@@ -9,7 +9,13 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "e2e": "pnpm --filter ./frontend e2e"
+    "coverage": "pnpm --filter ./backend test:coverage && pnpm --filter ./frontend test:coverage",
+    "e2e": "pnpm --filter ./frontend e2e",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs}": "eslint --fix",
+    "*.{json,md,yaml,yml,css}": "prettier --write"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
@@ -17,6 +23,9 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^16.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
+    "prettier": "^3.5.3",
     "typescript-eslint": "^8.26.0",
     "typescript": "^5.8.2"
   }

@@ -11,17 +11,17 @@ interface SessionData {
 }
 
 export default function App() {
+  const [url, setUrl] = useState("https://www.coze.cn");
+  const [loading, setLoading] = useState(false);
+  const [session, setSession] = useState<SessionData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   const searchParams = new URLSearchParams(window.location.search);
   const viewerSessionId = searchParams.get("sessionId");
 
   if (viewerSessionId) {
     return <ViewerPage apiBase={API_BASE} sessionId={viewerSessionId} />;
   }
-
-  const [url, setUrl] = useState("https://www.coze.cn");
-  const [loading, setLoading] = useState(false);
-  const [session, setSession] = useState<SessionData | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const createSession = async (): Promise<void> => {
     setLoading(true);

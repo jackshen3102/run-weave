@@ -92,6 +92,7 @@
 - [x] 增量迭代：协议与会话集成测试完善
 - [x] 增量迭代：共享 WS 协议类型与断线重连保活
 - [x] 增量迭代：连接稳定性增强（手动重连 + 心跳）
+- [x] 增量迭代：工程化门禁（CI + Coverage + Pre-commit）
 - [~] 更新验收清单与下一步计划
 
 ## 6. 执行日志
@@ -118,3 +119,8 @@
 - 2026-03-19：Viewer 增加重连状态提示与手动 `Reconnect` 按钮。
 - 2026-03-19：ws 服务增加 ping/pong 心跳与超时终止，增强僵尸连接清理能力。
 - 2026-03-19：本轮验证通过：`pnpm --filter ./backend typecheck`、`pnpm --filter ./frontend typecheck`、`pnpm test`、`pnpm e2e`。
+- 2026-03-19：新增 CI 工作流 `/.github/workflows/ci.yml`，覆盖 lint/typecheck/test/coverage/e2e。
+- 2026-03-19：新增覆盖率门禁（backend/frontend）与 `pnpm coverage` 脚本。
+- 2026-03-19：接入 `husky + lint-staged` 提交前门禁（`.husky/pre-commit`）。
+- 2026-03-19：清理前端误生成文件（如 `frontend/vite.config.js`）。
+- 2026-03-19：本轮验证通过：`pnpm lint`、`pnpm typecheck`、`pnpm coverage`、`pnpm e2e`。

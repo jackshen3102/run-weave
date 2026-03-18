@@ -29,6 +29,8 @@ export type ClientInputMessage =
     }
   | {
       type: "scroll";
+      x?: number;
+      y?: number;
       deltaX: number;
       deltaY: number;
     };

@@ -16,6 +16,7 @@ export async function applyInputToPage(page: Page, input: ClientInputMessage): P
         return;
       }
 
+      await page.mouse.move(input.x, input.y);
       await page.mouse.click(input.x, input.y, {
         button: input.button ?? "left",
       });
@@ -26,6 +27,9 @@ export async function applyInputToPage(page: Page, input: ClientInputMessage): P
       return;
     }
     case "scroll": {
+      if (typeof input.x === "number" && typeof input.y === "number") {
+        await page.mouse.move(input.x, input.y);
+      }
       await page.mouse.wheel(input.deltaX, input.deltaY);
       return;
     }

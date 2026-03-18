@@ -34,9 +34,10 @@ describe("applyInputToPage", () => {
     };
 
     await applyInputToPage(page as never, { type: "keyboard", key: "a", modifiers: ["Control", "Shift"] });
-    await applyInputToPage(page as never, { type: "scroll", deltaX: 0, deltaY: 120 });
+    await applyInputToPage(page as never, { type: "scroll", x: 40, y: 60, deltaX: 0, deltaY: 120 });
 
     expect(page.keyboard.press).toHaveBeenCalledWith("Control+Shift+a");
+    expect(page.mouse.move).toHaveBeenCalledWith(40, 60);
     expect(page.mouse.wheel).toHaveBeenCalledWith(0, 120);
   });
 });

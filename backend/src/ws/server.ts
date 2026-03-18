@@ -22,6 +22,8 @@ const clientInputSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("scroll"),
+    x: z.number().optional(),
+    y: z.number().optional(),
     deltaX: z.number(),
     deltaY: z.number(),
   }),

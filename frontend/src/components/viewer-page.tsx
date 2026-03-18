@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type WheelEvent } from "react";
 import type { ClientInputMessage, ServerEventMessage } from "@browser-viewer/shared";
 import { Button } from "./ui/button";
 import { extractKeyboardModifiers, mapClientPointToCanvas } from "../lib/coordinate";
@@ -36,7 +36,7 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
     wsRef.current.send(JSON.stringify(input));
   };
 
-  const mapPointerEvent = (event: MouseEvent<HTMLCanvasElement>) => {
+  const mapPointerEvent = (event: Pick<MouseEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>, "clientX" | "clientY">) => {
     const canvas = canvasRef.current;
     if (!canvas) {
       return null;
@@ -175,6 +175,7 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
           <canvas
             ref={canvasRef}
             className="h-auto w-full"
+            style={{ touchAction: "none" }}
             tabIndex={0}
             onClick={(event) => {
               event.currentTarget.focus();
@@ -210,8 +211,11 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
             }}
             onWheel={(event) => {
               event.preventDefault();
+              const point = mapPointerEvent(event);
               sendInput({
                 type: "scroll",
+                x: point?.x,
+                y: point?.y,
                 deltaX: event.deltaX,
                 deltaY: event.deltaY,
               });
