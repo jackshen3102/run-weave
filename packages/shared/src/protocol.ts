@@ -32,3 +32,17 @@ export type ClientInputMessage =
       deltaX: number;
       deltaY: number;
     };
+
+export type ServerEventMessage =
+  | {
+      type: "connected";
+      sessionId: string;
+    }
+  | {
+      type: "ack";
+      eventType: ClientInputMessage["type"];
+    }
+  | {
+      type: "error";
+      message: string;
+    };

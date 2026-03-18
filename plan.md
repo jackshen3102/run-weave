@@ -87,6 +87,11 @@
 - [x] 搭建 backend 最小可运行骨架
 - [x] 搭建 frontend 最小可运行骨架
 - [x] 接入测试与质量保障基线
+- [x] 增量迭代：后端推帧与前端只读 Viewer 联调
+- [x] 增量迭代：输入事件回传（mouse/keyboard/scroll）
+- [x] 增量迭代：协议与会话集成测试完善
+- [x] 增量迭代：共享 WS 协议类型与断线重连保活
+- [x] 增量迭代：连接稳定性增强（手动重连 + 心跳）
 - [~] 更新验收清单与下一步计划
 
 ## 6. 执行日志
@@ -97,3 +102,19 @@
 - 2026-03-19：完成 frontend 骨架（React + Vite + Tailwind + shadcn 风格组件 + dark/light 切换）。
 - 2026-03-19：完成质量基线（ESLint、TypeScript typecheck、Vitest 单测、Playwright smoke E2E）。
 - 2026-03-19：本地验证通过：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm e2e`、`pnpm build`。
+- 2026-03-19：新增后端 screencast 推帧（CDP start/frameAck/stop）并接入 `/ws?sessionId=` 二进制帧下发。
+- 2026-03-19：新增前端最小 Viewer 页面（`?sessionId=` 直连、Canvas 实时绘制、会话状态展示）。
+- 2026-03-19：完成输入事件回传闭环（前端 mouse/keyboard/scroll 上行，后端解析并注入 Playwright）。
+- 2026-03-19：新增坐标映射与输入测试（`backend/src/ws/input.test.ts`、`frontend/src/lib/coordinate.test.ts`）。
+- 2026-03-19：本轮验证通过：`pnpm --filter ./backend typecheck`、`pnpm --filter ./frontend typecheck`、`pnpm test`、`pnpm e2e`。
+- 2026-03-19：新增 backend API 集成测试（create/get/delete）与 ws 集成测试（连接、非法消息、输入注入）。
+- 2026-03-19：Viewer 增加 mousemove 节流（16ms）以降低高频输入压力。
+- 2026-03-19：本轮验证通过：`pnpm test`、`pnpm e2e`。
+- 2026-03-19：共享协议新增 `ServerEventMessage` 并在前后端统一使用（connected/ack/error）。
+- 2026-03-19：SessionManager 增加断线宽限期（默认 5 秒），支持页面刷新后快速重连保活。
+- 2026-03-19：Viewer 增加断线自动重连（指数退避，最高 2 秒）。
+- 2026-03-19：新增保活相关测试：`backend/src/session/manager.test.ts` 增加断线宽限期保活与到期销毁用例。
+- 2026-03-19：本轮验证通过：`pnpm --filter ./backend typecheck`、`pnpm --filter ./frontend typecheck`、`pnpm test`、`pnpm e2e`。
+- 2026-03-19：Viewer 增加重连状态提示与手动 `Reconnect` 按钮。
+- 2026-03-19：ws 服务增加 ping/pong 心跳与超时终止，增强僵尸连接清理能力。
+- 2026-03-19：本轮验证通过：`pnpm --filter ./backend typecheck`、`pnpm --filter ./frontend typecheck`、`pnpm test`、`pnpm e2e`。

@@ -21,7 +21,7 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
       const session = await sessionManager.createSession(parsed.data.url);
       const payload: CreateSessionResponse = {
         sessionId: session.id,
-        viewerUrl: `/viewer?sessionId=${session.id}`,
+        viewerUrl: `/?sessionId=${session.id}`,
       };
       res.status(201).json(payload);
     } catch (error) {

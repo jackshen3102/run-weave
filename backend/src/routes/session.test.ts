@@ -1,0 +1,104 @@
+import http from "node:http";
+import express from "express";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createSessionRouter } from "./session";
+
+interface MockSession {
+  id: string;
+  targetUrl: string;
+  connected: boolean;
+  createdAt: Date;
+}
+
+function createTestServer(sessionState: { current: MockSession | null }) {
+  const sessionManager = {
+    createSession: vi.fn(async (targetUrl: string) => {
+      const created: MockSession = {
+        id: "test-session-id",
+        targetUrl,
+        connected: false,
+        createdAt: new Date("2026-03-19T00:00:00.000Z"),
+      };
+      sessionState.current = created;
+      return { ...created, browserSession: {} };
+    }),
+    getSession: vi.fn((id: string) => (sessionState.current?.id === id ? sessionState.current : undefined)),
+    destroySession: vi.fn(async (id: string) => {
+      if (sessionState.current?.id !== id) {
+        return false;
+      }
+      sessionState.current = null;
+      return true;
+    }),
+  };
+
+  const app = express();
+  app.use(express.json());
+  app.use("/api", createSessionRouter(sessionManager as never));
+  const server = http.createServer(app);
+
+  return { server, sessionManager };
+}
+
+async function startServer(server: http.Server): Promise<number> {
+  await new Promise<void>((resolve) => {
+    server.listen(0, resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Failed to resolve test server port");
+  }
+  return address.port;
+}
+
+async function stopServer(server: http.Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+describe("session routes", () => {
+  const servers: http.Server[] = [];
+
+  afterEach(async () => {
+    await Promise.all(servers.map((server) => stopServer(server)));
+    servers.length = 0;
+  });
+
+  it("creates, fetches and deletes session", async () => {
+    const state = { current: null as MockSession | null };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com" }),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = (await createResponse.json()) as { sessionId: string; viewerUrl: string };
+    expect(created.sessionId).toBe("test-session-id");
+    expect(created.viewerUrl).toContain("sessionId=test-session-id");
+
+    const getResponse = await fetch(`http://127.0.0.1:${port}/api/session/test-session-id`);
+    expect(getResponse.status).toBe(200);
+    const statusPayload = (await getResponse.json()) as { sessionId: string; targetUrl: string };
+    expect(statusPayload.sessionId).toBe("test-session-id");
+    expect(statusPayload.targetUrl).toBe("https://example.com");
+
+    const deleteResponse = await fetch(`http://127.0.0.1:${port}/api/session/test-session-id`, {
+      method: "DELETE",
+    });
+    expect(deleteResponse.status).toBe(204);
+
+    const missingResponse = await fetch(`http://127.0.0.1:${port}/api/session/test-session-id`);
+    expect(missingResponse.status).toBe(404);
+  });
+});

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ThemeToggle } from "./components/theme-toggle";
 import { Button } from "./components/ui/button";
+import { ViewerPage } from "./components/viewer-page";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
 
@@ -10,7 +11,14 @@ interface SessionData {
 }
 
 export default function App() {
-  const [url, setUrl] = useState("https://example.com");
+  const searchParams = new URLSearchParams(window.location.search);
+  const viewerSessionId = searchParams.get("sessionId");
+
+  if (viewerSessionId) {
+    return <ViewerPage apiBase={API_BASE} sessionId={viewerSessionId} />;
+  }
+
+  const [url, setUrl] = useState("https://www.coze.cn");
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState<SessionData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +86,11 @@ export default function App() {
             <p>
               <span className="font-semibold">Viewer URL:</span> {session.viewerUrl}
             </p>
-            <p className="text-muted-foreground">WebSocket viewer page will be implemented next.</p>
+            <div className="pt-2">
+              <Button size="sm" onClick={() => window.open(session.viewerUrl, "_blank", "noopener,noreferrer")}>
+                Open Viewer
+              </Button>
+            </div>
           </div>
         )}
       </section>

@@ -31,4 +31,55 @@ describe("SessionManager", () => {
 
     await manager.dispose();
   });
+
+  it("keeps session alive during reconnect grace period", async () => {
+    vi.useFakeTimers();
+    try {
+      const browserServiceMock = createBrowserServiceMock();
+      const manager = new SessionManager(browserServiceMock as never, {
+        ttlMs: 60_000,
+        cleanupIntervalMs: 60_000,
+        disconnectGraceMs: 500,
+      });
+
+      const session = await manager.createSession("https://example.com");
+      manager.markConnected(session.id, false);
+
+      vi.advanceTimersByTime(300);
+      manager.markConnected(session.id, true);
+      vi.advanceTimersByTime(1000);
+
+      expect(manager.getSession(session.id)).toBeDefined();
+      expect(browserServiceMock.destroySession).not.toHaveBeenCalled();
+
+      await manager.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("destroys disconnected session after grace period", async () => {
+    vi.useFakeTimers();
+    try {
+      const browserServiceMock = createBrowserServiceMock();
+      const manager = new SessionManager(browserServiceMock as never, {
+        ttlMs: 60_000,
+        cleanupIntervalMs: 60_000,
+        disconnectGraceMs: 200,
+      });
+
+      const session = await manager.createSession("https://example.com");
+      manager.markConnected(session.id, false);
+
+      vi.advanceTimersByTime(250);
+      await Promise.resolve();
+
+      expect(manager.getSession(session.id)).toBeUndefined();
+      expect(browserServiceMock.destroySession).toHaveBeenCalledTimes(1);
+
+      await manager.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
