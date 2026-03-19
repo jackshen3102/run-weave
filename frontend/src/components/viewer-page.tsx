@@ -23,6 +23,10 @@ interface ViewerPageProps {
 }
 
 function toWebSocketBase(apiBase: string): string {
+  if (!apiBase) {
+    return window.location.origin.replace(/^http/, "ws");
+  }
+
   if (apiBase.startsWith("https://")) {
     return apiBase.replace("https://", "wss://");
   }

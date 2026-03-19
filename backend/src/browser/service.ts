@@ -1,10 +1,7 @@
 import { chromium } from "playwright-extra";
-import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { BrowserContext, Page } from "playwright";
-
-chromium.use(StealthPlugin());
 
 export interface BrowserSession {
   context: BrowserContext;
@@ -24,7 +21,8 @@ export class BrowserService {
   constructor(options?: BrowserServiceOptions) {
     this.headless = options?.headless ?? true;
     this.profileDir =
-      options?.profileDir?.trim() || path.resolve(process.cwd(), ".browser-profile");
+      options?.profileDir?.trim() ||
+      path.resolve(process.cwd(), ".browser-profile");
   }
 
   private async getOrCreateContext(): Promise<BrowserContext> {

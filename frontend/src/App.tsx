@@ -3,7 +3,7 @@ import { ThemeToggle } from "./components/theme-toggle";
 import { Button } from "./components/ui/button";
 import { ViewerPage } from "./components/viewer-page";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5001";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 interface SessionData {
   sessionId: string;
