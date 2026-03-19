@@ -1,6 +1,8 @@
 import { chromium } from "playwright-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import type { Browser, BrowserContext, Page } from "playwright";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import type { BrowserContext, Page } from "playwright";
 
 chromium.use(StealthPlugin());
 
@@ -10,14 +12,32 @@ export interface BrowserSession {
 }
 
 export class BrowserService {
-  private browser: Browser | null = null;
+  private context: BrowserContext | null = null;
 
-  async createSession(targetUrl: string): Promise<BrowserSession> {
-    if (!this.browser) {
-      this.browser = await chromium.launch({ headless: true });
+  private readonly profileDir =
+    process.env.BROWSER_PROFILE_DIR?.trim() ||
+    path.resolve(process.cwd(), ".browser-profile");
+
+  private async getOrCreateContext(): Promise<BrowserContext> {
+    if (this.context) {
+      return this.context;
     }
 
-    const context = await this.browser.newContext();
+    await mkdir(this.profileDir, { recursive: true });
+    const context = await chromium.launchPersistentContext(this.profileDir, {
+      headless: true,
+    });
+    context.on("close", () => {
+      if (this.context === context) {
+        this.context = null;
+      }
+    });
+    this.context = context;
+    return context;
+  }
+
+  async createSession(targetUrl: string): Promise<BrowserSession> {
+    const context = await this.getOrCreateContext();
     const page = await context.newPage();
     await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
 
@@ -26,14 +46,13 @@ export class BrowserService {
 
   async destroySession(session: BrowserSession): Promise<void> {
     await session.page.close().catch(() => undefined);
-    await session.context.close().catch(() => undefined);
   }
 
   async stop(): Promise<void> {
-    if (!this.browser) {
+    if (!this.context) {
       return;
     }
-    await this.browser.close().catch(() => undefined);
-    this.browser = null;
+    await this.context.close().catch(() => undefined);
+    this.context = null;
   }
 }
