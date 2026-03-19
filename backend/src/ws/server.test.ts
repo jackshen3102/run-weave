@@ -2,11 +2,84 @@ import http from "node:http";
 import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
+import type { ViewerTab } from "@browser-viewer/shared";
 import { attachWebSocketServer } from "./server";
 
 class FakeCDPSession extends EventEmitter {
   send = vi.fn(async () => undefined);
   detach = vi.fn(async () => undefined);
+}
+
+class FakePage extends EventEmitter {
+  readonly mouse = {
+    click: vi.fn(async () => undefined),
+    move: vi.fn(async () => undefined),
+    wheel: vi.fn(async () => undefined),
+  };
+
+  readonly keyboard = {
+    press: vi.fn(async () => undefined),
+  };
+
+  private readonly frame = {};
+
+  constructor(
+    private currentUrl: string,
+    private currentTitle: string,
+  ) {
+    super();
+  }
+
+  url(): string {
+    return this.currentUrl;
+  }
+
+  async title(): Promise<string> {
+    return this.currentTitle;
+  }
+
+  mainFrame(): object {
+    return this.frame;
+  }
+
+  setDocument(url: string, title: string): void {
+    this.currentUrl = url;
+    this.currentTitle = title;
+    this.emit("framenavigated", this.frame);
+    this.emit("load");
+  }
+
+  closePage(): void {
+    this.emit("close");
+  }
+}
+
+class FakeContext extends EventEmitter {
+  private readonly pagesList: FakePage[];
+
+  constructor(
+    pages: FakePage[],
+    private readonly cdpSession: FakeCDPSession,
+  ) {
+    super();
+    this.pagesList = [...pages];
+  }
+
+  pages(): FakePage[] {
+    return [...this.pagesList];
+  }
+
+  addPage(page: FakePage): void {
+    this.pagesList.push(page);
+    this.emit("page", page);
+  }
+
+  removePage(page: FakePage): void {
+    const next = this.pagesList.filter((item) => item !== page);
+    this.pagesList.splice(0, this.pagesList.length, ...next);
+  }
+
+  newCDPSession = vi.fn(async () => this.cdpSession);
 }
 
 function createJsonMessageQueue(socket: WebSocket) {
@@ -34,6 +107,22 @@ function createJsonMessageQueue(socket: WebSocket) {
         return Promise.resolve(ready);
       }
       return new Promise((resolve) => pendingResolvers.push(resolve));
+    },
+    nextByType: async (type: string): Promise<Record<string, unknown>> => {
+      for (;;) {
+        const next = await (async () => {
+          const ready = queue.shift();
+          if (ready) {
+            return ready;
+          }
+          return new Promise<Record<string, unknown>>((resolve) =>
+            pendingResolvers.push(resolve),
+          );
+        })();
+        if (next.type === type) {
+          return next;
+        }
+      }
     },
   };
 }
@@ -71,6 +160,13 @@ async function stopServer(server: http.Server): Promise<void> {
 }
 
 function closeSocket(socket: WebSocket): Promise<void> {
+  if (
+    socket.readyState === WebSocket.CLOSED ||
+    socket.readyState === WebSocket.CLOSING
+  ) {
+    return Promise.resolve();
+  }
+
   return new Promise((resolve) => {
     socket.once("close", () => resolve());
     socket.close();
@@ -82,33 +178,25 @@ describe("websocket server", () => {
   const sockets: WebSocket[] = [];
 
   afterEach(async () => {
-    await Promise.all(sockets.map((socket) => closeSocket(socket).catch(() => undefined)));
+    await Promise.all(
+      sockets.map((socket) => closeSocket(socket).catch(() => undefined)),
+    );
     sockets.length = 0;
 
     await Promise.all(servers.map((server) => stopServer(server)));
     servers.length = 0;
   });
 
-  it("accepts session and applies input to page", async () => {
+  it("accepts session and applies input to active tab", async () => {
     const cdpSession = new FakeCDPSession();
-    const page = {
-      mouse: {
-        click: vi.fn(async () => undefined),
-        move: vi.fn(async () => undefined),
-        wheel: vi.fn(async () => undefined),
-      },
-      keyboard: {
-        press: vi.fn(async () => undefined),
-      },
-    };
+    const page = new FakePage("https://example.com", "Example");
+    const context = new FakeContext([page], cdpSession);
 
     const sessionManager = {
       getSession: vi.fn(() => ({
         id: "session-1",
         browserSession: {
-          context: {
-            newCDPSession: vi.fn(async () => cdpSession),
-          },
+          context,
           page,
         },
       })),
@@ -121,39 +209,48 @@ describe("websocket server", () => {
     attachWebSocketServer(server, sessionManager as never);
     const port = await startServer(server);
 
-    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws?sessionId=session-1`);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-1`,
+    );
     sockets.push(socket);
     const queue = createJsonMessageQueue(socket);
 
     await waitForOpen(socket);
-    const connectedMessage = await queue.next();
+    const connectedMessage = await queue.nextByType("connected");
     expect(connectedMessage.type).toBe("connected");
 
-    socket.send(JSON.stringify({ type: "mouse", action: "click", x: 11, y: 22, button: "left" }));
-    const ackMessage = await queue.next();
+    const tabsMessage = await queue.nextByType("tabs");
+    const tabs = tabsMessage.tabs as ViewerTab[];
+    expect(tabs).toHaveLength(1);
+    const firstTab = tabs.at(0);
+    expect(firstTab).toBeDefined();
+    expect(firstTab?.active).toBe(true);
+
+    socket.send(
+      JSON.stringify({
+        type: "mouse",
+        action: "click",
+        x: 11,
+        y: 22,
+        button: "left",
+      }),
+    );
+    const ackMessage = await queue.nextByType("ack");
     expect(ackMessage.type).toBe("ack");
     expect(page.mouse.click).toHaveBeenCalledWith(11, 22, { button: "left" });
   });
 
-  it("returns error on invalid input payload", async () => {
+  it("switches between tabs and routes inputs to the active tab", async () => {
     const cdpSession = new FakeCDPSession();
+    const pageA = new FakePage("https://a.example", "Page A");
+    const context = new FakeContext([pageA], cdpSession);
+
     const sessionManager = {
       getSession: vi.fn(() => ({
         id: "session-2",
         browserSession: {
-          context: {
-            newCDPSession: vi.fn(async () => cdpSession),
-          },
-          page: {
-            mouse: {
-              click: vi.fn(async () => undefined),
-              move: vi.fn(async () => undefined),
-              wheel: vi.fn(async () => undefined),
-            },
-            keyboard: {
-              press: vi.fn(async () => undefined),
-            },
-          },
+          context,
+          page: pageA,
         },
       })),
       markConnected: vi.fn(),
@@ -165,15 +262,107 @@ describe("websocket server", () => {
     attachWebSocketServer(server, sessionManager as never);
     const port = await startServer(server);
 
-    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws?sessionId=session-2`);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-2`,
+    );
     sockets.push(socket);
     const queue = createJsonMessageQueue(socket);
 
     await waitForOpen(socket);
-    await queue.next();
+    await queue.nextByType("connected");
+    const firstTabsMessage = await queue.nextByType("tabs");
+    const firstTabs = firstTabsMessage.tabs as ViewerTab[];
+    const firstTab = firstTabs.at(0);
+    expect(firstTab).toBeDefined();
+    const firstTabId = firstTab?.id;
+    if (!firstTabId) {
+      throw new Error("Missing first tab id");
+    }
 
-    socket.send("{\"bad\":true}");
-    const errorMessage = await queue.next();
-    expect(errorMessage.type).toBe("error");
+    const pageB = new FakePage("https://b.example", "Page B");
+    context.addPage(pageB);
+
+    let tabsAfterPopup = await queue.nextByType("tabs");
+    let snapshot = tabsAfterPopup.tabs as ViewerTab[];
+    if (snapshot.length < 2) {
+      tabsAfterPopup = await queue.nextByType("tabs");
+      snapshot = tabsAfterPopup.tabs as ViewerTab[];
+    }
+
+    expect(snapshot).toHaveLength(2);
+    const secondTab = snapshot.find((tab) => tab.id !== firstTabId);
+    expect(secondTab).toBeTruthy();
+
+    socket.send(
+      JSON.stringify({
+        type: "tab",
+        action: "switch",
+        tabId: firstTabId,
+      }),
+    );
+
+    const switchAck = await queue.nextByType("ack");
+    expect(switchAck.eventType).toBe("tab");
+
+    socket.send(
+      JSON.stringify({
+        type: "mouse",
+        action: "click",
+        x: 5,
+        y: 9,
+        button: "left",
+      }),
+    );
+
+    const inputAck = await queue.nextByType("ack");
+    expect(inputAck.eventType).toBe("mouse");
+    expect(pageA.mouse.click).toHaveBeenCalledWith(5, 9, { button: "left" });
+    expect(pageB.mouse.click).not.toHaveBeenCalledWith(5, 9, {
+      button: "left",
+    });
+  });
+
+  it("returns error on invalid tab id", async () => {
+    const cdpSession = new FakeCDPSession();
+    const page = new FakePage("https://example.com", "Example");
+    const context = new FakeContext([page], cdpSession);
+
+    const sessionManager = {
+      getSession: vi.fn(() => ({
+        id: "session-3",
+        browserSession: {
+          context,
+          page,
+        },
+      })),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(server, sessionManager as never);
+    const port = await startServer(server);
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-3`,
+    );
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    await queue.nextByType("connected");
+    await queue.nextByType("tabs");
+
+    socket.send(
+      JSON.stringify({
+        type: "tab",
+        action: "switch",
+        tabId: "tab-unknown",
+      }),
+    );
+
+    const errorMessage = await queue.nextByType("error");
+    expect(errorMessage.message).toBe("Unknown tabId: tab-unknown");
   });
 });

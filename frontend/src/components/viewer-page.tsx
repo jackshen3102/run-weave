@@ -9,6 +9,7 @@ import {
 import type {
   ClientInputMessage,
   ServerEventMessage,
+  ViewerTab,
 } from "@browser-viewer/shared";
 import { Button } from "./ui/button";
 import {
@@ -42,6 +43,7 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [sentCount, setSentCount] = useState(0);
   const [ackCount, setAckCount] = useState(0);
+  const [tabs, setTabs] = useState<ViewerTab[]>([]);
   const moveLogCounterRef = useRef(0);
   const wsUrl = useMemo(
     () => `${toWebSocketBase(apiBase)}/ws?sessionId=${sessionId}`,
@@ -129,6 +131,13 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
               console.log("[viewer-fe] websocket control error", {
                 sessionId,
                 message: message.message,
+              });
+            } else if (message.type === "tabs") {
+              setTabs(message.tabs);
+              console.log("[viewer-fe] websocket tabs", {
+                sessionId,
+                count: message.tabs.length,
+                activeTab: message.tabs.find((tab) => tab.active)?.id,
               });
             } else if (message.type === "ack") {
               setAckCount((value) => value + 1);
@@ -231,7 +240,7 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [wsUrl, connectNonce]);
+  }, [wsUrl, connectNonce, sessionId]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 p-4 sm:p-8">
@@ -269,6 +278,30 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
       </header>
 
       <section className="rounded-xl border border-border/80 bg-card/70 p-3 backdrop-blur">
+        <div className="mb-3 flex flex-wrap gap-2" data-testid="tab-list">
+          {tabs.map((tab) => (
+            <Button
+              key={tab.id}
+              size="sm"
+              variant={tab.active ? "default" : "secondary"}
+              className="max-w-[220px] truncate"
+              aria-pressed={tab.active}
+              data-tab-id={tab.id}
+              onClick={() => {
+                if (tab.active) {
+                  return;
+                }
+                sendInput({ type: "tab", action: "switch", tabId: tab.id });
+              }}
+              title={tab.title || tab.url}
+            >
+              {tab.title || tab.url}
+            </Button>
+          ))}
+          {tabs.length === 0 && (
+            <p className="text-xs text-muted-foreground">Waiting for tabs...</p>
+          )}
+        </div>
         {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
         {status === "reconnecting" && !error && (
           <p className="mb-3 text-sm text-amber-600">

@@ -5,14 +5,20 @@ import { createSessionRouter } from "./routes/session";
 import { SessionManager } from "./session/manager";
 import { attachWebSocketServer } from "./ws/server";
 
-const port = Number(process.env.PORT ?? 3000);
+const port = Number(process.env.PORT ?? 5001);
 
 const app = express();
 app.use(express.json());
 
+const configuredOrigins = (process.env.FRONTEND_ORIGIN ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const allowedOrigins = new Set([
-  process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
+  "http://localhost:5173",
   "http://127.0.0.1:5173",
+  ...configuredOrigins,
 ]);
 
 app.use((req, res, next) => {
@@ -38,6 +44,68 @@ const sessionManager = new SessionManager(browserService);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+app.get("/test/popup", (_req, res) => {
+  res.type("html").send(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Popup Source</title>
+    <style>
+      body { margin: 0; font-family: sans-serif; background: #f2f4f8; }
+      #open {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin: 20px;
+        width: 280px;
+        height: 100px;
+        font-size: 18px;
+        text-decoration: none;
+        color: #111827;
+        border: 1px solid #9ca3af;
+        border-radius: 8px;
+        background: #e5e7eb;
+      }
+    </style>
+  </head>
+  <body>
+    <a id="open" href="/test/child" target="_blank" rel="noopener noreferrer">
+      Open Child Tab
+    </a>
+  </body>
+</html>`);
+});
+
+app.get("/test/popup-auto", (_req, res) => {
+  res.type("html").send(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Popup Auto Source</title>
+  </head>
+  <body>
+    <h1>Popup Auto Source</h1>
+    <script>
+      window.open("/test/child", "_blank", "noopener,noreferrer");
+    </script>
+  </body>
+</html>`);
+});
+
+app.get("/test/child", (_req, res) => {
+  res.type("html").send(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Popup Child</title>
+  </head>
+  <body>
+    <h1>Popup Child</h1>
+    <p>Opened from source page.</p>
+  </body>
+</html>`);
 });
 
 app.use("/api", createSessionRouter(sessionManager));

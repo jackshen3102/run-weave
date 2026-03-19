@@ -1,10 +1,11 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
 import type { WebSocket } from "ws";
-import type { CDPSession } from "playwright";
+import type { CDPSession, Frame, Page } from "playwright";
 import type {
   ClientInputMessage,
   ServerEventMessage,
+  ViewerTab,
 } from "@browser-viewer/shared";
 import { z } from "zod";
 import type { SessionManager } from "../session/manager";
@@ -31,6 +32,11 @@ const clientInputSchema = z.discriminatedUnion("type", [
     y: z.number().optional(),
     deltaX: z.number(),
     deltaY: z.number(),
+  }),
+  z.object({
+    type: z.literal("tab"),
+    action: z.literal("switch"),
+    tabId: z.string().min(1),
   }),
 ]);
 
@@ -86,6 +92,38 @@ export function attachWebSocketServer(
     let cdpSession: CDPSession | null = null;
     let heartbeatTimer: NodeJS.Timeout | null = null;
     let isAlive = true;
+    let isClosed = false;
+    let activePage: Page = session.browserSession.page;
+    let activeTabId: string | null = null;
+    let tabCounter = 0;
+
+    const tabIdToPage = new Map<string, Page>();
+    const pageToTabId = new WeakMap<Page, string>();
+    const tabTitleById = new Map<string, string>();
+    const pageListenersByTabId = new Map<
+      string,
+      {
+        close: () => void;
+        framenavigated: (frame: Frame) => void;
+        load: () => void;
+      }
+    >();
+
+    const buildTabsSnapshot = (): ViewerTab[] => {
+      return Array.from(tabIdToPage.entries()).map(([id, page]) => ({
+        id,
+        url: page.url(),
+        title: tabTitleById.get(id) ?? page.url(),
+        active: id === activeTabId,
+      }));
+    };
+
+    const emitTabs = (): void => {
+      sendEvent(socket, {
+        type: "tabs",
+        tabs: buildTabsSnapshot(),
+      });
+    };
 
     const onScreencastFrame = (payload: {
       data: string;
@@ -103,9 +141,8 @@ export function attachWebSocketServer(
     };
 
     const startScreencast = async (): Promise<void> => {
-      cdpSession = await session.browserSession.context.newCDPSession(
-        session.browserSession.page,
-      );
+      cdpSession =
+        await session.browserSession.context.newCDPSession(activePage);
       cdpSession.on("Page.screencastFrame", onScreencastFrame);
       await cdpSession.send("Page.startScreencast", {
         format: "jpeg",
@@ -113,7 +150,7 @@ export function attachWebSocketServer(
         maxWidth: 1280,
         maxHeight: 720,
       });
-      console.log("[viewer-be] screencast started", { sessionId });
+      console.log("[viewer-be] screencast started", { sessionId, activeTabId });
     };
 
     const stopScreencast = async (): Promise<void> => {
@@ -125,7 +162,116 @@ export function attachWebSocketServer(
       await cdpSession.send("Page.stopScreencast").catch(() => undefined);
       await cdpSession.detach().catch(() => undefined);
       cdpSession = null;
-      console.log("[viewer-be] screencast stopped", { sessionId });
+      console.log("[viewer-be] screencast stopped", { sessionId, activeTabId });
+    };
+
+    const refreshTabTitle = async (
+      tabId: string,
+      page: Page,
+    ): Promise<void> => {
+      try {
+        const title = await page.title();
+        tabTitleById.set(tabId, title || page.url());
+      } catch {
+        tabTitleById.set(tabId, page.url());
+      }
+      emitTabs();
+    };
+
+    const selectTab = async (tabId: string): Promise<boolean> => {
+      const nextPage = tabIdToPage.get(tabId);
+      if (!nextPage) {
+        return false;
+      }
+
+      activeTabId = tabId;
+      activePage = nextPage;
+      emitTabs();
+
+      await stopScreencast();
+      await startScreencast();
+      return true;
+    };
+
+    const selectLastTab = async (): Promise<void> => {
+      const fallbackTabId = Array.from(tabIdToPage.keys()).at(-1);
+      if (!fallbackTabId) {
+        activeTabId = null;
+        emitTabs();
+        await stopScreencast();
+        return;
+      }
+      await selectTab(fallbackTabId);
+    };
+
+    const unregisterPage = (tabId: string): void => {
+      const page = tabIdToPage.get(tabId);
+      if (!page) {
+        return;
+      }
+
+      const listeners = pageListenersByTabId.get(tabId);
+      if (listeners) {
+        page.off("close", listeners.close);
+        page.off("framenavigated", listeners.framenavigated);
+        page.off("load", listeners.load);
+      }
+
+      pageListenersByTabId.delete(tabId);
+      tabIdToPage.delete(tabId);
+      tabTitleById.delete(tabId);
+
+      if (activeTabId === tabId && !isClosed) {
+        void selectLastTab().catch((error) => {
+          sendEvent(socket, { type: "error", message: String(error) });
+        });
+      } else {
+        emitTabs();
+      }
+    };
+
+    const registerPage = (page: Page): string => {
+      const existing = pageToTabId.get(page);
+      if (existing) {
+        return existing;
+      }
+
+      const tabId = `tab-${++tabCounter}`;
+      pageToTabId.set(page, tabId);
+      tabIdToPage.set(tabId, page);
+      tabTitleById.set(tabId, page.url() || "about:blank");
+
+      const close = (): void => {
+        unregisterPage(tabId);
+      };
+      const framenavigated = (frame: Frame): void => {
+        if (frame === page.mainFrame()) {
+          emitTabs();
+        }
+      };
+      const load = (): void => {
+        void refreshTabTitle(tabId, page);
+      };
+
+      pageListenersByTabId.set(tabId, { close, framenavigated, load });
+      page.on("close", close);
+      page.on("framenavigated", framenavigated);
+      page.on("load", load);
+
+      void refreshTabTitle(tabId, page);
+      emitTabs();
+      return tabId;
+    };
+
+    const onContextPage = (page: Page): void => {
+      const tabId = registerPage(page);
+      void selectTab(tabId)
+        .then(() => {
+          console.log("[viewer-be] switched to new tab", { sessionId, tabId });
+        })
+        .catch((error) => {
+          sendEvent(socket, { type: "error", message: String(error) });
+        });
     };
 
     const startHeartbeat = (): void => {
@@ -154,8 +300,20 @@ export function attachWebSocketServer(
     };
 
     sessionManager.markConnected(sessionId, true);
+    session.browserSession.context.on("page", onContextPage);
+    for (const page of session.browserSession.context.pages()) {
+      registerPage(page);
+    }
+    const initialTabId =
+      pageToTabId.get(session.browserSession.page) ??
+      Array.from(tabIdToPage.keys())[0];
+    if (initialTabId) {
+      activeTabId = initialTabId;
+      activePage = tabIdToPage.get(initialTabId) ?? activePage;
+    }
     startHeartbeat();
     sendEvent(socket, { type: "connected", sessionId });
+    emitTabs();
     console.log("[viewer-be] websocket connected", { sessionId });
     void startScreencast().catch((error) => {
       sendEvent(socket, { type: "error", message: String(error) });
@@ -195,7 +353,25 @@ export function attachWebSocketServer(
         console.log("[viewer-be] input received", { sessionId, input: parsed });
       }
 
-      void applyInputToPage(session.browserSession.page, parsed)
+      if (parsed.type === "tab") {
+        void selectTab(parsed.tabId)
+          .then((switched) => {
+            if (!switched) {
+              sendEvent(socket, {
+                type: "error",
+                message: `Unknown tabId: ${parsed.tabId}`,
+              });
+              return;
+            }
+            sendEvent(socket, { type: "ack", eventType: parsed.type });
+          })
+          .catch((error) => {
+            sendEvent(socket, { type: "error", message: String(error) });
+          });
+        return;
+      }
+
+      void applyInputToPage(activePage, parsed)
         .then(() => {
           console.log("[viewer-be] input applied", {
             sessionId,
@@ -214,15 +390,29 @@ export function attachWebSocketServer(
     });
 
     socket.on("close", () => {
+      isClosed = true;
       stopHeartbeat();
       void stopScreencast();
+      session.browserSession.context.off("page", onContextPage);
+      for (const [tabId, listeners] of pageListenersByTabId.entries()) {
+        const page = tabIdToPage.get(tabId);
+        if (!page) {
+          continue;
+        }
+        page.off("close", listeners.close);
+        page.off("framenavigated", listeners.framenavigated);
+        page.off("load", listeners.load);
+      }
+      pageListenersByTabId.clear();
       sessionManager.markConnected(sessionId, false);
       console.log("[viewer-be] websocket closed", { sessionId });
     });
 
     socket.on("error", () => {
+      isClosed = true;
       stopHeartbeat();
       void stopScreencast();
+      session.browserSession.context.off("page", onContextPage);
       console.log("[viewer-be] websocket error", { sessionId });
     });
 

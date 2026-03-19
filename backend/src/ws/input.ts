@@ -8,7 +8,10 @@ function buildKeyboardCommand(key: string, modifiers?: string[]): string {
   return `${modifiers.join("+")}+${key}`;
 }
 
-export async function applyInputToPage(page: Page, input: ClientInputMessage): Promise<void> {
+export async function applyInputToPage(
+  page: Page,
+  input: ClientInputMessage,
+): Promise<void> {
   switch (input.type) {
     case "mouse": {
       if (input.action === "move") {
@@ -23,7 +26,9 @@ export async function applyInputToPage(page: Page, input: ClientInputMessage): P
       return;
     }
     case "keyboard": {
-      await page.keyboard.press(buildKeyboardCommand(input.key, input.modifiers));
+      await page.keyboard.press(
+        buildKeyboardCommand(input.key, input.modifiers),
+      );
       return;
     }
     case "scroll": {
@@ -32,6 +37,9 @@ export async function applyInputToPage(page: Page, input: ClientInputMessage): P
       }
       await page.mouse.wheel(input.deltaX, input.deltaY);
       return;
+    }
+    case "tab": {
+      throw new Error("Tab input should be handled by websocket server");
     }
     default: {
       const exhaustiveCheck: never = input;

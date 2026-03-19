@@ -15,6 +15,8 @@
     "@browser-viewer/shared": "workspace:*",
     "express": "^4.21.2",
     "playwright": "^1.52.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "uuid": "^11.1.0",
     "ws": "^8.18.1",
     "zod": "^3.24.2"

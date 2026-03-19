@@ -1,22 +1,27 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const E2E_BACKEND_PORT = 5501;
+const E2E_FRONTEND_PORT = 4273;
+const E2E_FRONTEND_ORIGIN = `http://127.0.0.1:${E2E_FRONTEND_PORT}`;
+const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
+
 export default defineConfig({
   testDir: "./tests",
   timeout: 30_000,
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: E2E_FRONTEND_ORIGIN,
     trace: "on-first-retry",
   },
   webServer: [
     {
-      command: "PORT=3100 FRONTEND_ORIGIN=http://127.0.0.1:4173 pnpm --filter ./backend dev",
-      port: 3100,
+      command: `PORT=${E2E_BACKEND_PORT} FRONTEND_ORIGIN=${E2E_FRONTEND_ORIGIN} pnpm --filter ./backend dev`,
+      port: E2E_BACKEND_PORT,
       reuseExistingServer: true,
       cwd: "..",
     },
     {
-      command: "VITE_API_BASE_URL=http://127.0.0.1:3100 pnpm --filter ./frontend dev -- --host 127.0.0.1 --port 4173",
-      port: 4173,
+      command: `VITE_API_BASE_URL=${E2E_API_BASE} pnpm --filter ./frontend dev --host 127.0.0.1 --port ${E2E_FRONTEND_PORT}`,
+      port: E2E_FRONTEND_PORT,
       reuseExistingServer: true,
       cwd: "..",
     },

@@ -14,6 +14,13 @@ export interface SessionStatusResponse {
   createdAt: string;
 }
 
+export interface ViewerTab {
+  id: string;
+  url: string;
+  title: string;
+  active: boolean;
+}
+
 export type ClientInputMessage =
   | {
       type: "mouse";
@@ -33,6 +40,11 @@ export type ClientInputMessage =
       y?: number;
       deltaX: number;
       deltaY: number;
+    }
+  | {
+      type: "tab";
+      action: "switch";
+      tabId: string;
     };
 
 export type ServerEventMessage =
@@ -43,6 +55,10 @@ export type ServerEventMessage =
   | {
       type: "ack";
       eventType: ClientInputMessage["type"];
+    }
+  | {
+      type: "tabs";
+      tabs: ViewerTab[];
     }
   | {
       type: "error";
