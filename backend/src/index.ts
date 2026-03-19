@@ -39,7 +39,10 @@ app.use((req, res, next) => {
   next();
 });
 
-const browserService = new BrowserService();
+const browserService = new BrowserService({
+  headless: process.env.BROWSER_HEADLESS?.trim().toLowerCase() !== "false",
+  profileDir: process.env.BROWSER_PROFILE_DIR,
+});
 const sessionManager = new SessionManager(browserService);
 
 app.get("/health", (_req, res) => {

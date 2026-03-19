@@ -76,6 +76,7 @@ export function attachWebSocketServer(
 
     if (!sessionId) {
       console.log("[viewer-be] websocket rejected: missing sessionId");
+      sendEvent(socket, { type: "error", message: "Missing sessionId" });
       socket.close(1008, "Missing sessionId");
       return;
     }
@@ -85,6 +86,7 @@ export function attachWebSocketServer(
       console.log("[viewer-be] websocket rejected: session not found", {
         sessionId,
       });
+      sendEvent(socket, { type: "error", message: "Session not found" });
       socket.close(1008, "Session not found");
       return;
     }

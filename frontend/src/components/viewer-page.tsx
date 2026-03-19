@@ -37,6 +37,8 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectCountRef = useRef(0);
+  const connectedAtRef = useRef<number | null>(null);
+  const wsCloseReasonRef = useRef<string | null>(null);
   const lastMoveAtRef = useRef(0);
   const [connectNonce, setConnectNonce] = useState(0);
   const [status, setStatus] = useState("connecting");
@@ -113,6 +115,8 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
         if (wsRef.current !== ws) {
           return;
         }
+        connectedAtRef.current = Date.now();
+        wsCloseReasonRef.current = null;
         reconnectCountRef.current = 0;
         setStatus("connected");
         setError(null);
@@ -127,6 +131,7 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
           try {
             const message = JSON.parse(event.data) as ServerEventMessage;
             if (message.type === "error") {
+              wsCloseReasonRef.current = message.message;
               setError(message.message);
               console.log("[viewer-fe] websocket control error", {
                 sessionId,
@@ -195,7 +200,7 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         const isCurrentSocket = wsRef.current === ws;
         if (isCurrentSocket) {
           wsRef.current = null;
@@ -211,14 +216,38 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
           return;
         }
 
+        const connectedAt = connectedAtRef.current;
+        const livedMs = connectedAt ? Date.now() - connectedAt : 0;
+        connectedAtRef.current = null;
+        const closedByPolicy = event.code === 1008;
+
+        if (closedByPolicy || livedMs < 1000) {
+          setStatus("closed");
+          const closeReason =
+            wsCloseReasonRef.current ||
+            event.reason ||
+            "WebSocket closed repeatedly. Please click Reconnect.";
+          setError(closeReason);
+          console.log("[viewer-fe] websocket closed, stop auto reconnect", {
+            sessionId,
+            code: event.code,
+            reason: event.reason,
+            eventMessage: wsCloseReasonRef.current,
+            livedMs,
+          });
+          return;
+        }
+
         setStatus("reconnecting");
         const attempt = reconnectCountRef.current;
-        const delay = Math.min(250 * 2 ** attempt, 2000);
+        const delay = Math.min(250 * 2 ** attempt, 5000);
         reconnectCountRef.current += 1;
         console.log("[viewer-fe] websocket closed, scheduling reconnect", {
           sessionId,
           attempt,
           delay,
+          code: event.code,
+          livedMs,
         });
 
         reconnectTimerRef.current = window.setTimeout(() => {
@@ -231,6 +260,8 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
 
     return () => {
       closed = true;
+      connectedAtRef.current = null;
+      wsCloseReasonRef.current = null;
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
       }
@@ -259,6 +290,8 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
               size="sm"
               onClick={() => {
                 reconnectCountRef.current = 0;
+                connectedAtRef.current = null;
+                wsCloseReasonRef.current = null;
                 setStatus("connecting");
                 setError(null);
                 setConnectNonce((value) => value + 1);

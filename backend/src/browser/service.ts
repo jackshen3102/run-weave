@@ -11,12 +11,21 @@ export interface BrowserSession {
   page: Page;
 }
 
+export interface BrowserServiceOptions {
+  headless?: boolean;
+  profileDir?: string;
+}
+
 export class BrowserService {
   private context: BrowserContext | null = null;
+  private readonly headless: boolean;
+  private readonly profileDir: string;
 
-  private readonly profileDir =
-    process.env.BROWSER_PROFILE_DIR?.trim() ||
-    path.resolve(process.cwd(), ".browser-profile");
+  constructor(options?: BrowserServiceOptions) {
+    this.headless = options?.headless ?? true;
+    this.profileDir =
+      options?.profileDir?.trim() || path.resolve(process.cwd(), ".browser-profile");
+  }
 
   private async getOrCreateContext(): Promise<BrowserContext> {
     if (this.context) {
@@ -25,7 +34,7 @@ export class BrowserService {
 
     await mkdir(this.profileDir, { recursive: true });
     const context = await chromium.launchPersistentContext(this.profileDir, {
-      headless: true,
+      headless: this.headless,
     });
     context.on("close", () => {
       if (this.context === context) {

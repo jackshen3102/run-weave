@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.6.2",
   "scripts": {
     "dev": "pnpm --parallel --filter ./backend --filter ./frontend dev",
+    "dev:headed": "BROWSER_HEADLESS=false pnpm --parallel --filter ./backend --filter ./frontend dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
