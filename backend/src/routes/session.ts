@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
-import type { CreateSessionRequest, CreateSessionResponse, SessionStatusResponse } from "@browser-viewer/shared";
+import type {
+  CreateSessionRequest,
+  CreateSessionResponse,
+  SessionStatusResponse,
+} from "@browser-viewer/shared";
 import type { SessionManager } from "../session/manager";
 
 const createSessionSchema = z.object({
@@ -11,21 +15,38 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
   const router = Router();
 
   router.post("/session", async (req, res) => {
-    const parsed = createSessionSchema.safeParse(req.body as CreateSessionRequest);
+    const parsed = createSessionSchema.safeParse(
+      req.body as CreateSessionRequest,
+    );
     if (!parsed.success) {
-      res.status(400).json({ message: "Invalid request body", errors: parsed.error.flatten() });
+      console.log("[viewer-be] create session invalid payload", {
+        body: req.body,
+      });
+      res
+        .status(400)
+        .json({
+          message: "Invalid request body",
+          errors: parsed.error.flatten(),
+        });
       return;
     }
 
     try {
+      console.log("[viewer-be] create session start", { url: parsed.data.url });
       const session = await sessionManager.createSession(parsed.data.url);
       const payload: CreateSessionResponse = {
         sessionId: session.id,
         viewerUrl: `/?sessionId=${session.id}`,
       };
+      console.log("[viewer-be] create session success", payload);
       res.status(201).json(payload);
     } catch (error) {
-      res.status(500).json({ message: "Failed to create session", error: String(error) });
+      console.log("[viewer-be] create session failed", {
+        error: String(error),
+      });
+      res
+        .status(500)
+        .json({ message: "Failed to create session", error: String(error) });
     }
   });
 

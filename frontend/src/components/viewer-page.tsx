@@ -1,7 +1,20 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type WheelEvent } from "react";
-import type { ClientInputMessage, ServerEventMessage } from "@browser-viewer/shared";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type WheelEvent,
+} from "react";
+import type {
+  ClientInputMessage,
+  ServerEventMessage,
+} from "@browser-viewer/shared";
 import { Button } from "./ui/button";
-import { extractKeyboardModifiers, mapClientPointToCanvas } from "../lib/coordinate";
+import {
+  extractKeyboardModifiers,
+  mapClientPointToCanvas,
+} from "../lib/coordinate";
 
 interface ViewerPageProps {
   apiBase: string;
@@ -27,16 +40,48 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
   const [connectNonce, setConnectNonce] = useState(0);
   const [status, setStatus] = useState("connecting");
   const [error, setError] = useState<string | null>(null);
-  const wsUrl = useMemo(() => `${toWebSocketBase(apiBase)}/ws?sessionId=${sessionId}`, [apiBase, sessionId]);
+  const [sentCount, setSentCount] = useState(0);
+  const [ackCount, setAckCount] = useState(0);
+  const moveLogCounterRef = useRef(0);
+  const wsUrl = useMemo(
+    () => `${toWebSocketBase(apiBase)}/ws?sessionId=${sessionId}`,
+    [apiBase, sessionId],
+  );
 
   const sendInput = (input: ClientInputMessage): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.log("[viewer-fe] skip send input: websocket not open", {
+        sessionId,
+        type: input.type,
+        action: input.type === "mouse" ? input.action : undefined,
+      });
       return;
     }
+
+    if (input.type !== "mouse" || input.action !== "move") {
+      console.log("[viewer-fe] send input", { sessionId, input });
+    } else {
+      moveLogCounterRef.current += 1;
+      if (moveLogCounterRef.current % 30 === 0) {
+        console.log("[viewer-fe] send mouse move (sampled)", {
+          sessionId,
+          count: moveLogCounterRef.current,
+          x: input.x,
+          y: input.y,
+        });
+      }
+    }
+
     wsRef.current.send(JSON.stringify(input));
+    setSentCount((value) => value + 1);
   };
 
-  const mapPointerEvent = (event: Pick<MouseEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>, "clientX" | "clientY">) => {
+  const mapPointerEvent = (
+    event: Pick<
+      MouseEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>,
+      "clientX" | "clientY"
+    >,
+  ) => {
     const canvas = canvasRef.current;
     if (!canvas) {
       return null;
@@ -60,22 +105,49 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
       ws.binaryType = "arraybuffer";
+      console.log("[viewer-fe] websocket connecting", { sessionId, wsUrl });
 
       ws.onopen = () => {
+        if (wsRef.current !== ws) {
+          return;
+        }
         reconnectCountRef.current = 0;
         setStatus("connected");
         setError(null);
+        console.log("[viewer-fe] websocket connected", { sessionId });
       };
 
       ws.onmessage = async (event) => {
+        if (wsRef.current !== ws) {
+          return;
+        }
         if (typeof event.data === "string") {
           try {
             const message = JSON.parse(event.data) as ServerEventMessage;
             if (message.type === "error") {
               setError(message.message);
+              console.log("[viewer-fe] websocket control error", {
+                sessionId,
+                message: message.message,
+              });
+            } else if (message.type === "ack") {
+              setAckCount((value) => value + 1);
+              console.log("[viewer-fe] websocket ack", {
+                sessionId,
+                eventType: message.eventType,
+              });
+            } else {
+              console.log("[viewer-fe] websocket control message", {
+                sessionId,
+                message,
+              });
             }
           } catch {
             setError("Received malformed control message.");
+            console.log("[viewer-fe] malformed control message", {
+              sessionId,
+              raw: event.data,
+            });
           }
           return;
         }
@@ -90,7 +162,9 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
           return;
         }
 
-        const blob = new Blob([event.data as ArrayBuffer], { type: "image/jpeg" });
+        const blob = new Blob([event.data as ArrayBuffer], {
+          type: "image/jpeg",
+        });
         const bitmap = await createImageBitmap(blob);
 
         if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
@@ -103,14 +177,28 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
       };
 
       ws.onerror = () => {
+        if (wsRef.current !== ws) {
+          return;
+        }
         if (!closed) {
           setError("WebSocket connection failed.");
+          console.log("[viewer-fe] websocket error", { sessionId });
         }
       };
 
       ws.onclose = () => {
-        wsRef.current = null;
+        const isCurrentSocket = wsRef.current === ws;
+        if (isCurrentSocket) {
+          wsRef.current = null;
+        }
         if (closed) {
+          console.log("[viewer-fe] websocket closed after cleanup", {
+            sessionId,
+          });
+          return;
+        }
+
+        if (!isCurrentSocket) {
           return;
         }
 
@@ -118,6 +206,11 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
         const attempt = reconnectCountRef.current;
         const delay = Math.min(250 * 2 ** attempt, 2000);
         reconnectCountRef.current += 1;
+        console.log("[viewer-fe] websocket closed, scheduling reconnect", {
+          sessionId,
+          attempt,
+          delay,
+        });
 
         reconnectTimerRef.current = window.setTimeout(() => {
           connect();
@@ -132,6 +225,9 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
       }
+      console.log("[viewer-fe] cleanup viewer page and close websocket", {
+        sessionId,
+      });
       wsRef.current?.close();
       wsRef.current = null;
     };
@@ -145,7 +241,9 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
           <p className="text-sm text-muted-foreground">Session: {sessionId}</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Status: {status}</span>
+          <span className="text-xs text-muted-foreground">
+            Status: {status}
+          </span>
           {(status === "reconnecting" || status === "closed") && (
             <Button
               variant="secondary"
@@ -160,7 +258,11 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
               Reconnect
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={() => window.location.assign("/")}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => window.location.assign("/")}
+          >
             Back
           </Button>
         </div>
@@ -169,15 +271,23 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
       <section className="rounded-xl border border-border/80 bg-card/70 p-3 backdrop-blur">
         {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
         {status === "reconnecting" && !error && (
-          <p className="mb-3 text-sm text-amber-600">Connection lost, trying to reconnect...</p>
+          <p className="mb-3 text-sm text-amber-600">
+            Connection lost, trying to reconnect...
+          </p>
         )}
+        <p
+          className="mb-2 text-xs text-muted-foreground"
+          data-testid="ws-stats"
+        >
+          Sent: {sentCount} | Ack: {ackCount}
+        </p>
         <div className="overflow-hidden rounded-md border border-border bg-black/70">
           <canvas
             ref={canvasRef}
             className="h-auto w-full"
             style={{ touchAction: "none" }}
             tabIndex={0}
-            onClick={(event) => {
+            onMouseDown={(event) => {
               event.currentTarget.focus();
               const point = mapPointerEvent(event);
               if (!point) {
@@ -188,7 +298,12 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
                 action: "click",
                 x: point.x,
                 y: point.y,
-                button: event.button === 1 ? "middle" : event.button === 2 ? "right" : "left",
+                button:
+                  event.button === 1
+                    ? "middle"
+                    : event.button === 2
+                      ? "right"
+                      : "left",
               });
             }}
             onMouseMove={(event) => {
