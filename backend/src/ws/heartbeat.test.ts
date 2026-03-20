@@ -1,26 +1,26 @@
 import { describe, expect, it, vi } from "vitest";
+import type { WebSocket } from "ws";
+import type { ConnectionContext } from "./context";
 import { createHeartbeatController } from "./heartbeat";
 
 describe("createHeartbeatController", () => {
   it("starts heartbeat and pings when alive", () => {
     vi.useFakeTimers();
     try {
-      const socket = {
-        readyState: 1,
-        ping: vi.fn(),
-        terminate: vi.fn(),
-      } as never;
+      const ping = vi.fn();
+      const terminate = vi.fn();
+      const socket = { readyState: 1, ping, terminate } as unknown as WebSocket;
       const state = {
         heartbeatTimer: null,
         isAlive: true,
-      } as never;
+      } as unknown as ConnectionContext;
 
       const controller = createHeartbeatController(socket, state);
       controller.start();
       vi.advanceTimersByTime(15_000);
 
-      expect(socket.ping).toHaveBeenCalledTimes(1);
-      expect(socket.terminate).not.toHaveBeenCalled();
+      expect(ping).toHaveBeenCalledTimes(1);
+      expect(terminate).not.toHaveBeenCalled();
 
       controller.stop();
     } finally {
@@ -31,22 +31,20 @@ describe("createHeartbeatController", () => {
   it("terminates when pong was not received", () => {
     vi.useFakeTimers();
     try {
-      const socket = {
-        readyState: 1,
-        ping: vi.fn(),
-        terminate: vi.fn(),
-      } as never;
+      const ping = vi.fn();
+      const terminate = vi.fn();
+      const socket = { readyState: 1, ping, terminate } as unknown as WebSocket;
       const state = {
         heartbeatTimer: null,
         isAlive: true,
-      } as never;
+      } as unknown as ConnectionContext;
 
       const controller = createHeartbeatController(socket, state);
       controller.start();
       vi.advanceTimersByTime(15_000);
       vi.advanceTimersByTime(15_000);
 
-      expect(socket.terminate).toHaveBeenCalledTimes(1);
+      expect(terminate).toHaveBeenCalledTimes(1);
       controller.stop();
     } finally {
       vi.useRealTimers();

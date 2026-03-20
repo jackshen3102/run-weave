@@ -1,5 +1,7 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
+import type { BrowserContext, Page } from "playwright";
+import type { ConnectionContext } from "./context";
 import { createTabManager } from "./tab-manager";
 
 class FakePage extends EventEmitter {
@@ -19,23 +21,35 @@ class FakePage extends EventEmitter {
 
 describe("createTabManager", () => {
   it("initializes tabs and can select existing tab", async () => {
-    const page = new FakePage("https://example.com", "Example");
-    const state = {
+    const fakePage = new FakePage("https://example.com", "Example");
+    const page = fakePage as unknown as Page;
+
+    const state: ConnectionContext = {
+      cdpSession: null,
+      heartbeatTimer: null,
+      isAlive: true,
+      isClosed: false,
       activePage: page,
       activeTabId: null,
       tabCounter: 0,
-      isClosed: false,
+      cursorLookupTimer: null,
+      cursorLookupInFlight: false,
+      pendingCursorPoint: null,
+      lastCursorLookupAt: 0,
+      lastCursorValue: "default",
       tabIdToPage: new Map(),
       pageToTabId: new WeakMap(),
       tabTitleById: new Map(),
-      tabLoadingById: new Map(),
       pageListenersByTabId: new Map(),
-    } as never;
+      tabLoadingById: new Map(),
+    };
+
+    const context = { pages: () => [page] } as unknown as BrowserContext;
 
     const manager = createTabManager({
       state,
       sessionId: "s-1",
-      context: { pages: () => [page] } as never,
+      context,
       emitTabs: vi.fn(),
       emitCursor: vi.fn(),
       emitNavigationState: vi.fn(async () => undefined),

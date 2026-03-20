@@ -3,6 +3,11 @@ import { handleNavigationMessage } from "./navigation-handler";
 import type { ConnectionContext } from "./context";
 import * as navigationModule from "./navigation";
 
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 function createState(): ConnectionContext {
   return {
     cdpSession: null,
@@ -68,7 +73,7 @@ describe("handleNavigationMessage", () => {
       },
     );
 
-    await Promise.resolve();
+    await flushMicrotasks();
     expect(page.goto).toHaveBeenCalledWith("https://example.com", {
       waitUntil: "domcontentloaded",
     });
@@ -95,7 +100,7 @@ describe("handleNavigationMessage", () => {
       },
     );
 
-    await Promise.resolve();
+    await flushMicrotasks();
     expect(state.tabLoadingById.get("tab-1")).toBe(false);
     expect(sendError).toHaveBeenCalledWith("Error: reload failed");
   });

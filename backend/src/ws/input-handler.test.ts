@@ -2,6 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { handlePageInputMessage } from "./input-handler";
 import * as inputModule from "./input";
 
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe("handlePageInputMessage", () => {
   it("acks and schedules cursor lookup for mouse move", async () => {
     vi.spyOn(inputModule, "applyInputToPage").mockResolvedValueOnce(undefined);
@@ -18,7 +23,7 @@ describe("handlePageInputMessage", () => {
       scheduleCursorLookup,
     });
 
-    await Promise.resolve();
+    await flushMicrotasks();
     expect(sendAck).toHaveBeenCalledTimes(1);
     expect(sendError).not.toHaveBeenCalled();
     expect(scheduleCursorLookup).toHaveBeenCalledWith(10, 20);
@@ -38,8 +43,8 @@ describe("handlePageInputMessage", () => {
       scheduleCursorLookup: vi.fn(),
     });
 
-    await Promise.resolve();
-    expect(sendAck).not.toHaveBeenCalled();
+    await flushMicrotasks();
     expect(sendError).toHaveBeenCalledWith("Error: boom");
+    expect(sendAck).not.toHaveBeenCalled();
   });
 });
