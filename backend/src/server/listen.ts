@@ -1,8 +1,43 @@
 import type http from "node:http";
+import net from "node:net";
 
 interface ListenWithFallbackOptions {
   host?: string;
   maxAttempts?: number;
+}
+
+async function isPortAvailable(port: number, host?: string): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    const tester = net.createServer();
+
+    const cleanup = (): void => {
+      tester.removeAllListeners("error");
+      tester.removeAllListeners("listening");
+    };
+
+    tester.once("error", () => {
+      cleanup();
+      resolve(false);
+    });
+
+    tester.once("listening", () => {
+      tester.close(() => {
+        cleanup();
+        resolve(true);
+      });
+    });
+
+    try {
+      if (host) {
+        tester.listen(port, host);
+      } else {
+        tester.listen(port);
+      }
+    } catch {
+      cleanup();
+      resolve(false);
+    }
+  });
 }
 
 async function listenOnPort(
@@ -49,6 +84,11 @@ export async function listenWithFallback(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const port = startPort + attempt;
+
+    if (!(await isPortAvailable(port, options.host))) {
+      continue;
+    }
+
     try {
       await listenOnPort(server, port, options.host);
       return port;
