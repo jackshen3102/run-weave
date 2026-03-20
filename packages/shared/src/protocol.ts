@@ -2,6 +2,16 @@ export interface CreateSessionRequest {
   url: string;
 }
 
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  expiresIn: number;
+}
+
 export interface CreateSessionResponse {
   sessionId: string;
   viewerUrl: string;

@@ -210,6 +210,9 @@ function closeSocket(socket: WebSocket): Promise<void> {
 describe("websocket server", () => {
   const servers: http.Server[] = [];
   const sockets: WebSocket[] = [];
+  const authService = {
+    verifyToken: vi.fn((token: string) => token === "valid-token"),
+  };
 
   afterEach(async () => {
     await Promise.all(
@@ -240,11 +243,15 @@ describe("websocket server", () => {
 
     const server = http.createServer();
     servers.push(server);
-    attachWebSocketServer(server, sessionManager as never);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
     const port = await startServer(server);
 
     const socket = new WebSocket(
-      `ws://127.0.0.1:${port}/ws?sessionId=session-1`,
+      `ws://127.0.0.1:${port}/ws?sessionId=session-1&token=valid-token`,
     );
     sockets.push(socket);
     const queue = createJsonMessageQueue(socket);
@@ -274,6 +281,43 @@ describe("websocket server", () => {
     expect(page.mouse.click).toHaveBeenCalledWith(11, 22, { button: "left" });
   });
 
+  it("rejects websocket connection without valid token", async () => {
+    const cdpSession = new FakeCDPSession();
+    const page = new FakePage("https://example.com", "Example");
+    const context = new FakeContext([page], cdpSession);
+
+    const sessionManager = {
+      getSession: vi.fn(() => ({
+        id: "session-auth",
+        browserSession: {
+          context,
+          page,
+        },
+      })),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-auth`,
+    );
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    const errorMessage = await queue.nextByType("error");
+    expect(errorMessage.message).toBe("Unauthorized");
+  });
+
   it("switches between tabs and routes inputs to the active tab", async () => {
     const cdpSession = new FakeCDPSession();
     const pageA = new FakePage("https://a.example", "Page A");
@@ -293,11 +337,15 @@ describe("websocket server", () => {
 
     const server = http.createServer();
     servers.push(server);
-    attachWebSocketServer(server, sessionManager as never);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
     const port = await startServer(server);
 
     const socket = new WebSocket(
-      `ws://127.0.0.1:${port}/ws?sessionId=session-2`,
+      `ws://127.0.0.1:${port}/ws?sessionId=session-2&token=valid-token`,
     );
     sockets.push(socket);
     const queue = createJsonMessageQueue(socket);
@@ -375,11 +423,15 @@ describe("websocket server", () => {
 
     const server = http.createServer();
     servers.push(server);
-    attachWebSocketServer(server, sessionManager as never);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
     const port = await startServer(server);
 
     const socket = new WebSocket(
-      `ws://127.0.0.1:${port}/ws?sessionId=session-3`,
+      `ws://127.0.0.1:${port}/ws?sessionId=session-3&token=valid-token`,
     );
     sockets.push(socket);
     const queue = createJsonMessageQueue(socket);
@@ -420,11 +472,15 @@ describe("websocket server", () => {
 
     const server = http.createServer();
     servers.push(server);
-    attachWebSocketServer(server, sessionManager as never);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
     const port = await startServer(server);
 
     const socket = new WebSocket(
-      `ws://127.0.0.1:${port}/ws?sessionId=session-4a`,
+      `ws://127.0.0.1:${port}/ws?sessionId=session-4a&token=valid-token`,
     );
     sockets.push(socket);
     const queue = createJsonMessageQueue(socket);
@@ -479,11 +535,15 @@ describe("websocket server", () => {
 
     const server = http.createServer();
     servers.push(server);
-    attachWebSocketServer(server, sessionManager as never);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
     const port = await startServer(server);
 
     const socket = new WebSocket(
-      `ws://127.0.0.1:${port}/ws?sessionId=session-4`,
+      `ws://127.0.0.1:${port}/ws?sessionId=session-4&token=valid-token`,
     );
     sockets.push(socket);
     const queue = createJsonMessageQueue(socket);

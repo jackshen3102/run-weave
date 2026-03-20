@@ -10,6 +10,7 @@ import type {
 } from "@browser-viewer/shared";
 import { z } from "zod";
 import type { SessionManager } from "../session/manager";
+import type { AuthService } from "../auth/service";
 import { applyInputToPage } from "./input";
 
 const clientInputSchema = z.union([
@@ -138,6 +139,7 @@ async function resolveCursorAtPoint(
 export function attachWebSocketServer(
   server: HttpServer,
   sessionManager: SessionManager,
+  authService: AuthService,
 ): WebSocketServer {
   const wss = new WebSocketServer({ server, path: "/ws" });
   let sampledMoveCount = 0;
@@ -153,10 +155,18 @@ export function attachWebSocketServer(
   wss.on("connection", (socket, request) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
     const sessionId = requestUrl.searchParams.get("sessionId");
+    const token = requestUrl.searchParams.get("token");
     console.log("[viewer-be] websocket connection incoming", {
       url: request.url,
       sessionId,
     });
+
+    if (!token || !authService.verifyToken(token)) {
+      console.log("[viewer-be] websocket rejected: unauthorized");
+      sendEvent(socket, { type: "error", message: "Unauthorized" });
+      socket.close(1008, "Unauthorized");
+      return;
+    }
 
     if (!sessionId) {
       console.log("[viewer-be] websocket rejected: missing sessionId");
@@ -215,13 +225,19 @@ export function attachWebSocketServer(
     const getNavigationHistory = async (
       page: Page,
     ): Promise<{ currentIndex: number; entryCount: number } | null> => {
-      const tempSession = await session.browserSession.context.newCDPSession(page);
+      const tempSession =
+        await session.browserSession.context.newCDPSession(page);
       try {
-        const history = (await tempSession.send("Page.getNavigationHistory")) as {
+        const history = (await tempSession.send(
+          "Page.getNavigationHistory",
+        )) as {
           currentIndex: number;
           entries: Array<unknown>;
         };
-        return { currentIndex: history.currentIndex, entryCount: history.entries.length };
+        return {
+          currentIndex: history.currentIndex,
+          entryCount: history.entries.length,
+        };
       } catch {
         return null;
       } finally {
@@ -243,7 +259,8 @@ export function attachWebSocketServer(
     };
 
     const stopPageLoading = async (page: Page): Promise<void> => {
-      const tempSession = await session.browserSession.context.newCDPSession(page);
+      const tempSession =
+        await session.browserSession.context.newCDPSession(page);
       try {
         await tempSession.send("Page.stopLoading");
       } finally {
@@ -611,7 +628,9 @@ export function attachWebSocketServer(
         void (async () => {
           if (parsed.action === "goto") {
             const normalizedUrl = normalizeNavigationUrl(parsed.url ?? "");
-            await targetPage.goto(normalizedUrl, { waitUntil: "domcontentloaded" });
+            await targetPage.goto(normalizedUrl, {
+              waitUntil: "domcontentloaded",
+            });
           } else if (parsed.action === "back") {
             const history = await getNavigationHistory(targetPage);
             if (history && history.currentIndex > 0) {

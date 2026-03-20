@@ -2,8 +2,10 @@ import { useState } from "react";
 import { ThemeToggle } from "./components/theme-toggle";
 import { Button } from "./components/ui/button";
 import { ViewerPage } from "./components/viewer-page";
+import { LoginPage } from "./components/login-page";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
 
 interface SessionData {
   sessionId: string;
@@ -15,12 +17,37 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState<SessionData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(() => {
+    return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  });
 
   const searchParams = new URLSearchParams(window.location.search);
   const viewerSessionId = searchParams.get("sessionId");
 
+  const clearToken = (): void => {
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    setToken(null);
+  };
+
+  const setTokenAndPersist = (nextToken: string): void => {
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, nextToken);
+    setToken(nextToken);
+    setError(null);
+  };
+
+  if (!token) {
+    return <LoginPage apiBase={API_BASE} onSuccess={setTokenAndPersist} />;
+  }
+
   if (viewerSessionId) {
-    return <ViewerPage apiBase={API_BASE} sessionId={viewerSessionId} />;
+    return (
+      <ViewerPage
+        apiBase={API_BASE}
+        sessionId={viewerSessionId}
+        token={token}
+        onAuthExpired={clearToken}
+      />
+    );
   }
 
   const createSession = async (): Promise<void> => {
@@ -34,11 +61,18 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/api/session`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ url }),
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          clearToken();
+          return;
+        }
         console.log("[viewer-fe] create session non-ok response", {
           status: response.status,
         });
@@ -69,7 +103,12 @@ export default function App() {
             React + Vite + shadcn/ui + Tailwind + Theme Toggle
           </p>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={clearToken}>
+            Logout
+          </Button>
+          <ThemeToggle />
+        </div>
       </header>
 
       <section className="rounded-xl border border-border/80 bg-card/70 p-5 backdrop-blur">

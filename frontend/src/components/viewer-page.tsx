@@ -23,6 +23,8 @@ import { normalizeRemoteCursor } from "../lib/cursor";
 interface ViewerPageProps {
   apiBase: string;
   sessionId: string;
+  token: string;
+  onAuthExpired?: () => void;
 }
 
 function toWebSocketBase(apiBase: string): string {
@@ -39,7 +41,12 @@ function toWebSocketBase(apiBase: string): string {
   return apiBase;
 }
 
-export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
+export function ViewerPage({
+  apiBase,
+  sessionId,
+  token,
+  onAuthExpired,
+}: ViewerPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -65,8 +72,9 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
   );
   const initialTabSyncedRef = useRef(false);
   const wsUrl = useMemo(
-    () => `${toWebSocketBase(apiBase)}/ws?sessionId=${sessionId}`,
-    [apiBase, sessionId],
+    () =>
+      `${toWebSocketBase(apiBase)}/ws?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(token)}`,
+    [apiBase, sessionId, token],
   );
 
   const syncUrlTabId = (tabId: string | null): void => {
@@ -216,6 +224,10 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
             if (message.type === "error") {
               wsCloseReasonRef.current = message.message;
               setError(message.message);
+              if (message.message === "Unauthorized") {
+                onAuthExpired?.();
+                return;
+              }
               console.log("[viewer-fe] websocket control error", {
                 sessionId,
                 message: message.message,
@@ -370,6 +382,10 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
             event.reason ||
             "WebSocket closed repeatedly. Please click Reconnect.";
           setError(closeReason);
+          if (closeReason === "Unauthorized") {
+            onAuthExpired?.();
+            return;
+          }
           console.log("[viewer-fe] websocket closed, stop auto reconnect", {
             sessionId,
             code: event.code,
@@ -416,7 +432,7 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [wsUrl, connectNonce, sessionId]);
+  }, [wsUrl, connectNonce, onAuthExpired, sessionId]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 p-4 sm:p-8">

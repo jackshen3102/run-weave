@@ -4,6 +4,10 @@
 
 - `PORT`: backend service port (default: `5001`).
 - `FRONTEND_ORIGIN`: allowed frontend origins for CORS, comma-separated.
+- `AUTH_USERNAME`: login username (set to `admin`).
+- `AUTH_PASSWORD`: login password.
+- `AUTH_JWT_SECRET`: signing secret for auth token.
+- `AUTH_TOKEN_TTL_SECONDS`: auth token TTL in seconds (default: `28800`).
 - `BROWSER_PROFILE_DIR`: persistent browser profile directory used by Playwright.
   - Default: `./.browser-profile` (relative to repository root).
   - Set this to a custom path if you want to reuse or isolate login state.
@@ -14,6 +18,9 @@
 Examples:
 
 ```bash
+# Setup backend env
+cp backend/.env.example backend/.env
+
 # Default headless
 pnpm dev
 
