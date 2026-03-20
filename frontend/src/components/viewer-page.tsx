@@ -16,6 +16,7 @@ import {
   extractKeyboardModifiers,
   mapClientPointToCanvas,
 } from "../lib/coordinate";
+import { normalizeRemoteCursor } from "../lib/cursor";
 
 interface ViewerPageProps {
   apiBase: string;
@@ -105,6 +106,7 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
 
   useEffect(() => {
     let closed = false;
+    const canvasElement = canvasRef.current;
     const connect = (): void => {
       if (closed) {
         return;
@@ -148,6 +150,11 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
                 count: message.tabs.length,
                 activeTab: message.tabs.find((tab) => tab.active)?.id,
               });
+            } else if (message.type === "cursor") {
+              const canvas = canvasRef.current;
+              if (canvas) {
+                canvas.style.cursor = normalizeRemoteCursor(message.cursor);
+              }
             } else if (message.type === "ack") {
               setAckCount((value) => value + 1);
               console.log("[viewer-fe] websocket ack", {
@@ -224,6 +231,9 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
         const livedMs = connectedAt ? Date.now() - connectedAt : 0;
         connectedAtRef.current = null;
         const closedByPolicy = event.code === 1008;
+        if (canvasRef.current) {
+          canvasRef.current.style.cursor = "default";
+        }
 
         if (closedByPolicy || livedMs < 1000) {
           setStatus("closed");
@@ -268,6 +278,9 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
       wsCloseReasonRef.current = null;
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
+      }
+      if (canvasElement) {
+        canvasElement.style.cursor = "default";
       }
       console.log("[viewer-fe] cleanup viewer page and close websocket", {
         sessionId,
@@ -406,6 +419,11 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
               });
             }}
             onContextMenu={(event) => event.preventDefault()}
+            onMouseLeave={() => {
+              if (canvasRef.current) {
+                canvasRef.current.style.cursor = "default";
+              }
+            }}
             onKeyDown={(event) => {
               event.preventDefault();
               sendInput({

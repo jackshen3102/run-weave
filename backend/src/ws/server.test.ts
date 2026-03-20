@@ -365,4 +365,73 @@ describe("websocket server", () => {
     const errorMessage = await queue.nextByType("error");
     expect(errorMessage.message).toBe("Unknown tabId: tab-unknown");
   });
+
+  it("syncs cursor style on mouse move", async () => {
+    const cdpSession = new FakeCDPSession();
+    (
+      cdpSession.send as unknown as {
+        mockImplementation: (
+          impl: (...args: unknown[]) => Promise<unknown>,
+        ) => void;
+      }
+    ).mockImplementation(async (...args: unknown[]) => {
+      const method = typeof args[0] === "string" ? args[0] : undefined;
+      if (method === "DOM.getNodeForLocation") {
+        return { backendNodeId: 42 };
+      }
+      if (method === "DOM.pushNodesByBackendIdsToFrontend") {
+        return { nodeIds: [7] };
+      }
+      if (method === "CSS.getComputedStyleForNode") {
+        return {
+          computedStyle: [{ name: "cursor", value: "pointer" }],
+        };
+      }
+      return undefined;
+    });
+
+    const page = new FakePage("https://example.com", "Example");
+    const context = new FakeContext([page], cdpSession);
+
+    const sessionManager = {
+      getSession: vi.fn(() => ({
+        id: "session-4",
+        browserSession: {
+          context,
+          page,
+        },
+      })),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(server, sessionManager as never);
+    const port = await startServer(server);
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-4`,
+    );
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    await queue.nextByType("connected");
+    await queue.nextByType("tabs");
+
+    socket.send(
+      JSON.stringify({
+        type: "mouse",
+        action: "move",
+        x: 50,
+        y: 30,
+      }),
+    );
+
+    const ackMessage = await queue.nextByType("ack");
+    expect(ackMessage.eventType).toBe("mouse");
+    const cursorMessage = await queue.nextByType("cursor");
+    expect(cursorMessage).toEqual({ type: "cursor", cursor: "pointer" });
+  });
 });
