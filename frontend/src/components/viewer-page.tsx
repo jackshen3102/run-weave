@@ -18,6 +18,7 @@ import {
   extractKeyboardModifiers,
   mapClientPointToCanvas,
 } from "../lib/coordinate";
+import { normalizeRemoteCursor } from "../lib/cursor";
 
 interface ViewerPageProps {
   apiBase: string;
@@ -91,7 +92,9 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
   };
 
   const activeTabId = tabs.find((tab) => tab.active)?.id ?? null;
-  const activeNavigation = activeTabId ? navigationByTabId[activeTabId] : undefined;
+  const activeNavigation = activeTabId
+    ? navigationByTabId[activeTabId]
+    : undefined;
 
   const sendInput = (input: ClientInputMessage): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -180,6 +183,7 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
   useEffect(() => {
     let closed = false;
     initialTabSyncedRef.current = false;
+    const canvasElement = canvasRef.current;
     const connect = (): void => {
       if (closed) {
         return;
@@ -218,7 +222,9 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
               });
             } else if (message.type === "tabs") {
               setTabs(message.tabs);
-              knownTabIdsRef.current = new Set(message.tabs.map((tab) => tab.id));
+              knownTabIdsRef.current = new Set(
+                message.tabs.map((tab) => tab.id),
+              );
               setNavigationByTabId((current) => {
                 const next: Record<string, NavigationState> = {};
                 for (const [tabId, state] of Object.entries(current)) {
@@ -229,14 +235,17 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
                 return next;
               });
 
-              const activeTab = message.tabs.find((tab) => tab.active)?.id ?? null;
+              const activeTab =
+                message.tabs.find((tab) => tab.active)?.id ?? null;
               const initialTabId = initialTabIdRef.current;
 
               if (!initialTabSyncedRef.current && message.tabs.length > 0) {
                 initialTabSyncedRef.current = true;
                 if (
                   initialTabId &&
-                  message.tabs.some((tab) => tab.id === initialTabId && !tab.active)
+                  message.tabs.some(
+                    (tab) => tab.id === initialTabId && !tab.active,
+                  )
                 ) {
                   if (ws.readyState === WebSocket.OPEN) {
                     ws.send(
@@ -269,6 +278,11 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
                 sessionId,
                 state: message.state,
               });
+            } else if (message.type === "cursor") {
+              const canvas = canvasRef.current;
+              if (canvas) {
+                canvas.style.cursor = normalizeRemoteCursor(message.cursor);
+              }
             } else if (message.type === "ack") {
               setAckCount((value) => value + 1);
               console.log("[viewer-fe] websocket ack", {
@@ -345,6 +359,9 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
         const livedMs = connectedAt ? Date.now() - connectedAt : 0;
         connectedAtRef.current = null;
         const closedByPolicy = event.code === 1008;
+        if (canvasRef.current) {
+          canvasRef.current.style.cursor = "default";
+        }
 
         if (closedByPolicy || livedMs < 1000) {
           setStatus("closed");
@@ -389,6 +406,9 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
       wsCloseReasonRef.current = null;
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
+      }
+      if (canvasElement) {
+        canvasElement.style.cursor = "default";
       }
       console.log("[viewer-fe] cleanup viewer page and close websocket", {
         sessionId,
@@ -461,7 +481,10 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
           )}
         </div>
 
-        <div className="mb-3 flex flex-col gap-2 sm:flex-row" data-testid="navigation-bar">
+        <div
+          className="mb-3 flex flex-col gap-2 sm:flex-row"
+          data-testid="navigation-bar"
+        >
           <div className="flex items-center gap-2">
             <Button
               size="sm"
@@ -473,7 +496,11 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
                 if (!activeTabId || !activeNavigation?.canGoBack) {
                   return;
                 }
-                sendInput({ type: "navigation", action: "back", tabId: activeTabId });
+                sendInput({
+                  type: "navigation",
+                  action: "back",
+                  tabId: activeTabId,
+                });
               }}
             >
               <ArrowLeft className="h-4 w-4" />
@@ -632,6 +659,11 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
               });
             }}
             onContextMenu={(event) => event.preventDefault()}
+            onMouseLeave={() => {
+              if (canvasRef.current) {
+                canvasRef.current.style.cursor = "default";
+              }
+            }}
             onKeyDown={(event) => {
               event.preventDefault();
               sendInput({

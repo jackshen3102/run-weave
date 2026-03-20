@@ -6,7 +6,10 @@ import type { ViewerTab } from "@browser-viewer/shared";
 import { attachWebSocketServer } from "./server";
 
 class FakeCDPSession extends EventEmitter {
-  private navigationHistory: { currentIndex: number; entries: Array<{ id: number; url: string }> } = {
+  private navigationHistory: {
+    currentIndex: number;
+    entries: Array<{ id: number; url: string }>;
+  } = {
     currentIndex: 0,
     entries: [{ id: 1, url: "https://example.com" }],
   };
@@ -552,5 +555,20 @@ describe("websocket server", () => {
     const stopAck = await queue.nextByType("ack");
     expect(stopAck.eventType).toBe("navigation");
     expect(cdpSession.send).toHaveBeenCalledWith("Page.stopLoading");
+    await queue.nextByType("tabs");
+
+    socket.send(
+      JSON.stringify({
+        type: "mouse",
+        action: "move",
+        x: 50,
+        y: 30,
+      }),
+    );
+
+    const ackMessage = await queue.nextByType("ack");
+    expect(ackMessage.eventType).toBe("mouse");
+    const cursorMessage = await queue.nextByType("cursor");
+    expect(cursorMessage).toEqual({ type: "cursor", cursor: "pointer" });
   });
 });

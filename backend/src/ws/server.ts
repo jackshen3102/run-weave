@@ -75,12 +75,73 @@ function parseClientMessage(raw: string): ClientInputMessage | null {
   }
 }
 
+function normalizeCursor(cursor: string | undefined): string {
+  if (!cursor || cursor === "auto") {
+    return "default";
+  }
+  if (cursor.startsWith("url(")) {
+    return "default";
+  }
+  return cursor;
+}
+
+async function resolveCursorAtPoint(
+  cdpSession: CDPSession,
+  x: number,
+  y: number,
+): Promise<string> {
+  const location = await cdpSession.send("DOM.getNodeForLocation", {
+    x,
+    y,
+    includeUserAgentShadowDOM: true,
+    ignorePointerEventsNone: false,
+  });
+
+  let nodeId =
+    typeof location?.nodeId === "number" ? (location.nodeId as number) : null;
+
+  if (!nodeId && typeof location?.backendNodeId === "number") {
+    const pushed = await cdpSession.send(
+      "DOM.pushNodesByBackendIdsToFrontend",
+      {
+        backendNodeIds: [location.backendNodeId],
+      },
+    );
+    const pushedNodeId = Array.isArray(pushed?.nodeIds)
+      ? pushed.nodeIds[0]
+      : null;
+    nodeId = typeof pushedNodeId === "number" ? pushedNodeId : null;
+  }
+
+  if (!nodeId) {
+    return "default";
+  }
+
+  const computed = await cdpSession.send("CSS.getComputedStyleForNode", {
+    nodeId,
+  });
+  const computedStyle = Array.isArray(computed?.computedStyle)
+    ? computed.computedStyle
+    : [];
+  const cursorEntry = computedStyle.find(
+    (entry: unknown) =>
+      typeof entry === "object" &&
+      entry !== null &&
+      "name" in entry &&
+      "value" in entry &&
+      (entry as { name: unknown }).name === "cursor",
+  ) as { value?: string } | undefined;
+
+  return normalizeCursor(cursorEntry?.value);
+}
+
 export function attachWebSocketServer(
   server: HttpServer,
   sessionManager: SessionManager,
 ): WebSocketServer {
   const wss = new WebSocketServer({ server, path: "/ws" });
   let sampledMoveCount = 0;
+  const cursorSyncIntervalMs = 50;
 
   const sendEvent = (socket: WebSocket, event: ServerEventMessage): void => {
     if (socket.readyState !== 1) {
@@ -121,6 +182,11 @@ export function attachWebSocketServer(
     let activePage: Page = session.browserSession.page;
     let activeTabId: string | null = null;
     let tabCounter = 0;
+    let cursorLookupTimer: NodeJS.Timeout | null = null;
+    let cursorLookupInFlight = false;
+    let pendingCursorPoint: { x: number; y: number } | null = null;
+    let lastCursorLookupAt = 0;
+    let lastCursorValue = "default";
 
     const tabIdToPage = new Map<string, Page>();
     const pageToTabId = new WeakMap<Page, string>();
@@ -220,6 +286,14 @@ export function attachWebSocketServer(
       });
     };
 
+    const emitCursor = (cursor: string): void => {
+      if (cursor === lastCursorValue) {
+        return;
+      }
+      lastCursorValue = cursor;
+      sendEvent(socket, { type: "cursor", cursor });
+    };
+
     const onScreencastFrame = (payload: {
       data: string;
       sessionId: number;
@@ -238,6 +312,8 @@ export function attachWebSocketServer(
     const startScreencast = async (): Promise<void> => {
       cdpSession =
         await session.browserSession.context.newCDPSession(activePage);
+      await cdpSession.send("DOM.enable");
+      await cdpSession.send("CSS.enable");
       cdpSession.on("Page.screencastFrame", onScreencastFrame);
       await cdpSession.send("Page.startScreencast", {
         format: "jpeg",
@@ -246,6 +322,51 @@ export function attachWebSocketServer(
         maxHeight: 720,
       });
       console.log("[viewer-be] screencast started", { sessionId, activeTabId });
+    };
+
+    const runCursorLookup = async (): Promise<void> => {
+      if (!cdpSession || cursorLookupInFlight || !pendingCursorPoint) {
+        return;
+      }
+
+      const point = pendingCursorPoint;
+      pendingCursorPoint = null;
+      cursorLookupInFlight = true;
+      lastCursorLookupAt = Date.now();
+
+      try {
+        const cursor = await resolveCursorAtPoint(cdpSession, point.x, point.y);
+        emitCursor(cursor);
+      } catch {
+        emitCursor("default");
+      } finally {
+        cursorLookupInFlight = false;
+      }
+
+      if (pendingCursorPoint && !cursorLookupTimer) {
+        const elapsed = Date.now() - lastCursorLookupAt;
+        const delay = Math.max(0, cursorSyncIntervalMs - elapsed);
+        cursorLookupTimer = setTimeout(() => {
+          cursorLookupTimer = null;
+          void runCursorLookup();
+        }, delay);
+        cursorLookupTimer.unref?.();
+      }
+    };
+
+    const scheduleCursorLookup = (x: number, y: number): void => {
+      pendingCursorPoint = { x, y };
+      if (!cdpSession || cursorLookupInFlight || cursorLookupTimer) {
+        return;
+      }
+
+      const elapsed = Date.now() - lastCursorLookupAt;
+      const delay = Math.max(0, cursorSyncIntervalMs - elapsed);
+      cursorLookupTimer = setTimeout(() => {
+        cursorLookupTimer = null;
+        void runCursorLookup();
+      }, delay);
+      cursorLookupTimer.unref?.();
     };
 
     const stopScreencast = async (): Promise<void> => {
@@ -286,6 +407,7 @@ export function attachWebSocketServer(
 
       await stopScreencast();
       await startScreencast();
+      emitCursor("default");
       return true;
     };
 
@@ -528,6 +650,9 @@ export function attachWebSocketServer(
             eventType: parsed.type,
           });
           sendEvent(socket, { type: "ack", eventType: parsed.type });
+          if (parsed.type === "mouse" && parsed.action === "move") {
+            scheduleCursorLookup(parsed.x, parsed.y);
+          }
         })
         .catch((error) => {
           console.log("[viewer-be] input apply failed", {
@@ -542,6 +667,10 @@ export function attachWebSocketServer(
     socket.on("close", () => {
       isClosed = true;
       stopHeartbeat();
+      if (cursorLookupTimer) {
+        clearTimeout(cursorLookupTimer);
+        cursorLookupTimer = null;
+      }
       void stopScreencast();
       session.browserSession.context.off("page", onContextPage);
       for (const [tabId, listeners] of pageListenersByTabId.entries()) {
@@ -561,6 +690,10 @@ export function attachWebSocketServer(
     socket.on("error", () => {
       isClosed = true;
       stopHeartbeat();
+      if (cursorLookupTimer) {
+        clearTimeout(cursorLookupTimer);
+        cursorLookupTimer = null;
+      }
       void stopScreencast();
       session.browserSession.context.off("page", onContextPage);
       console.log("[viewer-be] websocket error", { sessionId });

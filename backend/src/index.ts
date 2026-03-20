@@ -1,33 +1,12 @@
 import http from "node:http";
-import net from "node:net";
 import express from "express";
 import { BrowserService } from "./browser/service";
 import { createSessionRouter } from "./routes/session";
 import { SessionManager } from "./session/manager";
+import { listenWithFallback } from "./server/listen";
 import { attachWebSocketServer } from "./ws/server";
 
 const preferredPort = Number(process.env.PORT ?? 5001);
-
-async function isPortAvailable(port: number): Promise<boolean> {
-  return await new Promise((resolve) => {
-    const tester = net.createServer();
-
-    tester.once("error", () => resolve(false));
-    tester.once("listening", () => {
-      tester.close(() => resolve(true));
-    });
-
-    tester.listen(port, "127.0.0.1");
-  });
-}
-
-async function resolveListenPort(startPort: number): Promise<number> {
-  let port = startPort;
-  while (!(await isPortAvailable(port))) {
-    port += 1;
-  }
-  return port;
-}
 
 const app = express();
 app.use(express.json());
@@ -139,16 +118,14 @@ const server = http.createServer(app);
 attachWebSocketServer(server, sessionManager);
 
 const startServer = async (): Promise<void> => {
-  const port = await resolveListenPort(preferredPort);
+  const port = await listenWithFallback(server, preferredPort);
   if (port !== preferredPort) {
     console.log(
       `[viewer-be] preferred port ${preferredPort} is busy, switched to ${port}`,
     );
   }
 
-  server.listen(port, () => {
-    console.log(`backend listening on http://localhost:${port}`);
-  });
+  console.log(`backend listening on http://localhost:${port}`);
 };
 
 void startServer();

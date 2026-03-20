@@ -72,6 +72,10 @@ export type ServerEventMessage =
       sessionId: string;
     }
   | {
+      type: "cursor";
+      cursor: string;
+    }
+  | {
       type: "ack";
       eventType: ClientInputMessage["type"];
     }
