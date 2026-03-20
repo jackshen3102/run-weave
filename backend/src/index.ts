@@ -1,136 +1,132 @@
+import "dotenv/config";
 import http from "node:http";
 import express from "express";
 import { BrowserService } from "./browser/service";
+import { loadAuthConfig } from "./auth/config";
+import { createRequireAuth } from "./auth/middleware";
+import { AuthService } from "./auth/service";
+import { createAuthRouter } from "./routes/auth";
 import { createSessionRouter } from "./routes/session";
+import { createTestRouter } from "./routes/test";
+import { createCorsMiddleware } from "./server/cors";
 import { SessionManager } from "./session/manager";
 import { listenWithFallback } from "./server/listen";
 import { attachWebSocketServer } from "./ws/server";
 
-const preferredPort = Number(process.env.PORT ?? 5001);
+function readCliOption(optionName: string): string | undefined {
+  const longOption = `--${optionName}`;
+
+  for (let index = 2; index < process.argv.length; index += 1) {
+    const current = process.argv[index];
+    if (current == null) {
+      continue;
+    }
+
+    if (current === longOption) {
+      return process.argv[index + 1];
+    }
+
+    if (current.startsWith(`${longOption}=`)) {
+      return current.slice(longOption.length + 1);
+    }
+  }
+
+  return undefined;
+}
+
+function parsePort(rawValue: string | undefined, fallbackPort: number): number {
+  if (!rawValue) {
+    return fallbackPort;
+  }
+
+  const port = Number(rawValue.trim());
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid PORT value: ${JSON.stringify(rawValue)}`);
+  }
+
+  return port;
+}
+
+function resolveRuntimeConfig(): {
+  preferredPort: number;
+  strictPort: boolean;
+  host: string | undefined;
+} {
+  const rawCliPort = readCliOption("port");
+  const rawHost = readCliOption("host") ?? process.env.HOST;
+
+  return {
+    preferredPort: parsePort(rawCliPort ?? process.env.PORT, 5000),
+    strictPort:
+      rawCliPort != null ||
+      process.env.PORT_STRICT?.trim().toLowerCase() === "true",
+    host: rawHost?.trim() || undefined,
+  };
+}
+
+function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
+  return (rawOrigins ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+const { preferredPort, strictPort, host } = resolveRuntimeConfig();
 
 const app = express();
 app.use(express.json());
-
-const configuredOrigins = (process.env.FRONTEND_ORIGIN ?? "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
-const allowedOrigins = new Set([
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  ...configuredOrigins,
-]);
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && allowedOrigins.has(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Vary", "Origin");
-  }
-
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
-
-  if (req.method === "OPTIONS") {
-    res.status(204).end();
-    return;
-  }
-
-  next();
-});
+app.use(
+  createCorsMiddleware(parseConfiguredOrigins(process.env.FRONTEND_ORIGIN)),
+);
 
 const browserService = new BrowserService({
   headless: process.env.BROWSER_HEADLESS?.trim().toLowerCase() !== "false",
   profileDir: process.env.BROWSER_PROFILE_DIR,
 });
+const authService = new AuthService(loadAuthConfig());
+const requireAuth = createRequireAuth(authService);
 const sessionManager = new SessionManager(browserService);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.get("/test/popup", (_req, res) => {
-  res.type("html").send(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Popup Source</title>
-    <style>
-      body { margin: 0; font-family: sans-serif; background: #f2f4f8; }
-      #open {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        margin: 20px;
-        width: 280px;
-        height: 100px;
-        font-size: 18px;
-        text-decoration: none;
-        color: #111827;
-        border: 1px solid #9ca3af;
-        border-radius: 8px;
-        background: #e5e7eb;
-      }
-    </style>
-  </head>
-  <body>
-    <a id="open" href="/test/child" target="_blank" rel="noopener noreferrer">
-      Open Child Tab
-    </a>
-  </body>
-</html>`);
-});
+app.use("/test", createTestRouter());
 
-app.get("/test/popup-auto", (_req, res) => {
-  res.type("html").send(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Popup Auto Source</title>
-  </head>
-  <body>
-    <h1>Popup Auto Source</h1>
-    <script>
-      window.open("/test/child", "_blank", "noopener,noreferrer");
-    </script>
-  </body>
-</html>`);
-});
-
-app.get("/test/child", (_req, res) => {
-  res.type("html").send(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Popup Child</title>
-  </head>
-  <body>
-    <h1>Popup Child</h1>
-    <p>Opened from source page.</p>
-  </body>
-</html>`);
-});
-
-app.use("/api", createSessionRouter(sessionManager));
+app.use("/api/auth", createAuthRouter(authService));
+app.use("/api", requireAuth, createSessionRouter(sessionManager));
 
 const server = http.createServer(app);
-attachWebSocketServer(server, sessionManager);
+attachWebSocketServer(server, sessionManager, authService);
 
 const startServer = async (): Promise<void> => {
-  const port = await listenWithFallback(server, preferredPort);
+  const port = await listenWithFallback(server, preferredPort, {
+    host,
+    maxAttempts: strictPort ? 1 : undefined,
+  });
   if (port !== preferredPort) {
     console.log(
       `[viewer-be] preferred port ${preferredPort} is busy, switched to ${port}`,
     );
   }
 
-  console.log(`backend listening on http://localhost:${port}`);
+  const publicHost = host === "0.0.0.0" ? "localhost" : host;
+  console.log(
+    `backend listening on http://${publicHost ?? "localhost"}:${port}`,
+  );
 };
 
 void startServer();
 
+let shuttingDown = false;
+
 const shutdown = async (): Promise<void> => {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+
   server.close();
   await sessionManager.dispose();
   process.exit(0);
