@@ -52,7 +52,6 @@ export function useViewerConnection({
   const reconnectCountRef = useRef(0);
   const connectedAtRef = useRef<number | null>(null);
   const wsCloseReasonRef = useRef<string | null>(null);
-  const moveLogCounterRef = useRef(0);
   const initialTabIdRef = useRef<string | null>(
     getTabIdFromSearch(window.location.search),
   );
@@ -72,36 +71,14 @@ export function useViewerConnection({
     [apiBase, sessionId, token],
   );
 
-  const sendInput = useCallback(
-    (input: ClientInputMessage): void => {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-        console.log("[viewer-fe] skip send input: websocket not open", {
-          sessionId,
-          type: input.type,
-          action: input.type === "mouse" ? input.action : undefined,
-        });
-        return;
-      }
+  const sendInput = useCallback((input: ClientInputMessage): void => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      return;
+    }
 
-      if (input.type !== "mouse" || input.action !== "move") {
-        console.log("[viewer-fe] send input", { sessionId, input });
-      } else {
-        moveLogCounterRef.current += 1;
-        if (moveLogCounterRef.current % 30 === 0) {
-          console.log("[viewer-fe] send mouse move (sampled)", {
-            sessionId,
-            count: moveLogCounterRef.current,
-            x: input.x,
-            y: input.y,
-          });
-        }
-      }
-
-      wsRef.current.send(JSON.stringify(input));
-      dispatch({ type: "input/sent" });
-    },
-    [sessionId],
-  );
+    wsRef.current.send(JSON.stringify(input));
+    dispatch({ type: "input/sent" });
+  }, []);
 
   const reconnect = useCallback((): void => {
     reconnectCountRef.current = 0;
@@ -154,11 +131,6 @@ export function useViewerConnection({
 
       const activeTab = message.tabs.find((tab) => tab.active)?.id ?? null;
       syncUrlTabId(activeTab);
-      console.log("[viewer-fe] websocket tabs", {
-        sessionId,
-        count: message.tabs.length,
-        activeTab,
-      });
     };
 
     const handleControlMessage = (
@@ -218,6 +190,15 @@ export function useViewerConnection({
             sessionId,
             eventType: message.eventType,
           });
+          return;
+        case "clipboard":
+          if (message.action === "copy" && navigator.clipboard?.writeText) {
+            void navigator.clipboard.writeText(message.text).catch(() => {
+              console.log("[viewer-fe] failed to write clipboard", {
+                sessionId,
+              });
+            });
+          }
           return;
         default:
           console.log("[viewer-fe] websocket control message", {

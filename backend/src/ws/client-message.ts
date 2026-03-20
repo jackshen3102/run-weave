@@ -17,6 +17,11 @@ const clientInputSchema = z.union([
     modifiers: z.array(z.string()).optional(),
   }),
   z.object({
+    type: z.literal("clipboard"),
+    action: z.literal("paste"),
+    text: z.string(),
+  }),
+  z.object({
     type: z.literal("scroll"),
     x: z.number().optional(),
     y: z.number().optional(),

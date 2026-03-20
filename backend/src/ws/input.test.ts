@@ -1,18 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 import { applyInputToPage } from "./input";
 
+function createFakePage() {
+  return {
+    mouse: {
+      click: vi.fn(async () => undefined),
+      move: vi.fn(async () => undefined),
+      wheel: vi.fn(async () => undefined),
+    },
+    keyboard: {
+      press: vi.fn(async () => undefined),
+      insertText: vi.fn(async () => undefined),
+    },
+  };
+}
+
 describe("applyInputToPage", () => {
   it("applies mouse click and move events", async () => {
-    const page = {
-      mouse: {
-        click: vi.fn(async () => undefined),
-        move: vi.fn(async () => undefined),
-        wheel: vi.fn(async () => undefined),
-      },
-      keyboard: {
-        press: vi.fn(async () => undefined),
-      },
-    };
+    const page = createFakePage();
 
     await applyInputToPage(page as never, {
       type: "mouse",
@@ -33,16 +38,7 @@ describe("applyInputToPage", () => {
   });
 
   it("applies keyboard and scroll events", async () => {
-    const page = {
-      mouse: {
-        click: vi.fn(async () => undefined),
-        move: vi.fn(async () => undefined),
-        wheel: vi.fn(async () => undefined),
-      },
-      keyboard: {
-        press: vi.fn(async () => undefined),
-      },
-    };
+    const page = createFakePage();
 
     await applyInputToPage(page as never, {
       type: "keyboard",
@@ -62,17 +58,21 @@ describe("applyInputToPage", () => {
     expect(page.mouse.wheel).toHaveBeenCalledWith(0, 120);
   });
 
+  it("applies clipboard paste events", async () => {
+    const page = createFakePage();
+
+    await applyInputToPage(page as never, {
+      type: "clipboard",
+      action: "paste",
+      text: "你好 world",
+    });
+
+    expect(page.keyboard.insertText).toHaveBeenCalledWith("你好 world");
+    expect(page.keyboard.press).not.toHaveBeenCalled();
+  });
+
   it("rejects tab events", async () => {
-    const page = {
-      mouse: {
-        click: vi.fn(async () => undefined),
-        move: vi.fn(async () => undefined),
-        wheel: vi.fn(async () => undefined),
-      },
-      keyboard: {
-        press: vi.fn(async () => undefined),
-      },
-    };
+    const page = createFakePage();
 
     await expect(
       applyInputToPage(page as never, {
@@ -84,16 +84,7 @@ describe("applyInputToPage", () => {
   });
 
   it("rejects navigation events", async () => {
-    const page = {
-      mouse: {
-        click: vi.fn(async () => undefined),
-        move: vi.fn(async () => undefined),
-        wheel: vi.fn(async () => undefined),
-      },
-      keyboard: {
-        press: vi.fn(async () => undefined),
-      },
-    };
+    const page = createFakePage();
 
     await expect(
       applyInputToPage(page as never, {

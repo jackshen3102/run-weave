@@ -31,6 +31,10 @@ export async function applyInputToPage(
       );
       return;
     }
+    case "clipboard": {
+      await page.keyboard.insertText(input.text);
+      return;
+    }
     case "scroll": {
       if (typeof input.x === "number" && typeof input.y === "number") {
         await page.mouse.move(input.x, input.y);

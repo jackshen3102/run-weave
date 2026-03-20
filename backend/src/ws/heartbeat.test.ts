@@ -15,7 +15,7 @@ describe("createHeartbeatController", () => {
         isAlive: true,
       } as unknown as ConnectionContext;
 
-      const controller = createHeartbeatController(socket, state);
+      const controller = createHeartbeatController(socket as never, state as never);
       controller.start();
       vi.advanceTimersByTime(15_000);
 
@@ -39,7 +39,7 @@ describe("createHeartbeatController", () => {
         isAlive: true,
       } as unknown as ConnectionContext;
 
-      const controller = createHeartbeatController(socket, state);
+      const controller = createHeartbeatController(socket as never, state as never);
       controller.start();
       vi.advanceTimersByTime(15_000);
       vi.advanceTimersByTime(15_000);

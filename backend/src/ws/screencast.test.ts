@@ -27,7 +27,7 @@ describe("createScreencastController", () => {
       state,
       context,
       sessionId: "s-1",
-    });
+    } as never);
 
     await controller.start();
     expect(newCDPSession).toHaveBeenCalled();

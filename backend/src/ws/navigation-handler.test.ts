@@ -59,12 +59,19 @@ describe("handleNavigationMessage", () => {
     const page = { goto: vi.fn(async () => undefined) };
     state.tabIdToPage.set("tab-1", page as never);
 
-    vi.spyOn(navigationModule, "normalizeNavigationUrl").mockReturnValue("https://example.com");
+    vi.spyOn(navigationModule, "normalizeNavigationUrl").mockReturnValue(
+      "https://example.com",
+    );
     const sendAck = vi.fn();
     const emitNavigationState = vi.fn(async () => undefined);
 
     handleNavigationMessage(
-      { type: "navigation", action: "goto", tabId: "tab-1", url: "example.com" },
+      {
+        type: "navigation",
+        action: "goto",
+        tabId: "tab-1",
+        url: "example.com",
+      },
       {
         context: {} as never,
         state,
@@ -84,9 +91,11 @@ describe("handleNavigationMessage", () => {
 
   it("resets loading and reports error on failure", async () => {
     const state = createState();
-    const page = { reload: vi.fn(async () => {
-      throw new Error("reload failed");
-    }) };
+    const page = {
+      reload: vi.fn(async () => {
+        throw new Error("reload failed");
+      }),
+    };
     state.tabIdToPage.set("tab-1", page as never);
     const sendError = vi.fn();
 

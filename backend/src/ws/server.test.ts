@@ -48,6 +48,7 @@ class FakePage extends EventEmitter {
 
   readonly keyboard = {
     press: vi.fn(async () => undefined),
+    insertText: vi.fn(async () => undefined),
   };
 
   readonly goBack = vi.fn(async () => undefined);
@@ -59,6 +60,7 @@ class FakePage extends EventEmitter {
   });
 
   private readonly frame = {};
+  private selectedText = "";
 
   constructor(
     private currentUrl: string,
@@ -85,6 +87,12 @@ class FakePage extends EventEmitter {
     this.emit("framenavigated", this.frame);
     this.emit("load");
   }
+
+  setSelectedText(text: string): void {
+    this.selectedText = text;
+  }
+
+  evaluate = vi.fn(async () => this.selectedText);
 
   closePage(): void {
     this.emit("close");
@@ -292,6 +300,62 @@ describe("websocket server", () => {
     const ackMessage = await queue.nextByType("ack");
     expect(ackMessage.type).toBe("ack");
     expect(page.mouse.click).toHaveBeenCalledWith(11, 22, { button: "left" });
+  });
+
+  it("syncs copied text from remote page", async () => {
+    const cdpSession = new FakeCDPSession();
+    const page = new FakePage("https://example.com", "Example");
+    page.setSelectedText("copied from remote");
+    const context = new FakeContext([page], cdpSession);
+
+    const sessionManager = {
+      getSession: vi.fn(() => ({
+        id: "session-copy",
+        browserSession: {
+          context,
+          page,
+        },
+      })),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-copy&token=valid-token`,
+    );
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    await queue.nextByType("connected");
+    await queue.nextByType("tabs");
+
+    socket.send(
+      JSON.stringify({
+        type: "keyboard",
+        key: "c",
+        modifiers: ["Control"],
+      }),
+    );
+
+    const ackMessage = await queue.nextByType("ack");
+    expect(ackMessage.eventType).toBe("keyboard");
+
+    const clipboardMessage = await queue.nextByType("clipboard");
+    expect(clipboardMessage).toEqual({
+      type: "clipboard",
+      action: "copy",
+      text: "copied from remote",
+    });
   });
 
   it("rejects websocket connection without valid token", async () => {

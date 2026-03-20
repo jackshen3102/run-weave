@@ -20,6 +20,7 @@ export function ViewerPage({
   onAuthExpired,
 }: ViewerPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const inputBridgeRef = useRef<HTMLTextAreaElement>(null);
   const [addressInput, setAddressInput] = useState("");
   const [isEditingAddress, setIsEditingAddress] = useState(false);
   const {
@@ -46,9 +47,13 @@ export function ViewerPage({
     onWheel,
     onContextMenu,
     onMouseLeave,
-    onKeyDown,
+    onBridgeKeyDown,
+    onBridgeInput,
+    onBridgeCompositionStart,
+    onBridgeCompositionEnd,
   } = useViewerInput({
     canvasRef,
+    inputBridgeRef,
     sendInput,
   });
 
@@ -172,6 +177,19 @@ export function ViewerPage({
         >
           Sent: {sentCount} | Ack: {ackCount}
         </p>
+        <textarea
+          ref={inputBridgeRef}
+          aria-label="Viewer input bridge"
+          className="pointer-events-none fixed z-50 h-1 w-1 opacity-0"
+          style={{ left: 0, top: 0 }}
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          onKeyDown={onBridgeKeyDown}
+          onInput={onBridgeInput}
+          onCompositionStart={onBridgeCompositionStart}
+          onCompositionEnd={onBridgeCompositionEnd}
+        />
         <div className="overflow-hidden rounded-md border border-border bg-black/70">
           <canvas
             ref={canvasRef}
@@ -183,7 +201,6 @@ export function ViewerPage({
             onWheel={onWheel}
             onContextMenu={onContextMenu}
             onMouseLeave={onMouseLeave}
-            onKeyDown={onKeyDown}
           />
         </div>
 

@@ -5,7 +5,10 @@ import type { ConnectionContext } from "./context";
 import { createTabManager } from "./tab-manager";
 
 class FakePage extends EventEmitter {
-  constructor(private u: string, private t: string) {
+  constructor(
+    private u: string,
+    private t: string,
+  ) {
     super();
   }
   url(): string {
@@ -57,9 +60,9 @@ describe("createTabManager", () => {
       startScreencast: vi.fn(async () => undefined),
       stopScreencast: vi.fn(async () => undefined),
       sendError: vi.fn(),
-    });
+    } as never);
 
-    manager.initializeTabs(page);
+    manager.initializeTabs(page as never);
     const tabId = state.activeTabId;
     expect(tabId).toBeTruthy();
 

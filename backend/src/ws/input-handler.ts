@@ -1,6 +1,7 @@
 import type { ClientInputMessage } from "@browser-viewer/shared";
 import type { Page } from "playwright";
 import { applyInputToPage } from "./input";
+import { getClipboardCopyTextBeforeInput } from "./clipboard";
 
 type PageInputMessage = Exclude<
   ClientInputMessage,
@@ -13,18 +14,29 @@ export function handlePageInputMessage(params: {
   sessionId: string;
   sendError: (message: string) => void;
   sendAck: () => void;
+  sendClipboardCopy: (text: string) => void;
   scheduleCursorLookup: (x: number, y: number) => void;
 }): void {
-  const { parsed, activePage, sessionId, sendError, sendAck, scheduleCursorLookup } =
-    params;
+  const {
+    parsed,
+    activePage,
+    sessionId,
+    sendError,
+    sendAck,
+    sendClipboardCopy,
+    scheduleCursorLookup,
+  } = params;
 
-  void applyInputToPage(activePage, parsed)
-    .then(() => {
-      console.log("[viewer-be] input applied", {
-        sessionId,
-        eventType: parsed.type,
-      });
+  void getClipboardCopyTextBeforeInput(activePage, parsed)
+    .catch(() => null)
+    .then((clipboardText) =>
+      applyInputToPage(activePage, parsed).then(() => clipboardText),
+    )
+    .then((clipboardText) => {
       sendAck();
+      if (clipboardText) {
+        sendClipboardCopy(clipboardText);
+      }
       if (parsed.type === "mouse" && parsed.action === "move") {
         scheduleCursorLookup(parsed.x, parsed.y);
       }

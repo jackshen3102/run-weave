@@ -34,6 +34,18 @@ describe("parseClientMessage", () => {
     });
   });
 
+  it("parses clipboard paste message", () => {
+    const parsed = parseClientMessage(
+      JSON.stringify({ type: "clipboard", action: "paste", text: "你好" }),
+    );
+
+    expect(parsed).toEqual({
+      type: "clipboard",
+      action: "paste",
+      text: "你好",
+    });
+  });
+
   it("rejects devtools message without tabId", () => {
     const parsed = parseClientMessage(
       JSON.stringify({

@@ -205,7 +205,8 @@ export function attachWebSocketServer(
           parsed,
           selectTab: tabManager.selectTab,
           sendError,
-          sendAck: () => sendEvent(socket, { type: "ack", eventType: parsed.type }),
+          sendAck: () =>
+            sendEvent(socket, { type: "ack", eventType: parsed.type }),
         });
         return;
       }
@@ -215,7 +216,8 @@ export function attachWebSocketServer(
           context: session.browserSession.context,
           state,
           sendError,
-          sendAck: () => sendEvent(socket, { type: "ack", eventType: parsed.type }),
+          sendAck: () =>
+            sendEvent(socket, { type: "ack", eventType: parsed.type }),
           emitNavigationState,
         });
         return;
@@ -241,7 +243,14 @@ export function attachWebSocketServer(
         activePage: state.activePage,
         sessionId,
         sendError,
-        sendAck: () => sendEvent(socket, { type: "ack", eventType: parsed.type }),
+        sendAck: () =>
+          sendEvent(socket, { type: "ack", eventType: parsed.type }),
+        sendClipboardCopy: (text) =>
+          sendEvent(socket, {
+            type: "clipboard",
+            action: "copy",
+            text,
+          }),
         scheduleCursorLookup: cursorSync.scheduleLookup,
       });
     });

@@ -1,6 +1,9 @@
 import {
   useCallback,
   useRef,
+  type CompositionEventHandler,
+  type FormEventHandler,
+  type KeyboardEvent,
   type KeyboardEventHandler,
   type MouseEventHandler,
   type RefObject,
@@ -14,6 +17,7 @@ import {
 
 interface UseViewerInputParams {
   canvasRef: RefObject<HTMLCanvasElement | null>;
+  inputBridgeRef: RefObject<HTMLTextAreaElement | null>;
   sendInput: (input: ClientInputMessage) => void;
 }
 
@@ -23,14 +27,78 @@ interface UseViewerInputResult {
   onWheel: WheelEventHandler<HTMLCanvasElement>;
   onContextMenu: MouseEventHandler<HTMLCanvasElement>;
   onMouseLeave: MouseEventHandler<HTMLCanvasElement>;
-  onKeyDown: KeyboardEventHandler<HTMLCanvasElement>;
+  onBridgeKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
+  onBridgeInput: FormEventHandler<HTMLTextAreaElement>;
+  onBridgeCompositionStart: CompositionEventHandler<HTMLTextAreaElement>;
+  onBridgeCompositionEnd: CompositionEventHandler<HTMLTextAreaElement>;
+}
+
+const FORWARDED_KEYS = new Set([
+  "Backspace",
+  "Tab",
+  "Enter",
+  "Escape",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "Delete",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
+
+function shouldForwardAsKeyboardShortcut(event: KeyboardEvent): boolean {
+  if (event.ctrlKey || event.metaKey || event.altKey) {
+    return true;
+  }
+
+  return FORWARDED_KEYS.has(event.key);
 }
 
 export function useViewerInput({
   canvasRef,
+  inputBridgeRef,
   sendInput,
 }: UseViewerInputParams): UseViewerInputResult {
   const lastMoveAtRef = useRef(0);
+  const composingRef = useRef(false);
+
+  const sendClipboardPaste = useCallback(
+    (text: string): void => {
+      if (!text) {
+        return;
+      }
+      sendInput({ type: "clipboard", action: "paste", text });
+    },
+    [sendInput],
+  );
+
+  const sendKeyboardInput = useCallback(
+    (
+      event: Pick<
+        KeyboardEvent,
+        "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey"
+      >,
+    ): void => {
+      sendInput({
+        type: "keyboard",
+        key: event.key,
+        modifiers: extractKeyboardModifiers(event),
+      });
+    },
+    [sendInput],
+  );
+
+  const isPasteShortcut = useCallback(
+    (event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey">): boolean => {
+      return (
+        event.key.toLowerCase() === "v" && (event.ctrlKey || event.metaKey)
+      );
+    },
+    [],
+  );
 
   const mapPointerEvent = useCallback(
     (clientX: number, clientY: number) => {
@@ -51,7 +119,12 @@ export function useViewerInput({
 
   const onMouseDown = useCallback<MouseEventHandler<HTMLCanvasElement>>(
     (event) => {
-      event.currentTarget.focus();
+      event.preventDefault();
+      if (inputBridgeRef.current) {
+        inputBridgeRef.current.style.left = `${event.clientX}px`;
+        inputBridgeRef.current.style.top = `${event.clientY}px`;
+        inputBridgeRef.current.focus();
+      }
       const point = mapPointerEvent(event.clientX, event.clientY);
       if (!point) {
         return;
@@ -65,7 +138,7 @@ export function useViewerInput({
           event.button === 1 ? "middle" : event.button === 2 ? "right" : "left",
       });
     },
-    [mapPointerEvent, sendInput],
+    [inputBridgeRef, mapPointerEvent, sendInput],
   );
 
   const onMouseMove = useCallback<MouseEventHandler<HTMLCanvasElement>>(
@@ -118,16 +191,76 @@ export function useViewerInput({
     }
   }, [canvasRef]);
 
-  const onKeyDown = useCallback<KeyboardEventHandler<HTMLCanvasElement>>(
+  const onBridgeKeyDown = useCallback<
+    KeyboardEventHandler<HTMLTextAreaElement>
+  >(
     (event) => {
-      event.preventDefault();
-      sendInput({
-        type: "keyboard",
-        key: event.key,
-        modifiers: extractKeyboardModifiers(event),
-      });
+      if (event.nativeEvent.isComposing || composingRef.current) {
+        return;
+      }
+
+      if (isPasteShortcut(event)) {
+        event.preventDefault();
+        if (!navigator.clipboard?.readText) {
+          sendKeyboardInput(event);
+          return;
+        }
+        void navigator.clipboard
+          .readText()
+          .then((text) => {
+            sendClipboardPaste(text, "paste-shortcut");
+          })
+          .catch(() => {
+            sendKeyboardInput(event);
+          });
+        return;
+      }
+
+      if (shouldForwardAsKeyboardShortcut(event)) {
+        event.preventDefault();
+        sendKeyboardInput(event);
+      }
     },
-    [sendInput],
+    [isPasteShortcut, sendClipboardPaste, sendKeyboardInput],
+  );
+
+  const onBridgeInput = useCallback<FormEventHandler<HTMLTextAreaElement>>(
+    (event) => {
+      if (composingRef.current) {
+        return;
+      }
+
+      const text = event.currentTarget.value;
+      if (!text) {
+        return;
+      }
+
+      sendClipboardPaste(text, "input");
+      event.currentTarget.value = "";
+    },
+    [sendClipboardPaste],
+  );
+
+  const onBridgeCompositionStart = useCallback<
+    CompositionEventHandler<HTMLTextAreaElement>
+  >(() => {
+    composingRef.current = true;
+  }, []);
+
+  const onBridgeCompositionEnd = useCallback<
+    CompositionEventHandler<HTMLTextAreaElement>
+  >(
+    (event) => {
+      composingRef.current = false;
+      const text = event.currentTarget.value;
+      if (!text) {
+        return;
+      }
+
+      sendClipboardPaste(text, "composition");
+      event.currentTarget.value = "";
+    },
+    [sendClipboardPaste],
   );
 
   return {
@@ -136,6 +269,9 @@ export function useViewerInput({
     onWheel,
     onContextMenu,
     onMouseLeave,
-    onKeyDown,
+    onBridgeKeyDown,
+    onBridgeInput,
+    onBridgeCompositionStart,
+    onBridgeCompositionEnd,
   };
 }

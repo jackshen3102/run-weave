@@ -53,6 +53,11 @@ export type ClientInputMessage =
       modifiers?: string[];
     }
   | {
+      type: "clipboard";
+      action: "paste";
+      text: string;
+    }
+  | {
       type: "scroll";
       x?: number;
       y?: number;
@@ -102,6 +107,11 @@ export type ServerEventMessage =
   | {
       type: "ack";
       eventType: ClientInputMessage["type"];
+    }
+  | {
+      type: "clipboard";
+      action: "copy";
+      text: string;
     }
   | {
       type: "tabs";
