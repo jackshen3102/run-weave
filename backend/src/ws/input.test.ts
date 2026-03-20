@@ -82,4 +82,25 @@ describe("applyInputToPage", () => {
       }),
     ).rejects.toThrow("Tab input should be handled by websocket server");
   });
+
+  it("rejects navigation events", async () => {
+    const page = {
+      mouse: {
+        click: vi.fn(async () => undefined),
+        move: vi.fn(async () => undefined),
+        wheel: vi.fn(async () => undefined),
+      },
+      keyboard: {
+        press: vi.fn(async () => undefined),
+      },
+    };
+
+    await expect(
+      applyInputToPage(page as never, {
+        type: "navigation",
+        action: "reload",
+        tabId: "tab-1",
+      }),
+    ).rejects.toThrow("Navigation input should be handled by websocket server");
+  });
 });

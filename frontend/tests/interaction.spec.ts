@@ -25,21 +25,59 @@ test("viewer sends input and receives ack", async ({ page }) => {
 
   const canvas = viewerPage.locator("canvas");
   await expect(canvas).toBeVisible();
-  const tabs = viewerPage.getByTestId("tab-list").locator("button");
-  await expect(tabs).toHaveCount(2, { timeout: 20_000 });
   const sourceTab = viewerPage.getByRole("button", {
     name: "Popup Auto Source",
   });
   const childTab = viewerPage.getByRole("button", { name: "Popup Child" });
 
-  await expect(sourceTab).toBeVisible();
-  await expect(childTab).toBeVisible();
+  await expect(sourceTab).toBeVisible({ timeout: 20_000 });
+  await expect(childTab).toBeVisible({ timeout: 20_000 });
 
-  await expect(sourceTab).toHaveAttribute("aria-pressed", "true");
-  await childTab.click();
-  await expect(childTab).toHaveAttribute("aria-pressed", "true");
+  const sourceTabId = await sourceTab.getAttribute("data-tab-id");
+  const childTabId = await childTab.getAttribute("data-tab-id");
+  if (!sourceTabId || !childTabId) {
+    throw new Error("Missing tab id from tab buttons");
+  }
+
   await sourceTab.click();
   await expect(sourceTab).toHaveAttribute("aria-pressed", "true");
+  await expect(viewerPage).toHaveURL(new RegExp(`tabId=${sourceTabId}`));
+
+  await childTab.click();
+  await expect(childTab).toHaveAttribute("aria-pressed", "true");
+  await expect(viewerPage).toHaveURL(new RegExp(`tabId=${childTabId}`));
+
+  const navBar = viewerPage.getByTestId("navigation-bar");
+  const backButton = navBar.getByRole("button", { name: "Back" });
+  const forwardButton = navBar.getByRole("button", { name: "Forward" });
+  const refreshButton = navBar.getByRole("button", { name: "Refresh" });
+
+  await expect(backButton).toBeDisabled();
+  await expect(forwardButton).toBeDisabled();
+
+  await sourceTab.click();
+  await expect(sourceTab).toHaveAttribute("aria-pressed", "true");
+  await expect(viewerPage).toHaveURL(new RegExp(`tabId=${sourceTabId}`));
+
+  const addressInput = viewerPage.getByTestId("address-input");
+  await expect(navBar).toBeVisible();
+  await expect(addressInput).toHaveValue(/http/);
+
+  await addressInput.fill(`127.0.0.1:${E2E_BACKEND_PORT}/test/child`);
+  await addressInput.press("Enter");
+  await expect(addressInput).toHaveValue(
+    new RegExp(`https?://127\\.0\\.0\\.1:${E2E_BACKEND_PORT}/test/child`),
+  );
+
+  await navBar.getByRole("button", { name: "Back" }).click();
+  await expect(addressInput).toHaveValue(/popup-auto|child/);
+
+  await navBar.getByRole("button", { name: "Forward" }).click();
+  await expect(addressInput).toHaveValue(
+    new RegExp(`https?://127\\.0\\.0\\.1:${E2E_BACKEND_PORT}/test/child`),
+  );
+
+  await refreshButton.click();
 
   await canvas.click({ position: { x: 30, y: 30 } });
 

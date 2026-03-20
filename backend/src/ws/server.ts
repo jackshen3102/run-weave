@@ -4,6 +4,7 @@ import type { WebSocket } from "ws";
 import type { CDPSession, Frame, Page } from "playwright";
 import type {
   ClientInputMessage,
+  NavigationState,
   ServerEventMessage,
   ViewerTab,
 } from "@browser-viewer/shared";
@@ -11,7 +12,7 @@ import { z } from "zod";
 import type { SessionManager } from "../session/manager";
 import { applyInputToPage } from "./input";
 
-const clientInputSchema = z.discriminatedUnion("type", [
+const clientInputSchema = z.union([
   z.object({
     type: z.literal("mouse"),
     action: z.union([z.literal("click"), z.literal("move")]),
@@ -38,6 +39,28 @@ const clientInputSchema = z.discriminatedUnion("type", [
     action: z.literal("switch"),
     tabId: z.string().min(1),
   }),
+  z
+    .object({
+      type: z.literal("navigation"),
+      action: z.union([
+        z.literal("goto"),
+        z.literal("back"),
+        z.literal("forward"),
+        z.literal("reload"),
+        z.literal("stop"),
+      ]),
+      tabId: z.string().min(1),
+      url: z.string().min(1).optional(),
+    })
+    .superRefine((value, ctx) => {
+      if (value.action === "goto" && !value.url) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "url is required for goto action",
+          path: ["url"],
+        });
+      }
+    }),
 ]);
 
 function parseClientMessage(raw: string): ClientInputMessage | null {
@@ -46,7 +69,7 @@ function parseClientMessage(raw: string): ClientInputMessage | null {
     if (!parsed.success) {
       return null;
     }
-    return parsed.data;
+    return parsed.data as ClientInputMessage;
   } catch {
     return null;
   }
@@ -110,6 +133,76 @@ export function attachWebSocketServer(
         load: () => void;
       }
     >();
+    const tabLoadingById = new Map<string, boolean>();
+
+    const hasScheme = (url: string): boolean =>
+      /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(url);
+
+    const normalizeNavigationUrl = (rawUrl: string): string => {
+      const url = rawUrl.trim();
+      if (!url) {
+        throw new Error("URL is required");
+      }
+      return hasScheme(url) ? url : `https://${url}`;
+    };
+
+    const getNavigationHistory = async (
+      page: Page,
+    ): Promise<{ currentIndex: number; entryCount: number } | null> => {
+      const tempSession = await session.browserSession.context.newCDPSession(page);
+      try {
+        const history = (await tempSession.send("Page.getNavigationHistory")) as {
+          currentIndex: number;
+          entries: Array<unknown>;
+        };
+        return { currentIndex: history.currentIndex, entryCount: history.entries.length };
+      } catch {
+        return null;
+      } finally {
+        await tempSession.detach().catch(() => undefined);
+      }
+    };
+
+    const getNavigationCapability = async (
+      page: Page,
+    ): Promise<Pick<NavigationState, "canGoBack" | "canGoForward">> => {
+      const history = await getNavigationHistory(page);
+      if (!history) {
+        return { canGoBack: false, canGoForward: false };
+      }
+      return {
+        canGoBack: history.currentIndex > 0,
+        canGoForward: history.currentIndex < history.entryCount - 1,
+      };
+    };
+
+    const stopPageLoading = async (page: Page): Promise<void> => {
+      const tempSession = await session.browserSession.context.newCDPSession(page);
+      try {
+        await tempSession.send("Page.stopLoading");
+      } finally {
+        await tempSession.detach().catch(() => undefined);
+      }
+    };
+
+    const emitNavigationState = async (tabId: string): Promise<void> => {
+      const page = tabIdToPage.get(tabId);
+      if (!page) {
+        return;
+      }
+
+      const capability = await getNavigationCapability(page);
+      sendEvent(socket, {
+        type: "navigation-state",
+        state: {
+          tabId,
+          url: page.url(),
+          isLoading: tabLoadingById.get(tabId) ?? false,
+          canGoBack: capability.canGoBack,
+          canGoForward: capability.canGoForward,
+        },
+      });
+    };
 
     const buildTabsSnapshot = (): ViewerTab[] => {
       return Array.from(tabIdToPage.entries()).map(([id, page]) => ({
@@ -189,6 +282,7 @@ export function attachWebSocketServer(
       activeTabId = tabId;
       activePage = nextPage;
       emitTabs();
+      await emitNavigationState(tabId);
 
       await stopScreencast();
       await startScreencast();
@@ -222,6 +316,7 @@ export function attachWebSocketServer(
       pageListenersByTabId.delete(tabId);
       tabIdToPage.delete(tabId);
       tabTitleById.delete(tabId);
+      tabLoadingById.delete(tabId);
 
       if (activeTabId === tabId && !isClosed) {
         void selectLastTab().catch((error) => {
@@ -242,17 +337,22 @@ export function attachWebSocketServer(
       pageToTabId.set(page, tabId);
       tabIdToPage.set(tabId, page);
       tabTitleById.set(tabId, page.url() || "about:blank");
+      tabLoadingById.set(tabId, false);
 
       const close = (): void => {
         unregisterPage(tabId);
       };
       const framenavigated = (frame: Frame): void => {
         if (frame === page.mainFrame()) {
+          tabLoadingById.set(tabId, true);
           emitTabs();
+          void emitNavigationState(tabId);
         }
       };
       const load = (): void => {
+        tabLoadingById.set(tabId, false);
         void refreshTabTitle(tabId, page);
+        void emitNavigationState(tabId);
       };
 
       pageListenersByTabId.set(tabId, { close, framenavigated, load });
@@ -370,6 +470,54 @@ export function attachWebSocketServer(
           .catch((error) => {
             sendEvent(socket, { type: "error", message: String(error) });
           });
+        return;
+      }
+
+      if (parsed.type === "navigation") {
+        const targetPage = tabIdToPage.get(parsed.tabId);
+        if (!targetPage) {
+          sendEvent(socket, {
+            type: "error",
+            message: `Unknown tabId: ${parsed.tabId}`,
+          });
+          return;
+        }
+
+        tabLoadingById.set(parsed.tabId, parsed.action !== "stop");
+        void emitNavigationState(parsed.tabId);
+
+        void (async () => {
+          if (parsed.action === "goto") {
+            const normalizedUrl = normalizeNavigationUrl(parsed.url ?? "");
+            await targetPage.goto(normalizedUrl, { waitUntil: "domcontentloaded" });
+          } else if (parsed.action === "back") {
+            const history = await getNavigationHistory(targetPage);
+            if (history && history.currentIndex > 0) {
+              await targetPage.goBack({ waitUntil: "domcontentloaded" });
+            } else {
+              tabLoadingById.set(parsed.tabId, false);
+            }
+          } else if (parsed.action === "forward") {
+            const history = await getNavigationHistory(targetPage);
+            if (history && history.currentIndex < history.entryCount - 1) {
+              await targetPage.goForward({ waitUntil: "domcontentloaded" });
+            } else {
+              tabLoadingById.set(parsed.tabId, false);
+            }
+          } else if (parsed.action === "reload") {
+            await targetPage.reload({ waitUntil: "domcontentloaded" });
+          } else {
+            await stopPageLoading(targetPage);
+            tabLoadingById.set(parsed.tabId, false);
+          }
+
+          await emitNavigationState(parsed.tabId);
+          sendEvent(socket, { type: "ack", eventType: parsed.type });
+        })().catch((error) => {
+          tabLoadingById.set(parsed.tabId, false);
+          void emitNavigationState(parsed.tabId);
+          sendEvent(socket, { type: "error", message: String(error) });
+        });
         return;
       }
 

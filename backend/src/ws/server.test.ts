@@ -6,7 +6,24 @@ import type { ViewerTab } from "@browser-viewer/shared";
 import { attachWebSocketServer } from "./server";
 
 class FakeCDPSession extends EventEmitter {
-  send = vi.fn(async () => undefined);
+  private navigationHistory: { currentIndex: number; entries: Array<{ id: number; url: string }> } = {
+    currentIndex: 0,
+    entries: [{ id: 1, url: "https://example.com" }],
+  };
+
+  setNavigationHistory(currentIndex: number, urls: string[]): void {
+    this.navigationHistory = {
+      currentIndex,
+      entries: urls.map((url, index) => ({ id: index + 1, url })),
+    };
+  }
+
+  send = vi.fn(async (method: string) => {
+    if (method === "Page.getNavigationHistory") {
+      return this.navigationHistory;
+    }
+    return undefined;
+  });
   detach = vi.fn(async () => undefined);
 }
 
@@ -20,6 +37,14 @@ class FakePage extends EventEmitter {
   readonly keyboard = {
     press: vi.fn(async () => undefined),
   };
+
+  readonly goBack = vi.fn(async () => undefined);
+  readonly goForward = vi.fn(async () => undefined);
+  readonly reload = vi.fn(async () => undefined);
+  readonly stop = vi.fn(async () => undefined);
+  readonly goto = vi.fn(async (url: string) => {
+    this.currentUrl = url;
+  });
 
   private readonly frame = {};
 
@@ -364,5 +389,168 @@ describe("websocket server", () => {
 
     const errorMessage = await queue.nextByType("error");
     expect(errorMessage.message).toBe("Unknown tabId: tab-unknown");
+  });
+
+  it("no-ops back/forward when history capability is unavailable", async () => {
+    const cdpSession = new FakeCDPSession();
+    cdpSession.setNavigationHistory(0, ["https://example.com"]);
+    const page = new FakePage("https://example.com", "Example");
+    const context = new FakeContext([page], cdpSession);
+
+    const sessionManager = {
+      getSession: vi.fn(() => ({
+        id: "session-4a",
+        browserSession: {
+          context,
+          page,
+        },
+      })),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(server, sessionManager as never);
+    const port = await startServer(server);
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-4a`,
+    );
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    await queue.nextByType("connected");
+    const tabsMessage = await queue.nextByType("tabs");
+    const firstTab = (tabsMessage.tabs as ViewerTab[]).at(0);
+    if (!firstTab) {
+      throw new Error("Missing first tab");
+    }
+
+    socket.send(
+      JSON.stringify({
+        type: "navigation",
+        action: "back",
+        tabId: firstTab.id,
+      }),
+    );
+    const backAck = await queue.nextByType("ack");
+    expect(backAck.eventType).toBe("navigation");
+    expect(page.goBack).not.toHaveBeenCalled();
+
+    socket.send(
+      JSON.stringify({
+        type: "navigation",
+        action: "forward",
+        tabId: firstTab.id,
+      }),
+    );
+    const forwardAck = await queue.nextByType("ack");
+    expect(forwardAck.eventType).toBe("navigation");
+    expect(page.goForward).not.toHaveBeenCalled();
+  });
+
+  it("handles navigation commands on active tab", async () => {
+    const cdpSession = new FakeCDPSession();
+    const page = new FakePage("https://example.com", "Example");
+    const context = new FakeContext([page], cdpSession);
+
+    const sessionManager = {
+      getSession: vi.fn(() => ({
+        id: "session-4",
+        browserSession: {
+          context,
+          page,
+        },
+      })),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(server, sessionManager as never);
+    const port = await startServer(server);
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-4`,
+    );
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    await queue.nextByType("connected");
+    const tabsMessage = await queue.nextByType("tabs");
+    const firstTab = (tabsMessage.tabs as ViewerTab[]).at(0);
+    if (!firstTab) {
+      throw new Error("Missing first tab");
+    }
+
+    socket.send(
+      JSON.stringify({
+        type: "navigation",
+        action: "goto",
+        tabId: firstTab.id,
+        url: "example.com",
+      }),
+    );
+    const gotoAck = await queue.nextByType("ack");
+    expect(gotoAck.eventType).toBe("navigation");
+    expect(page.goto).toHaveBeenCalledWith("https://example.com", {
+      waitUntil: "domcontentloaded",
+    });
+
+    cdpSession.setNavigationHistory(1, [
+      "https://example.com",
+      "https://example.com/next",
+    ]);
+    socket.send(
+      JSON.stringify({
+        type: "navigation",
+        action: "back",
+        tabId: firstTab.id,
+      }),
+    );
+    const backAck = await queue.nextByType("ack");
+    expect(backAck.eventType).toBe("navigation");
+    expect(page.goBack).toHaveBeenCalled();
+
+    cdpSession.setNavigationHistory(0, [
+      "https://example.com",
+      "https://example.com/next",
+    ]);
+    socket.send(
+      JSON.stringify({
+        type: "navigation",
+        action: "forward",
+        tabId: firstTab.id,
+      }),
+    );
+    const forwardAck = await queue.nextByType("ack");
+    expect(forwardAck.eventType).toBe("navigation");
+    expect(page.goForward).toHaveBeenCalled();
+
+    socket.send(
+      JSON.stringify({
+        type: "navigation",
+        action: "reload",
+        tabId: firstTab.id,
+      }),
+    );
+    const reloadAck = await queue.nextByType("ack");
+    expect(reloadAck.eventType).toBe("navigation");
+    expect(page.reload).toHaveBeenCalled();
+
+    socket.send(
+      JSON.stringify({
+        type: "navigation",
+        action: "stop",
+        tabId: firstTab.id,
+      }),
+    );
+    const stopAck = await queue.nextByType("ack");
+    expect(stopAck.eventType).toBe("navigation");
+    expect(cdpSession.send).toHaveBeenCalledWith("Page.stopLoading");
   });
 });

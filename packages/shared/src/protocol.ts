@@ -21,6 +21,14 @@ export interface ViewerTab {
   active: boolean;
 }
 
+export interface NavigationState {
+  tabId: string;
+  url: string;
+  isLoading: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
 export type ClientInputMessage =
   | {
       type: "mouse";
@@ -45,6 +53,17 @@ export type ClientInputMessage =
       type: "tab";
       action: "switch";
       tabId: string;
+    }
+  | {
+      type: "navigation";
+      action: "goto";
+      tabId: string;
+      url: string;
+    }
+  | {
+      type: "navigation";
+      action: "back" | "forward" | "reload" | "stop";
+      tabId: string;
     };
 
 export type ServerEventMessage =
@@ -59,6 +78,10 @@ export type ServerEventMessage =
   | {
       type: "tabs";
       tabs: ViewerTab[];
+    }
+  | {
+      type: "navigation-state";
+      state: NavigationState;
     }
   | {
       type: "error";

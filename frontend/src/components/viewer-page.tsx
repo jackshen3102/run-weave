@@ -8,9 +8,11 @@ import {
 } from "react";
 import type {
   ClientInputMessage,
+  NavigationState,
   ServerEventMessage,
   ViewerTab,
 } from "@browser-viewer/shared";
+import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
 import {
   extractKeyboardModifiers,
@@ -50,11 +52,46 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
   const [sentCount, setSentCount] = useState(0);
   const [ackCount, setAckCount] = useState(0);
   const [tabs, setTabs] = useState<ViewerTab[]>([]);
+  const [navigationByTabId, setNavigationByTabId] = useState<
+    Record<string, NavigationState>
+  >({});
+  const [addressInput, setAddressInput] = useState("");
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
   const moveLogCounterRef = useRef(0);
+  const knownTabIdsRef = useRef<Set<string>>(new Set());
+  const initialTabIdRef = useRef<string | null>(
+    new URLSearchParams(window.location.search).get("tabId"),
+  );
+  const initialTabSyncedRef = useRef(false);
   const wsUrl = useMemo(
     () => `${toWebSocketBase(apiBase)}/ws?sessionId=${sessionId}`,
     [apiBase, sessionId],
   );
+
+  const syncUrlTabId = (tabId: string | null): void => {
+    const params = new URLSearchParams(window.location.search);
+    const currentTabId = params.get("tabId");
+    if (tabId) {
+      if (currentTabId === tabId) {
+        return;
+      }
+      params.set("tabId", tabId);
+    } else {
+      if (!currentTabId) {
+        return;
+      }
+      params.delete("tabId");
+    }
+
+    const query = params.toString();
+    const next = query
+      ? `${window.location.pathname}?${query}`
+      : window.location.pathname;
+    window.history.replaceState(null, "", next);
+  };
+
+  const activeTabId = tabs.find((tab) => tab.active)?.id ?? null;
+  const activeNavigation = activeTabId ? navigationByTabId[activeTabId] : undefined;
 
   const sendInput = (input: ClientInputMessage): void => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -103,8 +140,46 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
     );
   };
 
+  const normalizeNavigationUrl = (rawUrl: string): string | null => {
+    const trimmed = rawUrl.trim();
+    if (!trimmed) {
+      return null;
+    }
+    if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed)) {
+      return trimmed;
+    }
+    return `https://${trimmed}`;
+  };
+
+  const submitNavigation = (): void => {
+    if (!activeTabId) {
+      return;
+    }
+    const normalizedUrl = normalizeNavigationUrl(addressInput);
+    if (!normalizedUrl) {
+      return;
+    }
+
+    setAddressInput(normalizedUrl);
+    setIsEditingAddress(false);
+    sendInput({
+      type: "navigation",
+      action: "goto",
+      tabId: activeTabId,
+      url: normalizedUrl,
+    });
+  };
+
+  useEffect(() => {
+    if (isEditingAddress) {
+      return;
+    }
+    setAddressInput(activeNavigation?.url ?? "");
+  }, [activeNavigation?.url, isEditingAddress]);
+
   useEffect(() => {
     let closed = false;
+    initialTabSyncedRef.current = false;
     const connect = (): void => {
       if (closed) {
         return;
@@ -143,10 +218,56 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
               });
             } else if (message.type === "tabs") {
               setTabs(message.tabs);
+              knownTabIdsRef.current = new Set(message.tabs.map((tab) => tab.id));
+              setNavigationByTabId((current) => {
+                const next: Record<string, NavigationState> = {};
+                for (const [tabId, state] of Object.entries(current)) {
+                  if (knownTabIdsRef.current.has(tabId)) {
+                    next[tabId] = state;
+                  }
+                }
+                return next;
+              });
+
+              const activeTab = message.tabs.find((tab) => tab.active)?.id ?? null;
+              const initialTabId = initialTabIdRef.current;
+
+              if (!initialTabSyncedRef.current && message.tabs.length > 0) {
+                initialTabSyncedRef.current = true;
+                if (
+                  initialTabId &&
+                  message.tabs.some((tab) => tab.id === initialTabId && !tab.active)
+                ) {
+                  if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(
+                      JSON.stringify({
+                        type: "tab",
+                        action: "switch",
+                        tabId: initialTabId,
+                      }),
+                    );
+                    setSentCount((value) => value + 1);
+                  }
+                }
+              }
+
+              syncUrlTabId(activeTab);
               console.log("[viewer-fe] websocket tabs", {
                 sessionId,
                 count: message.tabs.length,
-                activeTab: message.tabs.find((tab) => tab.active)?.id,
+                activeTab,
+              });
+            } else if (message.type === "navigation-state") {
+              if (!knownTabIdsRef.current.has(message.state.tabId)) {
+                return;
+              }
+              setNavigationByTabId((current) => ({
+                ...current,
+                [message.state.tabId]: message.state,
+              }));
+              console.log("[viewer-fe] websocket navigation state", {
+                sessionId,
+                state: message.state,
               });
             } else if (message.type === "ack") {
               setAckCount((value) => value + 1);
@@ -339,6 +460,111 @@ export function ViewerPage({ apiBase, sessionId }: ViewerPageProps) {
             <p className="text-xs text-muted-foreground">Waiting for tabs...</p>
           )}
         </div>
+
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row" data-testid="navigation-bar">
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label="Back"
+              title="Back"
+              disabled={!activeTabId || !activeNavigation?.canGoBack}
+              onClick={() => {
+                if (!activeTabId || !activeNavigation?.canGoBack) {
+                  return;
+                }
+                sendInput({ type: "navigation", action: "back", tabId: activeTabId });
+              }}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label="Forward"
+              title="Forward"
+              disabled={!activeTabId || !activeNavigation?.canGoForward}
+              onClick={() => {
+                if (!activeTabId || !activeNavigation?.canGoForward) {
+                  return;
+                }
+                sendInput({
+                  type: "navigation",
+                  action: "forward",
+                  tabId: activeTabId,
+                });
+              }}
+            >
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            {activeNavigation?.isLoading ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-label="Refresh"
+                title="Refresh"
+                disabled={!activeTabId}
+                onClick={() => {
+                  if (!activeTabId) {
+                    return;
+                  }
+                  sendInput({
+                    type: "navigation",
+                    action: "stop",
+                    tabId: activeTabId,
+                  });
+                }}
+              >
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-label="Refresh"
+                title="Refresh"
+                disabled={!activeTabId}
+                onClick={() => {
+                  if (!activeTabId) {
+                    return;
+                  }
+                  sendInput({
+                    type: "navigation",
+                    action: "reload",
+                    tabId: activeTabId,
+                  });
+                }}
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
+          <input
+            data-testid="address-input"
+            value={addressInput}
+            onFocus={() => setIsEditingAddress(true)}
+            onChange={(event) => setAddressInput(event.target.value)}
+            onBlur={() => {
+              setIsEditingAddress(false);
+              setAddressInput(activeNavigation?.url ?? "");
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submitNavigation();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setIsEditingAddress(false);
+                setAddressInput(activeNavigation?.url ?? "");
+              }
+            }}
+            className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-sm outline-none ring-primary/30 transition focus:ring-2"
+            placeholder="https://example.com"
+          />
+        </div>
+
         {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
         {status === "reconnecting" && !error && (
           <p className="mb-3 text-sm text-amber-600">
