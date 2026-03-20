@@ -1,6 +1,7 @@
 import { useState } from "react";
-import type { LoginResponse } from "@browser-viewer/shared";
 import { Button } from "./ui/button";
+import { HttpError } from "../services/http";
+import { login as loginWithPassword } from "../services/auth";
 
 interface LoginPageProps {
   apiBase: string;
@@ -18,23 +19,15 @@ export function LoginPage({ apiBase, onSuccess }: LoginPageProps) {
     setError(null);
 
     try {
-      const response = await fetch(`${apiBase}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
+      const data = await loginWithPassword(apiBase, { username, password });
+      onSuccess(data.token);
+    } catch (loginError) {
+      if (loginError instanceof HttpError) {
+        if (loginError.status === 401) {
           setError("用户名或密码错误");
           return;
         }
-        throw new Error(`Login failed: ${response.status}`);
       }
-
-      const data = (await response.json()) as LoginResponse;
-      onSuccess(data.token);
-    } catch (loginError) {
       setError(String(loginError));
     } finally {
       setLoading(false);

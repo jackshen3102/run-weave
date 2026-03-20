@@ -1,36 +1,27 @@
 import { useState } from "react";
+import type { CreateSessionResponse } from "@browser-viewer/shared";
 import { ThemeToggle } from "./components/theme-toggle";
 import { Button } from "./components/ui/button";
 import { ViewerPage } from "./components/viewer-page";
 import { LoginPage } from "./components/login-page";
+import { useAuthToken } from "./features/auth/use-auth-token";
+import { HttpError } from "./services/http";
+import { createSession as createViewerSession } from "./services/session";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
 
-interface SessionData {
-  sessionId: string;
-  viewerUrl: string;
-}
-
 export default function App() {
   const [url, setUrl] = useState("https://www.google.cn");
   const [loading, setLoading] = useState(false);
-  const [session, setSession] = useState<SessionData | null>(null);
+  const [session, setSession] = useState<CreateSessionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-  });
+  const { token, setToken, clearToken } = useAuthToken(AUTH_TOKEN_STORAGE_KEY);
 
   const searchParams = new URLSearchParams(window.location.search);
   const viewerSessionId = searchParams.get("sessionId");
 
-  const clearToken = (): void => {
-    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-    setToken(null);
-  };
-
   const setTokenAndPersist = (nextToken: string): void => {
-    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, nextToken);
     setToken(nextToken);
     setError(null);
   };
@@ -59,30 +50,24 @@ export default function App() {
     });
 
     try {
-      const response = await fetch(`${API_BASE}/api/session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ url }),
-      });
+      if (!token) {
+        clearToken();
+        return;
+      }
 
-      if (!response.ok) {
-        if (response.status === 401) {
+      const data = await createViewerSession(API_BASE, { url }, token);
+      setSession(data);
+      console.log("[viewer-fe] create session success", data);
+    } catch (createError) {
+      if (createError instanceof HttpError) {
+        if (createError.status === 401) {
           clearToken();
           return;
         }
         console.log("[viewer-fe] create session non-ok response", {
-          status: response.status,
+          status: createError.status,
         });
-        throw new Error(`Create session failed: ${response.status}`);
       }
-
-      const data = (await response.json()) as SessionData;
-      setSession(data);
-      console.log("[viewer-fe] create session success", data);
-    } catch (createError) {
       setError(String(createError));
       console.log("[viewer-fe] create session failed", {
         error: String(createError),
