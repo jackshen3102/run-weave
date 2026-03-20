@@ -168,6 +168,16 @@ function waitForOpen(socket: WebSocket): Promise<void> {
   });
 }
 
+function waitForClose(
+  socket: WebSocket,
+): Promise<{ code: number; reason: Buffer }> {
+  return new Promise((resolve) => {
+    socket.once("close", (code, reason) => {
+      resolve({ code, reason });
+    });
+  });
+}
+
 async function startServer(server: http.Server): Promise<number> {
   await new Promise<void>((resolve) => {
     server.listen(0, resolve);
@@ -316,6 +326,80 @@ describe("websocket server", () => {
     await waitForOpen(socket);
     const errorMessage = await queue.nextByType("error");
     expect(errorMessage.message).toBe("Unauthorized");
+
+    const closeInfo = await waitForClose(socket);
+    expect(closeInfo.code).toBe(1008);
+    expect(closeInfo.reason.toString()).toBe("Unauthorized");
+  });
+
+  it("rejects websocket connection when sessionId is missing", async () => {
+    const cdpSession = new FakeCDPSession();
+    const page = new FakePage("https://example.com", "Example");
+    const context = new FakeContext([page], cdpSession);
+
+    const sessionManager = {
+      getSession: vi.fn(() => ({
+        id: "session-auth",
+        browserSession: {
+          context,
+          page,
+        },
+      })),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws?token=valid-token`);
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    const errorMessage = await queue.nextByType("error");
+    expect(errorMessage.message).toBe("Missing sessionId");
+
+    const closeInfo = await waitForClose(socket);
+    expect(closeInfo.code).toBe(1008);
+    expect(closeInfo.reason.toString()).toBe("Missing sessionId");
+  });
+
+  it("rejects websocket connection when session does not exist", async () => {
+    const sessionManager = {
+      getSession: vi.fn(() => undefined),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=missing-session&token=valid-token`,
+    );
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    const errorMessage = await queue.nextByType("error");
+    expect(errorMessage.message).toBe("Session not found");
+
+    const closeInfo = await waitForClose(socket);
+    expect(closeInfo.code).toBe(1008);
+    expect(closeInfo.reason.toString()).toBe("Session not found");
   });
 
   it("switches between tabs and routes inputs to the active tab", async () => {

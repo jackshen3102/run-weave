@@ -13,6 +13,17 @@ import { SessionManager } from "./session/manager";
 import { listenWithFallback } from "./server/listen";
 import { attachWebSocketServer } from "./ws/server";
 
+interface RuntimeConfig {
+  preferredPort: number;
+  strictPort: boolean;
+  host: string | undefined;
+}
+
+interface RuntimeServices {
+  authService: AuthService;
+  sessionManager: SessionManager;
+}
+
 function readCliOption(optionName: string): string | undefined {
   const longOption = `--${optionName}`;
 
@@ -47,11 +58,7 @@ function parsePort(rawValue: string | undefined, fallbackPort: number): number {
   return port;
 }
 
-function resolveRuntimeConfig(): {
-  preferredPort: number;
-  strictPort: boolean;
-  host: string | undefined;
-} {
+function resolveRuntimeConfig(): RuntimeConfig {
   const rawCliPort = readCliOption("port");
   const rawHost = readCliOption("host") ?? process.env.HOST;
 
@@ -71,71 +78,86 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
     .filter(Boolean);
 }
 
-const { preferredPort, strictPort, host } = resolveRuntimeConfig();
-
-const app = express();
-app.use(express.json());
-app.use(
-  createCorsMiddleware(parseConfiguredOrigins(process.env.FRONTEND_ORIGIN)),
-);
-
-const browserService = new BrowserService({
-  headless: process.env.BROWSER_HEADLESS?.trim().toLowerCase() !== "false",
-  profileDir: process.env.BROWSER_PROFILE_DIR,
-});
-const authService = new AuthService(loadAuthConfig());
-const requireAuth = createRequireAuth(authService);
-const sessionManager = new SessionManager(browserService);
-
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
-});
-
-app.use("/test", createTestRouter());
-
-app.use("/api/auth", createAuthRouter(authService));
-app.use("/api", requireAuth, createSessionRouter(sessionManager));
-
-const server = http.createServer(app);
-attachWebSocketServer(server, sessionManager, authService);
-
-const startServer = async (): Promise<void> => {
-  const port = await listenWithFallback(server, preferredPort, {
-    host,
-    maxAttempts: strictPort ? 1 : undefined,
+function createRuntimeServices(): RuntimeServices {
+  const browserService = new BrowserService({
+    headless: process.env.BROWSER_HEADLESS?.trim().toLowerCase() !== "false",
+    profileDir: process.env.BROWSER_PROFILE_DIR,
   });
-  if (port !== preferredPort) {
+  const authService = new AuthService(loadAuthConfig());
+  const sessionManager = new SessionManager(browserService);
+
+  return { authService, sessionManager };
+}
+
+function createHttpApp(services: RuntimeServices): express.Express {
+  const app = express();
+  const requireAuth = createRequireAuth(services.authService);
+
+  app.use(express.json());
+  app.use(
+    createCorsMiddleware(parseConfiguredOrigins(process.env.FRONTEND_ORIGIN)),
+  );
+
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  app.use("/test", createTestRouter());
+  app.use("/api/auth", createAuthRouter(services.authService));
+  app.use("/api", requireAuth, createSessionRouter(services.sessionManager));
+
+  return app;
+}
+
+function attachLifecycleHandlers(
+  server: http.Server,
+  sessionManager: SessionManager,
+): void {
+  let shuttingDown = false;
+
+  const shutdown = async (): Promise<void> => {
+    if (shuttingDown) {
+      return;
+    }
+
+    shuttingDown = true;
+    server.close();
+    await sessionManager.dispose();
+    process.exit(0);
+  };
+
+  process.on("SIGINT", () => {
+    void shutdown();
+  });
+
+  process.on("SIGTERM", () => {
+    void shutdown();
+  });
+}
+
+async function startRuntime(): Promise<void> {
+  const runtimeConfig = resolveRuntimeConfig();
+  const services = createRuntimeServices();
+  const app = createHttpApp(services);
+  const server = http.createServer(app);
+
+  attachWebSocketServer(server, services.sessionManager, services.authService);
+
+  const port = await listenWithFallback(server, runtimeConfig.preferredPort, {
+    host: runtimeConfig.host,
+    maxAttempts: runtimeConfig.strictPort ? 1 : undefined,
+  });
+
+  if (port !== runtimeConfig.preferredPort) {
     console.log(
-      `[viewer-be] preferred port ${preferredPort} is busy, switched to ${port}`,
+      `[viewer-be] preferred port ${runtimeConfig.preferredPort} is busy, switched to ${port}`,
     );
   }
 
-  const publicHost = host === "0.0.0.0" ? "localhost" : host;
-  console.log(
-    `backend listening on http://${publicHost ?? "localhost"}:${port}`,
-  );
-};
+  const publicHost = runtimeConfig.host === "0.0.0.0" ? "localhost" : runtimeConfig.host;
+  console.log(`backend listening on http://${publicHost ?? "localhost"}:${port}`);
 
-void startServer();
+  attachLifecycleHandlers(server, services.sessionManager);
+}
 
-let shuttingDown = false;
-
-const shutdown = async (): Promise<void> => {
-  if (shuttingDown) {
-    return;
-  }
-
-  shuttingDown = true;
-
-  server.close();
-  await sessionManager.dispose();
-  process.exit(0);
-};
-
-process.on("SIGINT", () => {
-  void shutdown();
-});
-
-process.on("SIGTERM", () => {
-  void shutdown();
-});
+void startRuntime();
