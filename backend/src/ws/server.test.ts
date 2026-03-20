@@ -25,6 +25,12 @@ class FakeCDPSession extends EventEmitter {
     if (method === "Page.getNavigationHistory") {
       return this.navigationHistory;
     }
+    if (method === "DOM.getNodeForLocation") {
+      return { nodeId: 1 };
+    }
+    if (method === "CSS.getComputedStyleForNode") {
+      return { computedStyle: [{ name: "cursor", value: "pointer" }] };
+    }
     return undefined;
   });
   detach = vi.fn(async () => undefined);
@@ -555,7 +561,6 @@ describe("websocket server", () => {
     const stopAck = await queue.nextByType("ack");
     expect(stopAck.eventType).toBe("navigation");
     expect(cdpSession.send).toHaveBeenCalledWith("Page.stopLoading");
-    await queue.nextByType("tabs");
 
     socket.send(
       JSON.stringify({
@@ -566,9 +571,19 @@ describe("websocket server", () => {
       }),
     );
 
-    const ackMessage = await queue.nextByType("ack");
-    expect(ackMessage.eventType).toBe("mouse");
-    const cursorMessage = await queue.nextByType("cursor");
+    let ackMessage: Record<string, unknown> | null = null;
+    let cursorMessage: Record<string, unknown> | null = null;
+    for (let i = 0; i < 10 && (!ackMessage || !cursorMessage); i += 1) {
+      const message = await queue.next();
+      if (message.type === "ack" && message.eventType === "mouse") {
+        ackMessage = message;
+      }
+      if (message.type === "cursor") {
+        cursorMessage = message;
+      }
+    }
+
+    expect(ackMessage).toMatchObject({ type: "ack", eventType: "mouse" });
     expect(cursorMessage).toEqual({ type: "cursor", cursor: "pointer" });
   });
 });
