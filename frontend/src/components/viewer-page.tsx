@@ -170,9 +170,9 @@ export function ViewerPage({
   }, [isMoreMenuOpen]);
 
   return (
-    <main className="relative min-h-screen overflow-hidden">
+    <main className="relative h-dvh overflow-hidden">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(86,134,144,0.16),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(170,150,115,0.14),transparent_28%)]" />
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1600px] flex-col">
+      <div className="relative mx-auto flex h-full w-full max-w-[1600px] flex-col">
         <textarea
           ref={inputBridgeRef}
           aria-label="Viewer input bridge"
@@ -188,11 +188,11 @@ export function ViewerPage({
         />
 
         <section
-          className={`animate-fade-rise relative flex flex-1 overflow-hidden border border-border/60 shadow-[0_30px_120px_-70px_rgba(0,0,0,0.95)] transition-all duration-300 ease-out ${
+          className={`animate-fade-rise relative flex flex-1 flex-col overflow-hidden border border-border/60 shadow-[0_30px_120px_-70px_rgba(0,0,0,0.95)] transition-all duration-300 ease-out ${
             isInspecting ? "bg-[#050607]" : "bg-black/92"
           }`}
         >
-          <div className="absolute left-0 right-0 top-0 z-20 border-b border-white/10 bg-[rgba(9,14,21,0.84)] backdrop-blur-xl">
+          <div className="z-20 border-b border-white/10 bg-[rgba(9,14,21,0.84)] backdrop-blur-xl">
             <div className="w-full px-3 py-2 sm:px-4 sm:py-2.5">
               <div className="flex items-center gap-2">
                 <Button
@@ -324,39 +324,49 @@ export function ViewerPage({
           </div>
 
           {activeTabId === null ? (
-            <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-stone-300/80">
+            <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-sm text-stone-300/80">
               Open a new tab to begin.
             </div>
-          ) : isInspecting ? (
-            <>
-              <div className="pointer-events-none absolute left-5 top-[4.2rem] z-10 rounded-full border border-white/15 bg-black/42 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-white/72 shadow-[0_12px_40px_-20px_rgba(0,0,0,0.8)] sm:top-[4.5rem]">
-                Inspector
-              </div>
-              <iframe
-                key={activeTabId}
-                title="DevTools"
-                src={buildDevtoolsPageUrl(
-                  apiBase,
-                  sessionId,
-                  token,
-                  activeTabId,
-                )}
-                className="h-full min-h-[70vh] w-full bg-[#050607] transition-opacity duration-300"
-                sandbox="allow-scripts allow-same-origin"
-              />
-            </>
           ) : (
-            <canvas
-              ref={canvasRef}
-              className="h-auto min-h-[70vh] w-full transition-opacity duration-300"
-              style={{ touchAction: "none" }}
-              tabIndex={0}
-              onMouseDown={onMouseDown}
-              onMouseMove={onMouseMove}
-              onWheel={onWheel}
-              onContextMenu={onContextMenu}
-              onMouseLeave={onMouseLeave}
-            />
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+              <div
+                className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
+                  isInspecting ? "pointer-events-none opacity-0" : "opacity-100"
+                }`}
+              >
+                <canvas
+                  ref={canvasRef}
+                  className="h-full w-auto max-w-full transition-opacity duration-300"
+                  style={{ touchAction: "none" }}
+                  tabIndex={isInspecting ? -1 : 0}
+                  onMouseDown={onMouseDown}
+                  onMouseMove={onMouseMove}
+                  onWheel={onWheel}
+                  onContextMenu={onContextMenu}
+                  onMouseLeave={onMouseLeave}
+                />
+              </div>
+
+              {isInspecting && (
+                <>
+                  <div className="pointer-events-none absolute left-5 top-3 z-10 rounded-full border border-white/15 bg-black/42 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-white/72 shadow-[0_12px_40px_-20px_rgba(0,0,0,0.8)]">
+                    Inspector
+                  </div>
+                  <iframe
+                    key={activeTabId}
+                    title="DevTools"
+                    src={buildDevtoolsPageUrl(
+                      apiBase,
+                      sessionId,
+                      token,
+                      activeTabId,
+                    )}
+                    className="absolute inset-0 h-full w-full bg-[#050607] transition-opacity duration-300"
+                    sandbox="allow-scripts allow-same-origin"
+                  />
+                </>
+              )}
+            </div>
           )}
         </section>
       </div>

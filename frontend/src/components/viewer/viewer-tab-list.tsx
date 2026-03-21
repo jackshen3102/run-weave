@@ -17,7 +17,7 @@ export function ViewerTabList({ tabs, onSwitchTab }: ViewerTabListProps) {
           key={tab.id}
           size="sm"
           variant={tab.active ? "default" : "ghost"}
-          className="max-w-[220px] shrink-0 rounded-full border border-white/10 px-4 text-stone-200 data-[active=true]:border-transparent data-[active=true]:text-primary-foreground data-[active=true]:shadow-sm hover:bg-white/8 hover:text-white"
+          className="max-w-[220px] shrink-0 overflow-hidden rounded-full border border-white/10 px-4 text-stone-200 data-[active=true]:border-transparent data-[active=true]:text-primary-foreground data-[active=true]:shadow-sm hover:bg-white/8 hover:text-white"
           aria-pressed={tab.active}
           data-active={tab.active}
           data-tab-id={tab.id}
@@ -29,7 +29,7 @@ export function ViewerTabList({ tabs, onSwitchTab }: ViewerTabListProps) {
           }}
           title={tab.title || tab.url}
         >
-          {tab.title || tab.url}
+          <span className="truncate">{tab.title || tab.url}</span>
         </Button>
       ))}
       {tabs.length === 0 && (
