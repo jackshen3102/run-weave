@@ -75,6 +75,24 @@ async function listenOnPort(
   });
 }
 
+export async function findAvailablePort(
+  startPort: number,
+  options: ListenWithFallbackOptions = {},
+): Promise<number> {
+  const maxAttempts = options.maxAttempts ?? 50;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const port = startPort + attempt;
+    if (await isPortAvailable(port, options.host)) {
+      return port;
+    }
+  }
+
+  throw new Error(
+    `Failed to find available port after ${maxAttempts} attempts starting from port ${startPort}`,
+  );
+}
+
 export async function listenWithFallback(
   server: http.Server,
   startPort: number,

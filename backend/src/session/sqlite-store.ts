@@ -1,0 +1,153 @@
+import Database from "better-sqlite3";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import type {
+  PersistedSessionRecord,
+  SessionStore,
+  UpdateSessionConnectionParams,
+} from "./store";
+
+interface SessionRow {
+  id: string;
+  target_url: string;
+  connected: number;
+  profile_path: string;
+  created_at: string;
+  last_activity_at: string;
+}
+
+export class SQLiteSessionStore implements SessionStore {
+  private database: Database.Database | null = null;
+
+  constructor(private readonly databaseFile: string) {}
+
+  async initialize(): Promise<void> {
+    await mkdir(path.dirname(this.databaseFile), { recursive: true });
+
+    const database = new Database(this.databaseFile);
+    database.pragma("journal_mode = WAL");
+    database.exec(`
+      create table if not exists sessions (
+        id text primary key,
+        target_url text not null,
+        connected integer not null default 0,
+        profile_path text not null,
+        created_at text not null,
+        last_activity_at text not null
+      );
+
+      create index if not exists idx_sessions_last_activity_at
+      on sessions(last_activity_at);
+    `);
+
+    this.database = database;
+  }
+
+  async dispose(): Promise<void> {
+    this.database?.close();
+    this.database = null;
+  }
+
+  async listSessions(): Promise<PersistedSessionRecord[]> {
+    const rows = this.getDatabase()
+      .prepare(
+        `
+          select
+            id,
+            target_url,
+            connected,
+            profile_path,
+            created_at,
+            last_activity_at
+          from sessions
+          order by created_at asc
+        `,
+      )
+      .all() as SessionRow[];
+
+    return rows.map((row) => this.toRecord(row));
+  }
+
+  async getSession(sessionId: string): Promise<PersistedSessionRecord | null> {
+    const row = this.getDatabase()
+      .prepare(
+        `
+          select
+            id,
+            target_url,
+            connected,
+            profile_path,
+            created_at,
+            last_activity_at
+          from sessions
+          where id = ?
+        `,
+      )
+      .get(sessionId) as SessionRow | undefined;
+
+    return row ? this.toRecord(row) : null;
+  }
+
+  async insertSession(session: PersistedSessionRecord): Promise<void> {
+    this.getDatabase()
+      .prepare(
+        `
+          insert into sessions (
+            id,
+            target_url,
+            connected,
+            profile_path,
+            created_at,
+            last_activity_at
+          ) values (?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        session.id,
+        session.targetUrl,
+        session.connected ? 1 : 0,
+        session.profilePath,
+        session.createdAt,
+        session.lastActivityAt,
+      );
+  }
+
+  async updateSessionConnection(
+    params: UpdateSessionConnectionParams,
+  ): Promise<void> {
+    this.getDatabase()
+      .prepare(
+        `
+          update sessions
+          set connected = ?, last_activity_at = ?
+          where id = ?
+        `,
+      )
+      .run(params.connected ? 1 : 0, params.lastActivityAt, params.sessionId);
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    this.getDatabase()
+      .prepare("delete from sessions where id = ?")
+      .run(sessionId);
+  }
+
+  private getDatabase(): Database.Database {
+    if (!this.database) {
+      throw new Error("[viewer-be] session store not initialized");
+    }
+
+    return this.database;
+  }
+
+  private toRecord(row: SessionRow): PersistedSessionRecord {
+    return {
+      id: row.id,
+      targetUrl: row.target_url,
+      connected: row.connected === 1,
+      profilePath: row.profile_path,
+      createdAt: row.created_at,
+      lastActivityAt: row.last_activity_at,
+    };
+  }
+}

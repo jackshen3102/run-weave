@@ -1,5 +1,6 @@
 import { chromium } from "playwright-extra";
 import { mkdir } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import type { BrowserContext, Page } from "playwright";
 
@@ -48,7 +49,7 @@ export class BrowserService {
     this.headless = options?.headless ?? true;
     this.profileRootDir =
       options?.profileDir?.trim() ||
-      path.resolve(process.cwd(), ".browser-profile");
+      path.join(os.homedir(), ".browser-profile");
     this.autoOpenDevtoolsForTabs = options?.autoOpenDevtoolsForTabs ?? false;
     this.devtoolsEnabled = options?.devtoolsEnabled ?? false;
     this.remoteDebuggingPort =
@@ -57,7 +58,7 @@ export class BrowserService {
         : null;
   }
 
-  private getSessionProfileDir(sessionId: string): string {
+  getSessionProfileDir(sessionId: string): string {
     return path.join(this.profileRootDir, "sessions", sessionId);
   }
 

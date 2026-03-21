@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { rm } from "node:fs/promises";
 import { BrowserService, type BrowserSession } from "../browser/service";
+import type { SessionStore } from "./store";
 
 export interface SessionRecord {
   id: string;
@@ -12,50 +12,53 @@ export interface SessionRecord {
   browserSession: BrowserSession;
 }
 
-interface SessionManagerOptions {
-  persistencePath?: string;
-}
-
-interface PersistedSessionRecord {
-  id: string;
-  targetUrl: string;
-  createdAt: string;
-  lastActivityAt: string;
-}
-
-
 export class SessionManager {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
-  private readonly persistencePath: string | null;
 
   constructor(
     private readonly browserService: BrowserService,
-    options?: SessionManagerOptions,
-  ) {
-    this.persistencePath = options?.persistencePath?.trim() || null;
-  }
+    private readonly sessionStore: SessionStore,
+  ) {}
 
   async initialize(): Promise<void> {
+    await this.sessionStore.initialize();
     await this.restorePersistedSessions();
   }
 
   async createSession(targetUrl: string): Promise<SessionRecord> {
     const sessionId = uuidv4();
+    const createdAt = new Date();
+    const lastActivityAt = new Date();
+    const profilePath = this.browserService.getSessionProfileDir(sessionId);
     const browserSession = await this.browserService.createSession(
       sessionId,
       targetUrl,
     );
+
+    try {
+      await this.sessionStore.insertSession({
+        id: sessionId,
+        targetUrl,
+        connected: false,
+        profilePath,
+        createdAt: createdAt.toISOString(),
+        lastActivityAt: lastActivityAt.toISOString(),
+      });
+    } catch (error) {
+      await this.browserService.destroySession(sessionId, browserSession);
+      throw error;
+    }
+
     const session: SessionRecord = {
       id: sessionId,
       targetUrl,
-      createdAt: new Date(),
-      lastActivityAt: new Date(),
+      createdAt,
+      lastActivityAt,
       connected: false,
       browserSession,
     };
     this.sessions.set(session.id, session);
-    void this.persistSessions();
     return session;
   }
 
@@ -74,7 +77,11 @@ export class SessionManager {
     if (connected) {
       this.cancelPendingDestroy(sessionId);
     }
-    void this.persistSessions();
+    void this.sessionStore.updateSessionConnection({
+      sessionId,
+      connected,
+      lastActivityAt: session.lastActivityAt.toISOString(),
+    });
   }
 
   async destroySession(sessionId: string): Promise<boolean> {
@@ -86,7 +93,20 @@ export class SessionManager {
     this.cancelPendingDestroy(sessionId);
     this.sessions.delete(sessionId);
     await this.browserService.destroySession(sessionId, session.browserSession);
-    await this.persistSessions();
+    await this.sessionStore.deleteSession(sessionId);
+
+    try {
+      await rm(this.browserService.getSessionProfileDir(sessionId), {
+        recursive: true,
+        force: true,
+      });
+    } catch (error) {
+      console.error("[viewer-be] failed to remove session profile", {
+        sessionId,
+        error: String(error),
+      });
+    }
+
     return true;
   }
 
@@ -106,14 +126,11 @@ export class SessionManager {
     this.disconnectTimers.forEach((timer) => clearTimeout(timer));
     this.disconnectTimers.clear();
     await this.browserService.stop();
+    await this.sessionStore.dispose();
   }
 
   private async restorePersistedSessions(): Promise<void> {
-    if (!this.persistencePath) {
-      return;
-    }
-
-    const records = await this.readPersistedSessions();
+    const records = await this.sessionStore.listSessions();
     if (records.length === 0) {
       return;
     }
@@ -132,72 +149,19 @@ export class SessionManager {
           connected: false,
           browserSession,
         });
+        if (record.connected) {
+          await this.sessionStore.updateSessionConnection({
+            sessionId: record.id,
+            connected: false,
+            lastActivityAt: record.lastActivityAt,
+          });
+        }
       } catch (error) {
         console.error("[viewer-be] failed to restore session", {
           sessionId: record.id,
           error: String(error),
         });
       }
-    }
-
-    await this.persistSessions();
-  }
-
-  private async readPersistedSessions(): Promise<PersistedSessionRecord[]> {
-    if (!this.persistencePath) {
-      return [];
-    }
-
-    try {
-      const raw = await readFile(this.persistencePath, "utf-8");
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) {
-        return [];
-      }
-
-      return parsed.filter((item): item is PersistedSessionRecord => {
-        if (!item || typeof item !== "object") {
-          return false;
-        }
-
-        const record = item as Partial<PersistedSessionRecord>;
-        return (
-          typeof record.id === "string" &&
-          typeof record.targetUrl === "string" &&
-          typeof record.createdAt === "string" &&
-          typeof record.lastActivityAt === "string"
-        );
-      });
-    } catch {
-      return [];
-    }
-  }
-
-  private async persistSessions(): Promise<void> {
-    if (!this.persistencePath) {
-      return;
-    }
-
-    const payload: PersistedSessionRecord[] = Array.from(
-      this.sessions.values(),
-    ).map((session) => ({
-      id: session.id,
-      targetUrl: session.targetUrl,
-      createdAt: session.createdAt.toISOString(),
-      lastActivityAt: session.lastActivityAt.toISOString(),
-    }));
-
-    try {
-      await mkdir(path.dirname(this.persistencePath), { recursive: true });
-      await writeFile(
-        this.persistencePath,
-        JSON.stringify(payload, null, 2),
-        "utf-8",
-      );
-    } catch (error) {
-      console.error("[viewer-be] failed to persist sessions", {
-        error: String(error),
-      });
     }
   }
 

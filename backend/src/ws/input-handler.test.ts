@@ -1,14 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handlePageInputMessage } from "./input-handler";
 import * as inputModule from "./input";
 import * as clipboardModule from "./clipboard";
 
-async function flushMicrotasks(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
 describe("handlePageInputMessage", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("acks and schedules cursor lookup for mouse move", async () => {
     vi.spyOn(inputModule, "applyInputToPage").mockResolvedValueOnce(undefined);
     const sendAck = vi.fn();
@@ -26,7 +25,9 @@ describe("handlePageInputMessage", () => {
       scheduleCursorLookup,
     });
 
-    await flushMicrotasks();
+    await vi.waitFor(() => {
+      expect(sendAck).toHaveBeenCalledTimes(1);
+    });
     expect(sendAck).toHaveBeenCalledTimes(1);
     expect(sendError).not.toHaveBeenCalled();
     expect(sendClipboardCopy).not.toHaveBeenCalled();
@@ -51,7 +52,9 @@ describe("handlePageInputMessage", () => {
       scheduleCursorLookup: vi.fn(),
     });
 
-    await flushMicrotasks();
+    await vi.waitFor(() => {
+      expect(sendError).toHaveBeenCalledWith("Error: boom");
+    });
     expect(sendError).toHaveBeenCalledWith("Error: boom");
     expect(sendAck).not.toHaveBeenCalled();
     expect(sendClipboardCopy).not.toHaveBeenCalled();

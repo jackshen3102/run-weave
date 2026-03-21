@@ -1,6 +1,6 @@
 import http from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { listenWithFallback } from "./listen";
+import { findAvailablePort, listenWithFallback } from "./listen";
 
 async function closeServer(server: http.Server): Promise<void> {
   if (!server.listening) {
@@ -65,6 +65,23 @@ describe("listenWithFallback", () => {
     servers.push(server);
 
     const chosenPort = await listenWithFallback(server, startPort, {
+      host: "127.0.0.1",
+      maxAttempts: 10,
+    });
+
+    expect(chosenPort).not.toBe(startPort);
+    expect(chosenPort).toBeGreaterThan(startPort);
+  });
+
+  it("finds the next available port when the preferred port is in use", async () => {
+    const startPort = await getFreePort();
+    const blocker = http.createServer();
+    servers.push(blocker);
+    await new Promise<void>((resolve) => {
+      blocker.listen(startPort, "127.0.0.1", () => resolve());
+    });
+
+    const chosenPort = await findAvailablePort(startPort, {
       host: "127.0.0.1",
       maxAttempts: 10,
     });

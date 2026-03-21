@@ -9,8 +9,11 @@ import { createAuthRouter } from "./routes/auth";
 import { createSessionRouter } from "./routes/session";
 import { createTestRouter } from "./routes/test";
 import { createCorsMiddleware } from "./server/cors";
+import { findAvailablePort } from "./server/listen";
 import { SessionManager } from "./session/manager";
+import { SQLiteSessionStore } from "./session/sqlite-store";
 import { listenWithFallback } from "./server/listen";
+import { resolveStoragePaths } from "./utils/path";
 import { attachWebSocketServer } from "./ws/server";
 import { getSessionTabPage } from "./ws/context";
 
@@ -85,7 +88,8 @@ async function resolveChromiumRevision(
 
     const browserVersion =
       typeof payload.Browser === "string" ? payload.Browser : "";
-    const revisionFromBrowser = browserVersion.match(/\b([0-9a-f]{6,40})\b/i)?.[1];
+    const revisionFromBrowser =
+      browserVersion.match(/\b([0-9a-f]{6,40})\b/i)?.[1];
     return revisionFromBrowser ?? null;
   } catch {
     return null;
@@ -174,26 +178,37 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
 }
 
 async function createRuntimeServices(): Promise<RuntimeServices> {
+  const storagePaths = resolveStoragePaths(process.env);
   const devtoolsEnabled =
     process.env.BROWSER_DEVTOOLS_ENABLED?.trim().toLowerCase() === "true";
   const rawRemoteDebuggingPort = process.env.BROWSER_REMOTE_DEBUGGING_PORT;
-  const parsedRemoteDebuggingPort = devtoolsEnabled
+  const preferredRemoteDebuggingPort = devtoolsEnabled
     ? parsePort(rawRemoteDebuggingPort, 9222)
+    : undefined;
+  const remoteDebuggingPort = preferredRemoteDebuggingPort
+    ? await findAvailablePort(preferredRemoteDebuggingPort, {
+        host: "127.0.0.1",
+      })
     : undefined;
   const browserService = new BrowserService({
     headless: process.env.BROWSER_HEADLESS?.trim().toLowerCase() !== "false",
-    profileDir: process.env.BROWSER_PROFILE_DIR,
+    profileDir: storagePaths.browserProfileDir,
     autoOpenDevtoolsForTabs:
       process.env.BROWSER_AUTO_OPEN_DEVTOOLS?.trim().toLowerCase() === "true",
     devtoolsEnabled,
-    remoteDebuggingPort: parsedRemoteDebuggingPort,
+    remoteDebuggingPort,
   });
+  if (
+    preferredRemoteDebuggingPort != null &&
+    remoteDebuggingPort !== preferredRemoteDebuggingPort
+  ) {
+    console.error(
+      `[viewer-be] preferred remote debugging port ${preferredRemoteDebuggingPort} is busy, switched to ${remoteDebuggingPort}`,
+    );
+  }
   const authService = new AuthService(loadAuthConfig());
-  const sessionManager = new SessionManager(browserService, {
-    persistencePath:
-      process.env.SESSION_STORE_FILE?.trim() ||
-      ".browser-profile/session-store.json",
-  });
+  const sessionStore = new SQLiteSessionStore(storagePaths.sessionDbFile);
+  const sessionManager = new SessionManager(browserService, sessionStore);
   await sessionManager.initialize();
 
   return { authService, sessionManager, browserService };
@@ -232,9 +247,12 @@ function createHttpApp(services: RuntimeServices): express.Express {
         return;
       }
 
-      const remoteDebuggingPort = services.sessionManager.getRemoteDebuggingPort();
+      const remoteDebuggingPort =
+        services.sessionManager.getRemoteDebuggingPort();
       if (remoteDebuggingPort == null) {
-        console.error("[viewer-be] devtools shell missing remote debugging port");
+        console.error(
+          "[viewer-be] devtools shell missing remote debugging port",
+        );
         res.status(503).send("Remote debugging is unavailable");
         return;
       }
@@ -254,10 +272,13 @@ function createHttpApp(services: RuntimeServices): express.Express {
         tabId,
       });
       if (!targetId) {
-        console.error("[viewer-be] devtools shell failed to resolve target id", {
-          sessionId,
-          tabId,
-        });
+        console.error(
+          "[viewer-be] devtools shell failed to resolve target id",
+          {
+            sessionId,
+            tabId,
+          },
+        );
         res.status(404).send("Target not found");
         return;
       }
