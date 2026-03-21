@@ -13,9 +13,6 @@ export interface SessionRecord {
 }
 
 interface SessionManagerOptions {
-  ttlMs?: number;
-  disconnectGraceMs?: number;
-  cleanupIntervalMs?: number;
   persistencePath?: string;
 }
 
@@ -26,43 +23,17 @@ interface PersistedSessionRecord {
   lastActivityAt: string;
 }
 
-interface SessionPolicy {
-  ttlMs: number;
-  disconnectGraceMs: number;
-}
-
-function createSessionPolicy(options?: SessionManagerOptions): SessionPolicy {
-  return {
-    ttlMs: options?.ttlMs ?? 10 * 60 * 1000,
-    disconnectGraceMs: options?.disconnectGraceMs ?? 5000,
-  };
-}
-
-function shouldExpireSession(
-  session: SessionRecord,
-  now: number,
-  policy: SessionPolicy,
-): boolean {
-  return (
-    !session.connected && now - session.lastActivityAt.getTime() > policy.ttlMs
-  );
-}
 
 export class SessionManager {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
-  private readonly policy: SessionPolicy;
-  private readonly cleanupTimer: NodeJS.Timeout;
   private readonly persistencePath: string | null;
 
   constructor(
     private readonly browserService: BrowserService,
     options?: SessionManagerOptions,
   ) {
-    this.policy = createSessionPolicy(options);
     this.persistencePath = options?.persistencePath?.trim() || null;
-    const cleanupIntervalMs = options?.cleanupIntervalMs ?? 30 * 1000;
-    this.cleanupTimer = this.startCleanupTimer(cleanupIntervalMs);
   }
 
   async initialize(): Promise<void> {
@@ -100,14 +71,10 @@ export class SessionManager {
 
     session.lastActivityAt = new Date();
     session.connected = connected;
-    void this.persistSessions();
-
     if (connected) {
       this.cancelPendingDestroy(sessionId);
-      return;
     }
-
-    this.schedulePendingDestroy(sessionId);
+    void this.persistSessions();
   }
 
   async destroySession(sessionId: string): Promise<boolean> {
@@ -136,28 +103,9 @@ export class SessionManager {
   }
 
   async dispose(): Promise<void> {
-    clearInterval(this.cleanupTimer);
     this.disconnectTimers.forEach((timer) => clearTimeout(timer));
     this.disconnectTimers.clear();
-    await Promise.all(
-      Array.from(this.sessions.keys()).map((id) => this.destroySession(id)),
-    );
     await this.browserService.stop();
-  }
-
-  private startCleanupTimer(cleanupIntervalMs: number): NodeJS.Timeout {
-    return setInterval(() => {
-      void this.cleanupExpiredSessions();
-    }, cleanupIntervalMs);
-  }
-
-  private async cleanupExpiredSessions(): Promise<void> {
-    const now = Date.now();
-    const expiredIds = Array.from(this.sessions.values())
-      .filter((session) => shouldExpireSession(session, now, this.policy))
-      .map((session) => session.id);
-
-    await Promise.all(expiredIds.map((id) => this.destroySession(id)));
   }
 
   private async restorePersistedSessions(): Promise<void> {
@@ -251,14 +199,6 @@ export class SessionManager {
         error: String(error),
       });
     }
-  }
-
-  private schedulePendingDestroy(sessionId: string): void {
-    this.cancelPendingDestroy(sessionId);
-    const timer = setTimeout(() => {
-      void this.destroySession(sessionId);
-    }, this.policy.disconnectGraceMs);
-    this.disconnectTimers.set(sessionId, timer);
   }
 
   private cancelPendingDestroy(sessionId: string): void {

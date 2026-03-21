@@ -15,10 +15,7 @@ function createBrowserServiceMock() {
 describe("SessionManager", () => {
   it("creates and destroys a session", async () => {
     const browserServiceMock = createBrowserServiceMock();
-    const manager = new SessionManager(browserServiceMock as never, {
-      ttlMs: 60_000,
-      cleanupIntervalMs: 60_000,
-    });
+    const manager = new SessionManager(browserServiceMock as never);
 
     const session = await manager.createSession("https://example.com");
     expect(session.id).toBeTruthy();
@@ -32,50 +29,20 @@ describe("SessionManager", () => {
     await manager.dispose();
   });
 
-  it("keeps session alive during reconnect grace period", async () => {
+  it("does not destroy session when disconnected", async () => {
     vi.useFakeTimers();
     try {
       const browserServiceMock = createBrowserServiceMock();
-      const manager = new SessionManager(browserServiceMock as never, {
-        ttlMs: 60_000,
-        cleanupIntervalMs: 60_000,
-        disconnectGraceMs: 500,
-      });
+      const manager = new SessionManager(browserServiceMock as never);
 
       const session = await manager.createSession("https://example.com");
       manager.markConnected(session.id, false);
 
-      vi.advanceTimersByTime(300);
-      manager.markConnected(session.id, true);
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(5 * 60_000);
+      await Promise.resolve();
 
       expect(manager.getSession(session.id)).toBeDefined();
       expect(browserServiceMock.destroySession).not.toHaveBeenCalled();
-
-      await manager.dispose();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("destroys disconnected session after grace period", async () => {
-    vi.useFakeTimers();
-    try {
-      const browserServiceMock = createBrowserServiceMock();
-      const manager = new SessionManager(browserServiceMock as never, {
-        ttlMs: 60_000,
-        cleanupIntervalMs: 60_000,
-        disconnectGraceMs: 200,
-      });
-
-      const session = await manager.createSession("https://example.com");
-      manager.markConnected(session.id, false);
-
-      vi.advanceTimersByTime(250);
-      await Promise.resolve();
-
-      expect(manager.getSession(session.id)).toBeUndefined();
-      expect(browserServiceMock.destroySession).toHaveBeenCalledTimes(1);
 
       await manager.dispose();
     } finally {
