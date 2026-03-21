@@ -62,9 +62,11 @@ describe("ViewerPage devtools controls", () => {
   });
 
   it("does not render devtools button when feature is disabled", () => {
-    render(<ViewerPage apiBase="http://localhost:5000" sessionId="s-1" token="t" />);
+    render(
+      <ViewerPage apiBase="http://localhost:5000" sessionId="s-1" token="t" />,
+    );
 
-    expect(screen.queryByRole("button", { name: "Open DevTools" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Inspect" })).toBeNull();
   });
 
   it("renders devtools button and sends open command when clicked", async () => {
@@ -72,15 +74,35 @@ describe("ViewerPage devtools controls", () => {
       buildViewerConnectionState({ devtoolsEnabled: true }),
     );
 
-    render(<ViewerPage apiBase="http://localhost:5000" sessionId="s-1" token="t" />);
+    render(
+      <ViewerPage apiBase="http://localhost:5000" sessionId="s-1" token="t" />,
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Open DevTools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect" }));
 
     expect(sendInput).toHaveBeenCalledWith({
       type: "devtools",
       action: "open",
       tabId: "tab-1",
     });
+  });
+
+  it("keeps address bar hidden until expanded from more menu", () => {
+    render(
+      <ViewerPage apiBase="http://localhost:5000" sessionId="s-1" token="t" />,
+    );
+
+    expect(screen.queryByTestId("navigation-bar")).toBeNull();
+
+    const moreActionsButton = screen.getAllByRole("button", {
+      name: "More actions",
+    })[0];
+
+    expect(moreActionsButton).toBeDefined();
+    fireEvent.click(moreActionsButton!);
+    fireEvent.click(screen.getByRole("button", { name: "Show address bar" }));
+
+    expect(screen.getByTestId("navigation-bar")).toBeInTheDocument();
   });
 
   it("renders devtools iframe when opened", () => {
@@ -91,13 +113,17 @@ describe("ViewerPage devtools controls", () => {
       }),
     );
 
-    render(<ViewerPage apiBase="http://localhost:5000" sessionId="s-1" token="t" />);
+    render(
+      <ViewerPage apiBase="http://localhost:5000" sessionId="s-1" token="t" />,
+    );
 
+    expect(screen.getByRole("button", { name: "Page" })).toBeInTheDocument();
     const frame = screen.getByTitle("DevTools");
     expect(frame).toBeInTheDocument();
     expect(frame).toHaveAttribute(
       "src",
       "http://localhost:5000/devtools?sessionId=s-1&token=t&tabId=tab-1",
     );
+    expect(screen.queryByRole("img")).toBeNull();
   });
 });

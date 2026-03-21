@@ -12,13 +12,30 @@ export function ThemeToggle() {
   }, []);
 
   if (!mounted) {
-    return <Button variant="secondary" size="sm">Theme</Button>;
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="rounded-full border border-border/60 bg-background/60 px-4 backdrop-blur"
+      >
+        Theme
+      </Button>
+    );
   }
 
   const isDark = theme === "dark";
   return (
-    <Button onClick={() => setTheme(isDark ? "light" : "dark")} variant="secondary" size="sm">
-      {isDark ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+    <Button
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      variant="ghost"
+      size="sm"
+      className="rounded-full border border-border/60 bg-background/60 px-4 backdrop-blur"
+    >
+      {isDark ? (
+        <Sun className="mr-2 h-4 w-4" />
+      ) : (
+        <Moon className="mr-2 h-4 w-4" />
+      )}
       {isDark ? "Light" : "Dark"}
     </Button>
   );

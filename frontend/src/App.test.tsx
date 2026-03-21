@@ -19,6 +19,9 @@ describe("App", () => {
       </ThemeProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(screen.getByText("Browser Viewer")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Continue" }),
+    ).toBeInTheDocument();
   });
 });

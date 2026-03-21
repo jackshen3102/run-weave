@@ -5,27 +5,31 @@
 @tailwind utilities;
 
 :root {
-  --background: 42 25% 97%;
-  --foreground: 211 35% 14%;
+  --background: 40 24% 96%;
+  --foreground: 210 22% 13%;
   --card: 0 0% 100%;
-  --card-foreground: 211 35% 14%;
-  --primary: 185 68% 35%;
+  --card-foreground: 210 22% 13%;
+  --primary: 191 52% 32%;
   --primary-foreground: 0 0% 100%;
-  --muted: 42 19% 92%;
-  --muted-foreground: 211 18% 38%;
-  --border: 35 20% 84%;
+  --muted: 42 16% 90%;
+  --muted-foreground: 212 13% 36%;
+  --border: 38 16% 80%;
 }
 
 .dark {
-  --background: 215 31% 11%;
-  --foreground: 43 100% 97%;
-  --card: 216 30% 15%;
-  --card-foreground: 43 100% 97%;
-  --primary: 184 62% 49%;
-  --primary-foreground: 215 31% 11%;
-  --muted: 216 21% 20%;
-  --muted-foreground: 42 20% 78%;
-  --border: 216 20% 24%;
+  --background: 210 17% 10%;
+  --foreground: 42 32% 95%;
+  --card: 215 18% 14%;
+  --card-foreground: 42 32% 95%;
+  --primary: 190 46% 56%;
+  --primary-foreground: 210 17% 10%;
+  --muted: 214 14% 18%;
+  --muted-foreground: 42 12% 74%;
+  --border: 214 14% 22%;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
@@ -33,12 +37,88 @@ body {
   min-height: 100vh;
   color: hsl(var(--foreground));
   background:
-    radial-gradient(circle at 85% 0%, rgba(52, 177, 188, 0.26), transparent 40%),
-    radial-gradient(circle at 8% 100%, rgba(225, 188, 110, 0.23), transparent 42%),
+    radial-gradient(circle at top, rgba(80, 132, 142, 0.18), transparent 28%),
+    radial-gradient(
+      circle at bottom left,
+      rgba(210, 178, 130, 0.16),
+      transparent 30%
+    ),
     hsl(var(--background));
   font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
 }
 
 #root {
   min-height: 100vh;
+}
+
+button,
+input,
+textarea,
+iframe,
+canvas {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(58, 122, 132, 0.2);
+}
+
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-fade-rise {
+  animation: fade-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-scale-fade {
+  animation: scale-fade 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-panel-in {
+  animation: panel-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-rise {
+    animation: none;
+  }
+
+  .animate-scale-fade,
+  .animate-panel-in {
+    animation: none;
+  }
 }

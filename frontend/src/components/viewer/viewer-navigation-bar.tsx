@@ -26,14 +26,12 @@ export function ViewerNavigationBar({
   onNavigationAction,
 }: ViewerNavigationBarProps) {
   return (
-    <div
-      className="mb-3 flex flex-col gap-2 sm:flex-row"
-      data-testid="navigation-bar"
-    >
+    <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
       <div className="flex items-center gap-2">
         <Button
           size="sm"
-          variant="secondary"
+          variant="ghost"
+          className="rounded-full border border-white/10 bg-white/5 px-3 text-stone-200 hover:bg-white/8 hover:text-white"
           aria-label="Back"
           title="Back"
           disabled={!activeTabId || !activeNavigation?.canGoBack}
@@ -48,7 +46,8 @@ export function ViewerNavigationBar({
         </Button>
         <Button
           size="sm"
-          variant="secondary"
+          variant="ghost"
+          className="rounded-full border border-white/10 bg-white/5 px-3 text-stone-200 hover:bg-white/8 hover:text-white"
           aria-label="Forward"
           title="Forward"
           disabled={!activeTabId || !activeNavigation?.canGoForward}
@@ -64,7 +63,8 @@ export function ViewerNavigationBar({
         {activeNavigation?.isLoading ? (
           <Button
             size="sm"
-            variant="secondary"
+            variant="ghost"
+            className="rounded-full border border-white/10 bg-white/5 px-3 text-stone-200 hover:bg-white/8 hover:text-white"
             aria-label="Refresh"
             title="Refresh"
             disabled={!activeTabId}
@@ -80,7 +80,8 @@ export function ViewerNavigationBar({
         ) : (
           <Button
             size="sm"
-            variant="secondary"
+            variant="ghost"
+            className="rounded-full border border-white/10 bg-white/5 px-3 text-stone-200 hover:bg-white/8 hover:text-white"
             aria-label="Refresh"
             title="Refresh"
             disabled={!activeTabId}
@@ -112,7 +113,7 @@ export function ViewerNavigationBar({
             onAddressCancel();
           }
         }}
-        className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-sm outline-none ring-primary/30 transition focus:ring-2"
+        className="h-11 flex-1 rounded-full border border-white/10 bg-white/5 px-4 text-sm text-white outline-none transition placeholder:text-stone-400 focus:border-primary/45"
         placeholder="https://example.com"
       />
     </div>
