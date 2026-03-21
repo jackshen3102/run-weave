@@ -144,9 +144,9 @@ Use this file as the local source of truth for commands and style.
 
 - Fail fast on missing required env vars.
 - Use `safeParse` for untrusted request payloads.
-- Log useful context before returning a server error.
+- Keep runtime logs error-only: remove `console.log/info/debug/warn` from app runtime code unless explicitly required for temporary debugging.
+- Use `console.error` for failures and include minimal structured context.
 - Stable log prefixes matter: frontend uses `[viewer-fe]`, backend uses `[viewer-be]`.
-- Prefer structured log payload objects over long concatenated strings.
 - On expected `401` auth failures in the frontend, clear auth state rather than retrying blindly.
 
 ## Testing Conventions

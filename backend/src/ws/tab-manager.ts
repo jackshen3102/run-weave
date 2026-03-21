@@ -3,7 +3,6 @@ import type { ConnectionContext } from "./context";
 
 interface TabManagerDeps {
   state: ConnectionContext;
-  sessionId: string;
   context: BrowserContext;
   emitTabs: () => void;
   emitCursor: (cursor: string) => void;
@@ -23,7 +22,6 @@ export function createTabManager(deps: TabManagerDeps): {
 } {
   const {
     state,
-    sessionId,
     context,
     emitTabs,
     emitCursor,
@@ -139,13 +137,9 @@ export function createTabManager(deps: TabManagerDeps): {
 
   const onContextPage = (page: Page): void => {
     const tabId = registerPage(page);
-    void selectTab(tabId)
-      .then(() => {
-        console.log("[viewer-be] switched to new tab", { sessionId, tabId });
-      })
-      .catch((error) => {
-        sendError(String(error));
-      });
+    void selectTab(tabId).catch((error) => {
+      sendError(String(error));
+    });
   };
 
   const createTab = async (): Promise<void> => {

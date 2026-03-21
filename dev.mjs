@@ -1,5 +1,4 @@
 import net from "node:net";
-import os from "node:os";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -34,24 +33,6 @@ export function createFrontendEnv({
 const DEFAULT_BACKEND_PORT = 5000;
 const DEFAULT_FRONTEND_PORT = 5173;
 const DEV_HOST = process.env.DEV_HOST?.trim() || "0.0.0.0";
-
-function resolveLanAddress() {
-  const interfaces = os.networkInterfaces();
-
-  for (const values of Object.values(interfaces)) {
-    if (!values) {
-      continue;
-    }
-
-    for (const info of values) {
-      if (info.family === "IPv4" && !info.internal) {
-        return info.address;
-      }
-    }
-  }
-
-  return undefined;
-}
 
 function canListenOnHost(port, host) {
   return new Promise((resolve) => {
@@ -210,12 +191,6 @@ async function run() {
   });
   reservedPorts.add(backendPort);
 
-  if (backendPort !== DEFAULT_BACKEND_PORT) {
-    console.log(
-      `[dev] backend preferred port ${DEFAULT_BACKEND_PORT} unavailable, using ${backendPort}`,
-    );
-  }
-
   const backend = spawnManagedProcess(
     "backend",
     [
@@ -249,12 +224,6 @@ async function run() {
   });
   reservedPorts.add(frontendPort);
 
-  if (frontendPort !== DEFAULT_FRONTEND_PORT) {
-    console.log(
-      `[dev] frontend preferred port ${DEFAULT_FRONTEND_PORT} unavailable, using ${frontendPort}`,
-    );
-  }
-
   const frontend = spawnManagedProcess(
     "frontend",
     [
@@ -277,17 +246,6 @@ async function run() {
   );
 
   const processes = [backend, frontend];
-
-  const lanAddress = resolveLanAddress();
-
-  console.log(
-    `[dev] frontend: http://localhost:${frontendPort} | backend: ${backendUrl}`,
-  );
-  if (lanAddress) {
-    console.log(
-      `[dev] network:  http://${lanAddress}:${frontendPort} | backend: http://${lanAddress}:${backendPort}`,
-    );
-  }
 
   await new Promise((resolve) => {
     let stopping = false;
@@ -312,12 +270,11 @@ async function run() {
       void stopAndResolve(0);
     };
 
-    const handleExit = (processInfo, code, signal) => {
+    const handleExit = (processInfo, code) => {
       if (stopping) {
         return;
       }
 
-      console.log(`[dev] ${processInfo.name} exited`, { code, signal });
       void stopAndResolve(code ?? 1);
     };
 

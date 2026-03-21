@@ -145,7 +145,7 @@ export function useViewerConnection({
             onAuthExpired?.();
             return;
           }
-          console.log("[viewer-fe] websocket control error", {
+          console.error("[viewer-fe] websocket control error", {
             sessionId,
             message: message.message,
           });
@@ -172,10 +172,6 @@ export function useViewerConnection({
             type: "message/navigation-state",
             navigation: message.state,
           });
-          console.log("[viewer-fe] websocket navigation state", {
-            sessionId,
-            state: message.state,
-          });
           return;
         case "cursor": {
           const canvas = canvasRef.current;
@@ -186,25 +182,18 @@ export function useViewerConnection({
         }
         case "ack":
           dispatch({ type: "message/ack" });
-          console.log("[viewer-fe] websocket ack", {
-            sessionId,
-            eventType: message.eventType,
-          });
           return;
         case "clipboard":
           if (message.action === "copy" && navigator.clipboard?.writeText) {
             void navigator.clipboard.writeText(message.text).catch(() => {
-              console.log("[viewer-fe] failed to write clipboard", {
+              console.error("[viewer-fe] failed to write clipboard", {
                 sessionId,
               });
             });
           }
           return;
         default:
-          console.log("[viewer-fe] websocket control message", {
-            sessionId,
-            message,
-          });
+          return;
       }
     };
 
@@ -243,9 +232,6 @@ export function useViewerConnection({
         wsRef.current = null;
       }
       if (closed) {
-        console.log("[viewer-fe] websocket closed after cleanup", {
-          sessionId,
-        });
         return;
       }
 
@@ -272,13 +258,6 @@ export function useViewerConnection({
           onAuthExpired?.();
           return;
         }
-        console.log("[viewer-fe] websocket closed, stop auto reconnect", {
-          sessionId,
-          code: event.code,
-          reason: event.reason,
-          eventMessage: wsCloseReasonRef.current,
-          livedMs,
-        });
         return;
       }
 
@@ -286,13 +265,6 @@ export function useViewerConnection({
       const attempt = reconnectCountRef.current;
       const delay = Math.min(250 * 2 ** attempt, 5000);
       reconnectCountRef.current += 1;
-      console.log("[viewer-fe] websocket closed, scheduling reconnect", {
-        sessionId,
-        attempt,
-        delay,
-        code: event.code,
-        livedMs,
-      });
 
       reconnectTimerRef.current = window.setTimeout(() => {
         connect();
@@ -307,7 +279,6 @@ export function useViewerConnection({
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
       ws.binaryType = "arraybuffer";
-      console.log("[viewer-fe] websocket connecting", { sessionId, wsUrl });
 
       ws.onopen = () => {
         if (wsRef.current !== ws) {
@@ -317,7 +288,6 @@ export function useViewerConnection({
         wsCloseReasonRef.current = null;
         reconnectCountRef.current = 0;
         dispatch({ type: "connection/opened" });
-        console.log("[viewer-fe] websocket connected", { sessionId });
       };
 
       ws.onmessage = async (event) => {
@@ -335,7 +305,7 @@ export function useViewerConnection({
               type: "connection/error",
               error: "Received malformed control message.",
             });
-            console.log("[viewer-fe] malformed control message", {
+            console.error("[viewer-fe] malformed control message", {
               sessionId,
               raw: event.data,
             });
@@ -355,7 +325,7 @@ export function useViewerConnection({
             type: "connection/error",
             error: "WebSocket connection failed.",
           });
-          console.log("[viewer-fe] websocket error", { sessionId });
+          console.error("[viewer-fe] websocket error", { sessionId });
         }
       };
 
@@ -376,9 +346,6 @@ export function useViewerConnection({
       if (canvasElement) {
         canvasElement.style.cursor = "default";
       }
-      console.log("[viewer-fe] cleanup viewer page and close websocket", {
-        sessionId,
-      });
       wsRef.current?.close();
       wsRef.current = null;
     };

@@ -219,11 +219,6 @@ function createHttpApp(services: RuntimeServices): express.Express {
 
   if (devtoolsEnabled) {
     app.get("/devtools", async (req, res) => {
-      console.log("[viewer-be] devtools shell route hit", {
-        host: req.headers.host,
-        sessionId: req.query.sessionId,
-        tabId: req.query.tabId,
-      });
       const sessionId = req.query.sessionId;
       const token = req.query.token;
       const tabId = req.query.tabId;
@@ -233,25 +228,20 @@ function createHttpApp(services: RuntimeServices): express.Express {
         typeof token !== "string" ||
         typeof tabId !== "string"
       ) {
-        console.log("[viewer-be] devtools shell invalid query", {
-          sessionId,
-          hasToken: typeof token === "string",
-          tabId,
-        });
         res.status(400).send("Missing required devtools query params");
         return;
       }
 
       const remoteDebuggingPort = services.sessionManager.getRemoteDebuggingPort();
       if (remoteDebuggingPort == null) {
-        console.log("[viewer-be] devtools shell missing remote debugging port");
+        console.error("[viewer-be] devtools shell missing remote debugging port");
         res.status(503).send("Remote debugging is unavailable");
         return;
       }
 
       const revision = await resolveChromiumRevision(remoteDebuggingPort);
       if (!revision) {
-        console.log("[viewer-be] devtools shell failed to resolve revision", {
+        console.error("[viewer-be] devtools shell failed to resolve revision", {
           remoteDebuggingPort,
         });
         res.status(502).send("Failed to resolve Chromium revision");
@@ -264,7 +254,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
         tabId,
       });
       if (!targetId) {
-        console.log("[viewer-be] devtools shell failed to resolve target id", {
+        console.error("[viewer-be] devtools shell failed to resolve target id", {
           sessionId,
           tabId,
         });
@@ -277,14 +267,6 @@ function createHttpApp(services: RuntimeServices): express.Express {
         revision,
         wsEndpoint,
       });
-      console.log("[viewer-be] devtools shell generated url", {
-        revision,
-        remoteDebuggingPort,
-        targetId,
-        wsEndpoint,
-        devtoolsUrl,
-      });
-
       res.setHeader("content-type", "text/html; charset=utf-8");
       res.send(buildDevtoolsShellHtml(devtoolsUrl));
     });
@@ -331,22 +313,10 @@ async function startRuntime(): Promise<void> {
     devtoolsEnabled,
   });
 
-  const port = await listenWithFallback(server, runtimeConfig.preferredPort, {
+  await listenWithFallback(server, runtimeConfig.preferredPort, {
     host: runtimeConfig.host,
     maxAttempts: runtimeConfig.strictPort ? 1 : undefined,
   });
-
-  if (port !== runtimeConfig.preferredPort) {
-    console.log(
-      `[viewer-be] preferred port ${runtimeConfig.preferredPort} is busy, switched to ${port}`,
-    );
-  }
-
-  const publicHost =
-    runtimeConfig.host === "0.0.0.0" ? "localhost" : runtimeConfig.host;
-  console.log(
-    `backend listening on http://${publicHost ?? "localhost"}:${port}`,
-  );
 
   attachLifecycleHandlers(server, services.sessionManager);
 }

@@ -6,12 +6,11 @@ export function createScreencastController(params: {
   socket: WebSocket;
   state: ConnectionContext;
   context: BrowserContext;
-  sessionId: string;
 }): {
   start: () => Promise<void>;
   stop: () => Promise<void>;
 } {
-  const { socket, state, context, sessionId } = params;
+  const { socket, state, context } = params;
 
   const onScreencastFrame = (payload: {
     data: string;
@@ -39,10 +38,6 @@ export function createScreencastController(params: {
       maxWidth: 1280,
       maxHeight: 720,
     });
-    console.log("[viewer-be] screencast started", {
-      sessionId,
-      activeTabId: state.activeTabId,
-    });
   };
 
   const stop = async (): Promise<void> => {
@@ -54,10 +49,6 @@ export function createScreencastController(params: {
     await state.cdpSession.send("Page.stopScreencast").catch(() => undefined);
     await state.cdpSession.detach().catch(() => undefined);
     state.cdpSession = null;
-    console.log("[viewer-be] screencast stopped", {
-      sessionId,
-      activeTabId: state.activeTabId,
-    });
   };
 
   return { start, stop };

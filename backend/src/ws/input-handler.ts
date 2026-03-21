@@ -42,7 +42,7 @@ export function handlePageInputMessage(params: {
       }
     })
     .catch((error) => {
-      console.log("[viewer-be] input apply failed", {
+      console.error("[viewer-be] input apply failed", {
         sessionId,
         eventType: parsed.type,
         error: String(error),

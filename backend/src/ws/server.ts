@@ -1,10 +1,7 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
 import type { WebSocket } from "ws";
-import type {
-  ClientInputMessage,
-  ServerEventMessage,
-} from "@browser-viewer/shared";
+import type { ServerEventMessage } from "@browser-viewer/shared";
 import type { SessionManager } from "../session/manager";
 import type { AuthService } from "../auth/service";
 import { parseClientMessage } from "./client-message";
@@ -33,7 +30,6 @@ export function attachWebSocketServer(
 ): WebSocketServer {
   const wss = new WebSocketServer({ server, path: "/ws" });
   const devtoolsEnabled = options?.devtoolsEnabled ?? false;
-  let sampledMoveCount = 0;
   const cursorSyncIntervalMs = 50;
 
   const sendEvent = (socket: WebSocket, event: ServerEventMessage): void => {
@@ -44,12 +40,6 @@ export function attachWebSocketServer(
   };
 
   wss.on("connection", (socket, request) => {
-    const requestUrl = new URL(request.url ?? "/", "http://localhost");
-    console.log("[viewer-be] websocket connection incoming", {
-      url: request.url,
-      sessionId: requestUrl.searchParams.get("sessionId"),
-    });
-
     const handshake = validateWebSocketHandshake({
       request,
       authService,
@@ -57,11 +47,6 @@ export function attachWebSocketServer(
     });
 
     if (!handshake.ok) {
-      if (handshake.logMeta) {
-        console.log(handshake.logMessage, handshake.logMeta);
-      } else {
-        console.log(handshake.logMessage);
-      }
       sendEvent(socket, { type: "error", message: handshake.errorMessage });
       socket.close(1008, handshake.closeReason);
       return;
@@ -70,23 +55,6 @@ export function attachWebSocketServer(
     const { sessionId, session } = handshake;
     const state = createConnectionContext(session.browserSession.page);
     registerSessionTabs(sessionId, state.tabIdToPage);
-
-    const logInput = (input: ClientInputMessage): void => {
-      if (input.type === "mouse" && input.action === "move") {
-        sampledMoveCount += 1;
-        if (sampledMoveCount % 30 === 0) {
-          console.log("[viewer-be] input mouse move (sampled)", {
-            sessionId,
-            count: sampledMoveCount,
-            x: input.x,
-            y: input.y,
-          });
-        }
-        return;
-      }
-
-      console.log("[viewer-be] input received", { sessionId, input });
-    };
 
     const sendError = (message: string): void => {
       sendEvent(socket, { type: "error", message });
@@ -141,7 +109,6 @@ export function attachWebSocketServer(
       socket,
       state,
       context: session.browserSession.context,
-      sessionId,
     });
 
     const cursorSync = createCursorSyncController({
@@ -152,7 +119,6 @@ export function attachWebSocketServer(
 
     const tabManager = createTabManager({
       state,
-      sessionId,
       context: session.browserSession.context,
       emitTabs,
       emitCursor,
@@ -172,11 +138,10 @@ export function attachWebSocketServer(
     sendEvent(socket, { type: "connected", sessionId });
     sendEvent(socket, { type: "devtools-capability", enabled: devtoolsEnabled });
     emitTabs();
-    console.log("[viewer-be] websocket connected", { sessionId });
 
     void screencast.start().catch((error) => {
       sendError(String(error));
-      console.log("[viewer-be] failed to start screencast", {
+      console.error("[viewer-be] failed to start screencast", {
         sessionId,
         error: String(error),
       });
@@ -190,15 +155,9 @@ export function attachWebSocketServer(
 
       const parsed = parseClientMessage(String(data));
       if (!parsed) {
-        console.log("[viewer-be] invalid client message", {
-          sessionId,
-          raw: String(data),
-        });
         sendError("Invalid message");
         return;
       }
-
-      logInput(parsed);
 
       if (parsed.type === "tab") {
         handleTabMessage({
@@ -265,24 +224,20 @@ export function attachWebSocketServer(
       unregisterSessionTabs(sessionId);
     };
 
-    const closeConnection = (
-      logType: "closed" | "error",
-      markDisconnected: boolean,
-    ): void => {
+    const closeConnection = (markDisconnected: boolean): void => {
       state.isClosed = true;
       cleanupConnection();
       if (markDisconnected) {
         sessionManager.markConnected(sessionId, false);
       }
-      console.log(`[viewer-be] websocket ${logType}`, { sessionId });
     };
 
     socket.on("close", () => {
-      closeConnection("closed", true);
+      closeConnection(true);
     });
 
     socket.on("error", () => {
-      closeConnection("error", false);
+      closeConnection(false);
     });
 
     socket.on("pong", () => {

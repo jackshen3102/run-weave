@@ -34,9 +34,6 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
       req.body as CreateSessionRequest,
     );
     if (!parsed.success) {
-      console.log("[viewer-be] create session invalid payload", {
-        body: req.body,
-      });
       res.status(400).json({
         message: "Invalid request body",
         errors: parsed.error.flatten(),
@@ -45,16 +42,14 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
     }
 
     try {
-      console.log("[viewer-be] create session start", { url: parsed.data.url });
       const session = await sessionManager.createSession(parsed.data.url);
       const payload: CreateSessionResponse = {
         sessionId: session.id,
         viewerUrl: `/?sessionId=${session.id}`,
       };
-      console.log("[viewer-be] create session success", payload);
       res.status(201).json(payload);
     } catch (error) {
-      console.log("[viewer-be] create session failed", {
+      console.error("[viewer-be] create session failed", {
         error: String(error),
       });
       res

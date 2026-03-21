@@ -133,7 +133,7 @@ export class SessionManager {
           browserSession,
         });
       } catch (error) {
-        console.log("[viewer-be] failed to restore session", {
+        console.error("[viewer-be] failed to restore session", {
           sessionId: record.id,
           error: String(error),
         });
@@ -195,7 +195,7 @@ export class SessionManager {
         "utf-8",
       );
     } catch (error) {
-      console.log("[viewer-be] failed to persist sessions", {
+      console.error("[viewer-be] failed to persist sessions", {
         error: String(error),
       });
     }

@@ -85,7 +85,6 @@ export function attachDevtoolsProxyServer(
 
   wss.on("connection", (clientSocket, request) => {
     if (!options.enabled || options.remoteDebuggingPort == null) {
-      console.log("[viewer-be] devtools proxy rejected: disabled");
       closeWithReason(clientSocket, 1011, "DevTools proxy disabled");
       return;
     }
@@ -98,11 +97,6 @@ export function attachDevtoolsProxyServer(
     });
 
     if (!handshake.ok) {
-      if (handshake.logMeta) {
-        console.log(handshake.logMessage, handshake.logMeta);
-      } else {
-        console.log(handshake.logMessage);
-      }
       closeWithReason(clientSocket, 1008, handshake.closeReason);
       return;
     }
@@ -116,20 +110,11 @@ export function attachDevtoolsProxyServer(
     void (async () => {
       const targetId = await resolveTargetId({ sessionManager, sessionId, tabId });
       if (!targetId) {
-        console.log("[viewer-be] devtools proxy target not found", {
-          sessionId,
-          tabId,
-        });
         closeWithReason(clientSocket, 1008, "Target not found");
         return;
       }
 
       const upstreamUrl = `ws://127.0.0.1:${options.remoteDebuggingPort}/devtools/page/${encodeURIComponent(targetId)}`;
-      console.log("[viewer-be] devtools proxy upstream connect", {
-        sessionId,
-        tabId,
-        targetId,
-      });
       const upstreamSocket = new WebSocket(upstreamUrl);
 
       const closeBoth = (code: number, reason: string): void => {
@@ -151,11 +136,6 @@ export function attachDevtoolsProxyServer(
       });
 
       upstreamSocket.on("open", () => {
-        console.log("[viewer-be] devtools proxy upstream connected", {
-          sessionId,
-          tabId,
-          targetId,
-        });
         for (const message of pendingClientMessages) {
           upstreamSocket.send(message.data, { binary: message.isBinary });
         }
@@ -170,27 +150,15 @@ export function attachDevtoolsProxyServer(
       });
 
       clientSocket.on("close", (code, reason) => {
-        console.log("[viewer-be] devtools proxy client closed", {
-          sessionId,
-          tabId,
-          code,
-          reason: String(reason),
-        });
         closeWithReason(upstreamSocket, code, String(reason));
       });
 
       upstreamSocket.on("close", (code, reason) => {
-        console.log("[viewer-be] devtools proxy upstream closed", {
-          sessionId,
-          tabId,
-          code,
-          reason: String(reason),
-        });
         closeWithReason(clientSocket, code, String(reason));
       });
 
       clientSocket.on("error", (error) => {
-        console.log("[viewer-be] devtools proxy client error", {
+        console.error("[viewer-be] devtools proxy client error", {
           sessionId,
           tabId,
           error: String(error),
@@ -199,7 +167,7 @@ export function attachDevtoolsProxyServer(
       });
 
       upstreamSocket.on("error", (error) => {
-        console.log("[viewer-be] devtools proxy upstream error", {
+        console.error("[viewer-be] devtools proxy upstream error", {
           sessionId,
           tabId,
           error: String(error),
@@ -207,7 +175,7 @@ export function attachDevtoolsProxyServer(
         closeBoth(1011, "Upstream socket error");
       });
     })().catch((error) => {
-      console.log("[viewer-be] devtools proxy setup failed", {
+      console.error("[viewer-be] devtools proxy setup failed", {
         error: String(error),
       });
       closeWithReason(clientSocket, 1011, "DevTools proxy setup failed");
