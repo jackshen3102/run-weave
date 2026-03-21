@@ -4,6 +4,7 @@ interface ViewerHeaderProps {
   sessionId: string;
   status: string;
   canReconnect: boolean;
+  onCreateTab: () => void;
   onReconnect: () => void;
   onBack: () => void;
 }
@@ -12,6 +13,7 @@ export function ViewerHeader({
   sessionId,
   status,
   canReconnect,
+  onCreateTab,
   onReconnect,
   onBack,
 }: ViewerHeaderProps) {
@@ -28,6 +30,9 @@ export function ViewerHeader({
             Reconnect
           </Button>
         )}
+        <Button variant="secondary" size="sm" onClick={onCreateTab}>
+          New Tab
+        </Button>
         <Button variant="secondary" size="sm" onClick={onBack}>
           Back
         </Button>

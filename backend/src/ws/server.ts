@@ -203,6 +203,7 @@ export function attachWebSocketServer(
       if (parsed.type === "tab") {
         handleTabMessage({
           parsed,
+          createTab: tabManager.createTab,
           selectTab: tabManager.selectTab,
           sendError,
           sendAck: () =>

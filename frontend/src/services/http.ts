@@ -28,3 +28,18 @@ export async function requestJson<T>(
 
   return (await response.json()) as T;
 }
+
+export async function requestVoid(
+  apiBase: string,
+  path: string,
+  init?: RequestInit,
+): Promise<void> {
+  const response = await fetch(buildUrl(apiBase, path), init);
+
+  if (!response.ok) {
+    throw new HttpError(
+      response.status,
+      `${init?.method ?? "GET"} ${path} failed: ${response.status}`,
+    );
+  }
+}

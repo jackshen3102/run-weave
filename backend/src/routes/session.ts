@@ -3,6 +3,7 @@ import { z } from "zod";
 import type {
   CreateSessionRequest,
   CreateSessionResponse,
+  SessionListItem,
   SessionStatusResponse,
 } from "@browser-viewer/shared";
 import type { SessionManager } from "../session/manager";
@@ -14,6 +15,20 @@ const createSessionSchema = z.object({
 export function createSessionRouter(sessionManager: SessionManager): Router {
   const router = Router();
 
+  router.get("/session", (_req, res) => {
+    const payload: SessionListItem[] = sessionManager
+      .listSessions()
+      .map((session) => ({
+        sessionId: session.id,
+        connected: session.connected,
+        targetUrl: session.targetUrl,
+        createdAt: session.createdAt.toISOString(),
+        lastActivityAt: session.lastActivityAt.toISOString(),
+      }));
+
+    res.json(payload);
+  });
+
   router.post("/session", async (req, res) => {
     const parsed = createSessionSchema.safeParse(
       req.body as CreateSessionRequest,
@@ -22,12 +37,10 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
       console.log("[viewer-be] create session invalid payload", {
         body: req.body,
       });
-      res
-        .status(400)
-        .json({
-          message: "Invalid request body",
-          errors: parsed.error.flatten(),
-        });
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
       return;
     }
 

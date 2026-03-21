@@ -22,7 +22,9 @@ function createTestServer(sessionState: { current: MockSession | null }) {
       sessionState.current = created;
       return { ...created, browserSession: {} };
     }),
-    getSession: vi.fn((id: string) => (sessionState.current?.id === id ? sessionState.current : undefined)),
+    getSession: vi.fn((id: string) =>
+      sessionState.current?.id === id ? sessionState.current : undefined,
+    ),
     destroySession: vi.fn(async (id: string) => {
       if (sessionState.current?.id !== id) {
         return false;
@@ -30,6 +32,16 @@ function createTestServer(sessionState: { current: MockSession | null }) {
       sessionState.current = null;
       return true;
     }),
+    listSessions: vi.fn(() =>
+      sessionState.current
+        ? [
+            {
+              ...sessionState.current,
+              lastActivityAt: new Date("2026-03-19T00:00:30.000Z"),
+            },
+          ]
+        : [],
+    ),
   };
 
   const app = express();
@@ -83,22 +95,43 @@ describe("session routes", () => {
       body: JSON.stringify({ url: "https://example.com" }),
     });
     expect(createResponse.status).toBe(201);
-    const created = (await createResponse.json()) as { sessionId: string; viewerUrl: string };
+    const created = (await createResponse.json()) as {
+      sessionId: string;
+      viewerUrl: string;
+    };
     expect(created.sessionId).toBe("test-session-id");
     expect(created.viewerUrl).toContain("sessionId=test-session-id");
 
-    const getResponse = await fetch(`http://127.0.0.1:${port}/api/session/test-session-id`);
+    const getResponse = await fetch(
+      `http://127.0.0.1:${port}/api/session/test-session-id`,
+    );
     expect(getResponse.status).toBe(200);
-    const statusPayload = (await getResponse.json()) as { sessionId: string; targetUrl: string };
+    const statusPayload = (await getResponse.json()) as {
+      sessionId: string;
+      targetUrl: string;
+    };
     expect(statusPayload.sessionId).toBe("test-session-id");
     expect(statusPayload.targetUrl).toBe("https://example.com");
 
-    const deleteResponse = await fetch(`http://127.0.0.1:${port}/api/session/test-session-id`, {
-      method: "DELETE",
-    });
+    const listResponse = await fetch(`http://127.0.0.1:${port}/api/session`);
+    expect(listResponse.status).toBe(200);
+    const listPayload = (await listResponse.json()) as Array<{
+      sessionId: string;
+    }>;
+    expect(listPayload).toHaveLength(1);
+    expect(listPayload[0]?.sessionId).toBe("test-session-id");
+
+    const deleteResponse = await fetch(
+      `http://127.0.0.1:${port}/api/session/test-session-id`,
+      {
+        method: "DELETE",
+      },
+    );
     expect(deleteResponse.status).toBe(204);
 
-    const missingResponse = await fetch(`http://127.0.0.1:${port}/api/session/test-session-id`);
+    const missingResponse = await fetch(
+      `http://127.0.0.1:${port}/api/session/test-session-id`,
+    );
     expect(missingResponse.status).toBe(404);
   });
 });

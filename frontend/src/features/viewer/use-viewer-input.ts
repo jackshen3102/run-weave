@@ -208,7 +208,7 @@ export function useViewerInput({
         void navigator.clipboard
           .readText()
           .then((text) => {
-            sendClipboardPaste(text, "paste-shortcut");
+            sendClipboardPaste(text);
           })
           .catch(() => {
             sendKeyboardInput(event);
@@ -235,7 +235,7 @@ export function useViewerInput({
         return;
       }
 
-      sendClipboardPaste(text, "input");
+      sendClipboardPaste(text);
       event.currentTarget.value = "";
     },
     [sendClipboardPaste],
@@ -257,7 +257,7 @@ export function useViewerInput({
         return;
       }
 
-      sendClipboardPaste(text, "composition");
+      sendClipboardPaste(text);
       event.currentTarget.value = "";
     },
     [sendClipboardPaste],

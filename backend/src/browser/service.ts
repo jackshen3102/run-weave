@@ -37,16 +37,16 @@ function buildLaunchArgs(options: {
 }
 
 export class BrowserService {
-  private context: BrowserContext | null = null;
+  private readonly contexts = new Map<string, BrowserContext>();
   private readonly headless: boolean;
-  private readonly profileDir: string;
+  private readonly profileRootDir: string;
   private readonly autoOpenDevtoolsForTabs: boolean;
   private readonly devtoolsEnabled: boolean;
   private readonly remoteDebuggingPort: number | null;
 
   constructor(options?: BrowserServiceOptions) {
     this.headless = options?.headless ?? true;
-    this.profileDir =
+    this.profileRootDir =
       options?.profileDir?.trim() ||
       path.resolve(process.cwd(), ".browser-profile");
     this.autoOpenDevtoolsForTabs = options?.autoOpenDevtoolsForTabs ?? false;
@@ -57,14 +57,19 @@ export class BrowserService {
         : null;
   }
 
-  private async getOrCreateContext(): Promise<BrowserContext> {
-    if (this.context) {
-      return this.context;
+  private getSessionProfileDir(sessionId: string): string {
+    return path.join(this.profileRootDir, "sessions", sessionId);
+  }
+
+  private async getOrCreateContext(sessionId: string): Promise<BrowserContext> {
+    const existingContext = this.contexts.get(sessionId);
+    if (existingContext) {
+      return existingContext;
     }
 
-    await mkdir(this.profileDir, { recursive: true });
-
-    const context = await chromium.launchPersistentContext(this.profileDir, {
+    const profileDir = this.getSessionProfileDir(sessionId);
+    await mkdir(profileDir, { recursive: true });
+    const context = await chromium.launchPersistentContext(profileDir, {
       headless: this.headless,
       args: buildLaunchArgs({
         autoOpenDevtoolsForTabs: this.autoOpenDevtoolsForTabs,
@@ -72,11 +77,12 @@ export class BrowserService {
       }),
     });
     context.on("close", () => {
-      if (this.context === context) {
-        this.context = null;
+      const current = this.contexts.get(sessionId);
+      if (current === context) {
+        this.contexts.delete(sessionId);
       }
     });
-    this.context = context;
+    this.contexts.set(sessionId, context);
     return context;
   }
 
@@ -88,23 +94,38 @@ export class BrowserService {
     return this.devtoolsEnabled;
   }
 
-  async createSession(targetUrl: string): Promise<BrowserSession> {
-    const context = await this.getOrCreateContext();
+  async createSession(
+    sessionId: string,
+    targetUrl: string,
+  ): Promise<BrowserSession> {
+    const context = await this.getOrCreateContext(sessionId);
     const page = await context.newPage();
     await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
 
     return { context, page };
   }
 
-  async destroySession(session: BrowserSession): Promise<void> {
+  async destroySession(
+    sessionId: string,
+    session: BrowserSession,
+  ): Promise<void> {
     await session.page.close().catch(() => undefined);
+    const context = this.contexts.get(sessionId);
+    if (!context || context !== session.context) {
+      return;
+    }
+
+    await context.close().catch(() => undefined);
+    this.contexts.delete(sessionId);
   }
 
   async stop(): Promise<void> {
-    if (!this.context) {
-      return;
-    }
-    await this.context.close().catch(() => undefined);
-    this.context = null;
+    const contexts = Array.from(this.contexts.values());
+    this.contexts.clear();
+    await Promise.all(
+      contexts.map(async (context) => {
+        await context.close().catch(() => undefined);
+      }),
+    );
   }
 }

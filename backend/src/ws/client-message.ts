@@ -28,11 +28,17 @@ const clientInputSchema = z.union([
     deltaX: z.number(),
     deltaY: z.number(),
   }),
-  z.object({
-    type: z.literal("tab"),
-    action: z.literal("switch"),
-    tabId: z.string().min(1),
-  }),
+  z.union([
+    z.object({
+      type: z.literal("tab"),
+      action: z.literal("create"),
+    }),
+    z.object({
+      type: z.literal("tab"),
+      action: z.literal("switch"),
+      tabId: z.string().min(1),
+    }),
+  ]),
   z
     .object({
       type: z.literal("navigation"),

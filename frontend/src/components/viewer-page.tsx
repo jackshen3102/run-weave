@@ -123,6 +123,9 @@ export function ViewerPage({
         sessionId={sessionId}
         status={status}
         canReconnect={status === "reconnecting" || status === "closed"}
+        onCreateTab={() => {
+          sendInput({ type: "tab", action: "create" });
+        }}
         onReconnect={reconnect}
         onBack={() => window.location.assign("/")}
       />

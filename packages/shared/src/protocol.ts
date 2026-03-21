@@ -24,6 +24,14 @@ export interface SessionStatusResponse {
   createdAt: string;
 }
 
+export interface SessionListItem {
+  sessionId: string;
+  connected: boolean;
+  targetUrl: string;
+  createdAt: string;
+  lastActivityAt: string;
+}
+
 export interface ViewerTab {
   id: string;
   url: string;
@@ -68,6 +76,10 @@ export type ClientInputMessage =
       type: "tab";
       action: "switch";
       tabId: string;
+    }
+  | {
+      type: "tab";
+      action: "create";
     }
   | {
       type: "navigation";

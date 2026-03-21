@@ -173,14 +173,13 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
     .filter(Boolean);
 }
 
-function createRuntimeServices(): RuntimeServices {
+async function createRuntimeServices(): Promise<RuntimeServices> {
   const devtoolsEnabled =
     process.env.BROWSER_DEVTOOLS_ENABLED?.trim().toLowerCase() === "true";
   const rawRemoteDebuggingPort = process.env.BROWSER_REMOTE_DEBUGGING_PORT;
   const parsedRemoteDebuggingPort = devtoolsEnabled
     ? parsePort(rawRemoteDebuggingPort, 9222)
     : undefined;
-
   const browserService = new BrowserService({
     headless: process.env.BROWSER_HEADLESS?.trim().toLowerCase() !== "false",
     profileDir: process.env.BROWSER_PROFILE_DIR,
@@ -190,7 +189,12 @@ function createRuntimeServices(): RuntimeServices {
     remoteDebuggingPort: parsedRemoteDebuggingPort,
   });
   const authService = new AuthService(loadAuthConfig());
-  const sessionManager = new SessionManager(browserService);
+  const sessionManager = new SessionManager(browserService, {
+    persistencePath:
+      process.env.SESSION_STORE_FILE?.trim() ||
+      ".browser-profile/session-store.json",
+  });
+  await sessionManager.initialize();
 
   return { authService, sessionManager, browserService };
 }
@@ -317,7 +321,7 @@ function attachLifecycleHandlers(
 
 async function startRuntime(): Promise<void> {
   const runtimeConfig = resolveRuntimeConfig();
-  const services = createRuntimeServices();
+  const services = await createRuntimeServices();
   const app = createHttpApp(services);
   const server = http.createServer(app);
 

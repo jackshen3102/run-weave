@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { BrowserService, type BrowserSession } from "../browser/service";
 
 export interface SessionRecord {
@@ -14,6 +16,14 @@ interface SessionManagerOptions {
   ttlMs?: number;
   disconnectGraceMs?: number;
   cleanupIntervalMs?: number;
+  persistencePath?: string;
+}
+
+interface PersistedSessionRecord {
+  id: string;
+  targetUrl: string;
+  createdAt: string;
+  lastActivityAt: string;
 }
 
 interface SessionPolicy {
@@ -33,7 +43,9 @@ function shouldExpireSession(
   now: number,
   policy: SessionPolicy,
 ): boolean {
-  return !session.connected && now - session.lastActivityAt.getTime() > policy.ttlMs;
+  return (
+    !session.connected && now - session.lastActivityAt.getTime() > policy.ttlMs
+  );
 }
 
 export class SessionManager {
@@ -41,20 +53,30 @@ export class SessionManager {
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
   private readonly policy: SessionPolicy;
   private readonly cleanupTimer: NodeJS.Timeout;
+  private readonly persistencePath: string | null;
 
   constructor(
     private readonly browserService: BrowserService,
     options?: SessionManagerOptions,
   ) {
     this.policy = createSessionPolicy(options);
+    this.persistencePath = options?.persistencePath?.trim() || null;
     const cleanupIntervalMs = options?.cleanupIntervalMs ?? 30 * 1000;
     this.cleanupTimer = this.startCleanupTimer(cleanupIntervalMs);
   }
 
+  async initialize(): Promise<void> {
+    await this.restorePersistedSessions();
+  }
+
   async createSession(targetUrl: string): Promise<SessionRecord> {
-    const browserSession = await this.browserService.createSession(targetUrl);
+    const sessionId = uuidv4();
+    const browserSession = await this.browserService.createSession(
+      sessionId,
+      targetUrl,
+    );
     const session: SessionRecord = {
-      id: uuidv4(),
+      id: sessionId,
       targetUrl,
       createdAt: new Date(),
       lastActivityAt: new Date(),
@@ -62,6 +84,7 @@ export class SessionManager {
       browserSession,
     };
     this.sessions.set(session.id, session);
+    void this.persistSessions();
     return session;
   }
 
@@ -77,6 +100,7 @@ export class SessionManager {
 
     session.lastActivityAt = new Date();
     session.connected = connected;
+    void this.persistSessions();
 
     if (connected) {
       this.cancelPendingDestroy(sessionId);
@@ -94,7 +118,8 @@ export class SessionManager {
 
     this.cancelPendingDestroy(sessionId);
     this.sessions.delete(sessionId);
-    await this.browserService.destroySession(session.browserSession);
+    await this.browserService.destroySession(sessionId, session.browserSession);
+    await this.persistSessions();
     return true;
   }
 
@@ -114,7 +139,9 @@ export class SessionManager {
     clearInterval(this.cleanupTimer);
     this.disconnectTimers.forEach((timer) => clearTimeout(timer));
     this.disconnectTimers.clear();
-    await Promise.all(Array.from(this.sessions.keys()).map((id) => this.destroySession(id)));
+    await Promise.all(
+      Array.from(this.sessions.keys()).map((id) => this.destroySession(id)),
+    );
     await this.browserService.stop();
   }
 
@@ -131,6 +158,99 @@ export class SessionManager {
       .map((session) => session.id);
 
     await Promise.all(expiredIds.map((id) => this.destroySession(id)));
+  }
+
+  private async restorePersistedSessions(): Promise<void> {
+    if (!this.persistencePath) {
+      return;
+    }
+
+    const records = await this.readPersistedSessions();
+    if (records.length === 0) {
+      return;
+    }
+
+    for (const record of records) {
+      try {
+        const browserSession = await this.browserService.createSession(
+          record.id,
+          record.targetUrl,
+        );
+        this.sessions.set(record.id, {
+          id: record.id,
+          targetUrl: record.targetUrl,
+          createdAt: new Date(record.createdAt),
+          lastActivityAt: new Date(record.lastActivityAt),
+          connected: false,
+          browserSession,
+        });
+      } catch (error) {
+        console.log("[viewer-be] failed to restore session", {
+          sessionId: record.id,
+          error: String(error),
+        });
+      }
+    }
+
+    await this.persistSessions();
+  }
+
+  private async readPersistedSessions(): Promise<PersistedSessionRecord[]> {
+    if (!this.persistencePath) {
+      return [];
+    }
+
+    try {
+      const raw = await readFile(this.persistencePath, "utf-8");
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed.filter((item): item is PersistedSessionRecord => {
+        if (!item || typeof item !== "object") {
+          return false;
+        }
+
+        const record = item as Partial<PersistedSessionRecord>;
+        return (
+          typeof record.id === "string" &&
+          typeof record.targetUrl === "string" &&
+          typeof record.createdAt === "string" &&
+          typeof record.lastActivityAt === "string"
+        );
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  private async persistSessions(): Promise<void> {
+    if (!this.persistencePath) {
+      return;
+    }
+
+    const payload: PersistedSessionRecord[] = Array.from(
+      this.sessions.values(),
+    ).map((session) => ({
+      id: session.id,
+      targetUrl: session.targetUrl,
+      createdAt: session.createdAt.toISOString(),
+      lastActivityAt: session.lastActivityAt.toISOString(),
+    }));
+
+    try {
+      await mkdir(path.dirname(this.persistencePath), { recursive: true });
+      await writeFile(
+        this.persistencePath,
+        JSON.stringify(payload, null, 2),
+        "utf-8",
+      );
+    } catch (error) {
+      console.log("[viewer-be] failed to persist sessions", {
+        error: String(error),
+      });
+    }
   }
 
   private schedulePendingDestroy(sessionId: string): void {
