@@ -13,6 +13,8 @@ export interface ViewerConnectionState {
   ackCount: number;
   tabs: ViewerTab[];
   navigationByTabId: Record<string, NavigationState>;
+  devtoolsEnabled: boolean;
+  devtoolsByTabId: Record<string, boolean>;
 }
 
 export type ViewerConnectionAction =
@@ -22,7 +24,9 @@ export type ViewerConnectionAction =
   | { type: "input/sent" }
   | { type: "message/ack" }
   | { type: "message/tabs"; tabs: ViewerTab[] }
-  | { type: "message/navigation-state"; navigation: NavigationState };
+  | { type: "message/navigation-state"; navigation: NavigationState }
+  | { type: "message/devtools-capability"; enabled: boolean }
+  | { type: "message/devtools-state"; tabId: string; opened: boolean };
 
 export const initialViewerConnectionState: ViewerConnectionState = {
   status: "connecting",
@@ -31,7 +35,29 @@ export const initialViewerConnectionState: ViewerConnectionState = {
   ackCount: 0,
   tabs: [],
   navigationByTabId: {},
+  devtoolsEnabled: false,
+  devtoolsByTabId: {},
 };
+
+function hasTab(tabs: ViewerTab[], tabId: string): boolean {
+  return tabs.some((tab) => tab.id === tabId);
+}
+
+function pruneByTabIds<T>(
+  record: Record<string, T>,
+  tabs: ViewerTab[],
+): Record<string, T> {
+  const nextTabIds = new Set(tabs.map((tab) => tab.id));
+  const next: Record<string, T> = {};
+
+  for (const [tabId, value] of Object.entries(record)) {
+    if (nextTabIds.has(tabId)) {
+      next[tabId] = value;
+    }
+  }
+
+  return next;
+}
 
 export function viewerConnectionReducer(
   state: ViewerConnectionState,
@@ -64,29 +90,15 @@ export function viewerConnectionReducer(
         ...state,
         ackCount: state.ackCount + 1,
       };
-    case "message/tabs": {
-      const nextTabIds = new Set(action.tabs.map((tab) => tab.id));
-      const nextNavigationByTabId: Record<string, NavigationState> = {};
-
-      for (const [tabId, navigation] of Object.entries(
-        state.navigationByTabId,
-      )) {
-        if (nextTabIds.has(tabId)) {
-          nextNavigationByTabId[tabId] = navigation;
-        }
-      }
-
+    case "message/tabs":
       return {
         ...state,
         tabs: action.tabs,
-        navigationByTabId: nextNavigationByTabId,
+        navigationByTabId: pruneByTabIds(state.navigationByTabId, action.tabs),
+        devtoolsByTabId: pruneByTabIds(state.devtoolsByTabId, action.tabs),
       };
-    }
     case "message/navigation-state": {
-      const tabExists = state.tabs.some(
-        (tab) => tab.id === action.navigation.tabId,
-      );
-      if (!tabExists) {
+      if (!hasTab(state.tabs, action.navigation.tabId)) {
         return state;
       }
 
@@ -95,6 +107,24 @@ export function viewerConnectionReducer(
         navigationByTabId: {
           ...state.navigationByTabId,
           [action.navigation.tabId]: action.navigation,
+        },
+      };
+    }
+    case "message/devtools-capability":
+      return {
+        ...state,
+        devtoolsEnabled: action.enabled,
+      };
+    case "message/devtools-state": {
+      if (!hasTab(state.tabs, action.tabId)) {
+        return state;
+      }
+
+      return {
+        ...state,
+        devtoolsByTabId: {
+          ...state.devtoolsByTabId,
+          [action.tabId]: action.opened,
         },
       };
     }

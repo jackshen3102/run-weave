@@ -53,6 +53,22 @@ describe("validateWebSocketHandshake", () => {
       sessionManager: { getSession: vi.fn(() => session) } as never,
     });
 
-    expect(result).toEqual({ ok: true, sessionId: "s-1", session });
+    expect(result).toEqual({ ok: true, sessionId: "s-1", session, tabId: null });
+  });
+
+  it("rejects missing tabId when required", () => {
+    const session = { id: "s-1", browserSession: { page: {}, context: {} } };
+    const result = validateWebSocketHandshake({
+      request: { url: "/ws/devtools-proxy?token=ok&sessionId=s-1" } as never,
+      authService: { verifyToken: vi.fn(() => true) } as never,
+      sessionManager: { getSession: vi.fn(() => session) } as never,
+      requireTabId: true,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      errorMessage: "Missing tabId",
+      closeReason: "Missing tabId",
+    });
   });
 });

@@ -25,6 +25,9 @@ class FakeCDPSession extends EventEmitter {
     if (method === "Page.getNavigationHistory") {
       return this.navigationHistory;
     }
+    if (method === "Target.getTargetInfo") {
+      return { targetInfo: { targetId: "target-1" } };
+    }
     if (method === "DOM.getNodeForLocation") {
       return { nodeId: 1 };
     }
@@ -598,6 +601,137 @@ describe("websocket server", () => {
     const forwardAck = await queue.nextByType("ack");
     expect(forwardAck.eventType).toBe("navigation");
     expect(page.goForward).not.toHaveBeenCalled();
+  });
+
+  it("rejects devtools command when feature is disabled", async () => {
+    const cdpSession = new FakeCDPSession();
+    const page = new FakePage("https://example.com", "Example");
+    const context = new FakeContext([page], cdpSession);
+
+    const sessionManager = {
+      getSession: vi.fn(() => ({
+        id: "session-devtools-disabled",
+        browserSession: {
+          context,
+          page,
+        },
+      })),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-devtools-disabled&token=valid-token`,
+    );
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    await queue.nextByType("connected");
+    const tabsMessage = await queue.nextByType("tabs");
+    const firstTab = (tabsMessage.tabs as ViewerTab[]).at(0);
+    if (!firstTab) {
+      throw new Error("Missing first tab");
+    }
+
+    socket.send(
+      JSON.stringify({
+        type: "devtools",
+        action: "open",
+        tabId: firstTab.id,
+      }),
+    );
+
+    const errorMessage = await queue.nextByType("error");
+    expect(errorMessage.message).toBe("DevTools is disabled");
+  });
+
+  it("emits devtools capability and toggles devtools state when enabled", async () => {
+    const cdpSession = new FakeCDPSession();
+    const page = new FakePage("https://example.com", "Example");
+    const context = new FakeContext([page], cdpSession);
+
+    const sessionManager = {
+      getSession: vi.fn(() => ({
+        id: "session-devtools-enabled",
+        browserSession: {
+          context,
+          page,
+        },
+      })),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+      { devtoolsEnabled: true },
+    );
+    const port = await startServer(server);
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-devtools-enabled&token=valid-token`,
+    );
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    await queue.nextByType("connected");
+    const capabilityMessage = await queue.nextByType("devtools-capability");
+    expect(capabilityMessage.enabled).toBe(true);
+
+    const tabsMessage = await queue.nextByType("tabs");
+    const firstTab = (tabsMessage.tabs as ViewerTab[]).at(0);
+    if (!firstTab) {
+      throw new Error("Missing first tab");
+    }
+
+    socket.send(
+      JSON.stringify({
+        type: "devtools",
+        action: "open",
+        tabId: firstTab.id,
+      }),
+    );
+
+    const openState = await queue.nextByType("devtools-state");
+    expect(openState).toMatchObject({
+      type: "devtools-state",
+      tabId: firstTab.id,
+      opened: true,
+    });
+    const openAck = await queue.nextByType("ack");
+    expect(openAck.eventType).toBe("devtools");
+
+    socket.send(
+      JSON.stringify({
+        type: "devtools",
+        action: "close",
+        tabId: firstTab.id,
+      }),
+    );
+
+    const closeState = await queue.nextByType("devtools-state");
+    expect(closeState).toMatchObject({
+      type: "devtools-state",
+      tabId: firstTab.id,
+      opened: false,
+    });
+    const closeAck = await queue.nextByType("ack");
+    expect(closeAck.eventType).toBe("devtools");
   });
 
   it("handles navigation commands on active tab", async () => {

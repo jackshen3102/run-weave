@@ -24,6 +24,7 @@ export interface ConnectionContext {
   tabTitleById: Map<string, string>;
   pageListenersByTabId: Map<string, PageListeners>;
   tabLoadingById: Map<string, boolean>;
+  devtoolsByTabId: Map<string, boolean>;
 }
 
 export function createConnectionContext(initialPage: Page): ConnectionContext {
@@ -45,5 +46,27 @@ export function createConnectionContext(initialPage: Page): ConnectionContext {
     tabTitleById: new Map<string, string>(),
     pageListenersByTabId: new Map<string, PageListeners>(),
     tabLoadingById: new Map<string, boolean>(),
+    devtoolsByTabId: new Map<string, boolean>(),
   };
+}
+
+const sessionTabMapBySessionId = new Map<string, Map<string, Page>>();
+
+export function registerSessionTabs(
+  sessionId: string,
+  tabIdToPage: Map<string, Page>,
+): void {
+  sessionTabMapBySessionId.set(sessionId, tabIdToPage);
+}
+
+export function unregisterSessionTabs(sessionId: string): void {
+  sessionTabMapBySessionId.delete(sessionId);
+}
+
+export function getSessionTabPage(sessionId: string, tabId: string): Page | null {
+  const tabMap = sessionTabMapBySessionId.get(sessionId);
+  if (!tabMap) {
+    return null;
+  }
+  return tabMap.get(tabId) ?? null;
 }

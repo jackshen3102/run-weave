@@ -4,7 +4,7 @@ import { applyInputToPage } from "./input";
 
 type PageInputMessage = Exclude<
   ClientInputMessage,
-  Extract<ClientInputMessage, { type: "tab" | "navigation" }>
+  Extract<ClientInputMessage, { type: "tab" | "navigation" | "devtools" }>
 >;
 
 export function handlePageInputMessage(params: {

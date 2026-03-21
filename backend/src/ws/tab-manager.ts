@@ -87,6 +87,7 @@ export function createTabManager(deps: TabManagerDeps): {
     state.tabIdToPage.delete(tabId);
     state.tabTitleById.delete(tabId);
     state.tabLoadingById.delete(tabId);
+    state.devtoolsByTabId.delete(tabId);
 
     if (state.activeTabId === tabId && !state.isClosed) {
       void selectLastTab().catch((error) => {

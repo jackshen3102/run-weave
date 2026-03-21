@@ -1,13 +1,20 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
 import type { WebSocket } from "ws";
-import type { ServerEventMessage } from "@browser-viewer/shared";
+import type {
+  ClientInputMessage,
+  ServerEventMessage,
+} from "@browser-viewer/shared";
 import type { SessionManager } from "../session/manager";
 import type { AuthService } from "../auth/service";
 import { parseClientMessage } from "./client-message";
 import { getNavigationCapability } from "./navigation";
 import { buildTabsSnapshot } from "./tabs";
-import { createConnectionContext } from "./context";
+import {
+  createConnectionContext,
+  registerSessionTabs,
+  unregisterSessionTabs,
+} from "./context";
 import { createHeartbeatController } from "./heartbeat";
 import { createScreencastController } from "./screencast";
 import { createCursorSyncController } from "./cursor-sync";
@@ -16,13 +23,16 @@ import { handleNavigationMessage } from "./navigation-handler";
 import { validateWebSocketHandshake } from "./handshake";
 import { handleTabMessage } from "./tab-handler";
 import { handlePageInputMessage } from "./input-handler";
+import { handleDevtoolsMessage } from "./devtools-handler";
 
 export function attachWebSocketServer(
   server: HttpServer,
   sessionManager: SessionManager,
   authService: AuthService,
+  options?: { devtoolsEnabled?: boolean },
 ): WebSocketServer {
   const wss = new WebSocketServer({ server, path: "/ws" });
+  const devtoolsEnabled = options?.devtoolsEnabled ?? false;
   let sampledMoveCount = 0;
   const cursorSyncIntervalMs = 50;
 
@@ -59,6 +69,24 @@ export function attachWebSocketServer(
 
     const { sessionId, session } = handshake;
     const state = createConnectionContext(session.browserSession.page);
+    registerSessionTabs(sessionId, state.tabIdToPage);
+
+    const logInput = (input: ClientInputMessage): void => {
+      if (input.type === "mouse" && input.action === "move") {
+        sampledMoveCount += 1;
+        if (sampledMoveCount % 30 === 0) {
+          console.log("[viewer-be] input mouse move (sampled)", {
+            sessionId,
+            count: sampledMoveCount,
+            x: input.x,
+            y: input.y,
+          });
+        }
+        return;
+      }
+
+      console.log("[viewer-be] input received", { sessionId, input });
+    };
 
     const sendError = (message: string): void => {
       sendEvent(socket, { type: "error", message });
@@ -105,6 +133,10 @@ export function attachWebSocketServer(
       sendEvent(socket, { type: "cursor", cursor });
     };
 
+    const emitDevtoolsState = (tabId: string, opened: boolean): void => {
+      sendEvent(socket, { type: "devtools-state", tabId, opened });
+    };
+
     const screencast = createScreencastController({
       socket,
       state,
@@ -138,6 +170,7 @@ export function attachWebSocketServer(
     heartbeat.start();
 
     sendEvent(socket, { type: "connected", sessionId });
+    sendEvent(socket, { type: "devtools-capability", enabled: devtoolsEnabled });
     emitTabs();
     console.log("[viewer-be] websocket connected", { sessionId });
 
@@ -165,19 +198,7 @@ export function attachWebSocketServer(
         return;
       }
 
-      if (parsed.type === "mouse" && parsed.action === "move") {
-        sampledMoveCount += 1;
-        if (sampledMoveCount % 30 === 0) {
-          console.log("[viewer-be] input mouse move (sampled)", {
-            sessionId,
-            count: sampledMoveCount,
-            x: parsed.x,
-            y: parsed.y,
-          });
-        }
-      } else {
-        console.log("[viewer-be] input received", { sessionId, input: parsed });
-      }
+      logInput(parsed);
 
       if (parsed.type === "tab") {
         handleTabMessage({
@@ -200,6 +221,21 @@ export function attachWebSocketServer(
         return;
       }
 
+      if (parsed.type === "devtools") {
+        if (!devtoolsEnabled) {
+          sendError("DevTools is disabled");
+          return;
+        }
+
+        handleDevtoolsMessage(parsed, {
+          state,
+          sendError,
+          sendAck: () => sendEvent(socket, { type: "ack", eventType: parsed.type }),
+          emitDevtoolsState,
+        });
+        return;
+      }
+
       handlePageInputMessage({
         parsed,
         activePage: state.activePage,
@@ -216,19 +252,27 @@ export function attachWebSocketServer(
       void screencast.stop();
       session.browserSession.context.off("page", tabManager.onContextPage);
       tabManager.disposePageListeners();
+      unregisterSessionTabs(sessionId);
+    };
+
+    const closeConnection = (
+      logType: "closed" | "error",
+      markDisconnected: boolean,
+    ): void => {
+      state.isClosed = true;
+      cleanupConnection();
+      if (markDisconnected) {
+        sessionManager.markConnected(sessionId, false);
+      }
+      console.log(`[viewer-be] websocket ${logType}`, { sessionId });
     };
 
     socket.on("close", () => {
-      state.isClosed = true;
-      cleanupConnection();
-      sessionManager.markConnected(sessionId, false);
-      console.log("[viewer-be] websocket closed", { sessionId });
+      closeConnection("closed", true);
     });
 
     socket.on("error", () => {
-      state.isClosed = true;
-      cleanupConnection();
-      console.log("[viewer-be] websocket error", { sessionId });
+      closeConnection("error", false);
     });
 
     socket.on("pong", () => {

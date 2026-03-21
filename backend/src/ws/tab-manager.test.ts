@@ -42,6 +42,7 @@ describe("createTabManager", () => {
       tabTitleById: new Map(),
       pageListenersByTabId: new Map(),
       tabLoadingById: new Map(),
+      devtoolsByTabId: new Map(),
     };
 
     const context = { pages: () => [page] } as unknown as BrowserContext;

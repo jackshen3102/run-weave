@@ -50,6 +50,11 @@ const clientInputSchema = z.union([
         });
       }
     }),
+  z.object({
+    type: z.literal("devtools"),
+    action: z.union([z.literal("open"), z.literal("close")]),
+    tabId: z.string().min(1),
+  }),
 ]);
 
 export function parseClientMessage(raw: string): ClientInputMessage | null {

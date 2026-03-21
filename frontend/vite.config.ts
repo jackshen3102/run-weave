@@ -21,6 +21,10 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      "/devtools": {
+        target: backendTarget,
+        changeOrigin: true,
+      },
     },
   },
 });

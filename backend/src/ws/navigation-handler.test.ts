@@ -27,6 +27,7 @@ function createState(): ConnectionContext {
     tabTitleById: new Map(),
     pageListenersByTabId: new Map(),
     tabLoadingById: new Map(),
+    devtoolsByTabId: new Map(),
   };
 }
 

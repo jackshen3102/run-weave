@@ -44,6 +44,9 @@ export async function applyInputToPage(
     case "navigation": {
       throw new Error("Navigation input should be handled by websocket server");
     }
+    case "devtools": {
+      throw new Error("DevTools input should be handled by websocket server");
+    }
     default: {
       const exhaustiveCheck: never = input;
       throw new Error(`Unsupported input type: ${String(exhaustiveCheck)}`);

@@ -3,7 +3,7 @@ import { ViewerHeader } from "./viewer/viewer-header";
 import { ViewerTabList } from "./viewer/viewer-tab-list";
 import { ViewerNavigationBar } from "./viewer/viewer-navigation-bar";
 import { useViewerConnection } from "../features/viewer/use-viewer-connection";
-import { normalizeNavigationUrl } from "../features/viewer/url";
+import { buildDevtoolsPageUrl, normalizeNavigationUrl } from "../features/viewer/url";
 import { useViewerInput } from "../features/viewer/use-viewer-input";
 
 interface ViewerPageProps {
@@ -29,6 +29,8 @@ export function ViewerPage({
     ackCount,
     tabs,
     navigationByTabId,
+    devtoolsEnabled,
+    devtoolsByTabId,
     sendInput,
     reconnect,
   } = useViewerConnection({
@@ -54,6 +56,11 @@ export function ViewerPage({
   const activeNavigation = activeTabId
     ? navigationByTabId[activeTabId]
     : undefined;
+  const activeDevtoolsOpened = activeTabId
+    ? (devtoolsByTabId[activeTabId] ?? false)
+    : false;
+  const canRenderDevtoolsControls = devtoolsEnabled && activeTabId !== null;
+  const shouldRenderDevtoolsFrame = canRenderDevtoolsControls && activeDevtoolsOpened;
 
   const submitNavigation = (): void => {
     if (!activeTabId) {
@@ -71,6 +78,30 @@ export function ViewerPage({
       action: "goto",
       tabId: activeTabId,
       url: normalizedUrl,
+    });
+  };
+
+  const submitTabNavigationAction = (
+    action: "back" | "forward" | "reload" | "stop",
+  ): void => {
+    if (!activeTabId) {
+      return;
+    }
+    sendInput({
+      type: "navigation",
+      action,
+      tabId: activeTabId,
+    });
+  };
+
+  const toggleDevtools = (): void => {
+    if (!activeTabId) {
+      return;
+    }
+    sendInput({
+      type: "devtools",
+      action: activeDevtoolsOpened ? "close" : "open",
+      tabId: activeTabId,
     });
   };
 
@@ -92,6 +123,18 @@ export function ViewerPage({
       />
 
       <section className="rounded-xl border border-border/80 bg-card/70 p-3 backdrop-blur">
+        {canRenderDevtoolsControls && (
+          <div className="mb-3 flex items-center justify-end">
+            <button
+              type="button"
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-md bg-muted px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:opacity-90"
+              onClick={toggleDevtools}
+            >
+              {activeDevtoolsOpened ? "Close DevTools" : "Open DevTools"}
+            </button>
+          </div>
+        )}
+
         <ViewerTabList
           tabs={tabs}
           onSwitchTab={(tabId) => {
@@ -114,16 +157,7 @@ export function ViewerPage({
             setIsEditingAddress(false);
             setAddressInput(activeNavigation?.url ?? "");
           }}
-          onNavigationAction={(action) => {
-            if (!activeTabId) {
-              return;
-            }
-            sendInput({
-              type: "navigation",
-              action,
-              tabId: activeTabId,
-            });
-          }}
+          onNavigationAction={submitTabNavigationAction}
         />
 
         {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
@@ -152,6 +186,18 @@ export function ViewerPage({
             onKeyDown={onKeyDown}
           />
         </div>
+
+        {shouldRenderDevtoolsFrame && activeTabId && (
+          <div className="mt-3 overflow-hidden rounded-md border border-border bg-black/80">
+            <iframe
+              key={activeTabId}
+              title="DevTools"
+              src={buildDevtoolsPageUrl(apiBase, sessionId, token, activeTabId)}
+              className="h-[420px] w-full"
+              sandbox="allow-scripts allow-same-origin"
+            />
+          </div>
+        )}
       </section>
     </main>
   );

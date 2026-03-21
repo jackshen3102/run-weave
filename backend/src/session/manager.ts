@@ -102,6 +102,14 @@ export class SessionManager {
     return Array.from(this.sessions.values());
   }
 
+  getRemoteDebuggingPort(): number | null {
+    return this.browserService.getRemoteDebuggingPort();
+  }
+
+  isDevtoolsEnabled(): boolean {
+    return this.browserService.isDevtoolsEnabled();
+  }
+
   async dispose(): Promise<void> {
     clearInterval(this.cleanupTimer);
     this.disconnectTimers.forEach((timer) => clearTimeout(timer));

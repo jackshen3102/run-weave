@@ -1,15 +1,45 @@
+function resolveApiBase(apiBase: string): string {
+  const trimmed = apiBase.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+
+  const proxyTarget = import.meta.env.VITE_PROXY_TARGET;
+  if (typeof proxyTarget === "string" && proxyTarget.trim()) {
+    return proxyTarget.trim();
+  }
+
+  return "";
+}
+
 export function toWebSocketBase(apiBase: string): string {
-  if (!apiBase) {
+  const resolvedBase = resolveApiBase(apiBase);
+  if (!resolvedBase) {
     return window.location.origin.replace(/^http/, "ws");
   }
 
-  if (apiBase.startsWith("https://")) {
-    return apiBase.replace("https://", "wss://");
+  if (resolvedBase.startsWith("https://")) {
+    return resolvedBase.replace("https://", "wss://");
   }
-  if (apiBase.startsWith("http://")) {
-    return apiBase.replace("http://", "ws://");
+  if (resolvedBase.startsWith("http://")) {
+    return resolvedBase.replace("http://", "ws://");
   }
-  return apiBase;
+  return resolvedBase;
+}
+
+export function toHttpBase(apiBase: string): string {
+  const resolvedBase = resolveApiBase(apiBase);
+  if (!resolvedBase) {
+    return window.location.origin;
+  }
+
+  if (resolvedBase.startsWith("wss://")) {
+    return resolvedBase.replace("wss://", "https://");
+  }
+  if (resolvedBase.startsWith("ws://")) {
+    return resolvedBase.replace("ws://", "http://");
+  }
+  return resolvedBase;
 }
 
 export function buildViewerWsUrl(
@@ -18,6 +48,15 @@ export function buildViewerWsUrl(
   token: string,
 ): string {
   return `${toWebSocketBase(apiBase)}/ws?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(token)}`;
+}
+
+export function buildDevtoolsPageUrl(
+  apiBase: string,
+  sessionId: string,
+  token: string,
+  tabId: string,
+): string {
+  return `${toHttpBase(apiBase)}/devtools?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(token)}&tabId=${encodeURIComponent(tabId)}`;
 }
 
 export function getTabIdFromSearch(search: string): string | null {

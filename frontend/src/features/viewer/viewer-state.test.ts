@@ -84,6 +84,53 @@ describe("viewerConnectionReducer", () => {
     expect(nextState.navigationByTabId.known?.isLoading).toBe(true);
   });
 
+  it("stores devtools capability", () => {
+    const nextState = viewerConnectionReducer(initialViewerConnectionState, {
+      type: "message/devtools-capability",
+      enabled: true,
+    });
+
+    expect(nextState.devtoolsEnabled).toBe(true);
+  });
+
+  it("stores and prunes devtools state by tab", () => {
+    const withTabs = viewerConnectionReducer(initialViewerConnectionState, {
+      type: "message/tabs",
+      tabs: [
+        {
+          id: "tab-1",
+          title: "Tab 1",
+          url: "https://example.com",
+          active: true,
+        },
+      ],
+    });
+
+    const withDevtoolsOpen = viewerConnectionReducer(withTabs, {
+      type: "message/devtools-state",
+      tabId: "tab-1",
+      opened: true,
+    });
+
+    const pruned = viewerConnectionReducer(withDevtoolsOpen, {
+      type: "message/tabs",
+      tabs: [],
+    });
+
+    expect(withDevtoolsOpen.devtoolsByTabId["tab-1"]).toBe(true);
+    expect(pruned.devtoolsByTabId).toEqual({});
+  });
+
+  it("ignores devtools state for unknown tabs", () => {
+    const nextState = viewerConnectionReducer(initialViewerConnectionState, {
+      type: "message/devtools-state",
+      tabId: "unknown",
+      opened: true,
+    });
+
+    expect(nextState).toBe(initialViewerConnectionState);
+  });
+
   it("increments ack and sent counters", () => {
     const afterAck = viewerConnectionReducer(initialViewerConnectionState, {
       type: "message/ack",

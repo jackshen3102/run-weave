@@ -34,6 +34,8 @@ interface UseViewerConnectionResult {
   ackCount: number;
   tabs: ViewerConnectionState["tabs"];
   navigationByTabId: ViewerConnectionState["navigationByTabId"];
+  devtoolsEnabled: boolean;
+  devtoolsByTabId: ViewerConnectionState["devtoolsByTabId"];
   sendInput: (input: ClientInputMessage) => void;
   reconnect: () => void;
 }
@@ -115,33 +117,42 @@ export function useViewerConnection({
     initialTabSyncedRef.current = false;
     const canvasElement = canvasRef.current;
 
+    const syncInitialTabSelection = (
+      ws: WebSocket,
+      message: Extract<ServerEventMessage, { type: "tabs" }>,
+    ): void => {
+      if (initialTabSyncedRef.current || message.tabs.length === 0) {
+        return;
+      }
+      initialTabSyncedRef.current = true;
+
+      const initialTabId = initialTabIdRef.current;
+      if (
+        !initialTabId ||
+        ws.readyState !== WebSocket.OPEN ||
+        !message.tabs.some((tab) => tab.id === initialTabId && !tab.active)
+      ) {
+        return;
+      }
+
+      ws.send(
+        JSON.stringify({
+          type: "tab",
+          action: "switch",
+          tabId: initialTabId,
+        }),
+      );
+      dispatch({ type: "input/sent" });
+    };
+
     const handleTabsMessage = (
       ws: WebSocket,
       message: Extract<ServerEventMessage, { type: "tabs" }>,
     ): void => {
       dispatch({ type: "message/tabs", tabs: message.tabs });
+      syncInitialTabSelection(ws, message);
 
       const activeTab = message.tabs.find((tab) => tab.active)?.id ?? null;
-      const initialTabId = initialTabIdRef.current;
-
-      if (!initialTabSyncedRef.current && message.tabs.length > 0) {
-        initialTabSyncedRef.current = true;
-        if (
-          initialTabId &&
-          message.tabs.some((tab) => tab.id === initialTabId && !tab.active) &&
-          ws.readyState === WebSocket.OPEN
-        ) {
-          ws.send(
-            JSON.stringify({
-              type: "tab",
-              action: "switch",
-              tabId: initialTabId,
-            }),
-          );
-          dispatch({ type: "input/sent" });
-        }
-      }
-
       syncUrlTabId(activeTab);
       console.log("[viewer-fe] websocket tabs", {
         sessionId,
@@ -154,58 +165,66 @@ export function useViewerConnection({
       ws: WebSocket,
       message: ServerEventMessage,
     ): void => {
-      if (message.type === "error") {
-        wsCloseReasonRef.current = message.message;
-        dispatch({ type: "connection/error", error: message.message });
-        if (message.message === "Unauthorized") {
-          onAuthExpired?.();
+      switch (message.type) {
+        case "error": {
+          wsCloseReasonRef.current = message.message;
+          dispatch({ type: "connection/error", error: message.message });
+          if (message.message === "Unauthorized") {
+            onAuthExpired?.();
+            return;
+          }
+          console.log("[viewer-fe] websocket control error", {
+            sessionId,
+            message: message.message,
+          });
           return;
         }
-        console.log("[viewer-fe] websocket control error", {
-          sessionId,
-          message: message.message,
-        });
-        return;
-      }
-
-      if (message.type === "tabs") {
-        handleTabsMessage(ws, message);
-        return;
-      }
-
-      if (message.type === "navigation-state") {
-        dispatch({
-          type: "message/navigation-state",
-          navigation: message.state,
-        });
-        console.log("[viewer-fe] websocket navigation state", {
-          sessionId,
-          state: message.state,
-        });
-        return;
-      }
-
-      if (message.type === "cursor") {
-        const canvas = canvasRef.current;
-        if (canvas) {
-          canvas.style.cursor = normalizeRemoteCursor(message.cursor);
+        case "tabs":
+          handleTabsMessage(ws, message);
+          return;
+        case "devtools-capability":
+          dispatch({
+            type: "message/devtools-capability",
+            enabled: message.enabled,
+          });
+          return;
+        case "devtools-state":
+          dispatch({
+            type: "message/devtools-state",
+            tabId: message.tabId,
+            opened: message.opened,
+          });
+          return;
+        case "navigation-state":
+          dispatch({
+            type: "message/navigation-state",
+            navigation: message.state,
+          });
+          console.log("[viewer-fe] websocket navigation state", {
+            sessionId,
+            state: message.state,
+          });
+          return;
+        case "cursor": {
+          const canvas = canvasRef.current;
+          if (canvas) {
+            canvas.style.cursor = normalizeRemoteCursor(message.cursor);
+          }
+          return;
         }
-        return;
+        case "ack":
+          dispatch({ type: "message/ack" });
+          console.log("[viewer-fe] websocket ack", {
+            sessionId,
+            eventType: message.eventType,
+          });
+          return;
+        default:
+          console.log("[viewer-fe] websocket control message", {
+            sessionId,
+            message,
+          });
       }
-
-      if (message.type === "ack") {
-        dispatch({ type: "message/ack" });
-        console.log("[viewer-fe] websocket ack", {
-          sessionId,
-          eventType: message.eventType,
-        });
-        return;
-      }
-
-      console.log("[viewer-fe] websocket control message", {
-        sessionId,
-        message,
-      });
     };
 
     const drawBinaryFrame = async (data: ArrayBuffer): Promise<void> => {
@@ -391,6 +410,8 @@ export function useViewerConnection({
     ackCount: state.ackCount,
     tabs: state.tabs,
     navigationByTabId: state.navigationByTabId,
+    devtoolsEnabled: state.devtoolsEnabled,
+    devtoolsByTabId: state.devtoolsByTabId,
     sendInput,
     reconnect,
   };

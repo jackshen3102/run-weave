@@ -74,12 +74,26 @@ export type ClientInputMessage =
       type: "navigation";
       action: "back" | "forward" | "reload" | "stop";
       tabId: string;
+    }
+  | {
+      type: "devtools";
+      action: "open" | "close";
+      tabId: string;
     };
 
 export type ServerEventMessage =
   | {
       type: "connected";
       sessionId: string;
+    }
+  | {
+      type: "devtools-capability";
+      enabled: boolean;
+    }
+  | {
+      type: "devtools-state";
+      tabId: string;
+      opened: boolean;
     }
   | {
       type: "cursor";

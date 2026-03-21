@@ -12,6 +12,7 @@ import { createCorsMiddleware } from "./server/cors";
 import { SessionManager } from "./session/manager";
 import { listenWithFallback } from "./server/listen";
 import { attachWebSocketServer } from "./ws/server";
+import { getSessionTabPage } from "./ws/context";
 
 interface RuntimeConfig {
   preferredPort: number;
@@ -22,6 +23,100 @@ interface RuntimeConfig {
 interface RuntimeServices {
   authService: AuthService;
   sessionManager: SessionManager;
+  browserService: BrowserService;
+}
+
+function buildDevtoolsShellHtml(devtoolsUrl: string): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DevTools</title>
+    <style>
+      html, body, iframe {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #111;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe id="devtools-frame" title="DevTools" src=${JSON.stringify(devtoolsUrl)}></iframe>
+  </body>
+</html>`;
+}
+
+function buildDevtoolsFrontendUrl(params: {
+  revision: string;
+  wsEndpoint: string;
+}): string {
+  const { revision, wsEndpoint } = params;
+  return `https://chrome-devtools-frontend.appspot.com/serve_rev/@${encodeURIComponent(revision)}/inspector.html?ws=${encodeURIComponent(wsEndpoint)}`;
+}
+
+async function resolveChromiumRevision(
+  remoteDebuggingPort: number,
+): Promise<string | null> {
+  const endpoint = `http://127.0.0.1:${remoteDebuggingPort}/json/version`;
+
+  try {
+    const response = await fetch(endpoint);
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as {
+      "WebKit-Version"?: unknown;
+      Browser?: unknown;
+    };
+
+    const webkitVersion =
+      typeof payload["WebKit-Version"] === "string"
+        ? payload["WebKit-Version"]
+        : "";
+    const revisionFromWebKit = webkitVersion.match(/@([0-9a-f]{6,40})/i)?.[1];
+    if (revisionFromWebKit) {
+      return revisionFromWebKit;
+    }
+
+    const browserVersion =
+      typeof payload.Browser === "string" ? payload.Browser : "";
+    const revisionFromBrowser = browserVersion.match(/\b([0-9a-f]{6,40})\b/i)?.[1];
+    return revisionFromBrowser ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveTargetIdForSessionTab(params: {
+  sessionManager: SessionManager;
+  sessionId: string;
+  tabId: string;
+}): Promise<string | null> {
+  const { sessionManager, sessionId, tabId } = params;
+  const session = sessionManager.getSession(sessionId);
+  if (!session) {
+    return null;
+  }
+
+  const page = getSessionTabPage(sessionId, tabId);
+  if (!page) {
+    return null;
+  }
+
+  const cdpSession = await session.browserSession.context.newCDPSession(page);
+  try {
+    const targetInfo = (await cdpSession.send("Target.getTargetInfo")) as {
+      targetInfo?: { targetId?: string };
+    };
+    return targetInfo.targetInfo?.targetId ?? null;
+  } finally {
+    await cdpSession.detach().catch(() => undefined);
+  }
 }
 
 function readCliOption(optionName: string): string | undefined {
@@ -79,19 +174,31 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
 }
 
 function createRuntimeServices(): RuntimeServices {
+  const devtoolsEnabled =
+    process.env.BROWSER_DEVTOOLS_ENABLED?.trim().toLowerCase() === "true";
+  const rawRemoteDebuggingPort = process.env.BROWSER_REMOTE_DEBUGGING_PORT;
+  const parsedRemoteDebuggingPort = devtoolsEnabled
+    ? parsePort(rawRemoteDebuggingPort, 9222)
+    : undefined;
+
   const browserService = new BrowserService({
     headless: process.env.BROWSER_HEADLESS?.trim().toLowerCase() !== "false",
     profileDir: process.env.BROWSER_PROFILE_DIR,
+    autoOpenDevtoolsForTabs:
+      process.env.BROWSER_AUTO_OPEN_DEVTOOLS?.trim().toLowerCase() === "true",
+    devtoolsEnabled,
+    remoteDebuggingPort: parsedRemoteDebuggingPort,
   });
   const authService = new AuthService(loadAuthConfig());
   const sessionManager = new SessionManager(browserService);
 
-  return { authService, sessionManager };
+  return { authService, sessionManager, browserService };
 }
 
 function createHttpApp(services: RuntimeServices): express.Express {
   const app = express();
   const requireAuth = createRequireAuth(services.authService);
+  const devtoolsEnabled = services.sessionManager.isDevtoolsEnabled();
 
   app.use(express.json());
   app.use(
@@ -105,6 +212,79 @@ function createHttpApp(services: RuntimeServices): express.Express {
   app.use("/test", createTestRouter());
   app.use("/api/auth", createAuthRouter(services.authService));
   app.use("/api", requireAuth, createSessionRouter(services.sessionManager));
+
+  if (devtoolsEnabled) {
+    app.get("/devtools", async (req, res) => {
+      console.log("[viewer-be] devtools shell route hit", {
+        host: req.headers.host,
+        sessionId: req.query.sessionId,
+        tabId: req.query.tabId,
+      });
+      const sessionId = req.query.sessionId;
+      const token = req.query.token;
+      const tabId = req.query.tabId;
+
+      if (
+        typeof sessionId !== "string" ||
+        typeof token !== "string" ||
+        typeof tabId !== "string"
+      ) {
+        console.log("[viewer-be] devtools shell invalid query", {
+          sessionId,
+          hasToken: typeof token === "string",
+          tabId,
+        });
+        res.status(400).send("Missing required devtools query params");
+        return;
+      }
+
+      const remoteDebuggingPort = services.sessionManager.getRemoteDebuggingPort();
+      if (remoteDebuggingPort == null) {
+        console.log("[viewer-be] devtools shell missing remote debugging port");
+        res.status(503).send("Remote debugging is unavailable");
+        return;
+      }
+
+      const revision = await resolveChromiumRevision(remoteDebuggingPort);
+      if (!revision) {
+        console.log("[viewer-be] devtools shell failed to resolve revision", {
+          remoteDebuggingPort,
+        });
+        res.status(502).send("Failed to resolve Chromium revision");
+        return;
+      }
+
+      const targetId = await resolveTargetIdForSessionTab({
+        sessionManager: services.sessionManager,
+        sessionId,
+        tabId,
+      });
+      if (!targetId) {
+        console.log("[viewer-be] devtools shell failed to resolve target id", {
+          sessionId,
+          tabId,
+        });
+        res.status(404).send("Target not found");
+        return;
+      }
+
+      const wsEndpoint = `127.0.0.1:${remoteDebuggingPort}/devtools/page/${encodeURIComponent(targetId)}`;
+      const devtoolsUrl = buildDevtoolsFrontendUrl({
+        revision,
+        wsEndpoint,
+      });
+      console.log("[viewer-be] devtools shell generated url", {
+        revision,
+        remoteDebuggingPort,
+        targetId,
+        wsEndpoint,
+        devtoolsUrl,
+      });
+
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      res.send(buildDevtoolsShellHtml(devtoolsUrl));
+    });
+  }
 
   return app;
 }
@@ -141,7 +321,11 @@ async function startRuntime(): Promise<void> {
   const app = createHttpApp(services);
   const server = http.createServer(app);
 
-  attachWebSocketServer(server, services.sessionManager, services.authService);
+  const devtoolsEnabled = services.sessionManager.isDevtoolsEnabled();
+
+  attachWebSocketServer(server, services.sessionManager, services.authService, {
+    devtoolsEnabled,
+  });
 
   const port = await listenWithFallback(server, runtimeConfig.preferredPort, {
     host: runtimeConfig.host,
@@ -154,8 +338,11 @@ async function startRuntime(): Promise<void> {
     );
   }
 
-  const publicHost = runtimeConfig.host === "0.0.0.0" ? "localhost" : runtimeConfig.host;
-  console.log(`backend listening on http://${publicHost ?? "localhost"}:${port}`);
+  const publicHost =
+    runtimeConfig.host === "0.0.0.0" ? "localhost" : runtimeConfig.host;
+  console.log(
+    `backend listening on http://${publicHost ?? "localhost"}:${port}`,
+  );
 
   attachLifecycleHandlers(server, services.sessionManager);
 }

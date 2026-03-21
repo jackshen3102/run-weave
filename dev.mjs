@@ -15,12 +15,18 @@ export function createBackendEnv({ baseEnv, backendPort }) {
   };
 }
 
-export function createFrontendEnv({ baseEnv, backendPort, frontendHost }) {
+export function createFrontendEnv({
+  baseEnv,
+  backendPort,
+  frontendHost,
+  frontendPort,
+}) {
   return {
     ...baseEnv,
     VITE_PROXY_TARGET: `http://localhost:${backendPort}`,
     VITE_STRICT_PORT: "true",
     ...(frontendHost ? { VITE_DEV_HOST: frontendHost } : {}),
+    VITE_DEV_PORT: frontendPort,
     VITE_API_BASE_URL: "",
   };
 }
@@ -264,7 +270,9 @@ async function run() {
     createFrontendEnv({
       baseEnv: process.env,
       backendPort,
+      frontendPort,
       frontendHost: DEV_HOST,
+      VITE_DEV_PORT: frontendPort,
     }),
   );
 
