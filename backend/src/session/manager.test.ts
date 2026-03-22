@@ -12,6 +12,10 @@ function createBrowserServiceMock() {
       context: { close: vi.fn(async () => undefined) },
       page: { close: vi.fn(async () => undefined) },
     })),
+    restoreSession: vi.fn(async () => ({
+      context: { close: vi.fn(async () => undefined) },
+      page: { close: vi.fn(async () => undefined) },
+    })),
     destroySession: vi.fn(async () => undefined),
     getSessionProfileDir: vi.fn((sessionId: string) =>
       path.join(profileRoot, "sessions", sessionId),
@@ -49,13 +53,17 @@ describe("SessionManager", () => {
       sessionStoreMock,
     );
 
-    const session = await manager.createSession("https://example.com");
+    const session = await manager.createSession({
+      targetUrl: "https://example.com",
+      proxyEnabled: true,
+    });
     expect(session.id).toBeTruthy();
     expect(manager.getSession(session.id)).toBeDefined();
     expect(sessionStoreMock.insertSession).toHaveBeenCalledWith(
       expect.objectContaining({
         id: session.id,
         targetUrl: "https://example.com",
+        proxyEnabled: true,
         connected: false,
         profilePath: browserServiceMock.getSessionProfileDir(session.id),
       }),
@@ -78,7 +86,10 @@ describe("SessionManager", () => {
       sessionStoreMock,
     );
 
-    const session = await manager.createSession("https://example.com");
+    const session = await manager.createSession({
+      targetUrl: "https://example.com",
+      proxyEnabled: true,
+    });
     manager.markConnected(session.id, true);
 
     expect(sessionStoreMock.updateSessionConnection).toHaveBeenCalledWith({
@@ -103,7 +114,10 @@ describe("SessionManager", () => {
       (sessionId: string) => path.join(tempDir, "sessions", sessionId),
     );
 
-    const session = await manager.createSession("https://example.com");
+    const session = await manager.createSession({
+      targetUrl: "https://example.com",
+      proxyEnabled: true,
+    });
     const profilePath = browserServiceMock.getSessionProfileDir(session.id);
     await mkdir(profilePath, { recursive: true });
 
@@ -121,6 +135,7 @@ describe("SessionManager", () => {
       {
         id: "session-1",
         targetUrl: "https://example.com",
+        proxyEnabled: true,
         connected: true,
         profilePath: browserServiceMock.getSessionProfileDir("session-1"),
         createdAt: "2026-03-21T00:00:00.000Z",
@@ -137,9 +152,11 @@ describe("SessionManager", () => {
     const restoredSession = manager.getSession("session-1");
     expect(restoredSession).toBeDefined();
     expect(restoredSession?.connected).toBe(false);
-    expect(browserServiceMock.createSession).toHaveBeenCalledWith(
+    expect(restoredSession?.proxyEnabled).toBe(true);
+    expect(browserServiceMock.restoreSession).toHaveBeenCalledWith(
       "session-1",
       "https://example.com",
+      { proxyEnabled: true },
     );
     expect(sessionStoreMock.updateSessionConnection).toHaveBeenCalledWith({
       sessionId: "session-1",
@@ -160,7 +177,10 @@ describe("SessionManager", () => {
         sessionStoreMock,
       );
 
-      const session = await manager.createSession("https://example.com");
+      const session = await manager.createSession({
+        targetUrl: "https://example.com",
+        proxyEnabled: false,
+      });
       manager.markConnected(session.id, false);
 
       vi.advanceTimersByTime(5 * 60_000);

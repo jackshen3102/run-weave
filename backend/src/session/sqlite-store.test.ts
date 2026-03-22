@@ -21,6 +21,7 @@ function createRecord(
   return {
     id: "session-1",
     targetUrl: "https://example.com",
+    proxyEnabled: true,
     connected: false,
     profilePath: "/profiles/session-1",
     createdAt: "2026-03-21T00:00:00.000Z",
@@ -67,5 +68,17 @@ describe("SQLiteSessionStore", () => {
 
     await expect(store.getSession("session-1")).resolves.toBeNull();
     await expect(store.listSessions()).resolves.toEqual([]);
+  });
+
+  it("keeps proxyEnabled false when stored as disabled", async () => {
+    const store = await createStore();
+
+    await store.insertSession(
+      createRecord({ id: "session-2", proxyEnabled: false }),
+    );
+
+    await expect(store.getSession("session-2")).resolves.toEqual(
+      createRecord({ id: "session-2", proxyEnabled: false }),
+    );
   });
 });

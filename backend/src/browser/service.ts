@@ -3,6 +3,10 @@ import { mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { BrowserContext, Page } from "playwright";
+import { findAvailablePort } from "../server/listen";
+
+const LOCAL_BYPASS_RULE = "127.0.0.1,localhost";
+const WHISTLE_PROXY_SERVER = "http://127.0.0.1:8899";
 
 export interface BrowserSession {
   context: BrowserContext;
@@ -15,6 +19,14 @@ export interface BrowserServiceOptions {
   autoOpenDevtoolsForTabs?: boolean;
   devtoolsEnabled?: boolean;
   remoteDebuggingPort?: number;
+}
+
+export interface BrowserSessionOptions {
+  proxyEnabled: boolean;
+}
+
+function isRestorablePage(page: Page): boolean {
+  return page.url() !== "about:blank";
 }
 
 function buildLaunchArgs(options: {
@@ -39,11 +51,12 @@ function buildLaunchArgs(options: {
 
 export class BrowserService {
   private readonly contexts = new Map<string, BrowserContext>();
+  private readonly remoteDebuggingPorts = new Map<string, number>();
   private readonly headless: boolean;
   private readonly profileRootDir: string;
   private readonly autoOpenDevtoolsForTabs: boolean;
   private readonly devtoolsEnabled: boolean;
-  private readonly remoteDebuggingPort: number | null;
+  private readonly remoteDebuggingPortBase: number | null;
 
   constructor(options?: BrowserServiceOptions) {
     this.headless = options?.headless ?? true;
@@ -52,7 +65,7 @@ export class BrowserService {
       path.join(os.homedir(), ".browser-profile");
     this.autoOpenDevtoolsForTabs = options?.autoOpenDevtoolsForTabs ?? false;
     this.devtoolsEnabled = options?.devtoolsEnabled ?? false;
-    this.remoteDebuggingPort =
+    this.remoteDebuggingPortBase =
       this.devtoolsEnabled && options?.remoteDebuggingPort
         ? options.remoteDebuggingPort
         : null;
@@ -62,33 +75,52 @@ export class BrowserService {
     return path.join(this.profileRootDir, "sessions", sessionId);
   }
 
-  private async getOrCreateContext(sessionId: string): Promise<BrowserContext> {
+  private async getOrCreateContext(
+    sessionId: string,
+    options: BrowserSessionOptions,
+  ): Promise<BrowserContext> {
     const existingContext = this.contexts.get(sessionId);
     if (existingContext) {
       return existingContext;
     }
 
     const profileDir = this.getSessionProfileDir(sessionId);
+    const remoteDebuggingPort =
+      await this.allocateRemoteDebuggingPort(sessionId);
     await mkdir(profileDir, { recursive: true });
-    const context = await chromium.launchPersistentContext(profileDir, {
-      headless: this.headless,
-      args: buildLaunchArgs({
-        autoOpenDevtoolsForTabs: this.autoOpenDevtoolsForTabs,
-        remoteDebuggingPort: this.remoteDebuggingPort,
-      }),
-    });
+    let context: BrowserContext;
+    try {
+      context = await chromium.launchPersistentContext(profileDir, {
+        headless: this.headless,
+        args: buildLaunchArgs({
+          autoOpenDevtoolsForTabs: this.autoOpenDevtoolsForTabs,
+          remoteDebuggingPort,
+        }),
+        proxy: options.proxyEnabled
+          ? {
+              bypass: LOCAL_BYPASS_RULE,
+              server: WHISTLE_PROXY_SERVER,
+            }
+          : undefined,
+      });
+    } catch (error) {
+      this.remoteDebuggingPorts.delete(sessionId);
+      throw error;
+    }
+
     context.on("close", () => {
       const current = this.contexts.get(sessionId);
       if (current === context) {
         this.contexts.delete(sessionId);
+        this.remoteDebuggingPorts.delete(sessionId);
       }
     });
     this.contexts.set(sessionId, context);
     return context;
   }
 
-  getRemoteDebuggingPort(): number | null {
-    return this.remoteDebuggingPort;
+  getRemoteDebuggingPort(sessionId: string): number | null {
+    return this.remoteDebuggingPorts.get(sessionId) ?? null;
   }
 
   isDevtoolsEnabled(): boolean {
@@ -98,11 +130,28 @@ export class BrowserService {
   async createSession(
     sessionId: string,
     targetUrl: string,
+    options: BrowserSessionOptions,
   ): Promise<BrowserSession> {
-    const context = await this.getOrCreateContext(sessionId);
+    const context = await this.getOrCreateContext(sessionId, options);
     const page = await context.newPage();
     await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
 
+    return { context, page };
+  }
+
+  async restoreSession(
+    sessionId: string,
+    targetUrl: string,
+    options: BrowserSessionOptions,
+  ): Promise<BrowserSession> {
+    const context = await this.getOrCreateContext(sessionId, options);
+    const persistedPage = context.pages().find(isRestorablePage);
+    if (persistedPage) {
+      return { context, page: persistedPage };
+    }
+
+    const page = await context.newPage();
+    await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
     return { context, page };
   }
 
@@ -118,15 +167,54 @@ export class BrowserService {
 
     await context.close().catch(() => undefined);
     this.contexts.delete(sessionId);
+    this.remoteDebuggingPorts.delete(sessionId);
   }
 
   async stop(): Promise<void> {
     const contexts = Array.from(this.contexts.values());
     this.contexts.clear();
+    this.remoteDebuggingPorts.clear();
     await Promise.all(
       contexts.map(async (context) => {
         await context.close().catch(() => undefined);
       }),
+    );
+  }
+
+  private async allocateRemoteDebuggingPort(
+    sessionId: string,
+  ): Promise<number | null> {
+    if (!this.devtoolsEnabled || this.remoteDebuggingPortBase == null) {
+      return null;
+    }
+
+    const existingPort = this.remoteDebuggingPorts.get(sessionId);
+    if (existingPort != null) {
+      return existingPort;
+    }
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const candidatePort = this.remoteDebuggingPortBase + attempt;
+      if (
+        Array.from(this.remoteDebuggingPorts.values()).includes(candidatePort)
+      ) {
+        continue;
+      }
+
+      try {
+        const port = await findAvailablePort(candidatePort, {
+          host: "127.0.0.1",
+          maxAttempts: 1,
+        });
+        this.remoteDebuggingPorts.set(sessionId, port);
+        return port;
+      } catch {
+        continue;
+      }
+    }
+
+    throw new Error(
+      `[viewer-be] failed to allocate remote debugging port for session ${sessionId}`,
     );
   }
 }

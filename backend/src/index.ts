@@ -9,7 +9,6 @@ import { createAuthRouter } from "./routes/auth";
 import { createSessionRouter } from "./routes/session";
 import { createTestRouter } from "./routes/test";
 import { createCorsMiddleware } from "./server/cors";
-import { findAvailablePort } from "./server/listen";
 import { SessionManager } from "./session/manager";
 import { SQLiteSessionStore } from "./session/sqlite-store";
 import { listenWithFallback } from "./server/listen";
@@ -182,30 +181,16 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   const devtoolsEnabled =
     process.env.BROWSER_DEVTOOLS_ENABLED?.trim().toLowerCase() === "true";
   const rawRemoteDebuggingPort = process.env.BROWSER_REMOTE_DEBUGGING_PORT;
-  const preferredRemoteDebuggingPort = devtoolsEnabled
-    ? parsePort(rawRemoteDebuggingPort, 9222)
-    : undefined;
-  const remoteDebuggingPort = preferredRemoteDebuggingPort
-    ? await findAvailablePort(preferredRemoteDebuggingPort, {
-        host: "127.0.0.1",
-      })
-    : undefined;
   const browserService = new BrowserService({
     headless: process.env.BROWSER_HEADLESS?.trim().toLowerCase() !== "false",
     profileDir: storagePaths.browserProfileDir,
     autoOpenDevtoolsForTabs:
       process.env.BROWSER_AUTO_OPEN_DEVTOOLS?.trim().toLowerCase() === "true",
     devtoolsEnabled,
-    remoteDebuggingPort,
+    remoteDebuggingPort: devtoolsEnabled
+      ? parsePort(rawRemoteDebuggingPort, 9222)
+      : undefined,
   });
-  if (
-    preferredRemoteDebuggingPort != null &&
-    remoteDebuggingPort !== preferredRemoteDebuggingPort
-  ) {
-    console.error(
-      `[viewer-be] preferred remote debugging port ${preferredRemoteDebuggingPort} is busy, switched to ${remoteDebuggingPort}`,
-    );
-  }
   const authService = new AuthService(loadAuthConfig());
   const sessionStore = new SQLiteSessionStore(storagePaths.sessionDbFile);
   const sessionManager = new SessionManager(browserService, sessionStore);
@@ -248,7 +233,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
       }
 
       const remoteDebuggingPort =
-        services.sessionManager.getRemoteDebuggingPort();
+        services.sessionManager.getRemoteDebuggingPort(sessionId);
       if (remoteDebuggingPort == null) {
         console.error(
           "[viewer-be] devtools shell missing remote debugging port",

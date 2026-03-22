@@ -30,6 +30,7 @@ function getSessionDisplayTitle(targetUrl: string): string {
 
 export default function App() {
   const [url, setUrl] = useState("https://www.google.cn");
+  const [proxyEnabled, setProxyEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -174,7 +175,11 @@ export default function App() {
         return;
       }
 
-      const data = await createViewerSession(API_BASE, { url }, token);
+      const data = await createViewerSession(
+        API_BASE,
+        { url, proxyEnabled },
+        token,
+      );
       await loadSessions();
       setIsSessionDrawerOpen(false);
       enterSession(data.sessionId);
@@ -290,6 +295,11 @@ export default function App() {
                         Last active{" "}
                         {formatDateTime(recentSession.lastActivityAt)}
                       </p>
+                      {recentSession.proxyEnabled && (
+                        <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+                          Proxy enabled
+                        </p>
+                      )}
                     </div>
 
                     <div className="mt-12 flex flex-wrap items-center gap-3">
@@ -374,6 +384,29 @@ export default function App() {
                   >
                     {loading ? "Starting..." : "Start"}
                   </Button>
+
+                  <label
+                    htmlFor="session-proxy-enabled"
+                    className="flex items-center justify-between gap-4 rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3 text-sm text-foreground"
+                  >
+                    <span className="space-y-1">
+                      <span className="block font-medium">Enable proxy</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Route this session through Whistle at 127.0.0.1:8899.
+                      </span>
+                    </span>
+                    <input
+                      id="session-proxy-enabled"
+                      type="checkbox"
+                      aria-label="Enable proxy"
+                      checked={proxyEnabled}
+                      onChange={(event) =>
+                        setProxyEnabled(event.target.checked)
+                      }
+                      disabled={loading}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                    />
+                  </label>
 
                   {error && (
                     <p className="text-sm text-red-500" role="alert">
@@ -468,6 +501,11 @@ export default function App() {
                       <p className="text-xs text-muted-foreground/85">
                         Last active {formatDateTime(session.lastActivityAt)}
                       </p>
+                      {session.proxyEnabled && (
+                        <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+                          Proxy enabled
+                        </p>
+                      )}
                     </div>
                     <div
                       className="relative flex items-center gap-2"

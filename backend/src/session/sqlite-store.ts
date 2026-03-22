@@ -10,10 +10,15 @@ import type {
 interface SessionRow {
   id: string;
   target_url: string;
+  proxy_enabled: number;
   connected: number;
   profile_path: string;
   created_at: string;
   last_activity_at: string;
+}
+
+interface TableInfoRow {
+  name: string;
 }
 
 export class SQLiteSessionStore implements SessionStore {
@@ -30,6 +35,7 @@ export class SQLiteSessionStore implements SessionStore {
       create table if not exists sessions (
         id text primary key,
         target_url text not null,
+        proxy_enabled integer not null default 0,
         connected integer not null default 0,
         profile_path text not null,
         created_at text not null,
@@ -39,6 +45,7 @@ export class SQLiteSessionStore implements SessionStore {
       create index if not exists idx_sessions_last_activity_at
       on sessions(last_activity_at);
     `);
+    this.ensureProxyEnabledColumn(database);
 
     this.database = database;
   }
@@ -55,6 +62,7 @@ export class SQLiteSessionStore implements SessionStore {
           select
             id,
             target_url,
+            proxy_enabled,
             connected,
             profile_path,
             created_at,
@@ -75,6 +83,7 @@ export class SQLiteSessionStore implements SessionStore {
           select
             id,
             target_url,
+            proxy_enabled,
             connected,
             profile_path,
             created_at,
@@ -95,16 +104,18 @@ export class SQLiteSessionStore implements SessionStore {
           insert into sessions (
             id,
             target_url,
+            proxy_enabled,
             connected,
             profile_path,
             created_at,
             last_activity_at
-          ) values (?, ?, ?, ?, ?, ?)
+          ) values (?, ?, ?, ?, ?, ?, ?)
         `,
       )
       .run(
         session.id,
         session.targetUrl,
+        session.proxyEnabled ? 1 : 0,
         session.connected ? 1 : 0,
         session.profilePath,
         session.createdAt,
@@ -140,10 +151,25 @@ export class SQLiteSessionStore implements SessionStore {
     return this.database;
   }
 
+  private ensureProxyEnabledColumn(database: Database.Database): void {
+    const columns = database
+      .prepare("pragma table_info(sessions)")
+      .all() as TableInfoRow[];
+
+    if (columns.some((column) => column.name === "proxy_enabled")) {
+      return;
+    }
+
+    database.exec(
+      "alter table sessions add column proxy_enabled integer not null default 0",
+    );
+  }
+
   private toRecord(row: SessionRow): PersistedSessionRecord {
     return {
       id: row.id,
       targetUrl: row.target_url,
+      proxyEnabled: row.proxy_enabled === 1,
       connected: row.connected === 1,
       profilePath: row.profile_path,
       createdAt: row.created_at,

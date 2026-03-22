@@ -10,6 +10,7 @@ import type { SessionManager } from "../session/manager";
 
 const createSessionSchema = z.object({
   url: z.string().url(),
+  proxyEnabled: z.boolean().optional().default(false),
 });
 
 export function createSessionRouter(sessionManager: SessionManager): Router {
@@ -22,6 +23,7 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
         sessionId: session.id,
         connected: session.connected,
         targetUrl: session.targetUrl,
+        proxyEnabled: session.proxyEnabled,
         createdAt: session.createdAt.toISOString(),
         lastActivityAt: session.lastActivityAt.toISOString(),
       }));
@@ -42,7 +44,10 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
     }
 
     try {
-      const session = await sessionManager.createSession(parsed.data.url);
+      const session = await sessionManager.createSession({
+        targetUrl: parsed.data.url,
+        proxyEnabled: parsed.data.proxyEnabled,
+      });
       const payload: CreateSessionResponse = {
         sessionId: session.id,
         viewerUrl: `/?sessionId=${session.id}`,
@@ -69,6 +74,7 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
       sessionId: session.id,
       connected: session.connected,
       targetUrl: session.targetUrl,
+      proxyEnabled: session.proxyEnabled,
       createdAt: session.createdAt.toISOString(),
     };
 

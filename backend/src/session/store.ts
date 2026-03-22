@@ -1,6 +1,7 @@
 export interface PersistedSessionRecord {
   id: string;
   targetUrl: string;
+  proxyEnabled: boolean;
   connected: boolean;
   profilePath: string;
   createdAt: string;

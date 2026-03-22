@@ -6,10 +6,16 @@ import type { SessionStore } from "./store";
 export interface SessionRecord {
   id: string;
   targetUrl: string;
+  proxyEnabled: boolean;
   createdAt: Date;
   lastActivityAt: Date;
   connected: boolean;
   browserSession: BrowserSession;
+}
+
+export interface CreateSessionOptions {
+  targetUrl: string;
+  proxyEnabled: boolean;
 }
 
 export class SessionManager {
@@ -26,20 +32,22 @@ export class SessionManager {
     await this.restorePersistedSessions();
   }
 
-  async createSession(targetUrl: string): Promise<SessionRecord> {
+  async createSession(options: CreateSessionOptions): Promise<SessionRecord> {
     const sessionId = uuidv4();
     const createdAt = new Date();
     const lastActivityAt = new Date();
     const profilePath = this.browserService.getSessionProfileDir(sessionId);
     const browserSession = await this.browserService.createSession(
       sessionId,
-      targetUrl,
+      options.targetUrl,
+      { proxyEnabled: options.proxyEnabled },
     );
 
     try {
       await this.sessionStore.insertSession({
         id: sessionId,
-        targetUrl,
+        targetUrl: options.targetUrl,
+        proxyEnabled: options.proxyEnabled,
         connected: false,
         profilePath,
         createdAt: createdAt.toISOString(),
@@ -52,7 +60,8 @@ export class SessionManager {
 
     const session: SessionRecord = {
       id: sessionId,
-      targetUrl,
+      targetUrl: options.targetUrl,
+      proxyEnabled: options.proxyEnabled,
       createdAt,
       lastActivityAt,
       connected: false,
@@ -114,8 +123,8 @@ export class SessionManager {
     return Array.from(this.sessions.values());
   }
 
-  getRemoteDebuggingPort(): number | null {
-    return this.browserService.getRemoteDebuggingPort();
+  getRemoteDebuggingPort(sessionId: string): number | null {
+    return this.browserService.getRemoteDebuggingPort(sessionId);
   }
 
   isDevtoolsEnabled(): boolean {
@@ -137,13 +146,15 @@ export class SessionManager {
 
     for (const record of records) {
       try {
-        const browserSession = await this.browserService.createSession(
+        const browserSession = await this.browserService.restoreSession(
           record.id,
           record.targetUrl,
+          { proxyEnabled: record.proxyEnabled },
         );
         this.sessions.set(record.id, {
           id: record.id,
           targetUrl: record.targetUrl,
+          proxyEnabled: record.proxyEnabled,
           createdAt: new Date(record.createdAt),
           lastActivityAt: new Date(record.lastActivityAt),
           connected: false,

@@ -6,22 +6,26 @@ import { createSessionRouter } from "./session";
 interface MockSession {
   id: string;
   targetUrl: string;
+  proxyEnabled: boolean;
   connected: boolean;
   createdAt: Date;
 }
 
 function createTestServer(sessionState: { current: MockSession | null }) {
   const sessionManager = {
-    createSession: vi.fn(async (targetUrl: string) => {
-      const created: MockSession = {
-        id: "test-session-id",
-        targetUrl,
-        connected: false,
-        createdAt: new Date("2026-03-19T00:00:00.000Z"),
-      };
-      sessionState.current = created;
-      return { ...created, browserSession: {} };
-    }),
+    createSession: vi.fn(
+      async (options: { targetUrl: string; proxyEnabled: boolean }) => {
+        const created: MockSession = {
+          id: "test-session-id",
+          targetUrl: options.targetUrl,
+          proxyEnabled: options.proxyEnabled,
+          connected: false,
+          createdAt: new Date("2026-03-19T00:00:00.000Z"),
+        };
+        sessionState.current = created;
+        return { ...created, browserSession: {} };
+      },
+    ),
     getSession: vi.fn((id: string) =>
       sessionState.current?.id === id ? sessionState.current : undefined,
     ),
@@ -92,7 +96,7 @@ describe("session routes", () => {
     const createResponse = await fetch(`http://127.0.0.1:${port}/api/session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com" }),
+      body: JSON.stringify({ url: "https://example.com", proxyEnabled: true }),
     });
     expect(createResponse.status).toBe(201);
     const created = (await createResponse.json()) as {
@@ -109,17 +113,21 @@ describe("session routes", () => {
     const statusPayload = (await getResponse.json()) as {
       sessionId: string;
       targetUrl: string;
+      proxyEnabled: boolean;
     };
     expect(statusPayload.sessionId).toBe("test-session-id");
     expect(statusPayload.targetUrl).toBe("https://example.com");
+    expect(statusPayload.proxyEnabled).toBe(true);
 
     const listResponse = await fetch(`http://127.0.0.1:${port}/api/session`);
     expect(listResponse.status).toBe(200);
     const listPayload = (await listResponse.json()) as Array<{
       sessionId: string;
+      proxyEnabled: boolean;
     }>;
     expect(listPayload).toHaveLength(1);
     expect(listPayload[0]?.sessionId).toBe("test-session-id");
+    expect(listPayload[0]?.proxyEnabled).toBe(true);
 
     const deleteResponse = await fetch(
       `http://127.0.0.1:${port}/api/session/test-session-id`,

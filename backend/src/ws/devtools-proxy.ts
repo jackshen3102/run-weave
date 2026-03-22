@@ -7,11 +7,17 @@ import { getSessionTabPage } from "./context";
 
 interface AttachDevtoolsProxyServerOptions {
   enabled: boolean;
-  remoteDebuggingPort: number | null;
 }
 
-function closeWithReason(socket: WebSocket, code: number, reason: string): void {
-  if (socket.readyState !== WebSocket.OPEN && socket.readyState !== WebSocket.CONNECTING) {
+function closeWithReason(
+  socket: WebSocket,
+  code: number,
+  reason: string,
+): void {
+  if (
+    socket.readyState !== WebSocket.OPEN &&
+    socket.readyState !== WebSocket.CONNECTING
+  ) {
     return;
   }
 
@@ -84,7 +90,7 @@ export function attachDevtoolsProxyServer(
   });
 
   wss.on("connection", (clientSocket, request) => {
-    if (!options.enabled || options.remoteDebuggingPort == null) {
+    if (!options.enabled) {
       closeWithReason(clientSocket, 1011, "DevTools proxy disabled");
       return;
     }
@@ -108,13 +114,24 @@ export function attachDevtoolsProxyServer(
     }
 
     void (async () => {
-      const targetId = await resolveTargetId({ sessionManager, sessionId, tabId });
+      const remoteDebuggingPort =
+        sessionManager.getRemoteDebuggingPort(sessionId);
+      if (remoteDebuggingPort == null) {
+        closeWithReason(clientSocket, 1011, "Remote debugging is unavailable");
+        return;
+      }
+
+      const targetId = await resolveTargetId({
+        sessionManager,
+        sessionId,
+        tabId,
+      });
       if (!targetId) {
         closeWithReason(clientSocket, 1008, "Target not found");
         return;
       }
 
-      const upstreamUrl = `ws://127.0.0.1:${options.remoteDebuggingPort}/devtools/page/${encodeURIComponent(targetId)}`;
+      const upstreamUrl = `ws://127.0.0.1:${remoteDebuggingPort}/devtools/page/${encodeURIComponent(targetId)}`;
       const upstreamSocket = new WebSocket(upstreamUrl);
 
       const closeBoth = (code: number, reason: string): void => {
@@ -122,7 +139,8 @@ export function attachDevtoolsProxyServer(
         closeWithReason(upstreamSocket, code, reason);
       };
 
-      const pendingClientMessages: Array<{ data: RawData; isBinary: boolean }> = [];
+      const pendingClientMessages: Array<{ data: RawData; isBinary: boolean }> =
+        [];
 
       clientSocket.on("message", (data, isBinary) => {
         if (upstreamSocket.readyState === WebSocket.OPEN) {

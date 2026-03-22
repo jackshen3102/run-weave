@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const FORCE_SHUTDOWN_TIMEOUT_MS = 5_000;
-const HEALTHCHECK_TIMEOUT_MS = 15_000;
+const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 30_000;
 const HEALTHCHECK_INTERVAL_MS = 200;
 
 export function createBackendEnv({ baseEnv, backendPort }) {
@@ -12,6 +12,22 @@ export function createBackendEnv({ baseEnv, backendPort }) {
     PORT: String(backendPort),
     PORT_STRICT: "true",
   };
+}
+
+export function resolveHealthcheckTimeoutMs(env = process.env) {
+  const rawValue = env.DEV_BACKEND_HEALTHCHECK_TIMEOUT_MS?.trim();
+  if (!rawValue) {
+    return DEFAULT_HEALTHCHECK_TIMEOUT_MS;
+  }
+
+  const timeoutMs = Number(rawValue);
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1) {
+    throw new Error(
+      `Invalid DEV_BACKEND_HEALTHCHECK_TIMEOUT_MS: ${JSON.stringify(rawValue)}`,
+    );
+  }
+
+  return timeoutMs;
 }
 
 export function createFrontendEnv({
@@ -148,7 +164,8 @@ async function stopProcesses(processes) {
 
 async function waitForBackendReady(backend, backendUrl) {
   const healthUrl = `${backendUrl}/health`;
-  const deadline = Date.now() + HEALTHCHECK_TIMEOUT_MS;
+  const healthcheckTimeoutMs = resolveHealthcheckTimeoutMs();
+  const deadline = Date.now() + healthcheckTimeoutMs;
 
   while (Date.now() < deadline) {
     if (childHasExited(backend)) {
@@ -178,7 +195,7 @@ async function waitForBackendReady(backend, backendUrl) {
   }
 
   throw new Error(
-    `backend did not become ready within ${HEALTHCHECK_TIMEOUT_MS}ms: ${healthUrl}`,
+    `backend did not become ready within ${healthcheckTimeoutMs}ms: ${healthUrl}`,
   );
 }
 

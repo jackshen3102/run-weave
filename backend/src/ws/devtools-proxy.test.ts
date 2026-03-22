@@ -85,6 +85,7 @@ describe("attachDevtoolsProxyServer", () => {
       verifyToken: vi.fn(() => true),
     };
     const sessionManager = {
+      getRemoteDebuggingPort: vi.fn(() => 9222),
       getSession: vi.fn(() => ({
         browserSession: {
           context: {
@@ -102,7 +103,6 @@ describe("attachDevtoolsProxyServer", () => {
       authService as never,
       {
         enabled: true,
-        remoteDebuggingPort: 9222,
       },
     );
     const port = await startServer(server);
@@ -123,6 +123,7 @@ describe("attachDevtoolsProxyServer", () => {
       verifyToken: vi.fn(() => true),
     };
     const sessionManager = {
+      getRemoteDebuggingPort: vi.fn(() => 9222),
       getSession: vi.fn(() => ({
         browserSession: {
           context: {
@@ -140,7 +141,6 @@ describe("attachDevtoolsProxyServer", () => {
       authService as never,
       {
         enabled: true,
-        remoteDebuggingPort: 9222,
       },
     );
     const port = await startServer(server);
@@ -176,6 +176,7 @@ describe("attachDevtoolsProxyServer", () => {
     const fakePage = {};
 
     const sessionManager = {
+      getRemoteDebuggingPort: vi.fn(() => upstreamPort),
       getSession: vi.fn((sessionId: string) => {
         if (sessionId !== "s-1") {
           return undefined;
@@ -196,7 +197,10 @@ describe("attachDevtoolsProxyServer", () => {
     };
 
     const contextModule = await import("./context");
-    contextModule.registerSessionTabs("s-1", new Map([["tab-1", fakePage as never]]));
+    contextModule.registerSessionTabs(
+      "s-1",
+      new Map([["tab-1", fakePage as never]]),
+    );
 
     const proxyHttp = http.createServer();
     servers.push(proxyHttp);
@@ -206,7 +210,6 @@ describe("attachDevtoolsProxyServer", () => {
       authService as never,
       {
         enabled: true,
-        remoteDebuggingPort: upstreamPort,
       },
     );
     const proxyPort = await startServer(proxyHttp);

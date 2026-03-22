@@ -1,5 +1,6 @@
 export interface CreateSessionRequest {
   url: string;
+  proxyEnabled: boolean;
 }
 
 export interface LoginRequest {
@@ -21,6 +22,7 @@ export interface SessionStatusResponse {
   sessionId: string;
   connected: boolean;
   targetUrl: string;
+  proxyEnabled: boolean;
   createdAt: string;
 }
 
@@ -28,6 +30,7 @@ export interface SessionListItem {
   sessionId: string;
   connected: boolean;
   targetUrl: string;
+  proxyEnabled: boolean;
   createdAt: string;
   lastActivityAt: string;
 }

@@ -13,6 +13,10 @@ function createBrowserServiceMock(profileRootDir: string) {
       context: { close: vi.fn(async () => undefined) },
       page: { close: vi.fn(async () => undefined) },
     })),
+    restoreSession: vi.fn(async () => ({
+      context: { close: vi.fn(async () => undefined) },
+      page: { close: vi.fn(async () => undefined) },
+    })),
     destroySession: vi.fn(async () => undefined),
     getRemoteDebuggingPort: vi.fn(() => null),
     getSessionProfileDir: vi.fn((sessionId: string) =>
@@ -49,9 +53,10 @@ describe("SessionManager integration", () => {
     );
     await firstManager.initialize();
 
-    const createdSession = await firstManager.createSession(
-      "https://example.com",
-    );
+    const createdSession = await firstManager.createSession({
+      targetUrl: "https://example.com",
+      proxyEnabled: true,
+    });
     firstManager.markConnected(createdSession.id, true);
     await firstManager.dispose();
 
@@ -67,14 +72,17 @@ describe("SessionManager integration", () => {
     expect(restoredSession).toBeDefined();
     expect(restoredSession?.targetUrl).toBe("https://example.com");
     expect(restoredSession?.connected).toBe(false);
-    expect(secondBrowserService.createSession).toHaveBeenCalledWith(
+    expect(restoredSession?.proxyEnabled).toBe(true);
+    expect(secondBrowserService.restoreSession).toHaveBeenCalledWith(
       createdSession.id,
       "https://example.com",
+      { proxyEnabled: true },
     );
     await expect(secondStore.getSession(createdSession.id)).resolves.toEqual(
       expect.objectContaining({
         id: createdSession.id,
         connected: false,
+        proxyEnabled: true,
         profilePath: path.join(profileRootDir, "sessions", createdSession.id),
       }),
     );
