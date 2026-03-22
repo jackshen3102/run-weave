@@ -160,6 +160,24 @@ Use this file as the local source of truth for commands and style.
 - If you change websocket behavior, run backend websocket tests and affected frontend viewer tests.
 - If you change a browser flow, run the closest Vitest file and at least one Playwright spec when relevant.
 
+## TDD Skill Policy
+
+- Treat the `test-driven-development` skill as selective guidance, not a mandatory default for every task.
+- Invoke the `test-driven-development` skill for bug fixes, backend route or service logic, auth flows, shared protocol or schema changes, state transitions, and other behavior-heavy changes with clear expected outcomes.
+- Prefer a failing test first for high-risk regressions, contract changes, and logic with meaningful edge cases.
+- Do not invoke the `test-driven-development` skill for pure styling, copy changes, layout tweaks, exploratory UI iteration, throwaway prototypes, or other work where behavior is not yet stable enough to specify precisely.
+- For frontend visual work, lightweight verification is enough unless behavior changes: run the closest affected test, add or update tests only when user-visible behavior or a regression boundary changes.
+- Do not force "every new function must have a test". Test critical behaviors, public contracts, and regression-prone paths instead of mechanically testing trivial helpers.
+- When the skill is used, adapt it to this repo: use the smallest failing test that proves the change, prefer real behavior over mock-heavy tests, and stop at the level of coverage justified by risk.
+
+## Playwright Skill Policy
+
+- Treat `playwright-skill` as opt-in only. Do not load or invoke it unless the user explicitly asks for `playwright-skill` by name, or the user explicitly confirms its use after the agent proposes it.
+- If the agent believes browser automation or visual verification would help, the agent must first explain why `playwright-skill` is the right tool for the task and ask for confirmation before loading it.
+- Do not silently invoke `playwright-skill` for routine frontend work, simple UI edits, styling tweaks, copy changes, static analysis, or checks that can be covered by code reading, Vitest, Testing Library, or existing project Playwright commands.
+- Prefer the repo's built-in commands such as `pnpm --filter ./frontend e2e` when the task is about maintaining or running project Playwright tests, and reserve `playwright-skill` for ad hoc browser automation, manual verification support, screenshots, or exploratory browser debugging.
+- When proposing `playwright-skill`, state the expected benefit clearly, such as validating a login flow, reproducing a browser-only bug, checking responsive layout, or capturing screenshots for review.
+
 ## Agent Workflow Tips
 
 - Start with the narrowest command that proves the change.
