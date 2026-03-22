@@ -5,6 +5,10 @@ import {
 } from "./viewer-state";
 
 describe("viewerConnectionReducer", () => {
+  it("assumes devtools are available until the server says otherwise", () => {
+    expect(initialViewerConnectionState.devtoolsEnabled).toBe(true);
+  });
+
   it("updates tabs and prunes stale navigation states", () => {
     const stateWithNav = {
       ...initialViewerConnectionState,

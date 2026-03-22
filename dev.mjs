@@ -9,6 +9,7 @@ const HEALTHCHECK_INTERVAL_MS = 200;
 export function createBackendEnv({ baseEnv, backendPort }) {
   return {
     ...baseEnv,
+    BROWSER_DEVTOOLS_ENABLED: baseEnv.BROWSER_DEVTOOLS_ENABLED ?? "true",
     PORT: String(backendPort),
     PORT_STRICT: "true",
   };

@@ -35,7 +35,7 @@ export const initialViewerConnectionState: ViewerConnectionState = {
   ackCount: 0,
   tabs: [],
   navigationByTabId: {},
-  devtoolsEnabled: false,
+  devtoolsEnabled: true,
   devtoolsByTabId: {},
 };
 

@@ -5,6 +5,7 @@ import { BrowserService } from "./browser/service";
 import { loadAuthConfig } from "./auth/config";
 import { createRequireAuth } from "./auth/middleware";
 import { AuthService } from "./auth/service";
+import { resolveDevtoolsEnabled } from "./config/devtools";
 import { createAuthRouter } from "./routes/auth";
 import { createSessionRouter } from "./routes/session";
 import { createTestRouter } from "./routes/test";
@@ -178,8 +179,7 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
 
 async function createRuntimeServices(): Promise<RuntimeServices> {
   const storagePaths = resolveStoragePaths(process.env);
-  const devtoolsEnabled =
-    process.env.BROWSER_DEVTOOLS_ENABLED?.trim().toLowerCase() === "true";
+  const devtoolsEnabled = resolveDevtoolsEnabled(process.env);
   const rawRemoteDebuggingPort = process.env.BROWSER_REMOTE_DEBUGGING_PORT;
   const browserService = new BrowserService({
     headless: process.env.BROWSER_HEADLESS?.trim().toLowerCase() !== "false",

@@ -18,6 +18,27 @@ test("createBackendEnv pins backend port and strict mode", () => {
   assert.equal(env.AUTH_USERNAME, "admin");
 });
 
+test("createBackendEnv enables devtools by default", () => {
+  const env = createBackendEnv({
+    baseEnv: { AUTH_USERNAME: "admin" },
+    backendPort: 5005,
+  });
+
+  assert.equal(env.BROWSER_DEVTOOLS_ENABLED, "true");
+});
+
+test("createBackendEnv preserves explicit devtools override", () => {
+  const env = createBackendEnv({
+    baseEnv: {
+      AUTH_USERNAME: "admin",
+      BROWSER_DEVTOOLS_ENABLED: "false",
+    },
+    backendPort: 5005,
+  });
+
+  assert.equal(env.BROWSER_DEVTOOLS_ENABLED, "false");
+});
+
 test("createFrontendEnv pins proxy target and strict port mode", () => {
   const env = createFrontendEnv({
     baseEnv: { NODE_ENV: "development" },
