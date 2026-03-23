@@ -38,6 +38,11 @@ const clientInputSchema = z.union([
       action: z.literal("switch"),
       tabId: z.string().min(1),
     }),
+    z.object({
+      type: z.literal("tab"),
+      action: z.literal("close"),
+      tabId: z.string().min(1),
+    }),
   ]),
   z
     .object({

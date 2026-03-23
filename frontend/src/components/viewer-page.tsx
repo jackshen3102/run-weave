@@ -5,6 +5,7 @@ import {
   MoreHorizontal,
   Plus,
   RotateCw,
+  X,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { ViewerTabList } from "./viewer/viewer-tab-list";
@@ -260,6 +261,23 @@ export function ViewerPage({
                         <Plus className="h-4 w-4 text-stone-400" />
                         New tab
                       </button>
+                      {activeTabId && (
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8"
+                          onClick={() => {
+                            setIsMoreMenuOpen(false);
+                            sendInput({
+                              type: "tab",
+                              action: "close",
+                              tabId: activeTabId,
+                            });
+                          }}
+                        >
+                          <X className="h-4 w-4 text-stone-400" />
+                          Close tab
+                        </button>
+                      )}
                       {canReconnect && (
                         <button
                           type="button"

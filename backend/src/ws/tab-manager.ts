@@ -16,6 +16,7 @@ interface TabManagerDeps {
 export function createTabManager(deps: TabManagerDeps): {
   selectTab: (tabId: string) => Promise<boolean>;
   createTab: () => Promise<void>;
+  closeTab: (tabId: string) => Promise<boolean>;
   registerPage: (page: Page) => Promise<string | null>;
   onContextPage: (page: Page) => void;
   initializeTabs: (primaryPage: Page) => Promise<void>;
@@ -174,6 +175,16 @@ export function createTabManager(deps: TabManagerDeps): {
     await page.goto("about:blank", { waitUntil: "domcontentloaded" });
   };
 
+  const closeTab = async (tabId: string): Promise<boolean> => {
+    const page = state.tabIdToPage.get(tabId);
+    if (!page) {
+      return false;
+    }
+
+    await page.close();
+    return true;
+  };
+
   const initializeTabs = async (primaryPage: Page): Promise<void> => {
     await Promise.all(
       context.pages().map((page) => registerPage(page, { suppressEmit: true })),
@@ -208,6 +219,7 @@ export function createTabManager(deps: TabManagerDeps): {
   return {
     selectTab,
     createTab,
+    closeTab,
     registerPage,
     onContextPage,
     initializeTabs,

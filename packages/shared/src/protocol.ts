@@ -85,6 +85,11 @@ export type ClientInputMessage =
     }
   | {
       type: "tab";
+      action: "close";
+      tabId: string;
+    }
+  | {
+      type: "tab";
       action: "create";
     }
   | {

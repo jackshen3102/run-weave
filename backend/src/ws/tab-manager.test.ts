@@ -20,6 +20,9 @@ class FakePage extends EventEmitter {
   mainFrame(): object {
     return {};
   }
+  close = vi.fn(async () => {
+    this.emit("close");
+  });
 }
 
 describe("createTabManager", () => {
@@ -73,5 +76,64 @@ describe("createTabManager", () => {
 
     const switched = await manager.selectTab(String(tabId));
     expect(switched).toBe(true);
+  });
+
+  it("closes existing tab and clears active tab when none remain", async () => {
+    const fakePage = new FakePage("https://example.com", "Example");
+    const page = fakePage as unknown as Page;
+
+    const state: ConnectionContext = {
+      cdpSession: null,
+      heartbeatTimer: null,
+      isAlive: true,
+      isClosed: false,
+      activePage: page,
+      activeTabId: null,
+      cursorLookupTimer: null,
+      cursorLookupInFlight: false,
+      pendingCursorPoint: null,
+      lastCursorLookupAt: 0,
+      lastCursorValue: "default",
+      tabIdToPage: new Map(),
+      pageToTabId: new WeakMap(),
+      tabTitleById: new Map(),
+      pageListenersByTabId: new Map(),
+      tabLoadingById: new Map(),
+      devtoolsByTabId: new Map(),
+    };
+
+    const contextPages: Page[] = [page];
+    const context = {
+      pages: () => [...contextPages],
+      newCDPSession: vi.fn(async () => ({
+        send: vi.fn(async () => ({ targetInfo: { targetId: "target-1" } })),
+        detach: vi.fn(async () => undefined),
+      })),
+    } as unknown as BrowserContext;
+
+    const manager = createTabManager({
+      state,
+      sessionId: "s-1",
+      context,
+      emitTabs: vi.fn(),
+      emitCursor: vi.fn(),
+      emitNavigationState: vi.fn(async () => undefined),
+      startScreencast: vi.fn(async () => undefined),
+      stopScreencast: vi.fn(async () => undefined),
+      sendError: vi.fn(),
+    } as never);
+
+    await manager.initializeTabs(page as never);
+    const tabId = state.activeTabId;
+    expect(tabId).toBe("target-1");
+
+    contextPages.length = 0;
+    const closed = await manager.closeTab("target-1");
+    expect(closed).toBe(true);
+
+    await Promise.resolve();
+
+    expect(state.activeTabId).toBeNull();
+    expect(state.tabIdToPage.size).toBe(0);
   });
 });

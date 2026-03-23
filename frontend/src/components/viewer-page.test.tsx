@@ -105,6 +105,25 @@ describe("ViewerPage devtools controls", () => {
     expect(screen.getByTestId("navigation-bar")).toBeInTheDocument();
   });
 
+  it("sends close tab command from more menu", () => {
+    render(
+      <ViewerPage apiBase="http://localhost:5000" sessionId="s-1" token="t" />,
+    );
+
+    const moreActionsButton = screen.getAllByRole("button", {
+      name: "More actions",
+    })[0];
+
+    fireEvent.click(moreActionsButton!);
+    fireEvent.click(screen.getByRole("button", { name: "Close tab" }));
+
+    expect(sendInput).toHaveBeenCalledWith({
+      type: "tab",
+      action: "close",
+      tabId: "tab-1",
+    });
+  });
+
   it("renders devtools iframe when opened", () => {
     useViewerConnectionMock.mockReturnValue(
       buildViewerConnectionState({

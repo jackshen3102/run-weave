@@ -58,9 +58,14 @@ class FakePage extends EventEmitter {
   readonly goto = vi.fn(async (url: string) => {
     this.currentUrl = url;
   });
+  readonly close = vi.fn(async () => {
+    this.onClose?.();
+    this.emit("close");
+  });
 
   private readonly frame = {};
   private selectedText = "";
+  private onClose: (() => void) | null = null;
 
   constructor(
     private currentUrl: string,
@@ -92,9 +97,14 @@ class FakePage extends EventEmitter {
     this.selectedText = text;
   }
 
+  setCloseHandler(handler: (() => void) | null): void {
+    this.onClose = handler;
+  }
+
   evaluate = vi.fn(async () => this.selectedText);
 
   closePage(): void {
+    this.onClose?.();
     this.emit("close");
   }
 }
@@ -112,6 +122,9 @@ class FakeContext extends EventEmitter {
     this.pagesList = [...pages];
     for (const page of pages) {
       this.ensureTargetId(page);
+      page.setCloseHandler(() => {
+        this.removePage(page);
+      });
     }
   }
 
@@ -134,10 +147,14 @@ class FakeContext extends EventEmitter {
   addPage(page: FakePage): void {
     this.pagesList.push(page);
     this.ensureTargetId(page);
+    page.setCloseHandler(() => {
+      this.removePage(page);
+    });
     this.emit("page", page);
   }
 
   removePage(page: FakePage): void {
+    page.setCloseHandler(null);
     const next = this.pagesList.filter((item) => item !== page);
     this.pagesList.splice(0, this.pagesList.length, ...next);
   }
@@ -640,6 +657,59 @@ describe("websocket server", () => {
 
     const errorMessage = await queue.nextByType("error");
     expect(errorMessage.message).toBe("Unknown tabId: tab-unknown");
+  });
+
+  it("closes active tab and emits updated tabs", async () => {
+    const cdpSession = new FakeCDPSession();
+    const page = new FakePage("https://example.com", "Example");
+    const context = new FakeContext([page], cdpSession);
+
+    const sessionManager = {
+      getSession: vi.fn(() => ({
+        id: "session-close-tab",
+        browserSession: {
+          context,
+          page,
+        },
+      })),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-close-tab&token=valid-token`,
+    );
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    await queue.nextByType("connected");
+    const tabsMessage = await queue.nextByType("tabs");
+    const firstTab = (tabsMessage.tabs as ViewerTab[]).at(0);
+    if (!firstTab) {
+      throw new Error("Missing first tab");
+    }
+
+    socket.send(
+      JSON.stringify({
+        type: "tab",
+        action: "close",
+        tabId: firstTab.id,
+      }),
+    );
+
+    const closeAck = await queue.nextByType("ack");
+    expect(closeAck.eventType).toBe("tab");
+    expect(page.close).toHaveBeenCalledTimes(1);
   });
 
   it("no-ops back/forward when history capability is unavailable", async () => {
