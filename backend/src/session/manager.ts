@@ -200,6 +200,15 @@ export class SessionManager {
           sessionId: record.id,
           error: String(error),
         });
+
+        try {
+          await this.sessionStore.deleteSession(record.id);
+        } catch (cleanupError) {
+          console.error("[viewer-be] failed to delete stale session", {
+            sessionId: record.id,
+            error: String(cleanupError),
+          });
+        }
       }
     }
   }

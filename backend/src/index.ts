@@ -1,5 +1,8 @@
 import "dotenv/config";
 import http from "node:http";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import { BrowserService } from "./browser/service";
 import { loadAuthConfig } from "./auth/config";
@@ -28,6 +31,9 @@ interface RuntimeServices {
   sessionManager: SessionManager;
   browserService: BrowserService;
 }
+
+const CURRENT_FILE_PATH = fileURLToPath(import.meta.url);
+const CURRENT_DIR_PATH = path.dirname(CURRENT_FILE_PATH);
 
 function buildDevtoolsShellHtml(devtoolsUrl: string): string {
   return `<!doctype html>
@@ -177,6 +183,10 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
     .filter(Boolean);
 }
 
+function resolveFrontendDistDir(): string {
+  return path.resolve(CURRENT_DIR_PATH, "../../frontend/dist");
+}
+
 async function createRuntimeServices(): Promise<RuntimeServices> {
   const storagePaths = resolveStoragePaths(process.env);
   const devtoolsEnabled = resolveDevtoolsEnabled(process.env);
@@ -275,6 +285,24 @@ function createHttpApp(services: RuntimeServices): express.Express {
       });
       res.setHeader("content-type", "text/html; charset=utf-8");
       res.send(buildDevtoolsShellHtml(devtoolsUrl));
+    });
+  }
+
+  const frontendDistDir = resolveFrontendDistDir();
+  if (existsSync(frontendDistDir)) {
+    app.use(express.static(frontendDistDir));
+
+    app.get("*", (req, res, next) => {
+      if (
+        req.path.startsWith("/api") ||
+        req.path.startsWith("/ws") ||
+        req.path.startsWith("/devtools")
+      ) {
+        next();
+        return;
+      }
+
+      res.sendFile(path.join(frontendDistDir, "index.html"));
     });
   }
 

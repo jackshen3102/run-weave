@@ -172,6 +172,39 @@ describe("SessionManager", () => {
     await manager.dispose();
   });
 
+  it("deletes a persisted session if restore fails", async () => {
+    const browserServiceMock = createBrowserServiceMock();
+    const sessionStoreMock = createSessionStoreMock();
+    sessionStoreMock.listSessions.mockResolvedValue([
+      {
+        id: "session-failed",
+        targetUrl: "http://127.0.0.1:5501/test/popup-auto",
+        proxyEnabled: false,
+        connected: false,
+        profilePath: browserServiceMock.getSessionProfileDir("session-failed"),
+        profileMode: "managed",
+        createdAt: "2026-03-21T00:00:00.000Z",
+        lastActivityAt: "2026-03-21T00:01:00.000Z",
+      },
+    ]);
+    browserServiceMock.restoreSession.mockRejectedValueOnce(
+      new Error("restore failed"),
+    );
+    const manager = new SessionManager(
+      browserServiceMock as never,
+      sessionStoreMock,
+    );
+
+    await manager.initialize();
+
+    expect(manager.getSession("session-failed")).toBeUndefined();
+    expect(sessionStoreMock.deleteSession).toHaveBeenCalledWith(
+      "session-failed",
+    );
+
+    await manager.dispose();
+  });
+
   it("does not destroy session when disconnected", async () => {
     vi.useFakeTimers();
     try {
