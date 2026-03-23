@@ -1,5 +1,6 @@
 import type { BrowserContext, Frame, Page } from "playwright";
 import type { ConnectionContext } from "./context";
+import { resolvePageTargetId } from "./tab-target";
 
 interface TabManagerDeps {
   state: ConnectionContext;
@@ -15,9 +16,9 @@ interface TabManagerDeps {
 export function createTabManager(deps: TabManagerDeps): {
   selectTab: (tabId: string) => Promise<boolean>;
   createTab: () => Promise<void>;
-  registerPage: (page: Page) => string;
+  registerPage: (page: Page) => Promise<string | null>;
   onContextPage: (page: Page) => void;
-  initializeTabs: (primaryPage: Page) => void;
+  initializeTabs: (primaryPage: Page) => Promise<void>;
   disposePageListeners: () => void;
 } {
   const {
@@ -31,14 +32,20 @@ export function createTabManager(deps: TabManagerDeps): {
     sendError,
   } = deps;
 
-  const refreshTabTitle = async (tabId: string, page: Page): Promise<void> => {
+  const refreshTabTitle = async (
+    tabId: string,
+    page: Page,
+    options?: { suppressEmit?: boolean },
+  ): Promise<void> => {
     try {
       const title = await page.title();
       state.tabTitleById.set(tabId, title || page.url());
     } catch {
       state.tabTitleById.set(tabId, page.url());
     }
-    emitTabs();
+    if (!options?.suppressEmit) {
+      emitTabs();
+    }
   };
 
   const selectTab = async (tabId: string): Promise<boolean> => {
@@ -59,7 +66,11 @@ export function createTabManager(deps: TabManagerDeps): {
   };
 
   const selectLastTab = async (): Promise<void> => {
-    const fallbackTabId = Array.from(state.tabIdToPage.keys()).at(-1);
+    const pages = context.pages();
+    const fallbackPage = pages.at(-1);
+    const fallbackTabId = fallbackPage
+      ? (state.pageToTabId.get(fallbackPage) ?? null)
+      : null;
     if (!fallbackTabId) {
       state.activeTabId = null;
       emitTabs();
@@ -83,6 +94,7 @@ export function createTabManager(deps: TabManagerDeps): {
     }
 
     state.pageListenersByTabId.delete(tabId);
+    state.pageToTabId.delete(page);
     state.tabIdToPage.delete(tabId);
     state.tabTitleById.delete(tabId);
     state.tabLoadingById.delete(tabId);
@@ -97,13 +109,20 @@ export function createTabManager(deps: TabManagerDeps): {
     }
   };
 
-  const registerPage = (page: Page): string => {
+  const registerPage = async (
+    page: Page,
+    options?: { suppressEmit?: boolean },
+  ): Promise<string | null> => {
     const existing = state.pageToTabId.get(page);
     if (existing) {
       return existing;
     }
 
-    const tabId = `tab-${++state.tabCounter}`;
+    const tabId = await resolvePageTargetId(context, page);
+    if (!tabId) {
+      return null;
+    }
+
     state.pageToTabId.set(page, tabId);
     state.tabIdToPage.set(tabId, page);
     state.tabTitleById.set(tabId, page.url() || "about:blank");
@@ -130,16 +149,24 @@ export function createTabManager(deps: TabManagerDeps): {
     page.on("framenavigated", framenavigated);
     page.on("load", load);
 
-    void refreshTabTitle(tabId, page);
-    emitTabs();
+    void refreshTabTitle(tabId, page, options);
+    if (!options?.suppressEmit) {
+      emitTabs();
+    }
     return tabId;
   };
 
   const onContextPage = (page: Page): void => {
-    const tabId = registerPage(page);
-    void selectTab(tabId).catch((error) => {
-      sendError(String(error));
-    });
+    void registerPage(page)
+      .then((tabId) => {
+        if (!tabId) {
+          return;
+        }
+        return selectTab(tabId);
+      })
+      .catch((error) => {
+        sendError(String(error));
+      });
   };
 
   const createTab = async (): Promise<void> => {
@@ -147,18 +174,22 @@ export function createTabManager(deps: TabManagerDeps): {
     await page.goto("about:blank", { waitUntil: "domcontentloaded" });
   };
 
-  const initializeTabs = (primaryPage: Page): void => {
-    for (const page of context.pages()) {
-      registerPage(page);
-    }
+  const initializeTabs = async (primaryPage: Page): Promise<void> => {
+    await Promise.all(
+      context.pages().map((page) => registerPage(page, { suppressEmit: true })),
+    );
+
+    const firstPage = context.pages().at(0);
     const initialTabId =
       state.pageToTabId.get(primaryPage) ??
-      Array.from(state.tabIdToPage.keys())[0];
+      (firstPage ? state.pageToTabId.get(firstPage) : undefined);
     if (initialTabId) {
       state.activeTabId = initialTabId;
       state.activePage =
         state.tabIdToPage.get(initialTabId) ?? state.activePage;
     }
+
+    emitTabs();
   };
 
   const disposePageListeners = (): void => {

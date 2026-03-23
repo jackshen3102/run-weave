@@ -7,11 +7,7 @@ import type { AuthService } from "../auth/service";
 import { parseClientMessage } from "./client-message";
 import { getNavigationCapability } from "./navigation";
 import { buildTabsSnapshot } from "./tabs";
-import {
-  createConnectionContext,
-  registerSessionTabs,
-  unregisterSessionTabs,
-} from "./context";
+import { createConnectionContext } from "./context";
 import { createHeartbeatController } from "./heartbeat";
 import { createScreencastController } from "./screencast";
 import { createCursorSyncController } from "./cursor-sync";
@@ -54,7 +50,6 @@ export function attachWebSocketServer(
 
     const { sessionId, session } = handshake;
     const state = createConnectionContext(session.browserSession.page);
-    registerSessionTabs(sessionId, state.tabIdToPage);
 
     const sendError = (message: string): void => {
       sendEvent(socket, { type: "error", message });
@@ -64,7 +59,8 @@ export function attachWebSocketServer(
       sendEvent(socket, {
         type: "tabs",
         tabs: buildTabsSnapshot(
-          state.tabIdToPage,
+          session.browserSession.context.pages(),
+          state.pageToTabId,
           state.tabTitleById,
           state.activeTabId,
         ),
@@ -132,12 +128,23 @@ export function attachWebSocketServer(
 
     sessionManager.markConnected(sessionId, true);
     session.browserSession.context.on("page", tabManager.onContextPage);
-    tabManager.initializeTabs(session.browserSession.page);
+    void tabManager
+      .initializeTabs(session.browserSession.page)
+      .catch((error) => {
+        sendError(String(error));
+        console.error("[viewer-be] failed to initialize tabs", {
+          sessionId,
+          error: String(error),
+        });
+        socket.close(1011, "Failed to initialize tabs");
+      });
     heartbeat.start();
 
     sendEvent(socket, { type: "connected", sessionId });
-    sendEvent(socket, { type: "devtools-capability", enabled: devtoolsEnabled });
-    emitTabs();
+    sendEvent(socket, {
+      type: "devtools-capability",
+      enabled: devtoolsEnabled,
+    });
 
     void screencast.start().catch((error) => {
       sendError(String(error));
@@ -192,7 +199,8 @@ export function attachWebSocketServer(
         handleDevtoolsMessage(parsed, {
           state,
           sendError,
-          sendAck: () => sendEvent(socket, { type: "ack", eventType: parsed.type }),
+          sendAck: () =>
+            sendEvent(socket, { type: "ack", eventType: parsed.type }),
           emitDevtoolsState,
         });
         return;
@@ -221,7 +229,6 @@ export function attachWebSocketServer(
       void screencast.stop();
       session.browserSession.context.off("page", tabManager.onContextPage);
       tabManager.disposePageListeners();
-      unregisterSessionTabs(sessionId);
     };
 
     const closeConnection = (markDisconnected: boolean): void => {

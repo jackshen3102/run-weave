@@ -89,6 +89,7 @@ describe("attachDevtoolsProxyServer", () => {
       getSession: vi.fn(() => ({
         browserSession: {
           context: {
+            pages: vi.fn(() => []),
             newCDPSession: vi.fn(async () => new FakeCDPSession()),
           },
         },
@@ -127,6 +128,7 @@ describe("attachDevtoolsProxyServer", () => {
       getSession: vi.fn(() => ({
         browserSession: {
           context: {
+            pages: vi.fn(() => []),
             newCDPSession: vi.fn(async () => new FakeCDPSession()),
           },
         },
@@ -175,6 +177,16 @@ describe("attachDevtoolsProxyServer", () => {
     const fakeCdpSession = new FakeCDPSession();
     const fakePage = {};
 
+    const context = {
+      pages: vi.fn(() => [fakePage]),
+      newCDPSession: vi.fn(async (page: unknown) => {
+        if (page !== fakePage) {
+          throw new Error("unexpected page");
+        }
+        return fakeCdpSession;
+      }),
+    };
+
     const sessionManager = {
       getRemoteDebuggingPort: vi.fn(() => upstreamPort),
       getSession: vi.fn((sessionId: string) => {
@@ -183,24 +195,11 @@ describe("attachDevtoolsProxyServer", () => {
         }
         return {
           browserSession: {
-            context: {
-              newCDPSession: vi.fn(async (page: unknown) => {
-                if (page !== fakePage) {
-                  throw new Error("unexpected page");
-                }
-                return fakeCdpSession;
-              }),
-            },
+            context,
           },
         };
       }),
     };
-
-    const contextModule = await import("./context");
-    contextModule.registerSessionTabs(
-      "s-1",
-      new Map([["tab-1", fakePage as never]]),
-    );
 
     const proxyHttp = http.createServer();
     servers.push(proxyHttp);
@@ -215,7 +214,7 @@ describe("attachDevtoolsProxyServer", () => {
     const proxyPort = await startServer(proxyHttp);
 
     const socket = new WebSocket(
-      `ws://127.0.0.1:${proxyPort}/ws/devtools-proxy?sessionId=s-1&token=ok&tabId=tab-1`,
+      `ws://127.0.0.1:${proxyPort}/ws/devtools-proxy?sessionId=s-1&token=ok&tabId=target-1`,
     );
     sockets.push(socket);
 
@@ -232,6 +231,5 @@ describe("attachDevtoolsProxyServer", () => {
 
     expect(echoed).toBe(payload);
     expect(fakeCdpSession.send).toHaveBeenCalledWith("Target.getTargetInfo");
-    contextModule.unregisterSessionTabs("s-1");
   });
 });

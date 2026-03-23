@@ -13,7 +13,6 @@ export interface ConnectionContext {
   isClosed: boolean;
   activePage: Page;
   activeTabId: string | null;
-  tabCounter: number;
   cursorLookupTimer: NodeJS.Timeout | null;
   cursorLookupInFlight: boolean;
   pendingCursorPoint: { x: number; y: number } | null;
@@ -35,7 +34,6 @@ export function createConnectionContext(initialPage: Page): ConnectionContext {
     isClosed: false,
     activePage: initialPage,
     activeTabId: null,
-    tabCounter: 0,
     cursorLookupTimer: null,
     cursorLookupInFlight: false,
     pendingCursorPoint: null,
@@ -48,25 +46,4 @@ export function createConnectionContext(initialPage: Page): ConnectionContext {
     tabLoadingById: new Map<string, boolean>(),
     devtoolsByTabId: new Map<string, boolean>(),
   };
-}
-
-const sessionTabMapBySessionId = new Map<string, Map<string, Page>>();
-
-export function registerSessionTabs(
-  sessionId: string,
-  tabIdToPage: Map<string, Page>,
-): void {
-  sessionTabMapBySessionId.set(sessionId, tabIdToPage);
-}
-
-export function unregisterSessionTabs(sessionId: string): void {
-  sessionTabMapBySessionId.delete(sessionId);
-}
-
-export function getSessionTabPage(sessionId: string, tabId: string): Page | null {
-  const tabMap = sessionTabMapBySessionId.get(sessionId);
-  if (!tabMap) {
-    return null;
-  }
-  return tabMap.get(tabId) ?? null;
 }

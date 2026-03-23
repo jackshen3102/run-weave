@@ -16,7 +16,6 @@ function createState(): ConnectionContext {
     isClosed: false,
     activePage: {} as never,
     activeTabId: null,
-    tabCounter: 0,
     cursorLookupTimer: null,
     cursorLookupInFlight: false,
     pendingCursorPoint: null,

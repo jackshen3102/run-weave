@@ -3,7 +3,7 @@ import WebSocket, { WebSocketServer, type RawData } from "ws";
 import type { AuthService } from "../auth/service";
 import type { SessionManager } from "../session/manager";
 import { validateWebSocketHandshake } from "./handshake";
-import { getSessionTabPage } from "./context";
+import { resolvePageByTargetId } from "./tab-target";
 
 interface AttachDevtoolsProxyServerOptions {
   enabled: boolean;
@@ -54,20 +54,15 @@ async function resolveTargetId(params: {
     return null;
   }
 
-  const page = getSessionTabPage(sessionId, tabId);
+  const page = await resolvePageByTargetId(
+    session.browserSession.context,
+    tabId,
+  );
   if (!page) {
     return null;
   }
 
-  const cdpSession = await session.browserSession.context.newCDPSession(page);
-  try {
-    const targetInfo = (await cdpSession.send("Target.getTargetInfo")) as {
-      targetInfo?: { targetId?: string };
-    };
-    return targetInfo.targetInfo?.targetId ?? null;
-  } finally {
-    await cdpSession.detach().catch(() => undefined);
-  }
+  return tabId;
 }
 
 export function attachDevtoolsProxyServer(

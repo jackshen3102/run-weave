@@ -2,14 +2,26 @@ import type { ViewerTab } from "@browser-viewer/shared";
 import type { Page } from "playwright";
 
 export function buildTabsSnapshot(
-  tabIdToPage: Map<string, Page>,
+  pages: Page[],
+  pageToTabId: WeakMap<Page, string>,
   tabTitleById: Map<string, string>,
   activeTabId: string | null,
 ): ViewerTab[] {
-  return Array.from(tabIdToPage.entries()).map(([id, page]) => ({
-    id,
-    url: page.url(),
-    title: tabTitleById.get(id) ?? page.url(),
-    active: id === activeTabId,
-  }));
+  const tabs: ViewerTab[] = [];
+
+  for (const page of pages) {
+    const id = pageToTabId.get(page);
+    if (!id) {
+      continue;
+    }
+
+    tabs.push({
+      id,
+      url: page.url(),
+      title: tabTitleById.get(id) ?? page.url(),
+      active: id === activeTabId,
+    });
+  }
+
+  return tabs;
 }

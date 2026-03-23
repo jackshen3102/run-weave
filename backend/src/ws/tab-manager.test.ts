@@ -34,7 +34,6 @@ describe("createTabManager", () => {
       isClosed: false,
       activePage: page,
       activeTabId: null,
-      tabCounter: 0,
       cursorLookupTimer: null,
       cursorLookupInFlight: false,
       pendingCursorPoint: null,
@@ -48,7 +47,13 @@ describe("createTabManager", () => {
       devtoolsByTabId: new Map(),
     };
 
-    const context = { pages: () => [page] } as unknown as BrowserContext;
+    const context = {
+      pages: () => [page],
+      newCDPSession: vi.fn(async () => ({
+        send: vi.fn(async () => ({ targetInfo: { targetId: "target-1" } })),
+        detach: vi.fn(async () => undefined),
+      })),
+    } as unknown as BrowserContext;
 
     const manager = createTabManager({
       state,
@@ -62,7 +67,7 @@ describe("createTabManager", () => {
       sendError: vi.fn(),
     } as never);
 
-    manager.initializeTabs(page as never);
+    await manager.initializeTabs(page as never);
     const tabId = state.activeTabId;
     expect(tabId).toBeTruthy();
 

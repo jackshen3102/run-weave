@@ -101,6 +101,8 @@ class FakePage extends EventEmitter {
 
 class FakeContext extends EventEmitter {
   private readonly pagesList: FakePage[];
+  private readonly pageTargetIds = new WeakMap<FakePage, string>();
+  private targetCounter = 0;
 
   constructor(
     pages: FakePage[],
@@ -108,6 +110,21 @@ class FakeContext extends EventEmitter {
   ) {
     super();
     this.pagesList = [...pages];
+    for (const page of pages) {
+      this.ensureTargetId(page);
+    }
+  }
+
+  private ensureTargetId(page: FakePage): string {
+    const existing = this.pageTargetIds.get(page);
+    if (existing) {
+      return existing;
+    }
+
+    this.targetCounter += 1;
+    const nextTargetId = `target-${this.targetCounter}`;
+    this.pageTargetIds.set(page, nextTargetId);
+    return nextTargetId;
   }
 
   pages(): FakePage[] {
@@ -116,6 +133,7 @@ class FakeContext extends EventEmitter {
 
   addPage(page: FakePage): void {
     this.pagesList.push(page);
+    this.ensureTargetId(page);
     this.emit("page", page);
   }
 
@@ -124,7 +142,26 @@ class FakeContext extends EventEmitter {
     this.pagesList.splice(0, this.pagesList.length, ...next);
   }
 
-  newCDPSession = vi.fn(async () => this.cdpSession);
+  newCDPSession = vi.fn(async (page: FakePage) => ({
+    send: vi.fn(async (method: string, params?: unknown) => {
+      if (method === "Target.getTargetInfo") {
+        return { targetInfo: { targetId: this.ensureTargetId(page) } };
+      }
+
+      if (params === undefined) {
+        return this.cdpSession.send(method);
+      }
+      return (
+        this.cdpSession.send as unknown as (
+          method: string,
+          payload?: unknown,
+        ) => Promise<unknown>
+      )(method, params);
+    }),
+    detach: vi.fn(async () => undefined),
+    on: this.cdpSession.on.bind(this.cdpSession),
+    off: this.cdpSession.off.bind(this.cdpSession),
+  }));
 }
 
 function createJsonMessageQueue(socket: WebSocket) {
@@ -515,11 +552,13 @@ describe("websocket server", () => {
     const pageB = new FakePage("https://b.example", "Page B");
     context.addPage(pageB);
 
-    let tabsAfterPopup = await queue.nextByType("tabs");
-    let snapshot = tabsAfterPopup.tabs as ViewerTab[];
-    if (snapshot.length < 2) {
-      tabsAfterPopup = await queue.nextByType("tabs");
+    let snapshot: ViewerTab[] = [];
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const tabsAfterPopup = await queue.nextByType("tabs");
       snapshot = tabsAfterPopup.tabs as ViewerTab[];
+      if (snapshot.length >= 2) {
+        break;
+      }
     }
 
     expect(snapshot).toHaveLength(2);
