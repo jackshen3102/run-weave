@@ -2,11 +2,13 @@ import http from "node:http";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionRouter } from "./session";
+import { SessionProfileValidationError } from "../session/manager";
 
 interface MockSession {
   id: string;
   targetUrl: string;
   proxyEnabled: boolean;
+  profileMode: "managed" | "custom";
   connected: boolean;
   createdAt: Date;
 }
@@ -14,11 +16,21 @@ interface MockSession {
 function createTestServer(sessionState: { current: MockSession | null }) {
   const sessionManager = {
     createSession: vi.fn(
-      async (options: { targetUrl: string; proxyEnabled: boolean }) => {
+      async (options: {
+        targetUrl: string;
+        proxyEnabled: boolean;
+        profilePath?: string;
+      }) => {
+        if (options.profilePath === "/missing") {
+          throw new SessionProfileValidationError(
+            "Custom profile path does not exist",
+          );
+        }
         const created: MockSession = {
           id: "test-session-id",
           targetUrl: options.targetUrl,
           proxyEnabled: options.proxyEnabled,
+          profileMode: options.profilePath ? "custom" : "managed",
           connected: false,
           createdAt: new Date("2026-03-19T00:00:00.000Z"),
         };
@@ -114,20 +126,24 @@ describe("session routes", () => {
       sessionId: string;
       targetUrl: string;
       proxyEnabled: boolean;
+      profileMode: "managed" | "custom";
     };
     expect(statusPayload.sessionId).toBe("test-session-id");
     expect(statusPayload.targetUrl).toBe("https://example.com");
     expect(statusPayload.proxyEnabled).toBe(true);
+    expect(statusPayload.profileMode).toBe("managed");
 
     const listResponse = await fetch(`http://127.0.0.1:${port}/api/session`);
     expect(listResponse.status).toBe(200);
     const listPayload = (await listResponse.json()) as Array<{
       sessionId: string;
       proxyEnabled: boolean;
+      profileMode: "managed" | "custom";
     }>;
     expect(listPayload).toHaveLength(1);
     expect(listPayload[0]?.sessionId).toBe("test-session-id");
     expect(listPayload[0]?.proxyEnabled).toBe(true);
+    expect(listPayload[0]?.profileMode).toBe("managed");
 
     const deleteResponse = await fetch(
       `http://127.0.0.1:${port}/api/session/test-session-id`,
@@ -141,5 +157,29 @@ describe("session routes", () => {
       `http://127.0.0.1:${port}/api/session/test-session-id`,
     );
     expect(missingResponse.status).toBe(404);
+  });
+
+  it("returns a validation error for an invalid custom profile path", async () => {
+    const state = { current: null as MockSession | null };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com",
+        proxyEnabled: false,
+        profilePath: "/missing",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        message: "Custom profile path does not exist",
+      }),
+    );
   });
 });

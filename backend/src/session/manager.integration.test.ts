@@ -76,7 +76,10 @@ describe("SessionManager integration", () => {
     expect(secondBrowserService.restoreSession).toHaveBeenCalledWith(
       createdSession.id,
       "https://example.com",
-      { proxyEnabled: true },
+      {
+        profilePath: path.join(profileRootDir, "sessions", createdSession.id),
+        proxyEnabled: true,
+      },
     );
     await expect(secondStore.getSession(createdSession.id)).resolves.toEqual(
       expect.objectContaining({
@@ -84,6 +87,7 @@ describe("SessionManager integration", () => {
         connected: false,
         proxyEnabled: true,
         profilePath: path.join(profileRootDir, "sessions", createdSession.id),
+        profileMode: "managed",
       }),
     );
 

@@ -47,6 +47,7 @@ describe("BrowserService", () => {
     });
 
     await service.createSession("session-proxy", "https://example.com", {
+      profilePath: "/tmp/browser-profiles/sessions/session-proxy",
       proxyEnabled: true,
     });
 
@@ -71,6 +72,7 @@ describe("BrowserService", () => {
     });
 
     await service.createSession("session-direct", "https://example.com", {
+      profilePath: "/tmp/browser-profiles/sessions/session-direct",
       proxyEnabled: false,
     });
 
@@ -94,9 +96,11 @@ describe("BrowserService", () => {
     });
 
     await service.createSession("session-a", "https://example.com", {
+      profilePath: "/tmp/browser-profiles/sessions/session-a",
       proxyEnabled: false,
     });
     await service.createSession("session-b", "https://example.com", {
+      profilePath: "/tmp/browser-profiles/sessions/session-b",
       proxyEnabled: false,
     });
 
@@ -135,7 +139,10 @@ describe("BrowserService", () => {
     const session = await service.restoreSession(
       "session-restored",
       "https://example.com",
-      { proxyEnabled: false },
+      {
+        profilePath: "/tmp/browser-profiles/sessions/session-restored",
+        proxyEnabled: false,
+      },
     );
 
     expect(session.page).toBe(persistedPage);
@@ -165,7 +172,10 @@ describe("BrowserService", () => {
     const session = await service.restoreSession(
       "session-restored",
       "https://example.com",
-      { proxyEnabled: false },
+      {
+        profilePath: "/tmp/browser-profiles/sessions/session-restored",
+        proxyEnabled: false,
+      },
     );
 
     expect(session.page).toBe(persistedPage);

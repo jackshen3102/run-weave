@@ -1,6 +1,7 @@
 export interface CreateSessionRequest {
   url: string;
   proxyEnabled: boolean;
+  profilePath?: string;
 }
 
 export interface LoginRequest {
@@ -23,6 +24,7 @@ export interface SessionStatusResponse {
   connected: boolean;
   targetUrl: string;
   proxyEnabled: boolean;
+  profileMode: "managed" | "custom";
   createdAt: string;
 }
 
@@ -31,6 +33,7 @@ export interface SessionListItem {
   connected: boolean;
   targetUrl: string;
   proxyEnabled: boolean;
+  profileMode: "managed" | "custom";
   createdAt: string;
   lastActivityAt: string;
 }

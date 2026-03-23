@@ -1,12 +1,23 @@
+import { constants } from "node:fs";
+import { access, rm, stat } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
-import { rm } from "node:fs/promises";
 import { BrowserService, type BrowserSession } from "../browser/service";
+import { expandHomePath } from "../utils/path";
 import type { SessionStore } from "./store";
+import type { SessionProfileMode } from "./store";
+
+export class SessionProfileValidationError extends Error {}
+
+export class SessionProfileConflictError extends Error {}
 
 export interface SessionRecord {
   id: string;
   targetUrl: string;
   proxyEnabled: boolean;
+  profilePath: string;
+  profileMode: SessionProfileMode;
   createdAt: Date;
   lastActivityAt: Date;
   connected: boolean;
@@ -16,6 +27,7 @@ export interface SessionRecord {
 export interface CreateSessionOptions {
   targetUrl: string;
   proxyEnabled: boolean;
+  profilePath?: string;
 }
 
 export class SessionManager {
@@ -36,11 +48,17 @@ export class SessionManager {
     const sessionId = uuidv4();
     const createdAt = new Date();
     const lastActivityAt = new Date();
-    const profilePath = this.browserService.getSessionProfileDir(sessionId);
+    const { profileMode, profilePath } = await this.resolveProfileBinding(
+      sessionId,
+      options.profilePath,
+    );
     const browserSession = await this.browserService.createSession(
       sessionId,
       options.targetUrl,
-      { proxyEnabled: options.proxyEnabled },
+      {
+        profilePath,
+        proxyEnabled: options.proxyEnabled,
+      },
     );
 
     try {
@@ -50,6 +68,7 @@ export class SessionManager {
         proxyEnabled: options.proxyEnabled,
         connected: false,
         profilePath,
+        profileMode,
         createdAt: createdAt.toISOString(),
         lastActivityAt: lastActivityAt.toISOString(),
       });
@@ -62,6 +81,8 @@ export class SessionManager {
       id: sessionId,
       targetUrl: options.targetUrl,
       proxyEnabled: options.proxyEnabled,
+      profilePath,
+      profileMode,
       createdAt,
       lastActivityAt,
       connected: false,
@@ -105,10 +126,12 @@ export class SessionManager {
     await this.sessionStore.deleteSession(sessionId);
 
     try {
-      await rm(this.browserService.getSessionProfileDir(sessionId), {
-        recursive: true,
-        force: true,
-      });
+      if (session.profileMode === "managed") {
+        await rm(session.profilePath, {
+          recursive: true,
+          force: true,
+        });
+      }
     } catch (error) {
       console.error("[viewer-be] failed to remove session profile", {
         sessionId,
@@ -149,12 +172,17 @@ export class SessionManager {
         const browserSession = await this.browserService.restoreSession(
           record.id,
           record.targetUrl,
-          { proxyEnabled: record.proxyEnabled },
+          {
+            profilePath: record.profilePath,
+            proxyEnabled: record.proxyEnabled,
+          },
         );
         this.sessions.set(record.id, {
           id: record.id,
           targetUrl: record.targetUrl,
           proxyEnabled: record.proxyEnabled,
+          profilePath: record.profilePath,
+          profileMode: record.profileMode,
           createdAt: new Date(record.createdAt),
           lastActivityAt: new Date(record.lastActivityAt),
           connected: false,
@@ -183,5 +211,67 @@ export class SessionManager {
     }
     clearTimeout(timer);
     this.disconnectTimers.delete(sessionId);
+  }
+
+  private async resolveProfileBinding(
+    sessionId: string,
+    customProfilePath: string | undefined,
+  ): Promise<{ profileMode: SessionProfileMode; profilePath: string }> {
+    if (!customProfilePath) {
+      return {
+        profileMode: "managed",
+        profilePath: this.browserService.getSessionProfileDir(sessionId),
+      };
+    }
+
+    const resolvedProfilePath = path.resolve(
+      expandHomePath(customProfilePath, os.homedir()) ?? customProfilePath,
+    );
+    await this.validateCustomProfilePath(resolvedProfilePath);
+    this.ensureProfilePathAvailable(resolvedProfilePath);
+
+    return {
+      profileMode: "custom",
+      profilePath: resolvedProfilePath,
+    };
+  }
+
+  private ensureProfilePathAvailable(profilePath: string): void {
+    const existingSession = Array.from(this.sessions.values()).find(
+      (session) => session.profilePath === profilePath,
+    );
+
+    if (!existingSession) {
+      return;
+    }
+
+    throw new SessionProfileConflictError(
+      "Custom profile path is already in use by another session",
+    );
+  }
+
+  private async validateCustomProfilePath(profilePath: string): Promise<void> {
+    let profileStats;
+    try {
+      profileStats = await stat(profilePath);
+    } catch {
+      throw new SessionProfileValidationError(
+        "Custom profile path does not exist",
+      );
+    }
+
+    if (!profileStats.isDirectory()) {
+      throw new SessionProfileValidationError(
+        "Custom profile path must point to a directory",
+      );
+    }
+
+    try {
+      await access(profilePath, constants.R_OK | constants.W_OK);
+    } catch {
+      throw new SessionProfileValidationError(
+        "Custom profile path must be readable and writable",
+      );
+    }
   }
 }

@@ -23,6 +23,7 @@ export interface BrowserServiceOptions {
 
 export interface BrowserSessionOptions {
   proxyEnabled: boolean;
+  profilePath: string;
 }
 
 function isRestorablePage(page: Page): boolean {
@@ -84,7 +85,7 @@ export class BrowserService {
       return existingContext;
     }
 
-    const profileDir = this.getSessionProfileDir(sessionId);
+    const profileDir = options.profilePath;
     const remoteDebuggingPort =
       await this.allocateRemoteDebuggingPort(sessionId);
     await mkdir(profileDir, { recursive: true });

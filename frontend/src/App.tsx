@@ -28,9 +28,21 @@ function getSessionDisplayTitle(targetUrl: string): string {
   }
 }
 
+function getProxyStatusLabel(proxyEnabled: boolean): string {
+  return proxyEnabled ? "Proxy enabled" : "Proxy disabled";
+}
+
+function getProfileModeLabel(
+  profileMode: SessionListItem["profileMode"],
+): string {
+  return profileMode === "custom" ? "Custom profile" : "Managed profile";
+}
+
 export default function App() {
   const [url, setUrl] = useState("https://www.google.cn");
   const [proxyEnabled, setProxyEnabled] = useState(false);
+  const [useCustomProfilePath, setUseCustomProfilePath] = useState(false);
+  const [profilePath, setProfilePath] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -166,6 +178,12 @@ export default function App() {
       return;
     }
 
+    const trimmedProfilePath = profilePath.trim();
+    if (useCustomProfilePath && !trimmedProfilePath) {
+      setError("Profile path is required when using a custom profile.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -177,7 +195,11 @@ export default function App() {
 
       const data = await createViewerSession(
         API_BASE,
-        { url, proxyEnabled },
+        {
+          url,
+          proxyEnabled,
+          profilePath: useCustomProfilePath ? trimmedProfilePath : undefined,
+        },
         token,
       );
       await loadSessions();
@@ -295,11 +317,12 @@ export default function App() {
                         Last active{" "}
                         {formatDateTime(recentSession.lastActivityAt)}
                       </p>
-                      {recentSession.proxyEnabled && (
-                        <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
-                          Proxy enabled
-                        </p>
-                      )}
+                      <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+                        {getProxyStatusLabel(recentSession.proxyEnabled)}
+                      </p>
+                      <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+                        {getProfileModeLabel(recentSession.profileMode)}
+                      </p>
                     </div>
 
                     <div className="mt-12 flex flex-wrap items-center gap-3">
@@ -332,28 +355,13 @@ export default function App() {
               </section>
 
               <section className="animate-fade-rise flex flex-col justify-between rounded-[2rem] border border-border/60 bg-background/65 p-6 backdrop-blur-xl sm:p-7">
-                <div className="space-y-3">
+                <div>
                   <p className="text-xs font-medium uppercase tracking-[0.28em] text-muted-foreground/70">
                     New Session
                   </p>
-                  <p className="text-2xl font-semibold tracking-[-0.04em] text-foreground">
-                    Start somewhere else.
-                  </p>
-                  <p className="text-sm leading-6 text-muted-foreground">
-                    Keep the input thin and the first action obvious.
-                  </p>
-                  {recentSession && (
-                    <button
-                      type="button"
-                      className="text-sm font-medium tracking-[-0.01em] text-muted-foreground transition hover:text-foreground"
-                      onClick={() => urlInputRef.current?.focus()}
-                    >
-                      Need a clean take? Start a fresh address.
-                    </button>
-                  )}
                 </div>
 
-                <div className="mt-10 space-y-4">
+                <div className="mt-6 space-y-4">
                   <label className="sr-only" htmlFor="target-url">
                     Target URL
                   </label>
@@ -407,6 +415,58 @@ export default function App() {
                       className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
                     />
                   </label>
+
+                  <label
+                    htmlFor="session-custom-profile-enabled"
+                    className="flex items-center justify-between gap-4 rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3 text-sm text-foreground"
+                  >
+                    <span className="space-y-1">
+                      <span className="block font-medium">
+                        Use custom profile path
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        Reuse an existing Playwright profile directory.
+                      </span>
+                    </span>
+                    <input
+                      id="session-custom-profile-enabled"
+                      type="checkbox"
+                      aria-label="Use custom profile path"
+                      checked={useCustomProfilePath}
+                      onChange={(event) => {
+                        const nextChecked = event.target.checked;
+                        setUseCustomProfilePath(nextChecked);
+                        if (!nextChecked) {
+                          setProfilePath("");
+                        }
+                      }}
+                      disabled={loading}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                    />
+                  </label>
+
+                  {useCustomProfilePath && (
+                    <div className="rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3">
+                      <label
+                        className="block text-sm font-medium text-foreground"
+                        htmlFor="session-profile-path"
+                      >
+                        Profile path
+                      </label>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Must point to an existing writable Playwright profile
+                        directory.
+                      </p>
+                      <input
+                        id="session-profile-path"
+                        value={profilePath}
+                        onChange={(event) => setProfilePath(event.target.value)}
+                        disabled={loading}
+                        className="mt-3 h-11 w-full rounded-[1rem] border border-border/60 bg-card/75 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
+                        placeholder="/Users/name/playwright-profile"
+                      />
+                    </div>
+                  )}
 
                   {error && (
                     <p className="text-sm text-red-500" role="alert">
@@ -501,11 +561,12 @@ export default function App() {
                       <p className="text-xs text-muted-foreground/85">
                         Last active {formatDateTime(session.lastActivityAt)}
                       </p>
-                      {session.proxyEnabled && (
-                        <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
-                          Proxy enabled
-                        </p>
-                      )}
+                      <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+                        {getProxyStatusLabel(session.proxyEnabled)}
+                      </p>
+                      <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+                        {getProfileModeLabel(session.profileMode)}
+                      </p>
                     </div>
                     <div
                       className="relative flex items-center gap-2"

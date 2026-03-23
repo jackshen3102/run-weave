@@ -1,9 +1,12 @@
+export type SessionProfileMode = "managed" | "custom";
+
 export interface PersistedSessionRecord {
   id: string;
   targetUrl: string;
   proxyEnabled: boolean;
   connected: boolean;
   profilePath: string;
+  profileMode: SessionProfileMode;
   createdAt: string;
   lastActivityAt: string;
 }

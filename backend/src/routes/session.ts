@@ -6,11 +6,16 @@ import type {
   SessionListItem,
   SessionStatusResponse,
 } from "@browser-viewer/shared";
-import type { SessionManager } from "../session/manager";
+import {
+  SessionProfileConflictError,
+  SessionProfileValidationError,
+  type SessionManager,
+} from "../session/manager";
 
 const createSessionSchema = z.object({
   url: z.string().url(),
   proxyEnabled: z.boolean().optional().default(false),
+  profilePath: z.string().trim().min(1).optional(),
 });
 
 export function createSessionRouter(sessionManager: SessionManager): Router {
@@ -24,6 +29,7 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
         connected: session.connected,
         targetUrl: session.targetUrl,
         proxyEnabled: session.proxyEnabled,
+        profileMode: session.profileMode,
         createdAt: session.createdAt.toISOString(),
         lastActivityAt: session.lastActivityAt.toISOString(),
       }));
@@ -47,6 +53,7 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
       const session = await sessionManager.createSession({
         targetUrl: parsed.data.url,
         proxyEnabled: parsed.data.proxyEnabled,
+        profilePath: parsed.data.profilePath,
       });
       const payload: CreateSessionResponse = {
         sessionId: session.id,
@@ -54,6 +61,16 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
       };
       res.status(201).json(payload);
     } catch (error) {
+      if (error instanceof SessionProfileValidationError) {
+        res.status(400).json({ message: error.message });
+        return;
+      }
+
+      if (error instanceof SessionProfileConflictError) {
+        res.status(409).json({ message: error.message });
+        return;
+      }
+
       console.error("[viewer-be] create session failed", {
         error: String(error),
       });
@@ -75,6 +92,7 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
       connected: session.connected,
       targetUrl: session.targetUrl,
       proxyEnabled: session.proxyEnabled,
+      profileMode: session.profileMode,
       createdAt: session.createdAt.toISOString(),
     };
 

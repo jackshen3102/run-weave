@@ -13,6 +13,7 @@ interface SessionRow {
   proxy_enabled: number;
   connected: number;
   profile_path: string;
+  profile_mode: string;
   created_at: string;
   last_activity_at: string;
 }
@@ -38,6 +39,7 @@ export class SQLiteSessionStore implements SessionStore {
         proxy_enabled integer not null default 0,
         connected integer not null default 0,
         profile_path text not null,
+        profile_mode text not null default 'managed',
         created_at text not null,
         last_activity_at text not null
       );
@@ -46,6 +48,7 @@ export class SQLiteSessionStore implements SessionStore {
       on sessions(last_activity_at);
     `);
     this.ensureProxyEnabledColumn(database);
+    this.ensureProfileModeColumn(database);
 
     this.database = database;
   }
@@ -65,6 +68,7 @@ export class SQLiteSessionStore implements SessionStore {
             proxy_enabled,
             connected,
             profile_path,
+            profile_mode,
             created_at,
             last_activity_at
           from sessions
@@ -86,6 +90,7 @@ export class SQLiteSessionStore implements SessionStore {
             proxy_enabled,
             connected,
             profile_path,
+            profile_mode,
             created_at,
             last_activity_at
           from sessions
@@ -107,9 +112,10 @@ export class SQLiteSessionStore implements SessionStore {
             proxy_enabled,
             connected,
             profile_path,
+            profile_mode,
             created_at,
             last_activity_at
-          ) values (?, ?, ?, ?, ?, ?, ?)
+          ) values (?, ?, ?, ?, ?, ?, ?, ?)
         `,
       )
       .run(
@@ -118,6 +124,7 @@ export class SQLiteSessionStore implements SessionStore {
         session.proxyEnabled ? 1 : 0,
         session.connected ? 1 : 0,
         session.profilePath,
+        session.profileMode,
         session.createdAt,
         session.lastActivityAt,
       );
@@ -165,6 +172,20 @@ export class SQLiteSessionStore implements SessionStore {
     );
   }
 
+  private ensureProfileModeColumn(database: Database.Database): void {
+    const columns = database
+      .prepare("pragma table_info(sessions)")
+      .all() as TableInfoRow[];
+
+    if (columns.some((column) => column.name === "profile_mode")) {
+      return;
+    }
+
+    database.exec(
+      "alter table sessions add column profile_mode text not null default 'managed'",
+    );
+  }
+
   private toRecord(row: SessionRow): PersistedSessionRecord {
     return {
       id: row.id,
@@ -172,6 +193,7 @@ export class SQLiteSessionStore implements SessionStore {
       proxyEnabled: row.proxy_enabled === 1,
       connected: row.connected === 1,
       profilePath: row.profile_path,
+      profileMode: row.profile_mode === "custom" ? "custom" : "managed",
       createdAt: row.created_at,
       lastActivityAt: row.last_activity_at,
     };

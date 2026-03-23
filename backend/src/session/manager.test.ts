@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -66,6 +66,7 @@ describe("SessionManager", () => {
         proxyEnabled: true,
         connected: false,
         profilePath: browserServiceMock.getSessionProfileDir(session.id),
+        profileMode: "managed",
       }),
     );
 
@@ -138,6 +139,7 @@ describe("SessionManager", () => {
         proxyEnabled: true,
         connected: true,
         profilePath: browserServiceMock.getSessionProfileDir("session-1"),
+        profileMode: "managed",
         createdAt: "2026-03-21T00:00:00.000Z",
         lastActivityAt: "2026-03-21T00:01:00.000Z",
       },
@@ -156,7 +158,10 @@ describe("SessionManager", () => {
     expect(browserServiceMock.restoreSession).toHaveBeenCalledWith(
       "session-1",
       "https://example.com",
-      { proxyEnabled: true },
+      {
+        profilePath: browserServiceMock.getSessionProfileDir("session-1"),
+        proxyEnabled: true,
+      },
     );
     expect(sessionStoreMock.updateSessionConnection).toHaveBeenCalledWith({
       sessionId: "session-1",
@@ -193,5 +198,87 @@ describe("SessionManager", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("uses a validated custom profile path without deleting it on destroy", async () => {
+    const browserServiceMock = createBrowserServiceMock();
+    const sessionStoreMock = createSessionStoreMock();
+    const manager = new SessionManager(
+      browserServiceMock as never,
+      sessionStoreMock,
+    );
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "custom-profile-"));
+    tempDirs.push(tempDir);
+
+    const session = await manager.createSession({
+      targetUrl: "https://example.com",
+      proxyEnabled: false,
+      profilePath: tempDir,
+    });
+
+    expect(browserServiceMock.createSession).toHaveBeenCalledWith(
+      session.id,
+      "https://example.com",
+      {
+        profilePath: tempDir,
+        proxyEnabled: false,
+      },
+    );
+    expect(sessionStoreMock.insertSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profileMode: "custom",
+        profilePath: tempDir,
+      }),
+    );
+
+    await manager.destroySession(session.id);
+
+    await expect(access(tempDir)).resolves.toBeUndefined();
+    await manager.dispose();
+  });
+
+  it("rejects a custom profile path that does not exist", async () => {
+    const browserServiceMock = createBrowserServiceMock();
+    const sessionStoreMock = createSessionStoreMock();
+    const manager = new SessionManager(
+      browserServiceMock as never,
+      sessionStoreMock,
+    );
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "missing-profile-"));
+    tempDirs.push(tempDir);
+    const missingPath = path.join(tempDir, "does-not-exist");
+
+    await expect(
+      manager.createSession({
+        targetUrl: "https://example.com",
+        proxyEnabled: false,
+        profilePath: missingPath,
+      }),
+    ).rejects.toThrow(/profile path/i);
+
+    await manager.dispose();
+  });
+
+  it("rejects a custom profile path that points to a file", async () => {
+    const browserServiceMock = createBrowserServiceMock();
+    const sessionStoreMock = createSessionStoreMock();
+    const manager = new SessionManager(
+      browserServiceMock as never,
+      sessionStoreMock,
+    );
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "file-profile-"));
+    tempDirs.push(tempDir);
+    const filePath = path.join(tempDir, "profile.txt");
+    await writeFile(filePath, "test", "utf8");
+
+    await expect(
+      manager.createSession({
+        targetUrl: "https://example.com",
+        proxyEnabled: false,
+        profilePath: filePath,
+      }),
+    ).rejects.toThrow(/profile path/i);
+
+    await manager.dispose();
   });
 });
