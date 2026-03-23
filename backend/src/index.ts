@@ -18,7 +18,6 @@ import { SQLiteSessionStore } from "./session/sqlite-store";
 import { listenWithFallback } from "./server/listen";
 import { resolveStoragePaths } from "./utils/path";
 import { attachWebSocketServer } from "./ws/server";
-import { attachDevtoolsProxyServer } from "./ws/devtools-proxy";
 import { getSessionTabPage } from "./ws/context";
 
 interface RuntimeConfig {
@@ -184,12 +183,6 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
     .filter(Boolean);
 }
 
-function resolveWsHostForRequest(req: express.Request): string {
-  const forwardedHost = req.get("x-forwarded-host")?.split(",")[0]?.trim();
-  const directHost = req.get("host")?.trim();
-  return forwardedHost || directHost || "127.0.0.1";
-}
-
 function resolveFrontendDistDir(): string {
   return path.resolve(CURRENT_DIR_PATH, "../../frontend/dist");
 }
@@ -285,8 +278,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
         return;
       }
 
-      const wsHost = resolveWsHostForRequest(req);
-      const wsEndpoint = `${wsHost}/ws/devtools-proxy?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(token)}&tabId=${encodeURIComponent(tabId)}`;
+      const wsEndpoint = `127.0.0.1:${remoteDebuggingPort}/devtools/page/${encodeURIComponent(targetId)}`;
       const devtoolsUrl = buildDevtoolsFrontendUrl({
         revision,
         wsEndpoint,
@@ -354,14 +346,6 @@ async function startRuntime(): Promise<void> {
   attachWebSocketServer(server, services.sessionManager, services.authService, {
     devtoolsEnabled,
   });
-  attachDevtoolsProxyServer(
-    server,
-    services.sessionManager,
-    services.authService,
-    {
-      enabled: devtoolsEnabled,
-    },
-  );
 
   await listenWithFallback(server, runtimeConfig.preferredPort, {
     host: runtimeConfig.host,
