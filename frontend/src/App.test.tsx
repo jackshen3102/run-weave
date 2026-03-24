@@ -37,7 +37,7 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows a proxy toggle on the create-session form for authenticated users", async () => {
+  it("shows a proxy toggle when using managed browser in advanced settings", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
     vi.stubGlobal(
       "fetch",
@@ -49,6 +49,10 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getByText("New Session")).toBeInTheDocument();
     });
+
+    fireEvent.click(screen.getByRole("button", { name: "New Browser" }));
+    fireEvent.click(screen.getByText(/Advanced/));
+
     expect(screen.getByLabelText("Enable proxy")).toBeInTheDocument();
   });
 
@@ -129,20 +133,15 @@ describe("App", () => {
       expect(screen.getByText("New Session")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByLabelText("Attach to existing browser"));
-
     const endpointInput = screen.getByLabelText("CDP endpoint");
     await waitFor(() => {
       expect(endpointInput).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByLabelText("Target URL"), {
-      target: { value: "https://example.com" },
-    });
     fireEvent.change(endpointInput, {
       target: { value: "http://127.0.0.1:9333" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -150,7 +149,7 @@ describe("App", () => {
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
-            url: "https://example.com",
+            url: "https://www.google.cn",
             source: {
               type: "connect-cdp",
               endpoint: "http://127.0.0.1:9333",
@@ -218,6 +217,9 @@ describe("App", () => {
       expect(screen.getByText("New Session")).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "New Browser" }));
+    fireEvent.click(screen.getByText(/Advanced/));
+
     fireEvent.change(screen.getByLabelText("Target URL"), {
       target: { value: "https://example.com" },
     });
@@ -226,7 +228,7 @@ describe("App", () => {
         value: '{"authorization":"Bearer demo","x-team":"alpha"}',
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(

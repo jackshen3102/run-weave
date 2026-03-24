@@ -87,9 +87,9 @@ export default function App() {
   const [url, setUrl] = useState("https://www.google.cn");
   const [sessionSourceType, setSessionSourceType] = useState<
     "launch" | "connect-cdp"
-  >("launch");
+  >("connect-cdp");
   const [proxyEnabled, setProxyEnabled] = useState(false);
-  const [cdpEndpoint, setCdpEndpoint] = useState("");
+  const [cdpEndpoint, setCdpEndpoint] = useState("http://127.0.0.1:9222");
   const [requestHeadersInput, setRequestHeadersInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -343,7 +343,7 @@ export default function App() {
 
         <section className="flex flex-1 items-center pb-4 pt-2 sm:pt-4">
           <div className="w-full">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.38fr)_minmax(320px,0.62fr)]">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
               <section
                 className={`animate-fade-rise rounded-[2rem] border border-border/60 bg-card/75 p-6 shadow-[0_30px_120px_-70px_rgba(17,24,39,0.65)] backdrop-blur-xl transition hover:border-border/80 sm:p-8 ${
                   recentSession ? "cursor-pointer" : ""
@@ -435,174 +435,142 @@ export default function App() {
                 )}
               </section>
 
-              <section className="animate-fade-rise flex flex-col justify-between rounded-[2rem] border border-border/60 bg-background/65 p-6 backdrop-blur-xl sm:p-7">
+              <section className="animate-fade-rise mx-auto w-full max-w-[860px] rounded-[1.5rem] border border-border/60 bg-background/65 p-4 backdrop-blur-xl sm:p-5">
                 <div>
                   <p className="text-xs font-medium uppercase tracking-[0.28em] text-muted-foreground/70">
                     New Session
                   </p>
                 </div>
 
-                <div className="mt-6 space-y-4">
-                  <label className="sr-only" htmlFor="target-url">
-                    Target URL
-                  </label>
-                  <div className="rounded-[1.5rem] border border-border/60 bg-card/75 p-3 shadow-[0_18px_60px_-40px_rgba(17,24,39,0.6)]">
-                    <input
-                      id="target-url"
-                      ref={urlInputRef}
-                      value={url}
-                      onChange={(event) => setUrl(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && !loading) {
-                          event.preventDefault();
-                          void createSession();
-                        }
-                      }}
+                <div className="mt-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-1.5 rounded-full border border-border/60 bg-background/60 p-0.5">
+                    <Button
+                      type="button"
+                      variant={
+                        sessionSourceType === "connect-cdp" ? "default" : "ghost"
+                      }
+                      size="sm"
+                      className="h-8 rounded-full px-3 text-xs"
+                      onClick={() => setSessionSourceType("connect-cdp")}
                       disabled={loading}
-                      className="h-12 w-full border-0 bg-transparent px-3 text-base outline-none placeholder:text-muted-foreground/55"
-                      placeholder="https://example.com"
-                    />
+                    >
+                      Attach Browser
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={sessionSourceType === "launch" ? "default" : "ghost"}
+                      size="sm"
+                      className="h-8 rounded-full px-3 text-xs"
+                      onClick={() => setSessionSourceType("launch")}
+                      disabled={loading}
+                    >
+                      New Browser
+                    </Button>
                   </div>
 
+                  {sessionSourceType === "connect-cdp" ? (
+                    <div className="rounded-[1rem] border border-primary/40 bg-card/85 px-3 py-2.5">
+                      <p className="mb-2 text-xs text-muted-foreground">
+                        Connect to an existing Chromium CDP endpoint.
+                      </p>
+                      <input
+                        id="session-cdp-endpoint"
+                        ref={urlInputRef}
+                        aria-label="CDP endpoint"
+                        value={cdpEndpoint}
+                        onChange={(event) => setCdpEndpoint(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !loading) {
+                            event.preventDefault();
+                            void createSession();
+                          }
+                        }}
+                        disabled={loading}
+                        className="h-10 w-full rounded-[0.9rem] border border-border/60 bg-background/70 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
+                        placeholder="http://127.0.0.1:9222"
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-[1rem] border border-primary/40 bg-card/85 px-3 py-2.5">
+                      <p className="text-xs text-muted-foreground">
+                        Start a new managed Playwright browser session.
+                      </p>
+                      <input
+                        id="target-url"
+                        aria-label="Target URL"
+                        value={url}
+                        onChange={(event) => setUrl(event.target.value)}
+                        disabled={loading}
+                        className="mt-2 h-10 w-full rounded-[0.9rem] border border-border/60 bg-card/75 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
+                        placeholder="https://example.com"
+                      />
+                    </div>
+                  )}
+
+                  {sessionSourceType === "launch" ? (
+                    <details className="rounded-[0.9rem] border border-border/60 bg-background/60 px-3 py-2">
+                      <summary className="cursor-pointer text-sm font-medium text-foreground marker:content-['']">
+                        <span className="inline-flex items-center gap-2">▸ Advanced</span>
+                      </summary>
+                      <div className="mt-3 space-y-3">
+                        <label
+                          htmlFor="session-proxy-enabled"
+                          className="flex items-center justify-between gap-4 rounded-[1rem] border border-border/60 bg-card/75 px-3 py-3 text-sm text-foreground"
+                        >
+                          <span className="space-y-1">
+                            <span className="block font-medium">Enable proxy</span>
+                            <span className="block text-xs text-muted-foreground">
+                              Route this session through Whistle at 127.0.0.1:8899.
+                            </span>
+                          </span>
+                          <input
+                            id="session-proxy-enabled"
+                            type="checkbox"
+                            aria-label="Enable proxy"
+                            checked={proxyEnabled}
+                            onChange={(event) => setProxyEnabled(event.target.checked)}
+                            disabled={loading}
+                            className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                          />
+                        </label>
+
+                        <div className="rounded-[1rem] border border-border/60 bg-card/75 px-3 py-3">
+                          <label
+                            className="block text-sm font-medium text-foreground"
+                            htmlFor="session-request-headers"
+                          >
+                            Request headers
+                          </label>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Optional JSON object applied to every request in this
+                            session.
+                          </p>
+                          <textarea
+                            id="session-request-headers"
+                            aria-label="Request headers"
+                            value={requestHeadersInput}
+                            onChange={(event) =>
+                              setRequestHeadersInput(event.target.value)
+                            }
+                            disabled={loading}
+                            className="mt-3 min-h-28 w-full rounded-[0.9rem] border border-border/60 bg-background/70 px-3 py-3 text-sm outline-none placeholder:text-muted-foreground/55"
+                            placeholder='{"x-session-id":"demo","x-team":"alpha"}'
+                          />
+                        </div>
+                      </div>
+                    </details>
+                  ) : null}
+
                   <Button
-                    className="h-11 w-full rounded-full text-sm"
+                    className="h-10 w-full rounded-full text-[13px] font-medium"
                     onClick={() => {
                       void createSession();
                     }}
                     disabled={loading}
                   >
-                    {loading ? "Starting..." : "Start"}
+                    {loading ? "Starting..." : "Connect"}
                   </Button>
 
-                  <div className="rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3">
-                    <p className="text-sm font-medium text-foreground">
-                      Session source
-                    </p>
-                    <div className="mt-3 space-y-3">
-                      <label
-                        htmlFor="session-source-launch"
-                        className="flex items-center justify-between gap-4 rounded-[1rem] border border-border/50 bg-card/75 px-3 py-3 text-sm text-foreground"
-                      >
-                        <span className="space-y-1">
-                          <span className="block font-medium">
-                            Start new browser
-                          </span>
-                          <span className="block text-xs text-muted-foreground">
-                            Launch a new managed Playwright browser.
-                          </span>
-                        </span>
-                        <input
-                          id="session-source-launch"
-                          type="radio"
-                          name="session-source"
-                          aria-label="Start new browser"
-                          checked={sessionSourceType === "launch"}
-                          onChange={() => setSessionSourceType("launch")}
-                          disabled={loading}
-                          className="h-4 w-4 border-border text-primary focus:ring-primary/40"
-                        />
-                      </label>
-                      <label
-                        htmlFor="session-source-connect-cdp"
-                        className="flex items-center justify-between gap-4 rounded-[1rem] border border-border/50 bg-card/75 px-3 py-3 text-sm text-foreground"
-                      >
-                        <span className="space-y-1">
-                          <span className="block font-medium">
-                            Attach to existing browser
-                          </span>
-                          <span className="block text-xs text-muted-foreground">
-                            Connect to a local Chromium CDP endpoint.
-                          </span>
-                        </span>
-                        <input
-                          id="session-source-connect-cdp"
-                          type="radio"
-                          name="session-source"
-                          aria-label="Attach to existing browser"
-                          checked={sessionSourceType === "connect-cdp"}
-                          onChange={() => setSessionSourceType("connect-cdp")}
-                          disabled={loading}
-                          className="h-4 w-4 border-border text-primary focus:ring-primary/40"
-                        />
-                      </label>
-                    </div>
-                  </div>
-
-                  {sessionSourceType === "launch" ? (
-                    <>
-                      <label
-                        htmlFor="session-proxy-enabled"
-                        className="flex items-center justify-between gap-4 rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3 text-sm text-foreground"
-                      >
-                        <span className="space-y-1">
-                          <span className="block font-medium">
-                            Enable proxy
-                          </span>
-                          <span className="block text-xs text-muted-foreground">
-                            Route this session through Whistle at
-                            127.0.0.1:8899.
-                          </span>
-                        </span>
-                        <input
-                          id="session-proxy-enabled"
-                          type="checkbox"
-                          aria-label="Enable proxy"
-                          checked={proxyEnabled}
-                          onChange={(event) =>
-                            setProxyEnabled(event.target.checked)
-                          }
-                          disabled={loading}
-                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
-                        />
-                      </label>
-
-                      <div className="rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3">
-                        <label
-                          className="block text-sm font-medium text-foreground"
-                          htmlFor="session-request-headers"
-                        >
-                          Request headers
-                        </label>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Optional JSON object applied to every request in this
-                          session.
-                        </p>
-                        <textarea
-                          id="session-request-headers"
-                          aria-label="Request headers"
-                          value={requestHeadersInput}
-                          onChange={(event) =>
-                            setRequestHeadersInput(event.target.value)
-                          }
-                          disabled={loading}
-                          className="mt-3 min-h-28 w-full rounded-[1rem] border border-border/60 bg-card/75 px-3 py-3 text-sm outline-none placeholder:text-muted-foreground/55"
-                          placeholder='{"x-session-id":"demo","x-team":"alpha"}'
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <div className="rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3">
-                      <label
-                        className="block text-sm font-medium text-foreground"
-                        htmlFor="session-cdp-endpoint"
-                      >
-                        CDP endpoint
-                      </label>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Connect to an existing Chromium endpoint such as
-                        http://127.0.0.1:9222.
-                      </p>
-                      <input
-                        id="session-cdp-endpoint"
-                        aria-label="CDP endpoint"
-                        value={cdpEndpoint}
-                        onChange={(event) => setCdpEndpoint(event.target.value)}
-                        disabled={loading}
-                        className="mt-3 h-11 w-full rounded-[1rem] border border-border/60 bg-card/75 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
-                        placeholder="http://127.0.0.1:9222"
-                      />
-                    </div>
-                  )}
 
                   {error && (
                     <p className="text-sm text-red-500" role="alert">
