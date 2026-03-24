@@ -2,10 +2,9 @@ import type { SessionListItem as SessionListItemType } from "@browser-viewer/sha
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import {
-  formatDateTime,
   getHeaderSummaryLabel,
   getProxyStatusLabel,
-  getSessionDisplayTitle,
+  getSessionContextLabel,
   getSessionSourceLabel,
 } from "../utils";
 
@@ -29,41 +28,28 @@ export function SessionListItem({
   return (
     <article className="rounded-[1.5rem] border border-border/60 bg-card/72 p-4 transition-colors hover:border-border/80">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-2">
+        <div className="min-w-0 flex-1 space-y-3">
           <div className="flex items-center gap-2">
             <span
               className={`h-2 w-2 rounded-full ${
                 session.connected ? "bg-emerald-500" : "bg-stone-400"
               }`}
             />
-            <p className="truncate text-base font-medium tracking-[-0.03em] text-foreground">
-              {getSessionDisplayTitle(session.targetUrl)}
-            </p>
+            <span className="text-xs text-muted-foreground">
+              {session.connected ? "Live" : "Idle"}
+            </span>
           </div>
-          <p className="truncate text-sm text-muted-foreground">{session.targetUrl}</p>
-          <p className="text-xs text-muted-foreground/85">
-            Last active {formatDateTime(session.lastActivityAt)}
-          </p>
-          <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
-            {getProxyStatusLabel(session.proxyEnabled)}
-          </p>
-          <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+          <p className="text-xl font-semibold tracking-[-0.04em] text-foreground">
             {getSessionSourceLabel(session.sourceType)}
           </p>
-          <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+          <p className="truncate text-sm text-muted-foreground/80">
+            {getSessionContextLabel(session)}
+          </p>
+          <p className="text-sm text-muted-foreground/80">
+            {getProxyStatusLabel(session.proxyEnabled)}
+            {" \u00b7 "}
             {getHeaderSummaryLabel(session.headers)}
           </p>
-          {Object.keys(session.headers).length > 0 && (
-            <div className="space-y-1 rounded-2xl border border-border/50 bg-background/45 px-3 py-2 text-xs text-muted-foreground">
-              {Object.entries(session.headers).map(([key, value]) => (
-                <p key={key} className="break-all">
-                  <span className="font-medium text-foreground">{key}</span>
-                  {": "}
-                  {value}
-                </p>
-              ))}
-            </div>
-          )}
         </div>
         <div
           className="relative flex items-center gap-2"
@@ -95,7 +81,7 @@ export function SessionListItem({
 
       <div className="mt-5 flex items-center justify-end gap-3">
         <Button size="sm" className="rounded-full px-4" onClick={onResume}>
-          Resume
+          Open
         </Button>
       </div>
     </article>

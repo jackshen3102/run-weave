@@ -41,6 +41,7 @@ export interface SessionStatusResponse {
   targetUrl: string;
   proxyEnabled: boolean;
   sourceType: SessionSourceType;
+  cdpEndpoint?: string;
   headers: SessionHeaders;
   createdAt: string;
 }
@@ -51,6 +52,7 @@ export interface SessionListItem {
   targetUrl: string;
   proxyEnabled: boolean;
   sourceType: SessionSourceType;
+  cdpEndpoint?: string;
   headers: SessionHeaders;
   createdAt: string;
   lastActivityAt: string;

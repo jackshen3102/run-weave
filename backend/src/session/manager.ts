@@ -16,6 +16,7 @@ export interface SessionRecord {
   targetUrl: string;
   proxyEnabled: boolean;
   sourceType: "launch" | "connect-cdp";
+  cdpEndpoint?: string;
   headers: SessionHeaders;
   createdAt: Date;
   lastActivityAt: Date;
@@ -56,6 +57,7 @@ function buildSessionRecord(
     targetUrl: record.targetUrl,
     proxyEnabled: record.proxyEnabled,
     sourceType: "launch",
+    cdpEndpoint: undefined,
     headers: record.headers,
     createdAt: new Date(record.createdAt),
     lastActivityAt: new Date(record.lastActivityAt),
@@ -119,6 +121,7 @@ export class SessionManager {
         targetUrl: options.targetUrl,
         proxyEnabled: false,
         sourceType: "connect-cdp",
+        cdpEndpoint: source.endpoint,
         headers: {},
         createdAt: new Date(),
         lastActivityAt: new Date(),

@@ -8,6 +8,7 @@ interface MockSession {
   targetUrl: string;
   proxyEnabled: boolean;
   sourceType: "launch" | "connect-cdp";
+  cdpEndpoint?: string;
   headers: Record<string, string>;
   connected: boolean;
   createdAt: Date;
@@ -37,6 +38,10 @@ function createTestServer(sessionState: { current: MockSession | null }) {
               ? options.source.proxyEnabled
               : false,
           sourceType: options.source.type,
+          cdpEndpoint:
+            options.source.type === "connect-cdp"
+              ? options.source.endpoint
+              : undefined,
           headers:
             options.source.type === "launch" ? options.source.headers : {},
           connected: false,
@@ -210,5 +215,15 @@ describe("session routes", () => {
         endpoint: "http://127.0.0.1:9333",
       },
     });
+
+    const listResponse = await fetch(`http://127.0.0.1:${port}/api/session`);
+    expect(listResponse.status).toBe(200);
+    const listPayload = (await listResponse.json()) as Array<{
+      sessionId: string;
+      sourceType: "launch" | "connect-cdp";
+      cdpEndpoint?: string;
+    }>;
+    expect(listPayload[0]?.sourceType).toBe("connect-cdp");
+    expect(listPayload[0]?.cdpEndpoint).toBe("http://127.0.0.1:9333");
   });
 });

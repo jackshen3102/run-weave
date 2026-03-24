@@ -43,6 +43,7 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
         targetUrl: session.targetUrl,
         proxyEnabled: session.proxyEnabled,
         sourceType: session.sourceType,
+        cdpEndpoint: session.cdpEndpoint,
         headers: session.headers,
         createdAt: session.createdAt.toISOString(),
         lastActivityAt: session.lastActivityAt.toISOString(),
@@ -97,6 +98,7 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
       targetUrl: session.targetUrl,
       proxyEnabled: session.proxyEnabled,
       sourceType: session.sourceType,
+      cdpEndpoint: session.cdpEndpoint,
       headers: session.headers,
       createdAt: session.createdAt.toISOString(),
     };

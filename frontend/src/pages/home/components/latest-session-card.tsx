@@ -1,10 +1,9 @@
 import type { SessionListItem } from "@browser-viewer/shared";
 import { Button } from "../../../components/ui/button";
 import {
-  formatDateTime,
   getHeaderSummaryLabel,
   getProxyStatusLabel,
-  getSessionDisplayTitle,
+  getSessionContextLabel,
   getSessionSourceLabel,
 } from "../utils";
 
@@ -52,23 +51,16 @@ export function LatestSessionCard({
             </span>
           </div>
 
-          <div className="mt-12 space-y-4">
-            <p className="text-4xl font-semibold tracking-[-0.06em] text-foreground sm:text-[4.2rem] sm:leading-[0.96]">
-              {getSessionDisplayTitle(session.targetUrl)}
-            </p>
-            <p className="max-w-xl text-sm text-muted-foreground sm:text-base">
-              {session.targetUrl}
-            </p>
-            <p className="text-sm text-muted-foreground/85">
-              Last active {formatDateTime(session.lastActivityAt)}
-            </p>
-            <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
-              {getProxyStatusLabel(session.proxyEnabled)}
-            </p>
-            <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+          <div className="mt-12 space-y-5">
+            <p className="text-3xl font-semibold tracking-[-0.05em] text-foreground sm:text-4xl">
               {getSessionSourceLabel(session.sourceType)}
             </p>
-            <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+            <p className="max-w-xl truncate text-sm text-muted-foreground/80 sm:text-base">
+              {getSessionContextLabel(session)}
+            </p>
+            <p className="text-sm text-muted-foreground/80 sm:text-base">
+              {getProxyStatusLabel(session.proxyEnabled)}
+              {" \u00b7 "}
               {getHeaderSummaryLabel(session.headers)}
             </p>
           </div>
@@ -81,7 +73,7 @@ export function LatestSessionCard({
                 onEnterSession(session.sessionId);
               }}
             >
-              Resume
+              Open
             </Button>
           </div>
         </>

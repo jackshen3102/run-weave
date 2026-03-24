@@ -19,7 +19,20 @@ export function getProxyStatusLabel(proxyEnabled: boolean): string {
 export function getSessionSourceLabel(
   sourceType: SessionListItem["sourceType"],
 ): string {
-  return sourceType === "connect-cdp" ? "Attached browser" : "Launched browser";
+  return sourceType === "connect-cdp" ? "Attach Browser" : "New Browser";
+}
+
+export function getSessionContextLabel(session: SessionListItem): string {
+  if (session.sourceType === "connect-cdp" && session.cdpEndpoint) {
+    try {
+      const endpoint = new URL(session.cdpEndpoint);
+      return `Port ${endpoint.port || endpoint.hostname}`;
+    } catch {
+      return session.cdpEndpoint;
+    }
+  }
+
+  return session.targetUrl;
 }
 
 export function getHeaderSummaryLabel(headers: SessionListItem["headers"]): string {

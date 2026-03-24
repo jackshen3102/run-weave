@@ -95,6 +95,7 @@ describe("App", () => {
             connected: false,
             proxyEnabled: true,
             sourceType: "connect-cdp",
+            cdpEndpoint: "http://127.0.0.1:9333",
             headers: {
               "x-team": "alpha",
             },
@@ -124,12 +125,52 @@ describe("App", () => {
       expect(screen.getByText("Quiet history.")).toBeInTheDocument();
     });
 
-    expect(screen.getAllByText("Proxy enabled").length).toBeGreaterThan(0);
-    expect(screen.getByText("Proxy disabled")).toBeInTheDocument();
-    expect(screen.getAllByText("Attached browser").length).toBeGreaterThan(0);
-    expect(screen.getByText("Launched browser")).toBeInTheDocument();
-    expect(screen.getAllByText("1 header").length).toBeGreaterThan(0);
-    expect(screen.getByText("No custom headers")).toBeInTheDocument();
+    expect(
+      screen.getAllByText((content) => content.includes("Proxy enabled")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText((content) => content.includes("Proxy disabled")),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Attach Browser").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("New Browser").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((content) => content.includes("1 header")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText((content) => content.includes("No custom headers")),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Port 9333").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Open" }).length).toBeGreaterThan(0);
+  });
+
+  it("shows the CDP port in the latest session card for attached browsers", async () => {
+    localStorage.setItem("viewer.auth.token", "token-1");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => [
+          {
+            sessionId: "session-1",
+            targetUrl: "https://www.coze.cn",
+            lastActivityAt: "2026-03-23T07:31:19.000Z",
+            connected: false,
+            proxyEnabled: false,
+            sourceType: "connect-cdp",
+            cdpEndpoint: "http://127.0.0.1:9333",
+            headers: {},
+          },
+        ],
+      })),
+    );
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByText("Latest Session")).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText("Port 9333").length).toBeGreaterThan(0);
   });
 
   it("shows a CDP endpoint input and submits it when attaching to an existing browser", async () => {
@@ -184,7 +225,7 @@ describe("App", () => {
     });
   });
 
-  it("submits custom session headers and shows them in the list", async () => {
+  it("submits custom session headers", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
     const fetchMock = vi.fn();
     fetchMock
@@ -267,10 +308,8 @@ describe("App", () => {
       );
     });
 
-    screen.getByRole("button", { name: "Sessions 1" }).click();
-
     await waitFor(() => {
-      expect(screen.getAllByText("1 header").length).toBeGreaterThan(0);
+      expect(screen.getByText("Viewer route session-1")).toBeInTheDocument();
     });
   });
 });
