@@ -1,16 +1,23 @@
-import { constants } from "node:fs";
-import { access, rm, stat } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import { rm } from "node:fs/promises";
+import type { SessionHeaders } from "@browser-viewer/shared";
 import { v4 as uuidv4 } from "uuid";
-import { BrowserService, type BrowserSession } from "../browser/service";
-import { expandHomePath } from "../utils/path";
-import type { SessionStore } from "./store";
-import type { SessionProfileMode } from "./store";
+import {
+  BrowserService,
+  type BrowserSession,
+  type BrowserSessionOptions,
+} from "../browser/service";
+import {
+  resolveSessionProfileBinding,
+  SessionProfileConflictError,
+  SessionProfileValidationError,
+} from "./profile-binding";
+import type {
+  PersistedSessionRecord,
+  SessionProfileMode,
+  SessionStore,
+} from "./store";
 
-export class SessionProfileValidationError extends Error {}
-
-export class SessionProfileConflictError extends Error {}
+export { SessionProfileConflictError, SessionProfileValidationError };
 
 export interface SessionRecord {
   id: string;
@@ -18,6 +25,7 @@ export interface SessionRecord {
   proxyEnabled: boolean;
   profilePath: string;
   profileMode: SessionProfileMode;
+  headers: SessionHeaders;
   createdAt: Date;
   lastActivityAt: Date;
   connected: boolean;
@@ -28,6 +36,53 @@ export interface CreateSessionOptions {
   targetUrl: string;
   proxyEnabled: boolean;
   profilePath?: string;
+  headers?: SessionHeaders;
+}
+
+function buildBrowserSessionOptions(session: {
+  profilePath: string;
+  proxyEnabled: boolean;
+  headers: SessionHeaders;
+}): BrowserSessionOptions {
+  return {
+    profilePath: session.profilePath,
+    proxyEnabled: session.proxyEnabled,
+    headers: session.headers,
+  };
+}
+
+function buildSessionRecord(
+  record: PersistedSessionRecord,
+  browserSession: BrowserSession,
+): SessionRecord {
+  return {
+    id: record.id,
+    targetUrl: record.targetUrl,
+    proxyEnabled: record.proxyEnabled,
+    profilePath: record.profilePath,
+    profileMode: record.profileMode,
+    headers: record.headers,
+    createdAt: new Date(record.createdAt),
+    lastActivityAt: new Date(record.lastActivityAt),
+    connected: false,
+    browserSession,
+  };
+}
+
+function buildPersistedSessionRecord(
+  session: SessionRecord,
+): PersistedSessionRecord {
+  return {
+    id: session.id,
+    targetUrl: session.targetUrl,
+    proxyEnabled: session.proxyEnabled,
+    connected: session.connected,
+    profilePath: session.profilePath,
+    profileMode: session.profileMode,
+    headers: session.headers,
+    createdAt: session.createdAt.toISOString(),
+    lastActivityAt: session.lastActivityAt.toISOString(),
+  };
 }
 
 export class SessionManager {
@@ -46,48 +101,48 @@ export class SessionManager {
 
   async createSession(options: CreateSessionOptions): Promise<SessionRecord> {
     const sessionId = uuidv4();
-    const createdAt = new Date();
-    const lastActivityAt = new Date();
-    const { profileMode, profilePath } = await this.resolveProfileBinding(
+    const headers = options.headers ?? {};
+    const { profileMode, profilePath } = await resolveSessionProfileBinding({
       sessionId,
-      options.profilePath,
-    );
+      customProfilePath: options.profilePath,
+      activeProfilePaths: Array.from(
+        this.sessions.values(),
+        (session) => session.profilePath,
+      ),
+      getManagedProfilePath: (managedSessionId) =>
+        this.browserService.getSessionProfileDir(managedSessionId),
+    });
     const browserSession = await this.browserService.createSession(
       sessionId,
       options.targetUrl,
-      {
+      buildBrowserSessionOptions({
         profilePath,
         proxyEnabled: options.proxyEnabled,
-      },
+        headers,
+      }),
     );
-
-    try {
-      await this.sessionStore.insertSession({
-        id: sessionId,
-        targetUrl: options.targetUrl,
-        proxyEnabled: options.proxyEnabled,
-        connected: false,
-        profilePath,
-        profileMode,
-        createdAt: createdAt.toISOString(),
-        lastActivityAt: lastActivityAt.toISOString(),
-      });
-    } catch (error) {
-      await this.browserService.destroySession(sessionId, browserSession);
-      throw error;
-    }
-
     const session: SessionRecord = {
       id: sessionId,
       targetUrl: options.targetUrl,
       proxyEnabled: options.proxyEnabled,
       profilePath,
       profileMode,
-      createdAt,
-      lastActivityAt,
+      headers,
+      createdAt: new Date(),
+      lastActivityAt: new Date(),
       connected: false,
       browserSession,
     };
+
+    try {
+      await this.sessionStore.insertSession(
+        buildPersistedSessionRecord(session),
+      );
+    } catch (error) {
+      await this.browserService.destroySession(sessionId, browserSession);
+      throw error;
+    }
+
     this.sessions.set(session.id, session);
     return session;
   }
@@ -169,47 +224,56 @@ export class SessionManager {
 
     for (const record of records) {
       try {
-        const browserSession = await this.browserService.restoreSession(
-          record.id,
-          record.targetUrl,
-          {
-            profilePath: record.profilePath,
-            proxyEnabled: record.proxyEnabled,
-          },
-        );
-        this.sessions.set(record.id, {
-          id: record.id,
-          targetUrl: record.targetUrl,
-          proxyEnabled: record.proxyEnabled,
-          profilePath: record.profilePath,
-          profileMode: record.profileMode,
-          createdAt: new Date(record.createdAt),
-          lastActivityAt: new Date(record.lastActivityAt),
-          connected: false,
-          browserSession,
-        });
-        if (record.connected) {
-          await this.sessionStore.updateSessionConnection({
-            sessionId: record.id,
-            connected: false,
-            lastActivityAt: record.lastActivityAt,
-          });
-        }
+        await this.restorePersistedSession(record);
       } catch (error) {
-        console.error("[viewer-be] failed to restore session", {
-          sessionId: record.id,
-          error: String(error),
-        });
-
-        try {
-          await this.sessionStore.deleteSession(record.id);
-        } catch (cleanupError) {
-          console.error("[viewer-be] failed to delete stale session", {
-            sessionId: record.id,
-            error: String(cleanupError),
-          });
-        }
+        await this.handleRestoreFailure(record.id, error);
       }
+    }
+  }
+
+  private async restorePersistedSession(
+    record: PersistedSessionRecord,
+  ): Promise<void> {
+    const browserSession = await this.browserService.restoreSession(
+      record.id,
+      record.targetUrl,
+      buildBrowserSessionOptions(record),
+    );
+
+    this.sessions.set(record.id, buildSessionRecord(record, browserSession));
+    await this.resetPersistedConnectionState(record);
+  }
+
+  private async resetPersistedConnectionState(
+    record: PersistedSessionRecord,
+  ): Promise<void> {
+    if (!record.connected) {
+      return;
+    }
+
+    await this.sessionStore.updateSessionConnection({
+      sessionId: record.id,
+      connected: false,
+      lastActivityAt: record.lastActivityAt,
+    });
+  }
+
+  private async handleRestoreFailure(
+    sessionId: string,
+    error: unknown,
+  ): Promise<void> {
+    console.error("[viewer-be] failed to restore session", {
+      sessionId,
+      error: String(error),
+    });
+
+    try {
+      await this.sessionStore.deleteSession(sessionId);
+    } catch (cleanupError) {
+      console.error("[viewer-be] failed to delete stale session", {
+        sessionId,
+        error: String(cleanupError),
+      });
     }
   }
 
@@ -220,67 +284,5 @@ export class SessionManager {
     }
     clearTimeout(timer);
     this.disconnectTimers.delete(sessionId);
-  }
-
-  private async resolveProfileBinding(
-    sessionId: string,
-    customProfilePath: string | undefined,
-  ): Promise<{ profileMode: SessionProfileMode; profilePath: string }> {
-    if (!customProfilePath) {
-      return {
-        profileMode: "managed",
-        profilePath: this.browserService.getSessionProfileDir(sessionId),
-      };
-    }
-
-    const resolvedProfilePath = path.resolve(
-      expandHomePath(customProfilePath, os.homedir()) ?? customProfilePath,
-    );
-    await this.validateCustomProfilePath(resolvedProfilePath);
-    this.ensureProfilePathAvailable(resolvedProfilePath);
-
-    return {
-      profileMode: "custom",
-      profilePath: resolvedProfilePath,
-    };
-  }
-
-  private ensureProfilePathAvailable(profilePath: string): void {
-    const existingSession = Array.from(this.sessions.values()).find(
-      (session) => session.profilePath === profilePath,
-    );
-
-    if (!existingSession) {
-      return;
-    }
-
-    throw new SessionProfileConflictError(
-      "Custom profile path is already in use by another session",
-    );
-  }
-
-  private async validateCustomProfilePath(profilePath: string): Promise<void> {
-    let profileStats;
-    try {
-      profileStats = await stat(profilePath);
-    } catch {
-      throw new SessionProfileValidationError(
-        "Custom profile path does not exist",
-      );
-    }
-
-    if (!profileStats.isDirectory()) {
-      throw new SessionProfileValidationError(
-        "Custom profile path must point to a directory",
-      );
-    }
-
-    try {
-      await access(profilePath, constants.R_OK | constants.W_OK);
-    } catch {
-      throw new SessionProfileValidationError(
-        "Custom profile path must be readable and writable",
-      );
-    }
   }
 }

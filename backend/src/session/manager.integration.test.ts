@@ -79,6 +79,7 @@ describe("SessionManager integration", () => {
       {
         profilePath: path.join(profileRootDir, "sessions", createdSession.id),
         proxyEnabled: true,
+        headers: {},
       },
     );
     await expect(secondStore.getSession(createdSession.id)).resolves.toEqual(
@@ -88,6 +89,7 @@ describe("SessionManager integration", () => {
         proxyEnabled: true,
         profilePath: path.join(profileRootDir, "sessions", createdSession.id),
         profileMode: "managed",
+        headers: {},
       }),
     );
 

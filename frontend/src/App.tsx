@@ -38,11 +38,57 @@ function getProfileModeLabel(
   return profileMode === "custom" ? "Custom profile" : "Managed profile";
 }
 
+function getHeaderSummaryLabel(headers: SessionListItem["headers"]): string {
+  const headerCount = Object.keys(headers).length;
+  if (headerCount === 0) {
+    return "No custom headers";
+  }
+
+  return `${headerCount} header${headerCount === 1 ? "" : "s"}`;
+}
+
+function parseSessionHeaders(input: string): Record<string, string> {
+  const trimmedInput = input.trim();
+  if (!trimmedInput) {
+    return {};
+  }
+
+  let parsedValue: unknown;
+  try {
+    parsedValue = JSON.parse(trimmedInput);
+  } catch {
+    throw new Error("Request headers must be valid JSON.");
+  }
+
+  if (
+    !parsedValue ||
+    typeof parsedValue !== "object" ||
+    Array.isArray(parsedValue)
+  ) {
+    throw new Error("Request headers must be a JSON object.");
+  }
+
+  const headers = Object.entries(parsedValue).reduce<Record<string, string>>(
+    (result, [key, value]) => {
+      if (typeof value !== "string") {
+        throw new Error("Request headers must use string values.");
+      }
+
+      result[key] = value;
+      return result;
+    },
+    {},
+  );
+
+  return headers;
+}
+
 export default function App() {
   const [url, setUrl] = useState("https://www.google.cn");
   const [proxyEnabled, setProxyEnabled] = useState(false);
   const [useCustomProfilePath, setUseCustomProfilePath] = useState(false);
   const [profilePath, setProfilePath] = useState("");
+  const [requestHeadersInput, setRequestHeadersInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -184,6 +230,16 @@ export default function App() {
       return;
     }
 
+    let parsedHeaders: Record<string, string>;
+    try {
+      parsedHeaders = parseSessionHeaders(requestHeadersInput);
+    } catch (parseError) {
+      setError(
+        parseError instanceof Error ? parseError.message : String(parseError),
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -199,6 +255,8 @@ export default function App() {
           url,
           proxyEnabled,
           profilePath: useCustomProfilePath ? trimmedProfilePath : undefined,
+          headers:
+            Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
         },
         token,
       );
@@ -322,6 +380,9 @@ export default function App() {
                       </p>
                       <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
                         {getProfileModeLabel(recentSession.profileMode)}
+                      </p>
+                      <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+                        {getHeaderSummaryLabel(recentSession.headers)}
                       </p>
                     </div>
 
@@ -468,6 +529,30 @@ export default function App() {
                     </div>
                   )}
 
+                  <div className="rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3">
+                    <label
+                      className="block text-sm font-medium text-foreground"
+                      htmlFor="session-request-headers"
+                    >
+                      Request headers
+                    </label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Optional JSON object applied to every request in this
+                      session.
+                    </p>
+                    <textarea
+                      id="session-request-headers"
+                      aria-label="Request headers"
+                      value={requestHeadersInput}
+                      onChange={(event) =>
+                        setRequestHeadersInput(event.target.value)
+                      }
+                      disabled={loading}
+                      className="mt-3 min-h-28 w-full rounded-[1rem] border border-border/60 bg-card/75 px-3 py-3 text-sm outline-none placeholder:text-muted-foreground/55"
+                      placeholder='{"x-session-id":"demo","x-team":"alpha"}'
+                    />
+                  </div>
+
                   {error && (
                     <p className="text-sm text-red-500" role="alert">
                       {error}
@@ -567,6 +652,24 @@ export default function App() {
                       <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
                         {getProfileModeLabel(session.profileMode)}
                       </p>
+                      <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
+                        {getHeaderSummaryLabel(session.headers)}
+                      </p>
+                      {Object.keys(session.headers).length > 0 && (
+                        <div className="space-y-1 rounded-2xl border border-border/50 bg-background/45 px-3 py-2 text-xs text-muted-foreground">
+                          {Object.entries(session.headers).map(
+                            ([key, value]) => (
+                              <p key={key} className="break-all">
+                                <span className="font-medium text-foreground">
+                                  {key}
+                                </span>
+                                {": "}
+                                {value}
+                              </p>
+                            ),
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div
                       className="relative flex items-center gap-2"

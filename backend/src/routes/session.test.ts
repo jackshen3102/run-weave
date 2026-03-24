@@ -9,6 +9,7 @@ interface MockSession {
   targetUrl: string;
   proxyEnabled: boolean;
   profileMode: "managed" | "custom";
+  headers: Record<string, string>;
   connected: boolean;
   createdAt: Date;
 }
@@ -20,6 +21,7 @@ function createTestServer(sessionState: { current: MockSession | null }) {
         targetUrl: string;
         proxyEnabled: boolean;
         profilePath?: string;
+        headers?: Record<string, string>;
       }) => {
         if (options.profilePath === "/missing") {
           throw new SessionProfileValidationError(
@@ -31,6 +33,7 @@ function createTestServer(sessionState: { current: MockSession | null }) {
           targetUrl: options.targetUrl,
           proxyEnabled: options.proxyEnabled,
           profileMode: options.profilePath ? "custom" : "managed",
+          headers: options.headers ?? {},
           connected: false,
           createdAt: new Date("2026-03-19T00:00:00.000Z"),
         };
@@ -108,7 +111,13 @@ describe("session routes", () => {
     const createResponse = await fetch(`http://127.0.0.1:${port}/api/session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com", proxyEnabled: true }),
+      body: JSON.stringify({
+        url: "https://example.com",
+        proxyEnabled: true,
+        headers: {
+          "x-session-id": "test-session-id",
+        },
+      }),
     });
     expect(createResponse.status).toBe(201);
     const created = (await createResponse.json()) as {
@@ -127,11 +136,15 @@ describe("session routes", () => {
       targetUrl: string;
       proxyEnabled: boolean;
       profileMode: "managed" | "custom";
+      headers: Record<string, string>;
     };
     expect(statusPayload.sessionId).toBe("test-session-id");
     expect(statusPayload.targetUrl).toBe("https://example.com");
     expect(statusPayload.proxyEnabled).toBe(true);
     expect(statusPayload.profileMode).toBe("managed");
+    expect(statusPayload.headers).toEqual({
+      "x-session-id": "test-session-id",
+    });
 
     const listResponse = await fetch(`http://127.0.0.1:${port}/api/session`);
     expect(listResponse.status).toBe(200);
@@ -139,11 +152,15 @@ describe("session routes", () => {
       sessionId: string;
       proxyEnabled: boolean;
       profileMode: "managed" | "custom";
+      headers: Record<string, string>;
     }>;
     expect(listPayload).toHaveLength(1);
     expect(listPayload[0]?.sessionId).toBe("test-session-id");
     expect(listPayload[0]?.proxyEnabled).toBe(true);
     expect(listPayload[0]?.profileMode).toBe("managed");
+    expect(listPayload[0]?.headers).toEqual({
+      "x-session-id": "test-session-id",
+    });
 
     const deleteResponse = await fetch(
       `http://127.0.0.1:${port}/api/session/test-session-id`,

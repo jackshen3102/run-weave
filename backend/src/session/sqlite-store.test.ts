@@ -25,6 +25,7 @@ function createRecord(
     connected: false,
     profilePath: "/profiles/session-1",
     profileMode: "managed",
+    headers: {},
     createdAt: "2026-03-21T00:00:00.000Z",
     lastActivityAt: "2026-03-21T00:00:00.000Z",
     ...overrides,
@@ -99,6 +100,30 @@ describe("SQLiteSessionStore", () => {
         id: "session-3",
         profileMode: "custom",
         profilePath: "/profiles/custom-profile",
+      }),
+    );
+  });
+
+  it("persists session headers", async () => {
+    const store = await createStore();
+
+    await store.insertSession(
+      createRecord({
+        id: "session-4",
+        headers: {
+          authorization: "Bearer demo",
+          "x-session-id": "session-4",
+        },
+      }),
+    );
+
+    await expect(store.getSession("session-4")).resolves.toEqual(
+      createRecord({
+        id: "session-4",
+        headers: {
+          authorization: "Bearer demo",
+          "x-session-id": "session-4",
+        },
       }),
     );
   });

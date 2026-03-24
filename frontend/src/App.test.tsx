@@ -66,6 +66,9 @@ describe("App", () => {
             connected: false,
             proxyEnabled: true,
             profileMode: "custom",
+            headers: {
+              "x-team": "alpha",
+            },
           },
           {
             sessionId: "session-2",
@@ -74,6 +77,7 @@ describe("App", () => {
             connected: false,
             proxyEnabled: false,
             profileMode: "managed",
+            headers: {},
           },
         ],
       })),
@@ -95,6 +99,8 @@ describe("App", () => {
     expect(screen.getByText("Proxy disabled")).toBeInTheDocument();
     expect(screen.getAllByText("Custom profile").length).toBeGreaterThan(0);
     expect(screen.getByText("Managed profile")).toBeInTheDocument();
+    expect(screen.getAllByText("1 header").length).toBeGreaterThan(0);
+    expect(screen.getByText("No custom headers")).toBeInTheDocument();
   });
 
   it("shows a custom profile path input and submits it", async () => {
@@ -152,5 +158,95 @@ describe("App", () => {
       );
     });
     expect(assignMock).toHaveBeenCalledWith("/?sessionId=session-1");
+  });
+
+  it("submits custom session headers and shows them in the list", async () => {
+    localStorage.setItem("viewer.auth.token", "token-1");
+    const fetchMock = vi.fn();
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            sessionId: "session-existing",
+            targetUrl: "https://example.com",
+            lastActivityAt: "2026-03-23T07:31:19.000Z",
+            connected: false,
+            proxyEnabled: false,
+            profileMode: "managed",
+            headers: {
+              "x-team": "alpha",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          sessionId: "session-1",
+          viewerUrl: "/?sessionId=session-1",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            sessionId: "session-existing",
+            targetUrl: "https://example.com",
+            lastActivityAt: "2026-03-23T07:31:19.000Z",
+            connected: false,
+            proxyEnabled: false,
+            profileMode: "managed",
+            headers: {
+              "x-team": "alpha",
+            },
+          },
+        ],
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    const assignMock = vi.fn();
+    Object.defineProperty(window, "location", {
+      value: { ...window.location, assign: assignMock },
+      writable: true,
+    });
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByText("New Session")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText("Target URL"), {
+      target: { value: "https://example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Request headers"), {
+      target: {
+        value: '{"authorization":"Bearer demo","x-team":"alpha"}',
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/session",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            url: "https://example.com",
+            proxyEnabled: false,
+            headers: {
+              authorization: "Bearer demo",
+              "x-team": "alpha",
+            },
+          }),
+        }),
+      );
+    });
+
+    screen.getByRole("button", { name: "Sessions 1" }).click();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("1 header").length).toBeGreaterThan(0);
+    });
   });
 });

@@ -1,7 +1,10 @@
+export type SessionHeaders = Record<string, string>;
+
 export interface CreateSessionRequest {
   url: string;
   proxyEnabled: boolean;
   profilePath?: string;
+  headers?: SessionHeaders;
 }
 
 export interface LoginRequest {
@@ -25,6 +28,7 @@ export interface SessionStatusResponse {
   targetUrl: string;
   proxyEnabled: boolean;
   profileMode: "managed" | "custom";
+  headers: SessionHeaders;
   createdAt: string;
 }
 
@@ -34,6 +38,7 @@ export interface SessionListItem {
   targetUrl: string;
   proxyEnabled: boolean;
   profileMode: "managed" | "custom";
+  headers: SessionHeaders;
   createdAt: string;
   lastActivityAt: string;
 }

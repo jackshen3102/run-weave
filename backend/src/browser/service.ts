@@ -2,6 +2,7 @@ import { chromium } from "playwright-extra";
 import { mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { SessionHeaders } from "@browser-viewer/shared";
 import type { BrowserContext, Page } from "playwright";
 import { findAvailablePort } from "../server/listen";
 
@@ -24,6 +25,7 @@ export interface BrowserServiceOptions {
 export interface BrowserSessionOptions {
   proxyEnabled: boolean;
   profilePath: string;
+  headers: SessionHeaders;
 }
 
 function isRestorablePage(page: Page): boolean {
@@ -97,6 +99,7 @@ export class BrowserService {
           autoOpenDevtoolsForTabs: this.autoOpenDevtoolsForTabs,
           remoteDebuggingPort,
         }),
+        extraHTTPHeaders: options.headers,
         proxy: options.proxyEnabled
           ? {
               bypass: LOCAL_BYPASS_RULE,

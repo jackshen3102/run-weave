@@ -1,3 +1,5 @@
+import type { SessionHeaders } from "@browser-viewer/shared";
+
 export type SessionProfileMode = "managed" | "custom";
 
 export interface PersistedSessionRecord {
@@ -7,6 +9,7 @@ export interface PersistedSessionRecord {
   connected: boolean;
   profilePath: string;
   profileMode: SessionProfileMode;
+  headers: SessionHeaders;
   createdAt: string;
   lastActivityAt: string;
 }

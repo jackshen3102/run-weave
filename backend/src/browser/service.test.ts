@@ -49,6 +49,7 @@ describe("BrowserService", () => {
     await service.createSession("session-proxy", "https://example.com", {
       profilePath: "/tmp/browser-profiles/sessions/session-proxy",
       proxyEnabled: true,
+      headers: {},
     });
 
     expect(launchPersistentContext).toHaveBeenCalledWith(
@@ -74,12 +75,41 @@ describe("BrowserService", () => {
     await service.createSession("session-direct", "https://example.com", {
       profilePath: "/tmp/browser-profiles/sessions/session-direct",
       proxyEnabled: false,
+      headers: {},
     });
 
     expect(launchPersistentContext).toHaveBeenCalledWith(
       "/tmp/browser-profiles/sessions/session-direct",
       expect.not.objectContaining({
         proxy: expect.anything(),
+      }),
+    );
+  });
+
+  it("applies per-session headers to persistent contexts", async () => {
+    const context = createBrowserContextMock();
+    launchPersistentContext.mockResolvedValue(context);
+    const service = new BrowserService({
+      headless: true,
+      profileDir: "/tmp/browser-profiles",
+    });
+
+    await service.createSession("session-headers", "https://example.com", {
+      profilePath: "/tmp/browser-profiles/sessions/session-headers",
+      proxyEnabled: false,
+      headers: {
+        "x-session-id": "session-headers",
+        authorization: "Bearer demo",
+      },
+    });
+
+    expect(launchPersistentContext).toHaveBeenCalledWith(
+      "/tmp/browser-profiles/sessions/session-headers",
+      expect.objectContaining({
+        extraHTTPHeaders: {
+          "x-session-id": "session-headers",
+          authorization: "Bearer demo",
+        },
       }),
     );
   });
@@ -98,10 +128,12 @@ describe("BrowserService", () => {
     await service.createSession("session-a", "https://example.com", {
       profilePath: "/tmp/browser-profiles/sessions/session-a",
       proxyEnabled: false,
+      headers: {},
     });
     await service.createSession("session-b", "https://example.com", {
       profilePath: "/tmp/browser-profiles/sessions/session-b",
       proxyEnabled: false,
+      headers: {},
     });
 
     expect(service.getRemoteDebuggingPort("session-a")).toBe(9222);
@@ -142,6 +174,7 @@ describe("BrowserService", () => {
       {
         profilePath: "/tmp/browser-profiles/sessions/session-restored",
         proxyEnabled: false,
+        headers: {},
       },
     );
 
@@ -175,6 +208,7 @@ describe("BrowserService", () => {
       {
         profilePath: "/tmp/browser-profiles/sessions/session-restored",
         proxyEnabled: false,
+        headers: {},
       },
     );
 

@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import type { SessionHeaders } from "@browser-viewer/shared";
 import type {
   PersistedSessionRecord,
   SessionStore,
@@ -14,6 +15,7 @@ interface SessionRow {
   connected: number;
   profile_path: string;
   profile_mode: string;
+  headers_json: string;
   created_at: string;
   last_activity_at: string;
 }
@@ -40,6 +42,7 @@ export class SQLiteSessionStore implements SessionStore {
         connected integer not null default 0,
         profile_path text not null,
         profile_mode text not null default 'managed',
+        headers_json text not null default '{}',
         created_at text not null,
         last_activity_at text not null
       );
@@ -49,6 +52,7 @@ export class SQLiteSessionStore implements SessionStore {
     `);
     this.ensureProxyEnabledColumn(database);
     this.ensureProfileModeColumn(database);
+    this.ensureHeadersColumn(database);
 
     this.database = database;
   }
@@ -69,6 +73,7 @@ export class SQLiteSessionStore implements SessionStore {
             connected,
             profile_path,
             profile_mode,
+            headers_json,
             created_at,
             last_activity_at
           from sessions
@@ -91,6 +96,7 @@ export class SQLiteSessionStore implements SessionStore {
             connected,
             profile_path,
             profile_mode,
+            headers_json,
             created_at,
             last_activity_at
           from sessions
@@ -113,9 +119,10 @@ export class SQLiteSessionStore implements SessionStore {
             connected,
             profile_path,
             profile_mode,
+            headers_json,
             created_at,
             last_activity_at
-          ) values (?, ?, ?, ?, ?, ?, ?, ?)
+          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
       )
       .run(
@@ -125,6 +132,7 @@ export class SQLiteSessionStore implements SessionStore {
         session.connected ? 1 : 0,
         session.profilePath,
         session.profileMode,
+        JSON.stringify(session.headers),
         session.createdAt,
         session.lastActivityAt,
       );
@@ -186,6 +194,20 @@ export class SQLiteSessionStore implements SessionStore {
     );
   }
 
+  private ensureHeadersColumn(database: Database.Database): void {
+    const columns = database
+      .prepare("pragma table_info(sessions)")
+      .all() as TableInfoRow[];
+
+    if (columns.some((column) => column.name === "headers_json")) {
+      return;
+    }
+
+    database.exec(
+      "alter table sessions add column headers_json text not null default '{}'",
+    );
+  }
+
   private toRecord(row: SessionRow): PersistedSessionRecord {
     return {
       id: row.id,
@@ -194,8 +216,26 @@ export class SQLiteSessionStore implements SessionStore {
       connected: row.connected === 1,
       profilePath: row.profile_path,
       profileMode: row.profile_mode === "custom" ? "custom" : "managed",
+      headers: this.parseHeaders(row.headers_json),
       createdAt: row.created_at,
       lastActivityAt: row.last_activity_at,
     };
+  }
+
+  private parseHeaders(rawHeaders: string): SessionHeaders {
+    try {
+      const parsed = JSON.parse(rawHeaders) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return {};
+      }
+
+      return Object.fromEntries(
+        Object.entries(parsed).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      );
+    } catch {
+      return {};
+    }
   }
 }
