@@ -1,23 +1,35 @@
 import { Router } from "express";
 import { z } from "zod";
 import type {
+  CreateSessionSource,
   CreateSessionRequest,
   CreateSessionResponse,
   SessionListItem,
   SessionStatusResponse,
 } from "@browser-viewer/shared";
-import {
-  SessionProfileConflictError,
-  SessionProfileValidationError,
-  type SessionManager,
-} from "../session/manager";
+import type { SessionManager } from "../session/manager";
+
+const launchSourceSchema = z.object({
+  type: z.literal("launch"),
+  proxyEnabled: z.boolean().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+});
+
+const connectCdpSourceSchema = z.object({
+  type: z.literal("connect-cdp"),
+  endpoint: z.string().trim().url(),
+});
 
 const createSessionSchema = z.object({
   url: z.string().url(),
-  proxyEnabled: z.boolean().optional().default(false),
-  profilePath: z.string().trim().min(1).optional(),
-  headers: z.record(z.string(), z.string()).optional(),
+  source: z.union([launchSourceSchema, connectCdpSourceSchema]).optional(),
 });
+
+function normalizeCreateSessionSource(
+  source: CreateSessionRequest["source"],
+): CreateSessionSource {
+  return source ?? { type: "launch" };
+}
 
 export function createSessionRouter(sessionManager: SessionManager): Router {
   const router = Router();
@@ -30,7 +42,7 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
         connected: session.connected,
         targetUrl: session.targetUrl,
         proxyEnabled: session.proxyEnabled,
-        profileMode: session.profileMode,
+        sourceType: session.sourceType,
         headers: session.headers,
         createdAt: session.createdAt.toISOString(),
         lastActivityAt: session.lastActivityAt.toISOString(),
@@ -52,11 +64,10 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
     }
 
     try {
+      const source = normalizeCreateSessionSource(parsed.data.source);
       const session = await sessionManager.createSession({
         targetUrl: parsed.data.url,
-        proxyEnabled: parsed.data.proxyEnabled,
-        profilePath: parsed.data.profilePath,
-        headers: parsed.data.headers,
+        source,
       });
       const payload: CreateSessionResponse = {
         sessionId: session.id,
@@ -64,16 +75,6 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
       };
       res.status(201).json(payload);
     } catch (error) {
-      if (error instanceof SessionProfileValidationError) {
-        res.status(400).json({ message: error.message });
-        return;
-      }
-
-      if (error instanceof SessionProfileConflictError) {
-        res.status(409).json({ message: error.message });
-        return;
-      }
-
       console.error("[viewer-be] create session failed", {
         error: String(error),
       });
@@ -95,7 +96,7 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
       connected: session.connected,
       targetUrl: session.targetUrl,
       proxyEnabled: session.proxyEnabled,
-      profileMode: session.profileMode,
+      sourceType: session.sourceType,
       headers: session.headers,
       createdAt: session.createdAt.toISOString(),
     };

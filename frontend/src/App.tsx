@@ -32,10 +32,10 @@ function getProxyStatusLabel(proxyEnabled: boolean): string {
   return proxyEnabled ? "Proxy enabled" : "Proxy disabled";
 }
 
-function getProfileModeLabel(
-  profileMode: SessionListItem["profileMode"],
+function getSessionSourceLabel(
+  sourceType: SessionListItem["sourceType"],
 ): string {
-  return profileMode === "custom" ? "Custom profile" : "Managed profile";
+  return sourceType === "connect-cdp" ? "Attached browser" : "Launched browser";
 }
 
 function getHeaderSummaryLabel(headers: SessionListItem["headers"]): string {
@@ -85,9 +85,11 @@ function parseSessionHeaders(input: string): Record<string, string> {
 
 export default function App() {
   const [url, setUrl] = useState("https://www.google.cn");
+  const [sessionSourceType, setSessionSourceType] = useState<
+    "launch" | "connect-cdp"
+  >("launch");
   const [proxyEnabled, setProxyEnabled] = useState(false);
-  const [useCustomProfilePath, setUseCustomProfilePath] = useState(false);
-  const [profilePath, setProfilePath] = useState("");
+  const [cdpEndpoint, setCdpEndpoint] = useState("");
   const [requestHeadersInput, setRequestHeadersInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -224,20 +226,26 @@ export default function App() {
       return;
     }
 
-    const trimmedProfilePath = profilePath.trim();
-    if (useCustomProfilePath && !trimmedProfilePath) {
-      setError("Profile path is required when using a custom profile.");
+    const trimmedCdpEndpoint = cdpEndpoint.trim();
+    if (sessionSourceType === "connect-cdp" && !trimmedCdpEndpoint) {
+      setError(
+        "CDP endpoint is required when attaching to an existing browser.",
+      );
       return;
     }
 
     let parsedHeaders: Record<string, string>;
-    try {
-      parsedHeaders = parseSessionHeaders(requestHeadersInput);
-    } catch (parseError) {
-      setError(
-        parseError instanceof Error ? parseError.message : String(parseError),
-      );
-      return;
+    if (sessionSourceType === "launch") {
+      try {
+        parsedHeaders = parseSessionHeaders(requestHeadersInput);
+      } catch (parseError) {
+        setError(
+          parseError instanceof Error ? parseError.message : String(parseError),
+        );
+        return;
+      }
+    } else {
+      parsedHeaders = {};
     }
 
     setLoading(true);
@@ -251,13 +259,25 @@ export default function App() {
 
       const data = await createViewerSession(
         API_BASE,
-        {
-          url,
-          proxyEnabled,
-          profilePath: useCustomProfilePath ? trimmedProfilePath : undefined,
-          headers:
-            Object.keys(parsedHeaders).length > 0 ? parsedHeaders : undefined,
-        },
+        sessionSourceType === "connect-cdp"
+          ? {
+              url,
+              source: {
+                type: "connect-cdp",
+                endpoint: trimmedCdpEndpoint,
+              },
+            }
+          : {
+              url,
+              source: {
+                type: "launch",
+                proxyEnabled,
+                headers:
+                  Object.keys(parsedHeaders).length > 0
+                    ? parsedHeaders
+                    : undefined,
+              },
+            },
         token,
       );
       await loadSessions();
@@ -379,7 +399,7 @@ export default function App() {
                         {getProxyStatusLabel(recentSession.proxyEnabled)}
                       </p>
                       <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
-                        {getProfileModeLabel(recentSession.profileMode)}
+                        {getSessionSourceLabel(recentSession.sourceType)}
                       </p>
                       <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
                         {getHeaderSummaryLabel(recentSession.headers)}
@@ -454,104 +474,135 @@ export default function App() {
                     {loading ? "Starting..." : "Start"}
                   </Button>
 
-                  <label
-                    htmlFor="session-proxy-enabled"
-                    className="flex items-center justify-between gap-4 rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3 text-sm text-foreground"
-                  >
-                    <span className="space-y-1">
-                      <span className="block font-medium">Enable proxy</span>
-                      <span className="block text-xs text-muted-foreground">
-                        Route this session through Whistle at 127.0.0.1:8899.
-                      </span>
-                    </span>
-                    <input
-                      id="session-proxy-enabled"
-                      type="checkbox"
-                      aria-label="Enable proxy"
-                      checked={proxyEnabled}
-                      onChange={(event) =>
-                        setProxyEnabled(event.target.checked)
-                      }
-                      disabled={loading}
-                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
-                    />
-                  </label>
+                  <div className="rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3">
+                    <p className="text-sm font-medium text-foreground">
+                      Session source
+                    </p>
+                    <div className="mt-3 space-y-3">
+                      <label
+                        htmlFor="session-source-launch"
+                        className="flex items-center justify-between gap-4 rounded-[1rem] border border-border/50 bg-card/75 px-3 py-3 text-sm text-foreground"
+                      >
+                        <span className="space-y-1">
+                          <span className="block font-medium">
+                            Start new browser
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            Launch a new managed Playwright browser.
+                          </span>
+                        </span>
+                        <input
+                          id="session-source-launch"
+                          type="radio"
+                          name="session-source"
+                          aria-label="Start new browser"
+                          checked={sessionSourceType === "launch"}
+                          onChange={() => setSessionSourceType("launch")}
+                          disabled={loading}
+                          className="h-4 w-4 border-border text-primary focus:ring-primary/40"
+                        />
+                      </label>
+                      <label
+                        htmlFor="session-source-connect-cdp"
+                        className="flex items-center justify-between gap-4 rounded-[1rem] border border-border/50 bg-card/75 px-3 py-3 text-sm text-foreground"
+                      >
+                        <span className="space-y-1">
+                          <span className="block font-medium">
+                            Attach to existing browser
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            Connect to a local Chromium CDP endpoint.
+                          </span>
+                        </span>
+                        <input
+                          id="session-source-connect-cdp"
+                          type="radio"
+                          name="session-source"
+                          aria-label="Attach to existing browser"
+                          checked={sessionSourceType === "connect-cdp"}
+                          onChange={() => setSessionSourceType("connect-cdp")}
+                          disabled={loading}
+                          className="h-4 w-4 border-border text-primary focus:ring-primary/40"
+                        />
+                      </label>
+                    </div>
+                  </div>
 
-                  <label
-                    htmlFor="session-custom-profile-enabled"
-                    className="flex items-center justify-between gap-4 rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3 text-sm text-foreground"
-                  >
-                    <span className="space-y-1">
-                      <span className="block font-medium">
-                        Use custom profile path
-                      </span>
-                      <span className="block text-xs text-muted-foreground">
-                        Reuse an existing Playwright profile directory.
-                      </span>
-                    </span>
-                    <input
-                      id="session-custom-profile-enabled"
-                      type="checkbox"
-                      aria-label="Use custom profile path"
-                      checked={useCustomProfilePath}
-                      onChange={(event) => {
-                        const nextChecked = event.target.checked;
-                        setUseCustomProfilePath(nextChecked);
-                        if (!nextChecked) {
-                          setProfilePath("");
-                        }
-                      }}
-                      disabled={loading}
-                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
-                    />
-                  </label>
+                  {sessionSourceType === "launch" ? (
+                    <>
+                      <label
+                        htmlFor="session-proxy-enabled"
+                        className="flex items-center justify-between gap-4 rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3 text-sm text-foreground"
+                      >
+                        <span className="space-y-1">
+                          <span className="block font-medium">
+                            Enable proxy
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            Route this session through Whistle at
+                            127.0.0.1:8899.
+                          </span>
+                        </span>
+                        <input
+                          id="session-proxy-enabled"
+                          type="checkbox"
+                          aria-label="Enable proxy"
+                          checked={proxyEnabled}
+                          onChange={(event) =>
+                            setProxyEnabled(event.target.checked)
+                          }
+                          disabled={loading}
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+                        />
+                      </label>
 
-                  {useCustomProfilePath && (
+                      <div className="rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3">
+                        <label
+                          className="block text-sm font-medium text-foreground"
+                          htmlFor="session-request-headers"
+                        >
+                          Request headers
+                        </label>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Optional JSON object applied to every request in this
+                          session.
+                        </p>
+                        <textarea
+                          id="session-request-headers"
+                          aria-label="Request headers"
+                          value={requestHeadersInput}
+                          onChange={(event) =>
+                            setRequestHeadersInput(event.target.value)
+                          }
+                          disabled={loading}
+                          className="mt-3 min-h-28 w-full rounded-[1rem] border border-border/60 bg-card/75 px-3 py-3 text-sm outline-none placeholder:text-muted-foreground/55"
+                          placeholder='{"x-session-id":"demo","x-team":"alpha"}'
+                        />
+                      </div>
+                    </>
+                  ) : (
                     <div className="rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3">
                       <label
                         className="block text-sm font-medium text-foreground"
-                        htmlFor="session-profile-path"
+                        htmlFor="session-cdp-endpoint"
                       >
-                        Profile path
+                        CDP endpoint
                       </label>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Must point to an existing writable Playwright profile
-                        directory.
+                        Connect to an existing Chromium endpoint such as
+                        http://127.0.0.1:9222.
                       </p>
                       <input
-                        id="session-profile-path"
-                        value={profilePath}
-                        onChange={(event) => setProfilePath(event.target.value)}
+                        id="session-cdp-endpoint"
+                        aria-label="CDP endpoint"
+                        value={cdpEndpoint}
+                        onChange={(event) => setCdpEndpoint(event.target.value)}
                         disabled={loading}
                         className="mt-3 h-11 w-full rounded-[1rem] border border-border/60 bg-card/75 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
-                        placeholder="/Users/name/playwright-profile"
+                        placeholder="http://127.0.0.1:9222"
                       />
                     </div>
                   )}
-
-                  <div className="rounded-[1.25rem] border border-border/60 bg-background/60 px-4 py-3">
-                    <label
-                      className="block text-sm font-medium text-foreground"
-                      htmlFor="session-request-headers"
-                    >
-                      Request headers
-                    </label>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Optional JSON object applied to every request in this
-                      session.
-                    </p>
-                    <textarea
-                      id="session-request-headers"
-                      aria-label="Request headers"
-                      value={requestHeadersInput}
-                      onChange={(event) =>
-                        setRequestHeadersInput(event.target.value)
-                      }
-                      disabled={loading}
-                      className="mt-3 min-h-28 w-full rounded-[1rem] border border-border/60 bg-card/75 px-3 py-3 text-sm outline-none placeholder:text-muted-foreground/55"
-                      placeholder='{"x-session-id":"demo","x-team":"alpha"}'
-                    />
-                  </div>
 
                   {error && (
                     <p className="text-sm text-red-500" role="alert">
@@ -650,7 +701,7 @@ export default function App() {
                         {getProxyStatusLabel(session.proxyEnabled)}
                       </p>
                       <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
-                        {getProfileModeLabel(session.profileMode)}
+                        {getSessionSourceLabel(session.sourceType)}
                       </p>
                       <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/80">
                         {getHeaderSummaryLabel(session.headers)}

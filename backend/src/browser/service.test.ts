@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { launchPersistentContext } = vi.hoisted(() => ({
+const { connectOverCDP, launchPersistentContext } = vi.hoisted(() => ({
+  connectOverCDP: vi.fn(),
   launchPersistentContext: vi.fn(),
 }));
 
 vi.mock("playwright-extra", () => ({
   chromium: {
+    connectOverCDP,
     launchPersistentContext,
   },
 }));
@@ -31,6 +33,7 @@ function createBrowserContextMock() {
 
 describe("BrowserService", () => {
   beforeEach(() => {
+    connectOverCDP.mockReset();
     launchPersistentContext.mockReset();
   });
 
@@ -47,6 +50,7 @@ describe("BrowserService", () => {
     });
 
     await service.createSession("session-proxy", "https://example.com", {
+      type: "launch",
       profilePath: "/tmp/browser-profiles/sessions/session-proxy",
       proxyEnabled: true,
       headers: {},
@@ -73,6 +77,7 @@ describe("BrowserService", () => {
     });
 
     await service.createSession("session-direct", "https://example.com", {
+      type: "launch",
       profilePath: "/tmp/browser-profiles/sessions/session-direct",
       proxyEnabled: false,
       headers: {},
@@ -95,6 +100,7 @@ describe("BrowserService", () => {
     });
 
     await service.createSession("session-headers", "https://example.com", {
+      type: "launch",
       profilePath: "/tmp/browser-profiles/sessions/session-headers",
       proxyEnabled: false,
       headers: {
@@ -126,11 +132,13 @@ describe("BrowserService", () => {
     });
 
     await service.createSession("session-a", "https://example.com", {
+      type: "launch",
       profilePath: "/tmp/browser-profiles/sessions/session-a",
       proxyEnabled: false,
       headers: {},
     });
     await service.createSession("session-b", "https://example.com", {
+      type: "launch",
       profilePath: "/tmp/browser-profiles/sessions/session-b",
       proxyEnabled: false,
       headers: {},
@@ -154,6 +162,74 @@ describe("BrowserService", () => {
     );
   });
 
+  it("attaches to an existing CDP endpoint without launching a context", async () => {
+    const persistedPage = {
+      close: vi.fn(async () => undefined),
+      goto: vi.fn(async () => undefined),
+      url: vi.fn(() => "https://example.com/existing"),
+    };
+    const context = createBrowserContextMock();
+    context.pages.mockReturnValue([persistedPage as never]);
+    const browser = {
+      close: vi.fn(async () => undefined),
+      contexts: vi.fn(() => [context]),
+      on: vi.fn(),
+    };
+    connectOverCDP.mockResolvedValue(browser);
+    const service = new BrowserService({
+      headless: true,
+      profileDir: "/tmp/browser-profiles",
+    });
+
+    const session = await service.createSession(
+      "session-attached",
+      "https://example.com",
+      {
+        type: "connect-cdp",
+        endpoint: "http://127.0.0.1:9333",
+      },
+    );
+
+    expect(connectOverCDP).toHaveBeenCalledWith("http://127.0.0.1:9333");
+    expect(launchPersistentContext).not.toHaveBeenCalled();
+    expect(session.page).toBe(persistedPage);
+    expect(service.getRemoteDebuggingPort("session-attached")).toBe(9333);
+  });
+
+  it("disconnects from an attached CDP browser without closing the page", async () => {
+    const page = {
+      close: vi.fn(async () => undefined),
+      goto: vi.fn(async () => undefined),
+      url: vi.fn(() => "https://example.com/existing"),
+    };
+    const context = createBrowserContextMock();
+    context.pages.mockReturnValue([page as never]);
+    const browser = {
+      close: vi.fn(async () => undefined),
+      contexts: vi.fn(() => [context]),
+      on: vi.fn(),
+    };
+    connectOverCDP.mockResolvedValue(browser);
+    const service = new BrowserService({
+      headless: true,
+      profileDir: "/tmp/browser-profiles",
+    });
+
+    const session = await service.createSession(
+      "session-attached",
+      "https://example.com",
+      {
+        type: "connect-cdp",
+        endpoint: "http://127.0.0.1:9333",
+      },
+    );
+    await service.destroySession("session-attached", session);
+
+    expect(browser.close).toHaveBeenCalledTimes(1);
+    expect(page.close).not.toHaveBeenCalled();
+    expect(context.close).not.toHaveBeenCalled();
+  });
+
   it("restores sessions from an existing persisted page without navigating again", async () => {
     const persistedPage = {
       close: vi.fn(async () => undefined),
@@ -172,6 +248,7 @@ describe("BrowserService", () => {
       "session-restored",
       "https://example.com",
       {
+        type: "launch",
         profilePath: "/tmp/browser-profiles/sessions/session-restored",
         proxyEnabled: false,
         headers: {},
@@ -206,6 +283,7 @@ describe("BrowserService", () => {
       "session-restored",
       "https://example.com",
       {
+        type: "launch",
         profilePath: "/tmp/browser-profiles/sessions/session-restored",
         proxyEnabled: false,
         headers: {},

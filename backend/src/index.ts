@@ -182,6 +182,10 @@ function resolveFrontendDistDir(): string {
   return path.resolve(CURRENT_DIR_PATH, "../../frontend/dist");
 }
 
+function resolveSessionRestoreEnabled(env: NodeJS.ProcessEnv): boolean {
+  return env.SESSION_RESTORE_ENABLED?.trim().toLowerCase() !== "false";
+}
+
 async function createRuntimeServices(): Promise<RuntimeServices> {
   const storagePaths = resolveStoragePaths(process.env);
   const devtoolsEnabled = resolveDevtoolsEnabled(process.env);
@@ -198,7 +202,9 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   });
   const authService = new AuthService(loadAuthConfig());
   const sessionStore = new SQLiteSessionStore(storagePaths.sessionDbFile);
-  const sessionManager = new SessionManager(browserService, sessionStore);
+  const sessionManager = new SessionManager(browserService, sessionStore, {
+    restorePersistedSessions: resolveSessionRestoreEnabled(process.env),
+  });
   await sessionManager.initialize();
 
   return { authService, sessionManager, browserService };

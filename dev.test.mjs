@@ -39,6 +39,15 @@ test("createBackendEnv preserves explicit devtools override", () => {
   assert.equal(env.BROWSER_DEVTOOLS_ENABLED, "false");
 });
 
+test("createBackendEnv disables persisted session restore in dev", () => {
+  const env = createBackendEnv({
+    baseEnv: { AUTH_USERNAME: "admin" },
+    backendPort: 5005,
+  });
+
+  assert.equal(env.SESSION_RESTORE_ENABLED, "false");
+});
+
 test("createFrontendEnv pins proxy target and strict port mode", () => {
   const env = createFrontendEnv({
     baseEnv: { NODE_ENV: "development" },

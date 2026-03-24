@@ -2,13 +2,12 @@ import http from "node:http";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionRouter } from "./session";
-import { SessionProfileValidationError } from "../session/manager";
 
 interface MockSession {
   id: string;
   targetUrl: string;
   proxyEnabled: boolean;
-  profileMode: "managed" | "custom";
+  sourceType: "launch" | "connect-cdp";
   headers: Record<string, string>;
   connected: boolean;
   createdAt: Date;
@@ -19,21 +18,27 @@ function createTestServer(sessionState: { current: MockSession | null }) {
     createSession: vi.fn(
       async (options: {
         targetUrl: string;
-        proxyEnabled: boolean;
-        profilePath?: string;
-        headers?: Record<string, string>;
+        source:
+          | {
+              type: "launch";
+              proxyEnabled: boolean;
+              headers: Record<string, string>;
+            }
+          | {
+              type: "connect-cdp";
+              endpoint: string;
+            };
       }) => {
-        if (options.profilePath === "/missing") {
-          throw new SessionProfileValidationError(
-            "Custom profile path does not exist",
-          );
-        }
         const created: MockSession = {
           id: "test-session-id",
           targetUrl: options.targetUrl,
-          proxyEnabled: options.proxyEnabled,
-          profileMode: options.profilePath ? "custom" : "managed",
-          headers: options.headers ?? {},
+          proxyEnabled:
+            options.source.type === "launch"
+              ? options.source.proxyEnabled
+              : false,
+          sourceType: options.source.type,
+          headers:
+            options.source.type === "launch" ? options.source.headers : {},
           connected: false,
           createdAt: new Date("2026-03-19T00:00:00.000Z"),
         };
@@ -113,9 +118,12 @@ describe("session routes", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: "https://example.com",
-        proxyEnabled: true,
-        headers: {
-          "x-session-id": "test-session-id",
+        source: {
+          type: "launch",
+          proxyEnabled: true,
+          headers: {
+            "x-session-id": "test-session-id",
+          },
         },
       }),
     });
@@ -135,13 +143,13 @@ describe("session routes", () => {
       sessionId: string;
       targetUrl: string;
       proxyEnabled: boolean;
-      profileMode: "managed" | "custom";
+      sourceType: "launch" | "connect-cdp";
       headers: Record<string, string>;
     };
     expect(statusPayload.sessionId).toBe("test-session-id");
     expect(statusPayload.targetUrl).toBe("https://example.com");
     expect(statusPayload.proxyEnabled).toBe(true);
-    expect(statusPayload.profileMode).toBe("managed");
+    expect(statusPayload.sourceType).toBe("launch");
     expect(statusPayload.headers).toEqual({
       "x-session-id": "test-session-id",
     });
@@ -151,13 +159,13 @@ describe("session routes", () => {
     const listPayload = (await listResponse.json()) as Array<{
       sessionId: string;
       proxyEnabled: boolean;
-      profileMode: "managed" | "custom";
+      sourceType: "launch" | "connect-cdp";
       headers: Record<string, string>;
     }>;
     expect(listPayload).toHaveLength(1);
     expect(listPayload[0]?.sessionId).toBe("test-session-id");
     expect(listPayload[0]?.proxyEnabled).toBe(true);
-    expect(listPayload[0]?.profileMode).toBe("managed");
+    expect(listPayload[0]?.sourceType).toBe("launch");
     expect(listPayload[0]?.headers).toEqual({
       "x-session-id": "test-session-id",
     });
@@ -176,9 +184,9 @@ describe("session routes", () => {
     expect(missingResponse.status).toBe(404);
   });
 
-  it("returns a validation error for an invalid custom profile path", async () => {
+  it("creates an attached CDP session", async () => {
     const state = { current: null as MockSession | null };
-    const { server } = createTestServer(state);
+    const { server, sessionManager } = createTestServer(state);
     servers.push(server);
     const port = await startServer(server);
 
@@ -187,16 +195,20 @@ describe("session routes", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: "https://example.com",
-        proxyEnabled: false,
-        profilePath: "/missing",
+        source: {
+          type: "connect-cdp",
+          endpoint: "http://127.0.0.1:9333",
+        },
       }),
     });
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual(
-      expect.objectContaining({
-        message: "Custom profile path does not exist",
-      }),
-    );
+    expect(response.status).toBe(201);
+    expect(sessionManager.createSession).toHaveBeenCalledWith({
+      targetUrl: "https://example.com",
+      source: {
+        type: "connect-cdp",
+        endpoint: "http://127.0.0.1:9333",
+      },
+    });
   });
 });

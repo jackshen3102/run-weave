@@ -55,7 +55,10 @@ describe("SessionManager integration", () => {
 
     const createdSession = await firstManager.createSession({
       targetUrl: "https://example.com",
-      proxyEnabled: true,
+      source: {
+        type: "launch",
+        proxyEnabled: true,
+      },
     });
     firstManager.markConnected(createdSession.id, true);
     await firstManager.dispose();
@@ -77,6 +80,7 @@ describe("SessionManager integration", () => {
       createdSession.id,
       "https://example.com",
       {
+        type: "launch",
         profilePath: path.join(profileRootDir, "sessions", createdSession.id),
         proxyEnabled: true,
         headers: {},

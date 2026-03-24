@@ -1,10 +1,23 @@
 export type SessionHeaders = Record<string, string>;
 
+export type SessionSourceType = "launch" | "connect-cdp";
+
+export interface LaunchSessionSource {
+  type: "launch";
+  proxyEnabled?: boolean;
+  headers?: SessionHeaders;
+}
+
+export interface ConnectCdpSessionSource {
+  type: "connect-cdp";
+  endpoint: string;
+}
+
+export type CreateSessionSource = LaunchSessionSource | ConnectCdpSessionSource;
+
 export interface CreateSessionRequest {
   url: string;
-  proxyEnabled: boolean;
-  profilePath?: string;
-  headers?: SessionHeaders;
+  source?: CreateSessionSource;
 }
 
 export interface LoginRequest {
@@ -27,7 +40,7 @@ export interface SessionStatusResponse {
   connected: boolean;
   targetUrl: string;
   proxyEnabled: boolean;
-  profileMode: "managed" | "custom";
+  sourceType: SessionSourceType;
   headers: SessionHeaders;
   createdAt: string;
 }
@@ -37,7 +50,7 @@ export interface SessionListItem {
   connected: boolean;
   targetUrl: string;
   proxyEnabled: boolean;
-  profileMode: "managed" | "custom";
+  sourceType: SessionSourceType;
   headers: SessionHeaders;
   createdAt: string;
   lastActivityAt: string;

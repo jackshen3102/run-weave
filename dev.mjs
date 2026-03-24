@@ -12,6 +12,7 @@ export function createBackendEnv({ baseEnv, backendPort }) {
     BROWSER_DEVTOOLS_ENABLED: baseEnv.BROWSER_DEVTOOLS_ENABLED ?? "true",
     PORT: String(backendPort),
     PORT_STRICT: "true",
+    SESSION_RESTORE_ENABLED: baseEnv.SESSION_RESTORE_ENABLED ?? "false",
   };
 }
 

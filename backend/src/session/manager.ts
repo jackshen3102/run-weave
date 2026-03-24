@@ -1,50 +1,46 @@
 import { rm } from "node:fs/promises";
-import type { SessionHeaders } from "@browser-viewer/shared";
+import type {
+  CreateSessionSource,
+  SessionHeaders,
+} from "@browser-viewer/shared";
 import { v4 as uuidv4 } from "uuid";
 import {
   BrowserService,
   type BrowserSession,
-  type BrowserSessionOptions,
+  type LaunchBrowserSessionOptions,
 } from "../browser/service";
-import {
-  resolveSessionProfileBinding,
-  SessionProfileConflictError,
-  SessionProfileValidationError,
-} from "./profile-binding";
-import type {
-  PersistedSessionRecord,
-  SessionProfileMode,
-  SessionStore,
-} from "./store";
-
-export { SessionProfileConflictError, SessionProfileValidationError };
+import type { PersistedSessionRecord, SessionStore } from "./store";
 
 export interface SessionRecord {
   id: string;
   targetUrl: string;
   proxyEnabled: boolean;
-  profilePath: string;
-  profileMode: SessionProfileMode;
+  sourceType: "launch" | "connect-cdp";
   headers: SessionHeaders;
   createdAt: Date;
   lastActivityAt: Date;
   connected: boolean;
+  persisted: boolean;
+  profilePath: string | null;
   browserSession: BrowserSession;
 }
 
 export interface CreateSessionOptions {
   targetUrl: string;
-  proxyEnabled: boolean;
-  profilePath?: string;
-  headers?: SessionHeaders;
+  source?: CreateSessionSource;
 }
 
-function buildBrowserSessionOptions(session: {
+export interface SessionManagerOptions {
+  restorePersistedSessions?: boolean;
+}
+
+function buildLaunchBrowserSessionOptions(session: {
   profilePath: string;
   proxyEnabled: boolean;
   headers: SessionHeaders;
-}): BrowserSessionOptions {
+}): LaunchBrowserSessionOptions {
   return {
+    type: "launch",
     profilePath: session.profilePath,
     proxyEnabled: session.proxyEnabled,
     headers: session.headers,
@@ -59,12 +55,13 @@ function buildSessionRecord(
     id: record.id,
     targetUrl: record.targetUrl,
     proxyEnabled: record.proxyEnabled,
-    profilePath: record.profilePath,
-    profileMode: record.profileMode,
+    sourceType: "launch",
     headers: record.headers,
     createdAt: new Date(record.createdAt),
     lastActivityAt: new Date(record.lastActivityAt),
     connected: false,
+    persisted: true,
+    profilePath: record.profilePath,
     browserSession,
   };
 }
@@ -76,9 +73,9 @@ function buildPersistedSessionRecord(
     id: session.id,
     targetUrl: session.targetUrl,
     proxyEnabled: session.proxyEnabled,
-    connected: session.connected,
-    profilePath: session.profilePath,
-    profileMode: session.profileMode,
+    connected: false,
+    profilePath: session.profilePath ?? "",
+    profileMode: "managed",
     headers: session.headers,
     createdAt: session.createdAt.toISOString(),
     lastActivityAt: session.lastActivityAt.toISOString(),
@@ -88,45 +85,72 @@ function buildPersistedSessionRecord(
 export class SessionManager {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
+  private readonly restorePersistedSessionsEnabled: boolean;
 
   constructor(
     private readonly browserService: BrowserService,
     private readonly sessionStore: SessionStore,
-  ) {}
+    options?: SessionManagerOptions,
+  ) {
+    this.restorePersistedSessionsEnabled =
+      options?.restorePersistedSessions ?? true;
+  }
 
   async initialize(): Promise<void> {
     await this.sessionStore.initialize();
+    if (!this.restorePersistedSessionsEnabled) {
+      return;
+    }
     await this.restorePersistedSessions();
   }
 
   async createSession(options: CreateSessionOptions): Promise<SessionRecord> {
     const sessionId = uuidv4();
-    const headers = options.headers ?? {};
-    const { profileMode, profilePath } = await resolveSessionProfileBinding({
-      sessionId,
-      customProfilePath: options.profilePath,
-      activeProfilePaths: Array.from(
-        this.sessions.values(),
-        (session) => session.profilePath,
-      ),
-      getManagedProfilePath: (managedSessionId) =>
-        this.browserService.getSessionProfileDir(managedSessionId),
-    });
+    const source = options.source ?? { type: "launch" };
+
+    if (source.type === "connect-cdp") {
+      const browserSession = await this.browserService.createSession(
+        sessionId,
+        options.targetUrl,
+        source,
+      );
+      const session: SessionRecord = {
+        id: sessionId,
+        targetUrl: options.targetUrl,
+        proxyEnabled: false,
+        sourceType: "connect-cdp",
+        headers: {},
+        createdAt: new Date(),
+        lastActivityAt: new Date(),
+        connected: false,
+        persisted: false,
+        profilePath: null,
+        browserSession,
+      };
+
+      this.sessions.set(session.id, session);
+      return session;
+    }
+
+    const profilePath = this.browserService.getSessionProfileDir(sessionId);
+    const proxyEnabled = source.proxyEnabled ?? false;
+    const headers = source.headers ?? {};
     const browserSession = await this.browserService.createSession(
       sessionId,
       options.targetUrl,
-      buildBrowserSessionOptions({
+      buildLaunchBrowserSessionOptions({
         profilePath,
-        proxyEnabled: options.proxyEnabled,
+        proxyEnabled,
         headers,
       }),
     );
     const session: SessionRecord = {
       id: sessionId,
       targetUrl: options.targetUrl,
-      proxyEnabled: options.proxyEnabled,
+      proxyEnabled,
+      sourceType: "launch",
+      persisted: true,
       profilePath,
-      profileMode,
       headers,
       createdAt: new Date(),
       lastActivityAt: new Date(),
@@ -162,6 +186,11 @@ export class SessionManager {
     if (connected) {
       this.cancelPendingDestroy(sessionId);
     }
+
+    if (!session.persisted) {
+      return;
+    }
+
     void this.sessionStore.updateSessionConnection({
       sessionId,
       connected,
@@ -178,10 +207,13 @@ export class SessionManager {
     this.cancelPendingDestroy(sessionId);
     this.sessions.delete(sessionId);
     await this.browserService.destroySession(sessionId, session.browserSession);
-    await this.sessionStore.deleteSession(sessionId);
+
+    if (session.persisted) {
+      await this.sessionStore.deleteSession(sessionId);
+    }
 
     try {
-      if (session.profileMode === "managed") {
+      if (session.profilePath) {
         await rm(session.profilePath, {
           recursive: true,
           force: true,
@@ -237,7 +269,7 @@ export class SessionManager {
     const browserSession = await this.browserService.restoreSession(
       record.id,
       record.targetUrl,
-      buildBrowserSessionOptions(record),
+      buildLaunchBrowserSessionOptions(record),
     );
 
     this.sessions.set(record.id, buildSessionRecord(record, browserSession));

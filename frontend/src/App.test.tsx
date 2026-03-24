@@ -65,7 +65,7 @@ describe("App", () => {
             lastActivityAt: "2026-03-23T07:31:19.000Z",
             connected: false,
             proxyEnabled: true,
-            profileMode: "custom",
+            sourceType: "connect-cdp",
             headers: {
               "x-team": "alpha",
             },
@@ -76,7 +76,7 @@ describe("App", () => {
             lastActivityAt: "2026-03-23T07:30:44.000Z",
             connected: false,
             proxyEnabled: false,
-            profileMode: "managed",
+            sourceType: "launch",
             headers: {},
           },
         ],
@@ -97,13 +97,13 @@ describe("App", () => {
 
     expect(screen.getAllByText("Proxy enabled").length).toBeGreaterThan(0);
     expect(screen.getByText("Proxy disabled")).toBeInTheDocument();
-    expect(screen.getAllByText("Custom profile").length).toBeGreaterThan(0);
-    expect(screen.getByText("Managed profile")).toBeInTheDocument();
+    expect(screen.getAllByText("Attached browser").length).toBeGreaterThan(0);
+    expect(screen.getByText("Launched browser")).toBeInTheDocument();
     expect(screen.getAllByText("1 header").length).toBeGreaterThan(0);
     expect(screen.getByText("No custom headers")).toBeInTheDocument();
   });
 
-  it("shows a custom profile path input and submits it", async () => {
+  it("shows a CDP endpoint input and submits it when attaching to an existing browser", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
     const fetchMock = vi.fn();
     fetchMock
@@ -129,18 +129,18 @@ describe("App", () => {
       expect(screen.getByText("New Session")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByLabelText("Use custom profile path"));
+    fireEvent.click(screen.getByLabelText("Attach to existing browser"));
 
-    const profilePathInput = screen.getByLabelText("Profile path");
+    const endpointInput = screen.getByLabelText("CDP endpoint");
     await waitFor(() => {
-      expect(profilePathInput).toBeInTheDocument();
+      expect(endpointInput).toBeInTheDocument();
     });
 
     fireEvent.change(screen.getByLabelText("Target URL"), {
       target: { value: "https://example.com" },
     });
-    fireEvent.change(profilePathInput, {
-      target: { value: "/profiles/custom-profile" },
+    fireEvent.change(endpointInput, {
+      target: { value: "http://127.0.0.1:9333" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
@@ -151,8 +151,10 @@ describe("App", () => {
           method: "POST",
           body: JSON.stringify({
             url: "https://example.com",
-            proxyEnabled: false,
-            profilePath: "/profiles/custom-profile",
+            source: {
+              type: "connect-cdp",
+              endpoint: "http://127.0.0.1:9333",
+            },
           }),
         }),
       );
@@ -173,7 +175,7 @@ describe("App", () => {
             lastActivityAt: "2026-03-23T07:31:19.000Z",
             connected: false,
             proxyEnabled: false,
-            profileMode: "managed",
+            sourceType: "launch",
             headers: {
               "x-team": "alpha",
             },
@@ -196,7 +198,7 @@ describe("App", () => {
             lastActivityAt: "2026-03-23T07:31:19.000Z",
             connected: false,
             proxyEnabled: false,
-            profileMode: "managed",
+            sourceType: "launch",
             headers: {
               "x-team": "alpha",
             },
@@ -233,10 +235,13 @@ describe("App", () => {
           method: "POST",
           body: JSON.stringify({
             url: "https://example.com",
-            proxyEnabled: false,
-            headers: {
-              authorization: "Bearer demo",
-              "x-team": "alpha",
+            source: {
+              type: "launch",
+              proxyEnabled: false,
+              headers: {
+                authorization: "Bearer demo",
+                "x-team": "alpha",
+              },
             },
           }),
         }),
