@@ -17,6 +17,16 @@ import {
 } from "../features/viewer/url";
 import { useViewerInput } from "../features/viewer/use-viewer-input";
 
+const HISTORY_GUARD_STATE_KEY = "__viewerHistoryGuard";
+
+function toHistoryState(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
 interface ViewerPageProps {
   apiBase: string;
   sessionId: string;
@@ -169,6 +179,35 @@ export function ViewerPage({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isMoreMenuOpen]);
+
+  useEffect(() => {
+    const pushHistoryGuard = (): void => {
+      const currentState = toHistoryState(window.history.state);
+      window.history.pushState(
+        {
+          ...currentState,
+          [HISTORY_GUARD_STATE_KEY]: true,
+        },
+        "",
+        window.location.href,
+      );
+    };
+
+    const handlePopState = (): void => {
+      pushHistoryGuard();
+    };
+
+    if (
+      toHistoryState(window.history.state)[HISTORY_GUARD_STATE_KEY] !== true
+    ) {
+      pushHistoryGuard();
+    }
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   return (
     <main className="relative h-dvh overflow-hidden">

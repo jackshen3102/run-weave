@@ -145,4 +145,38 @@ describe("ViewerPage devtools controls", () => {
     );
     expect(screen.queryByRole("img")).toBeNull();
   });
+
+  it("blocks browser back/forward while viewer page is mounted", () => {
+    window.history.replaceState(null, "", "/?sessionId=s-1");
+    const pushStateSpy = vi.spyOn(window.history, "pushState");
+    const addEventListenerSpy = vi.spyOn(window, "addEventListener");
+    const removeEventListenerSpy = vi.spyOn(window, "removeEventListener");
+
+    const { unmount } = render(
+      <ViewerPage apiBase="http://localhost:5000" sessionId="s-1" token="t" />,
+    );
+
+    expect(pushStateSpy).toHaveBeenCalled();
+
+    const popstateHandler = addEventListenerSpy.mock.calls.find(
+      ([eventName]) => eventName === "popstate",
+    )?.[1] as EventListener;
+
+    expect(popstateHandler).toBeTypeOf("function");
+
+    const callCountBeforePopstate = pushStateSpy.mock.calls.length;
+    popstateHandler(new PopStateEvent("popstate"));
+    expect(pushStateSpy.mock.calls.length).toBe(callCountBeforePopstate + 1);
+
+    expect(removeEventListenerSpy).not.toHaveBeenCalledWith(
+      "popstate",
+      popstateHandler,
+    );
+
+    unmount();
+    expect(removeEventListenerSpy).toHaveBeenCalledWith(
+      "popstate",
+      popstateHandler,
+    );
+  });
 });
