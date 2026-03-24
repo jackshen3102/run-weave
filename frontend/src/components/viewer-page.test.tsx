@@ -147,7 +147,7 @@ describe("ViewerPage devtools controls", () => {
   });
 
   it("blocks browser back/forward while viewer page is mounted", () => {
-    window.history.replaceState(null, "", "/?sessionId=s-1");
+    window.history.replaceState(null, "", "/viewer/s-1");
     const pushStateSpy = vi.spyOn(window.history, "pushState");
     const addEventListenerSpy = vi.spyOn(window, "addEventListener");
     const removeEventListenerSpy = vi.spyOn(window, "removeEventListener");

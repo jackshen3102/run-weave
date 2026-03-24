@@ -50,11 +50,13 @@ describe("viewer url helpers", () => {
   });
 
   it("syncs tab id to url query", () => {
-    window.history.replaceState(null, "", "/?sessionId=s1");
+    window.history.replaceState(null, "", "/viewer/s1");
     syncUrlTabId("tab-9");
+    expect(window.location.pathname).toBe("/viewer/s1");
     expect(window.location.search).toContain("tabId=tab-9");
 
     syncUrlTabId(null);
-    expect(window.location.search).toBe("?sessionId=s1");
+    expect(window.location.pathname).toBe("/viewer/s1");
+    expect(window.location.search).toBe("");
   });
 });

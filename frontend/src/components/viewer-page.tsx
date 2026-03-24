@@ -32,6 +32,7 @@ interface ViewerPageProps {
   sessionId: string;
   token: string;
   onAuthExpired?: () => void;
+  onHome?: () => void;
 }
 
 export function ViewerPage({
@@ -39,6 +40,7 @@ export function ViewerPage({
   sessionId,
   token,
   onAuthExpired,
+  onHome,
 }: ViewerPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputBridgeRef = useRef<HTMLTextAreaElement>(null);
@@ -239,7 +241,13 @@ export function ViewerPage({
                   variant="ghost"
                   size="sm"
                   className="rounded-full px-3 text-stone-300 hover:bg-white/8 hover:text-white"
-                  onClick={() => window.location.assign("/")}
+                  onClick={() => {
+                    if (onHome) {
+                      onHome();
+                      return;
+                    }
+                    window.location.assign("/");
+                  }}
                 >
                   Home
                 </Button>

@@ -6,13 +6,22 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { ThemeProvider } from "./components/theme-provider";
 import App from "./App";
 
-function renderApp() {
+vi.mock("./components/viewer-page", () => ({
+  ViewerPage: ({ sessionId }: { sessionId: string }) => (
+    <div>Viewer route {sessionId}</div>
+  ),
+}));
+
+function renderApp(initialPath = "/") {
   render(
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-      <App />
+      <MemoryRouter initialEntries={[initialPath]}>
+        <App />
+      </MemoryRouter>
     </ThemeProvider>,
   );
 }
@@ -35,6 +44,22 @@ describe("App", () => {
     expect(
       screen.getByRole("button", { name: "Continue" }),
     ).toBeInTheDocument();
+  });
+
+  it("redirects unauthenticated viewer route to login", () => {
+    renderApp("/viewer/s-1");
+
+    expect(screen.getByRole("button", { name: "Continue" })).toBeInTheDocument();
+  });
+
+  it("renders viewer route when authenticated", async () => {
+    localStorage.setItem("viewer.auth.token", "token-1");
+
+    renderApp("/viewer/s-1");
+
+    await waitFor(() => {
+      expect(screen.getByText("Viewer route s-1")).toBeInTheDocument();
+    });
   });
 
   it("shows a proxy toggle when using managed browser in advanced settings", async () => {
@@ -121,11 +146,6 @@ describe("App", () => {
       })
       .mockResolvedValueOnce({ ok: true, json: async () => [] });
     vi.stubGlobal("fetch", fetchMock);
-    const assignMock = vi.fn();
-    Object.defineProperty(window, "location", {
-      value: { ...window.location, assign: assignMock },
-      writable: true,
-    });
 
     renderApp();
 
@@ -158,7 +178,10 @@ describe("App", () => {
         }),
       );
     });
-    expect(assignMock).toHaveBeenCalledWith("/?sessionId=session-1");
+
+    await waitFor(() => {
+      expect(screen.getByText("Viewer route session-1")).toBeInTheDocument();
+    });
   });
 
   it("submits custom session headers and shows them in the list", async () => {
@@ -205,12 +228,6 @@ describe("App", () => {
         ],
       });
     vi.stubGlobal("fetch", fetchMock);
-    const assignMock = vi.fn();
-    Object.defineProperty(window, "location", {
-      value: { ...window.location, assign: assignMock },
-      writable: true,
-    });
-
     renderApp();
 
     await waitFor(() => {
