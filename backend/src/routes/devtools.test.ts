@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRequireAuth } from "../auth/middleware";
 import { createDevtoolsHandler } from "./devtools";
 
 interface MockResponse {
@@ -46,6 +45,8 @@ async function runRequest(options?: {
   authorization?: string;
   sessionId?: string;
   tabId?: string;
+  ticket?: string;
+  headers?: Record<string, string>;
   remoteDebuggingPort?: number | null;
   verifyToken?: (token: string) => boolean;
   resolveChromiumRevision?: (port: number) => Promise<string | null>;
@@ -56,50 +57,43 @@ async function runRequest(options?: {
 }): Promise<MockResponse> {
   const authService = {
     verifyToken: vi.fn(
-      options?.verifyToken ?? ((token: string) => token === "ok"),
+      options?.verifyToken ??
+        ((token: string) => token === "ok" || token === "ticket-ok"),
     ),
   };
   const sessionManager = {
-    getRemoteDebuggingPort: vi.fn(
-      () =>
-        hasOwnValue(options, "remoteDebuggingPort")
-          ? (options.remoteDebuggingPort as number | null)
-          : 9222,
+    getRemoteDebuggingPort: vi.fn(() =>
+      hasOwnValue(options, "remoteDebuggingPort")
+        ? (options.remoteDebuggingPort as number | null)
+        : 9222,
     ),
     getSession: vi.fn(),
   };
-  const requireAuth = createRequireAuth(authService as never);
   const handler = createDevtoolsHandler({
+    authService,
     sessionManager: sessionManager as never,
     resolveChromiumRevision:
       options?.resolveChromiumRevision ?? (async () => "1234567"),
     resolveTargetIdForSessionTab:
-      options?.resolveTargetIdForSessionTab ??
-      (async ({ tabId }) => tabId),
+      options?.resolveTargetIdForSessionTab ?? (async ({ tabId }) => tabId),
   });
   const req = {
-    headers: options?.authorization
-      ? { authorization: options.authorization }
-      : {},
+    headers: {
+      ...(options?.headers ?? {}),
+      ...(options?.authorization
+        ? { authorization: options.authorization }
+        : {}),
+    },
     query: {
       sessionId: options?.sessionId,
       tabId: options?.tabId,
+      ticket: options?.ticket,
     },
   };
   const res = createResponse();
 
-  await new Promise<void>((resolve) => {
-    requireAuth(req as never, res as never, () => {
-      const result = handler(req as never, res as never, (() => resolve()) as never);
-      void Promise.resolve(result)
-        .then(() => resolve())
-        .catch(() => resolve());
-    });
-
-    if (res.body) {
-      resolve();
-    }
-  });
+  const result = handler(req as never, res as never, vi.fn() as never);
+  await Promise.resolve(result);
 
   return res;
 }
@@ -111,8 +105,8 @@ describe("devtools routes", () => {
       tabId: "tab-1",
     });
 
-    expect(response.statusCode).toBe(401);
-    expect(response.body).toContain("Unauthorized");
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toContain("Missing required sessionId or tabId");
   });
 
   it("returns 400 when required query params are missing", async () => {
@@ -151,6 +145,10 @@ describe("devtools routes", () => {
       authorization: "Bearer ok",
       sessionId: "s-1",
       tabId: "tab-1",
+      headers: {
+        host: "203.0.113.10:5012",
+        "x-forwarded-proto": "https",
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -160,7 +158,40 @@ describe("devtools routes", () => {
       "chrome-devtools-frontend.appspot.com/serve_rev/@1234567/inspector.html",
     );
     expect(response.body).toContain(
-      "ws=127.0.0.1%3A9222%2Fdevtools%2Fpage%2Ftab-1",
+      "wss=203.0.113.10%3A5012%2Fws%2Fdevtools-proxy%3FsessionId%3Ds-1%26tabId%3Dtab-1%26token%3Dok",
+    );
+  });
+
+  it("accepts a query ticket instead of bearer auth", async () => {
+    const response = await runRequest({
+      sessionId: "s-1",
+      tabId: "tab-1",
+      ticket: "ticket-ok",
+      headers: {
+        host: "127.0.0.1:5012",
+        "x-forwarded-proto": "https",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain(
+      "wss=127.0.0.1%3A5012%2Fws%2Fdevtools-proxy%3FsessionId%3Ds-1%26tabId%3Dtab-1%26token%3Dticket-ok",
+    );
+  });
+
+  it("uses plain ws when the request is not forwarded as https", async () => {
+    const response = await runRequest({
+      authorization: "Bearer ok",
+      sessionId: "s-1",
+      tabId: "tab-1",
+      headers: {
+        host: "127.0.0.1:5012",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain(
+      "ws=127.0.0.1%3A5012%2Fws%2Fdevtools-proxy%3FsessionId%3Ds-1%26tabId%3Dtab-1%26token%3Dok",
     );
   });
 });

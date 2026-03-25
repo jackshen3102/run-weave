@@ -1,9 +1,13 @@
 import { Router } from "express";
-import type { RequestHandler } from "express";
+import type { Request, RequestHandler } from "express";
+import { readBearerToken } from "../auth/middleware";
 import type { SessionManager } from "../session/manager";
 import { resolvePageByTargetId } from "../ws/tab-target";
 
 interface CreateDevtoolsRouterOptions {
+  authService: {
+    verifyToken: (token: string) => boolean;
+  };
   sessionManager: SessionManager;
   resolveChromiumRevision?: (
     remoteDebuggingPort: number,
@@ -13,6 +17,20 @@ interface CreateDevtoolsRouterOptions {
     sessionId: string;
     tabId: string;
   }) => Promise<string | null>;
+}
+
+function resolveAccessToken(request: Request): string | null {
+  const bearerToken = readBearerToken(request);
+  if (bearerToken) {
+    return bearerToken;
+  }
+
+  const ticket = request.query.ticket;
+  if (typeof ticket === "string" && ticket.trim()) {
+    return ticket;
+  }
+
+  return null;
 }
 
 function buildDevtoolsShellHtml(devtoolsUrl: string): string {
@@ -42,9 +60,63 @@ function buildDevtoolsShellHtml(devtoolsUrl: string): string {
 function buildDevtoolsFrontendUrl(params: {
   revision: string;
   wsEndpoint: string;
+  wsProtocol: "ws" | "wss";
 }): string {
-  const { revision, wsEndpoint } = params;
-  return `https://chrome-devtools-frontend.appspot.com/serve_rev/@${encodeURIComponent(revision)}/inspector.html?ws=${encodeURIComponent(wsEndpoint)}`;
+  const { revision, wsEndpoint, wsProtocol } = params;
+  return `https://chrome-devtools-frontend.appspot.com/serve_rev/@${encodeURIComponent(revision)}/inspector.html?${wsProtocol}=${encodeURIComponent(wsEndpoint)}`;
+}
+
+function readForwardedHeader(
+  request: Request,
+  headerName: "x-forwarded-host" | "x-forwarded-proto",
+): string | null {
+  const value = request.headers[headerName];
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const [first] = value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return first ?? null;
+}
+
+function resolveRequestHost(request: Request): string {
+  return (
+    readForwardedHeader(request, "x-forwarded-host") ??
+    request.headers.host ??
+    "127.0.0.1"
+  );
+}
+
+function resolveWebSocketProtocol(request: Request): "ws" | "wss" {
+  const forwardedProto = readForwardedHeader(request, "x-forwarded-proto");
+  if (forwardedProto === "https") {
+    return "wss";
+  }
+  if (forwardedProto === "http") {
+    return "ws";
+  }
+
+  return request.socket?.encrypted ? "wss" : "ws";
+}
+
+function buildDevtoolsProxyEndpoint(params: {
+  request: Request;
+  sessionId: string;
+  tabId: string;
+  token: string;
+}): string {
+  const { request, sessionId, tabId, token } = params;
+  const host = resolveRequestHost(request);
+  const search = new URLSearchParams({
+    sessionId,
+    tabId,
+    token,
+  });
+
+  return `${host}/ws/devtools-proxy?${search.toString()}`;
 }
 
 async function defaultResolveChromiumRevision(
@@ -123,9 +195,15 @@ export function createDevtoolsHandler(
   return async (req, res) => {
     const sessionId = req.query.sessionId;
     const tabId = req.query.tabId;
+    const token = resolveAccessToken(req);
 
-    if (typeof sessionId !== "string" || typeof tabId !== "string") {
+    if (typeof sessionId !== "string" || typeof tabId !== "string" || !token) {
       res.status(400).send("Missing required sessionId or tabId");
+      return;
+    }
+
+    if (!options.authService.verifyToken(token)) {
+      res.status(401).json({ message: "Unauthorized" });
       return;
     }
 
@@ -160,10 +238,16 @@ export function createDevtoolsHandler(
       return;
     }
 
-    const wsEndpoint = `127.0.0.1:${remoteDebuggingPort}/devtools/page/${encodeURIComponent(targetId)}`;
+    const wsEndpoint = buildDevtoolsProxyEndpoint({
+      request: req,
+      sessionId,
+      tabId: targetId,
+      token,
+    });
     const devtoolsUrl = buildDevtoolsFrontendUrl({
       revision,
       wsEndpoint,
+      wsProtocol: resolveWebSocketProtocol(req),
     });
     res.setHeader("content-type", "text/html; charset=utf-8");
     res.send(buildDevtoolsShellHtml(devtoolsUrl));
