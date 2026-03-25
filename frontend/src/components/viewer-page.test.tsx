@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ViewerPage } from "./viewer-page";
 
 const sendInput = vi.fn();
-const fetchMock = vi.fn();
+const createDevtoolsTicketMock = vi.fn();
 
 function buildViewerConnectionState(overrides?: {
   devtoolsEnabled?: boolean;
@@ -55,11 +55,18 @@ vi.mock("../features/viewer/use-viewer-input", () => ({
   }),
 }));
 
+vi.mock("../services/session", () => ({
+  createDevtoolsTicket: (...args: unknown[]) => createDevtoolsTicketMock(...args),
+}));
+
 describe("ViewerPage devtools controls", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", fetchMock);
     sendInput.mockReset();
-    fetchMock.mockReset();
+    createDevtoolsTicketMock.mockReset();
+    createDevtoolsTicketMock.mockResolvedValue({
+      ticket: "ticket-1",
+      expiresIn: 60,
+    });
     useViewerConnectionMock.mockReset();
     useViewerConnectionMock.mockReturnValue(buildViewerConnectionState());
   });
@@ -128,10 +135,6 @@ describe("ViewerPage devtools controls", () => {
   });
 
   it("renders devtools iframe when opened", async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      text: vi.fn().mockResolvedValue("<html><body>DevTools Shell</body></html>"),
-    });
     useViewerConnectionMock.mockReturnValue(
       buildViewerConnectionState({
         devtoolsEnabled: true,
@@ -144,20 +147,19 @@ describe("ViewerPage devtools controls", () => {
     );
 
     expect(screen.getByRole("button", { name: "Page" })).toBeInTheDocument();
-    const frame = screen.getByTitle("DevTools");
-    expect(frame).toBeInTheDocument();
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "http://localhost:5000/devtools?sessionId=s-1&tabId=tab-1",
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: "Bearer t",
-          }),
-        }),
+      const frame = screen.getByTitle("DevTools");
+      expect(createDevtoolsTicketMock).toHaveBeenCalledWith(
+        "http://localhost:5000",
+        "t",
+        "s-1",
+        {
+          tabId: "tab-1",
+        },
       );
       expect(frame).toHaveAttribute(
-        "srcdoc",
-        "<html><body>DevTools Shell</body></html>",
+        "src",
+        "http://localhost:5000/devtools?sessionId=s-1&tabId=tab-1&ticket=ticket-1",
       );
     });
     expect(screen.queryByRole("img")).toBeNull();

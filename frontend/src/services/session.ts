@@ -1,4 +1,6 @@
 import type {
+  CreateDevtoolsTicketRequest,
+  CreateDevtoolsTicketResponse,
   CreateSessionRequest,
   CreateSessionResponse,
   SessionListItem,
@@ -42,4 +44,24 @@ export async function deleteSession(
       Authorization: `Bearer ${token}`,
     },
   });
+}
+
+export async function createDevtoolsTicket(
+  apiBase: string,
+  token: string,
+  sessionId: string,
+  payload: CreateDevtoolsTicketRequest,
+): Promise<CreateDevtoolsTicketResponse> {
+  return requestJson<CreateDevtoolsTicketResponse>(
+    apiBase,
+    `/api/session/${encodeURIComponent(sessionId)}/devtools-ticket`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
 }

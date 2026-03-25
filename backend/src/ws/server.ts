@@ -24,9 +24,20 @@ export function attachWebSocketServer(
   authService: AuthService,
   options?: { devtoolsEnabled?: boolean },
 ): WebSocketServer {
-  const wss = new WebSocketServer({ server, path: "/ws" });
+  const wss = new WebSocketServer({ noServer: true });
   const devtoolsEnabled = options?.devtoolsEnabled ?? false;
   const cursorSyncIntervalMs = 50;
+
+  server.on("upgrade", (request, socket, head) => {
+    const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+    if (pathname !== "/ws") {
+      return;
+    }
+
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit("connection", ws, request);
+    });
+  });
 
   const sendEvent = (socket: WebSocket, event: ServerEventMessage): void => {
     if (socket.readyState !== 1) {

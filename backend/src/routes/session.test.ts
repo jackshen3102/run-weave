@@ -15,6 +15,12 @@ interface MockSession {
 }
 
 function createTestServer(sessionState: { current: MockSession | null }) {
+  const authService = {
+    issueTemporaryToken: vi.fn(() => ({
+      token: "ticket-123",
+      expiresIn: 60,
+    })),
+  };
   const sessionManager = {
     createSession: vi.fn(
       async (options: {
@@ -75,10 +81,10 @@ function createTestServer(sessionState: { current: MockSession | null }) {
 
   const app = express();
   app.use(express.json());
-  app.use("/api", createSessionRouter(sessionManager as never));
+  app.use("/api", createSessionRouter(sessionManager as never, authService as never));
   const server = http.createServer(app);
 
-  return { server, sessionManager };
+  return { server, sessionManager, authService };
 }
 
 async function startServer(server: http.Server): Promise<number> {
@@ -225,5 +231,43 @@ describe("session routes", () => {
     }>;
     expect(listPayload[0]?.sourceType).toBe("connect-cdp");
     expect(listPayload[0]?.cdpEndpoint).toBe("http://127.0.0.1:9333");
+  });
+
+  it("issues a short-lived devtools ticket for an existing session", async () => {
+    const state = {
+      current: {
+        id: "test-session-id",
+        targetUrl: "https://example.com",
+        proxyEnabled: false,
+        sourceType: "launch" as const,
+        headers: {},
+        connected: false,
+        createdAt: new Date("2026-03-19T00:00:00.000Z"),
+      },
+    };
+    const { server, authService } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/session/test-session-id/devtools-ticket`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tabId: "tab-1" }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(authService.issueTemporaryToken).toHaveBeenCalledWith(
+      "devtools",
+      60_000,
+    );
+    const payload = (await response.json()) as {
+      ticket: string;
+      expiresIn: number;
+    };
+    expect(payload.ticket).toBe("ticket-123");
+    expect(payload.expiresIn).toBe(60);
   });
 });

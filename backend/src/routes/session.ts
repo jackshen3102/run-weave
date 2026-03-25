@@ -1,12 +1,15 @@
 import { Router } from "express";
 import { z } from "zod";
 import type {
+  CreateDevtoolsTicketRequest,
+  CreateDevtoolsTicketResponse,
   CreateSessionSource,
   CreateSessionRequest,
   CreateSessionResponse,
   SessionListItem,
   SessionStatusResponse,
 } from "@browser-viewer/shared";
+import type { AuthService } from "../auth/service";
 import type { SessionManager } from "../session/manager";
 
 const launchSourceSchema = z.object({
@@ -25,13 +28,20 @@ const createSessionSchema = z.object({
   source: z.union([launchSourceSchema, connectCdpSourceSchema]).optional(),
 });
 
+const createDevtoolsTicketSchema = z.object({
+  tabId: z.string().min(1),
+});
+
 function normalizeCreateSessionSource(
   source: CreateSessionRequest["source"],
 ): CreateSessionSource {
   return source ?? { type: "launch" };
 }
 
-export function createSessionRouter(sessionManager: SessionManager): Router {
+export function createSessionRouter(
+  sessionManager: SessionManager,
+  authService: AuthService,
+): Router {
   const router = Router();
 
   router.get("/session", (_req, res) => {
@@ -113,6 +123,32 @@ export function createSessionRouter(sessionManager: SessionManager): Router {
       return;
     }
     res.status(204).send();
+  });
+
+  router.post("/session/:id/devtools-ticket", (req, res) => {
+    const session = sessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Session not found" });
+      return;
+    }
+
+    const parsed = createDevtoolsTicketSchema.safeParse(
+      req.body as CreateDevtoolsTicketRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const issued = authService.issueTemporaryToken("devtools", 60_000);
+    const payload: CreateDevtoolsTicketResponse = {
+      ticket: issued.token,
+      expiresIn: issued.expiresIn,
+    };
+    res.status(200).json(payload);
   });
 
   return router;

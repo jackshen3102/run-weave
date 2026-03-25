@@ -54,8 +54,9 @@ export function buildDevtoolsPageUrl(
   apiBase: string,
   sessionId: string,
   tabId: string,
+  ticket: string,
 ): string {
-  return `${toHttpBase(apiBase)}/devtools?sessionId=${encodeURIComponent(sessionId)}&tabId=${encodeURIComponent(tabId)}`;
+  return `${toHttpBase(apiBase)}/devtools?sessionId=${encodeURIComponent(sessionId)}&tabId=${encodeURIComponent(tabId)}&ticket=${encodeURIComponent(ticket)}`;
 }
 
 export function getTabIdFromSearch(search: string): string | null {

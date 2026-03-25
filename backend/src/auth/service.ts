@@ -21,4 +21,11 @@ export class AuthService {
   verifyToken(token: string): boolean {
     return verifyToken(token, this.config.jwtSecret).valid;
   }
+
+  issueTemporaryToken(
+    username: string,
+    ttlMs: number,
+  ): { token: string; expiresIn: number } {
+    return issueToken(username, this.config.jwtSecret, ttlMs);
+  }
 }

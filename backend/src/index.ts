@@ -18,6 +18,7 @@ import { SessionManager } from "./session/manager";
 import { SQLiteSessionStore } from "./session/sqlite-store";
 import { listenWithFallback } from "./server/listen";
 import { resolveStoragePaths } from "./utils/path";
+import { attachDevtoolsProxyServer } from "./ws/devtools-proxy";
 import { attachWebSocketServer } from "./ws/server";
 
 interface RuntimeConfig {
@@ -137,13 +138,17 @@ function createHttpApp(services: RuntimeServices): express.Express {
 
   app.use("/test", createTestRouter());
   app.use("/api/auth", createAuthRouter(services.authService));
-  app.use("/api", requireAuth, createSessionRouter(services.sessionManager));
+  app.use(
+    "/api",
+    requireAuth,
+    createSessionRouter(services.sessionManager, services.authService),
+  );
 
   if (devtoolsEnabled) {
     app.use(
       "/devtools",
-      requireAuth,
       createDevtoolsRouter({
+        authService: services.authService,
         sessionManager: services.sessionManager,
       }),
     );
@@ -207,6 +212,14 @@ async function startRuntime(): Promise<void> {
   attachWebSocketServer(server, services.sessionManager, services.authService, {
     devtoolsEnabled,
   });
+  attachDevtoolsProxyServer(
+    server,
+    services.sessionManager,
+    services.authService,
+    {
+      enabled: devtoolsEnabled,
+    },
+  );
 
   await listenWithFallback(server, runtimeConfig.preferredPort, {
     host: runtimeConfig.host,

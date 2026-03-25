@@ -16,7 +16,8 @@ import {
   normalizeNavigationUrl,
 } from "../features/viewer/url";
 import { useViewerInput } from "../features/viewer/use-viewer-input";
-import { HttpError, requestText } from "../services/http";
+import { HttpError } from "../services/http";
+import { createDevtoolsTicket } from "../services/session";
 
 const HISTORY_GUARD_STATE_KEY = "__viewerHistoryGuard";
 
@@ -49,7 +50,7 @@ export function ViewerPage({
   const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isNavigationBarOpen, setIsNavigationBarOpen] = useState(false);
-  const [devtoolsContent, setDevtoolsContent] = useState<string | null>(null);
+  const [devtoolsUrl, setDevtoolsUrl] = useState<string | null>(null);
   const [devtoolsError, setDevtoolsError] = useState<string | null>(null);
   const {
     status,
@@ -154,29 +155,30 @@ export function ViewerPage({
 
   useEffect(() => {
     if (!isInspecting || !activeTabId) {
-      setDevtoolsContent(null);
+      setDevtoolsUrl(null);
       setDevtoolsError(null);
       return;
     }
 
     let cancelled = false;
-    setDevtoolsContent(null);
+    setDevtoolsUrl(null);
     setDevtoolsError(null);
 
-    void requestText(
-      "",
-      buildDevtoolsPageUrl(apiBase, sessionId, activeTabId),
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    )
-      .then((html) => {
+    void createDevtoolsTicket(apiBase, token, sessionId, {
+      tabId: activeTabId,
+    })
+      .then((payload) => {
         if (cancelled) {
           return;
         }
-        setDevtoolsContent(html);
+        setDevtoolsUrl(
+          buildDevtoolsPageUrl(
+            apiBase,
+            sessionId,
+            activeTabId,
+            payload.ticket,
+          ),
+        );
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -473,13 +475,14 @@ export function ViewerPage({
                   <div className="pointer-events-none absolute left-5 top-3 z-10 rounded-full border border-white/15 bg-black/42 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-white/72 shadow-[0_12px_40px_-20px_rgba(0,0,0,0.8)]">
                     Inspector
                   </div>
-                  <iframe
-                    key={activeTabId}
-                    title="DevTools"
-                    srcDoc={devtoolsContent ?? ""}
-                    className="absolute inset-0 h-full w-full bg-[#050607] transition-opacity duration-300"
-                    sandbox="allow-scripts allow-same-origin"
-                  />
+                  {devtoolsUrl ? (
+                    <iframe
+                      key={activeTabId}
+                      title="DevTools"
+                      src={devtoolsUrl}
+                      className="absolute inset-0 h-full w-full bg-[#050607] transition-opacity duration-300"
+                    />
+                  ) : null}
                 </>
               )}
             </div>

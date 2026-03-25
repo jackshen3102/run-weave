@@ -54,7 +54,7 @@ function buildLaunchArgs(options: {
   }
   if (options.remoteDebuggingPort !== null) {
     args.push(`--remote-debugging-port=${options.remoteDebuggingPort}`);
-    args.push("--remote-debugging-address=0.0.0.0");
+    args.push("--remote-debugging-address=127.0.0.1");
     args.push(
       "--remote-allow-origins=https://chrome-devtools-frontend.appspot.com",
     );

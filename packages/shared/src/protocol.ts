@@ -35,6 +35,15 @@ export interface CreateSessionResponse {
   viewerUrl: string;
 }
 
+export interface CreateDevtoolsTicketRequest {
+  tabId: string;
+}
+
+export interface CreateDevtoolsTicketResponse {
+  ticket: string;
+  expiresIn: number;
+}
+
 export interface SessionStatusResponse {
   sessionId: string;
   connected: boolean;
