@@ -3,14 +3,54 @@ import { Button } from "./ui/button";
 import { HttpError } from "../services/http";
 import { login as loginWithPassword } from "../services/auth";
 
+interface RememberedCredentials {
+  username: string;
+  password: string;
+}
+
 interface LoginPageProps {
   apiBase: string;
   onSuccess: (token: string) => void;
 }
 
+const REMEMBERED_CREDENTIALS_STORAGE_KEY = "viewer.auth.remembered-credentials";
+
+function loadRememberedCredentials(): RememberedCredentials | null {
+  const storedValue = localStorage.getItem(REMEMBERED_CREDENTIALS_STORAGE_KEY);
+
+  if (!storedValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(storedValue) as Partial<RememberedCredentials>;
+    if (
+      typeof parsed.username !== "string" ||
+      typeof parsed.password !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      username: parsed.username,
+      password: parsed.password,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function LoginPage({ apiBase, onSuccess }: LoginPageProps) {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("");
+  const rememberedCredentials = loadRememberedCredentials();
+  const [username, setUsername] = useState(
+    rememberedCredentials?.username ?? "admin",
+  );
+  const [password, setPassword] = useState(
+    rememberedCredentials?.password ?? "",
+  );
+  const [rememberPassword, setRememberPassword] = useState(
+    rememberedCredentials !== null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,6 +60,14 @@ export function LoginPage({ apiBase, onSuccess }: LoginPageProps) {
 
     try {
       const data = await loginWithPassword(apiBase, { username, password });
+      if (rememberPassword) {
+        localStorage.setItem(
+          REMEMBERED_CREDENTIALS_STORAGE_KEY,
+          JSON.stringify({ username, password }),
+        );
+      } else {
+        localStorage.removeItem(REMEMBERED_CREDENTIALS_STORAGE_KEY);
+      }
       onSuccess(data.token);
     } catch (loginError) {
       if (loginError instanceof HttpError && loginError.status === 401) {
@@ -82,6 +130,16 @@ export function LoginPage({ apiBase, onSuccess }: LoginPageProps) {
               className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50"
             />
           </div>
+
+          <label className="flex items-center gap-3 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={rememberPassword}
+              onChange={(event) => setRememberPassword(event.target.checked)}
+              className="h-4 w-4 rounded border border-border/70 accent-primary"
+            />
+            <span>Remember password</span>
+          </label>
 
           {error && (
             <p className="text-sm text-red-500" role="alert">
