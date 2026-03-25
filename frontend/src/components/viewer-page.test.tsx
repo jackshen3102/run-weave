@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ViewerPage } from "./viewer-page";
 
 const sendInput = vi.fn();
+const fetchMock = vi.fn();
 
 function buildViewerConnectionState(overrides?: {
   devtoolsEnabled?: boolean;
@@ -56,7 +57,9 @@ vi.mock("../features/viewer/use-viewer-input", () => ({
 
 describe("ViewerPage devtools controls", () => {
   beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
     sendInput.mockReset();
+    fetchMock.mockReset();
     useViewerConnectionMock.mockReset();
     useViewerConnectionMock.mockReturnValue(buildViewerConnectionState());
   });
@@ -124,7 +127,11 @@ describe("ViewerPage devtools controls", () => {
     });
   });
 
-  it("renders devtools iframe when opened", () => {
+  it("renders devtools iframe when opened", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      text: vi.fn().mockResolvedValue("<html><body>DevTools Shell</body></html>"),
+    });
     useViewerConnectionMock.mockReturnValue(
       buildViewerConnectionState({
         devtoolsEnabled: true,
@@ -139,10 +146,20 @@ describe("ViewerPage devtools controls", () => {
     expect(screen.getByRole("button", { name: "Page" })).toBeInTheDocument();
     const frame = screen.getByTitle("DevTools");
     expect(frame).toBeInTheDocument();
-    expect(frame).toHaveAttribute(
-      "src",
-      "http://localhost:5000/devtools?sessionId=s-1&token=t&tabId=tab-1",
-    );
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://localhost:5000/devtools?sessionId=s-1&tabId=tab-1",
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: "Bearer t",
+          }),
+        }),
+      );
+      expect(frame).toHaveAttribute(
+        "srcdoc",
+        "<html><body>DevTools Shell</body></html>",
+      );
+    });
     expect(screen.queryByRole("img")).toBeNull();
   });
 

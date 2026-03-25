@@ -31,9 +31,9 @@ describe("viewer url helpers", () => {
   });
 
   it("builds devtools page url against backend base", () => {
-    expect(
-      buildDevtoolsPageUrl("", "session-1", "token-1", "tab-1"),
-    ).toContain("/devtools?sessionId=session-1&token=token-1&tabId=tab-1");
+    expect(buildDevtoolsPageUrl("", "session-1", "tab-1")).toContain(
+      "/devtools?sessionId=session-1&tabId=tab-1",
+    );
   });
 
   it("normalizes navigation url", () => {

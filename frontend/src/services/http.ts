@@ -12,6 +12,23 @@ function buildUrl(apiBase: string, path: string): string {
   return `${apiBase}${path}`;
 }
 
+export async function requestText(
+  apiBase: string,
+  path: string,
+  init?: RequestInit,
+): Promise<string> {
+  const response = await fetch(buildUrl(apiBase, path), init);
+
+  if (!response.ok) {
+    throw new HttpError(
+      response.status,
+      `${init?.method ?? "GET"} ${path} failed: ${response.status}`,
+    );
+  }
+
+  return response.text();
+}
+
 export async function requestJson<T>(
   apiBase: string,
   path: string,

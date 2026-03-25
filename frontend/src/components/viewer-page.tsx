@@ -16,6 +16,7 @@ import {
   normalizeNavigationUrl,
 } from "../features/viewer/url";
 import { useViewerInput } from "../features/viewer/use-viewer-input";
+import { HttpError, requestText } from "../services/http";
 
 const HISTORY_GUARD_STATE_KEY = "__viewerHistoryGuard";
 
@@ -48,6 +49,8 @@ export function ViewerPage({
   const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isNavigationBarOpen, setIsNavigationBarOpen] = useState(false);
+  const [devtoolsContent, setDevtoolsContent] = useState<string | null>(null);
+  const [devtoolsError, setDevtoolsError] = useState<string | null>(null);
   const {
     status,
     error,
@@ -148,6 +151,53 @@ export function ViewerPage({
   useEffect(() => {
     setIsMoreMenuOpen(false);
   }, [activeTabId, isInspecting]);
+
+  useEffect(() => {
+    if (!isInspecting || !activeTabId) {
+      setDevtoolsContent(null);
+      setDevtoolsError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setDevtoolsContent(null);
+    setDevtoolsError(null);
+
+    void requestText(
+      "",
+      buildDevtoolsPageUrl(apiBase, sessionId, activeTabId),
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    )
+      .then((html) => {
+        if (cancelled) {
+          return;
+        }
+        setDevtoolsContent(html);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        if (error instanceof HttpError && error.status === 401) {
+          onAuthExpired?.();
+          return;
+        }
+        setDevtoolsError("Failed to load DevTools.");
+        console.error("[viewer-fe] failed to load devtools shell", {
+          sessionId,
+          tabId: activeTabId,
+          error: String(error),
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTabId, apiBase, isInspecting, onAuthExpired, sessionId, token]);
 
   useEffect(() => {
     if (!isMoreMenuOpen) {
@@ -385,6 +435,12 @@ export function ViewerPage({
                     (status === "reconnecting" ? "Reconnecting..." : status)}
                 </div>
               )}
+
+              {isInspecting && devtoolsError && (
+                <div className="mt-2 px-1 text-xs text-amber-300">
+                  {devtoolsError}
+                </div>
+              )}
             </div>
           </div>
 
@@ -420,12 +476,7 @@ export function ViewerPage({
                   <iframe
                     key={activeTabId}
                     title="DevTools"
-                    src={buildDevtoolsPageUrl(
-                      apiBase,
-                      sessionId,
-                      token,
-                      activeTabId,
-                    )}
+                    srcDoc={devtoolsContent ?? ""}
                     className="absolute inset-0 h-full w-full bg-[#050607] transition-opacity duration-300"
                     sandbox="allow-scripts allow-same-origin"
                   />

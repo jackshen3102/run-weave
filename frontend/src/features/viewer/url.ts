@@ -53,10 +53,9 @@ export function buildViewerWsUrl(
 export function buildDevtoolsPageUrl(
   apiBase: string,
   sessionId: string,
-  token: string,
   tabId: string,
 ): string {
-  return `${toHttpBase(apiBase)}/devtools?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(token)}&tabId=${encodeURIComponent(tabId)}`;
+  return `${toHttpBase(apiBase)}/devtools?sessionId=${encodeURIComponent(sessionId)}&tabId=${encodeURIComponent(tabId)}`;
 }
 
 export function getTabIdFromSearch(search: string): string | null {
