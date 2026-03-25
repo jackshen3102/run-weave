@@ -15,34 +15,29 @@ pnpm dev
 BROWSER_HEADLESS=false pnpm dev
 ```
 
-### Production-style local run (`pnpm start`)
+### Production run (`pnpm start`)
 
 ```bash
 # setup backend env
 cp backend/.env.example backend/.env
 
-# build all workspaces, then start one backend process
+# build all workspaces
+pnpm build
+
+# start backend for nginx proxying
 pnpm start
 ```
 
 What `pnpm start` does:
 
-- Runs `pnpm build` first.
-- Verifies build artifacts exist (`backend/dist/index.js`, `frontend/dist/index.html`).
-- Finds an available backend port (from `--port`, `PORT`, or default `5000`).
-- Starts backend with static frontend serving (serves `frontend/dist` when present).
-- Prints Vite-style access URLs, for example:
-  - `Local:   http://localhost:5000/`
-  - `Network: http://<your-lan-ip>:5000/`
+- Starts backend only.
+- Binds Node to `127.0.0.1:5001`.
+- Intended for Nginx reverse proxy deployment.
 
 Examples:
 
 ```bash
-# specify preferred port (will auto-fallback if occupied)
-pnpm start -- --port 5600
-
-# set host/port via env
-HOST=0.0.0.0 PORT=5000 pnpm start
+pnpm --filter ./backend start -- --host 127.0.0.1 --port 5001
 ```
 
 ## Backend environment variables

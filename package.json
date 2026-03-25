@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node ./dev.mjs",
     "dev:headed": "BROWSER_HEADLESS=false node ./dev.mjs",
-    "start": "node ./start.mjs",
+    "start": "pnpm --filter ./backend start -- --host 127.0.0.1 --port 5001",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
