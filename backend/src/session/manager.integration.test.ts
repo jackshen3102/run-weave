@@ -99,4 +99,59 @@ describe("SessionManager integration", () => {
 
     await secondManager.dispose();
   });
+
+  it("keeps persisted sessions in SQLite when restore fails during restart", async () => {
+    const tempDir = await createTempDir();
+    const databaseFile = path.join(tempDir, "session-store.db");
+    const profileRootDir = path.join(tempDir, ".browser-profile");
+
+    const firstBrowserService = createBrowserServiceMock(profileRootDir);
+    const firstStore = new SQLiteSessionStore(databaseFile);
+    const firstManager = new SessionManager(
+      firstBrowserService as never,
+      firstStore,
+    );
+    await firstManager.initialize();
+
+    const createdSession = await firstManager.createSession({
+      targetUrl: "https://example.com",
+      source: {
+        type: "launch",
+      },
+    });
+    await firstManager.dispose();
+
+    const restoreError = new Error("restore failed");
+    const secondBrowserService = createBrowserServiceMock(profileRootDir);
+    secondBrowserService.restoreSession.mockRejectedValueOnce(restoreError);
+    const secondStore = new SQLiteSessionStore(databaseFile);
+    const secondManager = new SessionManager(
+      secondBrowserService as never,
+      secondStore,
+    );
+
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    await secondManager.initialize();
+
+    expect(secondManager.getSession(createdSession.id)).toBeUndefined();
+    await expect(secondStore.getSession(createdSession.id)).resolves.toEqual(
+      expect.objectContaining({
+        id: createdSession.id,
+        targetUrl: "https://example.com",
+      }),
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[viewer-be] failed to restore session",
+      expect.objectContaining({
+        sessionId: createdSession.id,
+        error: String(restoreError),
+      }),
+    );
+
+    consoleErrorSpy.mockRestore();
+    await secondManager.dispose();
+  });
 });

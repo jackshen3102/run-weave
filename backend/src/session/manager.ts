@@ -309,15 +309,6 @@ export class SessionManager {
       sessionId,
       error: String(error),
     });
-
-    try {
-      await this.sessionStore.deleteSession(sessionId);
-    } catch (cleanupError) {
-      console.error("[viewer-be] failed to delete stale session", {
-        sessionId,
-        error: String(cleanupError),
-      });
-    }
   }
 
   private cancelPendingDestroy(sessionId: string): void {

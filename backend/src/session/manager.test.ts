@@ -262,7 +262,7 @@ describe("SessionManager", () => {
     await manager.dispose();
   });
 
-  it("deletes a persisted session if restore fails", async () => {
+  it("keeps a persisted session in storage if restore fails", async () => {
     const browserServiceMock = createBrowserServiceMock();
     const sessionStoreMock = createSessionStoreMock();
     sessionStoreMock.listSessions.mockResolvedValue([
@@ -289,9 +289,7 @@ describe("SessionManager", () => {
     await manager.initialize();
 
     expect(manager.getSession("session-failed")).toBeUndefined();
-    expect(sessionStoreMock.deleteSession).toHaveBeenCalledWith(
-      "session-failed",
-    );
+    expect(sessionStoreMock.deleteSession).not.toHaveBeenCalled();
 
     await manager.dispose();
   });
