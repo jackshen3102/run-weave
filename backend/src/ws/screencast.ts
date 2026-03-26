@@ -6,11 +6,13 @@ export function createScreencastController(params: {
   socket: WebSocket;
   state: ConnectionContext;
   context: BrowserContext;
+  onFirstFrame?: () => void;
 }): {
   start: () => Promise<void>;
   stop: () => Promise<void>;
 } {
-  const { socket, state, context } = params;
+  const { socket, state, context, onFirstFrame } = params;
+  let firstFrameEmitted = false;
 
   const onScreencastFrame = (payload: {
     data: string;
@@ -22,6 +24,10 @@ export function createScreencastController(params: {
 
     const frameBuffer = Buffer.from(payload.data, "base64");
     socket.send(frameBuffer, { binary: true });
+    if (!firstFrameEmitted) {
+      firstFrameEmitted = true;
+      onFirstFrame?.();
+    }
     void state.cdpSession?.send("Page.screencastFrameAck", {
       sessionId: payload.sessionId,
     });

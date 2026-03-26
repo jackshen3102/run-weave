@@ -11,6 +11,8 @@ import { AuthService } from "./auth/service";
 import { resolveDevtoolsEnabled } from "./config/devtools";
 import { createAuthRouter } from "./routes/auth";
 import { createDevtoolsRouter } from "./routes/devtools";
+import { QualityProbeStore } from "./quality/probe-store";
+import { createQualityRouter } from "./routes/quality";
 import { createSessionRouter } from "./routes/session";
 import { createTestRouter } from "./routes/test";
 import { createCorsMiddleware } from "./server/cors";
@@ -19,6 +21,7 @@ import { SQLiteSessionStore } from "./session/sqlite-store";
 import { listenWithFallback } from "./server/listen";
 import { resolveStoragePaths } from "./utils/path";
 import { attachDevtoolsProxyServer } from "./ws/devtools-proxy";
+import { WebSocketSessionController } from "./ws/session-control";
 import { attachWebSocketServer } from "./ws/server";
 
 interface RuntimeConfig {
@@ -31,6 +34,8 @@ interface RuntimeServices {
   authService: AuthService;
   sessionManager: SessionManager;
   browserService: BrowserService;
+  qualityProbeStore: QualityProbeStore;
+  wsSessionController: WebSocketSessionController;
 }
 
 const CURRENT_FILE_PATH = fileURLToPath(import.meta.url);
@@ -114,12 +119,21 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   });
   const authService = new AuthService(loadAuthConfig());
   const sessionStore = new SQLiteSessionStore(storagePaths.sessionDbFile);
+  const qualityProbeStore = new QualityProbeStore();
+  const wsSessionController = new WebSocketSessionController();
   const sessionManager = new SessionManager(browserService, sessionStore, {
     restorePersistedSessions: resolveSessionRestoreEnabled(process.env),
+    qualityProbeStore,
   });
   await sessionManager.initialize();
 
-  return { authService, sessionManager, browserService };
+  return {
+    authService,
+    sessionManager,
+    browserService,
+    qualityProbeStore,
+    wsSessionController,
+  };
 }
 
 function createHttpApp(services: RuntimeServices): express.Express {
@@ -142,6 +156,14 @@ function createHttpApp(services: RuntimeServices): express.Express {
     "/api",
     requireAuth,
     createSessionRouter(services.sessionManager, services.authService),
+  );
+  app.use(
+    "/api",
+    requireAuth,
+    createQualityRouter(
+      services.qualityProbeStore,
+      services.wsSessionController,
+    ),
   );
 
   if (devtoolsEnabled) {
@@ -211,6 +233,8 @@ async function startRuntime(): Promise<void> {
 
   attachWebSocketServer(server, services.sessionManager, services.authService, {
     devtoolsEnabled,
+    qualityProbeStore: services.qualityProbeStore,
+    wsSessionController: services.wsSessionController,
   });
   attachDevtoolsProxyServer(
     server,

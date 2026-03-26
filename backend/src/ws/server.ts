@@ -4,6 +4,8 @@ import type { WebSocket } from "ws";
 import type { ServerEventMessage } from "@browser-viewer/shared";
 import type { SessionManager } from "../session/manager";
 import type { AuthService } from "../auth/service";
+import { QualityProbeStore } from "../quality/probe-store";
+import { WebSocketSessionController } from "./session-control";
 import { parseClientMessage } from "./client-message";
 import { getNavigationCapability } from "./navigation";
 import { buildTabsSnapshot } from "./tabs";
@@ -22,10 +24,16 @@ export function attachWebSocketServer(
   server: HttpServer,
   sessionManager: SessionManager,
   authService: AuthService,
-  options?: { devtoolsEnabled?: boolean },
+  options?: {
+    devtoolsEnabled?: boolean;
+    qualityProbeStore?: QualityProbeStore;
+    wsSessionController?: WebSocketSessionController;
+  },
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
   const devtoolsEnabled = options?.devtoolsEnabled ?? false;
+  const qualityProbeStore = options?.qualityProbeStore;
+  const wsSessionController = options?.wsSessionController;
   const cursorSyncIntervalMs = 50;
 
   server.on("upgrade", (request, socket, head) => {
@@ -61,20 +69,27 @@ export function attachWebSocketServer(
 
     const { sessionId, session } = handshake;
     const state = createConnectionContext(session.browserSession.page);
+    wsSessionController?.register(sessionId, socket);
 
     const sendError = (message: string): void => {
+      qualityProbeStore?.recordError(sessionId, "ws.runtime", message);
       sendEvent(socket, { type: "error", message });
     };
 
     const emitTabs = (): void => {
+      const tabs = buildTabsSnapshot(
+        session.browserSession.context.pages(),
+        state.pageToTabId,
+        state.tabTitleById,
+        state.activeTabId,
+      );
+      qualityProbeStore?.updateTabState(sessionId, {
+        activeTabId: state.activeTabId,
+        tabCount: tabs.length,
+      });
       sendEvent(socket, {
         type: "tabs",
-        tabs: buildTabsSnapshot(
-          session.browserSession.context.pages(),
-          state.pageToTabId,
-          state.tabTitleById,
-          state.activeTabId,
-        ),
+        tabs,
       });
     };
 
@@ -116,6 +131,7 @@ export function attachWebSocketServer(
       socket,
       state,
       context: session.browserSession.context,
+      onFirstFrame: () => qualityProbeStore?.markFirstFrame(sessionId),
     });
 
     const cursorSync = createCursorSyncController({
@@ -184,8 +200,10 @@ export function attachWebSocketServer(
           closeTab: tabManager.closeTab,
           selectTab: tabManager.selectTab,
           sendError,
-          sendAck: () =>
-            sendEvent(socket, { type: "ack", eventType: parsed.type }),
+          sendAck: () => {
+            qualityProbeStore?.markInputAck(sessionId, parsed.type);
+            sendEvent(socket, { type: "ack", eventType: parsed.type });
+          },
         });
         return;
       }
@@ -195,9 +213,23 @@ export function attachWebSocketServer(
           context: session.browserSession.context,
           state,
           sendError,
-          sendAck: () =>
-            sendEvent(socket, { type: "ack", eventType: parsed.type }),
+          sendAck: () => {
+            qualityProbeStore?.markInputAck(sessionId, parsed.type);
+            sendEvent(socket, { type: "ack", eventType: parsed.type });
+          },
           emitNavigationState,
+          onNavigationRequested: (tabId, url) => {
+            qualityProbeStore?.markNavigationRequested(sessionId, {
+              tabId,
+              url,
+            });
+          },
+          onNavigationSettled: (tabId, url) => {
+            qualityProbeStore?.markNavigationSettled(sessionId, {
+              tabId,
+              url,
+            });
+          },
         });
         return;
       }
@@ -211,8 +243,10 @@ export function attachWebSocketServer(
         handleDevtoolsMessage(parsed, {
           state,
           sendError,
-          sendAck: () =>
-            sendEvent(socket, { type: "ack", eventType: parsed.type }),
+          sendAck: () => {
+            qualityProbeStore?.markInputAck(sessionId, parsed.type);
+            sendEvent(socket, { type: "ack", eventType: parsed.type });
+          },
           emitDevtoolsState,
         });
         return;
@@ -223,8 +257,10 @@ export function attachWebSocketServer(
         activePage: state.activePage,
         sessionId,
         sendError,
-        sendAck: () =>
-          sendEvent(socket, { type: "ack", eventType: parsed.type }),
+        sendAck: () => {
+          qualityProbeStore?.markInputAck(sessionId, parsed.type);
+          sendEvent(socket, { type: "ack", eventType: parsed.type });
+        },
         sendClipboardCopy: (text) =>
           sendEvent(socket, {
             type: "clipboard",
@@ -246,6 +282,7 @@ export function attachWebSocketServer(
     const closeConnection = (markDisconnected: boolean): void => {
       state.isClosed = true;
       cleanupConnection();
+      wsSessionController?.unregister(sessionId, socket);
       if (markDisconnected) {
         sessionManager.markConnected(sessionId, false);
       }

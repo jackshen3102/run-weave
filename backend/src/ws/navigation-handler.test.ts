@@ -55,7 +55,10 @@ describe("handleNavigationMessage", () => {
 
   it("handles goto and sends ack", async () => {
     const state = createState();
-    const page = { goto: vi.fn(async () => undefined) };
+    const page = {
+      goto: vi.fn(async () => undefined),
+      url: vi.fn(() => "https://example.com"),
+    };
     state.tabIdToPage.set("tab-1", page as never);
 
     vi.spyOn(navigationModule, "normalizeNavigationUrl").mockReturnValue(
@@ -63,6 +66,8 @@ describe("handleNavigationMessage", () => {
     );
     const sendAck = vi.fn();
     const emitNavigationState = vi.fn(async () => undefined);
+    const onNavigationRequested = vi.fn();
+    const onNavigationSettled = vi.fn();
 
     handleNavigationMessage(
       {
@@ -77,6 +82,8 @@ describe("handleNavigationMessage", () => {
         sendError: vi.fn(),
         sendAck,
         emitNavigationState,
+        onNavigationRequested,
+        onNavigationSettled,
       },
     );
 
@@ -86,6 +93,14 @@ describe("handleNavigationMessage", () => {
     });
     expect(sendAck).toHaveBeenCalledTimes(1);
     expect(emitNavigationState).toHaveBeenCalled();
+    expect(onNavigationRequested).toHaveBeenCalledWith(
+      "tab-1",
+      "example.com",
+    );
+    expect(onNavigationSettled).toHaveBeenCalledWith(
+      "tab-1",
+      "https://example.com",
+    );
   });
 
   it("resets loading and reports error on failure", async () => {

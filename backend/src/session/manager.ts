@@ -9,6 +9,7 @@ import {
   type BrowserSession,
   type LaunchBrowserSessionOptions,
 } from "../browser/service";
+import { QualityProbeStore } from "../quality/probe-store";
 import type { PersistedSessionRecord, SessionStore } from "./store";
 
 export interface SessionRecord {
@@ -33,6 +34,7 @@ export interface CreateSessionOptions {
 
 export interface SessionManagerOptions {
   restorePersistedSessions?: boolean;
+  qualityProbeStore?: QualityProbeStore;
 }
 
 function buildLaunchBrowserSessionOptions(session: {
@@ -88,6 +90,7 @@ export class SessionManager {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
   private readonly restorePersistedSessionsEnabled: boolean;
+  private readonly qualityProbeStore: QualityProbeStore | null;
 
   constructor(
     private readonly browserService: BrowserService,
@@ -96,6 +99,7 @@ export class SessionManager {
   ) {
     this.restorePersistedSessionsEnabled =
       options?.restorePersistedSessions ?? true;
+    this.qualityProbeStore = options?.qualityProbeStore ?? null;
   }
 
   async initialize(): Promise<void> {
@@ -132,6 +136,7 @@ export class SessionManager {
       };
 
       this.sessions.set(session.id, session);
+      this.qualityProbeStore?.createSession(session.id);
       return session;
     }
 
@@ -171,6 +176,7 @@ export class SessionManager {
     }
 
     this.sessions.set(session.id, session);
+    this.qualityProbeStore?.createSession(session.id);
     return session;
   }
 
@@ -186,6 +192,7 @@ export class SessionManager {
 
     session.lastActivityAt = new Date();
     session.connected = connected;
+    this.qualityProbeStore?.markViewerConnected(sessionId, connected);
     if (connected) {
       this.cancelPendingDestroy(sessionId);
     }
@@ -209,6 +216,7 @@ export class SessionManager {
 
     this.cancelPendingDestroy(sessionId);
     this.sessions.delete(sessionId);
+    this.qualityProbeStore?.destroySession(sessionId);
     await this.browserService.destroySession(sessionId, session.browserSession);
 
     if (session.persisted) {

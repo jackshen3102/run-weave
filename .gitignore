@@ -10,3 +10,4 @@ log
 backend/.browser-profile
 backend/.env
 .runtime/
+artifacts/

@@ -1,6 +1,6 @@
+import type { TLSSocket } from "node:tls";
 import { Router } from "express";
 import type { Request, RequestHandler } from "express";
-import type { Socket } from "net";
 import { readBearerToken } from "../auth/middleware";
 import type { SessionManager } from "../session/manager";
 import { resolvePageByTargetId } from "../ws/tab-target";
@@ -100,7 +100,8 @@ function resolveWebSocketProtocol(request: Request): "ws" | "wss" {
     return "ws";
   }
 
-  return (request.socket as Socket)?.encrypted ? "wss" : "ws";
+  const socket = request.socket as TLSSocket | undefined;
+  return socket?.encrypted ? "wss" : "ws";
 }
 
 function buildDevtoolsProxyEndpoint(params: {

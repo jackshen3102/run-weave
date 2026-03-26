@@ -13,6 +13,7 @@
     "test": "pnpm -r test",
     "coverage": "pnpm --filter ./backend test:coverage && pnpm --filter ./frontend test:coverage",
     "e2e": "pnpm --filter ./frontend e2e",
+    "quality:gate": "node ./scripts/quality-gate.mjs",
     "prepare": "husky"
   },
   "lint-staged": {

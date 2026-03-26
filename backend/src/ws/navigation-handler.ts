@@ -15,13 +15,23 @@ interface NavigationHandlerDeps {
   sendError: (message: string) => void;
   sendAck: () => void;
   emitNavigationState: (tabId: string) => Promise<void>;
+  onNavigationRequested?: (tabId: string, url: string | null) => void;
+  onNavigationSettled?: (tabId: string, url: string | null) => void;
 }
 
 export function handleNavigationMessage(
   parsed: NavigationMessage,
   deps: NavigationHandlerDeps,
 ): void {
-  const { context, state, sendError, sendAck, emitNavigationState } = deps;
+  const {
+    context,
+    state,
+    sendError,
+    sendAck,
+    emitNavigationState,
+    onNavigationRequested,
+    onNavigationSettled,
+  } = deps;
   const targetPage = state.tabIdToPage.get(parsed.tabId);
   if (!targetPage) {
     sendError(`Unknown tabId: ${parsed.tabId}`);
@@ -29,6 +39,10 @@ export function handleNavigationMessage(
   }
 
   state.tabLoadingById.set(parsed.tabId, parsed.action !== "stop");
+  onNavigationRequested?.(
+    parsed.tabId,
+    parsed.action === "goto" ? parsed.url : targetPage.url(),
+  );
   void emitNavigationState(parsed.tabId);
 
   void (async () => {
@@ -59,6 +73,7 @@ export function handleNavigationMessage(
     }
 
     await emitNavigationState(parsed.tabId);
+    onNavigationSettled?.(parsed.tabId, targetPage.url());
     sendAck();
   })().catch((error) => {
     state.tabLoadingById.set(parsed.tabId, false);
