@@ -117,6 +117,7 @@ export class BrowserService {
           autoOpenDevtoolsForTabs: this.autoOpenDevtoolsForTabs,
           remoteDebuggingPort,
         }),
+        ignoreHTTPSErrors: options.proxyEnabled,
         extraHTTPHeaders: options.headers,
         proxy: options.proxyEnabled
           ? {

@@ -60,6 +60,7 @@ describe("BrowserService", () => {
       "/tmp/browser-profiles/sessions/session-proxy",
       expect.objectContaining({
         headless: true,
+        ignoreHTTPSErrors: true,
         proxy: {
           bypass: "127.0.0.1,localhost",
           server: "http://127.0.0.1:8899",
@@ -86,6 +87,7 @@ describe("BrowserService", () => {
     expect(launchPersistentContext).toHaveBeenCalledWith(
       "/tmp/browser-profiles/sessions/session-direct",
       expect.not.objectContaining({
+        ignoreHTTPSErrors: true,
         proxy: expect.anything(),
       }),
     );
