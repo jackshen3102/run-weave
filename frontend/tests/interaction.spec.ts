@@ -29,9 +29,6 @@ test("viewer sends input and receives ack", async ({ page, request }) => {
   await page.goto("/");
 
   await page.getByRole("button", { name: "New Browser" }).click();
-  await page
-    .getByLabel("Target URL")
-    .fill(`http://127.0.0.1:${E2E_BACKEND_PORT}/test/popup-auto`);
   await page.getByRole("button", { name: "Connect" }).click();
 
   await expect(page).toHaveURL(/\/viewer\//);
@@ -45,6 +42,16 @@ test("viewer sends input and receives ack", async ({ page, request }) => {
 
   const canvas = viewerPage.locator("canvas");
   await expect(canvas).toBeVisible();
+
+  await viewerPage.getByRole("button", { name: "More actions" }).click();
+  await viewerPage.getByRole("button", { name: "Show address bar" }).click();
+
+  const navBar = viewerPage.getByTestId("navigation-bar");
+  const addressInput = viewerPage.getByTestId("address-input");
+  await expect(navBar).toBeVisible();
+  await addressInput.fill(`http://127.0.0.1:${E2E_BACKEND_PORT}/test/popup-auto`);
+  await addressInput.press("Enter");
+
   const tabButtons = viewerPage.getByTestId("tab-list").getByRole("button");
   await expect(tabButtons).toHaveCount(3, { timeout: 20_000 });
   const sourceTab = tabButtons.nth(1);
@@ -64,10 +71,6 @@ test("viewer sends input and receives ack", async ({ page, request }) => {
   await expect(childTab).toHaveAttribute("aria-pressed", "true");
   await expect(viewerPage).toHaveURL(new RegExp(`tabId=${childTabId}`));
 
-  await viewerPage.getByRole("button", { name: "More actions" }).click();
-  await viewerPage.getByRole("button", { name: "Show address bar" }).click();
-
-  const navBar = viewerPage.getByTestId("navigation-bar");
   const backButton = navBar.getByRole("button", { name: "Back" });
   const forwardButton = navBar.getByRole("button", { name: "Forward" });
   const refreshButton = navBar.getByRole("button", { name: "Refresh" });
@@ -79,8 +82,6 @@ test("viewer sends input and receives ack", async ({ page, request }) => {
   await expect(sourceTab).toHaveAttribute("aria-pressed", "true");
   await expect(viewerPage).toHaveURL(new RegExp(`tabId=${sourceTabId}`));
 
-  const addressInput = viewerPage.getByTestId("address-input");
-  await expect(navBar).toBeVisible();
   await expect(addressInput).toHaveValue(/http/);
 
   await addressInput.fill(`http://127.0.0.1:${E2E_BACKEND_PORT}/test/child`);
