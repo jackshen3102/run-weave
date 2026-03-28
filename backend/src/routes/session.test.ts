@@ -5,7 +5,7 @@ import { createSessionRouter } from "./session";
 
 interface MockSession {
   id: string;
-  targetUrl: string;
+  name: string;
   proxyEnabled: boolean;
   sourceType: "launch" | "connect-cdp";
   cdpEndpoint?: string;
@@ -24,7 +24,7 @@ function createTestServer(sessionState: { current: MockSession | null }) {
   const sessionManager = {
     createSession: vi.fn(
       async (options: {
-        targetUrl: string;
+        name: string;
         source:
           | {
               type: "launch";
@@ -38,7 +38,7 @@ function createTestServer(sessionState: { current: MockSession | null }) {
       }) => {
         const created: MockSession = {
           id: "test-session-id",
-          targetUrl: options.targetUrl,
+          name: options.name,
           proxyEnabled:
             options.source.type === "launch"
               ? options.source.proxyEnabled
@@ -66,6 +66,17 @@ function createTestServer(sessionState: { current: MockSession | null }) {
       }
       sessionState.current = null;
       return true;
+    }),
+    updateSessionName: vi.fn(async (id: string, name: string) => {
+      if (sessionState.current?.id !== id) {
+        return undefined;
+      }
+
+      sessionState.current = {
+        ...sessionState.current,
+        name,
+      };
+      return sessionState.current;
     }),
     listSessions: vi.fn(() =>
       sessionState.current
@@ -128,7 +139,7 @@ describe("session routes", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        url: "https://example.com",
+        name: "Default Playweight",
         source: {
           type: "launch",
           proxyEnabled: true,
@@ -152,13 +163,13 @@ describe("session routes", () => {
     expect(getResponse.status).toBe(200);
     const statusPayload = (await getResponse.json()) as {
       sessionId: string;
-      targetUrl: string;
+      name: string;
       proxyEnabled: boolean;
       sourceType: "launch" | "connect-cdp";
       headers: Record<string, string>;
     };
     expect(statusPayload.sessionId).toBe("test-session-id");
-    expect(statusPayload.targetUrl).toBe("https://example.com");
+    expect(statusPayload.name).toBe("Default Playweight");
     expect(statusPayload.proxyEnabled).toBe(true);
     expect(statusPayload.sourceType).toBe("launch");
     expect(statusPayload.headers).toEqual({
@@ -169,12 +180,14 @@ describe("session routes", () => {
     expect(listResponse.status).toBe(200);
     const listPayload = (await listResponse.json()) as Array<{
       sessionId: string;
+      name: string;
       proxyEnabled: boolean;
       sourceType: "launch" | "connect-cdp";
       headers: Record<string, string>;
     }>;
     expect(listPayload).toHaveLength(1);
     expect(listPayload[0]?.sessionId).toBe("test-session-id");
+    expect(listPayload[0]?.name).toBe("Default Playweight");
     expect(listPayload[0]?.proxyEnabled).toBe(true);
     expect(listPayload[0]?.sourceType).toBe("launch");
     expect(listPayload[0]?.headers).toEqual({
@@ -205,7 +218,7 @@ describe("session routes", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        url: "https://example.com",
+        name: "CDP Playweight",
         source: {
           type: "connect-cdp",
           endpoint: "http://127.0.0.1:9333",
@@ -215,7 +228,7 @@ describe("session routes", () => {
 
     expect(response.status).toBe(201);
     expect(sessionManager.createSession).toHaveBeenCalledWith({
-      targetUrl: "https://example.com",
+      name: "CDP Playweight",
       source: {
         type: "connect-cdp",
         endpoint: "http://127.0.0.1:9333",
@@ -233,11 +246,39 @@ describe("session routes", () => {
     expect(listPayload[0]?.cdpEndpoint).toBe("http://127.0.0.1:9333");
   });
 
+  it("accepts legacy create-session payloads that only provide url", async () => {
+    const state = { current: null as MockSession | null };
+    const { server, sessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "http://127.0.0.1:5501/test/child",
+        source: {
+          type: "launch",
+          proxyEnabled: false,
+        },
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(sessionManager.createSession).toHaveBeenCalledWith({
+      name: "http://127.0.0.1:5501/test/child",
+      source: expect.objectContaining({
+        type: "launch",
+        proxyEnabled: false,
+      }),
+    });
+  });
+
   it("issues a short-lived devtools ticket for an existing session", async () => {
     const state = {
       current: {
         id: "test-session-id",
-        targetUrl: "https://example.com",
+        name: "Default Playweight",
         proxyEnabled: false,
         sourceType: "launch" as const,
         headers: {},
@@ -269,5 +310,43 @@ describe("session routes", () => {
     };
     expect(payload.ticket).toBe("ticket-123");
     expect(payload.expiresIn).toBe(60);
+  });
+
+  it("renames an existing session", async () => {
+    const state = {
+      current: {
+        id: "test-session-id",
+        name: "Default Playweight",
+        proxyEnabled: false,
+        sourceType: "launch" as const,
+        headers: {},
+        connected: false,
+        createdAt: new Date("2026-03-19T00:00:00.000Z"),
+      },
+    };
+    const { server, sessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/session/test-session-id`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Renamed session" }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(sessionManager.updateSessionName).toHaveBeenCalledWith(
+      "test-session-id",
+      "Renamed session",
+    );
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        sessionId: "test-session-id",
+        name: "Renamed session",
+      }),
+    );
   });
 });

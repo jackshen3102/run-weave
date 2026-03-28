@@ -16,7 +16,7 @@ describe("session service", () => {
     await createSession(
       "",
       {
-        url: "https://example.com",
+        name: "Default Playweight",
         source: { type: "launch", proxyEnabled: true },
       },
       "token-1",
@@ -27,7 +27,7 @@ describe("session service", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          url: "https://example.com",
+          name: "Default Playweight",
           source: {
             type: "launch",
             proxyEnabled: true,
@@ -47,7 +47,7 @@ describe("session service", () => {
     await createSession(
       "",
       {
-        url: "https://example.com",
+        name: "CDP Playweight",
         source: {
           type: "connect-cdp",
           endpoint: "http://127.0.0.1:9333",
@@ -61,7 +61,7 @@ describe("session service", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          url: "https://example.com",
+          name: "CDP Playweight",
           source: {
             type: "connect-cdp",
             endpoint: "http://127.0.0.1:9333",
@@ -81,7 +81,7 @@ describe("session service", () => {
     await createSession(
       "",
       {
-        url: "https://example.com",
+        name: "Default Playweight",
         source: {
           type: "launch",
           proxyEnabled: false,
@@ -99,7 +99,7 @@ describe("session service", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          url: "https://example.com",
+          name: "Default Playweight",
           source: {
             type: "launch",
             proxyEnabled: false,

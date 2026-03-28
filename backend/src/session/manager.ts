@@ -14,7 +14,7 @@ import type { PersistedSessionRecord, SessionStore } from "./store";
 
 export interface SessionRecord {
   id: string;
-  targetUrl: string;
+  name: string;
   proxyEnabled: boolean;
   sourceType: "launch" | "connect-cdp";
   cdpEndpoint?: string;
@@ -28,7 +28,7 @@ export interface SessionRecord {
 }
 
 export interface CreateSessionOptions {
-  targetUrl: string;
+  name: string;
   source?: CreateSessionSource;
 }
 
@@ -56,7 +56,7 @@ function buildSessionRecord(
 ): SessionRecord {
   return {
     id: record.id,
-    targetUrl: record.targetUrl,
+    name: record.name,
     proxyEnabled: record.proxyEnabled,
     sourceType: "launch",
     cdpEndpoint: undefined,
@@ -75,7 +75,7 @@ function buildPersistedSessionRecord(
 ): PersistedSessionRecord {
   return {
     id: session.id,
-    targetUrl: session.targetUrl,
+    name: session.name,
     proxyEnabled: session.proxyEnabled,
     connected: false,
     profilePath: session.profilePath ?? "",
@@ -117,12 +117,11 @@ export class SessionManager {
     if (source.type === "connect-cdp") {
       const browserSession = await this.browserService.createSession(
         sessionId,
-        options.targetUrl,
         source,
       );
       const session: SessionRecord = {
         id: sessionId,
-        targetUrl: options.targetUrl,
+        name: options.name,
         proxyEnabled: false,
         sourceType: "connect-cdp",
         cdpEndpoint: source.endpoint,
@@ -145,7 +144,6 @@ export class SessionManager {
     const headers = source.headers ?? {};
     const browserSession = await this.browserService.createSession(
       sessionId,
-      options.targetUrl,
       buildLaunchBrowserSessionOptions({
         profilePath,
         proxyEnabled,
@@ -154,7 +152,7 @@ export class SessionManager {
     );
     const session: SessionRecord = {
       id: sessionId,
-      targetUrl: options.targetUrl,
+      name: options.name,
       proxyEnabled,
       sourceType: "launch",
       persisted: true,
@@ -182,6 +180,23 @@ export class SessionManager {
 
   getSession(sessionId: string): SessionRecord | undefined {
     return this.sessions.get(sessionId);
+  }
+
+  async updateSessionName(
+    sessionId: string,
+    name: string,
+  ): Promise<SessionRecord | undefined> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    session.name = name;
+    if (session.persisted) {
+      await this.sessionStore.updateSessionName(sessionId, name);
+    }
+
+    return session;
   }
 
   markConnected(sessionId: string, connected: boolean): void {
@@ -279,7 +294,6 @@ export class SessionManager {
   ): Promise<void> {
     const browserSession = await this.browserService.restoreSession(
       record.id,
-      record.targetUrl,
       buildLaunchBrowserSessionOptions(record),
     );
 

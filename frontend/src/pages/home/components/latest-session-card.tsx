@@ -3,7 +3,6 @@ import { Button } from "../../../components/ui/button";
 import {
   getHeaderSummaryLabel,
   getProxyStatusLabel,
-  getSessionContextLabel,
   getSessionSourceLabel,
 } from "../utils";
 
@@ -53,12 +52,11 @@ export function LatestSessionCard({
 
           <div className="mt-12 space-y-5">
             <p className="text-3xl font-semibold tracking-[-0.05em] text-foreground sm:text-4xl">
-              {getSessionSourceLabel(session.sourceType)}
-            </p>
-            <p className="max-w-xl truncate text-sm text-muted-foreground/80 sm:text-base">
-              {getSessionContextLabel(session)}
+              {session.name}
             </p>
             <p className="text-sm text-muted-foreground/80 sm:text-base">
+              {getSessionSourceLabel(session.sourceType)}
+              {" \u00b7 "}
               {getProxyStatusLabel(session.proxyEnabled)}
               {" \u00b7 "}
               {getHeaderSummaryLabel(session.headers)}

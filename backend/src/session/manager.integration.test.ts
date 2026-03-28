@@ -10,10 +10,12 @@ const tempDirs: string[] = [];
 function createBrowserServiceMock(profileRootDir: string) {
   return {
     createSession: vi.fn(async () => ({
+      type: "launch",
       context: { close: vi.fn(async () => undefined) },
       page: { close: vi.fn(async () => undefined) },
     })),
     restoreSession: vi.fn(async () => ({
+      type: "launch",
       context: { close: vi.fn(async () => undefined) },
       page: { close: vi.fn(async () => undefined) },
     })),
@@ -54,7 +56,7 @@ describe("SessionManager integration", () => {
     await firstManager.initialize();
 
     const createdSession = await firstManager.createSession({
-      targetUrl: "https://example.com",
+      name: "Default Playweight",
       source: {
         type: "launch",
         proxyEnabled: true,
@@ -73,12 +75,11 @@ describe("SessionManager integration", () => {
 
     const restoredSession = secondManager.getSession(createdSession.id);
     expect(restoredSession).toBeDefined();
-    expect(restoredSession?.targetUrl).toBe("https://example.com");
+    expect(restoredSession?.name).toBe("Default Playweight");
     expect(restoredSession?.connected).toBe(false);
     expect(restoredSession?.proxyEnabled).toBe(true);
     expect(secondBrowserService.restoreSession).toHaveBeenCalledWith(
       createdSession.id,
-      "https://example.com",
       {
         type: "launch",
         profilePath: path.join(profileRootDir, "sessions", createdSession.id),
@@ -114,7 +115,7 @@ describe("SessionManager integration", () => {
     await firstManager.initialize();
 
     const createdSession = await firstManager.createSession({
-      targetUrl: "https://example.com",
+      name: "Default Playweight",
       source: {
         type: "launch",
       },
@@ -140,7 +141,7 @@ describe("SessionManager integration", () => {
     await expect(secondStore.getSession(createdSession.id)).resolves.toEqual(
       expect.objectContaining({
         id: createdSession.id,
-        targetUrl: "https://example.com",
+        name: "Default Playweight",
       }),
     );
     expect(consoleErrorSpy).toHaveBeenCalledWith(

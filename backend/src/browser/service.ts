@@ -178,7 +178,6 @@ export class BrowserService {
 
   private async createAttachedSession(
     sessionId: string,
-    targetUrl: string,
     options: ConnectCdpBrowserSessionOptions,
   ): Promise<BrowserSession> {
     const context = await this.connectToExistingBrowser(
@@ -187,9 +186,6 @@ export class BrowserService {
     );
     const page =
       context.pages().find(isRestorablePage) ?? (await context.newPage());
-    if (page.url() === "about:blank") {
-      await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
-    }
 
     return {
       type: "connect-cdp",
@@ -208,23 +204,20 @@ export class BrowserService {
 
   async createSession(
     sessionId: string,
-    targetUrl: string,
     options: BrowserSessionOptions,
   ): Promise<BrowserSession> {
     if (options.type === "connect-cdp") {
-      return this.createAttachedSession(sessionId, targetUrl, options);
+      return this.createAttachedSession(sessionId, options);
     }
 
     const context = await this.getOrCreateLaunchContext(sessionId, options);
     const page = await context.newPage();
-    await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
 
     return { type: "launch", context, page };
   }
 
   async restoreSession(
     sessionId: string,
-    targetUrl: string,
     options: LaunchBrowserSessionOptions,
   ): Promise<BrowserSession> {
     const context = await this.getOrCreateLaunchContext(sessionId, options);
@@ -234,7 +227,6 @@ export class BrowserService {
     }
 
     const page = await context.newPage();
-    await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
     return { type: "launch", context, page };
   }
 

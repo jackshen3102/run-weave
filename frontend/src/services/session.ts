@@ -4,6 +4,8 @@ import type {
   CreateSessionRequest,
   CreateSessionResponse,
   SessionListItem,
+  UpdateSessionRequest,
+  SessionStatusResponse,
 } from "@browser-viewer/shared";
 import { requestJson, requestVoid } from "./http";
 
@@ -44,6 +46,26 @@ export async function deleteSession(
       Authorization: `Bearer ${token}`,
     },
   });
+}
+
+export async function updateSession(
+  apiBase: string,
+  token: string,
+  sessionId: string,
+  payload: UpdateSessionRequest,
+): Promise<SessionStatusResponse> {
+  return requestJson<SessionStatusResponse>(
+    apiBase,
+    `/api/session/${encodeURIComponent(sessionId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function createDevtoolsTicket(

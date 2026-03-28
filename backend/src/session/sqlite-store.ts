@@ -10,7 +10,7 @@ import type {
 
 interface SessionRow {
   id: string;
-  target_url: string;
+  name: string;
   proxy_enabled: number;
   connected: number;
   profile_path: string;
@@ -37,7 +37,8 @@ export class SQLiteSessionStore implements SessionStore {
     database.exec(`
       create table if not exists sessions (
         id text primary key,
-        target_url text not null,
+        target_url text not null default '',
+        name text not null default '',
         proxy_enabled integer not null default 0,
         connected integer not null default 0,
         profile_path text not null,
@@ -51,6 +52,7 @@ export class SQLiteSessionStore implements SessionStore {
       on sessions(last_activity_at);
     `);
     this.ensureProxyEnabledColumn(database);
+    this.ensureNameColumn(database);
     this.ensureProfileModeColumn(database);
     this.ensureHeadersColumn(database);
 
@@ -68,7 +70,7 @@ export class SQLiteSessionStore implements SessionStore {
         `
           select
             id,
-            target_url,
+            name,
             proxy_enabled,
             connected,
             profile_path,
@@ -91,7 +93,7 @@ export class SQLiteSessionStore implements SessionStore {
         `
           select
             id,
-            target_url,
+            name,
             proxy_enabled,
             connected,
             profile_path,
@@ -115,6 +117,7 @@ export class SQLiteSessionStore implements SessionStore {
           insert into sessions (
             id,
             target_url,
+            name,
             proxy_enabled,
             connected,
             profile_path,
@@ -122,12 +125,13 @@ export class SQLiteSessionStore implements SessionStore {
             headers_json,
             created_at,
             last_activity_at
-          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
       )
       .run(
         session.id,
-        session.targetUrl,
+        "",
+        session.name,
         session.proxyEnabled ? 1 : 0,
         session.connected ? 1 : 0,
         session.profilePath,
@@ -136,6 +140,18 @@ export class SQLiteSessionStore implements SessionStore {
         session.createdAt,
         session.lastActivityAt,
       );
+  }
+
+  async updateSessionName(sessionId: string, name: string): Promise<void> {
+    this.getDatabase()
+      .prepare(
+        `
+          update sessions
+          set name = ?
+          where id = ?
+        `,
+      )
+      .run(name, sessionId);
   }
 
   async updateSessionConnection(
@@ -180,6 +196,22 @@ export class SQLiteSessionStore implements SessionStore {
     );
   }
 
+  private ensureNameColumn(database: Database.Database): void {
+    const columns = database
+      .prepare("pragma table_info(sessions)")
+      .all() as TableInfoRow[];
+
+    if (!columns.some((column) => column.name === "name")) {
+      database.exec(
+        "alter table sessions add column name text not null default ''",
+      );
+    }
+
+    database.exec(
+      "update sessions set name = target_url where trim(name) = ''",
+    );
+  }
+
   private ensureProfileModeColumn(database: Database.Database): void {
     const columns = database
       .prepare("pragma table_info(sessions)")
@@ -211,7 +243,7 @@ export class SQLiteSessionStore implements SessionStore {
   private toRecord(row: SessionRow): PersistedSessionRecord {
     return {
       id: row.id,
-      targetUrl: row.target_url,
+      name: row.name,
       proxyEnabled: row.proxy_enabled === 1,
       connected: row.connected === 1,
       profilePath: row.profile_path,

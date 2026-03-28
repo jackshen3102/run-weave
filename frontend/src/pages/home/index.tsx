@@ -6,6 +6,7 @@ import {
   createSession as createViewerSession,
   deleteSession as deleteViewerSession,
   listSessions as fetchSessionList,
+  updateSession as updateViewerSession,
 } from "../../services/session";
 import { HomeHeader } from "./components/home-header";
 import { LatestSessionCard } from "./components/latest-session-card";
@@ -21,10 +22,11 @@ interface HomePageProps {
 
 export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
   const navigate = useNavigate();
-  const [url, setUrl] = useState("https://www.google.cn");
   const [sessionSourceType, setSessionSourceType] = useState<
     "launch" | "connect-cdp"
   >("connect-cdp");
+  const [sessionName, setSessionName] = useState("CDP Playweight");
+  const [sessionNameCustomized, setSessionNameCustomized] = useState(false);
   const [proxyEnabled, setProxyEnabled] = useState(false);
   const [cdpEndpoint, setCdpEndpoint] = useState("http://127.0.0.1:9222");
   const [requestHeadersInput, setRequestHeadersInput] = useState("");
@@ -119,6 +121,22 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
     navigate(`/viewer/${encodeURIComponent(sessionId)}`);
   };
 
+  const getDefaultSessionName = (
+    sourceType: "launch" | "connect-cdp",
+  ): string => {
+    return sourceType === "connect-cdp"
+      ? "CDP Playweight"
+      : "Default Playweight";
+  };
+
+  const changeSessionSourceType = (value: "launch" | "connect-cdp"): void => {
+    setSessionSourceType(value);
+    if (!sessionNameCustomized || !sessionName.trim()) {
+      setSessionName(getDefaultSessionName(value));
+      setSessionNameCustomized(false);
+    }
+  };
+
   const removeSession = async (sessionId: string): Promise<void> => {
     setDeletingSessionId(sessionId);
     setError(null);
@@ -138,8 +156,48 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
     }
   };
 
+  const renameSession = async (sessionId: string): Promise<void> => {
+    const session = sessions.find((item) => item.sessionId === sessionId);
+    if (!session) {
+      return;
+    }
+
+    const nextName = window.prompt("Session name", session.name);
+    if (nextName === null) {
+      return;
+    }
+
+    const trimmedName = nextName.trim();
+    if (!trimmedName) {
+      setError("Session name is required.");
+      return;
+    }
+
+    setError(null);
+    try {
+      await updateViewerSession(apiBase, token, sessionId, {
+        name: trimmedName,
+      });
+      await loadSessions();
+    } catch (renameError) {
+      if (renameError instanceof HttpError && renameError.status === 401) {
+        clearToken();
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      setError(String(renameError));
+    }
+  };
+
   const createSession = async (): Promise<void> => {
     if (loading) {
+      return;
+    }
+
+    const trimmedName = sessionName.trim();
+    if (!trimmedName) {
+      setError("Session name is required.");
       return;
     }
 
@@ -169,14 +227,14 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
         apiBase,
         sessionSourceType === "connect-cdp"
           ? {
-              url,
+              name: trimmedName,
               source: {
                 type: "connect-cdp",
                 endpoint: trimmedCdpEndpoint,
               },
             }
           : {
-              url,
+              name: trimmedName,
               source: {
                 type: "launch",
                 proxyEnabled,
@@ -224,11 +282,17 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
 
               <NewSessionForm
                 sessionSourceType={sessionSourceType}
-                onSessionSourceTypeChange={setSessionSourceType}
+                onSessionSourceTypeChange={changeSessionSourceType}
+                sessionName={sessionName}
+                onSessionNameChange={(value) => {
+                  setSessionName(value);
+                  setSessionNameCustomized(
+                    value.trim() !== "" &&
+                      value.trim() !== getDefaultSessionName(sessionSourceType),
+                  );
+                }}
                 cdpEndpoint={cdpEndpoint}
                 onCdpEndpointChange={setCdpEndpoint}
-                url={url}
-                onUrlChange={setUrl}
                 proxyEnabled={proxyEnabled}
                 onProxyEnabledChange={setProxyEnabled}
                 requestHeadersInput={requestHeadersInput}
@@ -255,6 +319,10 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
           setActiveSessionMenuId((currentId) => {
             return currentId === sessionId ? null : sessionId;
           });
+        }}
+        onRenameSession={(sessionId) => {
+          setActiveSessionMenuId(null);
+          void renameSession(sessionId);
         }}
         onRemoveSession={(sessionId) => {
           setActiveSessionMenuId(null);

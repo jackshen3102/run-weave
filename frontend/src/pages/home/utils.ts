@@ -4,14 +4,6 @@ export function formatDateTime(isoTime: string): string {
   return new Date(isoTime).toLocaleString();
 }
 
-export function getSessionDisplayTitle(targetUrl: string): string {
-  try {
-    return new URL(targetUrl).hostname.replace(/^www\./, "");
-  } catch {
-    return targetUrl;
-  }
-}
-
 export function getProxyStatusLabel(proxyEnabled: boolean): string {
   return proxyEnabled ? "Proxy enabled" : "Proxy disabled";
 }
@@ -20,19 +12,6 @@ export function getSessionSourceLabel(
   sourceType: SessionListItem["sourceType"],
 ): string {
   return sourceType === "connect-cdp" ? "Attach Browser" : "New Browser";
-}
-
-export function getSessionContextLabel(session: SessionListItem): string {
-  if (session.sourceType === "connect-cdp" && session.cdpEndpoint) {
-    try {
-      const endpoint = new URL(session.cdpEndpoint);
-      return `Port ${endpoint.port || endpoint.hostname}`;
-    } catch {
-      return session.cdpEndpoint;
-    }
-  }
-
-  return session.targetUrl;
 }
 
 export function getHeaderSummaryLabel(headers: SessionListItem["headers"]): string {

@@ -49,7 +49,7 @@ describe("BrowserService", () => {
       profileDir: "/tmp/browser-profiles",
     });
 
-    await service.createSession("session-proxy", "https://example.com", {
+    await service.createSession("session-proxy", {
       type: "launch",
       profilePath: "/tmp/browser-profiles/sessions/session-proxy",
       proxyEnabled: true,
@@ -77,7 +77,7 @@ describe("BrowserService", () => {
       profileDir: "/tmp/browser-profiles",
     });
 
-    await service.createSession("session-direct", "https://example.com", {
+    await service.createSession("session-direct", {
       type: "launch",
       profilePath: "/tmp/browser-profiles/sessions/session-direct",
       proxyEnabled: false,
@@ -101,7 +101,7 @@ describe("BrowserService", () => {
       profileDir: "/tmp/browser-profiles",
     });
 
-    await service.createSession("session-headers", "https://example.com", {
+    await service.createSession("session-headers", {
       type: "launch",
       profilePath: "/tmp/browser-profiles/sessions/session-headers",
       proxyEnabled: false,
@@ -133,13 +133,13 @@ describe("BrowserService", () => {
       remoteDebuggingPort: 9222,
     });
 
-    await service.createSession("session-a", "https://example.com", {
+    await service.createSession("session-a", {
       type: "launch",
       profilePath: "/tmp/browser-profiles/sessions/session-a",
       proxyEnabled: false,
       headers: {},
     });
-    await service.createSession("session-b", "https://example.com", {
+    await service.createSession("session-b", {
       type: "launch",
       profilePath: "/tmp/browser-profiles/sessions/session-b",
       proxyEnabled: false,
@@ -185,7 +185,6 @@ describe("BrowserService", () => {
 
     const session = await service.createSession(
       "session-attached",
-      "https://example.com",
       {
         type: "connect-cdp",
         endpoint: "http://127.0.0.1:9333",
@@ -219,7 +218,6 @@ describe("BrowserService", () => {
 
     const session = await service.createSession(
       "session-attached",
-      "https://example.com",
       {
         type: "connect-cdp",
         endpoint: "http://127.0.0.1:9333",
@@ -248,7 +246,6 @@ describe("BrowserService", () => {
 
     const session = await service.restoreSession(
       "session-restored",
-      "https://example.com",
       {
         type: "launch",
         profilePath: "/tmp/browser-profiles/sessions/session-restored",
@@ -283,7 +280,6 @@ describe("BrowserService", () => {
 
     const session = await service.restoreSession(
       "session-restored",
-      "https://example.com",
       {
         type: "launch",
         profilePath: "/tmp/browser-profiles/sessions/session-restored",
@@ -294,5 +290,23 @@ describe("BrowserService", () => {
 
     expect(session.page).toBe(persistedPage);
     expect(context.newPage).not.toHaveBeenCalled();
+  });
+
+  it("opens a blank page for new launch sessions without navigating", async () => {
+    const context = createBrowserContextMock();
+    launchPersistentContext.mockResolvedValue(context);
+    const service = new BrowserService({
+      headless: true,
+      profileDir: "/tmp/browser-profiles",
+    });
+
+    const session = await service.createSession("session-blank", {
+      type: "launch",
+      profilePath: "/tmp/browser-profiles/sessions/session-blank",
+      proxyEnabled: false,
+      headers: {},
+    });
+
+    expect(session.page.goto).not.toHaveBeenCalled();
   });
 });

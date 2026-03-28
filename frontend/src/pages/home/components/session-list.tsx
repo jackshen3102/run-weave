@@ -6,6 +6,7 @@ interface SessionListProps {
   deletingSessionId: string | null;
   activeSessionMenuId: string | null;
   onToggleMenu: (sessionId: string) => void;
+  onRenameSession: (sessionId: string) => void;
   onRemoveSession: (sessionId: string) => void;
   onResumeSession: (sessionId: string) => void;
 }
@@ -15,6 +16,7 @@ export function SessionList({
   deletingSessionId,
   activeSessionMenuId,
   onToggleMenu,
+  onRenameSession,
   onRemoveSession,
   onResumeSession,
 }: SessionListProps) {
@@ -39,6 +41,7 @@ export function SessionList({
             isDeleting={isDeleting}
             isMenuOpen={isMenuOpen}
             onToggleMenu={() => onToggleMenu(session.sessionId)}
+            onRename={() => onRenameSession(session.sessionId)}
             onRemove={() => onRemoveSession(session.sessionId)}
             onResume={() => onResumeSession(session.sessionId)}
           />

@@ -9,10 +9,12 @@ function createBrowserServiceMock() {
   const profileRoot = path.join(os.tmpdir(), "browser-profiles");
   return {
     createSession: vi.fn(async () => ({
+      type: "launch",
       context: { close: vi.fn(async () => undefined) },
       page: { close: vi.fn(async () => undefined) },
     })),
     restoreSession: vi.fn(async () => ({
+      type: "launch",
       context: { close: vi.fn(async () => undefined) },
       page: { close: vi.fn(async () => undefined) },
     })),
@@ -31,6 +33,7 @@ function createSessionStoreMock() {
     listSessions: vi.fn(async (): Promise<PersistedSessionRecord[]> => []),
     getSession: vi.fn(async () => null),
     insertSession: vi.fn(async () => undefined),
+    updateSessionName: vi.fn(async () => undefined),
     updateSessionConnection: vi.fn(async () => undefined),
     deleteSession: vi.fn(async () => undefined),
   } satisfies SessionStore;
@@ -54,7 +57,7 @@ describe("SessionManager", () => {
     );
 
     const session = await manager.createSession({
-      targetUrl: "https://example.com",
+      name: "Default Playweight",
       source: {
         type: "launch",
         proxyEnabled: true,
@@ -65,7 +68,7 @@ describe("SessionManager", () => {
     expect(sessionStoreMock.insertSession).toHaveBeenCalledWith(
       expect.objectContaining({
         id: session.id,
-        targetUrl: "https://example.com",
+        name: "Default Playweight",
         proxyEnabled: true,
         connected: false,
         profilePath: browserServiceMock.getSessionProfileDir(session.id),
@@ -91,7 +94,7 @@ describe("SessionManager", () => {
     );
 
     const session = await manager.createSession({
-      targetUrl: "https://example.com",
+      name: "Default Playweight",
       source: {
         type: "launch",
         proxyEnabled: true,
@@ -114,7 +117,7 @@ describe("SessionManager", () => {
     sessionStoreMock.listSessions.mockResolvedValue([
       {
         id: "session-headers",
-        targetUrl: "https://example.com",
+        name: "headers session",
         proxyEnabled: false,
         connected: false,
         profilePath: browserServiceMock.getSessionProfileDir("session-headers"),
@@ -133,7 +136,7 @@ describe("SessionManager", () => {
     );
 
     const createdSession = await manager.createSession({
-      targetUrl: "https://example.com",
+      name: "created session",
       source: {
         type: "launch",
         proxyEnabled: false,
@@ -145,7 +148,6 @@ describe("SessionManager", () => {
 
     expect(browserServiceMock.createSession).toHaveBeenCalledWith(
       createdSession.id,
-      "https://example.com",
       {
         type: "launch",
         profilePath: browserServiceMock.getSessionProfileDir(createdSession.id),
@@ -167,7 +169,6 @@ describe("SessionManager", () => {
 
     expect(browserServiceMock.restoreSession).toHaveBeenCalledWith(
       "session-headers",
-      "https://example.com",
       {
         type: "launch",
         profilePath: browserServiceMock.getSessionProfileDir("session-headers"),
@@ -182,6 +183,7 @@ describe("SessionManager", () => {
       "x-session-id": "session-headers",
       "x-trace": "enabled",
     });
+    expect(manager.getSession("session-headers")?.name).toBe("headers session");
 
     await manager.dispose();
   });
@@ -200,7 +202,7 @@ describe("SessionManager", () => {
     );
 
     const session = await manager.createSession({
-      targetUrl: "https://example.com",
+      name: "Default Playweight",
       source: {
         type: "launch",
         proxyEnabled: true,
@@ -222,7 +224,7 @@ describe("SessionManager", () => {
     sessionStoreMock.listSessions.mockResolvedValue([
       {
         id: "session-1",
-        targetUrl: "https://example.com",
+        name: "stored session",
         proxyEnabled: true,
         connected: true,
         profilePath: browserServiceMock.getSessionProfileDir("session-1"),
@@ -241,11 +243,11 @@ describe("SessionManager", () => {
 
     const restoredSession = manager.getSession("session-1");
     expect(restoredSession).toBeDefined();
+    expect(restoredSession?.name).toBe("stored session");
     expect(restoredSession?.connected).toBe(false);
     expect(restoredSession?.proxyEnabled).toBe(true);
     expect(browserServiceMock.restoreSession).toHaveBeenCalledWith(
       "session-1",
-      "https://example.com",
       {
         type: "launch",
         profilePath: browserServiceMock.getSessionProfileDir("session-1"),
@@ -268,7 +270,7 @@ describe("SessionManager", () => {
     sessionStoreMock.listSessions.mockResolvedValue([
       {
         id: "session-failed",
-        targetUrl: "http://127.0.0.1:5501/test/popup-auto",
+        name: "failed session",
         proxyEnabled: false,
         connected: false,
         profilePath: browserServiceMock.getSessionProfileDir("session-failed"),
@@ -300,7 +302,7 @@ describe("SessionManager", () => {
     sessionStoreMock.listSessions.mockResolvedValue([
       {
         id: "session-disabled",
-        targetUrl: "https://example.com",
+        name: "disabled session",
         proxyEnabled: false,
         connected: false,
         profilePath:
@@ -336,7 +338,7 @@ describe("SessionManager", () => {
       );
 
       const session = await manager.createSession({
-        targetUrl: "https://example.com",
+        name: "Default Playweight",
         source: {
           type: "launch",
           proxyEnabled: false,
@@ -365,7 +367,7 @@ describe("SessionManager", () => {
     );
 
     const session = await manager.createSession({
-      targetUrl: "https://example.com",
+      name: "CDP Playweight",
       source: {
         type: "connect-cdp",
         endpoint: "http://127.0.0.1:9333",
@@ -374,7 +376,6 @@ describe("SessionManager", () => {
 
     expect(browserServiceMock.createSession).toHaveBeenCalledWith(
       session.id,
-      "https://example.com",
       {
         type: "connect-cdp",
         endpoint: "http://127.0.0.1:9333",
@@ -398,7 +399,7 @@ describe("SessionManager", () => {
     );
 
     const session = await manager.createSession({
-      targetUrl: "https://example.com",
+      name: "CDP Playweight",
       source: {
         type: "connect-cdp",
         endpoint: "http://127.0.0.1:9333",
@@ -409,6 +410,33 @@ describe("SessionManager", () => {
 
     expect(browserServiceMock.destroySession).toHaveBeenCalledTimes(1);
     expect(sessionStoreMock.deleteSession).not.toHaveBeenCalled();
+    await manager.dispose();
+  });
+
+  it("updates a persisted session name", async () => {
+    const browserServiceMock = createBrowserServiceMock();
+    const sessionStoreMock = createSessionStoreMock();
+    const manager = new SessionManager(
+      browserServiceMock as never,
+      sessionStoreMock,
+    );
+
+    const session = await manager.createSession({
+      name: "Default Playweight",
+      source: {
+        type: "launch",
+        proxyEnabled: false,
+      },
+    });
+
+    await manager.updateSessionName(session.id, "Renamed session");
+
+    expect(manager.getSession(session.id)?.name).toBe("Renamed session");
+    expect(sessionStoreMock.updateSessionName).toHaveBeenCalledWith(
+      session.id,
+      "Renamed session",
+    );
+
     await manager.dispose();
   });
 });

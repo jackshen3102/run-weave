@@ -8,6 +8,7 @@ import type {
   CreateSessionResponse,
   SessionListItem,
   SessionStatusResponse,
+  UpdateSessionRequest,
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
 import type { SessionManager } from "../session/manager";
@@ -24,8 +25,16 @@ const connectCdpSourceSchema = z.object({
 });
 
 const createSessionSchema = z.object({
-  url: z.string().url(),
+  name: z.string().trim().min(1).optional(),
+  url: z.string().trim().min(1).optional(),
   source: z.union([launchSourceSchema, connectCdpSourceSchema]).optional(),
+}).refine((value) => Boolean(value.name ?? value.url), {
+  message: "Either name or url is required",
+  path: ["name"],
+});
+
+const updateSessionSchema = z.object({
+  name: z.string().trim().min(1),
 });
 
 const createDevtoolsTicketSchema = z.object({
@@ -50,7 +59,7 @@ export function createSessionRouter(
       .map((session) => ({
         sessionId: session.id,
         connected: session.connected,
-        targetUrl: session.targetUrl,
+        name: session.name,
         proxyEnabled: session.proxyEnabled,
         sourceType: session.sourceType,
         cdpEndpoint: session.cdpEndpoint,
@@ -76,8 +85,13 @@ export function createSessionRouter(
 
     try {
       const source = normalizeCreateSessionSource(parsed.data.source);
+      const sessionName = parsed.data.name ?? parsed.data.url;
+      if (!sessionName) {
+        res.status(400).json({ message: "Invalid request body" });
+        return;
+      }
       const session = await sessionManager.createSession({
-        targetUrl: parsed.data.url,
+        name: sessionName,
         source,
       });
       const payload: CreateSessionResponse = {
@@ -105,7 +119,40 @@ export function createSessionRouter(
     const payload: SessionStatusResponse = {
       sessionId: session.id,
       connected: session.connected,
-      targetUrl: session.targetUrl,
+      name: session.name,
+      proxyEnabled: session.proxyEnabled,
+      sourceType: session.sourceType,
+      cdpEndpoint: session.cdpEndpoint,
+      headers: session.headers,
+      createdAt: session.createdAt.toISOString(),
+    };
+
+    res.json(payload);
+  });
+
+  router.patch("/session/:id", async (req, res) => {
+    const parsed = updateSessionSchema.safeParse(req.body as UpdateSessionRequest);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const session = await sessionManager.updateSessionName(
+      req.params.id,
+      parsed.data.name,
+    );
+    if (!session) {
+      res.status(404).json({ message: "Session not found" });
+      return;
+    }
+
+    const payload: SessionStatusResponse = {
+      sessionId: session.id,
+      connected: session.connected,
+      name: session.name,
       proxyEnabled: session.proxyEnabled,
       sourceType: session.sourceType,
       cdpEndpoint: session.cdpEndpoint,

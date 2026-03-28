@@ -4,7 +4,7 @@ export type SessionProfileMode = "managed" | "custom";
 
 export interface PersistedSessionRecord {
   id: string;
-  targetUrl: string;
+  name: string;
   proxyEnabled: boolean;
   connected: boolean;
   profilePath: string;
@@ -26,6 +26,7 @@ export interface SessionStore {
   listSessions(): Promise<PersistedSessionRecord[]>;
   getSession(sessionId: string): Promise<PersistedSessionRecord | null>;
   insertSession(session: PersistedSessionRecord): Promise<void>;
+  updateSessionName(sessionId: string, name: string): Promise<void>;
   updateSessionConnection(params: UpdateSessionConnectionParams): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
 }

@@ -16,7 +16,8 @@ export interface ConnectCdpSessionSource {
 export type CreateSessionSource = LaunchSessionSource | ConnectCdpSessionSource;
 
 export interface CreateSessionRequest {
-  url: string;
+  name?: string;
+  url?: string;
   source?: CreateSessionSource;
 }
 
@@ -35,6 +36,10 @@ export interface CreateSessionResponse {
   viewerUrl: string;
 }
 
+export interface UpdateSessionRequest {
+  name: string;
+}
+
 export interface CreateDevtoolsTicketRequest {
   tabId: string;
 }
@@ -47,7 +52,7 @@ export interface CreateDevtoolsTicketResponse {
 export interface SessionStatusResponse {
   sessionId: string;
   connected: boolean;
-  targetUrl: string;
+  name: string;
   proxyEnabled: boolean;
   sourceType: SessionSourceType;
   cdpEndpoint?: string;
@@ -58,7 +63,7 @@ export interface SessionStatusResponse {
 export interface SessionListItem {
   sessionId: string;
   connected: boolean;
-  targetUrl: string;
+  name: string;
   proxyEnabled: boolean;
   sourceType: SessionSourceType;
   cdpEndpoint?: string;

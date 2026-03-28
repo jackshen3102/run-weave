@@ -20,7 +20,7 @@ function createRecord(
 ): PersistedSessionRecord {
   return {
     id: "session-1",
-    targetUrl: "https://example.com",
+    name: "Default Playweight",
     proxyEnabled: true,
     connected: false,
     profilePath: "/profiles/session-1",
@@ -124,6 +124,19 @@ describe("SQLiteSessionStore", () => {
           authorization: "Bearer demo",
           "x-session-id": "session-4",
         },
+      }),
+    );
+  });
+
+  it("updates the stored session name", async () => {
+    const store = await createStore();
+
+    await store.insertSession(createRecord());
+    await store.updateSessionName("session-1", "Renamed session");
+
+    await expect(store.getSession("session-1")).resolves.toEqual(
+      createRecord({
+        name: "Renamed session",
       }),
     );
   });

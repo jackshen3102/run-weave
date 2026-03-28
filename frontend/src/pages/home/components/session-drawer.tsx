@@ -11,6 +11,7 @@ interface SessionDrawerProps {
   activeSessionMenuId: string | null;
   onClose: () => void;
   onToggleMenu: (sessionId: string) => void;
+  onRenameSession: (sessionId: string) => void;
   onRemoveSession: (sessionId: string) => void;
   onResumeSession: (sessionId: string) => void;
 }
@@ -23,6 +24,7 @@ export function SessionDrawer({
   activeSessionMenuId,
   onClose,
   onToggleMenu,
+  onRenameSession,
   onRemoveSession,
   onResumeSession,
 }: SessionDrawerProps) {
@@ -74,6 +76,7 @@ export function SessionDrawer({
             deletingSessionId={deletingSessionId}
             activeSessionMenuId={activeSessionMenuId}
             onToggleMenu={onToggleMenu}
+            onRenameSession={onRenameSession}
             onRemoveSession={onRemoveSession}
             onResumeSession={onResumeSession}
           />

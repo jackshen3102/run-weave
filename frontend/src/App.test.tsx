@@ -76,9 +76,9 @@ describe("App", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "New Browser" }));
-    fireEvent.click(screen.getByText(/Advanced/));
 
     expect(screen.getByLabelText("Enable proxy")).toBeInTheDocument();
+    expect(screen.queryByText(/Advanced/)).not.toBeInTheDocument();
   });
 
   it("shows proxy status for each session in the drawer", async () => {
@@ -90,7 +90,7 @@ describe("App", () => {
         json: async () => [
           {
             sessionId: "session-1",
-            targetUrl: "https://www.coze.cn",
+            name: "CDP Playweight",
             lastActivityAt: "2026-03-23T07:31:19.000Z",
             connected: false,
             proxyEnabled: true,
@@ -102,7 +102,7 @@ describe("App", () => {
           },
           {
             sessionId: "session-2",
-            targetUrl: "https://www.juejin.cn",
+            name: "Default Playweight",
             lastActivityAt: "2026-03-23T07:30:44.000Z",
             connected: false,
             proxyEnabled: false,
@@ -139,11 +139,12 @@ describe("App", () => {
     expect(
       screen.getByText((content) => content.includes("No custom headers")),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Port 9333").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("CDP Playweight").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Default Playweight").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Open" }).length).toBeGreaterThan(0);
   });
 
-  it("shows the CDP port in the latest session card for attached browsers", async () => {
+  it("shows the session name in the latest session card", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
     vi.stubGlobal(
       "fetch",
@@ -152,7 +153,7 @@ describe("App", () => {
         json: async () => [
           {
             sessionId: "session-1",
-            targetUrl: "https://www.coze.cn",
+            name: "CDP Playweight",
             lastActivityAt: "2026-03-23T07:31:19.000Z",
             connected: false,
             proxyEnabled: false,
@@ -170,7 +171,7 @@ describe("App", () => {
       expect(screen.getByText("Latest Session")).toBeInTheDocument();
     });
 
-    expect(screen.getAllByText("Port 9333").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("CDP Playweight").length).toBeGreaterThan(0);
   });
 
   it("shows a CDP endpoint input and submits it when attaching to an existing browser", async () => {
@@ -210,7 +211,7 @@ describe("App", () => {
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
-            url: "https://www.google.cn",
+            name: "CDP Playweight",
             source: {
               type: "connect-cdp",
               endpoint: "http://127.0.0.1:9333",
@@ -234,7 +235,7 @@ describe("App", () => {
         json: async () => [
           {
             sessionId: "session-existing",
-            targetUrl: "https://example.com",
+            name: "Default Playweight",
             lastActivityAt: "2026-03-23T07:31:19.000Z",
             connected: false,
             proxyEnabled: false,
@@ -257,7 +258,7 @@ describe("App", () => {
         json: async () => [
           {
             sessionId: "session-existing",
-            targetUrl: "https://example.com",
+            name: "Default Playweight",
             lastActivityAt: "2026-03-23T07:31:19.000Z",
             connected: false,
             proxyEnabled: false,
@@ -276,10 +277,9 @@ describe("App", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "New Browser" }));
-    fireEvent.click(screen.getByText(/Advanced/));
 
-    fireEvent.change(screen.getByLabelText("Target URL"), {
-      target: { value: "https://example.com" },
+    fireEvent.change(screen.getByLabelText("Session name"), {
+      target: { value: "Custom session" },
     });
     fireEvent.change(screen.getByLabelText("Request headers"), {
       target: {
@@ -294,7 +294,7 @@ describe("App", () => {
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
-            url: "https://example.com",
+            name: "Custom session",
             source: {
               type: "launch",
               proxyEnabled: false,
@@ -311,5 +311,28 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getByText("Viewer route session-1")).toBeInTheDocument();
     });
+  });
+
+  it("requires a session name before creating a session", async () => {
+    localStorage.setItem("viewer.auth.token", "token-1");
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByText("New Session")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText("Session name"), {
+      target: { value: "   " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      screen.getByText("Session name is required."),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

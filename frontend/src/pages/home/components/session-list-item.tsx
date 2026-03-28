@@ -4,7 +4,6 @@ import { Button } from "../../../components/ui/button";
 import {
   getHeaderSummaryLabel,
   getProxyStatusLabel,
-  getSessionContextLabel,
   getSessionSourceLabel,
 } from "../utils";
 
@@ -13,6 +12,7 @@ interface SessionListItemProps {
   isDeleting: boolean;
   isMenuOpen: boolean;
   onToggleMenu: () => void;
+  onRename: () => void;
   onRemove: () => void;
   onResume: () => void;
 }
@@ -22,6 +22,7 @@ export function SessionListItem({
   isDeleting,
   isMenuOpen,
   onToggleMenu,
+  onRename,
   onRemove,
   onResume,
 }: SessionListItemProps) {
@@ -40,12 +41,11 @@ export function SessionListItem({
             </span>
           </div>
           <p className="text-xl font-semibold tracking-[-0.04em] text-foreground">
-            {getSessionSourceLabel(session.sourceType)}
-          </p>
-          <p className="truncate text-sm text-muted-foreground/80">
-            {getSessionContextLabel(session)}
+            {session.name}
           </p>
           <p className="text-sm text-muted-foreground/80">
+            {getSessionSourceLabel(session.sourceType)}
+            {" \u00b7 "}
             {getProxyStatusLabel(session.proxyEnabled)}
             {" \u00b7 "}
             {getHeaderSummaryLabel(session.headers)}
@@ -66,6 +66,13 @@ export function SessionListItem({
           </Button>
           {isMenuOpen && (
             <div className="animate-scale-fade absolute right-0 top-11 z-10 min-w-40 rounded-2xl border border-border/70 bg-background/96 p-2 shadow-[0_20px_50px_-30px_rgba(17,24,39,0.55)] backdrop-blur-xl">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60"
+                onClick={onRename}
+              >
+                <span>Rename session</span>
+              </button>
               <button
                 type="button"
                 className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-red-500 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
