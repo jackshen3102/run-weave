@@ -4,11 +4,13 @@ import path from "node:path";
 export interface StoragePaths {
   browserProfileDir: string;
   sessionDbFile: string;
+  terminalSessionDbFile: string;
 }
 
 interface StorageEnv {
   BROWSER_PROFILE_DIR?: string;
   SESSION_DB_FILE?: string;
+  TERMINAL_SESSION_DB_FILE?: string;
 }
 
 export function expandHomePath(
@@ -43,9 +45,14 @@ export function resolveStoragePaths(
     expandHomePath(env.SESSION_DB_FILE, homeDir) ??
       path.join(browserProfileDir, "session-store.db"),
   );
+  const terminalSessionDbFile = path.resolve(
+    expandHomePath(env.TERMINAL_SESSION_DB_FILE, homeDir) ??
+      path.join(browserProfileDir, "terminal-session-store.db"),
+  );
 
   return {
     browserProfileDir,
     sessionDbFile,
+    terminalSessionDbFile,
   };
 }

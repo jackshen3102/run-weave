@@ -14,14 +14,20 @@ import { createDevtoolsRouter } from "./routes/devtools";
 import { QualityProbeStore } from "./quality/probe-store";
 import { createQualityRouter } from "./routes/quality";
 import { createSessionRouter } from "./routes/session";
+import { createTerminalRouter } from "./routes/terminal";
 import { createTestRouter } from "./routes/test";
 import { createCorsMiddleware } from "./server/cors";
 import { SessionManager } from "./session/manager";
 import { SQLiteSessionStore } from "./session/sqlite-store";
+import { TerminalSessionManager } from "./terminal/manager";
+import { PtyService } from "./terminal/pty-service";
+import { TerminalRuntimeRegistry } from "./terminal/runtime-registry";
+import { SQLiteTerminalSessionStore } from "./terminal/sqlite-store";
 import { listenWithFallback } from "./server/listen";
 import { resolveStoragePaths } from "./utils/path";
 import { attachDevtoolsProxyServer } from "./ws/devtools-proxy";
 import { WebSocketSessionController } from "./ws/session-control";
+import { attachTerminalWebSocketServer } from "./ws/terminal-server";
 import { attachWebSocketServer } from "./ws/server";
 
 interface RuntimeConfig {
@@ -36,6 +42,9 @@ interface RuntimeServices {
   browserService: BrowserService;
   qualityProbeStore: QualityProbeStore;
   wsSessionController: WebSocketSessionController;
+  terminalSessionManager: TerminalSessionManager;
+  terminalRuntimeRegistry: TerminalRuntimeRegistry;
+  ptyService: PtyService;
 }
 
 const CURRENT_FILE_PATH = fileURLToPath(import.meta.url);
@@ -119,13 +128,22 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   });
   const authService = new AuthService(loadAuthConfig());
   const sessionStore = new SQLiteSessionStore(storagePaths.sessionDbFile);
+  const terminalSessionStore = new SQLiteTerminalSessionStore(
+    storagePaths.terminalSessionDbFile,
+  );
   const qualityProbeStore = new QualityProbeStore();
   const wsSessionController = new WebSocketSessionController();
   const sessionManager = new SessionManager(browserService, sessionStore, {
     restorePersistedSessions: resolveSessionRestoreEnabled(process.env),
     qualityProbeStore,
   });
+  const terminalSessionManager = new TerminalSessionManager(
+    terminalSessionStore,
+  );
+  const terminalRuntimeRegistry = new TerminalRuntimeRegistry();
+  const ptyService = new PtyService();
   await sessionManager.initialize();
+  await terminalSessionManager.initialize();
 
   return {
     authService,
@@ -133,6 +151,9 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     browserService,
     qualityProbeStore,
     wsSessionController,
+    terminalSessionManager,
+    terminalRuntimeRegistry,
+    ptyService,
   };
 }
 
@@ -164,6 +185,14 @@ function createHttpApp(services: RuntimeServices): express.Express {
       services.qualityProbeStore,
       services.wsSessionController,
     ),
+  );
+  app.use(
+    "/api/terminal",
+    requireAuth,
+    createTerminalRouter(services.terminalSessionManager, {
+      ptyService: services.ptyService,
+      runtimeRegistry: services.terminalRuntimeRegistry,
+    }),
   );
 
   if (devtoolsEnabled) {
@@ -200,6 +229,8 @@ function createHttpApp(services: RuntimeServices): express.Express {
 function attachLifecycleHandlers(
   server: http.Server,
   sessionManager: SessionManager,
+  terminalSessionManager: TerminalSessionManager,
+  terminalRuntimeRegistry: TerminalRuntimeRegistry,
 ): void {
   let shuttingDown = false;
 
@@ -210,6 +241,8 @@ function attachLifecycleHandlers(
 
     shuttingDown = true;
     server.close();
+    await terminalRuntimeRegistry.disposeAll();
+    await terminalSessionManager.dispose();
     await sessionManager.dispose();
     process.exit(0);
   };
@@ -236,6 +269,13 @@ async function startRuntime(): Promise<void> {
     qualityProbeStore: services.qualityProbeStore,
     wsSessionController: services.wsSessionController,
   });
+  attachTerminalWebSocketServer(
+    server,
+    services.terminalSessionManager,
+    services.terminalRuntimeRegistry,
+    services.authService,
+    services.ptyService,
+  );
   attachDevtoolsProxyServer(
     server,
     services.sessionManager,
@@ -250,7 +290,12 @@ async function startRuntime(): Promise<void> {
     maxAttempts: runtimeConfig.strictPort ? 1 : undefined,
   });
 
-  attachLifecycleHandlers(server, services.sessionManager);
+  attachLifecycleHandlers(
+    server,
+    services.sessionManager,
+    services.terminalSessionManager,
+    services.terminalRuntimeRegistry,
+  );
 }
 
 void startRuntime();

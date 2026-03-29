@@ -1,0 +1,91 @@
+import { describe, expect, it, vi } from "vitest";
+import { TerminalSessionManager } from "./manager";
+import type {
+  PersistedTerminalSessionRecord,
+  TerminalSessionStore,
+} from "./store";
+
+function createStoreMock() {
+  return {
+    initialize: vi.fn(async () => undefined),
+    dispose: vi.fn(async () => undefined),
+    listSessions: vi.fn(async (): Promise<PersistedTerminalSessionRecord[]> => []),
+    getSession: vi.fn(async () => null),
+    insertSession: vi.fn(async () => undefined),
+    updateSessionName: vi.fn(async () => undefined),
+    updateSessionActivity: vi.fn(async () => undefined),
+    updateSessionExit: vi.fn(async () => undefined),
+    deleteSession: vi.fn(async () => undefined),
+  } satisfies TerminalSessionStore;
+}
+
+describe("TerminalSessionManager", () => {
+  it("creates and lists terminal sessions", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+
+    const session = await manager.createSession({
+      command: "bash",
+      args: ["-l"],
+      cwd: "/tmp/demo",
+      linkedBrowserSessionId: "session-1",
+      name: "Demo shell",
+    });
+
+    expect(session.id).toBeTruthy();
+    expect(manager.getSession(session.id)).toEqual(session);
+    expect(manager.listSessions()).toHaveLength(1);
+    expect(store.insertSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: session.id,
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        linkedBrowserSessionId: "session-1",
+        status: "running",
+      }),
+    );
+  });
+
+  it("updates activity and exit state", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    const session = await manager.createSession({
+      command: "claude",
+      args: [],
+      cwd: "/tmp/project",
+      name: "Claude",
+    });
+
+    manager.markActivity(session.id);
+    manager.markExited(session.id, 130);
+
+    expect(store.updateSessionActivity).toHaveBeenCalledWith({
+      terminalSessionId: session.id,
+      lastActivityAt: expect.any(String),
+    });
+    expect(store.updateSessionExit).toHaveBeenCalledWith({
+      terminalSessionId: session.id,
+      status: "exited",
+      exitCode: 130,
+      lastActivityAt: expect.any(String),
+    });
+    expect(manager.getSession(session.id)?.status).toBe("exited");
+    expect(manager.getSession(session.id)?.exitCode).toBe(130);
+  });
+
+  it("deletes terminal sessions", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    const session = await manager.createSession({
+      command: "codex",
+      args: [],
+      cwd: "/tmp/project",
+      name: "Codex",
+    });
+
+    await expect(manager.destroySession(session.id)).resolves.toBe(true);
+    expect(manager.getSession(session.id)).toBeUndefined();
+    expect(store.deleteSession).toHaveBeenCalledWith(session.id);
+  });
+});

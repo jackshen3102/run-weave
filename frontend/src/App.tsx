@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuthToken } from "./features/auth/use-auth-token";
 import { HomePage } from "./pages/home-page";
 import { LoginPage } from "./pages/login-page";
+import { TerminalRoutePage } from "./pages/terminal-page";
 import { ViewerPage } from "./pages/viewer-page";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -37,6 +38,20 @@ export default function App() {
         element={
           token ? (
             <ViewerPage
+              apiBase={API_BASE}
+              token={token}
+              onAuthExpired={clearToken}
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/terminal/:terminalSessionId"
+        element={
+          token ? (
+            <TerminalRoutePage
               apiBase={API_BASE}
               token={token}
               onAuthExpired={clearToken}
