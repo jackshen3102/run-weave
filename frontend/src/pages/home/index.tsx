@@ -3,14 +3,18 @@ import { useNavigate } from "react-router-dom";
 import type { SessionListItem } from "@browser-viewer/shared";
 import { HttpError } from "../../services/http";
 import {
-  createSession as createViewerSession,
-  deleteSession as deleteViewerSession,
-  listSessions as fetchSessionList,
-  updateSession as updateViewerSession,
+  createTerminalSession,
+} from "../../services/terminal";
+import {
+  createSession as createBrowserSession,
+  deleteSession as deleteBrowserSession,
+  listSessions as fetchBrowserSessionList,
+  updateSession as updateBrowserSession,
 } from "../../services/session";
 import { HomeHeader } from "./components/home-header";
 import { LatestSessionCard } from "./components/latest-session-card";
 import { NewSessionForm } from "./components/new-session-form";
+import { NewTerminalForm } from "./components/new-terminal-form";
 import { SessionDrawer } from "./components/session-drawer";
 import { parseSessionHeaders } from "./utils";
 
@@ -31,7 +35,12 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
   const [cdpEndpoint, setCdpEndpoint] = useState("http://127.0.0.1:9222");
   const [requestHeadersInput, setRequestHeadersInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [terminalLoading, setTerminalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [terminalError, setTerminalError] = useState<string | null>(null);
+  const [terminalCommand, setTerminalCommand] = useState("bash");
+  const [terminalArgs, setTerminalArgs] = useState("");
+  const [terminalCwd, setTerminalCwd] = useState("");
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(
@@ -56,7 +65,7 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
   const loadSessions = useCallback(async (): Promise<void> => {
     setLoadingSessions(true);
     try {
-      const items = await fetchSessionList(apiBase, token);
+      const items = await fetchBrowserSessionList(apiBase, token);
       setSessions(items);
     } catch (listError) {
       if (listError instanceof HttpError && listError.status === 401) {
@@ -141,7 +150,7 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
     setDeletingSessionId(sessionId);
     setError(null);
     try {
-      await deleteViewerSession(apiBase, token, sessionId);
+      await deleteBrowserSession(apiBase, token, sessionId);
       await loadSessions();
     } catch (deleteError) {
       if (deleteError instanceof HttpError && deleteError.status === 401) {
@@ -175,7 +184,7 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
 
     setError(null);
     try {
-      await updateViewerSession(apiBase, token, sessionId, {
+      await updateBrowserSession(apiBase, token, sessionId, {
         name: trimmedName,
       });
       await loadSessions();
@@ -223,7 +232,7 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
     setError(null);
 
     try {
-      const data = await createViewerSession(
+      const data = await createBrowserSession(
         apiBase,
         sessionSourceType === "connect-cdp"
           ? {
@@ -262,6 +271,50 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
     }
   };
 
+  const createTerminal = async (): Promise<void> => {
+    if (terminalLoading) {
+      return;
+    }
+
+    const trimmedCommand = terminalCommand.trim();
+    const trimmedCwd = terminalCwd.trim();
+    if (!trimmedCommand) {
+      setTerminalError("Terminal command is required.");
+      return;
+    }
+    if (!trimmedCwd) {
+      setTerminalError("Terminal cwd is required.");
+      return;
+    }
+
+    const parsedArgs = terminalArgs
+      .split(/\s+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    setTerminalLoading(true);
+    setTerminalError(null);
+
+    try {
+      const data = await createTerminalSession(apiBase, token, {
+        command: trimmedCommand,
+        args: parsedArgs,
+        cwd: trimmedCwd,
+      });
+      navigate(`/terminal/${encodeURIComponent(data.terminalSessionId)}`);
+    } catch (createError) {
+      if (createError instanceof HttpError && createError.status === 401) {
+        clearToken();
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      setTerminalError(String(createError));
+    } finally {
+      setTerminalLoading(false);
+    }
+  };
+
   return (
     <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-8 sm:py-8">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217,226,211,0.75),transparent_32%),radial-gradient(circle_at_80%_20%,rgba(68,136,146,0.16),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(191,166,122,0.18),transparent_28%)]" />
@@ -280,29 +333,45 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
               <LatestSessionCard session={recentSession} onEnterSession={enterSession} />
 
-              <NewSessionForm
-                sessionSourceType={sessionSourceType}
-                onSessionSourceTypeChange={changeSessionSourceType}
-                sessionName={sessionName}
-                onSessionNameChange={(value) => {
-                  setSessionName(value);
-                  setSessionNameCustomized(
-                    value.trim() !== "" &&
-                      value.trim() !== getDefaultSessionName(sessionSourceType),
-                  );
-                }}
-                cdpEndpoint={cdpEndpoint}
-                onCdpEndpointChange={setCdpEndpoint}
-                proxyEnabled={proxyEnabled}
-                onProxyEnabledChange={setProxyEnabled}
-                requestHeadersInput={requestHeadersInput}
-                onRequestHeadersInputChange={setRequestHeadersInput}
-                loading={loading}
-                onSubmit={() => {
-                  void createSession();
-                }}
-                error={error}
-              />
+              <div className="space-y-6">
+                <NewSessionForm
+                  sessionSourceType={sessionSourceType}
+                  onSessionSourceTypeChange={changeSessionSourceType}
+                  sessionName={sessionName}
+                  onSessionNameChange={(value) => {
+                    setSessionName(value);
+                    setSessionNameCustomized(
+                      value.trim() !== "" &&
+                        value.trim() !== getDefaultSessionName(sessionSourceType),
+                    );
+                  }}
+                  cdpEndpoint={cdpEndpoint}
+                  onCdpEndpointChange={setCdpEndpoint}
+                  proxyEnabled={proxyEnabled}
+                  onProxyEnabledChange={setProxyEnabled}
+                  requestHeadersInput={requestHeadersInput}
+                  onRequestHeadersInputChange={setRequestHeadersInput}
+                  loading={loading}
+                  onSubmit={() => {
+                    void createSession();
+                  }}
+                  error={error}
+                />
+
+                <NewTerminalForm
+                  command={terminalCommand}
+                  args={terminalArgs}
+                  cwd={terminalCwd}
+                  loading={terminalLoading}
+                  error={terminalError}
+                  onCommandChange={setTerminalCommand}
+                  onArgsChange={setTerminalArgs}
+                  onCwdChange={setTerminalCwd}
+                  onSubmit={() => {
+                    void createTerminal();
+                  }}
+                />
+              </div>
             </div>
           </div>
         </section>

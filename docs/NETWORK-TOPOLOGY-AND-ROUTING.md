@@ -268,7 +268,146 @@ DTP -> RDP : 转发到 127.0.0.1:<port>/devtools/page/<targetId>
 - 真实 Chromium 调试端口只在服务端本机访问，浏览器端永远不直接访问 `127.0.0.1:<port>`。
 - 当 session 来源是 `connect-cdp` 时，如果 endpoint 中能解析出调试端口，也可以复用同类链路。
 
-## 7. 内部路由分层
+## 7. 新增远程终端后的总体拓扑
+
+如果增加远程终端能力，建议把它设计成与 Viewer 平行的第二条实时链路，而不是复用现有 `/ws`。
+
+核心原则：
+
+1. Terminal Session 独立于 Browser Session 存在。
+2. Terminal Session 可选关联某个 Browser Session，但生命周期分开。
+3. 前端可以把终端做成独立页面，也可以后续嵌入 Viewer 页面。
+4. 后端终端链路必须基于 PTY，才能支持 `codex`、`claude` 这类交互式 CLI。
+
+```plantuml
+@startuml
+title Browser Viewer + Remote Terminal 总体拓扑
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName Monospaced
+
+actor User as user
+
+rectangle "User Browser" as browser {
+  component "Frontend SPA\nReact + Vite" as fe
+  component "Viewer UI" as viewerUi
+  component "Terminal UI" as terminalUi
+}
+
+rectangle "Browser Viewer Backend" as be {
+  component "Express HTTP Server" as http
+  component "Viewer WebSocket Server\n/ws" as viewerWs
+  component "Terminal WebSocket Server\n/ws/terminal" as terminalWs
+  component "Auth Service" as auth
+  component "Session Manager" as sessionMgr
+  component "Terminal Session Manager" as terminalMgr
+  component "Browser Service\nPlaywright / CDP" as browserSvc
+  component "PTY Service" as ptySvc
+}
+
+cloud "Managed Browser\nPersistent Context" as managedBrowser
+cloud "External Browser\nCDP Endpoint" as cdpBrowser
+cloud "Host Shell / CLI Runtime\nbash / zsh / codex / claude" as shellRuntime
+
+user --> fe : 访问 SPA
+fe --> http : HTTP\n登录 / Browser Session / Terminal Session
+viewerUi --> viewerWs : WebSocket\n/ws?sessionId&token
+terminalUi --> terminalWs : WebSocket\n/ws/terminal?terminalSessionId&token
+
+http --> auth : Bearer Token 校验
+viewerWs --> auth : 握手校验 token
+terminalWs --> auth : 握手校验 token
+
+http --> sessionMgr : Browser Session 管理
+http --> terminalMgr : Terminal Session 管理
+
+sessionMgr --> browserSvc : 创建 / 维护浏览器会话
+terminalMgr --> ptySvc : 创建 / attach / resize / signal PTY
+
+browserSvc --> managedBrowser : launch 模式
+browserSvc --> cdpBrowser : connect-cdp 模式
+ptySvc --> shellRuntime : 启动交互式终端进程
+
+@enduml
+```
+
+### 解读
+
+- 现有 `/ws` 继续只负责 Viewer 的控制与画面回传。
+- 新增 `/ws/terminal` 专门承载终端输入输出、窗口尺寸变化和退出状态。
+- Terminal Session 与 Browser Session 是并列资源，前端可在产品层做组合展示，但后端不强绑定。
+
+## 8. 远程终端的对外入口建议
+
+在现有入口基础上，建议新增以下接口：
+
+| 类型      | 路径                        | 是否鉴权        | 用途                       |
+| --------- | --------------------------- | --------------- | -------------------------- |
+| HTTP      | `/api/terminal/session`     | 是              | 创建终端会话、查询终端列表 |
+| HTTP      | `/api/terminal/session/:id` | 是              | 查询或删除单个终端会话     |
+| WebSocket | `/ws/terminal`              | 是，query token | 建立终端实时交互链路       |
+
+### 边界说明
+
+- `/api/terminal/*` 复用现有 Bearer Token 鉴权模型。
+- `/ws/terminal` 复用现有 websocket 握手鉴权思路，但使用独立的 `terminalSessionId`。
+- 终端链路不应混入现有 Viewer 协议，以免消息模型和状态机变得复杂。
+
+## 9. 远程终端的核心链路
+
+```plantuml
+@startuml
+title Terminal Session 创建与连接链路
+
+skinparam shadowing false
+skinparam defaultFontName Monospaced
+
+actor User
+participant "Frontend SPA" as FE
+participant "Express HTTP" as BE
+participant "Auth Service" as AUTH
+participant "Terminal Session Manager" as TSM
+participant "PTY Service" as PTY
+participant "Host Shell / CLI" as CLI
+participant "Terminal WS" as TWS
+
+User -> FE : 创建远程终端
+FE -> BE : POST /api/terminal/session
+BE -> AUTH : verifyToken(token)
+BE -> TSM : createSession(...)
+TSM -> PTY : spawn PTY
+PTY -> CLI : 启动 shell / codex / claude
+TSM --> BE : terminalSessionId
+BE --> FE : 201 Created
+
+User -> FE : 打开终端
+FE -> TWS : WS /ws/terminal?terminalSessionId=...&token=...
+TWS -> AUTH : verifyToken(token)
+TWS -> TSM : getSession(terminalSessionId)
+
+alt 握手失败
+  TWS --> FE : error / close
+else 握手成功
+  TWS --> FE : connected / status
+  loop 持续交互
+    FE -> TWS : input / resize / signal
+    TWS -> PTY : write / resize / signal
+    PTY --> TWS : output / exit
+    TWS --> FE : output / exit / status
+  end
+end
+
+@enduml
+```
+
+### 解读
+
+- 终端会话先通过 HTTP 创建，再通过 WebSocket 进入实时交互。
+- PTY 负责承载真正的交互式终端能力，而不是一次性命令执行。
+- 该模型可以先支持独立 Terminal 页面，后续再扩展到 Viewer 内嵌终端或双栏工作台。
+
+## 10. 内部路由分层
 
 从后端内部职责看，网络链路可以再抽象为以下分层：
 
@@ -322,7 +461,7 @@ package "External Runtime" {
 - `Session Manager` 是网络入口与浏览器执行层之间的主要协调者。
 - WebSocket 下的 tab、navigation、input、screencast 等能力都属于执行层，它们对前端表现为一个统一的 `/ws` 通道。
 
-## 8. 关键架构边界
+## 11. 关键架构边界
 
 ### 鉴权边界
 
@@ -343,7 +482,7 @@ package "External Runtime" {
 - WebSocket 负责持续互动：输入事件、标签切换、导航状态、剪贴板、光标、屏幕帧。
 - DevTools 不再尝试让浏览器直接连接 remote debugging port，而是走独立的 `/ws/devtools-proxy` 同源代理链路。
 
-## 9. 单机 HTTPS/WSS 部署建议
+## 12. 单机 HTTPS/WSS 部署建议
 
 在单机部署到云服务器时，推荐让公网入口统一收口到 Nginx，再反向代理到本机 Node 单体。
 
@@ -490,7 +629,7 @@ pnpm --filter ./backend start -- --host 127.0.0.1 --port 5001
 | DevTools 流量转发           | 浏览器直接找 Chromium         | 服务端代理 Chromium                                                       |
 | 公网入口数量                | 逻辑上分散                    | 统一收口到 Nginx `:5012`                                                  |
 
-## 10. 本地配置与启动
+## 13. 本地配置与启动
 
 ### 前置条件
 
@@ -561,7 +700,7 @@ curl -k -i https://127.0.0.1:5012/health
 
 如果控制台里再次出现 `ws://wss//...`，说明运行中的后端还不是最新版本，或者浏览器仍在使用旧页面缓存。
 
-## 11. 服务器部署建议
+## 14. 服务器部署建议
 
 如果部署到一台只有公网 IP 的服务器，建议直接沿用这套模型：
 
@@ -593,7 +732,7 @@ curl -k -i https://127.0.0.1:5012/health
 - `X-Forwarded-Proto`
 - `X-Forwarded-For`
 
-## 12. 对阅读代码的定位建议
+## 15. 对阅读代码的定位建议
 
 如果需要从文档回到代码，可优先看以下入口：
 
@@ -609,6 +748,6 @@ curl -k -i https://127.0.0.1:5012/health
 - WebSocket 握手校验：`backend/src/ws/handshake.ts`
 - 共享协议定义：`packages/shared/src/protocol.ts`
 
-## 13. 一句话总结
+## 16. 一句话总结
 
 `browser-viewer` 的网络结构可以概括为：前端 SPA 通过 HTTP 管理会话，通过 `/ws` 实时操控远端页面，而后端作为统一入口，再把这些操作转译到 Playwright / CDP 控制的真实浏览器；当需要打开 DevTools 时，浏览器只连接同源 `wss` 代理，真正的 Chromium 调试端口始终留在服务端本机内部。

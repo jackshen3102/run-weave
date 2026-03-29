@@ -17,6 +17,11 @@ describe("path helpers", () => {
         ".browser-profile",
         "session-store.db",
       ),
+      terminalSessionDbFile: path.join(
+        "/Users/tester",
+        ".browser-profile",
+        "terminal-session-store.db",
+      ),
     });
   });
 
@@ -33,6 +38,11 @@ describe("path helpers", () => {
         "custom-profile",
         "session-store.db",
       ),
+      terminalSessionDbFile: path.join(
+        "/Users/tester",
+        "custom-profile",
+        "terminal-session-store.db",
+      ),
     });
   });
 
@@ -42,12 +52,18 @@ describe("path helpers", () => {
         {
           BROWSER_PROFILE_DIR: "~/custom-profile",
           SESSION_DB_FILE: "~/db/session.db",
+          TERMINAL_SESSION_DB_FILE: "~/db/terminal-session.db",
         },
         "/Users/tester",
       ),
     ).toEqual({
       browserProfileDir: path.join("/Users/tester", "custom-profile"),
       sessionDbFile: path.join("/Users/tester", "db", "session.db"),
+      terminalSessionDbFile: path.join(
+        "/Users/tester",
+        "db",
+        "terminal-session.db",
+      ),
     });
   });
 });

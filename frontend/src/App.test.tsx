@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useParams } from "react-router-dom";
 import { ThemeProvider } from "./components/theme-provider";
 import App from "./App";
 
@@ -14,6 +14,13 @@ vi.mock("./components/viewer-page", () => ({
   ViewerPage: ({ sessionId }: { sessionId: string }) => (
     <div>Viewer route {sessionId}</div>
   ),
+}));
+
+vi.mock("./pages/terminal-page", () => ({
+  TerminalRoutePage: () => {
+    const { terminalSessionId } = useParams<{ terminalSessionId: string }>();
+    return <div>Terminal route {terminalSessionId}</div>;
+  },
 }));
 
 function renderApp(initialPath = "/") {
@@ -334,5 +341,52 @@ describe("App", () => {
       screen.getByText("Session name is required."),
     ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates a terminal session from the home flow", async () => {
+    localStorage.setItem("viewer.auth.token", "token-1");
+    const fetchMock = vi.fn();
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          terminalSessionId: "terminal-1",
+          terminalUrl: "/terminal/terminal-1",
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByText("New Session")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText("Terminal command"), {
+      target: { value: "bash" },
+    });
+    fireEvent.change(screen.getByLabelText("Terminal cwd"), {
+      target: { value: "/tmp/demo" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Open Terminal" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/terminal/session",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            command: "bash",
+            args: [],
+            cwd: "/tmp/demo",
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Terminal route terminal-1")).toBeInTheDocument();
+    });
   });
 });
