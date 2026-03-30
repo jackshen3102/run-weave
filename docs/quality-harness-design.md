@@ -19,6 +19,17 @@ The design is tailored to the current repo shape:
 - shared protocol: `packages/shared`
 - current quality baseline: unit tests, backend integration tests, a small Playwright suite
 
+## Layered Test Entry Points
+
+The repository-level validation model uses explicit layer entry commands:
+
+- `pnpm run test:default`
+- `pnpm run test:ui`
+- `pnpm run test:e2e`
+- `pnpm run test:live`
+
+Detailed boundaries, naming conventions, and file-to-layer mapping are documented in `docs/testing/layered-testing-architecture.md`.
+
 ## 2. Problem Statement
 
 The current quality model is necessary but insufficient for autonomous verification.
