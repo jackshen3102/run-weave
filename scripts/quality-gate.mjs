@@ -30,13 +30,20 @@ const ALL_STEPS = [
   },
   {
     id: "e2e-smoke",
-    command: ["pnpm", "run", "test:e2e", "--", "tests/smoke.spec.ts"],
+    command: ["pnpm", "--filter", "./frontend", "e2e", "--", "tests/smoke.spec.ts"],
     layers: ["e2e"],
     critical: true,
   },
   {
     id: "e2e-interaction",
-    command: ["pnpm", "run", "test:e2e", "--", "tests/interaction.spec.ts"],
+    command: [
+      "pnpm",
+      "--filter",
+      "./frontend",
+      "e2e",
+      "--",
+      "tests/interaction.spec.ts",
+    ],
     layers: ["e2e"],
     critical: true,
     maxAttempts: 2,
