@@ -14,6 +14,7 @@ function createStoreMock() {
     insertSession: vi.fn(async () => undefined),
     updateSessionName: vi.fn(async () => undefined),
     updateSessionActivity: vi.fn(async () => undefined),
+    appendSessionScrollback: vi.fn(async () => undefined),
     updateSessionExit: vi.fn(async () => undefined),
     deleteSession: vi.fn(async () => undefined),
   } satisfies TerminalSessionStore;
@@ -42,6 +43,7 @@ describe("TerminalSessionManager", () => {
         args: ["-l"],
         cwd: "/tmp/demo",
         linkedBrowserSessionId: "session-1",
+        scrollback: "",
         status: "running",
       }),
     );
@@ -72,6 +74,30 @@ describe("TerminalSessionManager", () => {
     });
     expect(manager.getSession(session.id)?.status).toBe("exited");
     expect(manager.getSession(session.id)?.exitCode).toBe(130);
+  });
+
+  it("appends output and caps scrollback", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    const session = await manager.createSession({
+      command: "bash",
+      cwd: "/tmp/demo",
+    });
+
+    manager.appendOutput(session.id, "hello");
+    manager.appendOutput(session.id, " world");
+
+    expect(manager.getScrollback(session.id)).toBe("hello world");
+    expect(store.appendSessionScrollback).toHaveBeenCalledWith({
+      terminalSessionId: session.id,
+      chunk: "hello",
+      maxLength: 262144,
+    });
+    expect(store.appendSessionScrollback).toHaveBeenCalledWith({
+      terminalSessionId: session.id,
+      chunk: " world",
+      maxLength: 262144,
+    });
   });
 
   it("deletes terminal sessions", async () => {

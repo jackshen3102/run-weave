@@ -11,6 +11,7 @@ export interface TerminalSessionRecord {
   args: string[];
   cwd: string;
   linkedBrowserSessionId?: string;
+  scrollback: string;
   status: "running" | "exited";
   createdAt: Date;
   lastActivityAt: Date;
@@ -35,6 +36,7 @@ function buildRecord(
     args: persisted.args,
     cwd: persisted.cwd,
     linkedBrowserSessionId: persisted.linkedBrowserSessionId,
+    scrollback: persisted.scrollback,
     status: persisted.status,
     createdAt: new Date(persisted.createdAt),
     lastActivityAt: new Date(persisted.lastActivityAt),
@@ -52,12 +54,15 @@ function toPersisted(
     args: session.args,
     cwd: session.cwd,
     linkedBrowserSessionId: session.linkedBrowserSessionId,
+    scrollback: session.scrollback,
     status: session.status,
     createdAt: session.createdAt.toISOString(),
     lastActivityAt: session.lastActivityAt.toISOString(),
     exitCode: session.exitCode,
   };
 }
+
+const MAX_SCROLLBACK_LENGTH = 256 * 1024;
 
 export class TerminalSessionManager {
   private readonly sessions = new Map<string, TerminalSessionRecord>();
@@ -84,6 +89,7 @@ export class TerminalSessionManager {
       args: options.args ?? [],
       cwd: options.cwd,
       linkedBrowserSessionId: options.linkedBrowserSessionId,
+      scrollback: "",
       status: "running",
       createdAt: now,
       lastActivityAt: now,
@@ -92,6 +98,30 @@ export class TerminalSessionManager {
     await this.sessionStore.insertSession(toPersisted(session));
     this.sessions.set(session.id, session);
     return session;
+  }
+
+  getScrollback(terminalSessionId: string): string {
+    return this.sessions.get(terminalSessionId)?.scrollback ?? "";
+  }
+
+  appendOutput(terminalSessionId: string, chunk: string): void {
+    if (!chunk) {
+      return;
+    }
+
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return;
+    }
+
+    session.scrollback = `${session.scrollback}${chunk}`.slice(
+      -MAX_SCROLLBACK_LENGTH,
+    );
+    void this.sessionStore.appendSessionScrollback({
+      terminalSessionId,
+      chunk,
+      maxLength: MAX_SCROLLBACK_LENGTH,
+    });
   }
 
   getSession(terminalSessionId: string): TerminalSessionRecord | undefined {

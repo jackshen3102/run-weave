@@ -95,11 +95,11 @@ describe("terminal websocket server", () => {
     const terminalSessionManager = {
       getSession: vi.fn(() => undefined),
       markActivity: vi.fn(),
+      appendOutput: vi.fn(),
       markExited: vi.fn(),
     };
     const runtimeRegistry = {
       getRuntime: vi.fn(() => undefined),
-      getBufferedOutput: vi.fn(() => ""),
       subscribe: vi.fn(() => () => undefined),
       attachClient: vi.fn(),
       detachClient: vi.fn(),
@@ -131,9 +131,11 @@ describe("terminal websocket server", () => {
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
         id: "terminal-1",
+        scrollback: "",
         status: "running",
       })),
       markActivity: vi.fn(),
+      appendOutput: vi.fn(),
       markExited: vi.fn(),
     };
     const runtimeRegistry = new TerminalRuntimeRegistry();
@@ -182,9 +184,11 @@ describe("terminal websocket server", () => {
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
         id: "terminal-1",
+        scrollback: "",
         status: "running",
       })),
       markActivity: vi.fn(),
+      appendOutput: vi.fn(),
       markExited: vi.fn(),
     };
     const runtimeRegistry = new TerminalRuntimeRegistry();
@@ -213,7 +217,7 @@ describe("terminal websocket server", () => {
     expect(runtime.signal).toHaveBeenCalledWith("SIGINT");
   });
 
-  it("replays buffered output emitted before websocket attach", async () => {
+  it("replays persisted scrollback emitted before websocket attach", async () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyToken: vi.fn(() => true),
@@ -221,15 +225,16 @@ describe("terminal websocket server", () => {
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
         id: "terminal-1",
+        scrollback: "bash-3.2$ ",
         status: "running",
         exitCode: undefined,
       })),
       markActivity: vi.fn(),
+      appendOutput: vi.fn(),
       markExited: vi.fn(),
     };
     const runtimeRegistry = new TerminalRuntimeRegistry();
     runtimeRegistry.createRuntime("terminal-1", runtime);
-    runtime.emit("data", "bash-3.2$ ");
 
     const server = http.createServer();
     servers.push(server);
@@ -273,10 +278,12 @@ describe("terminal websocket server", () => {
         command: "bash",
         args: ["-l"],
         cwd: "/tmp/demo",
+        scrollback: "",
         status: "running",
         exitCode: undefined,
       })),
       markActivity: vi.fn(),
+      appendOutput: vi.fn(),
       markExited: vi.fn(),
     };
     const runtimeRegistry = new TerminalRuntimeRegistry();
@@ -321,9 +328,11 @@ describe("terminal websocket server", () => {
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
         id: "terminal-1",
+        scrollback: "",
         status: "running",
       })),
       markActivity: vi.fn(),
+      appendOutput: vi.fn(),
       markExited: vi.fn(),
     };
     const runtimeRegistry = new TerminalRuntimeRegistry();

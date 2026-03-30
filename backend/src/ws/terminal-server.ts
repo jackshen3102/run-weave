@@ -141,6 +141,7 @@ export function attachTerminalWebSocketServer(
     runtimeRegistry.attachClient(terminalSessionId, clientId);
     const unsubscribe = runtimeRegistry.subscribe(terminalSessionId, {
       onData(data) {
+        terminalSessionManager.appendOutput(terminalSessionId, data);
         terminalSessionManager.markActivity(terminalSessionId);
         sendEvent(socket, { type: "output", data });
       },
@@ -160,17 +161,16 @@ export function attachTerminalWebSocketServer(
 
     sendEvent(socket, { type: "connected", terminalSessionId });
     if (session) {
+      if (session.scrollback) {
+        sendEvent(socket, {
+          type: "output",
+          data: session.scrollback,
+        });
+      }
       sendEvent(socket, {
         type: "status",
         status: session.status,
         exitCode: session.exitCode,
-      });
-    }
-    const bufferedOutput = runtimeRegistry.getBufferedOutput(terminalSessionId);
-    if (bufferedOutput) {
-      sendEvent(socket, {
-        type: "output",
-        data: bufferedOutput,
       });
     }
 

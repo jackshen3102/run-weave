@@ -4,6 +4,12 @@ import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTerminalConnection } from "./use-terminal-connection";
 
+const createTerminalWsTicketMock = vi.fn();
+
+vi.mock("../../services/terminal", () => ({
+  createTerminalWsTicket: (...args: unknown[]) => createTerminalWsTicketMock(...args),
+}));
+
 type MessageHandler = (event: { data: string }) => void;
 type CloseHandler = (event: { code: number; reason: string }) => void;
 
@@ -77,12 +83,21 @@ function Probe(props: { onAuthExpired?: () => void }) {
   );
 }
 
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+}
+
 describe("useTerminalConnection", () => {
   const originalWebSocket = globalThis.WebSocket;
 
   beforeEach(() => {
     vi.useFakeTimers();
     MockWebSocket.instances = [];
+    createTerminalWsTicketMock.mockReset();
+    createTerminalWsTicketMock.mockResolvedValue({
+      ticket: "ws-ticket-1",
+      expiresIn: 60,
+    });
     globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
   });
 
@@ -92,7 +107,7 @@ describe("useTerminalConnection", () => {
     vi.useRealTimers();
   });
 
-  it("defers websocket creation so StrictMode cleanup does not close a connecting socket", () => {
+  it("defers websocket creation so StrictMode cleanup does not close a connecting socket", async () => {
     const { unmount } = render(
       <StrictMode>
         <Probe />
@@ -101,22 +116,29 @@ describe("useTerminalConnection", () => {
 
     expect(MockWebSocket.instances).toHaveLength(0);
 
-    act(() => {
+    await act(async () => {
       vi.runAllTimers();
+      await flushMicrotasks();
     });
 
     expect(MockWebSocket.instances).toHaveLength(1);
+    expect(createTerminalWsTicketMock).toHaveBeenCalledWith(
+      "http://localhost:5001",
+      "token-1",
+      "terminal-1",
+    );
 
     unmount();
 
     expect(MockWebSocket.instances[0]?.readyState).toBe(MockWebSocket.CLOSED);
   });
 
-  it("tracks terminal status, exit code, and output from websocket messages", () => {
+  it("tracks terminal status, exit code, and output from websocket messages", async () => {
     render(<Probe />);
 
-    act(() => {
+    await act(async () => {
       vi.runAllTimers();
+      await flushMicrotasks();
     });
 
     const socket = MockWebSocket.instances[0];
@@ -135,12 +157,13 @@ describe("useTerminalConnection", () => {
     expect(screen.getByTestId("output")).toHaveTextContent("bash-3.2$");
   });
 
-  it("clears auth state when websocket closes as unauthorized", () => {
+  it("retries with a fresh ticket when websocket closes as unauthorized", async () => {
     const onAuthExpired = vi.fn();
     render(<Probe onAuthExpired={onAuthExpired} />);
 
-    act(() => {
+    await act(async () => {
       vi.runAllTimers();
+      await flushMicrotasks();
     });
 
     const socket = MockWebSocket.instances[0];
@@ -150,7 +173,12 @@ describe("useTerminalConnection", () => {
       socket?.emitClose(1008, "Unauthorized");
     });
 
-    expect(onAuthExpired).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(onAuthExpired).toHaveBeenCalledTimes(0);
+    expect(MockWebSocket.instances).toHaveLength(2);
     expect(screen.getByTestId("connection-status")).toHaveTextContent("closed");
   });
 });

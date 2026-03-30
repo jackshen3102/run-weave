@@ -192,6 +192,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
     createTerminalRouter(services.terminalSessionManager, {
       ptyService: services.ptyService,
       runtimeRegistry: services.terminalRuntimeRegistry,
+      authService: services.authService,
     }),
   );
 

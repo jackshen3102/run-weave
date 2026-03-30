@@ -1,5 +1,5 @@
 import { Navigate, useParams } from "react-router-dom";
-import { TerminalPage as TerminalScreen } from "../components/terminal-page";
+import { TerminalWorkspace } from "../components/terminal/terminal-workspace";
 
 interface TerminalRoutePageProps {
   apiBase: string;
@@ -19,11 +19,13 @@ export function TerminalRoutePage({
   }
 
   return (
-    <TerminalScreen
-      apiBase={apiBase}
-      terminalSessionId={terminalSessionId}
-      token={token}
-      onAuthExpired={onAuthExpired}
-    />
+    <main className="h-dvh overflow-hidden bg-slate-950 p-3">
+      <TerminalWorkspace
+        apiBase={apiBase}
+        token={token}
+        initialTerminalSessionId={terminalSessionId}
+        onAuthExpired={onAuthExpired}
+      />
+    </main>
   );
 }

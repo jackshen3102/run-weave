@@ -66,6 +66,7 @@ describe("TerminalPage", () => {
       command: "bash",
       args: ["-l"],
       cwd: "/tmp/demo",
+      scrollback: "$ pwd\n/tmp/demo\n",
       status: "running",
       createdAt: "2026-03-29T00:00:00.000Z",
       lastActivityAt: "2026-03-29T00:00:00.000Z",

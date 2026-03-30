@@ -43,7 +43,7 @@ export function NewTerminalForm({
             onChange={(event) => onCommandChange(event.target.value)}
             disabled={loading}
             className="mt-3 h-10 w-full rounded-[0.9rem] border border-border/60 bg-background/70 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
-            placeholder="bash"
+            placeholder="Leave empty for default shell"
           />
         </div>
 
@@ -73,7 +73,7 @@ export function NewTerminalForm({
             onChange={(event) => onCwdChange(event.target.value)}
             disabled={loading}
             className="mt-3 h-10 w-full rounded-[0.9rem] border border-border/60 bg-background/70 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
-            placeholder="/workspace/project"
+            placeholder="Leave empty for user home"
           />
         </div>
 

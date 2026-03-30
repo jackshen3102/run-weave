@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type {
+  AppendTerminalSessionScrollbackParams,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
   UpdateTerminalSessionActivityParams,
@@ -15,6 +16,7 @@ interface TerminalSessionRow {
   args_json: string;
   cwd: string;
   linked_browser_session_id: string | null;
+  scrollback: string;
   status: string;
   created_at: string;
   last_activity_at: string;
@@ -39,6 +41,7 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
         args_json text not null default '[]',
         cwd text not null,
         linked_browser_session_id text,
+        scrollback text not null default '',
         status text not null,
         created_at text not null,
         last_activity_at text not null,
@@ -48,6 +51,17 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
       create index if not exists idx_terminal_sessions_last_activity_at
       on terminal_sessions(last_activity_at);
     `);
+    const columns = database
+      .prepare("pragma table_info(terminal_sessions)")
+      .all() as Array<{ name: string }>;
+    const hasScrollbackColumn = columns.some(
+      (column) => column.name === "scrollback",
+    );
+    if (!hasScrollbackColumn) {
+      database.exec(
+        "alter table terminal_sessions add column scrollback text not null default ''",
+      );
+    }
 
     this.database = database;
   }
@@ -68,6 +82,7 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
             args_json,
             cwd,
             linked_browser_session_id,
+            scrollback,
             status,
             created_at,
             last_activity_at,
@@ -94,6 +109,7 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
             args_json,
             cwd,
             linked_browser_session_id,
+            scrollback,
             status,
             created_at,
             last_activity_at,
@@ -118,11 +134,12 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
             args_json,
             cwd,
             linked_browser_session_id,
+            scrollback,
             status,
             created_at,
             last_activity_at,
             exit_code
-          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
       )
       .run(
@@ -132,6 +149,7 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
         JSON.stringify(session.args),
         session.cwd,
         session.linkedBrowserSessionId ?? null,
+        session.scrollback,
         session.status,
         session.createdAt,
         session.lastActivityAt,
@@ -166,6 +184,20 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
         `,
       )
       .run(params.lastActivityAt, params.terminalSessionId);
+  }
+
+  async appendSessionScrollback(
+    params: AppendTerminalSessionScrollbackParams,
+  ): Promise<void> {
+    this.getDatabase()
+      .prepare(
+        `
+          update terminal_sessions
+          set scrollback = substr(coalesce(scrollback, '') || ?, -?)
+          where id = ?
+        `,
+      )
+      .run(params.chunk, params.maxLength, params.terminalSessionId);
   }
 
   async updateSessionExit(
@@ -209,6 +241,7 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
       args: this.parseArgs(row.args_json),
       cwd: row.cwd,
       linkedBrowserSessionId: row.linked_browser_session_id ?? undefined,
+      scrollback: row.scrollback ?? "",
       status: row.status === "exited" ? "exited" : "running",
       createdAt: row.created_at,
       lastActivityAt: row.last_activity_at,

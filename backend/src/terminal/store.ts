@@ -5,6 +5,7 @@ export interface PersistedTerminalSessionRecord {
   args: string[];
   cwd: string;
   linkedBrowserSessionId?: string;
+  scrollback: string;
   status: "running" | "exited";
   createdAt: string;
   lastActivityAt: string;
@@ -23,6 +24,12 @@ export interface UpdateTerminalSessionExitParams {
   lastActivityAt: string;
 }
 
+export interface AppendTerminalSessionScrollbackParams {
+  terminalSessionId: string;
+  chunk: string;
+  maxLength: number;
+}
+
 export interface TerminalSessionStore {
   initialize(): Promise<void>;
   dispose(): Promise<void>;
@@ -34,6 +41,9 @@ export interface TerminalSessionStore {
   updateSessionName(terminalSessionId: string, name: string): Promise<void>;
   updateSessionActivity(
     params: UpdateTerminalSessionActivityParams,
+  ): Promise<void>;
+  appendSessionScrollback(
+    params: AppendTerminalSessionScrollbackParams,
   ): Promise<void>;
   updateSessionExit(params: UpdateTerminalSessionExitParams): Promise<void>;
   deleteSession(terminalSessionId: string): Promise<void>;

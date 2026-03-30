@@ -25,6 +25,7 @@ function createRecord(
     args: ["-l"],
     cwd: "/tmp/demo",
     linkedBrowserSessionId: "session-1",
+    scrollback: "",
     status: "running",
     createdAt: "2026-03-29T00:00:00.000Z",
     lastActivityAt: "2026-03-29T00:00:00.000Z",
@@ -57,6 +58,16 @@ describe("SQLiteTerminalSessionStore", () => {
       terminalSessionId: "terminal-1",
       lastActivityAt: "2026-03-29T00:10:00.000Z",
     });
+    await store.appendSessionScrollback({
+      terminalSessionId: "terminal-1",
+      chunk: "hello",
+      maxLength: 16,
+    });
+    await store.appendSessionScrollback({
+      terminalSessionId: "terminal-1",
+      chunk: " world",
+      maxLength: 16,
+    });
     await store.updateSessionExit({
       terminalSessionId: "terminal-1",
       status: "exited",
@@ -69,6 +80,7 @@ describe("SQLiteTerminalSessionStore", () => {
         status: "exited",
         exitCode: 130,
         lastActivityAt: "2026-03-29T00:11:00.000Z",
+        scrollback: "hello world",
       }),
     );
 
@@ -76,5 +88,22 @@ describe("SQLiteTerminalSessionStore", () => {
 
     await expect(store.getSession("terminal-1")).resolves.toBeNull();
     await expect(store.listSessions()).resolves.toEqual([]);
+  });
+
+  it("trims persisted scrollback to max length", async () => {
+    const store = await createStore();
+    await store.insertSession(createRecord());
+
+    await store.appendSessionScrollback({
+      terminalSessionId: "terminal-1",
+      chunk: "12345",
+      maxLength: 4,
+    });
+
+    await expect(store.getSession("terminal-1")).resolves.toEqual(
+      createRecord({
+        scrollback: "2345",
+      }),
+    );
   });
 });

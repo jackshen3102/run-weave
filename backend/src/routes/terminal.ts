@@ -1,26 +1,65 @@
 import { Router } from "express";
+import os from "node:os";
 import { z } from "zod";
 import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
+  CreateTerminalWsTicketResponse,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
 } from "@browser-viewer/shared";
+import type { AuthService } from "../auth/service";
 import type { TerminalSessionManager } from "../terminal/manager";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 
 const createTerminalSessionSchema = z.object({
   name: z.string().trim().min(1).optional(),
-  command: z.string().trim().min(1),
+  command: z.string().trim().min(1).optional(),
   args: z.array(z.string()).optional(),
-  cwd: z.string().trim().min(1),
+  cwd: z.string().trim().min(1).optional(),
   linkedBrowserSessionId: z.string().trim().min(1).optional(),
 });
 
 const updateTerminalSessionSchema = z.object({
   name: z.string().trim().min(1),
 });
+
+function resolveDefaultTerminalCommand(): string {
+  if (process.platform === "win32") {
+    const configured = process.env.COMSPEC?.trim();
+    if (configured) {
+      return configured;
+    }
+    return "powershell.exe";
+  }
+
+  const configured = process.env.SHELL?.trim();
+  if (configured) {
+    return configured;
+  }
+
+  return "/bin/bash";
+}
+
+function resolveTerminalCreateDefaults(payload: CreateTerminalSessionRequest): {
+  name?: string;
+  command: string;
+  args?: string[];
+  cwd: string;
+  linkedBrowserSessionId?: string;
+} {
+  const command = payload.command?.trim() || resolveDefaultTerminalCommand();
+  const cwd = payload.cwd?.trim() || os.homedir();
+
+  return {
+    name: payload.name,
+    command,
+    args: payload.args,
+    cwd,
+    linkedBrowserSessionId: payload.linkedBrowserSessionId,
+  };
+}
 
 function toStatusPayload(
   session: ReturnType<TerminalSessionManager["getSession"]> extends infer T
@@ -34,6 +73,7 @@ function toStatusPayload(
     args: session.args,
     cwd: session.cwd,
     linkedBrowserSessionId: session.linkedBrowserSessionId,
+    scrollback: session.scrollback,
     status: session.status,
     createdAt: session.createdAt.toISOString(),
     lastActivityAt: session.lastActivityAt.toISOString(),
@@ -46,6 +86,7 @@ export function createTerminalRouter(
   options?: {
     ptyService?: PtyService;
     runtimeRegistry?: TerminalRuntimeRegistry;
+    authService?: AuthService;
   },
 ): Router {
   const router = Router();
@@ -82,7 +123,9 @@ export function createTerminalRouter(
     }
 
     try {
-      const session = await terminalSessionManager.createSession(parsed.data);
+      const session = await terminalSessionManager.createSession(
+        resolveTerminalCreateDefaults(parsed.data),
+      );
       if (options?.ptyService && options.runtimeRegistry) {
         try {
           const runtime = options.ptyService.spawnSession({
@@ -120,6 +163,25 @@ export function createTerminalRouter(
     }
 
     res.json(toStatusPayload(session));
+  });
+
+  router.post("/session/:id/ws-ticket", (req, res) => {
+    const session = terminalSessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Terminal session not found" });
+      return;
+    }
+    if (!options?.authService) {
+      res.status(503).json({ message: "Terminal ticket service unavailable" });
+      return;
+    }
+
+    const issued = options.authService.issueTemporaryToken("terminal", 60_000);
+    const payload: CreateTerminalWsTicketResponse = {
+      ticket: issued.token,
+      expiresIn: issued.expiresIn,
+    };
+    res.status(200).json(payload);
   });
 
   router.patch("/session/:id", async (req, res) => {

@@ -1,4 +1,5 @@
 import http from "node:http";
+import os from "node:os";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTerminalRouter } from "./terminal";
@@ -10,6 +11,7 @@ interface MockTerminalSession {
   args: string[];
   cwd: string;
   linkedBrowserSessionId?: string;
+  scrollback: string;
   status: "running" | "exited";
   createdAt: Date;
   lastActivityAt: Date;
@@ -33,6 +35,7 @@ function createTestServer(sessionState: { current: MockTerminalSession | null })
           args: options.args ?? [],
           cwd: options.cwd,
           linkedBrowserSessionId: options.linkedBrowserSessionId,
+          scrollback: "",
           status: "running",
           createdAt: new Date("2026-03-29T00:00:00.000Z"),
           lastActivityAt: new Date("2026-03-29T00:00:00.000Z"),
@@ -65,11 +68,22 @@ function createTestServer(sessionState: { current: MockTerminalSession | null })
   };
 
   const app = express();
+  const authService = {
+    issueTemporaryToken: vi.fn(() => ({
+      token: "terminal-ticket-123",
+      expiresIn: 60,
+    })),
+  };
   app.use(express.json());
-  app.use("/api/terminal", createTerminalRouter(terminalSessionManager as never));
+  app.use(
+    "/api/terminal",
+    createTerminalRouter(terminalSessionManager as never, {
+      authService: authService as never,
+    }),
+  );
   const server = http.createServer(app);
 
-  return { server, terminalSessionManager };
+  return { server, terminalSessionManager, authService };
 }
 
 async function startServer(server: http.Server): Promise<number> {
@@ -127,6 +141,30 @@ describe("terminal routes", () => {
     });
   });
 
+  it("uses default shell and user home when command/cwd are omitted", async () => {
+    const state = { current: null as MockTerminalSession | null };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+    const originalShell = process.env.SHELL;
+    process.env.SHELL = "/bin/zsh";
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    process.env.SHELL = originalShell;
+    expect(response.status).toBe(201);
+    expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "/bin/zsh",
+        cwd: os.homedir(),
+      }),
+    );
+  });
+
   it("lists terminal sessions through the API", async () => {
     const state = {
       current: {
@@ -135,6 +173,7 @@ describe("terminal routes", () => {
         command: "bash",
         args: ["-l"],
         cwd: "/tmp/demo",
+        scrollback: "bash$ ",
         status: "running" as const,
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
         lastActivityAt: new Date("2026-03-29T00:00:00.000Z"),
@@ -169,6 +208,7 @@ describe("terminal routes", () => {
         command: "bash",
         args: [],
         cwd: "/tmp/demo",
+        scrollback: "",
         status: "running" as const,
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
         lastActivityAt: new Date("2026-03-29T00:00:00.000Z"),
@@ -186,5 +226,41 @@ describe("terminal routes", () => {
     );
 
     expect(response.status).toBe(204);
+  });
+
+  it("issues a short-lived terminal websocket ticket", async () => {
+    const state = {
+      current: {
+        id: "terminal-1",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        lastActivityAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+    };
+    const { server, authService } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/ws-ticket`,
+      {
+        method: "POST",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ticket: "terminal-ticket-123",
+      expiresIn: 60,
+    });
+    expect(authService.issueTemporaryToken).toHaveBeenCalledWith(
+      "terminal",
+      60_000,
+    );
   });
 });

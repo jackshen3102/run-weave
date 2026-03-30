@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TerminalClientMessage, TerminalServerMessage } from "@browser-viewer/shared";
+import { HttpError } from "../../services/http";
+import { createTerminalWsTicket } from "../../services/terminal";
 import { toWebSocketBase } from "../viewer/url";
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
@@ -8,11 +10,11 @@ type TerminalRuntimeStatus = "running" | "exited" | null;
 function buildTerminalWsUrl(
   apiBase: string,
   terminalSessionId: string,
-  token: string,
+  ticket: string,
 ): string {
   return `${toWebSocketBase(apiBase)}/ws/terminal?terminalSessionId=${encodeURIComponent(
     terminalSessionId,
-  )}&token=${encodeURIComponent(token)}`;
+  )}&token=${encodeURIComponent(ticket)}`;
 }
 
 function sendMessage(
@@ -40,11 +42,6 @@ export function useTerminalConnection(params: {
   const [error, setError] = useState<string | null>(null);
   const [output, setOutput] = useState("");
 
-  const wsUrl = useMemo(
-    () => buildTerminalWsUrl(apiBase, terminalSessionId, token),
-    [apiBase, terminalSessionId, token],
-  );
-
   useEffect(() => {
     setConnectionStatus("connecting");
     setTerminalStatus(null);
@@ -53,61 +50,98 @@ export function useTerminalConnection(params: {
     setOutput("");
     let cancelled = false;
     let socket: WebSocket | null = null;
+    let retriedWithFreshTicket = false;
 
     const connectTimer = window.setTimeout(() => {
-      if (cancelled) {
-        return;
-      }
-
-      socket = new WebSocket(wsUrl);
-      socketRef.current = socket;
-
-      socket.addEventListener("open", () => {
-        if (socketRef.current !== socket) {
-          return;
-        }
-        setConnectionStatus("connected");
-      });
-      socket.addEventListener("close", (event) => {
-        if (socketRef.current !== socket) {
-          return;
-        }
-        setConnectionStatus("closed");
-        if (event.code === 1008 && event.reason === "Unauthorized") {
-          onAuthExpired?.();
-        }
-      });
-      socket.addEventListener("message", (event) => {
-        if (socketRef.current !== socket) {
+      const connect = async (): Promise<void> => {
+        if (cancelled) {
           return;
         }
 
         try {
-          const parsed = JSON.parse(String(event.data)) as TerminalServerMessage;
-          if (parsed.type === "output") {
-            setOutput((current) => `${current}${parsed.data}`);
+          const ticketPayload = await createTerminalWsTicket(
+            apiBase,
+            token,
+            terminalSessionId,
+          );
+          if (cancelled) {
             return;
           }
-          if (parsed.type === "status") {
-            setTerminalStatus(parsed.status);
-            setExitCode(parsed.exitCode ?? null);
-            return;
-          }
-          if (parsed.type === "exit") {
-            setTerminalStatus("exited");
-            setExitCode(parsed.exitCode ?? null);
-            return;
-          }
-          if (parsed.type === "error") {
-            setError(parsed.message);
-            if (parsed.message === "Unauthorized") {
+
+          const wsUrl = buildTerminalWsUrl(
+            apiBase,
+            terminalSessionId,
+            ticketPayload.ticket,
+          );
+
+          socket = new WebSocket(wsUrl);
+          socketRef.current = socket;
+
+          socket.addEventListener("open", () => {
+            if (socketRef.current !== socket) {
+              return;
+            }
+            setConnectionStatus("connected");
+          });
+          socket.addEventListener("close", (event) => {
+            if (socketRef.current !== socket) {
+              return;
+            }
+            setConnectionStatus("closed");
+            if (event.code === 1008 && event.reason === "Unauthorized") {
+              if (!retriedWithFreshTicket && !cancelled) {
+                retriedWithFreshTicket = true;
+                void connect();
+                return;
+              }
               onAuthExpired?.();
             }
+          });
+          socket.addEventListener("message", (event) => {
+            if (socketRef.current !== socket) {
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(String(event.data)) as TerminalServerMessage;
+              if (parsed.type === "output") {
+                setOutput((current) => `${current}${parsed.data}`);
+                return;
+              }
+              if (parsed.type === "status") {
+                setTerminalStatus(parsed.status);
+                setExitCode(parsed.exitCode ?? null);
+                return;
+              }
+              if (parsed.type === "exit") {
+                setTerminalStatus("exited");
+                setExitCode(parsed.exitCode ?? null);
+                return;
+              }
+              if (parsed.type === "error") {
+                setError(parsed.message);
+                if (parsed.message === "Unauthorized") {
+                  onAuthExpired?.();
+                }
+              }
+            } catch {
+              setError("Invalid terminal message");
+            }
+          });
+        } catch (error) {
+          if (cancelled) {
+            return;
           }
-        } catch {
-          setError("Invalid terminal message");
+          if (error instanceof HttpError && error.status === 401) {
+            onAuthExpired?.();
+            return;
+          }
+          setError(String(error));
+          setConnectionStatus("closed");
         }
-      });
+      };
+
+      void connect();
     }, 0);
 
     return () => {
@@ -120,7 +154,7 @@ export function useTerminalConnection(params: {
         socketRef.current = null;
       }
     };
-  }, [onAuthExpired, wsUrl]);
+  }, [apiBase, onAuthExpired, terminalSessionId, token]);
 
   return {
     connectionStatus,

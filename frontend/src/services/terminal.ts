@@ -1,6 +1,7 @@
 import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
+  CreateTerminalWsTicketResponse,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
 } from "@browser-viewer/shared";
@@ -66,6 +67,23 @@ export async function deleteTerminalSession(
     `/api/terminal/session/${encodeURIComponent(terminalSessionId)}`,
     {
       method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function createTerminalWsTicket(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+): Promise<CreateTerminalWsTicketResponse> {
+  return requestJson<CreateTerminalWsTicketResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/ws-ticket`,
+    {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
       },

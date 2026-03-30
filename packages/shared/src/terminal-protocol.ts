@@ -1,14 +1,19 @@
 export interface CreateTerminalSessionRequest {
   name?: string;
-  command: string;
+  command?: string;
   args?: string[];
-  cwd: string;
+  cwd?: string;
   linkedBrowserSessionId?: string;
 }
 
 export interface CreateTerminalSessionResponse {
   terminalSessionId: string;
   terminalUrl: string;
+}
+
+export interface CreateTerminalWsTicketResponse {
+  ticket: string;
+  expiresIn: number;
 }
 
 export interface TerminalSessionStatusResponse {
@@ -18,6 +23,7 @@ export interface TerminalSessionStatusResponse {
   args: string[];
   cwd: string;
   linkedBrowserSessionId?: string;
+  scrollback: string;
   status: "running" | "exited";
   createdAt: string;
   lastActivityAt: string;

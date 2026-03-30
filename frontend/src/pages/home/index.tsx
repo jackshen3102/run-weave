@@ -38,7 +38,7 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
   const [terminalLoading, setTerminalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [terminalError, setTerminalError] = useState<string | null>(null);
-  const [terminalCommand, setTerminalCommand] = useState("bash");
+  const [terminalCommand, setTerminalCommand] = useState("");
   const [terminalArgs, setTerminalArgs] = useState("");
   const [terminalCwd, setTerminalCwd] = useState("");
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -278,15 +278,6 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
 
     const trimmedCommand = terminalCommand.trim();
     const trimmedCwd = terminalCwd.trim();
-    if (!trimmedCommand) {
-      setTerminalError("Terminal command is required.");
-      return;
-    }
-    if (!trimmedCwd) {
-      setTerminalError("Terminal cwd is required.");
-      return;
-    }
-
     const parsedArgs = terminalArgs
       .split(/\s+/)
       .map((item) => item.trim())
@@ -297,9 +288,9 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
 
     try {
       const data = await createTerminalSession(apiBase, token, {
-        command: trimmedCommand,
+        command: trimmedCommand || undefined,
         args: parsedArgs,
-        cwd: trimmedCwd,
+        cwd: trimmedCwd || undefined,
       });
       navigate(`/terminal/${encodeURIComponent(data.terminalSessionId)}`);
     } catch (createError) {
