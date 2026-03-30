@@ -52,7 +52,7 @@ export function useViewerConnection({
   const reconnectCountRef = useRef(0);
   const connectedAtRef = useRef<number | null>(null);
   const wsCloseReasonRef = useRef<string | null>(null);
-  const initialTabIdRef = useRef<string | null>(
+  const desiredTabIdRef = useRef<string | null>(
     getTabIdFromSearch(window.location.search),
   );
   const initialTabSyncedRef = useRef(false);
@@ -72,6 +72,11 @@ export function useViewerConnection({
   );
 
   const sendInput = useCallback((input: ClientInputMessage): void => {
+    if (input.type === "tab" && input.action === "switch") {
+      desiredTabIdRef.current = input.tabId;
+      syncUrlTabId(input.tabId);
+    }
+
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       return;
     }
@@ -103,7 +108,7 @@ export function useViewerConnection({
       }
       initialTabSyncedRef.current = true;
 
-      const initialTabId = initialTabIdRef.current;
+      const initialTabId = desiredTabIdRef.current;
       if (
         !initialTabId ||
         ws.readyState !== WebSocket.OPEN ||
@@ -129,8 +134,16 @@ export function useViewerConnection({
       dispatch({ type: "message/tabs", tabs: message.tabs });
       syncInitialTabSelection(ws, message);
 
-      const activeTab = message.tabs.find((tab) => tab.active)?.id ?? null;
-      syncUrlTabId(activeTab);
+      const desiredTabId = desiredTabIdRef.current;
+      if (desiredTabId && message.tabs.some((tab) => tab.id === desiredTabId)) {
+        syncUrlTabId(desiredTabId);
+        return;
+      }
+
+      const fallbackTabId =
+        message.tabs.find((tab) => tab.active)?.id ?? message.tabs[0]?.id ?? null;
+      desiredTabIdRef.current = fallbackTabId;
+      syncUrlTabId(fallbackTabId);
     };
 
     const handleControlMessage = (

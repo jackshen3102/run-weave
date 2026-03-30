@@ -5,7 +5,6 @@ import type {
   AppendTerminalSessionScrollbackParams,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
-  UpdateTerminalSessionActivityParams,
   UpdateTerminalSessionExitParams,
 } from "./store";
 
@@ -15,11 +14,9 @@ interface TerminalSessionRow {
   command: string;
   args_json: string;
   cwd: string;
-  linked_browser_session_id: string | null;
   scrollback: string;
   status: string;
   created_at: string;
-  last_activity_at: string;
   exit_code: number | null;
 }
 
@@ -40,16 +37,14 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
         command text not null,
         args_json text not null default '[]',
         cwd text not null,
-        linked_browser_session_id text,
         scrollback text not null default '',
         status text not null,
         created_at text not null,
-        last_activity_at text not null,
         exit_code integer
       );
 
-      create index if not exists idx_terminal_sessions_last_activity_at
-      on terminal_sessions(last_activity_at);
+      create index if not exists idx_terminal_sessions_created_at
+      on terminal_sessions(created_at);
     `);
     const columns = database
       .prepare("pragma table_info(terminal_sessions)")
@@ -61,6 +56,55 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
       database.exec(
         "alter table terminal_sessions add column scrollback text not null default ''",
       );
+    }
+    const hasLegacyBrowserLinkColumn = columns.some(
+      (column) => column.name === "linked_browser_session_id",
+    );
+    const hasLegacyLastActivityColumn = columns.some(
+      (column) => column.name === "last_activity_at",
+    );
+    if (hasLegacyBrowserLinkColumn || hasLegacyLastActivityColumn) {
+      database.exec(`
+        begin transaction;
+        create table terminal_sessions_next (
+          id text primary key,
+          name text not null,
+          command text not null,
+          args_json text not null default '[]',
+          cwd text not null,
+          scrollback text not null default '',
+          status text not null,
+          created_at text not null,
+          exit_code integer
+        );
+        insert into terminal_sessions_next (
+          id,
+          name,
+          command,
+          args_json,
+          cwd,
+          scrollback,
+          status,
+          created_at,
+          exit_code
+        )
+        select
+          id,
+          name,
+          command,
+          args_json,
+          cwd,
+          scrollback,
+          status,
+          created_at,
+          exit_code
+        from terminal_sessions;
+        drop table terminal_sessions;
+        alter table terminal_sessions_next rename to terminal_sessions;
+        create index if not exists idx_terminal_sessions_created_at
+        on terminal_sessions(created_at);
+        commit;
+      `);
     }
 
     this.database = database;
@@ -81,11 +125,9 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
             command,
             args_json,
             cwd,
-            linked_browser_session_id,
             scrollback,
             status,
             created_at,
-            last_activity_at,
             exit_code
           from terminal_sessions
           order by created_at asc
@@ -108,11 +150,9 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
             command,
             args_json,
             cwd,
-            linked_browser_session_id,
             scrollback,
             status,
             created_at,
-            last_activity_at,
             exit_code
           from terminal_sessions
           where id = ?
@@ -133,13 +173,11 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
             command,
             args_json,
             cwd,
-            linked_browser_session_id,
             scrollback,
             status,
             created_at,
-            last_activity_at,
             exit_code
-          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
       )
       .run(
@@ -148,11 +186,9 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
         session.command,
         JSON.stringify(session.args),
         session.cwd,
-        session.linkedBrowserSessionId ?? null,
         session.scrollback,
         session.status,
         session.createdAt,
-        session.lastActivityAt,
         session.exitCode ?? null,
       );
   }
@@ -170,20 +206,6 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
         `,
       )
       .run(name, terminalSessionId);
-  }
-
-  async updateSessionActivity(
-    params: UpdateTerminalSessionActivityParams,
-  ): Promise<void> {
-    this.getDatabase()
-      .prepare(
-        `
-          update terminal_sessions
-          set last_activity_at = ?
-          where id = ?
-        `,
-      )
-      .run(params.lastActivityAt, params.terminalSessionId);
   }
 
   async appendSessionScrollback(
@@ -207,14 +229,13 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
       .prepare(
         `
           update terminal_sessions
-          set status = ?, exit_code = ?, last_activity_at = ?
+          set status = ?, exit_code = ?
           where id = ?
         `,
       )
       .run(
         params.status,
         params.exitCode ?? null,
-        params.lastActivityAt,
         params.terminalSessionId,
       );
   }
@@ -240,11 +261,9 @@ export class SQLiteTerminalSessionStore implements TerminalSessionStore {
       command: row.command,
       args: this.parseArgs(row.args_json),
       cwd: row.cwd,
-      linkedBrowserSessionId: row.linked_browser_session_id ?? undefined,
       scrollback: row.scrollback ?? "",
       status: row.status === "exited" ? "exited" : "running",
       createdAt: row.created_at,
-      lastActivityAt: row.last_activity_at,
       exitCode: row.exit_code ?? undefined,
     };
   }

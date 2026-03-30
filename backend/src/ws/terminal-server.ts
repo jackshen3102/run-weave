@@ -9,6 +9,7 @@ import type { AuthService } from "../auth/service";
 import type { TerminalSessionManager } from "../terminal/manager";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
+import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
 
 function parseTerminalClientMessage(rawData: string): TerminalClientMessage | null {
@@ -138,11 +139,15 @@ export function attachTerminalWebSocketServer(
     }
 
     const clientId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const heartbeatState = {
+      heartbeatTimer: null as NodeJS.Timeout | null,
+      isAlive: true,
+    };
+    const heartbeat = createHeartbeatController(socket, heartbeatState);
     runtimeRegistry.attachClient(terminalSessionId, clientId);
     const unsubscribe = runtimeRegistry.subscribe(terminalSessionId, {
       onData(data) {
         terminalSessionManager.appendOutput(terminalSessionId, data);
-        terminalSessionManager.markActivity(terminalSessionId);
         sendEvent(socket, { type: "output", data });
       },
       onExit(event) {
@@ -173,6 +178,7 @@ export function attachTerminalWebSocketServer(
         exitCode: session.exitCode,
       });
     }
+    heartbeat.start();
 
     socket.on("message", (data, isBinary) => {
       if (isBinary) {
@@ -188,7 +194,6 @@ export function attachTerminalWebSocketServer(
       if (parsed.type === "input") {
         try {
           runtime.write(parsed.data);
-          terminalSessionManager.markActivity(terminalSessionId);
         } catch (error) {
           handleRuntimeActionError(socket, terminalSessionId, "input", error);
         }
@@ -197,7 +202,6 @@ export function attachTerminalWebSocketServer(
       if (parsed.type === "resize") {
         try {
           runtime.resize(parsed.cols, parsed.rows);
-          terminalSessionManager.markActivity(terminalSessionId);
         } catch (error) {
           handleRuntimeActionError(socket, terminalSessionId, "resize", error);
         }
@@ -206,13 +210,11 @@ export function attachTerminalWebSocketServer(
       if (parsed.type === "signal") {
         try {
           runtime.signal(parsed.signal);
-          terminalSessionManager.markActivity(terminalSessionId);
         } catch (error) {
           handleRuntimeActionError(socket, terminalSessionId, "signal", error);
         }
         return;
       }
-      terminalSessionManager.markActivity(terminalSessionId);
       const current = terminalSessionManager.getSession(terminalSessionId);
       sendEvent(socket, {
         type: "status",
@@ -221,9 +223,27 @@ export function attachTerminalWebSocketServer(
       });
     });
 
-    socket.on("close", () => {
+    let cleanedUp = false;
+    const cleanupConnection = () => {
+      if (cleanedUp) {
+        return;
+      }
+      cleanedUp = true;
+      heartbeat.stop();
       unsubscribe();
       runtimeRegistry.detachClient(terminalSessionId, clientId);
+    };
+
+    socket.on("close", () => {
+      cleanupConnection();
+    });
+
+    socket.on("error", () => {
+      cleanupConnection();
+    });
+
+    socket.on("pong", () => {
+      heartbeat.markAlive();
     });
   });
 

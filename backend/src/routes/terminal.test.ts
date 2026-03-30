@@ -10,11 +10,9 @@ interface MockTerminalSession {
   command: string;
   args: string[];
   cwd: string;
-  linkedBrowserSessionId?: string;
   scrollback: string;
   status: "running" | "exited";
   createdAt: Date;
-  lastActivityAt: Date;
   exitCode?: number;
 }
 
@@ -26,7 +24,6 @@ function createTestServer(sessionState: { current: MockTerminalSession | null })
         command: string;
         args?: string[];
         cwd: string;
-        linkedBrowserSessionId?: string;
       }) => {
         const created: MockTerminalSession = {
           id: "terminal-1",
@@ -34,11 +31,9 @@ function createTestServer(sessionState: { current: MockTerminalSession | null })
           command: options.command,
           args: options.args ?? [],
           cwd: options.cwd,
-          linkedBrowserSessionId: options.linkedBrowserSessionId,
           scrollback: "",
           status: "running",
           createdAt: new Date("2026-03-29T00:00:00.000Z"),
-          lastActivityAt: new Date("2026-03-29T00:00:00.000Z"),
         };
         sessionState.current = created;
         return created;
@@ -130,7 +125,6 @@ describe("terminal routes", () => {
         command: "bash",
         args: ["-l"],
         cwd: "/tmp/demo",
-        linkedBrowserSessionId: "session-1",
       }),
     });
 
@@ -139,6 +133,29 @@ describe("terminal routes", () => {
       terminalSessionId: "terminal-1",
       terminalUrl: "/terminal/terminal-1",
     });
+  });
+
+  it("rejects removed browser-link terminal field", async () => {
+    const state = { current: null as MockTerminalSession | null };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        command: "bash",
+        linkedBrowserSessionId: "session-1",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        message: "Invalid request body",
+      }),
+    );
   });
 
   it("uses default shell and user home when command/cwd are omitted", async () => {
@@ -176,7 +193,6 @@ describe("terminal routes", () => {
         scrollback: "bash$ ",
         status: "running" as const,
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
-        lastActivityAt: new Date("2026-03-29T00:00:00.000Z"),
       },
     };
     const { server } = createTestServer(state);
@@ -195,7 +211,6 @@ describe("terminal routes", () => {
         cwd: "/tmp/demo",
         status: "running",
         createdAt: "2026-03-29T00:00:00.000Z",
-        lastActivityAt: "2026-03-29T00:00:00.000Z",
       },
     ]);
   });
@@ -211,7 +226,6 @@ describe("terminal routes", () => {
         scrollback: "",
         status: "running" as const,
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
-        lastActivityAt: new Date("2026-03-29T00:00:00.000Z"),
       },
     };
     const { server } = createTestServer(state);
@@ -239,7 +253,6 @@ describe("terminal routes", () => {
         scrollback: "",
         status: "running" as const,
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
-        lastActivityAt: new Date("2026-03-29T00:00:00.000Z"),
       },
     };
     const { server, authService } = createTestServer(state);

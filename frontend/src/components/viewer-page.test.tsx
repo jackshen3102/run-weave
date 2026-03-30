@@ -59,10 +59,6 @@ vi.mock("../services/session", () => ({
   createDevtoolsTicket: (...args: unknown[]) => createDevtoolsTicketMock(...args),
 }));
 
-vi.mock("./terminal/terminal-workspace", () => ({
-  TerminalWorkspace: () => <div data-testid="terminal-workspace" />,
-}));
-
 describe("ViewerPage devtools controls", () => {
   beforeEach(() => {
     sendInput.mockReset();
@@ -119,14 +115,12 @@ describe("ViewerPage devtools controls", () => {
     expect(screen.getByTestId("navigation-bar")).toBeInTheDocument();
   });
 
-  it("renders embedded terminal workspace by default", () => {
+  it("does not render an embedded terminal workspace", () => {
     render(
       <ViewerPage apiBase="http://localhost:5000" sessionId="s-1" token="t" />,
     );
 
-    expect(screen.getAllByTestId("terminal-workspace").length).toBeGreaterThan(
-      0,
-    );
+    expect(screen.queryByTestId("terminal-workspace")).toBeNull();
   });
 
   it("sends close tab command from more menu", () => {

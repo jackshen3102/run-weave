@@ -78,6 +78,25 @@ function toTerminalSignal(signal: TerminalSignal): string {
   return signal;
 }
 
+function buildPtyEnv(
+  baseEnv: NodeJS.ProcessEnv,
+  sessionEnv: NodeJS.ProcessEnv | undefined,
+): NodeJS.ProcessEnv {
+  const merged: NodeJS.ProcessEnv = {
+    ...baseEnv,
+    ...sessionEnv,
+  };
+  const currentTerm = merged.TERM?.trim();
+  if (!currentTerm || currentTerm === "dumb") {
+    merged.TERM = "xterm-256color";
+  }
+  if (!merged.COLORTERM?.trim()) {
+    merged.COLORTERM = "truecolor";
+  }
+
+  return merged;
+}
+
 export class PtyService {
   private readonly spawnImpl: NonNullable<PtyServiceDependencies["spawn"]>;
 
@@ -90,12 +109,9 @@ export class PtyService {
   spawnSession(options: SpawnTerminalSessionOptions): PtyRuntime {
     ensureSpawnHelperExecutable();
 
-    const processEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      ...options.env,
-    };
+    const processEnv = buildPtyEnv(process.env, options.env);
     const ptyProcess = this.spawnImpl(options.command, options.args ?? [], {
-      name: "xterm-color",
+      name: "xterm-256color",
       cols: options.cols ?? 80,
       rows: options.rows ?? 24,
       cwd: options.cwd,

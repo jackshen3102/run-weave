@@ -3,7 +3,6 @@ export interface CreateTerminalSessionRequest {
   command?: string;
   args?: string[];
   cwd?: string;
-  linkedBrowserSessionId?: string;
 }
 
 export interface CreateTerminalSessionResponse {
@@ -22,11 +21,9 @@ export interface TerminalSessionStatusResponse {
   command: string;
   args: string[];
   cwd: string;
-  linkedBrowserSessionId?: string;
   scrollback: string;
   status: "running" | "exited";
   createdAt: string;
-  lastActivityAt: string;
   exitCode?: number;
 }
 
@@ -36,10 +33,8 @@ export interface TerminalSessionListItem {
   command: string;
   args: string[];
   cwd: string;
-  linkedBrowserSessionId?: string;
   status: "running" | "exited";
   createdAt: string;
-  lastActivityAt: string;
   exitCode?: number;
 }
 

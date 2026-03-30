@@ -13,7 +13,6 @@ function createStoreMock() {
     getSession: vi.fn(async () => null),
     insertSession: vi.fn(async () => undefined),
     updateSessionName: vi.fn(async () => undefined),
-    updateSessionActivity: vi.fn(async () => undefined),
     appendSessionScrollback: vi.fn(async () => undefined),
     updateSessionExit: vi.fn(async () => undefined),
     deleteSession: vi.fn(async () => undefined),
@@ -29,7 +28,6 @@ describe("TerminalSessionManager", () => {
       command: "bash",
       args: ["-l"],
       cwd: "/tmp/demo",
-      linkedBrowserSessionId: "session-1",
       name: "Demo shell",
     });
 
@@ -42,14 +40,13 @@ describe("TerminalSessionManager", () => {
         command: "bash",
         args: ["-l"],
         cwd: "/tmp/demo",
-        linkedBrowserSessionId: "session-1",
         scrollback: "",
         status: "running",
       }),
     );
   });
 
-  it("updates activity and exit state", async () => {
+  it("updates exit state", async () => {
     const store = createStoreMock();
     const manager = new TerminalSessionManager(store);
     const session = await manager.createSession({
@@ -59,18 +56,12 @@ describe("TerminalSessionManager", () => {
       name: "Claude",
     });
 
-    manager.markActivity(session.id);
     manager.markExited(session.id, 130);
 
-    expect(store.updateSessionActivity).toHaveBeenCalledWith({
-      terminalSessionId: session.id,
-      lastActivityAt: expect.any(String),
-    });
     expect(store.updateSessionExit).toHaveBeenCalledWith({
       terminalSessionId: session.id,
       status: "exited",
       exitCode: 130,
-      lastActivityAt: expect.any(String),
     });
     expect(manager.getSession(session.id)?.status).toBe("exited");
     expect(manager.getSession(session.id)?.exitCode).toBe(130);

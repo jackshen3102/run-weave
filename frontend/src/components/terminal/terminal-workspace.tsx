@@ -13,14 +13,12 @@ import { TerminalSurface } from "./terminal-surface";
 interface TerminalWorkspaceProps {
   apiBase: string;
   token: string;
-  linkedBrowserSessionId?: string;
   initialTerminalSessionId?: string;
+  onActiveSessionChange?: (terminalSessionId: string) => void;
+  onNoSessionAvailable?: () => void;
   onAuthExpired?: () => void;
   className?: string;
 }
-
-const AUTO_CREATE_IN_FLIGHT_BY_BROWSER_SESSION = new Set<string>();
-const AUTO_CREATE_DONE_BY_BROWSER_SESSION = new Set<string>();
 
 function buildSessionLabel(session: TerminalSessionListItem): string {
   const renderedArgs = session.args.join(" ");
@@ -30,8 +28,9 @@ function buildSessionLabel(session: TerminalSessionListItem): string {
 export function TerminalWorkspace({
   apiBase,
   token,
-  linkedBrowserSessionId,
   initialTerminalSessionId,
+  onActiveSessionChange,
+  onNoSessionAvailable,
   onAuthExpired,
   className,
 }: TerminalWorkspaceProps) {
@@ -39,23 +38,15 @@ export function TerminalWorkspace({
   const [activeSessionId, setActiveSessionId] = useState<string | null>(
     initialTerminalSessionId ?? null,
   );
+  const [hasLoadedSessions, setHasLoadedSessions] = useState(false);
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
 
   const visibleSessions = useMemo(() => {
-    const filtered = linkedBrowserSessionId
-      ? sessions.filter(
-          (session) => session.linkedBrowserSessionId === linkedBrowserSessionId,
-        )
-      : sessions;
-
-    return filtered.sort((left, right) => {
-      return (
-        new Date(right.lastActivityAt).getTime() -
-        new Date(left.lastActivityAt).getTime()
-      );
+    return [...sessions].sort((left, right) => {
+      return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
     });
-  }, [linkedBrowserSessionId, sessions]);
+  }, [sessions]);
 
   const activeSession =
     visibleSessions.find((session) => session.terminalSessionId === activeSessionId) ??
@@ -67,9 +58,6 @@ export function TerminalWorkspace({
     try {
       const nextSessions = await listTerminalSessions(apiBase, token);
       setSessions(nextSessions);
-      if (!activeSessionId) {
-        setActiveSessionId(nextSessions[0]?.terminalSessionId ?? null);
-      }
       setRequestError(null);
     } catch (error) {
       if (error instanceof HttpError && error.status === 401) {
@@ -78,15 +66,28 @@ export function TerminalWorkspace({
       }
       setRequestError(String(error));
     } finally {
+      setHasLoadedSessions(true);
       setLoading(false);
     }
-  }, [activeSessionId, apiBase, onAuthExpired, token]);
+  }, [apiBase, onAuthExpired, token]);
 
   useEffect(() => {
     void loadSessions();
   }, [loadSessions]);
 
   useEffect(() => {
+    if (!initialTerminalSessionId) {
+      return;
+    }
+
+    setActiveSessionId(initialTerminalSessionId);
+  }, [initialTerminalSessionId]);
+
+  useEffect(() => {
+    if (visibleSessions.length === 0) {
+      return;
+    }
+
     if (
       activeSessionId &&
       visibleSessions.some(
@@ -99,16 +100,33 @@ export function TerminalWorkspace({
     setActiveSessionId(visibleSessions[0]?.terminalSessionId ?? null);
   }, [activeSessionId, visibleSessions]);
 
-  const createSession = useCallback(async (options?: { autoCreateBrowserSessionId?: string }): Promise<void> => {
+  useEffect(() => {
+    if (!hasLoadedSessions) {
+      return;
+    }
+
+    if (requestError) {
+      return;
+    }
+
+    if (activeSession?.terminalSessionId) {
+      onActiveSessionChange?.(activeSession.terminalSessionId);
+      return;
+    }
+
+    onNoSessionAvailable?.();
+  }, [
+    activeSession?.terminalSessionId,
+    hasLoadedSessions,
+    onActiveSessionChange,
+    onNoSessionAvailable,
+    requestError,
+  ]);
+
+  const createSession = useCallback(async (): Promise<void> => {
     setLoading(true);
-    const autoCreateBrowserSessionId = options?.autoCreateBrowserSessionId;
     try {
-      const created = await createTerminalSession(apiBase, token, {
-        linkedBrowserSessionId,
-      });
-      if (autoCreateBrowserSessionId) {
-        AUTO_CREATE_DONE_BY_BROWSER_SESSION.add(autoCreateBrowserSessionId);
-      }
+      const created = await createTerminalSession(apiBase, token, {});
       setRequestError(null);
       await loadSessions();
       setActiveSessionId(created.terminalSessionId);
@@ -119,32 +137,9 @@ export function TerminalWorkspace({
       }
       setRequestError(String(error));
     } finally {
-      if (autoCreateBrowserSessionId) {
-        AUTO_CREATE_IN_FLIGHT_BY_BROWSER_SESSION.delete(autoCreateBrowserSessionId);
-      }
       setLoading(false);
     }
-  }, [apiBase, linkedBrowserSessionId, loadSessions, onAuthExpired, token]);
-
-  useEffect(() => {
-    if (!linkedBrowserSessionId) {
-      return;
-    }
-    if (loading || visibleSessions.length > 0) {
-      return;
-    }
-    if (
-      AUTO_CREATE_DONE_BY_BROWSER_SESSION.has(linkedBrowserSessionId) ||
-      AUTO_CREATE_IN_FLIGHT_BY_BROWSER_SESSION.has(linkedBrowserSessionId)
-    ) {
-      return;
-    }
-
-    AUTO_CREATE_IN_FLIGHT_BY_BROWSER_SESSION.add(linkedBrowserSessionId);
-    void createSession({
-      autoCreateBrowserSessionId: linkedBrowserSessionId,
-    });
-  }, [createSession, linkedBrowserSessionId, loading, visibleSessions.length]);
+  }, [apiBase, loadSessions, onAuthExpired, token]);
 
   const closeSession = async (terminalSessionId: string): Promise<void> => {
     setLoading(true);

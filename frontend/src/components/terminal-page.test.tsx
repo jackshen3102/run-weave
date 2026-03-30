@@ -69,7 +69,6 @@ describe("TerminalPage", () => {
       scrollback: "$ pwd\n/tmp/demo\n",
       status: "running",
       createdAt: "2026-03-29T00:00:00.000Z",
-      lastActivityAt: "2026-03-29T00:00:00.000Z",
     });
     useTerminalConnectionMock.mockReturnValue({
       connectionStatus: "connected",
@@ -107,7 +106,7 @@ describe("TerminalPage", () => {
     expect(screen.getByLabelText("Terminal emulator")).toBeInTheDocument();
     expect(screen.getByLabelText("Terminal output")).toHaveTextContent("/tmp/demo");
     expect(terminalOpenMock).toHaveBeenCalledTimes(1);
-    expect(terminalWriteMock).toHaveBeenCalledWith("$ pwd\r\n/tmp/demo\r\n");
+    expect(terminalWriteMock).toHaveBeenCalledWith("$ pwd\n/tmp/demo\n");
     expect(fitAddonFitMock).toHaveBeenCalled();
   });
 
@@ -156,6 +155,9 @@ describe("TerminalPage", () => {
 
     const emulator = await screen.findByLabelText("Terminal emulator");
     expect(emulator).toBeInTheDocument();
+    terminalOnDataHandler?.(
+      "\u001b]10;rgb:e2e2/e8e8/f0f0\u001b\\\u001b]11;rgb:0b0b/1212/2020\u001b\\\u001b[?276;2$y",
+    );
     terminalOnDataHandler?.("\r");
 
     await waitFor(() => {
@@ -163,6 +165,7 @@ describe("TerminalPage", () => {
     });
 
     expect(sendInput).toHaveBeenCalledWith("\r");
+    expect(sendInput).toHaveBeenCalledTimes(1);
   });
 
   it("renders exit state from terminal runtime status", async () => {

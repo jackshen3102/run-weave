@@ -23,12 +23,51 @@ describe("PtyService", () => {
     });
 
     expect(spawn).toHaveBeenCalledWith("bash", ["-l"], {
-      name: "xterm-color",
+      name: "xterm-256color",
       cols: 120,
       rows: 40,
       cwd: "/tmp/demo",
       env: expect.any(Object),
     });
     expect(runtime.pid).toBe(123);
+  });
+
+  it("uses vim-friendly terminal env defaults when TERM is missing", () => {
+    const ptyProcess = {
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      write: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 321,
+    };
+    const spawn = vi.fn(() => ptyProcess);
+    const service = new PtyService({ spawn });
+
+    const previousTerm = process.env.TERM;
+    const previousColorTerm = process.env.COLORTERM;
+    delete process.env.TERM;
+    delete process.env.COLORTERM;
+
+    try {
+      service.spawnSession({
+        command: "bash",
+        cwd: "/tmp/demo",
+      });
+    } finally {
+      process.env.TERM = previousTerm;
+      process.env.COLORTERM = previousColorTerm;
+    }
+
+    expect(spawn).toHaveBeenCalledWith(
+      "bash",
+      [],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          TERM: "xterm-256color",
+          COLORTERM: "truecolor",
+        }),
+      }),
+    );
   });
 });

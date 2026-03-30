@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WebSocket } from "ws";
-import type { ConnectionContext } from "./context";
+import type { HeartbeatState } from "./heartbeat";
 import { createHeartbeatController } from "./heartbeat";
 
 describe("createHeartbeatController", () => {
@@ -13,9 +13,9 @@ describe("createHeartbeatController", () => {
       const state = {
         heartbeatTimer: null,
         isAlive: true,
-      } as unknown as ConnectionContext;
+      } satisfies HeartbeatState;
 
-      const controller = createHeartbeatController(socket as never, state as never);
+      const controller = createHeartbeatController(socket as never, state);
       controller.start();
       vi.advanceTimersByTime(15_000);
 
@@ -37,9 +37,9 @@ describe("createHeartbeatController", () => {
       const state = {
         heartbeatTimer: null,
         isAlive: true,
-      } as unknown as ConnectionContext;
+      } satisfies HeartbeatState;
 
-      const controller = createHeartbeatController(socket as never, state as never);
+      const controller = createHeartbeatController(socket as never, state);
       controller.start();
       vi.advanceTimersByTime(15_000);
       vi.advanceTimersByTime(15_000);

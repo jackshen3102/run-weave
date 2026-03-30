@@ -1,4 +1,4 @@
-import { Navigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { TerminalWorkspace } from "../components/terminal/terminal-workspace";
 
 interface TerminalRoutePageProps {
@@ -13,6 +13,7 @@ export function TerminalRoutePage({
   onAuthExpired,
 }: TerminalRoutePageProps) {
   const { terminalSessionId } = useParams<{ terminalSessionId: string }>();
+  const navigate = useNavigate();
 
   if (!terminalSessionId) {
     return <Navigate to="/" replace />;
@@ -24,6 +25,18 @@ export function TerminalRoutePage({
         apiBase={apiBase}
         token={token}
         initialTerminalSessionId={terminalSessionId}
+        onActiveSessionChange={(activeTerminalSessionId) => {
+          if (activeTerminalSessionId === terminalSessionId) {
+            return;
+          }
+
+          navigate(`/terminal/${encodeURIComponent(activeTerminalSessionId)}`, {
+            replace: true,
+          });
+        }}
+        onNoSessionAvailable={() => {
+          navigate("/", { replace: true });
+        }}
         onAuthExpired={onAuthExpired}
       />
     </main>

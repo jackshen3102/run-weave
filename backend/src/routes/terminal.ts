@@ -18,8 +18,7 @@ const createTerminalSessionSchema = z.object({
   command: z.string().trim().min(1).optional(),
   args: z.array(z.string()).optional(),
   cwd: z.string().trim().min(1).optional(),
-  linkedBrowserSessionId: z.string().trim().min(1).optional(),
-});
+}).strict();
 
 const updateTerminalSessionSchema = z.object({
   name: z.string().trim().min(1),
@@ -47,7 +46,6 @@ function resolveTerminalCreateDefaults(payload: CreateTerminalSessionRequest): {
   command: string;
   args?: string[];
   cwd: string;
-  linkedBrowserSessionId?: string;
 } {
   const command = payload.command?.trim() || resolveDefaultTerminalCommand();
   const cwd = payload.cwd?.trim() || os.homedir();
@@ -57,7 +55,6 @@ function resolveTerminalCreateDefaults(payload: CreateTerminalSessionRequest): {
     command,
     args: payload.args,
     cwd,
-    linkedBrowserSessionId: payload.linkedBrowserSessionId,
   };
 }
 
@@ -72,11 +69,9 @@ function toStatusPayload(
     command: session.command,
     args: session.args,
     cwd: session.cwd,
-    linkedBrowserSessionId: session.linkedBrowserSessionId,
     scrollback: session.scrollback,
     status: session.status,
     createdAt: session.createdAt.toISOString(),
-    lastActivityAt: session.lastActivityAt.toISOString(),
     exitCode: session.exitCode,
   };
 }
@@ -100,10 +95,8 @@ export function createTerminalRouter(
         command: session.command,
         args: session.args,
         cwd: session.cwd,
-        linkedBrowserSessionId: session.linkedBrowserSessionId,
         status: session.status,
         createdAt: session.createdAt.toISOString(),
-        lastActivityAt: session.lastActivityAt.toISOString(),
         exitCode: session.exitCode,
       }));
 

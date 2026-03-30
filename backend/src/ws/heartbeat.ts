@@ -1,9 +1,13 @@
 import type { WebSocket } from "ws";
-import type { ConnectionContext } from "./context";
+
+export interface HeartbeatState {
+  heartbeatTimer: NodeJS.Timeout | null;
+  isAlive: boolean;
+}
 
 export function createHeartbeatController(
   socket: WebSocket,
-  state: ConnectionContext,
+  state: HeartbeatState,
 ): {
   start: () => void;
   stop: () => void;

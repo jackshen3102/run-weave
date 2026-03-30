@@ -217,6 +217,59 @@ describe("terminal websocket server", () => {
     expect(runtime.signal).toHaveBeenCalledWith("SIGINT");
   });
 
+  it("rejects unsupported app-layer ping messages", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyToken: vi.fn(() => true),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        scrollback: "",
+        status: "running",
+      })),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    runtimeRegistry.createRuntime("terminal-1", runtime);
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    socket.send(JSON.stringify({ type: "ping" }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "error",
+          message: "Invalid message",
+        }),
+      ]),
+    );
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+  });
+
   it("replays persisted scrollback emitted before websocket attach", async () => {
     const runtime = new FakeRuntime();
     const authService = {

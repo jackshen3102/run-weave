@@ -6,6 +6,7 @@ import { toWebSocketBase } from "../viewer/url";
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type TerminalRuntimeStatus = "running" | "exited" | null;
+const MAX_UNAUTHORIZED_RETRIES = 1;
 
 function buildTerminalWsUrl(
   apiBase: string,
@@ -50,13 +51,14 @@ export function useTerminalConnection(params: {
     setOutput("");
     let cancelled = false;
     let socket: WebSocket | null = null;
-    let retriedWithFreshTicket = false;
+    let unauthorizedRetryCount = 0;
 
     const connectTimer = window.setTimeout(() => {
       const connect = async (): Promise<void> => {
         if (cancelled) {
           return;
         }
+        setConnectionStatus("connecting");
 
         try {
           const ticketPayload = await createTerminalWsTicket(
@@ -87,15 +89,21 @@ export function useTerminalConnection(params: {
             if (socketRef.current !== socket) {
               return;
             }
-            setConnectionStatus("closed");
             if (event.code === 1008 && event.reason === "Unauthorized") {
-              if (!retriedWithFreshTicket && !cancelled) {
-                retriedWithFreshTicket = true;
+              if (
+                unauthorizedRetryCount < MAX_UNAUTHORIZED_RETRIES &&
+                !cancelled
+              ) {
+                unauthorizedRetryCount += 1;
+                setConnectionStatus("connecting");
                 void connect();
                 return;
               }
+              setConnectionStatus("closed");
               onAuthExpired?.();
+              return;
             }
+            setConnectionStatus("closed");
           });
           socket.addEventListener("message", (event) => {
             if (socketRef.current !== socket) {

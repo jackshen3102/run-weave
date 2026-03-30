@@ -32,7 +32,7 @@ class MockWebSocket {
   }
 
   close(): void {
-    this.readyState = MockWebSocket.CLOSED;
+    this.emitClose(1000, "");
   }
 
   send(): void {
@@ -87,6 +87,13 @@ async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
 }
 
+async function connectOnce(): Promise<void> {
+  await act(async () => {
+    vi.advanceTimersByTime(0);
+    await flushMicrotasks();
+  });
+}
+
 describe("useTerminalConnection", () => {
   const originalWebSocket = globalThis.WebSocket;
 
@@ -116,10 +123,7 @@ describe("useTerminalConnection", () => {
 
     expect(MockWebSocket.instances).toHaveLength(0);
 
-    await act(async () => {
-      vi.runAllTimers();
-      await flushMicrotasks();
-    });
+    await connectOnce();
 
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(createTerminalWsTicketMock).toHaveBeenCalledWith(
@@ -136,10 +140,7 @@ describe("useTerminalConnection", () => {
   it("tracks terminal status, exit code, and output from websocket messages", async () => {
     render(<Probe />);
 
-    await act(async () => {
-      vi.runAllTimers();
-      await flushMicrotasks();
-    });
+    await connectOnce();
 
     const socket = MockWebSocket.instances[0];
     expect(socket).toBeDefined();
@@ -161,10 +162,7 @@ describe("useTerminalConnection", () => {
     const onAuthExpired = vi.fn();
     render(<Probe onAuthExpired={onAuthExpired} />);
 
-    await act(async () => {
-      vi.runAllTimers();
-      await flushMicrotasks();
-    });
+    await connectOnce();
 
     const socket = MockWebSocket.instances[0];
     expect(socket).toBeDefined();
@@ -173,12 +171,58 @@ describe("useTerminalConnection", () => {
       socket?.emitClose(1008, "Unauthorized");
     });
 
-    await act(async () => {
-      await flushMicrotasks();
-    });
+    await connectOnce();
 
     expect(onAuthExpired).toHaveBeenCalledTimes(0);
     expect(MockWebSocket.instances).toHaveLength(2);
+    expect(screen.getByTestId("connection-status")).toHaveTextContent("connecting");
+  });
+
+  it("sets closed only after unauthorized retry is exhausted", async () => {
+    const onAuthExpired = vi.fn();
+    render(<Probe onAuthExpired={onAuthExpired} />);
+
+    await connectOnce();
+
+    const firstSocket = MockWebSocket.instances[0];
+    expect(firstSocket).toBeDefined();
+
+    act(() => {
+      firstSocket?.emitClose(1008, "Unauthorized");
+    });
+
+    await connectOnce();
+
+    const secondSocket = MockWebSocket.instances[1];
+    expect(secondSocket).toBeDefined();
+
+    act(() => {
+      secondSocket?.emitClose(1008, "Unauthorized");
+    });
+
     expect(screen.getByTestId("connection-status")).toHaveTextContent("closed");
+    expect(onAuthExpired).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an idle but healthy websocket connected without business messages", async () => {
+    render(<Probe />);
+
+    await connectOnce();
+
+    const socket = MockWebSocket.instances[0];
+    expect(socket).toBeDefined();
+
+    act(() => {
+      socket?.emitOpen();
+    });
+
+    expect(screen.getByTestId("connection-status")).toHaveTextContent("connected");
+
+    await act(async () => {
+      vi.advanceTimersByTime(50_000);
+      await flushMicrotasks();
+    });
+
+    expect(screen.getByTestId("connection-status")).toHaveTextContent("connected");
   });
 });

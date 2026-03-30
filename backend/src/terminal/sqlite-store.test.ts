@@ -24,11 +24,9 @@ function createRecord(
     command: "bash",
     args: ["-l"],
     cwd: "/tmp/demo",
-    linkedBrowserSessionId: "session-1",
     scrollback: "",
     status: "running",
     createdAt: "2026-03-29T00:00:00.000Z",
-    lastActivityAt: "2026-03-29T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -50,14 +48,10 @@ describe("SQLiteTerminalSessionStore", () => {
     await expect(store.listSessions()).resolves.toEqual([record]);
   });
 
-  it("updates activity, exit state, and deletes terminal sessions", async () => {
+  it("updates exit state and deletes terminal sessions", async () => {
     const store = await createStore();
     await store.insertSession(createRecord());
 
-    await store.updateSessionActivity({
-      terminalSessionId: "terminal-1",
-      lastActivityAt: "2026-03-29T00:10:00.000Z",
-    });
     await store.appendSessionScrollback({
       terminalSessionId: "terminal-1",
       chunk: "hello",
@@ -72,14 +66,12 @@ describe("SQLiteTerminalSessionStore", () => {
       terminalSessionId: "terminal-1",
       status: "exited",
       exitCode: 130,
-      lastActivityAt: "2026-03-29T00:11:00.000Z",
     });
 
     await expect(store.getSession("terminal-1")).resolves.toEqual(
       createRecord({
         status: "exited",
         exitCode: 130,
-        lastActivityAt: "2026-03-29T00:11:00.000Z",
         scrollback: "hello world",
       }),
     );
@@ -104,6 +96,49 @@ describe("SQLiteTerminalSessionStore", () => {
       createRecord({
         scrollback: "2345",
       }),
+    );
+  });
+
+  it("removes the legacy linked browser session column during initialization", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "terminal-store-legacy-"));
+    tempDirs.push(dir);
+    const databaseFile = path.join(dir, "terminal.db");
+
+    const DatabaseModule = await import("better-sqlite3");
+    const database = new DatabaseModule.default(databaseFile);
+    database.exec(`
+      create table terminal_sessions (
+        id text primary key,
+        name text not null,
+        command text not null,
+        args_json text not null default '[]',
+        cwd text not null,
+        linked_browser_session_id text,
+        scrollback text not null default '',
+        status text not null,
+        created_at text not null,
+        last_activity_at text not null,
+        exit_code integer
+      );
+    `);
+    database.close();
+
+    const store = new SQLiteTerminalSessionStore(databaseFile);
+    await store.initialize();
+
+    const verificationDb = new DatabaseModule.default(databaseFile, {
+      readonly: true,
+    });
+    const columns = verificationDb
+      .prepare("pragma table_info(terminal_sessions)")
+      .all() as Array<{ name: string }>;
+    verificationDb.close();
+
+    expect(columns.map((column) => column.name)).not.toContain(
+      "linked_browser_session_id",
+    );
+    expect(columns.map((column) => column.name)).not.toContain(
+      "last_activity_at",
     );
   });
 });

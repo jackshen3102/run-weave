@@ -14,7 +14,6 @@ import {
 import { HomeHeader } from "./components/home-header";
 import { LatestSessionCard } from "./components/latest-session-card";
 import { NewSessionForm } from "./components/new-session-form";
-import { NewTerminalForm } from "./components/new-terminal-form";
 import { SessionDrawer } from "./components/session-drawer";
 import { parseSessionHeaders } from "./utils";
 
@@ -38,9 +37,6 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
   const [terminalLoading, setTerminalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [terminalError, setTerminalError] = useState<string | null>(null);
-  const [terminalCommand, setTerminalCommand] = useState("");
-  const [terminalArgs, setTerminalArgs] = useState("");
-  const [terminalCwd, setTerminalCwd] = useState("");
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(
@@ -276,22 +272,11 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
       return;
     }
 
-    const trimmedCommand = terminalCommand.trim();
-    const trimmedCwd = terminalCwd.trim();
-    const parsedArgs = terminalArgs
-      .split(/\s+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-
     setTerminalLoading(true);
     setTerminalError(null);
 
     try {
-      const data = await createTerminalSession(apiBase, token, {
-        command: trimmedCommand || undefined,
-        args: parsedArgs,
-        cwd: trimmedCwd || undefined,
-      });
+      const data = await createTerminalSession(apiBase, token, {});
       navigate(`/terminal/${encodeURIComponent(data.terminalSessionId)}`);
     } catch (createError) {
       if (createError instanceof HttpError && createError.status === 401) {
@@ -312,57 +297,51 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
       <div className="relative mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col gap-8">
         <HomeHeader
           sessionCount={sessions.length}
+          terminalLoading={terminalLoading}
           onOpenSessions={() => setIsSessionDrawerOpen(true)}
+          onOpenTerminal={() => {
+            void createTerminal();
+          }}
           onLogout={() => {
             clearToken();
             navigate("/login", { replace: true });
           }}
         />
 
+        {terminalError ? (
+          <p className="text-sm text-red-500" role="alert">
+            {terminalError}
+          </p>
+        ) : null}
+
         <section className="flex flex-1 items-center pb-4 pt-2 sm:pt-4">
           <div className="w-full">
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
               <LatestSessionCard session={recentSession} onEnterSession={enterSession} />
 
-              <div className="space-y-6">
-                <NewSessionForm
-                  sessionSourceType={sessionSourceType}
-                  onSessionSourceTypeChange={changeSessionSourceType}
-                  sessionName={sessionName}
-                  onSessionNameChange={(value) => {
-                    setSessionName(value);
-                    setSessionNameCustomized(
-                      value.trim() !== "" &&
-                        value.trim() !== getDefaultSessionName(sessionSourceType),
-                    );
-                  }}
-                  cdpEndpoint={cdpEndpoint}
-                  onCdpEndpointChange={setCdpEndpoint}
-                  proxyEnabled={proxyEnabled}
-                  onProxyEnabledChange={setProxyEnabled}
-                  requestHeadersInput={requestHeadersInput}
-                  onRequestHeadersInputChange={setRequestHeadersInput}
-                  loading={loading}
-                  onSubmit={() => {
-                    void createSession();
-                  }}
-                  error={error}
-                />
-
-                <NewTerminalForm
-                  command={terminalCommand}
-                  args={terminalArgs}
-                  cwd={terminalCwd}
-                  loading={terminalLoading}
-                  error={terminalError}
-                  onCommandChange={setTerminalCommand}
-                  onArgsChange={setTerminalArgs}
-                  onCwdChange={setTerminalCwd}
-                  onSubmit={() => {
-                    void createTerminal();
-                  }}
-                />
-              </div>
+              <NewSessionForm
+                sessionSourceType={sessionSourceType}
+                onSessionSourceTypeChange={changeSessionSourceType}
+                sessionName={sessionName}
+                onSessionNameChange={(value) => {
+                  setSessionName(value);
+                  setSessionNameCustomized(
+                    value.trim() !== "" &&
+                      value.trim() !== getDefaultSessionName(sessionSourceType),
+                  );
+                }}
+                cdpEndpoint={cdpEndpoint}
+                onCdpEndpointChange={setCdpEndpoint}
+                proxyEnabled={proxyEnabled}
+                onProxyEnabledChange={setProxyEnabled}
+                requestHeadersInput={requestHeadersInput}
+                onRequestHeadersInputChange={setRequestHeadersInput}
+                loading={loading}
+                onSubmit={() => {
+                  void createSession();
+                }}
+                error={error}
+              />
             </div>
           </div>
         </section>

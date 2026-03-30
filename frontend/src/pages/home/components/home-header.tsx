@@ -3,13 +3,17 @@ import { Button } from "../../../components/ui/button";
 
 interface HomeHeaderProps {
   sessionCount: number;
+  terminalLoading: boolean;
   onOpenSessions: () => void;
+  onOpenTerminal: () => void;
   onLogout: () => void;
 }
 
 export function HomeHeader({
   sessionCount,
+  terminalLoading,
   onOpenSessions,
+  onOpenTerminal,
   onLogout,
 }: HomeHeaderProps) {
   return (
@@ -20,6 +24,14 @@ export function HomeHeader({
         </p>
       </div>
       <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          className="rounded-full px-4"
+          onClick={onOpenTerminal}
+          disabled={terminalLoading}
+        >
+          {terminalLoading ? "Opening..." : "Open Terminal"}
+        </Button>
         <Button
           variant="ghost"
           size="sm"

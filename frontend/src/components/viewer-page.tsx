@@ -10,7 +10,6 @@ import {
 import { Button } from "./ui/button";
 import { ViewerTabList } from "./viewer/viewer-tab-list";
 import { ViewerNavigationBar } from "./viewer/viewer-navigation-bar";
-import { TerminalWorkspace } from "./terminal/terminal-workspace";
 import { useViewerConnection } from "../features/viewer/use-viewer-connection";
 import {
   buildDevtoolsPageUrl,
@@ -45,16 +44,12 @@ export function ViewerPage({
   onAuthExpired,
   onHome,
 }: ViewerPageProps) {
-  const splitContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputBridgeRef = useRef<HTMLTextAreaElement>(null);
   const [addressInput, setAddressInput] = useState("");
   const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isNavigationBarOpen, setIsNavigationBarOpen] = useState(false);
-  const [isTerminalPanelOpen, setIsTerminalPanelOpen] = useState(true);
-  const [splitRatio, setSplitRatio] = useState(0.4);
-  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
   const [devtoolsUrl, setDevtoolsUrl] = useState<string | null>(null);
   const [devtoolsError, setDevtoolsError] = useState<string | null>(null);
   const {
@@ -268,39 +263,6 @@ export function ViewerPage({
     };
   }, []);
 
-  useEffect(() => {
-    if (!isDraggingSplit) {
-      return;
-    }
-
-    const handlePointerMove = (event: PointerEvent): void => {
-      const container = splitContainerRef.current;
-      if (!container) {
-        return;
-      }
-
-      const rect = container.getBoundingClientRect();
-      if (rect.width <= 0) {
-        return;
-      }
-
-      const ratio = (event.clientX - rect.left) / rect.width;
-      setSplitRatio(Math.min(0.8, Math.max(0.2, ratio)));
-    };
-
-    const handlePointerUp = (): void => {
-      setIsDraggingSplit(false);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    };
-  }, [isDraggingSplit]);
-
   return (
     <main className="relative h-dvh overflow-hidden">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(86,134,144,0.16),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(170,150,115,0.14),transparent_28%)]" />
@@ -319,21 +281,11 @@ export function ViewerPage({
           onCompositionEnd={onBridgeCompositionEnd}
         />
 
-        <div
-          ref={splitContainerRef}
-          className={`min-h-0 flex flex-1 ${
-            isTerminalPanelOpen ? "flex-row-reverse gap-2" : "flex-col"
-          }`}
-        >
+        <div className="min-h-0 flex flex-1">
           <section
-            className={`animate-fade-rise relative min-h-0 min-w-0 flex flex-col overflow-hidden border border-border/60 shadow-[0_30px_120px_-70px_rgba(0,0,0,0.95)] transition-all duration-300 ease-out ${
-              isTerminalPanelOpen ? "" : "flex-1"
-            } ${isInspecting ? "bg-[#050607]" : "bg-black/92"}`}
-            style={
-              isTerminalPanelOpen
-                ? { flex: `0 0 ${Math.round((1 - splitRatio) * 100)}%` }
-                : undefined
-            }
+            className={`animate-fade-rise relative min-h-0 min-w-0 flex flex-1 flex-col overflow-hidden border border-border/60 bg-black/92 shadow-[0_30px_120px_-70px_rgba(0,0,0,0.95)] transition-all duration-300 ease-out ${
+              isInspecting ? "bg-[#050607]" : "bg-black/92"
+            }`}
           >
             <div className="z-20 border-b border-white/10 bg-[rgba(9,14,21,0.84)] backdrop-blur-xl">
               <div className="w-full px-3 py-2 sm:px-4 sm:py-2.5">
@@ -398,23 +350,6 @@ export function ViewerPage({
                               : "Show address bar"}
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8"
-                          onClick={() => {
-                            setIsMoreMenuOpen(false);
-                            setIsTerminalPanelOpen((open) => !open);
-                          }}
-                        >
-                          {isTerminalPanelOpen ? (
-                            <ChevronDown className="h-4 w-4 text-stone-400" />
-                          ) : (
-                            <ChevronUp className="h-4 w-4 text-stone-400" />
-                          )}
-                          {isTerminalPanelOpen
-                            ? "Hide terminal panel"
-                            : "Show terminal panel"}
-                        </button>
                         <button
                           type="button"
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8"
@@ -556,35 +491,6 @@ export function ViewerPage({
               </div>
             )}
           </section>
-
-          {isTerminalPanelOpen && (
-            <>
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize panels"
-                className={`relative z-10 hidden w-2 cursor-col-resize rounded-full bg-white/5 transition hover:bg-white/20 md:block ${
-                  isDraggingSplit ? "bg-white/25" : ""
-                }`}
-                onPointerDown={() => {
-                  setIsDraggingSplit(true);
-                }}
-              >
-                <div className="absolute inset-y-1 left-1/2 w-px -translate-x-1/2 bg-white/25" />
-              </div>
-              <div
-                className="min-h-0 min-w-0 flex-1 overflow-hidden md:flex-none"
-                style={{ flex: `0 0 ${Math.round(splitRatio * 100)}%` }}
-              >
-                <TerminalWorkspace
-                  apiBase={apiBase}
-                  token={token}
-                  linkedBrowserSessionId={sessionId}
-                  onAuthExpired={onAuthExpired}
-                />
-              </div>
-            </>
-          )}
         </div>
       </div>
     </main>

@@ -24,6 +24,29 @@ async function loginAndSeedToken(
   return payload.token;
 }
 
+async function createNamedTerminalSession(
+  request: APIRequestContext,
+  token: string,
+  name: string,
+): Promise<{ terminalSessionId: string; terminalUrl: string }> {
+  const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    data: {
+      name,
+      command: "bash",
+      cwd: "/tmp",
+    },
+  });
+
+  expect(response.ok()).toBe(true);
+  return (await response.json()) as {
+    terminalSessionId: string;
+    terminalUrl: string;
+  };
+}
+
 test("creates a terminal session and streams command output", async ({
   page,
   request,
@@ -31,12 +54,10 @@ test("creates a terminal session and streams command output", async ({
   await loginAndSeedToken(request, page);
   await page.goto("/");
 
-  await page.getByLabel("Terminal command").fill("bash");
-  await page.getByLabel("Terminal cwd").fill("/tmp");
   await page.getByRole("button", { name: "Open Terminal" }).click();
 
   await expect(page).toHaveURL(/\/terminal\//);
-  await expect(page.getByRole("heading", { name: "bash" })).toBeVisible();
+  await expect(page.getByLabel("Terminal emulator")).toBeVisible();
   await page.getByLabel("Terminal emulator").click({ force: true });
 
   await page.keyboard.type("pwd");
@@ -46,7 +67,7 @@ test("creates a terminal session and streams command output", async ({
     .poll(async () => {
       return await page.getByLabel("Terminal output").textContent();
     })
-    .toContain("/tmp");
+    .toContain("/");
 
   await page.keyboard.type("printf 'terminal-e2e-ok\\\\n'");
   await page.keyboard.press("Enter");
@@ -56,4 +77,42 @@ test("creates a terminal session and streams command output", async ({
       return await page.getByLabel("Terminal output").textContent();
     })
     .toContain("terminal-e2e-ok");
+});
+
+test("keeps the selected terminal tab across refresh and falls back by URL", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  const suffix = `${Date.now()}`;
+  const firstSession = await createNamedTerminalSession(
+    request,
+    token,
+    `tab-keep-a-${suffix}`,
+  );
+  const secondSession = await createNamedTerminalSession(
+    request,
+    token,
+    `tab-keep-b-${suffix}`,
+  );
+
+  await page.goto(firstSession.terminalUrl);
+
+  await expect(page).toHaveURL(
+    new RegExp(`/terminal/${firstSession.terminalSessionId}$`),
+  );
+
+  await page
+    .getByRole("button", { name: `tab-keep-b-${suffix}`, exact: true })
+    .click();
+
+  await expect
+    .poll(() => page.url())
+    .toContain(`/terminal/${secondSession.terminalSessionId}`);
+
+  await page.reload();
+
+  await expect
+    .poll(() => page.url())
+    .toContain(`/terminal/${secondSession.terminalSessionId}`);
 });

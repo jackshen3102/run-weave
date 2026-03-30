@@ -11,8 +11,25 @@ interface TerminalSurfaceProps {
   onAuthExpired?: () => void;
 }
 
-function normalizeTerminalOutput(output: string): string {
-  return output.replace(/\r?\n/g, "\r\n");
+const ESCAPE = "\\u001b";
+const BELL = "\\u0007";
+const OSC_COLOR_RESPONSE_PATTERN = new RegExp(
+  `${ESCAPE}\\]1[01];rgb:[0-9a-f/]+(?:${BELL}|${ESCAPE}\\\\)`,
+  "i",
+);
+const DECRPM_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[\\?[0-9;]+\\$y`);
+const DCS_RESPONSE_PATTERN = new RegExp(`${ESCAPE}P[01]\\$r.*${ESCAPE}\\\\`);
+
+function isTerminalAutoResponse(data: string): boolean {
+  if (!data.startsWith("\u001b")) {
+    return false;
+  }
+
+  return (
+    OSC_COLOR_RESPONSE_PATTERN.test(data) ||
+    DECRPM_RESPONSE_PATTERN.test(data) ||
+    DCS_RESPONSE_PATTERN.test(data)
+  );
 }
 
 export function TerminalSurface({
@@ -86,6 +103,9 @@ export function TerminalSurface({
     };
 
     const dataDisposable = terminal.onData((data) => {
+      if (isTerminalAutoResponse(data)) {
+        return;
+      }
       sendInput(data);
     });
 
@@ -133,7 +153,7 @@ export function TerminalSurface({
       return;
     }
 
-    terminal.write(normalizeTerminalOutput(nextChunk));
+    terminal.write(nextChunk);
     renderedOutputLengthRef.current = output.length;
   }, [output]);
 

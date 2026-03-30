@@ -10,11 +10,9 @@ export interface TerminalSessionRecord {
   command: string;
   args: string[];
   cwd: string;
-  linkedBrowserSessionId?: string;
   scrollback: string;
   status: "running" | "exited";
   createdAt: Date;
-  lastActivityAt: Date;
   exitCode?: number;
 }
 
@@ -23,7 +21,6 @@ export interface CreateTerminalSessionOptions {
   command: string;
   args?: string[];
   cwd: string;
-  linkedBrowserSessionId?: string;
 }
 
 function buildRecord(
@@ -35,11 +32,9 @@ function buildRecord(
     command: persisted.command,
     args: persisted.args,
     cwd: persisted.cwd,
-    linkedBrowserSessionId: persisted.linkedBrowserSessionId,
     scrollback: persisted.scrollback,
     status: persisted.status,
     createdAt: new Date(persisted.createdAt),
-    lastActivityAt: new Date(persisted.lastActivityAt),
     exitCode: persisted.exitCode,
   };
 }
@@ -53,11 +48,9 @@ function toPersisted(
     command: session.command,
     args: session.args,
     cwd: session.cwd,
-    linkedBrowserSessionId: session.linkedBrowserSessionId,
     scrollback: session.scrollback,
     status: session.status,
     createdAt: session.createdAt.toISOString(),
-    lastActivityAt: session.lastActivityAt.toISOString(),
     exitCode: session.exitCode,
   };
 }
@@ -88,11 +81,9 @@ export class TerminalSessionManager {
       command: options.command,
       args: options.args ?? [],
       cwd: options.cwd,
-      linkedBrowserSessionId: options.linkedBrowserSessionId,
       scrollback: "",
       status: "running",
       createdAt: now,
-      lastActivityAt: now,
     };
 
     await this.sessionStore.insertSession(toPersisted(session));
@@ -132,19 +123,6 @@ export class TerminalSessionManager {
     return Array.from(this.sessions.values());
   }
 
-  markActivity(terminalSessionId: string): void {
-    const session = this.sessions.get(terminalSessionId);
-    if (!session) {
-      return;
-    }
-
-    session.lastActivityAt = new Date();
-    void this.sessionStore.updateSessionActivity({
-      terminalSessionId,
-      lastActivityAt: session.lastActivityAt.toISOString(),
-    });
-  }
-
   markExited(terminalSessionId: string, exitCode?: number): void {
     const session = this.sessions.get(terminalSessionId);
     if (!session) {
@@ -153,12 +131,10 @@ export class TerminalSessionManager {
 
     session.status = "exited";
     session.exitCode = exitCode;
-    session.lastActivityAt = new Date();
     void this.sessionStore.updateSessionExit({
       terminalSessionId,
       status: "exited",
       exitCode,
-      lastActivityAt: session.lastActivityAt.toISOString(),
     });
   }
 

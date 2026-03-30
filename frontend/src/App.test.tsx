@@ -363,12 +363,6 @@ describe("App", () => {
       expect(screen.getByText("New Session")).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByLabelText("Terminal command"), {
-      target: { value: "bash" },
-    });
-    fireEvent.change(screen.getByLabelText("Terminal cwd"), {
-      target: { value: "/tmp/demo" },
-    });
     fireEvent.click(screen.getByRole("button", { name: "Open Terminal" }));
 
     await waitFor(() => {
@@ -376,14 +370,14 @@ describe("App", () => {
         "/api/terminal/session",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({
-            command: "bash",
-            args: [],
-            cwd: "/tmp/demo",
-          }),
+          body: JSON.stringify({}),
         }),
       );
     });
+
+    expect(screen.queryByLabelText("Terminal command")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Terminal cwd")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Terminal args")).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText("Terminal route terminal-1")).toBeInTheDocument();
