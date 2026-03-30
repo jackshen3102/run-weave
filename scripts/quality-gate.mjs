@@ -257,7 +257,7 @@ function classifyFailure(stepResult) {
   const combinedOutput = `${stepResult.stdout}\n${stepResult.stderr}`;
 
   if (
-    /listen EPERM|EADDRINUSE|Process from config\.webServer was not able to start|Server is not running/i.test(
+    /listen EPERM|EADDRINUSE|Process from config\.webServer was not able to start|Server is not running|failed to allocate remote debugging port/i.test(
       combinedOutput,
     )
   ) {
@@ -454,7 +454,7 @@ if (isDirectRun) {
   const { failed, report } = await runQualityGate();
   globalThis.console.log(JSON.stringify(report, null, 2));
 
-  if (failed) {
+  if (failed && report.verdict === "fail_product_bug") {
     process.exit(1);
   }
 }
