@@ -107,6 +107,9 @@ importers:
       "@xterm/addon-fit":
         specifier: ^0.11.0
         version: 0.11.0
+      "@xterm/addon-webgl":
+        specifier: 0.20.0-beta.194
+        version: 0.20.0-beta.194(@xterm/xterm@6.0.0)
       "@xterm/xterm":
         specifier: ^6.0.0
         version: 6.0.0
@@ -1621,6 +1624,14 @@ packages:
       {
         integrity: sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==,
       }
+
+  "@xterm/addon-webgl@0.20.0-beta.194":
+    resolution:
+      {
+        integrity: sha512-aX4yGkHyoJVmxh3ZVMha7CYdTFu7tuzTJ0ljyXKAVFrdO+Wve4luK8w3wLmxuvqa9LWA9muMx/bGeEWtwD/Nlg==,
+      }
+    peerDependencies:
+      "@xterm/xterm": ^6.1.0-beta.195
 
   "@xterm/xterm@6.0.0":
     resolution:
@@ -5697,6 +5708,10 @@ snapshots:
       tinyrainbow: 2.0.0
 
   "@xterm/addon-fit@0.11.0": {}
+
+  "@xterm/addon-webgl@0.20.0-beta.194(@xterm/xterm@6.0.0)":
+    dependencies:
+      "@xterm/xterm": 6.0.0
 
   "@xterm/xterm@6.0.0": {}
 

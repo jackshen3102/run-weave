@@ -15,6 +15,7 @@ let terminalOnDataHandler: ((data: string) => void) | null = null;
 
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
+    constructor() {}
     onData = vi.fn((handler: (data: string) => void) => {
       terminalOnDataHandler = handler;
       return {
@@ -33,6 +34,17 @@ vi.mock("@xterm/addon-fit", () => ({
   FitAddon: class {
     fit = fitAddonFitMock;
     proposeDimensions = vi.fn(() => ({ cols: 120, rows: 36 }));
+  },
+}));
+
+const webglAddonInstance = { dispose: vi.fn() };
+const webglAddonConstructor = vi.fn(() => webglAddonInstance);
+
+vi.mock("@xterm/addon-webgl", () => ({
+  WebglAddon: class {
+    constructor() {
+      return webglAddonConstructor();
+    }
   },
 }));
 
@@ -58,6 +70,8 @@ describe("TerminalPage", () => {
     terminalDisposeMock.mockReset();
     terminalLoadAddonMock.mockReset();
     fitAddonFitMock.mockReset();
+    webglAddonConstructor.mockClear();
+    webglAddonInstance.dispose.mockClear();
     terminalOnDataHandler = null;
 
     getTerminalSessionMock.mockResolvedValue({
@@ -108,6 +122,7 @@ describe("TerminalPage", () => {
     expect(terminalOpenMock).toHaveBeenCalledTimes(1);
     expect(terminalWriteMock).toHaveBeenCalledWith("$ pwd\n/tmp/demo\n");
     expect(fitAddonFitMock).toHaveBeenCalled();
+    expect(terminalLoadAddonMock).toHaveBeenCalledTimes(2);
   });
 
   it("clears auth state when terminal APIs return 401", async () => {
@@ -192,4 +207,22 @@ describe("TerminalPage", () => {
     expect(await screen.findByText("Exited (130)")).toBeInTheDocument();
     expect(screen.getByText("offline")).toBeInTheDocument();
   });
+
+  it("loads the webgl addon", async () => {
+    render(
+      <TerminalPage
+        apiBase="http://localhost:5000"
+        terminalSessionId="terminal-1"
+        token="token-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(terminalOpenMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(webglAddonConstructor).toHaveBeenCalledTimes(1);
+    expect(terminalLoadAddonMock).toHaveBeenCalledWith(webglAddonInstance);
+  });
+
 });

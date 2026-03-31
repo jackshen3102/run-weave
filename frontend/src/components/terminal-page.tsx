@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import type { TerminalSessionStatusResponse } from "@browser-viewer/shared";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useTerminalConnection } from "../features/terminal/use-terminal-connection";
@@ -108,6 +109,7 @@ export function TerminalPage({
 
     terminal.loadAddon(fitAddon);
     terminal.open(container);
+    terminal.loadAddon(new WebglAddon());
     terminal.focus();
 
     const syncSize = () => {

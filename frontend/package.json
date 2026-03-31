@@ -17,6 +17,7 @@
   "dependencies": {
     "@browser-viewer/shared": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-webgl": "0.20.0-beta.194",
     "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
