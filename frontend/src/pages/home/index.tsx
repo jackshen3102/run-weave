@@ -8,6 +8,7 @@ import {
 import {
   createSession as createBrowserSession,
   deleteSession as deleteBrowserSession,
+  getDefaultCdpEndpoint,
   listSessions as fetchBrowserSessionList,
   updateSession as updateBrowserSession,
 } from "../../services/session";
@@ -32,6 +33,10 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
   const [sessionNameCustomized, setSessionNameCustomized] = useState(false);
   const [proxyEnabled, setProxyEnabled] = useState(false);
   const [cdpEndpoint, setCdpEndpoint] = useState("http://127.0.0.1:9222");
+  const [defaultCdpEndpoint, setDefaultCdpEndpoint] = useState(
+    "http://127.0.0.1:9222",
+  );
+  const [cdpEndpointCustomized, setCdpEndpointCustomized] = useState(false);
   const [requestHeadersInput, setRequestHeadersInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [terminalLoading, setTerminalLoading] = useState(false);
@@ -79,6 +84,31 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
   useEffect(() => {
     void loadSessions();
   }, [loadSessions]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDefaultCdpEndpoint = async (): Promise<void> => {
+      try {
+        const data = await getDefaultCdpEndpoint(apiBase, token);
+        if (cancelled || !data.endpoint) {
+          return;
+        }
+        setDefaultCdpEndpoint(data.endpoint);
+        if (!cdpEndpointCustomized) {
+          setCdpEndpoint(data.endpoint);
+        }
+      } catch {
+        // Ignore default endpoint failures.
+      }
+    };
+
+    void loadDefaultCdpEndpoint();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase, token, cdpEndpointCustomized]);
 
   useEffect(() => {
     if (!isSessionDrawerOpen) {
@@ -331,7 +361,11 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
                   );
                 }}
                 cdpEndpoint={cdpEndpoint}
-                onCdpEndpointChange={setCdpEndpoint}
+                cdpEndpointPlaceholder={defaultCdpEndpoint}
+                onCdpEndpointChange={(value) => {
+                  setCdpEndpointCustomized(true);
+                  setCdpEndpoint(value);
+                }}
                 proxyEnabled={proxyEnabled}
                 onProxyEnabledChange={setProxyEnabled}
                 requestHeadersInput={requestHeadersInput}

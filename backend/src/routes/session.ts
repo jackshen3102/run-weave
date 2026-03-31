@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { Router } from "express";
 import { z } from "zod";
 import type {
@@ -41,6 +43,27 @@ const createDevtoolsTicketSchema = z.object({
   tabId: z.string().min(1),
 });
 
+const execFileAsync = promisify(execFile);
+
+async function resolveDefaultCdpEndpoint(): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync("ps", ["-Ao", "pid,command"]);
+    const lines = stdout.split("\n");
+    for (const line of lines) {
+      const match = line.match(/--remote-debugging-port=(\d+)/);
+      if (match) {
+        return `http://127.0.0.1:${match[1]}`;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error("[viewer-be] resolve default CDP endpoint failed", {
+      error: String(error),
+    });
+    return null;
+  }
+}
+
 function normalizeCreateSessionSource(
   source: CreateSessionRequest["source"],
 ): CreateSessionSource {
@@ -69,6 +92,11 @@ export function createSessionRouter(
       }));
 
     res.json(payload);
+  });
+
+  router.get("/session/cdp-endpoint-default", async (_req, res) => {
+    const endpoint = await resolveDefaultCdpEndpoint();
+    res.json({ endpoint });
   });
 
   router.post("/session", async (req, res) => {

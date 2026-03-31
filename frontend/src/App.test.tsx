@@ -33,6 +33,11 @@ function renderApp(initialPath = "/") {
   );
 }
 
+const jsonResponse = (payload: unknown) => ({
+  ok: true,
+  json: async () => payload,
+});
+
 describe("App", () => {
   afterEach(() => {
     cleanup();
@@ -73,7 +78,12 @@ describe("App", () => {
     localStorage.setItem("viewer.auth.token", "token-1");
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: true, json: async () => [] })),
+      vi.fn(async (url: string) => {
+        if (url === "/api/session/cdp-endpoint-default") {
+          return jsonResponse({ endpoint: null });
+        }
+        return jsonResponse([]);
+      }),
     );
 
     renderApp();
@@ -183,17 +193,21 @@ describe("App", () => {
 
   it("shows a CDP endpoint input and submits it when attaching to an existing browser", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
-    const fetchMock = vi.fn();
-    fetchMock
-      .mockResolvedValueOnce({ ok: true, json: async () => [] })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === "/api/session/cdp-endpoint-default") {
+        return jsonResponse({ endpoint: "http://127.0.0.1:9333" });
+      }
+      if (url === "/api/session" && options?.method === "POST") {
+        return jsonResponse({
           sessionId: "session-1",
           viewerUrl: "/?sessionId=session-1",
-        }),
-      })
-      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+        });
+      }
+      if (url === "/api/session") {
+        return jsonResponse([]);
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     renderApp();
@@ -235,34 +249,18 @@ describe("App", () => {
 
   it("submits custom session headers", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
-    const fetchMock = vi.fn();
-    fetchMock
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [
-          {
-            sessionId: "session-existing",
-            name: "Default Playweight",
-            lastActivityAt: "2026-03-23T07:31:19.000Z",
-            connected: false,
-            proxyEnabled: false,
-            sourceType: "launch",
-            headers: {
-              "x-team": "alpha",
-            },
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === "/api/session/cdp-endpoint-default") {
+        return jsonResponse({ endpoint: "http://127.0.0.1:9333" });
+      }
+      if (url === "/api/session" && options?.method === "POST") {
+        return jsonResponse({
           sessionId: "session-1",
           viewerUrl: "/?sessionId=session-1",
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [
+        });
+      }
+      if (url === "/api/session") {
+        return jsonResponse([
           {
             sessionId: "session-existing",
             name: "Default Playweight",
@@ -274,8 +272,10 @@ describe("App", () => {
               "x-team": "alpha",
             },
           },
-        ],
-      });
+        ]);
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
     vi.stubGlobal("fetch", fetchMock);
     renderApp();
 
@@ -322,8 +322,15 @@ describe("App", () => {
 
   it("requires a session name before creating a session", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
-    const fetchMock = vi.fn();
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/session/cdp-endpoint-default") {
+        return jsonResponse({ endpoint: "http://127.0.0.1:9333" });
+      }
+      if (url === "/api/session") {
+        return jsonResponse([]);
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     renderApp();
@@ -340,21 +347,31 @@ describe("App", () => {
     expect(
       screen.getByText("Session name is required."),
     ).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, options]) =>
+          url === "/api/session" && options?.method === "POST",
+      ),
+    ).toBe(false);
   });
 
   it("creates a terminal session from the home flow", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
-    const fetchMock = vi.fn();
-    fetchMock
-      .mockResolvedValueOnce({ ok: true, json: async () => [] })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === "/api/session/cdp-endpoint-default") {
+        return jsonResponse({ endpoint: "http://127.0.0.1:9333" });
+      }
+      if (url === "/api/terminal/session" && options?.method === "POST") {
+        return jsonResponse({
           terminalSessionId: "terminal-1",
           terminalUrl: "/terminal/terminal-1",
-        }),
-      });
+        });
+      }
+      if (url === "/api/session") {
+        return jsonResponse([]);
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     renderApp();

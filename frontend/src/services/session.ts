@@ -35,6 +35,21 @@ export async function listSessions(
   });
 }
 
+export async function getDefaultCdpEndpoint(
+  apiBase: string,
+  token: string,
+): Promise<{ endpoint: string | null }> {
+  return requestJson<{ endpoint: string | null }>(
+    apiBase,
+    "/api/session/cdp-endpoint-default",
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
 export async function deleteSession(
   apiBase: string,
   token: string,

@@ -6,6 +6,7 @@ interface NewSessionFormProps {
   sessionName: string;
   onSessionNameChange: (value: string) => void;
   cdpEndpoint: string;
+  cdpEndpointPlaceholder: string;
   onCdpEndpointChange: (value: string) => void;
   proxyEnabled: boolean;
   onProxyEnabledChange: (value: boolean) => void;
@@ -22,6 +23,7 @@ export function NewSessionForm({
   sessionName,
   onSessionNameChange,
   cdpEndpoint,
+  cdpEndpointPlaceholder,
   onCdpEndpointChange,
   proxyEnabled,
   onProxyEnabledChange,
@@ -102,7 +104,7 @@ export function NewSessionForm({
               }}
               disabled={loading}
               className="h-10 w-full rounded-[0.9rem] border border-border/60 bg-background/70 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
-              placeholder="http://127.0.0.1:9222"
+              placeholder={cdpEndpointPlaceholder}
             />
           </div>
         ) : null}
