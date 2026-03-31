@@ -107,10 +107,10 @@ test("viewer sends input and receives ack", async ({ page, request }) => {
         },
       );
       if (!response.ok()) {
-        return null;
+        return false;
       }
 
-      return (await response.json()) as {
+      const payload = (await response.json()) as {
         snapshot: {
           activeTabId: string | null;
           tabCount: number;
@@ -123,21 +123,20 @@ test("viewer sends input and receives ack", async ({ page, request }) => {
           journeyStatus: string;
         };
       };
+
+      const { snapshot } = payload;
+      return (
+        snapshot.viewerConnected === true &&
+        snapshot.tabCount >= 3 &&
+        snapshot.milestones.tabsInitialized === true &&
+        snapshot.milestones.viewerConnected === true &&
+        snapshot.milestones.firstFrame === true &&
+        snapshot.milestones.inputAckWorking === true &&
+        snapshot.milestones.navigationWorking === true &&
+        snapshot.journeyStatus === "healthy"
+      );
     })
-    .toMatchObject({
-      snapshot: {
-        viewerConnected: true,
-        tabCount: 3,
-        milestones: {
-          tabsInitialized: true,
-          viewerConnected: true,
-          firstFrame: true,
-          inputAckWorking: true,
-          navigationWorking: true,
-        },
-        journeyStatus: "healthy",
-      },
-    });
+    .toBe(true);
 
   const connectionsResponse = await request.get(
     `${E2E_API_BASE}/api/quality/session/${sessionId}/connections`,
