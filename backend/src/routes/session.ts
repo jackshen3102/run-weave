@@ -44,23 +44,131 @@ const createDevtoolsTicketSchema = z.object({
 });
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_CDP_ENDPOINT = "http://127.0.0.1:9222";
 
-async function resolveDefaultCdpEndpoint(): Promise<string | null> {
+function normalizePort(value: number): number | null {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  if (value <= 0 || value > 65535) {
+    return null;
+  }
+  return value;
+}
+
+function extractPortFromUrl(value: string): number | null {
   try {
-    const { stdout } = await execFileAsync("ps", ["-Ao", "pid,command"]);
-    const lines = stdout.split("\n");
-    for (const line of lines) {
-      const match = line.match(/--remote-debugging-port=(\d+)/);
-      if (match) {
-        return `http://127.0.0.1:${match[1]}`;
+    const url = new URL(value);
+    if (!url.port) {
+      return null;
+    }
+    return normalizePort(Number(url.port));
+  } catch {
+    return null;
+  }
+}
+
+function extractPortFromText(output: string): number | null {
+  const urlMatch = output.match(
+    /(?:ws|wss|http|https):\/\/[^\s:]+:(\d{2,5})/,
+  );
+  if (urlMatch) {
+    return normalizePort(Number(urlMatch[1]));
+  }
+
+  const portMatch = output.match(
+    /(?:remote-debugging-port|cdp_port|cdpPort|port)\s*[:=]\s*(\d{2,5})/i,
+  );
+  if (portMatch) {
+    return normalizePort(Number(portMatch[1]));
+  }
+
+  return null;
+}
+
+function extractPortFromJson(value: unknown): number | null {
+  if (typeof value === "number") {
+    return normalizePort(value);
+  }
+
+  if (typeof value === "string") {
+    const urlPort = extractPortFromUrl(value);
+    if (urlPort) {
+      return urlPort;
+    }
+    const textPort = extractPortFromText(value);
+    if (textPort) {
+      return textPort;
+    }
+    return normalizePort(Number(value));
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const port = extractPortFromJson(item);
+      if (port) {
+        return port;
       }
     }
     return null;
+  }
+
+  if (value && typeof value === "object") {
+    for (const entry of Object.values(value as Record<string, unknown>)) {
+      const port = extractPortFromJson(entry);
+      if (port) {
+        return port;
+      }
+    }
+  }
+
+  return null;
+}
+
+function resolveCdpEndpointFromStatusOutput(output: string): string | null {
+  const trimmed = output.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    const portFromJson = extractPortFromJson(parsed);
+    if (portFromJson) {
+      return `http://127.0.0.1:${portFromJson}`;
+    }
+  } catch {
+    // ignore json parse errors
+  }
+
+  const portFromText = extractPortFromText(trimmed);
+  if (portFromText) {
+    return `http://127.0.0.1:${portFromText}`;
+  }
+
+  return null;
+}
+
+async function resolveDefaultCdpEndpoint(): Promise<string> {
+  try {
+    const { stdout, stderr } = await execFileAsync("openclaw", [
+      "browser",
+      "status",
+    ]);
+    const output = [stdout, stderr].filter(Boolean).join("\n");
+    const endpoint = resolveCdpEndpointFromStatusOutput(output);
+    if (endpoint) {
+      return endpoint;
+    }
+    console.warn(
+      "[viewer-be] resolve default CDP endpoint failed, fallback to 9222",
+    );
+    return DEFAULT_CDP_ENDPOINT;
   } catch (error) {
     console.error("[viewer-be] resolve default CDP endpoint failed", {
       error: String(error),
     });
-    return null;
+    return DEFAULT_CDP_ENDPOINT;
   }
 }
 
