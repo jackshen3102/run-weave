@@ -193,7 +193,7 @@ describe("App", () => {
 
   it("shows a CDP endpoint input and submits it when attaching to an existing browser", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
-    const fetchMock = vi.fn(async (url: string) => {
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
       if (url === "/api/session/cdp-endpoint-default") {
         return jsonResponse({ endpoint: "http://127.0.0.1:9333" });
       }
