@@ -30,6 +30,12 @@ const OSC_COLOR_RESPONSE_PATTERN = new RegExp(
 const DECRPM_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[\\?[0-9;]+\\$y`);
 const DCS_RESPONSE_PATTERN = new RegExp(`${ESCAPE}P[01]\\$r.*${ESCAPE}\\\\`);
 
+// xterm.js 6.0.0 has a bug in requestMode(): the handler for DECRQM queries
+// (CSI ? Pn $ p) crashes with "r is not defined". Vim sends these to probe
+// terminal mode capabilities. Strip them before writing — xterm cannot respond
+// to them anyway, and vim falls back to defaults when it receives no reply.
+const DECRQM_QUERY_RE = new RegExp(`${ESCAPE}\\[\\?[\\d;]+\\$p`, "g");
+
 function isTerminalAutoResponse(data: string): boolean {
   if (!data.startsWith("\u001b")) {
     return false;
@@ -153,9 +159,9 @@ export function TerminalPage({
       if (!terminalRef.current || pendingChunksRef.current.length === 0) {
         return;
       }
-      const batch = pendingChunksRef.current.join("");
+      const batch = pendingChunksRef.current.join("").replace(DECRQM_QUERY_RE, "");
       pendingChunksRef.current = [];
-      terminalRef.current.write(batch);
+      if (batch) terminalRef.current.write(batch);
     };
 
     writeChunkRef.current = (data: string) => {
