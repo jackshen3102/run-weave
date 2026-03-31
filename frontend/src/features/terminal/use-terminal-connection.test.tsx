@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, useCallback, useState } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -63,11 +63,17 @@ class MockWebSocket {
 }
 
 function Probe(props: { onAuthExpired?: () => void }) {
+  const [output, setOutput] = useState("");
+  const onOutput = useCallback((data: string) => {
+    setOutput((prev) => prev + data);
+  }, []);
+
   const connection = useTerminalConnection({
     apiBase: "http://localhost:5001",
     terminalSessionId: "terminal-1",
     token: "token-1",
     onAuthExpired: props.onAuthExpired,
+    onOutput,
   });
 
   return (
@@ -78,7 +84,7 @@ function Probe(props: { onAuthExpired?: () => void }) {
         {connection.exitCode == null ? "none" : String(connection.exitCode)}
       </span>
       <span data-testid="error">{connection.error ?? "none"}</span>
-      <pre data-testid="output">{connection.output}</pre>
+      <pre data-testid="output">{output}</pre>
     </div>
   );
 }

@@ -34,21 +34,26 @@ export function useTerminalConnection(params: {
   terminalSessionId: string;
   token: string;
   onAuthExpired?: () => void;
+  onOutput?: (data: string) => void;
 }) {
-  const { apiBase, terminalSessionId, token, onAuthExpired } = params;
+  const { apiBase, terminalSessionId, token, onAuthExpired, onOutput } = params;
   const socketRef = useRef<WebSocket | null>(null);
+  // Keep onOutput in a ref so it never needs to be in the effect's dep array.
+  const onOutputRef = useRef(onOutput);
+  useEffect(() => {
+    onOutputRef.current = onOutput;
+  }, [onOutput]);
+
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
   const [terminalStatus, setTerminalStatus] = useState<TerminalRuntimeStatus>(null);
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [output, setOutput] = useState("");
 
   useEffect(() => {
     setConnectionStatus("connecting");
     setTerminalStatus(null);
     setExitCode(null);
     setError(null);
-    setOutput("");
     let cancelled = false;
     let socket: WebSocket | null = null;
     let unauthorizedRetryCount = 0;
@@ -113,7 +118,7 @@ export function useTerminalConnection(params: {
             try {
               const parsed = JSON.parse(String(event.data)) as TerminalServerMessage;
               if (parsed.type === "output") {
-                setOutput((current) => `${current}${parsed.data}`);
+                onOutputRef.current?.(parsed.data);
                 return;
               }
               if (parsed.type === "status") {
@@ -169,10 +174,6 @@ export function useTerminalConnection(params: {
     terminalStatus,
     exitCode,
     error,
-    output,
-    clearOutput: useCallback(() => {
-      setOutput("");
-    }, []),
     sendInput: useCallback((data: string) => {
       sendMessage(socketRef.current, {
         type: "input",

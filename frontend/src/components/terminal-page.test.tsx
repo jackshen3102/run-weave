@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "../services/http";
 import { TerminalPage } from "./terminal-page";
@@ -11,16 +11,20 @@ const terminalFocusMock = vi.fn();
 const terminalDisposeMock = vi.fn();
 const terminalLoadAddonMock = vi.fn();
 const fitAddonFitMock = vi.fn();
+// Stable send mocks — must not change identity between renders or effects re-run.
+const sendInputMock = vi.fn();
+const sendResizeMock = vi.fn();
+const sendSignalMock = vi.fn();
 let terminalOnDataHandler: ((data: string) => void) | null = null;
+let capturedOnOutput: ((data: string) => void) | null = null;
 
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     constructor() {}
+    unicode = { activeVersion: "" };
     onData = vi.fn((handler: (data: string) => void) => {
       terminalOnDataHandler = handler;
-      return {
-        dispose: vi.fn(),
-      };
+      return { dispose: vi.fn() };
     });
     open = terminalOpenMock;
     write = terminalWriteMock;
@@ -37,7 +41,19 @@ vi.mock("@xterm/addon-fit", () => ({
   },
 }));
 
-const webglAddonInstance = { dispose: vi.fn() };
+vi.mock("@xterm/addon-unicode11", () => ({
+  Unicode11Addon: class {
+    constructor() {}
+  },
+}));
+
+vi.mock("@xterm/addon-canvas", () => ({
+  CanvasAddon: class {
+    constructor() {}
+  },
+}));
+
+const webglAddonInstance = { dispose: vi.fn(), onContextLoss: vi.fn() };
 const webglAddonConstructor = vi.fn(() => webglAddonInstance);
 
 vi.mock("@xterm/addon-webgl", () => ({
@@ -57,11 +73,22 @@ vi.mock("../features/terminal/use-terminal-connection", () => ({
 }));
 
 describe("TerminalPage", () => {
+  let rafSpy: { mockRestore: () => void } | undefined;
+
   afterEach(() => {
     cleanup();
+    rafSpy?.mockRestore();
   });
 
   beforeEach(() => {
+    // Make requestAnimationFrame flush synchronously so RAF-batched writes are
+    // immediately testable without async flushing.
+    rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
+    capturedOnOutput = null;
     getTerminalSessionMock.mockReset();
     useTerminalConnectionMock.mockReset();
     terminalOpenMock.mockReset();
@@ -70,8 +97,12 @@ describe("TerminalPage", () => {
     terminalDisposeMock.mockReset();
     terminalLoadAddonMock.mockReset();
     fitAddonFitMock.mockReset();
+    sendInputMock.mockReset();
+    sendResizeMock.mockReset();
+    sendSignalMock.mockReset();
     webglAddonConstructor.mockClear();
     webglAddonInstance.dispose.mockClear();
+    webglAddonInstance.onContextLoss.mockClear();
     terminalOnDataHandler = null;
 
     getTerminalSessionMock.mockResolvedValue({
@@ -84,16 +115,20 @@ describe("TerminalPage", () => {
       status: "running",
       createdAt: "2026-03-29T00:00:00.000Z",
     });
-    useTerminalConnectionMock.mockReturnValue({
-      connectionStatus: "connected",
-      terminalStatus: "running",
-      exitCode: null,
-      error: null,
-      output: "$ pwd\n/tmp/demo\n",
-      clearOutput: vi.fn(),
-      sendInput: vi.fn(),
-      sendResize: vi.fn(),
-      sendSignal: vi.fn(),
+
+    // Use stable function references so useEffect([sendInput, sendResize, ...])
+    // does not re-run on every render due to new function identity.
+    useTerminalConnectionMock.mockImplementation((params: { onOutput?: (data: string) => void }) => {
+      capturedOnOutput = params.onOutput ?? null;
+      return {
+        connectionStatus: "connected",
+        terminalStatus: "running",
+        exitCode: null,
+        error: null,
+        sendInput: sendInputMock,
+        sendResize: sendResizeMock,
+        sendSignal: sendSignalMock,
+      };
     });
   });
 
@@ -118,11 +153,13 @@ describe("TerminalPage", () => {
     expect(screen.getByText("bash -l")).toBeInTheDocument();
     expect(screen.getByText("running")).toBeInTheDocument();
     expect(screen.getByLabelText("Terminal emulator")).toBeInTheDocument();
-    expect(screen.getByLabelText("Terminal output")).toHaveTextContent("/tmp/demo");
     expect(terminalOpenMock).toHaveBeenCalledTimes(1);
-    expect(terminalWriteMock).toHaveBeenCalledWith("$ pwd\n/tmp/demo\n");
     expect(fitAddonFitMock).toHaveBeenCalled();
-    expect(terminalLoadAddonMock).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      capturedOnOutput?.("$ pwd\n/tmp/demo\n");
+    });
+    expect(terminalWriteMock).toHaveBeenCalledWith("$ pwd\n/tmp/demo\n");
   });
 
   it("clears auth state when terminal APIs return 401", async () => {
@@ -146,19 +183,6 @@ describe("TerminalPage", () => {
   });
 
   it("sends terminal input and resize events through the connection", async () => {
-    const sendInput = vi.fn();
-    const sendResize = vi.fn();
-    useTerminalConnectionMock.mockReturnValue({
-      connectionStatus: "connected",
-      terminalStatus: "running",
-      exitCode: null,
-      error: null,
-      output: "$ ",
-      clearOutput: vi.fn(),
-      sendInput,
-      sendResize,
-      sendSignal: vi.fn(),
-    });
 
     render(
       <TerminalPage
@@ -176,24 +200,25 @@ describe("TerminalPage", () => {
     terminalOnDataHandler?.("\r");
 
     await waitFor(() => {
-      expect(sendResize).toHaveBeenCalledWith(120, 36);
+      expect(sendResizeMock).toHaveBeenCalledWith(120, 36);
     });
 
-    expect(sendInput).toHaveBeenCalledWith("\r");
-    expect(sendInput).toHaveBeenCalledTimes(1);
+    expect(sendInputMock).toHaveBeenCalledWith("\r");
+    expect(sendInputMock).toHaveBeenCalledTimes(1);
   });
 
   it("renders exit state from terminal runtime status", async () => {
-    useTerminalConnectionMock.mockReturnValue({
-      connectionStatus: "closed",
-      terminalStatus: "exited",
-      exitCode: 130,
-      error: null,
-      output: "bash-3.2$ exit\n",
-      clearOutput: vi.fn(),
-      sendInput: vi.fn(),
-      sendResize: vi.fn(),
-      sendSignal: vi.fn(),
+    useTerminalConnectionMock.mockImplementation((params: { onOutput?: (data: string) => void }) => {
+      capturedOnOutput = params.onOutput ?? null;
+      return {
+        connectionStatus: "closed",
+        terminalStatus: "exited",
+        exitCode: 130,
+        error: null,
+        sendInput: sendInputMock,
+        sendResize: sendResizeMock,
+        sendSignal: sendSignalMock,
+      };
     });
 
     render(
@@ -208,7 +233,7 @@ describe("TerminalPage", () => {
     expect(screen.getByText("offline")).toBeInTheDocument();
   });
 
-  it("loads the webgl addon", async () => {
+  it("loads the webgl addon with unicode11", async () => {
     render(
       <TerminalPage
         apiBase="http://localhost:5000"
@@ -223,6 +248,7 @@ describe("TerminalPage", () => {
 
     expect(webglAddonConstructor).toHaveBeenCalledTimes(1);
     expect(terminalLoadAddonMock).toHaveBeenCalledWith(webglAddonInstance);
+    // FitAddon + Unicode11Addon + WebglAddon = 3 loadAddon calls
+    expect(terminalLoadAddonMock).toHaveBeenCalledTimes(3);
   });
-
 });

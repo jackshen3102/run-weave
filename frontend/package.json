@@ -16,7 +16,9 @@
   },
   "dependencies": {
     "@browser-viewer/shared": "workspace:*",
+    "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-unicode11": "^0.9.0",
     "@xterm/addon-webgl": "0.20.0-beta.194",
     "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",

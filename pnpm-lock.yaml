@@ -104,9 +104,15 @@ importers:
       "@browser-viewer/shared":
         specifier: workspace:*
         version: link:../packages/shared
+      "@xterm/addon-canvas":
+        specifier: ^0.7.0
+        version: 0.7.0(@xterm/xterm@6.0.0)
       "@xterm/addon-fit":
         specifier: ^0.11.0
         version: 0.11.0
+      "@xterm/addon-unicode11":
+        specifier: ^0.9.0
+        version: 0.9.0
       "@xterm/addon-webgl":
         specifier: 0.20.0-beta.194
         version: 0.20.0-beta.194(@xterm/xterm@6.0.0)
@@ -1117,7 +1123,6 @@ packages:
       }
     cpu: [arm]
     os: [linux]
-    libc: [glibc]
 
   "@rollup/rollup-linux-arm-musleabihf@4.59.0":
     resolution:
@@ -1126,7 +1131,6 @@ packages:
       }
     cpu: [arm]
     os: [linux]
-    libc: [musl]
 
   "@rollup/rollup-linux-arm64-gnu@4.59.0":
     resolution:
@@ -1135,7 +1139,6 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   "@rollup/rollup-linux-arm64-musl@4.59.0":
     resolution:
@@ -1144,7 +1147,6 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   "@rollup/rollup-linux-loong64-gnu@4.59.0":
     resolution:
@@ -1153,7 +1155,6 @@ packages:
       }
     cpu: [loong64]
     os: [linux]
-    libc: [glibc]
 
   "@rollup/rollup-linux-loong64-musl@4.59.0":
     resolution:
@@ -1162,7 +1163,6 @@ packages:
       }
     cpu: [loong64]
     os: [linux]
-    libc: [musl]
 
   "@rollup/rollup-linux-ppc64-gnu@4.59.0":
     resolution:
@@ -1171,7 +1171,6 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   "@rollup/rollup-linux-ppc64-musl@4.59.0":
     resolution:
@@ -1180,7 +1179,6 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
-    libc: [musl]
 
   "@rollup/rollup-linux-riscv64-gnu@4.59.0":
     resolution:
@@ -1189,7 +1187,6 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
-    libc: [glibc]
 
   "@rollup/rollup-linux-riscv64-musl@4.59.0":
     resolution:
@@ -1198,7 +1195,6 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
-    libc: [musl]
 
   "@rollup/rollup-linux-s390x-gnu@4.59.0":
     resolution:
@@ -1207,7 +1203,6 @@ packages:
       }
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   "@rollup/rollup-linux-x64-gnu@4.59.0":
     resolution:
@@ -1216,7 +1211,6 @@ packages:
       }
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   "@rollup/rollup-linux-x64-musl@4.59.0":
     resolution:
@@ -1225,7 +1219,6 @@ packages:
       }
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   "@rollup/rollup-openbsd-x64@4.59.0":
     resolution:
@@ -1619,10 +1612,24 @@ packages:
         integrity: sha512-fB2V0JFrQSMsCo9HiSq3Ezpdv4iYaXRG1Sx8edX3MwxfyNn83mKiGzOcH+Fkxt4MHxr3y42fQi1oeAInqgX2QA==,
       }
 
+  "@xterm/addon-canvas@0.7.0":
+    resolution:
+      {
+        integrity: sha512-LF5LYcfvefJuJ7QotNRdRSPc9YASAVDeoT5uyXS/nZshZXjYplGXRECBGiznwvhNL2I8bq1Lf5MzRwstsYQ2Iw==,
+      }
+    peerDependencies:
+      "@xterm/xterm": ^5.0.0
+
   "@xterm/addon-fit@0.11.0":
     resolution:
       {
         integrity: sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==,
+      }
+
+  "@xterm/addon-unicode11@0.9.0":
+    resolution:
+      {
+        integrity: sha512-FxDnYcyuXhNl+XSqGZL/t0U9eiNb/q3EWT5rYkQT/zuig8Gz/VagnQANKHdDWFM2lTMk9ly0EFQxxxtZUoRetw==,
       }
 
   "@xterm/addon-webgl@0.20.0-beta.194":
@@ -5707,7 +5714,13 @@ snapshots:
       loupe: 3.2.1
       tinyrainbow: 2.0.0
 
+  "@xterm/addon-canvas@0.7.0(@xterm/xterm@6.0.0)":
+    dependencies:
+      "@xterm/xterm": 6.0.0
+
   "@xterm/addon-fit@0.11.0": {}
+
+  "@xterm/addon-unicode11@0.9.0": {}
 
   "@xterm/addon-webgl@0.20.0-beta.194(@xterm/xterm@6.0.0)":
     dependencies:

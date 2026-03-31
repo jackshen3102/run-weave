@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
-import type { TerminalSessionStatusResponse } from "@browser-viewer/shared";
+import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
+import type { TerminalSessionStatusResponse } from "@browser-viewer/shared";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useTerminalConnection } from "../features/terminal/use-terminal-connection";
@@ -52,15 +54,21 @@ export function TerminalPage({
   const [requestError, setRequestError] = useState<string | null>(null);
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const renderedOutputLengthRef = useRef(0);
+
+  // RAF-based write batching: accumulate chunks within a frame, flush in one write.
+  const pendingChunksRef = useRef<string[]>([]);
+  const rafIdRef = useRef<number | null>(null);
+  const writeChunkRef = useRef<((data: string) => void) | null>(null);
+
+  const onOutput = useCallback((data: string) => {
+    writeChunkRef.current?.(data);
+  }, []);
+
   const {
     connectionStatus,
     terminalStatus,
     exitCode,
     error,
-    output,
-    clearOutput,
     sendInput,
     sendResize,
   } = useTerminalConnection({
@@ -68,7 +76,9 @@ export function TerminalPage({
     terminalSessionId,
     token,
     onAuthExpired,
+    onOutput,
   });
+
   const renderedCommand = useMemo(() => {
     return session ? renderCommand(session.command, session.args) : "Loading...";
   }, [session]);
@@ -90,11 +100,14 @@ export function TerminalPage({
     }
 
     const fitAddon = new FitAddon();
+    const unicode11Addon = new Unicode11Addon();
     const terminal = new Terminal({
+      allowProposedApi: true,
       cursorBlink: true,
       fontFamily: "\"Fira Code\", \"SFMono-Regular\", ui-monospace, monospace",
       fontSize: 14,
       lineHeight: 1.2,
+      scrollback: 5000,
       theme: {
         background: "#0f172a",
         foreground: "#e2e8f0",
@@ -104,13 +117,53 @@ export function TerminalPage({
     });
 
     terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-    renderedOutputLengthRef.current = 0;
 
     terminal.loadAddon(fitAddon);
+    terminal.loadAddon(unicode11Addon);
     terminal.open(container);
-    terminal.loadAddon(new WebglAddon());
+    terminal.unicode.activeVersion = "11";
+
+    // Renderer: try WebGL → Canvas → DOM fallback.
+    (() => {
+      try {
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => {
+          webgl.dispose();
+          try {
+            terminal.loadAddon(new CanvasAddon());
+          } catch {
+            // fall through to DOM renderer
+          }
+        });
+        terminal.loadAddon(webgl);
+      } catch {
+        try {
+          terminal.loadAddon(new CanvasAddon());
+        } catch {
+          // DOM renderer is the implicit fallback
+        }
+      }
+    })();
+
     terminal.focus();
+
+    // RAF batching: buffer chunks arriving within the same frame and flush together.
+    const flushPending = () => {
+      rafIdRef.current = null;
+      if (!terminalRef.current || pendingChunksRef.current.length === 0) {
+        return;
+      }
+      const batch = pendingChunksRef.current.join("");
+      pendingChunksRef.current = [];
+      terminalRef.current.write(batch);
+    };
+
+    writeChunkRef.current = (data: string) => {
+      pendingChunksRef.current.push(data);
+      if (rafIdRef.current === null) {
+        rafIdRef.current = requestAnimationFrame(flushPending);
+      }
+    };
 
     const syncSize = () => {
       fitAddon.fit();
@@ -131,51 +184,33 @@ export function TerminalPage({
     syncSize();
 
     let resizeObserver: ResizeObserver | null = null;
-    const handleWindowResize = () => {
-      syncSize();
-    };
-
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(() => {
         syncSize();
       });
       resizeObserver.observe(container);
     } else {
-      window.addEventListener("resize", handleWindowResize);
+      window.addEventListener("resize", syncSize);
     }
 
     return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      pendingChunksRef.current = [];
+      writeChunkRef.current = null;
+
       if (resizeObserver) {
         resizeObserver.disconnect();
       } else {
-        window.removeEventListener("resize", handleWindowResize);
+        window.removeEventListener("resize", syncSize);
       }
       dataDisposable.dispose();
       terminal.dispose();
       terminalRef.current = null;
-      fitAddonRef.current = null;
-      renderedOutputLengthRef.current = 0;
-      clearOutput();
     };
-  }, [clearOutput, sendInput, sendResize, terminalSessionId]);
-
-  useEffect(() => {
-    const terminal = terminalRef.current;
-    if (!terminal) {
-      return;
-    }
-
-    const nextChunk =
-      output.length >= renderedOutputLengthRef.current
-        ? output.slice(renderedOutputLengthRef.current)
-        : output;
-    if (!nextChunk) {
-      return;
-    }
-
-    terminal.write(nextChunk);
-    renderedOutputLengthRef.current = output.length;
-  }, [output]);
+  }, [sendInput, sendResize, terminalSessionId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,9 +265,6 @@ export function TerminalPage({
             onFocus={() => terminalRef.current?.focus()}
             ref={terminalContainerRef}
           />
-          <pre aria-label="Terminal output" className="sr-only">
-            {output || "$ "}
-          </pre>
         </div>
       </main>
     </div>
