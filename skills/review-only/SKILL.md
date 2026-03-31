@@ -129,3 +129,5 @@ In Hardcore Mode, at least 2 candidate approaches are mandatory for the architec
 - Validate suspected issues with commands/reads before reporting.
 - Prefer architecture and behavior risks over cosmetic comments.
 - Explicitly call out “self-built wheel” cases with replacement candidates.
+
+!!! 必须用中文回复
