@@ -28,7 +28,7 @@ test("control panel page loads", async ({ page, request }) => {
   const token = await loginAndSeedToken(request, page);
   await page.goto("/");
   await expect(page.getByText("Browser Viewer")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sessions" })).toBeVisible();
+  await expect(page.getByText("Sessions", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "New Browser" })).toBeVisible();
 
   const createSessionResponse = await request.post(
