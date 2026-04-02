@@ -6,12 +6,12 @@ import reactRefresh from "eslint-plugin-react-refresh";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**"],
+    ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "electron/release/**"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["backend/src/**/*.ts", "packages/shared/src/**/*.ts"],
+    files: ["backend/src/**/*.ts", "packages/shared/src/**/*.ts", "electron/src/**/*.ts"],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -19,7 +19,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["*.mjs"],
+    files: ["*.mjs", "**/*.mjs"],
     languageOptions: {
       globals: {
         ...globals.node,

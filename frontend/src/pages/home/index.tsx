@@ -22,9 +22,11 @@ interface HomePageProps {
   apiBase: string;
   token: string;
   clearToken: () => void;
+  connectionName?: string;
+  onSwitchConnection?: () => void;
 }
 
-export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
+export function HomePage({ apiBase, token, clearToken, connectionName, onSwitchConnection }: HomePageProps) {
   const navigate = useNavigate();
   const [sessionSourceType, setSessionSourceType] = useState<
     "launch" | "connect-cdp"
@@ -328,6 +330,8 @@ export function HomePage({ apiBase, token, clearToken }: HomePageProps) {
         <HomeHeader
           sessionCount={sessions.length}
           terminalLoading={terminalLoading}
+          connectionName={connectionName}
+          onSwitchConnection={onSwitchConnection}
           onOpenSessions={() => setIsSessionDrawerOpen(true)}
           onOpenTerminal={() => {
             void createTerminal();

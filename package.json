@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node ./dev.mjs",
     "dev:headed": "BROWSER_HEADLESS=false node ./dev.mjs",
+    "dev:electron": "node ./electron-dev.mjs",
+    "dev:electron:headed": "BROWSER_HEADLESS=false node ./electron-dev.mjs",
     "prestart": "pnpm build",
     "start": "pnpm --filter ./backend start -- --host 127.0.0.1 --port 5001",
     "build": "pnpm -r build",
@@ -37,5 +39,12 @@
     "prettier": "^3.5.3",
     "typescript-eslint": "^8.26.0",
     "typescript": "^5.8.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "better-sqlite3",
+      "node-pty"
+    ]
   }
 }

@@ -109,7 +109,7 @@ function resolveFrontendDistDir(): string {
 }
 
 function resolveSessionRestoreEnabled(env: NodeJS.ProcessEnv): boolean {
-  return env.SESSION_RESTORE_ENABLED?.trim().toLowerCase() !== "false";
+  return env.SESSION_RESTORE_ENABLED?.trim().toLowerCase() === "true";
 }
 
 async function createRuntimeServices(): Promise<RuntimeServices> {

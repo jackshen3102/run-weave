@@ -11,3 +11,4 @@ backend/.browser-profile
 backend/.env
 .runtime/
 artifacts/
+electron/release/

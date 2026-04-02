@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TerminalSessionListItem } from "@browser-viewer/shared";
-import { Plus, X } from "lucide-react";
+import { Home, Plus, X } from "lucide-react";
 import { HttpError } from "../../services/http";
 import {
   createTerminalSession,
@@ -16,6 +16,7 @@ interface TerminalWorkspaceProps {
   initialTerminalSessionId?: string;
   onActiveSessionChange?: (terminalSessionId: string) => void;
   onNoSessionAvailable?: () => void;
+  onNavigateHome?: () => void;
   onAuthExpired?: () => void;
   className?: string;
 }
@@ -31,6 +32,7 @@ export function TerminalWorkspace({
   initialTerminalSessionId,
   onActiveSessionChange,
   onNoSessionAvailable,
+  onNavigateHome,
   onAuthExpired,
   className,
 }: TerminalWorkspaceProps) {
@@ -216,6 +218,17 @@ export function TerminalWorkspace({
             <Plus className="mr-1 h-4 w-4" />
             New
           </Button>
+          {onNavigateHome && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-9 shrink-0 rounded-full px-3"
+              onClick={onNavigateHome}
+            >
+              <Home className="h-4 w-4" />
+            </Button>
+          )}
         </div>
 
         {requestError ? (

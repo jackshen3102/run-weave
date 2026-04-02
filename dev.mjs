@@ -1,5 +1,5 @@
 import net from "node:net";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const FORCE_SHUTDOWN_TIMEOUT_MS = 5_000;
@@ -86,7 +86,7 @@ async function isPortAvailable(port, host) {
   return result === true;
 }
 
-async function resolvePort(startPort, options = {}) {
+export async function resolvePort(startPort, options = {}) {
   const reservedPorts = options.reservedPorts ?? new Set();
   const host = options.host;
   let port = startPort;
@@ -96,13 +96,13 @@ async function resolvePort(startPort, options = {}) {
   return port;
 }
 
-function delay(ms) {
+export function delay(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
 }
 
-function spawnManagedProcess(name, args, env) {
+export function spawnManagedProcess(name, args, env) {
   return {
     name,
     child: spawn("pnpm", args, {
@@ -112,7 +112,17 @@ function spawnManagedProcess(name, args, env) {
   };
 }
 
-function childHasExited(processInfo) {
+export function spawnRawProcess(name, command, args, env) {
+  return {
+    name,
+    child: spawn(command, args, {
+      env,
+      stdio: "inherit",
+    }),
+  };
+}
+
+export function childHasExited(processInfo) {
   return (
     processInfo.child.exitCode !== null || processInfo.child.signalCode !== null
   );
@@ -133,7 +143,7 @@ function waitForExit(processInfo) {
   });
 }
 
-async function stopProcesses(processes) {
+export async function stopProcesses(processes) {
   const aliveProcesses = processes.filter(
     (processInfo) => !childHasExited(processInfo),
   );
@@ -164,7 +174,7 @@ async function stopProcesses(processes) {
   await exits;
 }
 
-async function waitForBackendReady(backend, backendUrl) {
+export async function waitForBackendReady(backend, backendUrl) {
   const healthUrl = `${backendUrl}/health`;
   const healthcheckTimeoutMs = resolveHealthcheckTimeoutMs();
   const deadline = Date.now() + healthcheckTimeoutMs;
@@ -201,16 +211,8 @@ async function waitForBackendReady(backend, backendUrl) {
   );
 }
 
-async function run() {
-  const reservedPorts = new Set();
-
-  const backendPort = await resolvePort(DEFAULT_BACKEND_PORT, {
-    reservedPorts,
-    host: DEV_HOST,
-  });
-  reservedPorts.add(backendPort);
-
-  const backend = spawnManagedProcess(
+export function startBackend({ host, backendPort, env }) {
+  return spawnManagedProcess(
     "backend",
     [
       "-C",
@@ -220,30 +222,14 @@ async function run() {
       "--port",
       String(backendPort),
       "--host",
-      DEV_HOST,
+      host,
     ],
-    createBackendEnv({
-      baseEnv: process.env,
-      backendPort,
-    }),
+    createBackendEnv({ baseEnv: env, backendPort }),
   );
+}
 
-  const backendUrl = `http://localhost:${backendPort}`;
-
-  try {
-    await waitForBackendReady(backend, backendUrl);
-  } catch (error) {
-    await stopProcesses([backend]);
-    throw error;
-  }
-
-  const frontendPort = await resolvePort(DEFAULT_FRONTEND_PORT, {
-    reservedPorts,
-    host: DEV_HOST,
-  });
-  reservedPorts.add(frontendPort);
-
-  const frontend = spawnManagedProcess(
+export function startFrontend({ host, backendPort, frontendPort, env }) {
+  return spawnManagedProcess(
     "frontend",
     [
       "-C",
@@ -253,20 +239,19 @@ async function run() {
       "--port",
       String(frontendPort),
       "--host",
-      DEV_HOST,
+      host,
     ],
     createFrontendEnv({
-      baseEnv: process.env,
+      baseEnv: env,
       backendPort,
       frontendPort,
-      frontendHost: DEV_HOST,
-      VITE_DEV_PORT: frontendPort,
+      frontendHost: host,
     }),
   );
+}
 
-  const processes = [backend, frontend];
-
-  await new Promise((resolve) => {
+export function watchProcesses(processes, { logPrefix = "[dev]" } = {}) {
+  return new Promise((resolve) => {
     let stopping = false;
 
     const cleanup = () => {
@@ -289,25 +274,19 @@ async function run() {
       void stopAndResolve(0);
     };
 
-    const handleExit = (processInfo, code) => {
-      if (stopping) {
-        return;
-      }
-
-      void stopAndResolve(code ?? 1);
-    };
-
     process.on("SIGINT", handleSignal);
     process.on("SIGTERM", handleSignal);
 
     for (const processInfo of processes) {
       processInfo.child.on("error", (error) => {
-        console.error(`[dev] ${processInfo.name} failed to start`, error);
+        console.error(`${logPrefix} ${processInfo.name} failed to start`, error);
         void stopAndResolve(1);
       });
 
-      processInfo.child.on("exit", (code, signal) => {
-        handleExit(processInfo, code, signal);
+      processInfo.child.on("exit", (code) => {
+        if (!stopping) {
+          void stopAndResolve(code ?? 1);
+        }
       });
     }
   }).then((exitCode) => {
@@ -315,6 +294,61 @@ async function run() {
       process.exit(exitCode);
     }
   });
+}
+
+export function resolveElectronBin(electronDir) {
+  return execFileSync(
+    "node",
+    ["-e", "process.stdout.write(require('electron'))"],
+    { cwd: electronDir, encoding: "utf-8" },
+  ).trim();
+}
+
+export function bundleElectron(electronDir) {
+  execFileSync("node", ["scripts/bundle.mjs"], {
+    cwd: electronDir,
+    stdio: "inherit",
+  });
+}
+
+async function run() {
+  const reservedPorts = new Set();
+
+  const backendPort = await resolvePort(DEFAULT_BACKEND_PORT, {
+    reservedPorts,
+    host: DEV_HOST,
+  });
+  reservedPorts.add(backendPort);
+
+  const backend = startBackend({
+    host: DEV_HOST,
+    backendPort,
+    env: process.env,
+  });
+
+  const backendUrl = `http://localhost:${backendPort}`;
+
+  try {
+    await waitForBackendReady(backend, backendUrl);
+  } catch (error) {
+    await stopProcesses([backend]);
+    throw error;
+  }
+
+  const frontendPort = await resolvePort(DEFAULT_FRONTEND_PORT, {
+    reservedPorts,
+    host: DEV_HOST,
+  });
+  reservedPorts.add(frontendPort);
+
+  const frontend = startFrontend({
+    host: DEV_HOST,
+    backendPort,
+    frontendPort,
+    env: process.env,
+  });
+
+  await watchProcesses([backend, frontend]);
 }
 
 const isDirectExecution =

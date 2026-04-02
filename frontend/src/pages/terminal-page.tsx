@@ -37,6 +37,9 @@ export function TerminalRoutePage({
         onNoSessionAvailable={() => {
           navigate("/", { replace: true });
         }}
+        onNavigateHome={() => {
+          navigate("/");
+        }}
         onAuthExpired={onAuthExpired}
       />
     </main>

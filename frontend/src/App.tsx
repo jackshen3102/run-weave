@@ -1,33 +1,93 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuthToken } from "./features/auth/use-auth-token";
+import { useConnections } from "./features/connection/use-connections";
 import { HomePage } from "./pages/home-page";
 import { LoginPage } from "./pages/login-page";
+import { ConnectionsPage } from "./pages/connections-page";
 import { TerminalRoutePage } from "./pages/terminal-page";
 import { ViewerPage } from "./pages/viewer-page";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
+const CONNECTIONS_STORAGE_KEY = "viewer.connections";
+
+declare global {
+  interface Window {
+    electronAPI?: { isElectron: boolean; platform: string };
+  }
+}
+
+const isElectron = window.electronAPI?.isElectron === true;
 
 export default function App() {
   const { token, setToken, clearToken } = useAuthToken(AUTH_TOKEN_STORAGE_KEY);
+  const {
+    connections,
+    activeConnection,
+    addConnection,
+    removeConnection,
+    updateConnection,
+    setActive,
+  } = useConnections(CONNECTIONS_STORAGE_KEY);
+
+  const apiBase = isElectron ? (activeConnection?.url ?? "") : WEB_API_BASE;
+
+  const needsConnection = isElectron && (!activeConnection || !apiBase);
+
+  const handleSelectConnection = (id: string) => {
+    setActive(id);
+    clearToken();
+  };
+
+  const handleAddConnection = (name: string, url: string) => {
+    addConnection(name, url);
+    clearToken();
+  };
 
   return (
     <Routes>
+      {isElectron && (
+        <Route
+          path="/connections"
+          element={
+            <ConnectionsPage
+              connections={connections}
+              activeId={activeConnection?.id ?? null}
+              onAdd={handleAddConnection}
+              onRemove={removeConnection}
+              onSelect={handleSelectConnection}
+              onEdit={updateConnection}
+            />
+          }
+        />
+      )}
       <Route
         path="/login"
         element={
-          token ? (
+          needsConnection ? (
+            <Navigate to="/connections" replace />
+          ) : token ? (
             <Navigate to="/" replace />
           ) : (
-            <LoginPage apiBase={API_BASE} onSuccess={setToken} />
+            <LoginPage apiBase={apiBase} onSuccess={setToken} />
           )
         }
       />
       <Route
         path="/"
         element={
-          token ? (
-            <HomePage apiBase={API_BASE} token={token} clearToken={clearToken} />
+          needsConnection ? (
+            <Navigate to="/connections" replace />
+          ) : token ? (
+            <HomePage
+              apiBase={apiBase}
+              token={token}
+              clearToken={clearToken}
+              connectionName={isElectron ? activeConnection?.name : undefined}
+              onSwitchConnection={
+                isElectron ? () => window.location.assign("/connections") : undefined
+              }
+            />
           ) : (
             <Navigate to="/login" replace />
           )
@@ -36,9 +96,11 @@ export default function App() {
       <Route
         path="/viewer/:sessionId"
         element={
-          token ? (
+          needsConnection ? (
+            <Navigate to="/connections" replace />
+          ) : token ? (
             <ViewerPage
-              apiBase={API_BASE}
+              apiBase={apiBase}
               token={token}
               onAuthExpired={clearToken}
             />
@@ -50,9 +112,11 @@ export default function App() {
       <Route
         path="/terminal/:terminalSessionId"
         element={
-          token ? (
+          needsConnection ? (
+            <Navigate to="/connections" replace />
+          ) : token ? (
             <TerminalRoutePage
-              apiBase={API_BASE}
+              apiBase={apiBase}
               token={token}
               onAuthExpired={clearToken}
             />
@@ -63,7 +127,12 @@ export default function App() {
       />
       <Route
         path="*"
-        element={<Navigate to={token ? "/" : "/login"} replace />}
+        element={
+          <Navigate
+            to={needsConnection ? "/connections" : token ? "/" : "/login"}
+            replace
+          />
+        }
       />
     </Routes>
   );
