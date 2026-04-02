@@ -6,11 +6,13 @@
 
 - 前端：React + Vite
 - 后端：Express + WebSocket + Playwright 控制
+- Electron 桌面客户端：electron/（多后端连接管理）
 - 共享协议：packages/shared
 
 ## 最小命令
 
 - 开发：`pnpm dev`
+- Electron 开发：`pnpm dev:electron`
 - 构建：`pnpm build`
 - 类型检查：`pnpm typecheck`
 - Lint：`pnpm lint`

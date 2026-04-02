@@ -68,7 +68,7 @@ function createWindow(): BrowserWindow {
     win.loadURL(`${CUSTOM_PROTOCOL}://./index.html`);
   }
 
-  setupCSP(win);
+  setupSessionIntercept(win);
 
   return win;
 }
@@ -89,19 +89,12 @@ function isBackendRequest(url: string): boolean {
   }
 }
 
-function setupCSP(win: BrowserWindow) {
+function setupSessionIntercept(win: BrowserWindow) {
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const headers: Record<string, string[]> = { ...details.responseHeaders };
 
-    const csp = [
-      "default-src 'self'",
-      `connect-src 'self' * ${CUSTOM_PROTOCOL}:`,
-      "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline'",
-      `img-src 'self' data: ${CUSTOM_PROTOCOL}:`,
-      "font-src 'self' data:",
-    ].join("; ");
-    headers["Content-Security-Policy"] = [csp];
+    delete headers["content-security-policy"];
+    delete headers["Content-Security-Policy"];
 
     if (isBackendRequest(details.url)) {
       headers["Access-Control-Allow-Origin"] = ["*"];
@@ -114,6 +107,8 @@ function setupCSP(win: BrowserWindow) {
     callback({ responseHeaders: headers });
   });
 }
+
+app.commandLine.appendSwitch("ignore-certificate-errors");
 
 app.whenReady().then(() => {
   if (!isDev) {

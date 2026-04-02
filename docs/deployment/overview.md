@@ -24,3 +24,11 @@
 - `deploy/nginx/nginx.conf.example`
 - `deploy/nginx/openssl-san.cnf.example`
 - `deploy/whistle/proxy.md`
+
+## Electron 桌面客户端
+
+- 开发：`pnpm dev:electron`（启动后端 + 前端 + Electron 窗口）
+- 带浏览器界面开发：`pnpm dev:electron:headed`
+- 默认监听 `0.0.0.0`，可通过 `DEV_HOST` 环境变量覆盖
+- 构建配置：`electron/electron-builder.yml`
+- Electron 客户端支持多后端连接管理，用户可在连接页面添加、切换不同后端地址
