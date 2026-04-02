@@ -4,8 +4,6 @@ const shared = {
   bundle: true,
   platform: "node",
   external: ["electron"],
-  format: "esm",
-  outExtension: { ".js": ".mjs" },
   sourcemap: true,
   target: "node20",
 };
@@ -14,7 +12,8 @@ await build({
   ...shared,
   entryPoints: ["src/main.ts"],
   outdir: "dist",
-  external: [...shared.external, "electron-updater"],
+  format: "cjs",
+  outExtension: { ".js": ".cjs" },
 });
 
 await build({

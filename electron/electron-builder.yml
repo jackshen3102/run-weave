@@ -2,6 +2,8 @@ appId: com.browser-viewer.desktop
 productName: Browser Viewer
 copyright: Copyright © 2024
 
+npmRebuild: false
+
 directories:
   buildResources: resources
   output: release
@@ -10,6 +12,7 @@ files:
   - dist/**/*
   - resources/**/*
   - "!resources/icons/raw/**"
+  - "!node_modules/**/*"
 
 extraResources:
   - from: ../frontend/dist
@@ -18,6 +21,7 @@ extraResources:
       - "**/*"
 
 mac:
+  icon: resources/icons/icon.icns
   category: public.app-category.developer-tools
   target:
     - target: dmg

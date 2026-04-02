@@ -74,7 +74,7 @@ async function run() {
   const electron = spawnRawProcess(
     "electron",
     electronBin,
-    [path.join(electronDir, "dist/main.mjs")],
+    [path.join(electronDir, "dist/main.cjs")],
     {
       ...process.env,
       BROWSER_VIEWER_DEV_URL: `http://localhost:${frontendPort}`,

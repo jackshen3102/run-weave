@@ -367,7 +367,8 @@ describe("App", () => {
 
   it("requires a session name before creating a session", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
-    const fetchMock = vi.fn(async (url: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const fetchMock = vi.fn(async (url: string, _options?: RequestInit) => {
       if (url === "/api/session/cdp-endpoint-default") {
         return jsonResponse({ endpoint: "http://127.0.0.1:9333" });
       }

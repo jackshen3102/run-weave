@@ -5,12 +5,9 @@ import {
   net,
 } from "electron";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { createTray } from "./tray.js";
 import { initAutoUpdater, checkForUpdates } from "./updater.js";
 import { getIsQuitting, setIsQuitting } from "./app-state.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = !app.isPackaged;
 
@@ -21,6 +18,19 @@ const RENDERER_DIST = path.join(__dirname, "../../frontend/dist");
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 
 const CUSTOM_PROTOCOL = "browser-viewer";
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: CUSTOM_PROTOCOL,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+]);
 
 function registerCustomProtocol() {
   protocol.handle(CUSTOM_PROTOCOL, (request) => {
@@ -65,7 +75,7 @@ function createWindow(): BrowserWindow {
     win.loadURL(DEV_SERVER_URL);
     win.webContents.openDevTools({ mode: "detach" });
   } else {
-    win.loadURL(`${CUSTOM_PROTOCOL}://./index.html`);
+    win.loadURL(`${CUSTOM_PROTOCOL}://app/index.html`);
   }
 
   setupSessionIntercept(win);

@@ -1,10 +1,7 @@
 import { Tray, Menu, BrowserWindow, app, nativeImage } from "electron";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { checkForUpdates } from "./updater.js";
 import { setIsQuitting } from "./app-state.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let tray: Tray | null = null;
 
