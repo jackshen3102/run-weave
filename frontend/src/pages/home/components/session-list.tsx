@@ -3,9 +3,8 @@ import { SessionListItem as SessionCard } from "./session-list-item";
 
 interface SessionListProps {
   sessions: SessionListItem[];
+  loadingSessions: boolean;
   deletingSessionId: string | null;
-  activeSessionMenuId: string | null;
-  onToggleMenu: (sessionId: string) => void;
   onRenameSession: (sessionId: string) => void;
   onRemoveSession: (sessionId: string) => void;
   onResumeSession: (sessionId: string) => void;
@@ -13,17 +12,24 @@ interface SessionListProps {
 
 export function SessionList({
   sessions,
+  loadingSessions,
   deletingSessionId,
-  activeSessionMenuId,
-  onToggleMenu,
   onRenameSession,
   onRemoveSession,
   onResumeSession,
 }: SessionListProps) {
+  if (loadingSessions && sessions.length === 0) {
+    return (
+      <div className="rounded-[1.25rem] border border-dashed border-border/60 px-5 py-6 text-sm text-muted-foreground">
+        Loading sessions...
+      </div>
+    );
+  }
+
   if (sessions.length === 0) {
     return (
-      <div className="rounded-[1.5rem] border border-dashed border-border/60 px-5 py-6 text-sm text-muted-foreground">
-        No other sessions.
+      <div className="rounded-[1.25rem] border border-dashed border-border/60 px-5 py-6 text-sm text-muted-foreground">
+        No sessions yet.
       </div>
     );
   }
@@ -32,15 +38,12 @@ export function SessionList({
     <>
       {sessions.map((session) => {
         const isDeleting = deletingSessionId === session.sessionId;
-        const isMenuOpen = activeSessionMenuId === session.sessionId;
 
         return (
           <SessionCard
             key={session.sessionId}
             session={session}
             isDeleting={isDeleting}
-            isMenuOpen={isMenuOpen}
-            onToggleMenu={() => onToggleMenu(session.sessionId)}
             onRename={() => onRenameSession(session.sessionId)}
             onRemove={() => onRemoveSession(session.sessionId)}
             onResume={() => onResumeSession(session.sessionId)}

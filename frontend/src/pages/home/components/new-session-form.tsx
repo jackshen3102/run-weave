@@ -34,8 +34,8 @@ export function NewSessionForm({
   error,
 }: NewSessionFormProps) {
   return (
-    <section className="animate-fade-rise mx-auto w-full max-w-[860px] rounded-[1.5rem] border border-border/60 bg-background/65 p-4 backdrop-blur-xl sm:p-5">
-      <div>
+    <section className="w-full rounded-[1.5rem] border border-border/60 bg-background/48 p-4 backdrop-blur-xl">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-medium uppercase tracking-[0.28em] text-muted-foreground/70">
           New Session
         </p>

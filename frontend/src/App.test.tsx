@@ -98,7 +98,7 @@ describe("App", () => {
     expect(screen.queryByText(/Advanced/)).not.toBeInTheDocument();
   });
 
-  it("shows proxy status for each session in the drawer", async () => {
+  it("renders session management inline on the home page without a sessions drawer", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
     vi.stubGlobal(
       "fetch",
@@ -136,11 +136,11 @@ describe("App", () => {
       expect(screen.getByText("New Session")).toBeInTheDocument();
     });
 
-    screen.getByRole("button", { name: "Sessions 2" }).click();
-
-    await waitFor(() => {
-      expect(screen.getByText("Quiet history.")).toBeInTheDocument();
-    });
+    expect(screen.queryByRole("button", { name: "Sessions 2" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Open Terminal" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
 
     expect(
       screen.getAllByText((content) => content.includes("Proxy enabled")).length,
@@ -159,9 +159,53 @@ describe("App", () => {
     expect(screen.getAllByText("CDP Playweight").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Default Playweight").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Open" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Rename" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Remove" }).length).toBeGreaterThan(0);
   });
 
-  it("shows the session name in the latest session card", async () => {
+  it("shows proxy and header metadata in the inline session list", async () => {
+    localStorage.setItem("viewer.auth.token", "token-1");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/session/cdp-endpoint-default") {
+          return jsonResponse({ endpoint: null });
+        }
+        if (url === "/api/session") {
+          return jsonResponse([
+            {
+              sessionId: "session-1",
+              name: "Default Playweight",
+              lastActivityAt: "2026-03-23T07:31:19.000Z",
+              connected: false,
+              proxyEnabled: true,
+              sourceType: "launch",
+              headers: {
+                "x-team": "alpha",
+              },
+            },
+          ]);
+        }
+        throw new Error(`Unhandled request: ${url}`);
+      }),
+    );
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Default Playweight").length).toBeGreaterThan(0);
+    });
+
+    expect(
+      screen.getAllByText((content) => content.includes("Proxy enabled")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((content) => content.includes("1 header")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("Quiet history.")).toBeNull();
+  });
+
+  it("shows the session name in the sessions list only", async () => {
     localStorage.setItem("viewer.auth.token", "token-1");
     vi.stubGlobal(
       "fetch",
@@ -185,10 +229,11 @@ describe("App", () => {
     renderApp();
 
     await waitFor(() => {
-      expect(screen.getByText("Latest Session")).toBeInTheDocument();
+      expect(screen.getByText("Sessions")).toBeInTheDocument();
     });
 
     expect(screen.getAllByText("CDP Playweight").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Latest Session")).toBeNull();
   });
 
   it("shows a CDP endpoint input and submits it when attaching to an existing browser", async () => {
@@ -349,8 +394,10 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(
-        ([url, options]) =>
-          url === "/api/session" && options?.method === "POST",
+        (call) => {
+          const [url, options] = call as [string, RequestInit?];
+          return url === "/api/session" && options?.method === "POST";
+        },
       ),
     ).toBe(false);
   });

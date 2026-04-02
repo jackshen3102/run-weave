@@ -2,9 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { SessionListItem } from "@browser-viewer/shared";
 import { HttpError } from "../../services/http";
-import {
-  createTerminalSession,
-} from "../../services/terminal";
+import { createTerminalSession } from "../../services/terminal";
 import {
   createSession as createBrowserSession,
   deleteSession as deleteBrowserSession,
@@ -13,9 +11,8 @@ import {
   updateSession as updateBrowserSession,
 } from "../../services/session";
 import { HomeHeader } from "./components/home-header";
-import { LatestSessionCard } from "./components/latest-session-card";
-import { NewSessionForm } from "./components/new-session-form";
-import { SessionDrawer } from "./components/session-drawer";
+import { HomeSidebar } from "./components/home-sidebar";
+import { SessionList } from "./components/session-list";
 import { parseSessionHeaders } from "./utils";
 
 interface HomePageProps {
@@ -26,7 +23,7 @@ interface HomePageProps {
   onSwitchConnection?: () => void;
 }
 
-export function HomePage({ apiBase, token, clearToken, connectionName, onSwitchConnection }: HomePageProps) {
+export function HomePage({ apiBase, token, clearToken, connectionName }: HomePageProps) {
   const navigate = useNavigate();
   const [sessionSourceType, setSessionSourceType] = useState<
     "launch" | "connect-cdp"
@@ -49,10 +46,6 @@ export function HomePage({ apiBase, token, clearToken, connectionName, onSwitchC
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(
     null,
   );
-  const [isSessionDrawerOpen, setIsSessionDrawerOpen] = useState(false);
-  const [activeSessionMenuId, setActiveSessionMenuId] = useState<string | null>(
-    null,
-  );
 
   const sortedSessions = useMemo(() => {
     return [...sessions].sort((left, right) => {
@@ -62,8 +55,6 @@ export function HomePage({ apiBase, token, clearToken, connectionName, onSwitchC
       );
     });
   }, [sessions]);
-
-  const recentSession = sortedSessions[0] ?? null;
 
   const loadSessions = useCallback(async (): Promise<void> => {
     setLoadingSessions(true);
@@ -111,48 +102,6 @@ export function HomePage({ apiBase, token, clearToken, connectionName, onSwitchC
       cancelled = true;
     };
   }, [apiBase, token, cdpEndpointCustomized]);
-
-  useEffect(() => {
-    if (!isSessionDrawerOpen) {
-      setActiveSessionMenuId(null);
-      return;
-    }
-
-    void loadSessions();
-  }, [isSessionDrawerOpen, loadSessions]);
-
-  useEffect(() => {
-    if (!activeSessionMenuId) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent): void => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-
-      if (target.closest("[data-session-menu-root='true']")) {
-        return;
-      }
-
-      setActiveSessionMenuId(null);
-    };
-
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
-        setActiveSessionMenuId(null);
-      }
-    };
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [activeSessionMenuId]);
 
   const enterSession = (sessionId: string): void => {
     navigate(`/viewer/${encodeURIComponent(sessionId)}`);
@@ -284,7 +233,6 @@ export function HomePage({ apiBase, token, clearToken, connectionName, onSwitchC
         token,
       );
       await loadSessions();
-      setIsSessionDrawerOpen(false);
       enterSession(data.sessionId);
     } catch (createError) {
       if (createError instanceof HttpError && createError.status === 401) {
@@ -326,13 +274,10 @@ export function HomePage({ apiBase, token, clearToken, connectionName, onSwitchC
   return (
     <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-8 sm:py-8">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217,226,211,0.75),transparent_32%),radial-gradient(circle_at_80%_20%,rgba(68,136,146,0.16),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(191,166,122,0.18),transparent_28%)]" />
-      <div className="relative mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col gap-8">
+      <div className="relative mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl flex-col gap-8">
         <HomeHeader
-          sessionCount={sessions.length}
           terminalLoading={terminalLoading}
           connectionName={connectionName}
-          onSwitchConnection={onSwitchConnection}
-          onOpenSessions={() => setIsSessionDrawerOpen(true)}
           onOpenTerminal={() => {
             void createTerminal();
           }}
@@ -348,68 +293,64 @@ export function HomePage({ apiBase, token, clearToken, connectionName, onSwitchC
           </p>
         ) : null}
 
-        <section className="flex flex-1 items-center pb-4 pt-2 sm:pt-4">
-          <div className="w-full">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
-              <LatestSessionCard session={recentSession} onEnterSession={enterSession} />
+        <section className="grid flex-1 gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+          <HomeSidebar
+            sessionSourceType={sessionSourceType}
+            onSessionSourceTypeChange={changeSessionSourceType}
+            sessionName={sessionName}
+            onSessionNameChange={(value) => {
+              setSessionName(value);
+              setSessionNameCustomized(
+                value.trim() !== "" &&
+                  value.trim() !== getDefaultSessionName(sessionSourceType),
+              );
+            }}
+            cdpEndpoint={cdpEndpoint}
+            cdpEndpointPlaceholder={defaultCdpEndpoint}
+            onCdpEndpointChange={(value) => {
+              setCdpEndpointCustomized(true);
+              setCdpEndpoint(value);
+            }}
+            proxyEnabled={proxyEnabled}
+            onProxyEnabledChange={setProxyEnabled}
+            requestHeadersInput={requestHeadersInput}
+            onRequestHeadersInputChange={setRequestHeadersInput}
+            loading={loading}
+            onSubmitSession={() => {
+              void createSession();
+            }}
+            error={error}
+          />
 
-              <NewSessionForm
-                sessionSourceType={sessionSourceType}
-                onSessionSourceTypeChange={changeSessionSourceType}
-                sessionName={sessionName}
-                onSessionNameChange={(value) => {
-                  setSessionName(value);
-                  setSessionNameCustomized(
-                    value.trim() !== "" &&
-                      value.trim() !== getDefaultSessionName(sessionSourceType),
-                  );
+          <section className="flex min-h-[200px] flex-col rounded-[2rem] border border-border/60 bg-card/75 p-6 shadow-[0_30px_120px_-70px_rgba(17,24,39,0.65)] backdrop-blur-xl sm:p-8">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.28em] text-muted-foreground/70">
+                  Sessions
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {loadingSessions ? "Refreshing quietly..." : `${sortedSessions.length} total`}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+              <SessionList
+                sessions={sortedSessions}
+                loadingSessions={loadingSessions}
+                deletingSessionId={deletingSessionId}
+                onRenameSession={(sessionId) => {
+                  void renameSession(sessionId);
                 }}
-                cdpEndpoint={cdpEndpoint}
-                cdpEndpointPlaceholder={defaultCdpEndpoint}
-                onCdpEndpointChange={(value) => {
-                  setCdpEndpointCustomized(true);
-                  setCdpEndpoint(value);
+                onRemoveSession={(sessionId) => {
+                  void removeSession(sessionId);
                 }}
-                proxyEnabled={proxyEnabled}
-                onProxyEnabledChange={setProxyEnabled}
-                requestHeadersInput={requestHeadersInput}
-                onRequestHeadersInputChange={setRequestHeadersInput}
-                loading={loading}
-                onSubmit={() => {
-                  void createSession();
-                }}
-                error={error}
+                onResumeSession={enterSession}
               />
             </div>
-          </div>
+          </section>
         </section>
       </div>
-
-      <SessionDrawer
-        isOpen={isSessionDrawerOpen}
-        loadingSessions={loadingSessions}
-        sessions={sortedSessions}
-        deletingSessionId={deletingSessionId}
-        activeSessionMenuId={activeSessionMenuId}
-        onClose={() => setIsSessionDrawerOpen(false)}
-        onToggleMenu={(sessionId) => {
-          setActiveSessionMenuId((currentId) => {
-            return currentId === sessionId ? null : sessionId;
-          });
-        }}
-        onRenameSession={(sessionId) => {
-          setActiveSessionMenuId(null);
-          void renameSession(sessionId);
-        }}
-        onRemoveSession={(sessionId) => {
-          setActiveSessionMenuId(null);
-          void removeSession(sessionId);
-        }}
-        onResumeSession={(sessionId) => {
-          setIsSessionDrawerOpen(false);
-          enterSession(sessionId);
-        }}
-      />
     </main>
   );
 }
