@@ -51,8 +51,10 @@ pnpm --filter ./backend start -- --host 127.0.0.1 --port 5001
 - `BROWSER_PROFILE_DIR`: persistent browser profile directory used by Playwright.
   - Default: `~/.browser-profile`.
   - Set this to a custom path if you want to reuse or isolate login state.
-- `SESSION_DB_FILE`: sqlite session DB path.
-  - Default: `<BROWSER_PROFILE_DIR>/session-store.db`.
+- `SESSION_STORE_FILE`: persisted browser session store path.
+  - Default: `<BROWSER_PROFILE_DIR>/session-store.json`.
+- `TERMINAL_SESSION_STORE_FILE`: persisted terminal session store path.
+  - Default: `<BROWSER_PROFILE_DIR>/terminal-session-store.json`.
 - `BROWSER_HEADLESS`: browser headless mode switch.
   - Default: `true` (headless).
   - Set to `false` to run headed for debugging.

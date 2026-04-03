@@ -13,7 +13,7 @@ function createStoreMock() {
     getSession: vi.fn(async () => null),
     insertSession: vi.fn(async () => undefined),
     updateSessionName: vi.fn(async () => undefined),
-    appendSessionScrollback: vi.fn(async () => undefined),
+    updateSessionScrollback: vi.fn(async () => undefined),
     updateSessionExit: vi.fn(async () => undefined),
     deleteSession: vi.fn(async () => undefined),
   } satisfies TerminalSessionStore;
@@ -67,7 +67,8 @@ describe("TerminalSessionManager", () => {
     expect(manager.getSession(session.id)?.exitCode).toBe(130);
   });
 
-  it("appends output and caps scrollback", async () => {
+  it("appends output and flushes throttled scrollback snapshots", async () => {
+    vi.useFakeTimers();
     const store = createStoreMock();
     const manager = new TerminalSessionManager(store);
     const session = await manager.createSession({
@@ -79,16 +80,16 @@ describe("TerminalSessionManager", () => {
     manager.appendOutput(session.id, " world");
 
     expect(manager.getScrollback(session.id)).toBe("hello world");
-    expect(store.appendSessionScrollback).toHaveBeenCalledWith({
+    expect(store.updateSessionScrollback).not.toHaveBeenCalled();
+
+    await vi.runAllTimersAsync();
+
+    expect(store.updateSessionScrollback).toHaveBeenCalledTimes(1);
+    expect(store.updateSessionScrollback).toHaveBeenCalledWith({
       terminalSessionId: session.id,
-      chunk: "hello",
-      maxLength: 262144,
+      scrollback: "hello world",
     });
-    expect(store.appendSessionScrollback).toHaveBeenCalledWith({
-      terminalSessionId: session.id,
-      chunk: " world",
-      maxLength: 262144,
-    });
+    vi.useRealTimers();
   });
 
   it("deletes terminal sessions", async () => {

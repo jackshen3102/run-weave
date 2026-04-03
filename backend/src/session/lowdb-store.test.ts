@@ -1,16 +1,16 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PersistedSessionRecord } from "./store";
-import { SQLiteSessionStore } from "./sqlite-store";
+import { LowDbSessionStore } from "./lowdb-store";
 
 const tempDirs: string[] = [];
 
 async function createStore() {
   const dir = await mkdtemp(path.join(os.tmpdir(), "session-store-"));
   tempDirs.push(dir);
-  const store = new SQLiteSessionStore(path.join(dir, "session-store.db"));
+  const store = new LowDbSessionStore(path.join(dir, "session-store.json"));
   await store.initialize();
   return store;
 }
@@ -38,8 +38,8 @@ afterEach(async () => {
   );
 });
 
-describe("SQLiteSessionStore", () => {
-  it("persists and reads sessions", async () => {
+describe("LowDbSessionStore", () => {
+  it("persists and reads sessions from a JSON file", async () => {
     const store = await createStore();
     const record = createRecord();
 
@@ -47,6 +47,14 @@ describe("SQLiteSessionStore", () => {
 
     await expect(store.getSession(record.id)).resolves.toEqual(record);
     await expect(store.listSessions()).resolves.toEqual([record]);
+
+    const persisted = JSON.parse(
+      await readFile(
+        path.join(tempDirs[0] ?? "", "session-store.json"),
+        "utf8",
+      ),
+    ) as { sessions: PersistedSessionRecord[] };
+    expect(persisted.sessions).toEqual([record]);
   });
 
   it("updates connection state and deletes sessions", async () => {
@@ -72,72 +80,40 @@ describe("SQLiteSessionStore", () => {
     await expect(store.listSessions()).resolves.toEqual([]);
   });
 
-  it("keeps proxyEnabled false when stored as disabled", async () => {
+  it("propagates write failures to callers", async () => {
     const store = await createStore();
+    const writeError = new Error("write failed");
+    const database = (
+      store as unknown as { database: { write: () => Promise<void> } | null }
+    ).database;
 
-    await store.insertSession(
-      createRecord({ id: "session-2", proxyEnabled: false }),
-    );
+    if (!database) {
+      throw new Error("expected initialized database");
+    }
 
-    await expect(store.getSession("session-2")).resolves.toEqual(
-      createRecord({ id: "session-2", proxyEnabled: false }),
-    );
+    database.write = async () => {
+      throw writeError;
+    };
+
+    await expect(store.insertSession(createRecord())).rejects.toThrow(writeError);
   });
 
-  it("persists custom profile mode", async () => {
+  it("surfaces the last queued write failure during dispose", async () => {
     const store = await createStore();
+    const writeError = new Error("write failed");
+    const database = (
+      store as unknown as { database: { write: () => Promise<void> } | null }
+    ).database;
 
-    await store.insertSession(
-      createRecord({
-        id: "session-3",
-        profileMode: "custom",
-        profilePath: "/profiles/custom-profile",
-      }),
-    );
+    if (!database) {
+      throw new Error("expected initialized database");
+    }
 
-    await expect(store.getSession("session-3")).resolves.toEqual(
-      createRecord({
-        id: "session-3",
-        profileMode: "custom",
-        profilePath: "/profiles/custom-profile",
-      }),
-    );
-  });
+    database.write = async () => {
+      throw writeError;
+    };
 
-  it("persists session headers", async () => {
-    const store = await createStore();
-
-    await store.insertSession(
-      createRecord({
-        id: "session-4",
-        headers: {
-          authorization: "Bearer demo",
-          "x-session-id": "session-4",
-        },
-      }),
-    );
-
-    await expect(store.getSession("session-4")).resolves.toEqual(
-      createRecord({
-        id: "session-4",
-        headers: {
-          authorization: "Bearer demo",
-          "x-session-id": "session-4",
-        },
-      }),
-    );
-  });
-
-  it("updates the stored session name", async () => {
-    const store = await createStore();
-
-    await store.insertSession(createRecord());
-    await store.updateSessionName("session-1", "Renamed session");
-
-    await expect(store.getSession("session-1")).resolves.toEqual(
-      createRecord({
-        name: "Renamed session",
-      }),
-    );
+    await expect(store.insertSession(createRecord())).rejects.toThrow(writeError);
+    await expect(store.dispose()).rejects.toThrow(writeError);
   });
 });

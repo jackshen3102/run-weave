@@ -5,6 +5,7 @@ import {
   net,
 } from "electron";
 import path from "node:path";
+import { resolveProtocolFilePath } from "./protocol-path.js";
 import { createTray } from "./tray.js";
 import { initAutoUpdater, checkForUpdates } from "./updater.js";
 import { getIsQuitting, setIsQuitting } from "./app-state.js";
@@ -34,21 +35,13 @@ protocol.registerSchemesAsPrivileged([
 
 function registerCustomProtocol() {
   protocol.handle(CUSTOM_PROTOCOL, (request) => {
-    const url = new URL(request.url);
-    let filePath = url.pathname;
+    const resolved = resolveProtocolFilePath(request.url, RENDERER_DIST);
 
-    if (filePath === "/" || filePath === "") {
-      filePath = "/index.html";
-    }
-
-    const fullPath = path.resolve(RENDERER_DIST, `.${filePath}`);
-    const rendererRoot = path.resolve(RENDERER_DIST) + path.sep;
-
-    if (!fullPath.startsWith(rendererRoot) && fullPath !== path.resolve(RENDERER_DIST)) {
+    if (resolved.status === "forbidden") {
       return new Response("Forbidden", { status: 403 });
     }
 
-    return net.fetch(`file://${fullPath}`);
+    return net.fetch(`file://${resolved.filePath}`);
   });
 }
 

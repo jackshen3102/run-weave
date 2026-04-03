@@ -56,9 +56,11 @@ function toPersisted(
 }
 
 const MAX_SCROLLBACK_LENGTH = 256 * 1024;
+const SCROLLBACK_FLUSH_DELAY_MS = 250;
 
 export class TerminalSessionManager {
   private readonly sessions = new Map<string, TerminalSessionRecord>();
+  private readonly scrollbackFlushTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(private readonly sessionStore: TerminalSessionStore) {}
 
@@ -108,11 +110,7 @@ export class TerminalSessionManager {
     session.scrollback = `${session.scrollback}${chunk}`.slice(
       -MAX_SCROLLBACK_LENGTH,
     );
-    void this.sessionStore.appendSessionScrollback({
-      terminalSessionId,
-      chunk,
-      maxLength: MAX_SCROLLBACK_LENGTH,
-    });
+    this.scheduleScrollbackFlush(terminalSessionId);
   }
 
   getSession(terminalSessionId: string): TerminalSessionRecord | undefined {
@@ -158,12 +156,58 @@ export class TerminalSessionManager {
       return false;
     }
 
+    this.clearPendingScrollbackFlush(terminalSessionId);
     this.sessions.delete(terminalSessionId);
     await this.sessionStore.deleteSession(terminalSessionId);
     return true;
   }
 
   async dispose(): Promise<void> {
+    await this.flushAllPendingScrollback();
     await this.sessionStore.dispose();
+  }
+
+  private scheduleScrollbackFlush(terminalSessionId: string): void {
+    this.clearPendingScrollbackFlush(terminalSessionId);
+
+    const timer = setTimeout(() => {
+      this.scrollbackFlushTimers.delete(terminalSessionId);
+      void this.flushScrollback(terminalSessionId);
+    }, SCROLLBACK_FLUSH_DELAY_MS);
+    this.scrollbackFlushTimers.set(terminalSessionId, timer);
+  }
+
+  private clearPendingScrollbackFlush(terminalSessionId: string): void {
+    const timer = this.scrollbackFlushTimers.get(terminalSessionId);
+    if (!timer) {
+      return;
+    }
+
+    clearTimeout(timer);
+    this.scrollbackFlushTimers.delete(terminalSessionId);
+  }
+
+  private async flushScrollback(terminalSessionId: string): Promise<void> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return;
+    }
+
+    await this.sessionStore.updateSessionScrollback({
+      terminalSessionId,
+      scrollback: session.scrollback,
+    });
+  }
+
+  private async flushAllPendingScrollback(): Promise<void> {
+    const pendingSessionIds = Array.from(this.scrollbackFlushTimers.keys());
+    pendingSessionIds.forEach((terminalSessionId) =>
+      this.clearPendingScrollbackFlush(terminalSessionId),
+    );
+    await Promise.all(
+      pendingSessionIds.map((terminalSessionId) =>
+        this.flushScrollback(terminalSessionId),
+      ),
+    );
   }
 }

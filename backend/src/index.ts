@@ -18,11 +18,11 @@ import { createTerminalRouter } from "./routes/terminal";
 import { createTestRouter } from "./routes/test";
 import { createCorsMiddleware } from "./server/cors";
 import { SessionManager } from "./session/manager";
-import { SQLiteSessionStore } from "./session/sqlite-store";
+import { LowDbSessionStore } from "./session/lowdb-store";
 import { TerminalSessionManager } from "./terminal/manager";
 import { PtyService } from "./terminal/pty-service";
 import { TerminalRuntimeRegistry } from "./terminal/runtime-registry";
-import { SQLiteTerminalSessionStore } from "./terminal/sqlite-store";
+import { LowDbTerminalSessionStore } from "./terminal/lowdb-store";
 import { listenWithFallback } from "./server/listen";
 import { resolveStoragePaths } from "./utils/path";
 import { attachDevtoolsProxyServer } from "./ws/devtools-proxy";
@@ -127,9 +127,9 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
       : undefined,
   });
   const authService = new AuthService(loadAuthConfig());
-  const sessionStore = new SQLiteSessionStore(storagePaths.sessionDbFile);
-  const terminalSessionStore = new SQLiteTerminalSessionStore(
-    storagePaths.terminalSessionDbFile,
+  const sessionStore = new LowDbSessionStore(storagePaths.sessionStoreFile);
+  const terminalSessionStore = new LowDbTerminalSessionStore(
+    storagePaths.terminalSessionStoreFile,
   );
   const qualityProbeStore = new QualityProbeStore();
   const wsSessionController = new WebSocketSessionController();

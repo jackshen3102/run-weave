@@ -14,9 +14,16 @@
 - 开发：`pnpm dev`
 - Electron 开发：`pnpm dev:electron`
 - 构建：`pnpm build`
+- Electron mac 打包：`pnpm dist:electron:mac`
 - 类型检查：`pnpm typecheck`
 - Lint：`pnpm lint`
 - 测试：`pnpm test`
+
+## Electron 打包约束
+
+- 默认仅打包当前本地可用的 mac 客户端。
+- 使用命令：`pnpm dist:electron:mac`
+- 不要默认打包 Windows 客户端，也不要为了兼容性额外生成 Windows 安装包，除非用户明确提出。
 
 ## 文档路由（按需读取）
 

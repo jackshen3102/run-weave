@@ -4,65 +4,65 @@ import { expandHomePath, resolveStoragePaths } from "./path";
 
 describe("path helpers", () => {
   it("expands a leading home directory token", () => {
-    expect(expandHomePath("~/data/session.db", "/Users/tester")).toBe(
-      path.join("/Users/tester", "data", "session.db"),
+    expect(expandHomePath("~/data/session.json", "/Users/tester")).toBe(
+      path.join("/Users/tester", "data", "session.json"),
     );
   });
 
   it("resolves default storage paths under the home directory", () => {
     expect(resolveStoragePaths({}, "/Users/tester")).toEqual({
       browserProfileDir: path.join("/Users/tester", ".browser-profile"),
-      sessionDbFile: path.join(
+      sessionStoreFile: path.join(
         "/Users/tester",
         ".browser-profile",
-        "session-store.db",
+        "session-store.json",
       ),
-      terminalSessionDbFile: path.join(
+      terminalSessionStoreFile: path.join(
         "/Users/tester",
         ".browser-profile",
-        "terminal-session-store.db",
+        "terminal-session-store.json",
       ),
     });
   });
 
-  it("derives the default database path from an overridden profile directory", () => {
+  it("derives the default store path from an overridden profile directory", () => {
     expect(
       resolveStoragePaths(
-        { BROWSER_PROFILE_DIR: "~/custom-profile", SESSION_DB_FILE: "   " },
+        { BROWSER_PROFILE_DIR: "~/custom-profile", SESSION_STORE_FILE: "   " },
         "/Users/tester",
       ),
     ).toEqual({
       browserProfileDir: path.join("/Users/tester", "custom-profile"),
-      sessionDbFile: path.join(
+      sessionStoreFile: path.join(
         "/Users/tester",
         "custom-profile",
-        "session-store.db",
+        "session-store.json",
       ),
-      terminalSessionDbFile: path.join(
+      terminalSessionStoreFile: path.join(
         "/Users/tester",
         "custom-profile",
-        "terminal-session-store.db",
+        "terminal-session-store.json",
       ),
     });
   });
 
-  it("expands explicit database paths independently", () => {
+  it("expands explicit store paths independently", () => {
     expect(
       resolveStoragePaths(
         {
           BROWSER_PROFILE_DIR: "~/custom-profile",
-          SESSION_DB_FILE: "~/db/session.db",
-          TERMINAL_SESSION_DB_FILE: "~/db/terminal-session.db",
+          SESSION_STORE_FILE: "~/db/session.json",
+          TERMINAL_SESSION_STORE_FILE: "~/db/terminal-session.json",
         },
         "/Users/tester",
       ),
     ).toEqual({
       browserProfileDir: path.join("/Users/tester", "custom-profile"),
-      sessionDbFile: path.join("/Users/tester", "db", "session.db"),
-      terminalSessionDbFile: path.join(
+      sessionStoreFile: path.join("/Users/tester", "db", "session.json"),
+      terminalSessionStoreFile: path.join(
         "/Users/tester",
         "db",
-        "terminal-session.db",
+        "terminal-session.json",
       ),
     });
   });

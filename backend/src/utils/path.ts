@@ -3,14 +3,14 @@ import path from "node:path";
 
 export interface StoragePaths {
   browserProfileDir: string;
-  sessionDbFile: string;
-  terminalSessionDbFile: string;
+  sessionStoreFile: string;
+  terminalSessionStoreFile: string;
 }
 
 interface StorageEnv {
   BROWSER_PROFILE_DIR?: string;
-  SESSION_DB_FILE?: string;
-  TERMINAL_SESSION_DB_FILE?: string;
+  SESSION_STORE_FILE?: string;
+  TERMINAL_SESSION_STORE_FILE?: string;
 }
 
 export function expandHomePath(
@@ -41,18 +41,18 @@ export function resolveStoragePaths(
   const browserProfileDir = path.resolve(
     expandHomePath(env.BROWSER_PROFILE_DIR, homeDir) ?? defaultProfileDir,
   );
-  const sessionDbFile = path.resolve(
-    expandHomePath(env.SESSION_DB_FILE, homeDir) ??
-      path.join(browserProfileDir, "session-store.db"),
+  const sessionStoreFile = path.resolve(
+    expandHomePath(env.SESSION_STORE_FILE, homeDir) ??
+      path.join(browserProfileDir, "session-store.json"),
   );
-  const terminalSessionDbFile = path.resolve(
-    expandHomePath(env.TERMINAL_SESSION_DB_FILE, homeDir) ??
-      path.join(browserProfileDir, "terminal-session-store.db"),
+  const terminalSessionStoreFile = path.resolve(
+    expandHomePath(env.TERMINAL_SESSION_STORE_FILE, homeDir) ??
+      path.join(browserProfileDir, "terminal-session-store.json"),
   );
 
   return {
     browserProfileDir,
-    sessionDbFile,
-    terminalSessionDbFile,
+    sessionStoreFile,
+    terminalSessionStoreFile,
   };
 }

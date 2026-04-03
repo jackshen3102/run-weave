@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SessionManager } from "./manager";
-import { SQLiteSessionStore } from "./sqlite-store";
+import { LowDbSessionStore } from "./lowdb-store";
 
 const tempDirs: string[] = [];
 
@@ -29,6 +29,29 @@ function createBrowserServiceMock(profileRootDir: string) {
   };
 }
 
+function createFailingRestoreBrowserService(
+  profileRootDir: string,
+  restoreError: Error,
+) {
+  return {
+    createSession: vi.fn(async () => ({
+      type: "launch",
+      context: { close: vi.fn(async () => undefined) },
+      page: { close: vi.fn(async () => undefined) },
+    })),
+    restoreSession: vi.fn(async () => {
+      throw restoreError;
+    }),
+    destroySession: vi.fn(async () => undefined),
+    getRemoteDebuggingPort: vi.fn(() => null),
+    getSessionProfileDir: vi.fn((sessionId: string) =>
+      path.join(profileRootDir, "sessions", sessionId),
+    ),
+    isDevtoolsEnabled: vi.fn(() => false),
+    stop: vi.fn(async () => undefined),
+  };
+}
+
 async function createTempDir() {
   const dir = await mkdtemp(path.join(os.tmpdir(), "session-manager-int-"));
   tempDirs.push(dir);
@@ -42,13 +65,13 @@ afterEach(async () => {
 });
 
 describe("SessionManager integration", () => {
-  it("restores SQLite-backed sessions across a restart", async () => {
+  it("restores JSON-backed sessions across a restart", async () => {
     const tempDir = await createTempDir();
-    const databaseFile = path.join(tempDir, "session-store.db");
+    const storeFile = path.join(tempDir, "session-store.json");
     const profileRootDir = path.join(tempDir, ".browser-profile");
 
     const firstBrowserService = createBrowserServiceMock(profileRootDir);
-    const firstStore = new SQLiteSessionStore(databaseFile);
+    const firstStore = new LowDbSessionStore(storeFile);
     const firstManager = new SessionManager(
       firstBrowserService as never,
       firstStore,
@@ -66,7 +89,7 @@ describe("SessionManager integration", () => {
     await firstManager.dispose();
 
     const secondBrowserService = createBrowserServiceMock(profileRootDir);
-    const secondStore = new SQLiteSessionStore(databaseFile);
+    const secondStore = new LowDbSessionStore(storeFile);
     const secondManager = new SessionManager(
       secondBrowserService as never,
       secondStore,
@@ -101,13 +124,13 @@ describe("SessionManager integration", () => {
     await secondManager.dispose();
   });
 
-  it("keeps persisted sessions in SQLite when restore fails during restart", async () => {
+  it("keeps persisted sessions in JSON when restore fails during restart", async () => {
     const tempDir = await createTempDir();
-    const databaseFile = path.join(tempDir, "session-store.db");
+    const storeFile = path.join(tempDir, "session-store.json");
     const profileRootDir = path.join(tempDir, ".browser-profile");
 
     const firstBrowserService = createBrowserServiceMock(profileRootDir);
-    const firstStore = new SQLiteSessionStore(databaseFile);
+    const firstStore = new LowDbSessionStore(storeFile);
     const firstManager = new SessionManager(
       firstBrowserService as never,
       firstStore,
@@ -123,9 +146,11 @@ describe("SessionManager integration", () => {
     await firstManager.dispose();
 
     const restoreError = new Error("restore failed");
-    const secondBrowserService = createBrowserServiceMock(profileRootDir);
-    secondBrowserService.restoreSession.mockRejectedValueOnce(restoreError);
-    const secondStore = new SQLiteSessionStore(databaseFile);
+    const secondBrowserService = createFailingRestoreBrowserService(
+      profileRootDir,
+      restoreError,
+    );
+    const secondStore = new LowDbSessionStore(storeFile);
     const secondManager = new SessionManager(
       secondBrowserService as never,
       secondStore,

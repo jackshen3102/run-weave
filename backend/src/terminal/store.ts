@@ -16,10 +16,9 @@ export interface UpdateTerminalSessionExitParams {
   exitCode?: number;
 }
 
-export interface AppendTerminalSessionScrollbackParams {
+export interface UpdateTerminalSessionScrollbackParams {
   terminalSessionId: string;
-  chunk: string;
-  maxLength: number;
+  scrollback: string;
 }
 
 export interface TerminalSessionStore {
@@ -31,8 +30,8 @@ export interface TerminalSessionStore {
   ): Promise<PersistedTerminalSessionRecord | null>;
   insertSession(session: PersistedTerminalSessionRecord): Promise<void>;
   updateSessionName(terminalSessionId: string, name: string): Promise<void>;
-  appendSessionScrollback(
-    params: AppendTerminalSessionScrollbackParams,
+  updateSessionScrollback(
+    params: UpdateTerminalSessionScrollbackParams,
   ): Promise<void>;
   updateSessionExit(params: UpdateTerminalSessionExitParams): Promise<void>;
   deleteSession(terminalSessionId: string): Promise<void>;

@@ -14,7 +14,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `PORT=${E2E_BACKEND_PORT} FRONTEND_ORIGIN=${E2E_FRONTEND_ORIGIN} AUTH_USERNAME=e2e-admin AUTH_PASSWORD=e2e-secret AUTH_JWT_SECRET=e2e-jwt-secret SESSION_RESTORE_ENABLED=false BROWSER_PROFILE_DIR=/tmp/browser-viewer-e2e-profile SESSION_DB_FILE=/tmp/browser-viewer-e2e-session.db node --import ./backend/node_modules/tsx/dist/loader.mjs backend/src/index.ts`,
+      command: `PORT=${E2E_BACKEND_PORT} FRONTEND_ORIGIN=${E2E_FRONTEND_ORIGIN} AUTH_USERNAME=e2e-admin AUTH_PASSWORD=e2e-secret AUTH_JWT_SECRET=e2e-jwt-secret SESSION_RESTORE_ENABLED=false BROWSER_PROFILE_DIR=/tmp/browser-viewer-e2e-profile SESSION_STORE_FILE=/tmp/browser-viewer-e2e-session.json TERMINAL_SESSION_STORE_FILE=/tmp/browser-viewer-e2e-terminal-session.json node --import ./backend/node_modules/tsx/dist/loader.mjs backend/src/index.ts`,
       port: E2E_BACKEND_PORT,
       reuseExistingServer: false,
       cwd: "..",

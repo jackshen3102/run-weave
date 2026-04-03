@@ -16,9 +16,9 @@
   },
   "dependencies": {
     "@browser-viewer/shared": "workspace:*",
-    "better-sqlite3": "^11.10.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "lowdb": "^7.0.1",
     "node-pty": "^1.1.0",
     "playwright": "^1.52.0",
     "playwright-extra": "^4.3.6",
@@ -28,7 +28,6 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.1",
     "@types/node": "^22.13.10",
     "@types/ws": "^8.5.14",

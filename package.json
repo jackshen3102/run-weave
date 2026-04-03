@@ -8,6 +8,7 @@
     "dev:headed": "BROWSER_HEADLESS=false node ./dev.mjs",
     "dev:electron": "node ./electron-dev.mjs",
     "dev:electron:headed": "BROWSER_HEADLESS=false node ./electron-dev.mjs",
+    "dist:electron:mac": "pnpm build && cd electron && rm -rf release && CSC_IDENTITY_AUTO_DISCOVERY=false ELECTRON_CACHE=/tmp/electron-cache pnpm dist --mac --arm64",
     "prestart": "pnpm build",
     "start": "pnpm --filter ./backend start -- --host 127.0.0.1 --port 5001",
     "build": "pnpm -r build",
@@ -43,7 +44,6 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
-      "better-sqlite3",
       "node-pty"
     ]
   }
