@@ -1,47 +1,40 @@
 import { useState } from "react";
+import type { ConnectionConfig } from "../features/connection/types";
+import { ConnectionSwitcher } from "./connection-switcher";
 import { Button } from "./ui/button";
 import { HttpError } from "../services/http";
 import { login as loginWithPassword } from "../services/auth";
-
-interface RememberedCredentials {
-  username: string;
-  password: string;
-}
+import {
+  clearRememberedCredentials,
+  loadRememberedCredentials,
+  saveRememberedCredentials,
+} from "../features/auth/storage";
 
 interface LoginPageProps {
   apiBase: string;
+  connectionId?: string;
+  isElectron?: boolean;
+  connections?: ConnectionConfig[];
+  connectionName?: string;
+  onSwitchConnection?: (connectionId: string) => void;
+  onOpenConnectionManager?: () => void;
   onSuccess: (token: string) => void;
 }
 
-const REMEMBERED_CREDENTIALS_STORAGE_KEY = "viewer.auth.remembered-credentials";
-
-function loadRememberedCredentials(): RememberedCredentials | null {
-  const storedValue = localStorage.getItem(REMEMBERED_CREDENTIALS_STORAGE_KEY);
-
-  if (!storedValue) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(storedValue) as Partial<RememberedCredentials>;
-    if (
-      typeof parsed.username !== "string" ||
-      typeof parsed.password !== "string"
-    ) {
-      return null;
-    }
-
-    return {
-      username: parsed.username,
-      password: parsed.password,
-    };
-  } catch {
-    return null;
-  }
-}
-
-export function LoginPage({ apiBase, onSuccess }: LoginPageProps) {
-  const rememberedCredentials = loadRememberedCredentials();
+export function LoginPage({
+  apiBase,
+  connectionId,
+  isElectron,
+  connections = [],
+  connectionName,
+  onSwitchConnection,
+  onOpenConnectionManager,
+  onSuccess,
+}: LoginPageProps) {
+  const rememberedCredentials = loadRememberedCredentials({
+    isElectron,
+    connectionId,
+  });
   const [username, setUsername] = useState(
     rememberedCredentials?.username ?? "admin",
   );
@@ -61,12 +54,12 @@ export function LoginPage({ apiBase, onSuccess }: LoginPageProps) {
     try {
       const data = await loginWithPassword(apiBase, { username, password });
       if (rememberPassword) {
-        localStorage.setItem(
-          REMEMBERED_CREDENTIALS_STORAGE_KEY,
-          JSON.stringify({ username, password }),
+        saveRememberedCredentials(
+          { username, password },
+          { isElectron, connectionId },
         );
       } else {
-        localStorage.removeItem(REMEMBERED_CREDENTIALS_STORAGE_KEY);
+        clearRememberedCredentials({ isElectron, connectionId });
       }
       onSuccess(data.token);
     } catch (loginError) {
@@ -85,10 +78,20 @@ export function LoginPage({ apiBase, onSuccess }: LoginPageProps) {
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 sm:px-6">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(70,130,145,0.18),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(195,172,135,0.16),transparent_35%)]" />
       <section className="animate-fade-rise relative w-full max-w-md rounded-[2rem] border border-border/60 bg-card/82 p-7 shadow-[0_34px_120px_-72px_rgba(17,24,39,0.82)] backdrop-blur-xl sm:p-9">
-        <div>
+        <div className="flex items-center justify-between gap-3">
           <p className="text-[0.68rem] font-semibold uppercase tracking-[0.38em] text-muted-foreground/70">
             Browser Viewer
           </p>
+          {isElectron && connectionName && onSwitchConnection && onOpenConnectionManager ? (
+            <ConnectionSwitcher
+              connections={connections}
+              activeConnectionId={connectionId ?? null}
+              activeConnectionName={connectionName}
+              onSelectConnection={onSwitchConnection}
+              onOpenConnectionManager={onOpenConnectionManager}
+              className="h-9 rounded-full border border-border/60 bg-background/60 px-3 text-[0.72rem] text-muted-foreground backdrop-blur"
+            />
+          ) : null}
         </div>
 
         <div className="mt-8 space-y-4">

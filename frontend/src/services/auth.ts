@@ -11,3 +11,14 @@ export async function login(
     body: JSON.stringify(payload),
   });
 }
+
+export async function verifyAuthToken(
+  apiBase: string,
+  token: string,
+): Promise<{ valid: true }> {
+  return requestJson<{ valid: true }>(apiBase, "/api/auth/verify", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}

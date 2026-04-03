@@ -13,6 +13,7 @@ vi.mock("../services/auth", () => ({
 }));
 
 const REMEMBERED_CREDENTIALS_STORAGE_KEY = "viewer.auth.remembered-credentials";
+const CONNECTION_AUTH_STORAGE_KEY = "viewer.auth.connection-auth";
 
 describe("LoginPage", () => {
   afterEach(() => {
@@ -97,5 +98,48 @@ describe("LoginPage", () => {
     expect(
       localStorage.getItem(REMEMBERED_CREDENTIALS_STORAGE_KEY),
     ).toBeNull();
+  });
+
+  it("loads remembered credentials scoped to the active connection in electron mode", () => {
+    localStorage.setItem(
+      CONNECTION_AUTH_STORAGE_KEY,
+      JSON.stringify({
+        "conn-2": {
+          username: "saved-admin",
+          password: "saved-secret",
+        },
+      }),
+    );
+
+    render(
+      <LoginPage
+        apiBase=""
+        connectionId="conn-2"
+        isElectron
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Username")).toHaveValue("saved-admin");
+    expect(screen.getByLabelText("Password")).toHaveValue("saved-secret");
+    expect(screen.getByLabelText("Remember password")).toBeChecked();
+  });
+
+  it("renders the connection switcher trigger in electron mode", () => {
+    render(
+      <LoginPage
+        apiBase=""
+        connectionId="conn-2"
+        isElectron
+        connectionName="Coze 助手"
+        onSwitchConnection={vi.fn()}
+        onOpenConnectionManager={vi.fn()}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /当前连接.*coze 助手/i }),
+    ).toBeInTheDocument();
   });
 });

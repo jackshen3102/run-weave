@@ -27,12 +27,12 @@ export function ConnectionsPage({
       activeId={activeId}
       onAdd={(name, url) => {
         onAdd(name, url);
-        navigate("/login", { replace: true });
+        navigate("/", { replace: true });
       }}
       onRemove={onRemove}
       onSelect={(id) => {
         onSelect(id);
-        navigate("/login", { replace: true });
+        navigate("/", { replace: true });
       }}
       onEdit={onEdit}
     />

@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { useAuthToken } from "./features/auth/use-auth-token";
 import { useConnections } from "./features/connection/use-connections";
+import { useScopedAuth } from "./features/auth/use-scoped-auth";
 import { HomePage } from "./pages/home-page";
 import { LoginPage } from "./pages/login-page";
 import { ConnectionsPage } from "./pages/connections-page";
@@ -13,14 +13,13 @@ const CONNECTIONS_STORAGE_KEY = "viewer.connections";
 
 declare global {
   interface Window {
-    electronAPI?: { isElectron: boolean; platform: string };
+    electronAPI?: { isElectron: boolean; platform: string; backendUrl?: string };
   }
 }
 
 const isElectron = window.electronAPI?.isElectron === true;
 
 export default function App() {
-  const { token, setToken, clearToken } = useAuthToken(AUTH_TOKEN_STORAGE_KEY);
   const {
     connections,
     activeConnection,
@@ -31,18 +30,30 @@ export default function App() {
   } = useConnections(CONNECTIONS_STORAGE_KEY);
 
   const apiBase = isElectron ? (activeConnection?.url ?? "") : WEB_API_BASE;
+  const activeConnectionId = isElectron ? (activeConnection?.id ?? null) : null;
+  const { token, status: authStatus, setToken, clearToken } = useScopedAuth({
+    apiBase,
+    isElectron,
+    connectionId: activeConnectionId,
+    webStorageKey: AUTH_TOKEN_STORAGE_KEY,
+  });
 
   const needsConnection = isElectron && (!activeConnection || !apiBase);
+  const isAuthChecking = !needsConnection && authStatus === "checking";
 
   const handleSelectConnection = (id: string) => {
     setActive(id);
-    clearToken();
   };
 
   const handleAddConnection = (name: string, url: string) => {
     addConnection(name, url);
-    clearToken();
   };
+
+  const openConnectionManager = () => {
+    window.location.assign("/connections");
+  };
+
+  const authPendingView = <main className="min-h-screen bg-background" />;
 
   return (
     <Routes>
@@ -66,10 +77,21 @@ export default function App() {
         element={
           needsConnection ? (
             <Navigate to="/connections" replace />
+          ) : isAuthChecking ? (
+            authPendingView
           ) : token ? (
             <Navigate to="/" replace />
           ) : (
-            <LoginPage apiBase={apiBase} onSuccess={setToken} />
+            <LoginPage
+              apiBase={apiBase}
+              connectionId={activeConnectionId ?? undefined}
+              isElectron={isElectron}
+              connections={connections}
+              connectionName={activeConnection?.name}
+              onSwitchConnection={isElectron ? handleSelectConnection : undefined}
+              onOpenConnectionManager={isElectron ? openConnectionManager : undefined}
+              onSuccess={setToken}
+            />
           )
         }
       />
@@ -78,15 +100,18 @@ export default function App() {
         element={
           needsConnection ? (
             <Navigate to="/connections" replace />
+          ) : isAuthChecking ? (
+            authPendingView
           ) : token ? (
             <HomePage
               apiBase={apiBase}
               token={token}
               clearToken={clearToken}
+              connections={connections}
+              activeConnectionId={activeConnectionId}
               connectionName={isElectron ? activeConnection?.name : undefined}
-              onSwitchConnection={
-                isElectron ? () => window.location.assign("/connections") : undefined
-              }
+              onSelectConnection={isElectron ? handleSelectConnection : undefined}
+              onOpenConnectionManager={isElectron ? openConnectionManager : undefined}
             />
           ) : (
             <Navigate to="/login" replace />
@@ -98,6 +123,8 @@ export default function App() {
         element={
           needsConnection ? (
             <Navigate to="/connections" replace />
+          ) : isAuthChecking ? (
+            authPendingView
           ) : token ? (
             <ViewerPage
               apiBase={apiBase}
@@ -114,6 +141,8 @@ export default function App() {
         element={
           needsConnection ? (
             <Navigate to="/connections" replace />
+          ) : isAuthChecking ? (
+            authPendingView
           ) : token ? (
             <TerminalRoutePage
               apiBase={apiBase}

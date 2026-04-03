@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useParams } from "react-router-dom";
@@ -33,10 +34,25 @@ function renderApp(initialPath = "/") {
   );
 }
 
+async function renderFreshApp(initialPath = "/") {
+  vi.resetModules();
+  const { default: FreshApp } = await import("./App");
+
+  render(
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <FreshApp />
+      </MemoryRouter>
+    </ThemeProvider>,
+  );
+}
+
 const jsonResponse = (payload: unknown) => ({
   ok: true,
   json: async () => payload,
 });
+
+const CONNECTION_AUTH_STORAGE_KEY = "viewer.auth.connection-auth";
 
 describe("App", () => {
   afterEach(() => {
@@ -234,6 +250,234 @@ describe("App", () => {
 
     expect(screen.getAllByText("CDP Playweight").length).toBeGreaterThan(0);
     expect(screen.queryByText("Latest Session")).toBeNull();
+  });
+
+  it("shows a clickable connection switch entry in electron mode", async () => {
+    localStorage.setItem(
+      "viewer.connections",
+      JSON.stringify({
+        connections: [
+          {
+            id: "conn-1",
+            name: "Local Backend",
+            url: "http://127.0.0.1:4000",
+            createdAt: 1,
+          },
+        ],
+        activeId: "conn-1",
+      }),
+    );
+    localStorage.setItem(
+      CONNECTION_AUTH_STORAGE_KEY,
+      JSON.stringify({
+        "conn-1": {
+          token: "token-conn-1",
+        },
+      }),
+    );
+    window.electronAPI = { isElectron: true, platform: "darwin" };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "http://127.0.0.1:4000/api/auth/verify") {
+          return jsonResponse({ valid: true });
+        }
+        if (url === "http://127.0.0.1:4000/api/session/cdp-endpoint-default") {
+          return jsonResponse({ endpoint: "http://127.0.0.1:9333" });
+        }
+        if (url === "http://127.0.0.1:4000/api/session") {
+          return jsonResponse([]);
+        }
+        throw new Error(`Unhandled request: ${url}`);
+      }),
+    );
+
+    await renderFreshApp();
+
+    await waitFor(() => {
+      expect(screen.getByText("New Session")).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByRole("button", { name: /当前连接.*local backend/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("defaults to the built-in local development connection in electron mode", async () => {
+    localStorage.setItem(
+      CONNECTION_AUTH_STORAGE_KEY,
+      JSON.stringify({
+        "system:local-development": {
+          token: "token-local-dev",
+        },
+      }),
+    );
+    window.electronAPI = {
+      isElectron: true,
+      platform: "darwin",
+      backendUrl: "http://localhost:5002",
+    };
+
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "http://localhost:5002/api/auth/verify") {
+        return jsonResponse({ valid: true });
+      }
+      if (url === "http://localhost:5002/api/session/cdp-endpoint-default") {
+        return jsonResponse({ endpoint: "http://127.0.0.1:9333" });
+      }
+      if (url === "http://localhost:5002/api/session") {
+        return jsonResponse([]);
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderFreshApp();
+
+    await waitFor(() => {
+      expect(screen.getByText("New Session")).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByRole("button", { name: /本地开发/i }),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:5002/api/session",
+      expect.objectContaining({
+        headers: {
+          Authorization: "Bearer token-local-dev",
+        },
+      }),
+    );
+  });
+
+  it("renders the built-in local development connection as read-only", async () => {
+    localStorage.setItem(
+      "viewer.connections",
+      JSON.stringify({
+        connections: [
+          {
+            id: "conn-1",
+            name: "Coze 助手",
+            url: "https://10.37.216.239:5012",
+            createdAt: 1,
+          },
+        ],
+        activeId: "conn-1",
+      }),
+    );
+    window.electronAPI = {
+      isElectron: true,
+      platform: "darwin",
+      backendUrl: "http://localhost:5002",
+    };
+
+    await renderFreshApp("/connections");
+
+    expect(screen.getByText("本地开发")).toBeInTheDocument();
+    expect(screen.getByText("http://localhost:5002")).toBeInTheDocument();
+    expect(screen.getByText("Coze 助手")).toBeInTheDocument();
+
+    const localDevItem = screen.getByText("本地开发").closest("li");
+    expect(localDevItem).not.toBeNull();
+    expect(within(localDevItem as HTMLElement).queryByRole("button", { name: "编辑" })).toBeNull();
+    expect(within(localDevItem as HTMLElement).queryByRole("button", { name: "删除" })).toBeNull();
+  });
+
+  it("switches connection without visiting login when the target connection token is valid", async () => {
+    localStorage.setItem(
+      "viewer.connections",
+      JSON.stringify({
+        connections: [
+          {
+            id: "conn-1",
+            name: "Coze 助手",
+            url: "https://10.37.216.239:5012",
+            createdAt: 1,
+          },
+        ],
+        activeId: "system:local-development",
+      }),
+    );
+    localStorage.setItem(
+      CONNECTION_AUTH_STORAGE_KEY,
+      JSON.stringify({
+        "conn-1": {
+          token: "token-conn-1",
+          username: "admin-user",
+          password: "super-secret",
+        },
+      }),
+    );
+    window.electronAPI = {
+      isElectron: true,
+      platform: "darwin",
+      backendUrl: "http://localhost:5002",
+    };
+
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === "https://10.37.216.239:5012/api/auth/verify") {
+        expect(options?.headers).toEqual({
+          Authorization: "Bearer token-conn-1",
+        });
+        return jsonResponse({ valid: true });
+      }
+      if (url === "https://10.37.216.239:5012/api/session/cdp-endpoint-default") {
+        return jsonResponse({ endpoint: "http://127.0.0.1:9333" });
+      }
+      if (url === "https://10.37.216.239:5012/api/session") {
+        return jsonResponse([]);
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderFreshApp("/connections");
+
+    fireEvent.click(screen.getByRole("button", { name: /Coze 助手/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("New Session")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
+  });
+
+  it("shows the reusable connection switcher on the login page in electron mode", async () => {
+    localStorage.setItem(
+      "viewer.connections",
+      JSON.stringify({
+        connections: [
+          {
+            id: "conn-1",
+            name: "Coze 助手",
+            url: "https://10.37.216.239:5012",
+            createdAt: 1,
+          },
+        ],
+        activeId: "conn-1",
+      }),
+    );
+    window.electronAPI = {
+      isElectron: true,
+      platform: "darwin",
+      backendUrl: "http://localhost:5002",
+    };
+
+    await renderFreshApp("/login");
+
+    expect(
+      screen.getByRole("button", { name: /当前连接.*coze 助手/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /当前连接.*coze 助手/i }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("本地开发")).toBeInTheDocument();
+    });
+    expect(screen.getByText("连接管理")).toBeInTheDocument();
   });
 
   it("shows a CDP endpoint input and submits it when attaching to an existing browser", async () => {

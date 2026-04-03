@@ -3,6 +3,9 @@ export interface ConnectionConfig {
   name: string;
   url: string;
   createdAt: number;
+  isSystem?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 export interface ConnectionStore {

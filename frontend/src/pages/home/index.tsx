@@ -19,11 +19,31 @@ interface HomePageProps {
   apiBase: string;
   token: string;
   clearToken: () => void;
+  connections?: Array<{
+    id: string;
+    name: string;
+    url: string;
+    createdAt: number;
+    isSystem?: boolean;
+    canEdit?: boolean;
+    canDelete?: boolean;
+  }>;
+  activeConnectionId?: string | null;
   connectionName?: string;
-  onSwitchConnection?: () => void;
+  onSelectConnection?: (connectionId: string) => void;
+  onOpenConnectionManager?: () => void;
 }
 
-export function HomePage({ apiBase, token, clearToken, connectionName }: HomePageProps) {
+export function HomePage({
+  apiBase,
+  token,
+  clearToken,
+  connections,
+  activeConnectionId,
+  connectionName,
+  onSelectConnection,
+  onOpenConnectionManager,
+}: HomePageProps) {
   const navigate = useNavigate();
   const [sessionSourceType, setSessionSourceType] = useState<
     "launch" | "connect-cdp"
@@ -277,7 +297,11 @@ export function HomePage({ apiBase, token, clearToken, connectionName }: HomePag
       <div className="relative mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl flex-col gap-8">
         <HomeHeader
           terminalLoading={terminalLoading}
+          connections={connections}
+          activeConnectionId={activeConnectionId}
           connectionName={connectionName}
+          onSelectConnection={onSelectConnection}
+          onOpenConnectionManager={onOpenConnectionManager}
           onOpenTerminal={() => {
             void createTerminal();
           }}

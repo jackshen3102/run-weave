@@ -76,6 +76,10 @@ export function ConnectionPage({
   };
 
   const handleEdit = (conn: ConnectionConfig) => {
+    if (conn.canEdit === false) {
+      return;
+    }
+
     setEditingId(conn.id);
     setEditName(conn.name);
     setEditUrl(conn.url);
@@ -251,30 +255,36 @@ export function ConnectionPage({
                         {conn.url}
                       </p>
                     </button>
-                    <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="rounded-full px-3 text-xs text-muted-foreground"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEdit(conn);
-                        }}
-                      >
-                        编辑
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="rounded-full px-3 text-xs text-red-500 hover:text-red-600"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemove(conn.id);
-                        }}
-                      >
-                        删除
-                      </Button>
-                    </div>
+                    {(conn.canEdit !== false || conn.canDelete !== false) && (
+                      <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
+                        {conn.canEdit !== false && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-full px-3 text-xs text-muted-foreground"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(conn);
+                            }}
+                          >
+                            编辑
+                          </Button>
+                        )}
+                        {conn.canDelete !== false && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-full px-3 text-xs text-red-500 hover:text-red-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRemove(conn.id);
+                            }}
+                          >
+                            删除
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </li>

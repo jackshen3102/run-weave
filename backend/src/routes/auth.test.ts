@@ -15,6 +15,7 @@ function createTestServer() {
         expiresIn: 3600,
       };
     }),
+    verifyToken: vi.fn((token: string) => token === "token-abc"),
   };
 
   const app = express();
@@ -85,6 +86,32 @@ describe("auth routes", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: "admin", password: "wrong" }),
+    });
+
+    expect(response.status).toBe(401);
+  });
+
+  it("verifies a valid bearer token", async () => {
+    const { server, authService } = createTestServer();
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/verify`, {
+      headers: { Authorization: "Bearer token-abc" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ valid: true });
+    expect(authService.verifyToken).toHaveBeenCalledWith("token-abc");
+  });
+
+  it("rejects an invalid bearer token", async () => {
+    const { server } = createTestServer();
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/verify`, {
+      headers: { Authorization: "Bearer wrong-token" },
     });
 
     expect(response.status).toBe(401);
