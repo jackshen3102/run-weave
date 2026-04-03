@@ -4,11 +4,7 @@ import { ConnectionSwitcher } from "./connection-switcher";
 import { Button } from "./ui/button";
 import { HttpError } from "../services/http";
 import { login as loginWithPassword } from "../services/auth";
-import {
-  clearRememberedCredentials,
-  loadRememberedCredentials,
-  saveRememberedCredentials,
-} from "../features/auth/storage";
+import { cleanupLegacyAuthStorage } from "../features/auth/storage";
 
 interface LoginPageProps {
   apiBase: string;
@@ -31,19 +27,9 @@ export function LoginPage({
   onOpenConnectionManager,
   onSuccess,
 }: LoginPageProps) {
-  const rememberedCredentials = loadRememberedCredentials({
-    isElectron,
-    connectionId,
-  });
-  const [username, setUsername] = useState(
-    rememberedCredentials?.username ?? "admin",
-  );
-  const [password, setPassword] = useState(
-    rememberedCredentials?.password ?? "",
-  );
-  const [rememberPassword, setRememberPassword] = useState(
-    rememberedCredentials !== null,
-  );
+  cleanupLegacyAuthStorage();
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,14 +39,6 @@ export function LoginPage({
 
     try {
       const data = await loginWithPassword(apiBase, { username, password });
-      if (rememberPassword) {
-        saveRememberedCredentials(
-          { username, password },
-          { isElectron, connectionId },
-        );
-      } else {
-        clearRememberedCredentials({ isElectron, connectionId });
-      }
       onSuccess(data.token);
     } catch (loginError) {
       if (loginError instanceof HttpError && loginError.status === 401) {
@@ -133,16 +111,6 @@ export function LoginPage({
               className="h-12 w-full rounded-[1.25rem] border border-border/60 bg-background/70 px-4 text-sm outline-none transition focus:border-primary/50"
             />
           </div>
-
-          <label className="flex items-center gap-3 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={rememberPassword}
-              onChange={(event) => setRememberPassword(event.target.checked)}
-              className="h-4 w-4 rounded border border-border/70 accent-primary"
-            />
-            <span>Remember password</span>
-          </label>
 
           {error && (
             <p className="text-sm text-red-500" role="alert">

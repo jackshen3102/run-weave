@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { HttpError } from "../../services/http";
 import { verifyAuthToken } from "../../services/auth";
 import {
+  cleanupLegacyAuthStorage,
   clearConnectionToken,
   getConnectionAuth,
   setConnectionToken,
@@ -17,6 +18,7 @@ interface UseScopedAuthParams {
 type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 
 function loadWebToken(storageKey: string): string | null {
+  cleanupLegacyAuthStorage();
   return localStorage.getItem(storageKey);
 }
 
@@ -31,6 +33,8 @@ export function useScopedAuth({
   setToken: (nextToken: string) => void;
   clearToken: () => void;
 } {
+  cleanupLegacyAuthStorage();
+
   const initialToken = useMemo(() => {
     if (!isElectron) {
       return loadWebToken(webStorageKey);

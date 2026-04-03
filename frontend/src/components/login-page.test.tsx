@@ -25,7 +25,7 @@ describe("LoginPage", () => {
     localStorage.clear();
   });
 
-  it("loads remembered credentials and marks remember password as checked", () => {
+  it("ignores and clears legacy remembered credentials", () => {
     localStorage.setItem(
       REMEMBERED_CREDENTIALS_STORAGE_KEY,
       JSON.stringify({
@@ -36,12 +36,13 @@ describe("LoginPage", () => {
 
     render(<LoginPage apiBase="" onSuccess={vi.fn()} />);
 
-    expect(screen.getByLabelText("Username")).toHaveValue("saved-admin");
-    expect(screen.getByLabelText("Password")).toHaveValue("saved-secret");
-    expect(screen.getByLabelText("Remember password")).toBeChecked();
+    expect(screen.getByLabelText("Username")).toHaveValue("admin");
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+    expect(screen.queryByLabelText("Remember password")).toBeNull();
+    expect(localStorage.getItem(REMEMBERED_CREDENTIALS_STORAGE_KEY)).toBeNull();
   });
 
-  it("stores credentials when remember password is checked", async () => {
+  it("does not persist plaintext credentials after login", async () => {
     const onSuccess = vi.fn();
 
     render(<LoginPage apiBase="" onSuccess={onSuccess} />);
@@ -52,59 +53,21 @@ describe("LoginPage", () => {
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "super-secret" },
     });
-    fireEvent.click(screen.getByLabelText("Remember password"));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     await waitFor(() => {
       expect(onSuccess).toHaveBeenCalledWith("token-1");
     });
 
-    expect(
-      JSON.parse(
-        localStorage.getItem(REMEMBERED_CREDENTIALS_STORAGE_KEY) ?? "null",
-      ),
-    ).toEqual({
-      username: "admin-user",
-      password: "super-secret",
-    });
+    expect(localStorage.getItem(REMEMBERED_CREDENTIALS_STORAGE_KEY)).toBeNull();
   });
 
-  it("clears remembered credentials when remember password is not checked", async () => {
-    const onSuccess = vi.fn();
-
-    localStorage.setItem(
-      REMEMBERED_CREDENTIALS_STORAGE_KEY,
-      JSON.stringify({
-        username: "stale-user",
-        password: "stale-secret",
-      }),
-    );
-
-    render(<LoginPage apiBase="" onSuccess={onSuccess} />);
-
-    fireEvent.click(screen.getByLabelText("Remember password"));
-    fireEvent.change(screen.getByLabelText("Username"), {
-      target: { value: "fresh-user" },
-    });
-    fireEvent.change(screen.getByLabelText("Password"), {
-      target: { value: "fresh-secret" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-    await waitFor(() => {
-      expect(onSuccess).toHaveBeenCalledWith("token-1");
-    });
-
-    expect(
-      localStorage.getItem(REMEMBERED_CREDENTIALS_STORAGE_KEY),
-    ).toBeNull();
-  });
-
-  it("loads remembered credentials scoped to the active connection in electron mode", () => {
+  it("sanitizes legacy scoped credentials but preserves the token", () => {
     localStorage.setItem(
       CONNECTION_AUTH_STORAGE_KEY,
       JSON.stringify({
         "conn-2": {
+          token: "token-2",
           username: "saved-admin",
           password: "saved-secret",
         },
@@ -120,9 +83,16 @@ describe("LoginPage", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Username")).toHaveValue("saved-admin");
-    expect(screen.getByLabelText("Password")).toHaveValue("saved-secret");
-    expect(screen.getByLabelText("Remember password")).toBeChecked();
+    expect(screen.getByLabelText("Username")).toHaveValue("admin");
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+    expect(screen.queryByLabelText("Remember password")).toBeNull();
+    expect(
+      JSON.parse(localStorage.getItem(CONNECTION_AUTH_STORAGE_KEY) ?? "{}"),
+    ).toEqual({
+      "conn-2": {
+        token: "token-2",
+      },
+    });
   });
 
   it("renders the connection switcher trigger in electron mode", () => {
