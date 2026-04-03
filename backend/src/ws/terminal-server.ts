@@ -9,6 +9,7 @@ import type { AuthService } from "../auth/service";
 import type { TerminalSessionManager } from "../terminal/manager";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
+import { extractShellPromptMetadata } from "../terminal/shell-integration";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
 
@@ -147,8 +148,32 @@ export function attachTerminalWebSocketServer(
     runtimeRegistry.attachClient(terminalSessionId, clientId);
     const unsubscribe = runtimeRegistry.subscribe(terminalSessionId, {
       onData(data) {
-        terminalSessionManager.appendOutput(terminalSessionId, data);
-        sendEvent(socket, { type: "output", data });
+        const metadata = extractShellPromptMetadata(data);
+
+        if (metadata.sessionName && metadata.cwd) {
+          void terminalSessionManager
+            .updateSessionMetadata(terminalSessionId, {
+              name: metadata.sessionName,
+              cwd: metadata.cwd,
+            })
+            .then((updatedSession) => {
+              if (!updatedSession) {
+                return;
+              }
+              sendEvent(socket, {
+                type: "metadata",
+                name: updatedSession.name,
+                cwd: updatedSession.cwd,
+              });
+            });
+        }
+
+        if (!metadata.output) {
+          return;
+        }
+
+        terminalSessionManager.appendOutput(terminalSessionId, metadata.output);
+        sendEvent(socket, { type: "output", data: metadata.output });
       },
       onExit(event) {
         terminalSessionManager.markExited(terminalSessionId, event.exitCode);

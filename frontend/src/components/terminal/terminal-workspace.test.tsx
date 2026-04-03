@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TerminalSessionListItem } from "@browser-viewer/shared";
 import { TerminalWorkspace } from "./terminal-workspace";
@@ -6,6 +6,7 @@ import { TerminalWorkspace } from "./terminal-workspace";
 const listTerminalSessionsMock = vi.fn();
 const createTerminalSessionMock = vi.fn();
 const deleteTerminalSessionMock = vi.fn();
+const terminalSurfacePropsSpy = vi.fn();
 
 vi.mock("../../services/terminal", () => ({
   listTerminalSessions: (...args: unknown[]) => listTerminalSessionsMock(...args),
@@ -14,7 +15,10 @@ vi.mock("../../services/terminal", () => ({
 }));
 
 vi.mock("./terminal-surface", () => ({
-  TerminalSurface: () => <div data-testid="terminal-surface" />,
+  TerminalSurface: (props: unknown) => {
+    terminalSurfacePropsSpy(props);
+    return <div data-testid="terminal-surface" />;
+  },
 }));
 
 describe("TerminalWorkspace", () => {
@@ -22,6 +26,7 @@ describe("TerminalWorkspace", () => {
     listTerminalSessionsMock.mockReset();
     createTerminalSessionMock.mockReset();
     deleteTerminalSessionMock.mockReset();
+    terminalSurfacePropsSpy.mockReset();
 
     listTerminalSessionsMock.mockResolvedValue([]);
     createTerminalSessionMock.mockResolvedValue({
@@ -32,6 +37,7 @@ describe("TerminalWorkspace", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.clearAllMocks();
   });
 
@@ -48,13 +54,113 @@ describe("TerminalWorkspace", () => {
   it("creates a terminal session from the new button without browser linkage", async () => {
     render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
 
+    await waitFor(() => {
+      expect(listTerminalSessionsMock).toHaveBeenCalled();
+    });
+
     fireEvent.click(screen.getAllByRole("button", { name: "New" })[0]!);
 
     await waitFor(() => {
       expect(createTerminalSessionMock).toHaveBeenCalledWith(
         "http://localhost:5000",
         "token-1",
-        {},
+        { cwd: undefined },
+      );
+    });
+  });
+
+  it("creates a new terminal session with the active session cwd", async () => {
+    listTerminalSessionsMock.mockResolvedValue([
+      {
+        terminalSessionId: "terminal-1",
+        name: "shell-1",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/project-a",
+        status: "running",
+        createdAt: "2026-03-30T00:00:00.000Z",
+      },
+      {
+        terminalSessionId: "terminal-2",
+        name: "shell-2",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/project-b",
+        status: "running",
+        createdAt: "2026-03-30T01:00:00.000Z",
+      },
+    ]);
+
+    render(
+      <TerminalWorkspace
+        apiBase="http://localhost:5000"
+        token="token-1"
+        initialTerminalSessionId="terminal-2"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("shell-2")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "shell-2" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "New" })[0]!);
+
+    await waitFor(() => {
+      expect(createTerminalSessionMock).toHaveBeenCalledWith(
+        "http://localhost:5000",
+        "token-1",
+        { cwd: "/tmp/project-b" },
+      );
+    });
+  });
+
+  it("uses the latest cwd metadata from the active terminal session", async () => {
+    listTerminalSessionsMock.mockResolvedValue([
+      {
+        terminalSessionId: "terminal-1",
+        name: "shell-1",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/project-a",
+        status: "running",
+        createdAt: "2026-03-30T00:00:00.000Z",
+      },
+    ]);
+
+    render(
+      <TerminalWorkspace
+        apiBase="http://localhost:5000"
+        token="token-1"
+        initialTerminalSessionId="terminal-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("terminal-surface")).toBeInTheDocument();
+    });
+
+    const props = terminalSurfacePropsSpy.mock.calls.at(-1)?.[0] as {
+      onMetadata?: (metadata: { name: string; cwd: string }) => void;
+    };
+    act(() => {
+      props.onMetadata?.({
+        name: "project-b",
+        cwd: "/tmp/project-b",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "project-b" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "New" })[0]!);
+
+    await waitFor(() => {
+      expect(createTerminalSessionMock).toHaveBeenCalledWith(
+        "http://localhost:5000",
+        "token-1",
+        { cwd: "/tmp/project-b" },
       );
     });
   });

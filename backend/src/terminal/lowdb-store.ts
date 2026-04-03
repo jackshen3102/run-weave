@@ -6,6 +6,7 @@ import type {
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
   UpdateTerminalSessionExitParams,
+  UpdateTerminalSessionMetadataParams,
   UpdateTerminalSessionScrollbackParams,
 } from "./store";
 
@@ -62,20 +63,20 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
     });
   }
 
-  async updateSessionName(
-    terminalSessionId: string,
-    name: string,
+  async updateSessionMetadata(
+    params: UpdateTerminalSessionMetadataParams,
   ): Promise<void> {
     await this.enqueueWrite(async () => {
       const database = this.getDatabase();
       const session = database.data.sessions.find(
-        (candidate) => candidate.id === terminalSessionId,
+        (candidate) => candidate.id === params.terminalSessionId,
       );
       if (!session) {
         return;
       }
 
-      session.name = name;
+      session.name = params.name;
+      session.cwd = params.cwd;
       await database.write();
     });
   }

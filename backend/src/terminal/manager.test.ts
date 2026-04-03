@@ -12,7 +12,7 @@ function createStoreMock() {
     listSessions: vi.fn(async (): Promise<PersistedTerminalSessionRecord[]> => []),
     getSession: vi.fn(async () => null),
     insertSession: vi.fn(async () => undefined),
-    updateSessionName: vi.fn(async () => undefined),
+    updateSessionMetadata: vi.fn(async () => undefined),
     updateSessionScrollback: vi.fn(async () => undefined),
     updateSessionExit: vi.fn(async () => undefined),
     deleteSession: vi.fn(async () => undefined),
@@ -105,5 +105,30 @@ describe("TerminalSessionManager", () => {
     await expect(manager.destroySession(session.id)).resolves.toBe(true);
     expect(manager.getSession(session.id)).toBeUndefined();
     expect(store.deleteSession).toHaveBeenCalledWith(session.id);
+  });
+
+  it("updates session metadata and persists the latest cwd", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    const session = await manager.createSession({
+      command: "zsh",
+      cwd: "/Users/bytedance",
+    });
+
+    const updated = await manager.updateSessionMetadata(session.id, {
+      name: "browser-hub",
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+    });
+
+    expect(updated).toMatchObject({
+      id: session.id,
+      name: "browser-hub",
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+    });
+    expect(store.updateSessionMetadata).toHaveBeenCalledWith({
+      terminalSessionId: session.id,
+      name: "browser-hub",
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+    });
   });
 });

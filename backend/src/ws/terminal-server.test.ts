@@ -176,6 +176,78 @@ describe("terminal websocket server", () => {
     );
   });
 
+  it("publishes terminal metadata updates from shell cwd markers", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyToken: vi.fn(() => true),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        name: "/bin/zsh",
+        cwd: "/tmp",
+        scrollback: "",
+        status: "running",
+      })),
+      updateSessionMetadata: vi.fn(async () => ({
+        id: "terminal-1",
+        name: "browser-hub",
+        cwd: "/Users/bytedance/Desktop/vscode/browser-hub",
+        scrollback: "",
+        status: "running",
+      })),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    runtimeRegistry.createRuntime("terminal-1", runtime);
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    runtime.emit(
+      "data",
+      "\u001b]7;file://localhost/Users/bytedance/Desktop/vscode/browser-hub\u0007",
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(terminalSessionManager.updateSessionMetadata).toHaveBeenCalledWith(
+      "terminal-1",
+      {
+        name: "browser-hub",
+        cwd: "/Users/bytedance/Desktop/vscode/browser-hub",
+      },
+    );
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "metadata",
+          name: "browser-hub",
+          cwd: "/Users/bytedance/Desktop/vscode/browser-hub",
+        }),
+      ]),
+    );
+  });
+
   it("handles resize and signal messages", async () => {
     const runtime = new FakeRuntime();
     const authService = {

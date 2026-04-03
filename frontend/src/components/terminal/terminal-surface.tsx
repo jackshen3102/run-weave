@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -12,6 +12,7 @@ interface TerminalSurfaceProps {
   terminalSessionId: string;
   token: string;
   onAuthExpired?: () => void;
+  onMetadata?: (metadata: { name: string; cwd: string }) => void;
 }
 
 const ESCAPE = "\\u001b";
@@ -46,6 +47,7 @@ export function TerminalSurface({
   terminalSessionId,
   token,
   onAuthExpired,
+  onMetadata,
 }: TerminalSurfaceProps) {
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -63,9 +65,6 @@ export function TerminalSurface({
   }, []);
 
   const {
-    connectionStatus,
-    terminalStatus,
-    exitCode,
     error,
     sendInput,
     sendResize,
@@ -75,16 +74,8 @@ export function TerminalSurface({
     token,
     onAuthExpired,
     onOutput,
+    onMetadata,
   });
-
-  const renderedTerminalStatus = useMemo(() => {
-    const effectiveStatus = terminalStatus ?? "running";
-    if (effectiveStatus === "exited") {
-      return exitCode == null ? "Exited" : `Exited (${exitCode})`;
-    }
-
-    return "running";
-  }, [exitCode, terminalStatus]);
 
   useEffect(() => {
     const container = terminalContainerRef.current;
@@ -176,6 +167,24 @@ export function TerminalSurface({
 
     syncSize();
 
+    let mountFitFrameId: number | null = null;
+    mountFitFrameId = requestAnimationFrame(() => {
+      mountFitFrameId = null;
+      syncSize();
+    });
+
+    let disposed = false;
+    const fontFaceSet = document.fonts;
+    let fontReadyPromise: Promise<unknown> | null = null;
+    if (fontFaceSet?.ready) {
+      fontReadyPromise = fontFaceSet.ready.then(() => {
+        if (disposed) {
+          return;
+        }
+        syncSize();
+      });
+    }
+
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(() => {
@@ -187,6 +196,12 @@ export function TerminalSurface({
     }
 
     return () => {
+      disposed = true;
+      void fontReadyPromise;
+      if (mountFitFrameId !== null) {
+        cancelAnimationFrame(mountFitFrameId);
+        mountFitFrameId = null;
+      }
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
@@ -207,15 +222,11 @@ export function TerminalSurface({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-slate-800/90 px-3 py-2 text-xs uppercase tracking-[0.22em] text-slate-400">
-        <span>{renderedTerminalStatus}</span>
-        <span>{connectionStatus === "connected" ? "live" : "offline"}</span>
-      </div>
       {error ? <p className="px-3 py-2 text-xs text-rose-400">{error}</p> : null}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
           aria-label="Terminal emulator"
-          className="h-full min-h-full w-full p-3"
+          className="h-full min-h-full w-full px-3 pt-2 pb-2"
           role="application"
           tabIndex={0}
           onClick={() => terminalRef.current?.focus()}

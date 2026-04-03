@@ -64,6 +64,11 @@ export type TerminalServerMessage =
       terminalSessionId: string;
     }
   | {
+      type: "metadata";
+      name: string;
+      cwd: string;
+    }
+  | {
       type: "output";
       data: string;
     }

@@ -64,6 +64,7 @@ class MockWebSocket {
 
 function Probe(props: { onAuthExpired?: () => void }) {
   const [output, setOutput] = useState("");
+  const [terminalName, setTerminalName] = useState("unknown");
   const onOutput = useCallback((data: string) => {
     setOutput((prev) => prev + data);
   }, []);
@@ -74,6 +75,9 @@ function Probe(props: { onAuthExpired?: () => void }) {
     token: "token-1",
     onAuthExpired: props.onAuthExpired,
     onOutput,
+    onMetadata: (metadata) => {
+      setTerminalName(metadata.name);
+    },
   });
 
   return (
@@ -84,6 +88,7 @@ function Probe(props: { onAuthExpired?: () => void }) {
         {connection.exitCode == null ? "none" : String(connection.exitCode)}
       </span>
       <span data-testid="error">{connection.error ?? "none"}</span>
+      <span data-testid="terminal-name">{terminalName}</span>
       <pre data-testid="output">{output}</pre>
     </div>
   );
@@ -162,6 +167,26 @@ describe("useTerminalConnection", () => {
     expect(screen.getByTestId("terminal-status")).toHaveTextContent("exited");
     expect(screen.getByTestId("exit-code")).toHaveTextContent("130");
     expect(screen.getByTestId("output")).toHaveTextContent("bash-3.2$");
+  });
+
+  it("surfaces terminal metadata updates", async () => {
+    render(<Probe />);
+
+    await connectOnce();
+
+    const socket = MockWebSocket.instances[0];
+    expect(socket).toBeDefined();
+
+    act(() => {
+      socket?.emitOpen();
+      socket?.emitMessage({
+        type: "metadata",
+        name: "browser-hub",
+        cwd: "/Users/bytedance/Desktop/vscode/browser-hub",
+      });
+    });
+
+    expect(screen.getByTestId("terminal-name")).toHaveTextContent("browser-hub");
   });
 
   it("retries with a fresh ticket when websocket closes as unauthorized", async () => {

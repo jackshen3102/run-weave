@@ -70,4 +70,33 @@ describe("PtyService", () => {
       }),
     );
   });
+
+  it("injects zsh shell integration so prompt refresh can publish cwd metadata", () => {
+    const ptyProcess = {
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      write: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 555,
+    };
+    const spawn = vi.fn(() => ptyProcess);
+    const service = new PtyService({ spawn });
+
+    service.spawnSession({
+      command: "/bin/zsh",
+      cwd: "/tmp/demo",
+    });
+
+    expect(spawn).toHaveBeenCalledWith(
+      "/bin/zsh",
+      [],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          ZDOTDIR: expect.stringContaining("browser-viewer-zsh"),
+          BROWSER_VIEWER_ORIGINAL_ZDOTDIR: expect.any(String),
+        }),
+      }),
+    );
+  });
 });

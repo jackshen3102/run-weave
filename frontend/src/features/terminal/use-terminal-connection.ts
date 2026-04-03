@@ -35,14 +35,20 @@ export function useTerminalConnection(params: {
   token: string;
   onAuthExpired?: () => void;
   onOutput?: (data: string) => void;
+  onMetadata?: (metadata: { name: string; cwd: string }) => void;
 }) {
-  const { apiBase, terminalSessionId, token, onAuthExpired, onOutput } = params;
+  const { apiBase, terminalSessionId, token, onAuthExpired, onOutput, onMetadata } =
+    params;
   const socketRef = useRef<WebSocket | null>(null);
   // Keep onOutput in a ref so it never needs to be in the effect's dep array.
   const onOutputRef = useRef(onOutput);
+  const onMetadataRef = useRef(onMetadata);
   useEffect(() => {
     onOutputRef.current = onOutput;
   }, [onOutput]);
+  useEffect(() => {
+    onMetadataRef.current = onMetadata;
+  }, [onMetadata]);
 
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
   const [terminalStatus, setTerminalStatus] = useState<TerminalRuntimeStatus>(null);
@@ -119,6 +125,13 @@ export function useTerminalConnection(params: {
               const parsed = JSON.parse(String(event.data)) as TerminalServerMessage;
               if (parsed.type === "output") {
                 onOutputRef.current?.(parsed.data);
+                return;
+              }
+              if (parsed.type === "metadata") {
+                onMetadataRef.current?.({
+                  name: parsed.name,
+                  cwd: parsed.cwd,
+                });
                 return;
               }
               if (parsed.type === "status") {

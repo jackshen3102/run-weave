@@ -128,7 +128,9 @@ export function TerminalWorkspace({
   const createSession = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
-      const created = await createTerminalSession(apiBase, token, {});
+      const created = await createTerminalSession(apiBase, token, {
+        cwd: activeSession?.cwd,
+      });
       setRequestError(null);
       await loadSessions();
       setActiveSessionId(created.terminalSessionId);
@@ -141,7 +143,7 @@ export function TerminalWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [apiBase, loadSessions, onAuthExpired, token]);
+  }, [activeSession?.cwd, apiBase, loadSessions, onAuthExpired, token]);
 
   const closeSession = async (terminalSessionId: string): Promise<void> => {
     setLoading(true);
@@ -159,6 +161,19 @@ export function TerminalWorkspace({
       setLoading(false);
     }
   };
+
+  const handleSessionMetadata = useCallback(
+    (terminalSessionId: string, metadata: { name: string; cwd: string }) => {
+      setSessions((currentSessions) =>
+        currentSessions.map((session) =>
+          session.terminalSessionId === terminalSessionId
+            ? { ...session, name: metadata.name, cwd: metadata.cwd }
+            : session,
+        ),
+      );
+    },
+    [],
+  );
 
   return (
     <section
@@ -244,6 +259,9 @@ export function TerminalWorkspace({
             terminalSessionId={activeSession.terminalSessionId}
             token={token}
             onAuthExpired={onAuthExpired}
+            onMetadata={(metadata) => {
+              handleSessionMetadata(activeSession.terminalSessionId, metadata);
+            }}
           />
         ) : (
           <div className="flex h-full items-center justify-center px-6 text-sm text-slate-400">

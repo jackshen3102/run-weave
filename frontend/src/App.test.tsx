@@ -653,6 +653,9 @@ describe("App", () => {
       if (url === "/api/session/cdp-endpoint-default") {
         return jsonResponse({ endpoint: "http://127.0.0.1:9333" });
       }
+      if (url === "/api/terminal/session" && !options?.method) {
+        return jsonResponse([]);
+      }
       if (url === "/api/terminal/session" && options?.method === "POST") {
         return jsonResponse({
           terminalSessionId: "terminal-1",
@@ -691,5 +694,124 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getByText("Terminal route terminal-1")).toBeInTheDocument();
     });
+  });
+
+  it("does not create duplicate terminal sessions on rapid repeated clicks", async () => {
+    localStorage.setItem("viewer.auth.token", "token-1");
+    let terminalListRequests = 0;
+    let resolveCreate: ((value: unknown) => void) | undefined;
+    const fetchMock = vi.fn((url: string, options?: RequestInit) => {
+      if (url === "/api/session/cdp-endpoint-default") {
+        return Promise.resolve(jsonResponse({ endpoint: "http://127.0.0.1:9333" }));
+      }
+      if (url === "/api/terminal/session" && !options?.method) {
+        terminalListRequests += 1;
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url === "/api/terminal/session" && options?.method === "POST") {
+        return new Promise((resolve) => {
+          resolveCreate = resolve;
+        });
+      }
+      if (url === "/api/session") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByText("New Session")).toBeInTheDocument();
+    });
+
+    const openTerminalButton = screen.getByRole("button", { name: "Open Terminal" });
+    fireEvent.click(openTerminalButton);
+    fireEvent.click(openTerminalButton);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(
+          ([url, options]) =>
+            url === "/api/terminal/session" &&
+            (options as RequestInit | undefined)?.method === "POST",
+        ),
+      ).toHaveLength(1);
+    });
+    expect(terminalListRequests).toBeGreaterThan(0);
+
+    resolveCreate?.(
+      jsonResponse({
+        terminalSessionId: "terminal-1",
+        terminalUrl: "/terminal/terminal-1",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Terminal route terminal-1")).toBeInTheDocument();
+    });
+  });
+
+  it("reuses the latest running terminal session before creating a new one", async () => {
+    localStorage.setItem("viewer.auth.token", "token-1");
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === "/api/session/cdp-endpoint-default") {
+        return jsonResponse({ endpoint: "http://127.0.0.1:9333" });
+      }
+      if (url === "/api/terminal/session" && !options?.method) {
+        return jsonResponse([
+          {
+            terminalSessionId: "terminal-old",
+            name: "shell-old",
+            command: "bash",
+            args: [],
+            cwd: "/tmp",
+            status: "exited",
+            createdAt: "2026-04-03T09:00:00.000Z",
+          },
+          {
+            terminalSessionId: "terminal-live",
+            name: "shell-live",
+            command: "bash",
+            args: [],
+            cwd: "/tmp",
+            status: "running",
+            createdAt: "2026-04-03T10:00:00.000Z",
+          },
+        ]);
+      }
+      if (url === "/api/terminal/session" && options?.method === "POST") {
+        return jsonResponse({
+          terminalSessionId: "terminal-new",
+          terminalUrl: "/terminal/terminal-new",
+        });
+      }
+      if (url === "/api/session") {
+        return jsonResponse([]);
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByText("New Session")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Terminal" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Terminal route terminal-live")).toBeInTheDocument();
+    });
+
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, options]) =>
+          url === "/api/terminal/session" &&
+          (options as RequestInit | undefined)?.method === "POST",
+      ),
+    ).toBe(false);
   });
 });

@@ -20,7 +20,7 @@ export function TerminalRoutePage({
   }
 
   return (
-    <main className="h-dvh overflow-hidden bg-slate-950 p-3">
+    <main className="h-dvh overflow-hidden bg-slate-950 px-3 pt-3 pb-2">
       <TerminalWorkspace
         apiBase={apiBase}
         token={token}

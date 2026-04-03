@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { SessionListItem } from "@browser-viewer/shared";
+import type { SessionListItem, TerminalSessionListItem } from "@browser-viewer/shared";
 import { HttpError } from "../../services/http";
 import { changePassword as submitPasswordChange } from "../../services/auth";
-import { createTerminalSession } from "../../services/terminal";
+import {
+  createTerminalSession,
+  listTerminalSessions,
+} from "../../services/terminal";
 import {
   createSession as createBrowserSession,
   deleteSession as deleteBrowserSession,
@@ -82,6 +85,20 @@ export function HomePage({
       );
     });
   }, [sessions]);
+
+  const resolveReusableTerminalSession = (
+    terminalSessions: TerminalSessionListItem[],
+  ): TerminalSessionListItem | null => {
+    const runningSessions = terminalSessions
+      .filter((session) => session.status === "running")
+      .sort((left, right) => {
+        return (
+          new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+        );
+      });
+
+    return runningSessions[0] ?? null;
+  };
 
   const loadSessions = useCallback(async (): Promise<void> => {
     setLoadingSessions(true);
@@ -283,6 +300,13 @@ export function HomePage({
     setTerminalError(null);
 
     try {
+      const existingTerminalSessions = await listTerminalSessions(apiBase, token);
+      const reusableSession = resolveReusableTerminalSession(existingTerminalSessions);
+      if (reusableSession) {
+        navigate(`/terminal/${encodeURIComponent(reusableSession.terminalSessionId)}`);
+        return;
+      }
+
       const data = await createTerminalSession(apiBase, token, {});
       navigate(`/terminal/${encodeURIComponent(data.terminalSessionId)}`);
     } catch (createError) {

@@ -136,6 +136,32 @@ export class TerminalSessionManager {
     });
   }
 
+  async updateSessionMetadata(
+    terminalSessionId: string,
+    metadata: {
+      name: string;
+      cwd: string;
+    },
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    if (session.name === metadata.name && session.cwd === metadata.cwd) {
+      return session;
+    }
+
+    session.name = metadata.name;
+    session.cwd = metadata.cwd;
+    await this.sessionStore.updateSessionMetadata({
+      terminalSessionId,
+      name: metadata.name,
+      cwd: metadata.cwd,
+    });
+    return session;
+  }
+
   async updateSessionName(
     terminalSessionId: string,
     name: string,
@@ -145,9 +171,10 @@ export class TerminalSessionManager {
       return undefined;
     }
 
-    session.name = name;
-    await this.sessionStore.updateSessionName(terminalSessionId, name);
-    return session;
+    return this.updateSessionMetadata(terminalSessionId, {
+      name,
+      cwd: session.cwd,
+    });
   }
 
   async destroySession(terminalSessionId: string): Promise<boolean> {

@@ -83,4 +83,25 @@ describe("TerminalRoutePage", () => {
 
     expect(navigateMock).not.toHaveBeenCalled();
   });
+
+  it("uses tighter bottom spacing so the terminal is not clipped", () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={["/terminal/terminal-1"]}>
+        <Routes>
+          <Route
+            path="/terminal/:terminalSessionId"
+            element={
+              <TerminalRoutePage
+                apiBase="http://localhost:5000"
+                token="token-1"
+                onAuthExpired={vi.fn()}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(container.querySelector("main")).toHaveClass("px-3", "pt-3", "pb-2");
+  });
 });

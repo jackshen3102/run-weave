@@ -21,6 +21,12 @@ export interface UpdateTerminalSessionScrollbackParams {
   scrollback: string;
 }
 
+export interface UpdateTerminalSessionMetadataParams {
+  terminalSessionId: string;
+  name: string;
+  cwd: string;
+}
+
 export interface TerminalSessionStore {
   initialize(): Promise<void>;
   dispose(): Promise<void>;
@@ -29,7 +35,9 @@ export interface TerminalSessionStore {
     terminalSessionId: string,
   ): Promise<PersistedTerminalSessionRecord | null>;
   insertSession(session: PersistedTerminalSessionRecord): Promise<void>;
-  updateSessionName(terminalSessionId: string, name: string): Promise<void>;
+  updateSessionMetadata(
+    params: UpdateTerminalSessionMetadataParams,
+  ): Promise<void>;
   updateSessionScrollback(
     params: UpdateTerminalSessionScrollbackParams,
   ): Promise<void>;

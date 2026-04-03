@@ -58,10 +58,15 @@ describe("LowDbTerminalSessionStore", () => {
     expect(persisted.sessions).toEqual([record]);
   });
 
-  it("updates terminal scrollback, exit state, and deletion", async () => {
+  it("updates terminal metadata, scrollback, exit state, and deletion", async () => {
     const store = await createStore();
     await store.insertSession(createRecord());
 
+    await store.updateSessionMetadata({
+      terminalSessionId: "terminal-1",
+      name: "browser-hub",
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+    });
     await store.updateSessionScrollback({
       terminalSessionId: "terminal-1",
       scrollback: "hello world",
@@ -74,6 +79,8 @@ describe("LowDbTerminalSessionStore", () => {
 
     await expect(store.getSession("terminal-1")).resolves.toEqual(
       createRecord({
+        name: "browser-hub",
+        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
         status: "exited",
         exitCode: 130,
         scrollback: "hello world",

@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import type { IPty } from "node-pty";
 import type { TerminalSignal } from "@browser-viewer/shared";
 import { resolveNodePtyDirectory } from "./node-pty-path";
+import { applyShellIntegration } from "./shell-integration";
 
 export interface SpawnTerminalSessionOptions {
   command: string;
@@ -96,6 +97,7 @@ function toTerminalSignal(signal: TerminalSignal): string {
 function buildPtyEnv(
   baseEnv: NodeJS.ProcessEnv,
   sessionEnv: NodeJS.ProcessEnv | undefined,
+  command: string,
 ): NodeJS.ProcessEnv {
   const merged: NodeJS.ProcessEnv = {
     ...baseEnv,
@@ -109,7 +111,7 @@ function buildPtyEnv(
     merged.COLORTERM = "truecolor";
   }
 
-  return merged;
+  return applyShellIntegration(command, merged);
 }
 
 export class PtyService {
@@ -125,7 +127,7 @@ export class PtyService {
   spawnSession(options: SpawnTerminalSessionOptions): PtyRuntime {
     ensureSpawnHelperExecutable();
 
-    const processEnv = buildPtyEnv(process.env, options.env);
+    const processEnv = buildPtyEnv(process.env, options.env, options.command);
     const ptyProcess = this.spawnImpl(options.command, options.args ?? [], {
       name: "xterm-256color",
       cols: options.cols ?? 80,
