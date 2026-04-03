@@ -12,6 +12,11 @@ describe("path helpers", () => {
   it("resolves default storage paths under the home directory", () => {
     expect(resolveStoragePaths({}, "/Users/tester")).toEqual({
       browserProfileDir: path.join("/Users/tester", ".browser-profile"),
+      authStoreFile: path.join(
+        "/Users/tester",
+        ".browser-profile",
+        "auth-store.json",
+      ),
       sessionStoreFile: path.join(
         "/Users/tester",
         ".browser-profile",
@@ -33,6 +38,11 @@ describe("path helpers", () => {
       ),
     ).toEqual({
       browserProfileDir: path.join("/Users/tester", "custom-profile"),
+      authStoreFile: path.join(
+        "/Users/tester",
+        "custom-profile",
+        "auth-store.json",
+      ),
       sessionStoreFile: path.join(
         "/Users/tester",
         "custom-profile",
@@ -51,6 +61,7 @@ describe("path helpers", () => {
       resolveStoragePaths(
         {
           BROWSER_PROFILE_DIR: "~/custom-profile",
+          AUTH_STORE_FILE: "~/db/auth.json",
           SESSION_STORE_FILE: "~/db/session.json",
           TERMINAL_SESSION_STORE_FILE: "~/db/terminal-session.json",
         },
@@ -58,6 +69,7 @@ describe("path helpers", () => {
       ),
     ).toEqual({
       browserProfileDir: path.join("/Users/tester", "custom-profile"),
+      authStoreFile: path.join("/Users/tester", "db", "auth.json"),
       sessionStoreFile: path.join("/Users/tester", "db", "session.json"),
       terminalSessionStoreFile: path.join(
         "/Users/tester",

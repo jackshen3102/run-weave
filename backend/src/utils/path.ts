@@ -3,12 +3,14 @@ import path from "node:path";
 
 export interface StoragePaths {
   browserProfileDir: string;
+  authStoreFile: string;
   sessionStoreFile: string;
   terminalSessionStoreFile: string;
 }
 
 interface StorageEnv {
   BROWSER_PROFILE_DIR?: string;
+  AUTH_STORE_FILE?: string;
   SESSION_STORE_FILE?: string;
   TERMINAL_SESSION_STORE_FILE?: string;
 }
@@ -41,6 +43,10 @@ export function resolveStoragePaths(
   const browserProfileDir = path.resolve(
     expandHomePath(env.BROWSER_PROFILE_DIR, homeDir) ?? defaultProfileDir,
   );
+  const authStoreFile = path.resolve(
+    expandHomePath(env.AUTH_STORE_FILE, homeDir) ??
+      path.join(browserProfileDir, "auth-store.json"),
+  );
   const sessionStoreFile = path.resolve(
     expandHomePath(env.SESSION_STORE_FILE, homeDir) ??
       path.join(browserProfileDir, "session-store.json"),
@@ -52,6 +58,7 @@ export function resolveStoragePaths(
 
   return {
     browserProfileDir,
+    authStoreFile,
     sessionStoreFile,
     terminalSessionStoreFile,
   };

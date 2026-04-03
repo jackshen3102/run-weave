@@ -31,6 +31,11 @@ export interface LoginResponse {
   expiresIn: number;
 }
 
+export interface ChangePasswordRequest {
+  oldPassword: string;
+  newPassword: string;
+}
+
 export interface CreateSessionResponse {
   sessionId: string;
   viewerUrl: string;

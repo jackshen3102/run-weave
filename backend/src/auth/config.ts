@@ -1,18 +1,10 @@
+import crypto from "node:crypto";
+
 interface AuthConfig {
   username: string;
   password: string;
   jwtSecret: string;
   tokenTtlMs: number;
-}
-
-function readRequiredEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(
-      `[viewer-be] missing required environment variable: ${name}`,
-    );
-  }
-  return value;
 }
 
 function parseTokenTtlMs(rawTtl: string | undefined): number {
@@ -32,9 +24,11 @@ function parseTokenTtlMs(rawTtl: string | undefined): number {
 
 export function loadAuthConfig(): AuthConfig {
   return {
-    username: readRequiredEnv("AUTH_USERNAME"),
-    password: readRequiredEnv("AUTH_PASSWORD"),
-    jwtSecret: readRequiredEnv("AUTH_JWT_SECRET"),
+    username: "admin",
+    password: "admin",
+    jwtSecret:
+      process.env.AUTH_JWT_SECRET?.trim() ||
+      crypto.randomBytes(32).toString("base64url"),
     tokenTtlMs: parseTokenTtlMs(process.env.AUTH_TOKEN_TTL_SECONDS),
   };
 }

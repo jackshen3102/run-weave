@@ -9,21 +9,21 @@ afterEach(() => {
 
 describe("loadAuthConfig", () => {
   it("loads required auth env with default ttl", () => {
-    process.env.AUTH_USERNAME = "admin";
-    process.env.AUTH_PASSWORD = "secret";
+    delete process.env.AUTH_USERNAME;
+    delete process.env.AUTH_PASSWORD;
     process.env.AUTH_JWT_SECRET = "jwt-secret";
     delete process.env.AUTH_TOKEN_TTL_SECONDS;
 
     const config = loadAuthConfig();
     expect(config.username).toBe("admin");
-    expect(config.password).toBe("secret");
+    expect(config.password).toBe("admin");
     expect(config.jwtSecret).toBe("jwt-secret");
     expect(config.tokenTtlMs).toBe(8 * 60 * 60 * 1000);
   });
 
   it("parses ttl seconds", () => {
-    process.env.AUTH_USERNAME = "admin";
-    process.env.AUTH_PASSWORD = "secret";
+    delete process.env.AUTH_USERNAME;
+    delete process.env.AUTH_PASSWORD;
     process.env.AUTH_JWT_SECRET = "jwt-secret";
     process.env.AUTH_TOKEN_TTL_SECONDS = "300";
 
@@ -32,13 +32,24 @@ describe("loadAuthConfig", () => {
   });
 
   it("throws for invalid ttl", () => {
-    process.env.AUTH_USERNAME = "admin";
-    process.env.AUTH_PASSWORD = "secret";
+    delete process.env.AUTH_USERNAME;
+    delete process.env.AUTH_PASSWORD;
     process.env.AUTH_JWT_SECRET = "jwt-secret";
     process.env.AUTH_TOKEN_TTL_SECONDS = "0";
 
     expect(() => loadAuthConfig()).toThrow(
       "AUTH_TOKEN_TTL_SECONDS must be a positive number",
     );
+  });
+
+  it("generates a jwt secret when none is provided", () => {
+    delete process.env.AUTH_JWT_SECRET;
+    delete process.env.AUTH_TOKEN_TTL_SECONDS;
+
+    const config = loadAuthConfig();
+
+    expect(config.username).toBe("admin");
+    expect(config.password).toBe("admin");
+    expect(config.jwtSecret.length).toBeGreaterThan(10);
   });
 });

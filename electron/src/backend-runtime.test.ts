@@ -64,6 +64,6 @@ test("fills packaged backend auth defaults when process env is missing", () => {
   });
 
   assert.equal(env.AUTH_USERNAME, "admin");
-  assert.equal(env.AUTH_PASSWORD, "browser-viewer");
+  assert.equal(env.AUTH_PASSWORD, "admin");
   assert.equal(env.AUTH_JWT_SECRET, "browser-viewer-local-jwt-secret");
 });

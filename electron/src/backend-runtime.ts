@@ -8,7 +8,7 @@ const HEALTHCHECK_INTERVAL_MS = 200;
 const LOCALHOST = "127.0.0.1";
 const DEFAULT_PACKAGED_AUTH = {
   AUTH_USERNAME: "admin",
-  AUTH_PASSWORD: "browser-viewer",
+  AUTH_PASSWORD: "admin",
   AUTH_JWT_SECRET: "browser-viewer-local-jwt-secret",
 } as const;
 

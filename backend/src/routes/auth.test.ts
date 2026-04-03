@@ -16,6 +16,9 @@ function createTestServer() {
       };
     }),
     verifyToken: vi.fn((token: string) => token === "token-abc"),
+    changePassword: vi.fn(async (oldPassword: string, newPassword: string) => {
+      return oldPassword === "secret" && newPassword.length > 0;
+    }),
   };
 
   const app = express();
@@ -115,5 +118,49 @@ describe("auth routes", () => {
     });
 
     expect(response.status).toBe(401);
+  });
+
+  it("changes password for an authenticated user when old password matches", async () => {
+    const { server, authService } = createTestServer();
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer token-abc",
+      },
+      body: JSON.stringify({
+        oldPassword: "secret",
+        newPassword: "new-secret",
+      }),
+    });
+
+    expect(response.status).toBe(204);
+    expect(authService.changePassword).toHaveBeenCalledWith(
+      "secret",
+      "new-secret",
+    );
+  });
+
+  it("rejects password change when the old password is wrong", async () => {
+    const { server } = createTestServer();
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer token-abc",
+      },
+      body: JSON.stringify({
+        oldPassword: "wrong",
+        newPassword: "new-secret",
+      }),
+    });
+
+    expect(response.status).toBe(403);
   });
 });

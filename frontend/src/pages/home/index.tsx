@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { SessionListItem } from "@browser-viewer/shared";
 import { HttpError } from "../../services/http";
+import { changePassword as submitPasswordChange } from "../../services/auth";
 import { createTerminalSession } from "../../services/terminal";
 import {
   createSession as createBrowserSession,
@@ -11,6 +12,7 @@ import {
   updateSession as updateBrowserSession,
 } from "../../services/session";
 import { HomeHeader } from "./components/home-header";
+import { ChangePasswordDialog } from "./components/change-password-dialog";
 import { HomeSidebar } from "./components/home-sidebar";
 import { SessionList } from "./components/session-list";
 import { parseSessionHeaders } from "./utils";
@@ -64,6 +66,11 @@ export function HomePage({
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(
+    null,
+  );
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
+  const [passwordChangeError, setPasswordChangeError] = useState<string | null>(
     null,
   );
 
@@ -291,6 +298,35 @@ export function HomePage({
     }
   };
 
+  const changePassword = async (payload: {
+    oldPassword: string;
+    newPassword: string;
+  }): Promise<void> => {
+    setPasswordChangeLoading(true);
+    setPasswordChangeError(null);
+
+    try {
+      await submitPasswordChange(apiBase, token, payload);
+      setPasswordDialogOpen(false);
+      clearToken();
+      navigate("/login", { replace: true });
+    } catch (changeError) {
+      if (changeError instanceof HttpError && changeError.status === 403) {
+        setPasswordChangeError("Incorrect current password.");
+        return;
+      }
+      if (changeError instanceof HttpError && changeError.status === 401) {
+        clearToken();
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      setPasswordChangeError(String(changeError));
+    } finally {
+      setPasswordChangeLoading(false);
+    }
+  };
+
   return (
     <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-8 sm:py-8">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217,226,211,0.75),transparent_32%),radial-gradient(circle_at_80%_20%,rgba(68,136,146,0.16),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(191,166,122,0.18),transparent_28%)]" />
@@ -305,10 +341,27 @@ export function HomePage({
           onOpenTerminal={() => {
             void createTerminal();
           }}
+          onOpenChangePassword={() => {
+            setPasswordChangeError(null);
+            setPasswordDialogOpen(true);
+          }}
           onLogout={() => {
             clearToken();
             navigate("/login", { replace: true });
           }}
+        />
+        <ChangePasswordDialog
+          open={passwordDialogOpen}
+          loading={passwordChangeLoading}
+          error={passwordChangeError}
+          onClose={() => {
+            if (passwordChangeLoading) {
+              return;
+            }
+            setPasswordChangeError(null);
+            setPasswordDialogOpen(false);
+          }}
+          onSubmit={changePassword}
         />
 
         {terminalError ? (

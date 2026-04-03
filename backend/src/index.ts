@@ -3,10 +3,12 @@ import http from "node:http";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import express from "express";
+import { LowDbAuthStore } from "./auth/lowdb-store";
 import { BrowserService } from "./browser/service";
 import { loadAuthConfig } from "./auth/config";
 import { createRequireAuth } from "./auth/middleware";
 import { AuthService } from "./auth/service";
+import type { AuthStore } from "./auth/store";
 import { resolveDevtoolsEnabled } from "./config/devtools";
 import { createAuthRouter } from "./routes/auth";
 import { createDevtoolsRouter } from "./routes/devtools";
@@ -36,6 +38,7 @@ interface RuntimeConfig {
 }
 
 interface RuntimeServices {
+  authStore: AuthStore;
   authService: AuthService;
   sessionManager: SessionManager;
   browserService: BrowserService;
@@ -117,6 +120,7 @@ function resolveSessionRestoreEnabled(env: NodeJS.ProcessEnv): boolean {
 
 async function createRuntimeServices(): Promise<RuntimeServices> {
   const storagePaths = resolveStoragePaths(process.env);
+  const authConfig = loadAuthConfig();
   const devtoolsEnabled = resolveDevtoolsEnabled(process.env);
   const rawRemoteDebuggingPort = process.env.BROWSER_REMOTE_DEBUGGING_PORT;
   const browserService = new BrowserService({
@@ -129,7 +133,22 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
       ? parsePort(rawRemoteDebuggingPort, 9222)
       : undefined,
   });
-  const authService = new AuthService(loadAuthConfig());
+  const authStore = new LowDbAuthStore(storagePaths.authStoreFile);
+  const persistedAuth = await authStore.initialize({
+    username: authConfig.username,
+    password: authConfig.password,
+    jwtSecret: authConfig.jwtSecret,
+    updatedAt: new Date().toISOString(),
+  });
+  const authService = new AuthService(
+    {
+      ...authConfig,
+      username: persistedAuth.username,
+      password: persistedAuth.password,
+      jwtSecret: persistedAuth.jwtSecret,
+    },
+    authStore,
+  );
   const sessionStore = new LowDbSessionStore(storagePaths.sessionStoreFile);
   const terminalSessionStore = new LowDbTerminalSessionStore(
     storagePaths.terminalSessionStoreFile,
@@ -149,6 +168,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   await terminalSessionManager.initialize();
 
   return {
+    authStore,
     authService,
     sessionManager,
     browserService,
@@ -232,6 +252,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
 
 function attachLifecycleHandlers(
   server: http.Server,
+  authStore: AuthStore,
   sessionManager: SessionManager,
   terminalSessionManager: TerminalSessionManager,
   terminalRuntimeRegistry: TerminalRuntimeRegistry,
@@ -248,6 +269,7 @@ function attachLifecycleHandlers(
     await terminalRuntimeRegistry.disposeAll();
     await terminalSessionManager.dispose();
     await sessionManager.dispose();
+    await authStore.dispose();
     process.exit(0);
   };
 
@@ -296,6 +318,7 @@ async function startRuntime(): Promise<void> {
 
   attachLifecycleHandlers(
     server,
+    services.authStore,
     services.sessionManager,
     services.terminalSessionManager,
     services.terminalRuntimeRegistry,

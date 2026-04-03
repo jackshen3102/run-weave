@@ -11,6 +11,7 @@ interface HomeHeaderProps {
   onSelectConnection?: (connectionId: string) => void;
   onOpenConnectionManager?: () => void;
   onOpenTerminal: () => void;
+  onOpenChangePassword: () => void;
   onLogout: () => void;
 }
 
@@ -22,6 +23,7 @@ export function HomeHeader({
   onSelectConnection,
   onOpenConnectionManager,
   onOpenTerminal,
+  onOpenChangePassword,
   onLogout,
 }: HomeHeaderProps) {
   return (
@@ -53,6 +55,14 @@ export function HomeHeader({
           disabled={terminalLoading}
         >
           {terminalLoading ? "Opening..." : "Open Terminal"}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="rounded-full px-4 text-muted-foreground"
+          onClick={onOpenChangePassword}
+        >
+          Change Password
         </Button>
         <Button
           variant="ghost"
