@@ -40,6 +40,7 @@ export function useTerminalConnection(params: {
   const { apiBase, terminalSessionId, token, onAuthExpired, onOutput, onMetadata } =
     params;
   const socketRef = useRef<WebSocket | null>(null);
+  const pendingResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   // Keep onOutput in a ref so it never needs to be in the effect's dep array.
   const onOutputRef = useRef(onOutput);
   const onMetadataRef = useRef(onMetadata);
@@ -95,6 +96,13 @@ export function useTerminalConnection(params: {
               return;
             }
             setConnectionStatus("connected");
+            if (pendingResizeRef.current) {
+              sendMessage(socket, {
+                type: "resize",
+                cols: pendingResizeRef.current.cols,
+                rows: pendingResizeRef.current.rows,
+              });
+            }
           });
           socket.addEventListener("close", (event) => {
             if (socketRef.current !== socket) {
@@ -194,6 +202,7 @@ export function useTerminalConnection(params: {
       });
     }, []),
     sendResize: useCallback((cols: number, rows: number) => {
+      pendingResizeRef.current = { cols, rows };
       sendMessage(socketRef.current, {
         type: "resize",
         cols,

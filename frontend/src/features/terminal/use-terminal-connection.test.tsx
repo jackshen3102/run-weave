@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useState } from "react";
+import { StrictMode, useCallback, useEffect, useState } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -92,6 +92,20 @@ function Probe(props: { onAuthExpired?: () => void }) {
       <pre data-testid="output">{output}</pre>
     </div>
   );
+}
+
+function ResizeProbe() {
+  const { sendResize } = useTerminalConnection({
+    apiBase: "http://localhost:5001",
+    terminalSessionId: "terminal-1",
+    token: "token-1",
+  });
+
+  useEffect(() => {
+    sendResize(132, 40);
+  }, [sendResize]);
+
+  return null;
 }
 
 async function flushMicrotasks(): Promise<void> {
@@ -255,5 +269,32 @@ describe("useTerminalConnection", () => {
     });
 
     expect(screen.getByTestId("connection-status")).toHaveTextContent("connected");
+  });
+
+  it("replays the latest terminal resize after websocket open", async () => {
+    const sendSpy = vi.spyOn(MockWebSocket.prototype, "send");
+
+    render(<ResizeProbe />);
+
+    await connectOnce();
+
+    const socket = MockWebSocket.instances[0];
+    expect(socket).toBeDefined();
+
+    expect(sendSpy).not.toHaveBeenCalled();
+
+    act(() => {
+      socket?.emitOpen();
+    });
+
+    expect(sendSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "resize",
+        cols: 132,
+        rows: 40,
+      }),
+    );
+
+    sendSpy.mockRestore();
   });
 });
