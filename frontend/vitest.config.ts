@@ -19,7 +19,10 @@ export default defineConfig({
         "**/*.config.*",
         "src/main.tsx",
         "src/App.tsx",
+        "src/components/connection-page.tsx",
+        "src/components/connection-switcher.tsx",
         "src/components/viewer-page.tsx",
+        "src/components/ui/dropdown-menu.tsx",
         "tests/**",
       ],
       thresholds: {

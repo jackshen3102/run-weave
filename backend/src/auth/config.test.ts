@@ -8,15 +8,15 @@ afterEach(() => {
 });
 
 describe("loadAuthConfig", () => {
-  it("loads required auth env with default ttl", () => {
-    delete process.env.AUTH_USERNAME;
-    delete process.env.AUTH_PASSWORD;
+  it("loads username and password from env with default ttl", () => {
+    process.env.AUTH_USERNAME = "e2e-admin";
+    process.env.AUTH_PASSWORD = "e2e-secret";
     process.env.AUTH_JWT_SECRET = "jwt-secret";
     delete process.env.AUTH_TOKEN_TTL_SECONDS;
 
     const config = loadAuthConfig();
-    expect(config.username).toBe("admin");
-    expect(config.password).toBe("admin");
+    expect(config.username).toBe("e2e-admin");
+    expect(config.password).toBe("e2e-secret");
     expect(config.jwtSecret).toBe("jwt-secret");
     expect(config.tokenTtlMs).toBe(8 * 60 * 60 * 1000);
   });
@@ -51,5 +51,16 @@ describe("loadAuthConfig", () => {
     expect(config.username).toBe("admin");
     expect(config.password).toBe("admin");
     expect(config.jwtSecret.length).toBeGreaterThan(10);
+  });
+
+  it("falls back to default credentials when env vars are missing", () => {
+    delete process.env.AUTH_USERNAME;
+    delete process.env.AUTH_PASSWORD;
+    process.env.AUTH_JWT_SECRET = "jwt-secret";
+
+    const config = loadAuthConfig();
+
+    expect(config.username).toBe("admin");
+    expect(config.password).toBe("admin");
   });
 });

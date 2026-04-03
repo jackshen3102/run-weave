@@ -23,9 +23,12 @@ function parseTokenTtlMs(rawTtl: string | undefined): number {
 }
 
 export function loadAuthConfig(): AuthConfig {
+  const username = process.env.AUTH_USERNAME?.trim();
+  const password = process.env.AUTH_PASSWORD?.trim();
+
   return {
-    username: "admin",
-    password: "admin",
+    username: username || "admin",
+    password: password || "admin",
     jwtSecret:
       process.env.AUTH_JWT_SECRET?.trim() ||
       crypto.randomBytes(32).toString("base64url"),
