@@ -19,6 +19,13 @@ extraResources:
     to: frontend/dist
     filter:
       - "**/*"
+  - from: ../backend/node_modules/node-pty
+    to: backend/node_modules/node-pty
+    filter:
+      - "lib/**/*"
+      - "prebuilds/darwin-arm64/**/*"
+      - "package.json"
+      - "LICENSE"
 
 mac:
   icon: resources/icons/icon.icns

@@ -1,3 +1,4 @@
+import { rmSync } from "node:fs";
 import { build } from "esbuild";
 
 const shared = {
@@ -26,4 +27,15 @@ await build({
   outExtension: { ".js": ".cjs" },
 });
 
-console.log("[bundle] electron main + preload built successfully");
+rmSync("dist/backend", { recursive: true, force: true });
+
+await build({
+  ...shared,
+  entryPoints: ["../backend/src/index.ts"],
+  outdir: "dist/backend",
+  format: "cjs",
+  external: ["node-pty"],
+  outExtension: { ".js": ".cjs" },
+});
+
+console.log("[bundle] electron main + preload + backend runtime built successfully");

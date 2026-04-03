@@ -1,11 +1,13 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   protocol,
   net,
 } from "electron";
 import path from "node:path";
 import { resolveProtocolFilePath } from "./protocol-path.js";
+import { startPackagedBackend, type PackagedBackendRuntime } from "./backend-runtime.js";
 import { createTray } from "./tray.js";
 import { initAutoUpdater, checkForUpdates } from "./updater.js";
 import { getIsQuitting, setIsQuitting } from "./app-state.js";
@@ -113,35 +115,60 @@ function setupSessionIntercept(win: BrowserWindow) {
 
 app.commandLine.appendSwitch("ignore-certificate-errors");
 
-app.whenReady().then(() => {
-  if (!isDev) {
-    registerCustomProtocol();
-  }
+let packagedBackendRuntime: PackagedBackendRuntime | null = null;
 
-  const mainWindow = createWindow();
-
-  createTray(mainWindow);
-
-  if (!isDev) {
-    initAutoUpdater(mainWindow);
-    setTimeout(() => checkForUpdates(), 3_000);
-  }
-
-  mainWindow.on("close", (event) => {
-    if (!getIsQuitting()) {
-      event.preventDefault();
-      mainWindow.hide();
+app.whenReady().then(async () => {
+  try {
+    if (!isDev) {
+      registerCustomProtocol();
+      packagedBackendRuntime = await startPackagedBackend({
+        baseEnv: process.env,
+      });
+      process.env.BROWSER_VIEWER_BACKEND_URL = packagedBackendRuntime.backendUrl;
+      packagedBackendRuntime.child.once("exit", (code, signal) => {
+        if (!getIsQuitting()) {
+          dialog.showErrorBox(
+            "Backend Stopped",
+            `The packaged backend exited unexpectedly (code=${code}, signal=${signal ?? "none"}).`,
+          );
+          app.quit();
+        }
+      });
     }
-  });
 
-  app.on("activate", () => {
-    mainWindow.show();
-    mainWindow.focus();
-  });
+    const mainWindow = createWindow();
+
+    createTray(mainWindow);
+
+    if (!isDev) {
+      initAutoUpdater(mainWindow);
+      setTimeout(() => checkForUpdates(), 3_000);
+    }
+
+    mainWindow.on("close", (event) => {
+      if (!getIsQuitting()) {
+        event.preventDefault();
+        mainWindow.hide();
+      }
+    });
+
+    app.on("activate", () => {
+      mainWindow.show();
+      mainWindow.focus();
+    });
+  } catch (error) {
+    console.error("[electron] failed to initialize application", error);
+    dialog.showErrorBox(
+      "Application Failed to Start",
+      String(error),
+    );
+    app.quit();
+  }
 });
 
 app.on("before-quit", () => {
   setIsQuitting(true);
+  void packagedBackendRuntime?.stop();
 });
 
 app.on("window-all-closed", () => {

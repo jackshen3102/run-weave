@@ -2,7 +2,6 @@ import "dotenv/config";
 import http from "node:http";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import express from "express";
 import { BrowserService } from "./browser/service";
 import { loadAuthConfig } from "./auth/config";
@@ -46,9 +45,6 @@ interface RuntimeServices {
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
   ptyService: PtyService;
 }
-
-const CURRENT_FILE_PATH = fileURLToPath(import.meta.url);
-const CURRENT_DIR_PATH = path.dirname(CURRENT_FILE_PATH);
 
 function readCliOption(optionName: string): string | undefined {
   const longOption = `--${optionName}`;
@@ -105,7 +101,14 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
 }
 
 function resolveFrontendDistDir(): string {
-  return path.resolve(CURRENT_DIR_PATH, "../../frontend/dist");
+  const primaryCandidate = path.resolve(process.cwd(), "frontend/dist");
+  const candidates = [
+    primaryCandidate,
+    path.resolve(process.cwd(), "../frontend/dist"),
+    path.resolve(process.cwd(), "../../frontend/dist"),
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? primaryCandidate;
 }
 
 function resolveSessionRestoreEnabled(env: NodeJS.ProcessEnv): boolean {

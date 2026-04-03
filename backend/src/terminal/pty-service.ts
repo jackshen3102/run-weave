@@ -1,8 +1,9 @@
 import { chmodSync, statSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { spawn, type IPty } from "node-pty";
+import type { IPty } from "node-pty";
 import type { TerminalSignal } from "@browser-viewer/shared";
+import { resolveNodePtyDirectory } from "./node-pty-path";
 
 export interface SpawnTerminalSessionOptions {
   command: string;
@@ -46,7 +47,19 @@ interface PtyServiceDependencies {
   ) => PtySpawnResult;
 }
 
-const require = createRequire(import.meta.url);
+const require = createRequire(
+  path.join(process.cwd(), "__browser_viewer_node_pty_loader__.cjs"),
+);
+
+function loadNodePtyModule(): typeof import("node-pty") {
+  const configuredDir = resolveNodePtyDirectory(process.env);
+
+  if (configuredDir) {
+    return require(path.join(configuredDir, "lib", "index.js")) as typeof import("node-pty");
+  }
+
+  return require("node-pty") as typeof import("node-pty");
+}
 
 function ensureSpawnHelperExecutable(): void {
   if (process.platform !== "darwin") {
@@ -54,9 +67,11 @@ function ensureSpawnHelperExecutable(): void {
   }
 
   try {
-    const packageJsonPath = require.resolve("node-pty/package.json");
+    const nodePtyDir =
+      resolveNodePtyDirectory(process.env) ??
+      path.dirname(require.resolve("node-pty/package.json"));
     const helperPath = path.join(
-      path.dirname(packageJsonPath),
+      nodePtyDir,
       "prebuilds",
       `darwin-${process.arch}`,
       "spawn-helper",
@@ -103,7 +118,8 @@ export class PtyService {
   constructor(dependencies?: PtyServiceDependencies) {
     this.spawnImpl =
       dependencies?.spawn ??
-      ((file, args, options) => spawn(file, args, options) as unknown as IPty);
+      ((file, args, options) =>
+        loadNodePtyModule().spawn(file, args, options) as unknown as IPty);
   }
 
   spawnSession(options: SpawnTerminalSessionOptions): PtyRuntime {
