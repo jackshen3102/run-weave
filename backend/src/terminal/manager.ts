@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
+import { TERMINAL_PERSISTED_SCROLLBACK_BYTES } from "@browser-viewer/shared";
 import type {
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
@@ -55,7 +56,6 @@ function toPersisted(
   };
 }
 
-const MAX_SCROLLBACK_LENGTH = 256 * 1024;
 const SCROLLBACK_FLUSH_DELAY_MS = 250;
 
 export class TerminalSessionManager {
@@ -108,7 +108,7 @@ export class TerminalSessionManager {
     }
 
     session.scrollback = `${session.scrollback}${chunk}`.slice(
-      -MAX_SCROLLBACK_LENGTH,
+      -TERMINAL_PERSISTED_SCROLLBACK_BYTES,
     );
     this.scheduleScrollbackFlush(terminalSessionId);
   }

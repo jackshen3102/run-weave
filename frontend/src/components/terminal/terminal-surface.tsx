@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -91,7 +92,7 @@ export function TerminalSurface({
       fontFamily: "\"Fira Code\", \"SFMono-Regular\", ui-monospace, monospace",
       fontSize: 13,
       lineHeight: 1.2,
-      scrollback: 5000,
+      scrollback: TERMINAL_CLIENT_SCROLLBACK_LINES,
       theme: {
         background: "#0b1220",
         foreground: "#e2e8f0",

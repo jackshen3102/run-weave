@@ -92,6 +92,20 @@ describe("TerminalSessionManager", () => {
     vi.useRealTimers();
   });
 
+  it("retains long scrollback transcripts instead of trimming after a few hundred kilobytes", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    const session = await manager.createSession({
+      command: "bash",
+      cwd: "/tmp/demo",
+    });
+    const largeTranscript = `${"line-1234567890\n".repeat(20_000)}done\n`;
+
+    manager.appendOutput(session.id, largeTranscript);
+
+    expect(manager.getScrollback(session.id)).toBe(largeTranscript);
+  });
+
   it("deletes terminal sessions", async () => {
     const store = createStoreMock();
     const manager = new TerminalSessionManager(store);

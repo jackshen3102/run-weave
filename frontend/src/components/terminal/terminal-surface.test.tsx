@@ -6,6 +6,7 @@ const terminalOpenMock = vi.fn();
 const terminalDisposeMock = vi.fn();
 const terminalLoadAddonMock = vi.fn();
 const terminalFocusMock = vi.fn();
+const terminalConstructorOptions: Array<Record<string, unknown>> = [];
 const fitAddonFitMock = vi.fn();
 const useTerminalConnectionMock = vi.fn();
 const sendInputMock = vi.fn();
@@ -13,7 +14,9 @@ const sendResizeMock = vi.fn();
 
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
-    constructor() {}
+    constructor(options: Record<string, unknown>) {
+      terminalConstructorOptions.push(options);
+    }
     unicode = { activeVersion: "" };
     onData = vi.fn(() => ({ dispose: vi.fn() }));
     open = terminalOpenMock;
@@ -67,6 +70,7 @@ describe("TerminalSurface", () => {
     terminalDisposeMock.mockReset();
     terminalLoadAddonMock.mockReset();
     terminalFocusMock.mockReset();
+    terminalConstructorOptions.length = 0;
     fitAddonFitMock.mockReset();
     useTerminalConnectionMock.mockReset();
     sendInputMock.mockReset();
@@ -129,5 +133,17 @@ describe("TerminalSurface", () => {
 
     expect(screen.queryByText("live")).not.toBeInTheDocument();
     expect(screen.queryByText("running")).not.toBeInTheDocument();
+  });
+
+  it("configures deeper xterm scrollback for long terminal transcripts", () => {
+    render(
+      <TerminalSurface
+        apiBase="http://localhost:5000"
+        terminalSessionId="terminal-1"
+        token="token-1"
+      />,
+    );
+
+    expect(terminalConstructorOptions.at(-1)?.scrollback).toBe(50_000);
   });
 });
