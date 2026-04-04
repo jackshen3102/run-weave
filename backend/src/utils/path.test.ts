@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { expandHomePath, resolveStoragePaths } from "./path";
@@ -9,22 +10,36 @@ describe("path helpers", () => {
     );
   });
 
-  it("resolves default storage paths under the home directory", () => {
-    expect(resolveStoragePaths({}, "/Users/tester")).toEqual({
-      browserProfileDir: path.join("/Users/tester", ".browser-profile"),
+  it("resolves default storage paths under a project-scoped home directory", () => {
+    const projectPath = "/Users/tester/workspace/browser-viewer";
+    const projectHash = createHash("sha256")
+      .update(projectPath)
+      .digest("hex")
+      .slice(0, 8);
+    expect(
+      resolveStoragePaths({}, "/Users/tester", projectPath),
+    ).toEqual({
+      browserProfileDir: path.join(
+        "/Users/tester",
+        ".browser-profile",
+        projectHash,
+      ),
       authStoreFile: path.join(
         "/Users/tester",
         ".browser-profile",
+        projectHash,
         "auth-store.json",
       ),
       sessionStoreFile: path.join(
         "/Users/tester",
         ".browser-profile",
+        projectHash,
         "session-store.json",
       ),
       terminalSessionStoreFile: path.join(
         "/Users/tester",
         ".browser-profile",
+        projectHash,
         "terminal-session-store.json",
       ),
     });
@@ -75,6 +90,27 @@ describe("path helpers", () => {
         "/Users/tester",
         "db",
         "terminal-session.json",
+      ),
+    });
+  });
+
+  it("keeps the legacy default directory when the project path is blank", () => {
+    expect(resolveStoragePaths({}, "/Users/tester", "   ")).toEqual({
+      browserProfileDir: path.join("/Users/tester", ".browser-profile"),
+      authStoreFile: path.join(
+        "/Users/tester",
+        ".browser-profile",
+        "auth-store.json",
+      ),
+      sessionStoreFile: path.join(
+        "/Users/tester",
+        ".browser-profile",
+        "session-store.json",
+      ),
+      terminalSessionStoreFile: path.join(
+        "/Users/tester",
+        ".browser-profile",
+        "terminal-session-store.json",
       ),
     });
   });

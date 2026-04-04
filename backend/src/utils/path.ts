@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 
@@ -38,8 +39,20 @@ export function expandHomePath(
 export function resolveStoragePaths(
   env: StorageEnv,
   homeDir: string = os.homedir(),
+  projectPath: string = process.cwd(),
 ): StoragePaths {
-  const defaultProfileDir = path.join(homeDir, ".browser-profile");
+  const trimmedProjectPath = projectPath.trim();
+  const defaultProfileRootDir = path.join(homeDir, ".browser-profile");
+  const defaultProfileDir =
+    trimmedProjectPath.length > 0
+      ? path.join(
+          defaultProfileRootDir,
+          createHash("sha256")
+            .update(trimmedProjectPath)
+            .digest("hex")
+            .slice(0, 8),
+        )
+      : defaultProfileRootDir;
   const browserProfileDir = path.resolve(
     expandHomePath(env.BROWSER_PROFILE_DIR, homeDir) ?? defaultProfileDir,
   );
