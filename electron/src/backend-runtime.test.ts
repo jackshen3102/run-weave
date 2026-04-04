@@ -3,6 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   buildPackagedBackendEnv,
+  findAvailablePort,
   resolvePackagedBackendPaths,
 } from "./backend-runtime.js";
 
@@ -66,4 +67,14 @@ test("fills packaged backend auth defaults when process env is missing", () => {
   assert.equal(env.AUTH_USERNAME, "admin");
   assert.equal(env.AUTH_PASSWORD, "admin");
   assert.equal(env.AUTH_JWT_SECRET, "browser-viewer-local-jwt-secret");
+});
+
+test("findAvailablePort skips ports that are unavailable on either localhost address family", async () => {
+  const unavailable = new Set([5001, 5002]);
+
+  const port = await findAvailablePort(5001, async (candidate) => {
+    return !unavailable.has(candidate);
+  });
+
+  assert.equal(port, 5003);
 });

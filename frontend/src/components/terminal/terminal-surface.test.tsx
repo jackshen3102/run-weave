@@ -9,6 +9,7 @@ const terminalFocusMock = vi.fn();
 const terminalConstructorOptions: Array<Record<string, unknown>> = [];
 const fitAddonFitMock = vi.fn();
 const useTerminalConnectionMock = vi.fn();
+const createTerminalSessionClipboardImageMock = vi.fn();
 const sendInputMock = vi.fn();
 const sendResizeMock = vi.fn();
 
@@ -19,7 +20,15 @@ vi.mock("@xterm/xterm", () => ({
     }
     unicode = { activeVersion: "" };
     onData = vi.fn(() => ({ dispose: vi.fn() }));
-    open = terminalOpenMock;
+    open = (container: HTMLElement) => {
+      const helperTextarea = document.createElement("textarea");
+      helperTextarea.className = "xterm-helper-textarea";
+      helperTextarea.addEventListener("paste", (event) => {
+        event.stopPropagation();
+      });
+      container.appendChild(helperTextarea);
+      terminalOpenMock(container);
+    };
     dispose = terminalDisposeMock;
     loadAddon = terminalLoadAddonMock;
     focus = terminalFocusMock;
@@ -57,6 +66,11 @@ vi.mock("../../features/terminal/use-terminal-connection", () => ({
   useTerminalConnection: (...args: unknown[]) => useTerminalConnectionMock(...args),
 }));
 
+vi.mock("../../services/terminal", () => ({
+  createTerminalSessionClipboardImage: (...args: unknown[]) =>
+    createTerminalSessionClipboardImageMock(...args),
+}));
+
 describe("TerminalSurface", () => {
   let rafSpy: { mockRestore: () => void } | undefined;
 
@@ -73,6 +87,7 @@ describe("TerminalSurface", () => {
     terminalConstructorOptions.length = 0;
     fitAddonFitMock.mockReset();
     useTerminalConnectionMock.mockReset();
+    createTerminalSessionClipboardImageMock.mockReset();
     sendInputMock.mockReset();
     sendResizeMock.mockReset();
 
@@ -83,6 +98,11 @@ describe("TerminalSurface", () => {
       error: null,
       sendInput: sendInputMock,
       sendResize: sendResizeMock,
+    });
+    createTerminalSessionClipboardImageMock.mockResolvedValue({
+      fileName: "browser-viewer-terminal-image-20260404-120000-abcdef.png",
+      filePath:
+        "/tmp/browser-viewer-terminal-images/browser-viewer-terminal-image-20260404-120000-abcdef.png",
     });
   });
 
@@ -145,5 +165,53 @@ describe("TerminalSurface", () => {
     );
 
     expect(terminalConstructorOptions.at(-1)?.scrollback).toBe(50_000);
+  });
+
+  it("uploads pasted clipboard images, displays image references, and inserts the stored path", async () => {
+    render(
+      <TerminalSurface
+        apiBase="http://localhost:5000"
+        terminalSessionId="terminal-1"
+        token="token-1"
+      />,
+    );
+
+    const file = new File([new Uint8Array([1, 2, 3, 4])], "clip.png", {
+      type: "image/png",
+    });
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        items: [
+          {
+            kind: "file",
+            type: "image/png",
+            getAsFile: () => file,
+          },
+        ],
+      },
+    });
+
+    const helperTextarea = document.querySelector(".xterm-helper-textarea");
+    expect(helperTextarea).toBeTruthy();
+    helperTextarea?.dispatchEvent(event);
+
+    await waitFor(() => {
+      expect(createTerminalSessionClipboardImageMock).toHaveBeenCalledWith(
+        "http://localhost:5000",
+        "token-1",
+        "terminal-1",
+        {
+          mimeType: "image/png",
+          dataBase64: "AQIDBA==",
+        },
+      );
+    });
+    expect(createTerminalSessionClipboardImageMock).toHaveBeenCalledTimes(1);
+    expect(sendInputMock).toHaveBeenCalledWith(
+      "'/tmp/browser-viewer-terminal-images/browser-viewer-terminal-image-20260404-120000-abcdef.png'",
+    );
+    expect(sendInputMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("[Image #1]")).toBeInTheDocument();
   });
 });

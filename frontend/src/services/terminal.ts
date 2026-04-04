@@ -1,4 +1,6 @@
 import type {
+  CreateTerminalClipboardImageRequest,
+  CreateTerminalClipboardImageResponse,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
@@ -87,6 +89,26 @@ export async function createTerminalWsTicket(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+  );
+}
+
+export async function createTerminalSessionClipboardImage(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  payload: CreateTerminalClipboardImageRequest,
+): Promise<CreateTerminalClipboardImageResponse> {
+  return requestJson<CreateTerminalClipboardImageResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/clipboard-image`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     },
   );
 }

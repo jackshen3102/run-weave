@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
@@ -7,6 +7,8 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
+import { HttpError } from "../../services/http";
+import { createTerminalSessionClipboardImage } from "../../services/terminal";
 
 interface TerminalSurfaceProps {
   apiBase: string;
@@ -14,6 +16,12 @@ interface TerminalSurfaceProps {
   token: string;
   onAuthExpired?: () => void;
   onMetadata?: (metadata: { name: string; cwd: string }) => void;
+}
+
+interface PastedImageReference {
+  id: string;
+  label: string;
+  filePath: string;
 }
 
 const ESCAPE = "\\u001b";
@@ -43,6 +51,35 @@ function isTerminalAutoResponse(data: string): boolean {
   );
 }
 
+async function fileToBase64(file: File): Promise<string> {
+  if (typeof file.arrayBuffer === "function") {
+    const buffer = await file.arrayBuffer();
+    return btoa(
+      Array.from(new Uint8Array(buffer), (byte) => String.fromCharCode(byte)).join(""),
+    );
+  }
+
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => {
+      reject(reader.error ?? new Error("Failed to read clipboard image"));
+    };
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Failed to read clipboard image"));
+        return;
+      }
+      resolve(result.split(",", 2)[1] ?? "");
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
+}
+
 export function TerminalSurface({
   apiBase,
   terminalSessionId,
@@ -52,6 +89,8 @@ export function TerminalSurface({
 }: TerminalSurfaceProps) {
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const [pasteError, setPasteError] = useState<string | null>(null);
+  const [pastedImages, setPastedImages] = useState<PastedImageReference[]>([]);
 
   // RAF-based write batching: accumulate chunks within a frame, flush in one write.
   const pendingChunksRef = useRef<string[]>([]);
@@ -196,6 +235,55 @@ export function TerminalSurface({
       window.addEventListener("resize", syncSize);
     }
 
+    const handlePaste = (event: ClipboardEvent) => {
+      const imageItem = Array.from(event.clipboardData?.items ?? []).find(
+        (item) => item.kind === "file" && item.type.startsWith("image/"),
+      );
+      const file = imageItem?.getAsFile();
+      if (!file) {
+        return;
+      }
+
+      event.preventDefault();
+      setPasteError(null);
+
+      void fileToBase64(file)
+        .then((dataBase64) =>
+          createTerminalSessionClipboardImage(
+            apiBase,
+            token,
+            terminalSessionId,
+            {
+              mimeType: file.type,
+              dataBase64,
+            },
+          ),
+        )
+        .then((payload) => {
+          setPastedImages((current) => [
+            ...current,
+            {
+              id: payload.filePath,
+              label: `[Image #${current.length + 1}]`,
+              filePath: payload.filePath,
+            },
+          ]);
+          sendInput(shellQuote(payload.filePath));
+        })
+        .catch((nextError: unknown) => {
+          if (nextError instanceof HttpError && nextError.status === 401) {
+            onAuthExpired?.();
+            return;
+          }
+          setPasteError(String(nextError));
+        });
+    };
+    const helperTextarea = container.querySelector(".xterm-helper-textarea");
+    const handlePasteEvent: EventListener = (event) => {
+      handlePaste(event as ClipboardEvent);
+    };
+    helperTextarea?.addEventListener("paste", handlePasteEvent, true);
+
     return () => {
       disposed = true;
       void fontReadyPromise;
@@ -215,15 +303,31 @@ export function TerminalSurface({
       } else {
         window.removeEventListener("resize", syncSize);
       }
+      helperTextarea?.removeEventListener("paste", handlePasteEvent, true);
       dataDisposable.dispose();
       terminal.dispose();
       terminalRef.current = null;
     };
-  }, [sendInput, sendResize, terminalSessionId]);
+  }, [apiBase, onAuthExpired, sendInput, sendResize, terminalSessionId, token]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {error ? <p className="px-3 py-2 text-xs text-rose-400">{error}</p> : null}
+      {error || pasteError ? (
+        <p className="px-3 py-2 text-xs text-rose-400">{error ?? pasteError}</p>
+      ) : null}
+      {pastedImages.length > 0 ? (
+        <div className="flex flex-wrap gap-2 px-3 pb-2">
+          {pastedImages.map((image) => (
+            <span
+              className="rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 font-mono text-xs text-slate-200"
+              key={image.id}
+              title={image.filePath}
+            >
+              {image.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
           aria-label="Terminal emulator"

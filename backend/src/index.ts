@@ -19,6 +19,7 @@ import { createTerminalRouter } from "./routes/terminal";
 import { createTestRouter } from "./routes/test";
 import { createCorsMiddleware } from "./server/cors";
 import { SessionManager } from "./session/manager";
+import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/clipboard-image";
 import { LowDbSessionStore } from "./session/lowdb-store";
 import { TerminalSessionManager } from "./terminal/manager";
 import { PtyService } from "./terminal/pty-service";
@@ -185,7 +186,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
   const requireAuth = createRequireAuth(services.authService);
   const devtoolsEnabled = services.sessionManager.isDevtoolsEnabled();
 
-  app.use(express.json());
+  app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
   app.use(
     createCorsMiddleware(parseConfiguredOrigins(process.env.FRONTEND_ORIGIN)),
   );

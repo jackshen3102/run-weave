@@ -1,7 +1,12 @@
 import { Router } from "express";
+import { randomBytes } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
+import path from "node:path";
 import { z } from "zod";
 import type {
+  CreateTerminalClipboardImageRequest,
+  CreateTerminalClipboardImageResponse,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
@@ -10,6 +15,10 @@ import type {
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
 import type { TerminalSessionManager } from "../terminal/manager";
+import {
+  TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
+  TERMINAL_CLIPBOARD_IMAGE_MAX_MIB,
+} from "../terminal/clipboard-image";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 
@@ -23,6 +32,36 @@ const createTerminalSessionSchema = z.object({
 const updateTerminalSessionSchema = z.object({
   name: z.string().trim().min(1),
 });
+
+const createTerminalClipboardImageSchema = z.object({
+  mimeType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
+  dataBase64: z.string().min(1),
+});
+
+function resolveClipboardImageExtension(mimeType: string): string {
+  switch (mimeType) {
+    case "image/png":
+      return "png";
+    case "image/jpeg":
+      return "jpg";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    default:
+      throw new Error(`Unsupported clipboard image mime type: ${mimeType}`);
+  }
+}
+
+function buildClipboardImageFileName(
+  now: Date,
+  extension: string,
+  randomHex = randomBytes(3).toString("hex"),
+): string {
+  const date = now.toISOString().slice(0, 10).replaceAll("-", "");
+  const time = now.toISOString().slice(11, 19).replaceAll(":", "");
+  return `browser-viewer-terminal-image-${date}-${time}-${randomHex}.${extension}`;
+}
 
 function resolveDefaultTerminalCommand(): string {
   if (process.platform === "win32") {
@@ -197,6 +236,57 @@ export function createTerminalRouter(
     }
 
     res.json(toStatusPayload(session));
+  });
+
+  router.post("/session/:id/clipboard-image", async (req, res) => {
+    const parsed = createTerminalClipboardImageSchema.safeParse(
+      req.body as CreateTerminalClipboardImageRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const session = terminalSessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Terminal session not found" });
+      return;
+    }
+
+    try {
+      const extension = resolveClipboardImageExtension(parsed.data.mimeType);
+      const fileName = buildClipboardImageFileName(new Date(), extension);
+      const terminalTempDir = path.join(os.tmpdir(), "browser-viewer-terminal-images");
+      const filePath = path.join(terminalTempDir, fileName);
+      const imageBuffer = Buffer.from(parsed.data.dataBase64, "base64");
+      if (imageBuffer.length > TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES) {
+        res.status(413).json({
+          message: `Clipboard image exceeds ${TERMINAL_CLIPBOARD_IMAGE_MAX_MIB} MiB limit`,
+        });
+        return;
+      }
+
+      await mkdir(terminalTempDir, { recursive: true });
+      await writeFile(filePath, imageBuffer);
+
+      const payload: CreateTerminalClipboardImageResponse = {
+        fileName,
+        filePath,
+      };
+      res.status(201).json(payload);
+    } catch (error) {
+      console.error("[viewer-be] store terminal clipboard image failed", {
+        terminalSessionId: req.params.id,
+        error: String(error),
+      });
+      res.status(500).json({
+        message: "Failed to store terminal clipboard image",
+        error: String(error),
+      });
+    }
   });
 
   router.delete("/session/:id", async (req, res) => {

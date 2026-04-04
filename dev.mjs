@@ -86,11 +86,27 @@ async function isPortAvailable(port, host) {
   return result === true;
 }
 
+function normalizeProbeHosts(host) {
+  return Array.from(
+    new Set(
+      [host, "127.0.0.1", "::1"].filter(
+        (candidate) => typeof candidate === "string" && candidate.trim().length > 0,
+      ),
+    ),
+  );
+}
+
 export async function resolvePort(startPort, options = {}) {
   const reservedPorts = options.reservedPorts ?? new Set();
-  const host = options.host;
+  const hosts = options.hosts ?? normalizeProbeHosts(options.host);
+  const isPortAvailableFn = options.isPortAvailable ?? isPortAvailable;
   let port = startPort;
-  while (reservedPorts.has(port) || !(await isPortAvailable(port, host))) {
+  while (
+    reservedPorts.has(port) ||
+    !(await Promise.all(hosts.map((host) => isPortAvailableFn(port, host)))).every(
+      Boolean,
+    )
+  ) {
     port += 1;
   }
   return port;

@@ -5,6 +5,7 @@ import {
   createBackendEnv,
   createFrontendEnv,
   resolveHealthcheckTimeoutMs,
+  resolvePort,
 } from "./dev.mjs";
 
 test("createBackendEnv pins backend port and strict mode", () => {
@@ -83,4 +84,23 @@ test("resolveHealthcheckTimeoutMs rejects invalid env overrides", () => {
       }),
     /Invalid DEV_BACKEND_HEALTHCHECK_TIMEOUT_MS/,
   );
+});
+
+test("resolvePort skips a port when localhost is occupied even if the primary host would allow it", async () => {
+  const checks = [];
+
+  const port = await resolvePort(5001, {
+    host: "0.0.0.0",
+    isPortAvailable: async (candidatePort, candidateHost) => {
+      checks.push(`${candidatePort}:${candidateHost}`);
+      if (candidatePort === 5001 && candidateHost === "127.0.0.1") {
+        return false;
+      }
+      return true;
+    },
+  });
+
+  assert.equal(port, 5002);
+  assert.ok(checks.includes("5001:0.0.0.0"));
+  assert.ok(checks.includes("5001:127.0.0.1"));
 });

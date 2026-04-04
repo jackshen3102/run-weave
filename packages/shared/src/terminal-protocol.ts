@@ -15,6 +15,16 @@ export interface CreateTerminalWsTicketResponse {
   expiresIn: number;
 }
 
+export interface CreateTerminalClipboardImageRequest {
+  mimeType: string;
+  dataBase64: string;
+}
+
+export interface CreateTerminalClipboardImageResponse {
+  fileName: string;
+  filePath: string;
+}
+
 export interface TerminalSessionStatusResponse {
   terminalSessionId: string;
   name: string;

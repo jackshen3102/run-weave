@@ -6,6 +6,7 @@ const DEFAULT_BACKEND_PORT = 5001;
 const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 30_000;
 const HEALTHCHECK_INTERVAL_MS = 200;
 const LOCALHOST = "127.0.0.1";
+const LOCALHOST_V6 = "::1";
 const DEFAULT_PACKAGED_AUTH = {
   AUTH_USERNAME: "admin",
   AUTH_PASSWORD: "admin",
@@ -81,13 +82,22 @@ async function isPortAvailable(port: number, host: string): Promise<boolean> {
   });
 }
 
-async function findAvailablePort(
+async function isBackendPortAvailable(port: number): Promise<boolean> {
+  const [ipv4Available, ipv6Available] = await Promise.all([
+    isPortAvailable(port, LOCALHOST),
+    isPortAvailable(port, LOCALHOST_V6),
+  ]);
+
+  return ipv4Available && ipv6Available;
+}
+
+export async function findAvailablePort(
   startPort: number,
-  host: string,
+  isAvailable: (port: number) => Promise<boolean> = isBackendPortAvailable,
 ): Promise<number> {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const port = startPort + attempt;
-    if (await isPortAvailable(port, host)) {
+    if (await isAvailable(port)) {
       return port;
     }
   }
@@ -175,7 +185,7 @@ export async function startPackagedBackend(
   readRequiredAuthEnv(mergedEnv);
 
   const backendPaths = resolvePackagedBackendPaths();
-  const backendPort = await findAvailablePort(DEFAULT_BACKEND_PORT, LOCALHOST);
+  const backendPort = await findAvailablePort(DEFAULT_BACKEND_PORT);
   const backendUrl = `http://127.0.0.1:${backendPort}`;
   const child = spawn(process.execPath, [backendPaths.backendEntry], {
     env: buildPackagedBackendEnv({

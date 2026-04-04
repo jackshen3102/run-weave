@@ -1,7 +1,14 @@
 import http from "node:http";
 import os from "node:os";
+import path from "node:path";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT,
+  TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
+  TERMINAL_CLIPBOARD_IMAGE_MAX_MIB,
+} from "../terminal/clipboard-image";
 import { createTerminalRouter } from "./terminal";
 
 interface MockTerminalSession {
@@ -69,7 +76,7 @@ function createTestServer(sessionState: { current: MockTerminalSession | null })
       expiresIn: 60,
     })),
   };
-  app.use(express.json());
+  app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
   app.use(
     "/api/terminal",
     createTerminalRouter(terminalSessionManager as never, {
@@ -106,10 +113,15 @@ async function stopServer(server: http.Server): Promise<void> {
 
 describe("terminal routes", () => {
   const servers: http.Server[] = [];
+  const tempDirs: string[] = [];
 
   afterEach(async () => {
     await Promise.all(servers.map((server) => stopServer(server)));
+    await Promise.all(
+      tempDirs.map((dir) => rm(dir, { recursive: true, force: true })),
+    );
     servers.length = 0;
+    tempDirs.length = 0;
   });
 
   it("creates terminal sessions through the API", async () => {
@@ -275,5 +287,93 @@ describe("terminal routes", () => {
       "terminal",
       60_000,
     );
+  });
+
+  it("stores uploaded clipboard images in the system temp directory", async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), "terminal-upload-"));
+    tempDirs.push(cwd);
+    const state = {
+      current: {
+        id: "terminal-1",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd,
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/clipboard-image`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mimeType: "image/png",
+          dataBase64: "AQIDBA==",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(201);
+    const payload = (await response.json()) as {
+      fileName: string;
+      filePath: string;
+    };
+    expect(payload.fileName).toMatch(
+      /^browser-viewer-terminal-image-\d{8}-\d{6}-[a-f0-9]{6}\.png$/,
+    );
+    expect(payload.filePath).toBe(
+      path.join(os.tmpdir(), "browser-viewer-terminal-images", payload.fileName),
+    );
+    await expect(readFile(payload.filePath)).resolves.toEqual(
+      Buffer.from([1, 2, 3, 4]),
+    );
+  });
+
+  it("rejects clipboard images larger than 100 MiB after base64 decoding", async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), "terminal-upload-"));
+    tempDirs.push(cwd);
+    const state = {
+      current: {
+        id: "terminal-1",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd,
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const oversizedPayload = Buffer.alloc(
+      TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES + 1,
+      1,
+    ).toString("base64");
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/clipboard-image`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mimeType: "image/png",
+          dataBase64: oversizedPayload,
+        }),
+      },
+    );
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({
+      message: `Clipboard image exceeds ${TERMINAL_CLIPBOARD_IMAGE_MAX_MIB} MiB limit`,
+    });
   });
 });
