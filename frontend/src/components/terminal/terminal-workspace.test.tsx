@@ -86,11 +86,41 @@ describe("TerminalWorkspace", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: "browser-viewer • Default" }),
+        screen.getByRole("button", { name: "browser-viewer" }),
       ).toBeInTheDocument();
     });
 
     expect(createTerminalSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("renders the home action before the project tabs and uses a plain plus icon for new project", async () => {
+    const onNavigateHome = vi.fn();
+    const { container } = render(
+      <TerminalWorkspace
+        apiBase="http://localhost:5000"
+        token="token-1"
+        onNavigateHome={onNavigateHome}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Go home" })).toBeInTheDocument();
+    });
+
+    const homeButton = screen.getByRole("button", { name: "Go home" });
+    const projectButton = screen.getByRole("button", { name: "browser-viewer" });
+
+    expect(
+      homeButton.compareDocumentPosition(projectButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(container.querySelector(".lucide-folder-plus")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "New Project" }).querySelector(".lucide-plus"),
+    ).not.toBeNull();
+
+    fireEvent.click(homeButton);
+    expect(onNavigateHome).toHaveBeenCalledTimes(1);
   });
 
   it("creates a terminal session from the new button without browser linkage", async () => {
@@ -100,7 +130,7 @@ describe("TerminalWorkspace", () => {
       expect(listTerminalSessionsMock).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getAllByRole("button", { name: "New" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "New Terminal" })[0]!);
 
     await waitFor(() => {
       expect(createTerminalSessionMock).toHaveBeenCalledWith(
@@ -169,7 +199,7 @@ describe("TerminalWorkspace", () => {
     render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "browser-viewer • Default" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "browser-viewer" })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "New Project" }));
@@ -333,12 +363,10 @@ describe("TerminalWorkspace", () => {
     render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "browser-viewer • Default" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "browser-viewer" })).toBeInTheDocument();
     });
 
-    fireEvent.contextMenu(
-      screen.getByRole("button", { name: "browser-viewer • Default" }),
-    );
+    fireEvent.contextMenu(screen.getByRole("button", { name: "browser-viewer" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     fireEvent.change(screen.getByLabelText("Project Name"), {
       target: { value: "browser-viewer-next" },
@@ -354,9 +382,7 @@ describe("TerminalWorkspace", () => {
       );
     });
 
-    expect(
-      screen.getByRole("button", { name: "browser-viewer-next • Default" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "browser-viewer-next" })).toBeInTheDocument();
   });
 
   it("deletes the active project and reloads the workspace", async () => {
@@ -395,12 +421,10 @@ describe("TerminalWorkspace", () => {
     render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "browser-viewer • Default" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "browser-viewer" })).toBeInTheDocument();
     });
 
-    fireEvent.contextMenu(
-      screen.getByRole("button", { name: "browser-viewer • Default" }),
-    );
+    fireEvent.contextMenu(screen.getByRole("button", { name: "browser-viewer" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(
       screen.getByText('Delete "browser-viewer" and all terminal tabs inside it. This cannot be undone.'),
@@ -415,7 +439,7 @@ describe("TerminalWorkspace", () => {
       );
     });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "coze-hub • Default" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "coze-hub" })).toBeInTheDocument();
     });
   });
 
@@ -456,7 +480,7 @@ describe("TerminalWorkspace", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "shell-2" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "New" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "New Terminal" })[0]!);
 
     await waitFor(() => {
       expect(createTerminalSessionMock).toHaveBeenCalledWith(
@@ -507,7 +531,7 @@ describe("TerminalWorkspace", () => {
       expect(screen.getByRole("button", { name: "project-b" })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getAllByRole("button", { name: "New" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "New Terminal" })[0]!);
 
     await waitFor(() => {
       expect(createTerminalSessionMock).toHaveBeenCalledWith(
