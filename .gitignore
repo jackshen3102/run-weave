@@ -12,3 +12,4 @@ backend/.env
 .runtime/
 artifacts/
 electron/release/
+.local-updates/

@@ -2,15 +2,26 @@ import pkg from "electron-updater";
 const { autoUpdater } = pkg;
 type UpdateInfo = pkg.UpdateInfo;
 import { BrowserWindow, dialog } from "electron";
+import { getCustomUpdateBaseUrl } from "./updater-config.js";
 
 let mainWindow: BrowserWindow | null = null;
 
 export function initAutoUpdater(win: BrowserWindow): void {
   mainWindow = win;
+  const updateBaseUrl = getCustomUpdateBaseUrl(
+    process.env.BROWSER_VIEWER_LOCAL_UPDATES_URL,
+  );
 
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.logger = null;
+
+  if (updateBaseUrl) {
+    autoUpdater.setFeedURL({
+      provider: "generic",
+      url: updateBaseUrl,
+    });
+  }
 
   autoUpdater.on("update-available", (info: UpdateInfo) => {
     if (!mainWindow) return;

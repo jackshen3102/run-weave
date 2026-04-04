@@ -11,6 +11,7 @@ import { startPackagedBackend, type PackagedBackendRuntime } from "./backend-run
 import { createTray } from "./tray.js";
 import { initAutoUpdater, checkForUpdates } from "./updater.js";
 import { getIsQuitting, setIsQuitting } from "./app-state.js";
+import { shouldEnableAutoUpdates } from "./updater-config.js";
 
 const isDev = !app.isPackaged;
 
@@ -140,7 +141,7 @@ app.whenReady().then(async () => {
 
     createTray(mainWindow);
 
-    if (!isDev) {
+    if (shouldEnableAutoUpdates({ isPackaged: app.isPackaged, platform: process.platform })) {
       initAutoUpdater(mainWindow);
       setTimeout(() => checkForUpdates(), 3_000);
     }
