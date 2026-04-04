@@ -3,6 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "../services/http";
 import { TerminalPage } from "./terminal-page";
 
+const {
+  webglAddonInstance,
+  webglAddonConstructor,
+  webLinksAddonInstance,
+  webLinksAddonConstructor,
+} = vi.hoisted(() => {
+  const webglInstance = { dispose: vi.fn(), onContextLoss: vi.fn() };
+  const webLinksInstance = {};
+  return {
+    webglAddonInstance: webglInstance,
+    webglAddonConstructor: vi.fn(() => webglInstance),
+    webLinksAddonInstance: webLinksInstance,
+    webLinksAddonConstructor: vi.fn(() => webLinksInstance),
+  };
+});
+
 const getTerminalSessionMock = vi.fn();
 const useTerminalConnectionMock = vi.fn();
 const terminalOpenMock = vi.fn();
@@ -53,13 +69,18 @@ vi.mock("@xterm/addon-canvas", () => ({
   },
 }));
 
-const webglAddonInstance = { dispose: vi.fn(), onContextLoss: vi.fn() };
-const webglAddonConstructor = vi.fn(() => webglAddonInstance);
-
 vi.mock("@xterm/addon-webgl", () => ({
   WebglAddon: class {
     constructor() {
       return webglAddonConstructor();
+    }
+  },
+}));
+
+vi.mock("@xterm/addon-web-links", () => ({
+  WebLinksAddon: class {
+    constructor() {
+      return webLinksAddonConstructor();
     }
   },
 }));
@@ -101,6 +122,7 @@ describe("TerminalPage", () => {
     sendResizeMock.mockReset();
     sendSignalMock.mockReset();
     webglAddonConstructor.mockClear();
+    webLinksAddonConstructor.mockClear();
     webglAddonInstance.dispose.mockClear();
     webglAddonInstance.onContextLoss.mockClear();
     terminalOnDataHandler = null;
@@ -233,7 +255,7 @@ describe("TerminalPage", () => {
     expect(screen.getByText("offline")).toBeInTheDocument();
   });
 
-  it("loads the webgl addon with unicode11", async () => {
+  it("loads the webgl and web links addons with unicode11", async () => {
     render(
       <TerminalPage
         apiBase="http://localhost:5000"
@@ -247,8 +269,9 @@ describe("TerminalPage", () => {
     });
 
     expect(webglAddonConstructor).toHaveBeenCalledTimes(1);
+    expect(webLinksAddonConstructor).toHaveBeenCalledTimes(1);
     expect(terminalLoadAddonMock).toHaveBeenCalledWith(webglAddonInstance);
-    // FitAddon + Unicode11Addon + WebglAddon = 3 loadAddon calls
-    expect(terminalLoadAddonMock).toHaveBeenCalledTimes(3);
+    expect(terminalLoadAddonMock).toHaveBeenCalledWith(webLinksAddonInstance);
+    expect(terminalLoadAddonMock).toHaveBeenCalledTimes(4);
   });
 });

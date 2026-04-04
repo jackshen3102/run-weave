@@ -2,6 +2,14 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TerminalSurface } from "./terminal-surface";
 
+const { webLinksAddonInstance, webLinksAddonConstructor } = vi.hoisted(() => {
+  const instance = {};
+  return {
+    webLinksAddonInstance: instance,
+    webLinksAddonConstructor: vi.fn(() => instance),
+  };
+});
+
 const terminalOpenMock = vi.fn();
 const terminalDisposeMock = vi.fn();
 const terminalLoadAddonMock = vi.fn();
@@ -62,6 +70,10 @@ vi.mock("@xterm/addon-webgl", () => ({
   },
 }));
 
+vi.mock("@xterm/addon-web-links", () => ({
+  WebLinksAddon: webLinksAddonConstructor,
+}));
+
 vi.mock("../../features/terminal/use-terminal-connection", () => ({
   useTerminalConnection: (...args: unknown[]) => useTerminalConnectionMock(...args),
 }));
@@ -90,6 +102,7 @@ describe("TerminalSurface", () => {
     createTerminalSessionClipboardImageMock.mockReset();
     sendInputMock.mockReset();
     sendResizeMock.mockReset();
+    webLinksAddonConstructor.mockClear();
 
     useTerminalConnectionMock.mockReturnValue({
       connectionStatus: "connected",
@@ -165,6 +178,23 @@ describe("TerminalSurface", () => {
     );
 
     expect(terminalConstructorOptions.at(-1)?.scrollback).toBe(50_000);
+  });
+
+  it("loads the web links addon so terminal URLs are clickable", async () => {
+    render(
+      <TerminalSurface
+        apiBase="http://localhost:5000"
+        terminalSessionId="terminal-1"
+        token="token-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(terminalOpenMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(webLinksAddonConstructor).toHaveBeenCalledTimes(1);
+    expect(terminalLoadAddonMock).toHaveBeenCalledWith(webLinksAddonInstance);
   });
 
   it("uploads pasted clipboard images, displays image references, and inserts the stored path", async () => {
