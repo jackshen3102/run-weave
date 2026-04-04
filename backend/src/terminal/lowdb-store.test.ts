@@ -1,8 +1,11 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { PersistedTerminalSessionRecord } from "./store";
+import type {
+  PersistedTerminalProjectRecord,
+  PersistedTerminalSessionRecord,
+} from "./store";
 import { LowDbTerminalSessionStore } from "./lowdb-store";
 
 const tempDirs: string[] = [];
@@ -22,6 +25,7 @@ function createRecord(
 ): PersistedTerminalSessionRecord {
   return {
     id: "terminal-1",
+    projectId: "project-1",
     name: "shell",
     command: "bash",
     args: ["-l"],
@@ -40,6 +44,20 @@ afterEach(async () => {
 });
 
 describe("LowDbTerminalSessionStore", () => {
+  it("bootstraps a default terminal project on first initialize", async () => {
+    const store = await createStore();
+
+    await expect(
+      (store as unknown as { listProjects: () => Promise<PersistedTerminalProjectRecord[]> })
+        .listProjects(),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        name: "Default Project",
+        isDefault: true,
+      }),
+    ]);
+  });
+
   it("persists and reads terminal sessions from a JSON file", async () => {
     const store = await createStore();
     const record = createRecord();
@@ -54,8 +72,62 @@ describe("LowDbTerminalSessionStore", () => {
         path.join(tempDirs[0] ?? "", "terminal-session-store.json"),
         "utf8",
       ),
-    ) as { sessions: PersistedTerminalSessionRecord[] };
+    ) as {
+      projects?: PersistedTerminalProjectRecord[];
+      sessions: PersistedTerminalSessionRecord[];
+    };
     expect(persisted.sessions).toEqual([record]);
+    expect(persisted.projects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          isDefault: true,
+        }),
+      ]),
+    );
+  });
+
+  it("migrates legacy terminal sessions into the default project on initialize", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "terminal-store-"));
+    tempDirs.push(dir);
+    const storeFile = path.join(dir, "terminal-session-store.json");
+    await writeFile(
+      storeFile,
+      JSON.stringify({
+        sessions: [
+          {
+            id: "legacy-terminal-1",
+            name: "legacy-shell",
+            command: "bash",
+            args: [],
+            cwd: "/tmp/legacy",
+            scrollback: "",
+            status: "running",
+            createdAt: "2026-03-29T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    const store = new LowDbTerminalSessionStore(storeFile);
+    await store.initialize();
+
+    const [defaultProject] = await (
+      store as unknown as { listProjects: () => Promise<PersistedTerminalProjectRecord[]> }
+    ).listProjects();
+    const [migratedSession] = await store.listSessions();
+
+    expect(defaultProject).toEqual(
+      expect.objectContaining({
+        isDefault: true,
+      }),
+    );
+    expect(migratedSession).toEqual(
+      expect.objectContaining({
+        id: "legacy-terminal-1",
+        projectId: defaultProject?.id,
+      }),
+    );
   });
 
   it("updates terminal metadata, scrollback, exit state, and deletion", async () => {

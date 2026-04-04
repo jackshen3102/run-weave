@@ -1,8 +1,24 @@
 export interface CreateTerminalSessionRequest {
+  projectId?: string;
   name?: string;
   command?: string;
   args?: string[];
   cwd?: string;
+}
+
+export interface CreateTerminalProjectRequest {
+  name: string;
+}
+
+export interface UpdateTerminalProjectRequest {
+  name: string;
+}
+
+export interface TerminalProjectListItem {
+  projectId: string;
+  name: string;
+  createdAt: string;
+  isDefault: boolean;
 }
 
 export interface CreateTerminalSessionResponse {
@@ -27,6 +43,7 @@ export interface CreateTerminalClipboardImageResponse {
 
 export interface TerminalSessionStatusResponse {
   terminalSessionId: string;
+  projectId: string;
   name: string;
   command: string;
   args: string[];
@@ -39,6 +56,7 @@ export interface TerminalSessionStatusResponse {
 
 export interface TerminalSessionListItem {
   terminalSessionId: string;
+  projectId: string;
   name: string;
   command: string;
   args: string[];

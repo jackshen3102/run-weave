@@ -23,11 +23,25 @@ describe("useHomeTerminalPassword", () => {
   });
 
   it("reuses an existing running terminal session before creating a new one", async () => {
+    localStorage.setItem(
+      "viewer.terminal.recent.http://localhost:5001",
+      JSON.stringify({
+        projectId: "project-2",
+        terminalSessionId: "terminal-2",
+      }),
+    );
     listTerminalSessionsMock.mockResolvedValue([
       {
         terminalSessionId: "terminal-1",
+        projectId: "project-1",
         status: "running",
         createdAt: "2026-04-04T12:00:00.000Z",
+      },
+      {
+        terminalSessionId: "terminal-2",
+        projectId: "project-2",
+        status: "running",
+        createdAt: "2026-04-04T11:00:00.000Z",
       },
     ]);
     const onOpenTerminalSession = vi.fn();
@@ -46,7 +60,7 @@ describe("useHomeTerminalPassword", () => {
     });
 
     expect(createTerminalSessionMock).not.toHaveBeenCalled();
-    expect(onOpenTerminalSession).toHaveBeenCalledWith("terminal-1");
+    expect(onOpenTerminalSession).toHaveBeenCalledWith("terminal-2");
   });
 
   it("surfaces incorrect current password without treating it as auth expiry", async () => {

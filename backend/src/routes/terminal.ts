@@ -5,13 +5,16 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import type {
+  CreateTerminalProjectRequest,
   CreateTerminalClipboardImageRequest,
   CreateTerminalClipboardImageResponse,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
+  TerminalProjectListItem,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
+  UpdateTerminalProjectRequest,
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
 import type { TerminalSessionManager } from "../terminal/manager";
@@ -23,10 +26,19 @@ import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 
 const createTerminalSessionSchema = z.object({
+  projectId: z.string().trim().min(1).optional(),
   name: z.string().trim().min(1).optional(),
   command: z.string().trim().min(1).optional(),
   args: z.array(z.string()).optional(),
   cwd: z.string().trim().min(1).optional(),
+}).strict();
+
+const createTerminalProjectSchema = z.object({
+  name: z.string().trim().min(1),
+}).strict();
+
+const updateTerminalProjectSchema = z.object({
+  name: z.string().trim().min(1),
 }).strict();
 
 const updateTerminalSessionSchema = z.object({
@@ -81,6 +93,7 @@ function resolveDefaultTerminalCommand(): string {
 }
 
 function resolveTerminalCreateDefaults(payload: CreateTerminalSessionRequest): {
+  projectId?: string;
   name?: string;
   command: string;
   args?: string[];
@@ -90,6 +103,7 @@ function resolveTerminalCreateDefaults(payload: CreateTerminalSessionRequest): {
   const cwd = payload.cwd?.trim() || os.homedir();
 
   return {
+    projectId: payload.projectId,
     name: payload.name,
     command,
     args: payload.args,
@@ -104,6 +118,7 @@ function toStatusPayload(
 ): TerminalSessionStatusResponse {
   return {
     terminalSessionId: session.id,
+    projectId: session.projectId,
     name: session.name,
     command: session.command,
     args: session.args,
@@ -125,11 +140,96 @@ export function createTerminalRouter(
 ): Router {
   const router = Router();
 
+  router.get("/project", (_req, res) => {
+    const payload: TerminalProjectListItem[] = terminalSessionManager
+      .listProjects()
+      .map((project) => ({
+        projectId: project.id,
+        name: project.name,
+        createdAt: project.createdAt.toISOString(),
+        isDefault: project.isDefault,
+      }));
+
+    res.json(payload);
+  });
+
+  router.post("/project", async (req, res) => {
+    const parsed = createTerminalProjectSchema.safeParse(
+      req.body as CreateTerminalProjectRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const project = await terminalSessionManager.createProject(parsed.data.name);
+    res.status(201).json({
+      projectId: project.id,
+      name: project.name,
+      createdAt: project.createdAt.toISOString(),
+      isDefault: project.isDefault,
+    } satisfies TerminalProjectListItem);
+  });
+
+  router.patch("/project/:id", async (req, res) => {
+    const parsed = updateTerminalProjectSchema.safeParse(
+      req.body as UpdateTerminalProjectRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const project = await terminalSessionManager.updateProject(
+      req.params.id,
+      parsed.data.name,
+    );
+    if (!project) {
+      res.status(404).json({ message: "Terminal project not found" });
+      return;
+    }
+
+    res.json({
+      projectId: project.id,
+      name: project.name,
+      createdAt: project.createdAt.toISOString(),
+      isDefault: project.isDefault,
+    } satisfies TerminalProjectListItem);
+  });
+
+  router.delete("/project/:id", async (req, res) => {
+    if (options?.runtimeRegistry) {
+      const childSessionIds = terminalSessionManager
+        .listSessions()
+        .filter((session) => session.projectId === req.params.id)
+        .map((session) => session.id);
+
+      for (const terminalSessionId of childSessionIds) {
+        await options.runtimeRegistry.disposeRuntime(terminalSessionId);
+      }
+    }
+
+    const deleted = await terminalSessionManager.deleteProject(req.params.id);
+    if (!deleted) {
+      res.status(404).json({ message: "Terminal project not found" });
+      return;
+    }
+
+    res.status(204).send();
+  });
+
   router.get("/session", (_req, res) => {
     const payload: TerminalSessionListItem[] = terminalSessionManager
       .listSessions()
       .map((session) => ({
         terminalSessionId: session.id,
+        projectId: session.projectId,
         name: session.name,
         command: session.command,
         args: session.args,

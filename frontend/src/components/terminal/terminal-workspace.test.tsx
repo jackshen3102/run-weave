@@ -3,13 +3,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TerminalSessionListItem } from "@browser-viewer/shared";
 import { TerminalWorkspace } from "./terminal-workspace";
 
+const listTerminalProjectsMock = vi.fn();
 const listTerminalSessionsMock = vi.fn();
+const createTerminalProjectMock = vi.fn();
+const updateTerminalProjectMock = vi.fn();
+const deleteTerminalProjectMock = vi.fn();
 const createTerminalSessionMock = vi.fn();
 const deleteTerminalSessionMock = vi.fn();
 const terminalSurfacePropsSpy = vi.fn();
 
 vi.mock("../../services/terminal", () => ({
+  listTerminalProjects: (...args: unknown[]) => listTerminalProjectsMock(...args),
   listTerminalSessions: (...args: unknown[]) => listTerminalSessionsMock(...args),
+  createTerminalProject: (...args: unknown[]) => createTerminalProjectMock(...args),
+  updateTerminalProject: (...args: unknown[]) => updateTerminalProjectMock(...args),
+  deleteTerminalProject: (...args: unknown[]) => deleteTerminalProjectMock(...args),
   createTerminalSession: (...args: unknown[]) => createTerminalSessionMock(...args),
   deleteTerminalSession: (...args: unknown[]) => deleteTerminalSessionMock(...args),
 }));
@@ -23,17 +31,49 @@ vi.mock("./terminal-surface", () => ({
 
 describe("TerminalWorkspace", () => {
   beforeEach(() => {
+    listTerminalProjectsMock.mockReset();
     listTerminalSessionsMock.mockReset();
+    createTerminalProjectMock.mockReset();
+    updateTerminalProjectMock.mockReset();
+    deleteTerminalProjectMock.mockReset();
     createTerminalSessionMock.mockReset();
     deleteTerminalSessionMock.mockReset();
     terminalSurfacePropsSpy.mockReset();
 
+    listTerminalProjectsMock.mockResolvedValue([
+      {
+        projectId: "project-1",
+        name: "browser-viewer",
+        createdAt: "2026-03-30T00:00:00.000Z",
+        isDefault: true,
+      },
+      {
+        projectId: "project-2",
+        name: "coze-hub",
+        createdAt: "2026-03-30T01:00:00.000Z",
+        isDefault: false,
+      },
+    ]);
     listTerminalSessionsMock.mockResolvedValue([]);
+    createTerminalProjectMock.mockImplementation(async (_apiBase, _token, payload) => ({
+      projectId: "project-3",
+      name: payload.name,
+      createdAt: "2026-03-30T02:00:00.000Z",
+      isDefault: false,
+    }));
+    updateTerminalProjectMock.mockImplementation(async (_apiBase, _token, projectId, payload) => ({
+      projectId,
+      name: payload.name,
+      createdAt: "2026-03-30T00:00:00.000Z",
+      isDefault: true,
+    }));
+    deleteTerminalProjectMock.mockResolvedValue(undefined);
     createTerminalSessionMock.mockResolvedValue({
       terminalSessionId: "terminal-1",
       terminalUrl: "/terminal/terminal-1",
     });
     deleteTerminalSessionMock.mockResolvedValue(undefined);
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -45,7 +85,9 @@ describe("TerminalWorkspace", () => {
     render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
 
     await waitFor(() => {
-      expect(listTerminalSessionsMock).toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: "browser-viewer • Default" }),
+      ).toBeInTheDocument();
     });
 
     expect(createTerminalSessionMock).not.toHaveBeenCalled();
@@ -64,8 +106,316 @@ describe("TerminalWorkspace", () => {
       expect(createTerminalSessionMock).toHaveBeenCalledWith(
         "http://localhost:5000",
         "token-1",
-        { cwd: undefined },
+        { projectId: "project-1", cwd: undefined },
       );
+    });
+  });
+
+  it("creates a new terminal project and switches to it", async () => {
+    createTerminalSessionMock.mockResolvedValueOnce({
+      terminalSessionId: "terminal-3",
+      terminalUrl: "/terminal/terminal-3",
+    });
+    listTerminalProjectsMock
+      .mockResolvedValueOnce([
+        {
+          projectId: "project-1",
+          name: "browser-viewer",
+          createdAt: "2026-03-30T00:00:00.000Z",
+          isDefault: true,
+        },
+        {
+          projectId: "project-2",
+          name: "coze-hub",
+          createdAt: "2026-03-30T01:00:00.000Z",
+          isDefault: false,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          projectId: "project-1",
+          name: "browser-viewer",
+          createdAt: "2026-03-30T00:00:00.000Z",
+          isDefault: true,
+        },
+        {
+          projectId: "project-2",
+          name: "coze-hub",
+          createdAt: "2026-03-30T01:00:00.000Z",
+          isDefault: false,
+        },
+        {
+          projectId: "project-3",
+          name: "playground",
+          createdAt: "2026-03-30T02:00:00.000Z",
+          isDefault: false,
+        },
+      ]);
+    listTerminalSessionsMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          terminalSessionId: "terminal-3",
+          projectId: "project-3",
+          name: "playground",
+          command: "bash",
+          args: [],
+          cwd: "/tmp",
+          status: "running",
+          createdAt: "2026-03-30T02:00:00.000Z",
+        },
+      ]);
+
+    render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "browser-viewer • Default" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "New Project" }));
+    fireEvent.change(screen.getByLabelText("Project Name"), {
+      target: { value: "playground" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create Project" }));
+
+    await waitFor(() => {
+      expect(createTerminalProjectMock).toHaveBeenCalledWith(
+        "http://localhost:5000",
+        "token-1",
+        { name: "playground" },
+      );
+    });
+    await waitFor(() => {
+      expect(createTerminalSessionMock).toHaveBeenCalledWith(
+        "http://localhost:5000",
+        "token-1",
+        { projectId: "project-3" },
+      );
+    });
+
+    expect(screen.getByRole("button", { name: "New Project" })).toHaveClass(
+      "bg-primary",
+      "h-9",
+      "px-4",
+    );
+    expect(
+      screen
+        .getAllByRole("button", { name: "playground" })
+        .some((element) => element.getAttribute("aria-pressed") === "true"),
+    ).toBe(true);
+    expect(screen.getAllByRole("button", { name: "playground" })).toHaveLength(2);
+    expect(terminalSurfacePropsSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        terminalSessionId: "terminal-3",
+      }),
+    );
+  });
+
+  it("does not bounce back to the previous terminal route while creating a project", async () => {
+    const onActiveSessionChange = vi.fn();
+    listTerminalSessionsMock.mockResolvedValue([
+      {
+        terminalSessionId: "terminal-1",
+        projectId: "project-1",
+        name: "shell-1",
+        command: "bash",
+        args: [],
+        cwd: "/tmp",
+        status: "running",
+        createdAt: "2026-03-30T00:00:00.000Z",
+      },
+    ]);
+    createTerminalSessionMock.mockResolvedValueOnce({
+      terminalSessionId: "terminal-3",
+      terminalUrl: "/terminal/terminal-3",
+    });
+    listTerminalProjectsMock
+      .mockResolvedValueOnce([
+        {
+          projectId: "project-1",
+          name: "browser-viewer",
+          createdAt: "2026-03-30T00:00:00.000Z",
+          isDefault: true,
+        },
+        {
+          projectId: "project-2",
+          name: "coze-hub",
+          createdAt: "2026-03-30T01:00:00.000Z",
+          isDefault: false,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          projectId: "project-1",
+          name: "browser-viewer",
+          createdAt: "2026-03-30T00:00:00.000Z",
+          isDefault: true,
+        },
+        {
+          projectId: "project-2",
+          name: "coze-hub",
+          createdAt: "2026-03-30T01:00:00.000Z",
+          isDefault: false,
+        },
+        {
+          projectId: "project-3",
+          name: "playground",
+          createdAt: "2026-03-30T02:00:00.000Z",
+          isDefault: false,
+        },
+      ]);
+    listTerminalSessionsMock
+      .mockResolvedValueOnce([
+        {
+          terminalSessionId: "terminal-1",
+          projectId: "project-1",
+          name: "shell-1",
+          command: "bash",
+          args: [],
+          cwd: "/tmp",
+          status: "running",
+          createdAt: "2026-03-30T00:00:00.000Z",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          terminalSessionId: "terminal-1",
+          projectId: "project-1",
+          name: "shell-1",
+          command: "bash",
+          args: [],
+          cwd: "/tmp",
+          status: "running",
+          createdAt: "2026-03-30T00:00:00.000Z",
+        },
+        {
+          terminalSessionId: "terminal-3",
+          projectId: "project-3",
+          name: "playground",
+          command: "bash",
+          args: [],
+          cwd: "/tmp",
+          status: "running",
+          createdAt: "2026-03-30T02:00:00.000Z",
+        },
+      ]);
+
+    render(
+      <TerminalWorkspace
+        apiBase="http://localhost:5000"
+        token="token-1"
+        initialTerminalSessionId="terminal-1"
+        onActiveSessionChange={onActiveSessionChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onActiveSessionChange).toHaveBeenCalledWith("terminal-1");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "New Project" }));
+    fireEvent.change(screen.getByLabelText("Project Name"), {
+      target: { value: "playground" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create Project" }));
+
+    await waitFor(() => {
+      expect(onActiveSessionChange).toHaveBeenLastCalledWith("terminal-3");
+    });
+
+    expect(onActiveSessionChange.mock.calls.map((call) => call[0])).toEqual([
+      "terminal-1",
+      "terminal-3",
+    ]);
+  });
+
+  it("renames the active terminal project", async () => {
+    render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "browser-viewer • Default" })).toBeInTheDocument();
+    });
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "browser-viewer • Default" }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    fireEvent.change(screen.getByLabelText("Project Name"), {
+      target: { value: "browser-viewer-next" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Project" }));
+
+    await waitFor(() => {
+      expect(updateTerminalProjectMock).toHaveBeenCalledWith(
+        "http://localhost:5000",
+        "token-1",
+        "project-1",
+        { name: "browser-viewer-next" },
+      );
+    });
+
+    expect(
+      screen.getByRole("button", { name: "browser-viewer-next • Default" }),
+    ).toBeInTheDocument();
+  });
+
+  it("deletes the active project and reloads the workspace", async () => {
+    listTerminalSessionsMock
+      .mockResolvedValueOnce([
+        {
+          terminalSessionId: "terminal-1",
+          projectId: "project-1",
+          name: "shell-1",
+          command: "bash",
+          args: [],
+          cwd: "/tmp",
+          status: "running",
+          createdAt: "2026-03-30T00:00:00.000Z",
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    listTerminalProjectsMock
+      .mockResolvedValueOnce([
+        {
+          projectId: "project-1",
+          name: "browser-viewer",
+          createdAt: "2026-03-30T00:00:00.000Z",
+          isDefault: true,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          projectId: "project-2",
+          name: "coze-hub",
+          createdAt: "2026-03-30T01:00:00.000Z",
+          isDefault: true,
+        },
+      ]);
+
+    render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "browser-viewer • Default" })).toBeInTheDocument();
+    });
+
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "browser-viewer • Default" }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(
+      screen.getByText('Delete "browser-viewer" and all terminal tabs inside it. This cannot be undone.'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => {
+      expect(deleteTerminalProjectMock).toHaveBeenCalledWith(
+        "http://localhost:5000",
+        "token-1",
+        "project-1",
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "coze-hub • Default" })).toBeInTheDocument();
     });
   });
 
@@ -73,6 +423,7 @@ describe("TerminalWorkspace", () => {
     listTerminalSessionsMock.mockResolvedValue([
       {
         terminalSessionId: "terminal-1",
+        projectId: "project-1",
         name: "shell-1",
         command: "bash",
         args: [],
@@ -82,6 +433,7 @@ describe("TerminalWorkspace", () => {
       },
       {
         terminalSessionId: "terminal-2",
+        projectId: "project-2",
         name: "shell-2",
         command: "bash",
         args: [],
@@ -110,7 +462,7 @@ describe("TerminalWorkspace", () => {
       expect(createTerminalSessionMock).toHaveBeenCalledWith(
         "http://localhost:5000",
         "token-1",
-        { cwd: "/tmp/project-b" },
+        { projectId: "project-2", cwd: "/tmp/project-b" },
       );
     });
   });
@@ -119,6 +471,7 @@ describe("TerminalWorkspace", () => {
     listTerminalSessionsMock.mockResolvedValue([
       {
         terminalSessionId: "terminal-1",
+        projectId: "project-1",
         name: "shell-1",
         command: "bash",
         args: [],
@@ -160,7 +513,7 @@ describe("TerminalWorkspace", () => {
       expect(createTerminalSessionMock).toHaveBeenCalledWith(
         "http://localhost:5000",
         "token-1",
-        { cwd: "/tmp/project-b" },
+        { projectId: "project-1", cwd: "/tmp/project-b" },
       );
     });
   });
@@ -170,6 +523,7 @@ describe("TerminalWorkspace", () => {
     listTerminalSessionsMock.mockResolvedValue([
       {
         terminalSessionId: "terminal-1",
+        projectId: "project-1",
         name: "shell-1",
         command: "bash",
         args: [],
@@ -179,6 +533,7 @@ describe("TerminalWorkspace", () => {
       },
       {
         terminalSessionId: "terminal-2",
+        projectId: "project-1",
         name: "shell-2",
         command: "bash",
         args: [],
@@ -206,6 +561,7 @@ describe("TerminalWorkspace", () => {
     listTerminalSessionsMock.mockResolvedValue([
       {
         terminalSessionId: "terminal-1",
+        projectId: "project-1",
         name: "shell-1",
         command: "bash",
         args: [],
@@ -215,6 +571,7 @@ describe("TerminalWorkspace", () => {
       },
       {
         terminalSessionId: "terminal-2",
+        projectId: "project-1",
         name: "shell-2",
         command: "bash",
         args: [],
@@ -261,6 +618,7 @@ describe("TerminalWorkspace", () => {
     resolveSessions?.([
       {
         terminalSessionId: "terminal-1",
+        projectId: "project-1",
         name: "shell-1",
         command: "bash",
         args: [],
@@ -270,6 +628,7 @@ describe("TerminalWorkspace", () => {
       },
       {
         terminalSessionId: "terminal-2",
+        projectId: "project-1",
         name: "shell-2",
         command: "bash",
         args: [],
@@ -309,6 +668,7 @@ describe("TerminalWorkspace", () => {
     resolveSessions?.([
       {
         terminalSessionId: "terminal-2",
+        projectId: "project-1",
         name: "shell-2",
         command: "bash",
         args: [],
@@ -321,6 +681,82 @@ describe("TerminalWorkspace", () => {
     await waitFor(() => {
       expect(onActiveSessionChange).toHaveBeenLastCalledWith("terminal-2");
     });
+  });
+
+  it("renders project switches above session tabs and filters sessions by active project", async () => {
+    listTerminalSessionsMock.mockResolvedValue([
+      {
+        terminalSessionId: "terminal-1",
+        projectId: "project-1",
+        name: "viewer-shell",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/viewer",
+        status: "running",
+        createdAt: "2026-03-30T00:00:00.000Z",
+      },
+      {
+        terminalSessionId: "terminal-2",
+        projectId: "project-2",
+        name: "coze-shell",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/coze",
+        status: "running",
+        createdAt: "2026-03-30T01:00:00.000Z",
+      },
+    ]);
+
+    render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "viewer-shell" })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("button", { name: "viewer-shell" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "coze-shell" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "coze-hub" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "coze-shell" })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: "viewer-shell" })).toBeNull();
+  });
+
+  it("keeps an empty active project open without reporting that the workspace is empty", async () => {
+    const onNoSessionAvailable = vi.fn();
+    listTerminalSessionsMock.mockResolvedValue([
+      {
+        terminalSessionId: "terminal-1",
+        projectId: "project-1",
+        name: "viewer-shell",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/viewer",
+        status: "running",
+        createdAt: "2026-03-30T00:00:00.000Z",
+      },
+    ]);
+
+    render(
+      <TerminalWorkspace
+        apiBase="http://localhost:5000"
+        token="token-1"
+        onNoSessionAvailable={onNoSessionAvailable}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "viewer-shell" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "coze-hub" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("No terminal tab yet. Create one to start.")).toBeInTheDocument();
+    });
+    expect(onNoSessionAvailable).not.toHaveBeenCalled();
   });
 
   it("does not report missing sessions when the terminal list request fails", async () => {
@@ -367,6 +803,7 @@ describe("TerminalWorkspace", () => {
     listTerminalSessionsMock.mockResolvedValue([
       {
         terminalSessionId: "terminal-1",
+        projectId: "project-1",
         name: "shell-1",
         command: "bash",
         args: [],
@@ -376,6 +813,7 @@ describe("TerminalWorkspace", () => {
       },
       {
         terminalSessionId: "terminal-2",
+        projectId: "project-1",
         name: "shell-2",
         command: "bash",
         args: [],
@@ -388,7 +826,7 @@ describe("TerminalWorkspace", () => {
     render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
 
     await waitFor(() => {
-      expect(listTerminalSessionsMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("button", { name: "shell-2" })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getAllByRole("button", { name: "shell-2" })[0]!);

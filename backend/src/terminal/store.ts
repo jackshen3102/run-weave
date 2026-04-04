@@ -1,5 +1,13 @@
+export interface PersistedTerminalProjectRecord {
+  id: string;
+  name: string;
+  createdAt: string;
+  isDefault: boolean;
+}
+
 export interface PersistedTerminalSessionRecord {
   id: string;
+  projectId: string;
   name: string;
   command: string;
   args: string[];
@@ -27,9 +35,20 @@ export interface UpdateTerminalSessionMetadataParams {
   cwd: string;
 }
 
+export interface UpdateTerminalProjectParams {
+  projectId: string;
+  name: string;
+}
+
 export interface TerminalSessionStore {
   initialize(): Promise<void>;
   dispose(): Promise<void>;
+  listProjects(): Promise<PersistedTerminalProjectRecord[]>;
+  getProject(projectId: string): Promise<PersistedTerminalProjectRecord | null>;
+  insertProject(project: PersistedTerminalProjectRecord): Promise<void>;
+  updateProject(params: UpdateTerminalProjectParams): Promise<void>;
+  deleteProject(projectId: string): Promise<void>;
+  setDefaultProject(projectId: string): Promise<void>;
   listSessions(): Promise<PersistedTerminalSessionRecord[]>;
   getSession(
     terminalSessionId: string,

@@ -13,6 +13,7 @@ import { createTerminalRouter } from "./terminal";
 
 interface MockTerminalSession {
   id: string;
+  projectId?: string;
   name: string;
   command: string;
   args: string[];
@@ -23,10 +24,32 @@ interface MockTerminalSession {
   exitCode?: number;
 }
 
-function createTestServer(sessionState: { current: MockTerminalSession | null }) {
+interface MockTerminalProject {
+  id: string;
+  name: string;
+  createdAt: Date;
+  isDefault: boolean;
+}
+
+function createTestServer(sessionState: {
+  current: MockTerminalSession | null;
+  sessions?: MockTerminalSession[];
+  projects?: MockTerminalProject[];
+}) {
+  const projects =
+    sessionState.projects ??
+    [
+      {
+        id: "project-default",
+        name: "Default Project",
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        isDefault: true,
+      },
+    ];
   const terminalSessionManager = {
     createSession: vi.fn(
       async (options: {
+        projectId?: string;
         name?: string;
         command: string;
         args?: string[];
@@ -34,6 +57,7 @@ function createTestServer(sessionState: { current: MockTerminalSession | null })
       }) => {
         const created: MockTerminalSession = {
           id: "terminal-1",
+          projectId: options.projectId ?? projects[0]?.id ?? "project-default",
           name: options.name ?? options.command,
           command: options.command,
           args: options.args ?? [],
@@ -46,10 +70,43 @@ function createTestServer(sessionState: { current: MockTerminalSession | null })
         return created;
       },
     ),
+    listProjects: vi.fn(() => projects),
+    createProject: vi.fn(async (name: string) => {
+      const created = {
+        id: "project-2",
+        name,
+        createdAt: new Date("2026-03-29T01:00:00.000Z"),
+        isDefault: false,
+      };
+      projects.push(created);
+      return created;
+    }),
+    updateProject: vi.fn(async (id: string, patch: { name: string }) => {
+      const current = projects.find((project) => project.id === id);
+      if (!current) {
+        return undefined;
+      }
+      current.name = patch.name;
+      return current;
+    }),
+    deleteProject: vi.fn(async (id: string) => {
+      const index = projects.findIndex((project) => project.id === id);
+      if (index < 0) {
+        return false;
+      }
+      projects.splice(index, 1);
+      if (sessionState.current?.projectId === id) {
+        sessionState.current = null;
+      }
+      return true;
+    }),
     getSession: vi.fn((id: string) =>
       sessionState.current?.id === id ? sessionState.current : undefined,
     ),
-    listSessions: vi.fn(() => (sessionState.current ? [sessionState.current] : [])),
+    listSessions: vi.fn(() =>
+      sessionState.sessions ??
+      (sessionState.current ? [sessionState.current] : []),
+    ),
     destroySession: vi.fn(async (id: string) => {
       if (sessionState.current?.id !== id) {
         return false;
@@ -76,16 +133,20 @@ function createTestServer(sessionState: { current: MockTerminalSession | null })
       expiresIn: 60,
     })),
   };
+  const runtimeRegistry = {
+    disposeRuntime: vi.fn(async () => undefined),
+  };
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
   app.use(
     "/api/terminal",
     createTerminalRouter(terminalSessionManager as never, {
       authService: authService as never,
+      runtimeRegistry: runtimeRegistry as never,
     }),
   );
   const server = http.createServer(app);
 
-  return { server, terminalSessionManager, authService };
+  return { server, terminalSessionManager, authService, runtimeRegistry };
 }
 
 async function startServer(server: http.Server): Promise<number> {
@@ -134,6 +195,7 @@ describe("terminal routes", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        projectId: "project-default",
         command: "bash",
         args: ["-l"],
         cwd: "/tmp/demo",
@@ -198,6 +260,7 @@ describe("terminal routes", () => {
     const state = {
       current: {
         id: "terminal-1",
+        projectId: "project-default",
         name: "bash",
         command: "bash",
         args: ["-l"],
@@ -217,6 +280,7 @@ describe("terminal routes", () => {
     await expect(response.json()).resolves.toEqual([
       {
         terminalSessionId: "terminal-1",
+        projectId: "project-default",
         name: "bash",
         command: "bash",
         args: ["-l"],
@@ -225,6 +289,143 @@ describe("terminal routes", () => {
         createdAt: "2026-03-29T00:00:00.000Z",
       },
     ]);
+  });
+
+  it("disposes project runtimes before cascading terminal deletion", async () => {
+    const state = {
+      current: null as MockTerminalSession | null,
+      sessions: [
+        {
+          id: "terminal-1",
+          projectId: "project-default",
+          name: "shell-1",
+          command: "bash",
+          args: [],
+          cwd: "/tmp/a",
+          scrollback: "",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        },
+        {
+          id: "terminal-2",
+          projectId: "project-default",
+          name: "shell-2",
+          command: "bash",
+          args: [],
+          cwd: "/tmp/b",
+          scrollback: "",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:01:00.000Z"),
+        },
+        {
+          id: "terminal-3",
+          projectId: "project-2",
+          name: "other",
+          command: "bash",
+          args: [],
+          cwd: "/tmp/c",
+          scrollback: "",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:02:00.000Z"),
+        },
+      ],
+    };
+    const { server, runtimeRegistry } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default`,
+      {
+        method: "DELETE",
+      },
+    );
+
+    expect(response.status).toBe(204);
+    expect(runtimeRegistry.disposeRuntime).toHaveBeenCalledTimes(2);
+    expect(runtimeRegistry.disposeRuntime).toHaveBeenNthCalledWith(1, "terminal-1");
+    expect(runtimeRegistry.disposeRuntime).toHaveBeenNthCalledWith(2, "terminal-2");
+  });
+
+  it("lists and creates terminal projects through the API", async () => {
+    const state = {
+      current: null as MockTerminalSession | null,
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const listResponse = await fetch(`http://127.0.0.1:${port}/api/terminal/project`);
+
+    expect(listResponse.status).toBe(200);
+    await expect(listResponse.json()).resolves.toEqual([
+      {
+        projectId: "project-default",
+        name: "Default Project",
+        createdAt: "2026-03-29T00:00:00.000Z",
+        isDefault: true,
+      },
+    ]);
+
+    const createResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "browser-viewer" }),
+      },
+    );
+
+    expect(createResponse.status).toBe(201);
+    await expect(createResponse.json()).resolves.toEqual({
+      projectId: "project-2",
+      name: "browser-viewer",
+      createdAt: "2026-03-29T01:00:00.000Z",
+      isDefault: false,
+    });
+  });
+
+  it("deletes terminal projects through the API and cascades child sessions", async () => {
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-2",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+        {
+          id: "project-2",
+          name: "browser-viewer",
+          createdAt: new Date("2026-03-29T01:00:00.000Z"),
+          isDefault: false,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-2`,
+      {
+        method: "DELETE",
+      },
+    );
+
+    expect(response.status).toBe(204);
+    expect(state.current).toBeNull();
   });
 
   it("deletes terminal sessions through the API", async () => {

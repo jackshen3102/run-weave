@@ -1,12 +1,21 @@
 import { v4 as uuidv4 } from "uuid";
 import { TERMINAL_PERSISTED_SCROLLBACK_BYTES } from "@browser-viewer/shared";
 import type {
+  PersistedTerminalProjectRecord,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
 } from "./store";
 
+export interface TerminalProjectRecord {
+  id: string;
+  name: string;
+  createdAt: Date;
+  isDefault: boolean;
+}
+
 export interface TerminalSessionRecord {
   id: string;
+  projectId: string;
   name: string;
   command: string;
   args: string[];
@@ -18,10 +27,33 @@ export interface TerminalSessionRecord {
 }
 
 export interface CreateTerminalSessionOptions {
+  projectId?: string;
   name?: string;
   command: string;
   args?: string[];
   cwd: string;
+}
+
+function buildProjectRecord(
+  persisted: PersistedTerminalProjectRecord,
+): TerminalProjectRecord {
+  return {
+    id: persisted.id,
+    name: persisted.name,
+    createdAt: new Date(persisted.createdAt),
+    isDefault: persisted.isDefault,
+  };
+}
+
+function toPersistedProject(
+  project: TerminalProjectRecord,
+): PersistedTerminalProjectRecord {
+  return {
+    id: project.id,
+    name: project.name,
+    createdAt: project.createdAt.toISOString(),
+    isDefault: project.isDefault,
+  };
 }
 
 function buildRecord(
@@ -29,6 +61,7 @@ function buildRecord(
 ): TerminalSessionRecord {
   return {
     id: persisted.id,
+    projectId: persisted.projectId,
     name: persisted.name,
     command: persisted.command,
     args: persisted.args,
@@ -45,6 +78,7 @@ function toPersisted(
 ): PersistedTerminalSessionRecord {
   return {
     id: session.id,
+    projectId: session.projectId,
     name: session.name,
     command: session.command,
     args: session.args,
@@ -59,6 +93,7 @@ function toPersisted(
 const SCROLLBACK_FLUSH_DELAY_MS = 250;
 
 export class TerminalSessionManager {
+  private readonly projects = new Map<string, TerminalProjectRecord>();
   private readonly sessions = new Map<string, TerminalSessionRecord>();
   private readonly scrollbackFlushTimers = new Map<string, NodeJS.Timeout>();
 
@@ -66,19 +101,118 @@ export class TerminalSessionManager {
 
   async initialize(): Promise<void> {
     await this.sessionStore.initialize();
+    const persistedProjects = await this.sessionStore.listProjects();
     const persistedSessions = await this.sessionStore.listSessions();
 
+    for (const persisted of persistedProjects) {
+      this.projects.set(persisted.id, buildProjectRecord(persisted));
+    }
     for (const persisted of persistedSessions) {
       this.sessions.set(persisted.id, buildRecord(persisted));
     }
+  }
+
+  listProjects(): TerminalProjectRecord[] {
+    return Array.from(this.projects.values()).sort(
+      (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+    );
+  }
+
+  getProject(projectId: string): TerminalProjectRecord | undefined {
+    return this.projects.get(projectId);
+  }
+
+  async createProject(name: string): Promise<TerminalProjectRecord> {
+    const project: TerminalProjectRecord = {
+      id: uuidv4(),
+      name: name.trim(),
+      createdAt: new Date(),
+      isDefault: this.projects.size === 0,
+    };
+
+    await this.sessionStore.insertProject(toPersistedProject(project));
+    this.projects.set(project.id, project);
+    if (project.isDefault) {
+      await this.sessionStore.setDefaultProject(project.id);
+    }
+    return project;
+  }
+
+  async updateProject(
+    projectId: string,
+    name: string,
+  ): Promise<TerminalProjectRecord | undefined> {
+    const project = this.projects.get(projectId);
+    if (!project) {
+      return undefined;
+    }
+
+    project.name = name.trim();
+    await this.sessionStore.updateProject({
+      projectId,
+      name: project.name,
+    });
+    return project;
+  }
+
+  async deleteProject(projectId: string): Promise<boolean> {
+    const project = this.projects.get(projectId);
+    if (!project) {
+      return false;
+    }
+
+    const childSessionIds = this.listSessions()
+      .filter((session) => session.projectId === projectId)
+      .map((session) => session.id);
+    for (const sessionId of childSessionIds) {
+      await this.destroySession(sessionId);
+    }
+
+    this.projects.delete(projectId);
+    await this.sessionStore.deleteProject(projectId);
+
+    if (this.projects.size === 0) {
+      await this.createProject("Default Project");
+      return true;
+    }
+
+    if (project.isDefault) {
+      const nextDefault = this.listProjects()[0];
+      if (nextDefault) {
+        for (const candidate of this.projects.values()) {
+          candidate.isDefault = candidate.id === nextDefault.id;
+        }
+        await this.sessionStore.setDefaultProject(nextDefault.id);
+      }
+    }
+
+    return true;
+  }
+
+  private getDefaultProjectId(): string {
+    const currentDefault = this.listProjects().find((project) => project.isDefault);
+    if (currentDefault) {
+      return currentDefault.id;
+    }
+
+    const fallback = this.listProjects()[0];
+    if (fallback) {
+      fallback.isDefault = true;
+      void this.sessionStore.setDefaultProject(fallback.id);
+      return fallback.id;
+    }
+
+    throw new Error("[viewer-be] terminal default project not initialized");
   }
 
   async createSession(
     options: CreateTerminalSessionOptions,
   ): Promise<TerminalSessionRecord> {
     const now = new Date();
+    const projectId = options.projectId ?? this.getDefaultProjectId();
     const session: TerminalSessionRecord = {
       id: uuidv4(),
+      projectId,
       name: options.name?.trim() || options.command,
       command: options.command,
       args: options.args ?? [],

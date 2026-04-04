@@ -1,13 +1,31 @@
 import type {
+  CreateTerminalProjectRequest,
   CreateTerminalClipboardImageRequest,
   CreateTerminalClipboardImageResponse,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
+  TerminalProjectListItem,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
+  UpdateTerminalProjectRequest,
 } from "@browser-viewer/shared";
 import { requestJson, requestVoid } from "./http";
+
+export async function createTerminalProject(
+  apiBase: string,
+  token: string,
+  payload: CreateTerminalProjectRequest,
+): Promise<TerminalProjectListItem> {
+  return requestJson<TerminalProjectListItem>(apiBase, "/api/terminal/project", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+}
 
 export async function createTerminalSession(
   apiBase: string,
@@ -28,6 +46,17 @@ export async function createTerminalSession(
   );
 }
 
+export async function listTerminalProjects(
+  apiBase: string,
+  token: string,
+): Promise<TerminalProjectListItem[]> {
+  return requestJson<TerminalProjectListItem[]>(apiBase, "/api/terminal/project", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
 export async function listTerminalSessions(
   apiBase: string,
   token: string,
@@ -39,6 +68,43 @@ export async function listTerminalSessions(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+  );
+}
+
+export async function deleteTerminalProject(
+  apiBase: string,
+  token: string,
+  projectId: string,
+): Promise<void> {
+  return requestVoid(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function updateTerminalProject(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  payload: UpdateTerminalProjectRequest,
+): Promise<TerminalProjectListItem> {
+  return requestJson<TerminalProjectListItem>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     },
   );
 }
