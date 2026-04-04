@@ -14,6 +14,7 @@ const terminalOpenMock = vi.fn();
 const terminalDisposeMock = vi.fn();
 const terminalLoadAddonMock = vi.fn();
 const terminalFocusMock = vi.fn();
+const terminalRefreshMock = vi.fn();
 const terminalConstructorOptions: Array<Record<string, unknown>> = [];
 const fitAddonFitMock = vi.fn();
 const useTerminalConnectionMock = vi.fn();
@@ -27,6 +28,7 @@ vi.mock("@xterm/xterm", () => ({
       terminalConstructorOptions.push(options);
     }
     unicode = { activeVersion: "" };
+    rows = 36;
     onData = vi.fn(() => ({ dispose: vi.fn() }));
     open = (container: HTMLElement) => {
       const helperTextarea = document.createElement("textarea");
@@ -40,6 +42,7 @@ vi.mock("@xterm/xterm", () => ({
     dispose = terminalDisposeMock;
     loadAddon = terminalLoadAddonMock;
     focus = terminalFocusMock;
+    refresh = terminalRefreshMock;
     write = vi.fn();
   },
 }));
@@ -96,6 +99,7 @@ describe("TerminalSurface", () => {
     terminalDisposeMock.mockReset();
     terminalLoadAddonMock.mockReset();
     terminalFocusMock.mockReset();
+    terminalRefreshMock.mockReset();
     terminalConstructorOptions.length = 0;
     fitAddonFitMock.mockReset();
     useTerminalConnectionMock.mockReset();
@@ -104,13 +108,15 @@ describe("TerminalSurface", () => {
     sendResizeMock.mockReset();
     webLinksAddonConstructor.mockClear();
 
-    useTerminalConnectionMock.mockReturnValue({
-      connectionStatus: "connected",
-      terminalStatus: "running",
-      exitCode: null,
-      error: null,
-      sendInput: sendInputMock,
-      sendResize: sendResizeMock,
+    useTerminalConnectionMock.mockImplementation(() => {
+      return {
+        connectionStatus: "connected",
+        terminalStatus: "running",
+        exitCode: null,
+        error: null,
+        sendInput: sendInputMock,
+        sendResize: sendResizeMock,
+      };
     });
     createTerminalSessionClipboardImageMock.mockResolvedValue({
       fileName: "browser-viewer-terminal-image-20260404-120000-abcdef.png",
@@ -195,6 +201,42 @@ describe("TerminalSurface", () => {
 
     expect(webLinksAddonConstructor).toHaveBeenCalledTimes(1);
     expect(terminalLoadAddonMock).toHaveBeenCalledWith(webLinksAddonInstance);
+  });
+
+  it("refreshes and resizes when the terminal surface becomes visible again", async () => {
+    render(
+      <TerminalSurface
+        apiBase="http://localhost:5000"
+        terminalSessionId="terminal-1"
+        token="token-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(sendResizeMock).toHaveBeenCalled();
+    });
+    sendResizeMock.mockClear();
+    terminalRefreshMock.mockClear();
+
+    const visibilityStateDescriptor = Object.getOwnPropertyDescriptor(
+      Document.prototype,
+      "visibilityState",
+    );
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    await waitFor(() => {
+      expect(sendResizeMock).toHaveBeenCalledWith(120, 36);
+    });
+    expect(terminalRefreshMock).toHaveBeenCalledWith(0, 35);
+
+    if (visibilityStateDescriptor) {
+      Object.defineProperty(document, "visibilityState", visibilityStateDescriptor);
+    }
   });
 
   it("uploads pasted clipboard images, displays image references, and inserts the stored path", async () => {

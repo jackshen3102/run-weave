@@ -24,6 +24,7 @@ const useTerminalConnectionMock = vi.fn();
 const terminalOpenMock = vi.fn();
 const terminalWriteMock = vi.fn();
 const terminalFocusMock = vi.fn();
+const terminalRefreshMock = vi.fn();
 const terminalDisposeMock = vi.fn();
 const terminalLoadAddonMock = vi.fn();
 const fitAddonFitMock = vi.fn();
@@ -38,6 +39,7 @@ vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     constructor() {}
     unicode = { activeVersion: "" };
+    rows = 36;
     onData = vi.fn((handler: (data: string) => void) => {
       terminalOnDataHandler = handler;
       return { dispose: vi.fn() };
@@ -45,6 +47,7 @@ vi.mock("@xterm/xterm", () => ({
     open = terminalOpenMock;
     write = terminalWriteMock;
     focus = terminalFocusMock;
+    refresh = terminalRefreshMock;
     dispose = terminalDisposeMock;
     loadAddon = terminalLoadAddonMock;
   },
@@ -115,6 +118,7 @@ describe("TerminalPage", () => {
     terminalOpenMock.mockReset();
     terminalWriteMock.mockReset();
     terminalFocusMock.mockReset();
+    terminalRefreshMock.mockReset();
     terminalDisposeMock.mockReset();
     terminalLoadAddonMock.mockReset();
     fitAddonFitMock.mockReset();
@@ -253,6 +257,78 @@ describe("TerminalPage", () => {
 
     expect(await screen.findByText("Exited (130)")).toBeInTheDocument();
     expect(screen.getByText("offline")).toBeInTheDocument();
+  });
+
+  it("refreshes and resizes when the page becomes visible again", async () => {
+    render(
+      <TerminalPage
+        apiBase="http://localhost:5000"
+        terminalSessionId="terminal-1"
+        token="token-1"
+      />,
+    );
+
+    await screen.findByLabelText("Terminal emulator");
+    sendResizeMock.mockClear();
+    terminalRefreshMock.mockClear();
+
+    const visibilityStateDescriptor = Object.getOwnPropertyDescriptor(
+      Document.prototype,
+      "visibilityState",
+    );
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(sendResizeMock).toHaveBeenCalledWith(120, 36);
+    expect(terminalRefreshMock).toHaveBeenCalledWith(0, 35);
+
+    if (visibilityStateDescriptor) {
+      Object.defineProperty(document, "visibilityState", visibilityStateDescriptor);
+    }
+  });
+
+  it("flushes buffered output with a timeout while hidden", () => {
+    vi.useFakeTimers();
+    rafSpy?.mockRestore();
+    rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1);
+
+    const visibilityStateDescriptor = Object.getOwnPropertyDescriptor(
+      Document.prototype,
+      "visibilityState",
+    );
+
+    try {
+      render(
+        <TerminalPage
+          apiBase="http://localhost:5000"
+          terminalSessionId="terminal-1"
+          token="token-1"
+        />,
+      );
+
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => "hidden",
+      });
+
+      act(() => {
+        capturedOnOutput?.("background-output");
+        vi.advanceTimersByTime(16);
+      });
+
+      expect(terminalWriteMock).toHaveBeenCalledWith("background-output");
+    } finally {
+      if (visibilityStateDescriptor) {
+        Object.defineProperty(document, "visibilityState", visibilityStateDescriptor);
+      }
+      vi.useRealTimers();
+    }
   });
 
   it("loads the webgl and web links addons with unicode11", async () => {

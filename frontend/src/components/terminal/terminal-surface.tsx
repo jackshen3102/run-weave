@@ -96,6 +96,7 @@ export function TerminalSurface({
   // RAF-based write batching: accumulate chunks within a frame, flush in one write.
   const pendingChunksRef = useRef<string[]>([]);
   const rafIdRef = useRef<number | null>(null);
+  const flushTimeoutIdRef = useRef<number | null>(null);
   // Stable write handler stored in a ref so onOutput below never changes identity.
   const writeChunkRef = useRef<((data: string) => void) | null>(null);
 
@@ -174,8 +175,20 @@ export function TerminalSurface({
     terminal.focus();
 
     // RAF batching: buffer chunks arriving within the same frame and flush together.
+    const clearScheduledFlush = () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      if (flushTimeoutIdRef.current !== null) {
+        window.clearTimeout(flushTimeoutIdRef.current);
+        flushTimeoutIdRef.current = null;
+      }
+    };
+
     const flushPending = () => {
       rafIdRef.current = null;
+      flushTimeoutIdRef.current = null;
       if (!terminalRef.current || pendingChunksRef.current.length === 0) {
         return;
       }
@@ -184,11 +197,24 @@ export function TerminalSurface({
       if (batch) terminalRef.current.write(batch);
     };
 
+    const scheduleFlush = () => {
+      if (rafIdRef.current !== null || flushTimeoutIdRef.current !== null) {
+        return;
+      }
+
+      if (document.visibilityState === "visible") {
+        rafIdRef.current = requestAnimationFrame(flushPending);
+        return;
+      }
+
+      // requestAnimationFrame pauses in background tabs/windows. Keep draining
+      // output so the terminal buffer stays current while hidden.
+      flushTimeoutIdRef.current = window.setTimeout(flushPending, 16);
+    };
+
     writeChunkRef.current = (data: string) => {
       pendingChunksRef.current.push(data);
-      if (rafIdRef.current === null) {
-        rafIdRef.current = requestAnimationFrame(flushPending);
-      }
+      scheduleFlush();
     };
 
     const syncSize = () => {
@@ -215,6 +241,14 @@ export function TerminalSurface({
       syncSize();
     });
 
+    const refreshTerminalViewport = () => {
+      if (!terminalRef.current || document.visibilityState !== "visible") {
+        return;
+      }
+      syncSize();
+      terminalRef.current.refresh(0, Math.max(terminalRef.current.rows - 1, 0));
+    };
+
     let disposed = false;
     const fontFaceSet = document.fonts;
     let fontReadyPromise: Promise<unknown> | null = null;
@@ -236,6 +270,8 @@ export function TerminalSurface({
     } else {
       window.addEventListener("resize", syncSize);
     }
+    document.addEventListener("visibilitychange", refreshTerminalViewport);
+    window.addEventListener("focus", refreshTerminalViewport);
 
     const handlePaste = (event: ClipboardEvent) => {
       const imageItem = Array.from(event.clipboardData?.items ?? []).find(
@@ -293,10 +329,7 @@ export function TerminalSurface({
         cancelAnimationFrame(mountFitFrameId);
         mountFitFrameId = null;
       }
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
+      clearScheduledFlush();
       pendingChunksRef.current = [];
       writeChunkRef.current = null;
 
@@ -305,6 +338,8 @@ export function TerminalSurface({
       } else {
         window.removeEventListener("resize", syncSize);
       }
+      document.removeEventListener("visibilitychange", refreshTerminalViewport);
+      window.removeEventListener("focus", refreshTerminalViewport);
       helperTextarea?.removeEventListener("paste", handlePasteEvent, true);
       dataDisposable.dispose();
       terminal.dispose();
