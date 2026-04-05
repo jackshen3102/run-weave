@@ -123,6 +123,16 @@ describe("TerminalWorkspace", () => {
     expect(onNavigateHome).toHaveBeenCalledTimes(1);
   });
 
+  it("renders terminal shortcut hints in the header", async () => {
+    render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Project Alt\+\[ \/ Alt\+\].*Tab Alt\+Shift\+\[ \/ Alt\+Shift\+\]/),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("creates a terminal session from the new button without browser linkage", async () => {
     render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
 
@@ -746,6 +756,108 @@ describe("TerminalWorkspace", () => {
       expect(screen.getByRole("button", { name: "coze-shell" })).toBeInTheDocument();
     });
     expect(screen.queryByRole("button", { name: "viewer-shell" })).toBeNull();
+  });
+
+  it("switches terminal tabs with global shortcuts", async () => {
+    const onActiveSessionChange = vi.fn();
+    listTerminalSessionsMock.mockResolvedValue([
+      {
+        terminalSessionId: "terminal-1",
+        projectId: "project-1",
+        name: "shell-1",
+        command: "bash",
+        args: [],
+        cwd: "/tmp",
+        status: "running",
+        createdAt: "2026-03-30T00:00:00.000Z",
+      },
+      {
+        terminalSessionId: "terminal-2",
+        projectId: "project-1",
+        name: "shell-2",
+        command: "bash",
+        args: [],
+        cwd: "/tmp",
+        status: "running",
+        createdAt: "2026-03-30T01:00:00.000Z",
+      },
+    ]);
+
+    render(
+      <TerminalWorkspace
+        apiBase="http://localhost:5000"
+        token="token-1"
+        onActiveSessionChange={onActiveSessionChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "shell-2" })).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: "]", altKey: true, shiftKey: true });
+
+    await waitFor(() => {
+      expect(onActiveSessionChange).toHaveBeenLastCalledWith("terminal-2");
+    });
+
+    fireEvent.keyDown(window, { key: "[", altKey: true, shiftKey: true });
+
+    await waitFor(() => {
+      expect(onActiveSessionChange).toHaveBeenLastCalledWith("terminal-1");
+    });
+  });
+
+  it("switches projects with global shortcuts while terminal surface is focused", async () => {
+    listTerminalSessionsMock.mockResolvedValue([
+      {
+        terminalSessionId: "terminal-1",
+        projectId: "project-1",
+        name: "viewer-shell",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/viewer",
+        status: "running",
+        createdAt: "2026-03-30T00:00:00.000Z",
+      },
+      {
+        terminalSessionId: "terminal-2",
+        projectId: "project-2",
+        name: "coze-shell",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/coze",
+        status: "running",
+        createdAt: "2026-03-30T01:00:00.000Z",
+      },
+    ]);
+
+    render(<TerminalWorkspace apiBase="http://localhost:5000" token="token-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("terminal-surface")).toBeInTheDocument();
+    });
+
+    const surface = screen.getByTestId("terminal-surface");
+    surface.focus();
+
+    fireEvent.keyDown(window, { key: "]", altKey: true });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "coze-hub" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    });
+    expect(screen.getByRole("button", { name: "coze-shell" })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "[", altKey: true });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "browser-viewer" }),
+      ).toHaveAttribute("aria-pressed", "true");
+    });
   });
 
   it("keeps an empty active project open without reporting that the workspace is empty", async () => {

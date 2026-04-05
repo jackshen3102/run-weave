@@ -81,6 +81,15 @@ function resolvePreferredSessionId(
   return projectSessions[0]?.terminalSessionId ?? null;
 }
 
+function cycleIndex(currentIndex: number, total: number, delta: number): number {
+  if (total <= 0) {
+    return -1;
+  }
+
+  const normalizedCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
+  return (normalizedCurrentIndex + delta + total) % total;
+}
+
 export function TerminalWorkspace({
   apiBase,
   token,
@@ -264,6 +273,89 @@ export function TerminalWorkspace({
     apiBase,
     hasLoadedSessions,
     requestError,
+  ]);
+
+  useEffect(() => {
+    if (projectDialogMode || projectPendingDeletion) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || !event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+
+      const matchesPrevious = event.code === "BracketLeft" || event.key === "[";
+      const matchesNext = event.code === "BracketRight" || event.key === "]";
+      const isPreviousProject = !event.shiftKey && matchesPrevious;
+      const isNextProject = !event.shiftKey && matchesNext;
+      const isPreviousSession = event.shiftKey && matchesPrevious;
+      const isNextSession = event.shiftKey && matchesNext;
+
+      if (!isPreviousProject && !isNextProject && !isPreviousSession && !isNextSession) {
+        return;
+      }
+
+      if (isPreviousProject || isNextProject) {
+        if (visibleProjects.length <= 1) {
+          return;
+        }
+
+        const currentProjectIndex = visibleProjects.findIndex(
+          (project) => project.projectId === activeProjectId,
+        );
+        const nextProject = visibleProjects[
+          cycleIndex(
+            currentProjectIndex,
+            visibleProjects.length,
+            isPreviousProject ? -1 : 1,
+          )
+        ];
+        if (!nextProject) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        setActiveProjectId(nextProject.projectId);
+        return;
+      }
+
+      if (visibleSessions.length <= 1) {
+        return;
+      }
+
+      const currentSessionIndex = visibleSessions.findIndex(
+        (session) => session.terminalSessionId === activeSession?.terminalSessionId,
+      );
+      const nextSession = visibleSessions[
+        cycleIndex(
+          currentSessionIndex,
+          visibleSessions.length,
+          isPreviousSession ? -1 : 1,
+        )
+      ];
+      if (!nextSession) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setActiveSessionId(nextSession.terminalSessionId);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    activeProjectId,
+    activeSession?.terminalSessionId,
+    projectDialogMode,
+    projectPendingDeletion,
+    visibleProjects,
+    visibleSessions,
   ]);
 
   useEffect(() => {
@@ -541,6 +633,9 @@ export function TerminalWorkspace({
                 </div>
               );
             })}
+          </div>
+          <div className="hidden shrink-0 text-[11px] text-slate-500 xl:block">
+            Project Alt+[ / Alt+]  Tab Alt+Shift+[ / Alt+Shift+]
           </div>
           <Button
             type="button"
