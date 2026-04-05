@@ -2,12 +2,17 @@ import {
   app,
   BrowserWindow,
   dialog,
+  ipcMain,
+  shell,
   protocol,
   net,
 } from "electron";
 import path from "node:path";
 import { resolveProtocolFilePath } from "./protocol-path.js";
-import { startPackagedBackend, type PackagedBackendRuntime } from "./backend-runtime.js";
+import {
+  startPackagedBackend,
+  type PackagedBackendRuntime,
+} from "./backend-runtime.js";
 import { createTray } from "./tray.js";
 import { initAutoUpdater, checkForUpdates } from "./updater.js";
 import { getIsQuitting, setIsQuitting } from "./app-state.js";
@@ -45,6 +50,24 @@ function registerCustomProtocol() {
     }
 
     return net.fetch(`file://${resolved.filePath}`);
+  });
+}
+
+function registerOpenExternalHandler(): void {
+  ipcMain.handle("viewer:open-external", async (_event, url: string) => {
+    if (typeof url !== "string") {
+      return;
+    }
+
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:", "mailto:"].includes(parsed.protocol)) {
+        return;
+      }
+      await shell.openExternal(url);
+    } catch {
+      return;
+    }
   });
 }
 
@@ -120,12 +143,14 @@ let packagedBackendRuntime: PackagedBackendRuntime | null = null;
 
 app.whenReady().then(async () => {
   try {
+    registerOpenExternalHandler();
     if (!isDev) {
       registerCustomProtocol();
       packagedBackendRuntime = await startPackagedBackend({
         baseEnv: process.env,
       });
-      process.env.BROWSER_VIEWER_BACKEND_URL = packagedBackendRuntime.backendUrl;
+      process.env.BROWSER_VIEWER_BACKEND_URL =
+        packagedBackendRuntime.backendUrl;
       packagedBackendRuntime.child.once("exit", (code, signal) => {
         if (!getIsQuitting()) {
           dialog.showErrorBox(
@@ -141,7 +166,12 @@ app.whenReady().then(async () => {
 
     createTray(mainWindow);
 
-    if (shouldEnableAutoUpdates({ isPackaged: app.isPackaged, platform: process.platform })) {
+    if (
+      shouldEnableAutoUpdates({
+        isPackaged: app.isPackaged,
+        platform: process.platform,
+      })
+    ) {
       initAutoUpdater(mainWindow);
       setTimeout(() => checkForUpdates(), 3_000);
     }
@@ -159,10 +189,7 @@ app.whenReady().then(async () => {
     });
   } catch (error) {
     console.error("[electron] failed to initialize application", error);
-    dialog.showErrorBox(
-      "Application Failed to Start",
-      String(error),
-    );
+    dialog.showErrorBox("Application Failed to Start", String(error));
     app.quit();
   }
 });

@@ -94,7 +94,9 @@ export function TerminalPage({
   });
 
   const renderedCommand = useMemo(() => {
-    return session ? renderCommand(session.command, session.args) : "Loading...";
+    return session
+      ? renderCommand(session.command, session.args)
+      : "Loading...";
   }, [session]);
   const renderedTerminalStatus = useMemo(() => {
     const effectiveStatus = terminalStatus ?? session?.status ?? "running";
@@ -118,7 +120,7 @@ export function TerminalPage({
     const terminal = new Terminal({
       allowProposedApi: true,
       cursorBlink: true,
-      fontFamily: "\"Fira Code\", \"SFMono-Regular\", ui-monospace, monospace",
+      fontFamily: '"Fira Code", "SFMono-Regular", ui-monospace, monospace',
       fontSize: 14,
       lineHeight: 1.2,
       scrollback: TERMINAL_CLIENT_SCROLLBACK_LINES,
@@ -134,7 +136,16 @@ export function TerminalPage({
 
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(unicode11Addon);
-    terminal.loadAddon(new WebLinksAddon());
+    terminal.loadAddon(
+      new WebLinksAddon((event, uri) => {
+        event.preventDefault();
+        if (window.electronAPI?.openExternal) {
+          void window.electronAPI.openExternal(uri);
+          return;
+        }
+        window.open(uri, "_blank", "noopener,noreferrer");
+      }),
+    );
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
 

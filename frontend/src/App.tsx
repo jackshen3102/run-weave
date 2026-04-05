@@ -13,7 +13,12 @@ const CONNECTIONS_STORAGE_KEY = "viewer.connections";
 
 declare global {
   interface Window {
-    electronAPI?: { isElectron: boolean; platform: string; backendUrl?: string };
+    electronAPI?: {
+      isElectron: boolean;
+      platform: string;
+      backendUrl?: string;
+      openExternal?: (url: string) => Promise<void>;
+    };
   }
 }
 
@@ -31,7 +36,12 @@ export default function App() {
 
   const apiBase = isElectron ? (activeConnection?.url ?? "") : WEB_API_BASE;
   const activeConnectionId = isElectron ? (activeConnection?.id ?? null) : null;
-  const { token, status: authStatus, setToken, clearToken } = useScopedAuth({
+  const {
+    token,
+    status: authStatus,
+    setToken,
+    clearToken,
+  } = useScopedAuth({
     apiBase,
     isElectron,
     connectionId: activeConnectionId,
@@ -88,8 +98,12 @@ export default function App() {
               isElectron={isElectron}
               connections={connections}
               connectionName={activeConnection?.name}
-              onSwitchConnection={isElectron ? handleSelectConnection : undefined}
-              onOpenConnectionManager={isElectron ? openConnectionManager : undefined}
+              onSwitchConnection={
+                isElectron ? handleSelectConnection : undefined
+              }
+              onOpenConnectionManager={
+                isElectron ? openConnectionManager : undefined
+              }
               onSuccess={setToken}
             />
           )
@@ -110,8 +124,12 @@ export default function App() {
               connections={connections}
               activeConnectionId={activeConnectionId}
               connectionName={isElectron ? activeConnection?.name : undefined}
-              onSelectConnection={isElectron ? handleSelectConnection : undefined}
-              onOpenConnectionManager={isElectron ? openConnectionManager : undefined}
+              onSelectConnection={
+                isElectron ? handleSelectConnection : undefined
+              }
+              onOpenConnectionManager={
+                isElectron ? openConnectionManager : undefined
+              }
             />
           ) : (
             <Navigate to="/login" replace />

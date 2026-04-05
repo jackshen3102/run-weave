@@ -13,3 +13,4 @@ backend/.env
 artifacts/
 electron/release/
 .local-updates/
+.playwright-cli/

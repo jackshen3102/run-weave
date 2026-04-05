@@ -62,7 +62,9 @@ async function fileToBase64(file: File): Promise<string> {
   if (typeof file.arrayBuffer === "function") {
     const buffer = await file.arrayBuffer();
     return btoa(
-      Array.from(new Uint8Array(buffer), (byte) => String.fromCharCode(byte)).join(""),
+      Array.from(new Uint8Array(buffer), (byte) =>
+        String.fromCharCode(byte),
+      ).join(""),
     );
   }
 
@@ -110,11 +112,7 @@ export function TerminalSurface({
     terminalRef.current?.write(nextChunk);
   }, []);
 
-  const {
-    error,
-    sendInput,
-    sendResize,
-  } = useTerminalConnection({
+  const { error, sendInput, sendResize } = useTerminalConnection({
     apiBase,
     terminalSessionId,
     token,
@@ -134,7 +132,7 @@ export function TerminalSurface({
     const terminal = new Terminal({
       allowProposedApi: true,
       cursorBlink: true,
-      fontFamily: "\"Fira Code\", \"SFMono-Regular\", ui-monospace, monospace",
+      fontFamily: '"Fira Code", "SFMono-Regular", ui-monospace, monospace',
       fontSize: 13,
       lineHeight: 1.2,
       scrollback: TERMINAL_CLIENT_SCROLLBACK_LINES,
@@ -150,7 +148,16 @@ export function TerminalSurface({
 
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(unicode11Addon);
-    terminal.loadAddon(new WebLinksAddon());
+    terminal.loadAddon(
+      new WebLinksAddon((event, uri) => {
+        event.preventDefault();
+        if (window.electronAPI?.openExternal) {
+          void window.electronAPI.openExternal(uri);
+          return;
+        }
+        window.open(uri, "_blank", "noopener,noreferrer");
+      }),
+    );
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
 
