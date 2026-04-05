@@ -296,6 +296,9 @@ export function TerminalWorkspace({
         return;
       }
 
+      event.preventDefault();
+      event.stopPropagation();
+
       if (isPreviousProject || isNextProject) {
         if (visibleProjects.length <= 1) {
           return;
@@ -314,9 +317,6 @@ export function TerminalWorkspace({
         if (!nextProject) {
           return;
         }
-
-        event.preventDefault();
-        event.stopPropagation();
         setActiveProjectId(nextProject.projectId);
         return;
       }
@@ -338,9 +338,6 @@ export function TerminalWorkspace({
       if (!nextSession) {
         return;
       }
-
-      event.preventDefault();
-      event.stopPropagation();
       setActiveSessionId(nextSession.terminalSessionId);
     };
 

@@ -808,6 +808,49 @@ describe("TerminalWorkspace", () => {
     });
   });
 
+  it("prevents terminal shortcut default behavior when no other terminal tab exists", async () => {
+    const onActiveSessionChange = vi.fn();
+    listTerminalSessionsMock.mockResolvedValue([
+      {
+        terminalSessionId: "terminal-1",
+        projectId: "project-1",
+        name: "shell-1",
+        command: "bash",
+        args: [],
+        cwd: "/tmp",
+        status: "running",
+        createdAt: "2026-03-30T00:00:00.000Z",
+      },
+    ]);
+
+    render(
+      <TerminalWorkspace
+        apiBase="http://localhost:5000"
+        token="token-1"
+        onActiveSessionChange={onActiveSessionChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "shell-1" })).toBeInTheDocument();
+    });
+
+    const event = new KeyboardEvent("keydown", {
+      key: "]",
+      altKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    const prevented = !window.dispatchEvent(event);
+
+    expect(prevented).toBe(true);
+    expect(event.defaultPrevented).toBe(true);
+    expect(onActiveSessionChange).toHaveBeenCalledTimes(1);
+    expect(onActiveSessionChange).toHaveBeenLastCalledWith("terminal-1");
+  });
+
   it("switches projects with global shortcuts while terminal surface is focused", async () => {
     listTerminalSessionsMock.mockResolvedValue([
       {
