@@ -10,6 +10,7 @@ interface RuntimeEntry {
   attachedClients: Set<string>;
   bufferedOutput: string;
   subscribers: Set<RuntimeSubscriber>;
+  recorderAttached: boolean;
 }
 
 export class TerminalRuntimeRegistry {
@@ -22,6 +23,7 @@ export class TerminalRuntimeRegistry {
       attachedClients: new Set<string>(),
       bufferedOutput: "",
       subscribers: new Set<RuntimeSubscriber>(),
+      recorderAttached: false,
     };
 
     runtime.onData((data) => {
@@ -40,6 +42,16 @@ export class TerminalRuntimeRegistry {
     });
 
     this.runtimes.set(terminalSessionId, entry);
+  }
+
+  ensureRecorder(terminalSessionId: string, recorder: RuntimeSubscriber): void {
+    const entry = this.runtimes.get(terminalSessionId);
+    if (!entry || entry.recorderAttached) {
+      return;
+    }
+
+    entry.subscribers.add(recorder);
+    entry.recorderAttached = true;
   }
 
   getRuntime(terminalSessionId: string): PtyRuntime | undefined {

@@ -10,10 +10,13 @@ import type { TerminalSessionManager } from "../terminal/manager";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import { extractShellPromptMetadata } from "../terminal/shell-integration";
+import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
 
-function parseTerminalClientMessage(rawData: string): TerminalClientMessage | null {
+function parseTerminalClientMessage(
+  rawData: string,
+): TerminalClientMessage | null {
   try {
     const parsed = JSON.parse(rawData) as unknown;
     if (!parsed || typeof parsed !== "object") {
@@ -124,6 +127,13 @@ export function attachTerminalWebSocketServer(
           cwd: session.cwd,
         });
         runtimeRegistry.createRuntime(terminalSessionId, runtime);
+        runtimeRegistry.ensureRecorder(
+          terminalSessionId,
+          createTerminalRuntimeRecorder(
+            terminalSessionManager,
+            terminalSessionId,
+          ),
+        );
       } catch (error) {
         sendEvent(socket, {
           type: "error",
@@ -134,10 +144,18 @@ export function attachTerminalWebSocketServer(
       }
     }
     if (!runtime) {
-      sendEvent(socket, { type: "error", message: "Terminal runtime not found" });
+      sendEvent(socket, {
+        type: "error",
+        message: "Terminal runtime not found",
+      });
       socket.close(1011, "Terminal runtime not found");
       return;
     }
+
+    runtimeRegistry.ensureRecorder(
+      terminalSessionId,
+      createTerminalRuntimeRecorder(terminalSessionManager, terminalSessionId),
+    );
 
     const clientId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const heartbeatState = {
@@ -151,28 +169,17 @@ export function attachTerminalWebSocketServer(
         const metadata = extractShellPromptMetadata(data);
 
         if (metadata.sessionName && metadata.cwd) {
-          void terminalSessionManager
-            .updateSessionMetadata(terminalSessionId, {
-              name: metadata.sessionName,
-              cwd: metadata.cwd,
-            })
-            .then((updatedSession) => {
-              if (!updatedSession) {
-                return;
-              }
-              sendEvent(socket, {
-                type: "metadata",
-                name: updatedSession.name,
-                cwd: updatedSession.cwd,
-              });
-            });
+          sendEvent(socket, {
+            type: "metadata",
+            name: metadata.sessionName,
+            cwd: metadata.cwd,
+          });
         }
 
         if (!metadata.output) {
           return;
         }
 
-        terminalSessionManager.appendOutput(terminalSessionId, metadata.output);
         sendEvent(socket, { type: "output", data: metadata.output });
       },
       onExit(event) {

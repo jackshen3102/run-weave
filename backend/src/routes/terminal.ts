@@ -24,22 +24,29 @@ import {
 } from "../terminal/clipboard-image";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
+import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
 
-const createTerminalSessionSchema = z.object({
-  projectId: z.string().trim().min(1).optional(),
-  name: z.string().trim().min(1).optional(),
-  command: z.string().trim().min(1).optional(),
-  args: z.array(z.string()).optional(),
-  cwd: z.string().trim().min(1).optional(),
-}).strict();
+const createTerminalSessionSchema = z
+  .object({
+    projectId: z.string().trim().min(1).optional(),
+    name: z.string().trim().min(1).optional(),
+    command: z.string().trim().min(1).optional(),
+    args: z.array(z.string()).optional(),
+    cwd: z.string().trim().min(1).optional(),
+  })
+  .strict();
 
-const createTerminalProjectSchema = z.object({
-  name: z.string().trim().min(1),
-}).strict();
+const createTerminalProjectSchema = z
+  .object({
+    name: z.string().trim().min(1),
+  })
+  .strict();
 
-const updateTerminalProjectSchema = z.object({
-  name: z.string().trim().min(1),
-}).strict();
+const updateTerminalProjectSchema = z
+  .object({
+    name: z.string().trim().min(1),
+  })
+  .strict();
 
 const updateTerminalSessionSchema = z.object({
   name: z.string().trim().min(1),
@@ -181,7 +188,9 @@ export function createTerminalRouter(
       return;
     }
 
-    const project = await terminalSessionManager.createProject(parsed.data.name);
+    const project = await terminalSessionManager.createProject(
+      parsed.data.name,
+    );
     res.status(201).json({
       projectId: project.id,
       name: project.name,
@@ -282,6 +291,10 @@ export function createTerminalRouter(
             cwd: session.cwd,
           });
           options.runtimeRegistry.createRuntime(session.id, runtime);
+          options.runtimeRegistry.ensureRecorder(
+            session.id,
+            createTerminalRuntimeRecorder(terminalSessionManager, session.id),
+          );
         } catch (error) {
           await terminalSessionManager.destroySession(session.id);
           throw error;
@@ -375,7 +388,10 @@ export function createTerminalRouter(
     try {
       const extension = resolveClipboardImageExtension(parsed.data.mimeType);
       const fileName = buildClipboardImageFileName(new Date(), extension);
-      const terminalTempDir = path.join(os.tmpdir(), "browser-viewer-terminal-images");
+      const terminalTempDir = path.join(
+        os.tmpdir(),
+        "browser-viewer-terminal-images",
+      );
       const filePath = path.join(terminalTempDir, fileName);
       const imageBuffer = Buffer.from(parsed.data.dataBase64, "base64");
       if (imageBuffer.length > TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES) {
