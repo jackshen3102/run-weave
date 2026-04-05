@@ -223,6 +223,8 @@ describe("TerminalPage", () => {
     terminalOnDataHandler?.(
       "\u001b]10;rgb:e2e2/e8e8/f0f0\u001b\\\u001b]11;rgb:0b0b/1212/2020\u001b\\\u001b[?276;2$y",
     );
+    terminalOnDataHandler?.("\u001b[3;3R");
+    terminalOnDataHandler?.("\u001b[?1;2c");
     terminalOnDataHandler?.("\r");
 
     await waitFor(() => {

@@ -23,6 +23,7 @@ const createTerminalSessionClipboardImageMock = vi.fn();
 const sendInputMock = vi.fn();
 const sendResizeMock = vi.fn();
 let capturedOnOutput: ((data: string) => void) | null = null;
+let terminalOnDataHandler: ((data: string) => void) | null = null;
 
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
@@ -31,7 +32,10 @@ vi.mock("@xterm/xterm", () => ({
     }
     unicode = { activeVersion: "" };
     rows = 36;
-    onData = vi.fn(() => ({ dispose: vi.fn() }));
+    onData = vi.fn((handler: (data: string) => void) => {
+      terminalOnDataHandler = handler;
+      return { dispose: vi.fn() };
+    });
     open = (container: HTMLElement) => {
       const helperTextarea = document.createElement("textarea");
       helperTextarea.className = "xterm-helper-textarea";
@@ -111,6 +115,7 @@ describe("TerminalSurface", () => {
     sendResizeMock.mockReset();
     webLinksAddonConstructor.mockClear();
     capturedOnOutput = null;
+    terminalOnDataHandler = null;
 
     useTerminalConnectionMock.mockImplementation((params: { onOutput?: (data: string) => void }) => {
       capturedOnOutput = params.onOutput ?? null;
@@ -320,5 +325,26 @@ describe("TerminalSurface", () => {
     );
     expect(sendInputMock).toHaveBeenCalledTimes(1);
     expect(screen.getByText("[Image #1]")).toBeInTheDocument();
+  });
+
+  it("filters xterm cursor and device attribute auto responses", async () => {
+    render(
+      <TerminalSurface
+        apiBase="http://localhost:5000"
+        terminalSessionId="terminal-1"
+        token="token-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(terminalOpenMock).toHaveBeenCalledTimes(1);
+    });
+
+    terminalOnDataHandler?.("\u001b[3;3R");
+    terminalOnDataHandler?.("\u001b[?1;2c");
+    terminalOnDataHandler?.("ls\r");
+
+    expect(sendInputMock).toHaveBeenCalledTimes(1);
+    expect(sendInputMock).toHaveBeenCalledWith("ls\r");
   });
 });

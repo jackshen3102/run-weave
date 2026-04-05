@@ -33,6 +33,10 @@ const OSC_COLOR_RESPONSE_PATTERN = new RegExp(
 );
 const DECRPM_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[\\?[0-9;]+\\$y`);
 const DCS_RESPONSE_PATTERN = new RegExp(`${ESCAPE}P[01]\\$r.*${ESCAPE}\\\\`);
+const CURSOR_POSITION_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[[0-9;]+R`);
+const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
+  `${ESCAPE}\\[(?:\\?|>)[0-9;]+c`,
+);
 
 // xterm.js 6.0.0 has a bug in requestMode(): the handler for DECRQM queries
 // (CSI ? Pn $ p) crashes with "r is not defined". Vim sends these to probe
@@ -48,7 +52,9 @@ function isTerminalAutoResponse(data: string): boolean {
   return (
     OSC_COLOR_RESPONSE_PATTERN.test(data) ||
     DECRPM_RESPONSE_PATTERN.test(data) ||
-    DCS_RESPONSE_PATTERN.test(data)
+    DCS_RESPONSE_PATTERN.test(data) ||
+    CURSOR_POSITION_RESPONSE_PATTERN.test(data) ||
+    DEVICE_ATTRIBUTES_RESPONSE_PATTERN.test(data)
   );
 }
 

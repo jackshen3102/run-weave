@@ -251,7 +251,59 @@ describe("terminal routes", () => {
     expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
         command: "/bin/zsh",
+        args: ["-l"],
         cwd: os.homedir(),
+      }),
+    );
+  });
+
+  it("defaults zsh sessions to login shell args when args are omitted", async () => {
+    const state = { current: null as MockTerminalSession | null };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        command: "/bin/zsh",
+        cwd: "/tmp/demo",
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "/bin/zsh",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+      }),
+    );
+  });
+
+  it("preserves explicit terminal args when provided", async () => {
+    const state = { current: null as MockTerminalSession | null };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        command: "/bin/zsh",
+        args: ["-i"],
+        cwd: "/tmp/demo",
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "/bin/zsh",
+        args: ["-i"],
+        cwd: "/tmp/demo",
       }),
     );
   });

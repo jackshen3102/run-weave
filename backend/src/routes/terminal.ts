@@ -92,6 +92,22 @@ function resolveDefaultTerminalCommand(): string {
   return "/bin/bash";
 }
 
+function resolveDefaultTerminalArgs(
+  command: string,
+  args: string[] | undefined,
+): string[] | undefined {
+  if (args) {
+    return args;
+  }
+
+  const shellName = path.basename(command);
+  if (shellName === "zsh" || shellName === "bash") {
+    return ["-l"];
+  }
+
+  return undefined;
+}
+
 function resolveTerminalCreateDefaults(payload: CreateTerminalSessionRequest): {
   projectId?: string;
   name?: string;
@@ -106,7 +122,7 @@ function resolveTerminalCreateDefaults(payload: CreateTerminalSessionRequest): {
     projectId: payload.projectId,
     name: payload.name,
     command,
-    args: payload.args,
+    args: resolveDefaultTerminalArgs(command, payload.args),
     cwd,
   };
 }
