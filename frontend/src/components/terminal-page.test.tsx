@@ -225,6 +225,8 @@ describe("TerminalPage", () => {
     );
     terminalOnDataHandler?.("\u001b[3;3R");
     terminalOnDataHandler?.("\u001b[?1;2c");
+    terminalOnDataHandler?.("\u001b[I");
+    terminalOnDataHandler?.("\u001b[O");
     terminalOnDataHandler?.("\r");
 
     await waitFor(() => {

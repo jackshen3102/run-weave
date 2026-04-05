@@ -37,6 +37,7 @@ const CURSOR_POSITION_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[[0-9;]+R`);
 const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
   `${ESCAPE}\\[(?:\\?|>)[0-9;]+c`,
 );
+const FOCUS_REPORTING_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[(?:I|O)$`);
 
 // xterm.js 6.0.0 has a bug in requestMode(): the handler for DECRQM queries
 // (CSI ? Pn $ p) crashes with "r is not defined". Vim sends these to probe
@@ -54,7 +55,8 @@ function isTerminalAutoResponse(data: string): boolean {
     DECRPM_RESPONSE_PATTERN.test(data) ||
     DCS_RESPONSE_PATTERN.test(data) ||
     CURSOR_POSITION_RESPONSE_PATTERN.test(data) ||
-    DEVICE_ATTRIBUTES_RESPONSE_PATTERN.test(data)
+    DEVICE_ATTRIBUTES_RESPONSE_PATTERN.test(data) ||
+    FOCUS_REPORTING_RESPONSE_PATTERN.test(data)
   );
 }
 

@@ -327,7 +327,7 @@ describe("TerminalSurface", () => {
     expect(screen.getByText("[Image #1]")).toBeInTheDocument();
   });
 
-  it("filters xterm cursor and device attribute auto responses", async () => {
+  it("filters xterm cursor, device attribute, and focus auto responses", async () => {
     render(
       <TerminalSurface
         apiBase="http://localhost:5000"
@@ -342,6 +342,8 @@ describe("TerminalSurface", () => {
 
     terminalOnDataHandler?.("\u001b[3;3R");
     terminalOnDataHandler?.("\u001b[?1;2c");
+    terminalOnDataHandler?.("\u001b[I");
+    terminalOnDataHandler?.("\u001b[O");
     terminalOnDataHandler?.("ls\r");
 
     expect(sendInputMock).toHaveBeenCalledTimes(1);
