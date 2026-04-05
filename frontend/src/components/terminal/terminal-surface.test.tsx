@@ -15,12 +15,14 @@ const terminalDisposeMock = vi.fn();
 const terminalLoadAddonMock = vi.fn();
 const terminalFocusMock = vi.fn();
 const terminalRefreshMock = vi.fn();
+const terminalWriteMock = vi.fn();
 const terminalConstructorOptions: Array<Record<string, unknown>> = [];
 const fitAddonFitMock = vi.fn();
 const useTerminalConnectionMock = vi.fn();
 const createTerminalSessionClipboardImageMock = vi.fn();
 const sendInputMock = vi.fn();
 const sendResizeMock = vi.fn();
+let capturedOnOutput: ((data: string) => void) | null = null;
 
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
@@ -43,7 +45,7 @@ vi.mock("@xterm/xterm", () => ({
     loadAddon = terminalLoadAddonMock;
     focus = terminalFocusMock;
     refresh = terminalRefreshMock;
-    write = vi.fn();
+    write = terminalWriteMock;
   },
 }));
 
@@ -100,6 +102,7 @@ describe("TerminalSurface", () => {
     terminalLoadAddonMock.mockReset();
     terminalFocusMock.mockReset();
     terminalRefreshMock.mockReset();
+    terminalWriteMock.mockReset();
     terminalConstructorOptions.length = 0;
     fitAddonFitMock.mockReset();
     useTerminalConnectionMock.mockReset();
@@ -107,8 +110,10 @@ describe("TerminalSurface", () => {
     sendInputMock.mockReset();
     sendResizeMock.mockReset();
     webLinksAddonConstructor.mockClear();
+    capturedOnOutput = null;
 
-    useTerminalConnectionMock.mockImplementation(() => {
+    useTerminalConnectionMock.mockImplementation((params: { onOutput?: (data: string) => void }) => {
+      capturedOnOutput = params.onOutput ?? null;
       return {
         connectionStatus: "connected",
         terminalStatus: "running",
@@ -236,6 +241,36 @@ describe("TerminalSurface", () => {
 
     if (visibilityStateDescriptor) {
       Object.defineProperty(document, "visibilityState", visibilityStateDescriptor);
+    }
+  });
+
+  it("writes terminal output immediately while hidden", () => {
+    const visibilityStateDescriptor = Object.getOwnPropertyDescriptor(
+      Document.prototype,
+      "visibilityState",
+    );
+
+    try {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => "hidden",
+      });
+
+      render(
+        <TerminalSurface
+          apiBase="http://localhost:5000"
+          terminalSessionId="terminal-1"
+          token="token-1"
+        />,
+      );
+
+      capturedOnOutput?.("background-output");
+
+      expect(terminalWriteMock).toHaveBeenCalledWith("background-output");
+    } finally {
+      if (visibilityStateDescriptor) {
+        Object.defineProperty(document, "visibilityState", visibilityStateDescriptor);
+      }
     }
   });
 

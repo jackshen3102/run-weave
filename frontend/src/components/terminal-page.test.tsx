@@ -293,11 +293,7 @@ describe("TerminalPage", () => {
     }
   });
 
-  it("flushes buffered output with a timeout while hidden", () => {
-    vi.useFakeTimers();
-    rafSpy?.mockRestore();
-    rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1);
-
+  it("writes terminal output immediately while hidden", () => {
     const visibilityStateDescriptor = Object.getOwnPropertyDescriptor(
       Document.prototype,
       "visibilityState",
@@ -319,7 +315,6 @@ describe("TerminalPage", () => {
 
       act(() => {
         capturedOnOutput?.("background-output");
-        vi.advanceTimersByTime(16);
       });
 
       expect(terminalWriteMock).toHaveBeenCalledWith("background-output");
@@ -327,7 +322,6 @@ describe("TerminalPage", () => {
       if (visibilityStateDescriptor) {
         Object.defineProperty(document, "visibilityState", visibilityStateDescriptor);
       }
-      vi.useRealTimers();
     }
   });
 

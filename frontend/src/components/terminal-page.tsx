@@ -63,14 +63,13 @@ export function TerminalPage({
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
 
-  // RAF-based write batching: accumulate chunks within a frame, flush in one write.
-  const pendingChunksRef = useRef<string[]>([]);
-  const rafIdRef = useRef<number | null>(null);
-  const flushTimeoutIdRef = useRef<number | null>(null);
-  const writeChunkRef = useRef<((data: string) => void) | null>(null);
-
   const onOutput = useCallback((data: string) => {
-    writeChunkRef.current?.(data);
+    const nextChunk = data.replace(DECRQM_QUERY_RE, "");
+    if (!nextChunk) {
+      return;
+    }
+
+    terminalRef.current?.write(nextChunk);
   }, []);
 
   const {
@@ -157,49 +156,6 @@ export function TerminalPage({
 
     terminal.focus();
 
-    // RAF batching: buffer chunks arriving within the same frame and flush together.
-    const clearScheduledFlush = () => {
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      if (flushTimeoutIdRef.current !== null) {
-        window.clearTimeout(flushTimeoutIdRef.current);
-        flushTimeoutIdRef.current = null;
-      }
-    };
-
-    const flushPending = () => {
-      rafIdRef.current = null;
-      flushTimeoutIdRef.current = null;
-      if (!terminalRef.current || pendingChunksRef.current.length === 0) {
-        return;
-      }
-      const batch = pendingChunksRef.current.join("").replace(DECRQM_QUERY_RE, "");
-      pendingChunksRef.current = [];
-      if (batch) terminalRef.current.write(batch);
-    };
-
-    const scheduleFlush = () => {
-      if (rafIdRef.current !== null || flushTimeoutIdRef.current !== null) {
-        return;
-      }
-
-      if (document.visibilityState === "visible") {
-        rafIdRef.current = requestAnimationFrame(flushPending);
-        return;
-      }
-
-      // requestAnimationFrame pauses in background tabs/windows. Keep draining
-      // output so the terminal buffer stays current while hidden.
-      flushTimeoutIdRef.current = window.setTimeout(flushPending, 16);
-    };
-
-    writeChunkRef.current = (data: string) => {
-      pendingChunksRef.current.push(data);
-      scheduleFlush();
-    };
-
     const syncSize = () => {
       fitAddon.fit();
       const dimensions = fitAddon.proposeDimensions();
@@ -240,10 +196,6 @@ export function TerminalPage({
     window.addEventListener("focus", refreshTerminalViewport);
 
     return () => {
-      clearScheduledFlush();
-      pendingChunksRef.current = [];
-      writeChunkRef.current = null;
-
       if (resizeObserver) {
         resizeObserver.disconnect();
       } else {
