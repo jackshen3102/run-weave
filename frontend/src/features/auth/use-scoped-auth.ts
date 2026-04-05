@@ -16,6 +16,7 @@ interface UseScopedAuthParams {
 }
 
 type AuthStatus = "checking" | "authenticated" | "unauthenticated";
+const ACCESS_TOKEN_REFRESH_LEAD_MS = 60 * 1000;
 
 interface AuthSessionState {
   accessToken: string;
@@ -272,6 +273,71 @@ export function useScopedAuth({
       cancelled = true;
     };
   }, [apiBase, connectionId, isElectron, validationNonce, webStorageKey]);
+
+  useEffect(() => {
+    if (!apiBase || !session || status !== "authenticated") {
+      return;
+    }
+
+    if (isElectron && !session.refreshToken) {
+      return;
+    }
+
+    let cancelled = false;
+    const refreshDelayMs = Math.max(
+      session.accessExpiresAt - Date.now() - ACCESS_TOKEN_REFRESH_LEAD_MS,
+      0,
+    );
+    const timer = window.setTimeout(() => {
+      void refreshSession(
+        apiBase,
+        isElectron
+          ? {
+              clientType: "electron",
+              refreshToken: session.refreshToken ?? "",
+            }
+          : { clientType: "web" },
+      )
+        .then((refreshed) => {
+          if (cancelled) {
+            return;
+          }
+
+          const storedSession = toSessionState(refreshed);
+          if (isElectron) {
+            if (connectionId) {
+              setConnectionAuth(connectionId, storedSession);
+            }
+          } else {
+            saveWebSession(webStorageKey, storedSession);
+          }
+          setSessionState(storedSession);
+          setStatus("authenticated");
+        })
+        .catch((error: unknown) => {
+          if (cancelled) {
+            return;
+          }
+
+          if (error instanceof HttpError && error.status === 401) {
+            if (isElectron && connectionId) {
+              clearConnectionAuth(connectionId);
+            }
+            if (!isElectron) {
+              localStorage.removeItem(webStorageKey);
+            }
+          }
+
+          setSessionState(null);
+          setStatus("unauthenticated");
+        });
+    }, refreshDelayMs);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [apiBase, connectionId, isElectron, session, status, webStorageKey]);
 
   return {
     token: session?.accessToken ?? null,

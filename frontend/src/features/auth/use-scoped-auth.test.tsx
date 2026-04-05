@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "../../services/http";
 import { useScopedAuth } from "./use-scoped-auth";
@@ -13,6 +13,7 @@ vi.mock("../../services/auth", () => ({
 
 describe("useScopedAuth", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     localStorage.clear();
     refreshSessionMock.mockReset();
     verifyAuthTokenMock.mockReset();
@@ -103,7 +104,7 @@ describe("useScopedAuth", () => {
       JSON.stringify({
         "conn-1": {
           accessToken: "scoped-token",
-          accessExpiresAt: Date.now() + 60_000,
+          accessExpiresAt: Date.now() + 120_000,
           refreshToken: "refresh-token",
           sessionId: "session-1",
         },
@@ -167,6 +168,61 @@ describe("useScopedAuth", () => {
     expect(refreshSessionMock).toHaveBeenCalledWith("http://localhost:5001", {
       clientType: "electron",
       refreshToken: "refresh-token",
+    });
+  });
+
+  it("refreshes an electron-scoped session before the access token expires while the app stays open", async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(
+      "viewer.auth.connection-auth",
+      JSON.stringify({
+        "conn-1": {
+          accessToken: "scoped-token",
+          accessExpiresAt: Date.now() + 30_000,
+          refreshToken: "refresh-token",
+          sessionId: "session-1",
+        },
+      }),
+    );
+    verifyAuthTokenMock.mockResolvedValue({ valid: true });
+    refreshSessionMock.mockResolvedValue({
+      accessToken: "fresh-token",
+      refreshToken: "refresh-token-next",
+      expiresIn: 900,
+      sessionId: "session-2",
+    });
+
+    const { result } = renderHook(() =>
+      useScopedAuth({
+        apiBase: "http://localhost:5001",
+        isElectron: true,
+        connectionId: "conn-1",
+        webStorageKey: "viewer.auth.token",
+      }),
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.status).toBe("authenticated");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(refreshSessionMock).toHaveBeenCalledWith("http://localhost:5001", {
+      clientType: "electron",
+      refreshToken: "refresh-token",
+    });
+    expect(result.current.token).toBe("fresh-token");
+    expect(
+      JSON.parse(localStorage.getItem("viewer.auth.connection-auth") ?? "null"),
+    ).toMatchObject({
+      "conn-1": {
+        accessToken: "fresh-token",
+        refreshToken: "refresh-token-next",
+        sessionId: "session-2",
+      },
     });
   });
 
