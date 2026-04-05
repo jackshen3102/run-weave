@@ -1,5 +1,9 @@
 export interface ConnectionAuthRecord {
   token?: string;
+  accessToken?: string;
+  accessExpiresAt?: number;
+  refreshToken?: string;
+  sessionId?: string;
 }
 
 type ConnectionAuthStore = Record<string, ConnectionAuthRecord>;
@@ -34,7 +38,23 @@ export function cleanupLegacyAuthStorage(): void {
 
   const store = loadConnectionAuthStore();
   const sanitizedEntries = Object.entries(store).flatMap(([connectionId, record]) =>
-    record.token ? [[connectionId, { token: record.token } satisfies ConnectionAuthRecord]] : [],
+    record.accessToken ||
+    record.token ||
+    record.refreshToken ||
+    record.sessionId ||
+    record.accessExpiresAt
+      ? [[
+          connectionId,
+          {
+            accessToken: record.accessToken ?? record.token,
+            accessExpiresAt:
+              record.accessExpiresAt ??
+              (record.accessToken ?? record.token ? Date.now() + 15 * 60 * 1000 : undefined),
+            refreshToken: record.refreshToken,
+            sessionId: record.sessionId ?? "legacy-session",
+          } satisfies ConnectionAuthRecord,
+        ]]
+      : [],
   );
   saveConnectionAuthStore(Object.fromEntries(sanitizedEntries));
 }
@@ -49,20 +69,18 @@ export function getConnectionAuth(
   return loadConnectionAuthStore()[connectionId] ?? null;
 }
 
-export function setConnectionToken(
+export function setConnectionAuth(
   connectionId: string,
-  token: string,
+  auth: ConnectionAuthRecord,
 ): void {
   const store = loadConnectionAuthStore();
-  const current = store[connectionId] ?? {};
   store[connectionId] = {
-    ...current,
-    token,
+    ...auth,
   };
   saveConnectionAuthStore(store);
 }
 
-export function clearConnectionToken(connectionId: string): void {
+export function clearConnectionAuth(connectionId: string): void {
   const store = loadConnectionAuthStore();
   if (!(connectionId in store)) {
     return;
@@ -70,4 +88,16 @@ export function clearConnectionToken(connectionId: string): void {
 
   delete store[connectionId];
   saveConnectionAuthStore(store);
+}
+
+export function setConnectionToken(connectionId: string, token: string): void {
+  setConnectionAuth(connectionId, {
+    accessToken: token,
+    accessExpiresAt: Date.now() + 15 * 60 * 1000,
+    sessionId: "legacy-session",
+  });
+}
+
+export function clearConnectionToken(connectionId: string): void {
+  clearConnectionAuth(connectionId);
 }

@@ -2,7 +2,11 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
-import type { AuthStore, PersistedAuthRecord } from "./store";
+import type {
+  AuthStore,
+  PersistedAuthRecord,
+  PersistedRefreshSessionRecord,
+} from "./store";
 
 interface AuthStoreData {
   auth: PersistedAuthRecord | null;
@@ -32,6 +36,7 @@ export class LowDbAuthStore implements AuthStore {
       database.data.auth = structuredClone(defaultRecord);
       await database.write();
     }
+    database.data.auth.refreshSessions ||= [];
     this.database = database;
     return structuredClone(database.data.auth);
   }
@@ -42,17 +47,85 @@ export class LowDbAuthStore implements AuthStore {
     updatedAt: string;
   }): Promise<PersistedAuthRecord> {
     return await this.enqueueWrite(async () => {
-      const database = this.getDatabase();
-      const auth = database.data.auth;
-      if (!auth) {
-        throw new Error("[viewer-be] auth store not initialized");
-      }
-
+      const auth = this.getAuthRecord();
       auth.password = params.password;
       auth.jwtSecret = params.jwtSecret;
       auth.updatedAt = params.updatedAt;
-      await database.write();
+      await this.getDatabase().write();
       return structuredClone(auth);
+    });
+  }
+
+  async createRefreshSession(
+    session: PersistedRefreshSessionRecord,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const auth = this.getAuthRecord();
+      auth.refreshSessions.push(structuredClone(session));
+      await this.getDatabase().write();
+    });
+  }
+
+  async getRefreshSession(
+    sessionId: string,
+  ): Promise<PersistedRefreshSessionRecord | null> {
+    const auth = this.getAuthRecord();
+    const session = auth.refreshSessions.find((entry) => entry.id === sessionId);
+    return session ? structuredClone(session) : null;
+  }
+
+  async replaceRefreshSession(
+    sessionId: string,
+    nextSession: PersistedRefreshSessionRecord,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const auth = this.getAuthRecord();
+      const sessionIndex = auth.refreshSessions.findIndex(
+        (entry) => entry.id === sessionId,
+      );
+      if (sessionIndex < 0) {
+        throw new Error("[viewer-be] refresh session not found");
+      }
+      auth.refreshSessions[sessionIndex] = {
+        ...auth.refreshSessions[sessionIndex]!,
+        revokedAt: nextSession.createdAt,
+        replacedBySessionId: nextSession.id,
+      };
+      auth.refreshSessions.push(structuredClone(nextSession));
+      await this.getDatabase().write();
+    });
+  }
+
+  async revokeRefreshSession(
+    sessionId: string,
+    revokedAt: string,
+  ): Promise<PersistedRefreshSessionRecord | null> {
+    return await this.enqueueWrite(async () => {
+      const auth = this.getAuthRecord();
+      const session = auth.refreshSessions.find((entry) => entry.id === sessionId);
+      if (!session) {
+        return null;
+      }
+      session.revokedAt = revokedAt;
+      await this.getDatabase().write();
+      return structuredClone(session);
+    });
+  }
+
+  async revokeRefreshSessions(
+    sessionIds: string[],
+    revokedAt: string,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const auth = this.getAuthRecord();
+      const sessionIdSet = new Set(sessionIds);
+      for (const session of auth.refreshSessions) {
+        if (!sessionIdSet.has(session.id)) {
+          continue;
+        }
+        session.revokedAt = revokedAt;
+      }
+      await this.getDatabase().write();
     });
   }
 
@@ -67,6 +140,15 @@ export class LowDbAuthStore implements AuthStore {
     }
 
     return this.database;
+  }
+
+  private getAuthRecord(): PersistedAuthRecord {
+    const auth = this.getDatabase().data.auth;
+    if (!auth) {
+      throw new Error("[viewer-be] auth store not initialized");
+    }
+    auth.refreshSessions ||= [];
+    return auth;
   }
 
   private enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {

@@ -95,6 +95,7 @@ export function attachDevtoolsProxyServer(
       authService,
       sessionManager,
       requireTabId: true,
+      tokenType: "devtools",
     });
 
     if (!handshake.ok) {

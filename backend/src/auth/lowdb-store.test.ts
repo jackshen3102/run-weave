@@ -24,6 +24,7 @@ describe("LowDbAuthStore", () => {
       password: "admin",
       jwtSecret: "jwt-secret",
       updatedAt: "2026-04-03T00:00:00.000Z",
+      refreshSessions: [],
     });
 
     expect(record).toEqual({
@@ -31,10 +32,11 @@ describe("LowDbAuthStore", () => {
       password: "admin",
       jwtSecret: "jwt-secret",
       updatedAt: "2026-04-03T00:00:00.000Z",
+      refreshSessions: [],
     });
   });
 
-  it("updates password and jwt secret", async () => {
+  it("updates password and keeps refresh sessions", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "auth-store-"));
     tempDirs.push(tempDir);
     const store = new LowDbAuthStore(path.join(tempDir, "auth-store.json"));
@@ -43,6 +45,20 @@ describe("LowDbAuthStore", () => {
       password: "admin",
       jwtSecret: "jwt-secret",
       updatedAt: "2026-04-03T00:00:00.000Z",
+      refreshSessions: [
+        {
+          id: "session-1",
+          username: "admin",
+          tokenHash: "hash-1",
+          createdAt: "2026-04-03T00:00:00.000Z",
+          lastUsedAt: "2026-04-03T00:00:00.000Z",
+          expiresAt: "2026-05-03T00:00:00.000Z",
+          revokedAt: null,
+          replacedBySessionId: null,
+          clientType: "web",
+          connectionId: null,
+        },
+      ],
     });
 
     const record = await store.updatePassword({
@@ -56,6 +72,20 @@ describe("LowDbAuthStore", () => {
       password: "new-password",
       jwtSecret: "next-secret",
       updatedAt: "2026-04-03T01:00:00.000Z",
+      refreshSessions: [
+        {
+          id: "session-1",
+          username: "admin",
+          tokenHash: "hash-1",
+          createdAt: "2026-04-03T00:00:00.000Z",
+          lastUsedAt: "2026-04-03T00:00:00.000Z",
+          expiresAt: "2026-05-03T00:00:00.000Z",
+          revokedAt: null,
+          replacedBySessionId: null,
+          clientType: "web",
+          connectionId: null,
+        },
+      ],
     });
   });
 });

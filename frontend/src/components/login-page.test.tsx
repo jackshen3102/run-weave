@@ -9,7 +9,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginPage } from "./login-page";
 
 vi.mock("../services/auth", () => ({
-  login: vi.fn(async () => ({ token: "token-1" })),
+  login: vi.fn(async () => ({
+    accessToken: "token-1",
+    expiresIn: 900,
+    sessionId: "session-1",
+  })),
 }));
 
 const REMEMBERED_CREDENTIALS_STORAGE_KEY = "viewer.auth.remembered-credentials";
@@ -56,7 +60,11 @@ describe("LoginPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     await waitFor(() => {
-      expect(onSuccess).toHaveBeenCalledWith("token-1");
+      expect(onSuccess).toHaveBeenCalledWith({
+        accessToken: "token-1",
+        expiresIn: 900,
+        sessionId: "session-1",
+      });
     });
 
     expect(localStorage.getItem(REMEMBERED_CREDENTIALS_STORAGE_KEY)).toBeNull();
@@ -90,7 +98,9 @@ describe("LoginPage", () => {
       JSON.parse(localStorage.getItem(CONNECTION_AUTH_STORAGE_KEY) ?? "{}"),
     ).toEqual({
       "conn-2": {
-        token: "token-2",
+        accessToken: "token-2",
+        accessExpiresAt: expect.any(Number),
+        sessionId: "legacy-session",
       },
     });
   });

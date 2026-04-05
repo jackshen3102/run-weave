@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useReducer,
   useRef,
   type RefObject,
@@ -11,6 +10,7 @@ import type {
   ServerEventMessage,
 } from "@browser-viewer/shared";
 import { normalizeRemoteCursor } from "../../lib/cursor";
+import { createViewerWsTicket } from "../../services/session";
 import { buildViewerWsUrl, getTabIdFromSearch, syncUrlTabId } from "./url";
 import {
   initialViewerConnectionState,
@@ -64,11 +64,6 @@ export function useViewerConnection({
   const [state, dispatch] = useReducer(
     viewerConnectionReducer,
     initialViewerConnectionState,
-  );
-
-  const wsUrl = useMemo(
-    () => buildViewerWsUrl(apiBase, sessionId, token),
-    [apiBase, sessionId, token],
   );
 
   const sendInput = useCallback((input: ClientInputMessage): void => {
@@ -280,16 +275,33 @@ export function useViewerConnection({
       reconnectCountRef.current += 1;
 
       reconnectTimerRef.current = window.setTimeout(() => {
-        connect();
+        void connect();
       }, delay);
     };
 
-    const connect = (): void => {
+    const connect = async (): Promise<void> => {
       if (closed) {
         return;
       }
 
-      const ws = new WebSocket(wsUrl);
+      let ticketPayload;
+      try {
+        ticketPayload = await createViewerWsTicket(apiBase, token, sessionId);
+      } catch (error) {
+        dispatch({
+          type: "connection/error",
+          error: String(error),
+        });
+        return;
+      }
+
+      if (closed) {
+        return;
+      }
+
+      const ws = new WebSocket(
+        buildViewerWsUrl(apiBase, sessionId, ticketPayload.ticket),
+      );
       wsRef.current = ws;
       ws.binaryType = "arraybuffer";
 
@@ -347,7 +359,7 @@ export function useViewerConnection({
       };
     };
 
-    connect();
+    void connect();
 
     return () => {
       closed = true;
@@ -362,7 +374,7 @@ export function useViewerConnection({
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [canvasRef, connectNonce, onAuthExpired, sessionId, wsUrl]);
+  }, [apiBase, canvasRef, connectNonce, onAuthExpired, sessionId, token]);
 
   return {
     status: state.status,

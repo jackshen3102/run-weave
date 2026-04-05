@@ -59,6 +59,7 @@ export function attachWebSocketServer(
       request,
       authService,
       sessionManager,
+      tokenType: "viewer-ws",
     });
 
     if (!handshake.ok) {

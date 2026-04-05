@@ -42,13 +42,12 @@ function hasOwnValue<T extends object, K extends PropertyKey>(
 }
 
 async function runRequest(options?: {
-  authorization?: string;
   sessionId?: string;
   tabId?: string;
   ticket?: string;
   headers?: Record<string, string>;
   remoteDebuggingPort?: number | null;
-  verifyToken?: (token: string) => boolean;
+  verifyTemporaryToken?: (token: string) => unknown;
   resolveChromiumRevision?: (port: number) => Promise<string | null>;
   resolveTargetIdForSessionTab?: (params: {
     sessionId: string;
@@ -56,9 +55,20 @@ async function runRequest(options?: {
   }) => Promise<string | null>;
 }): Promise<MockResponse> {
   const authService = {
-    verifyToken: vi.fn(
-      options?.verifyToken ??
-        ((token: string) => token === "ok" || token === "ticket-ok"),
+    verifyTemporaryToken: vi.fn(
+      options?.verifyTemporaryToken ??
+        ((token: string) =>
+          token === "ticket-ok"
+            ? {
+                sessionId: "auth-session-1",
+                username: "admin",
+                tokenType: "devtools",
+                resource: {
+                  sessionId: options?.sessionId,
+                  tabId: options?.tabId,
+                },
+              }
+            : null),
     ),
   };
   const sessionManager = {
@@ -80,9 +90,6 @@ async function runRequest(options?: {
   const req = {
     headers: {
       ...(options?.headers ?? {}),
-      ...(options?.authorization
-        ? { authorization: options.authorization }
-        : {}),
     },
     query: {
       sessionId: options?.sessionId,
@@ -111,7 +118,6 @@ describe("devtools routes", () => {
 
   it("returns 400 when required query params are missing", async () => {
     const response = await runRequest({
-      authorization: "Bearer ok",
     });
 
     expect(response.statusCode).toBe(400);
@@ -120,9 +126,9 @@ describe("devtools routes", () => {
 
   it("returns 503 when remote debugging is unavailable", async () => {
     const response = await runRequest({
-      authorization: "Bearer ok",
       sessionId: "s-1",
       tabId: "tab-1",
+      ticket: "ticket-ok",
       remoteDebuggingPort: null,
     });
 
@@ -131,9 +137,9 @@ describe("devtools routes", () => {
 
   it("returns 404 when target cannot be resolved", async () => {
     const response = await runRequest({
-      authorization: "Bearer ok",
       sessionId: "s-1",
       tabId: "missing",
+      ticket: "ticket-ok",
       resolveTargetIdForSessionTab: async () => null,
     });
 
@@ -142,9 +148,9 @@ describe("devtools routes", () => {
 
   it("returns a devtools shell html page", async () => {
     const response = await runRequest({
-      authorization: "Bearer ok",
       sessionId: "s-1",
       tabId: "tab-1",
+      ticket: "ticket-ok",
       headers: {
         host: "203.0.113.10:5012",
         "x-forwarded-proto": "https",
@@ -158,11 +164,11 @@ describe("devtools routes", () => {
       "chrome-devtools-frontend.appspot.com/serve_rev/@1234567/inspector.html",
     );
     expect(response.body).toContain(
-      "wss=203.0.113.10%3A5012%2Fws%2Fdevtools-proxy%3FsessionId%3Ds-1%26tabId%3Dtab-1%26token%3Dok",
+      "wss=203.0.113.10%3A5012%2Fws%2Fdevtools-proxy%3FsessionId%3Ds-1%26tabId%3Dtab-1%26token%3Dticket-ok",
     );
   });
 
-  it("accepts a query ticket instead of bearer auth", async () => {
+  it("accepts a query ticket for devtools auth", async () => {
     const response = await runRequest({
       sessionId: "s-1",
       tabId: "tab-1",
@@ -181,9 +187,9 @@ describe("devtools routes", () => {
 
   it("uses plain ws when the request is not forwarded as https", async () => {
     const response = await runRequest({
-      authorization: "Bearer ok",
       sessionId: "s-1",
       tabId: "tab-1",
+      ticket: "ticket-ok",
       headers: {
         host: "127.0.0.1:5012",
       },
@@ -191,7 +197,7 @@ describe("devtools routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain(
-      "ws=127.0.0.1%3A5012%2Fws%2Fdevtools-proxy%3FsessionId%3Ds-1%26tabId%3Dtab-1%26token%3Dok",
+      "ws=127.0.0.1%3A5012%2Fws%2Fdevtools-proxy%3FsessionId%3Ds-1%26tabId%3Dtab-1%26token%3Dticket-ok",
     );
   });
 });

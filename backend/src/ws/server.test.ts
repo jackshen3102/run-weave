@@ -286,7 +286,23 @@ describe("websocket server", () => {
   const servers: http.Server[] = [];
   const sockets: WebSocket[] = [];
   const authService = {
-    verifyToken: vi.fn((token: string) => token === "valid-token"),
+    verifyTemporaryToken: vi.fn(
+      (
+        token: string,
+        params: {
+          tokenType: "viewer-ws" | "devtools";
+          resource: { sessionId?: string; tabId?: string };
+        },
+      ) =>
+        token === "valid-token"
+          ? {
+              sessionId: "auth-session-1",
+              username: "admin",
+              tokenType: params.tokenType,
+              resource: params.resource,
+            }
+          : null,
+    ),
   };
 
   afterEach(async () => {

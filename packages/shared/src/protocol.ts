@@ -27,8 +27,21 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  token: string;
+  accessToken: string;
+  refreshToken?: string;
   expiresIn: number;
+  sessionId: string;
+}
+
+export interface RefreshSessionRequest {
+  refreshToken: string;
+}
+
+export interface RefreshSessionResponse {
+  accessToken: string;
+  refreshToken?: string;
+  expiresIn: number;
+  sessionId: string;
 }
 
 export interface ChangePasswordRequest {
@@ -50,6 +63,11 @@ export interface CreateDevtoolsTicketRequest {
 }
 
 export interface CreateDevtoolsTicketResponse {
+  ticket: string;
+  expiresIn: number;
+}
+
+export interface CreateViewerWsTicketResponse {
   ticket: string;
   expiresIn: number;
 }

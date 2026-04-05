@@ -18,7 +18,7 @@ function getBearerToken(request: Request): string | null {
 export function createRequireAuth(authService: AuthService): RequestHandler {
   return (req, res, next) => {
     const token = getBearerToken(req);
-    if (!token || !authService.verifyToken(token)) {
+    if (!token || !authService.verifyAccessToken(token)) {
       res.status(401).json({ message: "Unauthorized" });
       return;
     }

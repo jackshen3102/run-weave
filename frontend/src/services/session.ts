@@ -3,6 +3,7 @@ import type {
   CreateDevtoolsTicketResponse,
   CreateSessionRequest,
   CreateSessionResponse,
+  CreateViewerWsTicketResponse,
   SessionListItem,
   UpdateSessionRequest,
   SessionStatusResponse,
@@ -99,6 +100,23 @@ export async function createDevtoolsTicket(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function createViewerWsTicket(
+  apiBase: string,
+  token: string,
+  sessionId: string,
+): Promise<CreateViewerWsTicketResponse> {
+  return requestJson<CreateViewerWsTicketResponse>(
+    apiBase,
+    `/api/session/${encodeURIComponent(sessionId)}/ws-ticket`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     },
   );
 }

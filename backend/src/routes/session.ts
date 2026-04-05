@@ -13,6 +13,7 @@ import type {
   UpdateSessionRequest,
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
+import { readBearerToken } from "../auth/middleware";
 import type { SessionManager } from "../session/manager";
 
 const launchSourceSchema = z.object({
@@ -178,6 +179,19 @@ function normalizeCreateSessionSource(
   return source ?? { type: "launch" };
 }
 
+function resolveAuthenticatedSessionId(
+  authService: AuthService,
+  authorizationHeader: string | undefined,
+): string | null {
+  const token = readBearerToken({
+    headers: { authorization: authorizationHeader },
+  } as never);
+  if (!token) {
+    return null;
+  }
+  return authService.verifyAccessToken(token)?.sessionId ?? null;
+}
+
 export function createSessionRouter(
   sessionManager: SessionManager,
   authService: AuthService,
@@ -308,10 +322,45 @@ export function createSessionRouter(
     res.status(204).send();
   });
 
+  router.post("/session/:id/ws-ticket", (req, res) => {
+    const session = sessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Session not found" });
+      return;
+    }
+    const authSessionId = resolveAuthenticatedSessionId(
+      authService,
+      req.headers.authorization,
+    );
+    if (!authSessionId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const issued = authService.issueTemporaryToken({
+      sessionId: authSessionId,
+      tokenType: "viewer-ws",
+      resource: { sessionId: session.id },
+      ttlMs: 60_000,
+    });
+    res.status(200).json({
+      ticket: issued.token,
+      expiresIn: issued.expiresIn,
+    });
+  });
+
   router.post("/session/:id/devtools-ticket", (req, res) => {
     const session = sessionManager.getSession(req.params.id);
     if (!session) {
       res.status(404).json({ message: "Session not found" });
+      return;
+    }
+    const authSessionId = resolveAuthenticatedSessionId(
+      authService,
+      req.headers.authorization,
+    );
+    if (!authSessionId) {
+      res.status(401).json({ message: "Unauthorized" });
       return;
     }
 
@@ -326,7 +375,12 @@ export function createSessionRouter(
       return;
     }
 
-    const issued = authService.issueTemporaryToken("devtools", 60_000);
+    const issued = authService.issueTemporaryToken({
+      sessionId: authSessionId,
+      tokenType: "devtools",
+      resource: { sessionId: session.id, tabId: parsed.data.tabId },
+      ttlMs: 60_000,
+    });
     const payload: CreateDevtoolsTicketResponse = {
       ticket: issued.token,
       expiresIn: issued.expiresIn,

@@ -16,6 +16,10 @@ interface MockSession {
 
 function createTestServer(sessionState: { current: MockSession | null }) {
   const authService = {
+    verifyAccessToken: vi.fn(() => ({
+      sessionId: "auth-session-1",
+      username: "admin",
+    })),
     issueTemporaryToken: vi.fn(() => ({
       token: "ticket-123",
       expiresIn: 60,
@@ -274,6 +278,45 @@ describe("session routes", () => {
     });
   });
 
+  it("issues a short-lived viewer websocket ticket for an existing session", async () => {
+    const state = {
+      current: {
+        id: "test-session-id",
+        name: "Default Playweight",
+        proxyEnabled: false,
+        sourceType: "launch" as const,
+        headers: {},
+        connected: false,
+        createdAt: new Date("2026-03-19T00:00:00.000Z"),
+      },
+    };
+    const { server, authService } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/session/test-session-id/ws-ticket`,
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer access-token-1" },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(authService.issueTemporaryToken).toHaveBeenCalledWith({
+      sessionId: "auth-session-1",
+      tokenType: "viewer-ws",
+      resource: { sessionId: "test-session-id" },
+      ttlMs: 60_000,
+    });
+    const payload = (await response.json()) as {
+      ticket: string;
+      expiresIn: number;
+    };
+    expect(payload.ticket).toBe("ticket-123");
+    expect(payload.expiresIn).toBe(60);
+  });
+
   it("issues a short-lived devtools ticket for an existing session", async () => {
     const state = {
       current: {
@@ -294,16 +337,21 @@ describe("session routes", () => {
       `http://127.0.0.1:${port}/api/session/test-session-id/devtools-ticket`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer access-token-1",
+        },
         body: JSON.stringify({ tabId: "tab-1" }),
       },
     );
 
     expect(response.status).toBe(200);
-    expect(authService.issueTemporaryToken).toHaveBeenCalledWith(
-      "devtools",
-      60_000,
-    );
+    expect(authService.issueTemporaryToken).toHaveBeenCalledWith({
+      sessionId: "auth-session-1",
+      tokenType: "devtools",
+      resource: { sessionId: "test-session-id", tabId: "tab-1" },
+      ttlMs: 60_000,
+    });
     const payload = (await response.json()) as {
       ticket: string;
       expiresIn: number;

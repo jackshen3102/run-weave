@@ -4,19 +4,20 @@ interface AuthConfig {
   username: string;
   password: string;
   jwtSecret: string;
-  tokenTtlMs: number;
+  accessTokenTtlMs: number;
+  refreshTokenTtlMs: number;
+  refreshCookieName: string;
+  secureCookies: boolean;
 }
 
-function parseTokenTtlMs(rawTtl: string | undefined): number {
+function parsePositiveMs(rawTtl: string | undefined, fallbackMs: number, envName: string): number {
   if (!rawTtl) {
-    return 8 * 60 * 60 * 1000;
+    return fallbackMs;
   }
 
   const ttlSeconds = Number(rawTtl);
   if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
-    throw new Error(
-      "[viewer-be] AUTH_TOKEN_TTL_SECONDS must be a positive number",
-    );
+    throw new Error(`[viewer-be] ${envName} must be a positive number`);
   }
 
   return ttlSeconds * 1000;
@@ -32,7 +33,23 @@ export function loadAuthConfig(): AuthConfig {
     jwtSecret:
       process.env.AUTH_JWT_SECRET?.trim() ||
       crypto.randomBytes(32).toString("base64url"),
-    tokenTtlMs: parseTokenTtlMs(process.env.AUTH_TOKEN_TTL_SECONDS),
+    accessTokenTtlMs: parsePositiveMs(
+      process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS ??
+        process.env.AUTH_TOKEN_TTL_SECONDS,
+      15 * 60 * 1000,
+      process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS != null
+        ? "AUTH_ACCESS_TOKEN_TTL_SECONDS"
+        : "AUTH_TOKEN_TTL_SECONDS",
+    ),
+    refreshTokenTtlMs: parsePositiveMs(
+      process.env.AUTH_REFRESH_TOKEN_TTL_SECONDS,
+      30 * 24 * 60 * 60 * 1000,
+      "AUTH_REFRESH_TOKEN_TTL_SECONDS",
+    ),
+    refreshCookieName:
+      process.env.AUTH_REFRESH_COOKIE_NAME?.trim() || "viewer_refresh",
+    secureCookies:
+      process.env.AUTH_COOKIE_SECURE?.trim().toLowerCase() !== "false",
   };
 }
 

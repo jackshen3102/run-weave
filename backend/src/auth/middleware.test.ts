@@ -17,7 +17,7 @@ describe("auth middleware", () => {
   });
 
   it("rejects unauthorized request", () => {
-    const authService = { verifyToken: vi.fn(() => false) };
+    const authService = { verifyAccessToken: vi.fn(() => null) };
     const middleware = createRequireAuth(authService as never);
     const req = {
       headers: { authorization: "Bearer bad" },
@@ -35,7 +35,12 @@ describe("auth middleware", () => {
   });
 
   it("passes authorized request", () => {
-    const authService = { verifyToken: vi.fn(() => true) };
+    const authService = {
+      verifyAccessToken: vi.fn(() => ({
+        sessionId: "session-1",
+        username: "admin",
+      })),
+    };
     const middleware = createRequireAuth(authService as never);
     const req = {
       headers: { authorization: "Bearer good" },

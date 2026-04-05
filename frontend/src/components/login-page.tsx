@@ -5,6 +5,7 @@ import { Button } from "./ui/button";
 import { HttpError } from "../services/http";
 import { login as loginWithPassword } from "../services/auth";
 import { cleanupLegacyAuthStorage } from "../features/auth/storage";
+import type { LoginResponse } from "@browser-viewer/shared";
 
 interface LoginPageProps {
   apiBase: string;
@@ -14,7 +15,7 @@ interface LoginPageProps {
   connectionName?: string;
   onSwitchConnection?: (connectionId: string) => void;
   onOpenConnectionManager?: () => void;
-  onSuccess: (token: string) => void;
+  onSuccess: (session: LoginResponse) => void;
 }
 
 export function LoginPage({
@@ -38,8 +39,14 @@ export function LoginPage({
     setError(null);
 
     try {
-      const data = await loginWithPassword(apiBase, { username, password });
-      onSuccess(data.token);
+      const data = await loginWithPassword(
+        apiBase,
+        { username, password },
+        isElectron
+          ? { clientType: "electron", connectionId }
+          : { clientType: "web" },
+      );
+      onSuccess(data);
     } catch (loginError) {
       if (loginError instanceof HttpError && loginError.status === 401) {
         setError("Incorrect username or password.");

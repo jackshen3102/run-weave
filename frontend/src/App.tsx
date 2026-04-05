@@ -36,12 +36,7 @@ export default function App() {
 
   const apiBase = isElectron ? (activeConnection?.url ?? "") : WEB_API_BASE;
   const activeConnectionId = isElectron ? (activeConnection?.id ?? null) : null;
-  const {
-    token,
-    status: authStatus,
-    setToken,
-    clearToken,
-  } = useScopedAuth({
+  const { token, status: authStatus, setSession, clearToken } = useScopedAuth({
     apiBase,
     isElectron,
     connectionId: activeConnectionId,
@@ -98,13 +93,9 @@ export default function App() {
               isElectron={isElectron}
               connections={connections}
               connectionName={activeConnection?.name}
-              onSwitchConnection={
-                isElectron ? handleSelectConnection : undefined
-              }
-              onOpenConnectionManager={
-                isElectron ? openConnectionManager : undefined
-              }
-              onSuccess={setToken}
+              onSwitchConnection={isElectron ? handleSelectConnection : undefined}
+              onOpenConnectionManager={isElectron ? openConnectionManager : undefined}
+              onSuccess={setSession}
             />
           )
         }

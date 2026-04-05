@@ -128,6 +128,10 @@ function createTestServer(sessionState: {
 
   const app = express();
   const authService = {
+    verifyAccessToken: vi.fn(() => ({
+      sessionId: "auth-session-1",
+      username: "admin",
+    })),
     issueTemporaryToken: vi.fn(() => ({
       token: "terminal-ticket-123",
       expiresIn: 60,
@@ -528,6 +532,7 @@ describe("terminal routes", () => {
       `http://127.0.0.1:${port}/api/terminal/session/terminal-1/ws-ticket`,
       {
         method: "POST",
+        headers: { Authorization: "Bearer access-token-1" },
       },
     );
 
@@ -536,10 +541,12 @@ describe("terminal routes", () => {
       ticket: "terminal-ticket-123",
       expiresIn: 60,
     });
-    expect(authService.issueTemporaryToken).toHaveBeenCalledWith(
-      "terminal",
-      60_000,
-    );
+    expect(authService.issueTemporaryToken).toHaveBeenCalledWith({
+      sessionId: "auth-session-1",
+      tokenType: "terminal-ws",
+      resource: { terminalSessionId: "terminal-1" },
+      ttlMs: 60_000,
+    });
   });
 
   it("stores uploaded clipboard images in the system temp directory", async () => {

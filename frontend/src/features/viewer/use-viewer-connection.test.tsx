@@ -4,6 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClientInputMessage } from "@browser-viewer/shared";
 import { useViewerConnection } from "./use-viewer-connection";
 
+const createViewerWsTicketMock = vi.fn();
+
+vi.mock("../../services/session", () => ({
+  createViewerWsTicket: (...args: unknown[]) => createViewerWsTicketMock(...args),
+}));
+
 type MessageHandler = (event: { data: string }) => void;
 type OpenHandler = () => void;
 type CloseHandler = (event: { code: number; reason: string }) => void;
@@ -110,6 +116,11 @@ describe("useViewerConnection", () => {
 
   beforeEach(() => {
     MockWebSocket.instances = [];
+    createViewerWsTicketMock.mockReset();
+    createViewerWsTicketMock.mockResolvedValue({
+      ticket: "viewer-ticket-1",
+      expiresIn: 60,
+    });
     globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
     window.history.replaceState(null, "", "/viewer/session-1");
     globalThis.createImageBitmap = vi.fn();
@@ -127,6 +138,11 @@ describe("useViewerConnection", () => {
 
     const socket = MockWebSocket.instances[0];
     expect(socket).toBeDefined();
+    expect(createViewerWsTicketMock).toHaveBeenCalledWith(
+      "http://localhost:5000",
+      "token-1",
+      "session-1",
+    );
 
     act(() => {
       socket?.emitOpen();

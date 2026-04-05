@@ -3,20 +3,30 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "../../services/http";
 import { useScopedAuth } from "./use-scoped-auth";
 
+const refreshSessionMock = vi.fn();
 const verifyAuthTokenMock = vi.fn();
 
 vi.mock("../../services/auth", () => ({
   verifyAuthToken: (...args: unknown[]) => verifyAuthTokenMock(...args),
+  refreshSession: (...args: unknown[]) => refreshSessionMock(...args),
 }));
 
 describe("useScopedAuth", () => {
   beforeEach(() => {
     localStorage.clear();
+    refreshSessionMock.mockReset();
     verifyAuthTokenMock.mockReset();
   });
 
-  it("loads a web token from local storage and updates it locally", async () => {
-    localStorage.setItem("viewer.auth.token", "web-token");
+  it("loads a web session from local storage and updates it locally", async () => {
+    localStorage.setItem(
+      "viewer.auth.token",
+      JSON.stringify({
+        accessToken: "web-token",
+        accessExpiresAt: Date.now() + 120_000,
+        sessionId: "session-1",
+      }),
+    );
 
     const { result } = renderHook(() =>
       useScopedAuth({
@@ -30,17 +40,60 @@ describe("useScopedAuth", () => {
     expect(result.current.token).toBe("web-token");
     expect(result.current.status).toBe("authenticated");
 
-    result.current.setToken("updated-token");
+    result.current.setSession({
+      accessToken: "updated-token",
+      expiresIn: 900,
+      sessionId: "session-2",
+    });
     await waitFor(() => {
-      expect(localStorage.getItem("viewer.auth.token")).toBe("updated-token");
       expect(result.current.token).toBe("updated-token");
     });
 
-    result.current.clearToken();
+    expect(
+      JSON.parse(localStorage.getItem("viewer.auth.token") ?? "null"),
+    ).toMatchObject({
+      accessToken: "updated-token",
+      sessionId: "session-2",
+    });
+
+    result.current.clearSession();
     await waitFor(() => {
       expect(localStorage.getItem("viewer.auth.token")).toBeNull();
       expect(result.current.token).toBeNull();
       expect(result.current.status).toBe("unauthenticated");
+    });
+  });
+
+  it("refreshes a web session from cookies when the stored access token is expired", async () => {
+    localStorage.setItem(
+      "viewer.auth.token",
+      JSON.stringify({
+        accessToken: "expired-token",
+        accessExpiresAt: Date.now() - 1_000,
+        sessionId: "session-1",
+      }),
+    );
+    refreshSessionMock.mockResolvedValue({
+      accessToken: "fresh-token",
+      expiresIn: 900,
+      sessionId: "session-2",
+    });
+
+    const { result } = renderHook(() =>
+      useScopedAuth({
+        apiBase: "http://localhost:5001",
+        isElectron: false,
+        connectionId: null,
+        webStorageKey: "viewer.auth.token",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("authenticated");
+    });
+    expect(result.current.token).toBe("fresh-token");
+    expect(refreshSessionMock).toHaveBeenCalledWith("http://localhost:5001", {
+      clientType: "web",
     });
   });
 
@@ -49,7 +102,10 @@ describe("useScopedAuth", () => {
       "viewer.auth.connection-auth",
       JSON.stringify({
         "conn-1": {
-          token: "scoped-token",
+          accessToken: "scoped-token",
+          accessExpiresAt: Date.now() + 60_000,
+          refreshToken: "refresh-token",
+          sessionId: "session-1",
         },
       }),
     );
@@ -76,17 +132,58 @@ describe("useScopedAuth", () => {
     );
   });
 
-  it("removes an invalid electron-scoped token after a 401", async () => {
+  it("refreshes an expired electron-scoped session with its refresh token", async () => {
     localStorage.setItem(
       "viewer.auth.connection-auth",
       JSON.stringify({
         "conn-1": {
-          token: "expired-token",
+          accessToken: "expired-token",
+          accessExpiresAt: Date.now() - 1_000,
+          refreshToken: "refresh-token",
+          sessionId: "session-1",
         },
       }),
     );
-    verifyAuthTokenMock.mockRejectedValue(
-      new HttpError(401, "GET /api/auth/verify failed: 401"),
+    refreshSessionMock.mockResolvedValue({
+      accessToken: "fresh-token",
+      refreshToken: "refresh-token-next",
+      expiresIn: 900,
+      sessionId: "session-2",
+    });
+
+    const { result } = renderHook(() =>
+      useScopedAuth({
+        apiBase: "http://localhost:5001",
+        isElectron: true,
+        connectionId: "conn-1",
+        webStorageKey: "viewer.auth.token",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("authenticated");
+    });
+    expect(result.current.token).toBe("fresh-token");
+    expect(refreshSessionMock).toHaveBeenCalledWith("http://localhost:5001", {
+      clientType: "electron",
+      refreshToken: "refresh-token",
+    });
+  });
+
+  it("removes an invalid electron-scoped session after refresh fails", async () => {
+    localStorage.setItem(
+      "viewer.auth.connection-auth",
+      JSON.stringify({
+        "conn-1": {
+          accessToken: "expired-token",
+          accessExpiresAt: Date.now() - 1_000,
+          refreshToken: "refresh-token",
+          sessionId: "session-1",
+        },
+      }),
+    );
+    refreshSessionMock.mockRejectedValue(
+      new HttpError(401, "POST /api/auth/refresh failed: 401"),
     );
 
     const { result } = renderHook(() =>

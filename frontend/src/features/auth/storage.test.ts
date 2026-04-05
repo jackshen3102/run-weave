@@ -40,7 +40,9 @@ describe("auth storage", () => {
     expect(localStorage.getItem(REMEMBERED_CREDENTIALS_STORAGE_KEY)).toBeNull();
     expect(JSON.parse(localStorage.getItem(CONNECTION_AUTH_STORAGE_KEY) ?? "{}")).toEqual({
       "conn-1": {
-        token: "token-1",
+        accessToken: "token-1",
+        accessExpiresAt: expect.any(Number),
+        sessionId: "legacy-session",
       },
     });
   });
@@ -50,7 +52,9 @@ describe("auth storage", () => {
 
     setConnectionToken("conn-1", "token-1");
     expect(getConnectionAuth("conn-1")).toEqual({
-      token: "token-1",
+      accessToken: "token-1",
+      accessExpiresAt: expect.any(Number),
+      sessionId: "legacy-session",
     });
 
     clearConnectionToken("conn-1");

@@ -21,6 +21,17 @@ class FakeRuntime extends EventEmitter {
   }
 }
 
+function createTerminalTicketVerification(resource: {
+  terminalSessionId?: string;
+}) {
+  return {
+    sessionId: "auth-session-1",
+    username: "admin",
+    tokenType: "terminal-ws" as const,
+    resource,
+  };
+}
+
 function waitForOpen(socket: WebSocket): Promise<void> {
   return new Promise((resolve, reject) => {
     socket.once("open", () => resolve());
@@ -90,7 +101,7 @@ describe("terminal websocket server", () => {
 
   it("rejects unauthorized terminal websocket requests", async () => {
     const authService = {
-      verifyToken: vi.fn(() => false),
+      verifyTemporaryToken: vi.fn(() => null),
     };
     const terminalSessionManager = {
       getSession: vi.fn(() => undefined),
@@ -126,7 +137,10 @@ describe("terminal websocket server", () => {
   it("forwards input to PTY and output to the client", async () => {
     const runtime = new FakeRuntime();
     const authService = {
-      verifyToken: vi.fn(() => true),
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
     };
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
@@ -179,7 +193,10 @@ describe("terminal websocket server", () => {
   it("publishes terminal metadata updates from shell cwd markers", async () => {
     const runtime = new FakeRuntime();
     const authService = {
-      verifyToken: vi.fn(() => true),
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
     };
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
@@ -251,7 +268,10 @@ describe("terminal websocket server", () => {
   it("handles resize and signal messages", async () => {
     const runtime = new FakeRuntime();
     const authService = {
-      verifyToken: vi.fn(() => true),
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
     };
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
@@ -292,7 +312,10 @@ describe("terminal websocket server", () => {
   it("rejects unsupported app-layer ping messages", async () => {
     const runtime = new FakeRuntime();
     const authService = {
-      verifyToken: vi.fn(() => true),
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
     };
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
@@ -345,7 +368,10 @@ describe("terminal websocket server", () => {
   it("replays persisted scrollback emitted before websocket attach", async () => {
     const runtime = new FakeRuntime();
     const authService = {
-      verifyToken: vi.fn(() => true),
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
     };
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
@@ -395,7 +421,10 @@ describe("terminal websocket server", () => {
   it("recreates a missing runtime for a persisted running session", async () => {
     const runtime = new FakeRuntime();
     const authService = {
-      verifyToken: vi.fn(() => true),
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
     };
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
@@ -448,7 +477,10 @@ describe("terminal websocket server", () => {
       throw new Error("write failed");
     });
     const authService = {
-      verifyToken: vi.fn(() => true),
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
     };
     const terminalSessionManager = {
       getSession: vi.fn(() => ({

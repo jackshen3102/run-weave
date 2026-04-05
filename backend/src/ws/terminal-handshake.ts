@@ -25,19 +25,25 @@ export function validateTerminalWebSocketHandshake(params: {
   const terminalSessionId = requestUrl.searchParams.get("terminalSessionId");
   const token = requestUrl.searchParams.get("token");
 
-  if (!token || !authService.verifyToken(token)) {
-    return {
-      ok: false,
-      errorMessage: "Unauthorized",
-      closeReason: "Unauthorized",
-    };
-  }
-
   if (!terminalSessionId) {
     return {
       ok: false,
       errorMessage: "Missing terminalSessionId",
       closeReason: "Missing terminalSessionId",
+    };
+  }
+
+  const verifiedTicket =
+    token &&
+    authService.verifyTemporaryToken(token, {
+      tokenType: "terminal-ws",
+      resource: { terminalSessionId },
+    });
+  if (!verifiedTicket) {
+    return {
+      ok: false,
+      errorMessage: "Unauthorized",
+      closeReason: "Unauthorized",
     };
   }
 

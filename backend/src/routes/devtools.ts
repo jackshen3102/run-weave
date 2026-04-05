@@ -1,13 +1,18 @@
 import type { TLSSocket } from "node:tls";
 import { Router } from "express";
 import type { Request, RequestHandler } from "express";
-import { readBearerToken } from "../auth/middleware";
 import type { SessionManager } from "../session/manager";
 import { resolvePageByTargetId } from "../ws/tab-target";
 
 interface CreateDevtoolsRouterOptions {
   authService: {
-    verifyToken: (token: string) => boolean;
+    verifyTemporaryToken: (
+      token: string,
+      params: {
+        tokenType: "devtools";
+        resource: { sessionId?: string; tabId?: string };
+      },
+    ) => unknown;
   };
   sessionManager: SessionManager;
   resolveChromiumRevision?: (
@@ -21,11 +26,6 @@ interface CreateDevtoolsRouterOptions {
 }
 
 function resolveAccessToken(request: Request): string | null {
-  const bearerToken = readBearerToken(request);
-  if (bearerToken) {
-    return bearerToken;
-  }
-
   const ticket = request.query.ticket;
   if (typeof ticket === "string" && ticket.trim()) {
     return ticket;
@@ -204,7 +204,11 @@ export function createDevtoolsHandler(
       return;
     }
 
-    if (!options.authService.verifyToken(token)) {
+    const verifiedTicket = options.authService.verifyTemporaryToken(token, {
+      tokenType: "devtools",
+      resource: { sessionId, tabId },
+    });
+    if (!verifiedTicket) {
       res.status(401).json({ message: "Unauthorized" });
       return;
     }

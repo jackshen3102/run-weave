@@ -17,6 +17,7 @@ import type {
   UpdateTerminalProjectRequest,
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
+import { readBearerToken } from "../auth/middleware";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
   TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
@@ -162,6 +163,19 @@ export function createTerminalRouter(
   },
 ): Router {
   const router = Router();
+
+  const resolveAuthenticatedSessionId = (authorizationHeader: string | undefined) => {
+    if (!options?.authService) {
+      return null;
+    }
+    const token = readBearerToken({
+      headers: { authorization: authorizationHeader },
+    } as never);
+    if (!token) {
+      return null;
+    }
+    return options.authService.verifyAccessToken(token)?.sessionId ?? null;
+  };
 
   router.get("/project", (_req, res) => {
     const payload: TerminalProjectListItem[] = terminalSessionManager
@@ -336,8 +350,18 @@ export function createTerminalRouter(
       res.status(503).json({ message: "Terminal ticket service unavailable" });
       return;
     }
+    const authSessionId = resolveAuthenticatedSessionId(req.headers.authorization);
+    if (!authSessionId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
 
-    const issued = options.authService.issueTemporaryToken("terminal", 60_000);
+    const issued = options.authService.issueTemporaryToken({
+      sessionId: authSessionId,
+      tokenType: "terminal-ws",
+      resource: { terminalSessionId: session.id },
+      ttlMs: 60_000,
+    });
     const payload: CreateTerminalWsTicketResponse = {
       ticket: issued.token,
       expiresIn: issued.expiresIn,

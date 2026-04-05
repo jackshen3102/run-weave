@@ -1,31 +1,73 @@
 import crypto from "node:crypto";
 
-interface TokenPayload {
+export type SignedTokenType =
+  | "access"
+  | "refresh"
+  | "viewer-ws"
+  | "terminal-ws"
+  | "devtools"
+  | "legacy-temp";
+
+export interface TokenResource {
+  sessionId?: string;
+  terminalSessionId?: string;
+  tabId?: string;
+}
+
+interface BaseTokenPayload {
+  type: SignedTokenType;
   sub: string;
+  sid: string;
   exp: number;
+  resource?: TokenResource;
 }
 
 interface VerifyResult {
   valid: boolean;
-  username?: string;
+  payload?: BaseTokenPayload;
 }
 
-function encodePayload(payload: TokenPayload): string {
+function encodePayload(payload: BaseTokenPayload): string {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
-function decodePayload(encodedPayload: string): TokenPayload | null {
+function decodePayload(encodedPayload: string): BaseTokenPayload | null {
   try {
     const decoded = Buffer.from(encodedPayload, "base64url").toString("utf8");
-    const parsed = JSON.parse(decoded) as Partial<TokenPayload>;
+    const parsed = JSON.parse(decoded) as Partial<BaseTokenPayload>;
     if (
       typeof parsed.sub !== "string" ||
+      typeof parsed.sid !== "string" ||
       typeof parsed.exp !== "number" ||
+      typeof parsed.type !== "string" ||
       !Number.isFinite(parsed.exp)
     ) {
       return null;
     }
-    return { sub: parsed.sub, exp: parsed.exp };
+
+    return {
+      sub: parsed.sub,
+      sid: parsed.sid,
+      exp: parsed.exp,
+      type: parsed.type as SignedTokenType,
+      resource:
+        parsed.resource && typeof parsed.resource === "object"
+          ? {
+              sessionId:
+                typeof parsed.resource.sessionId === "string"
+                  ? parsed.resource.sessionId
+                  : undefined,
+              terminalSessionId:
+                typeof parsed.resource.terminalSessionId === "string"
+                  ? parsed.resource.terminalSessionId
+                  : undefined,
+              tabId:
+                typeof parsed.resource.tabId === "string"
+                  ? parsed.resource.tabId
+                  : undefined,
+            }
+          : undefined,
+    };
   } catch {
     return null;
   }
@@ -38,19 +80,25 @@ function signPayload(encodedPayload: string, secret: string): string {
     .digest("base64url");
 }
 
-export function issueToken(
-  username: string,
-  secret: string,
-  ttlMs: number,
-): { token: string; expiresIn: number } {
+export function issueToken(params: {
+  username: string;
+  sessionId: string;
+  secret: string;
+  ttlMs: number;
+  tokenType: SignedTokenType;
+  resource?: TokenResource;
+}): { token: string; expiresIn: number } {
   const nowMs = Date.now();
-  const expiresIn = Math.max(1, Math.floor(ttlMs / 1000));
-  const payload: TokenPayload = {
-    sub: username,
+  const expiresIn = Math.max(1, Math.floor(params.ttlMs / 1000));
+  const payload: BaseTokenPayload = {
+    sub: params.username,
+    sid: params.sessionId,
     exp: Math.floor(nowMs / 1000) + expiresIn,
+    type: params.tokenType,
+    resource: params.resource,
   };
   const encodedPayload = encodePayload(payload);
-  const signature = signPayload(encodedPayload, secret);
+  const signature = signPayload(encodedPayload, params.secret);
   return {
     token: `${encodedPayload}.${signature}`,
     expiresIn,
@@ -89,6 +137,6 @@ export function verifyToken(token: string, secret: string): VerifyResult {
 
   return {
     valid: true,
-    username: payload.sub,
+    payload,
   };
 }

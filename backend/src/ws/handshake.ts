@@ -36,21 +36,19 @@ export function validateWebSocketHandshake(params: {
   authService: AuthService;
   sessionManager: SessionManager;
   requireTabId?: boolean;
+  tokenType: "viewer-ws" | "devtools";
 }): HandshakeResult {
-  const { request, authService, sessionManager, requireTabId = false } = params;
+  const {
+    request,
+    authService,
+    sessionManager,
+    requireTabId = false,
+    tokenType,
+  } = params;
   const requestUrl = new URL(request.url ?? "/", "http://localhost");
   const sessionId = requestUrl.searchParams.get("sessionId");
   const token = requestUrl.searchParams.get("token");
   const tabId = requestUrl.searchParams.get("tabId");
-
-  if (!token || !authService.verifyToken(token)) {
-    return {
-      ok: false,
-      errorMessage: "Unauthorized",
-      closeReason: "Unauthorized",
-      logMessage: "[viewer-be] websocket rejected: unauthorized",
-    };
-  }
 
   if (!sessionId) {
     return {
@@ -58,6 +56,24 @@ export function validateWebSocketHandshake(params: {
       errorMessage: "Missing sessionId",
       closeReason: "Missing sessionId",
       logMessage: "[viewer-be] websocket rejected: missing sessionId",
+    };
+  }
+
+  const verifiedTicket =
+    token &&
+    authService.verifyTemporaryToken(token, {
+      tokenType,
+      resource: {
+        sessionId,
+        ...(tabId ? { tabId } : {}),
+      },
+    });
+  if (!verifiedTicket) {
+    return {
+      ok: false,
+      errorMessage: "Unauthorized",
+      closeReason: "Unauthorized",
+      logMessage: "[viewer-be] websocket rejected: unauthorized",
     };
   }
 

@@ -14,6 +14,18 @@ class FakeCDPSession {
   detach = vi.fn(async () => undefined);
 }
 
+function createVerifiedDevtoolsTicket(resource: {
+  sessionId?: string;
+  tabId?: string;
+}) {
+  return {
+    sessionId: "auth-session-1",
+    username: "admin",
+    tokenType: "devtools" as const,
+    resource,
+  };
+}
+
 async function startServer(server: http.Server): Promise<number> {
   await new Promise<void>((resolve) => {
     server.listen(0, resolve);
@@ -82,7 +94,10 @@ describe("attachDevtoolsProxyServer", () => {
 
   it("rejects missing tabId", async () => {
     const authService = {
-      verifyToken: vi.fn(() => true),
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { sessionId?: string; tabId?: string } }) =>
+          createVerifiedDevtoolsTicket(params.resource),
+      ),
     };
     const sessionManager = {
       getRemoteDebuggingPort: vi.fn(() => 9222),
@@ -121,7 +136,10 @@ describe("attachDevtoolsProxyServer", () => {
 
   it("rejects when tab target cannot be resolved", async () => {
     const authService = {
-      verifyToken: vi.fn(() => true),
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { sessionId?: string; tabId?: string } }) =>
+          createVerifiedDevtoolsTicket(params.resource),
+      ),
     };
     const sessionManager = {
       getRemoteDebuggingPort: vi.fn(() => 9222),
@@ -171,7 +189,10 @@ describe("attachDevtoolsProxyServer", () => {
     });
 
     const authService = {
-      verifyToken: vi.fn(() => true),
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { sessionId?: string; tabId?: string } }) =>
+          createVerifiedDevtoolsTicket(params.resource),
+      ),
     };
 
     const fakeCdpSession = new FakeCDPSession();

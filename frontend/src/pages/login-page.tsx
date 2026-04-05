@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import type { ConnectionConfig } from "../features/connection/types";
 import { LoginPage as LoginScreen } from "../components/login-page";
+import type { LoginResponse } from "@browser-viewer/shared";
 
 interface LoginPageProps {
   apiBase: string;
@@ -10,7 +11,7 @@ interface LoginPageProps {
   connectionName?: string;
   onSwitchConnection?: (connectionId: string) => void;
   onOpenConnectionManager?: () => void;
-  onSuccess: (token: string) => void;
+  onSuccess: (session: LoginResponse) => void;
 }
 
 export function LoginPage({
@@ -34,8 +35,8 @@ export function LoginPage({
       connectionName={connectionName}
       onSwitchConnection={onSwitchConnection}
       onOpenConnectionManager={onOpenConnectionManager}
-      onSuccess={(token) => {
-        onSuccess(token);
+      onSuccess={(session) => {
+        onSuccess(session);
         navigate("/", { replace: true });
       }}
     />

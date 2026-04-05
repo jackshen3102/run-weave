@@ -41,6 +41,8 @@ interface RuntimeConfig {
 interface RuntimeServices {
   authStore: AuthStore;
   authService: AuthService;
+  authCookieName: string;
+  authSecureCookies: boolean;
   sessionManager: SessionManager;
   browserService: BrowserService;
   qualityProbeStore: QualityProbeStore;
@@ -140,6 +142,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     password: authConfig.password,
     jwtSecret: authConfig.jwtSecret,
     updatedAt: new Date().toISOString(),
+    refreshSessions: [],
   });
   const authService = new AuthService(
     {
@@ -147,6 +150,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
       username: persistedAuth.username,
       password: persistedAuth.password,
       jwtSecret: persistedAuth.jwtSecret,
+      initialRefreshSessions: persistedAuth.refreshSessions,
     },
     authStore,
   );
@@ -171,6 +175,8 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   return {
     authStore,
     authService,
+    authCookieName: authConfig.refreshCookieName,
+    authSecureCookies: authConfig.secureCookies,
     sessionManager,
     browserService,
     qualityProbeStore,
@@ -196,7 +202,13 @@ function createHttpApp(services: RuntimeServices): express.Express {
   });
 
   app.use("/test", createTestRouter());
-  app.use("/api/auth", createAuthRouter(services.authService));
+  app.use(
+    "/api/auth",
+    createAuthRouter(services.authService, {
+      refreshCookieName: services.authCookieName,
+      secureCookies: services.authSecureCookies,
+    }),
+  );
   app.use(
     "/api",
     requireAuth,
