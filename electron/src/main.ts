@@ -130,7 +130,9 @@ function setupSessionIntercept(win: BrowserWindow) {
       headers["Access-Control-Allow-Methods"] = [
         "GET, POST, DELETE, PATCH, PUT, OPTIONS",
       ];
-      headers["Access-Control-Allow-Headers"] = ["Content-Type, Authorization"];
+      headers["Access-Control-Allow-Headers"] = [
+        "Content-Type, Authorization, X-Auth-Client, X-Connection-Id",
+      ];
     }
 
     callback({ responseHeaders: headers });

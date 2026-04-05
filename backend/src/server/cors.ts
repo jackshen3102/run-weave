@@ -16,6 +16,12 @@ export function createCorsMiddleware(
   configuredOrigins: string[],
 ): RequestHandler {
   const allowedOrigins = new Set(configuredOrigins);
+  const allowedHeaders = [
+    "Content-Type",
+    "Authorization",
+    "X-Auth-Client",
+    "X-Connection-Id",
+  ];
 
   return (req, res, next) => {
     const origin = req.headers.origin;
@@ -28,7 +34,10 @@ export function createCorsMiddleware(
     }
 
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      allowedHeaders.join(","),
+    );
 
     if (req.method === "OPTIONS") {
       res.status(204).end();
