@@ -50,6 +50,9 @@
     </filter>
   </defs>
 
+  <rect x="72" y="72" width="880" height="880" rx="214" fill="#F6F5F1"/>
+  <rect x="72" y="72" width="880" height="880" rx="214" stroke="rgba(18,55,67,0.08)" stroke-width="8"/>
+
   <g transform="translate(102.4 102.4) scale(0.8)">
     <rect x="56" y="56" width="912" height="912" rx="196" fill="url(#bg)"/>
     <rect x="56" y="56" width="912" height="912" rx="196" stroke="rgba(255,255,255,0.1)"/>

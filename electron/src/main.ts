@@ -6,6 +6,7 @@ import {
   shell,
   protocol,
   net,
+  nativeImage,
 } from "electron";
 import path from "node:path";
 import { resolveProtocolFilePath } from "./protocol-path.js";
@@ -25,6 +26,10 @@ const DEV_SERVER_URL =
 
 const RENDERER_DIST = path.join(__dirname, "../../frontend/dist");
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
+const DEV_DOCK_ICON_PATH = path.join(
+  __dirname,
+  "../resources/icons/icon-preview.png",
+);
 
 const CUSTOM_PROTOCOL = "browser-viewer";
 
@@ -102,6 +107,19 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
+function setApplicationIcon(): void {
+  if (process.platform !== "darwin") {
+    return;
+  }
+
+  const icon = nativeImage.createFromPath(DEV_DOCK_ICON_PATH);
+  if (icon.isEmpty()) {
+    return;
+  }
+
+  app.dock.setIcon(icon);
+}
+
 function isBackendRequest(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -145,6 +163,7 @@ let packagedBackendRuntime: PackagedBackendRuntime | null = null;
 
 app.whenReady().then(async () => {
   try {
+    setApplicationIcon();
     registerOpenExternalHandler();
     if (!isDev) {
       registerCustomProtocol();
