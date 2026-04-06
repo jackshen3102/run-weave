@@ -1,4 +1,9 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 
 const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
@@ -15,13 +20,22 @@ async function loginAndSeedToken(
   });
 
   expect(response.ok()).toBe(true);
-  const payload = (await response.json()) as { token: string };
+  const payload = (await response.json()) as {
+    accessToken: string;
+    expiresIn: number;
+    sessionId: string;
+  };
 
-  await page.addInitScript((token: string) => {
-    window.localStorage.setItem("viewer.auth.token", token);
-  }, payload.token);
+  await page.addInitScript(({ accessToken, expiresIn, sessionId }) => {
+    const session = {
+      accessToken,
+      accessExpiresAt: Date.now() + expiresIn * 1000,
+      sessionId,
+    };
+    window.localStorage.setItem("viewer.auth.token", JSON.stringify(session));
+  }, payload);
 
-  return payload.token;
+  return payload.accessToken;
 }
 
 test("viewer sends input and receives ack", async ({ page, request }) => {
@@ -49,7 +63,9 @@ test("viewer sends input and receives ack", async ({ page, request }) => {
   const navBar = viewerPage.getByTestId("navigation-bar");
   const addressInput = viewerPage.getByTestId("address-input");
   await expect(navBar).toBeVisible();
-  await addressInput.fill(`http://127.0.0.1:${E2E_BACKEND_PORT}/test/popup-auto`);
+  await addressInput.fill(
+    `http://127.0.0.1:${E2E_BACKEND_PORT}/test/popup-auto`,
+  );
   await addressInput.press("Enter");
 
   const tabButtons = viewerPage.getByTestId("tab-list").getByRole("button");
@@ -166,33 +182,35 @@ test("viewer sends input and receives ack", async ({ page, request }) => {
 
   await expect(viewerPage.getByText("Reconnecting...")).toBeVisible();
 
-  await expect.poll(async () => {
-    const response = await request.get(
-      `${E2E_API_BASE}/api/quality/session/${sessionId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
+  await expect
+    .poll(async () => {
+      const response = await request.get(
+        `${E2E_API_BASE}/api/quality/session/${sessionId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      },
-    );
-    if (!response.ok()) {
-      return false;
-    }
+      );
+      if (!response.ok()) {
+        return false;
+      }
 
-    const payload = (await response.json()) as {
-      snapshot: {
-        reconnectCount: number;
-        viewerConnected: boolean;
-        milestones: Record<string, boolean>;
-        journeyStatus: string;
+      const payload = (await response.json()) as {
+        snapshot: {
+          reconnectCount: number;
+          viewerConnected: boolean;
+          milestones: Record<string, boolean>;
+          journeyStatus: string;
+        };
       };
-    };
 
-    return (
-      payload.snapshot.reconnectCount >= 1 &&
-      payload.snapshot.viewerConnected === true &&
-      payload.snapshot.milestones.reconnectRecovered === true &&
-      payload.snapshot.journeyStatus === "healthy"
-    );
-  }).toBe(true);
+      return (
+        payload.snapshot.reconnectCount >= 1 &&
+        payload.snapshot.viewerConnected === true &&
+        payload.snapshot.milestones.reconnectRecovered === true &&
+        payload.snapshot.journeyStatus === "healthy"
+      );
+    })
+    .toBe(true);
 });

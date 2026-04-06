@@ -1,4 +1,9 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 
 const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
@@ -15,13 +20,22 @@ async function loginAndSeedToken(
   });
 
   expect(response.ok()).toBe(true);
-  const payload = (await response.json()) as { token: string };
+  const payload = (await response.json()) as {
+    accessToken: string;
+    expiresIn: number;
+    sessionId: string;
+  };
 
-  await page.addInitScript((token: string) => {
-    window.localStorage.setItem("viewer.auth.token", token);
-  }, payload.token);
+  await page.addInitScript(({ accessToken, expiresIn, sessionId }) => {
+    const session = {
+      accessToken,
+      accessExpiresAt: Date.now() + expiresIn * 1000,
+      sessionId,
+    };
+    window.localStorage.setItem("viewer.auth.token", JSON.stringify(session));
+  }, payload);
 
-  return payload.token;
+  return payload.accessToken;
 }
 
 test("supports vim write/exit and preserves interaction through resize", async ({
