@@ -1,16 +1,21 @@
 import pkg from "electron-updater";
-const { autoUpdater } = pkg;
-type UpdateInfo = pkg.UpdateInfo;
+import type { UpdateInfo } from "electron-updater";
 import { BrowserWindow, dialog } from "electron";
 import { getCustomUpdateBaseUrl } from "./updater-config.js";
 
 let mainWindow: BrowserWindow | null = null;
+
+function getAutoUpdater() {
+  return pkg.autoUpdater;
+}
 
 export function initAutoUpdater(win: BrowserWindow): void {
   mainWindow = win;
   const updateBaseUrl = getCustomUpdateBaseUrl(
     process.env.BROWSER_VIEWER_LOCAL_UPDATES_URL,
   );
+
+  const autoUpdater = getAutoUpdater();
 
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -71,6 +76,7 @@ export function initAutoUpdater(win: BrowserWindow): void {
 }
 
 export function checkForUpdates(): void {
+  const autoUpdater = getAutoUpdater();
   autoUpdater.checkForUpdates().catch((error: unknown) => {
     console.error("[auto-updater] check failed:", error);
   });

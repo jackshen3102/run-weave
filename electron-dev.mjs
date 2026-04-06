@@ -71,15 +71,18 @@ async function run() {
   console.log("[electron-dev] starting electron...");
 
   const electronBin = resolveElectronBin(electronDir);
+  const electronEnv = {
+    ...process.env,
+    BROWSER_VIEWER_DEV_URL: `http://localhost:${frontendPort}`,
+    BROWSER_VIEWER_BACKEND_URL: backendUrl,
+  };
+  delete electronEnv.ELECTRON_RUN_AS_NODE;
+
   const electron = spawnRawProcess(
     "electron",
     electronBin,
     [path.join(electronDir, "dist/main.cjs")],
-    {
-      ...process.env,
-      BROWSER_VIEWER_DEV_URL: `http://localhost:${frontendPort}`,
-      BROWSER_VIEWER_BACKEND_URL: backendUrl,
-    },
+    electronEnv,
   );
 
   await watchProcesses([backend, frontend, electron], {
