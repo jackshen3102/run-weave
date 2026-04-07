@@ -3,7 +3,7 @@
 ## 测试门槛
 
 - 后端单测：`pnpm --filter ./backend test -- src/terminal/pty-service.test.ts src/ws/heartbeat.test.ts src/ws/terminal-server.test.ts`
-- 前端单测：`pnpm --filter ./frontend test -- src/components/terminal-page.test.tsx src/features/terminal/use-terminal-connection.test.tsx`
+- 前端逻辑单测：`pnpm --filter ./frontend test -- src/services/terminal.test.ts`
 - E2E：`pnpm --filter ./frontend e2e -- tests/terminal.spec.ts tests/terminal-vim.spec.ts`
 
 ## 发布规则
