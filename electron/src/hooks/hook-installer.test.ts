@@ -113,6 +113,42 @@ test("collapses duplicate browser-viewer entries for the same event down to one 
   });
 });
 
+test("keeps third-party hooks from later duplicate browser-viewer entries", () => {
+  const merged = mergeJsonHookEntry({
+    existing: [
+      {
+        matcher: "*",
+        hooks: [{ type: "command", command: "browser-viewer-hook-bridge --source codex", timeout: 1 }],
+      },
+      {
+        matcher: "*",
+        hooks: [
+          { type: "command", command: "/tmp/browser-viewer-hook-bridge --source codex", timeout: 2 },
+          { type: "command", command: "third-party-tool", timeout: 9 },
+        ],
+      },
+    ],
+    command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+    timeout: 5,
+  });
+
+  assert.equal(merged.length, 2);
+  assert.deepEqual(merged[0], {
+    matcher: "*",
+    hooks: [
+      {
+        type: "command",
+        command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+        timeout: 5,
+      },
+    ],
+  });
+  assert.deepEqual(merged[1], {
+    matcher: "*",
+    hooks: [{ type: "command", command: "third-party-tool", timeout: 9 }],
+  });
+});
+
 test("preserves third-party hooks when a matcher entry contains browser-viewer and external commands", () => {
   const merged = mergeJsonHookEntry({
     existing: [
@@ -262,6 +298,41 @@ test("replaces a browser-viewer trae list item even when its keys are reordered"
   assert.match(output, /neighbor-tool/);
   assert.equal((output.match(/browser-viewer-hook-bridge --source trae/g) ?? []).length, 1);
   assert.doesNotMatch(output, /\/tmp\/browser-viewer-hook-bridge --source trae/);
+});
+
+test("collapses multiple top-level trae browser-viewer blocks down to one block", () => {
+  const input = [
+    "version: 1",
+    "hooks:",
+    "  - type: command",
+    "    command: 'third-party-tool'",
+    "    matchers:",
+    "      - event: stop",
+    "  - type: command",
+    "    command: '/tmp/browser-viewer-hook-bridge --source trae'",
+    "    matchers:",
+    "      - event: stop",
+    "  - type: command",
+    "    command: '/other/browser-viewer-hook-bridge --source trae'",
+    "    matchers:",
+    "      - event: user_prompt_submit",
+    "  - type: command",
+    "    command: 'neighbor-tool'",
+    "    matchers:",
+    "      - event: post_tool_use",
+    "",
+  ].join("\n");
+
+  const output = upsertTraeHookBlock(
+    input,
+    renderTraeHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
+  );
+
+  assert.match(output, /third-party-tool/);
+  assert.match(output, /neighbor-tool/);
+  assert.equal((output.match(/browser-viewer-hook-bridge --source trae/g) ?? []).length, 1);
+  assert.doesNotMatch(output, /\/tmp\/browser-viewer-hook-bridge --source trae/);
+  assert.doesNotMatch(output, /\/other\/browser-viewer-hook-bridge --source trae/);
 });
 
 test("expands an inline top-level hooks array instead of appending a second hooks key", () => {

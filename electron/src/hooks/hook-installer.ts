@@ -51,6 +51,11 @@ export function mergeJsonHookEntry(args: {
       if (!inserted) {
         merged.push(rewriteBrowserViewerHooks(entry, nextHook));
         inserted = true;
+      } else {
+        const prunedEntry = removeBrowserViewerHooks(entry);
+        if (prunedEntry) {
+          merged.push(prunedEntry);
+        }
       }
 
       continue;
@@ -389,6 +394,21 @@ function rewriteBrowserViewerHooks(
   };
 }
 
+function removeBrowserViewerHooks(entry: Record<string, unknown>): Record<string, unknown> | null {
+  const hooks = Array.isArray(entry.hooks) ? entry.hooks : [];
+  const remainingHooks = hooks.filter(
+    (hook) => !(isRecord(hook) && isBrowserViewerHookObject(hook)),
+  );
+  if (remainingHooks.length === 0) {
+    return null;
+  }
+
+  return {
+    ...entry,
+    hooks: remainingHooks,
+  };
+}
+
 function isBrowserViewerHookObject(hook: Record<string, unknown>): boolean {
   const command = hook.command;
   return typeof command === "string" && command.includes(BRIDGE_BASENAME);
@@ -412,27 +432,37 @@ export function upsertTraeHookBlock(content: string, block: string): string {
       return joinYamlLines(nextLines);
     }
 
-    const browserViewerLocation = findTraeBrowserViewerBlock(
+    const browserViewerLocations = findTraeBrowserViewerBlocks(
       lines,
       hooksSection.start + 1,
       hooksSection.end,
       lineIndent(lines[hooksSection.start] ?? ""),
     );
-    const insertAt = browserViewerLocation ? browserViewerLocation.start : hooksSection.end;
-    const removeEnd = browserViewerLocation ? browserViewerLocation.end : hooksSection.end;
-    const nextLines = [...lines.slice(0, insertAt), ...blockLines, ...lines.slice(removeEnd)];
+    const insertAt = browserViewerLocations[0]?.start ?? hooksSection.end;
+    const nextLines: string[] = [];
+    nextLines.push(...lines.slice(0, insertAt), ...blockLines);
+
+    let cursor = insertAt;
+    for (const location of browserViewerLocations) {
+      nextLines.push(...lines.slice(cursor, location.start));
+      cursor = location.end;
+    }
+    nextLines.push(...lines.slice(cursor));
+
     return joinYamlLines(nextLines);
   }
 
   return `${content.trimEnd()}\n\nhooks:\n${block}`;
 }
 
-function findTraeBrowserViewerBlock(
+function findTraeBrowserViewerBlocks(
   lines: string[],
   startIndex: number,
   endIndex: number,
   hooksIndent: number,
-): { start: number; end: number } | null {
+): Array<{ start: number; end: number }> {
+  const locations: Array<{ start: number; end: number }> = [];
+
   for (let index = startIndex; index < endIndex; index += 1) {
     if (!isTraeTopLevelListItem(lines[index] ?? "", hooksIndent)) {
       continue;
@@ -442,11 +472,13 @@ function findTraeBrowserViewerBlock(
     const end = findTraeBlockEnd(lines, start, endIndex);
     const blockLines = lines.slice(start, end);
     if (blockLines.some((line) => line.includes(BRIDGE_BASENAME))) {
-      return { start, end };
+      locations.push({ start, end });
     }
+
+    index = end - 1;
   }
 
-  return null;
+  return locations;
 }
 
 function findTraeBlockEnd(lines: string[], start: number, ceiling: number): number {
