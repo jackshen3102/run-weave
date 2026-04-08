@@ -50,6 +50,7 @@ export function ViewerPage({
 }: ViewerPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputBridgeRef = useRef<HTMLTextAreaElement>(null);
+  const tokenRef = useRef(token);
   const [addressInput, setAddressInput] = useState("");
   const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -103,6 +104,10 @@ export function ViewerPage({
   const isInspecting = canRenderDevtoolsControls && activeDevtoolsOpened;
   const canReconnect = status === "reconnecting" || status === "closed";
   const aiAssistEnabled = collaboration.aiStatus !== "idle";
+
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
 
   const submitNavigation = (): void => {
     if (!activeTabId) {
@@ -214,7 +219,7 @@ export function ViewerPage({
     setDevtoolsUrl(null);
     setDevtoolsError(null);
 
-    void createDevtoolsTicket(apiBase, token, sessionId, {
+    void createDevtoolsTicket(apiBase, tokenRef.current, sessionId, {
       tabId: activeTabId,
     })
       .then((payload) => {
@@ -249,7 +254,7 @@ export function ViewerPage({
     return () => {
       cancelled = true;
     };
-  }, [activeTabId, apiBase, isInspecting, onAuthExpired, sessionId, token]);
+  }, [activeTabId, apiBase, isInspecting, onAuthExpired, sessionId]);
 
   useEffect(() => {
     if (!isMoreMenuOpen) {

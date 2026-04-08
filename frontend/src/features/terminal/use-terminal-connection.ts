@@ -40,10 +40,14 @@ export function useTerminalConnection(params: {
   const { apiBase, terminalSessionId, token, onAuthExpired, onOutput, onMetadata } =
     params;
   const socketRef = useRef<WebSocket | null>(null);
+  const tokenRef = useRef(token);
   const pendingResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   // Keep onOutput in a ref so it never needs to be in the effect's dep array.
   const onOutputRef = useRef(onOutput);
   const onMetadataRef = useRef(onMetadata);
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
   useEffect(() => {
     onOutputRef.current = onOutput;
   }, [onOutput]);
@@ -75,7 +79,7 @@ export function useTerminalConnection(params: {
         try {
           const ticketPayload = await createTerminalWsTicket(
             apiBase,
-            token,
+            tokenRef.current,
             terminalSessionId,
           );
           if (cancelled) {
@@ -188,7 +192,7 @@ export function useTerminalConnection(params: {
         socketRef.current = null;
       }
     };
-  }, [apiBase, onAuthExpired, terminalSessionId, token]);
+  }, [apiBase, onAuthExpired, terminalSessionId]);
 
   return {
     connectionStatus,

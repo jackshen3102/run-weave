@@ -49,6 +49,7 @@ export function useViewerConnection({
   onAuthExpired,
 }: UseViewerConnectionParams): UseViewerConnectionResult {
   const wsRef = useRef<WebSocket | null>(null);
+  const tokenRef = useRef(token);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectCountRef = useRef(0);
   const connectedAtRef = useRef<number | null>(null);
@@ -66,6 +67,10 @@ export function useViewerConnection({
     viewerConnectionReducer,
     initialViewerConnectionState,
   );
+
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
 
   const sendInput = useCallback((input: ClientInputMessage): void => {
     if (input.type === "tab" && input.action === "switch") {
@@ -293,7 +298,11 @@ export function useViewerConnection({
 
       let ticketPayload;
       try {
-        ticketPayload = await createViewerWsTicket(apiBase, token, sessionId);
+        ticketPayload = await createViewerWsTicket(
+          apiBase,
+          tokenRef.current,
+          sessionId,
+        );
       } catch (error) {
         dispatch({
           type: "connection/error",
@@ -381,7 +390,7 @@ export function useViewerConnection({
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [apiBase, canvasRef, connectNonce, onAuthExpired, sessionId, token]);
+  }, [apiBase, canvasRef, connectNonce, onAuthExpired, sessionId]);
 
   return {
     status: state.status,
