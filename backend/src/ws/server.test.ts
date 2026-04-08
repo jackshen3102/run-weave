@@ -428,6 +428,72 @@ describe("websocket server", () => {
     });
   });
 
+  it("keeps the ai bridge connected when a human also operates", async () => {
+    const cdpSession = new FakeCDPSession();
+    const page = new FakePage("https://example.com", "Example");
+    const context = new FakeContext([page], cdpSession);
+    const collaborationState = {
+      controlOwner: "ai" as const,
+      aiStatus: "running" as const,
+      collaborationTabId: "target-1",
+      aiBridgeIssuedAt: "2026-04-08T10:00:00.000Z",
+      aiBridgeExpiresAt: "2026-04-08T10:01:00.000Z",
+      aiLastAction: "Page.navigate",
+      aiLastError: null,
+    };
+    const sessionManager = {
+      getSession: vi.fn(() => ({
+        id: "session-ai",
+        browserSession: {
+          context,
+          page,
+        },
+      })),
+      getCollaborationState: vi.fn(() => collaborationState),
+      onCollaborationTabSelected: vi.fn(() => collaborationState),
+      onHumanInput: vi.fn(() => collaborationState),
+      on: vi.fn(),
+      off: vi.fn(),
+      markConnected: vi.fn(),
+      destroySession: vi.fn(async () => true),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachWebSocketServer(
+      server,
+      sessionManager as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws?sessionId=session-ai&token=valid-token`,
+    );
+    sockets.push(socket);
+    const queue = createJsonMessageQueue(socket);
+
+    await waitForOpen(socket);
+    await queue.nextByType("connected");
+    await queue.nextByType("tabs");
+    vi.clearAllMocks();
+
+    socket.send(
+      JSON.stringify({
+        type: "mouse",
+        action: "click",
+        x: 11,
+        y: 22,
+        button: "left",
+      }),
+    );
+
+    await queue.nextByType("ack");
+
+    expect(sessionManager.onHumanInput).toHaveBeenCalledWith("session-ai");
+    expect(sessionManager.onCollaborationTabSelected).not.toHaveBeenCalled();
+  });
+
   it("rejects websocket connection without valid token", async () => {
     const cdpSession = new FakeCDPSession();
     const page = new FakePage("https://example.com", "Example");

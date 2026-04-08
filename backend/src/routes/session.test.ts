@@ -6,6 +6,8 @@ import { createSessionRouter } from "./session";
 interface MockSession {
   id: string;
   name: string;
+  preferredForAi?: boolean;
+  persisted?: boolean;
   proxyEnabled: boolean;
   sourceType: "launch" | "connect-cdp";
   cdpEndpoint?: string;
@@ -25,10 +27,14 @@ function createTestServer(sessionState: { current: MockSession | null }) {
       expiresIn: 60,
     })),
   };
+  const aiBridgeSessionController = {
+    disconnectSession: vi.fn(() => true),
+  };
   const sessionManager = {
     createSession: vi.fn(
       async (options: {
         name: string;
+        preferredForAi?: boolean;
         source:
           | {
               type: "launch";
@@ -43,6 +49,7 @@ function createTestServer(sessionState: { current: MockSession | null }) {
         const created: MockSession = {
           id: "test-session-id",
           name: options.name,
+          preferredForAi: options.preferredForAi ?? false,
           proxyEnabled:
             options.source.type === "launch"
               ? options.source.proxyEnabled
@@ -55,6 +62,7 @@ function createTestServer(sessionState: { current: MockSession | null }) {
           headers:
             options.source.type === "launch" ? options.source.headers : {},
           connected: false,
+          persisted: options.source.type === "launch",
           createdAt: new Date("2026-03-19T00:00:00.000Z"),
         };
         sessionState.current = created;
@@ -82,6 +90,17 @@ function createTestServer(sessionState: { current: MockSession | null }) {
       };
       return sessionState.current;
     }),
+    updateSessionAiPreference: vi.fn(async (id: string, preferredForAi: boolean) => {
+      if (sessionState.current?.id !== id) {
+        return undefined;
+      }
+
+      sessionState.current = {
+        ...sessionState.current,
+        preferredForAi,
+      };
+      return sessionState.current;
+    }),
     listSessions: vi.fn(() =>
       sessionState.current
         ? [
@@ -92,14 +111,32 @@ function createTestServer(sessionState: { current: MockSession | null }) {
           ]
         : [],
     ),
+    getCollaborationState: vi.fn(() => ({
+      controlOwner: "none",
+      aiStatus: "idle",
+      collaborationTabId: null,
+      aiBridgeIssuedAt: null,
+      aiBridgeExpiresAt: null,
+      aiLastAction: null,
+      aiLastError: null,
+    })),
+    onAiBridgeIssued: vi.fn(),
+    onAiBridgeRevoked: vi.fn(),
   };
 
   const app = express();
   app.use(express.json());
-  app.use("/api", createSessionRouter(sessionManager as never, authService as never));
+  app.use(
+    "/api",
+    createSessionRouter(
+      sessionManager as never,
+      authService as never,
+      aiBridgeSessionController as never,
+    ),
+  );
   const server = http.createServer(app);
 
-  return { server, sessionManager, authService };
+  return { server, sessionManager, authService, aiBridgeSessionController };
 }
 
 async function startServer(server: http.Server): Promise<number> {
@@ -233,6 +270,7 @@ describe("session routes", () => {
     expect(response.status).toBe(201);
     expect(sessionManager.createSession).toHaveBeenCalledWith({
       name: "CDP Playweight",
+      preferredForAi: false,
       source: {
         type: "connect-cdp",
         endpoint: "http://127.0.0.1:9333",
@@ -248,6 +286,290 @@ describe("session routes", () => {
     }>;
     expect(listPayload[0]?.sourceType).toBe("connect-cdp");
     expect(listPayload[0]?.cdpEndpoint).toBe("http://127.0.0.1:9333");
+  });
+
+  it("rejects a non-persisted cdp session as preferred ai default", async () => {
+    const state = { current: null as MockSession | null };
+    const { server, sessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "CDP Playweight",
+        preferredForAi: true,
+        source: {
+          type: "connect-cdp",
+          endpoint: "http://127.0.0.1:9333",
+        },
+      }),
+    });
+
+    expect(createResponse.status).toBe(400);
+    expect(sessionManager.createSession).not.toHaveBeenCalled();
+  });
+
+  it("creates and updates the preferred ai session", async () => {
+    const state = { current: null as MockSession | null };
+    const { server, sessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "AI session",
+        preferredForAi: true,
+        source: {
+          type: "launch",
+          proxyEnabled: false,
+        },
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    expect(sessionManager.createSession).toHaveBeenCalledWith({
+      name: "AI session",
+      preferredForAi: true,
+      source: expect.objectContaining({
+        type: "launch",
+        proxyEnabled: false,
+      }),
+    });
+
+    const listResponse = await fetch(`http://127.0.0.1:${port}/api/session`);
+    const listPayload = (await listResponse.json()) as Array<{
+      preferredForAi?: boolean;
+    }>;
+    expect(listPayload[0]?.preferredForAi).toBe(true);
+
+    const updateResponse = await fetch(
+      `http://127.0.0.1:${port}/api/session/test-session-id/ai-preference`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferredForAi: false }),
+      },
+    );
+
+    expect(updateResponse.status).toBe(200);
+    expect(sessionManager.updateSessionAiPreference).toHaveBeenCalledWith(
+      "test-session-id",
+      false,
+    );
+  });
+
+  it("rejects setting ai default on a non-persisted session", async () => {
+    const state = {
+      current: {
+        id: "test-session-id",
+        name: "CDP session",
+        preferredForAi: false,
+        persisted: false,
+        proxyEnabled: false,
+        sourceType: "connect-cdp" as const,
+        cdpEndpoint: "http://127.0.0.1:9333",
+        headers: {},
+        connected: false,
+        createdAt: new Date("2026-03-19T00:00:00.000Z"),
+      },
+    };
+    const { server, sessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/session/test-session-id/ai-preference`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferredForAi: true }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(sessionManager.updateSessionAiPreference).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when no preferred ai session exists", async () => {
+    const state = { current: null as MockSession | null };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/session/ai-default`,
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("returns the preferred ai session", async () => {
+    const state = {
+      current: {
+        id: "test-session-id",
+        name: "AI session",
+        preferredForAi: true,
+        proxyEnabled: false,
+        sourceType: "launch" as const,
+        headers: {},
+        connected: true,
+        createdAt: new Date("2026-03-19T00:00:00.000Z"),
+      },
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/session/ai-default`,
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      sessionId: string;
+      preferredForAi: boolean;
+      name: string;
+    };
+    expect(payload.sessionId).toBe("test-session-id");
+    expect(payload.preferredForAi).toBe(true);
+    expect(payload.name).toBe("AI session");
+  });
+
+  it("ensures a preferred ai session exists", async () => {
+    const state = { current: null as MockSession | null };
+    const { server, sessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/session/ai-default/ensure`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Reusable AI session" }),
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(sessionManager.createSession).toHaveBeenCalledWith({
+      name: "Reusable AI session",
+      preferredForAi: true,
+      source: { type: "launch" },
+    });
+
+    const payload = (await response.json()) as {
+      sessionId: string;
+      preferredForAi: boolean;
+      name: string;
+    };
+    expect(payload.sessionId).toBe("test-session-id");
+    expect(payload.preferredForAi).toBe(true);
+    expect(payload.name).toBe("Reusable AI session");
+  });
+
+  it("reuses the existing preferred ai session during ensure", async () => {
+    const state = {
+      current: {
+        id: "test-session-id",
+        name: "Existing AI session",
+        preferredForAi: true,
+        proxyEnabled: false,
+        sourceType: "launch" as const,
+        headers: {},
+        connected: true,
+        createdAt: new Date("2026-03-19T00:00:00.000Z"),
+      },
+    };
+    const { server, sessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/session/ai-default/ensure`,
+      {
+        method: "POST",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(sessionManager.createSession).not.toHaveBeenCalled();
+    const payload = (await response.json()) as {
+      sessionId: string;
+      preferredForAi: boolean;
+      name: string;
+    };
+    expect(payload.sessionId).toBe("test-session-id");
+    expect(payload.preferredForAi).toBe(true);
+    expect(payload.name).toBe("Existing AI session");
+  });
+
+  it("creates and revokes an AI bridge", async () => {
+    const state = {
+      current: {
+        id: "test-session-id",
+        name: "Default Playweight",
+        proxyEnabled: false,
+        sourceType: "launch" as const,
+        headers: {},
+        connected: true,
+        createdAt: new Date("2026-03-19T00:00:00.000Z"),
+      },
+    };
+    const { server, authService, sessionManager, aiBridgeSessionController } =
+      createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const createResponse = await fetch(
+      `http://127.0.0.1:${port}/api/session/test-session-id/ai-bridge`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer token",
+          Host: `127.0.0.1:${port}`,
+        },
+        body: JSON.stringify({ tabId: "target-1" }),
+      },
+    );
+
+    expect(createResponse.status).toBe(200);
+    const created = (await createResponse.json()) as {
+      bridgeUrl: string;
+    };
+    expect(created.bridgeUrl).toBe(
+      `ws://127.0.0.1:${port}/ws/ai-bridge?sessionId=test-session-id`,
+    );
+    expect(authService.issueTemporaryToken).not.toHaveBeenCalled();
+    expect(sessionManager.onAiBridgeIssued).toHaveBeenCalledWith(
+      "test-session-id",
+      expect.objectContaining({
+        collaborationTabId: "target-1",
+      }),
+    );
+
+    const revokeResponse = await fetch(
+      `http://127.0.0.1:${port}/api/session/test-session-id/ai-bridge`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: "Bearer token",
+        },
+      },
+    );
+
+    expect(revokeResponse.status).toBe(204);
+    expect(aiBridgeSessionController.disconnectSession).toHaveBeenCalledWith(
+      "test-session-id",
+      "AI bridge revoked",
+    );
+    expect(sessionManager.onAiBridgeRevoked).toHaveBeenCalledWith(
+      "test-session-id",
+    );
   });
 
   it("accepts legacy create-session payloads that only provide url", async () => {
@@ -271,6 +593,7 @@ describe("session routes", () => {
     expect(response.status).toBe(201);
     expect(sessionManager.createSession).toHaveBeenCalledWith({
       name: "http://127.0.0.1:5501/test/child",
+      preferredForAi: false,
       source: expect.objectContaining({
         type: "launch",
         proxyEnabled: false,

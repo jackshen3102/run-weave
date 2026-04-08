@@ -19,6 +19,7 @@ export interface CreateSessionRequest {
   name?: string;
   url?: string;
   source?: CreateSessionSource;
+  preferredForAi?: boolean;
 }
 
 export interface LoginRequest {
@@ -58,6 +59,10 @@ export interface UpdateSessionRequest {
   name: string;
 }
 
+export interface UpdateSessionAiPreferenceRequest {
+  preferredForAi: boolean;
+}
+
 export interface CreateDevtoolsTicketRequest {
   tabId: string;
 }
@@ -67,15 +72,43 @@ export interface CreateDevtoolsTicketResponse {
   expiresIn: number;
 }
 
+export interface CreateAiBridgeRequest {
+  tabId?: string;
+}
+
+export interface CreateAiBridgeResponse {
+  bridgeUrl: string;
+}
+
 export interface CreateViewerWsTicketResponse {
   ticket: string;
   expiresIn: number;
+}
+
+export type CollaborationControlOwner = "human" | "ai" | "none";
+
+export type CollaborationAiStatus =
+  | "idle"
+  | "attached"
+  | "running"
+  | "paused"
+  | "error";
+
+export interface CollaborationState {
+  controlOwner: CollaborationControlOwner;
+  aiStatus: CollaborationAiStatus;
+  collaborationTabId: string | null;
+  aiBridgeIssuedAt: string | null;
+  aiBridgeExpiresAt: string | null;
+  aiLastAction: string | null;
+  aiLastError: string | null;
 }
 
 export interface SessionStatusResponse {
   sessionId: string;
   connected: boolean;
   name: string;
+  preferredForAi: boolean;
   proxyEnabled: boolean;
   sourceType: SessionSourceType;
   cdpEndpoint?: string;
@@ -87,6 +120,7 @@ export interface SessionListItem {
   sessionId: string;
   connected: boolean;
   name: string;
+  preferredForAi: boolean;
   proxyEnabled: boolean;
   sourceType: SessionSourceType;
   cdpEndpoint?: string;
@@ -204,4 +238,8 @@ export type ServerEventMessage =
   | {
       type: "error";
       message: string;
+    }
+  | {
+      type: "collaboration-state";
+      collaboration: CollaborationState;
     };

@@ -4,8 +4,10 @@ import { HttpError } from "../../../services/http";
 import {
   createSession as createBrowserSession,
   deleteSession as deleteBrowserSession,
+  ensureAiDefaultSession as ensureBrowserAiDefaultSession,
   getDefaultCdpEndpoint,
   listSessions as fetchBrowserSessionList,
+  updateSessionAiPreference as updateBrowserSessionAiPreference,
   updateSession as updateBrowserSession,
 } from "../../../services/session";
 import { parseSessionHeaders } from "../utils";
@@ -40,16 +42,23 @@ export function useHomeSessions({
   );
   const [cdpEndpointCustomized, setCdpEndpointCustomized] = useState(false);
   const [requestHeadersInput, setRequestHeadersInput] = useState("");
+  const [preferredForAi, setPreferredForAi] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [openingAiViewer, setOpeningAiViewer] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(
     null,
   );
+  const [updatingAiPreferenceSessionId, setUpdatingAiPreferenceSessionId] =
+    useState<string | null>(null);
 
   const sortedSessions = useMemo(() => {
     return [...sessions].sort((left, right) => {
+      if (left.preferredForAi !== right.preferredForAi) {
+        return left.preferredForAi ? -1 : 1;
+      }
       return (
         new Date(right.lastActivityAt).getTime() -
         new Date(left.lastActivityAt).getTime()
@@ -106,6 +115,9 @@ export function useHomeSessions({
 
   const setSessionSource = useCallback((value: SessionSourceType): void => {
     setSessionSourceType(value);
+    if (value !== "launch") {
+      setPreferredForAi(false);
+    }
     setSessionNameState((currentName) => {
       if (!sessionNameCustomized || !currentName.trim()) {
         setSessionNameCustomized(false);
@@ -169,6 +181,7 @@ export function useHomeSessions({
         sessionSourceType === "connect-cdp"
           ? {
               name: trimmedName,
+              preferredForAi,
               source: {
                 type: "connect-cdp",
                 endpoint: trimmedCdpEndpoint,
@@ -176,6 +189,7 @@ export function useHomeSessions({
             }
           : {
               name: trimmedName,
+              preferredForAi,
               source: {
                 type: "launch",
                 proxyEnabled,
@@ -211,6 +225,7 @@ export function useHomeSessions({
     sessionName,
     sessionSourceType,
     token,
+    preferredForAi,
   ]);
 
   const removeSession = useCallback(
@@ -233,6 +248,29 @@ export function useHomeSessions({
     },
     [apiBase, loadSessions, onAuthExpired, token],
   );
+
+  const openAiViewer = useCallback(async (): Promise<void> => {
+    if (openingAiViewer) {
+      return;
+    }
+
+    setOpeningAiViewer(true);
+    setError(null);
+    try {
+      const session = await ensureBrowserAiDefaultSession(apiBase, token);
+      await loadSessions();
+      onEnterSession(session.sessionId);
+    } catch (openError) {
+      if (openError instanceof HttpError && openError.status === 401) {
+        onAuthExpired();
+        return;
+      }
+
+      setError(String(openError));
+    } finally {
+      setOpeningAiViewer(false);
+    }
+  }, [apiBase, loadSessions, onAuthExpired, onEnterSession, openingAiViewer, token]);
 
   const renameSession = useCallback(
     async (sessionId: string): Promise<void> => {
@@ -270,6 +308,32 @@ export function useHomeSessions({
     [apiBase, loadSessions, onAuthExpired, sessions, token],
   );
 
+  const updateSessionAiPreference = useCallback(
+    async (sessionId: string, nextPreferredForAi: boolean): Promise<void> => {
+      setUpdatingAiPreferenceSessionId(sessionId);
+      setError(null);
+      try {
+        await updateBrowserSessionAiPreference(
+          apiBase,
+          token,
+          sessionId,
+          nextPreferredForAi,
+        );
+        await loadSessions();
+      } catch (updateError) {
+        if (updateError instanceof HttpError && updateError.status === 401) {
+          onAuthExpired();
+          return;
+        }
+
+        setError(String(updateError));
+      } finally {
+        setUpdatingAiPreferenceSessionId(null);
+      }
+    },
+    [apiBase, loadSessions, onAuthExpired, token],
+  );
+
   return {
     sessionSourceType,
     setSessionSourceType: setSessionSource,
@@ -282,14 +346,20 @@ export function useHomeSessions({
     setCdpEndpoint,
     requestHeadersInput,
     setRequestHeadersInput,
+    preferredForAi,
+    setPreferredForAi,
     loading,
     error,
     sessions,
     sortedSessions,
     loadingSessions,
+    openingAiViewer,
     deletingSessionId,
+    updatingAiPreferenceSessionId,
+    openAiViewer,
     createSession,
     removeSession,
     renameSession,
+    updateSessionAiPreference,
   };
 }

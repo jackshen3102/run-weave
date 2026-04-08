@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ensureAiDefaultSession,
+  getAiDefaultSession,
+  createAiBridge,
   createDevtoolsTicket,
   createSession,
   deleteSession,
   getDefaultCdpEndpoint,
   listSessions,
+  revokeAiBridge,
+  updateSessionAiPreference,
   updateSession,
 } from "./session";
 
@@ -24,6 +29,7 @@ describe("session service", () => {
       "",
       {
         name: "Default Playweight",
+        preferredForAi: true,
         source: { type: "launch", proxyEnabled: true },
       },
       "token-1",
@@ -35,6 +41,7 @@ describe("session service", () => {
         method: "POST",
         body: JSON.stringify({
           name: "Default Playweight",
+          preferredForAi: true,
           source: {
             type: "launch",
             proxyEnabled: true,
@@ -158,6 +165,67 @@ describe("session service", () => {
     );
   });
 
+  it("reads the preferred ai session with the bearer token", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        sessionId: "s-1",
+        connected: false,
+        name: "AI Viewer",
+        preferredForAi: true,
+        proxyEnabled: false,
+        sourceType: "launch",
+        headers: {},
+        createdAt: "2026-04-08T00:00:00.000Z",
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getAiDefaultSession("http://localhost:5001", "token-1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:5001/api/session/ai-default",
+      {
+        headers: {
+          Authorization: "Bearer token-1",
+        },
+      },
+    );
+  });
+
+  it("ensures the preferred ai session with the bearer token", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        sessionId: "s-1",
+        connected: false,
+        name: "AI Viewer",
+        preferredForAi: true,
+        proxyEnabled: false,
+        sourceType: "launch",
+        headers: {},
+        createdAt: "2026-04-08T00:00:00.000Z",
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await ensureAiDefaultSession("http://localhost:5001", "token-1", "AI Viewer");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:5001/api/session/ai-default/ensure",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer token-1",
+        },
+        body: JSON.stringify({
+          name: "AI Viewer",
+        }),
+      },
+    );
+  });
+
   it("deletes a session by encoded id", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -212,6 +280,39 @@ describe("session service", () => {
     );
   });
 
+  it("updates ai preference by encoded id", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        sessionId: "session/1",
+        connected: false,
+        preferredForAi: true,
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateSessionAiPreference(
+      "http://localhost:5001",
+      "token-1",
+      "session/1",
+      true,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:5001/api/session/session%2F1/ai-preference",
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer token-1",
+        },
+        body: JSON.stringify({
+          preferredForAi: true,
+        }),
+      },
+    );
+  });
+
   it("creates a devtools ticket for the encoded session id", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -242,6 +343,61 @@ describe("session service", () => {
         body: JSON.stringify({
           tabId: "tab-1",
         }),
+      },
+    );
+  });
+
+  it("creates and revokes an ai bridge for the encoded session id", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => ({
+        ok: true,
+        json: async () => ({
+          bridgeUrl: "ws://127.0.0.1:5001/ws/ai-bridge?sessionId=session%2F1",
+        }),
+      }))
+      .mockImplementationOnce(async () => ({
+        ok: true,
+        json: async () => ({}),
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createAiBridge(
+      "http://localhost:5001",
+      "token-1",
+      "session/1",
+      {
+        tabId: "tab-1",
+      },
+    );
+    await revokeAiBridge(
+      "http://localhost:5001",
+      "token-1",
+      "session/1",
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:5001/api/session/session%2F1/ai-bridge",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer token-1",
+        },
+        body: JSON.stringify({
+          tabId: "tab-1",
+        }),
+      },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:5001/api/session/session%2F1/ai-bridge",
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: "Bearer token-1",
+        },
       },
     );
   });

@@ -17,7 +17,11 @@ import {
 } from "../features/viewer/url";
 import { useViewerInput } from "../features/viewer/use-viewer-input";
 import { HttpError } from "../services/http";
-import { createDevtoolsTicket } from "../services/session";
+import {
+  createAiBridge,
+  createDevtoolsTicket,
+  revokeAiBridge,
+} from "../services/session";
 
 const HISTORY_GUARD_STATE_KEY = "__viewerHistoryGuard";
 
@@ -52,6 +56,9 @@ export function ViewerPage({
   const [isNavigationBarOpen, setIsNavigationBarOpen] = useState(false);
   const [devtoolsUrl, setDevtoolsUrl] = useState<string | null>(null);
   const [devtoolsError, setDevtoolsError] = useState<string | null>(null);
+  const [aiBridgeUrl, setAiBridgeUrl] = useState<string | null>(null);
+  const [aiBridgeError, setAiBridgeError] = useState<string | null>(null);
+  const [aiBridgeLoading, setAiBridgeLoading] = useState(false);
   const {
     status,
     error,
@@ -59,6 +66,7 @@ export function ViewerPage({
     navigationByTabId,
     devtoolsEnabled,
     devtoolsByTabId,
+    collaboration,
     sendInput,
     reconnect,
   } = useViewerConnection({
@@ -94,6 +102,7 @@ export function ViewerPage({
   const canRenderDevtoolsControls = devtoolsEnabled && activeTabId !== null;
   const isInspecting = canRenderDevtoolsControls && activeDevtoolsOpened;
   const canReconnect = status === "reconnecting" || status === "closed";
+  const aiAssistEnabled = collaboration.aiStatus !== "idle";
 
   const submitNavigation = (): void => {
     if (!activeTabId) {
@@ -141,6 +150,41 @@ export function ViewerPage({
     });
   };
 
+  const toggleAiAssist = (): void => {
+    if (aiBridgeLoading) {
+      return;
+    }
+
+    setAiBridgeLoading(true);
+    setAiBridgeError(null);
+
+    const request = aiAssistEnabled
+      ? revokeAiBridge(apiBase, token, sessionId).then(() => {
+          setAiBridgeUrl(null);
+        })
+      : createAiBridge(apiBase, token, sessionId, {
+          tabId: activeTabId ?? undefined,
+        }).then((payload) => {
+          setAiBridgeUrl(payload.bridgeUrl);
+        });
+
+    void request
+      .catch((currentError: unknown) => {
+        if (currentError instanceof HttpError && currentError.status === 401) {
+          onAuthExpired?.();
+          return;
+        }
+        setAiBridgeError("Failed to update AI bridge.");
+        console.error("[viewer-fe] failed to update ai bridge", {
+          sessionId,
+          error: String(currentError),
+        });
+      })
+      .finally(() => {
+        setAiBridgeLoading(false);
+      });
+  };
+
   useEffect(() => {
     if (isEditingAddress) {
       return;
@@ -152,6 +196,12 @@ export function ViewerPage({
   useEffect(() => {
     setIsMoreMenuOpen(false);
   }, [activeTabId, isInspecting]);
+
+  useEffect(() => {
+    if (collaboration.aiStatus === "idle") {
+      setAiBridgeUrl(null);
+    }
+  }, [collaboration.aiStatus]);
 
   useEffect(() => {
     if (!isInspecting || !activeTabId) {
@@ -405,6 +455,20 @@ export function ViewerPage({
                       {isInspecting ? "Page" : "Inspect"}
                     </Button>
                   )}
+
+                  <Button
+                    size="sm"
+                    variant={aiAssistEnabled ? "secondary" : "ghost"}
+                    className="rounded-full px-4 transition-all duration-300 ease-out"
+                    onClick={toggleAiAssist}
+                    disabled={aiBridgeLoading}
+                  >
+                    {aiBridgeLoading
+                      ? "Updating..."
+                      : aiAssistEnabled
+                        ? "Disable AI"
+                        : "AI Assist"}
+                  </Button>
                 </div>
 
                 {isNavigationBarOpen && !isInspecting && (
@@ -436,6 +500,46 @@ export function ViewerPage({
                   <div className="mt-2 px-1 text-xs text-amber-300">
                     {error ??
                       (status === "reconnecting" ? "Reconnecting..." : status)}
+                  </div>
+                )}
+
+                <div className="mt-2 px-1 text-xs text-stone-300/80">
+                  AI {collaboration.aiStatus}
+                  {collaboration.controlOwner !== "none"
+                    ? ` · owner ${collaboration.controlOwner}`
+                    : ""}
+                  {collaboration.collaborationTabId
+                    ? ` · tab ${collaboration.collaborationTabId}`
+                    : ""}
+                </div>
+
+                {collaboration.aiLastAction && (
+                  <div className="mt-1 px-1 text-xs text-stone-300/72">
+                    Last AI action: {collaboration.aiLastAction}
+                  </div>
+                )}
+
+                {(aiBridgeUrl || aiBridgeError || collaboration.aiLastError) && (
+                  <div className="mt-1 flex flex-wrap items-center gap-2 px-1 text-xs">
+                    {aiBridgeUrl && (
+                      <button
+                        type="button"
+                        className="rounded-full border border-white/12 px-2 py-1 text-stone-200 transition hover:bg-white/8"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(aiBridgeUrl);
+                        }}
+                      >
+                        Copy AI bridge URL
+                      </button>
+                    )}
+                    {aiBridgeError ? (
+                      <span className="text-amber-300">{aiBridgeError}</span>
+                    ) : null}
+                    {collaboration.aiLastError ? (
+                      <span className="text-amber-300">
+                        {collaboration.aiLastError}
+                      </span>
+                    ) : null}
                   </div>
                 )}
 

@@ -160,4 +160,23 @@ describe("viewerConnectionReducer", () => {
     expect(opened.status).toBe("connected");
     expect(opened.error).toBeNull();
   });
+
+  it("stores collaboration state updates", () => {
+    const nextState = viewerConnectionReducer(initialViewerConnectionState, {
+      type: "message/collaboration-state",
+      collaboration: {
+        controlOwner: "ai",
+        aiStatus: "running",
+        collaborationTabId: "tab-1",
+        aiBridgeIssuedAt: "2026-04-08T10:00:00.000Z",
+        aiBridgeExpiresAt: "2026-04-08T10:01:00.000Z",
+        aiLastAction: "Page.navigate",
+        aiLastError: null,
+      },
+    });
+
+    expect(nextState.collaboration.controlOwner).toBe("ai");
+    expect(nextState.collaboration.aiStatus).toBe("running");
+    expect(nextState.collaboration.collaborationTabId).toBe("tab-1");
+  });
 });

@@ -21,6 +21,7 @@ function createRecord(
   return {
     id: "session-1",
     name: "Default Playweight",
+    preferredForAi: false,
     proxyEnabled: true,
     connected: false,
     profilePath: "/profiles/session-1",
@@ -78,6 +79,49 @@ describe("LowDbSessionStore", () => {
 
     await expect(store.getSession("session-1")).resolves.toBeNull();
     await expect(store.listSessions()).resolves.toEqual([]);
+  });
+
+  it("keeps at most one preferred ai session in storage", async () => {
+    const store = await createStore();
+
+    await store.insertSession(createRecord());
+    await store.insertSession(
+      createRecord({
+        id: "session-2",
+        name: "Second session",
+        profilePath: "/profiles/session-2",
+      }),
+    );
+
+    await store.setPreferredForAiSession("session-2");
+
+    await expect(store.getSession("session-1")).resolves.toEqual(
+      expect.objectContaining({
+        id: "session-1",
+        preferredForAi: false,
+      }),
+    );
+    await expect(store.getSession("session-2")).resolves.toEqual(
+      expect.objectContaining({
+        id: "session-2",
+        preferredForAi: true,
+      }),
+    );
+
+    await store.setPreferredForAiSession(null);
+
+    await expect(store.getSession("session-1")).resolves.toEqual(
+      expect.objectContaining({
+        id: "session-1",
+        preferredForAi: false,
+      }),
+    );
+    await expect(store.getSession("session-2")).resolves.toEqual(
+      expect.objectContaining({
+        id: "session-2",
+        preferredForAi: false,
+      }),
+    );
   });
 
   it("propagates write failures to callers", async () => {

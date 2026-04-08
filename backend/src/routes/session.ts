@@ -1,8 +1,12 @@
 import { execFile } from "node:child_process";
+import type { TLSSocket } from "node:tls";
 import { promisify } from "node:util";
 import { Router } from "express";
+import type { Request } from "express";
 import { z } from "zod";
 import type {
+  CreateAiBridgeRequest,
+  CreateAiBridgeResponse,
   CreateDevtoolsTicketRequest,
   CreateDevtoolsTicketResponse,
   CreateSessionSource,
@@ -10,11 +14,13 @@ import type {
   CreateSessionResponse,
   SessionListItem,
   SessionStatusResponse,
+  UpdateSessionAiPreferenceRequest,
   UpdateSessionRequest,
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
 import { readBearerToken } from "../auth/middleware";
 import type { SessionManager } from "../session/manager";
+import type { WebSocketSessionController } from "../ws/session-control";
 
 const launchSourceSchema = z.object({
   type: z.literal("launch"),
@@ -31,6 +37,7 @@ const createSessionSchema = z.object({
   name: z.string().trim().min(1).optional(),
   url: z.string().trim().min(1).optional(),
   source: z.union([launchSourceSchema, connectCdpSourceSchema]).optional(),
+  preferredForAi: z.boolean().optional(),
 }).refine((value) => Boolean(value.name ?? value.url), {
   message: "Either name or url is required",
   path: ["name"],
@@ -40,12 +47,25 @@ const updateSessionSchema = z.object({
   name: z.string().trim().min(1),
 });
 
+const updateSessionAiPreferenceSchema = z.object({
+  preferredForAi: z.boolean(),
+});
+
 const createDevtoolsTicketSchema = z.object({
   tabId: z.string().min(1),
 });
 
+const createAiBridgeSchema = z.object({
+  tabId: z.string().min(1).optional(),
+});
+
+const ensureAiDefaultSessionSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+});
+
 const execFileAsync = promisify(execFile);
 const DEFAULT_CDP_ENDPOINT = "http://127.0.0.1:9222";
+const DEFAULT_AI_SESSION_NAME = "AI Viewer";
 
 function normalizePort(value: number): number | null {
   if (!Number.isFinite(value)) {
@@ -179,6 +199,13 @@ function normalizeCreateSessionSource(
   return source ?? { type: "launch" };
 }
 
+function supportsPreferredForAi(session: {
+  sourceType: "launch" | "connect-cdp";
+  persisted?: boolean;
+}): boolean {
+  return session.sourceType === "launch" && session.persisted !== false;
+}
+
 function resolveAuthenticatedSessionId(
   authService: AuthService,
   authorizationHeader: string | undefined,
@@ -192,9 +219,78 @@ function resolveAuthenticatedSessionId(
   return authService.verifyAccessToken(token)?.sessionId ?? null;
 }
 
+function readForwardedHeader(
+  request: Request,
+  headerName: "x-forwarded-host" | "x-forwarded-proto",
+): string | null {
+  const value = request.headers[headerName];
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const [first] = value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return first ?? null;
+}
+
+function resolveRequestHost(request: Request): string {
+  return (
+    readForwardedHeader(request, "x-forwarded-host") ??
+    request.headers.host ??
+    "127.0.0.1"
+  );
+}
+
+function resolveWebSocketProtocol(request: Request): "ws" | "wss" {
+  const forwardedProto = readForwardedHeader(request, "x-forwarded-proto");
+  if (forwardedProto === "https") {
+    return "wss";
+  }
+  if (forwardedProto === "http") {
+    return "ws";
+  }
+
+  const socket = request.socket as TLSSocket | undefined;
+  return socket?.encrypted ? "wss" : "ws";
+}
+
+function buildAiBridgeUrl(params: {
+  request: Request;
+  sessionId: string;
+}): string {
+  const { request, sessionId } = params;
+  const protocol = resolveWebSocketProtocol(request);
+  const host = resolveRequestHost(request);
+  const search = new URLSearchParams({
+    sessionId,
+  });
+  return `${protocol}://${host}/ws/ai-bridge?${search.toString()}`;
+}
+
+function toSessionStatusResponse(
+  session: ReturnType<SessionManager["getSession"]> extends infer T
+    ? NonNullable<T>
+    : never,
+): SessionStatusResponse {
+  return {
+    sessionId: session.id,
+    connected: session.connected,
+    name: session.name,
+    preferredForAi: session.preferredForAi,
+    proxyEnabled: session.proxyEnabled,
+    sourceType: session.sourceType,
+    cdpEndpoint: session.cdpEndpoint,
+    headers: session.headers,
+    createdAt: session.createdAt.toISOString(),
+  };
+}
+
 export function createSessionRouter(
   sessionManager: SessionManager,
   authService: AuthService,
+  aiBridgeSessionController?: WebSocketSessionController,
 ): Router {
   const router = Router();
 
@@ -205,6 +301,7 @@ export function createSessionRouter(
         sessionId: session.id,
         connected: session.connected,
         name: session.name,
+        preferredForAi: session.preferredForAi,
         proxyEnabled: session.proxyEnabled,
         sourceType: session.sourceType,
         cdpEndpoint: session.cdpEndpoint,
@@ -221,6 +318,57 @@ export function createSessionRouter(
     res.json({ endpoint });
   });
 
+  router.get("/session/ai-default", (_req, res) => {
+    const session = sessionManager
+      .listSessions()
+      .find((candidate) => candidate.preferredForAi);
+
+    if (!session) {
+      res.status(404).json({ message: "Preferred AI session not found" });
+      return;
+    }
+
+    res.json(toSessionStatusResponse(session));
+  });
+
+  router.post("/session/ai-default/ensure", async (req, res) => {
+    const parsed = ensureAiDefaultSessionSchema.safeParse(
+      (req.body ?? {}) as { name?: string },
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const existingSession = sessionManager
+      .listSessions()
+      .find((candidate) => candidate.preferredForAi);
+    if (existingSession) {
+      res.status(200).json(toSessionStatusResponse(existingSession));
+      return;
+    }
+
+    try {
+      const session = await sessionManager.createSession({
+        name: parsed.data.name ?? DEFAULT_AI_SESSION_NAME,
+        preferredForAi: true,
+        source: { type: "launch" },
+      });
+      res.status(201).json(toSessionStatusResponse(session));
+    } catch (error) {
+      console.error("[viewer-be] ensure preferred ai session failed", {
+        error: String(error),
+      });
+      res.status(500).json({
+        message: "Failed to ensure preferred AI session",
+        error: String(error),
+      });
+    }
+  });
+
   router.post("/session", async (req, res) => {
     const parsed = createSessionSchema.safeParse(
       req.body as CreateSessionRequest,
@@ -235,6 +383,12 @@ export function createSessionRouter(
 
     try {
       const source = normalizeCreateSessionSource(parsed.data.source);
+      if (parsed.data.preferredForAi && source.type !== "launch") {
+        res.status(400).json({
+          message: "Preferred AI session must be persisted",
+        });
+        return;
+      }
       const sessionName = parsed.data.name ?? parsed.data.url;
       if (!sessionName) {
         res.status(400).json({ message: "Invalid request body" });
@@ -242,6 +396,7 @@ export function createSessionRouter(
       }
       const session = await sessionManager.createSession({
         name: sessionName,
+        preferredForAi: parsed.data.preferredForAi ?? false,
         source,
       });
       const payload: CreateSessionResponse = {
@@ -266,18 +421,7 @@ export function createSessionRouter(
       return;
     }
 
-    const payload: SessionStatusResponse = {
-      sessionId: session.id,
-      connected: session.connected,
-      name: session.name,
-      proxyEnabled: session.proxyEnabled,
-      sourceType: session.sourceType,
-      cdpEndpoint: session.cdpEndpoint,
-      headers: session.headers,
-      createdAt: session.createdAt.toISOString(),
-    };
-
-    res.json(payload);
+    res.json(toSessionStatusResponse(session));
   });
 
   router.patch("/session/:id", async (req, res) => {
@@ -299,18 +443,43 @@ export function createSessionRouter(
       return;
     }
 
-    const payload: SessionStatusResponse = {
-      sessionId: session.id,
-      connected: session.connected,
-      name: session.name,
-      proxyEnabled: session.proxyEnabled,
-      sourceType: session.sourceType,
-      cdpEndpoint: session.cdpEndpoint,
-      headers: session.headers,
-      createdAt: session.createdAt.toISOString(),
-    };
+    res.json(toSessionStatusResponse(session));
+  });
 
-    res.json(payload);
+  router.patch("/session/:id/ai-preference", async (req, res) => {
+    const parsed = updateSessionAiPreferenceSchema.safeParse(
+      req.body as UpdateSessionAiPreferenceRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const currentSession = sessionManager.getSession(req.params.id);
+    if (!currentSession) {
+      res.status(404).json({ message: "Session not found" });
+      return;
+    }
+    if (parsed.data.preferredForAi && !supportsPreferredForAi(currentSession)) {
+      res.status(400).json({
+        message: "Preferred AI session must be persisted",
+      });
+      return;
+    }
+
+    const session = await sessionManager.updateSessionAiPreference(
+      req.params.id,
+      parsed.data.preferredForAi,
+    );
+    if (!session) {
+      res.status(404).json({ message: "Session not found" });
+      return;
+    }
+
+    res.json(toSessionStatusResponse(session));
   });
 
   router.delete("/session/:id", async (req, res) => {
@@ -386,6 +555,65 @@ export function createSessionRouter(
       expiresIn: issued.expiresIn,
     };
     res.status(200).json(payload);
+  });
+
+  router.post("/session/:id/ai-bridge", (req, res) => {
+    const session = sessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Session not found" });
+      return;
+    }
+    const authSessionId = resolveAuthenticatedSessionId(
+      authService,
+      req.headers.authorization,
+    );
+    if (!authSessionId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const parsed = createAiBridgeSchema.safeParse(
+      req.body as CreateAiBridgeRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    sessionManager.onAiBridgeIssued(session.id, {
+      collaborationTabId:
+        parsed.data.tabId ?? session.collaboration?.collaborationTabId ?? null,
+    });
+    const payload: CreateAiBridgeResponse = {
+      bridgeUrl: buildAiBridgeUrl({
+        request: req,
+        sessionId: session.id,
+      }),
+    };
+    res.status(200).json(payload);
+  });
+
+  router.delete("/session/:id/ai-bridge", (req, res) => {
+    const session = sessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Session not found" });
+      return;
+    }
+    const authSessionId = resolveAuthenticatedSessionId(
+      authService,
+      req.headers.authorization,
+    );
+    if (!authSessionId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    aiBridgeSessionController?.disconnectSession(session.id, "AI bridge revoked");
+    sessionManager.onAiBridgeRevoked(session.id);
+    res.status(204).send();
   });
 
   return router;

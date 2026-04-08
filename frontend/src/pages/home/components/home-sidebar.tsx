@@ -12,6 +12,8 @@ interface HomeSidebarProps {
   onProxyEnabledChange: (value: boolean) => void;
   requestHeadersInput: string;
   onRequestHeadersInputChange: (value: string) => void;
+  preferredForAi: boolean;
+  onPreferredForAiChange: (value: boolean) => void;
   loading: boolean;
   onSubmitSession: () => void;
   error: string | null;
@@ -29,6 +31,8 @@ export function HomeSidebar({
   onProxyEnabledChange,
   requestHeadersInput,
   onRequestHeadersInputChange,
+  preferredForAi,
+  onPreferredForAiChange,
   loading,
   onSubmitSession,
   error,
@@ -47,6 +51,8 @@ export function HomeSidebar({
         onProxyEnabledChange={onProxyEnabledChange}
         requestHeadersInput={requestHeadersInput}
         onRequestHeadersInputChange={onRequestHeadersInputChange}
+        preferredForAi={preferredForAi}
+        onPreferredForAiChange={onPreferredForAiChange}
         loading={loading}
         onSubmit={onSubmitSession}
         error={error}

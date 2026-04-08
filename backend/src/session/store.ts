@@ -5,6 +5,7 @@ export type SessionProfileMode = "managed" | "custom";
 export interface PersistedSessionRecord {
   id: string;
   name: string;
+  preferredForAi: boolean;
   proxyEnabled: boolean;
   connected: boolean;
   profilePath: string;
@@ -28,5 +29,6 @@ export interface SessionStore {
   insertSession(session: PersistedSessionRecord): Promise<void>;
   updateSessionName(sessionId: string, name: string): Promise<void>;
   updateSessionConnection(params: UpdateSessionConnectionParams): Promise<void>;
+  setPreferredForAiSession(sessionId: string | null): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
 }

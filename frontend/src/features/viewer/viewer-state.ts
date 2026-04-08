@@ -1,4 +1,8 @@
-import type { NavigationState, ViewerTab } from "@browser-viewer/shared";
+import type {
+  CollaborationState,
+  NavigationState,
+  ViewerTab,
+} from "@browser-viewer/shared";
 
 export type ViewerConnectionStatus =
   | "connecting"
@@ -15,6 +19,7 @@ export interface ViewerConnectionState {
   navigationByTabId: Record<string, NavigationState>;
   devtoolsEnabled: boolean;
   devtoolsByTabId: Record<string, boolean>;
+  collaboration: CollaborationState;
 }
 
 export type ViewerConnectionAction =
@@ -26,7 +31,8 @@ export type ViewerConnectionAction =
   | { type: "message/tabs"; tabs: ViewerTab[] }
   | { type: "message/navigation-state"; navigation: NavigationState }
   | { type: "message/devtools-capability"; enabled: boolean }
-  | { type: "message/devtools-state"; tabId: string; opened: boolean };
+  | { type: "message/devtools-state"; tabId: string; opened: boolean }
+  | { type: "message/collaboration-state"; collaboration: CollaborationState };
 
 export const initialViewerConnectionState: ViewerConnectionState = {
   status: "connecting",
@@ -37,6 +43,15 @@ export const initialViewerConnectionState: ViewerConnectionState = {
   navigationByTabId: {},
   devtoolsEnabled: true,
   devtoolsByTabId: {},
+  collaboration: {
+    controlOwner: "none",
+    aiStatus: "idle",
+    collaborationTabId: null,
+    aiBridgeIssuedAt: null,
+    aiBridgeExpiresAt: null,
+    aiLastAction: null,
+    aiLastError: null,
+  },
 };
 
 function hasTab(tabs: ViewerTab[], tabId: string): boolean {
@@ -128,6 +143,11 @@ export function viewerConnectionReducer(
         },
       };
     }
+    case "message/collaboration-state":
+      return {
+        ...state,
+        collaboration: action.collaboration,
+      };
     default:
       return state;
   }

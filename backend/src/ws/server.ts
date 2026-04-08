@@ -1,7 +1,10 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
 import type { WebSocket } from "ws";
-import type { ServerEventMessage } from "@browser-viewer/shared";
+import type {
+  CollaborationState,
+  ServerEventMessage,
+} from "@browser-viewer/shared";
 import type { SessionManager } from "../session/manager";
 import type { AuthService } from "../auth/service";
 import { QualityProbeStore } from "../quality/probe-store";
@@ -71,6 +74,16 @@ export function attachWebSocketServer(
     const { sessionId, session } = handshake;
     const state = createConnectionContext(session.browserSession.page);
     wsSessionController?.register(sessionId, socket);
+    const collaborationApi = sessionManager as Partial<
+      Pick<
+        SessionManager,
+        | "getCollaborationState"
+        | "onCollaborationTabSelected"
+        | "onHumanInput"
+        | "on"
+        | "off"
+      >
+    >;
 
     const sendError = (message: string): void => {
       qualityProbeStore?.recordError(sessionId, "ws.runtime", message);
@@ -128,6 +141,28 @@ export function attachWebSocketServer(
       sendEvent(socket, { type: "devtools-state", tabId, opened });
     };
 
+    const emitCollaborationState = (collaboration: CollaborationState): void => {
+      sendEvent(socket, {
+        type: "collaboration-state",
+        collaboration,
+      });
+    };
+
+    const syncCollaborationWithActiveTab = (): void => {
+      if (!state.activeTabId) {
+        return;
+      }
+      const current = collaborationApi.getCollaborationState?.(sessionId);
+      if (current?.collaborationTabId === state.activeTabId) {
+        return;
+      }
+      collaborationApi.onCollaborationTabSelected?.(sessionId, state.activeTabId);
+    };
+
+    const markHumanControl = (): void => {
+      collaborationApi.onHumanInput?.(sessionId);
+    };
+
     const screencast = createScreencastController({
       socket,
       state,
@@ -153,11 +188,24 @@ export function attachWebSocketServer(
     });
 
     const heartbeat = createHeartbeatController(socket, state);
+    const handleCollaborationUpdated = (
+      changedSessionId: string,
+      collaboration: CollaborationState,
+    ): void => {
+      if (changedSessionId !== sessionId) {
+        return;
+      }
+      emitCollaborationState(collaboration);
+    };
 
     sessionManager.markConnected(sessionId, true);
+    collaborationApi.on?.("collaboration-updated", handleCollaborationUpdated);
     session.browserSession.context.on("page", tabManager.onContextPage);
     void tabManager
       .initializeTabs(session.browserSession.page)
+      .then(() => {
+        syncCollaborationWithActiveTab();
+      })
       .catch((error) => {
         sendError(String(error));
         console.error("[viewer-be] failed to initialize tabs", {
@@ -173,6 +221,11 @@ export function attachWebSocketServer(
       type: "devtools-capability",
       enabled: devtoolsEnabled,
     });
+    const initialCollaboration =
+      collaborationApi.getCollaborationState?.(sessionId);
+    if (initialCollaboration) {
+      emitCollaborationState(initialCollaboration);
+    }
 
     void screencast.start().catch((error) => {
       sendError(String(error));
@@ -202,6 +255,8 @@ export function attachWebSocketServer(
           selectTab: tabManager.selectTab,
           sendError,
           sendAck: () => {
+            markHumanControl();
+            syncCollaborationWithActiveTab();
             qualityProbeStore?.markInputAck(sessionId, parsed.type);
             sendEvent(socket, { type: "ack", eventType: parsed.type });
           },
@@ -210,6 +265,7 @@ export function attachWebSocketServer(
       }
 
       if (parsed.type === "navigation") {
+        markHumanControl();
         handleNavigationMessage(parsed, {
           context: session.browserSession.context,
           state,
@@ -253,6 +309,7 @@ export function attachWebSocketServer(
         return;
       }
 
+      markHumanControl();
       handlePageInputMessage({
         parsed,
         activePage: state.activePage,
@@ -276,6 +333,7 @@ export function attachWebSocketServer(
       heartbeat.stop();
       cursorSync.dispose();
       void screencast.stop();
+      collaborationApi.off?.("collaboration-updated", handleCollaborationUpdated);
       session.browserSession.context.off("page", tabManager.onContextPage);
       tabManager.disposePageListeners();
     };

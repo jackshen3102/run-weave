@@ -35,6 +35,7 @@ function createSessionStoreMock() {
     insertSession: vi.fn(async () => undefined),
     updateSessionName: vi.fn(async () => undefined),
     updateSessionConnection: vi.fn(async () => undefined),
+    setPreferredForAiSession: vi.fn(async () => undefined),
     deleteSession: vi.fn(async () => undefined),
   } satisfies SessionStore;
 }
@@ -118,6 +119,7 @@ describe("SessionManager", () => {
       {
         id: "session-headers",
         name: "headers session",
+        preferredForAi: false,
         proxyEnabled: false,
         connected: false,
         profilePath: browserServiceMock.getSessionProfileDir("session-headers"),
@@ -225,6 +227,7 @@ describe("SessionManager", () => {
       {
         id: "session-1",
         name: "stored session",
+        preferredForAi: false,
         proxyEnabled: true,
         connected: true,
         profilePath: browserServiceMock.getSessionProfileDir("session-1"),
@@ -271,6 +274,7 @@ describe("SessionManager", () => {
       {
         id: "session-failed",
         name: "failed session",
+        preferredForAi: false,
         proxyEnabled: false,
         connected: false,
         profilePath: browserServiceMock.getSessionProfileDir("session-failed"),
@@ -303,6 +307,7 @@ describe("SessionManager", () => {
       {
         id: "session-disabled",
         name: "disabled session",
+        preferredForAi: false,
         proxyEnabled: false,
         connected: false,
         profilePath:
@@ -436,6 +441,176 @@ describe("SessionManager", () => {
       session.id,
       "Renamed session",
     );
+
+    await manager.dispose();
+  });
+
+  it("tracks collaboration state transitions per session", async () => {
+    const browserServiceMock = createBrowserServiceMock();
+    const sessionStoreMock = createSessionStoreMock();
+    const manager = new SessionManager(
+      browserServiceMock as never,
+      sessionStoreMock,
+    );
+
+    const session = await manager.createSession({
+      name: "Collaborative session",
+      source: {
+        type: "launch",
+        proxyEnabled: false,
+      },
+    });
+
+    expect(manager.getCollaborationState(session.id)).toEqual({
+      controlOwner: "none",
+      aiStatus: "idle",
+      collaborationTabId: null,
+      aiBridgeIssuedAt: null,
+      aiBridgeExpiresAt: null,
+      aiLastAction: null,
+      aiLastError: null,
+    });
+
+    const issuedState = manager.onAiBridgeIssued(session.id, {
+      collaborationTabId: "target-1",
+      issuedAt: "2026-04-08T10:00:00.000Z",
+    });
+
+    expect(issuedState).toEqual({
+      controlOwner: "none",
+      aiStatus: "attached",
+      collaborationTabId: "target-1",
+      aiBridgeIssuedAt: "2026-04-08T10:00:00.000Z",
+      aiBridgeExpiresAt: null,
+      aiLastAction: null,
+      aiLastError: null,
+    });
+
+    const runningState = manager.onAiMessage(session.id, "Page.navigate");
+    expect(runningState).toEqual({
+      controlOwner: "ai",
+      aiStatus: "running",
+      collaborationTabId: "target-1",
+      aiBridgeIssuedAt: "2026-04-08T10:00:00.000Z",
+      aiBridgeExpiresAt: null,
+      aiLastAction: "Page.navigate",
+      aiLastError: null,
+    });
+
+    const errorState = manager.onAiBridgeError(session.id, "Error: boom");
+    expect(errorState).toEqual({
+      controlOwner: "ai",
+      aiStatus: "error",
+      collaborationTabId: "target-1",
+      aiBridgeIssuedAt: "2026-04-08T10:00:00.000Z",
+      aiBridgeExpiresAt: null,
+      aiLastAction: "Page.navigate",
+      aiLastError: "Error: boom",
+    });
+
+    const disconnectedState = manager.onAiBridgeDisconnected(session.id);
+    expect(disconnectedState).toEqual({
+      controlOwner: "none",
+      aiStatus: "idle",
+      collaborationTabId: "target-1",
+      aiBridgeIssuedAt: null,
+      aiBridgeExpiresAt: null,
+      aiLastAction: "Page.navigate",
+      aiLastError: "Error: boom",
+    });
+
+    const humanState = manager.onHumanInput(session.id);
+    expect(humanState).toEqual({
+      controlOwner: "human",
+      aiStatus: "idle",
+      collaborationTabId: "target-1",
+      aiBridgeIssuedAt: null,
+      aiBridgeExpiresAt: null,
+      aiLastAction: "Page.navigate",
+      aiLastError: "Error: boom",
+    });
+
+    const revokedState = manager.onAiBridgeRevoked(session.id);
+    expect(revokedState).toEqual({
+      controlOwner: "none",
+      aiStatus: "idle",
+      collaborationTabId: "target-1",
+      aiBridgeIssuedAt: null,
+      aiBridgeExpiresAt: null,
+      aiLastAction: null,
+      aiLastError: null,
+    });
+
+    expect(manager.getCollaborationState(session.id)).toEqual(revokedState);
+
+    await manager.dispose();
+  });
+
+  it("keeps at most one preferred ai session", async () => {
+    const browserServiceMock = createBrowserServiceMock();
+    const sessionStoreMock = createSessionStoreMock();
+    const manager = new SessionManager(
+      browserServiceMock as never,
+      sessionStoreMock,
+    );
+
+    const firstSession = await manager.createSession({
+      name: "First session",
+      source: {
+        type: "launch",
+        proxyEnabled: false,
+      },
+      preferredForAi: true,
+    });
+    const secondSession = await manager.createSession({
+      name: "Second session",
+      source: {
+        type: "launch",
+        proxyEnabled: false,
+      },
+    });
+
+    expect(manager.getSession(firstSession.id)?.preferredForAi).toBe(true);
+
+    await manager.updateSessionAiPreference(secondSession.id, true);
+
+    expect(manager.getSession(firstSession.id)?.preferredForAi).toBe(false);
+    expect(manager.getSession(secondSession.id)?.preferredForAi).toBe(true);
+    expect(sessionStoreMock.setPreferredForAiSession).toHaveBeenLastCalledWith(
+      secondSession.id,
+    );
+
+    await manager.updateSessionAiPreference(secondSession.id, false);
+
+    expect(manager.getSession(secondSession.id)?.preferredForAi).toBe(false);
+    expect(sessionStoreMock.setPreferredForAiSession).toHaveBeenLastCalledWith(
+      null,
+    );
+
+    await manager.dispose();
+  });
+
+  it("rejects non-persisted sessions as preferred ai default", async () => {
+    const browserServiceMock = createBrowserServiceMock();
+    const sessionStoreMock = createSessionStoreMock();
+    const manager = new SessionManager(
+      browserServiceMock as never,
+      sessionStoreMock,
+    );
+
+    const session = await manager.createSession({
+      name: "Attached browser",
+      source: {
+        type: "connect-cdp",
+        endpoint: "http://127.0.0.1:9333",
+      },
+    });
+
+    await expect(
+      manager.updateSessionAiPreference(session.id, true),
+    ).rejects.toThrow("Preferred AI session must be persisted");
+    expect(manager.getSession(session.id)?.preferredForAi).toBe(false);
+    expect(sessionStoreMock.setPreferredForAiSession).not.toHaveBeenCalled();
 
     await manager.dispose();
   });

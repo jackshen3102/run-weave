@@ -36,6 +36,7 @@ interface UseViewerConnectionResult {
   navigationByTabId: ViewerConnectionState["navigationByTabId"];
   devtoolsEnabled: boolean;
   devtoolsByTabId: ViewerConnectionState["devtoolsByTabId"];
+  collaboration: ViewerConnectionState["collaboration"];
   sendInput: (input: ClientInputMessage) => void;
   reconnect: () => void;
 }
@@ -179,6 +180,12 @@ export function useViewerConnection({
           dispatch({
             type: "message/navigation-state",
             navigation: message.state,
+          });
+          return;
+        case "collaboration-state":
+          dispatch({
+            type: "message/collaboration-state",
+            collaboration: message.collaboration,
           });
           return;
         case "cursor": {
@@ -385,6 +392,7 @@ export function useViewerConnection({
     navigationByTabId: state.navigationByTabId,
     devtoolsEnabled: state.devtoolsEnabled,
     devtoolsByTabId: state.devtoolsByTabId,
+    collaboration: state.collaboration,
     sendInput,
     reconnect,
   };

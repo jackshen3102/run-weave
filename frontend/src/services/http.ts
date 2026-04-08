@@ -12,6 +12,29 @@ function buildUrl(apiBase: string, path: string): string {
   return `${apiBase}${path}`;
 }
 
+async function buildHttpError(
+  response: Response,
+  path: string,
+  init?: RequestInit,
+): Promise<HttpError> {
+  const fallbackMessage = `${init?.method ?? "GET"} ${path} failed: ${response.status}`;
+  const contentType =
+    response.headers?.get?.("content-type")?.toLowerCase() ?? "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      const payload = (await response.json()) as { message?: unknown };
+      if (typeof payload.message === "string" && payload.message.trim()) {
+        return new HttpError(response.status, payload.message);
+      }
+    } catch {
+      // Ignore malformed error bodies and keep the fallback message.
+    }
+  }
+
+  return new HttpError(response.status, fallbackMessage);
+}
+
 export async function requestText(
   apiBase: string,
   path: string,
@@ -20,10 +43,7 @@ export async function requestText(
   const response = await fetch(buildUrl(apiBase, path), init);
 
   if (!response.ok) {
-    throw new HttpError(
-      response.status,
-      `${init?.method ?? "GET"} ${path} failed: ${response.status}`,
-    );
+    throw await buildHttpError(response, path, init);
   }
 
   return response.text();
@@ -37,10 +57,7 @@ export async function requestJson<T>(
   const response = await fetch(buildUrl(apiBase, path), init);
 
   if (!response.ok) {
-    throw new HttpError(
-      response.status,
-      `${init?.method ?? "GET"} ${path} failed: ${response.status}`,
-    );
+    throw await buildHttpError(response, path, init);
   }
 
   return (await response.json()) as T;
@@ -54,9 +71,6 @@ export async function requestVoid(
   const response = await fetch(buildUrl(apiBase, path), init);
 
   if (!response.ok) {
-    throw new HttpError(
-      response.status,
-      `${init?.method ?? "GET"} ${path} failed: ${response.status}`,
-    );
+    throw await buildHttpError(response, path, init);
   }
 }

@@ -36,7 +36,7 @@ export function validateWebSocketHandshake(params: {
   authService: AuthService;
   sessionManager: SessionManager;
   requireTabId?: boolean;
-  tokenType: "viewer-ws" | "devtools";
+  tokenType: "viewer-ws" | "devtools" | "ai-bridge";
 }): HandshakeResult {
   const {
     request,
@@ -59,15 +59,18 @@ export function validateWebSocketHandshake(params: {
     };
   }
 
+  const requiresTemporaryToken = tokenType !== "ai-bridge";
   const verifiedTicket =
-    token &&
-    authService.verifyTemporaryToken(token, {
-      tokenType,
-      resource: {
-        sessionId,
-        ...(tabId ? { tabId } : {}),
-      },
-    });
+    !requiresTemporaryToken
+      ? true
+      : token &&
+        authService.verifyTemporaryToken(token, {
+          tokenType,
+          resource: {
+            sessionId,
+            ...(tabId ? { tabId } : {}),
+          },
+        });
   if (!verifiedTicket) {
     return {
       ok: false,

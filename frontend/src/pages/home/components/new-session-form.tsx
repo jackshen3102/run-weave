@@ -12,6 +12,8 @@ interface NewSessionFormProps {
   onProxyEnabledChange: (value: boolean) => void;
   requestHeadersInput: string;
   onRequestHeadersInputChange: (value: string) => void;
+  preferredForAi: boolean;
+  onPreferredForAiChange: (value: boolean) => void;
   loading: boolean;
   onSubmit: () => void;
   error: string | null;
@@ -29,6 +31,8 @@ export function NewSessionForm({
   onProxyEnabledChange,
   requestHeadersInput,
   onRequestHeadersInputChange,
+  preferredForAi,
+  onPreferredForAiChange,
   loading,
   onSubmit,
   error,
@@ -107,6 +111,29 @@ export function NewSessionForm({
               placeholder={cdpEndpointPlaceholder}
             />
           </div>
+        ) : null}
+
+        {sessionSourceType === "launch" ? (
+          <label
+            htmlFor="session-preferred-for-ai"
+            className="flex items-center justify-between gap-4 rounded-[1rem] border border-border/60 bg-card/75 px-3 py-3 text-sm text-foreground"
+          >
+            <span className="space-y-1">
+              <span className="block font-medium">Default AI Viewer</span>
+              <span className="block text-xs text-muted-foreground">
+                Mark this persistent browser as the default AI viewer session.
+              </span>
+            </span>
+            <input
+              id="session-preferred-for-ai"
+              type="checkbox"
+              aria-label="Default AI Viewer"
+              checked={preferredForAi}
+              onChange={(event) => onPreferredForAiChange(event.target.checked)}
+              disabled={loading}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+            />
+          </label>
         ) : null}
 
         {sessionSourceType === "launch" ? (

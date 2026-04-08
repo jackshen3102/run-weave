@@ -88,6 +88,17 @@ export class LowDbSessionStore implements SessionStore {
     });
   }
 
+  async setPreferredForAiSession(sessionId: string | null): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      for (const session of database.data.sessions) {
+        session.preferredForAi =
+          sessionId !== null && session.id === sessionId;
+      }
+      await database.write();
+    });
+  }
+
   async deleteSession(sessionId: string): Promise<void> {
     await this.enqueueWrite(async () => {
       const database = this.getDatabase();
@@ -111,7 +122,10 @@ export class LowDbSessionStore implements SessionStore {
       .data.sessions
       .slice()
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-      .map((session) => structuredClone(session));
+      .map((session) => ({
+        ...structuredClone(session),
+        preferredForAi: session.preferredForAi ?? false,
+      }));
   }
 
   private enqueueWrite(operation: () => Promise<void>): Promise<void> {

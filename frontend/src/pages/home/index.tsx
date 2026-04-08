@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "../../components/ui/button";
 import { HomeHeader } from "./components/home-header";
 import { ChangePasswordDialog } from "./components/change-password-dialog";
 import { HomeSidebar } from "./components/home-sidebar";
@@ -54,14 +55,20 @@ export function HomePage({
     setCdpEndpoint,
     requestHeadersInput,
     setRequestHeadersInput,
+    preferredForAi,
+    setPreferredForAi,
     loading,
     error,
     sortedSessions,
     loadingSessions,
+    openingAiViewer,
     deletingSessionId,
+    updatingAiPreferenceSessionId,
+    openAiViewer,
     createSession,
     removeSession,
     renameSession,
+    updateSessionAiPreference,
   } = useHomeSessions({
     apiBase,
     token,
@@ -134,6 +141,8 @@ export function HomePage({
             onProxyEnabledChange={setProxyEnabled}
             requestHeadersInput={requestHeadersInput}
             onRequestHeadersInputChange={setRequestHeadersInput}
+            preferredForAi={preferredForAi}
+            onPreferredForAiChange={setPreferredForAi}
             loading={loading}
             onSubmitSession={() => {
               void createSession();
@@ -151,6 +160,18 @@ export function HomePage({
                   {loadingSessions ? "Refreshing quietly..." : `${sortedSessions.length} total`}
                 </p>
               </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="rounded-full px-4"
+                onClick={() => {
+                  void openAiViewer();
+                }}
+                disabled={openingAiViewer}
+              >
+                {openingAiViewer ? "Opening..." : "Open Default AI Viewer"}
+              </Button>
             </div>
 
             <div className="mt-6 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
@@ -158,6 +179,7 @@ export function HomePage({
                 sessions={sortedSessions}
                 loadingSessions={loadingSessions}
                 deletingSessionId={deletingSessionId}
+                updatingAiPreferenceSessionId={updatingAiPreferenceSessionId}
                 onRenameSession={(sessionId) => {
                   void renameSession(sessionId);
                 }}
@@ -166,6 +188,9 @@ export function HomePage({
                 }}
                 onResumeSession={(sessionId) => {
                   navigate(`/viewer/${encodeURIComponent(sessionId)}`);
+                }}
+                onToggleAiPreference={(sessionId, nextPreferredForAi) => {
+                  void updateSessionAiPreference(sessionId, nextPreferredForAi);
                 }}
               />
             </div>
