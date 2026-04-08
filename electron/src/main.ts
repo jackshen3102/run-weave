@@ -8,7 +8,9 @@ import {
   net,
   nativeImage,
 } from "electron";
+import pidusage from "pidusage";
 import path from "node:path";
+import type { RuntimeStatsSnapshot } from "@browser-viewer/shared";
 import { resolveProtocolFilePath } from "./protocol-path.js";
 import {
   startPackagedBackend,
@@ -18,6 +20,10 @@ import { createTray } from "./tray.js";
 import { initAutoUpdater, checkForUpdates } from "./updater.js";
 import { getIsQuitting, setIsQuitting } from "./app-state.js";
 import { shouldEnableAutoUpdates } from "./updater-config.js";
+import {
+  buildRuntimeStatsSnapshot,
+  type ElectronProcessMetric,
+} from "./runtime-monitor.js";
 
 const isDev = !app.isPackaged;
 
@@ -74,6 +80,41 @@ function registerOpenExternalHandler(): void {
       return;
     }
   });
+}
+
+function registerRuntimeStatsHandler(
+  getPackagedBackendRuntime: () => PackagedBackendRuntime | null,
+): void {
+  ipcMain.handle(
+    "viewer:get-runtime-stats",
+    async (): Promise<RuntimeStatsSnapshot> => {
+      const packagedBackendRuntime = getPackagedBackendRuntime();
+      const backendPid =
+        typeof packagedBackendRuntime?.child.pid === "number"
+          ? packagedBackendRuntime.child.pid
+          : null;
+
+      let backendUsage: { cpu: number; memory: number } | null = null;
+      if (backendPid !== null) {
+        try {
+          const usage = await pidusage(backendPid);
+          backendUsage = {
+            cpu: usage.cpu,
+            memory: usage.memory,
+          };
+        } catch {
+          backendUsage = null;
+        }
+      }
+
+      return buildRuntimeStatsSnapshot({
+        sampledAt: Date.now(),
+        processMetrics: app.getAppMetrics() as ElectronProcessMetric[],
+        backendPid,
+        backendUsage,
+      });
+    },
+  );
 }
 
 function createWindow(): BrowserWindow {
@@ -165,6 +206,7 @@ app.whenReady().then(async () => {
   try {
     setApplicationIcon();
     registerOpenExternalHandler();
+    registerRuntimeStatsHandler(() => packagedBackendRuntime);
     if (!isDev) {
       registerCustomProtocol();
       packagedBackendRuntime = await startPackagedBackend({

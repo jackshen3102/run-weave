@@ -98,9 +98,15 @@ importers:
 
   electron:
     dependencies:
+      "@browser-viewer/shared":
+        specifier: workspace:*
+        version: link:../packages/shared
       electron-updater:
         specifier: ^6.6.2
         version: 6.8.3
+      pidusage:
+        specifier: ^4.0.1
+        version: 4.0.1
     devDependencies:
       "@types/node":
         specifier: ^22.13.10
@@ -5308,6 +5314,13 @@ packages:
     engines: { node: ">=0.10" }
     hasBin: true
 
+  pidusage@4.0.1:
+    resolution:
+      {
+        integrity: sha512-yCH2dtLHfEBnzlHUJymR/Z1nN2ePG3m392Mv8TFlTP1B0xkpMQNHAnfkY0n2tAi6ceKO6YWhxYfZ96V4vVkh/g==,
+      }
+    engines: { node: ">=18" }
+
   pify@2.3.0:
     resolution:
       {
@@ -10009,6 +10022,10 @@ snapshots:
   picomatch@4.0.3: {}
 
   pidtree@0.6.0: {}
+
+  pidusage@4.0.1:
+    dependencies:
+      safe-buffer: 5.2.1
 
   pify@2.3.0: {}
 

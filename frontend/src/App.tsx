@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import type { RuntimeStatsSnapshot } from "@browser-viewer/shared";
 import { useConnections } from "./features/connection/use-connections";
 import { useScopedAuth } from "./features/auth/use-scoped-auth";
 import { HomePage } from "./pages/home-page";
@@ -18,6 +19,7 @@ declare global {
       platform: string;
       backendUrl?: string;
       openExternal?: (url: string) => Promise<void>;
+      getRuntimeStats?: () => Promise<RuntimeStatsSnapshot>;
       beep?: () => void;
     };
   }

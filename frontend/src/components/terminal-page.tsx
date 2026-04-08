@@ -8,6 +8,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import type { TerminalSessionStatusResponse } from "@browser-viewer/shared";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { RuntimeMonitorBadge } from "./runtime-monitor-badge";
 import { useTerminalConnection } from "../features/terminal/use-terminal-connection";
 import { HttpError } from "../services/http";
 import { getTerminalSession } from "../services/terminal";
@@ -257,13 +258,18 @@ export function TerminalPage({
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 px-6 py-4">
-        <h1 className="text-xl font-semibold">
-          {session?.name ?? "Terminal Session"}
-        </h1>
-        <p className="mt-1 text-sm text-slate-400">{renderedCommand}</p>
-        <div className="mt-2 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-slate-500">
-          <span>{renderedTerminalStatus}</span>
-          <span>{renderedConnectionStatus}</span>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold">
+              {session?.name ?? "Terminal Session"}
+            </h1>
+            <p className="mt-1 text-sm text-slate-400">{renderedCommand}</p>
+            <div className="mt-2 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-slate-500">
+              <span>{renderedTerminalStatus}</span>
+              <span>{renderedConnectionStatus}</span>
+            </div>
+          </div>
+          <RuntimeMonitorBadge />
         </div>
       </header>
       <main className="flex min-h-0 flex-1 flex-col gap-4 p-6">

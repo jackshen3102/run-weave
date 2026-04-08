@@ -1,5 +1,6 @@
 import type { ConnectionConfig } from "../../../features/connection/types";
 import { ConnectionSwitcher } from "../../../components/connection-switcher";
+import { RuntimeMonitorBadge } from "../../../components/runtime-monitor-badge";
 import { ThemeToggle } from "../../../components/theme-toggle";
 import { Button } from "../../../components/ui/button";
 
@@ -72,6 +73,7 @@ export function HomeHeader({
         >
           Logout
         </Button>
+        <RuntimeMonitorBadge />
         <ThemeToggle />
       </div>
     </header>
