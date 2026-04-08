@@ -4,11 +4,23 @@ import path from "node:path";
 import { constants as fsConstants } from "node:fs";
 
 type JsonRecord = Record<string, unknown>;
+type HookInstallerOptions = {
+  homeDir?: string;
+  resourcesPath?: string | null;
+};
+
+type HookInstallerContext = {
+  homeDir: string;
+  resourcesPath: string | null;
+};
+
+type JsonReadResult =
+  | { status: "missing" }
+  | { status: "invalid" }
+  | { status: "valid"; value: JsonRecord };
 
 const BRIDGE_BASENAME = "browser-viewer-hook-bridge";
 const BACKUP_SUFFIX = ".browser-viewer-hook-backup";
-const LAUNCHER_DIR = path.join(os.homedir(), ".browser-viewer", "bin");
-const LAUNCHER_PATH = path.join(LAUNCHER_DIR, BRIDGE_BASENAME);
 
 const CLAUDE_EVENTS = [
   "SessionStart",
@@ -25,21 +37,17 @@ const CODEX_EVENTS = ["SessionStart", "UserPromptSubmit", "Stop"];
 const TRAE_EVENTS = ["user_prompt_submit", "post_tool_use", "stop", "subagent_stop"];
 
 export function mergeJsonHookEntry(args: {
-  existing: Array<Record<string, unknown>>;
+  existing: Array<unknown>;
   command: string;
   timeout: number;
-}): Array<Record<string, unknown>> {
-  const nextHook: JsonRecord = {
-    type: "command",
-    command: args.command,
-    timeout: args.timeout,
-  };
+}): Array<unknown> {
+  const nextHook = createBrowserViewerHook(args.command, args.timeout);
 
-  const merged: Array<Record<string, unknown>> = [];
+  const merged: Array<unknown> = [];
   let inserted = false;
 
   for (const entry of args.existing) {
-    if (isBrowserViewerHookEntry(entry)) {
+    if (isRecord(entry) && isBrowserViewerHookEntry(entry)) {
       merged.push(rewriteBrowserViewerHooks(entry, nextHook));
       inserted = true;
       continue;
@@ -78,44 +86,67 @@ export function buildLauncherScript(args: {
   return [
     "#!/usr/bin/env bash",
     "set -euo pipefail",
-    `LAUNCHER_NAME="${BRIDGE_BASENAME}"`,
-    `exec node "${packagedBridgePath}" "$@"`,
+    `HOOK_BRIDGE_PATH="${packagedBridgePath}"`,
+    'if [ -x "$HOOK_BRIDGE_PATH" ]; then',
+    '  exec "$HOOK_BRIDGE_PATH" "$@"',
+    "fi",
+    'exec node "$HOOK_BRIDGE_PATH" "$@"',
     "",
   ].join("\n");
 }
 
-export async function installHooksIfNeeded(): Promise<void> {
-  await installAllHooks();
+export async function installHooksIfNeeded(options: HookInstallerOptions = {}): Promise<void> {
+  const context = resolveHookInstallerContext(options);
+  if (!(await hasAnyConfigDir(context))) {
+    return;
+  }
+
+  await installAllHooks(context);
 }
 
-export async function installAllHooks(): Promise<void> {
-  await writeLauncherScript();
-  await installClaudeHooks();
-  await installCodexHooks();
-  await installTraeHooks();
+export async function installAllHooks(options: HookInstallerOptions = {}): Promise<void> {
+  const context = resolveHookInstallerContext(options);
+  await writeLauncherScript(context);
+  await installClaudeHooks(context);
+  await installCodexHooks(context);
+  await installTraeHooks(context);
 }
 
-export async function writeLauncherScript(packagedBridgePath = resolvePackagedBridgePath()): Promise<void> {
-  await mkdir(LAUNCHER_DIR, { recursive: true });
-  await writeFile(LAUNCHER_PATH, buildLauncherScript({ packagedBridgePath }), "utf8");
-  await chmod(LAUNCHER_PATH, 0o755);
+export async function writeLauncherScript(options: HookInstallerOptions = {}): Promise<void> {
+  const context = resolveHookInstallerContext(options);
+  const launcherDir = getLauncherDir(context.homeDir);
+  const launcherPath = getLauncherPath(context.homeDir);
+
+  await mkdir(launcherDir, { recursive: true });
+  await writeFile(
+    launcherPath,
+    buildLauncherScript({ packagedBridgePath: resolvePackagedBridgePath(context) }),
+    "utf8",
+  );
+  await chmod(launcherPath, 0o755);
 }
 
-export async function installClaudeHooks(): Promise<void> {
-  const configDir = path.join(os.homedir(), ".claude");
+export async function installClaudeHooks(options: HookInstallerOptions = {}): Promise<void> {
+  const context = resolveHookInstallerContext(options);
+  const configDir = getClaudeDir(context.homeDir);
   if (!(await directoryExists(configDir))) {
     return;
   }
 
   const settingsPath = path.join(configDir, "settings.json");
-  const existing = (await readJsonFile(settingsPath)) ?? {};
+  const existingResult = await readJsonObjectFile(settingsPath);
+  if (existingResult.status === "invalid") {
+    return;
+  }
+
+  const existing = existingResult.status === "valid" ? existingResult.value : {};
   await backupFile(settingsPath);
 
-  const hooks = toRecordMap(existing.hooks);
+  const hooks = toHookArrayMap(existing.hooks);
   for (const event of CLAUDE_EVENTS) {
     hooks[event] = mergeJsonHookEntry({
-      existing: toEntryArray(hooks[event]),
-      command: `${launcherCommand()} --source claude`,
+      existing: toUnknownArray(hooks[event]),
+      command: `${launcherCommand(context)} --source claude`,
       timeout: event === "PermissionRequest" ? 86400 : 10,
     });
   }
@@ -124,21 +155,27 @@ export async function installClaudeHooks(): Promise<void> {
   await writeJsonFile(settingsPath, existing);
 }
 
-export async function installCodexHooks(): Promise<void> {
-  const configDir = path.join(os.homedir(), ".codex");
+export async function installCodexHooks(options: HookInstallerOptions = {}): Promise<void> {
+  const context = resolveHookInstallerContext(options);
+  const configDir = getCodexDir(context.homeDir);
   if (!(await directoryExists(configDir))) {
     return;
   }
 
   const hooksPath = path.join(configDir, "hooks.json");
-  const existing = (await readJsonFile(hooksPath)) ?? {};
+  const existingResult = await readJsonObjectFile(hooksPath);
+  if (existingResult.status === "invalid") {
+    return;
+  }
+
+  const existing = existingResult.status === "valid" ? existingResult.value : {};
   await backupFile(hooksPath);
 
-  const hooks = toRecordMap(existing.hooks);
+  const hooks = toHookArrayMap(existing.hooks);
   for (const event of CODEX_EVENTS) {
     hooks[event] = mergeJsonHookEntry({
-      existing: toEntryArray(hooks[event]),
-      command: `${launcherCommand()} --source codex`,
+      existing: toUnknownArray(hooks[event]),
+      command: `${launcherCommand(context)} --source codex`,
       timeout: 5,
     });
   }
@@ -147,8 +184,9 @@ export async function installCodexHooks(): Promise<void> {
   await writeJsonFile(hooksPath, existing);
 }
 
-export async function installTraeHooks(): Promise<void> {
-  const configDir = path.join(os.homedir(), ".trae");
+export async function installTraeHooks(options: HookInstallerOptions = {}): Promise<void> {
+  const context = resolveHookInstallerContext(options);
+  const configDir = getTraeDir(context.homeDir);
   if (!(await directoryExists(configDir))) {
     return;
   }
@@ -157,7 +195,7 @@ export async function installTraeHooks(): Promise<void> {
   await backupFile(yamlPath);
 
   const current = await readTextFile(yamlPath);
-  const nextBlock = renderTraeHookBlock(launcherCommand());
+  const nextBlock = renderTraeHookBlock(launcherCommand(context));
   const nextContent = upsertTraeHookBlock(current, nextBlock);
 
   await writeFile(yamlPath, ensureTrailingNewline(nextContent), "utf8");
@@ -179,24 +217,44 @@ async function backupFile(filePath: string): Promise<void> {
     return;
   }
 
+  const backupPath = `${filePath}${BACKUP_SUFFIX}`;
+  try {
+    await access(backupPath, fsConstants.F_OK);
+    return;
+  } catch {
+    // Create the first backup only.
+  }
+
   await copyFile(filePath, `${filePath}${BACKUP_SUFFIX}`);
 }
 
-async function readJsonFile(filePath: string): Promise<JsonRecord | null> {
+async function readJsonObjectFile(filePath: string): Promise<JsonReadResult> {
   try {
     const content = await readFile(filePath, "utf8");
     const parsed = JSON.parse(content) as unknown;
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
+    if (!isRecord(parsed)) {
+      return { status: "invalid" };
+    }
 
-async function readTextFile(filePath: string): Promise<string> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch {
-    return "";
+    if ("hooks" in parsed && parsed.hooks !== undefined && !isRecord(parsed.hooks)) {
+      return { status: "invalid" };
+    }
+
+    if (isRecord(parsed.hooks)) {
+      for (const value of Object.values(parsed.hooks)) {
+        if (!Array.isArray(value)) {
+          return { status: "invalid" };
+        }
+      }
+    }
+
+    return { status: "valid", value: parsed };
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ENOENT") {
+      return { status: "missing" };
+    }
+
+    return { status: "invalid" };
   }
 }
 
@@ -204,34 +262,85 @@ async function writeJsonFile(filePath: string, value: JsonRecord): Promise<void>
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function launcherCommand(): string {
-  return LAUNCHER_PATH;
+async function readTextFile(filePath: string): Promise<string> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ENOENT") {
+      return "";
+    }
+
+    return "";
+  }
 }
 
-function resolvePackagedBridgePath(): string {
+function resolveHookInstallerContext(options: HookInstallerOptions): HookInstallerContext {
+  return {
+    homeDir: options.homeDir ?? os.homedir(),
+    resourcesPath: options.resourcesPath ?? getProcessResourcesPath(),
+  };
+}
+
+function getProcessResourcesPath(): string | null {
   const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
-  return path.join(resourcesPath ?? process.cwd(), "hook-bridge.mjs");
+  return typeof resourcesPath === "string" && resourcesPath ? resourcesPath : null;
 }
 
-function toRecordMap(value: unknown): Record<string, Array<Record<string, unknown>>> {
+function getLauncherDir(homeDir: string): string {
+  return path.join(homeDir, ".browser-viewer", "bin");
+}
+
+function getLauncherPath(homeDir: string): string {
+  return path.join(getLauncherDir(homeDir), BRIDGE_BASENAME);
+}
+
+function getClaudeDir(homeDir: string): string {
+  return path.join(homeDir, ".claude");
+}
+
+function getCodexDir(homeDir: string): string {
+  return path.join(homeDir, ".codex");
+}
+
+function getTraeDir(homeDir: string): string {
+  return path.join(homeDir, ".trae");
+}
+
+async function hasAnyConfigDir(context: HookInstallerContext): Promise<boolean> {
+  return (
+    (await directoryExists(getClaudeDir(context.homeDir))) ||
+    (await directoryExists(getCodexDir(context.homeDir))) ||
+    (await directoryExists(getTraeDir(context.homeDir)))
+  );
+}
+
+function launcherCommand(context: HookInstallerContext): string {
+  return getLauncherPath(context.homeDir);
+}
+
+function resolvePackagedBridgePath(context: HookInstallerContext): string {
+  return path.join(context.resourcesPath ?? process.cwd(), "hook-bridge.mjs");
+}
+
+function toHookArrayMap(value: unknown): Record<string, Array<unknown>> {
   if (!isRecord(value)) {
     return {};
   }
 
-  const result: Record<string, Array<Record<string, unknown>>> = {};
+  const result: Record<string, Array<unknown>> = {};
   for (const [key, raw] of Object.entries(value)) {
-    result[key] = toEntryArray(raw);
+    result[key] = toUnknownArray(raw);
   }
 
   return result;
 }
 
-function toEntryArray(value: unknown): Array<Record<string, unknown>> {
+function toUnknownArray(value: unknown): Array<unknown> {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return value.filter(isRecord);
+  return value;
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -254,13 +363,21 @@ function isBrowserViewerHookEntry(entry: Record<string, unknown>): boolean {
   });
 }
 
+function createBrowserViewerHook(command: string, timeout: number): JsonRecord {
+  return {
+    type: "command",
+    command,
+    timeout,
+  };
+}
+
 function rewriteBrowserViewerHooks(
   entry: Record<string, unknown>,
   nextHook: Record<string, unknown>,
 ): Record<string, unknown> {
-  const hooks = Array.isArray(entry.hooks) ? entry.hooks.filter(isRecord) : [];
+  const hooks = Array.isArray(entry.hooks) ? entry.hooks : [];
   const rewrittenHooks = hooks.map((hook) =>
-    isBrowserViewerHookObject(hook) ? { ...nextHook } : hook,
+    isRecord(hook) && isBrowserViewerHookObject(hook) ? { ...nextHook } : hook,
   );
 
   return {
@@ -285,57 +402,55 @@ export function upsertTraeHookBlock(content: string, block: string): string {
 
   const lines = content.split("\n");
   const blockLines = block.split("\n");
-  const browserViewerLocation = findTraeBrowserViewerBlock(lines);
-
-  if (browserViewerLocation) {
-    const nextLines = [
-      ...lines.slice(0, browserViewerLocation.start),
-      ...blockLines,
-      ...lines.slice(browserViewerLocation.end),
-    ];
-    return joinYamlLines(nextLines);
-  }
-
   const hooksSection = findTopLevelHooksSection(lines);
   if (hooksSection) {
-    const nextLines = [
-      ...lines.slice(0, hooksSection.end),
-      ...blockLines,
-      ...lines.slice(hooksSection.end),
-    ];
+    const browserViewerLocation = findTraeBrowserViewerBlock(
+      lines,
+      hooksSection.start + 1,
+      hooksSection.end,
+    );
+    const insertAt = browserViewerLocation ? browserViewerLocation.start : hooksSection.end;
+    const removeEnd = browserViewerLocation ? browserViewerLocation.end : hooksSection.end;
+    const nextLines = [...lines.slice(0, insertAt), ...blockLines, ...lines.slice(removeEnd)];
     return joinYamlLines(nextLines);
   }
 
   return `${content.trimEnd()}\n\nhooks:\n${block}`;
 }
 
-function findTraeBrowserViewerBlock(lines: string[]): { start: number; end: number } | null {
-  const commandLineIndex = lines.findIndex((line) => line.includes(BRIDGE_BASENAME));
+function findTraeBrowserViewerBlock(
+  lines: string[],
+  startIndex: number,
+  endIndex: number,
+): { start: number; end: number } | null {
+  const commandLineIndex = lines.findIndex(
+    (line, index) => index >= startIndex && index < endIndex && line.includes(BRIDGE_BASENAME),
+  );
   if (commandLineIndex < 0) {
     return null;
   }
 
-  const start = findTraeBlockStart(lines, commandLineIndex);
-  const end = findTraeBlockEnd(lines, start);
+  const start = findTraeBlockStart(lines, commandLineIndex, startIndex);
+  const end = findTraeBlockEnd(lines, start, endIndex);
   return { start, end };
 }
 
-function findTraeBlockStart(lines: string[], index: number): number {
-  for (let current = index; current >= 0; current -= 1) {
+function findTraeBlockStart(lines: string[], index: number, floor: number): number {
+  for (let current = index; current >= floor; current -= 1) {
     const line = lines[current] ?? "";
     if (line.trim().startsWith("- type: command")) {
       return current;
     }
   }
 
-  return index;
+  return floor;
 }
 
-function findTraeBlockEnd(lines: string[], start: number): number {
+function findTraeBlockEnd(lines: string[], start: number, ceiling: number): number {
   const startIndent = lineIndent(lines[start] ?? "");
   let current = start + 1;
 
-  while (current < lines.length) {
+  while (current < lines.length && current < ceiling) {
     const line = lines[current] ?? "";
     const trimmed = line.trim();
     const indent = lineIndent(line);
@@ -378,4 +493,8 @@ function joinYamlLines(lines: string[]): string {
 function lineIndent(line: string): number {
   const match = line.match(/^(\s*)/);
   return match?.[1]?.length ?? 0;
+}
+
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === "object" && error !== null && "code" in error;
 }

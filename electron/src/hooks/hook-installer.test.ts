@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, writeFile, access, rm, mkdir } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import {
   mergeJsonHookEntry,
   renderTraeHookBlock,
   buildLauncherScript,
   upsertTraeHookBlock,
+  installHooksIfNeeded,
+  installClaudeHooks,
+  installCodexHooks,
 } from "./hook-installer.js";
 
 test("merges browser-viewer command into codex hook config without dropping existing hooks", () => {
@@ -124,7 +130,9 @@ test("builds launcher script pointing at packaged hook bridge", () => {
     packagedBridgePath: "/Applications/Browser Viewer.app/Contents/Resources/hook-bridge.mjs",
   });
 
-  assert.match(script, /browser-viewer-hook-bridge/);
+  assert.match(script, /HOOK_BRIDGE_PATH/);
+  assert.match(script, /if \[ -x "\$HOOK_BRIDGE_PATH" \]; then/);
+  assert.match(script, /exec "\$HOOK_BRIDGE_PATH" "\$@"/);
   assert.match(script, /hook-bridge\.mjs/);
   assert.match(script, /exec node/);
 });
@@ -153,3 +161,141 @@ test("upserts trae hook into an existing top-level hooks section without duplica
   assert.match(output, /browser-viewer-hook-bridge --source trae/);
   assert.match(output, /profiles:/);
 });
+
+test("upserts trae hooks only in the top-level hooks section and leaves nested profile hooks untouched", () => {
+  const input = [
+    "version: 1",
+    "profiles:",
+    "  default:",
+    "    hooks:",
+    "      - type: command",
+    "        command: '/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source trae'",
+    "        matchers:",
+    "          - event: user_prompt_submit",
+    "",
+    "hooks:",
+    "  - type: command",
+    "    command: 'third-party-tool'",
+    "    matchers:",
+    "      - event: stop",
+    "",
+  ].join("\n");
+
+  const output = upsertTraeHookBlock(
+    input,
+    renderTraeHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
+  );
+
+  assert.equal((output.match(/^hooks:/gm) ?? []).length, 1);
+  assert.ok(
+    output.includes(
+      "profiles:\n  default:\n    hooks:\n      - type: command\n        command: '/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source trae'",
+    ),
+  );
+  assert.match(output, /third-party-tool/);
+  assert.equal((output.match(/browser-viewer-hook-bridge --source trae/g) ?? []).length, 2);
+});
+
+test("preserves unknown array members when merging browser-viewer hooks", () => {
+  const merged = mergeJsonHookEntry({
+    existing: [
+      {
+        matcher: "*",
+        hooks: [
+          "unexpected-string",
+          {
+            type: "command",
+            command: "browser-viewer-hook-bridge --source codex",
+            timeout: 3,
+          },
+          7,
+          {
+            type: "command",
+            command: "third-party-tool",
+            timeout: 9,
+          },
+        ],
+      },
+    ],
+    command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+    timeout: 5,
+  });
+
+  assert.equal(merged.length, 1);
+  assert.deepEqual(merged[0], {
+    matcher: "*",
+    hooks: [
+      "unexpected-string",
+      {
+        type: "command",
+        command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+        timeout: 5,
+      },
+      7,
+      {
+        type: "command",
+        command: "third-party-tool",
+        timeout: 9,
+      },
+    ],
+  });
+});
+
+test("leaves invalid existing JSON untouched in a temp home", async () => {
+  const homeDir = await createTempHome();
+  try {
+    const claudeDir = path.join(homeDir, ".claude");
+    await mkdir(claudeDir, { recursive: true });
+    const settingsPath = path.join(claudeDir, "settings.json");
+    const invalid = "{ not-json";
+    await writeFile(settingsPath, invalid, "utf8");
+
+    await installClaudeHooks({ homeDir });
+
+    assert.equal(await readFile(settingsPath, "utf8"), invalid);
+    await assertRejectsMissing(path.join(claudeDir, "settings.json.browser-viewer-hook-backup"));
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
+  }
+});
+
+test("preserves an existing backup file when installing codex hooks in a temp home", async () => {
+  const homeDir = await createTempHome();
+  try {
+    const codexDir = path.join(homeDir, ".codex");
+    await mkdir(codexDir, { recursive: true });
+    const hooksPath = path.join(codexDir, "hooks.json");
+    const backupPath = `${hooksPath}.browser-viewer-hook-backup`;
+    await writeFile(
+      hooksPath,
+      JSON.stringify({ hooks: { SessionStart: [{ matcher: "*", hooks: [{ type: "command", command: "old" }] }] } }, null, 2),
+      "utf8",
+    );
+    await writeFile(backupPath, "first-backup\n", "utf8");
+
+    await installCodexHooks({ homeDir });
+
+    assert.equal(await readFile(backupPath, "utf8"), "first-backup\n");
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
+  }
+});
+
+test("skips launcher creation when no hook config directories exist in a temp home", async () => {
+  const homeDir = await createTempHome();
+  try {
+    await installHooksIfNeeded({ homeDir });
+
+    await assertRejectsMissing(path.join(homeDir, ".browser-viewer", "bin", "browser-viewer-hook-bridge"));
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
+  }
+});
+
+async function createTempHome(): Promise<string> {
+  return mkdtemp(path.join(os.tmpdir(), "browser-viewer-hooks-"));
+}
+
+async function assertRejectsMissing(filePath: string): Promise<void> {
+  await assert.rejects(access(filePath), { code: "ENOENT" });
+}
