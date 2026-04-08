@@ -48,8 +48,11 @@ export function mergeJsonHookEntry(args: {
 
   for (const entry of args.existing) {
     if (isRecord(entry) && isBrowserViewerHookEntry(entry)) {
-      merged.push(rewriteBrowserViewerHooks(entry, nextHook));
-      inserted = true;
+      if (!inserted) {
+        merged.push(rewriteBrowserViewerHooks(entry, nextHook));
+        inserted = true;
+      }
+
       continue;
     }
 
@@ -404,10 +407,16 @@ export function upsertTraeHookBlock(content: string, block: string): string {
   const blockLines = block.split("\n");
   const hooksSection = findTopLevelHooksSection(lines);
   if (hooksSection) {
+    if (hooksSection.inlineEmpty) {
+      const nextLines = [...lines.slice(0, hooksSection.start), "hooks:", ...blockLines, ...lines.slice(hooksSection.start + 1)];
+      return joinYamlLines(nextLines);
+    }
+
     const browserViewerLocation = findTraeBrowserViewerBlock(
       lines,
       hooksSection.start + 1,
       hooksSection.end,
+      lineIndent(lines[hooksSection.start] ?? ""),
     );
     const insertAt = browserViewerLocation ? browserViewerLocation.start : hooksSection.end;
     const removeEnd = browserViewerLocation ? browserViewerLocation.end : hooksSection.end;
@@ -422,28 +431,22 @@ function findTraeBrowserViewerBlock(
   lines: string[],
   startIndex: number,
   endIndex: number,
+  hooksIndent: number,
 ): { start: number; end: number } | null {
-  const commandLineIndex = lines.findIndex(
-    (line, index) => index >= startIndex && index < endIndex && line.includes(BRIDGE_BASENAME),
-  );
-  if (commandLineIndex < 0) {
-    return null;
-  }
+  for (let index = startIndex; index < endIndex; index += 1) {
+    if (!isTraeTopLevelListItem(lines[index] ?? "", hooksIndent)) {
+      continue;
+    }
 
-  const start = findTraeBlockStart(lines, commandLineIndex, startIndex);
-  const end = findTraeBlockEnd(lines, start, endIndex);
-  return { start, end };
-}
-
-function findTraeBlockStart(lines: string[], index: number, floor: number): number {
-  for (let current = index; current >= floor; current -= 1) {
-    const line = lines[current] ?? "";
-    if (line.trim().startsWith("- type: command")) {
-      return current;
+    const start = index;
+    const end = findTraeBlockEnd(lines, start, endIndex);
+    const blockLines = lines.slice(start, end);
+    if (blockLines.some((line) => line.includes(BRIDGE_BASENAME))) {
+      return { start, end };
     }
   }
 
-  return floor;
+  return null;
 }
 
 function findTraeBlockEnd(lines: string[], start: number, ceiling: number): number {
@@ -464,10 +467,18 @@ function findTraeBlockEnd(lines: string[], start: number, ceiling: number): numb
   return current;
 }
 
-function findTopLevelHooksSection(lines: string[]): { start: number; end: number } | null {
-  const start = lines.findIndex((line) => line.trim() === "hooks:" && lineIndent(line) === 0);
+function findTopLevelHooksSection(lines: string[]): { start: number; end: number; inlineEmpty: boolean } | null {
+  const start = lines.findIndex(
+    (line) =>
+      lineIndent(line) === 0 && /^(hooks:|hooks:\s*\[\s*\])\s*$/.test(line.trim()),
+  );
   if (start < 0) {
     return null;
+  }
+
+  const inlineEmpty = /^hooks:\s*\[\s*\]\s*$/.test(lines[start]?.trim() ?? "");
+  if (inlineEmpty) {
+    return { start, end: start + 1, inlineEmpty };
   }
 
   let end = lines.length;
@@ -483,7 +494,7 @@ function findTopLevelHooksSection(lines: string[]): { start: number; end: number
     }
   }
 
-  return { start, end };
+  return { start, end, inlineEmpty };
 }
 
 function joinYamlLines(lines: string[]): string {
@@ -493,6 +504,10 @@ function joinYamlLines(lines: string[]): string {
 function lineIndent(line: string): number {
   const match = line.match(/^(\s*)/);
   return match?.[1]?.length ?? 0;
+}
+
+function isTraeTopLevelListItem(line: string, hooksIndent: number): boolean {
+  return lineIndent(line) > hooksIndent && line.trimStart().startsWith("- ");
 }
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
