@@ -70,6 +70,47 @@ test("replaces an existing browser-viewer entry instead of duplicating it", () =
   });
 });
 
+test("preserves third-party hooks when a matcher entry contains browser-viewer and external commands", () => {
+  const merged = mergeJsonHookEntry({
+    existing: [
+      {
+        matcher: "*",
+        hooks: [
+          {
+            type: "command",
+            command: "browser-viewer-hook-bridge --source codex",
+            timeout: 3,
+          },
+          {
+            type: "command",
+            command: "third-party-tool",
+            timeout: 9,
+          },
+        ],
+      },
+    ],
+    command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+    timeout: 5,
+  });
+
+  assert.equal(merged.length, 1);
+  assert.deepEqual(merged[0], {
+    matcher: "*",
+    hooks: [
+      {
+        type: "command",
+        command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+        timeout: 5,
+      },
+      {
+        type: "command",
+        command: "third-party-tool",
+        timeout: 9,
+      },
+    ],
+  });
+});
+
 test("renders a stable trae hook block", () => {
   const block = renderTraeHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge");
 

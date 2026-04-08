@@ -29,32 +29,30 @@ export function mergeJsonHookEntry(args: {
   command: string;
   timeout: number;
 }): Array<Record<string, unknown>> {
-  const nextEntry: JsonRecord = {
-    matcher: "*",
-    hooks: [
-      {
-        type: "command",
-        command: args.command,
-        timeout: args.timeout,
-      },
-    ],
+  const nextHook: JsonRecord = {
+    type: "command",
+    command: args.command,
+    timeout: args.timeout,
   };
 
   const merged: Array<Record<string, unknown>> = [];
-  let replaced = false;
+  let inserted = false;
 
   for (const entry of args.existing) {
-    if (!replaced && isBrowserViewerHookEntry(entry)) {
-      merged.push(nextEntry);
-      replaced = true;
+    if (isBrowserViewerHookEntry(entry)) {
+      merged.push(rewriteBrowserViewerHooks(entry, nextHook));
+      inserted = true;
       continue;
     }
 
     merged.push(entry);
   }
 
-  if (!replaced) {
-    merged.push(nextEntry);
+  if (!inserted) {
+    merged.push({
+      matcher: "*",
+      hooks: [nextHook],
+    });
   }
 
   return merged;
@@ -254,6 +252,26 @@ function isBrowserViewerHookEntry(entry: Record<string, unknown>): boolean {
     const command = hook.command;
     return typeof command === "string" && command.includes(BRIDGE_BASENAME);
   });
+}
+
+function rewriteBrowserViewerHooks(
+  entry: Record<string, unknown>,
+  nextHook: Record<string, unknown>,
+): Record<string, unknown> {
+  const hooks = Array.isArray(entry.hooks) ? entry.hooks.filter(isRecord) : [];
+  const rewrittenHooks = hooks.map((hook) =>
+    isBrowserViewerHookObject(hook) ? { ...nextHook } : hook,
+  );
+
+  return {
+    ...entry,
+    hooks: rewrittenHooks,
+  };
+}
+
+function isBrowserViewerHookObject(hook: Record<string, unknown>): boolean {
+  const command = hook.command;
+  return typeof command === "string" && command.includes(BRIDGE_BASENAME);
 }
 
 function ensureTrailingNewline(content: string): string {
