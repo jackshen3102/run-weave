@@ -30,11 +30,17 @@ interface BuildHookEventMessageInput {
 
 type HookEventPayload = {
   hookEventName?: string;
+  hook_event_name?: string;
   eventName?: string;
+  event?: string;
   sessionId?: string;
+  session_id?: string;
   toolName?: string;
+  tool_name?: string;
   prompt?: string;
   lastAssistantMessage?: string;
+  last_assistant_message?: string;
+  cwd?: string;
 };
 
 const CANONICAL_EVENT_NAMES: Record<string, CanonicalHookEvent> = {
@@ -53,6 +59,7 @@ const CANONICAL_EVENT_NAMES: Record<string, CanonicalHookEvent> = {
   notification: "Notification",
   stop: "Stop",
   subagent_stop: "Stop",
+  subagentstop: "Stop",
   unknown: "Unknown",
 };
 
@@ -85,17 +92,23 @@ export function buildHookEventMessage({
   now,
 }: BuildHookEventMessageInput): HookEventMessage {
   const payload = parseHookEventPayload(stdinText);
-  const hookEventName = payload.hookEventName ?? payload.eventName ?? "Unknown";
+  const hookEventName =
+    payload.hookEventName ??
+    payload.hook_event_name ??
+    payload.eventName ??
+    payload.event ??
+    "Unknown";
 
   return {
     source,
     hookEvent: normalizeHookEventName(hookEventName),
-    sessionId: payload.sessionId ?? "",
-    cwd: env.PWD ?? null,
+    sessionId: payload.sessionId ?? payload.session_id ?? "",
+    cwd: payload.cwd ?? env.PWD ?? null,
     terminalBundleId: detectTerminalBundleId(env),
-    toolName: payload.toolName ?? null,
+    toolName: payload.toolName ?? payload.tool_name ?? null,
     prompt: payload.prompt ?? null,
-    lastAssistantMessage: payload.lastAssistantMessage ?? null,
+    lastAssistantMessage:
+      payload.lastAssistantMessage ?? payload.last_assistant_message ?? null,
     timestamp: now.toISOString(),
   };
 }
