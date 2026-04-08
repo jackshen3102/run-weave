@@ -29,18 +29,18 @@ interface BuildHookEventMessageInput {
 }
 
 type HookEventPayload = {
-  hookEventName?: string;
-  hook_event_name?: string;
-  eventName?: string;
-  event?: string;
-  sessionId?: string;
-  session_id?: string;
-  toolName?: string;
-  tool_name?: string;
-  prompt?: string;
-  lastAssistantMessage?: string;
-  last_assistant_message?: string;
-  cwd?: string;
+  hookEventName?: unknown;
+  hook_event_name?: unknown;
+  eventName?: unknown;
+  event?: unknown;
+  sessionId?: unknown;
+  session_id?: unknown;
+  toolName?: unknown;
+  tool_name?: unknown;
+  prompt?: unknown;
+  lastAssistantMessage?: unknown;
+  last_assistant_message?: unknown;
+  cwd?: unknown;
 };
 
 const CANONICAL_EVENT_NAMES: Record<string, CanonicalHookEvent> = {
@@ -71,8 +71,17 @@ const TERMINAL_BUNDLE_IDS: Record<string, string> = {
   wezterm: "com.github.wez.wezterm",
 };
 
-export function normalizeHookEventName(raw: string): CanonicalHookEvent | string {
-  const normalized = raw.trim().toLowerCase().replace(/[-\s]+/g, "_");
+export function normalizeHookEventName(raw: unknown): CanonicalHookEvent | string {
+  if (typeof raw !== "string") {
+    return "Unknown";
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return "Unknown";
+  }
+
+  const normalized = trimmed.toLowerCase().replace(/[-\s]+/g, "_");
   return CANONICAL_EVENT_NAMES[normalized] ?? raw;
 }
 
@@ -92,23 +101,25 @@ export function buildHookEventMessage({
   now,
 }: BuildHookEventMessageInput): HookEventMessage {
   const payload = parseHookEventPayload(stdinText);
-  const hookEventName =
-    payload.hookEventName ??
-    payload.hook_event_name ??
-    payload.eventName ??
-    payload.event ??
-    "Unknown";
+  const hookEventName = firstNonBlankString(
+    payload.hookEventName,
+    payload.hook_event_name,
+    payload.eventName,
+    payload.event,
+  );
 
   return {
     source,
-    hookEvent: normalizeHookEventName(hookEventName),
-    sessionId: payload.sessionId ?? payload.session_id ?? "",
-    cwd: payload.cwd ?? env.PWD ?? null,
+    hookEvent: normalizeHookEventName(hookEventName ?? "Unknown"),
+    sessionId: firstNonBlankString(payload.sessionId, payload.session_id) ?? "",
+    cwd: firstNonBlankString(payload.cwd, env.PWD),
     terminalBundleId: detectTerminalBundleId(env),
-    toolName: payload.toolName ?? payload.tool_name ?? null,
-    prompt: payload.prompt ?? null,
-    lastAssistantMessage:
-      payload.lastAssistantMessage ?? payload.last_assistant_message ?? null,
+    toolName: firstNonBlankString(payload.toolName, payload.tool_name),
+    prompt: firstNonBlankString(payload.prompt),
+    lastAssistantMessage: firstNonBlankString(
+      payload.lastAssistantMessage,
+      payload.last_assistant_message,
+    ),
     timestamp: now.toISOString(),
   };
 }
@@ -124,4 +135,19 @@ function parseHookEventPayload(stdinText: string): HookEventPayload {
   } catch {
     return {};
   }
+}
+
+function firstNonBlankString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value !== "string") {
+      continue;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return null;
 }
