@@ -21,6 +21,7 @@ export interface ConnectionContext {
   tabIdToPage: Map<string, Page>;
   pageToTabId: WeakMap<Page, string>;
   tabTitleById: Map<string, string>;
+  tabFaviconById: Map<string, string | null>;
   pageListenersByTabId: Map<string, PageListeners>;
   tabLoadingById: Map<string, boolean>;
   devtoolsByTabId: Map<string, boolean>;
@@ -42,6 +43,7 @@ export function createConnectionContext(initialPage: Page): ConnectionContext {
     tabIdToPage: new Map<string, Page>(),
     pageToTabId: new WeakMap<Page, string>(),
     tabTitleById: new Map<string, string>(),
+    tabFaviconById: new Map<string, string | null>(),
     pageListenersByTabId: new Map<string, PageListeners>(),
     tabLoadingById: new Map<string, boolean>(),
     devtoolsByTabId: new Map<string, boolean>(),

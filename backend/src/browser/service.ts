@@ -2,7 +2,7 @@ import { chromium } from "playwright-extra";
 import { mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { SessionHeaders } from "@browser-viewer/shared";
+import type { BrowserProfile, SessionHeaders } from "@browser-viewer/shared";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { findAvailablePort } from "../server/listen";
 
@@ -28,6 +28,7 @@ export interface LaunchBrowserSessionOptions {
   proxyEnabled: boolean;
   profilePath: string;
   headers: SessionHeaders;
+  browserProfile?: BrowserProfile;
 }
 
 export interface ConnectCdpBrowserSessionOptions {
@@ -61,6 +62,12 @@ function buildLaunchArgs(options: {
   }
 
   return args.length > 0 ? args : undefined;
+}
+
+function resolveViewport(
+  browserProfile: BrowserProfile | undefined,
+): { width: number; height: number } | undefined {
+  return browserProfile?.viewport;
 }
 
 export class BrowserService {
@@ -119,12 +126,17 @@ export class BrowserService {
         }),
         ignoreHTTPSErrors: options.proxyEnabled,
         extraHTTPHeaders: options.headers,
+        locale: options.browserProfile?.locale,
         proxy: options.proxyEnabled
           ? {
               bypass: LOCAL_BYPASS_RULE,
               server: WHISTLE_PROXY_SERVER,
             }
           : undefined,
+        screen: resolveViewport(options.browserProfile),
+        timezoneId: options.browserProfile?.timezoneId,
+        userAgent: options.browserProfile?.userAgent,
+        viewport: resolveViewport(options.browserProfile),
       });
     } catch (error) {
       this.remoteDebuggingPorts.delete(sessionId);

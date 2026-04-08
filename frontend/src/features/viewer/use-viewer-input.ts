@@ -18,7 +18,8 @@ import {
 interface UseViewerInputParams {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   inputBridgeRef: RefObject<HTMLTextAreaElement | null>;
-  sendInput: (input: ClientInputMessage) => void;
+  enabled: boolean;
+  sendInput: (input: ClientInputMessage) => boolean;
 }
 
 interface UseViewerInputResult {
@@ -60,6 +61,7 @@ function shouldForwardAsKeyboardShortcut(event: KeyboardEvent): boolean {
 export function useViewerInput({
   canvasRef,
   inputBridgeRef,
+  enabled,
   sendInput,
 }: UseViewerInputParams): UseViewerInputResult {
   const lastMoveAtRef = useRef(0);
@@ -120,6 +122,9 @@ export function useViewerInput({
   const onMouseDown = useCallback<MouseEventHandler<HTMLCanvasElement>>(
     (event) => {
       event.preventDefault();
+      if (!enabled) {
+        return;
+      }
       if (inputBridgeRef.current) {
         inputBridgeRef.current.style.left = `${event.clientX}px`;
         inputBridgeRef.current.style.top = `${event.clientY}px`;
@@ -138,11 +143,14 @@ export function useViewerInput({
           event.button === 1 ? "middle" : event.button === 2 ? "right" : "left",
       });
     },
-    [inputBridgeRef, mapPointerEvent, sendInput],
+    [enabled, inputBridgeRef, mapPointerEvent, sendInput],
   );
 
   const onMouseMove = useCallback<MouseEventHandler<HTMLCanvasElement>>(
     (event) => {
+      if (!enabled) {
+        return;
+      }
       const now = Date.now();
       if (now - lastMoveAtRef.current < 16) {
         return;
@@ -160,12 +168,15 @@ export function useViewerInput({
         y: point.y,
       });
     },
-    [mapPointerEvent, sendInput],
+    [enabled, mapPointerEvent, sendInput],
   );
 
   const onWheel = useCallback<WheelEventHandler<HTMLCanvasElement>>(
     (event) => {
       event.preventDefault();
+      if (!enabled) {
+        return;
+      }
       const point = mapPointerEvent(event.clientX, event.clientY);
       sendInput({
         type: "scroll",
@@ -175,7 +186,7 @@ export function useViewerInput({
         deltaY: event.deltaY,
       });
     },
-    [mapPointerEvent, sendInput],
+    [enabled, mapPointerEvent, sendInput],
   );
 
   const onContextMenu = useCallback<MouseEventHandler<HTMLCanvasElement>>(
@@ -195,6 +206,10 @@ export function useViewerInput({
     KeyboardEventHandler<HTMLTextAreaElement>
   >(
     (event) => {
+      if (!enabled) {
+        event.preventDefault();
+        return;
+      }
       if (event.nativeEvent.isComposing || composingRef.current) {
         return;
       }
@@ -221,11 +236,15 @@ export function useViewerInput({
         sendKeyboardInput(event);
       }
     },
-    [isPasteShortcut, sendClipboardPaste, sendKeyboardInput],
+    [enabled, isPasteShortcut, sendClipboardPaste, sendKeyboardInput],
   );
 
   const onBridgeInput = useCallback<FormEventHandler<HTMLTextAreaElement>>(
     (event) => {
+      if (!enabled) {
+        event.currentTarget.value = "";
+        return;
+      }
       if (composingRef.current) {
         return;
       }
@@ -238,7 +257,7 @@ export function useViewerInput({
       sendClipboardPaste(text);
       event.currentTarget.value = "";
     },
-    [sendClipboardPaste],
+    [enabled, sendClipboardPaste],
   );
 
   const onBridgeCompositionStart = useCallback<
@@ -252,6 +271,10 @@ export function useViewerInput({
   >(
     (event) => {
       composingRef.current = false;
+      if (!enabled) {
+        event.currentTarget.value = "";
+        return;
+      }
       const text = event.currentTarget.value;
       if (!text) {
         return;
@@ -260,7 +283,7 @@ export function useViewerInput({
       sendClipboardPaste(text);
       event.currentTarget.value = "";
     },
-    [sendClipboardPaste],
+    [enabled, sendClipboardPaste],
   );
 
   return {

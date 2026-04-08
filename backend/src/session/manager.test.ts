@@ -74,6 +74,7 @@ describe("SessionManager", () => {
         connected: false,
         profilePath: browserServiceMock.getSessionProfileDir(session.id),
         headers: {},
+        browserProfile: undefined,
       }),
     );
 
@@ -128,6 +129,14 @@ describe("SessionManager", () => {
           "x-session-id": "session-headers",
           "x-trace": "enabled",
         },
+        browserProfile: {
+          locale: "en-US",
+          timezoneId: "Asia/Shanghai",
+          viewport: {
+            width: 1440,
+            height: 900,
+          },
+        },
         createdAt: "2026-03-21T00:00:00.000Z",
         lastActivityAt: "2026-03-21T00:01:00.000Z",
       },
@@ -145,6 +154,13 @@ describe("SessionManager", () => {
         headers: {
           "x-session-id": "created-session",
         },
+        browserProfile: {
+          locale: "en-US",
+          viewport: {
+            width: 1280,
+            height: 720,
+          },
+        },
       },
     });
 
@@ -157,12 +173,26 @@ describe("SessionManager", () => {
         headers: {
           "x-session-id": "created-session",
         },
+        browserProfile: {
+          locale: "en-US",
+          viewport: {
+            width: 1280,
+            height: 720,
+          },
+        },
       },
     );
     expect(sessionStoreMock.insertSession).toHaveBeenCalledWith(
       expect.objectContaining({
         headers: {
           "x-session-id": "created-session",
+        },
+        browserProfile: {
+          locale: "en-US",
+          viewport: {
+            width: 1280,
+            height: 720,
+          },
         },
       }),
     );
@@ -179,11 +209,27 @@ describe("SessionManager", () => {
           "x-session-id": "session-headers",
           "x-trace": "enabled",
         },
+        browserProfile: {
+          locale: "en-US",
+          timezoneId: "Asia/Shanghai",
+          viewport: {
+            width: 1440,
+            height: 900,
+          },
+        },
       },
     );
     expect(manager.getSession("session-headers")?.headers).toEqual({
       "x-session-id": "session-headers",
       "x-trace": "enabled",
+    });
+    expect(manager.getSession("session-headers")?.browserProfile).toEqual({
+      locale: "en-US",
+      timezoneId: "Asia/Shanghai",
+      viewport: {
+        width: 1440,
+        height: 900,
+      },
     });
     expect(manager.getSession("session-headers")?.name).toBe("headers session");
 

@@ -10,7 +10,7 @@ import {
   updateSessionAiPreference as updateBrowserSessionAiPreference,
   updateSession as updateBrowserSession,
 } from "../../../services/session";
-import { parseSessionHeaders } from "../utils";
+import { parseBrowserProfileInput, parseSessionHeaders } from "../utils";
 
 type SessionSourceType = "launch" | "connect-cdp";
 
@@ -42,6 +42,12 @@ export function useHomeSessions({
   );
   const [cdpEndpointCustomized, setCdpEndpointCustomized] = useState(false);
   const [requestHeadersInput, setRequestHeadersInput] = useState("");
+  const [browserLocaleInput, setBrowserLocaleInput] = useState("");
+  const [browserTimezoneInput, setBrowserTimezoneInput] = useState("");
+  const [browserUserAgentInput, setBrowserUserAgentInput] = useState("");
+  const [browserViewportWidthInput, setBrowserViewportWidthInput] = useState("");
+  const [browserViewportHeightInput, setBrowserViewportHeightInput] =
+    useState("");
   const [preferredForAi, setPreferredForAi] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -161,15 +167,24 @@ export function useHomeSessions({
     }
 
     let parsedHeaders: Record<string, string>;
+    let browserProfile;
     if (sessionSourceType === "launch") {
       try {
         parsedHeaders = parseSessionHeaders(requestHeadersInput);
+        browserProfile = parseBrowserProfileInput({
+          localeInput: browserLocaleInput,
+          timezoneIdInput: browserTimezoneInput,
+          userAgentInput: browserUserAgentInput,
+          viewportWidthInput: browserViewportWidthInput,
+          viewportHeightInput: browserViewportHeightInput,
+        });
       } catch (parseError) {
         setError(parseError instanceof Error ? parseError.message : String(parseError));
         return;
       }
     } else {
       parsedHeaders = {};
+      browserProfile = undefined;
     }
 
     setLoading(true);
@@ -197,6 +212,7 @@ export function useHomeSessions({
                   Object.keys(parsedHeaders).length > 0
                     ? parsedHeaders
                     : undefined,
+                browserProfile,
               },
             },
         token,
@@ -215,6 +231,11 @@ export function useHomeSessions({
     }
   }, [
     apiBase,
+    browserLocaleInput,
+    browserTimezoneInput,
+    browserUserAgentInput,
+    browserViewportHeightInput,
+    browserViewportWidthInput,
     cdpEndpoint,
     loadSessions,
     loading,
@@ -346,6 +367,16 @@ export function useHomeSessions({
     setCdpEndpoint,
     requestHeadersInput,
     setRequestHeadersInput,
+    browserLocaleInput,
+    setBrowserLocaleInput,
+    browserTimezoneInput,
+    setBrowserTimezoneInput,
+    browserUserAgentInput,
+    setBrowserUserAgentInput,
+    browserViewportWidthInput,
+    setBrowserViewportWidthInput,
+    browserViewportHeightInput,
+    setBrowserViewportHeightInput,
     preferredForAi,
     setPreferredForAi,
     loading,

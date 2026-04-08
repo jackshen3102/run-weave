@@ -92,9 +92,11 @@ export function attachWebSocketServer(
 
     const emitTabs = (): void => {
       const tabs = buildTabsSnapshot(
+        sessionId,
         session.browserSession.context.pages(),
         state.pageToTabId,
         state.tabTitleById,
+        state.tabFaviconById,
         state.activeTabId,
       );
       qualityProbeStore?.updateTabState(sessionId, {

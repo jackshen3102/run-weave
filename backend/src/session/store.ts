@@ -1,4 +1,4 @@
-import type { SessionHeaders } from "@browser-viewer/shared";
+import type { BrowserProfile, SessionHeaders } from "@browser-viewer/shared";
 
 export type SessionProfileMode = "managed" | "custom";
 
@@ -11,6 +11,7 @@ export interface PersistedSessionRecord {
   profilePath: string;
   profileMode: SessionProfileMode;
   headers: SessionHeaders;
+  browserProfile?: BrowserProfile;
   createdAt: string;
   lastActivityAt: string;
 }

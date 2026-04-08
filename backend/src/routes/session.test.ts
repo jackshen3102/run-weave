@@ -12,6 +12,15 @@ interface MockSession {
   sourceType: "launch" | "connect-cdp";
   cdpEndpoint?: string;
   headers: Record<string, string>;
+  browserProfile?: {
+    locale?: string;
+    timezoneId?: string;
+    userAgent?: string;
+    viewport?: {
+      width: number;
+      height: number;
+    };
+  };
   connected: boolean;
   createdAt: Date;
 }
@@ -40,6 +49,7 @@ function createTestServer(sessionState: { current: MockSession | null }) {
               type: "launch";
               proxyEnabled: boolean;
               headers: Record<string, string>;
+              browserProfile?: MockSession["browserProfile"];
             }
           | {
               type: "connect-cdp";
@@ -61,6 +71,10 @@ function createTestServer(sessionState: { current: MockSession | null }) {
               : undefined,
           headers:
             options.source.type === "launch" ? options.source.headers : {},
+          browserProfile:
+            options.source.type === "launch"
+              ? options.source.browserProfile
+              : undefined,
           connected: false,
           persisted: options.source.type === "launch",
           createdAt: new Date("2026-03-19T00:00:00.000Z"),
@@ -187,6 +201,14 @@ describe("session routes", () => {
           headers: {
             "x-session-id": "test-session-id",
           },
+          browserProfile: {
+            locale: "en-US",
+            timezoneId: "Asia/Shanghai",
+            viewport: {
+              width: 1440,
+              height: 900,
+            },
+          },
         },
       }),
     });
@@ -208,6 +230,7 @@ describe("session routes", () => {
       proxyEnabled: boolean;
       sourceType: "launch" | "connect-cdp";
       headers: Record<string, string>;
+      browserProfile?: MockSession["browserProfile"];
     };
     expect(statusPayload.sessionId).toBe("test-session-id");
     expect(statusPayload.name).toBe("Default Playweight");
@@ -215,6 +238,14 @@ describe("session routes", () => {
     expect(statusPayload.sourceType).toBe("launch");
     expect(statusPayload.headers).toEqual({
       "x-session-id": "test-session-id",
+    });
+    expect(statusPayload.browserProfile).toEqual({
+      locale: "en-US",
+      timezoneId: "Asia/Shanghai",
+      viewport: {
+        width: 1440,
+        height: 900,
+      },
     });
 
     const listResponse = await fetch(`http://127.0.0.1:${port}/api/session`);
@@ -225,6 +256,7 @@ describe("session routes", () => {
       proxyEnabled: boolean;
       sourceType: "launch" | "connect-cdp";
       headers: Record<string, string>;
+      browserProfile?: MockSession["browserProfile"];
     }>;
     expect(listPayload).toHaveLength(1);
     expect(listPayload[0]?.sessionId).toBe("test-session-id");
@@ -233,6 +265,14 @@ describe("session routes", () => {
     expect(listPayload[0]?.sourceType).toBe("launch");
     expect(listPayload[0]?.headers).toEqual({
       "x-session-id": "test-session-id",
+    });
+    expect(listPayload[0]?.browserProfile).toEqual({
+      locale: "en-US",
+      timezoneId: "Asia/Shanghai",
+      viewport: {
+        width: 1440,
+        height: 900,
+      },
     });
 
     const deleteResponse = await fetch(
@@ -247,6 +287,44 @@ describe("session routes", () => {
       `http://127.0.0.1:${port}/api/session/test-session-id`,
     );
     expect(missingResponse.status).toBe(404);
+  });
+
+  it("returns field-level browser profile validation errors", async () => {
+    const state = { current: null as MockSession | null };
+    const { server, sessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Invalid profile",
+        source: {
+          type: "launch",
+          browserProfile: {
+            locale: "bad locale",
+            timezoneId: "Mars/Olympus",
+          },
+        },
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    const payload = (await response.json()) as {
+      message: string;
+      errors: {
+        fieldErrors: Record<string, string[]>;
+      };
+    };
+    expect(payload.message).toBe("Invalid request body");
+    expect(payload.errors.fieldErrors["source.browserProfile.locale"]).toEqual([
+      "Locale must be a valid BCP 47 language tag.",
+    ]);
+    expect(
+      payload.errors.fieldErrors["source.browserProfile.timezoneId"],
+    ).toEqual(["Timezone must be a supported IANA time zone."]);
+    expect(sessionManager.createSession).not.toHaveBeenCalled();
   });
 
   it("creates an attached CDP session", async () => {

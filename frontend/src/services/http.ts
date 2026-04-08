@@ -74,3 +74,17 @@ export async function requestVoid(
     throw await buildHttpError(response, path, init);
   }
 }
+
+export async function requestBlob(
+  apiBase: string,
+  path: string,
+  init?: RequestInit,
+): Promise<Blob> {
+  const response = await fetch(buildUrl(apiBase, path), init);
+
+  if (!response.ok) {
+    throw await buildHttpError(response, path, init);
+  }
+
+  return response.blob();
+}

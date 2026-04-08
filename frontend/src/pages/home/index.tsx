@@ -55,6 +55,16 @@ export function HomePage({
     setCdpEndpoint,
     requestHeadersInput,
     setRequestHeadersInput,
+    browserLocaleInput,
+    setBrowserLocaleInput,
+    browserTimezoneInput,
+    setBrowserTimezoneInput,
+    browserUserAgentInput,
+    setBrowserUserAgentInput,
+    browserViewportWidthInput,
+    setBrowserViewportWidthInput,
+    browserViewportHeightInput,
+    setBrowserViewportHeightInput,
     preferredForAi,
     setPreferredForAi,
     loading,
@@ -141,6 +151,16 @@ export function HomePage({
             onProxyEnabledChange={setProxyEnabled}
             requestHeadersInput={requestHeadersInput}
             onRequestHeadersInputChange={setRequestHeadersInput}
+            browserLocaleInput={browserLocaleInput}
+            onBrowserLocaleInputChange={setBrowserLocaleInput}
+            browserTimezoneInput={browserTimezoneInput}
+            onBrowserTimezoneInputChange={setBrowserTimezoneInput}
+            browserUserAgentInput={browserUserAgentInput}
+            onBrowserUserAgentInputChange={setBrowserUserAgentInput}
+            browserViewportWidthInput={browserViewportWidthInput}
+            onBrowserViewportWidthInputChange={setBrowserViewportWidthInput}
+            browserViewportHeightInput={browserViewportHeightInput}
+            onBrowserViewportHeightInputChange={setBrowserViewportHeightInput}
             preferredForAi={preferredForAi}
             onPreferredForAiChange={setPreferredForAi}
             loading={loading}

@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { rm } from "node:fs/promises";
 import type {
+  BrowserProfile,
   CollaborationState,
   CreateSessionSource,
   SessionHeaders,
@@ -22,6 +23,7 @@ export interface SessionRecord {
   sourceType: "launch" | "connect-cdp";
   cdpEndpoint?: string;
   headers: SessionHeaders;
+  browserProfile?: BrowserProfile;
   createdAt: Date;
   lastActivityAt: Date;
   connected: boolean;
@@ -51,12 +53,14 @@ function buildLaunchBrowserSessionOptions(session: {
   profilePath: string;
   proxyEnabled: boolean;
   headers: SessionHeaders;
+  browserProfile?: BrowserProfile;
 }): LaunchBrowserSessionOptions {
   return {
     type: "launch",
     profilePath: session.profilePath,
     proxyEnabled: session.proxyEnabled,
     headers: session.headers,
+    browserProfile: session.browserProfile,
   };
 }
 
@@ -72,6 +76,7 @@ function buildSessionRecord(
     sourceType: "launch",
     cdpEndpoint: undefined,
     headers: record.headers,
+    browserProfile: record.browserProfile,
     createdAt: new Date(record.createdAt),
     lastActivityAt: new Date(record.lastActivityAt),
     connected: false,
@@ -106,6 +111,7 @@ function buildPersistedSessionRecord(
     profilePath: session.profilePath ?? "",
     profileMode: "managed",
     headers: session.headers,
+    browserProfile: session.browserProfile,
     createdAt: session.createdAt.toISOString(),
     lastActivityAt: session.lastActivityAt.toISOString(),
   };
@@ -156,6 +162,7 @@ export class SessionManager extends EventEmitter {
         sourceType: "connect-cdp",
         cdpEndpoint: source.endpoint,
         headers: {},
+        browserProfile: undefined,
         createdAt: new Date(),
         lastActivityAt: new Date(),
         connected: false,
@@ -176,12 +183,14 @@ export class SessionManager extends EventEmitter {
     const profilePath = this.browserService.getSessionProfileDir(sessionId);
     const proxyEnabled = source.proxyEnabled ?? false;
     const headers = source.headers ?? {};
+    const browserProfile = source.browserProfile;
     const browserSession = await this.browserService.createSession(
       sessionId,
       buildLaunchBrowserSessionOptions({
         profilePath,
         proxyEnabled,
         headers,
+        browserProfile,
       }),
     );
     const session: SessionRecord = {
@@ -193,6 +202,7 @@ export class SessionManager extends EventEmitter {
       persisted: true,
       profilePath,
       headers,
+      browserProfile,
       createdAt: new Date(),
       lastActivityAt: new Date(),
       connected: false,

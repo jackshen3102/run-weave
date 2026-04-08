@@ -15,7 +15,9 @@ import {
   buildDevtoolsPageUrl,
   normalizeNavigationUrl,
 } from "../features/viewer/url";
+import { getViewerSecurityState } from "../features/viewer/viewer-security";
 import { useViewerInput } from "../features/viewer/use-viewer-input";
+import { getViewerSurfaceState } from "../features/viewer/viewer-surface";
 import { HttpError } from "../services/http";
 import {
   createAiBridge,
@@ -90,6 +92,7 @@ export function ViewerPage({
   } = useViewerInput({
     canvasRef,
     inputBridgeRef,
+    enabled: status === "connected",
     sendInput,
   });
 
@@ -103,14 +106,36 @@ export function ViewerPage({
   const canRenderDevtoolsControls = devtoolsEnabled && activeTabId !== null;
   const isInspecting = canRenderDevtoolsControls && activeDevtoolsOpened;
   const canReconnect = status === "reconnecting" || status === "closed";
+  const viewerControlsDisabled = status !== "connected";
+  const viewerInputEnabled = !isInspecting && !viewerControlsDisabled;
   const aiAssistEnabled = collaboration.aiStatus !== "idle";
+  const securityState = getViewerSecurityState(
+    isEditingAddress ? addressInput : (activeNavigation?.url ?? ""),
+  );
+  const surfaceState = getViewerSurfaceState({
+    activeTabId,
+    status,
+    isLoading: activeNavigation?.isLoading ?? false,
+    error,
+  });
 
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
 
+  useEffect(() => {
+    if (viewerInputEnabled) {
+      return;
+    }
+
+    if (inputBridgeRef.current) {
+      inputBridgeRef.current.value = "";
+      inputBridgeRef.current.blur();
+    }
+  }, [viewerInputEnabled]);
+
   const submitNavigation = (): void => {
-    if (!activeTabId) {
+    if (!activeTabId || viewerControlsDisabled) {
       return;
     }
 
@@ -132,7 +157,7 @@ export function ViewerPage({
   const submitTabNavigationAction = (
     action: "back" | "forward" | "reload" | "stop",
   ): void => {
-    if (!activeTabId) {
+    if (!activeTabId || viewerControlsDisabled) {
       return;
     }
 
@@ -144,7 +169,7 @@ export function ViewerPage({
   };
 
   const toggleInspectMode = (): void => {
-    if (!activeTabId) {
+    if (!activeTabId || viewerControlsDisabled) {
       return;
     }
 
@@ -327,6 +352,7 @@ export function ViewerPage({
           aria-label="Viewer input bridge"
           className="pointer-events-none fixed z-50 h-1 w-1 opacity-0"
           style={{ left: 0, top: 0 }}
+          disabled={!viewerInputEnabled}
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
@@ -362,10 +388,15 @@ export function ViewerPage({
 
                   <div className="min-w-0 flex-1">
                     <ViewerTabList
+                      apiBase={apiBase}
+                      sessionId={sessionId}
+                      token={token}
                       tabs={tabs}
+                      disabled={viewerControlsDisabled}
                       onSwitchTab={(tabId) => {
                         sendInput({ type: "tab", action: "switch", tabId });
                       }}
+                      onAuthExpired={onAuthExpired}
                     />
                   </div>
 
@@ -405,21 +436,22 @@ export function ViewerPage({
                               : "Show address bar"}
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8"
-                          onClick={() => {
-                            setIsMoreMenuOpen(false);
-                            sendInput({ type: "tab", action: "create" });
-                          }}
-                        >
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8 disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={() => {
+                              setIsMoreMenuOpen(false);
+                              sendInput({ type: "tab", action: "create" });
+                            }}
+                            disabled={viewerControlsDisabled}
+                          >
                           <Plus className="h-4 w-4 text-stone-400" />
                           New tab
                         </button>
                         {activeTabId && (
                           <button
                             type="button"
-                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8"
+                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8 disabled:cursor-not-allowed disabled:opacity-50"
                             onClick={() => {
                               setIsMoreMenuOpen(false);
                               sendInput({
@@ -428,6 +460,7 @@ export function ViewerPage({
                                 tabId: activeTabId,
                               });
                             }}
+                            disabled={viewerControlsDisabled}
                           >
                             <X className="h-4 w-4 text-stone-400" />
                             Close tab
@@ -456,6 +489,7 @@ export function ViewerPage({
                       variant={isInspecting ? "secondary" : "default"}
                       className="rounded-full px-4 transition-all duration-300 ease-out"
                       onClick={toggleInspectMode}
+                      disabled={viewerControlsDisabled}
                     >
                       {isInspecting ? "Page" : "Inspect"}
                     </Button>
@@ -485,6 +519,8 @@ export function ViewerPage({
                       activeTabId={activeTabId}
                       activeNavigation={activeNavigation}
                       addressInput={addressInput}
+                      securityState={securityState}
+                      disabled={viewerControlsDisabled}
                       onAddressFocus={() => setIsEditingAddress(true)}
                       onAddressChange={setAddressInput}
                       onAddressBlur={() => {
@@ -569,18 +605,65 @@ export function ViewerPage({
                       : "opacity-100"
                   }`}
                 >
-                  <canvas
-                    ref={canvasRef}
-                    className="h-full w-auto max-w-full transition-opacity duration-300"
-                    style={{ touchAction: "none" }}
-                    tabIndex={isInspecting ? -1 : 0}
-                    onMouseDown={onMouseDown}
-                    onMouseMove={onMouseMove}
-                    onWheel={onWheel}
+                    <canvas
+                      ref={canvasRef}
+                      className="h-full w-auto max-w-full transition-opacity duration-300"
+                      style={{ touchAction: "none" }}
+                      tabIndex={viewerInputEnabled ? 0 : -1}
+                      onMouseDown={onMouseDown}
+                      onMouseMove={onMouseMove}
+                      onWheel={onWheel}
                     onContextMenu={onContextMenu}
                     onMouseLeave={onMouseLeave}
                   />
                 </div>
+
+                {!isInspecting &&
+                surfaceState.visible &&
+                surfaceState.presentation === "overlay" ? (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-[radial-gradient(circle_at_center,rgba(10,12,16,0.18),rgba(5,7,10,0.78))] px-6 text-center">
+                    <div
+                      className={`max-w-sm rounded-3xl border px-5 py-4 shadow-[0_30px_80px_-50px_rgba(0,0,0,0.9)] backdrop-blur-md ${
+                        surfaceState.tone === "warning"
+                          ? "border-amber-400/20 bg-[rgba(42,26,8,0.68)] text-amber-100"
+                          : "border-white/10 bg-[rgba(8,12,18,0.7)] text-stone-100"
+                      }`}
+                    >
+                      <p className="text-sm font-medium">{surfaceState.title}</p>
+                      {surfaceState.detail ? (
+                        <p className="mt-1 text-xs text-current/75">
+                          {surfaceState.detail}
+                        </p>
+                      ) : null}
+                      {surfaceState.action === "reconnect" ? (
+                        <Button
+                          size="sm"
+                          className="mt-4 rounded-full px-4"
+                          onClick={() => {
+                            reconnect();
+                          }}
+                        >
+                          Reconnect
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                {!isInspecting &&
+                surfaceState.visible &&
+                surfaceState.presentation === "badge" ? (
+                  <div className="pointer-events-none absolute right-4 top-4 z-10">
+                    <div className="rounded-full border border-white/10 bg-[rgba(8,12,18,0.78)] px-4 py-2 text-left text-xs text-stone-100 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)] backdrop-blur-md">
+                      <p className="font-medium">{surfaceState.title}</p>
+                      {surfaceState.detail ? (
+                        <p className="mt-0.5 text-[11px] text-current/75">
+                          {surfaceState.detail}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
 
                 {isInspecting && (
                   <>

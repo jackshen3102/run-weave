@@ -1,6 +1,7 @@
 import type { BrowserContext, Frame, Page } from "playwright";
 import type { ConnectionContext } from "./context";
 import { resolvePageTargetId } from "./tab-target";
+import { resolveTabFaviconUrl } from "./tabs";
 
 interface TabManagerDeps {
   state: ConnectionContext;
@@ -33,7 +34,7 @@ export function createTabManager(deps: TabManagerDeps): {
     sendError,
   } = deps;
 
-  const refreshTabTitle = async (
+  const refreshTabMetadata = async (
     tabId: string,
     page: Page,
     options?: { suppressEmit?: boolean },
@@ -44,6 +45,13 @@ export function createTabManager(deps: TabManagerDeps): {
     } catch {
       state.tabTitleById.set(tabId, page.url());
     }
+
+    try {
+      state.tabFaviconById.set(tabId, await resolveTabFaviconUrl(page));
+    } catch {
+      state.tabFaviconById.set(tabId, null);
+    }
+
     if (!options?.suppressEmit) {
       emitTabs();
     }
@@ -98,6 +106,7 @@ export function createTabManager(deps: TabManagerDeps): {
     state.pageToTabId.delete(page);
     state.tabIdToPage.delete(tabId);
     state.tabTitleById.delete(tabId);
+    state.tabFaviconById.delete(tabId);
     state.tabLoadingById.delete(tabId);
     state.devtoolsByTabId.delete(tabId);
 
@@ -127,6 +136,7 @@ export function createTabManager(deps: TabManagerDeps): {
     state.pageToTabId.set(page, tabId);
     state.tabIdToPage.set(tabId, page);
     state.tabTitleById.set(tabId, page.url() || "about:blank");
+    state.tabFaviconById.set(tabId, null);
     state.tabLoadingById.set(tabId, false);
 
     const close = (): void => {
@@ -141,7 +151,7 @@ export function createTabManager(deps: TabManagerDeps): {
     };
     const load = (): void => {
       state.tabLoadingById.set(tabId, false);
-      void refreshTabTitle(tabId, page);
+      void refreshTabMetadata(tabId, page);
       void emitNavigationState(tabId);
     };
 
@@ -150,7 +160,7 @@ export function createTabManager(deps: TabManagerDeps): {
     page.on("framenavigated", framenavigated);
     page.on("load", load);
 
-    void refreshTabTitle(tabId, page, options);
+    await refreshTabMetadata(tabId, page, options);
     if (!options?.suppressEmit) {
       emitTabs();
     }

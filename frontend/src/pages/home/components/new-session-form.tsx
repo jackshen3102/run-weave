@@ -12,6 +12,16 @@ interface NewSessionFormProps {
   onProxyEnabledChange: (value: boolean) => void;
   requestHeadersInput: string;
   onRequestHeadersInputChange: (value: string) => void;
+  browserLocaleInput: string;
+  onBrowserLocaleInputChange: (value: string) => void;
+  browserTimezoneInput: string;
+  onBrowserTimezoneInputChange: (value: string) => void;
+  browserUserAgentInput: string;
+  onBrowserUserAgentInputChange: (value: string) => void;
+  browserViewportWidthInput: string;
+  onBrowserViewportWidthInputChange: (value: string) => void;
+  browserViewportHeightInput: string;
+  onBrowserViewportHeightInputChange: (value: string) => void;
   preferredForAi: boolean;
   onPreferredForAiChange: (value: boolean) => void;
   loading: boolean;
@@ -31,6 +41,16 @@ export function NewSessionForm({
   onProxyEnabledChange,
   requestHeadersInput,
   onRequestHeadersInputChange,
+  browserLocaleInput,
+  onBrowserLocaleInputChange,
+  browserTimezoneInput,
+  onBrowserTimezoneInputChange,
+  browserUserAgentInput,
+  onBrowserUserAgentInputChange,
+  browserViewportWidthInput,
+  onBrowserViewportWidthInputChange,
+  browserViewportHeightInput,
+  onBrowserViewportHeightInputChange,
   preferredForAi,
   onPreferredForAiChange,
   loading,
@@ -158,6 +178,74 @@ export function NewSessionForm({
                 className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
               />
             </label>
+
+            <div className="rounded-[1rem] border border-border/60 bg-card/75 px-3 py-3">
+              <p className="text-sm font-medium text-foreground">
+                Browser profile
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Optional launch settings for deterministic Playwright sessions.
+              </p>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <input
+                  aria-label="Browser locale"
+                  value={browserLocaleInput}
+                  onChange={(event) =>
+                    onBrowserLocaleInputChange(event.target.value)
+                  }
+                  disabled={loading}
+                  className="h-10 w-full rounded-[0.9rem] border border-border/60 bg-background/70 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
+                  placeholder="Locale, e.g. en-US"
+                />
+                <input
+                  aria-label="Browser timezone"
+                  value={browserTimezoneInput}
+                  onChange={(event) =>
+                    onBrowserTimezoneInputChange(event.target.value)
+                  }
+                  disabled={loading}
+                  className="h-10 w-full rounded-[0.9rem] border border-border/60 bg-background/70 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
+                  placeholder="Timezone, e.g. Asia/Shanghai"
+                />
+              </div>
+
+              <textarea
+                aria-label="Browser user agent"
+                value={browserUserAgentInput}
+                onChange={(event) =>
+                  onBrowserUserAgentInputChange(event.target.value)
+                }
+                disabled={loading}
+                className="mt-3 min-h-20 w-full rounded-[0.9rem] border border-border/60 bg-background/70 px-3 py-3 text-sm outline-none placeholder:text-muted-foreground/55"
+                placeholder="User agent override"
+              />
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <input
+                  aria-label="Viewport width"
+                  inputMode="numeric"
+                  value={browserViewportWidthInput}
+                  onChange={(event) =>
+                    onBrowserViewportWidthInputChange(event.target.value)
+                  }
+                  disabled={loading}
+                  className="h-10 w-full rounded-[0.9rem] border border-border/60 bg-background/70 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
+                  placeholder="Viewport width"
+                />
+                <input
+                  aria-label="Viewport height"
+                  inputMode="numeric"
+                  value={browserViewportHeightInput}
+                  onChange={(event) =>
+                    onBrowserViewportHeightInputChange(event.target.value)
+                  }
+                  disabled={loading}
+                  className="h-10 w-full rounded-[0.9rem] border border-border/60 bg-background/70 px-3 text-sm outline-none placeholder:text-muted-foreground/55"
+                  placeholder="Viewport height"
+                />
+              </div>
+            </div>
 
             <div className="rounded-[1rem] border border-border/60 bg-card/75 px-3 py-3">
               <label

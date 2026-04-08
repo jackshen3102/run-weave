@@ -11,7 +11,7 @@ import type {
   UpdateSessionAiPreferenceRequest,
   UpdateSessionRequest,
 } from "@browser-viewer/shared";
-import { requestJson, requestVoid } from "./http";
+import { requestBlob, requestJson, requestVoid } from "./http";
 
 export async function createSession(
   apiBase: string,
@@ -208,6 +208,25 @@ export async function createViewerWsTicket(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+  );
+}
+
+export async function getSessionTabFavicon(
+  apiBase: string,
+  token: string,
+  sessionId: string,
+  tabId: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  return requestBlob(
+    apiBase,
+    `/api/session/${encodeURIComponent(sessionId)}/tabs/${encodeURIComponent(tabId)}/favicon`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      signal,
     },
   );
 }

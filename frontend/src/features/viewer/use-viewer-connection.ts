@@ -37,7 +37,7 @@ interface UseViewerConnectionResult {
   devtoolsEnabled: boolean;
   devtoolsByTabId: ViewerConnectionState["devtoolsByTabId"];
   collaboration: ViewerConnectionState["collaboration"];
-  sendInput: (input: ClientInputMessage) => void;
+  sendInput: (input: ClientInputMessage) => boolean;
   reconnect: () => void;
 }
 
@@ -72,18 +72,19 @@ export function useViewerConnection({
     tokenRef.current = token;
   }, [token]);
 
-  const sendInput = useCallback((input: ClientInputMessage): void => {
+  const sendInput = useCallback((input: ClientInputMessage): boolean => {
     if (input.type === "tab" && input.action === "switch") {
       desiredTabIdRef.current = input.tabId;
       syncUrlTabId(input.tabId);
     }
 
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      return;
+      return false;
     }
 
     wsRef.current.send(JSON.stringify(input));
     dispatch({ type: "input/sent" });
+    return true;
   }, []);
 
   const reconnect = useCallback((): void => {

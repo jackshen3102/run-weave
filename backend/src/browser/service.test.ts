@@ -122,6 +122,48 @@ describe("BrowserService", () => {
     );
   });
 
+  it("applies browser profile settings to persistent contexts", async () => {
+    const context = createBrowserContextMock();
+    launchPersistentContext.mockResolvedValue(context);
+    const service = new BrowserService({
+      headless: true,
+      profileDir: "/tmp/browser-profiles",
+    });
+
+    await service.createSession("session-profile", {
+      type: "launch",
+      profilePath: "/tmp/browser-profiles/sessions/session-profile",
+      proxyEnabled: false,
+      headers: {},
+      browserProfile: {
+        locale: "en-US",
+        timezoneId: "Asia/Shanghai",
+        userAgent: "Playwright Stable Test Agent",
+        viewport: {
+          width: 1440,
+          height: 900,
+        },
+      },
+    });
+
+    expect(launchPersistentContext).toHaveBeenCalledWith(
+      "/tmp/browser-profiles/sessions/session-profile",
+      expect.objectContaining({
+        locale: "en-US",
+        timezoneId: "Asia/Shanghai",
+        userAgent: "Playwright Stable Test Agent",
+        viewport: {
+          width: 1440,
+          height: 900,
+        },
+        screen: {
+          width: 1440,
+          height: 900,
+        },
+      }),
+    );
+  });
+
   it("assigns distinct remote debugging ports per session when devtools are enabled", async () => {
     launchPersistentContext
       .mockResolvedValueOnce(createBrowserContextMock())

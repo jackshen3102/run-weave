@@ -7,6 +7,7 @@ import {
   createSession,
   deleteSession,
   getDefaultCdpEndpoint,
+  getSessionTabFavicon,
   listSessions,
   revokeAiBridge,
   updateSessionAiPreference,
@@ -127,6 +128,58 @@ describe("session service", () => {
     );
   });
 
+  it("sends a browser profile when launching a new browser", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ sessionId: "s-1", viewerUrl: "/?sessionId=s-1" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createSession(
+      "",
+      {
+        name: "Default Playweight",
+        source: {
+          type: "launch",
+          proxyEnabled: false,
+          browserProfile: {
+            locale: "en-US",
+            timezoneId: "Asia/Shanghai",
+            userAgent: "Playwright Stable Test Agent",
+            viewport: {
+              width: 1440,
+              height: 900,
+            },
+          },
+        },
+      },
+      "token-1",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/session",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "Default Playweight",
+          source: {
+            type: "launch",
+            proxyEnabled: false,
+            browserProfile: {
+              locale: "en-US",
+              timezoneId: "Asia/Shanghai",
+              userAgent: "Playwright Stable Test Agent",
+              viewport: {
+                width: 1440,
+                height: 900,
+              },
+            },
+          },
+        }),
+      }),
+    );
+  });
+
   it("lists sessions with the bearer token", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -142,6 +195,31 @@ describe("session service", () => {
         headers: {
           Authorization: "Bearer token-1",
         },
+      },
+    );
+  });
+
+  it("loads a tab favicon with the bearer token", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      blob: async () => new Blob(["icon"], { type: "image/png" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getSessionTabFavicon(
+      "http://localhost:5001",
+      "token-1",
+      "session/1",
+      "tab/1",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:5001/api/session/session%2F1/tabs/tab%2F1/favicon",
+      {
+        headers: {
+          Authorization: "Bearer token-1",
+        },
+        signal: undefined,
       },
     );
   });

@@ -2,10 +2,23 @@ export type SessionHeaders = Record<string, string>;
 
 export type SessionSourceType = "launch" | "connect-cdp";
 
+export interface BrowserViewport {
+  width: number;
+  height: number;
+}
+
+export interface BrowserProfile {
+  locale?: string;
+  timezoneId?: string;
+  userAgent?: string;
+  viewport?: BrowserViewport;
+}
+
 export interface LaunchSessionSource {
   type: "launch";
   proxyEnabled?: boolean;
   headers?: SessionHeaders;
+  browserProfile?: BrowserProfile;
 }
 
 export interface ConnectCdpSessionSource {
@@ -113,6 +126,7 @@ export interface SessionStatusResponse {
   sourceType: SessionSourceType;
   cdpEndpoint?: string;
   headers: SessionHeaders;
+  browserProfile?: BrowserProfile;
   createdAt: string;
 }
 
@@ -125,6 +139,7 @@ export interface SessionListItem {
   sourceType: SessionSourceType;
   cdpEndpoint?: string;
   headers: SessionHeaders;
+  browserProfile?: BrowserProfile;
   createdAt: string;
   lastActivityAt: string;
 }
@@ -134,6 +149,7 @@ export interface ViewerTab {
   url: string;
   title: string;
   active: boolean;
+  faviconUrl?: string | null;
 }
 
 export interface NavigationState {

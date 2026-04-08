@@ -17,15 +17,45 @@ import type {
   UpdateSessionAiPreferenceRequest,
   UpdateSessionRequest,
 } from "@browser-viewer/shared";
+import { validateBrowserProfile } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
 import { readBearerToken } from "../auth/middleware";
+import { createSessionFaviconHandler } from "./session-favicon";
 import type { SessionManager } from "../session/manager";
 import type { WebSocketSessionController } from "../ws/session-control";
+
+const browserViewportSchema = z.object({
+  width: z.number().int().min(1).max(10000),
+  height: z.number().int().min(1).max(10000),
+});
+
+const browserProfileSchema = z.object({
+  locale: z.string().trim().min(1).optional(),
+  timezoneId: z.string().trim().min(1).optional(),
+  userAgent: z.string().trim().min(1).optional(),
+  viewport: browserViewportSchema.optional(),
+}).superRefine((profile, ctx) => {
+  const validation = validateBrowserProfile(profile);
+  for (const [fieldPath, message] of Object.entries(validation.fieldErrors)) {
+    if (!message) {
+      continue;
+    }
+
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message,
+      path: fieldPath.startsWith("viewport.")
+        ? ["viewport", fieldPath.slice("viewport.".length)]
+        : [fieldPath],
+    });
+  }
+}).transform((profile) => validateBrowserProfile(profile).normalizedProfile);
 
 const launchSourceSchema = z.object({
   type: z.literal("launch"),
   proxyEnabled: z.boolean().optional(),
   headers: z.record(z.string(), z.string()).optional(),
+  browserProfile: browserProfileSchema.optional(),
 });
 
 const connectCdpSourceSchema = z.object({
@@ -36,7 +66,9 @@ const connectCdpSourceSchema = z.object({
 const createSessionSchema = z.object({
   name: z.string().trim().min(1).optional(),
   url: z.string().trim().min(1).optional(),
-  source: z.union([launchSourceSchema, connectCdpSourceSchema]).optional(),
+  source: z
+    .discriminatedUnion("type", [launchSourceSchema, connectCdpSourceSchema])
+    .optional(),
   preferredForAi: z.boolean().optional(),
 }).refine((value) => Boolean(value.name ?? value.url), {
   message: "Either name or url is required",
@@ -66,6 +98,24 @@ const ensureAiDefaultSessionSchema = z.object({
 const execFileAsync = promisify(execFile);
 const DEFAULT_CDP_ENDPOINT = "http://127.0.0.1:9222";
 const DEFAULT_AI_SESSION_NAME = "AI Viewer";
+
+function formatValidationErrors(error: z.ZodError): {
+  formErrors: string[];
+  fieldErrors: Record<string, string[]>;
+} {
+  const fieldErrors: Record<string, string[]> = {};
+
+  for (const issue of error.issues) {
+    const key = issue.path.length > 0 ? issue.path.join(".") : "root";
+    fieldErrors[key] ??= [];
+    fieldErrors[key].push(issue.message);
+  }
+
+  return {
+    formErrors: error.flatten().formErrors,
+    fieldErrors,
+  };
+}
 
 function normalizePort(value: number): number | null {
   if (!Number.isFinite(value)) {
@@ -283,6 +333,7 @@ function toSessionStatusResponse(
     sourceType: session.sourceType,
     cdpEndpoint: session.cdpEndpoint,
     headers: session.headers,
+    browserProfile: session.browserProfile,
     createdAt: session.createdAt.toISOString(),
   };
 }
@@ -293,6 +344,10 @@ export function createSessionRouter(
   aiBridgeSessionController?: WebSocketSessionController,
 ): Router {
   const router = Router();
+  router.get(
+    "/session/:id/tabs/:tabId/favicon",
+    createSessionFaviconHandler({ sessionManager }),
+  );
 
   router.get("/session", (_req, res) => {
     const payload: SessionListItem[] = sessionManager
@@ -306,6 +361,7 @@ export function createSessionRouter(
         sourceType: session.sourceType,
         cdpEndpoint: session.cdpEndpoint,
         headers: session.headers,
+        browserProfile: session.browserProfile,
         createdAt: session.createdAt.toISOString(),
         lastActivityAt: session.lastActivityAt.toISOString(),
       }));
@@ -338,7 +394,7 @@ export function createSessionRouter(
     if (!parsed.success) {
       res.status(400).json({
         message: "Invalid request body",
-        errors: parsed.error.flatten(),
+        errors: formatValidationErrors(parsed.error),
       });
       return;
     }
@@ -376,7 +432,7 @@ export function createSessionRouter(
     if (!parsed.success) {
       res.status(400).json({
         message: "Invalid request body",
-        errors: parsed.error.flatten(),
+        errors: formatValidationErrors(parsed.error),
       });
       return;
     }
@@ -429,7 +485,7 @@ export function createSessionRouter(
     if (!parsed.success) {
       res.status(400).json({
         message: "Invalid request body",
-        errors: parsed.error.flatten(),
+        errors: formatValidationErrors(parsed.error),
       });
       return;
     }
@@ -453,7 +509,7 @@ export function createSessionRouter(
     if (!parsed.success) {
       res.status(400).json({
         message: "Invalid request body",
-        errors: parsed.error.flatten(),
+        errors: formatValidationErrors(parsed.error),
       });
       return;
     }
@@ -539,7 +595,7 @@ export function createSessionRouter(
     if (!parsed.success) {
       res.status(400).json({
         message: "Invalid request body",
-        errors: parsed.error.flatten(),
+        errors: formatValidationErrors(parsed.error),
       });
       return;
     }
@@ -578,7 +634,7 @@ export function createSessionRouter(
     if (!parsed.success) {
       res.status(400).json({
         message: "Invalid request body",
-        errors: parsed.error.flatten(),
+        errors: formatValidationErrors(parsed.error),
       });
       return;
     }

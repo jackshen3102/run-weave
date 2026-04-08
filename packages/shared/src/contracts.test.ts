@@ -8,14 +8,28 @@ describe("shared contracts", () => {
       source: {
         type: "launch",
         proxyEnabled: false,
+        browserProfile: {
+          locale: "en-US",
+          timezoneId: "Asia/Shanghai",
+          viewport: {
+            width: 1440,
+            height: 900,
+          },
+        },
       },
     };
 
-    expect(request.source).toBeDefined();
-    if (!request.source) {
+    const { source } = request;
+    expect(source).toBeDefined();
+    if (!source) {
       throw new Error("Expected source to be defined");
     }
 
-    expect(request.source.type).toBe("launch");
+    expect(source.type).toBe("launch");
+    if (source.type !== "launch") {
+      throw new Error("Expected a launch session source");
+    }
+
+    expect(source.browserProfile?.viewport?.width).toBe(1440);
   });
 });

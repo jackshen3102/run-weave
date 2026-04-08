@@ -24,6 +24,7 @@ function createState(): ConnectionContext {
     tabIdToPage: new Map(),
     pageToTabId: new WeakMap(),
     tabTitleById: new Map(),
+    tabFaviconById: new Map(),
     pageListenersByTabId: new Map(),
     tabLoadingById: new Map(),
     devtoolsByTabId: new Map(),

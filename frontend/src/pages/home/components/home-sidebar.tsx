@@ -12,6 +12,16 @@ interface HomeSidebarProps {
   onProxyEnabledChange: (value: boolean) => void;
   requestHeadersInput: string;
   onRequestHeadersInputChange: (value: string) => void;
+  browserLocaleInput: string;
+  onBrowserLocaleInputChange: (value: string) => void;
+  browserTimezoneInput: string;
+  onBrowserTimezoneInputChange: (value: string) => void;
+  browserUserAgentInput: string;
+  onBrowserUserAgentInputChange: (value: string) => void;
+  browserViewportWidthInput: string;
+  onBrowserViewportWidthInputChange: (value: string) => void;
+  browserViewportHeightInput: string;
+  onBrowserViewportHeightInputChange: (value: string) => void;
   preferredForAi: boolean;
   onPreferredForAiChange: (value: boolean) => void;
   loading: boolean;
@@ -31,6 +41,16 @@ export function HomeSidebar({
   onProxyEnabledChange,
   requestHeadersInput,
   onRequestHeadersInputChange,
+  browserLocaleInput,
+  onBrowserLocaleInputChange,
+  browserTimezoneInput,
+  onBrowserTimezoneInputChange,
+  browserUserAgentInput,
+  onBrowserUserAgentInputChange,
+  browserViewportWidthInput,
+  onBrowserViewportWidthInputChange,
+  browserViewportHeightInput,
+  onBrowserViewportHeightInputChange,
   preferredForAi,
   onPreferredForAiChange,
   loading,
@@ -51,6 +71,16 @@ export function HomeSidebar({
         onProxyEnabledChange={onProxyEnabledChange}
         requestHeadersInput={requestHeadersInput}
         onRequestHeadersInputChange={onRequestHeadersInputChange}
+        browserLocaleInput={browserLocaleInput}
+        onBrowserLocaleInputChange={onBrowserLocaleInputChange}
+        browserTimezoneInput={browserTimezoneInput}
+        onBrowserTimezoneInputChange={onBrowserTimezoneInputChange}
+        browserUserAgentInput={browserUserAgentInput}
+        onBrowserUserAgentInputChange={onBrowserUserAgentInputChange}
+        browserViewportWidthInput={browserViewportWidthInput}
+        onBrowserViewportWidthInputChange={onBrowserViewportWidthInputChange}
+        browserViewportHeightInput={browserViewportHeightInput}
+        onBrowserViewportHeightInputChange={onBrowserViewportHeightInputChange}
         preferredForAi={preferredForAi}
         onPreferredForAiChange={onPreferredForAiChange}
         loading={loading}
