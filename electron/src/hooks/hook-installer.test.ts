@@ -4,6 +4,7 @@ import {
   mergeJsonHookEntry,
   renderTraeHookBlock,
   buildLauncherScript,
+  upsertTraeHookBlock,
 } from "./hook-installer.js";
 
 test("merges browser-viewer command into codex hook config without dropping existing hooks", () => {
@@ -85,4 +86,29 @@ test("builds launcher script pointing at packaged hook bridge", () => {
   assert.match(script, /browser-viewer-hook-bridge/);
   assert.match(script, /hook-bridge\.mjs/);
   assert.match(script, /exec node/);
+});
+
+test("upserts trae hook into an existing top-level hooks section without duplicating it", () => {
+  const input = [
+    "version: 1",
+    "hooks:",
+    "  - type: command",
+    "    command: 'other-tool'",
+    "    matchers:",
+    "      - event: user_prompt_submit",
+    "",
+    "profiles:",
+    "  default: true",
+    "",
+  ].join("\n");
+
+  const output = upsertTraeHookBlock(
+    input,
+    renderTraeHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
+  );
+
+  assert.equal((output.match(/^hooks:/gm) ?? []).length, 1);
+  assert.match(output, /other-tool/);
+  assert.match(output, /browser-viewer-hook-bridge --source trae/);
+  assert.match(output, /profiles:/);
 });

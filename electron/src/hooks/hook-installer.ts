@@ -260,49 +260,46 @@ function ensureTrailingNewline(content: string): string {
   return content.endsWith("\n") ? content : `${content}\n`;
 }
 
-function upsertTraeHookBlock(content: string, block: string): string {
+export function upsertTraeHookBlock(content: string, block: string): string {
   if (!content.trim()) {
     return `hooks:\n${block}`;
   }
 
-  if (!content.includes(BRIDGE_BASENAME)) {
-    return `${content.trimEnd()}\n\nhooks:\n${block}`;
-  }
-
   const lines = content.split("\n");
-  const result: string[] = [];
-  let replaced = false;
+  const blockLines = block.split("\n");
+  const browserViewerLocation = findTraeBrowserViewerBlock(lines);
 
-  for (let index = 0; index < lines.length; ) {
-    const line = lines[index] ?? "";
-    if (line.includes(BRIDGE_BASENAME)) {
-      const blockStart = findTraeBlockStart(lines, index);
-      const blockEnd = findTraeBlockEnd(lines, blockStart);
-      if (!replaced) {
-        result.push(block);
-        replaced = true;
-      }
-      index = blockEnd;
-      if (index < lines.length && lines[index]?.trim() === "") {
-        index += 1;
-      }
-      continue;
-    }
-
-    result.push(line);
-    index += 1;
+  if (browserViewerLocation) {
+    const nextLines = [
+      ...lines.slice(0, browserViewerLocation.start),
+      ...blockLines,
+      ...lines.slice(browserViewerLocation.end),
+    ];
+    return joinYamlLines(nextLines);
   }
 
-  if (!replaced) {
-    if (result.length > 0 && result[result.length - 1]?.trim() !== "") {
-      result.push("");
-    }
-
-    result.push("hooks:");
-    result.push(block);
+  const hooksSection = findTopLevelHooksSection(lines);
+  if (hooksSection) {
+    const nextLines = [
+      ...lines.slice(0, hooksSection.end),
+      ...blockLines,
+      ...lines.slice(hooksSection.end),
+    ];
+    return joinYamlLines(nextLines);
   }
 
-  return result.join("\n").replace(/\n{3,}/g, "\n\n");
+  return `${content.trimEnd()}\n\nhooks:\n${block}`;
+}
+
+function findTraeBrowserViewerBlock(lines: string[]): { start: number; end: number } | null {
+  const commandLineIndex = lines.findIndex((line) => line.includes(BRIDGE_BASENAME));
+  if (commandLineIndex < 0) {
+    return null;
+  }
+
+  const start = findTraeBlockStart(lines, commandLineIndex);
+  const end = findTraeBlockEnd(lines, start);
+  return { start, end };
 }
 
 function findTraeBlockStart(lines: string[], index: number): number {
@@ -332,6 +329,32 @@ function findTraeBlockEnd(lines: string[], start: number): number {
   }
 
   return current;
+}
+
+function findTopLevelHooksSection(lines: string[]): { start: number; end: number } | null {
+  const start = lines.findIndex((line) => line.trim() === "hooks:" && lineIndent(line) === 0);
+  if (start < 0) {
+    return null;
+  }
+
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (!line.trim()) {
+      continue;
+    }
+
+    if (lineIndent(line) === 0) {
+      end = index;
+      break;
+    }
+  }
+
+  return { start, end };
+}
+
+function joinYamlLines(lines: string[]): string {
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
 function lineIndent(line: string): number {
