@@ -190,6 +190,116 @@ describe("terminal websocket server", () => {
     );
   });
 
+  it("batches adjacent PTY output chunks into a single websocket output event", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        scrollback: "",
+        status: "running",
+      })),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    runtimeRegistry.createRuntime("terminal-1", runtime);
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    runtime.emit("data", "echo ");
+    runtime.emit("data", "hello\n");
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const outputMessages = messages.filter((message) => message.type === "output");
+    expect(outputMessages).toEqual([
+      expect.objectContaining({
+        type: "output",
+        data: "echo hello\n",
+      }),
+    ]);
+  });
+
+  it("flushes buffered PTY output before sending terminal exit events", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        scrollback: "",
+        status: "running",
+      })),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    runtimeRegistry.createRuntime("terminal-1", runtime);
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    runtime.emit("data", "final line\n");
+    runtime.emit("exit", { exitCode: 0 });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const outputIndex = messages.findIndex(
+      (message) => message.type === "output" && message.data === "final line\n",
+    );
+    const exitIndex = messages.findIndex((message) => message.type === "exit");
+
+    expect(outputIndex).toBeGreaterThan(-1);
+    expect(exitIndex).toBeGreaterThan(outputIndex);
+  });
+
   it("publishes terminal metadata updates from shell cwd markers", async () => {
     const runtime = new FakeRuntime();
     const authService = {
@@ -467,6 +577,11 @@ describe("terminal websocket server", () => {
       command: "bash",
       args: ["-l"],
       cwd: "/tmp/demo",
+      fallback: expect.objectContaining({
+        command: expect.any(String),
+        args: expect.any(Array),
+      }),
+      onFallbackActivated: expect.any(Function),
     });
     expect(runtimeRegistry.getRuntime("terminal-1")).toBe(runtime);
   });

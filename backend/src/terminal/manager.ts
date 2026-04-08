@@ -1,10 +1,15 @@
 import { v4 as uuidv4 } from "uuid";
-import { TERMINAL_PERSISTED_SCROLLBACK_BYTES } from "@browser-viewer/shared";
 import type {
   PersistedTerminalProjectRecord,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
 } from "./store";
+import {
+  appendToScrollbackBuffer,
+  createScrollbackBuffer,
+  readScrollbackBuffer,
+  type ScrollbackBuffer,
+} from "./scrollback-buffer";
 
 export interface TerminalProjectRecord {
   id: string;
@@ -24,6 +29,12 @@ export interface TerminalSessionRecord {
   status: "running" | "exited";
   createdAt: Date;
   exitCode?: number;
+}
+
+interface RuntimeTerminalSessionRecord
+  extends Omit<TerminalSessionRecord, "scrollback"> {
+  readonly scrollback: string;
+  scrollbackBuffer: ScrollbackBuffer;
 }
 
 export interface CreateTerminalSessionOptions {
@@ -73,6 +84,34 @@ function buildRecord(
   };
 }
 
+function createRuntimeRecord(
+  record: TerminalSessionRecord,
+): RuntimeTerminalSessionRecord {
+  const { scrollback, ...rest } = record;
+  const runtimeRecord = { ...rest } as Omit<
+    RuntimeTerminalSessionRecord,
+    "scrollback" | "scrollbackBuffer"
+  > &
+    Partial<Pick<RuntimeTerminalSessionRecord, "scrollbackBuffer">>;
+
+  Object.defineProperty(runtimeRecord, "scrollbackBuffer", {
+    configurable: false,
+    enumerable: false,
+    value: createScrollbackBuffer(scrollback),
+    writable: true,
+  });
+
+  Object.defineProperty(runtimeRecord, "scrollback", {
+    configurable: false,
+    enumerable: true,
+    get() {
+      return readScrollbackBuffer(runtimeRecord.scrollbackBuffer!);
+    },
+  });
+
+  return runtimeRecord as RuntimeTerminalSessionRecord;
+}
+
 function toPersisted(
   session: TerminalSessionRecord,
 ): PersistedTerminalSessionRecord {
@@ -94,7 +133,7 @@ const SCROLLBACK_FLUSH_DELAY_MS = 250;
 
 export class TerminalSessionManager {
   private readonly projects = new Map<string, TerminalProjectRecord>();
-  private readonly sessions = new Map<string, TerminalSessionRecord>();
+  private readonly sessions = new Map<string, RuntimeTerminalSessionRecord>();
   private readonly scrollbackFlushTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(private readonly sessionStore: TerminalSessionStore) {}
@@ -108,7 +147,7 @@ export class TerminalSessionManager {
       this.projects.set(persisted.id, buildProjectRecord(persisted));
     }
     for (const persisted of persistedSessions) {
-      this.sessions.set(persisted.id, buildRecord(persisted));
+      this.sessions.set(persisted.id, createRuntimeRecord(buildRecord(persisted)));
     }
   }
 
@@ -210,7 +249,7 @@ export class TerminalSessionManager {
   ): Promise<TerminalSessionRecord> {
     const now = new Date();
     const projectId = options.projectId ?? this.getDefaultProjectId();
-    const session: TerminalSessionRecord = {
+    const session = createRuntimeRecord({
       id: uuidv4(),
       projectId,
       name: options.name?.trim() || options.command,
@@ -220,7 +259,7 @@ export class TerminalSessionManager {
       scrollback: "",
       status: "running",
       createdAt: now,
-    };
+    });
 
     await this.sessionStore.insertSession(toPersisted(session));
     this.sessions.set(session.id, session);
@@ -241,9 +280,7 @@ export class TerminalSessionManager {
       return;
     }
 
-    session.scrollback = `${session.scrollback}${chunk}`.slice(
-      -TERMINAL_PERSISTED_SCROLLBACK_BYTES,
-    );
+    appendToScrollbackBuffer(session.scrollbackBuffer, chunk);
     this.scheduleScrollbackFlush(terminalSessionId);
   }
 
@@ -309,6 +346,40 @@ export class TerminalSessionManager {
       name,
       cwd: session.cwd,
     });
+  }
+
+  async updateSessionLaunch(
+    terminalSessionId: string,
+    launch: {
+      command: string;
+      args: string[];
+    },
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const nextName = session.name === session.command ? launch.command : session.name;
+    const nextArgs = [...launch.args];
+    const commandUnchanged = session.command === launch.command;
+    const argsUnchanged =
+      session.args.length === nextArgs.length &&
+      session.args.every((arg, index) => arg === nextArgs[index]);
+    if (commandUnchanged && argsUnchanged && nextName === session.name) {
+      return session;
+    }
+
+    session.name = nextName;
+    session.command = launch.command;
+    session.args = nextArgs;
+    await this.sessionStore.updateSessionLaunch({
+      terminalSessionId,
+      name: nextName,
+      command: launch.command,
+      args: nextArgs,
+    });
+    return session;
   }
 
   async destroySession(terminalSessionId: string): Promise<boolean> {

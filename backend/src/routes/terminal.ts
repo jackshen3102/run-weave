@@ -23,6 +23,11 @@ import {
   TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
   TERMINAL_CLIPBOARD_IMAGE_MAX_MIB,
 } from "../terminal/clipboard-image";
+import {
+  resolveDefaultTerminalArgs,
+  resolveDefaultTerminalCommand,
+  resolveTerminalFallbackLaunchConfig,
+} from "../terminal/default-shell";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
@@ -34,6 +39,7 @@ const createTerminalSessionSchema = z
     command: z.string().trim().min(1).optional(),
     args: z.array(z.string()).optional(),
     cwd: z.string().trim().min(1).optional(),
+    inheritFromTerminalSessionId: z.string().trim().min(1).optional(),
   })
   .strict();
 
@@ -83,40 +89,10 @@ function buildClipboardImageFileName(
   return `browser-viewer-terminal-image-${date}-${time}-${randomHex}.${extension}`;
 }
 
-function resolveDefaultTerminalCommand(): string {
-  if (process.platform === "win32") {
-    const configured = process.env.COMSPEC?.trim();
-    if (configured) {
-      return configured;
-    }
-    return "powershell.exe";
-  }
-
-  const configured = process.env.SHELL?.trim();
-  if (configured) {
-    return configured;
-  }
-
-  return "/bin/bash";
-}
-
-function resolveDefaultTerminalArgs(
-  command: string,
-  args: string[] | undefined,
-): string[] | undefined {
-  if (args) {
-    return args;
-  }
-
-  const shellName = path.basename(command);
-  if (shellName === "zsh" || shellName === "bash") {
-    return ["-l"];
-  }
-
-  return undefined;
-}
-
-function resolveTerminalCreateDefaults(payload: CreateTerminalSessionRequest): {
+function resolveTerminalCreateDefaults(
+  payload: CreateTerminalSessionRequest,
+  terminalSessionManager: TerminalSessionManager,
+): {
   projectId?: string;
   name?: string;
   command: string;
@@ -124,13 +100,16 @@ function resolveTerminalCreateDefaults(payload: CreateTerminalSessionRequest): {
   cwd: string;
 } {
   const command = payload.command?.trim() || resolveDefaultTerminalCommand();
-  const cwd = payload.cwd?.trim() || os.homedir();
+  const inheritedCwd = payload.inheritFromTerminalSessionId
+    ? terminalSessionManager.getSession(payload.inheritFromTerminalSessionId)?.cwd
+    : undefined;
+  const cwd = payload.cwd?.trim() || inheritedCwd || os.homedir();
 
   return {
     projectId: payload.projectId,
     name: payload.name,
     command,
-    args: resolveDefaultTerminalArgs(command, payload.args),
+    args: payload.args ?? resolveDefaultTerminalArgs(command),
     cwd,
   };
 }
@@ -295,7 +274,7 @@ export function createTerminalRouter(
 
     try {
       const session = await terminalSessionManager.createSession(
-        resolveTerminalCreateDefaults(parsed.data),
+        resolveTerminalCreateDefaults(parsed.data, terminalSessionManager),
       );
       if (options?.ptyService && options.runtimeRegistry) {
         try {
@@ -303,6 +282,13 @@ export function createTerminalRouter(
             command: session.command,
             args: session.args,
             cwd: session.cwd,
+            fallback: resolveTerminalFallbackLaunchConfig({
+              command: session.command,
+              args: session.args,
+            }),
+            onFallbackActivated: (fallback) => {
+              void terminalSessionManager.updateSessionLaunch(session.id, fallback);
+            },
           });
           options.runtimeRegistry.createRuntime(session.id, runtime);
           options.runtimeRegistry.ensureRecorder(

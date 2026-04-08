@@ -28,6 +28,7 @@ function createStoreMock() {
     setDefaultProject: vi.fn(async () => undefined),
     insertSession: vi.fn(async () => undefined),
     updateSessionMetadata: vi.fn(async () => undefined),
+    updateSessionLaunch: vi.fn(async () => undefined),
     updateSessionScrollback: vi.fn(async () => undefined),
     updateSessionExit: vi.fn(async () => undefined),
     deleteSession: vi.fn(async () => undefined),
@@ -236,6 +237,36 @@ describe("TerminalSessionManager", () => {
       terminalSessionId: session.id,
       name: "browser-hub",
       cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+    });
+  });
+
+  it("updates session launch config and renames command-derived tabs", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    await manager.initialize();
+    const session = await manager.createSession({
+      command: "/bad-shell",
+      args: ["--broken"],
+      cwd: "/tmp/demo",
+      projectId: "project-default",
+    });
+
+    const updated = await manager.updateSessionLaunch(session.id, {
+      command: "/bin/zsh",
+      args: ["-l"],
+    });
+
+    expect(updated).toMatchObject({
+      id: session.id,
+      name: "/bin/zsh",
+      command: "/bin/zsh",
+      args: ["-l"],
+    });
+    expect(store.updateSessionLaunch).toHaveBeenCalledWith({
+      terminalSessionId: session.id,
+      name: "/bin/zsh",
+      command: "/bin/zsh",
+      args: ["-l"],
     });
   });
 });

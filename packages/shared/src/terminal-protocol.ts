@@ -4,6 +4,7 @@ export interface CreateTerminalSessionRequest {
   command?: string;
   args?: string[];
   cwd?: string;
+  inheritFromTerminalSessionId?: string;
 }
 
 export interface CreateTerminalProjectRequest {

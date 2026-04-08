@@ -39,6 +39,32 @@ describe("terminal service", () => {
     );
   });
 
+  it("forwards inheritFromTerminalSessionId when creating a terminal session", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ terminalSessionId: "terminal-2" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createTerminalSession("http://localhost:5001", "token-1", {
+      inheritFromTerminalSessionId: "terminal-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:5001/api/terminal/session",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer token-1",
+        },
+        body: JSON.stringify({
+          inheritFromTerminalSessionId: "terminal-1",
+        }),
+      },
+    );
+  });
+
   it("lists terminal sessions", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,

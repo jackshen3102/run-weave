@@ -6,7 +6,9 @@ import type {
   TerminalServerMessage,
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
+import { resolveTerminalFallbackLaunchConfig } from "../terminal/default-shell";
 import type { TerminalSessionManager } from "../terminal/manager";
+import { TerminalOutputBatcher } from "../terminal/output-batcher";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import { extractShellPromptMetadata } from "../terminal/shell-integration";
@@ -125,6 +127,16 @@ export function attachTerminalWebSocketServer(
           command: session.command,
           args: session.args,
           cwd: session.cwd,
+          fallback: resolveTerminalFallbackLaunchConfig({
+            command: session.command,
+            args: session.args,
+          }),
+          onFallbackActivated: (fallback) => {
+            void terminalSessionManager.updateSessionLaunch(
+              terminalSessionId,
+              fallback,
+            );
+          },
         });
         runtimeRegistry.createRuntime(terminalSessionId, runtime);
         runtimeRegistry.ensureRecorder(
@@ -163,6 +175,9 @@ export function attachTerminalWebSocketServer(
       isAlive: true,
     };
     const heartbeat = createHeartbeatController(socket, heartbeatState);
+    const outputBatcher = new TerminalOutputBatcher((output) => {
+      sendEvent(socket, { type: "output", data: output });
+    });
     runtimeRegistry.attachClient(terminalSessionId, clientId);
     const unsubscribe = runtimeRegistry.subscribe(terminalSessionId, {
       onData(data) {
@@ -180,9 +195,10 @@ export function attachTerminalWebSocketServer(
           return;
         }
 
-        sendEvent(socket, { type: "output", data: metadata.output });
+        outputBatcher.push(metadata.output);
       },
       onExit(event) {
+        outputBatcher.flush();
         terminalSessionManager.markExited(terminalSessionId, event.exitCode);
         sendEvent(socket, {
           type: "status",
@@ -263,6 +279,7 @@ export function attachTerminalWebSocketServer(
       cleanedUp = true;
       heartbeat.stop();
       unsubscribe();
+      outputBatcher.dispose();
       runtimeRegistry.detachClient(terminalSessionId, clientId);
     };
 

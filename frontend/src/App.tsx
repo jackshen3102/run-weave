@@ -18,6 +18,7 @@ declare global {
       platform: string;
       backendUrl?: string;
       openExternal?: (url: string) => Promise<void>;
+      beep?: () => void;
     };
   }
 }

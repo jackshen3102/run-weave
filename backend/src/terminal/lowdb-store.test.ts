@@ -165,6 +165,26 @@ describe("LowDbTerminalSessionStore", () => {
     await expect(store.listSessions()).resolves.toEqual([]);
   });
 
+  it("updates terminal launch config in place", async () => {
+    const store = await createStore();
+    await store.insertSession(createRecord());
+
+    await store.updateSessionLaunch({
+      terminalSessionId: "terminal-1",
+      name: "/bin/zsh",
+      command: "/bin/zsh",
+      args: ["-l"],
+    });
+
+    await expect(store.getSession("terminal-1")).resolves.toEqual(
+      createRecord({
+        name: "/bin/zsh",
+        command: "/bin/zsh",
+        args: ["-l"],
+      }),
+    );
+  });
+
   it("propagates write failures to callers", async () => {
     const store = await createStore();
     await store.insertSession(createRecord());

@@ -35,6 +35,13 @@ export interface UpdateTerminalSessionMetadataParams {
   cwd: string;
 }
 
+export interface UpdateTerminalSessionLaunchParams {
+  terminalSessionId: string;
+  name: string;
+  command: string;
+  args: string[];
+}
+
 export interface UpdateTerminalProjectParams {
   projectId: string;
   name: string;
@@ -57,6 +64,7 @@ export interface TerminalSessionStore {
   updateSessionMetadata(
     params: UpdateTerminalSessionMetadataParams,
   ): Promise<void>;
+  updateSessionLaunch(params: UpdateTerminalSessionLaunchParams): Promise<void>;
   updateSessionScrollback(
     params: UpdateTerminalSessionScrollbackParams,
   ): Promise<void>;

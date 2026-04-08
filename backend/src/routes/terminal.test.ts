@@ -36,6 +36,10 @@ function createTestServer(sessionState: {
   sessions?: MockTerminalSession[];
   projects?: MockTerminalProject[];
 }) {
+  const resolveSession = (id: string) =>
+    sessionState.current?.id === id
+      ? sessionState.current
+      : sessionState.sessions?.find((session) => session.id === id);
   const projects =
     sessionState.projects ??
     [
@@ -100,9 +104,7 @@ function createTestServer(sessionState: {
       }
       return true;
     }),
-    getSession: vi.fn((id: string) =>
-      sessionState.current?.id === id ? sessionState.current : undefined,
-    ),
+    getSession: vi.fn((id: string) => resolveSession(id)),
     listSessions: vi.fn(() =>
       sessionState.sessions ??
       (sessionState.current ? [sessionState.current] : []),
@@ -308,6 +310,75 @@ describe("terminal routes", () => {
         command: "/bin/zsh",
         args: ["-i"],
         cwd: "/tmp/demo",
+      }),
+    );
+  });
+
+  it("inherits cwd from a referenced terminal session when cwd is omitted", async () => {
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "feat",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+    };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inheritFromTerminalSessionId: "terminal-1",
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      }),
+    );
+  });
+
+  it("prefers explicit cwd over inherited cwd when both are provided", async () => {
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "feat",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+    };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cwd: "/tmp/override",
+        inheritFromTerminalSessionId: "terminal-1",
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: "/tmp/override",
       }),
     );
   });

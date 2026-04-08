@@ -1,21 +1,50 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
+import { Settings2 } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
+import {
+  containsTerminalActivityContent,
+  shouldEmitTerminalActivityPulse,
+  shouldMarkTerminalActivity,
+} from "../../features/terminal/activity-marker";
+import { createTerminalBellPlayer } from "../../features/terminal/bell";
+import {
+  DEFAULT_TERMINAL_PREFERENCES,
+  type TerminalPreferences,
+  type TerminalRendererPreference,
+  loadTerminalPreferences,
+  saveTerminalPreferences,
+} from "../../features/terminal/preferences";
+import { createResizeScheduler } from "../../features/terminal/resize-scheduler";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
 import { HttpError } from "../../services/http";
 import { createTerminalSessionClipboardImage } from "../../services/terminal";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 interface TerminalSurfaceProps {
+  active: boolean;
   apiBase: string;
   terminalSessionId: string;
   token: string;
   onAuthExpired?: () => void;
+  onActivity?: () => void;
+  onBell?: () => void;
   onMetadata?: (metadata: { name: string; cwd: string }) => void;
 }
 
@@ -38,6 +67,20 @@ const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
   `${ESCAPE}\\[(?:\\?|>)[0-9;]+c`,
 );
 const FOCUS_REPORTING_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[(?:I|O)$`);
+const TERMINAL_RESIZE_DEBOUNCE_MS = 120;
+const MIN_TERMINAL_FONT_SIZE = 11;
+const MAX_TERMINAL_FONT_SIZE = 24;
+
+interface TerminalSearchResults {
+  resultCount: number;
+  resultIndex: number;
+}
+
+type ActiveRenderer = "webgl" | "canvas" | "dom";
+
+function clampTerminalFontSize(value: number): number {
+  return Math.max(MIN_TERMINAL_FONT_SIZE, Math.min(MAX_TERMINAL_FONT_SIZE, value));
+}
 
 // xterm.js 6.0.0 has a bug in requestMode(): the handler for DECRQM queries
 // (CSI ? Pn $ p) crashes with "r is not defined". Vim sends these to probe
@@ -92,16 +135,47 @@ function shellQuote(value: string): string {
 }
 
 export function TerminalSurface({
+  active,
   apiBase,
   terminalSessionId,
   token,
   onAuthExpired,
+  onActivity,
+  onBell,
   onMetadata,
 }: TerminalSurfaceProps) {
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const refreshTerminalViewportRef = useRef<(() => void) | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const applyRendererPreferenceRef = useRef<
+    ((preference: TerminalRendererPreference) => void) | null
+  >(null);
+  const bellPlayerRef = useRef(createTerminalBellPlayer());
+  const activeRef = useRef(active);
+  const onActivityRef = useRef(onActivity);
+  const onBellRef = useRef(onBell);
+  const openedAtRef = useRef(Date.now());
+  const lastActivityMarkedAtRef = useRef<number | null>(null);
+  const lastResizedAtRef = useRef<number | null>(null);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<PastedImageReference[]>([]);
+  const [preferences, setPreferences] = useState<TerminalPreferences>(() =>
+    loadTerminalPreferences(apiBase),
+  );
+  const preferencesRef = useRef(preferences);
+  const [effectiveRenderer, setEffectiveRenderer] =
+    useState<ActiveRenderer>("dom");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] =
+    useState<TerminalSearchResults | null>(null);
+  const [searchOptions, setSearchOptions] = useState({
+    caseSensitive: false,
+    wholeWord: false,
+    regex: false,
+  });
 
   // onOutput is stable so it never triggers a reconnect inside
   // useTerminalConnection.
@@ -109,6 +183,24 @@ export function TerminalSurface({
     const nextChunk = data.replace(DECRQM_QUERY_RE, "");
     if (!nextChunk) {
       return;
+    }
+
+    const now = Date.now();
+    if (
+      containsTerminalActivityContent(nextChunk) &&
+      shouldMarkTerminalActivity({
+        active: activeRef.current,
+        now,
+        openedAt: openedAtRef.current,
+        lastResizedAt: lastResizedAtRef.current,
+      }) &&
+      shouldEmitTerminalActivityPulse({
+        now,
+        lastMarkedAt: lastActivityMarkedAtRef.current,
+      })
+    ) {
+      lastActivityMarkedAtRef.current = now;
+      onActivityRef.current?.();
     }
 
     terminalRef.current?.write(nextChunk);
@@ -123,20 +215,78 @@ export function TerminalSurface({
     onMetadata,
   });
 
+  const clearSearch = useCallback(() => {
+    setSearchResults(null);
+    searchAddonRef.current?.clearDecorations();
+    searchAddonRef.current?.clearActiveDecoration();
+  }, []);
+
+  const updatePreferences = useCallback(
+    (updates: Partial<TerminalPreferences>) => {
+      setPreferences(saveTerminalPreferences(apiBase, updates));
+    },
+    [apiBase],
+  );
+
+  const runSearch = useCallback(
+    (direction: "next" | "previous", query = searchQuery) => {
+      if (!query) {
+        clearSearch();
+        return;
+      }
+
+      const searchAddon = searchAddonRef.current;
+      if (!searchAddon) {
+        return;
+      }
+
+      if (direction === "previous") {
+        searchAddon.findPrevious(query, searchOptions);
+        return;
+      }
+
+      searchAddon.findNext(query, searchOptions);
+    },
+    [clearSearch, searchOptions, searchQuery],
+  );
+
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+
+  useEffect(() => {
+    onActivityRef.current = onActivity;
+  }, [onActivity]);
+
+  useEffect(() => {
+    onBellRef.current = onBell;
+  }, [onBell]);
+
+  useEffect(() => {
+    setPreferences(loadTerminalPreferences(apiBase));
+  }, [apiBase]);
+
+  useEffect(() => {
+    preferencesRef.current = preferences;
+  }, [preferences]);
+
   useEffect(() => {
     const container = terminalContainerRef.current;
     if (!container) {
       return;
     }
 
+    const initialPreferences = preferencesRef.current;
     const fitAddon = new FitAddon();
+    const searchAddon = new SearchAddon();
     const unicode11Addon = new Unicode11Addon();
     const terminal = new Terminal({
       allowProposedApi: true,
-      cursorBlink: true,
-      fontFamily: '"Fira Code", "SFMono-Regular", ui-monospace, monospace',
-      fontSize: 13,
+      cursorBlink: initialPreferences.cursorBlink,
+      fontFamily: initialPreferences.fontFamily,
+      fontSize: initialPreferences.fontSize,
       lineHeight: 1.2,
+      screenReaderMode: initialPreferences.screenReaderMode,
       scrollback: TERMINAL_CLIENT_SCROLLBACK_LINES,
       theme: {
         background: "#0b1220",
@@ -147,8 +297,10 @@ export function TerminalSurface({
     });
 
     terminalRef.current = terminal;
+    searchAddonRef.current = searchAddon;
 
     terminal.loadAddon(fitAddon);
+    terminal.loadAddon(searchAddon);
     terminal.loadAddon(unicode11Addon);
     terminal.loadAddon(
       new WebLinksAddon((event, uri) => {
@@ -163,29 +315,70 @@ export function TerminalSurface({
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
 
-    // Renderer: try WebGL → Canvas → DOM fallback.
-    (() => {
-      try {
-        const webgl = new WebglAddon();
-        webgl.onContextLoss(() => {
-          webgl.dispose();
-          try {
-            terminal.loadAddon(new CanvasAddon());
-          } catch {
-            // fall through to DOM renderer
-          }
-        });
-        terminal.loadAddon(webgl);
-      } catch {
-        try {
-          terminal.loadAddon(new CanvasAddon());
-        } catch {
-          // DOM renderer is the implicit fallback
-        }
-      }
-    })();
+    let rendererAddon: { dispose(): void } | null = null;
+    const applyRendererPreference = (preference: TerminalRendererPreference) => {
+      rendererAddon?.dispose();
+      rendererAddon = null;
 
-    terminal.focus();
+      const loadCanvas = (): boolean => {
+        try {
+          const canvas = new CanvasAddon();
+          terminal.loadAddon(canvas);
+          rendererAddon = canvas;
+          setEffectiveRenderer("canvas");
+          return true;
+        } catch {
+          setEffectiveRenderer("dom");
+          return false;
+        }
+      };
+
+      const loadWebgl = (allowCanvasFallback: boolean): boolean => {
+        try {
+          const webgl = new WebglAddon();
+          webgl.onContextLoss(() => {
+            webgl.dispose();
+            if (allowCanvasFallback) {
+              if (!loadCanvas()) {
+                setEffectiveRenderer("dom");
+              }
+              return;
+            }
+            setEffectiveRenderer("dom");
+          });
+          terminal.loadAddon(webgl);
+          rendererAddon = webgl;
+          setEffectiveRenderer("webgl");
+          return true;
+        } catch {
+          if (allowCanvasFallback) {
+            return loadCanvas();
+          }
+          return loadCanvas();
+        }
+      };
+
+      if (preference === "dom") {
+        setEffectiveRenderer("dom");
+        return;
+      }
+
+      if (preference === "canvas") {
+        loadCanvas();
+        return;
+      }
+
+      if (preference === "webgl") {
+        loadWebgl(false);
+        return;
+      }
+
+      if (!loadWebgl(true)) {
+        setEffectiveRenderer("dom");
+      }
+    };
+    applyRendererPreferenceRef.current = applyRendererPreference;
+    applyRendererPreference(initialPreferences.renderer);
 
     const syncSize = () => {
       fitAddon.fit();
@@ -193,14 +386,39 @@ export function TerminalSurface({
       if (!dimensions) {
         return;
       }
+      lastResizedAtRef.current = Date.now();
       sendResize(dimensions.cols, dimensions.rows);
     };
+    const resizeScheduler = createResizeScheduler(
+      syncSize,
+      TERMINAL_RESIZE_DEBOUNCE_MS,
+    );
+    const selectionDisposable = terminal.onSelectionChange(() => {
+      if (!preferencesRef.current.copyOnSelect) {
+        return;
+      }
+
+      const selection = terminal.getSelection();
+      if (!selection || !navigator.clipboard?.writeText) {
+        return;
+      }
+
+      void navigator.clipboard.writeText(selection).catch(() => undefined);
+    });
 
     const dataDisposable = terminal.onData((data) => {
       if (isTerminalAutoResponse(data)) {
         return;
       }
       sendInput(data);
+    });
+    const bellDisposable = terminal.onBell(() => {
+      if (!activeRef.current) {
+        onBellRef.current?.();
+      }
+      if (preferencesRef.current.bellMode === "sound") {
+        bellPlayerRef.current.play();
+      }
     });
 
     syncSize();
@@ -210,6 +428,16 @@ export function TerminalSurface({
       mountFitFrameId = null;
       syncSize();
     });
+    const searchResultsDisposable = searchAddon.onDidChangeResults((results) => {
+      setSearchResults(
+        results
+          ? {
+              resultCount: results.resultCount,
+              resultIndex: results.resultIndex,
+            }
+          : null,
+      );
+    });
 
     const refreshTerminalViewport = () => {
       if (!terminalRef.current || document.visibilityState !== "visible") {
@@ -218,6 +446,7 @@ export function TerminalSurface({
       syncSize();
       terminalRef.current.refresh(0, Math.max(terminalRef.current.rows - 1, 0));
     };
+    refreshTerminalViewportRef.current = refreshTerminalViewport;
 
     let disposed = false;
     const fontFaceSet = document.fonts;
@@ -234,11 +463,11 @@ export function TerminalSurface({
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(() => {
-        syncSize();
+        resizeScheduler.schedule();
       });
       resizeObserver.observe(container);
     } else {
-      window.addEventListener("resize", syncSize);
+      window.addEventListener("resize", resizeScheduler.schedule);
     }
     document.addEventListener("visibilitychange", refreshTerminalViewport);
     window.addEventListener("focus", refreshTerminalViewport);
@@ -303,16 +532,110 @@ export function TerminalSurface({
       if (resizeObserver) {
         resizeObserver.disconnect();
       } else {
-        window.removeEventListener("resize", syncSize);
+        window.removeEventListener("resize", resizeScheduler.schedule);
       }
       document.removeEventListener("visibilitychange", refreshTerminalViewport);
       window.removeEventListener("focus", refreshTerminalViewport);
       helperTextarea?.removeEventListener("paste", handlePasteEvent, true);
+      searchResultsDisposable.dispose();
       dataDisposable.dispose();
+      bellDisposable.dispose();
+      selectionDisposable.dispose();
+      resizeScheduler.dispose();
+      rendererAddon?.dispose();
       terminal.dispose();
       terminalRef.current = null;
+      refreshTerminalViewportRef.current = null;
+      searchAddonRef.current = null;
+      applyRendererPreferenceRef.current = null;
     };
-  }, [apiBase, onAuthExpired, sendInput, sendResize, terminalSessionId, token]);
+  }, [
+    apiBase,
+    onAuthExpired,
+    sendInput,
+    sendResize,
+    terminalSessionId,
+    token,
+  ]);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+
+    terminal.options.fontFamily = preferences.fontFamily;
+    terminal.options.fontSize = preferences.fontSize;
+    terminal.options.cursorBlink = preferences.cursorBlink;
+    terminal.options.screenReaderMode = preferences.screenReaderMode;
+    applyRendererPreferenceRef.current?.(preferences.renderer);
+    refreshTerminalViewportRef.current?.();
+  }, [preferences]);
+
+  useEffect(() => {
+    if (!active || !terminalRef.current) {
+      return;
+    }
+
+    terminalRef.current.focus();
+    const frameId = requestAnimationFrame(() => {
+      refreshTerminalViewportRef.current?.();
+    });
+
+    return () => {
+      cancelAnimationFrame(frameId);
+    };
+  }, [active]);
+
+  useEffect(() => {
+    if (!searchOpen) {
+      return;
+    }
+
+    const frameId = requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
+
+    return () => {
+      cancelAnimationFrame(frameId);
+    };
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (!searchOpen) {
+      clearSearch();
+      return;
+    }
+
+    runSearch("next");
+  }, [clearSearch, runSearch, searchOpen, searchOptions, searchQuery]);
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const openSearch = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f";
+      if (openSearch) {
+        event.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+
+      if (event.key === "Escape" && searchOpen) {
+        event.preventDefault();
+        setSearchOpen(false);
+        terminalRef.current?.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [active, searchOpen]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -333,13 +656,261 @@ export function TerminalSurface({
         </div>
       ) : null}
       <div className="relative min-h-0 flex-1 overflow-hidden">
+        {active ? (
+          <div className="pointer-events-none absolute top-3 right-4 z-10 flex items-start gap-2">
+            {searchOpen ? (
+              <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/95 px-2 py-2 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.9)] backdrop-blur">
+                <input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      runSearch(event.shiftKey ? "previous" : "next");
+                    }
+                  }}
+                  className="w-44 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 outline-none placeholder:text-slate-500"
+                  placeholder="Find in terminal"
+                />
+                <span className="min-w-16 text-center text-[11px] text-slate-400">
+                  {searchResults?.resultCount
+                    ? `${searchResults.resultIndex + 1}/${searchResults.resultCount}`
+                    : searchQuery
+                      ? "0/0"
+                      : "--"}
+                </span>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:border-slate-500"
+                  onClick={() => {
+                    runSearch("previous");
+                  }}
+                >
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:border-slate-500"
+                  onClick={() => {
+                    runSearch("next");
+                  }}
+                >
+                  Next
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-md border px-2 py-1 text-[11px] ${
+                    searchOptions.caseSensitive
+                      ? "border-slate-100 bg-slate-100 text-slate-950"
+                      : "border-slate-700 text-slate-300"
+                  }`}
+                  onClick={() => {
+                    setSearchOptions((current) => ({
+                      ...current,
+                      caseSensitive: !current.caseSensitive,
+                    }));
+                  }}
+                >
+                  Aa
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-md border px-2 py-1 text-[11px] ${
+                    searchOptions.wholeWord
+                      ? "border-slate-100 bg-slate-100 text-slate-950"
+                      : "border-slate-700 text-slate-300"
+                  }`}
+                  onClick={() => {
+                    setSearchOptions((current) => ({
+                      ...current,
+                      wholeWord: !current.wholeWord,
+                    }));
+                  }}
+                >
+                  Word
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-md border px-2 py-1 text-[11px] ${
+                    searchOptions.regex
+                      ? "border-slate-100 bg-slate-100 text-slate-950"
+                      : "border-slate-700 text-slate-300"
+                  }`}
+                  onClick={() => {
+                    setSearchOptions((current) => ({
+                      ...current,
+                      regex: !current.regex,
+                    }));
+                  }}
+                >
+                  .*
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:border-slate-500"
+                  onClick={() => {
+                    setSearchOpen(false);
+                    terminalRef.current?.focus();
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-950/90 px-3 py-1.5 text-[11px] text-slate-300 backdrop-blur hover:border-slate-500"
+                    >
+                      <Settings2 className="h-3.5 w-3.5" />
+                      Terminal
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="max-h-[var(--radix-dropdown-menu-content-available-height)] w-64 overflow-y-auto overscroll-contain"
+                  >
+                    <DropdownMenuLabel>Terminal Settings</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[11px] text-slate-500">
+                      Font Size {preferences.fontSize}px
+                    </DropdownMenuLabel>
+                    <div className="flex items-center gap-2 px-2 py-1.5">
+                      <button
+                        type="button"
+                        className="flex-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
+                        onClick={() => {
+                          updatePreferences({
+                            fontSize: clampTerminalFontSize(preferences.fontSize - 1),
+                          });
+                        }}
+                      >
+                        Smaller
+                      </button>
+                      <button
+                        type="button"
+                        className="flex-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
+                        onClick={() => {
+                          updatePreferences({
+                            fontSize: clampTerminalFontSize(preferences.fontSize + 1),
+                          });
+                        }}
+                      >
+                        Larger
+                      </button>
+                    </div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[11px] text-slate-500">
+                      Font Family
+                    </DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={preferences.fontFamily}
+                      onValueChange={(value) => {
+                        updatePreferences({
+                          fontFamily: value as TerminalPreferences["fontFamily"],
+                        });
+                      }}
+                    >
+                      <DropdownMenuRadioItem value={DEFAULT_TERMINAL_PREFERENCES.fontFamily}>
+                        Fira Code
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value={'"JetBrains Mono", "SFMono-Regular", ui-monospace, monospace'}>
+                        JetBrains Mono
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value={'"SFMono-Regular", ui-monospace, monospace'}>
+                        SF Mono
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[11px] text-slate-500">
+                      Renderer {effectiveRenderer.toUpperCase()}
+                    </DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={preferences.renderer}
+                      onValueChange={(value) => {
+                        updatePreferences({
+                          renderer: value as TerminalRendererPreference,
+                        });
+                      }}
+                    >
+                      <DropdownMenuRadioItem value="auto">Auto</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="webgl">WebGL</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="canvas">Canvas</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="dom">DOM</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuCheckboxItem
+                      checked={preferences.bellMode === "sound"}
+                      onCheckedChange={(checked) => {
+                        updatePreferences({
+                          bellMode: checked === true ? "sound" : "off",
+                        });
+                        if (checked === true) {
+                          void bellPlayerRef.current.play();
+                        }
+                      }}
+                    >
+                      Bell Sound
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={preferences.cursorBlink}
+                      onCheckedChange={(checked) => {
+                        updatePreferences({ cursorBlink: checked === true });
+                      }}
+                    >
+                      Cursor Blink
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={preferences.copyOnSelect}
+                      onCheckedChange={(checked) => {
+                        updatePreferences({ copyOnSelect: checked === true });
+                      }}
+                    >
+                      Copy On Select
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={preferences.screenReaderMode}
+                      onCheckedChange={(checked) => {
+                        updatePreferences({ screenReaderMode: checked === true });
+                      }}
+                    >
+                      Screen Reader Mode
+                    </DropdownMenuCheckboxItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <button
+                  type="button"
+                  className="pointer-events-auto rounded-full border border-slate-700 bg-slate-950/90 px-3 py-1.5 text-[11px] text-slate-300 backdrop-blur hover:border-slate-500"
+                  onClick={() => {
+                    setSearchOpen(true);
+                  }}
+                >
+                  Find
+                </button>
+              </>
+            )}
+          </div>
+        ) : null}
         <div
           aria-label="Terminal emulator"
           className="h-full min-h-full w-full px-3 pt-2 pb-2"
           role="application"
           tabIndex={0}
-          onClick={() => terminalRef.current?.focus()}
-          onFocus={() => terminalRef.current?.focus()}
+          onClick={() => {
+            if (active) {
+              terminalRef.current?.focus();
+            }
+          }}
+          onFocus={() => {
+            if (active) {
+              terminalRef.current?.focus();
+            }
+          }}
           ref={terminalContainerRef}
         />
       </div>

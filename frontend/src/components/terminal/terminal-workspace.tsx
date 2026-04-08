@@ -46,6 +46,8 @@ interface TerminalWorkspaceProps {
   className?: string;
 }
 
+const BELL_MARKER_DURATION_MS = 2_000;
+
 function buildSessionLabel(session: TerminalSessionListItem): string {
   const renderedArgs = session.args.join(" ");
   return renderedArgs ? `${session.command} ${renderedArgs}` : session.command;
@@ -109,6 +111,8 @@ export function TerminalWorkspace({
   const [hasLoadedSessions, setHasLoadedSessions] = useState(false);
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [activityMarkers, setActivityMarkers] = useState<Record<string, boolean>>({});
+  const [bellMarkers, setBellMarkers] = useState<Record<string, boolean>>({});
   const [projectDialogMode, setProjectDialogMode] = useState<"create" | "rename" | null>(
     null,
   );
@@ -363,12 +367,85 @@ export function TerminalWorkspace({
     onNoSessionAvailable?.();
   }, [hasLoadedSessions, onNoSessionAvailable, requestError, sessions.length]);
 
+  useEffect(() => {
+    if (!activeSession?.terminalSessionId) {
+      return;
+    }
+
+    setActivityMarkers((current) => {
+      if (!current[activeSession.terminalSessionId]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [activeSession.terminalSessionId]: false,
+      };
+    });
+  }, [activeSession?.terminalSessionId]);
+
+  useEffect(() => {
+    if (!activeSession?.terminalSessionId) {
+      return;
+    }
+
+    setBellMarkers((current) => {
+      if (!current[activeSession.terminalSessionId]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[activeSession.terminalSessionId];
+      return next;
+    });
+  }, [activeSession?.terminalSessionId]);
+
+  useEffect(() => {
+    const sessionIds = new Set(sessions.map((session) => session.terminalSessionId));
+    setActivityMarkers((current) => {
+      let changed = false;
+      const nextEntries = Object.entries(current).filter(([terminalSessionId, active]) => {
+        const keep = active && sessionIds.has(terminalSessionId);
+        if (!keep) {
+          changed = true;
+        }
+        return keep;
+      });
+
+      if (!changed) {
+        return current;
+      }
+
+      return Object.fromEntries(nextEntries);
+    });
+  }, [sessions]);
+
+  useEffect(() => {
+    const sessionIds = new Set(sessions.map((session) => session.terminalSessionId));
+    setBellMarkers((current) => {
+      let changed = false;
+      const nextEntries = Object.entries(current).filter(([terminalSessionId, active]) => {
+        const keep = active && sessionIds.has(terminalSessionId);
+        if (!keep) {
+          changed = true;
+        }
+        return keep;
+      });
+
+      if (!changed) {
+        return current;
+      }
+
+      return Object.fromEntries(nextEntries);
+    });
+  }, [sessions]);
+
   const createSession = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
       const created = await createTerminalSession(apiBase, token, {
         projectId: activeProjectId ?? undefined,
-        cwd: activeSession?.cwd,
+        inheritFromTerminalSessionId: activeSession?.terminalSessionId,
       });
       setRequestError(null);
       await loadSessions();
@@ -382,7 +459,14 @@ export function TerminalWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [activeProjectId, activeSession?.cwd, apiBase, loadSessions, onAuthExpired, token]);
+  }, [
+    activeProjectId,
+    activeSession?.terminalSessionId,
+    apiBase,
+    loadSessions,
+    onAuthExpired,
+    token,
+  ]);
 
   const closeSession = async (terminalSessionId: string): Promise<void> => {
     setLoading(true);
@@ -469,7 +553,7 @@ export function TerminalWorkspace({
         setLoading(false);
       }
     },
-    [activeProject, apiBase, onAuthExpired, projectDialogMode, token],
+    [activeProject, apiBase, loadSessions, onAuthExpired, projectDialogMode, token],
   );
 
   const removeProject = useCallback(async (): Promise<void> => {
@@ -511,6 +595,38 @@ export function TerminalWorkspace({
     [],
   );
 
+  const handleSessionActivity = useCallback((terminalSessionId: string) => {
+    setActivityMarkers((current) => {
+      if (current[terminalSessionId]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [terminalSessionId]: true,
+      };
+    });
+  }, []);
+
+  const handleSessionBell = useCallback((terminalSessionId: string) => {
+    setBellMarkers((current) => ({
+      ...current,
+      [terminalSessionId]: true,
+    }));
+
+    window.setTimeout(() => {
+      setBellMarkers((current) => {
+        if (!current[terminalSessionId]) {
+          return current;
+        }
+
+        const next = { ...current };
+        delete next[terminalSessionId];
+        return next;
+      });
+    }, BELL_MARKER_DURATION_MS);
+  }, []);
+
   return (
     <section
       className={[
@@ -537,6 +653,16 @@ export function TerminalWorkspace({
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {visibleProjects.map((project) => {
               const isActive = project.projectId === activeProjectId;
+              const hasBell = sessions.some(
+                (session) =>
+                  session.projectId === project.projectId &&
+                  bellMarkers[session.terminalSessionId],
+              );
+              const hasActivity = sessions.some(
+                (session) =>
+                  session.projectId === project.projectId &&
+                  activityMarkers[session.terminalSessionId],
+              );
               return (
                 <ContextMenu key={project.projectId}>
                   <ContextMenuTrigger asChild>
@@ -552,7 +678,16 @@ export function TerminalWorkspace({
                         setActiveProjectId(project.projectId);
                       }}
                     >
-                      {project.name}
+                      <span className="inline-flex items-center gap-1.5">
+                        <span>{project.name}</span>
+                        {!isActive && (hasBell || hasActivity) ? (
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              hasBell ? "bg-amber-400" : "bg-emerald-400"
+                            }`}
+                          />
+                        ) : null}
+                      </span>
                     </button>
                   </ContextMenuTrigger>
                   <ContextMenuContent className="w-44">
@@ -600,6 +735,8 @@ export function TerminalWorkspace({
             {visibleSessions.map((session) => {
               const isActive =
                 session.terminalSessionId === activeSession?.terminalSessionId;
+              const hasBell = !isActive && bellMarkers[session.terminalSessionId];
+              const hasActivity = !isActive && activityMarkers[session.terminalSessionId];
               return (
                 <div
                   key={session.terminalSessionId}
@@ -615,7 +752,16 @@ export function TerminalWorkspace({
                     }}
                     title={buildSessionLabel(session)}
                   >
-                    {session.name}
+                    <span className="inline-flex items-center gap-1.5">
+                      <span>{session.name}</span>
+                      {hasBell || hasActivity ? (
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            hasBell ? "bg-amber-400" : "bg-emerald-400"
+                          }`}
+                        />
+                      ) : null}
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -653,18 +799,40 @@ export function TerminalWorkspace({
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1">
-        {activeSession ? (
-          <TerminalSurface
-            key={activeSession.terminalSessionId}
-            apiBase={apiBase}
-            terminalSessionId={activeSession.terminalSessionId}
-            token={token}
-            onAuthExpired={onAuthExpired}
-            onMetadata={(metadata) => {
-              handleSessionMetadata(activeSession.terminalSessionId, metadata);
-            }}
-          />
+      <div className="relative min-h-0 flex-1">
+        {sessions.length > 0 ? (
+          sessions.map((session) => {
+            const isActive =
+              session.terminalSessionId === activeSession?.terminalSessionId;
+
+            return (
+              <div
+                aria-hidden={!isActive}
+                className={[
+                  "absolute top-0 h-full w-full",
+                  isActive ? "left-0" : "-left-[9999em] pointer-events-none",
+                ].join(" ")}
+                key={session.terminalSessionId}
+              >
+                <TerminalSurface
+                  active={isActive}
+                  apiBase={apiBase}
+                  terminalSessionId={session.terminalSessionId}
+                  token={token}
+                  onAuthExpired={onAuthExpired}
+                  onActivity={() => {
+                    handleSessionActivity(session.terminalSessionId);
+                  }}
+                  onBell={() => {
+                    handleSessionBell(session.terminalSessionId);
+                  }}
+                  onMetadata={(metadata) => {
+                    handleSessionMetadata(session.terminalSessionId, metadata);
+                  }}
+                />
+              </div>
+            );
+          })
         ) : (
           <div className="flex h-full items-center justify-center px-6 text-sm text-slate-400">
             No terminal tab yet. Create one to start.

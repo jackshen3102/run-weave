@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, shell } from "electron";
 
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld("electronAPI", {
   backendUrl: process.env.BROWSER_VIEWER_BACKEND_URL ?? "",
   openExternal: (url: string) =>
     ipcRenderer.invoke("viewer:open-external", url),
+  beep: () => shell.beep(),
 });
