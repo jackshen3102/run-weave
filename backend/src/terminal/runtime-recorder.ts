@@ -1,15 +1,19 @@
-import { extractShellPromptMetadata } from "./shell-integration";
+import { createShellPromptTracker } from "./shell-integration";
 import type { TerminalSessionManager } from "./manager";
 
 export function createTerminalRuntimeRecorder(
   terminalSessionManager: TerminalSessionManager,
   terminalSessionId: string,
 ) {
+  const tracker = createShellPromptTracker({
+    cwd: terminalSessionManager.getSession(terminalSessionId)?.cwd ?? null,
+  });
+
   return {
     onData(data: string) {
-      const metadata = extractShellPromptMetadata(data);
+      const metadata = tracker.consume(data);
 
-      if (metadata.sessionName && metadata.cwd) {
+      if (metadata.metadataChanged && metadata.sessionName && metadata.cwd) {
         void terminalSessionManager.updateSessionMetadata(terminalSessionId, {
           name: metadata.sessionName,
           cwd: metadata.cwd,

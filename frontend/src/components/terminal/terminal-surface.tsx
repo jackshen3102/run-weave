@@ -156,6 +156,7 @@ export function TerminalSurface({
   const activeRef = useRef(active);
   const onActivityRef = useRef(onActivity);
   const onBellRef = useRef(onBell);
+  const tokenRef = useRef(token);
   const openedAtRef = useRef(Date.now());
   const lastActivityMarkedAtRef = useRef<number | null>(null);
   const lastResizedAtRef = useRef<number | null>(null);
@@ -261,6 +262,10 @@ export function TerminalSurface({
   useEffect(() => {
     onBellRef.current = onBell;
   }, [onBell]);
+
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
 
   useEffect(() => {
     setPreferences(loadTerminalPreferences(apiBase));
@@ -488,7 +493,7 @@ export function TerminalSurface({
         .then((dataBase64) =>
           createTerminalSessionClipboardImage(
             apiBase,
-            token,
+            tokenRef.current,
             terminalSessionId,
             {
               mimeType: file.type,
@@ -555,7 +560,6 @@ export function TerminalSurface({
     sendInput,
     sendResize,
     terminalSessionId,
-    token,
   ]);
 
   useEffect(() => {

@@ -245,6 +245,71 @@ describe("terminal websocket server", () => {
     ]);
   });
 
+  it("flushes the first PTY output chunk immediately after terminal input", async () => {
+    vi.useFakeTimers();
+    try {
+      const runtime = new FakeRuntime();
+      runtime.write.mockImplementation((data: string) => {
+        runtime.emit("data", data);
+      });
+      const authService = {
+        verifyTemporaryToken: vi.fn(
+          (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+            createTerminalTicketVerification(params.resource),
+        ),
+      };
+      const terminalSessionManager = {
+        getSession: vi.fn(() => ({
+          id: "terminal-1",
+          scrollback: "",
+          status: "running",
+        })),
+        appendOutput: vi.fn(),
+        markExited: vi.fn(),
+      };
+      const runtimeRegistry = new TerminalRuntimeRegistry();
+      runtimeRegistry.createRuntime("terminal-1", runtime);
+      const server = http.createServer();
+      servers.push(server);
+      attachTerminalWebSocketServer(
+        server,
+        terminalSessionManager as never,
+        runtimeRegistry as never,
+        authService as never,
+      );
+      const port = await startServer(server);
+      const socket = new WebSocket(
+        `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+      );
+      sockets.push(socket);
+      const messages: Array<Record<string, unknown>> = [];
+      socket.on("message", (data, isBinary) => {
+        if (isBinary) {
+          return;
+        }
+        messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+      });
+
+      await waitForOpen(socket);
+
+      socket.send(JSON.stringify({ type: "input", data: "ls" }));
+      await vi.waitFor(() => {
+        expect(runtime.write).toHaveBeenCalledWith("ls");
+      });
+      await vi.waitFor(() => {
+        const outputMessages = messages.filter((message) => message.type === "output");
+        expect(outputMessages).toEqual([
+          expect.objectContaining({
+            type: "output",
+            data: "ls",
+          }),
+        ]);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("flushes buffered PTY output before sending terminal exit events", async () => {
     const runtime = new FakeRuntime();
     const authService = {
@@ -370,6 +435,71 @@ describe("terminal websocket server", () => {
           type: "metadata",
           name: "browser-hub",
           cwd: "/Users/bytedance/Desktop/vscode/browser-hub",
+        }),
+      ]),
+    );
+  });
+
+  it("publishes terminal metadata updates from foreground command markers", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        name: "browser-viewer",
+        cwd: "/Users/bytedance/Desktop/vscode/browser-viewer",
+        scrollback: "",
+        status: "running",
+      })),
+      updateSessionMetadata: vi.fn(async () => ({
+        id: "terminal-1",
+        name: "browser-viewer(codex)",
+        cwd: "/Users/bytedance/Desktop/vscode/browser-viewer",
+        scrollback: "",
+        status: "running",
+      })),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    runtimeRegistry.createRuntime("terminal-1", runtime);
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    runtime.emit("data", "\u001b]633;BrowserViewerCommand=codex\u0007");
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "metadata",
+          name: "browser-viewer(codex)",
+          cwd: "/Users/bytedance/Desktop/vscode/browser-viewer",
         }),
       ]),
     );

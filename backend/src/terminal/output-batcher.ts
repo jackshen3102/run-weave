@@ -4,11 +4,24 @@ const OUTPUT_BATCH_MAX_SIZE = 200 * 1024;
 export class TerminalOutputBatcher {
   private bufferedOutput = "";
   private flushTimer: NodeJS.Timeout | null = null;
+  private flushNextChunkImmediately = false;
 
   constructor(private readonly onFlush: (output: string) => void) {}
 
+  markNextChunkInteractive(): void {
+    this.flushNextChunkImmediately = true;
+  }
+
   push(chunk: string): void {
     if (!chunk) {
+      return;
+    }
+
+    if (this.flushNextChunkImmediately) {
+      this.flushNextChunkImmediately = false;
+      this.flush();
+      this.bufferedOutput += chunk;
+      this.flush();
       return;
     }
 
@@ -48,6 +61,7 @@ export class TerminalOutputBatcher {
       this.flushTimer = null;
     }
 
+    this.flushNextChunkImmediately = false;
     this.bufferedOutput = "";
   }
 }

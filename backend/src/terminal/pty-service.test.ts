@@ -207,7 +207,7 @@ describe("PtyService", () => {
     );
   });
 
-  it("injects zsh shell integration so prompt refresh can publish cwd metadata", () => {
+  it("injects zsh shell integration so prompt refresh can publish cwd and command metadata", () => {
     const ptyProcess = {
       onData: vi.fn(),
       onExit: vi.fn(),
@@ -231,6 +231,35 @@ describe("PtyService", () => {
         env: expect.objectContaining({
           ZDOTDIR: expect.stringContaining("browser-viewer-zsh"),
           BROWSER_VIEWER_ORIGINAL_ZDOTDIR: expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  it("injects bash shell integration so prompt refresh can publish cwd and command metadata", () => {
+    const ptyProcess = {
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      write: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 556,
+    };
+    const spawn = vi.fn(() => ptyProcess);
+    const service = new PtyService({ spawn });
+
+    service.spawnSession({
+      command: "/bin/bash",
+      cwd: "/tmp/demo",
+    });
+
+    expect(spawn).toHaveBeenCalledWith(
+      "/bin/bash",
+      [],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          PROMPT_COMMAND: expect.stringContaining("BrowserViewerCommand"),
+          BROWSER_VIEWER_LAST_COMMAND: "",
         }),
       }),
     );

@@ -11,7 +11,7 @@ import type { TerminalSessionManager } from "../terminal/manager";
 import { TerminalOutputBatcher } from "../terminal/output-batcher";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import { extractShellPromptMetadata } from "../terminal/shell-integration";
+import { createShellPromptTracker } from "../terminal/shell-integration";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
@@ -178,12 +178,15 @@ export function attachTerminalWebSocketServer(
     const outputBatcher = new TerminalOutputBatcher((output) => {
       sendEvent(socket, { type: "output", data: output });
     });
+    const shellPromptTracker = createShellPromptTracker({
+      cwd: session?.cwd ?? null,
+    });
     runtimeRegistry.attachClient(terminalSessionId, clientId);
     const unsubscribe = runtimeRegistry.subscribe(terminalSessionId, {
       onData(data) {
-        const metadata = extractShellPromptMetadata(data);
+        const metadata = shellPromptTracker.consume(data);
 
-        if (metadata.sessionName && metadata.cwd) {
+        if (metadata.metadataChanged && metadata.sessionName && metadata.cwd) {
           sendEvent(socket, {
             type: "metadata",
             name: metadata.sessionName,
@@ -241,6 +244,7 @@ export function attachTerminalWebSocketServer(
 
       if (parsed.type === "input") {
         try {
+          outputBatcher.markNextChunkInteractive();
           runtime.write(parsed.data);
         } catch (error) {
           handleRuntimeActionError(socket, terminalSessionId, "input", error);

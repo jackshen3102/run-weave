@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HttpError } from "../../services/http";
 import { refreshSession, verifyAuthToken } from "../../services/auth";
 import {
@@ -141,6 +141,17 @@ export function useScopedAuth({
       : "unauthenticated";
   });
   const [validationNonce, setValidationNonce] = useState(0);
+  const statusRef = useRef<AuthStatus>(status);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  const loadStoredSession = useCallback((): AuthSessionState | null => {
+    return isElectron
+      ? loadElectronSession(connectionId)
+      : loadWebSession(webStorageKey);
+  }, [connectionId, isElectron, webStorageKey]);
 
   const clearSession = useCallback(() => {
     if (isElectron) {
@@ -153,6 +164,7 @@ export function useScopedAuth({
 
     setSessionState(null);
     setStatus("unauthenticated");
+    statusRef.current = "unauthenticated";
     setValidationNonce((value) => value + 1);
   }, [connectionId, isElectron, webStorageKey]);
 
@@ -174,6 +186,7 @@ export function useScopedAuth({
 
       setSessionState(storedSession);
       setStatus("authenticated");
+      statusRef.current = "authenticated";
       setValidationNonce((value) => value + 1);
     },
     [connectionId, isElectron, webStorageKey],
@@ -195,9 +208,7 @@ export function useScopedAuth({
     let cancelled = false;
 
     const run = async (): Promise<void> => {
-      const nextSession = isElectron
-        ? loadElectronSession(connectionId)
-        : loadWebSession(webStorageKey);
+      const nextSession = loadStoredSession();
 
       if (cancelled) {
         return;
@@ -272,7 +283,49 @@ export function useScopedAuth({
     return () => {
       cancelled = true;
     };
-  }, [apiBase, connectionId, isElectron, validationNonce, webStorageKey]);
+  }, [
+    apiBase,
+    connectionId,
+    isElectron,
+    loadStoredSession,
+    validationNonce,
+    webStorageKey,
+  ]);
+
+  useEffect(() => {
+    const revalidateExpiredSessionOnForeground = (): void => {
+      if (!apiBase || document.visibilityState === "hidden") {
+        return;
+      }
+
+      if (statusRef.current === "checking") {
+        return;
+      }
+
+      const nextSession = loadStoredSession();
+      if (!nextSession || isSessionFresh(nextSession)) {
+        return;
+      }
+
+      statusRef.current = "checking";
+      setStatus("checking");
+      setValidationNonce((value) => value + 1);
+    };
+
+    document.addEventListener(
+      "visibilitychange",
+      revalidateExpiredSessionOnForeground,
+    );
+    window.addEventListener("focus", revalidateExpiredSessionOnForeground);
+
+    return () => {
+      document.removeEventListener(
+        "visibilitychange",
+        revalidateExpiredSessionOnForeground,
+      );
+      window.removeEventListener("focus", revalidateExpiredSessionOnForeground);
+    };
+  }, [apiBase, loadStoredSession]);
 
   useEffect(() => {
     if (!apiBase || !session || status !== "authenticated") {

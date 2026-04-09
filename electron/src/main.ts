@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  Menu,
   shell,
   protocol,
   net,
@@ -24,6 +25,8 @@ import {
   buildRuntimeStatsSnapshot,
   type ElectronProcessMetric,
 } from "./runtime-monitor.js";
+import { buildApplicationMenuTemplate } from "./application-menu.js";
+import { shouldAutoOpenWindowDevtools } from "./window-devtools.js";
 
 const isDev = !app.isPackaged;
 
@@ -117,7 +120,7 @@ function registerRuntimeStatsHandler(
   );
 }
 
-function createWindow(): BrowserWindow {
+function createWindow(options?: { hideOnClose?: boolean }): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -138,12 +141,23 @@ function createWindow(): BrowserWindow {
 
   if (isDev) {
     win.loadURL(DEV_SERVER_URL);
-    win.webContents.openDevTools({ mode: "detach" });
+    if (shouldAutoOpenWindowDevtools({ isDev })) {
+      win.webContents.openDevTools({ mode: "detach" });
+    }
   } else {
     win.loadURL(`${CUSTOM_PROTOCOL}://app/index.html`);
   }
 
   setupSessionIntercept(win);
+
+  if (options?.hideOnClose) {
+    win.on("close", (event) => {
+      if (!getIsQuitting()) {
+        event.preventDefault();
+        win.hide();
+      }
+    });
+  }
 
   return win;
 }
@@ -201,6 +215,7 @@ function setupSessionIntercept(win: BrowserWindow) {
 app.commandLine.appendSwitch("ignore-certificate-errors");
 
 let packagedBackendRuntime: PackagedBackendRuntime | null = null;
+let mainWindow: BrowserWindow | null = null;
 
 app.whenReady().then(async () => {
   try {
@@ -225,7 +240,20 @@ app.whenReady().then(async () => {
       });
     }
 
-    const mainWindow = createWindow();
+    const openNewWindow = (): BrowserWindow => {
+      return createWindow();
+    };
+
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate(
+        buildApplicationMenuTemplate({
+          platform: process.platform,
+          onNewWindow: openNewWindow,
+        }),
+      ),
+    );
+
+    mainWindow = createWindow({ hideOnClose: true });
 
     createTray(mainWindow);
 
@@ -239,14 +267,12 @@ app.whenReady().then(async () => {
       setTimeout(() => checkForUpdates(), 3_000);
     }
 
-    mainWindow.on("close", (event) => {
-      if (!getIsQuitting()) {
-        event.preventDefault();
-        mainWindow.hide();
-      }
-    });
-
     app.on("activate", () => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        mainWindow = createWindow({ hideOnClose: true });
+        createTray(mainWindow);
+        return;
+      }
       mainWindow.show();
       mainWindow.focus();
     });

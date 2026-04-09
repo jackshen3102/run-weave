@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { TerminalClientMessage, TerminalServerMessage } from "@browser-viewer/shared";
 import { HttpError } from "../../services/http";
 import { createTerminalWsTicket } from "../../services/terminal";
+import {
+  getTerminalReconnectDelay,
+  shouldAutoReconnectTerminalClose,
+} from "./reconnect-policy";
 import { toWebSocketBase } from "../viewer/url";
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
@@ -42,6 +46,10 @@ export function useTerminalConnection(params: {
   const socketRef = useRef<WebSocket | null>(null);
   const tokenRef = useRef(token);
   const pendingResizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const reconnectCountRef = useRef(0);
+  const connectedAtRef = useRef<number | null>(null);
+  const closeReasonRef = useRef<string | null>(null);
   // Keep onOutput in a ref so it never needs to be in the effect's dep array.
   const onOutputRef = useRef(onOutput);
   const onMetadataRef = useRef(onMetadata);
@@ -66,131 +74,185 @@ export function useTerminalConnection(params: {
     setExitCode(null);
     setError(null);
     let cancelled = false;
-    let socket: WebSocket | null = null;
     let unauthorizedRetryCount = 0;
 
-    const connectTimer = window.setTimeout(() => {
-      const connect = async (): Promise<void> => {
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current === null) {
+        return;
+      }
+
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    };
+
+    const connect = async (): Promise<void> => {
+      if (cancelled) {
+        return;
+      }
+
+      clearReconnectTimer();
+      setConnectionStatus("connecting");
+      setError(null);
+
+      try {
+        const ticketPayload = await createTerminalWsTicket(
+          apiBase,
+          tokenRef.current,
+          terminalSessionId,
+        );
         if (cancelled) {
           return;
         }
-        setConnectionStatus("connecting");
 
-        try {
-          const ticketPayload = await createTerminalWsTicket(
-            apiBase,
-            tokenRef.current,
-            terminalSessionId,
-          );
-          if (cancelled) {
+        const wsUrl = buildTerminalWsUrl(
+          apiBase,
+          terminalSessionId,
+          ticketPayload.ticket,
+        );
+
+        const socket = new WebSocket(wsUrl);
+        socketRef.current = socket;
+
+        socket.addEventListener("open", () => {
+          if (socketRef.current !== socket) {
             return;
           }
 
-          const wsUrl = buildTerminalWsUrl(
-            apiBase,
-            terminalSessionId,
-            ticketPayload.ticket,
-          );
+          connectedAtRef.current = Date.now();
+          closeReasonRef.current = null;
+          reconnectCountRef.current = 0;
+          setError(null);
+          setConnectionStatus("connected");
+          if (pendingResizeRef.current) {
+            sendMessage(socket, {
+              type: "resize",
+              cols: pendingResizeRef.current.cols,
+              rows: pendingResizeRef.current.rows,
+            });
+          }
+        });
+        socket.addEventListener("close", (event) => {
+          if (socketRef.current !== socket) {
+            return;
+          }
 
-          socket = new WebSocket(wsUrl);
-          socketRef.current = socket;
+          socketRef.current = null;
 
-          socket.addEventListener("open", () => {
-            if (socketRef.current !== socket) {
-              return;
-            }
-            setConnectionStatus("connected");
-            if (pendingResizeRef.current) {
-              sendMessage(socket, {
-                type: "resize",
-                cols: pendingResizeRef.current.cols,
-                rows: pendingResizeRef.current.rows,
-              });
-            }
-          });
-          socket.addEventListener("close", (event) => {
-            if (socketRef.current !== socket) {
-              return;
-            }
-            if (event.code === 1008 && event.reason === "Unauthorized") {
-              if (
-                unauthorizedRetryCount < MAX_UNAUTHORIZED_RETRIES &&
-                !cancelled
-              ) {
-                unauthorizedRetryCount += 1;
-                setConnectionStatus("connecting");
-                void connect();
-                return;
-              }
-              setConnectionStatus("closed");
-              onAuthExpired?.();
+          if (event.code === 1008 && event.reason === "Unauthorized") {
+            if (
+              unauthorizedRetryCount < MAX_UNAUTHORIZED_RETRIES &&
+              !cancelled
+            ) {
+              unauthorizedRetryCount += 1;
+              closeReasonRef.current = null;
+              setConnectionStatus("connecting");
+              void connect();
               return;
             }
             setConnectionStatus("closed");
-          });
-          socket.addEventListener("message", (event) => {
-            if (socketRef.current !== socket) {
-              return;
-            }
-
-            try {
-              const parsed = JSON.parse(String(event.data)) as TerminalServerMessage;
-              if (parsed.type === "output") {
-                onOutputRef.current?.(parsed.data);
-                return;
-              }
-              if (parsed.type === "metadata") {
-                onMetadataRef.current?.({
-                  name: parsed.name,
-                  cwd: parsed.cwd,
-                });
-                return;
-              }
-              if (parsed.type === "status") {
-                setTerminalStatus(parsed.status);
-                setExitCode(parsed.exitCode ?? null);
-                return;
-              }
-              if (parsed.type === "exit") {
-                setTerminalStatus("exited");
-                setExitCode(parsed.exitCode ?? null);
-                return;
-              }
-              if (parsed.type === "error") {
-                setError(parsed.message);
-                if (parsed.message === "Unauthorized") {
-                  onAuthExpired?.();
-                }
-              }
-            } catch {
-              setError("Invalid terminal message");
-            }
-          });
-        } catch (error) {
-          if (cancelled) {
-            return;
-          }
-          if (error instanceof HttpError && error.status === 401) {
             onAuthExpired?.();
             return;
           }
-          setError(String(error));
-          setConnectionStatus("closed");
-        }
-      };
 
+          const connectedAt = connectedAtRef.current;
+          const livedMs = connectedAt ? Date.now() - connectedAt : 0;
+          connectedAtRef.current = null;
+
+          if (
+            !cancelled &&
+            shouldAutoReconnectTerminalClose({
+              code: event.code,
+              livedMs,
+            })
+          ) {
+            const delay = getTerminalReconnectDelay(reconnectCountRef.current);
+            reconnectCountRef.current += 1;
+            setConnectionStatus("connecting");
+            clearReconnectTimer();
+            reconnectTimerRef.current = window.setTimeout(() => {
+              void connect();
+            }, delay);
+            return;
+          }
+
+          setConnectionStatus("closed");
+          if (closeReasonRef.current || event.reason) {
+            setError(
+              closeReasonRef.current ||
+                event.reason ||
+                "Terminal connection closed.",
+            );
+          }
+        });
+        socket.addEventListener("message", (event) => {
+          if (socketRef.current !== socket) {
+            return;
+          }
+
+          try {
+            const parsed = JSON.parse(String(event.data)) as TerminalServerMessage;
+            if (parsed.type === "output") {
+              onOutputRef.current?.(parsed.data);
+              return;
+            }
+            if (parsed.type === "metadata") {
+              onMetadataRef.current?.({
+                name: parsed.name,
+                cwd: parsed.cwd,
+              });
+              return;
+            }
+            if (parsed.type === "status") {
+              setTerminalStatus(parsed.status);
+              setExitCode(parsed.exitCode ?? null);
+              return;
+            }
+            if (parsed.type === "exit") {
+              setTerminalStatus("exited");
+              setExitCode(parsed.exitCode ?? null);
+              return;
+            }
+            if (parsed.type === "error") {
+              closeReasonRef.current = parsed.message;
+              setError(parsed.message);
+              if (parsed.message === "Unauthorized") {
+                onAuthExpired?.();
+              }
+            }
+          } catch {
+            closeReasonRef.current = "Invalid terminal message";
+            setError("Invalid terminal message");
+          }
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        if (error instanceof HttpError && error.status === 401) {
+          onAuthExpired?.();
+          return;
+        }
+
+        closeReasonRef.current = String(error);
+        setError(String(error));
+        setConnectionStatus("closed");
+      }
+    };
+
+    const connectTimer = window.setTimeout(() => {
       void connect();
     }, 0);
 
     return () => {
       cancelled = true;
+      connectedAtRef.current = null;
+      closeReasonRef.current = null;
+      reconnectCountRef.current = 0;
       window.clearTimeout(connectTimer);
-      if (socket) {
-        socket.close();
-      }
-      if (socketRef.current === socket) {
-        socketRef.current = null;
-      }
+      clearReconnectTimer();
+      socketRef.current?.close();
+      socketRef.current = null;
     };
   }, [apiBase, onAuthExpired, terminalSessionId]);
 
