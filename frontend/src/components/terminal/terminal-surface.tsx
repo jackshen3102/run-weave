@@ -126,6 +126,17 @@ function isTerminalAutoResponse(data: string): boolean {
   );
 }
 
+function isShiftEnterLineFeed(event: KeyboardEvent): boolean {
+  return (
+    event.type === "keydown" &&
+    event.key === "Enter" &&
+    event.shiftKey &&
+    !event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey
+  );
+}
+
 async function fileToBase64(file: File): Promise<string> {
   if (typeof file.arrayBuffer === "function") {
     const buffer = await file.arrayBuffer();
@@ -505,10 +516,7 @@ export function TerminalSurface({
       void navigator.clipboard.writeText(selection).catch(() => undefined);
     });
 
-    const dataDisposable = terminal.onData((data) => {
-      if (isTerminalAutoResponse(data)) {
-        return;
-      }
+    const sendTerminalInput = (data: string) => {
       inputSequenceRef.current += 1;
       lastInputSentAtRef.current = Date.now();
       logTerminalPerf("terminal.input.captured", {
@@ -517,6 +525,21 @@ export function TerminalSurface({
         ...summarizeTerminalChunk(data),
       });
       sendInput(data);
+    };
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (isShiftEnterLineFeed(event)) {
+        event.preventDefault();
+        sendTerminalInput("\n");
+        return false;
+      }
+
+      return true;
+    });
+    const dataDisposable = terminal.onData((data) => {
+      if (isTerminalAutoResponse(data)) {
+        return;
+      }
+      sendTerminalInput(data);
     });
     const bellDisposable = terminal.onBell(() => {
       if (!activeRef.current) {
