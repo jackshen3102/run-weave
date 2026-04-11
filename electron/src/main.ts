@@ -11,7 +11,10 @@ import {
 } from "electron";
 import pidusage from "pidusage";
 import path from "node:path";
-import type { RuntimeStatsSnapshot } from "@browser-viewer/shared";
+import type {
+  PackagedBackendConnectionState,
+  RuntimeStatsSnapshot,
+} from "@browser-viewer/shared";
 import { resolveProtocolFilePath } from "./protocol-path.js";
 import {
   startPackagedBackend,
@@ -25,10 +28,16 @@ import {
   buildRuntimeStatsSnapshot,
   type ElectronProcessMetric,
 } from "./runtime-monitor.js";
+import {
+  createAvailablePackagedBackendState,
+  createUnavailablePackagedBackendStateFromError,
+  createUnavailablePackagedBackendStateFromExit,
+} from "./packaged-backend-state.js";
 import { buildApplicationMenuTemplate } from "./application-menu.js";
 import { shouldAutoOpenWindowDevtools } from "./window-devtools.js";
 
 const isDev = !app.isPackaged;
+process.env.BROWSER_VIEWER_MANAGES_PACKAGED_BACKEND = isDev ? "false" : "true";
 
 const DEV_SERVER_URL =
   process.env.BROWSER_VIEWER_DEV_URL ?? "http://localhost:5173";
@@ -216,28 +225,145 @@ app.commandLine.appendSwitch("ignore-certificate-errors");
 
 let packagedBackendRuntime: PackagedBackendRuntime | null = null;
 let mainWindow: BrowserWindow | null = null;
+let packagedBackendState: PackagedBackendConnectionState = {
+  kind: "packaged-local",
+  available: false,
+  backendUrl: process.env.BROWSER_VIEWER_BACKEND_URL ?? "",
+  statusMessage: null,
+  canReconnect: true,
+};
+let packagedBackendRestartPromise:
+  | Promise<PackagedBackendConnectionState>
+  | null = null;
+const expectedPackagedBackendExits = new WeakSet<object>();
+
+function broadcastPackagedBackendState(): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send("viewer:packaged-backend-state", packagedBackendState);
+    }
+  }
+}
+
+function setPackagedBackendState(
+  state: PackagedBackendConnectionState,
+): PackagedBackendConnectionState {
+  packagedBackendState = state;
+  process.env.BROWSER_VIEWER_BACKEND_URL = state.backendUrl;
+  broadcastPackagedBackendState();
+  return packagedBackendState;
+}
+
+function attachPackagedBackendExitHandler(runtime: PackagedBackendRuntime): void {
+  runtime.child.once("exit", (code, signal) => {
+    const expectedExit = expectedPackagedBackendExits.has(runtime.child);
+    expectedPackagedBackendExits.delete(runtime.child);
+
+    if (packagedBackendRuntime?.child === runtime.child) {
+      packagedBackendRuntime = null;
+    }
+
+    if (getIsQuitting() || expectedExit) {
+      return;
+    }
+
+    console.error("[electron] packaged backend exited unexpectedly", {
+      code,
+      signal,
+    });
+    setPackagedBackendState(
+      createUnavailablePackagedBackendStateFromExit(runtime.backendUrl, {
+        code,
+        signal,
+      }),
+    );
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+async function stopPackagedBackendRuntimeForRestart(): Promise<void> {
+  if (!packagedBackendRuntime) {
+    return;
+  }
+
+  expectedPackagedBackendExits.add(packagedBackendRuntime.child);
+  const runtime = packagedBackendRuntime;
+  packagedBackendRuntime = null;
+  await runtime.stop();
+}
+
+async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionState> {
+  try {
+    const runtime = await startPackagedBackend({
+      baseEnv: process.env,
+    });
+
+    packagedBackendRuntime = runtime;
+    attachPackagedBackendExitHandler(runtime);
+    return setPackagedBackendState(
+      createAvailablePackagedBackendState(runtime.backendUrl),
+    );
+  } catch (error) {
+    console.error("[electron] packaged backend unavailable", error);
+    return setPackagedBackendState(
+      createUnavailablePackagedBackendStateFromError(
+        packagedBackendState.backendUrl,
+        error,
+      ),
+    );
+  }
+}
+
+async function restartPackagedBackendRuntime(): Promise<PackagedBackendConnectionState> {
+  if (packagedBackendRestartPromise) {
+    return packagedBackendRestartPromise;
+  }
+
+  packagedBackendRestartPromise = (async () => {
+    await stopPackagedBackendRuntimeForRestart();
+    return await startPackagedBackendRuntime();
+  })();
+
+  try {
+    return await packagedBackendRestartPromise;
+  } finally {
+    packagedBackendRestartPromise = null;
+  }
+}
+
+function registerPackagedBackendHandlers(): void {
+  ipcMain.handle(
+    "viewer:get-packaged-backend-state",
+    async (): Promise<PackagedBackendConnectionState> => {
+      return packagedBackendState;
+    },
+  );
+
+  ipcMain.handle(
+    "viewer:restart-packaged-backend",
+    async (): Promise<PackagedBackendConnectionState> => {
+      if (isDev) {
+        return packagedBackendState;
+      }
+
+      return await restartPackagedBackendRuntime();
+    },
+  );
+}
 
 app.whenReady().then(async () => {
   try {
     setApplicationIcon();
     registerOpenExternalHandler();
+    registerPackagedBackendHandlers();
     registerRuntimeStatsHandler(() => packagedBackendRuntime);
     if (!isDev) {
       registerCustomProtocol();
-      packagedBackendRuntime = await startPackagedBackend({
-        baseEnv: process.env,
-      });
-      process.env.BROWSER_VIEWER_BACKEND_URL =
-        packagedBackendRuntime.backendUrl;
-      packagedBackendRuntime.child.once("exit", (code, signal) => {
-        if (!getIsQuitting()) {
-          dialog.showErrorBox(
-            "Backend Stopped",
-            `The packaged backend exited unexpectedly (code=${code}, signal=${signal ?? "none"}).`,
-          );
-          app.quit();
-        }
-      });
+      await startPackagedBackendRuntime();
     }
 
     const openNewWindow = (): BrowserWindow => {

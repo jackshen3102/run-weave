@@ -21,3 +21,11 @@ export interface RuntimeStatsSnapshot {
     memoryMb: number | null;
   };
 }
+
+export interface PackagedBackendConnectionState {
+  kind: "packaged-local";
+  available: boolean;
+  backendUrl: string;
+  statusMessage: string | null;
+  canReconnect: boolean;
+}

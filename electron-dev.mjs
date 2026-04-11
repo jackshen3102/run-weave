@@ -75,6 +75,7 @@ async function run() {
     ...process.env,
     BROWSER_VIEWER_DEV_URL: `http://localhost:${frontendPort}`,
     BROWSER_VIEWER_BACKEND_URL: backendUrl,
+    BROWSER_VIEWER_MANAGES_PACKAGED_BACKEND: "false",
   };
   delete electronEnv.ELECTRON_RUN_AS_NODE;
 

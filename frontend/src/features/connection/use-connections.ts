@@ -1,25 +1,30 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PackagedBackendConnectionState } from "@browser-viewer/shared";
 import type { ConnectionConfig, ConnectionStore } from "./types";
+import {
+  buildLocalDevelopmentConnection,
+  LOCAL_DEV_CONNECTION_ID,
+  shouldExposeLocalDevelopmentConnection,
+} from "./system-connection";
 
 const DEFAULT_STORE: ConnectionStore = { connections: [], activeId: null };
-const LOCAL_DEV_CONNECTION_ID = "system:local-development";
 
 const isElectron = window.electronAPI?.isElectron === true;
+const managesPackagedBackend =
+  window.electronAPI?.managesPackagedBackend === true;
 const electronBackendUrl = window.electronAPI?.backendUrl?.trim().replace(/\/+$/, "") ?? "";
 
-function getLocalDevelopmentConnection(): ConnectionConfig | null {
-  if (!isElectron || !electronBackendUrl) {
+function getInitialPackagedBackendState(): PackagedBackendConnectionState | null {
+  if (!shouldExposeLocalDevelopmentConnection(isElectron, managesPackagedBackend)) {
     return null;
   }
 
   return {
-    id: LOCAL_DEV_CONNECTION_ID,
-    name: "本地开发",
-    url: electronBackendUrl,
-    createdAt: 0,
-    isSystem: true,
-    canEdit: false,
-    canDelete: false,
+    kind: "packaged-local",
+    available: Boolean(electronBackendUrl),
+    backendUrl: electronBackendUrl,
+    statusMessage: electronBackendUrl ? null : "内置本地后端不可用",
+    canReconnect: true,
   };
 }
 
@@ -53,6 +58,7 @@ export interface UseConnectionsResult {
   updateConnection: (id: string, patch: { name?: string; url?: string }) => void;
   setActive: (id: string) => void;
   clearActive: () => void;
+  reconnectSystemConnection: (id: string) => Promise<boolean>;
 }
 
 const NOOP_CONN: ConnectionConfig = { id: "", name: "", url: "", createdAt: 0 };
@@ -64,16 +70,47 @@ const NOOP_RESULT: UseConnectionsResult = {
   updateConnection: () => {},
   setActive: () => {},
   clearActive: () => {},
+  reconnectSystemConnection: async () => false,
 };
 
 export function useConnections(storageKey: string): UseConnectionsResult {
   const [store, setStoreState] = useState<ConnectionStore>(() =>
     isElectron ? loadStore(storageKey) : DEFAULT_STORE,
   );
-  const localDevelopmentConnection = useMemo(() => getLocalDevelopmentConnection(), []);
+  const [packagedBackendState, setPackagedBackendState] =
+    useState<PackagedBackendConnectionState | null>(() =>
+      getInitialPackagedBackendState(),
+    );
+  const localDevelopmentConnection = useMemo(
+    () => buildLocalDevelopmentConnection(packagedBackendState),
+    [packagedBackendState],
+  );
 
   const storeRef = useRef(store);
   storeRef.current = store;
+
+  useEffect(() => {
+    if (!shouldExposeLocalDevelopmentConnection(isElectron, managesPackagedBackend)) {
+      return;
+    }
+
+    let disposed = false;
+    const electronApi = window.electronAPI;
+    const unsubscribe = electronApi?.onPackagedBackendStateChange?.((state) => {
+      setPackagedBackendState(state);
+    });
+
+    void electronApi?.getPackagedBackendState?.().then((state) => {
+      if (!disposed) {
+        setPackagedBackendState(state);
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, []);
 
   const persist = useCallback(
     (updater: StoreUpdater) => {
@@ -174,6 +211,23 @@ export function useConnections(storageKey: string): UseConnectionsResult {
     persist((prev) => ({ ...prev, activeId: null }));
   }, [persist]);
 
+  const reconnectSystemConnection = useCallback(async (id: string) => {
+    if (
+      !shouldExposeLocalDevelopmentConnection(isElectron, managesPackagedBackend) ||
+      id !== LOCAL_DEV_CONNECTION_ID
+    ) {
+      return false;
+    }
+
+    const nextState = await window.electronAPI?.restartPackagedBackend?.();
+    if (!nextState) {
+      return false;
+    }
+
+    setPackagedBackendState(nextState);
+    return nextState.available;
+  }, []);
+
   return isElectron
     ? {
         connections,
@@ -183,6 +237,7 @@ export function useConnections(storageKey: string): UseConnectionsResult {
         updateConnection,
         setActive,
         clearActive,
+        reconnectSystemConnection,
       }
     : NOOP_RESULT;
 }

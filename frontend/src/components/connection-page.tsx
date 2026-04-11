@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "./ui/button";
 import type { ConnectionConfig } from "../features/connection/types";
+import { shouldShowReconnectAction } from "../features/connection/system-connection";
 
 interface ConnectionPageProps {
   connections: ConnectionConfig[];
@@ -9,6 +10,7 @@ interface ConnectionPageProps {
   onRemove: (id: string) => void;
   onSelect: (id: string) => void;
   onEdit: (id: string, patch: { name?: string; url?: string }) => void;
+  onReconnect?: (id: string) => Promise<boolean>;
 }
 
 export function ConnectionPage({
@@ -18,6 +20,7 @@ export function ConnectionPage({
   onRemove,
   onSelect,
   onEdit,
+  onReconnect,
 }: ConnectionPageProps) {
   const [showForm, setShowForm] = useState(connections.length === 0);
   const [name, setName] = useState("");
@@ -252,8 +255,13 @@ export function ConnectionPage({
                     >
                       <p className="text-sm font-medium">{conn.name}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {conn.url}
+                        {conn.url || "内置本地后端未连接"}
                       </p>
+                      {conn.available === false && conn.statusMessage ? (
+                        <p className="mt-1 text-xs text-amber-600">
+                          {conn.statusMessage}
+                        </p>
+                      ) : null}
                     </button>
                     {(conn.canEdit !== false || conn.canDelete !== false) && (
                       <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
@@ -285,6 +293,19 @@ export function ConnectionPage({
                         )}
                       </div>
                     )}
+                    {shouldShowReconnectAction(conn) && onReconnect ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="ml-2 rounded-full px-4"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void onReconnect(conn.id);
+                        }}
+                      >
+                        恢复
+                      </Button>
+                    ) : null}
                   </>
                 )}
               </li>

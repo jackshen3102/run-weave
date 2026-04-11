@@ -3,6 +3,9 @@ export interface ConnectionConfig {
   name: string;
   url: string;
   createdAt: number;
+  available?: boolean;
+  statusMessage?: string | null;
+  canReconnect?: boolean;
   isSystem?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;

@@ -9,6 +9,7 @@ interface ConnectionsPageProps {
   onRemove: (id: string) => void;
   onSelect: (id: string) => void;
   onEdit: (id: string, patch: { name?: string; url?: string }) => void;
+  onReconnect?: (id: string) => Promise<boolean>;
 }
 
 export function ConnectionsPage({
@@ -18,6 +19,7 @@ export function ConnectionsPage({
   onRemove,
   onSelect,
   onEdit,
+  onReconnect,
 }: ConnectionsPageProps) {
   const navigate = useNavigate();
 
@@ -35,6 +37,16 @@ export function ConnectionsPage({
         navigate("/", { replace: true });
       }}
       onEdit={onEdit}
+      onReconnect={async (id) => {
+        const reconnected = await onReconnect?.(id);
+        if (reconnected) {
+          onSelect(id);
+          navigate("/", { replace: true });
+          return true;
+        }
+
+        return false;
+      }}
     />
   );
 }

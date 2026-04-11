@@ -1,5 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import type { RuntimeStatsSnapshot } from "@browser-viewer/shared";
+import type {
+  PackagedBackendConnectionState,
+  RuntimeStatsSnapshot,
+} from "@browser-viewer/shared";
+import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
 import { useScopedAuth } from "./features/auth/use-scoped-auth";
 import { HomePage } from "./pages/home-page";
@@ -16,8 +20,14 @@ declare global {
   interface Window {
     electronAPI?: {
       isElectron: boolean;
+      managesPackagedBackend?: boolean;
       platform: string;
       backendUrl?: string;
+      getPackagedBackendState?: () => Promise<PackagedBackendConnectionState>;
+      onPackagedBackendStateChange?: (
+        listener: (state: PackagedBackendConnectionState) => void,
+      ) => (() => void) | void;
+      restartPackagedBackend?: () => Promise<PackagedBackendConnectionState>;
       openExternal?: (url: string) => Promise<void>;
       getRuntimeStats?: () => Promise<RuntimeStatsSnapshot>;
       beep?: () => void;
@@ -35,6 +45,7 @@ export default function App() {
     removeConnection,
     updateConnection,
     setActive,
+    reconnectSystemConnection,
   } = useConnections(CONNECTIONS_STORAGE_KEY);
 
   const apiBase = isElectron ? (activeConnection?.url ?? "") : WEB_API_BASE;
@@ -46,7 +57,7 @@ export default function App() {
     webStorageKey: AUTH_TOKEN_STORAGE_KEY,
   });
 
-  const needsConnection = isElectron && (!activeConnection || !apiBase);
+  const needsConnection = resolveNeedsConnection(isElectron, activeConnection);
   const isAuthChecking = !needsConnection && authStatus === "checking";
 
   const handleSelectConnection = (id: string) => {
@@ -76,6 +87,7 @@ export default function App() {
               onRemove={removeConnection}
               onSelect={handleSelectConnection}
               onEdit={updateConnection}
+              onReconnect={reconnectSystemConnection}
             />
           }
         />
