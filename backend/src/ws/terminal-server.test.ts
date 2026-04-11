@@ -2,6 +2,7 @@ import http from "node:http";
 import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
 import { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import { attachTerminalWebSocketServer } from "./terminal-server";
 
@@ -605,7 +606,7 @@ describe("terminal websocket server", () => {
     expect(socket.readyState).toBe(WebSocket.OPEN);
   });
 
-  it("replays persisted scrollback emitted before websocket attach", async () => {
+  it("sends a snapshot of persisted scrollback when websocket attaches", async () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyTemporaryToken: vi.fn(
@@ -651,11 +652,169 @@ describe("terminal websocket server", () => {
     await waitForOpen(socket);
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(messages).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "output", data: "bash-3.2$ " }),
-      ]),
+    expect(messages).toEqual([
+      {
+        type: "connected",
+        terminalSessionId: "terminal-1",
+      },
+      {
+        type: "snapshot",
+        data: "bash-3.2$ ",
+      },
+      {
+        type: "status",
+        status: "running",
+      },
+    ]);
+  });
+
+  it("limits websocket snapshot scrollback to the configured latest lines", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const scrollback = Array.from(
+      { length: TERMINAL_CLIENT_SCROLLBACK_LINES + 250 },
+      (_, index) => `line-${index + 1}`,
+    ).join("\n");
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        scrollback,
+        status: "running",
+        exitCode: undefined,
+      })),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    runtimeRegistry.createRuntime("terminal-1", runtime);
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry as never,
+      authService as never,
     );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(messages).toEqual([
+      {
+        type: "connected",
+        terminalSessionId: "terminal-1",
+      },
+      {
+        type: "snapshot",
+        data: Array.from(
+          { length: TERMINAL_CLIENT_SCROLLBACK_LINES },
+          (_, index) =>
+            `line-${index + (TERMINAL_CLIENT_SCROLLBACK_LINES + 250 - TERMINAL_CLIENT_SCROLLBACK_LINES + 1)}`,
+        ).join("\n"),
+      },
+      {
+        type: "status",
+        status: "running",
+      },
+    ]);
+  });
+
+  it("flushes live output after the initial snapshot when output arrives during websocket attach", async () => {
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
+          createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi
+        .fn()
+        .mockReturnValue({
+          id: "terminal-1",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+          scrollback: "bash-3.2$ ",
+          status: "running",
+          exitCode: undefined,
+        }),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+      updateSessionLaunch: vi.fn(),
+    };
+    const runtime = new FakeRuntime();
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => runtime),
+      ensureRecorder: vi.fn(),
+      attachClient: vi.fn(),
+      detachClient: vi.fn(),
+      subscribe: vi.fn((_terminalSessionId, subscriber) => {
+        subscriber.onData("echo hi\n");
+        return () => undefined;
+      }),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(messages).toEqual([
+      {
+        type: "connected",
+        terminalSessionId: "terminal-1",
+      },
+      {
+        type: "snapshot",
+        data: "bash-3.2$ ",
+      },
+      {
+        type: "status",
+        status: "running",
+      },
+      {
+        type: "output",
+        data: "echo hi\n",
+      },
+    ]);
   });
 
   it("recreates a missing runtime for a persisted running session", async () => {

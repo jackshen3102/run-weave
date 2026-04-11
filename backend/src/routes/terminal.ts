@@ -12,6 +12,7 @@ import type {
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
   TerminalProjectListItem,
+  TerminalSessionHistoryResponse,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
   UpdateTerminalProjectRequest,
@@ -28,6 +29,7 @@ import {
   resolveDefaultTerminalCommand,
   resolveTerminalFallbackLaunchConfig,
 } from "../terminal/default-shell";
+import { getLiveTerminalScrollback } from "../terminal/live-scrollback";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
@@ -131,6 +133,25 @@ function toStatusPayload(
     createdAt: session.createdAt.toISOString(),
     exitCode: session.exitCode,
   };
+}
+
+function toLiveStatusPayload(
+  session: ReturnType<TerminalSessionManager["getSession"]> extends infer T
+    ? NonNullable<T>
+    : never,
+): TerminalSessionStatusResponse {
+  return {
+    ...toStatusPayload(session),
+    scrollback: getLiveTerminalScrollback(session.scrollback),
+  };
+}
+
+function toHistoryPayload(
+  session: ReturnType<TerminalSessionManager["getSession"]> extends infer T
+    ? NonNullable<T>
+    : never,
+): TerminalSessionHistoryResponse {
+  return toStatusPayload(session);
 }
 
 export function createTerminalRouter(
@@ -316,6 +337,16 @@ export function createTerminalRouter(
     }
   });
 
+  router.get("/session/:id/history", (req, res) => {
+    const session = terminalSessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Terminal session not found" });
+      return;
+    }
+
+    res.json(toHistoryPayload(session));
+  });
+
   router.get("/session/:id", (req, res) => {
     const session = terminalSessionManager.getSession(req.params.id);
     if (!session) {
@@ -323,7 +354,7 @@ export function createTerminalRouter(
       return;
     }
 
-    res.json(toStatusPayload(session));
+    res.json(toLiveStatusPayload(session));
   });
 
   router.post("/session/:id/ws-ticket", (req, res) => {

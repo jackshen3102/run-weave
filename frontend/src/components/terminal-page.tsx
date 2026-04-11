@@ -72,6 +72,23 @@ export function TerminalPage({
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
 
+  const onSnapshot = useCallback((data: string) => {
+    const nextChunk = data.replace(DECRQM_QUERY_RE, "");
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+
+    terminal.reset();
+    if (!nextChunk) {
+      return;
+    }
+
+    terminal.write(nextChunk, () => {
+      terminal.scrollToBottom();
+    });
+  }, []);
+
   const onOutput = useCallback((data: string) => {
     const nextChunk = data.replace(DECRQM_QUERY_RE, "");
     if (!nextChunk) {
@@ -93,6 +110,7 @@ export function TerminalPage({
     terminalSessionId,
     token,
     onAuthExpired,
+    onSnapshot,
     onOutput,
   });
 

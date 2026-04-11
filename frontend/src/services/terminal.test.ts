@@ -6,6 +6,7 @@ import {
   createTerminalWsTicket,
   deleteTerminalProject,
   deleteTerminalSession,
+  getTerminalHistory,
   getTerminalSession,
   listTerminalProjects,
   listTerminalSessions,
@@ -140,6 +141,25 @@ describe("terminal service", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:5001/api/terminal/session/terminal%2F1",
+      {
+        headers: {
+          Authorization: "Bearer token-1",
+        },
+      },
+    );
+  });
+
+  it("reads terminal history by encoded id", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ terminalSessionId: "terminal/1", scrollback: "" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getTerminalHistory("http://localhost:5001", "token-1", "terminal/1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:5001/api/terminal/session/terminal%2F1/history",
       {
         headers: {
           Authorization: "Bearer token-1",

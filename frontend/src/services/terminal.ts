@@ -6,6 +6,7 @@ import type {
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
   TerminalProjectListItem,
+  TerminalSessionHistoryResponse,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
   UpdateTerminalProjectRequest,
@@ -117,6 +118,22 @@ export async function getTerminalSession(
   return requestJson<TerminalSessionStatusResponse>(
     apiBase,
     `/api/terminal/session/${encodeURIComponent(terminalSessionId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalHistory(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+): Promise<TerminalSessionHistoryResponse> {
+  return requestJson<TerminalSessionHistoryResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/history`,
     {
       headers: {
         Authorization: `Bearer ${token}`,

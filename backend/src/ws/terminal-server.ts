@@ -7,6 +7,7 @@ import type {
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
 import { resolveTerminalFallbackLaunchConfig } from "../terminal/default-shell";
+import { getLiveTerminalScrollback } from "../terminal/live-scrollback";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { TerminalOutputBatcher } from "../terminal/output-batcher";
 import type { PtyService } from "../terminal/pty-service";
@@ -178,6 +179,8 @@ export function attachTerminalWebSocketServer(
     const outputBatcher = new TerminalOutputBatcher((output) => {
       sendEvent(socket, { type: "output", data: output });
     });
+    let snapshotDelivered = false;
+    let pendingInitialOutput = "";
     const shellPromptTracker = createShellPromptTracker({
       cwd: session?.cwd ?? null,
     });
@@ -195,6 +198,11 @@ export function attachTerminalWebSocketServer(
         }
 
         if (!metadata.output) {
+          return;
+        }
+
+        if (!snapshotDelivered) {
+          pendingInitialOutput += metadata.output;
           return;
         }
 
@@ -217,17 +225,26 @@ export function attachTerminalWebSocketServer(
 
     sendEvent(socket, { type: "connected", terminalSessionId });
     if (session) {
-      if (session.scrollback) {
-        sendEvent(socket, {
-          type: "output",
-          data: session.scrollback,
-        });
-      }
+      sendEvent(socket, {
+        type: "snapshot",
+        data: getLiveTerminalScrollback(session.scrollback),
+      });
+      snapshotDelivered = true;
       sendEvent(socket, {
         type: "status",
         status: session.status,
         exitCode: session.exitCode,
       });
+    } else {
+      sendEvent(socket, {
+        type: "snapshot",
+        data: "",
+      });
+      snapshotDelivered = true;
+    }
+    if (pendingInitialOutput) {
+      outputBatcher.push(pendingInitialOutput);
+      pendingInitialOutput = "";
     }
     heartbeat.start();
 

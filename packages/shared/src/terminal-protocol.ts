@@ -55,6 +55,8 @@ export interface TerminalSessionStatusResponse {
   exitCode?: number;
 }
 
+export type TerminalSessionHistoryResponse = TerminalSessionStatusResponse;
+
 export interface TerminalSessionListItem {
   terminalSessionId: string;
   projectId: string;
@@ -91,6 +93,10 @@ export type TerminalServerMessage =
   | {
       type: "connected";
       terminalSessionId: string;
+    }
+  | {
+      type: "snapshot";
+      data: string;
     }
   | {
       type: "metadata";

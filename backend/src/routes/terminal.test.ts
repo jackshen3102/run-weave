@@ -9,6 +9,7 @@ import {
   TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
   TERMINAL_CLIPBOARD_IMAGE_MAX_MIB,
 } from "../terminal/clipboard-image";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
 import { createTerminalRouter } from "./terminal";
 
 interface MockTerminalSession {
@@ -416,6 +417,96 @@ describe("terminal routes", () => {
         createdAt: "2026-03-29T00:00:00.000Z",
       },
     ]);
+  });
+
+  it("reads terminal session history through a dedicated API", async () => {
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "bash",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "bash$ ls\nREADME.md\n",
+        status: "exited" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        exitCode: 0,
+      },
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/history`,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      terminalSessionId: "terminal-1",
+      projectId: "project-default",
+      name: "bash",
+      command: "bash",
+      args: ["-l"],
+      cwd: "/tmp/demo",
+      scrollback: "bash$ ls\nREADME.md\n",
+      status: "exited",
+      createdAt: "2026-03-29T00:00:00.000Z",
+      exitCode: 0,
+    });
+  });
+
+  it("limits live terminal scrollback to the configured latest lines", async () => {
+    const scrollback = Array.from({ length: 2_500 }, (_, index) => `line-${index + 1}`)
+      .join("\n");
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "bash",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback,
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1`,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        terminalSessionId: "terminal-1",
+        scrollback: Array.from(
+          { length: TERMINAL_CLIENT_SCROLLBACK_LINES },
+          (_, index) => `line-${index + (2_500 - TERMINAL_CLIENT_SCROLLBACK_LINES + 1)}`,
+        ).join("\n"),
+      }),
+    );
+  });
+
+  it("returns 404 when reading history for an unknown terminal session", async () => {
+    const state = { current: null as MockTerminalSession | null };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/missing/history`,
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      message: "Terminal session not found",
+    });
   });
 
   it("disposes project runtimes before cascading terminal deletion", async () => {

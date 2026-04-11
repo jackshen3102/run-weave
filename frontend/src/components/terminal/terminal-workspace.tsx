@@ -33,6 +33,7 @@ import {
   ContextMenuTrigger,
 } from "../ui/context-menu";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
+import { TerminalHistoryDrawer } from "./terminal-history-drawer";
 import { TerminalSurface } from "./terminal-surface";
 
 interface TerminalWorkspaceProps {
@@ -119,6 +120,10 @@ export function TerminalWorkspace({
   const [projectDialogError, setProjectDialogError] = useState<string | null>(null);
   const [projectPendingDeletion, setProjectPendingDeletion] =
     useState<TerminalProjectListItem | null>(null);
+  const [historyTerminalSessionId, setHistoryTerminalSessionId] = useState<string | null>(
+    null,
+  );
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
 
   const visibleProjects = useMemo(() => {
     return [...projects].sort((left, right) => {
@@ -421,6 +426,23 @@ export function TerminalWorkspace({
   }, [sessions]);
 
   useEffect(() => {
+    if (!historyTerminalSessionId) {
+      return;
+    }
+
+    if (
+      sessions.some(
+        (session) => session.terminalSessionId === historyTerminalSessionId,
+      )
+    ) {
+      return;
+    }
+
+    setHistoryDrawerOpen(false);
+    setHistoryTerminalSessionId(null);
+  }, [historyTerminalSessionId, sessions]);
+
+  useEffect(() => {
     const sessionIds = new Set(sessions.map((session) => session.terminalSessionId));
     setBellMarkers((current) => {
       let changed = false;
@@ -627,6 +649,16 @@ export function TerminalWorkspace({
     }, BELL_MARKER_DURATION_MS);
   }, []);
 
+  const openHistoryDrawer = useCallback((terminalSessionId: string) => {
+    setHistoryTerminalSessionId(terminalSessionId);
+    setHistoryDrawerOpen(true);
+  }, []);
+
+  const historySession =
+    sessions.find(
+      (session) => session.terminalSessionId === historyTerminalSessionId,
+    ) ?? null;
+
   return (
     <section
       className={[
@@ -829,6 +861,9 @@ export function TerminalWorkspace({
                   onMetadata={(metadata) => {
                     handleSessionMetadata(session.terminalSessionId, metadata);
                   }}
+                  onOpenHistory={() => {
+                    openHistoryDrawer(session.terminalSessionId);
+                  }}
                 />
               </div>
             );
@@ -847,6 +882,20 @@ export function TerminalWorkspace({
         initialName={projectDialogMode === "rename" ? activeProject?.name ?? "" : ""}
         onClose={closeProjectDialog}
         onSubmit={submitProjectDialog}
+      />
+      <TerminalHistoryDrawer
+        open={historyDrawerOpen}
+        apiBase={apiBase}
+        token={token}
+        terminalSessionId={historyTerminalSessionId}
+        terminalName={historySession?.name}
+        onOpenChange={(open) => {
+          setHistoryDrawerOpen(open);
+          if (!open) {
+            setHistoryTerminalSessionId(null);
+          }
+        }}
+        onAuthExpired={onAuthExpired}
       />
       <AlertDialog
         open={projectPendingDeletion !== null}

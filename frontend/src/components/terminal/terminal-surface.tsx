@@ -25,11 +25,15 @@ import {
 import { createResizeScheduler } from "../../features/terminal/resize-scheduler";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
 import { HttpError } from "../../services/http";
-import { createTerminalSessionClipboardImage } from "../../services/terminal";
+import {
+  createTerminalSessionClipboardImage,
+  getTerminalSession,
+} from "../../services/terminal";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -46,6 +50,7 @@ interface TerminalSurfaceProps {
   onActivity?: () => void;
   onBell?: () => void;
   onMetadata?: (metadata: { name: string; cwd: string }) => void;
+  onOpenHistory?: () => void;
 }
 
 interface PastedImageReference {
@@ -143,6 +148,7 @@ export function TerminalSurface({
   onActivity,
   onBell,
   onMetadata,
+  onOpenHistory,
 }: TerminalSurfaceProps) {
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -168,6 +174,7 @@ export function TerminalSurface({
   const preferencesRef = useRef(preferences);
   const [effectiveRenderer, setEffectiveRenderer] =
     useState<ActiveRenderer>("dom");
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] =
@@ -180,6 +187,25 @@ export function TerminalSurface({
 
   // onOutput is stable so it never triggers a reconnect inside
   // useTerminalConnection.
+  const onSnapshot = useCallback((data: string) => {
+    const nextChunk = data.replace(DECRQM_QUERY_RE, "");
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+
+    terminal.reset();
+    if (!nextChunk) {
+      refreshTerminalViewportRef.current?.();
+      return;
+    }
+
+    terminal.write(nextChunk, () => {
+      terminal.scrollToBottom();
+      refreshTerminalViewportRef.current?.();
+    });
+  }, []);
+
   const onOutput = useCallback((data: string) => {
     const nextChunk = data.replace(DECRQM_QUERY_RE, "");
     if (!nextChunk) {
@@ -212,6 +238,7 @@ export function TerminalSurface({
     terminalSessionId,
     token,
     onAuthExpired,
+    onSnapshot,
     onOutput,
     onMetadata,
   });
@@ -563,6 +590,30 @@ export function TerminalSurface({
   ]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    void getTerminalSession(apiBase, token, terminalSessionId)
+      .then((session) => {
+        if (cancelled) {
+          return;
+        }
+        onMetadata?.({ name: session.name, cwd: session.cwd });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        if (error instanceof HttpError && error.status === 401) {
+          onAuthExpired?.();
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase, onAuthExpired, onMetadata, terminalSessionId, token]);
+
+  useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal) {
       return;
@@ -765,7 +816,10 @@ export function TerminalSurface({
               </div>
             ) : (
               <>
-                <DropdownMenu>
+                <DropdownMenu
+                  open={settingsMenuOpen}
+                  onOpenChange={setSettingsMenuOpen}
+                >
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
@@ -885,6 +939,18 @@ export function TerminalSurface({
                     >
                       Screen Reader Mode
                     </DropdownMenuCheckboxItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={(event) => {
+                        event.preventDefault();
+                        setSettingsMenuOpen(false);
+                        requestAnimationFrame(() => {
+                          onOpenHistory?.();
+                        });
+                      }}
+                    >
+                      View History
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <button
