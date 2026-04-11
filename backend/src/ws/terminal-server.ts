@@ -17,6 +17,25 @@ import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
 
+const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-be]";
+
+function summarizeTerminalChunk(data: string): { len: number; preview: string } {
+  return {
+    len: data.length,
+    preview: JSON.stringify(data.slice(0, 32)),
+  };
+}
+
+function logTerminalPerf(
+  event: string,
+  details: Record<string, unknown>,
+): void {
+  console.info(TERMINAL_PERF_LOG_PREFIX, event, {
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
+
 function parseTerminalClientMessage(
   rawData: string,
 ): TerminalClientMessage | null {
@@ -176,17 +195,47 @@ export function attachTerminalWebSocketServer(
       isAlive: true,
     };
     const heartbeat = createHeartbeatController(socket, heartbeatState);
-    const outputBatcher = new TerminalOutputBatcher((output) => {
-      sendEvent(socket, { type: "output", data: output });
-    });
+    let inputSequence = 0;
+    let runtimeOutputSequence = 0;
+    let flushedOutputSequence = 0;
+    let lastInputAt: number | null = null;
+    const outputBatcher = new TerminalOutputBatcher(
+      (output) => {
+        flushedOutputSequence += 1;
+        logTerminalPerf("terminal.ws.output.flush", {
+          terminalSessionId,
+          clientId,
+          seq: flushedOutputSequence,
+          sinceLastInputMs: lastInputAt === null ? null : Date.now() - lastInputAt,
+          ...summarizeTerminalChunk(output),
+        });
+        sendEvent(socket, { type: "output", data: output });
+      },
+      `${terminalSessionId}/${clientId}`,
+    );
     let snapshotDelivered = false;
     let pendingInitialOutput = "";
     const shellPromptTracker = createShellPromptTracker({
       cwd: session?.cwd ?? null,
     });
+    logTerminalPerf("terminal.ws.connected", {
+      terminalSessionId,
+      clientId,
+      runtimeExists: Boolean(runtime),
+      sessionStatus: session?.status ?? null,
+    });
     runtimeRegistry.attachClient(terminalSessionId, clientId);
     const unsubscribe = runtimeRegistry.subscribe(terminalSessionId, {
       onData(data) {
+        runtimeOutputSequence += 1;
+        logTerminalPerf("terminal.runtime.output", {
+          terminalSessionId,
+          clientId,
+          seq: runtimeOutputSequence,
+          snapshotDelivered,
+          sinceLastInputMs: lastInputAt === null ? null : Date.now() - lastInputAt,
+          ...summarizeTerminalChunk(data),
+        });
         const metadata = shellPromptTracker.consume(data);
 
         if (metadata.metadataChanged && metadata.sessionName && metadata.cwd) {
@@ -202,10 +251,22 @@ export function attachTerminalWebSocketServer(
         }
 
         if (!snapshotDelivered) {
+          logTerminalPerf("terminal.runtime.output.buffered-before-snapshot", {
+            terminalSessionId,
+            clientId,
+            seq: runtimeOutputSequence,
+            ...summarizeTerminalChunk(metadata.output),
+          });
           pendingInitialOutput += metadata.output;
           return;
         }
 
+        logTerminalPerf("terminal.runtime.output.to-batcher", {
+          terminalSessionId,
+          clientId,
+          seq: runtimeOutputSequence,
+          ...summarizeTerminalChunk(metadata.output),
+        });
         outputBatcher.push(metadata.output);
       },
       onExit(event) {
@@ -261,8 +322,24 @@ export function attachTerminalWebSocketServer(
 
       if (parsed.type === "input") {
         try {
+          inputSequence += 1;
+          lastInputAt = Date.now();
+          logTerminalPerf("terminal.ws.input.received", {
+            terminalSessionId,
+            clientId,
+            seq: inputSequence,
+            ...summarizeTerminalChunk(parsed.data),
+          });
           outputBatcher.markNextChunkInteractive();
+          const writeStartedAt = performance.now();
           runtime.write(parsed.data);
+          logTerminalPerf("terminal.ws.input.written", {
+            terminalSessionId,
+            clientId,
+            seq: inputSequence,
+            runtimeWriteDurationMs: Number((performance.now() - writeStartedAt).toFixed(2)),
+            ...summarizeTerminalChunk(parsed.data),
+          });
         } catch (error) {
           handleRuntimeActionError(socket, terminalSessionId, "input", error);
         }

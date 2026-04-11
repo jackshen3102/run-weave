@@ -606,13 +606,23 @@ export function TerminalWorkspace({
 
   const handleSessionMetadata = useCallback(
     (terminalSessionId: string, metadata: { name: string; cwd: string }) => {
-      setSessions((currentSessions) =>
-        currentSessions.map((session) =>
-          session.terminalSessionId === terminalSessionId
-            ? { ...session, name: metadata.name, cwd: metadata.cwd }
-            : session,
-        ),
-      );
+      setSessions((currentSessions) => {
+        let changed = false;
+        const nextSessions = currentSessions.map((session) => {
+          if (session.terminalSessionId !== terminalSessionId) {
+            return session;
+          }
+
+          if (session.name === metadata.name && session.cwd === metadata.cwd) {
+            return session;
+          }
+
+          changed = true;
+          return { ...session, name: metadata.name, cwd: metadata.cwd };
+        });
+
+        return changed ? nextSessions : currentSessions;
+      });
     },
     [],
   );

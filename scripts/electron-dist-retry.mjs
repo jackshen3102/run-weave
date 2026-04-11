@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -9,6 +10,22 @@ const ELECTRON_DIR = path.join(ROOT, "electron");
 const ELECTRON_RELEASE_DIR = path.join(ELECTRON_DIR, "release");
 const DEFAULT_WAIT_MS = 5_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
+
+function resolveDefaultCacheRoot() {
+  const homeDir = os.homedir();
+  if (process.platform === "darwin") {
+    return path.join(homeDir, "Library", "Caches");
+  }
+  if (process.platform === "win32") {
+    return path.join(
+      process.env.LOCALAPPDATA ?? path.join(homeDir, "AppData", "Local"),
+      "Cache",
+    );
+  }
+  return path.join(
+    process.env.XDG_CACHE_HOME ?? path.join(homeDir, ".cache"),
+  );
+}
 
 export function isRetriableHdiutilResizeBusyError(output) {
   return (
@@ -107,11 +124,16 @@ async function main() {
   const builderArgs = process.argv.slice(2);
   const distArgs =
     builderArgs.length > 0 ? ["dist", ...builderArgs] : ["dist", "--mac", "--arm64"];
+  const defaultCacheRoot = resolveDefaultCacheRoot();
   const electronEnv = {
     ...process.env,
     CSC_IDENTITY_AUTO_DISCOVERY:
       process.env.CSC_IDENTITY_AUTO_DISCOVERY ?? "false",
-    ELECTRON_CACHE: process.env.ELECTRON_CACHE ?? "/tmp/electron-cache",
+    ELECTRON_CACHE:
+      process.env.ELECTRON_CACHE ?? path.join(defaultCacheRoot, "electron"),
+    ELECTRON_BUILDER_CACHE:
+      process.env.ELECTRON_BUILDER_CACHE ??
+      path.join(defaultCacheRoot, "electron-builder"),
   };
 
   await runCheckedCommand("node", ["./scripts/bump-electron-version.mjs"]);

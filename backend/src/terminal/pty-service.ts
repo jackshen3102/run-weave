@@ -54,6 +54,24 @@ interface PtyServiceDependencies {
 
 const QUICK_EXIT_FALLBACK_THRESHOLD_MS = 1_000;
 const TERMINAL_PROGRAM_NAME = "browser-viewer";
+const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-be]";
+
+function summarizeTerminalChunk(data: string): { len: number; preview: string } {
+  return {
+    len: data.length,
+    preview: JSON.stringify(data.slice(0, 32)),
+  };
+}
+
+function logTerminalPerf(
+  event: string,
+  details: Record<string, unknown>,
+): void {
+  console.info(TERMINAL_PERF_LOG_PREFIX, event, {
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
 
 const require = createRequire(
   path.join(process.cwd(), "__browser_viewer_node_pty_loader__.cjs"),
@@ -189,6 +207,9 @@ export class PtyService {
     let disposed = false;
     let fallbackActivated = false;
     let launchStartedAt = Date.now();
+    let lastWriteAt: number | null = null;
+    let writeSequence = 0;
+    let dataSequence = 0;
 
     const emitData = (data: string) => {
       if (dataListeners.size === 0) {
@@ -308,6 +329,13 @@ export class PtyService {
       currentRuntime = runtime;
       currentPid = runtime.pid;
       runtime.onData((data) => {
+        dataSequence += 1;
+        logTerminalPerf("pty.output", {
+          pid: runtime.pid,
+          seq: dataSequence,
+          sinceLastWriteMs: lastWriteAt === null ? null : Date.now() - lastWriteAt,
+          ...summarizeTerminalChunk(data),
+        });
         emitData(data);
       });
       runtime.onExit((event) => {
@@ -369,6 +397,13 @@ export class PtyService {
         }
       },
       write(data) {
+        writeSequence += 1;
+        lastWriteAt = Date.now();
+        logTerminalPerf("pty.write", {
+          pid: currentRuntime?.pid ?? currentPid,
+          seq: writeSequence,
+          ...summarizeTerminalChunk(data),
+        });
         currentRuntime?.write(data);
       },
       resize(cols, rows) {

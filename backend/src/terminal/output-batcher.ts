@@ -1,15 +1,33 @@
 const OUTPUT_BATCH_DURATION_MS = 16;
 const OUTPUT_BATCH_MAX_SIZE = 200 * 1024;
+const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-be]";
+
+function logTerminalPerf(
+  event: string,
+  details: Record<string, unknown>,
+): void {
+  console.info(TERMINAL_PERF_LOG_PREFIX, event, {
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
 
 export class TerminalOutputBatcher {
   private bufferedOutput = "";
   private flushTimer: NodeJS.Timeout | null = null;
   private flushNextChunkImmediately = false;
 
-  constructor(private readonly onFlush: (output: string) => void) {}
+  constructor(
+    private readonly onFlush: (output: string) => void,
+    private readonly label = "default",
+  ) {}
 
   markNextChunkInteractive(): void {
     this.flushNextChunkImmediately = true;
+    logTerminalPerf("terminal.batcher.interactive", {
+      label: this.label,
+      bufferedLen: this.bufferedOutput.length,
+    });
   }
 
   push(chunk: string): void {
@@ -19,6 +37,11 @@ export class TerminalOutputBatcher {
 
     if (this.flushNextChunkImmediately) {
       this.flushNextChunkImmediately = false;
+      logTerminalPerf("terminal.batcher.push.immediate", {
+        label: this.label,
+        chunkLen: chunk.length,
+        bufferedLen: this.bufferedOutput.length,
+      });
       this.flush();
       this.bufferedOutput += chunk;
       this.flush();
@@ -26,6 +49,11 @@ export class TerminalOutputBatcher {
     }
 
     if (this.bufferedOutput.length + chunk.length >= OUTPUT_BATCH_MAX_SIZE) {
+      logTerminalPerf("terminal.batcher.push.max-size", {
+        label: this.label,
+        chunkLen: chunk.length,
+        bufferedLen: this.bufferedOutput.length,
+      });
       this.flush();
     }
 
@@ -35,6 +63,11 @@ export class TerminalOutputBatcher {
       return;
     }
 
+    logTerminalPerf("terminal.batcher.schedule", {
+      label: this.label,
+      bufferedLen: this.bufferedOutput.length,
+      delayMs: OUTPUT_BATCH_DURATION_MS,
+    });
     this.flushTimer = setTimeout(() => {
       this.flush();
     }, OUTPUT_BATCH_DURATION_MS);
@@ -52,6 +85,10 @@ export class TerminalOutputBatcher {
 
     const output = this.bufferedOutput;
     this.bufferedOutput = "";
+    logTerminalPerf("terminal.batcher.flush", {
+      label: this.label,
+      outputLen: output.length,
+    });
     this.onFlush(output);
   }
 

@@ -82,6 +82,24 @@ interface TerminalSearchResults {
 }
 
 type ActiveRenderer = "webgl" | "canvas" | "dom";
+const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-fe]";
+
+function summarizeTerminalChunk(data: string): { len: number; preview: string } {
+  return {
+    len: data.length,
+    preview: JSON.stringify(data.slice(0, 32)),
+  };
+}
+
+function logTerminalPerf(
+  event: string,
+  details: Record<string, unknown>,
+): void {
+  console.info(TERMINAL_PERF_LOG_PREFIX, event, {
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
 
 function clampTerminalFontSize(value: number): number {
   return Math.max(MIN_TERMINAL_FONT_SIZE, Math.min(MAX_TERMINAL_FONT_SIZE, value));
@@ -162,10 +180,15 @@ export function TerminalSurface({
   const activeRef = useRef(active);
   const onActivityRef = useRef(onActivity);
   const onBellRef = useRef(onBell);
+  const onAuthExpiredRef = useRef(onAuthExpired);
+  const onMetadataRef = useRef(onMetadata);
   const tokenRef = useRef(token);
   const openedAtRef = useRef(Date.now());
   const lastActivityMarkedAtRef = useRef<number | null>(null);
   const lastResizedAtRef = useRef<number | null>(null);
+  const inputSequenceRef = useRef(0);
+  const outputSequenceRef = useRef(0);
+  const lastInputSentAtRef = useRef<number | null>(null);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<PastedImageReference[]>([]);
   const [preferences, setPreferences] = useState<TerminalPreferences>(() =>
@@ -194,17 +217,28 @@ export function TerminalSurface({
       return;
     }
 
+    logTerminalPerf("terminal.snapshot.received", {
+      terminalSessionId,
+      ...summarizeTerminalChunk(nextChunk),
+    });
+
     terminal.reset();
     if (!nextChunk) {
       refreshTerminalViewportRef.current?.();
       return;
     }
 
+    const renderStartedAt = performance.now();
     terminal.write(nextChunk, () => {
+      logTerminalPerf("terminal.snapshot.rendered", {
+        terminalSessionId,
+        renderDurationMs: Number((performance.now() - renderStartedAt).toFixed(2)),
+        ...summarizeTerminalChunk(nextChunk),
+      });
       terminal.scrollToBottom();
       refreshTerminalViewportRef.current?.();
     });
-  }, []);
+  }, [terminalSessionId]);
 
   const onOutput = useCallback((data: string) => {
     const nextChunk = data.replace(DECRQM_QUERY_RE, "");
@@ -230,8 +264,33 @@ export function TerminalSurface({
       onActivityRef.current?.();
     }
 
-    terminalRef.current?.write(nextChunk);
-  }, []);
+    outputSequenceRef.current += 1;
+    const outputSequence = outputSequenceRef.current;
+    logTerminalPerf("terminal.output.received", {
+      terminalSessionId,
+      seq: outputSequence,
+      sinceLastInputMs:
+        lastInputSentAtRef.current === null
+          ? null
+          : now - lastInputSentAtRef.current,
+      ...summarizeTerminalChunk(nextChunk),
+    });
+
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+
+    const renderStartedAt = performance.now();
+    terminal.write(nextChunk, () => {
+      logTerminalPerf("terminal.output.rendered", {
+        terminalSessionId,
+        seq: outputSequence,
+        renderDurationMs: Number((performance.now() - renderStartedAt).toFixed(2)),
+        ...summarizeTerminalChunk(nextChunk),
+      });
+    });
+  }, [terminalSessionId]);
 
   const { error, sendInput, sendResize } = useTerminalConnection({
     apiBase,
@@ -289,6 +348,14 @@ export function TerminalSurface({
   useEffect(() => {
     onBellRef.current = onBell;
   }, [onBell]);
+
+  useEffect(() => {
+    onAuthExpiredRef.current = onAuthExpired;
+  }, [onAuthExpired]);
+
+  useEffect(() => {
+    onMetadataRef.current = onMetadata;
+  }, [onMetadata]);
 
   useEffect(() => {
     tokenRef.current = token;
@@ -442,6 +509,13 @@ export function TerminalSurface({
       if (isTerminalAutoResponse(data)) {
         return;
       }
+      inputSequenceRef.current += 1;
+      lastInputSentAtRef.current = Date.now();
+      logTerminalPerf("terminal.input.captured", {
+        terminalSessionId,
+        seq: inputSequenceRef.current,
+        ...summarizeTerminalChunk(data),
+      });
       sendInput(data);
     });
     const bellDisposable = terminal.onBell(() => {
@@ -597,21 +671,21 @@ export function TerminalSurface({
         if (cancelled) {
           return;
         }
-        onMetadata?.({ name: session.name, cwd: session.cwd });
+        onMetadataRef.current?.({ name: session.name, cwd: session.cwd });
       })
       .catch((error: unknown) => {
         if (cancelled) {
           return;
         }
         if (error instanceof HttpError && error.status === 401) {
-          onAuthExpired?.();
+          onAuthExpiredRef.current?.();
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [apiBase, onAuthExpired, onMetadata, terminalSessionId, token]);
+  }, [apiBase, terminalSessionId, token]);
 
   useEffect(() => {
     const terminal = terminalRef.current;

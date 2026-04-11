@@ -11,6 +11,24 @@ import { toWebSocketBase } from "../viewer/url";
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type TerminalRuntimeStatus = "running" | "exited" | null;
 const MAX_UNAUTHORIZED_RETRIES = 1;
+const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-fe]";
+
+function summarizeTerminalChunk(data: string): { len: number; preview: string } {
+  return {
+    len: data.length,
+    preview: JSON.stringify(data.slice(0, 32)),
+  };
+}
+
+function logTerminalPerf(
+  event: string,
+  details: Record<string, unknown>,
+): void {
+  console.info(TERMINAL_PERF_LOG_PREFIX, event, {
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
 
 function buildTerminalWsUrl(
   apiBase: string,
@@ -59,6 +77,8 @@ export function useTerminalConnection(params: {
   const reconnectCountRef = useRef(0);
   const connectedAtRef = useRef<number | null>(null);
   const closeReasonRef = useRef<string | null>(null);
+  const outboundSequenceRef = useRef(0);
+  const inboundSequenceRef = useRef(0);
   // Keep onOutput in a ref so it never needs to be in the effect's dep array.
   const onSnapshotRef = useRef(onSnapshot);
   const onOutputRef = useRef(onOutput);
@@ -106,6 +126,10 @@ export function useTerminalConnection(params: {
       clearReconnectTimer();
       setConnectionStatus("connecting");
       setError(null);
+      logTerminalPerf("ws.connect.start", {
+        terminalSessionId,
+        reconnectCount: reconnectCountRef.current,
+      });
 
       try {
         const ticketPayload = await createTerminalWsTicket(
@@ -136,6 +160,10 @@ export function useTerminalConnection(params: {
           reconnectCountRef.current = 0;
           setError(null);
           setConnectionStatus("connected");
+          logTerminalPerf("ws.open", {
+            terminalSessionId,
+            pendingResize: pendingResizeRef.current,
+          });
           if (pendingResizeRef.current) {
             sendMessage(socket, {
               type: "resize",
@@ -170,6 +198,13 @@ export function useTerminalConnection(params: {
           const connectedAt = connectedAtRef.current;
           const livedMs = connectedAt ? Date.now() - connectedAt : 0;
           connectedAtRef.current = null;
+          logTerminalPerf("ws.close", {
+            terminalSessionId,
+            code: event.code,
+            reason: event.reason,
+            livedMs,
+            closeReason: closeReasonRef.current,
+          });
 
           if (
             !cancelled &&
@@ -204,15 +239,32 @@ export function useTerminalConnection(params: {
 
           try {
             const parsed = JSON.parse(String(event.data)) as TerminalServerMessage;
+            inboundSequenceRef.current += 1;
             if (parsed.type === "snapshot") {
+              logTerminalPerf("ws.message.snapshot", {
+                terminalSessionId,
+                seq: inboundSequenceRef.current,
+                ...summarizeTerminalChunk(parsed.data),
+              });
               onSnapshotRef.current?.(parsed.data);
               return;
             }
             if (parsed.type === "output") {
+              logTerminalPerf("ws.message.output", {
+                terminalSessionId,
+                seq: inboundSequenceRef.current,
+                ...summarizeTerminalChunk(parsed.data),
+              });
               onOutputRef.current?.(parsed.data);
               return;
             }
             if (parsed.type === "metadata") {
+              logTerminalPerf("ws.message.metadata", {
+                terminalSessionId,
+                seq: inboundSequenceRef.current,
+                name: parsed.name,
+                cwd: parsed.cwd,
+              });
               onMetadataRef.current?.({
                 name: parsed.name,
                 cwd: parsed.cwd,
@@ -220,16 +272,32 @@ export function useTerminalConnection(params: {
               return;
             }
             if (parsed.type === "status") {
+              logTerminalPerf("ws.message.status", {
+                terminalSessionId,
+                seq: inboundSequenceRef.current,
+                status: parsed.status,
+                exitCode: parsed.exitCode ?? null,
+              });
               setTerminalStatus(parsed.status);
               setExitCode(parsed.exitCode ?? null);
               return;
             }
             if (parsed.type === "exit") {
+              logTerminalPerf("ws.message.exit", {
+                terminalSessionId,
+                seq: inboundSequenceRef.current,
+                exitCode: parsed.exitCode ?? null,
+              });
               setTerminalStatus("exited");
               setExitCode(parsed.exitCode ?? null);
               return;
             }
             if (parsed.type === "error") {
+              logTerminalPerf("ws.message.error", {
+                terminalSessionId,
+                seq: inboundSequenceRef.current,
+                message: parsed.message,
+              });
               closeReasonRef.current = parsed.message;
               setError(parsed.message);
               if (parsed.message === "Unauthorized") {
@@ -251,6 +319,10 @@ export function useTerminalConnection(params: {
           return;
         }
 
+        logTerminalPerf("ws.connect.error", {
+          terminalSessionId,
+          error: String(error),
+        });
         closeReasonRef.current = String(error);
         setError(String(error));
         setConnectionStatus("closed");
@@ -279,24 +351,46 @@ export function useTerminalConnection(params: {
     exitCode,
     error,
     sendInput: useCallback((data: string) => {
+      outboundSequenceRef.current += 1;
+      logTerminalPerf("ws.send.input", {
+        terminalSessionId,
+        seq: outboundSequenceRef.current,
+        socketReadyState: socketRef.current?.readyState ?? null,
+        ...summarizeTerminalChunk(data),
+      });
       sendMessage(socketRef.current, {
         type: "input",
         data,
       });
-    }, []),
+    }, [terminalSessionId]),
     sendResize: useCallback((cols: number, rows: number) => {
       pendingResizeRef.current = { cols, rows };
+      outboundSequenceRef.current += 1;
+      logTerminalPerf("ws.send.resize", {
+        terminalSessionId,
+        seq: outboundSequenceRef.current,
+        socketReadyState: socketRef.current?.readyState ?? null,
+        cols,
+        rows,
+      });
       sendMessage(socketRef.current, {
         type: "resize",
         cols,
         rows,
       });
-    }, []),
+    }, [terminalSessionId]),
     sendSignal: useCallback((signal: "SIGINT" | "SIGTERM" | "SIGKILL") => {
+      outboundSequenceRef.current += 1;
+      logTerminalPerf("ws.send.signal", {
+        terminalSessionId,
+        seq: outboundSequenceRef.current,
+        socketReadyState: socketRef.current?.readyState ?? null,
+        signal,
+      });
       sendMessage(socketRef.current, {
         type: "signal",
         signal,
       });
-    }, []),
+    }, [terminalSessionId]),
   };
 }
