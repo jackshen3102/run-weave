@@ -5,6 +5,7 @@ import {
   loadRecentTerminalSelection,
   saveRecentTerminalSelection,
 } from "../../features/terminal/recent-selection";
+import { resolveCachedTerminalSurfaceIds } from "../../features/terminal/surface-cache";
 import { HttpError } from "../../services/http";
 import {
   createTerminalProject,
@@ -115,6 +116,7 @@ export function TerminalWorkspace({
   const [requestError, setRequestError] = useState<string | null>(null);
   const [activityMarkers, setActivityMarkers] = useState<Record<string, boolean>>({});
   const [bellMarkers, setBellMarkers] = useState<Record<string, boolean>>({});
+  const [cachedSurfaceSessionIds, setCachedSurfaceSessionIds] = useState<string[]>([]);
   const [projectDialogMode, setProjectDialogMode] = useState<"create" | "rename" | null>(
     null,
   );
@@ -141,6 +143,14 @@ export function TerminalWorkspace({
         return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
       });
   }, [activeProjectId, sessions]);
+  const sessionIds = useMemo(
+    () => sessions.map((session) => session.terminalSessionId),
+    [sessions],
+  );
+  const cachedSurfaceSessionIdSet = useMemo(
+    () => new Set(cachedSurfaceSessionIds),
+    [cachedSurfaceSessionIds],
+  );
 
   const activeProject =
     visibleProjects.find((project) => project.projectId === activeProjectId) ?? null;
@@ -267,6 +277,16 @@ export function TerminalWorkspace({
     onActiveSessionChange,
     requestError,
   ]);
+
+  useEffect(() => {
+    setCachedSurfaceSessionIds((current) =>
+      resolveCachedTerminalSurfaceIds({
+        activeSessionId: activeSession?.terminalSessionId ?? null,
+        cachedSessionIds: current,
+        sessionIds,
+      }),
+    );
+  }, [activeSession?.terminalSessionId, sessionIds]);
 
   useEffect(() => {
     if (!hasLoadedSessions || requestError || !activeProjectId) {
@@ -847,8 +867,10 @@ export function TerminalWorkspace({
           sessions.map((session) => {
             const isActive =
               session.terminalSessionId === activeSession?.terminalSessionId;
+            const shouldRenderSurface =
+              isActive || cachedSurfaceSessionIdSet.has(session.terminalSessionId);
 
-            if (!isActive) {
+            if (!shouldRenderSurface) {
               return (
                 <TerminalHeadlessConnection
                   apiBase={apiBase}
@@ -871,11 +893,15 @@ export function TerminalWorkspace({
 
             return (
               <div
-                className="absolute top-0 left-0 h-full w-full"
+                aria-hidden={!isActive}
+                className={[
+                  "absolute top-0 h-full w-full",
+                  isActive ? "left-0" : "-left-[9999em] pointer-events-none",
+                ].join(" ")}
                 key={session.terminalSessionId}
               >
                 <TerminalSurface
-                  active
+                  active={isActive}
                   apiBase={apiBase}
                   terminalSessionId={session.terminalSessionId}
                   token={token}

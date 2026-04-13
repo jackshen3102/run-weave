@@ -104,6 +104,12 @@ test("creates a terminal session and streams command output", async ({
   request,
 }) => {
   await loginAndSeedToken(request, page);
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
   await page.goto("/");
 
   await page.getByRole("button", { name: "Open Terminal" }).click();
@@ -117,7 +123,7 @@ test("creates a terminal session and streams command output", async ({
 
   await expect
     .poll(async () => {
-      return await page.getByLabel("Terminal output").textContent();
+      return await getLiveTerminalText(page);
     })
     .toContain("/");
 
@@ -126,7 +132,7 @@ test("creates a terminal session and streams command output", async ({
 
   await expect
     .poll(async () => {
-      return await page.getByLabel("Terminal output").textContent();
+      return await getLiveTerminalText(page);
     })
     .toContain("terminal-e2e-ok");
 });

@@ -65,6 +65,7 @@ interface PastedImageReference {
 
 const ESCAPE = "\\u001b";
 const BELL = "\\u0007";
+const BELL_CHARACTER = "\u0007";
 const OSC_COLOR_RESPONSE_PATTERN = new RegExp(
   `${ESCAPE}\\]1[01];rgb:[0-9a-f/]+(?:${BELL}|${ESCAPE}\\\\)`,
   "i",
@@ -79,6 +80,7 @@ const FOCUS_REPORTING_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[(?:I|O)$`);
 const TERMINAL_RESIZE_DEBOUNCE_MS = 120;
 const MIN_TERMINAL_FONT_SIZE = 11;
 const MAX_TERMINAL_FONT_SIZE = 24;
+const DEFERRED_OUTPUT_REPLAY_MAX_CHARS = 128 * 1024;
 
 interface TerminalSearchResults {
   resultCount: number;
@@ -218,8 +220,12 @@ export function TerminalSurface({
   const outputSequenceRef = useRef(0);
   const lastInputSentAtRef = useRef<number | null>(null);
   const hasDeferredOutputRef = useRef(false);
+  const deferredOutputRef = useRef("");
+  const requiresSnapshotRestoreRef = useRef(false);
+  const hasRenderedSnapshotRef = useRef(false);
   const restoreSnapshotRequestRef = useRef(0);
   const websocketContentVersionRef = useRef(0);
+  const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<PastedImageReference[]>([]);
   const [preferences, setPreferences] = useState<TerminalPreferences>(() =>
@@ -251,6 +257,10 @@ export function TerminalSurface({
       ...summarizeTerminalChunk(nextChunk),
     });
 
+    hasRenderedSnapshotRef.current = true;
+    hasDeferredOutputRef.current = false;
+    deferredOutputRef.current = "";
+    requiresSnapshotRestoreRef.current = false;
     terminal.reset();
     if (!nextChunk) {
       refreshTerminalViewportRef.current?.();
@@ -269,16 +279,61 @@ export function TerminalSurface({
     });
   }, [terminalSessionId]);
 
+  const markDeferredOutput = useCallback((data: string) => {
+    hasDeferredOutputRef.current = true;
+
+    if (requiresSnapshotRestoreRef.current) {
+      return;
+    }
+
+    if (
+      deferredOutputRef.current.length + data.length >
+      DEFERRED_OUTPUT_REPLAY_MAX_CHARS
+    ) {
+      deferredOutputRef.current = "";
+      requiresSnapshotRestoreRef.current = true;
+      return;
+    }
+
+    deferredOutputRef.current += data;
+  }, []);
+
+  const replayDeferredOutput = useCallback(() => {
+    const terminal = terminalRef.current;
+    const deferredOutput = deferredOutputRef.current;
+    if (!terminal || !deferredOutput) {
+      return false;
+    }
+
+    deferredOutputRef.current = "";
+    hasDeferredOutputRef.current = false;
+
+    const renderStartedAt = performance.now();
+    terminal.write(deferredOutput, () => {
+      logTerminalPerf("terminal.deferred-output.rendered", {
+        terminalSessionId,
+        renderDurationMs: Number((performance.now() - renderStartedAt).toFixed(2)),
+        ...summarizeTerminalChunk(deferredOutput),
+      });
+      refreshTerminalViewportRef.current?.();
+    });
+
+    return true;
+  }, [terminalSessionId]);
+
   // onOutput is stable so it never triggers a reconnect inside
   // useTerminalConnection.
   const onSnapshot = useCallback((data: string) => {
     websocketContentVersionRef.current += 1;
     if (!activeRef.current) {
-      hasDeferredOutputRef.current = hasDeferredOutputRef.current || data.length > 0;
+      if (data.length > 0) {
+        hasDeferredOutputRef.current = true;
+        deferredOutputRef.current = "";
+        requiresSnapshotRestoreRef.current = true;
+      }
       return;
     }
 
-    hasDeferredOutputRef.current = false;
     renderTerminalSnapshot(data);
   }, [renderTerminalSnapshot]);
 
@@ -290,6 +345,10 @@ export function TerminalSurface({
     websocketContentVersionRef.current += 1;
 
     const now = Date.now();
+    if (!activeRef.current && nextChunk.includes(BELL_CHARACTER)) {
+      onBellRef.current?.();
+    }
+
     if (
       containsTerminalActivityContent(nextChunk) &&
       shouldMarkTerminalActivity({
@@ -328,13 +387,13 @@ export function TerminalSurface({
       ...summarizeTerminalChunk(nextChunk),
     });
 
-    const terminal = terminalRef.current;
-    if (!terminal) {
+    if (!activeRef.current) {
+      markDeferredOutput(nextChunk);
       return;
     }
 
-    if (!activeRef.current) {
-      hasDeferredOutputRef.current = true;
+    const terminal = terminalRef.current;
+    if (!terminal) {
       return;
     }
 
@@ -376,7 +435,7 @@ export function TerminalSurface({
         });
       });
     });
-  }, [terminalSessionId]);
+  }, [markDeferredOutput, terminalSessionId]);
 
   const { error, sendInput, sendResize } = useTerminalConnection({
     apiBase,
@@ -571,7 +630,14 @@ export function TerminalSurface({
       if (!dimensions) {
         return;
       }
+      if (
+        lastSentResizeRef.current?.cols === dimensions.cols &&
+        lastSentResizeRef.current.rows === dimensions.rows
+      ) {
+        return;
+      }
       lastResizedAtRef.current = Date.now();
+      lastSentResizeRef.current = { cols: dimensions.cols, rows: dimensions.rows };
       sendResize(dimensions.cols, dimensions.rows);
     };
     const resizeScheduler = createResizeScheduler(
@@ -821,37 +887,81 @@ export function TerminalSurface({
 
     let cancelled = false;
     const requestId = restoreSnapshotRequestRef.current + 1;
-    const websocketContentVersionAtRequest = websocketContentVersionRef.current;
     restoreSnapshotRequestRef.current = requestId;
-    hasDeferredOutputRef.current = false;
 
-    void getTerminalSession(apiBase, tokenRef.current, terminalSessionId)
-      .then((session) => {
+    if (
+      hasRenderedSnapshotRef.current &&
+      !hasDeferredOutputRef.current &&
+      !requiresSnapshotRestoreRef.current
+    ) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (hasRenderedSnapshotRef.current && !requiresSnapshotRestoreRef.current) {
+      if (replayDeferredOutput()) {
+        return () => {
+          cancelled = true;
+        };
+      }
+      hasDeferredOutputRef.current = false;
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const restoreSnapshot = async (attempt: number): Promise<void> => {
+      const websocketContentVersionAtRequest = websocketContentVersionRef.current;
+      try {
+        const session = await getTerminalSession(
+          apiBase,
+          tokenRef.current,
+          terminalSessionId,
+        );
         if (
           cancelled ||
-          restoreSnapshotRequestRef.current !== requestId ||
-          websocketContentVersionRef.current !== websocketContentVersionAtRequest
+          restoreSnapshotRequestRef.current !== requestId
         ) {
           return;
         }
 
+        if (websocketContentVersionRef.current !== websocketContentVersionAtRequest) {
+          if (requiresSnapshotRestoreRef.current && attempt < 2) {
+            await restoreSnapshot(attempt + 1);
+            return;
+          }
+          if (!requiresSnapshotRestoreRef.current) {
+            return;
+          }
+        }
+
         onMetadataRef.current?.({ name: session.name, cwd: session.cwd });
         renderTerminalSnapshot(session.scrollback);
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         if (cancelled) {
           return;
         }
         hasDeferredOutputRef.current = true;
+        requiresSnapshotRestoreRef.current = true;
         if (error instanceof HttpError && error.status === 401) {
           onAuthExpiredRef.current?.();
         }
-      });
+      }
+    };
+
+    void restoreSnapshot(0);
 
     return () => {
       cancelled = true;
     };
-  }, [active, apiBase, renderTerminalSnapshot, terminalSessionId]);
+  }, [
+    active,
+    apiBase,
+    renderTerminalSnapshot,
+    replayDeferredOutput,
+    terminalSessionId,
+  ]);
 
   useEffect(() => {
     if (!searchOpen) {
