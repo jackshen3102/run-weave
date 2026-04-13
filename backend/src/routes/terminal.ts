@@ -29,7 +29,6 @@ import {
   resolveDefaultTerminalCommand,
   resolveTerminalFallbackLaunchConfig,
 } from "../terminal/default-shell";
-import { getLiveTerminalScrollback } from "../terminal/live-scrollback";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
@@ -103,7 +102,8 @@ function resolveTerminalCreateDefaults(
 } {
   const command = payload.command?.trim() || resolveDefaultTerminalCommand();
   const inheritedCwd = payload.inheritFromTerminalSessionId
-    ? terminalSessionManager.getSession(payload.inheritFromTerminalSessionId)?.cwd
+    ? terminalSessionManager.getSession(payload.inheritFromTerminalSessionId)
+        ?.cwd
     : undefined;
   const cwd = payload.cwd?.trim() || inheritedCwd || os.homedir();
 
@@ -139,10 +139,19 @@ function toLiveStatusPayload(
   session: ReturnType<TerminalSessionManager["getSession"]> extends infer T
     ? NonNullable<T>
     : never,
+  scrollback: string,
 ): TerminalSessionStatusResponse {
   return {
-    ...toStatusPayload(session),
-    scrollback: getLiveTerminalScrollback(session.scrollback),
+    terminalSessionId: session.id,
+    projectId: session.projectId,
+    name: session.name,
+    command: session.command,
+    args: session.args,
+    cwd: session.cwd,
+    scrollback,
+    status: session.status,
+    createdAt: session.createdAt.toISOString(),
+    exitCode: session.exitCode,
   };
 }
 
@@ -164,7 +173,9 @@ export function createTerminalRouter(
 ): Router {
   const router = Router();
 
-  const resolveAuthenticatedSessionId = (authorizationHeader: string | undefined) => {
+  const resolveAuthenticatedSessionId = (
+    authorizationHeader: string | undefined,
+  ) => {
     if (!options?.authService) {
       return null;
     }
@@ -308,7 +319,10 @@ export function createTerminalRouter(
               args: session.args,
             }),
             onFallbackActivated: (fallback) => {
-              void terminalSessionManager.updateSessionLaunch(session.id, fallback);
+              void terminalSessionManager.updateSessionLaunch(
+                session.id,
+                fallback,
+              );
             },
           });
           options.runtimeRegistry.createRuntime(session.id, runtime);
@@ -354,7 +368,12 @@ export function createTerminalRouter(
       return;
     }
 
-    res.json(toLiveStatusPayload(session));
+    res.json(
+      toLiveStatusPayload(
+        session,
+        terminalSessionManager.getLiveScrollback(req.params.id),
+      ),
+    );
   });
 
   router.post("/session/:id/ws-ticket", (req, res) => {
@@ -367,7 +386,9 @@ export function createTerminalRouter(
       res.status(503).json({ message: "Terminal ticket service unavailable" });
       return;
     }
-    const authSessionId = resolveAuthenticatedSessionId(req.headers.authorization);
+    const authSessionId = resolveAuthenticatedSessionId(
+      req.headers.authorization,
+    );
     if (!authSessionId) {
       res.status(401).json({ message: "Unauthorized" });
       return;

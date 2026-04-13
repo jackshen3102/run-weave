@@ -62,6 +62,7 @@ export function TerminalHeadlessConnection({
     onAuthExpired,
     onOutput: handleOutput,
     onMetadata,
+    includeSnapshot: false,
   });
 
   return null;

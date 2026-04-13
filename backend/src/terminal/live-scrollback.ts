@@ -1,4 +1,11 @@
-import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
+import {
+  TERMINAL_CLIENT_SCROLLBACK_LINES,
+  TERMINAL_LIVE_SCROLLBACK_BYTES,
+} from "@browser-viewer/shared";
+import {
+  createScrollbackBuffer,
+  readScrollbackBuffer,
+} from "./scrollback-buffer";
 
 function limitScrollbackLines(scrollback: string, maxLines: number): string {
   if (!scrollback) {
@@ -14,5 +21,10 @@ function limitScrollbackLines(scrollback: string, maxLines: number): string {
 }
 
 export function getLiveTerminalScrollback(scrollback: string): string {
-  return limitScrollbackLines(scrollback, TERMINAL_CLIENT_SCROLLBACK_LINES);
+  return readScrollbackBuffer(
+    createScrollbackBuffer(
+      limitScrollbackLines(scrollback, TERMINAL_CLIENT_SCROLLBACK_LINES),
+      TERMINAL_LIVE_SCROLLBACK_BYTES,
+    ),
+  );
 }

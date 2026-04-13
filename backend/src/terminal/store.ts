@@ -29,6 +29,11 @@ export interface UpdateTerminalSessionScrollbackParams {
   scrollback: string;
 }
 
+export interface AppendTerminalSessionScrollbackParams {
+  terminalSessionId: string;
+  chunk: string;
+}
+
 export interface UpdateTerminalSessionMetadataParams {
   terminalSessionId: string;
   name: string;
@@ -67,6 +72,9 @@ export interface TerminalSessionStore {
   updateSessionLaunch(params: UpdateTerminalSessionLaunchParams): Promise<void>;
   updateSessionScrollback(
     params: UpdateTerminalSessionScrollbackParams,
+  ): Promise<void>;
+  appendSessionScrollback(
+    params: AppendTerminalSessionScrollbackParams,
   ): Promise<void>;
   updateSessionExit(params: UpdateTerminalSessionExitParams): Promise<void>;
   deleteSession(terminalSessionId: string): Promise<void>;

@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TerminalClientMessage, TerminalServerMessage } from "@browser-viewer/shared";
+import type {
+  TerminalClientMessage,
+  TerminalServerMessage,
+} from "@browser-viewer/shared";
 import { HttpError } from "../../services/http";
 import { createTerminalWsTicket } from "../../services/terminal";
 import {
   getTerminalReconnectDelay,
   shouldAutoReconnectTerminalClose,
 } from "./reconnect-policy";
-import {
-  logTerminalPerf,
-  summarizeTerminalChunk,
-} from "./perf-logging";
+import { logTerminalPerf, summarizeTerminalChunk } from "./perf-logging";
 import { toWebSocketBase } from "../viewer/url";
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
@@ -20,10 +20,16 @@ function buildTerminalWsUrl(
   apiBase: string,
   terminalSessionId: string,
   ticket: string,
+  includeSnapshot: boolean,
 ): string {
-  return `${toWebSocketBase(apiBase)}/ws/terminal?terminalSessionId=${encodeURIComponent(
+  const searchParams = new URLSearchParams({
     terminalSessionId,
-  )}&token=${encodeURIComponent(ticket)}`;
+    token: ticket,
+  });
+  if (!includeSnapshot) {
+    searchParams.set("snapshot", "0");
+  }
+  return `${toWebSocketBase(apiBase)}/ws/terminal?${searchParams.toString()}`;
 }
 
 function sendMessage(
@@ -45,6 +51,7 @@ export function useTerminalConnection(params: {
   onSnapshot?: (data: string) => void;
   onOutput?: (data: string) => void;
   onMetadata?: (metadata: { name: string; cwd: string }) => void;
+  includeSnapshot?: boolean;
 }) {
   const {
     apiBase,
@@ -54,8 +61,8 @@ export function useTerminalConnection(params: {
     onSnapshot,
     onOutput,
     onMetadata,
-  } =
-    params;
+    includeSnapshot = true,
+  } = params;
   const socketRef = useRef<WebSocket | null>(null);
   const tokenRef = useRef(token);
   const pendingResizeRef = useRef<{ cols: number; rows: number } | null>(null);
@@ -82,8 +89,10 @@ export function useTerminalConnection(params: {
     onMetadataRef.current = onMetadata;
   }, [onMetadata]);
 
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
-  const [terminalStatus, setTerminalStatus] = useState<TerminalRuntimeStatus>(null);
+  const [connectionStatus, setConnectionStatus] =
+    useState<ConnectionStatus>("connecting");
+  const [terminalStatus, setTerminalStatus] =
+    useState<TerminalRuntimeStatus>(null);
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -131,6 +140,7 @@ export function useTerminalConnection(params: {
           apiBase,
           terminalSessionId,
           ticketPayload.ticket,
+          includeSnapshot,
         );
 
         const socket = new WebSocket(wsUrl);
@@ -224,7 +234,9 @@ export function useTerminalConnection(params: {
           }
 
           try {
-            const parsed = JSON.parse(String(event.data)) as TerminalServerMessage;
+            const parsed = JSON.parse(
+              String(event.data),
+            ) as TerminalServerMessage;
             inboundSequenceRef.current += 1;
             if (parsed.type === "snapshot") {
               logTerminalPerf("ws.message.snapshot", {
@@ -329,54 +341,63 @@ export function useTerminalConnection(params: {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [apiBase, onAuthExpired, terminalSessionId]);
+  }, [apiBase, includeSnapshot, onAuthExpired, terminalSessionId]);
 
   return {
     connectionStatus,
     terminalStatus,
     exitCode,
     error,
-    sendInput: useCallback((data: string) => {
-      outboundSequenceRef.current += 1;
-      logTerminalPerf("ws.send.input", {
-        terminalSessionId,
-        seq: outboundSequenceRef.current,
-        socketReadyState: socketRef.current?.readyState ?? null,
-        ...summarizeTerminalChunk(data),
-      });
-      sendMessage(socketRef.current, {
-        type: "input",
-        data,
-      });
-    }, [terminalSessionId]),
-    sendResize: useCallback((cols: number, rows: number) => {
-      pendingResizeRef.current = { cols, rows };
-      outboundSequenceRef.current += 1;
-      logTerminalPerf("ws.send.resize", {
-        terminalSessionId,
-        seq: outboundSequenceRef.current,
-        socketReadyState: socketRef.current?.readyState ?? null,
-        cols,
-        rows,
-      });
-      sendMessage(socketRef.current, {
-        type: "resize",
-        cols,
-        rows,
-      });
-    }, [terminalSessionId]),
-    sendSignal: useCallback((signal: "SIGINT" | "SIGTERM" | "SIGKILL") => {
-      outboundSequenceRef.current += 1;
-      logTerminalPerf("ws.send.signal", {
-        terminalSessionId,
-        seq: outboundSequenceRef.current,
-        socketReadyState: socketRef.current?.readyState ?? null,
-        signal,
-      });
-      sendMessage(socketRef.current, {
-        type: "signal",
-        signal,
-      });
-    }, [terminalSessionId]),
+    sendInput: useCallback(
+      (data: string) => {
+        outboundSequenceRef.current += 1;
+        logTerminalPerf("ws.send.input", {
+          terminalSessionId,
+          seq: outboundSequenceRef.current,
+          socketReadyState: socketRef.current?.readyState ?? null,
+          ...summarizeTerminalChunk(data),
+        });
+        sendMessage(socketRef.current, {
+          type: "input",
+          data,
+        });
+      },
+      [terminalSessionId],
+    ),
+    sendResize: useCallback(
+      (cols: number, rows: number) => {
+        pendingResizeRef.current = { cols, rows };
+        outboundSequenceRef.current += 1;
+        logTerminalPerf("ws.send.resize", {
+          terminalSessionId,
+          seq: outboundSequenceRef.current,
+          socketReadyState: socketRef.current?.readyState ?? null,
+          cols,
+          rows,
+        });
+        sendMessage(socketRef.current, {
+          type: "resize",
+          cols,
+          rows,
+        });
+      },
+      [terminalSessionId],
+    ),
+    sendSignal: useCallback(
+      (signal: "SIGINT" | "SIGTERM" | "SIGKILL") => {
+        outboundSequenceRef.current += 1;
+        logTerminalPerf("ws.send.signal", {
+          terminalSessionId,
+          seq: outboundSequenceRef.current,
+          socketReadyState: socketRef.current?.readyState ?? null,
+          signal,
+        });
+        sendMessage(socketRef.current, {
+          type: "signal",
+          signal,
+        });
+      },
+      [terminalSessionId],
+    ),
   };
 }

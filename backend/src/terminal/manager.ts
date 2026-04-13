@@ -1,4 +1,8 @@
 import { v4 as uuidv4 } from "uuid";
+import {
+  TERMINAL_CLIENT_SCROLLBACK_LINES,
+  TERMINAL_LIVE_SCROLLBACK_BYTES,
+} from "@browser-viewer/shared";
 import type {
   PersistedTerminalProjectRecord,
   PersistedTerminalSessionRecord,
@@ -8,6 +12,7 @@ import {
   appendToScrollbackBuffer,
   createScrollbackBuffer,
   readScrollbackBuffer,
+  readScrollbackBufferTailLines,
   type ScrollbackBuffer,
 } from "./scrollback-buffer";
 
@@ -31,8 +36,10 @@ export interface TerminalSessionRecord {
   exitCode?: number;
 }
 
-interface RuntimeTerminalSessionRecord
-  extends Omit<TerminalSessionRecord, "scrollback"> {
+interface RuntimeTerminalSessionRecord extends Omit<
+  TerminalSessionRecord,
+  "scrollback"
+> {
   readonly scrollback: string;
   scrollbackBuffer: ScrollbackBuffer;
 }
@@ -135,6 +142,7 @@ export class TerminalSessionManager {
   private readonly projects = new Map<string, TerminalProjectRecord>();
   private readonly sessions = new Map<string, RuntimeTerminalSessionRecord>();
   private readonly scrollbackFlushTimers = new Map<string, NodeJS.Timeout>();
+  private readonly pendingScrollbackChunks = new Map<string, string[]>();
 
   constructor(private readonly sessionStore: TerminalSessionStore) {}
 
@@ -147,7 +155,10 @@ export class TerminalSessionManager {
       this.projects.set(persisted.id, buildProjectRecord(persisted));
     }
     for (const persisted of persistedSessions) {
-      this.sessions.set(persisted.id, createRuntimeRecord(buildRecord(persisted)));
+      this.sessions.set(
+        persisted.id,
+        createRuntimeRecord(buildRecord(persisted)),
+      );
     }
   }
 
@@ -229,7 +240,9 @@ export class TerminalSessionManager {
   }
 
   private getDefaultProjectId(): string {
-    const currentDefault = this.listProjects().find((project) => project.isDefault);
+    const currentDefault = this.listProjects().find(
+      (project) => project.isDefault,
+    );
     if (currentDefault) {
       return currentDefault.id;
     }
@@ -270,6 +283,23 @@ export class TerminalSessionManager {
     return this.sessions.get(terminalSessionId)?.scrollback ?? "";
   }
 
+  getLiveScrollback(terminalSessionId: string): string {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return "";
+    }
+
+    return readScrollbackBuffer(
+      createScrollbackBuffer(
+        readScrollbackBufferTailLines(
+          session.scrollbackBuffer,
+          TERMINAL_CLIENT_SCROLLBACK_LINES,
+        ),
+        TERMINAL_LIVE_SCROLLBACK_BYTES,
+      ),
+    );
+  }
+
   appendOutput(terminalSessionId: string, chunk: string): void {
     if (!chunk) {
       return;
@@ -281,6 +311,12 @@ export class TerminalSessionManager {
     }
 
     appendToScrollbackBuffer(session.scrollbackBuffer, chunk);
+    const pendingChunks = this.pendingScrollbackChunks.get(terminalSessionId);
+    if (pendingChunks) {
+      pendingChunks.push(chunk);
+    } else {
+      this.pendingScrollbackChunks.set(terminalSessionId, [chunk]);
+    }
     this.scheduleScrollbackFlush(terminalSessionId);
   }
 
@@ -360,7 +396,8 @@ export class TerminalSessionManager {
       return undefined;
     }
 
-    const nextName = session.name === session.command ? launch.command : session.name;
+    const nextName =
+      session.name === session.command ? launch.command : session.name;
     const nextArgs = [...launch.args];
     const commandUnchanged = session.command === launch.command;
     const argsUnchanged =
@@ -389,6 +426,7 @@ export class TerminalSessionManager {
     }
 
     this.clearPendingScrollbackFlush(terminalSessionId);
+    this.pendingScrollbackChunks.delete(terminalSessionId);
     this.sessions.delete(terminalSessionId);
     await this.sessionStore.deleteSession(terminalSessionId);
     return true;
@@ -420,14 +458,20 @@ export class TerminalSessionManager {
   }
 
   private async flushScrollback(terminalSessionId: string): Promise<void> {
-    const session = this.sessions.get(terminalSessionId);
-    if (!session) {
+    if (!this.sessions.has(terminalSessionId)) {
+      this.pendingScrollbackChunks.delete(terminalSessionId);
       return;
     }
 
-    await this.sessionStore.updateSessionScrollback({
+    const pendingChunks = this.pendingScrollbackChunks.get(terminalSessionId);
+    if (!pendingChunks?.length) {
+      return;
+    }
+    this.pendingScrollbackChunks.delete(terminalSessionId);
+
+    await this.sessionStore.appendSessionScrollback({
       terminalSessionId,
-      scrollback: session.scrollback,
+      chunk: pendingChunks.join(""),
     });
   }
 

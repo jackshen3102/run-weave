@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  TERMINAL_CLIENT_SCROLLBACK_LINES,
+  TERMINAL_LIVE_SCROLLBACK_BYTES,
+} from "@browser-viewer/shared";
 import { TerminalSessionManager } from "./manager";
 import type {
   PersistedTerminalProjectRecord,
@@ -16,11 +20,13 @@ function createStoreMock() {
   return {
     initialize: vi.fn(async () => undefined),
     dispose: vi.fn(async () => undefined),
-    listSessions: vi.fn(async (): Promise<PersistedTerminalSessionRecord[]> => []),
+    listSessions: vi.fn(
+      async (): Promise<PersistedTerminalSessionRecord[]> => [],
+    ),
     getSession: vi.fn(async () => null),
-    listProjects: vi.fn(async (): Promise<PersistedTerminalProjectRecord[]> => [
-      defaultProject,
-    ]),
+    listProjects: vi.fn(
+      async (): Promise<PersistedTerminalProjectRecord[]> => [defaultProject],
+    ),
     getProject: vi.fn(async () => defaultProject),
     insertProject: vi.fn(async () => undefined),
     updateProject: vi.fn(async () => undefined),
@@ -29,6 +35,7 @@ function createStoreMock() {
     insertSession: vi.fn(async () => undefined),
     updateSessionMetadata: vi.fn(async () => undefined),
     updateSessionLaunch: vi.fn(async () => undefined),
+    appendSessionScrollback: vi.fn(async () => undefined),
     updateSessionScrollback: vi.fn(async () => undefined),
     updateSessionExit: vi.fn(async () => undefined),
     deleteSession: vi.fn(async () => undefined),
@@ -97,7 +104,9 @@ describe("TerminalSessionManager", () => {
         manager as unknown as {
           listProjects: () => Array<{ isDefault: boolean }>;
         }
-      ).listProjects().some((project) => project.isDefault),
+      )
+        .listProjects()
+        .some((project) => project.isDefault),
     ).toBe(true);
   });
 
@@ -153,7 +162,7 @@ describe("TerminalSessionManager", () => {
     expect(manager.getSession(session.id)?.exitCode).toBe(130);
   });
 
-  it("appends output and flushes throttled scrollback snapshots", async () => {
+  it("appends output and flushes only the pending scrollback chunk", async () => {
     vi.useFakeTimers();
     const store = createStoreMock();
     const manager = new TerminalSessionManager(store);
@@ -168,16 +177,39 @@ describe("TerminalSessionManager", () => {
     manager.appendOutput(session.id, " world");
 
     expect(manager.getScrollback(session.id)).toBe("hello world");
+    expect(store.appendSessionScrollback).not.toHaveBeenCalled();
     expect(store.updateSessionScrollback).not.toHaveBeenCalled();
 
     await vi.runAllTimersAsync();
 
-    expect(store.updateSessionScrollback).toHaveBeenCalledTimes(1);
-    expect(store.updateSessionScrollback).toHaveBeenCalledWith({
+    expect(store.appendSessionScrollback).toHaveBeenCalledTimes(1);
+    expect(store.appendSessionScrollback).toHaveBeenCalledWith({
       terminalSessionId: session.id,
-      scrollback: "hello world",
+      chunk: "hello world",
     });
+    expect(store.updateSessionScrollback).not.toHaveBeenCalled();
     vi.useRealTimers();
+  });
+
+  it("keeps pending output chunks separate until flush", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    await manager.initialize();
+    const session = await manager.createSession({
+      command: "bash",
+      cwd: "/tmp/demo",
+      projectId: "project-default",
+    });
+
+    manager.appendOutput(session.id, "hello");
+    manager.appendOutput(session.id, " world");
+
+    const pendingChunks = (
+      manager as unknown as {
+        pendingScrollbackChunks: Map<string, string[]>;
+      }
+    ).pendingScrollbackChunks.get(session.id);
+    expect(pendingChunks).toEqual(["hello", " world"]);
   });
 
   it("retains long scrollback transcripts instead of trimming after a few hundred kilobytes", async () => {
@@ -194,6 +226,52 @@ describe("TerminalSessionManager", () => {
     manager.appendOutput(session.id, largeTranscript);
 
     expect(manager.getScrollback(session.id)).toBe(largeTranscript);
+  });
+
+  it("reads live scrollback from the latest client-visible lines", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    await manager.initialize();
+    const session = await manager.createSession({
+      command: "bash",
+      cwd: "/tmp/demo",
+      projectId: "project-default",
+    });
+    const scrollback = Array.from(
+      { length: TERMINAL_CLIENT_SCROLLBACK_LINES + 20 },
+      (_, index) => `line-${index + 1}`,
+    ).join("\n");
+
+    manager.appendOutput(session.id, scrollback);
+
+    expect(manager.getLiveScrollback(session.id)).toBe(
+      Array.from(
+        { length: TERMINAL_CLIENT_SCROLLBACK_LINES },
+        (_, index) => `line-${index + 21}`,
+      ).join("\n"),
+    );
+  });
+
+  it("caps live scrollback by bytes after limiting to client-visible lines", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    await manager.initialize();
+    const session = await manager.createSession({
+      command: "bash",
+      cwd: "/tmp/demo",
+      projectId: "project-default",
+    });
+    const scrollback = `${`${"x".repeat(2_048)}\n`.repeat(
+      TERMINAL_CLIENT_SCROLLBACK_LINES,
+    )}tail-marker\n`;
+
+    manager.appendOutput(session.id, scrollback);
+
+    const liveScrollback = manager.getLiveScrollback(session.id);
+    expect(Buffer.byteLength(liveScrollback, "utf8")).toBeLessThanOrEqual(
+      TERMINAL_LIVE_SCROLLBACK_BYTES,
+    );
+    expect(liveScrollback.endsWith("tail-marker\n")).toBe(true);
   });
 
   it("deletes terminal sessions", async () => {

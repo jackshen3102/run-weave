@@ -41,16 +41,14 @@ function createTestServer(sessionState: {
     sessionState.current?.id === id
       ? sessionState.current
       : sessionState.sessions?.find((session) => session.id === id);
-  const projects =
-    sessionState.projects ??
-    [
-      {
-        id: "project-default",
-        name: "Default Project",
-        createdAt: new Date("2026-03-29T00:00:00.000Z"),
-        isDefault: true,
-      },
-    ];
+  const projects = sessionState.projects ?? [
+    {
+      id: "project-default",
+      name: "Default Project",
+      createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      isDefault: true,
+    },
+  ];
   const terminalSessionManager = {
     createSession: vi.fn(
       async (options: {
@@ -106,9 +104,21 @@ function createTestServer(sessionState: {
       return true;
     }),
     getSession: vi.fn((id: string) => resolveSession(id)),
-    listSessions: vi.fn(() =>
-      sessionState.sessions ??
-      (sessionState.current ? [sessionState.current] : []),
+    getLiveScrollback: vi.fn((id: string) => {
+      const session = resolveSession(id);
+      if (!session) {
+        return "";
+      }
+      const lines = session.scrollback.split("\n");
+      if (lines.length <= TERMINAL_CLIENT_SCROLLBACK_LINES) {
+        return session.scrollback;
+      }
+      return lines.slice(-TERMINAL_CLIENT_SCROLLBACK_LINES).join("\n");
+    }),
+    listSessions: vi.fn(
+      () =>
+        sessionState.sessions ??
+        (sessionState.current ? [sessionState.current] : []),
     ),
     destroySession: vi.fn(async (id: string) => {
       if (sessionState.current?.id !== id) {
@@ -198,16 +208,19 @@ describe("terminal routes", () => {
     servers.push(server);
     const port = await startServer(server);
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        projectId: "project-default",
-        command: "bash",
-        args: ["-l"],
-        cwd: "/tmp/demo",
-      }),
-    });
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "project-default",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+        }),
+      },
+    );
 
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual({
@@ -222,14 +235,17 @@ describe("terminal routes", () => {
     servers.push(server);
     const port = await startServer(server);
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        command: "bash",
-        linkedBrowserSessionId: "session-1",
-      }),
-    });
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: "bash",
+          linkedBrowserSessionId: "session-1",
+        }),
+      },
+    );
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual(
@@ -247,11 +263,14 @@ describe("terminal routes", () => {
     const originalShell = process.env.SHELL;
     process.env.SHELL = "/bin/zsh";
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      },
+    );
 
     process.env.SHELL = originalShell;
     expect(response.status).toBe(201);
@@ -270,14 +289,17 @@ describe("terminal routes", () => {
     servers.push(server);
     const port = await startServer(server);
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        command: "/bin/zsh",
-        cwd: "/tmp/demo",
-      }),
-    });
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: "/bin/zsh",
+          cwd: "/tmp/demo",
+        }),
+      },
+    );
 
     expect(response.status).toBe(201);
     expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
@@ -295,15 +317,18 @@ describe("terminal routes", () => {
     servers.push(server);
     const port = await startServer(server);
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        command: "/bin/zsh",
-        args: ["-i"],
-        cwd: "/tmp/demo",
-      }),
-    });
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: "/bin/zsh",
+          args: ["-i"],
+          cwd: "/tmp/demo",
+        }),
+      },
+    );
 
     expect(response.status).toBe(201);
     expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
@@ -333,13 +358,16 @@ describe("terminal routes", () => {
     servers.push(server);
     const port = await startServer(server);
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        inheritFromTerminalSessionId: "terminal-1",
-      }),
-    });
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inheritFromTerminalSessionId: "terminal-1",
+        }),
+      },
+    );
 
     expect(response.status).toBe(201);
     expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
@@ -367,14 +395,17 @@ describe("terminal routes", () => {
     servers.push(server);
     const port = await startServer(server);
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cwd: "/tmp/override",
-        inheritFromTerminalSessionId: "terminal-1",
-      }),
-    });
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cwd: "/tmp/override",
+          inheritFromTerminalSessionId: "terminal-1",
+        }),
+      },
+    );
 
     expect(response.status).toBe(201);
     expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
@@ -402,7 +433,9 @@ describe("terminal routes", () => {
     servers.push(server);
     const port = await startServer(server);
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/terminal/session`);
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+    );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual([
@@ -458,8 +491,10 @@ describe("terminal routes", () => {
   });
 
   it("limits live terminal scrollback to the configured latest lines", async () => {
-    const scrollback = Array.from({ length: 2_500 }, (_, index) => `line-${index + 1}`)
-      .join("\n");
+    const scrollback = Array.from(
+      { length: 2_500 },
+      (_, index) => `line-${index + 1}`,
+    ).join("\n");
     const state = {
       current: {
         id: "terminal-1",
@@ -487,7 +522,8 @@ describe("terminal routes", () => {
         terminalSessionId: "terminal-1",
         scrollback: Array.from(
           { length: TERMINAL_CLIENT_SCROLLBACK_LINES },
-          (_, index) => `line-${index + (2_500 - TERMINAL_CLIENT_SCROLLBACK_LINES + 1)}`,
+          (_, index) =>
+            `line-${index + (2_500 - TERMINAL_CLIENT_SCROLLBACK_LINES + 1)}`,
         ).join("\n"),
       }),
     );
@@ -561,8 +597,14 @@ describe("terminal routes", () => {
 
     expect(response.status).toBe(204);
     expect(runtimeRegistry.disposeRuntime).toHaveBeenCalledTimes(2);
-    expect(runtimeRegistry.disposeRuntime).toHaveBeenNthCalledWith(1, "terminal-1");
-    expect(runtimeRegistry.disposeRuntime).toHaveBeenNthCalledWith(2, "terminal-2");
+    expect(runtimeRegistry.disposeRuntime).toHaveBeenNthCalledWith(
+      1,
+      "terminal-1",
+    );
+    expect(runtimeRegistry.disposeRuntime).toHaveBeenNthCalledWith(
+      2,
+      "terminal-2",
+    );
   });
 
   it("lists and creates terminal projects through the API", async () => {
@@ -573,7 +615,9 @@ describe("terminal routes", () => {
     servers.push(server);
     const port = await startServer(server);
 
-    const listResponse = await fetch(`http://127.0.0.1:${port}/api/terminal/project`);
+    const listResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project`,
+    );
 
     expect(listResponse.status).toBe(200);
     await expect(listResponse.json()).resolves.toEqual([
@@ -751,7 +795,11 @@ describe("terminal routes", () => {
       /^browser-viewer-terminal-image-\d{8}-\d{6}-[a-f0-9]{6}\.png$/,
     );
     expect(payload.filePath).toBe(
-      path.join(os.tmpdir(), "browser-viewer-terminal-images", payload.fileName),
+      path.join(
+        os.tmpdir(),
+        "browser-viewer-terminal-images",
+        payload.fileName,
+      ),
     );
     await expect(readFile(payload.filePath)).resolves.toEqual(
       Buffer.from([1, 2, 3, 4]),

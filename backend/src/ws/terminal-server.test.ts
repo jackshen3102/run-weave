@@ -17,7 +17,9 @@ class FakeRuntime extends EventEmitter {
     this.on("data", listener);
   }
 
-  onExit(listener: (event: { exitCode: number; signal?: number }) => void): void {
+  onExit(
+    listener: (event: { exitCode: number; signal?: number }) => void,
+  ): void {
     this.on("exit", listener);
   }
 }
@@ -139,8 +141,10 @@ describe("terminal websocket server", () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const terminalSessionManager = {
@@ -185,7 +189,10 @@ describe("terminal websocket server", () => {
     expect(runtime.write).toHaveBeenCalledWith("pwd\n");
     expect(messages).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: "connected", terminalSessionId: "terminal-1" }),
+        expect.objectContaining({
+          type: "connected",
+          terminalSessionId: "terminal-1",
+        }),
         expect.objectContaining({ type: "output", data: "/tmp/demo\n" }),
       ]),
     );
@@ -195,8 +202,10 @@ describe("terminal websocket server", () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const terminalSessionManager = {
@@ -237,7 +246,9 @@ describe("terminal websocket server", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const outputMessages = messages.filter((message) => message.type === "output");
+    const outputMessages = messages.filter(
+      (message) => message.type === "output",
+    );
     expect(outputMessages).toEqual([
       expect.objectContaining({
         type: "output",
@@ -255,8 +266,10 @@ describe("terminal websocket server", () => {
       });
       const authService = {
         verifyTemporaryToken: vi.fn(
-          (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-            createTerminalTicketVerification(params.resource),
+          (
+            _token: string,
+            params: { resource: { terminalSessionId?: string } },
+          ) => createTerminalTicketVerification(params.resource),
         ),
       };
       const terminalSessionManager = {
@@ -298,7 +311,9 @@ describe("terminal websocket server", () => {
         expect(runtime.write).toHaveBeenCalledWith("ls");
       });
       await vi.waitFor(() => {
-        const outputMessages = messages.filter((message) => message.type === "output");
+        const outputMessages = messages.filter(
+          (message) => message.type === "output",
+        );
         expect(outputMessages).toEqual([
           expect.objectContaining({
             type: "output",
@@ -315,8 +330,10 @@ describe("terminal websocket server", () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const terminalSessionManager = {
@@ -370,8 +387,10 @@ describe("terminal websocket server", () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const terminalSessionManager = {
@@ -445,8 +464,10 @@ describe("terminal websocket server", () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const terminalSessionManager = {
@@ -510,8 +531,10 @@ describe("terminal websocket server", () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const terminalSessionManager = {
@@ -554,8 +577,10 @@ describe("terminal websocket server", () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const terminalSessionManager = {
@@ -610,8 +635,10 @@ describe("terminal websocket server", () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const terminalSessionManager = {
@@ -672,8 +699,10 @@ describe("terminal websocket server", () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const scrollback = Array.from(
@@ -737,25 +766,102 @@ describe("terminal websocket server", () => {
     ]);
   });
 
-  it("flushes live output after the initial snapshot when output arrives during websocket attach", async () => {
+  it("skips the initial websocket snapshot when the client only watches live output", async () => {
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const terminalSessionManager = {
-      getSession: vi
-        .fn()
-        .mockReturnValue({
-          id: "terminal-1",
-          command: "bash",
-          args: ["-l"],
-          cwd: "/tmp/demo",
-          scrollback: "bash-3.2$ ",
-          status: "running",
-          exitCode: undefined,
-        }),
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "large persisted transcript",
+        status: "running",
+        exitCode: undefined,
+      })),
+      getLiveScrollback: vi.fn(() => "large persisted transcript"),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+      updateSessionLaunch: vi.fn(),
+    };
+    const runtime = new FakeRuntime();
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => runtime),
+      ensureRecorder: vi.fn(),
+      attachClient: vi.fn(),
+      detachClient: vi.fn(),
+      subscribe: vi.fn((_terminalSessionId, subscriber) => {
+        subscriber.onData("live-only\n");
+        return () => undefined;
+      }),
+    };
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry as never,
+      authService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token&snapshot=0`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(terminalSessionManager.getLiveScrollback).not.toHaveBeenCalled();
+    expect(messages).toEqual([
+      {
+        type: "connected",
+        terminalSessionId: "terminal-1",
+      },
+      {
+        type: "status",
+        status: "running",
+      },
+      {
+        type: "output",
+        data: "live-only\n",
+      },
+    ]);
+  });
+
+  it("flushes live output after the initial snapshot when output arrives during websocket attach", async () => {
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn().mockReturnValue({
+        id: "terminal-1",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "bash-3.2$ ",
+        status: "running",
+        exitCode: undefined,
+      }),
       markActivity: vi.fn(),
       appendOutput: vi.fn(),
       markExited: vi.fn(),
@@ -821,8 +927,10 @@ describe("terminal websocket server", () => {
     const runtime = new FakeRuntime();
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const terminalSessionManager = {
@@ -882,8 +990,10 @@ describe("terminal websocket server", () => {
     });
     const authService = {
       verifyTemporaryToken: vi.fn(
-        (_token: string, params: { resource: { terminalSessionId?: string } }) =>
-          createTerminalTicketVerification(params.resource),
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
       ),
     };
     const terminalSessionManager = {

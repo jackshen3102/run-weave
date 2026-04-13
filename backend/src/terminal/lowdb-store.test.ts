@@ -37,6 +37,10 @@ function createRecord(
   };
 }
 
+function resolveScrollbackFile(dir: string, terminalSessionId: string): string {
+  return path.join(dir, "terminal-scrollback", `${terminalSessionId}.log`);
+}
+
 afterEach(async () => {
   await Promise.all(
     tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
@@ -48,8 +52,11 @@ describe("LowDbTerminalSessionStore", () => {
     const store = await createStore();
 
     await expect(
-      (store as unknown as { listProjects: () => Promise<PersistedTerminalProjectRecord[]> })
-        .listProjects(),
+      (
+        store as unknown as {
+          listProjects: () => Promise<PersistedTerminalProjectRecord[]>;
+        }
+      ).listProjects(),
     ).resolves.toEqual([
       expect.objectContaining({
         name: "Default Project",
@@ -58,9 +65,9 @@ describe("LowDbTerminalSessionStore", () => {
     ]);
   });
 
-  it("persists and reads terminal sessions from a JSON file", async () => {
+  it("persists terminal metadata in JSON and scrollback in a per-session file", async () => {
     const store = await createStore();
-    const record = createRecord();
+    const record = createRecord({ scrollback: "boot transcript\n" });
 
     await store.insertSession(record);
 
@@ -74,9 +81,15 @@ describe("LowDbTerminalSessionStore", () => {
       ),
     ) as {
       projects?: PersistedTerminalProjectRecord[];
-      sessions: PersistedTerminalSessionRecord[];
+      sessions: Array<
+        Omit<PersistedTerminalSessionRecord, "scrollback"> & {
+          scrollback?: string;
+        }
+      >;
     };
-    expect(persisted.sessions).toEqual([record]);
+    expect(persisted.sessions).toEqual([
+      expect.not.objectContaining({ scrollback: expect.any(String) }),
+    ]);
     expect(persisted.projects).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -84,9 +97,12 @@ describe("LowDbTerminalSessionStore", () => {
         }),
       ]),
     );
+    await expect(
+      readFile(resolveScrollbackFile(tempDirs[0] ?? "", record.id), "utf8"),
+    ).resolves.toBe("boot transcript\n");
   });
 
-  it("migrates legacy terminal sessions into the default project on initialize", async () => {
+  it("migrates legacy terminal sessions into the default project and external scrollback file on initialize", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "terminal-store-"));
     tempDirs.push(dir);
     const storeFile = path.join(dir, "terminal-session-store.json");
@@ -100,7 +116,7 @@ describe("LowDbTerminalSessionStore", () => {
             command: "bash",
             args: [],
             cwd: "/tmp/legacy",
-            scrollback: "",
+            scrollback: "legacy transcript\n",
             status: "running",
             createdAt: "2026-03-29T00:00:00.000Z",
           },
@@ -113,7 +129,9 @@ describe("LowDbTerminalSessionStore", () => {
     await store.initialize();
 
     const [defaultProject] = await (
-      store as unknown as { listProjects: () => Promise<PersistedTerminalProjectRecord[]> }
+      store as unknown as {
+        listProjects: () => Promise<PersistedTerminalProjectRecord[]>;
+      }
     ).listProjects();
     const [migratedSession] = await store.listSessions();
 
@@ -126,8 +144,16 @@ describe("LowDbTerminalSessionStore", () => {
       expect.objectContaining({
         id: "legacy-terminal-1",
         projectId: defaultProject?.id,
+        scrollback: "legacy transcript\n",
       }),
     );
+    const migratedPersisted = JSON.parse(await readFile(storeFile, "utf8")) as {
+      sessions: Array<{ scrollback?: string }>;
+    };
+    expect(migratedPersisted.sessions[0]).not.toHaveProperty("scrollback");
+    await expect(
+      readFile(resolveScrollbackFile(dir, "legacy-terminal-1"), "utf8"),
+    ).resolves.toBe("legacy transcript\n");
   });
 
   it("updates terminal metadata, scrollback, exit state, and deletion", async () => {
@@ -163,6 +189,88 @@ describe("LowDbTerminalSessionStore", () => {
 
     await expect(store.getSession("terminal-1")).resolves.toBeNull();
     await expect(store.listSessions()).resolves.toEqual([]);
+    await expect(
+      readFile(resolveScrollbackFile(tempDirs[0] ?? "", "terminal-1"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("appends scrollback chunks without rewriting terminal metadata JSON", async () => {
+    const store = await createStore();
+    await store.insertSession(createRecord());
+    const database = (
+      store as unknown as { database: { write: () => Promise<void> } | null }
+    ).database;
+
+    if (!database) {
+      throw new Error("expected initialized database");
+    }
+
+    database.write = async () => {
+      throw new Error("metadata JSON write should not run");
+    };
+
+    await store.appendSessionScrollback({
+      terminalSessionId: "terminal-1",
+      chunk: "hello",
+    });
+    await store.appendSessionScrollback({
+      terminalSessionId: "terminal-1",
+      chunk: " world",
+    });
+
+    await expect(store.getSession("terminal-1")).resolves.toEqual(
+      createRecord({ scrollback: "hello world" }),
+    );
+    await expect(
+      readFile(resolveScrollbackFile(tempDirs[0] ?? "", "terminal-1"), "utf8"),
+    ).resolves.toBe("hello world");
+  });
+
+  it("does not wait for pending metadata JSON writes before appending scrollback", async () => {
+    const store = await createStore();
+    await store.insertSession(createRecord());
+    const database = (
+      store as unknown as { database: { write: () => Promise<void> } | null }
+    ).database;
+    let finishMetadataWrite: () => void = () => undefined;
+
+    if (!database) {
+      throw new Error("expected initialized database");
+    }
+
+    database.write = async () =>
+      await new Promise<void>((resolve) => {
+        finishMetadataWrite = resolve;
+      });
+
+    const pendingMetadataWrite = store.updateSessionMetadata({
+      terminalSessionId: "terminal-1",
+      name: "browser-hub",
+      cwd: "/tmp/browser-hub",
+    });
+    const appendResult = store
+      .appendSessionScrollback({
+        terminalSessionId: "terminal-1",
+        chunk: "hello",
+      })
+      .then(() => "appended");
+
+    await expect(
+      Promise.race([
+        appendResult,
+        new Promise<"blocked">((resolve) => {
+          setTimeout(() => {
+            resolve("blocked");
+          }, 20);
+        }),
+      ]),
+    ).resolves.toBe("appended");
+
+    finishMetadataWrite();
+    await pendingMetadataWrite;
+    await expect(
+      readFile(resolveScrollbackFile(tempDirs[0] ?? "", "terminal-1"), "utf8"),
+    ).resolves.toBe("hello");
   });
 
   it("updates terminal launch config in place", async () => {
@@ -202,9 +310,10 @@ describe("LowDbTerminalSessionStore", () => {
     };
 
     await expect(
-      store.updateSessionScrollback({
+      store.updateSessionMetadata({
         terminalSessionId: "terminal-1",
-        scrollback: "hello world",
+        name: "browser-hub",
+        cwd: "/tmp/browser-hub",
       }),
     ).rejects.toThrow(writeError);
   });
@@ -226,9 +335,10 @@ describe("LowDbTerminalSessionStore", () => {
     };
 
     await expect(
-      store.updateSessionScrollback({
+      store.updateSessionMetadata({
         terminalSessionId: "terminal-1",
-        scrollback: "hello world",
+        name: "browser-hub",
+        cwd: "/tmp/browser-hub",
       }),
     ).rejects.toThrow(writeError);
     await expect(store.dispose()).rejects.toThrow(writeError);

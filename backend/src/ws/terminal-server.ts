@@ -1,4 +1,4 @@
-import type { Server as HttpServer } from "node:http";
+import type { IncomingMessage, Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
 import type { WebSocket } from "ws";
 import type {
@@ -74,6 +74,26 @@ function sendEvent(socket: WebSocket, event: TerminalServerMessage): void {
   socket.send(JSON.stringify(event));
 }
 
+function shouldSendInitialSnapshot(request: IncomingMessage): boolean {
+  const searchParams = new URL(request.url ?? "/", "http://localhost")
+    .searchParams;
+  return searchParams.get("snapshot") !== "0";
+}
+
+function resolveLiveScrollback(
+  terminalSessionManager: TerminalSessionManager,
+  terminalSessionId: string,
+  fallbackScrollback: string,
+): string {
+  const manager = terminalSessionManager as TerminalSessionManager & {
+    getLiveScrollback?: (terminalSessionId: string) => string;
+  };
+  return (
+    manager.getLiveScrollback?.(terminalSessionId) ??
+    getLiveTerminalScrollback(fallbackScrollback)
+  );
+}
+
 function handleRuntimeActionError(
   socket: WebSocket,
   terminalSessionId: string,
@@ -125,6 +145,7 @@ export function attachTerminalWebSocketServer(
 
     const { terminalSessionId } = handshake;
     const session = terminalSessionManager.getSession(terminalSessionId);
+    const sendInitialSnapshot = shouldSendInitialSnapshot(request);
     let runtime = runtimeRegistry.getRuntime(terminalSessionId);
     if (!runtime && session?.status === "running" && ptyService) {
       try {
@@ -184,20 +205,18 @@ export function attachTerminalWebSocketServer(
     let runtimeOutputSequence = 0;
     let flushedOutputSequence = 0;
     let lastInputAt: number | null = null;
-    const outputBatcher = new TerminalOutputBatcher(
-      (output) => {
-        flushedOutputSequence += 1;
-        logTerminalPerf("terminal.ws.output.flush", {
-          terminalSessionId,
-          clientId,
-          seq: flushedOutputSequence,
-          sinceLastInputMs: lastInputAt === null ? null : Date.now() - lastInputAt,
-          ...summarizeTerminalChunk(output),
-        });
-        sendEvent(socket, { type: "output", data: output });
-      },
-      `${terminalSessionId}/${clientId}`,
-    );
+    const outputBatcher = new TerminalOutputBatcher((output) => {
+      flushedOutputSequence += 1;
+      logTerminalPerf("terminal.ws.output.flush", {
+        terminalSessionId,
+        clientId,
+        seq: flushedOutputSequence,
+        sinceLastInputMs:
+          lastInputAt === null ? null : Date.now() - lastInputAt,
+        ...summarizeTerminalChunk(output),
+      });
+      sendEvent(socket, { type: "output", data: output });
+    }, `${terminalSessionId}/${clientId}`);
     let snapshotDelivered = false;
     let pendingInitialOutput = "";
     const shellPromptTracker = createShellPromptTracker({
@@ -218,7 +237,8 @@ export function attachTerminalWebSocketServer(
           clientId,
           seq: runtimeOutputSequence,
           snapshotDelivered,
-          sinceLastInputMs: lastInputAt === null ? null : Date.now() - lastInputAt,
+          sinceLastInputMs:
+            lastInputAt === null ? null : Date.now() - lastInputAt,
           ...summarizeTerminalChunk(data),
         });
         const metadata = shellPromptTracker.consume(data);
@@ -271,10 +291,16 @@ export function attachTerminalWebSocketServer(
 
     sendEvent(socket, { type: "connected", terminalSessionId });
     if (session) {
-      sendEvent(socket, {
-        type: "snapshot",
-        data: getLiveTerminalScrollback(session.scrollback),
-      });
+      if (sendInitialSnapshot) {
+        sendEvent(socket, {
+          type: "snapshot",
+          data: resolveLiveScrollback(
+            terminalSessionManager,
+            terminalSessionId,
+            session.scrollback,
+          ),
+        });
+      }
       snapshotDelivered = true;
       sendEvent(socket, {
         type: "status",
@@ -322,7 +348,9 @@ export function attachTerminalWebSocketServer(
             terminalSessionId,
             clientId,
             seq: inputSequence,
-            runtimeWriteDurationMs: Number((performance.now() - writeStartedAt).toFixed(2)),
+            runtimeWriteDurationMs: Number(
+              (performance.now() - writeStartedAt).toFixed(2),
+            ),
             ...summarizeTerminalChunk(parsed.data),
           });
         } catch (error) {

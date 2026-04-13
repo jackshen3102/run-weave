@@ -34,7 +34,10 @@ function trimTextToTailBytes(value: string, limitBytes: number): string {
   return retained;
 }
 
-function normalizeChunk(text: string, limitBytes: number): ScrollbackChunk | null {
+function normalizeChunk(
+  text: string,
+  limitBytes: number,
+): ScrollbackChunk | null {
   if (!text || limitBytes <= 0) {
     return null;
   }
@@ -92,4 +95,41 @@ export function appendToScrollbackBuffer(
 
 export function readScrollbackBuffer(buffer: ScrollbackBuffer): string {
   return buffer.chunks.map((chunk) => chunk.text).join("");
+}
+
+export function readScrollbackBufferTailLines(
+  buffer: ScrollbackBuffer,
+  maxLines: number,
+): string {
+  if (maxLines <= 0 || buffer.chunks.length === 0) {
+    return "";
+  }
+
+  const tailParts: string[] = [];
+  let lineBreaks = 0;
+
+  for (
+    let chunkIndex = buffer.chunks.length - 1;
+    chunkIndex >= 0;
+    chunkIndex -= 1
+  ) {
+    const text = buffer.chunks[chunkIndex]?.text ?? "";
+    for (let index = text.length - 1; index >= 0; index -= 1) {
+      if (text[index] !== "\n") {
+        continue;
+      }
+
+      lineBreaks += 1;
+      if (lineBreaks >= maxLines) {
+        const tail = text.slice(index + 1);
+        if (tail) {
+          tailParts.push(tail);
+        }
+        return tailParts.reverse().join("");
+      }
+    }
+    tailParts.push(text);
+  }
+
+  return tailParts.reverse().join("");
 }
