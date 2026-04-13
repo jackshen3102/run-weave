@@ -34,6 +34,7 @@ import {
 } from "../ui/context-menu";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
 import { TerminalHistoryDrawer } from "./terminal-history-drawer";
+import { TerminalHeadlessConnection } from "./terminal-headless-connection";
 import { TerminalSurface } from "./terminal-surface";
 
 interface TerminalWorkspaceProps {
@@ -847,17 +848,34 @@ export function TerminalWorkspace({
             const isActive =
               session.terminalSessionId === activeSession?.terminalSessionId;
 
+            if (!isActive) {
+              return (
+                <TerminalHeadlessConnection
+                  apiBase={apiBase}
+                  key={session.terminalSessionId}
+                  terminalSessionId={session.terminalSessionId}
+                  token={token}
+                  onAuthExpired={onAuthExpired}
+                  onActivity={() => {
+                    handleSessionActivity(session.terminalSessionId);
+                  }}
+                  onBell={() => {
+                    handleSessionBell(session.terminalSessionId);
+                  }}
+                  onMetadata={(metadata) => {
+                    handleSessionMetadata(session.terminalSessionId, metadata);
+                  }}
+                />
+              );
+            }
+
             return (
               <div
-                aria-hidden={!isActive}
-                className={[
-                  "absolute top-0 h-full w-full",
-                  isActive ? "left-0" : "-left-[9999em] pointer-events-none",
-                ].join(" ")}
+                className="absolute top-0 left-0 h-full w-full"
                 key={session.terminalSessionId}
               >
                 <TerminalSurface
-                  active={isActive}
+                  active
                   apiBase={apiBase}
                   terminalSessionId={session.terminalSessionId}
                   token={token}

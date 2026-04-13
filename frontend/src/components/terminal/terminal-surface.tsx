@@ -22,6 +22,10 @@ import {
   loadTerminalPreferences,
   saveTerminalPreferences,
 } from "../../features/terminal/preferences";
+import {
+  logTerminalPerf,
+  summarizeTerminalChunk,
+} from "../../features/terminal/perf-logging";
 import { createResizeScheduler } from "../../features/terminal/resize-scheduler";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
 import { HttpError } from "../../services/http";
@@ -82,22 +86,35 @@ interface TerminalSearchResults {
 }
 
 type ActiveRenderer = "webgl" | "canvas" | "dom";
-const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-fe]";
 
-function summarizeTerminalChunk(data: string): { len: number; preview: string } {
-  return {
-    len: data.length,
-    preview: JSON.stringify(data.slice(0, 32)),
-  };
-}
-
-function logTerminalPerf(
+function recordTerminalPerfProbeEvent(
   event: string,
+  data: string,
   details: Record<string, unknown>,
 ): void {
-  console.info(TERMINAL_PERF_LOG_PREFIX, event, {
-    at: new Date().toISOString(),
-    ...details,
+  const target = window as unknown as {
+    __terminalPerfProbeEvents?: Array<{
+      event: string;
+      at: number;
+      details: Record<string, unknown>;
+    }>;
+  };
+  if (!target.__terminalPerfProbeEvents) {
+    return;
+  }
+
+  const probeText = data.match(/BV_[^\s\r\n]+/)?.[0];
+  if (!probeText) {
+    return;
+  }
+
+  target.__terminalPerfProbeEvents.push({
+    event,
+    at: performance.now(),
+    details: {
+      ...details,
+      probeText,
+    },
   });
 }
 
@@ -200,6 +217,9 @@ export function TerminalSurface({
   const inputSequenceRef = useRef(0);
   const outputSequenceRef = useRef(0);
   const lastInputSentAtRef = useRef<number | null>(null);
+  const hasDeferredOutputRef = useRef(false);
+  const restoreSnapshotRequestRef = useRef(0);
+  const websocketContentVersionRef = useRef(0);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<PastedImageReference[]>([]);
   const [preferences, setPreferences] = useState<TerminalPreferences>(() =>
@@ -219,9 +239,7 @@ export function TerminalSurface({
     regex: false,
   });
 
-  // onOutput is stable so it never triggers a reconnect inside
-  // useTerminalConnection.
-  const onSnapshot = useCallback((data: string) => {
+  const renderTerminalSnapshot = useCallback((data: string) => {
     const nextChunk = data.replace(DECRQM_QUERY_RE, "");
     const terminal = terminalRef.current;
     if (!terminal) {
@@ -251,11 +269,25 @@ export function TerminalSurface({
     });
   }, [terminalSessionId]);
 
+  // onOutput is stable so it never triggers a reconnect inside
+  // useTerminalConnection.
+  const onSnapshot = useCallback((data: string) => {
+    websocketContentVersionRef.current += 1;
+    if (!activeRef.current) {
+      hasDeferredOutputRef.current = hasDeferredOutputRef.current || data.length > 0;
+      return;
+    }
+
+    hasDeferredOutputRef.current = false;
+    renderTerminalSnapshot(data);
+  }, [renderTerminalSnapshot]);
+
   const onOutput = useCallback((data: string) => {
     const nextChunk = data.replace(DECRQM_QUERY_RE, "");
     if (!nextChunk) {
       return;
     }
+    websocketContentVersionRef.current += 1;
 
     const now = Date.now();
     if (
@@ -286,19 +318,62 @@ export function TerminalSurface({
           : now - lastInputSentAtRef.current,
       ...summarizeTerminalChunk(nextChunk),
     });
+    recordTerminalPerfProbeEvent("terminal.output.received", nextChunk, {
+      terminalSessionId,
+      seq: outputSequence,
+      sinceLastInputMs:
+        lastInputSentAtRef.current === null
+          ? null
+          : now - lastInputSentAtRef.current,
+      ...summarizeTerminalChunk(nextChunk),
+    });
 
     const terminal = terminalRef.current;
     if (!terminal) {
       return;
     }
 
+    if (!activeRef.current) {
+      hasDeferredOutputRef.current = true;
+      return;
+    }
+
     const renderStartedAt = performance.now();
     terminal.write(nextChunk, () => {
+      const renderedAt = performance.now();
+      const sinceLastInputMs =
+        lastInputSentAtRef.current === null
+          ? null
+          : Date.now() - lastInputSentAtRef.current;
       logTerminalPerf("terminal.output.rendered", {
         terminalSessionId,
         seq: outputSequence,
-        renderDurationMs: Number((performance.now() - renderStartedAt).toFixed(2)),
+        sinceLastInputMs,
+        renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
         ...summarizeTerminalChunk(nextChunk),
+      });
+      recordTerminalPerfProbeEvent("terminal.output.rendered", nextChunk, {
+        terminalSessionId,
+        seq: outputSequence,
+        sinceLastInputMs,
+        renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
+        ...summarizeTerminalChunk(nextChunk),
+      });
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const paintDelayMs = Number((performance.now() - renderedAt).toFixed(2));
+          const paintedSinceLastInputMs =
+            lastInputSentAtRef.current === null
+              ? null
+              : Date.now() - lastInputSentAtRef.current;
+          recordTerminalPerfProbeEvent("terminal.output.painted", nextChunk, {
+            terminalSessionId,
+            seq: outputSequence,
+            sinceLastInputMs: paintedSinceLastInputMs,
+            paintDelayMs,
+            ...summarizeTerminalChunk(nextChunk),
+          });
+        });
       });
     });
   }, [terminalSessionId]);
@@ -738,6 +813,45 @@ export function TerminalSurface({
       cancelAnimationFrame(frameId);
     };
   }, [active]);
+
+  useEffect(() => {
+    if (!active || !terminalRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    const requestId = restoreSnapshotRequestRef.current + 1;
+    const websocketContentVersionAtRequest = websocketContentVersionRef.current;
+    restoreSnapshotRequestRef.current = requestId;
+    hasDeferredOutputRef.current = false;
+
+    void getTerminalSession(apiBase, tokenRef.current, terminalSessionId)
+      .then((session) => {
+        if (
+          cancelled ||
+          restoreSnapshotRequestRef.current !== requestId ||
+          websocketContentVersionRef.current !== websocketContentVersionAtRequest
+        ) {
+          return;
+        }
+
+        onMetadataRef.current?.({ name: session.name, cwd: session.cwd });
+        renderTerminalSnapshot(session.scrollback);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        hasDeferredOutputRef.current = true;
+        if (error instanceof HttpError && error.status === 401) {
+          onAuthExpiredRef.current?.();
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, apiBase, renderTerminalSnapshot, terminalSessionId]);
 
   useEffect(() => {
     if (!searchOpen) {

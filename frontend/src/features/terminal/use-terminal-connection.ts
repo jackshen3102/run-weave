@@ -6,29 +6,15 @@ import {
   getTerminalReconnectDelay,
   shouldAutoReconnectTerminalClose,
 } from "./reconnect-policy";
+import {
+  logTerminalPerf,
+  summarizeTerminalChunk,
+} from "./perf-logging";
 import { toWebSocketBase } from "../viewer/url";
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type TerminalRuntimeStatus = "running" | "exited" | null;
 const MAX_UNAUTHORIZED_RETRIES = 1;
-const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-fe]";
-
-function summarizeTerminalChunk(data: string): { len: number; preview: string } {
-  return {
-    len: data.length,
-    preview: JSON.stringify(data.slice(0, 32)),
-  };
-}
-
-function logTerminalPerf(
-  event: string,
-  details: Record<string, unknown>,
-): void {
-  console.info(TERMINAL_PERF_LOG_PREFIX, event, {
-    at: new Date().toISOString(),
-    ...details,
-  });
-}
 
 function buildTerminalWsUrl(
   apiBase: string,

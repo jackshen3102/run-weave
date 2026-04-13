@@ -5,6 +5,10 @@ import type { IPty } from "node-pty";
 import type { TerminalSignal } from "@browser-viewer/shared";
 import type { TerminalLaunchConfig } from "./default-shell";
 import { resolveNodePtyDirectory } from "./node-pty-path";
+import {
+  logTerminalPerf,
+  summarizeTerminalChunk,
+} from "./perf-logging";
 import { applyShellIntegration } from "./shell-integration";
 import backendPackageJson from "../../package.json";
 
@@ -54,24 +58,6 @@ interface PtyServiceDependencies {
 
 const QUICK_EXIT_FALLBACK_THRESHOLD_MS = 1_000;
 const TERMINAL_PROGRAM_NAME = "browser-viewer";
-const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-be]";
-
-function summarizeTerminalChunk(data: string): { len: number; preview: string } {
-  return {
-    len: data.length,
-    preview: JSON.stringify(data.slice(0, 32)),
-  };
-}
-
-function logTerminalPerf(
-  event: string,
-  details: Record<string, unknown>,
-): void {
-  console.info(TERMINAL_PERF_LOG_PREFIX, event, {
-    at: new Date().toISOString(),
-    ...details,
-  });
-}
 
 const require = createRequire(
   path.join(process.cwd(), "__browser_viewer_node_pty_loader__.cjs"),
