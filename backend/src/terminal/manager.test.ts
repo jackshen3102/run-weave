@@ -6,6 +6,7 @@ import {
 import { TerminalSessionManager } from "./manager";
 import type {
   PersistedTerminalProjectRecord,
+  PersistedTerminalSessionMetadataRecord,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
 } from "./store";
@@ -23,7 +24,12 @@ function createStoreMock() {
     listSessions: vi.fn(
       async (): Promise<PersistedTerminalSessionRecord[]> => [],
     ),
+    listSessionMetadata: vi.fn(
+      async (): Promise<PersistedTerminalSessionMetadataRecord[]> => [],
+    ),
     getSession: vi.fn(async () => null),
+    readSessionScrollback: vi.fn(async () => ""),
+    readSessionLiveScrollback: vi.fn(async () => ""),
     listProjects: vi.fn(
       async (): Promise<PersistedTerminalProjectRecord[]> => [defaultProject],
     ),
@@ -43,6 +49,36 @@ function createStoreMock() {
 }
 
 describe("TerminalSessionManager", () => {
+  it("initializes restored sessions from metadata without reading scrollback", async () => {
+    const store = createStoreMock();
+    store.listSessions.mockRejectedValue(
+      new Error("full scrollback should not be read on initialize"),
+    );
+    store.listSessionMetadata.mockResolvedValue([
+      {
+        id: "terminal-heavy",
+        projectId: "project-default",
+        name: "heavy shell",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/heavy",
+        status: "running",
+        createdAt: "2026-03-29T00:00:00.000Z",
+      },
+    ]);
+    const manager = new TerminalSessionManager(store);
+
+    await manager.initialize();
+
+    expect(store.listSessionMetadata).toHaveBeenCalledTimes(1);
+    expect(store.listSessions).not.toHaveBeenCalled();
+    expect(store.readSessionScrollback).not.toHaveBeenCalled();
+    expect(manager.getSession("terminal-heavy")).toMatchObject({
+      id: "terminal-heavy",
+      cwd: "/tmp/heavy",
+    });
+  });
+
   it("initializes with a default project and creates sessions inside it", async () => {
     const store = createStoreMock();
     const manager = new TerminalSessionManager(store);

@@ -1,4 +1,8 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  TERMINAL_COMPACTED_SCROLLBACK_BYTES,
+  TERMINAL_PERSISTED_SCROLLBACK_BYTES,
+} from "@browser-viewer/shared";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -100,6 +104,30 @@ describe("LowDbTerminalSessionStore", () => {
     await expect(
       readFile(resolveScrollbackFile(tempDirs[0] ?? "", record.id), "utf8"),
     ).resolves.toBe("boot transcript\n");
+  });
+
+  it("lists session metadata without reading scrollback files", async () => {
+    const store = await createStore();
+    const record = createRecord({ scrollback: "boot transcript\n" });
+
+    await store.insertSession(record);
+    await rm(resolveScrollbackFile(tempDirs[0] ?? "", record.id), {
+      force: true,
+    });
+
+    await expect(store.listSessionMetadata()).resolves.toEqual([
+      {
+        id: record.id,
+        projectId: record.projectId,
+        name: record.name,
+        command: record.command,
+        args: record.args,
+        cwd: record.cwd,
+        status: record.status,
+        createdAt: record.createdAt,
+        exitCode: record.exitCode,
+      },
+    ]);
   });
 
   it("migrates legacy terminal sessions into the default project and external scrollback file on initialize", async () => {
@@ -224,6 +252,30 @@ describe("LowDbTerminalSessionStore", () => {
     await expect(
       readFile(resolveScrollbackFile(tempDirs[0] ?? "", "terminal-1"), "utf8"),
     ).resolves.toBe("hello world");
+  });
+
+  it("compacts oversized scrollback files back to the hysteresis target", async () => {
+    const store = await createStore();
+    await store.insertSession(createRecord());
+    const initialScrollback = "a".repeat(TERMINAL_PERSISTED_SCROLLBACK_BYTES);
+
+    await store.updateSessionScrollback({
+      terminalSessionId: "terminal-1",
+      scrollback: initialScrollback,
+    });
+    await store.appendSessionScrollback({
+      terminalSessionId: "terminal-1",
+      chunk: "tail-marker",
+    });
+
+    const compacted = await readFile(
+      resolveScrollbackFile(tempDirs[0] ?? "", "terminal-1"),
+      "utf8",
+    );
+    expect(Buffer.byteLength(compacted, "utf8")).toBe(
+      TERMINAL_COMPACTED_SCROLLBACK_BYTES,
+    );
+    expect(compacted.endsWith("tail-marker")).toBe(true);
   });
 
   it("does not wait for pending metadata JSON writes before appending scrollback", async () => {

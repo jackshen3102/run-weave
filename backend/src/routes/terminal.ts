@@ -120,26 +120,7 @@ function toStatusPayload(
   session: ReturnType<TerminalSessionManager["getSession"]> extends infer T
     ? NonNullable<T>
     : never,
-): TerminalSessionStatusResponse {
-  return {
-    terminalSessionId: session.id,
-    projectId: session.projectId,
-    name: session.name,
-    command: session.command,
-    args: session.args,
-    cwd: session.cwd,
-    scrollback: session.scrollback,
-    status: session.status,
-    createdAt: session.createdAt.toISOString(),
-    exitCode: session.exitCode,
-  };
-}
-
-function toLiveStatusPayload(
-  session: ReturnType<TerminalSessionManager["getSession"]> extends infer T
-    ? NonNullable<T>
-    : never,
-  scrollback: string,
+  scrollback = session.scrollback,
 ): TerminalSessionStatusResponse {
   return {
     terminalSessionId: session.id,
@@ -159,8 +140,9 @@ function toHistoryPayload(
   session: ReturnType<TerminalSessionManager["getSession"]> extends infer T
     ? NonNullable<T>
     : never,
+  scrollback: string,
 ): TerminalSessionHistoryResponse {
-  return toStatusPayload(session);
+  return toStatusPayload(session, scrollback);
 }
 
 export function createTerminalRouter(
@@ -351,17 +333,7 @@ export function createTerminalRouter(
     }
   });
 
-  router.get("/session/:id/history", (req, res) => {
-    const session = terminalSessionManager.getSession(req.params.id);
-    if (!session) {
-      res.status(404).json({ message: "Terminal session not found" });
-      return;
-    }
-
-    res.json(toHistoryPayload(session));
-  });
-
-  router.get("/session/:id", (req, res) => {
+  router.get("/session/:id/history", async (req, res) => {
     const session = terminalSessionManager.getSession(req.params.id);
     if (!session) {
       res.status(404).json({ message: "Terminal session not found" });
@@ -369,9 +341,24 @@ export function createTerminalRouter(
     }
 
     res.json(
-      toLiveStatusPayload(
+      toHistoryPayload(
         session,
-        terminalSessionManager.getLiveScrollback(req.params.id),
+        await terminalSessionManager.readScrollback(req.params.id),
+      ),
+    );
+  });
+
+  router.get("/session/:id", async (req, res) => {
+    const session = terminalSessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Terminal session not found" });
+      return;
+    }
+
+    res.json(
+      toStatusPayload(
+        session,
+        await terminalSessionManager.readLiveScrollback(req.params.id),
       ),
     );
   });

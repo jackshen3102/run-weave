@@ -5,6 +5,7 @@ import {
 } from "@browser-viewer/shared";
 import type {
   PersistedTerminalProjectRecord,
+  PersistedTerminalSessionMetadataRecord,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
 } from "./store";
@@ -42,6 +43,7 @@ interface RuntimeTerminalSessionRecord extends Omit<
 > {
   readonly scrollback: string;
   scrollbackBuffer: ScrollbackBuffer;
+  scrollbackLoaded: boolean;
 }
 
 export interface CreateTerminalSessionOptions {
@@ -75,7 +77,7 @@ function toPersistedProject(
 }
 
 function buildRecord(
-  persisted: PersistedTerminalSessionRecord,
+  persisted: PersistedTerminalSessionMetadataRecord & { scrollback?: string },
 ): TerminalSessionRecord {
   return {
     id: persisted.id,
@@ -84,7 +86,7 @@ function buildRecord(
     command: persisted.command,
     args: persisted.args,
     cwd: persisted.cwd,
-    scrollback: persisted.scrollback,
+    scrollback: persisted.scrollback ?? "",
     status: persisted.status,
     createdAt: new Date(persisted.createdAt),
     exitCode: persisted.exitCode,
@@ -93,6 +95,7 @@ function buildRecord(
 
 function createRuntimeRecord(
   record: TerminalSessionRecord,
+  options?: { scrollbackLoaded?: boolean },
 ): RuntimeTerminalSessionRecord {
   const { scrollback, ...rest } = record;
   const runtimeRecord = { ...rest } as Omit<
@@ -105,6 +108,12 @@ function createRuntimeRecord(
     configurable: false,
     enumerable: false,
     value: createScrollbackBuffer(scrollback),
+    writable: true,
+  });
+  Object.defineProperty(runtimeRecord, "scrollbackLoaded", {
+    configurable: false,
+    enumerable: false,
+    value: options?.scrollbackLoaded ?? true,
     writable: true,
   });
 
@@ -149,7 +158,7 @@ export class TerminalSessionManager {
   async initialize(): Promise<void> {
     await this.sessionStore.initialize();
     const persistedProjects = await this.sessionStore.listProjects();
-    const persistedSessions = await this.sessionStore.listSessions();
+    const persistedSessions = await this.sessionStore.listSessionMetadata();
 
     for (const persisted of persistedProjects) {
       this.projects.set(persisted.id, buildProjectRecord(persisted));
@@ -157,7 +166,9 @@ export class TerminalSessionManager {
     for (const persisted of persistedSessions) {
       this.sessions.set(
         persisted.id,
-        createRuntimeRecord(buildRecord(persisted)),
+        createRuntimeRecord(buildRecord(persisted), {
+          scrollbackLoaded: false,
+        }),
       );
     }
   }
@@ -280,12 +291,34 @@ export class TerminalSessionManager {
   }
 
   getScrollback(terminalSessionId: string): string {
-    return this.sessions.get(terminalSessionId)?.scrollback ?? "";
+    const session = this.sessions.get(terminalSessionId);
+    if (!session?.scrollbackLoaded) {
+      return "";
+    }
+
+    return session.scrollback;
+  }
+
+  async readScrollback(terminalSessionId: string): Promise<string> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return "";
+    }
+
+    if (!session.scrollbackLoaded) {
+      await this.flushScrollback(terminalSessionId);
+      session.scrollbackBuffer = createScrollbackBuffer(
+        await this.sessionStore.readSessionScrollback(terminalSessionId),
+      );
+      session.scrollbackLoaded = true;
+    }
+
+    return session.scrollback;
   }
 
   getLiveScrollback(terminalSessionId: string): string {
     const session = this.sessions.get(terminalSessionId);
-    if (!session) {
+    if (!session?.scrollbackLoaded) {
       return "";
     }
 
@@ -298,6 +331,20 @@ export class TerminalSessionManager {
         TERMINAL_LIVE_SCROLLBACK_BYTES,
       ),
     );
+  }
+
+  async readLiveScrollback(terminalSessionId: string): Promise<string> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return "";
+    }
+
+    if (!session.scrollbackLoaded) {
+      await this.flushScrollback(terminalSessionId);
+      return this.sessionStore.readSessionLiveScrollback(terminalSessionId);
+    }
+
+    return this.getLiveScrollback(terminalSessionId);
   }
 
   appendOutput(terminalSessionId: string, chunk: string): void {

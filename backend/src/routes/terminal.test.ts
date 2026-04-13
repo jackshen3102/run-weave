@@ -104,6 +104,20 @@ function createTestServer(sessionState: {
       return true;
     }),
     getSession: vi.fn((id: string) => resolveSession(id)),
+    readScrollback: vi.fn(async (id: string) => {
+      return resolveSession(id)?.scrollback ?? "";
+    }),
+    readLiveScrollback: vi.fn(async (id: string) => {
+      const session = resolveSession(id);
+      if (!session) {
+        return "";
+      }
+      const lines = session.scrollback.split("\n");
+      if (lines.length <= TERMINAL_CLIENT_SCROLLBACK_LINES) {
+        return session.scrollback;
+      }
+      return lines.slice(-TERMINAL_CLIENT_SCROLLBACK_LINES).join("\n");
+    }),
     getLiveScrollback: vi.fn((id: string) => {
       const session = resolveSession(id);
       if (!session) {

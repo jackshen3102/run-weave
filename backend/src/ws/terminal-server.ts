@@ -80,15 +80,17 @@ function shouldSendInitialSnapshot(request: IncomingMessage): boolean {
   return searchParams.get("snapshot") !== "0";
 }
 
-function resolveLiveScrollback(
+async function resolveLiveScrollback(
   terminalSessionManager: TerminalSessionManager,
   terminalSessionId: string,
   fallbackScrollback: string,
-): string {
+): Promise<string> {
   const manager = terminalSessionManager as TerminalSessionManager & {
+    readLiveScrollback?: (terminalSessionId: string) => Promise<string>;
     getLiveScrollback?: (terminalSessionId: string) => string;
   };
   return (
+    (await manager.readLiveScrollback?.(terminalSessionId)) ??
     manager.getLiveScrollback?.(terminalSessionId) ??
     getLiveTerminalScrollback(fallbackScrollback)
   );
@@ -131,7 +133,7 @@ export function attachTerminalWebSocketServer(
     });
   });
 
-  wss.on("connection", (socket, request) => {
+  wss.on("connection", async (socket, request) => {
     const handshake = validateTerminalWebSocketHandshake({
       request,
       authService,
@@ -294,7 +296,7 @@ export function attachTerminalWebSocketServer(
       if (sendInitialSnapshot) {
         sendEvent(socket, {
           type: "snapshot",
-          data: resolveLiveScrollback(
+          data: await resolveLiveScrollback(
             terminalSessionManager,
             terminalSessionId,
             session.scrollback,

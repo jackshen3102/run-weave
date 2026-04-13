@@ -1,18 +1,24 @@
 import {
   appendFile,
+  open,
   mkdir,
   readFile,
   rm,
   stat,
   writeFile,
 } from "node:fs/promises";
-import { TERMINAL_PERSISTED_SCROLLBACK_BYTES } from "@browser-viewer/shared";
+import {
+  TERMINAL_COMPACTED_SCROLLBACK_BYTES,
+  TERMINAL_LIVE_SCROLLBACK_BYTES,
+  TERMINAL_PERSISTED_SCROLLBACK_BYTES,
+} from "@browser-viewer/shared";
 import path from "node:path";
 import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
 import type {
   AppendTerminalSessionScrollbackParams,
   PersistedTerminalProjectRecord,
+  PersistedTerminalSessionMetadataRecord,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
   UpdateTerminalProjectParams,
@@ -21,6 +27,7 @@ import type {
   UpdateTerminalSessionMetadataParams,
   UpdateTerminalSessionScrollbackParams,
 } from "./store";
+import { getLiveTerminalScrollback } from "./live-scrollback";
 import {
   createScrollbackBuffer,
   readScrollbackBuffer,
@@ -30,11 +37,6 @@ interface TerminalSessionStoreData {
   projects: PersistedTerminalProjectRecord[];
   sessions: PersistedTerminalSessionMetadataRecord[];
 }
-
-type PersistedTerminalSessionMetadataRecord = Omit<
-  PersistedTerminalSessionRecord,
-  "scrollback"
->;
 
 interface LegacyTerminalSessionStoreData {
   projects?: PersistedTerminalProjectRecord[];
@@ -49,6 +51,7 @@ const DEFAULT_DATA: TerminalSessionStoreData = {
   projects: [],
   sessions: [],
 };
+const LIVE_SCROLLBACK_READ_BYTES = TERMINAL_LIVE_SCROLLBACK_BYTES + 4;
 
 export class LowDbTerminalSessionStore implements TerminalSessionStore {
   private database: Low<TerminalSessionStoreData> | null = null;
@@ -119,6 +122,12 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
     return this.getSessions();
   }
 
+  async listSessionMetadata(): Promise<
+    PersistedTerminalSessionMetadataRecord[]
+  > {
+    return this.getSessionMetadataRecords();
+  }
+
   async listProjects(): Promise<PersistedTerminalProjectRecord[]> {
     return this.getProjects();
   }
@@ -134,11 +143,26 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
   async getSession(
     terminalSessionId: string,
   ): Promise<PersistedTerminalSessionRecord | null> {
-    return (
-      (await this.getSessions()).find(
+    const metadata =
+      this.getSessionMetadataRecords().find(
         (session) => session.id === terminalSessionId,
-      ) ?? null
-    );
+      ) ?? null;
+    if (!metadata) {
+      return null;
+    }
+
+    return {
+      ...metadata,
+      scrollback: await this.readSessionScrollback(terminalSessionId),
+    };
+  }
+
+  async readSessionScrollback(terminalSessionId: string): Promise<string> {
+    return this.readScrollbackFile(terminalSessionId);
+  }
+
+  async readSessionLiveScrollback(terminalSessionId: string): Promise<string> {
+    return this.readLiveScrollbackFile(terminalSessionId);
   }
 
   async insertSession(session: PersistedTerminalSessionRecord): Promise<void> {
@@ -319,15 +343,19 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
     return this.database;
   }
 
-  private async getSessions(): Promise<PersistedTerminalSessionRecord[]> {
-    const sessions = this.getDatabase()
+  private getSessionMetadataRecords(): PersistedTerminalSessionMetadataRecord[] {
+    return this.getDatabase()
       .data.sessions.slice()
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
       .map((session) => structuredClone(session));
+  }
+
+  private async getSessions(): Promise<PersistedTerminalSessionRecord[]> {
+    const sessions = this.getSessionMetadataRecords();
     return Promise.all(
       sessions.map(async (session) => ({
         ...session,
-        scrollback: await this.readScrollbackFile(session.id),
+        scrollback: await this.readSessionScrollback(session.id),
       })),
     );
   }
@@ -381,6 +409,50 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
     }
   }
 
+  private async readLiveScrollbackFile(
+    terminalSessionId: string,
+  ): Promise<string> {
+    const scrollbackFile = this.resolveScrollbackFile(terminalSessionId);
+    try {
+      const stats = await stat(scrollbackFile);
+      if (stats.size <= 0) {
+        return "";
+      }
+
+      const bytesToRead = Math.min(stats.size, LIVE_SCROLLBACK_READ_BYTES);
+      const file = await open(scrollbackFile, "r");
+      try {
+        const buffer = Buffer.alloc(bytesToRead);
+        const { bytesRead } = await file.read(
+          buffer,
+          0,
+          bytesToRead,
+          stats.size - bytesToRead,
+        );
+        let tail = buffer.toString("utf8", 0, bytesRead);
+        if (stats.size > bytesToRead) {
+          const firstLineBreak = tail.indexOf("\n");
+          if (firstLineBreak >= 0 && firstLineBreak < tail.length - 1) {
+            tail = tail.slice(firstLineBreak + 1);
+          }
+        }
+        return getLiveTerminalScrollback(tail);
+      } finally {
+        await file.close();
+      }
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        return "";
+      }
+      throw error;
+    }
+  }
+
   private async writeScrollbackFile(
     terminalSessionId: string,
     scrollback: string,
@@ -410,7 +482,7 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
     const compactedScrollback = readScrollbackBuffer(
       createScrollbackBuffer(
         oversizedScrollback,
-        TERMINAL_PERSISTED_SCROLLBACK_BYTES,
+        TERMINAL_COMPACTED_SCROLLBACK_BYTES,
       ),
     );
     await writeFile(scrollbackFile, compactedScrollback, "utf8");

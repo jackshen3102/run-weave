@@ -18,6 +18,11 @@ export interface PersistedTerminalSessionRecord {
   exitCode?: number;
 }
 
+export type PersistedTerminalSessionMetadataRecord = Omit<
+  PersistedTerminalSessionRecord,
+  "scrollback"
+>;
+
 export interface UpdateTerminalSessionExitParams {
   terminalSessionId: string;
   status: "exited";
@@ -62,9 +67,12 @@ export interface TerminalSessionStore {
   deleteProject(projectId: string): Promise<void>;
   setDefaultProject(projectId: string): Promise<void>;
   listSessions(): Promise<PersistedTerminalSessionRecord[]>;
+  listSessionMetadata(): Promise<PersistedTerminalSessionMetadataRecord[]>;
   getSession(
     terminalSessionId: string,
   ): Promise<PersistedTerminalSessionRecord | null>;
+  readSessionScrollback(terminalSessionId: string): Promise<string>;
+  readSessionLiveScrollback(terminalSessionId: string): Promise<string>;
   insertSession(session: PersistedTerminalSessionRecord): Promise<void>;
   updateSessionMetadata(
     params: UpdateTerminalSessionMetadataParams,
