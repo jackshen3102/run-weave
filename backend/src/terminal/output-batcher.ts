@@ -1,16 +1,7 @@
+import { logTerminalPerf } from "./perf-logging";
+
 const OUTPUT_BATCH_DURATION_MS = 16;
 const OUTPUT_BATCH_MAX_SIZE = 200 * 1024;
-const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-be]";
-
-function logTerminalPerf(
-  event: string,
-  details: Record<string, unknown>,
-): void {
-  console.info(TERMINAL_PERF_LOG_PREFIX, event, {
-    at: new Date().toISOString(),
-    ...details,
-  });
-}
 
 export class TerminalOutputBatcher {
   private bufferedOutput = "";

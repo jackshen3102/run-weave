@@ -7,6 +7,7 @@ import {
 
 const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
+const TERMINAL_PREFERENCES_KEY = `viewer.terminal.preferences.${E2E_API_BASE}`;
 
 async function loginAndSeedToken(
   request: APIRequestContext,
@@ -42,6 +43,7 @@ async function createNamedTerminalSession(
   request: APIRequestContext,
   token: string,
   name: string,
+  options: { command?: string; args?: string[] } = {},
 ): Promise<{ terminalSessionId: string; terminalUrl: string }> {
   const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
     headers: {
@@ -49,7 +51,8 @@ async function createNamedTerminalSession(
     },
     data: {
       name,
-      command: "bash",
+      command: options.command ?? "bash",
+      args: options.args,
       cwd: "/tmp",
     },
   });
@@ -59,6 +62,41 @@ async function createNamedTerminalSession(
     terminalSessionId: string;
     terminalUrl: string;
   };
+}
+
+async function getTerminalScrollback(
+  request: APIRequestContext,
+  token: string,
+  terminalSessionId: string,
+): Promise<string> {
+  const response = await request.get(
+    `${E2E_API_BASE}/api/terminal/session/${encodeURIComponent(terminalSessionId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  expect(response.ok()).toBe(true);
+  const payload = (await response.json()) as { scrollback: string };
+  return payload.scrollback;
+}
+
+async function getLiveTerminalText(page: Page): Promise<string> {
+  const rowTexts = await page.locator(".xterm-rows").evaluateAll((elements) => {
+    return elements
+      .filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left >= 0;
+      })
+      .map((element) => element.textContent ?? "");
+  });
+  if (rowTexts.length > 0) {
+    return rowTexts.join("\n");
+  }
+
+  return (await page.getByLabel("Terminal output").textContent()) ?? "";
 }
 
 test("creates a terminal session and streams command output", async ({
@@ -129,4 +167,51 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
   await expect
     .poll(() => page.url())
     .toContain(`/terminal/${secondSession.terminalSessionId}`);
+});
+
+test("restores deferred background terminal output when selected", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  const suffix = `${Date.now()}`;
+  const backgroundMarker = `inactive-restore-${suffix}`;
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
+  const activeSession = await createNamedTerminalSession(
+    request,
+    token,
+    `inactive-active-${suffix}`,
+  );
+  const backgroundSession = await createNamedTerminalSession(
+    request,
+    token,
+    `inactive-bg-${suffix}`,
+    {
+      command: "bash",
+      args: ["-lc", `printf '${backgroundMarker}\\n'; sleep 60`],
+    },
+  );
+
+  await expect
+    .poll(() =>
+      getTerminalScrollback(request, token, backgroundSession.terminalSessionId),
+    )
+    .toContain(backgroundMarker);
+
+  await page.goto(activeSession.terminalUrl);
+  await expect(page.getByLabel("Terminal emulator").first()).toBeVisible();
+
+  await page
+    .getByRole("button", { name: `inactive-bg-${suffix}`, exact: true })
+    .click();
+  await expect
+    .poll(() => page.url())
+    .toContain(`/terminal/${backgroundSession.terminalSessionId}`);
+
+  await expect.poll(() => getLiveTerminalText(page)).toContain(backgroundMarker);
 });

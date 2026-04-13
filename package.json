@@ -23,6 +23,7 @@
     "test:e2e": "pnpm --filter ./frontend e2e",
     "test:e2e:list": "pnpm --filter ./frontend exec playwright test --list",
     "test:live": "pnpm --filter ./backend test:live",
+    "perf:terminal": "node ./scripts/terminal-perf-ralph.mjs",
     "coverage": "pnpm --filter ./backend test:coverage && pnpm --filter ./frontend test:coverage",
     "e2e": "pnpm --filter ./frontend e2e",
     "quality:gate": "node ./scripts/quality-gate.mjs",

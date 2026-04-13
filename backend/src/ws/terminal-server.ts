@@ -10,31 +10,16 @@ import { resolveTerminalFallbackLaunchConfig } from "../terminal/default-shell";
 import { getLiveTerminalScrollback } from "../terminal/live-scrollback";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { TerminalOutputBatcher } from "../terminal/output-batcher";
+import {
+  logTerminalPerf,
+  summarizeTerminalChunk,
+} from "../terminal/perf-logging";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import { createShellPromptTracker } from "../terminal/shell-integration";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
-
-const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-be]";
-
-function summarizeTerminalChunk(data: string): { len: number; preview: string } {
-  return {
-    len: data.length,
-    preview: JSON.stringify(data.slice(0, 32)),
-  };
-}
-
-function logTerminalPerf(
-  event: string,
-  details: Record<string, unknown>,
-): void {
-  console.info(TERMINAL_PERF_LOG_PREFIX, event, {
-    at: new Date().toISOString(),
-    ...details,
-  });
-}
 
 function parseTerminalClientMessage(
   rawData: string,
