@@ -1,16 +1,18 @@
 # 架构与网络拓扑
 
-本文从架构沟通视角描述系统边界、入口与核心链路，避免部署细节与本地路径。
+本文从架构沟通视角描述 Runweave 的系统边界、入口与核心链路，避免部署细节与本地路径。
 
 ## 总体形态
 
-系统由五条并行链路组成：
+Runweave 当前由五条并行链路组成：
 
 1. 前端 SPA 通过 HTTP 管理会话与登录。
 2. 前端通过 `/ws` 建立实时控制与画面通道。
 3. DevTools 通过 `/devtools` 生成入口页，再由 `/ws/devtools-proxy` 同源代理到服务端本机调试端口。
-4. AI/自动化工具通过 `ai-default -> ai-bridge -> /ws/ai-bridge` 复用 viewer 创建的浏览器。
+4. AI/自动化工具通过 `ai-default -> ai-bridge -> /ws/ai-bridge` 复用 Runweave viewer 创建的浏览器。
 5. Electron 桌面客户端通过自定义协议（`browser-viewer://`）加载前端，直连用户配置的远程后端。
+
+说明：`browser-viewer://` 仍是当前 Electron 自定义协议名，属于代码级标识，不代表产品名。
 
 ## 对外入口（高层）
 
@@ -21,7 +23,7 @@
 ## 核心链路（概念级）
 
 - **登录与会话**：HTTP 登录 -> 创建/查询/删除会话。
-- **Viewer 实时交互**：`/ws` 负责输入、状态回执与画面回传。
+- **Runweave Viewer 实时交互**：`/ws` 负责输入、状态回执与画面回传。
 - **默认 AI viewer**：HTTP 查询 `GET /api/session/ai-default`，缺失时用 `POST /api/session/ai-default/ensure` 创建一个可恢复的默认 viewer 会话。
 - **AI bridge**：先通过 `POST /api/session/:id/ai-bridge` 获得 session 级 bridge 信息，再通过 `/ws/ai-bridge?sessionId=...` 把外部工具附着到该浏览器。
 - **DevTools**：前端先换取短时 ticket，再访问 `/devtools`，由服务端返回同源 DevTools 入口。

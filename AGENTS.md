@@ -4,6 +4,7 @@
 
 ## 项目概览
 
+- 项目名：Runweave
 - 前端：React + Vite
 - 后端：Express + WebSocket + Playwright 控制
 - Electron 桌面客户端：electron/（多后端连接管理）

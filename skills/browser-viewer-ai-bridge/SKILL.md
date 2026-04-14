@@ -1,14 +1,17 @@
 ---
 name: browser-viewer-ai-bridge
-description: Use when work must attach to a browser created by this browser-viewer project instead of launching a separate Playwright browser, especially for E2E checks, difficult debugging, screenshots, or tasks that explicitly require the ai-default -> ai-bridge workflow before handing control to playwright-cli or another CDP-capable tool.
+description: Use when work must attach to a browser created by Runweave instead of launching a separate Playwright browser, especially for E2E checks, difficult debugging, screenshots, or tasks that explicitly require the ai-default -> ai-bridge workflow before handing control to playwright-cli or another CDP-capable tool.
 ---
 
-# Browser Viewer AI Bridge
+# Runweave AI Bridge
 
 ## Purpose
 
-Use this skill to obtain a reusable AI bridge URL from the local `browser-viewer`
+Use this skill to obtain a reusable AI bridge URL from the local Runweave
 backend, using the project's default AI session when possible.
+
+Note: the skill `name` remains `browser-viewer-ai-bridge` for compatibility with
+the current local skill registry. The product name is Runweave.
 
 This skill only covers the bootstrap phase:
 
@@ -22,11 +25,11 @@ After that, hand control to `playwright-cli` or another CDP-capable tool.
 ## Hard Rule
 
 - Do not launch a separate Playwright browser when this skill is in use.
-- Always attach to the browser that `browser-viewer` created.
+- Always attach to the browser that Runweave created.
 
 ## Use Cases
 
-- E2E checks that must share the same viewer session
+- E2E checks that must share the same Runweave viewer session
 - hard-to-reproduce debugging that benefits from the live viewer
 - screenshots or inspection tasks that must run through viewer-managed browser state
 - user instructions like "must use viewer", "reuse AI viewer", "through ai-bridge", or "不要自己起一个 playwright"

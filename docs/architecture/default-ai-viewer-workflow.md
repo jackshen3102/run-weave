@@ -1,13 +1,13 @@
-# 默认 AI Viewer 工作流
+# Runweave 默认 AI Viewer 工作流
 
-说明当前项目里“默认 AI viewer + AI bridge + 外部自动化工具附着”的产品语义与调用顺序。
+说明 Runweave 里“默认 AI viewer + AI bridge + 外部自动化工具附着”的产品语义与调用顺序。
 
 ## 目标
 
 这条链路解决两个问题：
 
 1. 不要每次都新建一个 viewer 会话给 AI 用
-2. 让外部工具复用 viewer 创建的浏览器，而不是自己再起一个独立 Playwright 浏览器
+2. 让外部工具复用 Runweave 创建的浏览器，而不是自己再起一个独立 Playwright 浏览器
 
 ## 核心对象
 
@@ -32,7 +32,7 @@ AI bridge 是一个 session 级 CDP bridge。
 
 用途：
 
-- 把 viewer 创建的浏览器暴露给外部工具
+- 把 Runweave viewer 创建的浏览器暴露给外部工具
 - 典型消费者是 `playwright-cli` 或直接使用 `chromium.connectOverCDP(...)` 的脚本
 
 ## 标准顺序
@@ -85,7 +85,7 @@ Content-Type: application/json
 
 ### 4. 外部工具附着
 
-后续页面操作不属于 `browser-viewer` API，而属于 CDP 消费方。
+后续页面操作不属于 Runweave 的 HTTP/WebSocket API，而属于 CDP 消费方。
 
 例如：
 
@@ -99,7 +99,7 @@ Playwright 代码形态：
 const browser = await chromium.connectOverCDP(bridgeUrl);
 ```
 
-## Viewer UI 对应关系
+## Runweave UI 对应关系
 
 首页当前有三类入口：
 
@@ -141,8 +141,8 @@ AI 真正开始操作，要等：
 
 ## 推荐使用场景
 
-- E2E 测试要和 viewer 共用同一个浏览器
-- 疑难问题排查时，需要一边看 viewer 一边让外部工具操作
+- E2E 测试要和 Runweave viewer 共用同一个浏览器
+- 疑难问题排查时，需要一边看 Runweave viewer 一边让外部工具操作
 - 明确要求“不要自己起一个 Playwright 浏览器”的任务
 
 ## 不推荐的理解

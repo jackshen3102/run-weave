@@ -1,4 +1,13 @@
-# Browser Viewer
+# Runweave
+
+Runweave is a 24/7 CLI-first agent workspace for turning ideas into running
+programs from anywhere. The current implementation combines a browser viewer,
+terminal workspace, AI bridge, Express/WebSocket backend, Playwright control
+plane, and Electron desktop client.
+
+Note: the code namespace still uses `browser-viewer` in package names, protocol
+identifiers, storage keys, and some internal paths. Treat those as technical
+identifiers until a separate code-level rename is done.
 
 ## Run modes
 
