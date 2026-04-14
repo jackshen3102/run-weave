@@ -37,10 +37,12 @@ import { TerminalProjectDialog } from "./terminal-project-dialog";
 import { TerminalHistoryDrawer } from "./terminal-history-drawer";
 import { TerminalHeadlessConnection } from "./terminal-headless-connection";
 import { TerminalSurface } from "./terminal-surface";
+import type { ClientMode } from "../../features/client-mode";
 
 interface TerminalWorkspaceProps {
   apiBase: string;
   token: string;
+  clientMode?: ClientMode;
   initialTerminalSessionId?: string;
   onActiveSessionChange?: (terminalSessionId: string) => void;
   onNoSessionAvailable?: () => void;
@@ -98,6 +100,7 @@ function cycleIndex(currentIndex: number, total: number, delta: number): number 
 export function TerminalWorkspace({
   apiBase,
   token,
+  clientMode = "desktop",
   initialTerminalSessionId,
   onActiveSessionChange,
   onNoSessionAvailable,
@@ -127,6 +130,7 @@ export function TerminalWorkspace({
     null,
   );
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+  const isMobileMonitor = clientMode === "mobile";
 
   const visibleProjects = useMemo(() => {
     return [...projects].sort((left, right) => {
@@ -753,45 +757,49 @@ export function TerminalWorkspace({
                       </span>
                     </button>
                   </ContextMenuTrigger>
-                  <ContextMenuContent className="w-44">
-                    <ContextMenuItem
-                      onSelect={() => {
-                        setActiveProjectId(project.projectId);
-                        setProjectDialogError(null);
-                        setProjectDialogMode("rename");
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                      Rename
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={() => {
-                        setActiveProjectId(project.projectId);
-                        setProjectPendingDeletion(project);
-                      }}
-                      className="text-rose-400 focus:text-rose-400"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </ContextMenuItem>
-                  </ContextMenuContent>
+                  {!isMobileMonitor ? (
+                    <ContextMenuContent className="w-44">
+                      <ContextMenuItem
+                        onSelect={() => {
+                          setActiveProjectId(project.projectId);
+                          setProjectDialogError(null);
+                          setProjectDialogMode("rename");
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Rename
+                      </ContextMenuItem>
+                      <ContextMenuItem
+                        onSelect={() => {
+                          setActiveProjectId(project.projectId);
+                          setProjectPendingDeletion(project);
+                        }}
+                        className="text-rose-400 focus:text-rose-400"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  ) : null}
                 </ContextMenu>
               );
             })}
           </div>
-          <Button
-            type="button"
-            size="sm"
-            disabled={loading}
-            className="h-9 shrink-0 rounded-full px-4"
-            onClick={() => {
-              setProjectDialogError(null);
-              setProjectDialogMode("create");
-            }}
-          >
-            <Plus className="mr-1 h-4 w-4" />
-            New Project
-          </Button>
+          {!isMobileMonitor ? (
+            <Button
+              type="button"
+              size="sm"
+              disabled={loading}
+              className="h-9 shrink-0 rounded-full px-4"
+              onClick={() => {
+                setProjectDialogError(null);
+                setProjectDialogMode("create");
+              }}
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              New Project
+            </Button>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -826,35 +834,41 @@ export function TerminalWorkspace({
                       ) : null}
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    className="rounded-full p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-                    aria-label={`Close terminal ${session.name}`}
-                    onClick={() => {
-                      void closeSession(session.terminalSessionId);
-                    }}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                  {!isMobileMonitor ? (
+                    <button
+                      type="button"
+                      className="rounded-full p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                      aria-label={`Close terminal ${session.name}`}
+                      onClick={() => {
+                        void closeSession(session.terminalSessionId);
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  ) : null}
                 </div>
               );
             })}
           </div>
-          <div className="hidden shrink-0 text-[11px] text-slate-500 xl:block">
-            Project Alt+[ / Alt+]  Tab Alt+Shift+[ / Alt+Shift+]
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            disabled={loading}
-            className="h-9 shrink-0 rounded-full px-4"
-            onClick={() => {
-              void createSession();
-            }}
-          >
-            <Plus className="mr-1 h-4 w-4" />
-            New Terminal
-          </Button>
+          {!isMobileMonitor ? (
+            <div className="hidden shrink-0 text-[11px] text-slate-500 xl:block">
+              Project Alt+[ / Alt+]  Tab Alt+Shift+[ / Alt+Shift+]
+            </div>
+          ) : null}
+          {!isMobileMonitor ? (
+            <Button
+              type="button"
+              size="sm"
+              disabled={loading}
+              className="h-9 shrink-0 rounded-full px-4"
+              onClick={() => {
+                void createSession();
+              }}
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              New Terminal
+            </Button>
+          ) : null}
         </div>
 
         {requestError ? (
@@ -903,6 +917,7 @@ export function TerminalWorkspace({
                 <TerminalSurface
                   active={isActive}
                   apiBase={apiBase}
+                  clientMode={clientMode}
                   terminalSessionId={session.terminalSessionId}
                   token={token}
                   onAuthExpired={onAuthExpired}

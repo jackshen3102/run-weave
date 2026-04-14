@@ -13,11 +13,13 @@
 
 - HTTPS：登录与会话管理
 - WSS：Runweave Viewer 与 DevTools 代理
+- 前端 `apiBase` 为空时，HTTP / WebSocket 默认使用当前页面同源入口
 
 ## 运行位置
 
 - 后端应用与调试端口仅在服务端内部可达。
 - 浏览器仅访问公网入口与同源 WebSocket。
+- 运行时 API 地址不依赖 `VITE_PROXY_TARGET` 兜底；需要跨源后端时应显式传入连接地址或通过入口代理收口。
 
 如需部署模板与配置示例，参考 `deploy/` 目录：
 

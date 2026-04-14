@@ -15,6 +15,7 @@ import {
   shouldMarkTerminalActivity,
 } from "../../features/terminal/activity-marker";
 import { createTerminalBellPlayer } from "../../features/terminal/bell";
+import type { ClientMode } from "../../features/client-mode";
 import {
   DEFAULT_TERMINAL_PREFERENCES,
   type TerminalPreferences,
@@ -44,12 +45,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { TerminalMobileKeybar } from "./terminal-mobile-keybar";
 
 interface TerminalSurfaceProps {
   active: boolean;
   apiBase: string;
   terminalSessionId: string;
   token: string;
+  clientMode?: ClientMode;
   onAuthExpired?: () => void;
   onActivity?: () => void;
   onBell?: () => void;
@@ -187,11 +190,43 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\"'\"'")}'`;
 }
 
+function resolveMobileBeforeInputData(
+  event: InputEvent,
+  helperTextarea: HTMLTextAreaElement,
+): string | null {
+  if (
+    event.inputType === "insertText" ||
+    event.inputType === "insertReplacementText" ||
+    event.inputType === "insertCompositionText" ||
+    event.inputType === "insertFromPaste"
+  ) {
+    return (event.data ?? helperTextarea.value) || null;
+  }
+
+  if (
+    event.inputType === "insertLineBreak" ||
+    event.inputType === "insertParagraph"
+  ) {
+    return "\r";
+  }
+
+  if (event.inputType === "deleteContentBackward") {
+    return "\u007f";
+  }
+
+  if (event.inputType === "deleteContentForward") {
+    return "\u001b[3~";
+  }
+
+  return null;
+}
+
 export function TerminalSurface({
   active,
   apiBase,
   terminalSessionId,
   token,
+  clientMode = "desktop",
   onAuthExpired,
   onActivity,
   onBell,
@@ -218,6 +253,7 @@ export function TerminalSurface({
   const lastResizedAtRef = useRef<number | null>(null);
   const inputSequenceRef = useRef(0);
   const outputSequenceRef = useRef(0);
+  const xtermUserInputSequenceRef = useRef(0);
   const lastInputSentAtRef = useRef<number | null>(null);
   const hasDeferredOutputRef = useRef(false);
   const deferredOutputRef = useRef("");
@@ -235,6 +271,7 @@ export function TerminalSurface({
   const [effectiveRenderer, setEffectiveRenderer] =
     useState<ActiveRenderer>("dom");
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [mobileKeybarOpen, setMobileKeybarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] =
@@ -447,6 +484,20 @@ export function TerminalSurface({
     onMetadata,
   });
 
+  const sendTerminalInput = useCallback(
+    (data: string): void => {
+      inputSequenceRef.current += 1;
+      lastInputSentAtRef.current = Date.now();
+      logTerminalPerf("terminal.input.captured", {
+        terminalSessionId,
+        seq: inputSequenceRef.current,
+        ...summarizeTerminalChunk(data),
+      });
+      sendInput(data);
+    },
+    [sendInput, terminalSessionId],
+  );
+
   const clearSearch = useCallback(() => {
     setSearchResults(null);
     searchAddonRef.current?.clearDecorations();
@@ -657,16 +708,6 @@ export function TerminalSurface({
       void navigator.clipboard.writeText(selection).catch(() => undefined);
     });
 
-    const sendTerminalInput = (data: string) => {
-      inputSequenceRef.current += 1;
-      lastInputSentAtRef.current = Date.now();
-      logTerminalPerf("terminal.input.captured", {
-        terminalSessionId,
-        seq: inputSequenceRef.current,
-        ...summarizeTerminalChunk(data),
-      });
-      sendInput(data);
-    };
     terminal.attachCustomKeyEventHandler((event) => {
       if (isShiftEnterLineFeed(event)) {
         event.preventDefault();
@@ -680,6 +721,7 @@ export function TerminalSurface({
       if (isTerminalAutoResponse(data)) {
         return;
       }
+      xtermUserInputSequenceRef.current += 1;
       sendTerminalInput(data);
     });
     const bellDisposable = terminal.onBell(() => {
@@ -775,7 +817,7 @@ export function TerminalSurface({
               filePath: payload.filePath,
             },
           ]);
-          sendInput(shellQuote(payload.filePath));
+          sendTerminalInput(shellQuote(payload.filePath));
         })
         .catch((nextError: unknown) => {
           if (nextError instanceof HttpError && nextError.status === 401) {
@@ -785,11 +827,37 @@ export function TerminalSurface({
           setPasteError(String(nextError));
         });
     };
-    const helperTextarea = container.querySelector(".xterm-helper-textarea");
+    const helperTextarea = container.querySelector<HTMLTextAreaElement>(
+      ".xterm-helper-textarea",
+    );
     const handlePasteEvent: EventListener = (event) => {
       handlePaste(event as ClipboardEvent);
     };
+    const handleMobileBeforeInput: EventListener = (event) => {
+      if (clientMode !== "mobile" || !helperTextarea) {
+        return;
+      }
+
+      const inputEvent = event as InputEvent;
+      const data = resolveMobileBeforeInputData(inputEvent, helperTextarea);
+      if (!data) {
+        return;
+      }
+
+      const xtermUserInputSequence = xtermUserInputSequenceRef.current;
+      window.setTimeout(() => {
+        if (disposed) {
+          return;
+        }
+        if (xtermUserInputSequenceRef.current !== xtermUserInputSequence) {
+          return;
+        }
+
+        sendTerminalInput(data);
+      }, 20);
+    };
     helperTextarea?.addEventListener("paste", handlePasteEvent, true);
+    helperTextarea?.addEventListener("beforeinput", handleMobileBeforeInput, true);
 
     return () => {
       disposed = true;
@@ -807,6 +875,11 @@ export function TerminalSurface({
       document.removeEventListener("visibilitychange", refreshTerminalViewport);
       window.removeEventListener("focus", refreshTerminalViewport);
       helperTextarea?.removeEventListener("paste", handlePasteEvent, true);
+      helperTextarea?.removeEventListener(
+        "beforeinput",
+        handleMobileBeforeInput,
+        true,
+      );
       searchResultsDisposable.dispose();
       dataDisposable.dispose();
       bellDisposable.dispose();
@@ -821,8 +894,9 @@ export function TerminalSurface({
     };
   }, [
     apiBase,
+    clientMode,
     onAuthExpired,
-    sendInput,
+    sendTerminalInput,
     sendResize,
     terminalSessionId,
   ]);
@@ -993,6 +1067,10 @@ export function TerminalSurface({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (clientMode === "mobile") {
+        return;
+      }
+
       const openSearch = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f";
       if (openSearch) {
         event.preventDefault();
@@ -1011,7 +1089,27 @@ export function TerminalSurface({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [active, searchOpen]);
+  }, [active, clientMode, searchOpen]);
+
+  useEffect(() => {
+    if (clientMode !== "mobile") {
+      return;
+    }
+
+    setSearchOpen(false);
+    setSettingsMenuOpen(false);
+  }, [clientMode]);
+
+  useEffect(() => {
+    if (active && clientMode === "mobile") {
+      return;
+    }
+
+    setMobileKeybarOpen(false);
+  }, [active, clientMode]);
+
+  const showTerminalToolbar = active && clientMode !== "mobile";
+  const showMobileKeybarToggle = active && clientMode === "mobile";
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -1032,7 +1130,7 @@ export function TerminalSurface({
         </div>
       ) : null}
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        {active ? (
+        {showTerminalToolbar ? (
           <div className="pointer-events-none absolute top-3 right-4 z-10 flex items-start gap-2">
             {searchOpen ? (
               <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/95 px-2 py-2 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.9)] backdrop-blur">
@@ -1287,6 +1385,27 @@ export function TerminalSurface({
             )}
           </div>
         ) : null}
+        {showMobileKeybarToggle ? (
+          <div className="pointer-events-none absolute top-3 right-4 z-30">
+            <button
+              type="button"
+              aria-expanded={mobileKeybarOpen}
+              aria-label="Toggle terminal shortcut keys"
+              className="pointer-events-auto rounded-md border border-slate-700 bg-slate-950/90 px-2 py-1 text-[10px] leading-none text-slate-300 backdrop-blur active:bg-slate-800"
+              onPointerDown={(event) => {
+                event.preventDefault();
+              }}
+              onClick={() => {
+                setMobileKeybarOpen((current) => !current);
+                requestAnimationFrame(() => {
+                  terminalRef.current?.focus();
+                });
+              }}
+            >
+              Keys
+            </button>
+          </div>
+        ) : null}
         <div
           aria-label="Terminal emulator"
           className="h-full min-h-full w-full px-3 pt-2 pb-2"
@@ -1303,6 +1422,10 @@ export function TerminalSurface({
             }
           }}
           ref={terminalContainerRef}
+        />
+        <TerminalMobileKeybar
+          visible={active && clientMode === "mobile" && mobileKeybarOpen}
+          onSendInput={sendTerminalInput}
         />
       </div>
     </div>

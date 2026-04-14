@@ -7,6 +7,7 @@ import { HttpError } from "../../services/http";
 import { createTerminalWsTicket } from "../../services/terminal";
 import {
   getTerminalReconnectDelay,
+  MIN_TERMINAL_RECONNECT_LIFETIME_MS,
   shouldAutoReconnectTerminalClose,
 } from "./reconnect-policy";
 import { logTerminalPerf, summarizeTerminalChunk } from "./perf-logging";
@@ -14,7 +15,7 @@ import { toWebSocketBase } from "../viewer/url";
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type TerminalRuntimeStatus = "running" | "exited" | null;
-const MAX_UNAUTHORIZED_RETRIES = 1;
+const MAX_PENDING_INPUT_CHARS = 8 * 1024;
 
 function buildTerminalWsUrl(
   apiBase: string,
@@ -67,11 +68,15 @@ export function useTerminalConnection(params: {
   const tokenRef = useRef(token);
   const pendingResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
+  const stableConnectionTimerRef = useRef<number | null>(null);
   const reconnectCountRef = useRef(0);
   const connectedAtRef = useRef<number | null>(null);
   const closeReasonRef = useRef<string | null>(null);
+  const terminalStatusRef = useRef<TerminalRuntimeStatus>(null);
   const outboundSequenceRef = useRef(0);
   const inboundSequenceRef = useRef(0);
+  const pendingInputRef = useRef<string[]>([]);
+  const connectionStatusRef = useRef<ConnectionStatus>("connecting");
   // Keep onOutput in a ref so it never needs to be in the effect's dep array.
   const onSnapshotRef = useRef(onSnapshot);
   const onOutputRef = useRef(onOutput);
@@ -95,14 +100,29 @@ export function useTerminalConnection(params: {
     useState<TerminalRuntimeStatus>(null);
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [manualReconnectNonce, setManualReconnectNonce] = useState(0);
+
+  const setNextConnectionStatus = useCallback(
+    (status: ConnectionStatus): void => {
+      connectionStatusRef.current = status;
+      setConnectionStatus(status);
+    },
+    [],
+  );
+  const setNextTerminalStatus = useCallback(
+    (status: TerminalRuntimeStatus): void => {
+      terminalStatusRef.current = status;
+      setTerminalStatus(status);
+    },
+    [],
+  );
 
   useEffect(() => {
-    setConnectionStatus("connecting");
-    setTerminalStatus(null);
+    setNextConnectionStatus("connecting");
+    setNextTerminalStatus(null);
     setExitCode(null);
     setError(null);
     let cancelled = false;
-    let unauthorizedRetryCount = 0;
 
     const clearReconnectTimer = () => {
       if (reconnectTimerRef.current === null) {
@@ -113,13 +133,39 @@ export function useTerminalConnection(params: {
       reconnectTimerRef.current = null;
     };
 
+    const clearStableConnectionTimer = () => {
+      if (stableConnectionTimerRef.current === null) {
+        return;
+      }
+
+      window.clearTimeout(stableConnectionTimerRef.current);
+      stableConnectionTimerRef.current = null;
+    };
+
+    const flushPendingInput = (socket: WebSocket): void => {
+      if (
+        socket.readyState !== WebSocket.OPEN ||
+        pendingInputRef.current.length === 0
+      ) {
+        return;
+      }
+
+      const pendingInput = pendingInputRef.current.splice(0);
+      for (const data of pendingInput) {
+        sendMessage(socket, {
+          type: "input",
+          data,
+        });
+      }
+    };
+
     const connect = async (): Promise<void> => {
       if (cancelled) {
         return;
       }
 
       clearReconnectTimer();
-      setConnectionStatus("connecting");
+      setNextConnectionStatus("connecting");
       setError(null);
       logTerminalPerf("ws.connect.start", {
         terminalSessionId,
@@ -153,9 +199,15 @@ export function useTerminalConnection(params: {
 
           connectedAtRef.current = Date.now();
           closeReasonRef.current = null;
-          reconnectCountRef.current = 0;
+          clearStableConnectionTimer();
+          stableConnectionTimerRef.current = window.setTimeout(() => {
+            if (socketRef.current === socket) {
+              reconnectCountRef.current = 0;
+            }
+            stableConnectionTimerRef.current = null;
+          }, MIN_TERMINAL_RECONNECT_LIFETIME_MS);
           setError(null);
-          setConnectionStatus("connected");
+          setNextConnectionStatus("connected");
           logTerminalPerf("ws.open", {
             terminalSessionId,
             pendingResize: pendingResizeRef.current,
@@ -167,6 +219,7 @@ export function useTerminalConnection(params: {
               rows: pendingResizeRef.current.rows,
             });
           }
+          flushPendingInput(socket);
         });
         socket.addEventListener("close", (event) => {
           if (socketRef.current !== socket) {
@@ -174,19 +227,10 @@ export function useTerminalConnection(params: {
           }
 
           socketRef.current = null;
+          clearStableConnectionTimer();
 
           if (event.code === 1008 && event.reason === "Unauthorized") {
-            if (
-              unauthorizedRetryCount < MAX_UNAUTHORIZED_RETRIES &&
-              !cancelled
-            ) {
-              unauthorizedRetryCount += 1;
-              closeReasonRef.current = null;
-              setConnectionStatus("connecting");
-              void connect();
-              return;
-            }
-            setConnectionStatus("closed");
+            setNextConnectionStatus("closed");
             onAuthExpired?.();
             return;
           }
@@ -200,18 +244,25 @@ export function useTerminalConnection(params: {
             reason: event.reason,
             livedMs,
             closeReason: closeReasonRef.current,
+            reconnectAttempt: reconnectCountRef.current,
+            terminalStatus: terminalStatusRef.current,
           });
 
+          const closeReason = closeReasonRef.current || event.reason || null;
+          const reconnectAttempt = reconnectCountRef.current;
           if (
             !cancelled &&
             shouldAutoReconnectTerminalClose({
               code: event.code,
               livedMs,
+              reason: closeReason,
+              reconnectAttempt,
+              terminalStatus: terminalStatusRef.current,
             })
           ) {
-            const delay = getTerminalReconnectDelay(reconnectCountRef.current);
-            reconnectCountRef.current += 1;
-            setConnectionStatus("connecting");
+            const delay = getTerminalReconnectDelay(reconnectAttempt);
+            reconnectCountRef.current = reconnectAttempt + 1;
+            setNextConnectionStatus("connecting");
             clearReconnectTimer();
             reconnectTimerRef.current = window.setTimeout(() => {
               void connect();
@@ -219,7 +270,7 @@ export function useTerminalConnection(params: {
             return;
           }
 
-          setConnectionStatus("closed");
+          setNextConnectionStatus("closed");
           if (closeReasonRef.current || event.reason) {
             setError(
               closeReasonRef.current ||
@@ -276,7 +327,7 @@ export function useTerminalConnection(params: {
                 status: parsed.status,
                 exitCode: parsed.exitCode ?? null,
               });
-              setTerminalStatus(parsed.status);
+              setNextTerminalStatus(parsed.status);
               setExitCode(parsed.exitCode ?? null);
               return;
             }
@@ -286,7 +337,7 @@ export function useTerminalConnection(params: {
                 seq: inboundSequenceRef.current,
                 exitCode: parsed.exitCode ?? null,
               });
-              setTerminalStatus("exited");
+              setNextTerminalStatus("exited");
               setExitCode(parsed.exitCode ?? null);
               return;
             }
@@ -323,7 +374,7 @@ export function useTerminalConnection(params: {
         });
         closeReasonRef.current = String(error);
         setError(String(error));
-        setConnectionStatus("closed");
+        setNextConnectionStatus("closed");
       }
     };
 
@@ -338,10 +389,42 @@ export function useTerminalConnection(params: {
       reconnectCountRef.current = 0;
       window.clearTimeout(connectTimer);
       clearReconnectTimer();
+      clearStableConnectionTimer();
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [apiBase, includeSnapshot, onAuthExpired, terminalSessionId]);
+  }, [
+    apiBase,
+    includeSnapshot,
+    manualReconnectNonce,
+    onAuthExpired,
+    setNextConnectionStatus,
+    setNextTerminalStatus,
+    terminalSessionId,
+  ]);
+
+  const queuePendingInput = useCallback(
+    (data: string, socketReadyState: number | null): void => {
+      pendingInputRef.current.push(data);
+      let totalLen = pendingInputRef.current.reduce(
+        (total, chunk) => total + chunk.length,
+        0,
+      );
+      while (
+        pendingInputRef.current.length > 0 &&
+        totalLen > MAX_PENDING_INPUT_CHARS
+      ) {
+        totalLen -= pendingInputRef.current.shift()?.length ?? 0;
+      }
+      if (socketReadyState === null || socketReadyState === WebSocket.CLOSED) {
+        if (connectionStatusRef.current !== "connecting") {
+          setNextConnectionStatus("connecting");
+          setManualReconnectNonce((current) => current + 1);
+        }
+      }
+    },
+    [setNextConnectionStatus],
+  );
 
   return {
     connectionStatus,
@@ -351,18 +434,24 @@ export function useTerminalConnection(params: {
     sendInput: useCallback(
       (data: string) => {
         outboundSequenceRef.current += 1;
+        const socket = socketRef.current;
         logTerminalPerf("ws.send.input", {
           terminalSessionId,
           seq: outboundSequenceRef.current,
-          socketReadyState: socketRef.current?.readyState ?? null,
+          socketReadyState: socket?.readyState ?? null,
           ...summarizeTerminalChunk(data),
         });
-        sendMessage(socketRef.current, {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          queuePendingInput(data, socket?.readyState ?? null);
+          return;
+        }
+
+        sendMessage(socket, {
           type: "input",
           data,
         });
       },
-      [terminalSessionId],
+      [queuePendingInput, terminalSessionId],
     ),
     sendResize: useCallback(
       (cols: number, rows: number) => {

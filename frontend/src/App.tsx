@@ -6,6 +6,7 @@ import type {
 import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
 import { useScopedAuth } from "./features/auth/use-scoped-auth";
+import { useClientMode } from "./features/use-client-mode";
 import { HomePage } from "./pages/home-page";
 import { LoginPage } from "./pages/login-page";
 import { ConnectionsPage } from "./pages/connections-page";
@@ -38,6 +39,7 @@ declare global {
 const isElectron = window.electronAPI?.isElectron === true;
 
 export default function App() {
+  const clientMode = useClientMode(isElectron);
   const {
     connections,
     activeConnection,
@@ -126,6 +128,7 @@ export default function App() {
             <HomePage
               apiBase={apiBase}
               token={token}
+              clientMode={clientMode}
               clearToken={clearToken}
               connections={connections}
               activeConnectionId={activeConnectionId}
@@ -153,6 +156,7 @@ export default function App() {
             <ViewerPage
               apiBase={apiBase}
               token={token}
+              clientMode={clientMode}
               onAuthExpired={clearToken}
             />
           ) : (
@@ -171,6 +175,7 @@ export default function App() {
             <TerminalRoutePage
               apiBase={apiBase}
               token={token}
+              clientMode={clientMode}
               onAuthExpired={clearToken}
             />
           ) : (

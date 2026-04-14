@@ -7,10 +7,12 @@ import { HomeSidebar } from "./components/home-sidebar";
 import { SessionList } from "./components/session-list";
 import { useHomeSessions } from "./hooks/use-home-sessions";
 import { useHomeTerminalPassword } from "./hooks/use-home-terminal-password";
+import type { ClientMode } from "../../features/client-mode";
 
 interface HomePageProps {
   apiBase: string;
   token: string;
+  clientMode: ClientMode;
   clearToken: () => void;
   connections?: Array<{
     id: string;
@@ -30,6 +32,7 @@ interface HomePageProps {
 export function HomePage({
   apiBase,
   token,
+  clientMode,
   clearToken,
   connections,
   activeConnectionId,
@@ -106,6 +109,95 @@ export function HomePage({
       navigate(`/terminal/${encodeURIComponent(terminalSessionId)}`);
     },
   });
+
+  if (clientMode === "mobile") {
+    return (
+      <main className="relative min-h-dvh overflow-hidden px-4 py-5">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217,226,211,0.68),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(68,136,146,0.14),transparent_30%)]" />
+        <div className="relative mx-auto flex min-h-[calc(100dvh-2.5rem)] w-full max-w-2xl flex-col gap-5">
+          <header className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.34em] text-muted-foreground/70">
+                Browser Viewer
+              </p>
+              {connectionName ? (
+                <p className="mt-2 truncate text-sm text-muted-foreground">
+                  {connectionName}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                size="sm"
+                className="rounded-full px-4"
+                onClick={() => {
+                  void createTerminal();
+                }}
+                disabled={terminalLoading}
+              >
+                {terminalLoading ? "Opening..." : "Terminal"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-full px-4 text-muted-foreground"
+                onClick={handleAuthExpired}
+              >
+                Logout
+              </Button>
+            </div>
+          </header>
+
+          {terminalError ? (
+            <p className="text-sm text-red-500" role="alert">
+              {terminalError}
+            </p>
+          ) : null}
+
+          <section className="flex min-h-0 flex-1 flex-col rounded-[1.5rem] border border-border/60 bg-card/82 p-4 shadow-[0_26px_100px_-72px_rgba(17,24,39,0.7)] backdrop-blur-xl">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/70">
+                  Sessions
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {loadingSessions ? "Refreshing..." : `${sortedSessions.length} total`}
+                </p>
+              </div>
+            </div>
+
+            {error ? (
+              <p className="mt-3 text-sm text-red-500" role="alert">
+                {error}
+              </p>
+            ) : null}
+
+            <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+              <SessionList
+                sessions={sortedSessions}
+                loadingSessions={loadingSessions}
+                deletingSessionId={deletingSessionId}
+                updatingAiPreferenceSessionId={updatingAiPreferenceSessionId}
+                actions="open-only"
+                onRenameSession={(sessionId) => {
+                  void renameSession(sessionId);
+                }}
+                onRemoveSession={(sessionId) => {
+                  void removeSession(sessionId);
+                }}
+                onResumeSession={(sessionId) => {
+                  navigate(`/viewer/${encodeURIComponent(sessionId)}`);
+                }}
+                onToggleAiPreference={(sessionId, nextPreferredForAi) => {
+                  void updateSessionAiPreference(sessionId, nextPreferredForAi);
+                }}
+              />
+            </div>
+          </section>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-8 sm:py-8">

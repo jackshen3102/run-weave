@@ -10,6 +10,7 @@ interface SessionListItemProps {
   session: SessionListItemType;
   isDeleting: boolean;
   isUpdatingAiPreference: boolean;
+  actions?: "full" | "open-only";
   onRename: () => void;
   onRemove: () => void;
   onResume: () => void;
@@ -20,6 +21,7 @@ export function SessionListItem({
   session,
   isDeleting,
   isUpdatingAiPreference,
+  actions = "full",
   onRename,
   onRemove,
   onResume,
@@ -63,7 +65,7 @@ export function SessionListItem({
         <Button size="sm" className="rounded-full px-4" onClick={onResume}>
           Open
         </Button>
-        {canSetAiDefault ? (
+        {actions === "full" && canSetAiDefault ? (
           <Button
             size="sm"
             variant="ghost"
@@ -78,23 +80,27 @@ export function SessionListItem({
                 : "Set Default AI Viewer"}
           </Button>
         ) : null}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="rounded-full px-4"
-          onClick={onRename}
-        >
-          Rename
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="rounded-full px-4 text-red-500 hover:text-red-600"
-          disabled={isDeleting}
-          onClick={onRemove}
-        >
-          {isDeleting ? "Removing..." : "Remove"}
-        </Button>
+        {actions === "full" ? (
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rounded-full px-4"
+              onClick={onRename}
+            >
+              Rename
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rounded-full px-4 text-red-500 hover:text-red-600"
+              disabled={isDeleting}
+              onClick={onRemove}
+            >
+              {isDeleting ? "Removing..." : "Remove"}
+            </Button>
+          </>
+        ) : null}
       </div>
     </article>
   );

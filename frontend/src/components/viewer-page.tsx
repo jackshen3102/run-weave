@@ -24,6 +24,7 @@ import {
   createDevtoolsTicket,
   revokeAiBridge,
 } from "../services/session";
+import type { ClientMode } from "../features/client-mode";
 
 const HISTORY_GUARD_STATE_KEY = "__viewerHistoryGuard";
 
@@ -39,6 +40,7 @@ interface ViewerPageProps {
   apiBase: string;
   sessionId: string;
   token: string;
+  clientMode?: ClientMode;
   onAuthExpired?: () => void;
   onHome?: () => void;
 }
@@ -47,6 +49,7 @@ export function ViewerPage({
   apiBase,
   sessionId,
   token,
+  clientMode = "desktop",
   onAuthExpired,
   onHome,
 }: ViewerPageProps) {
@@ -96,18 +99,22 @@ export function ViewerPage({
     sendInput,
   });
 
-  const activeTabId = tabs.find((tab) => tab.active)?.id ?? null;
+  const isMobileObserveMode = clientMode === "mobile";
+  const activeTab = tabs.find((tab) => tab.active) ?? null;
+  const activeTabId = activeTab?.id ?? null;
   const activeNavigation = activeTabId
     ? navigationByTabId[activeTabId]
     : undefined;
   const activeDevtoolsOpened = activeTabId
     ? (devtoolsByTabId[activeTabId] ?? false)
     : false;
-  const canRenderDevtoolsControls = devtoolsEnabled && activeTabId !== null;
+  const canRenderDevtoolsControls =
+    clientMode === "desktop" && devtoolsEnabled && activeTabId !== null;
   const isInspecting = canRenderDevtoolsControls && activeDevtoolsOpened;
   const canReconnect = status === "reconnecting" || status === "closed";
   const viewerControlsDisabled = status !== "connected";
-  const viewerInputEnabled = !isInspecting && !viewerControlsDisabled;
+  const viewerInputEnabled =
+    clientMode === "desktop" && !isInspecting && !viewerControlsDisabled;
   const aiAssistEnabled = collaboration.aiStatus !== "idle";
   const securityState = getViewerSecurityState(
     isEditingAddress ? addressInput : (activeNavigation?.url ?? ""),
@@ -347,20 +354,22 @@ export function ViewerPage({
     <main className="relative h-dvh overflow-hidden">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(86,134,144,0.16),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(170,150,115,0.14),transparent_28%)]" />
       <div className="relative mx-auto flex h-full w-full max-w-[1600px] flex-col gap-3 p-3">
-        <textarea
-          ref={inputBridgeRef}
-          aria-label="Viewer input bridge"
-          className="pointer-events-none fixed z-50 h-1 w-1 opacity-0"
-          style={{ left: 0, top: 0 }}
-          disabled={!viewerInputEnabled}
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          onKeyDown={onBridgeKeyDown}
-          onInput={onBridgeInput}
-          onCompositionStart={onBridgeCompositionStart}
-          onCompositionEnd={onBridgeCompositionEnd}
-        />
+        {clientMode === "desktop" ? (
+          <textarea
+            ref={inputBridgeRef}
+            aria-label="Viewer input bridge"
+            className="pointer-events-none fixed z-50 h-1 w-1 opacity-0"
+            style={{ left: 0, top: 0 }}
+            disabled={!viewerInputEnabled}
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            onKeyDown={onBridgeKeyDown}
+            onInput={onBridgeInput}
+            onCompositionStart={onBridgeCompositionStart}
+            onCompositionEnd={onBridgeCompositionEnd}
+          />
+        ) : null}
 
         <div className="min-h-0 flex flex-1">
           <section
@@ -370,6 +379,42 @@ export function ViewerPage({
           >
             <div className="z-20 border-b border-white/10 bg-[rgba(9,14,21,0.84)] backdrop-blur-xl">
               <div className="w-full px-3 py-2 sm:px-4 sm:py-2.5">
+                {isMobileObserveMode ? (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-full px-3 text-stone-300 hover:bg-white/8 hover:text-white"
+                      onClick={() => {
+                        if (onHome) {
+                          onHome();
+                          return;
+                        }
+                        window.location.assign("/");
+                      }}
+                    >
+                      Home
+                    </Button>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-stone-100">
+                        {activeTab?.title || "Live Viewer"}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-stone-400">
+                        {activeNavigation?.url ?? status}
+                      </p>
+                    </div>
+                    {canReconnect ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="rounded-full px-3"
+                        onClick={reconnect}
+                      >
+                        Reconnect
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : (
                 <div className="flex items-center gap-2">
                   <Button
                     variant="ghost"
@@ -509,8 +554,9 @@ export function ViewerPage({
                         : "AI Assist"}
                   </Button>
                 </div>
+                )}
 
-                {isNavigationBarOpen && !isInspecting && (
+                {clientMode === "desktop" && isNavigationBarOpen && !isInspecting && (
                   <div
                     className="mt-2 border-t border-white/10 pt-2"
                     data-testid="navigation-bar"
@@ -554,13 +600,14 @@ export function ViewerPage({
                     : ""}
                 </div>
 
-                {collaboration.aiLastAction && (
+                {clientMode === "desktop" && collaboration.aiLastAction && (
                   <div className="mt-1 px-1 text-xs text-stone-300/72">
                     Last AI action: {collaboration.aiLastAction}
                   </div>
                 )}
 
-                {(aiBridgeUrl || aiBridgeError || collaboration.aiLastError) && (
+                {clientMode === "desktop" &&
+                (aiBridgeUrl || aiBridgeError || collaboration.aiLastError) && (
                   <div className="mt-1 flex flex-wrap items-center gap-2 px-1 text-xs">
                     {aiBridgeUrl && (
                       <button
@@ -605,16 +652,27 @@ export function ViewerPage({
                       : "opacity-100"
                   }`}
                 >
-                    <canvas
-                      ref={canvasRef}
-                      className="h-full w-auto max-w-full transition-opacity duration-300"
-                      style={{ touchAction: "none" }}
-                      tabIndex={viewerInputEnabled ? 0 : -1}
-                      onMouseDown={onMouseDown}
-                      onMouseMove={onMouseMove}
-                      onWheel={onWheel}
-                    onContextMenu={onContextMenu}
-                    onMouseLeave={onMouseLeave}
+                  <canvas
+                    ref={canvasRef}
+                    className="h-full w-auto max-w-full transition-opacity duration-300"
+                    style={{
+                      touchAction:
+                        clientMode === "desktop" ? "none" : "auto",
+                    }}
+                    tabIndex={viewerInputEnabled ? 0 : -1}
+                    onMouseDown={
+                      clientMode === "desktop" ? onMouseDown : undefined
+                    }
+                    onMouseMove={
+                      clientMode === "desktop" ? onMouseMove : undefined
+                    }
+                    onWheel={clientMode === "desktop" ? onWheel : undefined}
+                    onContextMenu={
+                      clientMode === "desktop" ? onContextMenu : undefined
+                    }
+                    onMouseLeave={
+                      clientMode === "desktop" ? onMouseLeave : undefined
+                    }
                   />
                 </div>
 

@@ -18,10 +18,18 @@ describe("viewer url helpers", () => {
     expect(toWebSocketBase("ws://already")).toBe("ws://already");
   });
 
+  it("uses the current page origin for empty websocket base", () => {
+    expect(toWebSocketBase("")).toBe(window.location.origin.replace(/^http/, "ws"));
+  });
+
   it("converts websocket base to http base", () => {
     expect(toHttpBase("ws://localhost:5000")).toBe("http://localhost:5000");
     expect(toHttpBase("wss://example.com")).toBe("https://example.com");
     expect(toHttpBase("https://already")).toBe("https://already");
+  });
+
+  it("uses the current page origin for empty http base", () => {
+    expect(toHttpBase("")).toBe(window.location.origin);
   });
 
   it("builds websocket url with encoded params", () => {

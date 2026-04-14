@@ -4,11 +4,6 @@ function resolveApiBase(apiBase: string): string {
     return trimmed;
   }
 
-  const proxyTarget = import.meta.env.VITE_PROXY_TARGET;
-  if (typeof proxyTarget === "string" && proxyTarget.trim()) {
-    return proxyTarget.trim();
-  }
-
   return "";
 }
 

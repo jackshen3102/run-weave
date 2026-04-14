@@ -1,15 +1,18 @@
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { TerminalWorkspace } from "../components/terminal/terminal-workspace";
+import type { ClientMode } from "../features/client-mode";
 
 interface TerminalRoutePageProps {
   apiBase: string;
   token: string;
+  clientMode: ClientMode;
   onAuthExpired: () => void;
 }
 
 export function TerminalRoutePage({
   apiBase,
   token,
+  clientMode,
   onAuthExpired,
 }: TerminalRoutePageProps) {
   const { terminalSessionId } = useParams<{ terminalSessionId: string }>();
@@ -24,6 +27,7 @@ export function TerminalRoutePage({
       <TerminalWorkspace
         apiBase={apiBase}
         token={token}
+        clientMode={clientMode}
         initialTerminalSessionId={terminalSessionId}
         onActiveSessionChange={(activeTerminalSessionId) => {
           if (activeTerminalSessionId === terminalSessionId) {
