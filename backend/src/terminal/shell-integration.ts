@@ -217,7 +217,7 @@ export function applyShellIntegration(
       '  unset BROWSER_VIEWER_IN_PROMPT_COMMAND',
       '}',
       "trap '_browser_viewer_preexec' DEBUG",
-    ].join("; ");
+    ].join("\n");
     const existingPromptCommand = env.PROMPT_COMMAND?.trim();
     return {
       ...env,
