@@ -67,3 +67,7 @@ pnpm --filter ./backend start -- --host 127.0.0.1 --port 5001
 - `BROWSER_HEADLESS`: browser headless mode switch.
   - Default: `true` (headless).
   - Set to `false` to run headed for debugging.
+
+## License
+
+MIT
