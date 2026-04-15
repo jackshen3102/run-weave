@@ -18,6 +18,7 @@ import { createSessionRouter } from "./routes/session";
 import { createTerminalRouter } from "./routes/terminal";
 import { createTestRouter } from "./routes/test";
 import { createCorsMiddleware } from "./server/cors";
+import { resolveFrontendDistDir } from "./server/frontend-dist";
 import { SessionManager } from "./session/manager";
 import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/clipboard-image";
 import { LowDbSessionStore } from "./session/lowdb-store";
@@ -106,17 +107,6 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
-}
-
-function resolveFrontendDistDir(): string {
-  const primaryCandidate = path.resolve(process.cwd(), "frontend/dist");
-  const candidates = [
-    primaryCandidate,
-    path.resolve(process.cwd(), "../frontend/dist"),
-    path.resolve(process.cwd(), "../../frontend/dist"),
-  ];
-
-  return candidates.find((candidate) => existsSync(candidate)) ?? primaryCandidate;
 }
 
 function resolveSessionRestoreEnabled(env: NodeJS.ProcessEnv): boolean {

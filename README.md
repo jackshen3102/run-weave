@@ -64,6 +64,9 @@ pnpm --filter ./backend start -- --host 127.0.0.1 --port 5001
   - Default: `<BROWSER_PROFILE_DIR>/session-store.json`.
 - `TERMINAL_SESSION_STORE_FILE`: persisted terminal session store path.
   - Default: `<BROWSER_PROFILE_DIR>/terminal-session-store.json`.
+- `FRONTEND_DIST_DIR`: optional frontend build output directory served by the backend.
+  - `pnpm start` normally finds `frontend/dist` automatically.
+  - Packaged Electron sets this to the bundled `frontend/dist` resource.
 - `BROWSER_HEADLESS`: browser headless mode switch.
   - Default: `true` (headless).
   - Set to `false` to run headed for debugging.

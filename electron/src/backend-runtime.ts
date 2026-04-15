@@ -5,7 +5,7 @@ import path from "node:path";
 const DEFAULT_BACKEND_PORT = 5001;
 const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 30_000;
 const HEALTHCHECK_INTERVAL_MS = 200;
-const LOCALHOST = "127.0.0.1";
+const LAN_BIND_HOST = "0.0.0.0";
 const LOCALHOST_V6 = "::1";
 const DEFAULT_PACKAGED_AUTH = {
   AUTH_USERNAME: "admin",
@@ -15,6 +15,7 @@ const DEFAULT_PACKAGED_AUTH = {
 
 export interface PackagedBackendPaths {
   backendEntry: string;
+  frontendDistDir: string;
   nodePtyDir: string;
 }
 
@@ -28,7 +29,14 @@ export function resolvePackagedBackendPaths(
   resourcesPath: string = process.resourcesPath,
 ): PackagedBackendPaths {
   return {
-    backendEntry: path.join(resourcesPath, "app.asar", "dist", "backend", "index.cjs"),
+    backendEntry: path.join(
+      resourcesPath,
+      "app.asar",
+      "dist",
+      "backend",
+      "index.cjs",
+    ),
+    frontendDistDir: path.join(resourcesPath, "frontend", "dist"),
     nodePtyDir: path.join(resourcesPath, "backend", "node_modules", "node-pty"),
   };
 }
@@ -42,9 +50,10 @@ export function buildPackagedBackendEnv(options: {
     ...DEFAULT_PACKAGED_AUTH,
     ...options.baseEnv,
     ELECTRON_RUN_AS_NODE: "1",
-    HOST: LOCALHOST,
+    HOST: LAN_BIND_HOST,
     PORT: String(options.backendPort),
     PORT_STRICT: "true",
+    FRONTEND_DIST_DIR: options.backendPaths.frontendDistDir,
     BROWSER_VIEWER_NODE_PTY_DIR: options.backendPaths.nodePtyDir,
   };
 }
@@ -83,12 +92,12 @@ async function isPortAvailable(port: number, host: string): Promise<boolean> {
 }
 
 async function isBackendPortAvailable(port: number): Promise<boolean> {
-  const [ipv4Available, ipv6Available] = await Promise.all([
-    isPortAvailable(port, LOCALHOST),
+  const [lanAvailable, ipv6Available] = await Promise.all([
+    isPortAvailable(port, LAN_BIND_HOST),
     isPortAvailable(port, LOCALHOST_V6),
   ]);
 
-  return ipv4Available && ipv6Available;
+  return lanAvailable && ipv6Available;
 }
 
 export async function findAvailablePort(

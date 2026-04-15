@@ -8,7 +8,9 @@ import {
 } from "./backend-runtime.js";
 
 test("resolves packaged backend resources under electron resources path", () => {
-  const resolved = resolvePackagedBackendPaths("/Applications/Browser Viewer.app/Contents/Resources");
+  const resolved = resolvePackagedBackendPaths(
+    "/Applications/Browser Viewer.app/Contents/Resources",
+  );
 
   assert.equal(
     resolved.backendEntry,
@@ -47,12 +49,22 @@ test("builds packaged backend env with runtime paths and assigned port", () => {
 
   assert.equal(env.PORT, "5007");
   assert.equal(env.PORT_STRICT, "true");
-  assert.equal(env.HOST, "127.0.0.1");
+  assert.equal(env.HOST, "0.0.0.0");
+  assert.equal(env.FRONTEND_DIST_DIR, resolved.frontendDistDir);
   assert.equal(env.BROWSER_VIEWER_NODE_PTY_DIR, resolved.nodePtyDir);
   assert.equal(env.AUTH_USERNAME, "admin");
   assert.equal(env.AUTH_PASSWORD, "secret");
   assert.equal(env.AUTH_JWT_SECRET, "jwt-secret");
   assert.equal(env.SESSION_RESTORE_ENABLED, "true");
+});
+
+test("resolves packaged frontend resources for backend static serving", () => {
+  const resolved = resolvePackagedBackendPaths("/app/resources");
+
+  assert.equal(
+    resolved.frontendDistDir,
+    path.join("/app/resources", "frontend", "dist"),
+  );
 });
 
 test("fills packaged backend auth defaults when process env is missing", () => {
@@ -69,7 +81,7 @@ test("fills packaged backend auth defaults when process env is missing", () => {
   assert.equal(env.AUTH_JWT_SECRET, "browser-viewer-local-jwt-secret");
 });
 
-test("findAvailablePort skips ports that are unavailable on either localhost address family", async () => {
+test("findAvailablePort skips ports reported as unavailable", async () => {
   const unavailable = new Set([5001, 5002]);
 
   const port = await findAvailablePort(5001, async (candidate) => {

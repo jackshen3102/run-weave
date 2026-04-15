@@ -34,3 +34,6 @@
 - 默认监听 `0.0.0.0`，可通过 `DEV_HOST` 环境变量覆盖
 - 构建配置：`electron/electron-builder.yml`
 - Electron 客户端支持多后端连接管理，用户可在连接页面添加、切换不同后端地址
+- 打包后的 Electron 客户端会拉起内置后端；内置后端绑定 `0.0.0.0`，同一内网可通过 `http://<本机内网 IP>:<端口>/` 访问同一套 Web 前端
+- 内置后端通过 `FRONTEND_DIST_DIR` 指向打包资源中的 `frontend/dist`，因此后端地址既提供 API / WebSocket，也提供前端静态页面
+- 内网访问仍会暴露登录、Viewer、Terminal 等能力，不应在不可信网络中运行；发布包应确保默认账号密码已按环境要求修改
