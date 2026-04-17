@@ -83,6 +83,7 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       projects.push({
         id: crypto.randomUUID(),
         name: "Default Project",
+        path: null,
         createdAt: new Date().toISOString(),
         isDefault: true,
       });
@@ -194,7 +195,12 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
         return;
       }
 
-      project.name = params.name;
+      if (params.name !== undefined) {
+        project.name = params.name;
+      }
+      if ("path" in params) {
+        project.path = params.path ?? null;
+      }
       await database.write();
     });
   }

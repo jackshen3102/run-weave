@@ -5,6 +5,11 @@ import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
+  TerminalPreviewChangeKind,
+  TerminalPreviewFileDiffResponse,
+  TerminalPreviewFileResponse,
+  TerminalPreviewFileSearchResponse,
+  TerminalPreviewGitChangesResponse,
   TerminalProjectListItem,
   TerminalSessionHistoryResponse,
   TerminalSessionListItem,
@@ -192,6 +197,84 @@ export async function createTerminalSessionClipboardImage(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function searchTerminalPreviewFiles(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  params: { query: string; limit?: number },
+): Promise<TerminalPreviewFileSearchResponse> {
+  const query = new URLSearchParams();
+  query.set("q", params.query);
+  if (params.limit !== undefined) {
+    query.set("limit", String(params.limit));
+  }
+
+  return requestJson<TerminalPreviewFileSearchResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/preview/files/search?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalPreviewFile(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  filePath: string,
+): Promise<TerminalPreviewFileResponse> {
+  const query = new URLSearchParams({ path: filePath });
+  return requestJson<TerminalPreviewFileResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/preview/file?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalPreviewGitChanges(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+): Promise<TerminalPreviewGitChangesResponse> {
+  return requestJson<TerminalPreviewGitChangesResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/preview/git-changes`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalPreviewFileDiff(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  params: { path: string; kind: TerminalPreviewChangeKind },
+): Promise<TerminalPreviewFileDiffResponse> {
+  const query = new URLSearchParams({
+    path: params.path,
+    kind: params.kind,
+  });
+  return requestJson<TerminalPreviewFileDiffResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/preview/file-diff?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     },
   );
 }

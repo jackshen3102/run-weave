@@ -3,12 +3,13 @@ import { Button } from "../ui/button";
 
 interface TerminalProjectDialogProps {
   open: boolean;
-  mode: "create" | "rename";
+  mode: "create" | "edit";
   loading: boolean;
   error: string | null;
   initialName?: string;
+  initialPath?: string | null;
   onClose: () => void;
-  onSubmit: (name: string) => Promise<void>;
+  onSubmit: (name: string, projectPath: string) => Promise<void>;
 }
 
 export function TerminalProjectDialog({
@@ -17,10 +18,12 @@ export function TerminalProjectDialog({
   loading,
   error,
   initialName = "",
+  initialPath = "",
   onClose,
   onSubmit,
 }: TerminalProjectDialogProps) {
   const [name, setName] = useState(initialName);
+  const [projectPath, setProjectPath] = useState(initialPath ?? "");
 
   useEffect(() => {
     if (!open) {
@@ -28,14 +31,15 @@ export function TerminalProjectDialog({
     }
 
     setName(initialName);
-  }, [initialName, open]);
+    setProjectPath(initialPath ?? "");
+  }, [initialName, initialPath, open]);
 
   if (!open) {
     return null;
   }
 
   const submit = async (): Promise<void> => {
-    await onSubmit(name);
+    await onSubmit(name, projectPath);
   };
 
   return (
@@ -44,12 +48,12 @@ export function TerminalProjectDialog({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-100">
-              {mode === "create" ? "Create Project" : "Rename Project"}
+              {mode === "create" ? "Create Project" : "Edit Project"}
             </h2>
             <p className="mt-1 text-sm text-slate-400">
               {mode === "create"
                 ? "Create a project bucket above your terminal tabs."
-                : "Update the visible name for this terminal project."}
+                : "Update the name or project path for this terminal project."}
             </p>
           </div>
           <Button
@@ -83,6 +87,30 @@ export function TerminalProjectDialog({
               }}
               className="h-12 w-full rounded-[1.25rem] border border-slate-800 bg-slate-900/80 px-4 text-sm text-slate-100 outline-none transition focus:border-slate-500"
             />
+          </div>
+          <div className="space-y-2">
+            <label
+              className="text-xs uppercase tracking-[0.24em] text-slate-500"
+              htmlFor="terminal-project-path"
+            >
+              Project Path
+            </label>
+            <input
+              id="terminal-project-path"
+              value={projectPath}
+              placeholder="/Users/me/project"
+              onChange={(event) => setProjectPath(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void submit();
+                }
+              }}
+              className="h-12 w-full rounded-[1.25rem] border border-slate-800 bg-slate-900/80 px-4 text-sm text-slate-100 outline-none transition focus:border-slate-500"
+            />
+            <p className="text-xs text-slate-500">
+              Optional. Preview uses this path as its file root.
+            </p>
           </div>
 
           {error ? (

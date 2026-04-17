@@ -1,0 +1,676 @@
+import {
+  lazy,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  useRef,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import type {
+  TerminalPreviewChangeFile,
+  TerminalPreviewChangeKind,
+  TerminalPreviewFileDiffResponse,
+  TerminalPreviewFileResponse,
+  TerminalPreviewFileSearchItem,
+  TerminalPreviewGitChangesResponse,
+  TerminalProjectListItem,
+  TerminalSessionListItem,
+} from "@browser-viewer/shared";
+import { Copy, RefreshCw, X } from "lucide-react";
+import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
+import { HttpError } from "../../services/http";
+import {
+  getTerminalPreviewFile,
+  getTerminalPreviewFileDiff,
+  getTerminalPreviewGitChanges,
+  searchTerminalPreviewFiles,
+} from "../../services/terminal";
+import { Button } from "../ui/button";
+import { TerminalOpenFileCommand } from "./terminal-open-file-command";
+
+const TerminalMonacoViewer = lazy(() =>
+  import("./terminal-monaco-viewer").then((module) => ({
+    default: module.TerminalMonacoViewer,
+  })),
+);
+
+interface TerminalPreviewPanelProps {
+  apiBase: string;
+  token: string;
+  activeProject: TerminalProjectListItem | null;
+  activeSession: TerminalSessionListItem | null;
+  widthPx?: number;
+  onAuthExpired?: () => void;
+  onEditProject: () => void;
+}
+
+function describeMode(mode: string | null | undefined): string {
+  if (mode === "file") {
+    return "Open file";
+  }
+  if (mode === "changes") {
+    return "Changes";
+  }
+  return "Preview";
+}
+
+function statusBadge(status: TerminalPreviewChangeFile["status"]): string {
+  switch (status) {
+    case "added":
+      return "A";
+    case "deleted":
+      return "D";
+    case "renamed":
+      return "R";
+    case "untracked":
+      return "U";
+    case "modified":
+      return "M";
+    default:
+      return "?";
+  }
+}
+
+function basename(filePath: string): string {
+  return filePath.split("/").at(-1) ?? filePath;
+}
+
+function dirname(filePath: string): string {
+  const parts = filePath.split("/");
+  parts.pop();
+  return parts.join("/");
+}
+
+export function TerminalPreviewPanel({
+  apiBase,
+  token,
+  activeProject,
+  activeSession,
+  widthPx,
+  onAuthExpired,
+  onEditProject,
+}: TerminalPreviewPanelProps) {
+  const closePreview = useTerminalPreviewStore((state) => state.closePreview);
+  const setWidth = useTerminalPreviewStore((state) => state.setWidth);
+  const updateProjectPreview = useTerminalPreviewStore(
+    (state) => state.updateProjectPreview,
+  );
+  const projectState = useTerminalPreviewStore((state) =>
+    activeProject ? state.projects[activeProject.projectId] : undefined,
+  );
+  const mode = projectState?.mode ?? null;
+  const query = projectState?.openFileQuery ?? "";
+  const selectedFilePath = projectState?.selectedFilePath;
+  const selectedChangePath = projectState?.selectedChangePath;
+  const selectedChangeKind = projectState?.selectedChangeKind;
+  const [searchItems, setSearchItems] = useState<TerminalPreviewFileSearchItem[]>(
+    [],
+  );
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [filePreview, setFilePreview] = useState<TerminalPreviewFileResponse | null>(
+    null,
+  );
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [changes, setChanges] = useState<TerminalPreviewGitChangesResponse | null>(
+    null,
+  );
+  const [changesLoading, setChangesLoading] = useState(false);
+  const [changesError, setChangesError] = useState<string | null>(null);
+  const [fileDiff, setFileDiff] = useState<TerminalPreviewFileDiffResponse | null>(
+    null,
+  );
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
+  const fileRequestIdRef = useRef(0);
+  const diffRequestIdRef = useRef(0);
+
+  const terminalSessionId = activeSession?.terminalSessionId ?? null;
+  const projectId = activeProject?.projectId ?? null;
+  const hasProjectPath = Boolean(activeProject?.path);
+  const absoluteInput = query.trim().startsWith("/");
+  const panelWidth = widthPx ? `${widthPx}px` : "clamp(320px, 40vw, 60vw)";
+
+  const handleRequestError = useCallback(
+    (error: unknown): string => {
+      if (error instanceof HttpError && error.status === 401) {
+        onAuthExpired?.();
+      }
+      return error instanceof Error ? error.message : String(error);
+    },
+    [onAuthExpired],
+  );
+
+  const loadFile = useCallback(
+    async (filePath: string): Promise<void> => {
+      if (!terminalSessionId || !projectId) {
+        return;
+      }
+      const requestId = fileRequestIdRef.current + 1;
+      fileRequestIdRef.current = requestId;
+      setFileLoading(true);
+      setFileError(null);
+      try {
+        const payload = await getTerminalPreviewFile(
+          apiBase,
+          token,
+          terminalSessionId,
+          filePath,
+        );
+        if (fileRequestIdRef.current !== requestId) {
+          return;
+        }
+        setFilePreview(payload);
+      } catch (error) {
+        if (fileRequestIdRef.current !== requestId) {
+          return;
+        }
+        setFilePreview(null);
+        setFileError(handleRequestError(error));
+      } finally {
+        if (fileRequestIdRef.current === requestId) {
+          setFileLoading(false);
+        }
+      }
+    },
+    [apiBase, handleRequestError, projectId, terminalSessionId, token],
+  );
+
+  const loadChanges = useCallback(async (): Promise<void> => {
+    if (!terminalSessionId || !projectId) {
+      return;
+    }
+    setChangesLoading(true);
+    setChangesError(null);
+    setFileDiff(null);
+    setDiffError(null);
+    try {
+      const payload = await getTerminalPreviewGitChanges(
+        apiBase,
+        token,
+        terminalSessionId,
+      );
+      setChanges(payload);
+      const selected =
+        payload.staged[0] ?? payload.working[0] ?? null;
+      if (selected) {
+        updateProjectPreview(projectId, {
+          mode: "changes",
+          selectedChangePath: selected.path,
+          selectedChangeKind: payload.staged[0] ? "staged" : "working",
+        });
+      }
+    } catch (error) {
+      setChanges(null);
+      setChangesError(handleRequestError(error));
+    } finally {
+      setChangesLoading(false);
+    }
+  }, [
+    apiBase,
+    handleRequestError,
+    projectId,
+    terminalSessionId,
+    token,
+    updateProjectPreview,
+  ]);
+
+  const loadDiff = useCallback(
+    async (filePath: string, kind: TerminalPreviewChangeKind): Promise<void> => {
+      if (!terminalSessionId) {
+        return;
+      }
+      const requestId = diffRequestIdRef.current + 1;
+      diffRequestIdRef.current = requestId;
+      setDiffLoading(true);
+      setDiffError(null);
+      try {
+        const payload = await getTerminalPreviewFileDiff(
+          apiBase,
+          token,
+          terminalSessionId,
+          { path: filePath, kind },
+        );
+        if (diffRequestIdRef.current !== requestId) {
+          return;
+        }
+        setFileDiff(payload);
+      } catch (error) {
+        if (diffRequestIdRef.current !== requestId) {
+          return;
+        }
+        setFileDiff(null);
+        setDiffError(handleRequestError(error));
+      } finally {
+        if (diffRequestIdRef.current === requestId) {
+          setDiffLoading(false);
+        }
+      }
+    },
+    [apiBase, handleRequestError, terminalSessionId, token],
+  );
+
+  useEffect(() => {
+    fileRequestIdRef.current += 1;
+    diffRequestIdRef.current += 1;
+    setSearchItems([]);
+    setSearchError(null);
+    setFilePreview(null);
+    setFileError(null);
+    setChanges(null);
+    setChangesError(null);
+    setFileDiff(null);
+    setDiffError(null);
+  }, [projectId]);
+
+  useEffect(() => {
+    if (mode !== "file" || !selectedFilePath) {
+      return;
+    }
+    void loadFile(selectedFilePath);
+  }, [loadFile, mode, selectedFilePath]);
+
+  useEffect(() => {
+    if (mode !== "changes" || !hasProjectPath || !terminalSessionId) {
+      return;
+    }
+    void loadChanges();
+  }, [hasProjectPath, loadChanges, mode, terminalSessionId]);
+
+  useEffect(() => {
+    if (mode !== "changes" || !selectedChangePath || !selectedChangeKind) {
+      return;
+    }
+    void loadDiff(selectedChangePath, selectedChangeKind);
+  }, [loadDiff, mode, selectedChangeKind, selectedChangePath]);
+
+  useEffect(() => {
+    if (
+      mode !== "file" ||
+      selectedFilePath ||
+      !terminalSessionId ||
+      !projectId ||
+      !query.trim() ||
+      absoluteInput
+    ) {
+      return;
+    }
+    const abort = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      setSearchLoading(true);
+      setSearchError(null);
+      searchTerminalPreviewFiles(apiBase, token, terminalSessionId, {
+        query,
+        limit: 50,
+      })
+        .then((payload) => {
+          if (!abort.signal.aborted) {
+            setSearchItems(payload.items);
+          }
+        })
+        .catch((error: unknown) => {
+          if (!abort.signal.aborted) {
+            setSearchError(handleRequestError(error));
+          }
+        })
+        .finally(() => {
+          if (!abort.signal.aborted) {
+            setSearchLoading(false);
+          }
+        });
+    }, 250);
+
+    return () => {
+      abort.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    absoluteInput,
+    apiBase,
+    handleRequestError,
+    mode,
+    projectId,
+    query,
+    selectedFilePath,
+    terminalSessionId,
+    token,
+  ]);
+
+  const selectedPath = useMemo(() => {
+    if (mode === "file") {
+      return selectedFilePath ?? filePreview?.path ?? null;
+    }
+    if (mode === "changes") {
+      return selectedChangePath ?? fileDiff?.path ?? null;
+    }
+    return null;
+  }, [fileDiff?.path, filePreview?.path, mode, selectedChangePath, selectedFilePath]);
+
+  const refresh = (): void => {
+    if (mode === "file") {
+      if (selectedFilePath) {
+        void loadFile(selectedFilePath);
+      } else if (projectId) {
+        updateProjectPreview(projectId, { openFileQuery: query });
+      }
+      return;
+    }
+    if (mode === "changes") {
+      void loadChanges();
+    }
+  };
+
+  const copyPath = (): void => {
+    if (!selectedPath) {
+      return;
+    }
+    void navigator.clipboard?.writeText(selectedPath);
+  };
+
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    event.preventDefault();
+    const handlePointerMove = (moveEvent: globalThis.PointerEvent): void => {
+      const nextWidth = Math.min(
+        Math.round(window.innerWidth * 0.6),
+        Math.max(320, window.innerWidth - moveEvent.clientX),
+      );
+      setWidth(nextWidth);
+    };
+    const stop = (): void => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stop);
+  };
+
+  const openFilePath = (filePath: string): void => {
+    if (!projectId) {
+      return;
+    }
+    updateProjectPreview(projectId, {
+      mode: "file",
+      selectedFilePath: filePath,
+      path: filePath,
+    });
+  };
+
+  const renderEmpty = (title: string, action?: ReactNode): ReactNode => (
+    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-sm text-slate-400">
+      <p>{title}</p>
+      {action}
+    </div>
+  );
+
+  const renderChangesList = (
+    title: string,
+    kind: TerminalPreviewChangeKind,
+    files: TerminalPreviewChangeFile[],
+  ): ReactNode => (
+    <div className="flex flex-col gap-1">
+      <div className="px-2 py-1 text-[11px] uppercase tracking-[0.22em] text-slate-500">
+        {title}
+      </div>
+      {files.map((file) => {
+        const selected =
+          selectedChangePath === file.path && selectedChangeKind === kind;
+        return (
+          <button
+            type="button"
+            key={`${kind}:${file.path}`}
+            className={[
+              "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm",
+              selected
+                ? "bg-slate-800 text-slate-100"
+                : "text-slate-300 hover:bg-slate-900",
+            ].join(" ")}
+            onClick={() => {
+              if (!projectId) {
+                return;
+              }
+              updateProjectPreview(projectId, {
+                mode: "changes",
+                selectedChangePath: file.path,
+                selectedChangeKind: kind,
+              });
+            }}
+          >
+            <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
+              {statusBadge(file.status)}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">{basename(file.path)}</span>
+              {dirname(file.path) ? (
+                <span className="block truncate text-xs text-slate-500">
+                  {dirname(file.path)}
+                </span>
+              ) : null}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  let body: ReactNode;
+  if (!activeProject || !activeSession) {
+    body = renderEmpty("No terminal session selected");
+  } else if (!hasProjectPath) {
+    body = renderEmpty(
+      "Set a project path to use Preview",
+      <Button
+        type="button"
+        size="sm"
+        className="rounded-lg"
+        onClick={onEditProject}
+      >
+        Set project path
+      </Button>,
+    );
+  } else if (mode === "file" && !selectedFilePath) {
+    body = (
+      <TerminalOpenFileCommand
+        query={query}
+        loading={searchLoading}
+        error={searchError}
+        items={searchItems}
+        absoluteInput={absoluteInput}
+        onQueryChange={(nextQuery) => {
+          if (projectId) {
+            updateProjectPreview(projectId, {
+              mode: "file",
+              openFileQuery: nextQuery,
+              selectedFilePath: undefined,
+            });
+          }
+        }}
+        onOpenPath={openFilePath}
+      />
+    );
+  } else if (mode === "file") {
+    body = (
+      <div className="h-full min-h-0">
+        {fileLoading ? (
+          renderEmpty("Loading preview...")
+        ) : fileError ? (
+          renderEmpty(fileError)
+        ) : filePreview ? (
+          <Suspense fallback={renderEmpty("Loading editor...")}>
+            <TerminalMonacoViewer
+              language={filePreview.language}
+              content={filePreview.content}
+            />
+          </Suspense>
+        ) : (
+          renderEmpty("No file selected")
+        )}
+      </div>
+    );
+  } else if (mode === "changes") {
+    const noChanges =
+      changes && changes.staged.length === 0 && changes.working.length === 0;
+    body = (
+      <div className="grid h-full min-h-0 grid-cols-[190px_minmax(0,1fr)]">
+        <aside className="min-h-0 overflow-auto border-r border-slate-800 p-2">
+          {changesLoading ? (
+            <div className="px-2 py-4 text-sm text-slate-400">Loading changes...</div>
+          ) : changesError ? (
+            <div className="px-2 py-4 text-sm text-rose-300">{changesError}</div>
+          ) : noChanges ? (
+            <div className="px-2 py-4 text-sm text-slate-400">No changes</div>
+          ) : changes ? (
+            <div className="flex flex-col gap-3">
+              {renderChangesList("Staged Changes", "staged", changes.staged)}
+              {renderChangesList("Working Changes", "working", changes.working)}
+            </div>
+          ) : null}
+        </aside>
+        <div className="min-h-0">
+          {diffLoading ? (
+            renderEmpty("Loading diff...")
+          ) : diffError ? (
+            renderEmpty(diffError)
+          ) : fileDiff ? (
+            <Suspense fallback={renderEmpty("Loading editor...")}>
+              <TerminalMonacoViewer
+                diff
+                language="plaintext"
+                oldContent={fileDiff.oldContent}
+                newContent={fileDiff.newContent}
+              />
+            </Suspense>
+          ) : (
+            renderEmpty("Select a changed file")
+          )}
+        </div>
+      </div>
+    );
+  } else {
+    body = renderEmpty(
+      "No preview for this project",
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          className="rounded-lg"
+          onClick={() => {
+            if (projectId) {
+              updateProjectPreview(projectId, { mode: "file" });
+            }
+          }}
+        >
+          Open file...
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="rounded-lg"
+          onClick={() => {
+            if (projectId) {
+              updateProjectPreview(projectId, { mode: "changes" });
+            }
+          }}
+        >
+          Changes
+        </Button>
+      </div>,
+    );
+  }
+
+  return (
+    <aside
+      className="relative flex h-full min-h-0 shrink-0 border-l border-slate-800 bg-slate-950"
+      style={{ width: panelWidth }}
+    >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-slate-600"
+        onPointerDown={startResize}
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="border-b border-slate-800 px-3 py-3">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h2 className="truncate text-sm font-semibold text-slate-100">
+                  {describeMode(mode)}
+                </h2>
+                <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] uppercase text-slate-400">
+                  Read only
+                </span>
+              </div>
+              <p className="mt-1 truncate text-xs text-slate-500">
+                {activeProject?.name ?? "No project"}
+                {activeProject?.path ? ` · root: ${activeProject.path}` : ""}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 rounded-lg px-2"
+                disabled={!mode || fileLoading || changesLoading}
+                onClick={refresh}
+                aria-label="Refresh preview"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 rounded-lg px-2"
+                disabled={!selectedPath}
+                onClick={copyPath}
+                aria-label="Copy path"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 rounded-lg px-2"
+                onClick={closePreview}
+                aria-label="Close preview"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </header>
+        {selectedPath ? (
+          <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2 text-xs text-slate-400">
+            <span className="min-w-0 flex-1 truncate">{selectedPath}</span>
+            {mode === "file" ? (
+              <button
+                type="button"
+                className="shrink-0 rounded-lg px-2 py-1 text-slate-300 hover:bg-slate-800"
+                onClick={() => {
+                  if (projectId) {
+                    updateProjectPreview(projectId, {
+                      mode: "file",
+                      selectedFilePath: undefined,
+                    });
+                    setFilePreview(null);
+                    setFileError(null);
+                  }
+                }}
+              >
+                Open another...
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="min-h-0 flex-1">{body}</div>
+      </div>
+    </aside>
+  );
+}
