@@ -1,7 +1,17 @@
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import {
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+  mkdir,
+} from "node:fs/promises";
+import { promisify } from "node:util";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -28,9 +38,12 @@ interface MockTerminalSession {
 interface MockTerminalProject {
   id: string;
   name: string;
+  path: string | null;
   createdAt: Date;
   isDefault: boolean;
 }
+
+const execFileAsync = promisify(execFile);
 
 function createTestServer(sessionState: {
   current: MockTerminalSession | null;
@@ -45,6 +58,7 @@ function createTestServer(sessionState: {
     {
       id: "project-default",
       name: "Default Project",
+      path: null,
       createdAt: new Date("2026-03-29T00:00:00.000Z"),
       isDefault: true,
     },
@@ -78,18 +92,22 @@ function createTestServer(sessionState: {
       const created = {
         id: "project-2",
         name,
+        path: null,
         createdAt: new Date("2026-03-29T01:00:00.000Z"),
         isDefault: false,
       };
       projects.push(created);
       return created;
     }),
-    updateProject: vi.fn(async (id: string, patch: { name: string }) => {
+    updateProject: vi.fn(async (id: string, patch: { name: string; path?: string | null }) => {
       const current = projects.find((project) => project.id === id);
       if (!current) {
         return undefined;
       }
       current.name = patch.name;
+      if ("path" in patch) {
+        current.path = patch.path ?? null;
+      }
       return current;
     }),
     deleteProject: vi.fn(async (id: string) => {
@@ -104,6 +122,7 @@ function createTestServer(sessionState: {
       return true;
     }),
     getSession: vi.fn((id: string) => resolveSession(id)),
+    getProject: vi.fn((id: string) => projects.find((project) => project.id === id)),
     readScrollback: vi.fn(async (id: string) => {
       return resolveSession(id)?.scrollback ?? "";
     }),
@@ -180,6 +199,21 @@ function createTestServer(sessionState: {
   return { server, terminalSessionManager, authService, runtimeRegistry };
 }
 
+async function createGitRepo(): Promise<string> {
+  const repo = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-repo-"));
+  await execFileAsync("git", ["init"], { cwd: repo });
+  await execFileAsync("git", ["config", "user.email", "test@example.com"], {
+    cwd: repo,
+  });
+  await execFileAsync("git", ["config", "user.name", "Terminal Preview Test"], {
+    cwd: repo,
+  });
+  tempDirsForGit.push(repo);
+  return repo;
+}
+
+const tempDirsForGit: string[] = [];
+
 async function startServer(server: http.Server): Promise<number> {
   await new Promise<void>((resolve) => {
     server.listen(0, resolve);
@@ -212,8 +246,12 @@ describe("terminal routes", () => {
     await Promise.all(
       tempDirs.map((dir) => rm(dir, { recursive: true, force: true })),
     );
+    await Promise.all(
+      tempDirsForGit.map((dir) => rm(dir, { recursive: true, force: true })),
+    );
     servers.length = 0;
     tempDirs.length = 0;
+    tempDirsForGit.length = 0;
   });
 
   it("creates terminal sessions through the API", async () => {
@@ -638,6 +676,7 @@ describe("terminal routes", () => {
       {
         projectId: "project-default",
         name: "Default Project",
+        path: null,
         createdAt: "2026-03-29T00:00:00.000Z",
         isDefault: true,
       },
@@ -656,9 +695,345 @@ describe("terminal routes", () => {
     await expect(createResponse.json()).resolves.toEqual({
       projectId: "project-2",
       name: "browser-viewer",
+      path: null,
       createdAt: "2026-03-29T01:00:00.000Z",
       isDefault: false,
     });
+  });
+
+  it("stores a validated project path and uses it as the default terminal cwd", async () => {
+    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-project-"));
+    tempDirs.push(projectPath);
+    const state = {
+      current: null as MockTerminalSession | null,
+    };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+    const normalizedProjectPath = await realpath(projectPath);
+
+    const updateResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Default Project",
+          path: projectPath,
+        }),
+      },
+    );
+
+    expect(updateResponse.status).toBe(200);
+    await expect(updateResponse.json()).resolves.toEqual(
+      expect.objectContaining({
+        projectId: "project-default",
+        path: normalizedProjectPath,
+      }),
+    );
+
+    const createResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: "project-default" }),
+      },
+    );
+
+    expect(createResponse.status).toBe(201);
+    expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: normalizedProjectPath,
+      }),
+    );
+  });
+
+  it("rejects project paths that are not directories", async () => {
+    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-project-"));
+    const filePath = path.join(projectPath, "README.md");
+    tempDirs.push(projectPath);
+    await writeFile(filePath, "# demo\n");
+    const state = {
+      current: null as MockTerminalSession | null,
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Default Project",
+          path: filePath,
+        }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      message: "Project path must be a readable directory",
+    });
+  });
+
+  it("previews a project file without using the terminal cwd", async () => {
+    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    tempDirs.push(projectPath);
+    await writeFile(path.join(projectPath, "README.md"), "# Preview\n");
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/not-the-preview-root",
+        scrollback: "",
+        status: "exited" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: projectPath,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/file?path=README.md`,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        kind: "file",
+        projectId: "project-default",
+        path: "README.md",
+        projectPath,
+        language: "markdown",
+        content: "# Preview\n",
+        readonly: true,
+      }),
+    );
+  });
+
+  it("rejects preview paths outside the project path", async () => {
+    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), "terminal-outside-"));
+    tempDirs.push(projectPath, outsideDir);
+    const outsideFile = path.join(outsideDir, "secret.txt");
+    await writeFile(outsideFile, "secret\n");
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: projectPath,
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: projectPath,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/file?path=${encodeURIComponent(outsideFile)}`,
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      message: "Path is outside the project path",
+    });
+  });
+
+  it("rejects preview files that symlink outside the project path", async () => {
+    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), "terminal-outside-"));
+    tempDirs.push(projectPath, outsideDir);
+    const outsideFile = path.join(outsideDir, "secret.txt");
+    await writeFile(outsideFile, "secret\n");
+    await symlink(outsideFile, path.join(projectPath, "linked-secret.txt"));
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: projectPath,
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: projectPath,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/file?path=linked-secret.txt`,
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      message: "Path is outside the project path",
+    });
+  });
+
+  it("searches preview files by fuzzy relative path without returning absolute candidates", async () => {
+    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    tempDirs.push(projectPath);
+    await mkdir(path.join(projectPath, "frontend/src/components/terminal"), {
+      recursive: true,
+    });
+    await mkdir(path.join(projectPath, "docs/architecture"), { recursive: true });
+    await writeFile(
+      path.join(projectPath, "frontend/src/components/terminal/terminal-workspace.tsx"),
+      "export {}\n",
+    );
+    await writeFile(
+      path.join(projectPath, "docs/architecture/terminal-code-preview.md"),
+      "# plan\n",
+    );
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: projectPath,
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: projectPath,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/files/search?q=term%20work&limit=10`,
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      items: Array<{ path: string; basename: string; dirname: string }>;
+    };
+    expect(payload.items[0]).toEqual(
+      expect.objectContaining({
+        path: "frontend/src/components/terminal/terminal-workspace.tsx",
+        basename: "terminal-workspace.tsx",
+        dirname: "frontend/src/components/terminal",
+      }),
+    );
+    expect(payload.items.every((item) => !path.isAbsolute(item.path))).toBe(true);
+  });
+
+  it("returns staged and working preview changes and loads one file diff", async () => {
+    const repo = await createGitRepo();
+    await writeFile(path.join(repo, "README.md"), "old readme\n");
+    await writeFile(path.join(repo, "staged.txt"), "old staged\n");
+    await execFileAsync("git", ["add", "."], { cwd: repo });
+    await execFileAsync("git", ["commit", "-m", "initial"], { cwd: repo });
+    await writeFile(path.join(repo, "staged.txt"), "new staged\n");
+    await execFileAsync("git", ["add", "staged.txt"], { cwd: repo });
+    await writeFile(path.join(repo, "README.md"), "new readme\n");
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/not-the-preview-root",
+        scrollback: "",
+        status: "exited" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: repo,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const changesResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/git-changes`,
+    );
+
+    expect(changesResponse.status).toBe(200);
+    await expect(changesResponse.json()).resolves.toEqual(
+      expect.objectContaining({
+        staged: [{ path: "staged.txt", status: "modified" }],
+        working: [{ path: "README.md", status: "modified" }],
+      }),
+    );
+
+    const diffResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/file-diff?path=staged.txt&kind=staged`,
+    );
+
+    expect(diffResponse.status).toBe(200);
+    await expect(diffResponse.json()).resolves.toEqual(
+      expect.objectContaining({
+        kind: "file-diff",
+        changeKind: "staged",
+        path: "staged.txt",
+        status: "modified",
+        oldContent: "old staged\n",
+        newContent: "new staged\n",
+        readonly: true,
+      }),
+    );
   });
 
   it("deletes terminal projects through the API and cascades child sessions", async () => {
@@ -678,12 +1053,14 @@ describe("terminal routes", () => {
         {
           id: "project-default",
           name: "Default Project",
+          path: null,
           createdAt: new Date("2026-03-29T00:00:00.000Z"),
           isDefault: true,
         },
         {
           id: "project-2",
           name: "browser-viewer",
+          path: null,
           createdAt: new Date("2026-03-29T01:00:00.000Z"),
           isDefault: false,
         },

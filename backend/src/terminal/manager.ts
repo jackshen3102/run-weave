@@ -20,6 +20,7 @@ import {
 export interface TerminalProjectRecord {
   id: string;
   name: string;
+  path: string | null;
   createdAt: Date;
   isDefault: boolean;
 }
@@ -60,6 +61,7 @@ function buildProjectRecord(
   return {
     id: persisted.id,
     name: persisted.name,
+    path: persisted.path ?? null,
     createdAt: new Date(persisted.createdAt),
     isDefault: persisted.isDefault,
   };
@@ -71,6 +73,7 @@ function toPersistedProject(
   return {
     id: project.id,
     name: project.name,
+    path: project.path,
     createdAt: project.createdAt.toISOString(),
     isDefault: project.isDefault,
   };
@@ -183,10 +186,14 @@ export class TerminalSessionManager {
     return this.projects.get(projectId);
   }
 
-  async createProject(name: string): Promise<TerminalProjectRecord> {
+  async createProject(
+    name: string,
+    projectPath?: string | null,
+  ): Promise<TerminalProjectRecord> {
     const project: TerminalProjectRecord = {
       id: uuidv4(),
       name: name.trim(),
+      path: projectPath?.trim() || null,
       createdAt: new Date(),
       isDefault: this.projects.size === 0,
     };
@@ -201,17 +208,23 @@ export class TerminalSessionManager {
 
   async updateProject(
     projectId: string,
-    name: string,
+    patch: { name?: string; path?: string | null },
   ): Promise<TerminalProjectRecord | undefined> {
     const project = this.projects.get(projectId);
     if (!project) {
       return undefined;
     }
 
-    project.name = name.trim();
+    if (patch.name !== undefined) {
+      project.name = patch.name.trim();
+    }
+    if ("path" in patch) {
+      project.path = patch.path?.trim() || null;
+    }
     await this.sessionStore.updateProject({
       projectId,
       name: project.name,
+      path: project.path,
     });
     return project;
   }

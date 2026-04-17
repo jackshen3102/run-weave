@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { TerminalProjectListItem, TerminalSessionListItem } from "@browser-viewer/shared";
 import { Home, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   loadRecentTerminalSelection,
   saveRecentTerminalSelection,
 } from "../../features/terminal/recent-selection";
+import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { resolveCachedTerminalSurfaceIds } from "../../features/terminal/surface-cache";
 import { HttpError } from "../../services/http";
 import {
@@ -34,10 +35,17 @@ import {
   ContextMenuTrigger,
 } from "../ui/context-menu";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
+import { TerminalPreviewMenu } from "./terminal-preview-menu";
 import { TerminalHistoryDrawer } from "./terminal-history-drawer";
 import { TerminalHeadlessConnection } from "./terminal-headless-connection";
 import { TerminalSurface } from "./terminal-surface";
 import type { ClientMode } from "../../features/client-mode";
+
+const TerminalPreviewPanel = lazy(() =>
+  import("./terminal-preview-panel").then((module) => ({
+    default: module.TerminalPreviewPanel,
+  })),
+);
 
 interface TerminalWorkspaceProps {
   apiBase: string;
@@ -120,7 +128,7 @@ export function TerminalWorkspace({
   const [activityMarkers, setActivityMarkers] = useState<Record<string, boolean>>({});
   const [bellMarkers, setBellMarkers] = useState<Record<string, boolean>>({});
   const [cachedSurfaceSessionIds, setCachedSurfaceSessionIds] = useState<string[]>([]);
-  const [projectDialogMode, setProjectDialogMode] = useState<"create" | "rename" | null>(
+  const [projectDialogMode, setProjectDialogMode] = useState<"create" | "edit" | null>(
     null,
   );
   const [projectDialogError, setProjectDialogError] = useState<string | null>(null);
@@ -131,6 +139,14 @@ export function TerminalWorkspace({
   );
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const isMobileMonitor = clientMode === "mobile";
+  const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
+  const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
+  const activeProjectPreviewMode = useTerminalPreviewStore((state) =>
+    activeProjectId ? state.projects[activeProjectId]?.mode ?? null : null,
+  );
+  const removeProjectPreview = useTerminalPreviewStore(
+    (state) => state.removeProjectPreview,
+  );
 
   const visibleProjects = useMemo(() => {
     return [...projects].sort((left, right) => {
@@ -542,22 +558,23 @@ export function TerminalWorkspace({
   }, [loading]);
 
   const submitProjectDialog = useCallback(
-    async (name: string): Promise<void> => {
+    async (name: string, projectPath: string): Promise<void> => {
       const trimmedName = name.trim();
       if (!trimmedName) {
         setProjectDialogError("Project name is required.");
         return;
       }
+      const trimmedPath = projectPath.trim();
 
       setLoading(true);
       setProjectDialogError(null);
       try {
-        if (projectDialogMode === "rename" && activeProject) {
+        if (projectDialogMode === "edit" && activeProject) {
           const updatedProject = await updateTerminalProject(
             apiBase,
             token,
             activeProject.projectId,
-            { name: trimmedName },
+            { name: trimmedName, path: trimmedPath || null },
           );
           setProjects((currentProjects) =>
             currentProjects.map((project) =>
@@ -567,6 +584,7 @@ export function TerminalWorkspace({
         } else {
           const createdProject = await createTerminalProject(apiBase, token, {
             name: trimmedName,
+            path: trimmedPath || null,
           });
           const createdSession = await createTerminalSession(apiBase, token, {
             projectId: createdProject.projectId,
@@ -616,6 +634,7 @@ export function TerminalWorkspace({
       setProjectDialogError(null);
       setActiveSessionId(null);
       setActiveProjectId(null);
+      removeProjectPreview(targetProject.projectId);
       setProjectPendingDeletion(null);
       await loadSessions();
     } catch (error) {
@@ -627,7 +646,15 @@ export function TerminalWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [activeProject, apiBase, loadSessions, onAuthExpired, projectPendingDeletion, token]);
+  }, [
+    activeProject,
+    apiBase,
+    loadSessions,
+    onAuthExpired,
+    projectPendingDeletion,
+    removeProjectPreview,
+    token,
+  ]);
 
   const handleSessionMetadata = useCallback(
     (terminalSessionId: string, metadata: { name: string; cwd: string }) => {
@@ -763,11 +790,11 @@ export function TerminalWorkspace({
                         onSelect={() => {
                           setActiveProjectId(project.projectId);
                           setProjectDialogError(null);
-                          setProjectDialogMode("rename");
+                          setProjectDialogMode("edit");
                         }}
                       >
                         <Pencil className="h-4 w-4" />
-                        Rename
+                        Edit
                       </ContextMenuItem>
                       <ContextMenuItem
                         onSelect={() => {
@@ -785,6 +812,13 @@ export function TerminalWorkspace({
               );
             })}
           </div>
+          {!isMobileMonitor ? (
+            <TerminalPreviewMenu
+              projectId={activeProjectId}
+              mode={activeProjectPreviewMode}
+              disabled={loading}
+            />
+          ) : null}
           {!isMobileMonitor ? (
             <Button
               type="button"
@@ -876,79 +910,106 @@ export function TerminalWorkspace({
         ) : null}
       </div>
 
-      <div className="relative min-h-0 flex-1">
-        {sessions.length > 0 ? (
-          sessions.map((session) => {
-            const isActive =
-              session.terminalSessionId === activeSession?.terminalSessionId;
-            const shouldRenderSurface =
-              isActive || cachedSurfaceSessionIdSet.has(session.terminalSessionId);
+      <div className="min-h-0 flex-1">
+        <div className="flex h-full min-h-0">
+          <div className="relative min-h-0 flex-1">
+            {sessions.length > 0 ? (
+              sessions.map((session) => {
+                const isActive =
+                  session.terminalSessionId === activeSession?.terminalSessionId;
+                const shouldRenderSurface =
+                  isActive || cachedSurfaceSessionIdSet.has(session.terminalSessionId);
 
-            if (!shouldRenderSurface) {
-              return (
-                <TerminalHeadlessConnection
-                  apiBase={apiBase}
-                  key={session.terminalSessionId}
-                  terminalSessionId={session.terminalSessionId}
-                  token={token}
-                  onAuthExpired={onAuthExpired}
-                  onActivity={() => {
-                    handleSessionActivity(session.terminalSessionId);
-                  }}
-                  onBell={() => {
-                    handleSessionBell(session.terminalSessionId);
-                  }}
-                  onMetadata={(metadata) => {
-                    handleSessionMetadata(session.terminalSessionId, metadata);
-                  }}
-                />
-              );
-            }
+                if (!shouldRenderSurface) {
+                  return (
+                    <TerminalHeadlessConnection
+                      apiBase={apiBase}
+                      key={session.terminalSessionId}
+                      terminalSessionId={session.terminalSessionId}
+                      token={token}
+                      onAuthExpired={onAuthExpired}
+                      onActivity={() => {
+                        handleSessionActivity(session.terminalSessionId);
+                      }}
+                      onBell={() => {
+                        handleSessionBell(session.terminalSessionId);
+                      }}
+                      onMetadata={(metadata) => {
+                        handleSessionMetadata(session.terminalSessionId, metadata);
+                      }}
+                    />
+                  );
+                }
 
-            return (
-              <div
-                aria-hidden={!isActive}
-                className={[
-                  "absolute top-0 h-full w-full",
-                  isActive ? "left-0" : "-left-[9999em] pointer-events-none",
-                ].join(" ")}
-                key={session.terminalSessionId}
-              >
-                <TerminalSurface
-                  active={isActive}
-                  apiBase={apiBase}
-                  clientMode={clientMode}
-                  terminalSessionId={session.terminalSessionId}
-                  token={token}
-                  onAuthExpired={onAuthExpired}
-                  onActivity={() => {
-                    handleSessionActivity(session.terminalSessionId);
-                  }}
-                  onBell={() => {
-                    handleSessionBell(session.terminalSessionId);
-                  }}
-                  onMetadata={(metadata) => {
-                    handleSessionMetadata(session.terminalSessionId, metadata);
-                  }}
-                  onOpenHistory={() => {
-                    openHistoryDrawer(session.terminalSessionId);
-                  }}
-                />
+                return (
+                  <div
+                    aria-hidden={!isActive}
+                    className={[
+                      "absolute top-0 h-full w-full",
+                      isActive ? "left-0" : "-left-[9999em] pointer-events-none",
+                    ].join(" ")}
+                    key={session.terminalSessionId}
+                  >
+                    <TerminalSurface
+                      active={isActive}
+                      apiBase={apiBase}
+                      clientMode={clientMode}
+                      terminalSessionId={session.terminalSessionId}
+                      token={token}
+                      onAuthExpired={onAuthExpired}
+                      onActivity={() => {
+                        handleSessionActivity(session.terminalSessionId);
+                      }}
+                      onBell={() => {
+                        handleSessionBell(session.terminalSessionId);
+                      }}
+                      onMetadata={(metadata) => {
+                        handleSessionMetadata(session.terminalSessionId, metadata);
+                      }}
+                      onOpenHistory={() => {
+                        openHistoryDrawer(session.terminalSessionId);
+                      }}
+                    />
+                  </div>
+                );
+              })
+            ) : (
+              <div className="flex h-full items-center justify-center px-6 text-sm text-slate-400">
+                No terminal tab yet. Create one to start.
               </div>
-            );
-          })
-        ) : (
-          <div className="flex h-full items-center justify-center px-6 text-sm text-slate-400">
-            No terminal tab yet. Create one to start.
+            )}
           </div>
-        )}
+          {previewOpen && !isMobileMonitor ? (
+            <Suspense
+              fallback={
+                <aside className="flex h-full w-[min(40vw,520px)] shrink-0 items-center justify-center border-l border-slate-800 bg-slate-950 text-sm text-slate-400">
+                  Loading preview...
+                </aside>
+              }
+            >
+              <TerminalPreviewPanel
+                apiBase={apiBase}
+                token={token}
+                activeProject={activeProject}
+                activeSession={activeSession}
+                widthPx={previewWidthPx}
+                onAuthExpired={onAuthExpired}
+                onEditProject={() => {
+                  setProjectDialogError(null);
+                  setProjectDialogMode("edit");
+                }}
+              />
+            </Suspense>
+          ) : null}
+        </div>
       </div>
       <TerminalProjectDialog
         open={projectDialogMode !== null}
         mode={projectDialogMode ?? "create"}
         loading={loading}
         error={projectDialogError}
-        initialName={projectDialogMode === "rename" ? activeProject?.name ?? "" : ""}
+        initialName={projectDialogMode === "edit" ? activeProject?.name ?? "" : ""}
+        initialPath={projectDialogMode === "edit" ? activeProject?.path ?? "" : ""}
         onClose={closeProjectDialog}
         onSubmit={submitProjectDialog}
       />

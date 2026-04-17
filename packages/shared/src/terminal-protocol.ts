@@ -9,17 +9,88 @@ export interface CreateTerminalSessionRequest {
 
 export interface CreateTerminalProjectRequest {
   name: string;
+  path?: string | null;
 }
 
 export interface UpdateTerminalProjectRequest {
-  name: string;
+  name?: string;
+  path?: string | null;
 }
 
 export interface TerminalProjectListItem {
   projectId: string;
   name: string;
+  path: string | null;
   createdAt: string;
   isDefault: boolean;
+}
+
+export type TerminalPreviewChangeKind = "staged" | "working";
+export type TerminalPreviewGitStatus =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed"
+  | "copied"
+  | "untracked"
+  | "unknown";
+
+export interface TerminalPreviewFileSearchItem {
+  path: string;
+  basename: string;
+  dirname: string;
+  gitStatus?: TerminalPreviewGitStatus;
+  reason: string;
+  score: number;
+}
+
+export interface TerminalPreviewFileSearchResponse {
+  kind: "file-search";
+  projectId: string;
+  projectPath: string;
+  query: string;
+  absoluteInput: boolean;
+  items: TerminalPreviewFileSearchItem[];
+}
+
+export interface TerminalPreviewFileResponse {
+  kind: "file";
+  projectId: string;
+  path: string;
+  absolutePath: string;
+  base: "project";
+  projectPath: string;
+  language: string;
+  content: string;
+  sizeBytes: number;
+  readonly: true;
+}
+
+export interface TerminalPreviewChangeFile {
+  path: string;
+  status: TerminalPreviewGitStatus;
+}
+
+export interface TerminalPreviewGitChangesResponse {
+  kind: "git-changes";
+  projectId: string;
+  projectPath: string;
+  repoRoot: string;
+  staged: TerminalPreviewChangeFile[];
+  working: TerminalPreviewChangeFile[];
+}
+
+export interface TerminalPreviewFileDiffResponse {
+  kind: "file-diff";
+  projectId: string;
+  projectPath: string;
+  repoRoot: string;
+  changeKind: TerminalPreviewChangeKind;
+  path: string;
+  status: TerminalPreviewGitStatus;
+  oldContent: string;
+  newContent: string;
+  readonly: true;
 }
 
 export interface CreateTerminalSessionResponse {

@@ -1,6 +1,7 @@
 export interface PersistedTerminalProjectRecord {
   id: string;
   name: string;
+  path?: string | null;
   createdAt: string;
   isDefault: boolean;
 }
@@ -54,7 +55,8 @@ export interface UpdateTerminalSessionLaunchParams {
 
 export interface UpdateTerminalProjectParams {
   projectId: string;
-  name: string;
+  name?: string;
+  path?: string | null;
 }
 
 export interface TerminalSessionStore {

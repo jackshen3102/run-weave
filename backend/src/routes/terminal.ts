@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -29,6 +29,14 @@ import {
   resolveDefaultTerminalCommand,
   resolveTerminalFallbackLaunchConfig,
 } from "../terminal/default-shell";
+import {
+  getPreviewFileDiff,
+  getPreviewGitChanges,
+  normalizeProjectPath,
+  readPreviewFile,
+  searchPreviewFiles,
+  TerminalPreviewError,
+} from "../terminal/preview";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
@@ -47,14 +55,33 @@ const createTerminalSessionSchema = z
 const createTerminalProjectSchema = z
   .object({
     name: z.string().trim().min(1),
+    path: z.string().nullable().optional(),
   })
   .strict();
 
 const updateTerminalProjectSchema = z
   .object({
-    name: z.string().trim().min(1),
+    name: z.string().trim().min(1).optional(),
+    path: z.string().nullable().optional(),
   })
-  .strict();
+  .strict()
+  .refine((payload) => payload.name !== undefined || "path" in payload, {
+    message: "Project name or path is required",
+  });
+
+const previewFileSearchSchema = z.object({
+  q: z.string().optional().default(""),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+const previewFileSchema = z.object({
+  path: z.string().min(1),
+});
+
+const previewFileDiffSchema = z.object({
+  path: z.string().min(1),
+  kind: z.enum(["staged", "working"]),
+});
 
 const updateTerminalSessionSchema = z.object({
   name: z.string().trim().min(1),
@@ -105,7 +132,13 @@ function resolveTerminalCreateDefaults(
     ? terminalSessionManager.getSession(payload.inheritFromTerminalSessionId)
         ?.cwd
     : undefined;
-  const cwd = payload.cwd?.trim() || inheritedCwd || os.homedir();
+  const projectId =
+    payload.projectId ??
+    terminalSessionManager.listProjects().find((project) => project.isDefault)?.id;
+  const projectPath = projectId
+    ? terminalSessionManager.getProject(projectId)?.path
+    : undefined;
+  const cwd = payload.cwd?.trim() || inheritedCwd || projectPath || os.homedir();
 
   return {
     projectId: payload.projectId,
@@ -114,6 +147,39 @@ function resolveTerminalCreateDefaults(
     args: payload.args ?? resolveDefaultTerminalArgs(command),
     cwd,
   };
+}
+
+function toProjectPayload(
+  project: ReturnType<TerminalSessionManager["getProject"]> extends infer T
+    ? NonNullable<T>
+    : never,
+): TerminalProjectListItem {
+  return {
+    projectId: project.id,
+    name: project.name,
+    path: project.path ?? null,
+    createdAt: project.createdAt.toISOString(),
+    isDefault: project.isDefault,
+  };
+}
+
+async function resolveProjectPathInput(
+  rawPath: string | null | undefined,
+): Promise<string | null | undefined> {
+  if (rawPath === undefined) {
+    return undefined;
+  }
+  if (rawPath === null || rawPath.trim() === "") {
+    return null;
+  }
+  const normalized = await normalizeProjectPath(rawPath);
+  if (!normalized) {
+    throw new TerminalPreviewError(
+      "Project path must be a readable directory",
+      400,
+    );
+  }
+  return normalized;
 }
 
 function toStatusPayload(
@@ -170,15 +236,36 @@ export function createTerminalRouter(
     return options.authService.verifyAccessToken(token)?.sessionId ?? null;
   };
 
+  const resolvePreviewContext = (terminalSessionId: string) => {
+    const session = terminalSessionManager.getSession(terminalSessionId);
+    if (!session) {
+      throw new TerminalPreviewError("Terminal session not found", 404);
+    }
+    const project = terminalSessionManager.getProject(session.projectId);
+    if (!project) {
+      throw new TerminalPreviewError("Terminal project not found", 404);
+    }
+    return { session, project };
+  };
+
+  const handlePreviewError = (res: Response, error: unknown) => {
+    if (error instanceof TerminalPreviewError) {
+      res.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+    console.error("[viewer-be] terminal preview request failed", {
+      error: String(error),
+    });
+    res.status(500).json({
+      message: "Terminal preview request failed",
+      error: String(error),
+    });
+  };
+
   router.get("/project", (_req, res) => {
     const payload: TerminalProjectListItem[] = terminalSessionManager
       .listProjects()
-      .map((project) => ({
-        projectId: project.id,
-        name: project.name,
-        createdAt: project.createdAt.toISOString(),
-        isDefault: project.isDefault,
-      }));
+      .map((project) => toProjectPayload(project));
 
     res.json(payload);
   });
@@ -195,15 +282,16 @@ export function createTerminalRouter(
       return;
     }
 
-    const project = await terminalSessionManager.createProject(
-      parsed.data.name,
-    );
-    res.status(201).json({
-      projectId: project.id,
-      name: project.name,
-      createdAt: project.createdAt.toISOString(),
-      isDefault: project.isDefault,
-    } satisfies TerminalProjectListItem);
+    try {
+      const projectPath = await resolveProjectPathInput(parsed.data.path);
+      const project = await terminalSessionManager.createProject(
+        parsed.data.name,
+        projectPath ?? null,
+      );
+      res.status(201).json(toProjectPayload(project));
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
   });
 
   router.patch("/project/:id", async (req, res) => {
@@ -218,21 +306,21 @@ export function createTerminalRouter(
       return;
     }
 
-    const project = await terminalSessionManager.updateProject(
-      req.params.id,
-      parsed.data.name,
-    );
-    if (!project) {
-      res.status(404).json({ message: "Terminal project not found" });
-      return;
-    }
+    try {
+      const projectPath = await resolveProjectPathInput(parsed.data.path);
+      const project = await terminalSessionManager.updateProject(req.params.id, {
+        name: parsed.data.name,
+        ...(projectPath !== undefined ? { path: projectPath } : {}),
+      });
+      if (!project) {
+        res.status(404).json({ message: "Terminal project not found" });
+        return;
+      }
 
-    res.json({
-      projectId: project.id,
-      name: project.name,
-      createdAt: project.createdAt.toISOString(),
-      isDefault: project.isDefault,
-    } satisfies TerminalProjectListItem);
+      res.json(toProjectPayload(project));
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
   });
 
   router.delete("/project/:id", async (req, res) => {
@@ -346,6 +434,94 @@ export function createTerminalRouter(
         await terminalSessionManager.readScrollback(req.params.id),
       ),
     );
+  });
+
+  router.get("/session/:id/preview/files/search", async (req, res) => {
+    const parsed = previewFileSearchSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolvePreviewContext(req.params.id);
+      res.json(
+        await searchPreviewFiles({
+          projectId: project.id,
+          projectPath: project.path,
+          query: parsed.data.q,
+          limit: parsed.data.limit,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.get("/session/:id/preview/file", async (req, res) => {
+    const parsed = previewFileSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolvePreviewContext(req.params.id);
+      res.json(
+        await readPreviewFile({
+          projectId: project.id,
+          projectPath: project.path,
+          requestedPath: parsed.data.path,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.get("/session/:id/preview/git-changes", async (req, res) => {
+    try {
+      const { project } = resolvePreviewContext(req.params.id);
+      res.json(
+        await getPreviewGitChanges({
+          projectId: project.id,
+          projectPath: project.path,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.get("/session/:id/preview/file-diff", async (req, res) => {
+    const parsed = previewFileDiffSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolvePreviewContext(req.params.id);
+      res.json(
+        await getPreviewFileDiff({
+          projectId: project.id,
+          projectPath: project.path,
+          requestedPath: parsed.data.path,
+          changeKind: parsed.data.kind,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
   });
 
   router.get("/session/:id", async (req, res) => {
