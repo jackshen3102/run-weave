@@ -779,54 +779,6 @@ describe("terminal routes", () => {
     });
   });
 
-  it("previews a project file without using the terminal cwd", async () => {
-    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
-    tempDirs.push(projectPath);
-    await writeFile(path.join(projectPath, "README.md"), "# Preview\n");
-    const state = {
-      current: {
-        id: "terminal-1",
-        projectId: "project-default",
-        name: "bash",
-        command: "bash",
-        args: [],
-        cwd: "/tmp/not-the-preview-root",
-        scrollback: "",
-        status: "exited" as const,
-        createdAt: new Date("2026-03-29T00:00:00.000Z"),
-      },
-      projects: [
-        {
-          id: "project-default",
-          name: "Default Project",
-          path: projectPath,
-          createdAt: new Date("2026-03-29T00:00:00.000Z"),
-          isDefault: true,
-        },
-      ],
-    };
-    const { server } = createTestServer(state);
-    servers.push(server);
-    const port = await startServer(server);
-
-    const response = await fetch(
-      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/file?path=README.md`,
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual(
-      expect.objectContaining({
-        kind: "file",
-        projectId: "project-default",
-        path: "README.md",
-        projectPath,
-        language: "markdown",
-        content: "# Preview\n",
-        readonly: true,
-      }),
-    );
-  });
-
   it("previews a project file directly from the project route", async () => {
     const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
     tempDirs.push(projectPath);
@@ -865,12 +817,10 @@ describe("terminal routes", () => {
     );
   });
 
-  it("rejects preview paths outside the project path", async () => {
+  it("does not expose legacy session-scoped preview routes", async () => {
     const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
-    const outsideDir = await mkdtemp(path.join(os.tmpdir(), "terminal-outside-"));
-    tempDirs.push(projectPath, outsideDir);
-    const outsideFile = path.join(outsideDir, "secret.txt");
-    await writeFile(outsideFile, "secret\n");
+    tempDirs.push(projectPath);
+    await writeFile(path.join(projectPath, "README.md"), "# Preview\n");
     const state = {
       current: {
         id: "terminal-1",
@@ -898,7 +848,36 @@ describe("terminal routes", () => {
     const port = await startServer(server);
 
     const response = await fetch(
-      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/file?path=${encodeURIComponent(outsideFile)}`,
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/file?path=README.md`,
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects project preview paths outside the project path", async () => {
+    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), "terminal-outside-"));
+    tempDirs.push(projectPath, outsideDir);
+    const outsideFile = path.join(outsideDir, "secret.txt");
+    await writeFile(outsideFile, "secret\n");
+    const state = {
+      current: null,
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: projectPath,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file?path=${encodeURIComponent(outsideFile)}`,
     );
 
     expect(response.status).toBe(403);
@@ -907,7 +886,7 @@ describe("terminal routes", () => {
     });
   });
 
-  it("rejects preview files that symlink outside the project path", async () => {
+  it("rejects project preview files that symlink outside the project path", async () => {
     const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
     const outsideDir = await mkdtemp(path.join(os.tmpdir(), "terminal-outside-"));
     tempDirs.push(projectPath, outsideDir);
@@ -915,17 +894,7 @@ describe("terminal routes", () => {
     await writeFile(outsideFile, "secret\n");
     await symlink(outsideFile, path.join(projectPath, "linked-secret.txt"));
     const state = {
-      current: {
-        id: "terminal-1",
-        projectId: "project-default",
-        name: "bash",
-        command: "bash",
-        args: [],
-        cwd: projectPath,
-        scrollback: "",
-        status: "running" as const,
-        createdAt: new Date("2026-03-29T00:00:00.000Z"),
-      },
+      current: null,
       projects: [
         {
           id: "project-default",
@@ -941,7 +910,7 @@ describe("terminal routes", () => {
     const port = await startServer(server);
 
     const response = await fetch(
-      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/file?path=linked-secret.txt`,
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file?path=linked-secret.txt`,
     );
 
     expect(response.status).toBe(403);
@@ -950,7 +919,7 @@ describe("terminal routes", () => {
     });
   });
 
-  it("searches preview files by fuzzy relative path without returning absolute candidates", async () => {
+  it("searches project preview files by fuzzy relative path without returning absolute candidates", async () => {
     const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
     tempDirs.push(projectPath);
     await mkdir(path.join(projectPath, "frontend/src/components/terminal"), {
@@ -966,17 +935,7 @@ describe("terminal routes", () => {
       "# plan\n",
     );
     const state = {
-      current: {
-        id: "terminal-1",
-        projectId: "project-default",
-        name: "bash",
-        command: "bash",
-        args: [],
-        cwd: projectPath,
-        scrollback: "",
-        status: "running" as const,
-        createdAt: new Date("2026-03-29T00:00:00.000Z"),
-      },
+      current: null,
       projects: [
         {
           id: "project-default",
@@ -992,7 +951,7 @@ describe("terminal routes", () => {
     const port = await startServer(server);
 
     const response = await fetch(
-      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/files/search?q=term%20work&limit=10`,
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/files/search?q=term%20work&limit=10`,
     );
 
     expect(response.status).toBe(200);
@@ -1009,32 +968,21 @@ describe("terminal routes", () => {
     expect(payload.items.every((item) => !path.isAbsolute(item.path))).toBe(true);
   });
 
-  it("returns staged and working preview changes and loads one file diff", async () => {
-    const repo = await createGitRepo();
-    await writeFile(path.join(repo, "README.md"), "old readme\n");
-    await writeFile(path.join(repo, "staged.txt"), "old staged\n");
-    await execFileAsync("git", ["add", "."], { cwd: repo });
-    await execFileAsync("git", ["commit", "-m", "initial"], { cwd: repo });
-    await writeFile(path.join(repo, "staged.txt"), "new staged\n");
-    await execFileAsync("git", ["add", "staged.txt"], { cwd: repo });
-    await writeFile(path.join(repo, "README.md"), "new readme\n");
+  it("searches project preview files without returning gitignored files", async () => {
+    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    tempDirs.push(projectPath);
+    await mkdir(path.join(projectPath, "src"), { recursive: true });
+    await mkdir(path.join(projectPath, "generated"), { recursive: true });
+    await writeFile(path.join(projectPath, ".gitignore"), "generated/\n");
+    await writeFile(path.join(projectPath, "src/terminal-preview.ts"), "export {};\n");
+    await writeFile(path.join(projectPath, "generated/terminal-preview.js"), "ignored\n");
     const state = {
-      current: {
-        id: "terminal-1",
-        projectId: "project-default",
-        name: "bash",
-        command: "bash",
-        args: [],
-        cwd: "/tmp/not-the-preview-root",
-        scrollback: "",
-        status: "exited" as const,
-        createdAt: new Date("2026-03-29T00:00:00.000Z"),
-      },
+      current: null,
       projects: [
         {
           id: "project-default",
           name: "Default Project",
-          path: repo,
+          path: projectPath,
           createdAt: new Date("2026-03-29T00:00:00.000Z"),
           isDefault: true,
         },
@@ -1044,33 +992,19 @@ describe("terminal routes", () => {
     servers.push(server);
     const port = await startServer(server);
 
-    const changesResponse = await fetch(
-      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/git-changes`,
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/files/search?q=terminal%20preview&limit=20`,
     );
 
-    expect(changesResponse.status).toBe(200);
-    await expect(changesResponse.json()).resolves.toEqual(
-      expect.objectContaining({
-        staged: [{ path: "staged.txt", status: "modified" }],
-        working: [{ path: "README.md", status: "modified" }],
-      }),
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      items: Array<{ path: string }>;
+    };
+    expect(payload.items.map((item) => item.path)).toContain(
+      "src/terminal-preview.ts",
     );
-
-    const diffResponse = await fetch(
-      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/file-diff?path=staged.txt&kind=staged`,
-    );
-
-    expect(diffResponse.status).toBe(200);
-    await expect(diffResponse.json()).resolves.toEqual(
-      expect.objectContaining({
-        kind: "file-diff",
-        changeKind: "staged",
-        path: "staged.txt",
-        status: "modified",
-        oldContent: "old staged\n",
-        newContent: "new staged\n",
-        readonly: true,
-      }),
+    expect(payload.items.map((item) => item.path)).not.toContain(
+      "generated/terminal-preview.js",
     );
   });
 

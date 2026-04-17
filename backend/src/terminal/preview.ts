@@ -26,11 +26,35 @@ const FILE_PREVIEW_MAX_BYTES = 1024 * 1024;
 const GIT_FILE_CONTENT_MAX_BYTES = 1024 * 1024;
 const SEARCH_MAX_FILES = 20_000;
 const DEFAULT_SEARCH_LIMIT = 50;
+const RG_SEARCH_TIMEOUT_MS = 5_000;
+const FILE_SEARCH_CACHE_TTL_MS = 15_000;
+const SENSITIVE_FILE_GLOBS = [
+  ".env",
+  "**/.env",
+  ".env.local",
+  "**/.env.local",
+  ".env.*.local",
+  "**/.env.*.local",
+  "*secret*",
+  "**/*secret*",
+  "*secrets*",
+  "**/*secrets*",
+];
+const SAFE_ENV_TEMPLATE_FILES = new Set([
+  ".env.example",
+  ".env.sample",
+  ".env.template",
+  ".env.defaults",
+]);
 const EXCLUDED_DIRECTORIES = new Set([
   ".cache",
   ".git",
+  ".hg",
   ".next",
+  ".svn",
   ".turbo",
+  "CVS",
+  "bower_components",
   "build",
   "coverage",
   "dist",
@@ -39,6 +63,16 @@ const EXCLUDED_DIRECTORIES = new Set([
   "test-results",
   "vendor",
 ]);
+const EXCLUDED_FILE_BASENAMES = new Set([".DS_Store", "Thumbs.db"]);
+const EXCLUDED_FILE_SUFFIXES = [".code-search"];
+
+interface FileSearchCacheEntry {
+  loadedAt: number;
+  files: string[];
+}
+
+const fileSearchCandidateCache = new Map<string, FileSearchCacheEntry>();
+const fileSearchCandidateInflight = new Map<string, Promise<string[]>>();
 
 export class TerminalPreviewError extends Error {
   constructor(
@@ -235,19 +269,63 @@ function fuzzyScore(query: string, candidate: string): number {
   return 0;
 }
 
+function splitQueryPieces(query: string): string[] {
+  return query
+    .trim()
+    .split(/\s+/g)
+    .map((piece) => piece.trim())
+    .filter(Boolean);
+}
+
+function scoreQueryAgainstCandidate(query: string, candidate: string): number {
+  const pieces = splitQueryPieces(query);
+  if (pieces.length <= 1) {
+    return fuzzyScore(query, candidate);
+  }
+
+  let total = 0;
+  for (const piece of pieces) {
+    const pieceScore = fuzzyScore(piece, candidate);
+    if (pieceScore <= 0) {
+      return 0;
+    }
+    total += pieceScore;
+  }
+
+  return total / pieces.length;
+}
+
+function pathBoundaryBonus(query: string, relativePath: string): number {
+  const compactQuery = compactText(query);
+  const compactPath = compactText(relativePath);
+  if (!compactQuery) {
+    return 0;
+  }
+  if (compactPath === compactQuery) {
+    return 45;
+  }
+  if (compactPath.endsWith(compactQuery)) {
+    return 30;
+  }
+  return 0;
+}
+
 function rankFile(query: string, relativePath: string): TerminalPreviewFileSearchItem | null {
   const basename = path.posix.basename(relativePath);
   const dirname = path.posix.dirname(relativePath);
   const normalizedDirname = dirname === "." ? "" : dirname;
-  const basenameScore = fuzzyScore(query, basename);
-  const pathScore = fuzzyScore(query, relativePath);
+  const basenameScore = scoreQueryAgainstCandidate(query, basename);
+  const pathScore = scoreQueryAgainstCandidate(query, relativePath);
   const segmentScore = relativePath
     .split("/")
-    .reduce((best, segment) => Math.max(best, fuzzyScore(query, segment)), 0);
+    .reduce(
+      (best, segment) => Math.max(best, scoreQueryAgainstCandidate(query, segment)),
+      0,
+    );
   const score = Math.max(
-    basenameScore > 0 ? basenameScore + 20 : 0,
+    basenameScore > 0 ? basenameScore + 25 : 0,
+    pathScore > 0 ? pathScore + pathBoundaryBonus(query, relativePath) : 0,
     segmentScore > 0 ? segmentScore + 10 : 0,
-    pathScore,
   );
   if (score <= 0) {
     return null;
@@ -295,6 +373,213 @@ async function collectFiles(rootPath: string): Promise<string[]> {
   return results;
 }
 
+function toRgExcludeGlob(directoryName: string): string {
+  return `!**/${directoryName}/**`;
+}
+
+function buildRgFileArgs(): string[] {
+  const args = [
+    "--files",
+    "--hidden",
+    "--case-sensitive",
+    "--no-require-git",
+    "--no-config",
+  ];
+
+  for (const directoryName of EXCLUDED_DIRECTORIES) {
+    args.push("-g", toRgExcludeGlob(directoryName));
+  }
+  for (const fileBasename of EXCLUDED_FILE_BASENAMES) {
+    args.push("-g", `!**/${fileBasename}`);
+  }
+  for (const fileSuffix of EXCLUDED_FILE_SUFFIXES) {
+    args.push("-g", `!**/*${fileSuffix}`);
+  }
+  for (const sensitiveGlob of SENSITIVE_FILE_GLOBS) {
+    args.push("-g", `!${sensitiveGlob}`);
+  }
+
+  return args;
+}
+
+function isSensitiveSearchPath(relativePath: string): boolean {
+  const basename = path.posix.basename(relativePath).toLowerCase();
+  if (SAFE_ENV_TEMPLATE_FILES.has(basename)) {
+    return false;
+  }
+  if (
+    basename === ".env" ||
+    (basename.startsWith(".env.") && basename.endsWith(".local"))
+  ) {
+    return true;
+  }
+  return basename.includes("secret");
+}
+
+function shouldIncludeSearchCandidate(relativePath: string): boolean {
+  if (isSensitiveSearchPath(relativePath)) {
+    return false;
+  }
+  const basename = path.posix.basename(relativePath);
+  if (EXCLUDED_FILE_BASENAMES.has(basename)) {
+    return false;
+  }
+  if (EXCLUDED_FILE_SUFFIXES.some((suffix) => basename.endsWith(suffix))) {
+    return false;
+  }
+  return !relativePath
+    .split("/")
+    .some((segment) => EXCLUDED_DIRECTORIES.has(segment));
+}
+
+function normalizeRgFileList(stdout: string): string[] {
+  return stdout
+    .split(/\r?\n/g)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((filePath) => filePath.split(path.sep).join("/"))
+    .filter((filePath) => !path.isAbsolute(filePath))
+    .filter(shouldIncludeSearchCandidate)
+    .slice(0, SEARCH_MAX_FILES);
+}
+
+async function collectFilesWithRipgrep(rootPath: string): Promise<string[]> {
+  const { stdout } = await execFileAsync("rg", buildRgFileArgs(), {
+    cwd: rootPath,
+    maxBuffer: 8 * 1024 * 1024,
+    timeout: RG_SEARCH_TIMEOUT_MS,
+  });
+
+  return normalizeRgFileList(stdout);
+}
+
+function describeRipgrepFailure(error: unknown): string {
+  if (error instanceof Error) {
+    const errorWithDetails = error as Error & {
+      code?: string;
+      signal?: string;
+      killed?: boolean;
+    };
+    return [
+      error.message,
+      errorWithDetails.code ? `code=${errorWithDetails.code}` : null,
+      errorWithDetails.signal ? `signal=${errorWithDetails.signal}` : null,
+      errorWithDetails.killed ? "killed=true" : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+  return String(error);
+}
+
+function shouldWarnRipgrepFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return true;
+  }
+  const errorWithDetails = error as Error & {
+    code?: string;
+    signal?: string;
+    killed?: boolean;
+  };
+  if (errorWithDetails.code === "ENOENT") {
+    return false;
+  }
+  return Boolean(
+    errorWithDetails.killed ||
+      errorWithDetails.signal ||
+      errorWithDetails.code === "ETIMEDOUT" ||
+      errorWithDetails.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ||
+      errorWithDetails.code,
+  );
+}
+
+async function collectSearchCandidateFiles(rootPath: string): Promise<string[]> {
+  try {
+    return await collectFilesWithRipgrep(rootPath);
+  } catch (error) {
+    if (shouldWarnRipgrepFailure(error)) {
+      console.warn("[viewer-be] preview rg file search failed; falling back", {
+        rootPath,
+        error: describeRipgrepFailure(error),
+      });
+    }
+    return (await collectFiles(rootPath)).filter(shouldIncludeSearchCandidate);
+  }
+}
+
+function getFileSearchCacheKey(projectId: string, rootPath: string): string {
+  return `${projectId}:${rootPath}`;
+}
+
+function readFileSearchCache(cacheKey: string, now = Date.now()): string[] | null {
+  const cached = fileSearchCandidateCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+  if (now - cached.loadedAt > FILE_SEARCH_CACHE_TTL_MS) {
+    fileSearchCandidateCache.delete(cacheKey);
+    return null;
+  }
+  return cached.files;
+}
+
+function writeFileSearchCache(
+  cacheKey: string,
+  files: string[],
+  now = Date.now(),
+): void {
+  fileSearchCandidateCache.set(cacheKey, {
+    loadedAt: now,
+    files,
+  });
+}
+
+export function clearPreviewFileSearchCache(projectId?: string): void {
+  if (!projectId) {
+    fileSearchCandidateCache.clear();
+    fileSearchCandidateInflight.clear();
+    return;
+  }
+
+  for (const cacheKey of fileSearchCandidateCache.keys()) {
+    if (cacheKey.startsWith(`${projectId}:`)) {
+      fileSearchCandidateCache.delete(cacheKey);
+    }
+  }
+  for (const cacheKey of fileSearchCandidateInflight.keys()) {
+    if (cacheKey.startsWith(`${projectId}:`)) {
+      fileSearchCandidateInflight.delete(cacheKey);
+    }
+  }
+}
+
+async function collectCachedSearchCandidateFiles(
+  projectId: string,
+  rootPath: string,
+): Promise<string[]> {
+  const cacheKey = getFileSearchCacheKey(projectId, rootPath);
+  const cached = readFileSearchCache(cacheKey);
+  if (cached !== null) {
+    return cached;
+  }
+
+  const inflight = fileSearchCandidateInflight.get(cacheKey);
+  if (inflight) {
+    return inflight;
+  }
+
+  const pending = collectSearchCandidateFiles(rootPath)
+    .then((files) => {
+      writeFileSearchCache(cacheKey, files);
+      return files;
+    })
+    .finally(() => {
+      fileSearchCandidateInflight.delete(cacheKey);
+    });
+  fileSearchCandidateInflight.set(cacheKey, pending);
+  return pending;
+}
+
 export async function searchPreviewFiles(params: {
   projectId: string;
   projectPath: string | null | undefined;
@@ -317,7 +602,7 @@ export async function searchPreviewFiles(params: {
   }
 
   const rootPath = await realpath(projectPath);
-  const rankedItems = (await collectFiles(rootPath))
+  const rankedItems = (await collectCachedSearchCandidateFiles(params.projectId, rootPath))
     .flatMap((relativePath) => {
       const ranked = rankFile(query, relativePath);
       return ranked ? [ranked] : [];

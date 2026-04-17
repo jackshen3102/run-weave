@@ -47,9 +47,15 @@ async function loginAndSeedToken(
 async function createPreviewRepo(): Promise<string> {
   const repo = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-e2e-"));
   await mkdir(path.join(repo, "docs/architecture"), { recursive: true });
+  await mkdir(path.join(repo, "generated"), { recursive: true });
+  await writeFile(path.join(repo, ".gitignore"), "generated/\n");
   await writeFile(
     path.join(repo, "docs/architecture/terminal-code-preview.md"),
     "# Terminal Preview Plan\n",
+  );
+  await writeFile(
+    path.join(repo, "generated/terminal-code-preview.js"),
+    "ignored\n",
   );
   await writeFile(path.join(repo, "README.md"), "old readme\n");
   await writeFile(path.join(repo, "staged.txt"), "old staged\n");
@@ -136,6 +142,8 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     await page
       .getByPlaceholder("Search file or paste absolute path...")
       .fill("terminal preview");
+    await expect(page.getByText("terminal-code-preview.md")).toBeVisible();
+    await expect(page.getByText("terminal-code-preview.js")).not.toBeVisible();
     await page.getByText("terminal-code-preview.md").click();
     await expect(
       page.getByText("docs/architecture/terminal-code-preview.md"),
@@ -143,7 +151,8 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
 
     previewFileRequestCount = 0;
     await page
-      .getByRole("button", { name: path.basename(repo), exact: true })
+      .locator("button")
+      .filter({ hasText: path.basename(repo) })
       .nth(1)
       .click();
     await page.waitForTimeout(500);
