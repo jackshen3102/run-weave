@@ -9,10 +9,14 @@ import {
   getTerminalPreviewFile,
   getTerminalPreviewFileDiff,
   getTerminalPreviewGitChanges,
+  getTerminalProjectPreviewFile,
+  getTerminalProjectPreviewFileDiff,
+  getTerminalProjectPreviewGitChanges,
   getTerminalHistory,
   getTerminalSession,
   listTerminalProjects,
   listTerminalSessions,
+  searchTerminalProjectPreviewFiles,
   searchTerminalPreviewFiles,
   updateTerminalProject,
 } from "./terminal";
@@ -384,6 +388,92 @@ describe("terminal service", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "http://localhost:5001/api/terminal/session/terminal%2F1/preview/file-diff?path=README.md&kind=working",
+      {
+        headers: {
+          Authorization: "Bearer token-1",
+        },
+      },
+    );
+  });
+
+  it("uses project-scoped preview endpoints for files, changes, and diffs", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ kind: "file-search", items: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ kind: "file", path: "docs/plan.md" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ kind: "git-changes", staged: [], working: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ kind: "file-diff", path: "README.md" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await searchTerminalProjectPreviewFiles(
+      "http://localhost:5001",
+      "token-1",
+      "project/1",
+      {
+        query: "term work",
+        limit: 25,
+      },
+    );
+    await getTerminalProjectPreviewFile(
+      "http://localhost:5001",
+      "token-1",
+      "project/1",
+      "docs/plan.md",
+    );
+    await getTerminalProjectPreviewGitChanges(
+      "http://localhost:5001",
+      "token-1",
+      "project/1",
+    );
+    await getTerminalProjectPreviewFileDiff(
+      "http://localhost:5001",
+      "token-1",
+      "project/1",
+      { path: "README.md", kind: "working" },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:5001/api/terminal/project/project%2F1/preview/files/search?q=term+work&limit=25",
+      {
+        headers: {
+          Authorization: "Bearer token-1",
+        },
+      },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:5001/api/terminal/project/project%2F1/preview/file?path=docs%2Fplan.md",
+      {
+        headers: {
+          Authorization: "Bearer token-1",
+        },
+      },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:5001/api/terminal/project/project%2F1/preview/git-changes",
+      {
+        headers: {
+          Authorization: "Bearer token-1",
+        },
+      },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "http://localhost:5001/api/terminal/project/project%2F1/preview/file-diff?path=README.md&kind=working",
       {
         headers: {
           Authorization: "Bearer token-1",

@@ -991,7 +991,6 @@ export function TerminalWorkspace({
                 apiBase={apiBase}
                 token={token}
                 activeProject={activeProject}
-                activeSession={activeSession}
                 widthPx={previewWidthPx}
                 onAuthExpired={onAuthExpired}
                 onEditProject={() => {

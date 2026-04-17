@@ -827,6 +827,44 @@ describe("terminal routes", () => {
     );
   });
 
+  it("previews a project file directly from the project route", async () => {
+    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    tempDirs.push(projectPath);
+    await writeFile(path.join(projectPath, "README.md"), "# Project Preview\n");
+    const state = {
+      current: null,
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: projectPath,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file?path=README.md`,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        kind: "file",
+        projectId: "project-default",
+        path: "README.md",
+        projectPath,
+        language: "markdown",
+        content: "# Project Preview\n",
+        readonly: true,
+      }),
+    );
+  });
+
   it("rejects preview paths outside the project path", async () => {
     const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
     const outsideDir = await mkdtemp(path.join(os.tmpdir(), "terminal-outside-"));
@@ -1020,6 +1058,61 @@ describe("terminal routes", () => {
 
     const diffResponse = await fetch(
       `http://127.0.0.1:${port}/api/terminal/session/terminal-1/preview/file-diff?path=staged.txt&kind=staged`,
+    );
+
+    expect(diffResponse.status).toBe(200);
+    await expect(diffResponse.json()).resolves.toEqual(
+      expect.objectContaining({
+        kind: "file-diff",
+        changeKind: "staged",
+        path: "staged.txt",
+        status: "modified",
+        oldContent: "old staged\n",
+        newContent: "new staged\n",
+        readonly: true,
+      }),
+    );
+  });
+
+  it("returns project preview changes and file diffs directly from the project route", async () => {
+    const repo = await createGitRepo();
+    await writeFile(path.join(repo, "README.md"), "old readme\n");
+    await writeFile(path.join(repo, "staged.txt"), "old staged\n");
+    await execFileAsync("git", ["add", "."], { cwd: repo });
+    await execFileAsync("git", ["commit", "-m", "initial"], { cwd: repo });
+    await writeFile(path.join(repo, "staged.txt"), "new staged\n");
+    await execFileAsync("git", ["add", "staged.txt"], { cwd: repo });
+    await writeFile(path.join(repo, "README.md"), "new readme\n");
+    const state = {
+      current: null,
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: repo,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const changesResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/git-changes`,
+    );
+
+    expect(changesResponse.status).toBe(200);
+    await expect(changesResponse.json()).resolves.toEqual(
+      expect.objectContaining({
+        staged: [{ path: "staged.txt", status: "modified" }],
+        working: [{ path: "README.md", status: "modified" }],
+      }),
+    );
+
+    const diffResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file-diff?path=staged.txt&kind=staged`,
     );
 
     expect(diffResponse.status).toBe(200);

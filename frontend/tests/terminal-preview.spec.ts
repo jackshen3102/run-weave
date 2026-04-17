@@ -94,6 +94,7 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
         },
         data: {
           projectId: project.projectId,
+          name: "Terminal One",
           command: "bash",
           cwd: repo,
         },
@@ -103,6 +104,27 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     const session = (await sessionResponse.json()) as {
       terminalSessionId: string;
     };
+    const secondSessionResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/session`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          projectId: project.projectId,
+          name: "Terminal Two",
+          command: "bash",
+          cwd: repo,
+        },
+      },
+    );
+    expect(secondSessionResponse.ok()).toBe(true);
+
+    let previewFileRequestCount = 0;
+    await page.route("**/api/terminal/**/preview/file?**", async (route) => {
+      previewFileRequestCount += 1;
+      await route.continue();
+    });
 
     await page.goto(`/terminal/${encodeURIComponent(session.terminalSessionId)}`);
     await expect(
@@ -115,6 +137,17 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
       .getByPlaceholder("Search file or paste absolute path...")
       .fill("terminal preview");
     await page.getByText("terminal-code-preview.md").click();
+    await expect(
+      page.getByText("docs/architecture/terminal-code-preview.md"),
+    ).toBeVisible();
+
+    previewFileRequestCount = 0;
+    await page
+      .getByRole("button", { name: path.basename(repo), exact: true })
+      .nth(1)
+      .click();
+    await page.waitForTimeout(500);
+    expect(previewFileRequestCount).toBe(0);
     await expect(
       page.getByText("docs/architecture/terminal-code-preview.md"),
     ).toBeVisible();

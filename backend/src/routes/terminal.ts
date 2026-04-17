@@ -248,6 +248,14 @@ export function createTerminalRouter(
     return { session, project };
   };
 
+  const resolveProjectPreviewContext = (projectId: string) => {
+    const project = terminalSessionManager.getProject(projectId);
+    if (!project) {
+      throw new TerminalPreviewError("Terminal project not found", 404);
+    }
+    return { project };
+  };
+
   const handlePreviewError = (res: Response, error: unknown) => {
     if (error instanceof TerminalPreviewError) {
       res.status(error.statusCode).json({ message: error.message });
@@ -268,6 +276,94 @@ export function createTerminalRouter(
       .map((project) => toProjectPayload(project));
 
     res.json(payload);
+  });
+
+  router.get("/project/:id/preview/files/search", async (req, res) => {
+    const parsed = previewFileSearchSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolveProjectPreviewContext(req.params.id);
+      res.json(
+        await searchPreviewFiles({
+          projectId: project.id,
+          projectPath: project.path,
+          query: parsed.data.q,
+          limit: parsed.data.limit,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.get("/project/:id/preview/file", async (req, res) => {
+    const parsed = previewFileSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolveProjectPreviewContext(req.params.id);
+      res.json(
+        await readPreviewFile({
+          projectId: project.id,
+          projectPath: project.path,
+          requestedPath: parsed.data.path,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.get("/project/:id/preview/git-changes", async (req, res) => {
+    try {
+      const { project } = resolveProjectPreviewContext(req.params.id);
+      res.json(
+        await getPreviewGitChanges({
+          projectId: project.id,
+          projectPath: project.path,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.get("/project/:id/preview/file-diff", async (req, res) => {
+    const parsed = previewFileDiffSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolveProjectPreviewContext(req.params.id);
+      res.json(
+        await getPreviewFileDiff({
+          projectId: project.id,
+          projectPath: project.path,
+          requestedPath: parsed.data.path,
+          changeKind: parsed.data.kind,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
   });
 
   router.post("/project", async (req, res) => {

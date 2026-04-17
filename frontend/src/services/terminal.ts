@@ -224,6 +224,29 @@ export async function searchTerminalPreviewFiles(
   );
 }
 
+export async function searchTerminalProjectPreviewFiles(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  params: { query: string; limit?: number },
+): Promise<TerminalPreviewFileSearchResponse> {
+  const query = new URLSearchParams();
+  query.set("q", params.query);
+  if (params.limit !== undefined) {
+    query.set("limit", String(params.limit));
+  }
+
+  return requestJson<TerminalPreviewFileSearchResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/files/search?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
 export async function getTerminalPreviewFile(
   apiBase: string,
   token: string,
@@ -234,6 +257,24 @@ export async function getTerminalPreviewFile(
   return requestJson<TerminalPreviewFileResponse>(
     apiBase,
     `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/preview/file?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalProjectPreviewFile(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  filePath: string,
+): Promise<TerminalPreviewFileResponse> {
+  const query = new URLSearchParams({ path: filePath });
+  return requestJson<TerminalPreviewFileResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file?${query.toString()}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -258,6 +299,22 @@ export async function getTerminalPreviewGitChanges(
   );
 }
 
+export async function getTerminalProjectPreviewGitChanges(
+  apiBase: string,
+  token: string,
+  projectId: string,
+): Promise<TerminalPreviewGitChangesResponse> {
+  return requestJson<TerminalPreviewGitChangesResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/git-changes`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
 export async function getTerminalPreviewFileDiff(
   apiBase: string,
   token: string,
@@ -271,6 +328,27 @@ export async function getTerminalPreviewFileDiff(
   return requestJson<TerminalPreviewFileDiffResponse>(
     apiBase,
     `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/preview/file-diff?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalProjectPreviewFileDiff(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  params: { path: string; kind: TerminalPreviewChangeKind },
+): Promise<TerminalPreviewFileDiffResponse> {
+  const query = new URLSearchParams({
+    path: params.path,
+    kind: params.kind,
+  });
+  return requestJson<TerminalPreviewFileDiffResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file-diff?${query.toString()}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,

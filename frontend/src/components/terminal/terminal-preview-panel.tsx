@@ -17,16 +17,15 @@ import type {
   TerminalPreviewFileSearchItem,
   TerminalPreviewGitChangesResponse,
   TerminalProjectListItem,
-  TerminalSessionListItem,
 } from "@browser-viewer/shared";
 import { Copy, RefreshCw, X } from "lucide-react";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { HttpError } from "../../services/http";
 import {
-  getTerminalPreviewFile,
-  getTerminalPreviewFileDiff,
-  getTerminalPreviewGitChanges,
-  searchTerminalPreviewFiles,
+  getTerminalProjectPreviewFile,
+  getTerminalProjectPreviewFileDiff,
+  getTerminalProjectPreviewGitChanges,
+  searchTerminalProjectPreviewFiles,
 } from "../../services/terminal";
 import { Button } from "../ui/button";
 import { TerminalOpenFileCommand } from "./terminal-open-file-command";
@@ -41,7 +40,6 @@ interface TerminalPreviewPanelProps {
   apiBase: string;
   token: string;
   activeProject: TerminalProjectListItem | null;
-  activeSession: TerminalSessionListItem | null;
   widthPx?: number;
   onAuthExpired?: () => void;
   onEditProject: () => void;
@@ -88,7 +86,6 @@ export function TerminalPreviewPanel({
   apiBase,
   token,
   activeProject,
-  activeSession,
   widthPx,
   onAuthExpired,
   onEditProject,
@@ -129,7 +126,6 @@ export function TerminalPreviewPanel({
   const fileRequestIdRef = useRef(0);
   const diffRequestIdRef = useRef(0);
 
-  const terminalSessionId = activeSession?.terminalSessionId ?? null;
   const projectId = activeProject?.projectId ?? null;
   const hasProjectPath = Boolean(activeProject?.path);
   const absoluteInput = query.trim().startsWith("/");
@@ -147,7 +143,7 @@ export function TerminalPreviewPanel({
 
   const loadFile = useCallback(
     async (filePath: string): Promise<void> => {
-      if (!terminalSessionId || !projectId) {
+      if (!projectId) {
         return;
       }
       const requestId = fileRequestIdRef.current + 1;
@@ -155,10 +151,10 @@ export function TerminalPreviewPanel({
       setFileLoading(true);
       setFileError(null);
       try {
-        const payload = await getTerminalPreviewFile(
+        const payload = await getTerminalProjectPreviewFile(
           apiBase,
           token,
-          terminalSessionId,
+          projectId,
           filePath,
         );
         if (fileRequestIdRef.current !== requestId) {
@@ -177,11 +173,11 @@ export function TerminalPreviewPanel({
         }
       }
     },
-    [apiBase, handleRequestError, projectId, terminalSessionId, token],
+    [apiBase, handleRequestError, projectId, token],
   );
 
   const loadChanges = useCallback(async (): Promise<void> => {
-    if (!terminalSessionId || !projectId) {
+    if (!projectId) {
       return;
     }
     setChangesLoading(true);
@@ -189,10 +185,10 @@ export function TerminalPreviewPanel({
     setFileDiff(null);
     setDiffError(null);
     try {
-      const payload = await getTerminalPreviewGitChanges(
+      const payload = await getTerminalProjectPreviewGitChanges(
         apiBase,
         token,
-        terminalSessionId,
+        projectId,
       );
       setChanges(payload);
       const selected =
@@ -214,14 +210,13 @@ export function TerminalPreviewPanel({
     apiBase,
     handleRequestError,
     projectId,
-    terminalSessionId,
     token,
     updateProjectPreview,
   ]);
 
   const loadDiff = useCallback(
     async (filePath: string, kind: TerminalPreviewChangeKind): Promise<void> => {
-      if (!terminalSessionId) {
+      if (!projectId) {
         return;
       }
       const requestId = diffRequestIdRef.current + 1;
@@ -229,10 +224,10 @@ export function TerminalPreviewPanel({
       setDiffLoading(true);
       setDiffError(null);
       try {
-        const payload = await getTerminalPreviewFileDiff(
+        const payload = await getTerminalProjectPreviewFileDiff(
           apiBase,
           token,
-          terminalSessionId,
+          projectId,
           { path: filePath, kind },
         );
         if (diffRequestIdRef.current !== requestId) {
@@ -251,7 +246,7 @@ export function TerminalPreviewPanel({
         }
       }
     },
-    [apiBase, handleRequestError, terminalSessionId, token],
+    [apiBase, handleRequestError, projectId, token],
   );
 
   useEffect(() => {
@@ -275,11 +270,11 @@ export function TerminalPreviewPanel({
   }, [loadFile, mode, selectedFilePath]);
 
   useEffect(() => {
-    if (mode !== "changes" || !hasProjectPath || !terminalSessionId) {
+    if (mode !== "changes" || !hasProjectPath || !projectId) {
       return;
     }
     void loadChanges();
-  }, [hasProjectPath, loadChanges, mode, terminalSessionId]);
+  }, [hasProjectPath, loadChanges, mode, projectId]);
 
   useEffect(() => {
     if (mode !== "changes" || !selectedChangePath || !selectedChangeKind) {
@@ -292,7 +287,6 @@ export function TerminalPreviewPanel({
     if (
       mode !== "file" ||
       selectedFilePath ||
-      !terminalSessionId ||
       !projectId ||
       !query.trim() ||
       absoluteInput
@@ -303,7 +297,7 @@ export function TerminalPreviewPanel({
     const timeoutId = window.setTimeout(() => {
       setSearchLoading(true);
       setSearchError(null);
-      searchTerminalPreviewFiles(apiBase, token, terminalSessionId, {
+      searchTerminalProjectPreviewFiles(apiBase, token, projectId, {
         query,
         limit: 50,
       })
@@ -336,7 +330,6 @@ export function TerminalPreviewPanel({
     projectId,
     query,
     selectedFilePath,
-    terminalSessionId,
     token,
   ]);
 
@@ -457,8 +450,8 @@ export function TerminalPreviewPanel({
   );
 
   let body: ReactNode;
-  if (!activeProject || !activeSession) {
-    body = renderEmpty("No terminal session selected");
+  if (!activeProject) {
+    body = renderEmpty("No project selected");
   } else if (!hasProjectPath) {
     body = renderEmpty(
       "Set a project path to use Preview",
