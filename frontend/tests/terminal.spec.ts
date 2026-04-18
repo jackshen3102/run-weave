@@ -158,13 +158,13 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
     request,
     token,
     `tab-keep-a-${suffix}`,
-    { projectId: project.projectId },
+    { projectId: project.projectId, command: "tail", args: ["-f", "/dev/null"] },
   );
   const secondSession = await createNamedTerminalSession(
     request,
     token,
     `tab-keep-b-${suffix}`,
-    { projectId: project.projectId },
+    { projectId: project.projectId, command: "tail", args: ["-f", "/dev/null"] },
   );
 
   await page.goto(firstSession.terminalUrl);
