@@ -1,45 +1,17 @@
 import { useCallback, useState } from "react";
-import type { TerminalSessionListItem } from "@browser-viewer/shared";
 import { HttpError } from "../../../services/http";
 import { changePassword as submitPasswordChange } from "../../../services/auth";
-import { loadRecentTerminalSelection } from "../../../features/terminal/recent-selection";
 import {
   createTerminalSession,
   listTerminalSessions,
 } from "../../../services/terminal";
+import { resolveReusableTerminalSession } from "../terminal-session-reuse";
 
 interface UseHomeTerminalPasswordParams {
   apiBase: string;
   token: string;
   onAuthExpired: () => void;
   onOpenTerminalSession: (terminalSessionId: string) => void;
-}
-
-function resolveReusableTerminalSession(
-  terminalSessions: TerminalSessionListItem[],
-  apiBase: string,
-): TerminalSessionListItem | null {
-  const recentSelection = loadRecentTerminalSelection(apiBase);
-  if (recentSelection) {
-    const recentSession = terminalSessions.find(
-      (session) =>
-        session.projectId === recentSelection.projectId &&
-        session.terminalSessionId === recentSelection.terminalSessionId,
-    );
-    if (recentSession) {
-      return recentSession;
-    }
-  }
-
-  const runningSessions = terminalSessions
-    .filter((session) => session.status === "running")
-    .sort((left, right) => {
-      return (
-        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-      );
-    });
-
-  return runningSessions[0] ?? null;
 }
 
 export function useHomeTerminalPassword({

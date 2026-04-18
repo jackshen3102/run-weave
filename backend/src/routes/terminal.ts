@@ -503,7 +503,15 @@ export function createTerminalRouter(
       if (options?.ptyService && options.runtimeRegistry) {
         try {
           let launchSession = session;
-          if (options.tmuxService && (await options.tmuxService.isAvailable())) {
+          const tmuxAvailable = options.tmuxService
+            ? await options.tmuxService.isAvailable()
+            : false;
+          const tmuxUnavailableReason =
+            options.tmuxService && !tmuxAvailable
+              ? await options.tmuxService.getUnavailableReason()
+              : null;
+
+          if (options.tmuxService && tmuxAvailable) {
             const target = options.tmuxService.buildTarget(session.id);
             launchSession =
               (await terminalSessionManager.updateRuntimeMetadata(session.id, {
@@ -517,8 +525,7 @@ export function createTerminalRouter(
               (await terminalSessionManager.updateRuntimeMetadata(session.id, {
                 runtimeKind: "pty",
                 tmuxUnavailableReason:
-                  (await options.tmuxService.getUnavailableReason()) ??
-                  "tmux unavailable",
+                  tmuxUnavailableReason ?? "tmux unavailable",
                 recoverable: false,
               })) ?? session;
           }

@@ -58,6 +58,26 @@ test("builds packaged backend env with runtime paths and assigned port", () => {
   assert.equal(env.SESSION_RESTORE_ENABLED, "true");
 });
 
+test("adds common macOS CLI paths for packaged backend commands", () => {
+  const resolved = resolvePackagedBackendPaths("/app/resources");
+
+  const env = buildPackagedBackendEnv({
+    baseEnv: {
+      PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+    },
+    backendPort: 5007,
+    backendPaths: resolved,
+  });
+
+  const pathEntries = env.PATH?.split(path.delimiter) ?? [];
+  assert.ok(pathEntries.includes("/opt/homebrew/bin"));
+  assert.ok(pathEntries.includes("/usr/local/bin"));
+  assert.equal(
+    pathEntries.filter((entry) => entry === "/opt/homebrew/bin").length,
+    1,
+  );
+});
+
 test("resolves packaged frontend resources for backend static serving", () => {
   const resolved = resolvePackagedBackendPaths("/app/resources");
 
