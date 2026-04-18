@@ -8,6 +8,7 @@ const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
 export default defineConfig({
   testDir: "./tests",
   timeout: 30_000,
+  workers: 1,
   use: {
     baseURL: E2E_FRONTEND_ORIGIN,
     trace: "on-first-retry",
