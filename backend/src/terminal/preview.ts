@@ -72,6 +72,14 @@ interface FileSearchCacheEntry {
   files: string[];
 }
 
+interface GitignoreRule {
+  pattern: string;
+  anchored: boolean;
+  directoryOnly: boolean;
+  hasSlash: boolean;
+  negated: boolean;
+}
+
 const fileSearchCandidateCache = new Map<string, FileSearchCacheEntry>();
 const fileSearchCandidateInflight = new Map<string, Promise<string[]>>();
 
@@ -446,8 +454,149 @@ function rankFile(query: string, relativePath: string): TerminalPreviewFileSearc
   };
 }
 
+function parseGitignoreRule(line: string): GitignoreRule | null {
+  let pattern = line.trim();
+  if (!pattern || pattern.startsWith("#")) {
+    return null;
+  }
+
+  let negated = false;
+  if (pattern.startsWith("!")) {
+    negated = true;
+    pattern = pattern.slice(1).trim();
+  }
+  if (!pattern) {
+    return null;
+  }
+
+  if (pattern.startsWith("\\#") || pattern.startsWith("\\!")) {
+    pattern = pattern.slice(1);
+  }
+
+  const anchored = pattern.startsWith("/");
+  pattern = pattern.replace(/^\/+/, "");
+  const directoryOnly = pattern.endsWith("/");
+  pattern = pattern.replace(/\/+$/, "");
+  if (!pattern) {
+    return null;
+  }
+
+  return {
+    pattern,
+    anchored,
+    directoryOnly,
+    hasSlash: anchored || pattern.includes("/"),
+    negated,
+  };
+}
+
+async function loadRootGitignoreRules(rootPath: string): Promise<GitignoreRule[]> {
+  const content = await readFile(path.join(rootPath, ".gitignore"), "utf8").catch(
+    () => null,
+  );
+  if (!content) {
+    return [];
+  }
+
+  return content
+    .split(/\r?\n/g)
+    .map(parseGitignoreRule)
+    .filter((rule): rule is GitignoreRule => rule !== null);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+}
+
+function gitignorePatternToRegExp(pattern: string): RegExp {
+  let source = "";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    if (!char) {
+      continue;
+    }
+    if (char === "*") {
+      if (pattern[index + 1] === "*") {
+        source += ".*";
+        index += 1;
+      } else {
+        source += "[^/]*";
+      }
+      continue;
+    }
+    if (char === "?") {
+      source += "[^/]";
+      continue;
+    }
+    source += escapeRegExp(char);
+  }
+  return new RegExp(`^${source}$`);
+}
+
+function gitignorePatternMatches(pattern: string, candidate: string): boolean {
+  return gitignorePatternToRegExp(pattern).test(candidate);
+}
+
+function pathOrParentMatchesGitignorePattern(
+  pattern: string,
+  candidate: string,
+): boolean {
+  const segments = candidate.split("/").filter(Boolean);
+  for (let index = segments.length; index >= 1; index -= 1) {
+    if (gitignorePatternMatches(pattern, segments.slice(0, index).join("/"))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function matchesGitignoreRule(
+  rule: GitignoreRule,
+  relativePath: string,
+  isDirectory: boolean,
+): boolean {
+  const normalizedPath = relativePath.split(path.sep).join("/");
+  const segments = normalizedPath.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    return false;
+  }
+
+  if (!rule.hasSlash) {
+    const candidateSegments = rule.directoryOnly
+      ? isDirectory
+        ? segments
+        : segments.slice(0, -1)
+      : segments;
+    return candidateSegments.some((segment) =>
+      gitignorePatternMatches(rule.pattern, segment),
+    );
+  }
+
+  const candidates = rule.anchored
+    ? [normalizedPath]
+    : segments.map((_, index) => segments.slice(index).join("/"));
+  return candidates.some((candidate) =>
+    pathOrParentMatchesGitignorePattern(rule.pattern, candidate),
+  );
+}
+
+function isIgnoredByGitignore(
+  relativePath: string,
+  isDirectory: boolean,
+  rules: GitignoreRule[],
+): boolean {
+  let ignored = false;
+  for (const rule of rules) {
+    if (matchesGitignoreRule(rule, relativePath, isDirectory)) {
+      ignored = !rule.negated;
+    }
+  }
+  return ignored;
+}
+
 async function collectFiles(rootPath: string): Promise<string[]> {
   const results: string[] = [];
+  const gitignoreRules = await loadRootGitignoreRules(rootPath);
   const stack = [rootPath];
   while (stack.length > 0 && results.length < SEARCH_MAX_FILES) {
     const current = stack.pop();
@@ -462,14 +611,20 @@ async function collectFiles(rootPath: string): Promise<string[]> {
         }
       }
       const absolutePath = path.join(current, entry.name);
+      const relativePath = toRelativePath(rootPath, absolutePath);
       if (entry.isDirectory()) {
-        if (!EXCLUDED_DIRECTORIES.has(entry.name)) {
+        if (
+          !EXCLUDED_DIRECTORIES.has(entry.name) &&
+          !isIgnoredByGitignore(relativePath, true, gitignoreRules)
+        ) {
           stack.push(absolutePath);
         }
         continue;
       }
       if (entry.isFile()) {
-        results.push(toRelativePath(rootPath, absolutePath));
+        if (!isIgnoredByGitignore(relativePath, false, gitignoreRules)) {
+          results.push(relativePath);
+        }
       }
     }
   }
