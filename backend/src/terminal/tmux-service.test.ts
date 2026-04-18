@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TmuxRebuildLimitError, TmuxService } from "./tmux-service";
 
@@ -68,6 +71,11 @@ describe("TmuxService", () => {
         "/tmp/runweave-test/tmux.sock",
         "-f",
         "/tmp/runweave-test/tmux.conf",
+        "set-option",
+        "-g",
+        "mouse",
+        "on",
+        ";",
         "new-session",
         "-A",
         "-s",
@@ -76,6 +84,18 @@ describe("TmuxService", () => {
         "/tmp/demo",
       ],
     });
+  });
+
+  it("sets mouse mode before attaching to an existing tmux server", () => {
+    const service = createService(vi.fn(), { TMUX_BINARY: "/usr/bin/tmux" });
+    const target = {
+      sessionName: "runweave-terminal-1",
+      socketPath: "/tmp/runweave-test/tmux.sock",
+    };
+
+    expect(service.buildAttachCommand(target, "/tmp/demo").args).toEqual(
+      expect.arrayContaining(["set-option", "-g", "mouse", "on", ";"]),
+    );
   });
 
   it("includes the original launch command when creating a missing tmux session", () => {
@@ -97,6 +117,11 @@ describe("TmuxService", () => {
         "/tmp/runweave-test/tmux.sock",
         "-f",
         "/tmp/runweave-test/tmux.conf",
+        "set-option",
+        "-g",
+        "mouse",
+        "on",
+        ";",
         "new-session",
         "-A",
         "-s",
@@ -141,6 +166,34 @@ describe("TmuxService", () => {
       ],
       expect.any(Object),
     );
+  });
+
+  it("enables mouse support in the generated tmux config", async () => {
+    const socketDir = await mkdtemp(path.join(os.tmpdir(), "runweave-tmux-"));
+    const service = new TmuxService({
+      execFile: vi.fn(async () => ({ stdout: "", stderr: "" })),
+      socketPath: path.join(socketDir, "tmux.sock"),
+    });
+
+    try {
+      await service.createDetachedSession(
+        {
+          sessionName: "runweave-terminal-1",
+          socketPath: path.join(socketDir, "tmux.sock"),
+        },
+        "/tmp/demo",
+        {
+          command: "bash",
+          args: ["-lc", "printf 'tmux-ok\\n'; sleep 60"],
+        },
+      );
+
+      await expect(readFile(service.configPath, "utf8")).resolves.toContain(
+        "set-option -g mouse on",
+      );
+    } finally {
+      await rm(socketDir, { force: true, recursive: true });
+    }
   });
 
   it("reports explicit disablement as unavailable", async () => {

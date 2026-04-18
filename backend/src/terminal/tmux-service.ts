@@ -62,6 +62,7 @@ const CaptureHistoryLines = 5_000;
 const InteractivePaneReadyMinWaitMs = 1_000;
 const InteractivePaneReadyStableMs = 200;
 const InteractivePaneReadyTimeoutMs = 2_500;
+const TMUX_RUNTIME_OPTION_ARGS = ["set-option", "-g", "mouse", "on"];
 
 export class TmuxRebuildLimitError extends Error {
   constructor(
@@ -186,6 +187,8 @@ export class TmuxService {
       command: this.binary,
       args: [
         ...this.buildServerArgs(target.socketPath),
+        ...TMUX_RUNTIME_OPTION_ARGS,
+        ";",
         "new-session",
         "-A",
         "-s",
@@ -373,6 +376,7 @@ export class TmuxService {
       this.configPath,
       [
         "set-option -g history-limit 5000",
+        "set-option -g mouse on",
         "set-option -g default-terminal \"tmux-256color\"",
         "set-option -as terminal-overrides ',xterm-256color:RGB'",
         "unbind-key C-b",
