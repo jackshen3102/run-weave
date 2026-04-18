@@ -25,6 +25,7 @@ import { LowDbSessionStore } from "./session/lowdb-store";
 import { TerminalSessionManager } from "./terminal/manager";
 import { PtyService } from "./terminal/pty-service";
 import { TerminalRuntimeRegistry } from "./terminal/runtime-registry";
+import { TmuxService } from "./terminal/tmux-service";
 import { LowDbTerminalSessionStore } from "./terminal/lowdb-store";
 import { listenWithFallback } from "./server/listen";
 import { resolveStoragePaths } from "./utils/path";
@@ -53,6 +54,7 @@ interface RuntimeServices {
   terminalSessionManager: TerminalSessionManager;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
   ptyService: PtyService;
+  tmuxService: TmuxService;
 }
 
 function readCliOption(optionName: string): string | undefined {
@@ -162,6 +164,16 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   );
   const terminalRuntimeRegistry = new TerminalRuntimeRegistry();
   const ptyService = new PtyService();
+  const tmuxService = new TmuxService({
+    socketPath:
+      process.env.TERMINAL_TMUX_SOCKET_PATH ??
+      path.join(
+        path.dirname(storagePaths.terminalSessionStoreFile),
+        "tmux",
+        "runweave.tmux.sock",
+      ),
+    env: process.env,
+  });
   await sessionManager.initialize();
   await terminalSessionManager.initialize();
 
@@ -178,6 +190,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalSessionManager,
     terminalRuntimeRegistry,
     ptyService,
+    tmuxService,
   };
 }
 
@@ -226,6 +239,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
     createTerminalRouter(services.terminalSessionManager, {
       ptyService: services.ptyService,
       runtimeRegistry: services.terminalRuntimeRegistry,
+      tmuxService: services.tmuxService,
       authService: services.authService,
     }),
   );
@@ -312,6 +326,7 @@ async function startRuntime(): Promise<void> {
     services.terminalRuntimeRegistry,
     services.authService,
     services.ptyService,
+    services.tmuxService,
   );
   attachDevtoolsProxyServer(
     server,

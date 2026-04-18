@@ -25,6 +25,7 @@ import type {
   UpdateTerminalSessionExitParams,
   UpdateTerminalSessionLaunchParams,
   UpdateTerminalSessionMetadataParams,
+  UpdateTerminalSessionRuntimeMetadataParams,
   UpdateTerminalSessionScrollbackParams,
 } from "./store";
 import { getLiveTerminalScrollback } from "./live-scrollback";
@@ -273,6 +274,27 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
     });
   }
 
+  async updateSessionRuntimeMetadata(
+    params: UpdateTerminalSessionRuntimeMetadataParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const session = database.data.sessions.find(
+        (candidate) => candidate.id === params.terminalSessionId,
+      );
+      if (!session) {
+        return;
+      }
+
+      session.runtimeKind = params.runtimeKind;
+      session.tmuxSessionName = params.tmuxSessionName;
+      session.tmuxSocketPath = params.tmuxSocketPath;
+      session.tmuxUnavailableReason = params.tmuxUnavailableReason;
+      session.recoverable = params.recoverable;
+      await database.write();
+    });
+  }
+
   async updateSessionScrollback(
     params: UpdateTerminalSessionScrollbackParams,
   ): Promise<void> {
@@ -512,5 +534,10 @@ function toMetadataRecord(
     status: session.status,
     createdAt: session.createdAt,
     exitCode: session.exitCode,
+    runtimeKind: session.runtimeKind,
+    tmuxSessionName: session.tmuxSessionName,
+    tmuxSocketPath: session.tmuxSocketPath,
+    tmuxUnavailableReason: session.tmuxUnavailableReason,
+    recoverable: session.recoverable,
   };
 }

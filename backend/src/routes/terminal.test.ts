@@ -33,6 +33,11 @@ interface MockTerminalSession {
   status: "running" | "exited";
   createdAt: Date;
   exitCode?: number;
+  runtimeKind?: "pty" | "tmux";
+  tmuxSessionName?: string;
+  tmuxSocketPath?: string;
+  tmuxUnavailableReason?: string;
+  recoverable?: boolean;
 }
 
 interface MockTerminalProject {
@@ -49,6 +54,10 @@ function createTestServer(sessionState: {
   current: MockTerminalSession | null;
   sessions?: MockTerminalSession[];
   projects?: MockTerminalProject[];
+}, options?: {
+  ptyService?: unknown;
+  runtimeRegistry?: unknown;
+  tmuxService?: unknown;
 }) {
   const resolveSession = (id: string) =>
     sessionState.current?.id === id
@@ -160,6 +169,16 @@ function createTestServer(sessionState: {
       sessionState.current = null;
       return true;
     }),
+    updateRuntimeMetadata: vi.fn(
+      async (id: string, metadata: Partial<MockTerminalSession>) => {
+        const session = resolveSession(id);
+        if (!session) {
+          return undefined;
+        }
+        Object.assign(session, metadata);
+        return session;
+      },
+    ),
     updateSessionName: vi.fn(async (id: string, name: string) => {
       if (sessionState.current?.id !== id) {
         return undefined;
@@ -184,6 +203,9 @@ function createTestServer(sessionState: {
     })),
   };
   const runtimeRegistry = {
+    getRuntime: vi.fn(() => undefined),
+    createRuntime: vi.fn(),
+    ensureRecorder: vi.fn(),
     disposeRuntime: vi.fn(async () => undefined),
   };
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
@@ -191,7 +213,9 @@ function createTestServer(sessionState: {
     "/api/terminal",
     createTerminalRouter(terminalSessionManager as never, {
       authService: authService as never,
-      runtimeRegistry: runtimeRegistry as never,
+      ptyService: options?.ptyService as never,
+      runtimeRegistry: (options?.runtimeRegistry ?? runtimeRegistry) as never,
+      tmuxService: options?.tmuxService as never,
     }),
   );
   const server = http.createServer(app);
@@ -279,6 +303,152 @@ describe("terminal routes", () => {
       terminalSessionId: "terminal-1",
       terminalUrl: "/terminal/terminal-1",
     });
+  });
+
+  it("creates tmux-backed terminal sessions when tmux is available", async () => {
+    const state = { current: null as MockTerminalSession | null };
+    const runtime = { pid: 10 };
+    const ptyService = {
+      spawnSession: vi.fn(() => runtime),
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => undefined),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const tmuxService = {
+      isAvailable: vi.fn(async () => true),
+      buildTarget: vi.fn(() => ({
+        sessionName: "runweave-terminal-1",
+        socketPath: "/tmp/runweave/tmux.sock",
+      })),
+      withSessionLock: vi.fn(
+        async (_id: string, action: () => Promise<unknown>) => action(),
+      ),
+      hasSession: vi.fn(async () => false),
+      createDetachedSession: vi.fn(async () => undefined),
+      waitForPaneReady: vi.fn(async () => undefined),
+      buildAttachCommand: vi.fn(() => ({
+        command: "tmux",
+        args: [
+          "-S",
+          "/tmp/runweave/tmux.sock",
+          "new-session",
+          "-A",
+          "-s",
+          "runweave-terminal-1",
+        ],
+      })),
+    };
+    const { server, terminalSessionManager } = createTestServer(state, {
+      ptyService,
+      runtimeRegistry,
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "project-default",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(terminalSessionManager.updateRuntimeMetadata).toHaveBeenCalledWith(
+      "terminal-1",
+      {
+        runtimeKind: "tmux",
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+        recoverable: true,
+      },
+    );
+    expect(ptyService.spawnSession).toHaveBeenCalledWith({
+      command: "tmux",
+      args: [
+        "-S",
+        "/tmp/runweave/tmux.sock",
+        "new-session",
+        "-A",
+        "-s",
+        "runweave-terminal-1",
+      ],
+      cwd: "/tmp/demo",
+      fallback: null,
+    });
+    expect(runtimeRegistry.createRuntime).toHaveBeenCalledWith(
+      "terminal-1",
+      expect.objectContaining({ pid: runtime.pid }),
+    );
+    expect(runtimeRegistry.ensureRecorder).not.toHaveBeenCalled();
+  });
+
+  it("falls back to pty sessions when tmux is unavailable", async () => {
+    const state = { current: null as MockTerminalSession | null };
+    const runtime = { pid: 10 };
+    const ptyService = {
+      spawnSession: vi.fn(() => runtime),
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => undefined),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const tmuxService = {
+      isAvailable: vi.fn(async () => false),
+      getUnavailableReason: vi.fn(async () => "tmux missing"),
+    };
+    const { server, terminalSessionManager } = createTestServer(state, {
+      ptyService,
+      runtimeRegistry,
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "project-default",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(terminalSessionManager.updateRuntimeMetadata).toHaveBeenCalledWith(
+      "terminal-1",
+      {
+        runtimeKind: "pty",
+        tmuxUnavailableReason: "tmux missing",
+        recoverable: false,
+      },
+    );
+    expect(ptyService.spawnSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        fallback: expect.any(Object),
+      }),
+    );
+    expect(runtimeRegistry.ensureRecorder).toHaveBeenCalled();
   });
 
   it("rejects removed browser-link terminal field", async () => {
@@ -542,9 +712,57 @@ describe("terminal routes", () => {
     });
   });
 
+  it("reads tmux-backed terminal history from capture-pane", async () => {
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "bash",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "persisted pty history",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        runtimeKind: "tmux" as const,
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      },
+    };
+    const tmuxService = {
+      capturePane: vi.fn(async () => ({
+        data: "tmux pane history\n",
+        durationMs: 12,
+      })),
+    };
+    const { server, terminalSessionManager } = createTestServer(state, {
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/history`,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        terminalSessionId: "terminal-1",
+        scrollback: "tmux pane history\n",
+      }),
+    );
+    expect(terminalSessionManager.readScrollback).not.toHaveBeenCalled();
+    expect(tmuxService.capturePane).toHaveBeenCalledWith({
+      sessionName: "runweave-terminal-1",
+      socketPath: "/tmp/runweave/tmux.sock",
+    });
+  });
+
   it("limits live terminal scrollback to the configured latest lines", async () => {
+    const totalLineCount = TERMINAL_CLIENT_SCROLLBACK_LINES + 250;
     const scrollback = Array.from(
-      { length: 2_500 },
+      { length: totalLineCount },
       (_, index) => `line-${index + 1}`,
     ).join("\n");
     const state = {
@@ -575,7 +793,7 @@ describe("terminal routes", () => {
         scrollback: Array.from(
           { length: TERMINAL_CLIENT_SCROLLBACK_LINES },
           (_, index) =>
-            `line-${index + (2_500 - TERMINAL_CLIENT_SCROLLBACK_LINES + 1)}`,
+            `line-${index + (totalLineCount - TERMINAL_CLIENT_SCROLLBACK_LINES + 1)}`,
         ).join("\n"),
       }),
     );
@@ -657,6 +875,47 @@ describe("terminal routes", () => {
       2,
       "terminal-2",
     );
+  });
+
+  it("kills tmux sessions when deleting terminal projects", async () => {
+    const state = {
+      current: null as MockTerminalSession | null,
+      sessions: [
+        {
+          id: "terminal-1",
+          projectId: "project-default",
+          name: "tmux-shell",
+          command: "bash",
+          args: [],
+          cwd: "/tmp/a",
+          scrollback: "",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          runtimeKind: "tmux" as const,
+          tmuxSessionName: "runweave-terminal-1",
+          tmuxSocketPath: "/tmp/runweave/tmux.sock",
+        },
+      ],
+    };
+    const tmuxService = {
+      killSession: vi.fn(async () => undefined),
+    };
+    const { server } = createTestServer(state, { tmuxService });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default`,
+      {
+        method: "DELETE",
+      },
+    );
+
+    expect(response.status).toBe(204);
+    expect(tmuxService.killSession).toHaveBeenCalledWith({
+      sessionName: "runweave-terminal-1",
+      socketPath: "/tmp/runweave/tmux.sock",
+    });
   });
 
   it("lists and creates terminal projects through the API", async () => {
@@ -1166,6 +1425,46 @@ describe("terminal routes", () => {
     );
 
     expect(response.status).toBe(204);
+  });
+
+  it("kills tmux sessions when deleting tmux-backed terminal sessions", async () => {
+    const state = {
+      current: {
+        id: "terminal-1",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        runtimeKind: "tmux" as const,
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      },
+    };
+    const tmuxService = {
+      killSession: vi.fn(async () => undefined),
+    };
+    const { server, runtimeRegistry } = createTestServer(state, {
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1`,
+      {
+        method: "DELETE",
+      },
+    );
+
+    expect(response.status).toBe(204);
+    expect(runtimeRegistry.disposeRuntime).toHaveBeenCalledWith("terminal-1");
+    expect(tmuxService.killSession).toHaveBeenCalledWith({
+      sessionName: "runweave-terminal-1",
+      socketPath: "/tmp/runweave/tmux.sock",
+    });
   });
 
   it("issues a short-lived terminal websocket ticket", async () => {

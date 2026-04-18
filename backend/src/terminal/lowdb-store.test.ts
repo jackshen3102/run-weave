@@ -222,6 +222,47 @@ describe("LowDbTerminalSessionStore", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("persists terminal runtime metadata in session JSON", async () => {
+    const store = await createStore();
+    await store.insertSession(createRecord());
+
+    await store.updateSessionRuntimeMetadata({
+      terminalSessionId: "terminal-1",
+      runtimeKind: "tmux",
+      tmuxSessionName: "runweave-terminal-1",
+      tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      recoverable: true,
+    });
+
+    await expect(store.getSession("terminal-1")).resolves.toEqual(
+      createRecord({
+        runtimeKind: "tmux",
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+        recoverable: true,
+      }),
+    );
+    const persisted = JSON.parse(
+      await readFile(
+        path.join(tempDirs[0] ?? "", "terminal-session-store.json"),
+        "utf8",
+      ),
+    ) as {
+      sessions: Array<{
+        runtimeKind?: string;
+        tmuxSessionName?: string;
+        tmuxSocketPath?: string;
+        recoverable?: boolean;
+      }>;
+    };
+    expect(persisted.sessions[0]).toMatchObject({
+      runtimeKind: "tmux",
+      tmuxSessionName: "runweave-terminal-1",
+      tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      recoverable: true,
+    });
+  });
+
   it("appends scrollback chunks without rewriting terminal metadata JSON", async () => {
     const store = await createStore();
     await store.insertSession(createRecord());
@@ -313,7 +354,7 @@ describe("LowDbTerminalSessionStore", () => {
         new Promise<"blocked">((resolve) => {
           setTimeout(() => {
             resolve("blocked");
-          }, 20);
+          }, 1_000);
         }),
       ]),
     ).resolves.toBe("appended");

@@ -980,7 +980,619 @@ describe("terminal websocket server", () => {
       }),
       onFallbackActivated: expect.any(Function),
     });
-    expect(runtimeRegistry.getRuntime("terminal-1")).toBe(runtime);
+    expect(runtimeRegistry.getRuntime("terminal-1")).toEqual(
+      expect.objectContaining({ pid: runtime.pid }),
+    );
+  });
+
+  it("attaches a missing runtime to an existing tmux-backed session without using plain tmux capture as the websocket snapshot", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "persisted pty history",
+        status: "running",
+        exitCode: undefined,
+        runtimeKind: "tmux",
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      })),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+      updateRuntimeMetadata: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    const ptyService = {
+      spawnSession: vi.fn(() => runtime),
+    };
+    const tmuxService = {
+      withSessionLock: vi.fn(
+        async (_id: string, action: () => Promise<unknown>) => action(),
+      ),
+      hasSession: vi.fn(async () => true),
+      buildAttachCommand: vi.fn(() => ({
+        command: "tmux",
+        args: [
+          "-S",
+          "/tmp/runweave/tmux.sock",
+          "new-session",
+          "-A",
+          "-s",
+          "runweave-terminal-1",
+        ],
+      })),
+      capturePane: vi.fn(async () => ({
+        data: "tmux pane history\n",
+        durationMs: 10,
+      })),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry as never,
+      authService as never,
+      ptyService as never,
+      tmuxService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(ptyService.spawnSession).toHaveBeenCalledWith({
+      command: "tmux",
+      args: [
+        "-S",
+        "/tmp/runweave/tmux.sock",
+        "new-session",
+        "-A",
+        "-s",
+        "runweave-terminal-1",
+      ],
+      cwd: "/tmp/demo",
+      fallback: null,
+    });
+    expect(runtimeRegistry.getRuntime("terminal-1")).toEqual(
+      expect.objectContaining({ pid: runtime.pid }),
+    );
+    expect(terminalSessionManager.appendOutput).not.toHaveBeenCalled();
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        {
+          type: "snapshot",
+          data: "",
+        },
+      ]),
+    );
+    expect(tmuxService.capturePane).not.toHaveBeenCalled();
+  });
+
+  it("uses buffered tmux attach output for websocket snapshots", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "plain capture should not be used",
+        status: "running",
+        exitCode: undefined,
+        runtimeKind: "tmux",
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      })),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+      updateRuntimeMetadata: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    runtimeRegistry.createRuntime("terminal-1", runtime);
+    runtime.emit("data", "\u001b[?1049h\u001b[Hfresh tmux frame");
+    runtimeRegistry.attachClient("terminal-1", "existing-client");
+    const tmuxService = {
+      capturePane: vi.fn(async () => ({
+        data: "plain tmux pane history\n",
+        durationMs: 10,
+      })),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry as never,
+      authService as never,
+      undefined,
+      tmuxService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        {
+          type: "snapshot",
+          data: "\u001b[?1049h\u001b[Hfresh tmux frame",
+        },
+      ]),
+    );
+    expect(tmuxService.capturePane).not.toHaveBeenCalled();
+  });
+
+  it("coalesces tmux repaint chunks before the initial websocket snapshot", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "plain capture should not be used",
+        status: "running",
+        exitCode: undefined,
+        runtimeKind: "tmux",
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      })),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+      updateRuntimeMetadata: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    runtimeRegistry.createRuntime("terminal-1", runtime);
+    runtime.emit("data", "\u001b[?1049h\u001b[Hpartial frame");
+    runtimeRegistry.attachClient("terminal-1", "existing-client");
+    const tmuxService = {
+      capturePane: vi.fn(async () => ({
+        data: "plain tmux pane history\n",
+        durationMs: 10,
+      })),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry as never,
+      authService as never,
+      undefined,
+      tmuxService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    setTimeout(() => runtime.emit("data", " after repaint settle"), 10);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        {
+          type: "snapshot",
+          data: "\u001b[?1049h\u001b[Hpartial frame after repaint settle",
+        },
+      ]),
+    );
+    expect(
+      messages.some(
+        (message) =>
+          message.type === "output" &&
+          message.data === " after repaint settle",
+      ),
+    ).toBe(false);
+    expect(tmuxService.capturePane).not.toHaveBeenCalled();
+  });
+
+  it("recycles idle tmux attach runtimes so reconnecting clients get a fresh tmux repaint", async () => {
+    const staleRuntime = new FakeRuntime();
+    const freshRuntime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running",
+        exitCode: undefined,
+        runtimeKind: "tmux",
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      })),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+      updateRuntimeMetadata: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    runtimeRegistry.createRuntime("terminal-1", staleRuntime);
+    const ptyService = {
+      spawnSession: vi.fn(() => freshRuntime),
+    };
+    const tmuxService = {
+      withSessionLock: vi.fn(
+        async (_id: string, action: () => Promise<unknown>) => action(),
+      ),
+      hasSession: vi.fn(async () => true),
+      buildAttachCommand: vi.fn(() => ({
+        command: "tmux",
+        args: ["new-session", "-A", "-s", "runweave-terminal-1"],
+      })),
+      capturePane: vi.fn(async () => ({ data: "plain history", durationMs: 1 })),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry,
+      authService as never,
+      ptyService as never,
+      tmuxService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+
+    await waitForOpen(socket);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(staleRuntime.dispose).toHaveBeenCalledTimes(1);
+    expect(ptyService.spawnSession).toHaveBeenCalledWith({
+      command: "tmux",
+      args: ["new-session", "-A", "-s", "runweave-terminal-1"],
+      cwd: "/tmp/demo",
+      fallback: null,
+    });
+    expect(runtimeRegistry.getRuntime("terminal-1")).toEqual(
+      expect.objectContaining({ pid: freshRuntime.pid }),
+    );
+    expect(tmuxService.capturePane).not.toHaveBeenCalled();
+  });
+
+  it("queues resize messages that arrive while tmux runtime recreation is still pending", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running",
+        exitCode: undefined,
+        runtimeKind: "tmux",
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      })),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+      updateRuntimeMetadata: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    const ptyService = {
+      spawnSession: vi.fn(() => runtime),
+    };
+    let releaseRuntimeRecreation: () => void = () => undefined;
+    const runtimeRecreationBlocked = new Promise<void>((resolve) => {
+      releaseRuntimeRecreation = resolve;
+    });
+    const tmuxService = {
+      withSessionLock: vi.fn(
+        async (_id: string, action: () => Promise<unknown>) => {
+          await runtimeRecreationBlocked;
+          return action();
+        },
+      ),
+      hasSession: vi.fn(async () => true),
+      buildAttachCommand: vi.fn(() => ({
+        command: "tmux",
+        args: ["new-session", "-A", "-s", "runweave-terminal-1"],
+      })),
+      capturePane: vi.fn(async () => ({ data: "", durationMs: 1 })),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry,
+      authService as never,
+      ptyService as never,
+      tmuxService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+
+    await waitForOpen(socket);
+    socket.send(JSON.stringify({ type: "resize", cols: 180, rows: 50 }));
+    expect(runtime.resize).not.toHaveBeenCalled();
+
+    releaseRuntimeRecreation();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(runtime.resize).toHaveBeenCalledWith(180, 50);
+  });
+
+  it("rebuilds a missing tmux session and warns the websocket client", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running",
+        exitCode: undefined,
+        runtimeKind: "tmux",
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      })),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+      updateRuntimeMetadata: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    const ptyService = {
+      spawnSession: vi.fn(() => runtime),
+    };
+    const tmuxService = {
+      withSessionLock: vi.fn(
+        async (_id: string, action: () => Promise<unknown>) => action(),
+      ),
+      hasSession: vi.fn(async () => false),
+      recordRebuildAttempt: vi.fn(() => ({
+        allowed: true,
+        count: 1,
+        windowMs: 60_000,
+        maxAttempts: 3,
+      })),
+      createDetachedSession: vi.fn(async () => undefined),
+      waitForPaneReady: vi.fn(async () => undefined),
+      buildAttachCommand: vi.fn(() => ({
+        command: "tmux",
+        args: ["new-session", "-A", "-s", "runweave-terminal-1"],
+      })),
+      capturePane: vi.fn(async () => ({ data: "", durationMs: 1 })),
+    };
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry,
+      authService as never,
+      ptyService as never,
+      tmuxService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(tmuxService.recordRebuildAttempt).toHaveBeenCalledWith("terminal-1");
+    expect(ptyService.spawnSession).toHaveBeenCalledWith({
+      command: "tmux",
+      args: ["new-session", "-A", "-s", "runweave-terminal-1"],
+      cwd: "/tmp/demo",
+      fallback: null,
+    });
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "error",
+          message: expect.stringContaining("Original tmux session was lost"),
+        }),
+      ]),
+    );
+  });
+
+  it("keeps tmux-backed sessions running when the attach client exits", async () => {
+    const runtime = new FakeRuntime();
+    const replacementRuntime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running",
+        exitCode: undefined,
+        runtimeKind: "tmux",
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      })),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+      updateRuntimeMetadata: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    runtimeRegistry.createRuntime("terminal-1", runtime);
+    runtimeRegistry.attachClient("terminal-1", "existing-client");
+    const ptyService = {
+      spawnSession: vi.fn(() => replacementRuntime),
+    };
+    const tmuxService = {
+      withSessionLock: vi.fn(
+        async (_id: string, action: () => Promise<unknown>) => action(),
+      ),
+      hasSession: vi.fn(async () => true),
+      buildAttachCommand: vi.fn(() => ({
+        command: "tmux",
+        args: ["new-session", "-A", "-s", "runweave-terminal-1"],
+      })),
+      capturePane: vi.fn(async () => ({ data: "", durationMs: 1 })),
+    };
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry,
+      authService as never,
+      ptyService as never,
+      tmuxService as never,
+    );
+    const port = await startServer(server);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(socket);
+    const messages: Array<Record<string, unknown>> = [];
+    socket.on("message", (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      messages.push(JSON.parse(String(data)) as Record<string, unknown>);
+    });
+
+    await waitForOpen(socket);
+    runtime.emit("exit", { exitCode: 0 });
+    await waitForClose(socket);
+
+    expect(terminalSessionManager.markExited).not.toHaveBeenCalled();
+    expect(ptyService.spawnSession).toHaveBeenCalledWith({
+      command: "tmux",
+      args: ["new-session", "-A", "-s", "runweave-terminal-1"],
+      cwd: "/tmp/demo",
+      fallback: null,
+    });
+    expect(runtimeRegistry.getRuntime("terminal-1")).toEqual(
+      expect.objectContaining({ pid: replacementRuntime.pid }),
+    );
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "error",
+          message: expect.stringContaining("reattaching"),
+        }),
+      ]),
+    );
   });
 
   it("isolates PTY runtime errors triggered by websocket input", async () => {

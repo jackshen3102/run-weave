@@ -40,6 +40,7 @@ function createStoreMock() {
     setDefaultProject: vi.fn(async () => undefined),
     insertSession: vi.fn(async () => undefined),
     updateSessionMetadata: vi.fn(async () => undefined),
+    updateSessionRuntimeMetadata: vi.fn(async () => undefined),
     updateSessionLaunch: vi.fn(async () => undefined),
     appendSessionScrollback: vi.fn(async () => undefined),
     updateSessionScrollback: vi.fn(async () => undefined),
@@ -173,6 +174,39 @@ describe("TerminalSessionManager", () => {
         status: "running",
       }),
     );
+  });
+
+  it("persists terminal runtime metadata", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    await manager.initialize();
+    const session = await manager.createSession({
+      command: "bash",
+      cwd: "/tmp/demo",
+      projectId: "project-default",
+    });
+
+    const updated = await manager.updateRuntimeMetadata(session.id, {
+      runtimeKind: "tmux",
+      tmuxSessionName: "runweave-terminal-1",
+      tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      recoverable: true,
+    });
+
+    expect(updated).toMatchObject({
+      id: session.id,
+      runtimeKind: "tmux",
+      tmuxSessionName: "runweave-terminal-1",
+      tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      recoverable: true,
+    });
+    expect(store.updateSessionRuntimeMetadata).toHaveBeenCalledWith({
+      terminalSessionId: session.id,
+      runtimeKind: "tmux",
+      tmuxSessionName: "runweave-terminal-1",
+      tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      recoverable: true,
+    });
   });
 
   it("updates exit state", async () => {

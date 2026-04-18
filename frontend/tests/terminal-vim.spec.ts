@@ -39,12 +39,37 @@ async function loginAndSeedToken(
   return payload.accessToken;
 }
 
+async function createTerminalSession(
+  request: APIRequestContext,
+  token: string,
+  name: string,
+): Promise<{ terminalSessionId: string; terminalUrl: string }> {
+  const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    data: {
+      name,
+      command: "bash",
+      cwd: "/tmp",
+    },
+  });
+
+  expect(response.ok()).toBe(true);
+  return (await response.json()) as {
+    terminalSessionId: string;
+    terminalUrl: string;
+  };
+}
+
 async function getLiveTerminalText(page: Page): Promise<string> {
   const rowTexts = await page.locator(".xterm-rows").evaluateAll((elements) => {
     return elements
       .filter((element) => {
         const rect = element.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left >= 0;
+        return (
+          rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left >= 0
+        );
       })
       .map((element) => element.textContent ?? "");
   });
@@ -61,17 +86,20 @@ test("supports vim write/exit and preserves interaction through resize", async (
 }) => {
   const targetPath = "/tmp/viewer-vim-e2e.txt";
 
-  await loginAndSeedToken(request, page);
+  const token = await loginAndSeedToken(request, page);
+  const session = await createTerminalSession(
+    request,
+    token,
+    `vim-${Date.now()}`,
+  );
   await page.addInitScript((preferencesKey) => {
     window.localStorage.setItem(
       preferencesKey,
       JSON.stringify({ renderer: "dom", screenReaderMode: true }),
     );
   }, TERMINAL_PREFERENCES_KEY);
-  await page.goto("/");
 
-  await page.getByRole("button", { name: "Open Terminal" }).click();
-
+  await page.goto(session.terminalUrl);
   await expect(page).toHaveURL(/\/terminal\//);
   await page.getByLabel("Terminal emulator").click({ force: true });
 
@@ -95,3 +123,75 @@ test("supports vim write/exit and preserves interaction through resize", async (
     })
     .toContain("viewer-vim-e2e-after-resize");
 });
+
+test("preserves vim screen and input after page refresh", async ({
+  page,
+  request,
+}) => {
+  const targetPath = `/tmp/viewer-vim-refresh-e2e-${Date.now()}.txt`;
+
+  const token = await loginAndSeedToken(request, page);
+  const session = await createTerminalSession(
+    request,
+    token,
+    `vim-refresh-${Date.now()}`,
+  );
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
+
+  await page.goto(session.terminalUrl);
+  await expect(page).toHaveURL(/\/terminal\//);
+  await page.getByLabel("Terminal emulator").click({ force: true });
+
+  await page.keyboard.type(`vim ${targetPath}`);
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(async () => {
+      return await getLiveTerminalText(page);
+    })
+    .toContain(pathBasename(targetPath));
+
+  await page.keyboard.press("i");
+  await expect
+    .poll(async () => {
+      return await getLiveTerminalText(page);
+    })
+    .toContain("INSERT");
+  await page.keyboard.type("viewer-vim-refresh");
+  await expect
+    .poll(async () => {
+      return await getLiveTerminalText(page);
+    })
+    .toContain("viewer-vim-refresh");
+
+  await page.reload();
+  await expect(page).toHaveURL(/\/terminal\//);
+  await expect
+    .poll(async () => {
+      return await getLiveTerminalText(page);
+    })
+    .toContain("viewer-vim-refresh");
+
+  await page.getByLabel("Terminal emulator").click({ force: true });
+  await page.keyboard.type("-after-page-reload");
+  await page.keyboard.press("Escape");
+  await page.keyboard.type(":wq");
+  await page.keyboard.press("Enter");
+
+  await page.keyboard.type(`cat ${targetPath}`);
+  await page.keyboard.press("Enter");
+
+  await expect
+    .poll(async () => {
+      return await getLiveTerminalText(page);
+    })
+    .toContain("viewer-vim-refresh-after-page-reload");
+});
+
+function pathBasename(value: string): string {
+  return value.split("/").at(-1) ?? value;
+}

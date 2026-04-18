@@ -104,17 +104,20 @@ test("creates a terminal session and streams command output", async ({
   page,
   request,
 }) => {
-  await loginAndSeedToken(request, page);
+  const token = await loginAndSeedToken(request, page);
+  const session = await createNamedTerminalSession(
+    request,
+    token,
+    `stream-${Date.now()}`,
+  );
   await page.addInitScript((preferencesKey) => {
     window.localStorage.setItem(
       preferencesKey,
       JSON.stringify({ renderer: "dom", screenReaderMode: true }),
     );
   }, TERMINAL_PREFERENCES_KEY);
-  await page.goto("/");
 
-  await page.getByRole("button", { name: "Open Terminal" }).click();
-
+  await page.goto(session.terminalUrl);
   await expect(page).toHaveURL(/\/terminal\//);
   await expect(page.getByLabel("Terminal emulator")).toBeVisible();
   await page.getByLabel("Terminal emulator").click({ force: true });
@@ -136,6 +139,57 @@ test("creates a terminal session and streams command output", async ({
       return await getLiveTerminalText(page);
     })
     .toContain("terminal-e2e-ok");
+});
+
+test("fits the terminal pane to the available viewport", async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 1780, height: 900 });
+  const token = await loginAndSeedToken(request, page);
+  const session = await createNamedTerminalSession(
+    request,
+    token,
+    `fit-${Date.now()}`,
+  );
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
+
+  await page.goto(session.terminalUrl);
+  await page.getByLabel("Terminal emulator").click({ force: true });
+  await page.keyboard.type("printf '__SIZE__ '; stty size; printf '__END__\\n'");
+  await page.keyboard.press("Enter");
+
+  await expect
+    .poll(async () => {
+      const text = await getLiveTerminalText(page);
+      const match = text.match(/__SIZE__\s+(\d+)\s+(\d+)/);
+      if (!match) {
+        return null;
+      }
+      return {
+        rows: Number(match[1]),
+        cols: Number(match[2]),
+      };
+    })
+    .toEqual(
+      expect.objectContaining({
+        rows: expect.any(Number),
+        cols: expect.any(Number),
+      }),
+    );
+
+  const text = await getLiveTerminalText(page);
+  const match = text.match(/__SIZE__\s+(\d+)\s+(\d+)/);
+  expect(match).not.toBeNull();
+  const rows = Number(match?.[1]);
+  const cols = Number(match?.[2]);
+  expect(rows).toBeGreaterThan(30);
+  expect(cols).toBeGreaterThan(120);
 });
 
 test("keeps the selected terminal tab across refresh and falls back by URL", async ({
