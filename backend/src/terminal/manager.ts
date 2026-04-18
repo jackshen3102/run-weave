@@ -8,6 +8,8 @@ import type {
   PersistedTerminalSessionMetadataRecord,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
+  TerminalRuntimeKind,
+  TerminalRuntimeMetadata,
 } from "./store";
 import {
   appendToScrollbackBuffer,
@@ -36,6 +38,11 @@ export interface TerminalSessionRecord {
   status: "running" | "exited";
   createdAt: Date;
   exitCode?: number;
+  runtimeKind: TerminalRuntimeKind;
+  tmuxSessionName?: string;
+  tmuxSocketPath?: string;
+  tmuxUnavailableReason?: string;
+  recoverable?: boolean;
 }
 
 interface RuntimeTerminalSessionRecord extends Omit<
@@ -93,6 +100,11 @@ function buildRecord(
     status: persisted.status,
     createdAt: new Date(persisted.createdAt),
     exitCode: persisted.exitCode,
+    runtimeKind: persisted.runtimeKind ?? "pty",
+    tmuxSessionName: persisted.tmuxSessionName,
+    tmuxSocketPath: persisted.tmuxSocketPath,
+    tmuxUnavailableReason: persisted.tmuxUnavailableReason,
+    recoverable: persisted.recoverable,
   };
 }
 
@@ -145,6 +157,11 @@ function toPersisted(
     status: session.status,
     createdAt: session.createdAt.toISOString(),
     exitCode: session.exitCode,
+    runtimeKind: session.runtimeKind,
+    tmuxSessionName: session.tmuxSessionName,
+    tmuxSocketPath: session.tmuxSocketPath,
+    tmuxUnavailableReason: session.tmuxUnavailableReason,
+    recoverable: session.recoverable,
   };
 }
 
@@ -296,6 +313,8 @@ export class TerminalSessionManager {
       scrollback: "",
       status: "running",
       createdAt: now,
+      runtimeKind: "pty",
+      recoverable: false,
     });
 
     await this.sessionStore.insertSession(toPersisted(session));
@@ -475,6 +494,31 @@ export class TerminalSessionManager {
       name: nextName,
       command: launch.command,
       args: nextArgs,
+    });
+    return session;
+  }
+
+  async updateRuntimeMetadata(
+    terminalSessionId: string,
+    metadata: TerminalRuntimeMetadata,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    session.runtimeKind = metadata.runtimeKind;
+    session.tmuxSessionName = metadata.tmuxSessionName;
+    session.tmuxSocketPath = metadata.tmuxSocketPath;
+    session.tmuxUnavailableReason = metadata.tmuxUnavailableReason;
+    session.recoverable = metadata.recoverable;
+    await this.sessionStore.updateSessionRuntimeMetadata({
+      terminalSessionId,
+      runtimeKind: metadata.runtimeKind,
+      tmuxSessionName: metadata.tmuxSessionName,
+      tmuxSocketPath: metadata.tmuxSocketPath,
+      tmuxUnavailableReason: metadata.tmuxUnavailableReason,
+      recoverable: metadata.recoverable,
     });
     return session;
   }

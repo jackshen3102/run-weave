@@ -11,6 +11,7 @@
 | 默认 AI Viewer  | architecture/default-ai-viewer-workflow.md   |
 | AI 协作状态     | architecture/ai-collaboration-state.md       |
 | 终端代码预览    | architecture/terminal-code-preview.md        |
+| 终端 tmux 恢复  | architecture/terminal-tmux-recovery.md       |
 | 质量体系概览    | quality/quality-harness.md                   |
 | 终端性能优化    | quality/terminal-performance-optimization.md |
 | 测试层级与命名  | testing/layers.md                            |

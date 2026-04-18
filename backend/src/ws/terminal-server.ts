@@ -6,7 +6,6 @@ import type {
   TerminalServerMessage,
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
-import { resolveTerminalFallbackLaunchConfig } from "../terminal/default-shell";
 import { getLiveTerminalScrollback } from "../terminal/live-scrollback";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { TerminalOutputBatcher } from "../terminal/output-batcher";
@@ -16,10 +15,22 @@ import {
 } from "../terminal/perf-logging";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import { createShellPromptTracker } from "../terminal/shell-integration";
+import {
+  ensureTerminalRuntime,
+  isTmuxBackedSession,
+  readTerminalScrollback,
+} from "../terminal/runtime-launcher";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
+import { createShellPromptTracker } from "../terminal/shell-integration";
+import type { TmuxService } from "../terminal/tmux-service";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
+
+const TMUX_INITIAL_REPAINT_SETTLE_MS = 50;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function parseTerminalClientMessage(
   rawData: string,
@@ -80,11 +91,29 @@ function shouldSendInitialSnapshot(request: IncomingMessage): boolean {
   return searchParams.get("snapshot") !== "0";
 }
 
+function shouldSettleInitialTmuxRepaint(
+  session: ReturnType<TerminalSessionManager["getSession"]>,
+  tmuxService?: TmuxService,
+): boolean {
+  return Boolean(session && isTmuxBackedSession(session) && tmuxService);
+}
+
 async function resolveLiveScrollback(
   terminalSessionManager: TerminalSessionManager,
   terminalSessionId: string,
   fallbackScrollback: string,
+  tmuxService?: TmuxService,
 ): Promise<string> {
+  const session = terminalSessionManager.getSession(terminalSessionId);
+  if (session && isTmuxBackedSession(session) && tmuxService) {
+    return readTerminalScrollback(
+      session,
+      terminalSessionManager,
+      tmuxService,
+      "live",
+    );
+  }
+
   const manager = terminalSessionManager as TerminalSessionManager & {
     readLiveScrollback?: (terminalSessionId: string) => Promise<string>;
     getLiveScrollback?: (terminalSessionId: string) => string;
@@ -93,6 +122,26 @@ async function resolveLiveScrollback(
     (await manager.readLiveScrollback?.(terminalSessionId)) ??
     manager.getLiveScrollback?.(terminalSessionId) ??
     getLiveTerminalScrollback(fallbackScrollback)
+  );
+}
+
+function resolveInitialSnapshot(
+  terminalSessionManager: TerminalSessionManager,
+  runtimeRegistry: TerminalRuntimeRegistry,
+  terminalSessionId: string,
+  fallbackScrollback: string,
+  tmuxService?: TmuxService,
+): Promise<string> | string {
+  const session = terminalSessionManager.getSession(terminalSessionId);
+  if (session && isTmuxBackedSession(session) && tmuxService) {
+    return runtimeRegistry.getBufferedOutput(terminalSessionId);
+  }
+
+  return resolveLiveScrollback(
+    terminalSessionManager,
+    terminalSessionId,
+    fallbackScrollback,
+    tmuxService,
   );
 }
 
@@ -119,6 +168,7 @@ export function attachTerminalWebSocketServer(
   runtimeRegistry: TerminalRuntimeRegistry,
   authService: AuthService,
   ptyService?: PtyService,
+  tmuxService?: TmuxService,
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -148,32 +198,52 @@ export function attachTerminalWebSocketServer(
     const { terminalSessionId } = handshake;
     const session = terminalSessionManager.getSession(terminalSessionId);
     const sendInitialSnapshot = shouldSendInitialSnapshot(request);
+    const settleInitialTmuxRepaint = shouldSettleInitialTmuxRepaint(
+      session,
+      tmuxService,
+    );
+    const pendingClientMessages: Array<{ data: string; isBinary: boolean }> = [];
+    let handleClientMessage:
+      | ((data: string, isBinary: boolean) => void)
+      | null = null;
+    socket.on("message", (data, isBinary) => {
+      const rawData = String(data);
+      if (!handleClientMessage) {
+        pendingClientMessages.push({ data: rawData, isBinary });
+        return;
+      }
+
+      handleClientMessage(rawData, isBinary);
+    });
+
     let runtime = runtimeRegistry.getRuntime(terminalSessionId);
+    if (
+      runtime &&
+      session &&
+      isTmuxBackedSession(session) &&
+      ptyService &&
+      tmuxService &&
+      runtimeRegistry.getAttachedClientCount(terminalSessionId) === 0
+    ) {
+      await runtimeRegistry.disposeRuntime(terminalSessionId);
+      runtime = undefined;
+    }
     if (!runtime && session?.status === "running" && ptyService) {
       try {
-        runtime = ptyService.spawnSession({
-          command: session.command,
-          args: session.args,
-          cwd: session.cwd,
-          fallback: resolveTerminalFallbackLaunchConfig({
-            command: session.command,
-            args: session.args,
-          }),
-          onFallbackActivated: (fallback) => {
-            void terminalSessionManager.updateSessionLaunch(
-              terminalSessionId,
-              fallback,
-            );
-          },
+        const ensured = await ensureTerminalRuntime({
+          session,
+          terminalSessionManager,
+          runtimeRegistry,
+          ptyService,
+          tmuxService,
         });
-        runtimeRegistry.createRuntime(terminalSessionId, runtime);
-        runtimeRegistry.ensureRecorder(
-          terminalSessionId,
-          createTerminalRuntimeRecorder(
-            terminalSessionManager,
-            terminalSessionId,
-          ),
-        );
+        runtime = ensured.runtime;
+        if (ensured.warning) {
+          sendEvent(socket, {
+            type: "error",
+            message: ensured.warning,
+          });
+        }
       } catch (error) {
         sendEvent(socket, {
           type: "error",
@@ -191,11 +261,14 @@ export function attachTerminalWebSocketServer(
       socket.close(1011, "Terminal runtime not found");
       return;
     }
+    const activeRuntime = runtime;
 
-    runtimeRegistry.ensureRecorder(
-      terminalSessionId,
-      createTerminalRuntimeRecorder(terminalSessionManager, terminalSessionId),
-    );
+    if (!session || !isTmuxBackedSession(session)) {
+      runtimeRegistry.ensureRecorder(
+        terminalSessionId,
+        createTerminalRuntimeRecorder(terminalSessionManager, terminalSessionId),
+      );
+    }
 
     const clientId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const heartbeatState = {
@@ -278,6 +351,38 @@ export function attachTerminalWebSocketServer(
       },
       onExit(event) {
         outputBatcher.flush();
+        if (session && isTmuxBackedSession(session) && ptyService && tmuxService) {
+          void (async () => {
+            await runtimeRegistry.disposeRuntime(terminalSessionId);
+            try {
+              const ensured = await ensureTerminalRuntime({
+                session,
+                terminalSessionManager,
+                runtimeRegistry,
+                ptyService,
+                tmuxService,
+              });
+              sendEvent(socket, {
+                type: "error",
+                message:
+                  ensured.warning ??
+                  "Terminal tmux attach client disconnected; reattaching.",
+              });
+              sendEvent(socket, {
+                type: "status",
+                status: "running",
+              });
+              socket.close(1012, "Terminal tmux attach reattached");
+            } catch (error) {
+              sendEvent(socket, {
+                type: "error",
+                message: `Failed to recover tmux terminal runtime: ${String(error)}`,
+              });
+              socket.close(1011, "Failed to recover tmux terminal runtime");
+            }
+          })();
+          return;
+        }
         terminalSessionManager.markExited(terminalSessionId, event.exitCode);
         sendEvent(socket, {
           type: "status",
@@ -294,12 +399,17 @@ export function attachTerminalWebSocketServer(
     sendEvent(socket, { type: "connected", terminalSessionId });
     if (session) {
       if (sendInitialSnapshot) {
+        if (settleInitialTmuxRepaint) {
+          await delay(TMUX_INITIAL_REPAINT_SETTLE_MS);
+        }
         sendEvent(socket, {
           type: "snapshot",
-          data: await resolveLiveScrollback(
+          data: await resolveInitialSnapshot(
             terminalSessionManager,
+            runtimeRegistry,
             terminalSessionId,
             session.scrollback,
+            tmuxService,
           ),
         });
       }
@@ -316,18 +426,21 @@ export function attachTerminalWebSocketServer(
       });
       snapshotDelivered = true;
     }
+    if (settleInitialTmuxRepaint) {
+      pendingInitialOutput = "";
+    }
     if (pendingInitialOutput) {
       outputBatcher.push(pendingInitialOutput);
       pendingInitialOutput = "";
     }
     heartbeat.start();
 
-    socket.on("message", (data, isBinary) => {
+    handleClientMessage = (data, isBinary) => {
       if (isBinary) {
         return;
       }
 
-      const parsed = parseTerminalClientMessage(String(data));
+      const parsed = parseTerminalClientMessage(data);
       if (!parsed) {
         sendEvent(socket, { type: "error", message: "Invalid message" });
         return;
@@ -345,7 +458,7 @@ export function attachTerminalWebSocketServer(
           });
           outputBatcher.markNextChunkInteractive();
           const writeStartedAt = performance.now();
-          runtime.write(parsed.data);
+          activeRuntime.write(parsed.data);
           logTerminalPerf("terminal.ws.input.written", {
             terminalSessionId,
             clientId,
@@ -362,7 +475,7 @@ export function attachTerminalWebSocketServer(
       }
       if (parsed.type === "resize") {
         try {
-          runtime.resize(parsed.cols, parsed.rows);
+          activeRuntime.resize(parsed.cols, parsed.rows);
         } catch (error) {
           handleRuntimeActionError(socket, terminalSessionId, "resize", error);
         }
@@ -370,7 +483,7 @@ export function attachTerminalWebSocketServer(
       }
       if (parsed.type === "signal") {
         try {
-          runtime.signal(parsed.signal);
+          activeRuntime.signal(parsed.signal);
         } catch (error) {
           handleRuntimeActionError(socket, terminalSessionId, "signal", error);
         }
@@ -382,7 +495,10 @@ export function attachTerminalWebSocketServer(
         status: current?.status ?? "running",
         exitCode: current?.exitCode,
       });
-    });
+    };
+    for (const pendingMessage of pendingClientMessages.splice(0)) {
+      handleClientMessage(pendingMessage.data, pendingMessage.isBinary);
+    }
 
     let cleanedUp = false;
     const cleanupConnection = () => {

@@ -150,11 +150,7 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     ).toBeVisible();
 
     previewFileRequestCount = 0;
-    await page
-      .locator("button")
-      .filter({ hasText: path.basename(repo) })
-      .nth(1)
-      .click();
+    await page.getByRole("button", { name: "Preview Project" }).click();
     await page.waitForTimeout(500);
     expect(previewFileRequestCount).toBe(0);
     await expect(

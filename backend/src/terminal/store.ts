@@ -17,12 +17,27 @@ export interface PersistedTerminalSessionRecord {
   status: "running" | "exited";
   createdAt: string;
   exitCode?: number;
+  runtimeKind?: TerminalRuntimeKind;
+  tmuxSessionName?: string;
+  tmuxSocketPath?: string;
+  tmuxUnavailableReason?: string;
+  recoverable?: boolean;
 }
 
 export type PersistedTerminalSessionMetadataRecord = Omit<
   PersistedTerminalSessionRecord,
   "scrollback"
 >;
+
+export type TerminalRuntimeKind = "pty" | "tmux";
+
+export interface TerminalRuntimeMetadata {
+  runtimeKind: TerminalRuntimeKind;
+  tmuxSessionName?: string;
+  tmuxSocketPath?: string;
+  tmuxUnavailableReason?: string;
+  recoverable?: boolean;
+}
 
 export interface UpdateTerminalSessionExitParams {
   terminalSessionId: string;
@@ -53,6 +68,11 @@ export interface UpdateTerminalSessionLaunchParams {
   args: string[];
 }
 
+export interface UpdateTerminalSessionRuntimeMetadataParams
+  extends TerminalRuntimeMetadata {
+  terminalSessionId: string;
+}
+
 export interface UpdateTerminalProjectParams {
   projectId: string;
   name?: string;
@@ -80,6 +100,9 @@ export interface TerminalSessionStore {
     params: UpdateTerminalSessionMetadataParams,
   ): Promise<void>;
   updateSessionLaunch(params: UpdateTerminalSessionLaunchParams): Promise<void>;
+  updateSessionRuntimeMetadata(
+    params: UpdateTerminalSessionRuntimeMetadataParams,
+  ): Promise<void>;
   updateSessionScrollback(
     params: UpdateTerminalSessionScrollbackParams,
   ): Promise<void>;

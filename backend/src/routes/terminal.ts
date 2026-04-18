@@ -27,7 +27,6 @@ import {
 import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,
-  resolveTerminalFallbackLaunchConfig,
 } from "../terminal/default-shell";
 import {
   clearPreviewFileSearchCache,
@@ -41,7 +40,12 @@ import {
 } from "../terminal/preview";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
+import {
+  ensureTerminalRuntime,
+  killTmuxSessionForTerminal,
+  readTerminalScrollback,
+} from "../terminal/runtime-launcher";
+import type { TmuxService } from "../terminal/tmux-service";
 
 const createTerminalSessionSchema = z
   .object({
@@ -218,6 +222,7 @@ export function createTerminalRouter(
   options?: {
     ptyService?: PtyService;
     runtimeRegistry?: TerminalRuntimeRegistry;
+    tmuxService?: TmuxService;
     authService?: AuthService;
   },
 ): Router {
@@ -438,15 +443,17 @@ export function createTerminalRouter(
   });
 
   router.delete("/project/:id", async (req, res) => {
-    if (options?.runtimeRegistry) {
-      const childSessionIds = terminalSessionManager
-        .listSessions()
-        .filter((session) => session.projectId === req.params.id)
-        .map((session) => session.id);
+    const childSessions = terminalSessionManager
+      .listSessions()
+      .filter((session) => session.projectId === req.params.id);
 
-      for (const terminalSessionId of childSessionIds) {
-        await options.runtimeRegistry.disposeRuntime(terminalSessionId);
+    if (options?.runtimeRegistry) {
+      for (const session of childSessions) {
+        await options.runtimeRegistry.disposeRuntime(session.id);
       }
+    }
+    for (const session of childSessions) {
+      await killTmuxSessionForTerminal(session, options?.tmuxService);
     }
 
     const deleted = await terminalSessionManager.deleteProject(req.params.id);
@@ -495,26 +502,35 @@ export function createTerminalRouter(
       );
       if (options?.ptyService && options.runtimeRegistry) {
         try {
-          const runtime = options.ptyService.spawnSession({
-            command: session.command,
-            args: session.args,
-            cwd: session.cwd,
-            fallback: resolveTerminalFallbackLaunchConfig({
-              command: session.command,
-              args: session.args,
-            }),
-            onFallbackActivated: (fallback) => {
-              void terminalSessionManager.updateSessionLaunch(
-                session.id,
-                fallback,
-              );
-            },
+          let launchSession = session;
+          if (options.tmuxService && (await options.tmuxService.isAvailable())) {
+            const target = options.tmuxService.buildTarget(session.id);
+            launchSession =
+              (await terminalSessionManager.updateRuntimeMetadata(session.id, {
+                runtimeKind: "tmux",
+                tmuxSessionName: target.sessionName,
+                tmuxSocketPath: target.socketPath,
+                recoverable: true,
+              })) ?? session;
+          } else if (options.tmuxService) {
+            launchSession =
+              (await terminalSessionManager.updateRuntimeMetadata(session.id, {
+                runtimeKind: "pty",
+                tmuxUnavailableReason:
+                  (await options.tmuxService.getUnavailableReason()) ??
+                  "tmux unavailable",
+                recoverable: false,
+              })) ?? session;
+          }
+
+          await ensureTerminalRuntime({
+            session: launchSession,
+            terminalSessionManager,
+            runtimeRegistry: options.runtimeRegistry,
+            ptyService: options.ptyService,
+            tmuxService: options.tmuxService,
+            allowMissingTmuxSession: true,
           });
-          options.runtimeRegistry.createRuntime(session.id, runtime);
-          options.runtimeRegistry.ensureRecorder(
-            session.id,
-            createTerminalRuntimeRecorder(terminalSessionManager, session.id),
-          );
         } catch (error) {
           await terminalSessionManager.destroySession(session.id);
           throw error;
@@ -546,7 +562,12 @@ export function createTerminalRouter(
     res.json(
       toHistoryPayload(
         session,
-        await terminalSessionManager.readScrollback(req.params.id),
+        await readTerminalScrollback(
+          session,
+          terminalSessionManager,
+          options?.tmuxService,
+          "history",
+        ),
       ),
     );
   });
@@ -561,7 +582,12 @@ export function createTerminalRouter(
     res.json(
       toStatusPayload(
         session,
-        await terminalSessionManager.readLiveScrollback(req.params.id),
+        await readTerminalScrollback(
+          session,
+          terminalSessionManager,
+          options?.tmuxService,
+          "live",
+        ),
       ),
     );
   });
@@ -674,8 +700,12 @@ export function createTerminalRouter(
   });
 
   router.delete("/session/:id", async (req, res) => {
+    const session = terminalSessionManager.getSession(req.params.id);
     if (options?.runtimeRegistry) {
       await options.runtimeRegistry.disposeRuntime(req.params.id);
+    }
+    if (session) {
+      await killTmuxSessionForTerminal(session, options?.tmuxService);
     }
     const deleted = await terminalSessionManager.destroySession(req.params.id);
     if (!deleted) {
