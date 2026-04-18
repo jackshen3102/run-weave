@@ -817,6 +817,39 @@ describe("terminal routes", () => {
     );
   });
 
+  it("serves project preview image assets with no-store caching", async () => {
+    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    tempDirs.push(projectPath);
+    const imageBytes = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    await writeFile(path.join(projectPath, "preview.png"), imageBytes);
+    const state = {
+      current: null,
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: projectPath,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/asset?path=preview.png`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("image/png");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(Buffer.from(await response.arrayBuffer()).equals(imageBytes)).toBe(true);
+  });
+
   it("does not expose legacy session-scoped preview routes", async () => {
     const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
     tempDirs.push(projectPath);

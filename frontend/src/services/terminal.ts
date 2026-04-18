@@ -16,7 +16,7 @@ import type {
   TerminalSessionStatusResponse,
   UpdateTerminalProjectRequest,
 } from "@browser-viewer/shared";
-import { requestJson, requestVoid } from "./http";
+import { requestBlob, requestJson, requestVoid } from "./http";
 
 export async function createTerminalProject(
   apiBase: string,
@@ -234,6 +234,24 @@ export async function getTerminalProjectPreviewFile(
   return requestJson<TerminalPreviewFileResponse>(
     apiBase,
     `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalProjectPreviewAsset(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  filePath: string,
+): Promise<Blob> {
+  const query = new URLSearchParams({ path: filePath });
+  return requestBlob(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/asset?${query.toString()}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,

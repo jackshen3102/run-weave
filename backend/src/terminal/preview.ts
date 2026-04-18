@@ -23,6 +23,7 @@ import type {
 const execFileAsync = promisify(execFile);
 
 const FILE_PREVIEW_MAX_BYTES = 1024 * 1024;
+const IMAGE_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 const GIT_FILE_CONTENT_MAX_BYTES = 1024 * 1024;
 const SEARCH_MAX_FILES = 20_000;
 const DEFAULT_SEARCH_LIMIT = 50;
@@ -81,6 +82,20 @@ export class TerminalPreviewError extends Error {
   ) {
     super(message);
   }
+}
+
+export interface TerminalPreviewAssetResponse {
+  kind: "asset";
+  projectId: string;
+  path: string;
+  absolutePath: string;
+  base: "project";
+  projectPath: string;
+  mimeType: string;
+  content: Buffer;
+  sizeBytes: number;
+  cacheControl: "no-store";
+  readonly: true;
 }
 
 export async function normalizeProjectPath(
@@ -170,6 +185,8 @@ function detectLanguage(filePath: string): string {
     case ".md":
     case ".mdx":
       return "markdown";
+    case ".svg":
+      return "svg";
     case ".ts":
     case ".tsx":
       return "typescript";
@@ -179,6 +196,47 @@ function detectLanguage(filePath: string): string {
     default:
       return "plaintext";
   }
+}
+
+function detectImageMimeType(buffer: Buffer, filePath: string): string | null {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === ".svg") {
+    const sample = buffer.subarray(0, Math.min(buffer.length, 4096)).toString("utf8");
+    if (/<svg[\s>]/i.test(sample)) {
+      return "image/svg+xml";
+    }
+  }
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return "image/jpeg";
+  }
+  const header = buffer.subarray(0, 12).toString("ascii");
+  if (header.startsWith("GIF87a") || header.startsWith("GIF89a")) {
+    return "image/gif";
+  }
+  if (header.startsWith("RIFF") && header.slice(8, 12) === "WEBP") {
+    return "image/webp";
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(4, 8).toString("ascii") === "ftyp" &&
+    buffer.subarray(8, 12).toString("ascii") === "avif"
+  ) {
+    return "image/avif";
+  }
+  return null;
 }
 
 function isLikelyBinary(buffer: Buffer): boolean {
@@ -230,6 +288,51 @@ export async function readPreviewFile(params: {
     language: detectLanguage(relativePath),
     content: contentBuffer.toString("utf8"),
     sizeBytes: fileStats.size,
+    readonly: true,
+  };
+}
+
+export async function readPreviewAsset(params: {
+  projectId: string;
+  projectPath: string | null | undefined;
+  requestedPath: string;
+}): Promise<TerminalPreviewAssetResponse> {
+  const projectPath = ensureProjectPath(params.projectPath);
+  const { absolutePath, relativePath } = await resolvePreviewPath(
+    projectPath,
+    params.requestedPath,
+  );
+  const fileStats = await stat(absolutePath).catch(() => null);
+  if (!fileStats) {
+    throw new TerminalPreviewError("File not found", 404);
+  }
+  if (fileStats.isDirectory()) {
+    throw new TerminalPreviewError("Directories are not supported", 400);
+  }
+  if (!fileStats.isFile()) {
+    throw new TerminalPreviewError("Only regular files can be previewed", 400);
+  }
+  if (fileStats.size > IMAGE_PREVIEW_MAX_BYTES) {
+    throw new TerminalPreviewError("Image exceeds preview limit", 413);
+  }
+
+  const content = await readFile(absolutePath);
+  const mimeType = detectImageMimeType(content, relativePath);
+  if (!mimeType) {
+    throw new TerminalPreviewError("Image format is not supported", 415);
+  }
+
+  return {
+    kind: "asset",
+    projectId: params.projectId,
+    path: relativePath,
+    absolutePath,
+    base: "project",
+    projectPath,
+    mimeType,
+    content,
+    sizeBytes: fileStats.size,
+    cacheControl: "no-store",
     readonly: true,
   };
 }

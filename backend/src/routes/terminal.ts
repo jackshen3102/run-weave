@@ -34,6 +34,7 @@ import {
   getPreviewFileDiff,
   getPreviewGitChanges,
   normalizeProjectPath,
+  readPreviewAsset,
   readPreviewFile,
   searchPreviewFiles,
   TerminalPreviewError,
@@ -311,6 +312,33 @@ export function createTerminalRouter(
           requestedPath: parsed.data.path,
         }),
       );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.get("/project/:id/preview/asset", async (req, res) => {
+    const parsed = previewFileSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolveProjectPreviewContext(req.params.id);
+      const payload = await readPreviewAsset({
+        projectId: project.id,
+        projectPath: project.path,
+        requestedPath: parsed.data.path,
+      });
+      res
+        .status(200)
+        .type(payload.mimeType)
+        .set("Cache-Control", payload.cacheControl)
+        .send(payload.content);
     } catch (error) {
       handlePreviewError(res, error);
     }

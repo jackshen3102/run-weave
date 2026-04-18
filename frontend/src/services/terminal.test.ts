@@ -6,6 +6,7 @@ import {
   createTerminalWsTicket,
   deleteTerminalProject,
   deleteTerminalSession,
+  getTerminalProjectPreviewAsset,
   getTerminalProjectPreviewFile,
   getTerminalProjectPreviewFileDiff,
   getTerminalProjectPreviewGitChanges,
@@ -301,7 +302,8 @@ describe("terminal service", () => {
     );
   });
 
-  it("uses project-scoped preview endpoints for files, changes, and diffs", async () => {
+  it("uses project-scoped preview endpoints for files, assets, changes, and diffs", async () => {
+    const assetBlob = new Blob(["image"]);
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -311,6 +313,10 @@ describe("terminal service", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ kind: "file", path: "docs/plan.md" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        blob: async () => assetBlob,
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -337,6 +343,14 @@ describe("terminal service", () => {
       "project/1",
       "docs/plan.md",
     );
+    await expect(
+      getTerminalProjectPreviewAsset(
+        "http://localhost:5001",
+        "token-1",
+        "project/1",
+        "screenshots/result.png",
+      ),
+    ).resolves.toBe(assetBlob);
     await getTerminalProjectPreviewGitChanges(
       "http://localhost:5001",
       "token-1",
@@ -369,7 +383,7 @@ describe("terminal service", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:5001/api/terminal/project/project%2F1/preview/git-changes",
+      "http://localhost:5001/api/terminal/project/project%2F1/preview/asset?path=screenshots%2Fresult.png",
       {
         headers: {
           Authorization: "Bearer token-1",
@@ -378,6 +392,15 @@ describe("terminal service", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
+      "http://localhost:5001/api/terminal/project/project%2F1/preview/git-changes",
+      {
+        headers: {
+          Authorization: "Bearer token-1",
+        },
+      },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
       "http://localhost:5001/api/terminal/project/project%2F1/preview/file-diff?path=README.md&kind=working",
       {
         headers: {

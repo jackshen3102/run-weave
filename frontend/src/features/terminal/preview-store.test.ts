@@ -28,6 +28,9 @@ describe("terminal preview store", () => {
     useTerminalPreviewStore.getState().updateProjectPreview("project-1", {
       mode: "file",
       selectedFilePath: "README.md",
+      markdownViewMode: "preview",
+      markdownSplitSourceWidthPct: 64,
+      svgViewMode: "source",
     });
     useTerminalPreviewStore.getState().updateProjectPreview("project-2", {
       mode: "changes",
@@ -42,6 +45,32 @@ describe("terminal preview store", () => {
         selectedChangePath: "docs/plan.md",
         selectedChangeKind: "working",
       },
+    });
+  });
+
+  it("stores markdown and svg file view preferences per project", () => {
+    useTerminalPreviewStore.getState().updateProjectPreview("project-1", {
+      mode: "file",
+      markdownViewMode: "split",
+      markdownSplitSourceWidthPct: 55,
+      svgViewMode: "preview",
+    });
+    useTerminalPreviewStore.getState().updateProjectPreview("project-2", {
+      mode: "file",
+      markdownViewMode: "source",
+      svgViewMode: "source",
+    });
+
+    expect(useTerminalPreviewStore.getState().projects["project-1"]).toEqual({
+      mode: "file",
+      markdownViewMode: "split",
+      markdownSplitSourceWidthPct: 55,
+      svgViewMode: "preview",
+    });
+    expect(useTerminalPreviewStore.getState().projects["project-2"]).toEqual({
+      mode: "file",
+      markdownViewMode: "source",
+      svgViewMode: "source",
     });
   });
 });
