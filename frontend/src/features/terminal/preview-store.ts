@@ -2,6 +2,8 @@ import { create } from "zustand";
 import type { TerminalPreviewChangeKind } from "@browser-viewer/shared";
 
 export type TerminalPreviewMode = "file" | "changes";
+export type TerminalMarkdownViewMode = "source" | "split" | "preview";
+export type TerminalSvgViewMode = "preview" | "source";
 
 interface TerminalPreviewUiState {
   open: boolean;
@@ -15,6 +17,9 @@ export interface TerminalPreviewProjectState {
   selectedFilePath?: string;
   selectedChangePath?: string;
   selectedChangeKind?: TerminalPreviewChangeKind;
+  markdownViewMode?: TerminalMarkdownViewMode;
+  markdownSplitSourceWidthPct?: number;
+  svgViewMode?: TerminalSvgViewMode;
 }
 
 interface TerminalPreviewStore {

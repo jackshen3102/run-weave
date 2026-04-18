@@ -7,6 +7,7 @@ import {
 
 const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
+const TERMINAL_PREFERENCES_KEY = `viewer.terminal.preferences.${E2E_API_BASE}`;
 
 async function loginAndSeedToken(
   request: APIRequestContext,
@@ -38,6 +39,22 @@ async function loginAndSeedToken(
   return payload.accessToken;
 }
 
+async function getLiveTerminalText(page: Page): Promise<string> {
+  const rowTexts = await page.locator(".xterm-rows").evaluateAll((elements) => {
+    return elements
+      .filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left >= 0;
+      })
+      .map((element) => element.textContent ?? "");
+  });
+  if (rowTexts.length > 0) {
+    return rowTexts.join("\n");
+  }
+
+  return (await page.getByLabel("Terminal output").textContent()) ?? "";
+}
+
 test("supports vim write/exit and preserves interaction through resize", async ({
   page,
   request,
@@ -45,6 +62,12 @@ test("supports vim write/exit and preserves interaction through resize", async (
   const targetPath = "/tmp/viewer-vim-e2e.txt";
 
   await loginAndSeedToken(request, page);
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
   await page.goto("/");
 
   await page.getByRole("button", { name: "Open Terminal" }).click();
@@ -68,7 +91,7 @@ test("supports vim write/exit and preserves interaction through resize", async (
 
   await expect
     .poll(async () => {
-      return await page.getByLabel("Terminal output").textContent();
+      return await getLiveTerminalText(page);
     })
     .toContain("viewer-vim-e2e-after-resize");
 });

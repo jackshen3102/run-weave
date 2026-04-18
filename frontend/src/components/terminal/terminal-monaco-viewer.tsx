@@ -1,5 +1,8 @@
+import { useEffect, useRef } from "react";
 import "./monaco-workers";
-import Editor, { DiffEditor } from "@monaco-editor/react";
+import Editor, { DiffEditor, type OnMount } from "@monaco-editor/react";
+
+type MonacoEditor = Parameters<OnMount>[0];
 
 interface TerminalMonacoViewerProps {
   language?: string;
@@ -7,6 +10,8 @@ interface TerminalMonacoViewerProps {
   oldContent?: string;
   newContent?: string;
   diff?: boolean;
+  scrollRatio?: number;
+  onScrollRatioChange?: (ratio: number) => void;
 }
 
 const EDITOR_OPTIONS = {
@@ -26,7 +31,33 @@ export function TerminalMonacoViewer({
   oldContent = "",
   newContent = "",
   diff = false,
+  scrollRatio,
+  onScrollRatioChange,
 }: TerminalMonacoViewerProps) {
+  const editorRef = useRef<MonacoEditor | null>(null);
+  const scrollDisposableRef = useRef<{ dispose: () => void } | null>(null);
+
+  useEffect(() => {
+    if (diff || scrollRatio === undefined) {
+      return;
+    }
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    const scrollHeight = editor.getScrollHeight();
+    const visibleHeight = editor.getLayoutInfo().height;
+    const maxScrollTop = Math.max(0, scrollHeight - visibleHeight);
+    editor.setScrollTop(maxScrollTop * Math.min(Math.max(scrollRatio, 0), 1));
+  }, [diff, scrollRatio]);
+
+  useEffect(() => {
+    return () => {
+      scrollDisposableRef.current?.dispose();
+      scrollDisposableRef.current = null;
+    };
+  }, []);
+
   if (diff) {
     return (
       <DiffEditor
@@ -52,6 +83,19 @@ export function TerminalMonacoViewer({
       value={content}
       theme="vs-dark"
       options={EDITOR_OPTIONS}
+      onMount={(editor) => {
+        editorRef.current = editor;
+        scrollDisposableRef.current?.dispose();
+        scrollDisposableRef.current = editor.onDidScrollChange(() => {
+          if (!onScrollRatioChange) {
+            return;
+          }
+          const scrollHeight = editor.getScrollHeight();
+          const visibleHeight = editor.getLayoutInfo().height;
+          const maxScrollTop = Math.max(0, scrollHeight - visibleHeight);
+          onScrollRatioChange(maxScrollTop > 0 ? editor.getScrollTop() / maxScrollTop : 0);
+        });
+      }}
     />
   );
 }

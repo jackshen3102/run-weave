@@ -43,13 +43,14 @@ async function createNamedTerminalSession(
   request: APIRequestContext,
   token: string,
   name: string,
-  options: { command?: string; args?: string[] } = {},
+  options: { command?: string; args?: string[]; projectId?: string } = {},
 ): Promise<{ terminalSessionId: string; terminalUrl: string }> {
   const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
     data: {
+      projectId: options.projectId,
       name,
       command: options.command ?? "bash",
       args: options.args,
@@ -143,15 +144,27 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
 }) => {
   const token = await loginAndSeedToken(request, page);
   const suffix = `${Date.now()}`;
+  const projectResponse = await request.post(`${E2E_API_BASE}/api/terminal/project`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    data: {
+      name: `Tab Keep Project ${suffix}`,
+    },
+  });
+  expect(projectResponse.ok()).toBe(true);
+  const project = (await projectResponse.json()) as { projectId: string };
   const firstSession = await createNamedTerminalSession(
     request,
     token,
     `tab-keep-a-${suffix}`,
+    { projectId: project.projectId, command: "tail", args: ["-f", "/dev/null"] },
   );
   const secondSession = await createNamedTerminalSession(
     request,
     token,
     `tab-keep-b-${suffix}`,
+    { projectId: project.projectId, command: "tail", args: ["-f", "/dev/null"] },
   );
 
   await page.goto(firstSession.terminalUrl);

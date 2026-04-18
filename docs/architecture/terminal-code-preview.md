@@ -23,23 +23,33 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - `frontend/src/pages/terminal-page.tsx`：Terminal 路由入口，负责把路由参数传给工作台。
 - `frontend/src/components/terminal/terminal-workspace.tsx`：Terminal 工作台，负责项目、会话、顶部栏、活动 session 容器、历史抽屉。
 - `frontend/src/components/terminal/terminal-surface.tsx`：xterm 渲染与输入连接，不应承载代码预览业务。
-- `frontend/src/services/terminal.ts`：Terminal HTTP API client，目前没有文件读取或 git diff 能力。
-- `backend/src/routes/terminal.ts`：Terminal HTTP API，目前提供 project、session、history、ws-ticket、clipboard-image。
-- `packages/shared/src/terminal-protocol.ts`：Terminal 共享协议，目前没有 preview 相关类型。
-- 当前 `frontend/package.json` 没有 `monaco-editor`、`@monaco-editor/react` 或 `zustand` 依赖。
-- 当前 Terminal Project 只有名称、创建时间和默认项目标记，没有项目路径字段。
-- 当前 Terminal Session 有 `cwd`，并且后端会通过 shell integration 尝试追踪实时 cwd；但该 cwd 依赖 shell marker 和 PTY 生命周期，不适合作为 Preview 的文件根目录。
+- `frontend/src/components/terminal/terminal-preview-panel.tsx`：右侧 Preview 面板，负责 `file` / `changes` 两种模式的内容切换、文件读取、diff 读取、刷新、复制路径和关闭。
+- `frontend/src/components/terminal/terminal-preview-menu.tsx`：Terminal 顶部栏里的 Preview 入口菜单，目前包含 `Open file...`、`Changes` 和 `Close preview`。
+- `frontend/src/components/terminal/terminal-open-file-command.tsx`：Open file 的搜索输入和结果列表，不依赖 Monaco。
+- `frontend/src/components/terminal/terminal-monaco-viewer.tsx`：只读 Monaco Editor / Diff Editor 封装，已通过 lazy boundary 加载。
+- `frontend/src/features/terminal/preview-store.ts`：Preview 专用 Zustand store，当前 mode 为 `file | changes`，并按 project 保存 query、selected file、selected change。
+- `frontend/src/services/terminal.ts`：Terminal HTTP API client 已提供 project-scoped Preview wrappers：文件搜索、文件读取、git changes、单文件 diff。
+- `backend/src/routes/terminal.ts`：Terminal HTTP API 已提供 `/api/terminal/project/:id/preview/...` project-scoped Preview 路由。
+- `backend/src/terminal/preview.ts`：后端 Preview service 已基于 project path 做路径约束、文件读取、语言识别、搜索、git changes 和 diff。
+- `packages/shared/src/terminal-protocol.ts`：Terminal 共享协议已包含 Preview search/file/git changes/file diff 类型。
+- 当前 `frontend/package.json` 已有 `monaco-editor`、`@monaco-editor/react` 和 `zustand`，但还没有 `markdown-it`、Markdown 插件及 Mermaid 依赖。
+- 当前 Terminal Project 已有 `path: string | null` 字段。Preview 的文件根目录是 project path，不使用 terminal session 的实时 `cwd`。
+- 后端已经把 `.md` / `.mdx` 识别为 `language: "markdown"`。因此 Markdown 预览不需要新增文件读取 API，属于前端渲染层能力。
+- 当前后端还没有把独立 `.svg` 文件识别成可渲染预览类型；SVG 文件预览需要在后端语言识别和前端 file mode 渲染层补齐。
 
 设计结论：
 
 - 预览面板应挂在 `TerminalWorkspace` 的内容区布局中。
 - `TerminalSurface` 继续只关心 xterm 连接、渲染、搜索、设置、粘贴等终端能力。
-- Terminal Project 需要新增项目路径字段，Preview 的文件搜索、文件读取和 git changes 都基于该项目路径。
-- 后端需要新增挂在 terminal session 下的只读 preview API；session 只用于定位 project，Preview root 使用 project path。
+- Preview 的文件搜索、文件读取和 git changes 都基于 Terminal Project Path。
+- Markdown 预览应复用当前 `file` 模式和当前 project-scoped file API，不新增 `markdown` 顶层 mode。
+- Markdown 渲染只在打开 Markdown 文件时出现，作为 `file` 模式内的 `Source` / `Split` / `Preview` 视图切换。
+- 独立 `.svg` 文件也复用当前 `file` 模式和当前 project-scoped file API。它默认展示 SVG 预览，并可切到源码；这不等同于 Markdown 文档中嵌入的 SVG。
+- 独立图片文件预览也复用当前 `file` 模式，但不复用文本 file content 响应。图片预览通过 project-scoped asset endpoint 获取受限图片字节，默认展示图片预览；这不等同于 Markdown 文档中嵌入的图片。
 
 ## 目标
 
-1. 在 Terminal 右侧临时预览代码、Markdown 或 diff。
+1. 在 Terminal 右侧临时预览代码、Markdown、图片、SVG 或 diff。
 2. 默认关闭，不影响终端主体验。
 3. 不展示项目级文件树。
 4. 不提供编辑能力。
@@ -54,7 +64,7 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - 不做文件树、全局搜索、符号索引、LSP diagnostics。
 - 不做代码编辑、保存、重命名、删除。
 - 不做 git commit、stage、unstage 等写操作。
-- 不在 v1 处理大型二进制文件或超大文件。
+- 不在 v1 处理大型二进制文件或超大文件。图片预览是受 MIME allowlist 和大小上限约束的例外，不扩展为通用二进制预览。
 
 ## 推荐方案
 
@@ -68,9 +78,52 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 
 ![Open file preview](assets/terminal-code-preview-open-file.svg)
 
+打开 Markdown 文件时，右侧面板进入 Markdown view。默认显示 `Split`，左侧是只读原始 Markdown，右侧是 rendered Markdown 预览；顶部路径栏右侧提供 `Source` / `Split` / `Preview` 切换。
+
+![Markdown split view](assets/terminal-code-preview-markdown-split.svg)
+
+切到 `Preview` 后，只显示 rendered Markdown 预览。
+
+![Markdown rendered preview](assets/terminal-code-preview-markdown-preview.svg)
+
+切到 `Source` 后，只显示只读 Monaco Editor 中的 Markdown 源文。用户可以随时切回 `Split` 或 `Preview`。
+
+![Markdown source view](assets/terminal-code-preview-markdown-source.svg)
+
+Markdown 中指向当前 project 内其他 Markdown 文件的相对链接可以在 Preview 面板内跳转，仍复用 `Open file` 的文件读取链路。
+
+![Markdown link navigation](assets/terminal-code-preview-markdown-link.svg)
+
+打开独立 `.svg` 文件时，右侧默认展示 SVG 预览，而不是源码。路径栏右侧提供 `Preview` / `Source` 切换；`Source` 用只读 Monaco 显示 SVG XML。
+
+![SVG file preview](assets/terminal-code-preview-svg-preview.svg)
+
+![SVG file source](assets/terminal-code-preview-svg-source.svg)
+
+打开独立图片文件时，右侧默认展示图片预览。第一版支持常见 raster 图片格式，不提供源码视图。
+
+![Image file preview](assets/terminal-code-preview-image-preview.svg)
+
 查看提交前变更时，右侧显示 Changes 面板和 Monaco Diff Editor。左侧只列本次变更文件，并按 `Staged Changes` / `Working Changes` 分组，不展示项目文件树。
 
 ![Diff preview](assets/terminal-code-preview-diff.svg)
+
+### 交互草图索引
+
+本文涉及会改变 Preview 面板状态或内容区域的交互，都需要对应草图：
+
+| 交互                                                 | 草图                                                |
+| ---------------------------------------------------- | --------------------------------------------------- |
+| 点击 `Preview` 打开入口菜单，面板仍关闭              | `assets/terminal-code-preview-closed.svg`           |
+| 选择 `Open file...` 并搜索文件                       | `assets/terminal-code-preview-open-file.svg`        |
+| 打开 Markdown 文件后的 source + preview split view   | `assets/terminal-code-preview-markdown-split.svg`   |
+| Markdown 切到仅 rendered preview，含 Mermaid diagram | `assets/terminal-code-preview-markdown-preview.svg` |
+| Markdown 切到仅 source view                          | `assets/terminal-code-preview-markdown-source.svg`  |
+| Markdown project 内相对链接跳转                      | `assets/terminal-code-preview-markdown-link.svg`    |
+| 打开独立 `.svg` 文件后的默认 SVG preview             | `assets/terminal-code-preview-svg-preview.svg`      |
+| SVG 文件切到 readonly source view                    | `assets/terminal-code-preview-svg-source.svg`       |
+| 打开独立图片文件后的默认 image preview               | `assets/terminal-code-preview-image-preview.svg`    |
+| 选择 `Changes` 并查看 staged / working diff          | `assets/terminal-code-preview-diff.svg`             |
 
 ## 信息架构
 
@@ -145,6 +198,9 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 3. Body
    - `file-picker`：文件搜索结果列表；选中文件后进入 file preview
    - `file`：Monaco readonly editor
+   - `markdown-view`：Markdown 文件的 `Source` / `Split` / `Preview` 视图
+   - `svg-view`：独立 SVG 文件的 `Preview` / `Source` 视图
+   - `image-view`：独立图片文件的只读 preview
    - `changes`：Staged / Working 分组文件索引 + Monaco diff editor
    - `empty/error`：轻量空状态或错误状态
 
@@ -152,7 +208,7 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 
 桌面端建议：
 
-- 默认宽度：40%
+- 默认宽度：50%
 - 最小宽度：320px
 - 最大宽度：60%
 - 可拖拽调整宽度
@@ -172,6 +228,9 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 | -------------- | ------------------------------------------ |
 | Open file 搜索 | 重新加载当前项目路径的文件候选索引         |
 | Open file 预览 | 重新读取当前路径内容                       |
+| Markdown 预览  | 重新读取当前 Markdown 文件并重新渲染       |
+| SVG 预览       | 重新读取当前 SVG 文件并重新渲染            |
+| 图片预览       | 重新读取当前图片文件并重新加载预览         |
 | Changes        | 重新加载 staged changes 和 working changes |
 | 空状态         | 不展示或置灰                               |
 
@@ -200,6 +259,9 @@ File no longer exists
 | -------------- | ------------------------------ |
 | Open file 搜索 | 置灰或隐藏                     |
 | Open file 预览 | 复制当前文件相对项目路径的路径 |
+| Markdown 预览  | 复制当前 Markdown 文件相对路径 |
+| SVG 预览       | 复制当前 SVG 文件相对路径      |
+| 图片预览       | 复制当前图片文件相对路径       |
 | Changes        | 复制当前选中变更文件路径       |
 | 空状态         | 置灰或隐藏                     |
 
@@ -259,13 +321,13 @@ Terminal 行为保持宽松：
 - 用户在 terminal 中 `cd` 到任何目录都不受限制。
 - terminal session 的 `cwd` 继续用于 terminal 标签、历史记录和 session metadata，不用于 Preview 文件解析。
 
-Preview API 仍挂在 session 下，但 session 只用于定位 active project 和鉴权上下文：
+Preview API 使用 project-scoped 路由。Terminal session 只用于工作台内确定 active project，不参与 Preview API 的路径解析：
 
 ```text
-terminalSessionId -> session.projectId -> project.path -> previewRoot
+projectId -> project.path -> previewRoot
 ```
 
-如果 session 已退出，只要 session 记录存在、project 仍存在且 project path 有效，Preview API 仍可工作；不需要 PTY runtime 存活。
+只要 project 存在且 project path 有效，Preview API 即可工作；不需要 PTY runtime 存活。
 
 ## 切换行为
 
@@ -420,8 +482,220 @@ root: /repo
 
 - Header 显示 `Open file`、`Read only`、`Updated ... ago`、`Refresh`、`Copy path`、`Close`。
 - Context bar 显示当前相对 project path 的路径，不常驻展示 project path 或 terminal `cwd`。
-- Body 使用 Monaco readonly editor。
+- 普通代码文件的 Body 使用 Monaco readonly editor。
+- Markdown 文件的 Body 默认使用 `Split` 双列视图，左侧显示只读原始 Markdown，右侧显示 rendered Markdown 预览；路径栏右侧显示 `Source` / `Split` / `Preview` 切换。
+- Markdown rendered preview 第一版需要支持语言标记为 `mermaid` 的 fenced code block。
+- 独立 `.svg` 文件的 Body 默认使用 SVG preview；路径栏右侧显示 `Preview` / `Source` 切换。
+- 独立图片文件的 Body 默认使用 image preview；不显示 source 切换。
 - 如果文件语言可从扩展名推断，使用对应 language；否则使用 plaintext。
+
+### 预览 Markdown
+
+Markdown 预览是 `Open file` 模式下的文件视图，不是新的 Preview 顶层任务。
+
+触发条件：
+
+- 后端返回 `language: "markdown"`。
+- 或前端根据 normalized path 判断扩展名为 `.md` / `.mdx`。前端判断只作为兜底，后端 `language` 仍是主信号。
+
+默认显示：
+
+- 打开 Markdown 文件后，默认进入 `Split` view。
+- 路径栏仍显示当前相对 project path，例如 `docs/architecture/terminal-code-preview.md`。
+- 路径栏右侧展示紧凑切换控件：`Source` / `Split` / `Preview`。
+- `Source` 激活时，Body 只显示只读 Monaco Markdown 源文。
+- `Split` 激活时，Body 左侧显示只读 Monaco Markdown 源文，右侧显示 rendered Markdown。
+- `Split` 默认左右比例为 50% / 50%，用户可以拖拽中间分隔线调整 source / preview 宽度。
+- `Preview` 激活时，Body 只显示 rendered Markdown。
+- `Split` 下左右滚动需要联动：滚动 source 时 preview 跟随到对应段落，滚动 preview 时 source 跟随到对应 Markdown 源位置。
+- Markdown 中的 Mermaid fence 在 `Split` 右侧和 `Preview` 中渲染为只读 diagram。
+- 切换不改变 selected file，不重新走文件搜索，不关闭面板。
+
+草图：
+
+![Markdown split view](assets/terminal-code-preview-markdown-split.svg)
+
+![Markdown rendered preview](assets/terminal-code-preview-markdown-preview.svg)
+
+![Markdown source view](assets/terminal-code-preview-markdown-source.svg)
+
+状态归属：
+
+- 不新增 `TerminalPreviewMode = "markdown"`。
+- 在当前 project preview state 中增加 `markdownViewMode?: "source" | "split" | "preview"`。
+- `markdownViewMode` 按 project 隔离，和现有 `selectedFilePath`、`openFileQuery` 保持同样生命周期。
+- `markdownSplitSourceWidthPct?: number` 可按 project 记录 Split 内部 source 宽度百分比，默认 50，建议限制在 30-70 之间。
+- 关闭 Preview 后再打开同一 project，恢复该 project 上次选择的 Markdown view。
+- 切换到其他 project 时使用目标 project 自己的 `markdownViewMode`，没有则默认 `split`。
+- 非 Markdown 文件不展示切换控件，也不读取 `markdownViewMode`。
+- 从 Markdown 文件切到非 Markdown 文件时，Context bar 必须按当前 `filePreview.language` 重新派生操作区，立即隐藏 `Source` / `Split` / `Preview` 控件，避免旧 Markdown 控件残留。
+
+交互规则：
+
+| 操作                          | 行为                                                           | 草图                                                  |
+| ----------------------------- | -------------------------------------------------------------- | ----------------------------------------------------- |
+| 打开 `.md` / `.mdx` 文件      | 默认显示左 source、右 preview 的 split view                    | `terminal-code-preview-markdown-split.svg`            |
+| 点击 `Source`                 | 只显示 Monaco readonly source                                  | `terminal-code-preview-markdown-source.svg`           |
+| 点击 `Split`                  | 左右默认 50/50，支持拖拽分隔线，左右滚动联动                   | `terminal-code-preview-markdown-split.svg`            |
+| 点击 `Preview`                | 只显示 rendered Markdown                                       | `terminal-code-preview-markdown-preview.svg`          |
+| 点击当前文档内 heading anchor | 在当前 rendered view 内滚动，不重新读取文件                    | `terminal-code-preview-markdown-preview.svg`          |
+| 渲染 Mermaid diagram          | 在 split 右侧或 preview view 内显示只读 diagram                | `terminal-code-preview-markdown-split.svg`            |
+| 点击 project 内 Markdown 链接 | 复用 `openFilePath` 打开目标文件，保留当前 Markdown view       | `terminal-code-preview-markdown-link.svg`             |
+| 点击普通外链                  | 使用新窗口打开，附带 `rel="noreferrer"`                        | 不改变 Preview 面板，不需要额外草图                   |
+| 点击不支持的本地图片          | 第一版显示 alt / fallback，Markdown renderer 不新增 asset 读取 | fallback 是内容渲染状态，不改变主交互，先不单独出草图 |
+
+滚动联动实现边界：
+
+- v1 接受段落级 / block 级联动精度，不要求达到 VS Code 的子行级或长段落内部精确对齐。
+- Source 到 Preview：Markdown renderer 应尽量利用 markdown-it token 的 source line 信息，渲染 block DOM 时保留类似 `data-source-line` 的标记，再按当前 Monaco 可视行定位到最接近的 preview block。
+- Preview 到 Source：可以用 `IntersectionObserver` 或节流后的 scroll event 找到当前可视区域内最接近顶部的 `data-source-line` block，再调用 Monaco 的 reveal line API 滚动到对应源位置。
+- 双向同步必须有 `activeScrollSource`、同步 flag、`requestAnimationFrame` 或 debounce 机制，避免 source 滚动触发 preview，preview 再反向触发 source 的循环抖动。
+- 长段落、表格、Mermaid diagram、代码块等区域如果无法精确映射，允许对齐到对应 block 的起始行。
+- 如果实时滚动联动实现成本明显超出 v1 预算，可降级为点击同步：点击 source 某行或 preview 某个 block 时滚动到对应段落。降级需要在实现说明和验收中显式标记，不静默替代实时联动。
+
+相对链接处理：
+
+- `./next.md`、`../guide.md`、`docs/testing/layers.md` 这类 Markdown 链接，如果解析后仍在当前 project path 内，点击后在同一 Preview 面板中打开目标文件。
+- 链接跳转后继续保持 `mode: "file"`，更新 `selectedFilePath` 和 `path`。
+- 如果目标文件也是 Markdown，沿用当前 project 的 `markdownViewMode`。
+- 如果链接带 hash，例如 `./next.md#section`，先打开目标文件，再滚动到目标 heading；找不到 heading 时只打开文件。
+- 如果链接解析到 project path 外，阻止跳转并展示轻量错误，例如 `Path is outside the project path`。
+- 非 Markdown 相对链接可以按普通文件打开；如果是二进制或不支持类型，沿用现有文件预览错误。
+
+草图：
+
+![Markdown link navigation](assets/terminal-code-preview-markdown-link.svg)
+
+图片与资源：
+
+- 第一版 Markdown renderer 不读取本地相对图片；独立图片文件预览使用的 `preview/asset` endpoint 不自动开放给 Markdown 内容。
+- 远程 HTTPS 图片可以按浏览器默认加载，但要避免让 Markdown renderer 注入任意 HTML。
+- Markdown 本地图片如果必须支持，应后续明确复用 `preview/asset` 的只读路径，继续遵守 project path containment、MIME allowlist 和 size limit；不要通过 `file://` 暴露本地路径。
+
+Mermaid 支持：
+
+- 第一版支持 Markdown fenced code block 中的 `mermaid` 语言标记。
+- Mermaid diagram 在 rendered Markdown 内原位渲染，不提供编辑、缩放、导出、复制 SVG 或独立全屏预览。
+- Mermaid 初始化使用只读、安全配置，例如 `startOnLoad: false`、`securityLevel: "strict"`，并禁用可执行 HTML label。
+- `mermaid.initialize(...)` 只能在 Mermaid renderer 模块内以幂等方式执行；重复打开文件、切换 `Split` / `Preview` 或热更新时不得重复注册全局配置导致状态漂移。
+- Mermaid 渲染必须由前端在当前 Markdown renderer 内完成，不新增后端 Mermaid API。
+- Mermaid 渲染错误不能打断整篇 Markdown；只在该 diagram 位置显示轻量错误块，并保留 `Source` / `Split` 切换用于查看原始 fence。
+- Mermaid 渲染应按文档内容生成稳定 container id，避免多个 diagram 或快速切换文件时互相覆盖。
+
+安全策略：
+
+- `markdown-it` 配置 `html: false`，默认不渲染 raw HTML。
+- rendered HTML 再经过 sanitizer，例如 DOMPurify。
+- 外链只允许安全协议，禁止 `javascript:`、`data:` 等危险链接。
+- 代码块内容作为文本渲染，不执行。
+- Mermaid source 作为 diagram DSL 处理，不允许通过 Mermaid label 注入可执行 HTML。
+- Markdown 插件只启用阅读场景需要的能力，避免引入会执行脚本或访问本地文件的插件。
+
+### 预览 SVG 文件
+
+SVG 文件预览只针对独立 `.svg` 文件，不表示 Markdown 文档中嵌入 SVG 的能力。Markdown 内的图片和内嵌资源仍按 Markdown 渲染边界处理。
+
+触发条件：
+
+- 后端返回 `language: "svg"`。
+- 或前端根据 normalized path 判断扩展名为 `.svg`。前端判断只作为兜底，后端 `language` 仍是主信号。
+- `language: "svg"` 是 Preview 类型信号，用于进入 SVG preview；它不是 Monaco source view 的 language id。
+- 后端需要把 `.svg` 纳入文本预览类型，仍受现有文件大小、project path containment 和 binary 检测限制。
+
+默认显示：
+
+- 打开 `.svg` 文件后，默认进入 `Preview`。
+- 路径栏仍显示当前相对 project path，例如 `docs/architecture/assets/terminal-code-preview-open-file.svg`。
+- 路径栏右侧展示紧凑切换控件：`Preview` / `Source`。
+- `Preview` 激活时，Body 显示渲染后的 SVG。
+- `Source` 激活时，Body 使用只读 Monaco 显示 SVG XML 源码，Monaco language 使用 `xml`。
+- 切换不改变 selected file，不重新走文件搜索，不关闭面板。
+
+草图：
+
+![SVG file preview](assets/terminal-code-preview-svg-preview.svg)
+
+![SVG file source](assets/terminal-code-preview-svg-source.svg)
+
+状态归属：
+
+- 不新增 `TerminalPreviewMode = "svg"`。
+- 在当前 project preview state 中增加 `svgViewMode?: "preview" | "source"`。
+- `svgViewMode` 按 project 隔离，和 `markdownViewMode` 保持同样生命周期。
+- 关闭 Preview 后再打开同一 project，恢复该 project 上次选择的 SVG view。
+- 切换到其他 project 时使用目标 project 自己的 `svgViewMode`，没有则默认 `preview`。
+- 非 SVG 文件不展示 SVG view 切换控件，也不读取 `svgViewMode`。
+
+交互规则：
+
+| 操作                     | 行为                                                     | 草图                                    |
+| ------------------------ | -------------------------------------------------------- | --------------------------------------- |
+| 打开 `.svg` 文件         | 默认显示渲染后的 SVG preview                             | `terminal-code-preview-svg-preview.svg` |
+| 点击 `Source`            | 只显示 Monaco readonly SVG XML source，language 为 `xml` | `terminal-code-preview-svg-source.svg`  |
+| 点击 `Preview`           | 切回渲染后的 SVG preview                                 | `terminal-code-preview-svg-preview.svg` |
+| SVG 渲染失败             | 在 preview 区域显示轻量错误，可切 source                 | `terminal-code-preview-svg-preview.svg` |
+| SVG 文件包含外部资源引用 | 默认不加载外部资源，仍可切 source 查看 XML               | 不改变主交互，先不单独出草图            |
+
+SVG 渲染安全：
+
+- SVG preview 必须经过 sanitizer，禁止 script、event handler、foreignObject、内联可执行内容和危险 URL。
+- 不通过 `file://` 直接展示本地 SVG 文件。
+- 不把原始 SVG XML 直接插入主 DOM。
+- 推荐用 sanitized SVG Blob URL 加 `<img>`，或用 sandboxed iframe 且不授予 script 权限；实现时选择一种安全渲染路径，不混用。
+- 外部资源引用默认不加载，例如外链 image、font、style import。
+- SVG 渲染错误只影响当前 SVG preview，不影响面板关闭、复制路径、切到 source。
+
+### 预览图片文件
+
+图片文件预览只针对独立图片文件，不表示 Markdown 文档中嵌入本地图片的能力。Markdown 内的本地图片仍按 Markdown 渲染边界处理，第一版不因图片文件预览而自动支持 Markdown 本地图片。
+
+触发条件：
+
+- 前端只根据文件名扩展名判断是否进入 image preview；判断来源可以是 `Open file...` 搜索结果的相对路径，也可以是用户显式输入后 normalized 的 path。
+- 打开命中图片 allowlist 的路径时，前端不先调用 `preview/file` 获取 metadata，直接进入 image preview 并请求 `preview/asset`。
+- 第一版支持 raster 图片 allowlist：`.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.avif`。
+- `.svg` 不走 image preview，继续走独立 SVG preview。
+- 其他二进制文件仍按不支持处理。
+
+默认显示：
+
+- 打开支持的图片文件后，默认进入 image preview。
+- 路径栏仍显示当前相对 project path，例如 `docs/assets/screenshot.png`。
+- 图片默认使用 `object-fit: contain` 显示在 Preview 面板内，保留原始比例，不裁剪。
+- `.gif` 使用浏览器 `<img>` 原生加载，第一版支持 GIF 动画播放。
+- 第一版不提供 source、zoom、pan、背景切换、旋转、导出、复制图片内容、GIF 暂停或逐帧控制。
+- 切换文件或刷新时重新获取当前图片。
+
+草图：
+
+![Image file preview](assets/terminal-code-preview-image-preview.svg)
+
+状态归属：
+
+- 不新增 `TerminalPreviewMode = "image"`。
+- 图片文件没有额外 view mode；进入图片文件时 Context bar 只展示路径和通用操作，不展示 Markdown / SVG 的 view 切换控件。
+- 从 Markdown 或 SVG 文件切到图片文件时，Context bar 必须按当前文件类型重新派生，隐藏旧的 view 切换控件。
+
+交互规则：
+
+| 操作             | 行为                                 | 草图                                      |
+| ---------------- | ------------------------------------ | ----------------------------------------- |
+| 打开图片文件     | 默认显示图片 preview                 | `terminal-code-preview-image-preview.svg` |
+| Refresh          | 重新读取并加载图片                   | `terminal-code-preview-image-preview.svg` |
+| Copy path        | 复制当前图片相对项目路径             | 不改变 Preview 面板，不需要额外草图       |
+| 图片加载失败     | 显示轻量错误，不关闭面板             | `terminal-code-preview-image-preview.svg` |
+| 打开不支持的图片 | 显示 `Image format is not supported` | 不改变主交互，先不单独出草图              |
+| 图片过大         | 显示 `Image exceeds preview limit`   | 不改变主交互，先不单独出草图              |
+
+图片后端读取：
+
+- 图片不走现有文本 `preview/file` JSON content 响应，避免把二进制塞进 JSON。
+- 图片文件不要求 `preview/file` 返回 `language: "image"`、`language: "image/png"` 或空 `content` metadata；第一版没有图片 metadata 探测流程。
+- 新增 project-scoped asset endpoint，例如 `GET /api/terminal/project/:id/preview/asset?path=<path>`。
+- asset endpoint 只服务 allowlist 图片 MIME，且必须复用 project path containment、realpath / symlink 防逃逸和 auth 校验。
+- 返回时设置正确 `Content-Type`，并设置 `Cache-Control: no-store`，避免用户刷新后看到旧图。
+- 默认大小上限建议 5 MiB；超过上限返回明确错误。
+- 不返回目录列表，不支持任意文件下载。
 
 错误状态：
 
@@ -432,6 +706,8 @@ root: /repo
 | 文件不存在     | `File not found`，保留输入框方便修改 |
 | 文件过大       | `File exceeds preview limit`         |
 | 二进制文件     | `Binary files cannot be previewed`   |
+| 图片格式不支持 | `Image format is not supported`      |
+| 图片过大       | `Image exceeds preview limit`        |
 | 项目未设置路径 | `Set a project path to use Preview`  |
 | 路径不允许     | `Path is outside the project path`   |
 
@@ -565,8 +841,16 @@ Type to search files or paste an absolute path
 - `frontend/src/components/terminal/terminal-preview-menu.tsx`
 - `frontend/src/components/terminal/terminal-open-file-command.tsx`
 - `frontend/src/components/terminal/terminal-monaco-viewer.tsx`
+- `frontend/src/components/terminal/terminal-markdown-preview.tsx`
+- `frontend/src/components/terminal/terminal-svg-preview.tsx`
+- `frontend/src/components/terminal/terminal-image-preview.tsx`
+- `frontend/src/features/terminal/markdown-preview.ts`
+- `frontend/src/features/terminal/svg-preview.ts`
+- `frontend/src/features/terminal/image-preview.ts`
 - `frontend/src/features/terminal/preview-store.ts`
-- `frontend/src/services/terminal-preview.ts`
+- `frontend/src/services/terminal.ts`
+
+当前项目已经有前四个 Preview 组件、`preview-store.ts` 和 project-scoped service wrappers。Markdown / SVG / Image 增量建议只新增 renderer 组件和纯渲染工具，不拆出新的 service 文件。
 
 ### 状态管理
 
@@ -581,13 +865,16 @@ Type to search files or paste an absolute path
 
 依赖：
 
-- 在 `frontend/package.json` dependencies 增加 `zustand`。
-- 只为 Preview 引入，不借机重构现有 terminal project/session 状态。
+- `zustand` 已经存在，只为 Preview 使用，不借机重构现有 terminal project/session 状态。
+- Markdown 增量需要在 `frontend/package.json` dependencies 增加 `markdown-it`、必要插件和 `mermaid`。
+- 如果 Markdown / SVG renderer 输出 HTML 或 SVG，增加 sanitizer 依赖，例如 `dompurify` 及类型依赖，避免直接把 Markdown / SVG 产物塞进 DOM。
 
 状态归属：
 
 - `preview-store.ts` 持有 preview open/closed、width 和 per-project preview state。
 - 每个 terminal project 在 store 中有自己的 preview mode、path、open file query、selected file path、selected change。
+- Markdown source/split/preview 选择属于 file mode 内的视图偏好，按 project 保存在 `markdownViewMode`，不升级为新的顶层 mode。
+- SVG preview/source 选择属于 file mode 内的视图偏好，按 project 保存在 `svgViewMode`，不升级为新的顶层 mode。
 - `TerminalWorkspace` 负责把 active terminal session id、active project id 和 active project 数据传给 Preview 组件，并调用 store action。
 - project path 来自 active project 数据，不写入 preview store，避免 project path 更新时出现双数据源同步问题。
 - `TerminalSurface` 不感知 preview。
@@ -601,6 +888,8 @@ Type to search files or paste an absolute path
 import { create } from "zustand";
 
 type TerminalPreviewMode = "file" | "changes";
+type TerminalMarkdownViewMode = "source" | "split" | "preview";
+type TerminalSvgViewMode = "preview" | "source";
 
 interface TerminalPreviewUiState {
   open: boolean;
@@ -614,6 +903,9 @@ interface TerminalPreviewProjectState {
   selectedFilePath?: string;
   selectedChangePath?: string;
   selectedChangeKind?: "staged" | "working";
+  markdownViewMode?: TerminalMarkdownViewMode;
+  markdownSplitSourceWidthPct?: number;
+  svgViewMode?: TerminalSvgViewMode;
 }
 
 interface TerminalPreviewStore {
@@ -664,6 +956,9 @@ TerminalWorkspace
   └─ lazy TerminalPreviewPanel
        ├─ TerminalOpenFileCommand
        ├─ ChangesFileList
+       ├─ lazy TerminalMarkdownPreview
+       ├─ lazy TerminalSvgPreview
+       ├─ lazy TerminalImagePreview
        └─ lazy TerminalMonacoViewer
             ├─ @monaco-editor/react Editor
             └─ @monaco-editor/react DiffEditor
@@ -675,6 +970,43 @@ TerminalWorkspace
 - Electron 端：懒加载不能减少最终安装包体积，但可以减少窗口首屏加载成本、JS parse/execute 成本和内存占用。
 - Electron 打包体积会增加，v1 接受该成本，但需要在 PR 中记录 `pnpm build` / Electron renderer 产物变化；如体积不可接受，再评估只加载基础语言、进一步拆 worker 或改用更轻量 viewer。
 - 不为降低体积改成手写代码高亮。预览 diff 和大文件滚动稳定性优先。
+
+Markdown renderer 也应独立 lazy：
+
+- 打开 Preview 面板但只停留在文件搜索时，不下载 Markdown renderer。
+- 打开普通代码文件时，不下载 Markdown renderer。
+- 打开 Markdown 文件且 `markdownViewMode === "preview" | "split"` 时，才加载 `markdown-it`、插件、Mermaid 和 sanitizer。
+- `Source` 只加载 lazy Monaco viewer，不加载 Markdown renderer。
+- `Preview` 只加载 Markdown renderer，不加载 Monaco。
+- `Split` 同时加载 lazy Monaco viewer 和 Markdown renderer，并在同一面板内左右分栏。
+- Mermaid 跟随 Markdown renderer lazy chunk 加载；普通代码文件、Changes、Markdown Source 模式不加载 Mermaid。
+
+SVG renderer 也应独立 lazy：
+
+- 打开 Preview 面板但只停留在文件搜索时，不下载 SVG renderer。
+- 打开普通代码文件、Markdown 文件或 Changes 时，不下载 SVG renderer。
+- 打开 SVG 文件且 `svgViewMode === "preview"` 时，才加载 SVG sanitizer / renderer。
+- SVG `Source` 只加载 lazy Monaco viewer，不加载 SVG renderer。
+- SVG `Preview` 只加载 SVG renderer，不加载 Monaco。
+
+Image renderer 也应独立 lazy：
+
+- 打开 Preview 面板但只停留在文件搜索时，不下载 Image renderer。
+- 打开普通代码文件、Markdown 文件、SVG 文件或 Changes 时，不下载 Image renderer。
+- 打开支持的图片文件时，才加载 Image renderer。
+- Image preview 不加载 Monaco。
+
+Markdown 插件建议：
+
+- `markdown-it`
+- `markdown-it-anchor`
+- `markdown-it-task-lists`
+- `markdown-it-footnote`
+- `mermaid`
+- sanitizer：`dompurify`
+
+第一版明确支持 Mermaid。KaTeX、PlantUML 或其他重插件仍不进入第一版；它们会继续增加体积、样式和安全边界，应该按明确需求单独设计。
+`markdown-it-container` 不进入第一版默认依赖；如果后续需要 admonition / callout 块，可在 v1.1 作为明确能力再引入。
 
 Web Worker 配置：
 
@@ -725,17 +1057,16 @@ GET /api/terminal/project
 }
 ```
 
-新增 API 挂在 Terminal session 下：
+Preview API 挂在 Terminal project 下：
 
 ```http
-GET /api/terminal/session/:id/preview/files/search?q=<query>&limit=50
+GET /api/terminal/project/:id/preview/files/search?q=<query>&limit=50
 Authorization: Bearer <accessToken>
 ```
 
 语义：
 
-- session id 只用于确认 session 存在、读取 `session.projectId`，并定位对应 project path。
-- 如果 session 已退出但记录仍存在，且 project path 有效，接口仍可工作。
+- project id 用于定位 project path。
 - 如果 project path 为空或无效，返回需要设置 project path 的错误。
 - 只返回 project path 内相对路径候选。
 - `q` 是相对路径 fuzzy query。
@@ -782,17 +1113,21 @@ Authorization: Bearer <accessToken>
 ```
 
 ```http
-GET /api/terminal/session/:id/preview/file?path=<path>
+GET /api/terminal/project/:id/preview/file?path=<path>
 Authorization: Bearer <accessToken>
 ```
 
 语义：
 
-- session id 只用于定位 project path。
+- project id 用于定位 project path。
 - `path` 可以是相对 project path 的路径，也可以是显式绝对路径。
 - 相对路径按 project path 解析。
 - 显式绝对路径必须位于 project path 内。
 - 后端返回 normalized path、absolute path、解析基准和只读内容。
+- 后端需要把 `.svg` 返回为 `language: "svg"`，不要只回退为 plaintext；前端据此默认进入 SVG preview。
+- 前端不得把 `language: "svg"` 直接传给 Monaco。SVG source view 的 Monaco language 应映射为 `xml`；`svg` 只作为 Preview 类型判断使用。
+- 前端打开图片文件时不调用该接口；图片文件由前端按文件名扩展名识别，并直接使用专用 asset endpoint。
+- 该接口不定义图片 metadata 返回契约，不需要为图片返回 `language: "image"`、`language: "image/png"` 或空 `content`。
 - 该接口不接受目录，不返回目录列表。
 
 返回：
@@ -813,13 +1148,30 @@ Authorization: Bearer <accessToken>
 ```
 
 ```http
-GET /api/terminal/session/:id/preview/git-changes
+GET /api/terminal/project/:id/preview/asset?path=<path>
 Authorization: Bearer <accessToken>
 ```
 
 语义：
 
-- session id 只用于定位 project path。
+- project id 用于定位 project path。
+- `path` 可以是相对 project path 的路径，也可以是显式绝对路径；解析规则与 `preview/file` 一致。
+- 前端只有在文件名扩展名命中图片 allowlist 时才调用该接口；后端仍必须自行校验真实 MIME 和大小，不能只信任扩展名。
+- 只服务 allowlist 图片 MIME：`image/png`、`image/jpeg`、`image/gif`、`image/webp`、`image/avif`。
+- `.svg` 不走该 endpoint，继续走文本 `preview/file` + SVG renderer。
+- 响应直接返回图片字节，不包 JSON，不返回任意二进制文件。
+- 设置 `Content-Type` 为实际图片 MIME，设置 `Cache-Control: no-store`。
+- 默认大小上限建议 5 MiB；超过上限返回 `Image exceeds preview limit`。
+- project path 缺失、路径越界、目录、symlink 逃逸和鉴权失败沿用 Preview file 的错误语义。
+
+```http
+GET /api/terminal/project/:id/preview/git-changes
+Authorization: Bearer <accessToken>
+```
+
+语义：
+
+- project id 用于定位 project path。
 - 后端以 project path 作为 git working directory。
 - 如果 project path 位于 git repo 子目录内，v1 只返回 project path 下的 changes；如果用户想看整个 repo，应把 project path 设置为 repo root。
 - 如果 project path 不在 git repo 内，返回明确错误。
@@ -850,13 +1202,13 @@ Authorization: Bearer <accessToken>
 ```
 
 ```http
-GET /api/terminal/session/:id/preview/file-diff?path=<path>&kind=<staged|working>
+GET /api/terminal/project/:id/preview/file-diff?path=<path>&kind=<staged|working>
 Authorization: Bearer <accessToken>
 ```
 
 语义：
 
-- session id 只用于定位 project path。
+- project id 用于定位 project path。
 - `path` 必须是 project path 内的相对路径。
 - `kind=staged` 返回 index 对 HEAD 的 diff。
 - `kind=working` 返回 working tree 对 index 的 diff。
@@ -890,7 +1242,8 @@ Authorization: Bearer <accessToken>
 - 不从 terminal session `cwd` 推断 preview root。
 - 不接受目录读取。
 - 最大文件大小建议 1 MiB，后续可配置到 2 MiB。
-- 二进制文件不返回内容。
+- 二进制文件不通过 `preview/file` 返回内容。
+- 图片文件是 allowlist 二进制例外，只能通过 `preview/asset` 返回图片字节，并受 5 MiB 默认上限约束。
 - 拒绝特殊设备路径、socket、FIFO。
 - 错误信息不暴露不必要的系统细节。
 
@@ -920,7 +1273,7 @@ git diff 限制：
 鉴权：
 
 - 复用现有 Terminal HTTP bearer token。
-- Preview API 必须确认 session 存在。
+- Preview API 必须确认 project 存在。
 - 后续如引入 capability，可把 preview 标记为 readonly terminal capability。
 
 ## 移动端边界
@@ -954,6 +1307,14 @@ git diff 限制：
 - Monaco Diff Editor。
 - Vite / Electron renderer 下显式配置 Monaco web workers。
 - 后端只读 file-search、file、git-changes 和 file-diff API。
+- Markdown rendered mode，使用 `markdown-it` 和受控插件渲染 `.md` / `.mdx`。
+- Markdown `Source` / `Split` / `Preview` 三种视图切换，其中 `Split` 左 source、右 preview。
+- Markdown project 内相对链接跳转。
+- Mermaid diagram 在 Markdown rendered 区域中原位渲染。
+- 独立 `.svg` 文件默认显示 SVG preview，可切换到 readonly source。
+- SVG preview 使用安全渲染路径，不通过 `file://` 或未经清洗的主 DOM 注入展示。
+- 独立图片文件默认显示 image preview，不提供 source 视图。
+- 图片 preview 第一版支持 `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.avif`，通过 project-scoped asset endpoint 读取受限图片字节。
 
 ### v1.1
 
@@ -962,10 +1323,13 @@ git diff 限制：
 - 复制文件路径、复制 diff。
 - `Open file...` 可增加轻量候选组，例如最近打开的 Markdown、当前 working/staged changes 中的 Markdown、最近变更文件。
 - `Open file...` 可增加路径补全，但只补当前 project path 内候选，不做项目文件树。
+- Markdown admonition / callout 块可作为可选增强；如采用，可再引入 `markdown-it-container` 并限定允许的 container 名称。
 
 ### v2
 
-- Open file 的 Markdown rendered mode 切换。
+- Markdown 本地图片接入只读 `preview/asset` API。
+- Mermaid zoom / fullscreen / export 等增强交互按明确需求单独评估。
+- KaTeX、PlantUML 等重插件按明确需求单独评估。
 - AI artifact 显式注册，例如 plan、测试报告、review notes。
 - 预览入口可由 AI 输出主动提示，但仍需用户点击打开。
 
@@ -974,6 +1338,7 @@ git diff 限制：
 桌面端：
 
 - Preview 默认关闭，Terminal 初始保持完整宽度。
+- Preview 打开后的默认宽度是 50%，仍可拖拽调整，最大宽度保持 60%。
 - Preview 关闭时，Terminal 初始 JS chunk 不包含 Monaco；未选中文件的 `Open file...` 搜索状态也不加载 Monaco。
 - 打开 Preview 后，左侧 Terminal 仍可输入、搜索、接收输出。
 - Preview 状态由 `zustand` store 管理，`TerminalWorkspace` 不新增 per-project preview `useState` / `Map` 状态。
@@ -988,6 +1353,35 @@ git diff 限制：
 - `Open file...` 搜索结果只包含 project path 内相对路径。
 - `Open file...` 绝对路径只允许完整输入后打开，不参与 fuzzy search，且必须位于 project path 内。
 - `Open file...` 错误状态不关闭面板，也不清空用户输入。
+- Markdown 默认以 `Split` 打开，左侧是 readonly Monaco source，右侧是 rendered preview。
+- Markdown `Split` 默认左右 50% / 50%，支持拖拽内部 source / preview 分隔线调整宽度。
+- Markdown `Source` / `Split` / `Preview` 切换不改变 selected file，也不重新走文件搜索。
+- Markdown `Source` 和 `Split` 中的 source 区域复用 readonly Monaco，不允许编辑保存。
+- Markdown `Split` 中 source 与 preview 左右滚动联动，任一侧滚动时另一侧跟随到对应内容位置。
+- Markdown `Split` 滚动联动 v1 只要求段落级 / block 级精度；长段落内部、表格、diagram 和代码块允许对齐到 block 起始行。
+- Markdown `Split` 滚动联动不能出现明显循环抖动；实现需要防止 source / preview 相互触发无限滚动。
+- 从 Markdown 文件切到普通代码、SVG 或其他非 Markdown 文件时，Context bar 不再显示 Markdown `Source` / `Split` / `Preview` 控件。
+- Markdown project 内相对链接点击后在同一 Preview 面板打开目标文件，并继续受 project path 约束。
+- Markdown Mermaid fence 在 `Split` 右侧或 `Preview` 内渲染为 diagram。
+- Mermaid 渲染错误只影响该 diagram 块，不影响整篇 Markdown 阅读和 `Source` / `Split` 切换。
+- Mermaid 使用安全配置，不允许通过 label 注入可执行 HTML。
+- Mermaid 初始化幂等；多次打开 Markdown、切换视图或重新渲染不会重复污染 Mermaid 全局配置。
+- Markdown raw HTML 不执行，危险链接不生效。
+- Markdown 本地图片在未接入只读 asset 路径前不通过 `file://` 暴露本机路径。
+- 独立 `.svg` 文件默认以 SVG preview 打开，而不是显示 XML source。
+- SVG `Preview` / `Source` 切换不改变 selected file，也不重新走文件搜索。
+- SVG `Source` 模式复用 readonly Monaco，不允许编辑保存。
+- SVG preview 不执行 script、event handler、foreignObject 或危险 URL。
+- SVG preview 不通过 `file://` 直接加载本地文件，也不把未清洗 SVG XML 注入主 DOM。
+- SVG 渲染失败只影响当前 preview 区域，用户仍可切到 source 查看 XML。
+- SVG source view 使用 Monaco `xml` language mode；`language: "svg"` 只用于 Preview 判断，不作为 Monaco language id。
+- 独立图片文件默认以 image preview 打开，不显示 source 或 SVG / Markdown view mode 切换控件。
+- 图片 preview 默认 `object-fit: contain`，保留原始比例，不裁剪。
+- 支持的图片格式为 `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.avif`；`.svg` 仍进入 SVG preview，不走 image preview。
+- `.gif` 在 image preview 中按浏览器 `<img>` 原生行为播放动画，不只显示第一帧。
+- 打开图片文件时，前端按文件名扩展名直接调用 `preview/asset`，不先调用 `preview/file` 获取图片 metadata。
+- 不支持的图片格式显示 `Image format is not supported`，超出大小限制显示 `Image exceeds preview limit`。
+- 从 Markdown 或 SVG 文件切到图片文件时，Context bar 不再显示之前文件类型的 view mode 控件。
 - `Changes` 能看到 staged / working 两组变更文件；选中文件后按需加载并展示当前文件 diff。
 - Changes 左侧文件索引不扩展成项目文件树。
 - Changes 左侧文件项不显示新增/删除行数。
@@ -1005,12 +1399,14 @@ git diff 限制：
 
 - Project API 支持可选 path 字段；新旧 project path 为空时返回 `null`。
 - 大文件被拒绝或提示超限。
-- 二进制文件不返回正文。
+- 二进制文件不通过 `preview/file` 返回正文。
+- `preview/asset` 只返回 allowlist 图片字节，必须包含 project path containment、MIME 校验、`Cache-Control: no-store` 和默认 5 MiB 大小上限。
+- `preview/file` 不需要为图片文件返回 language 或空 content metadata；图片打开流程由前端扩展名判断后直接走 `preview/asset`。
 - 目录路径不返回列表。
 - 文件搜索不返回绝对路径候选，不读取正文，有超时和结果数量上限。
 - `git-changes` 不返回文件正文或 diff content，只返回 staged / working 文件索引。
 - `file-diff` 只返回单个选中文件的 old/new content，并有单文件大小限制。
-- Preview API 不依赖 PTY runtime 存活；exited session 只要记录和 project path 有效即可使用。
+- Preview API 不依赖 PTY runtime 存活；只要 project 记录和 project path 有效即可使用。
 - Preview API 不使用 session `cwd` 推断 root。
 - git changes 超时、project path 缺失或非 git repo 时有明确错误。
 
@@ -1020,6 +1416,10 @@ git diff 限制：
 2. 是否允许绝对路径读取。建议允许显式输入，但必须限制在 project path 内。
 3. Preview width 是否需要持久化。建议 v1 不持久化，后续再考虑 `zustand/middleware` persist。
 4. Monaco v1 支持哪些语言 worker。建议先覆盖 editor、TypeScript/JavaScript、JSON、CSS、HTML，其余语言回退 plaintext 或基础 tokenization。
+5. Markdown 第一版是否必须支持本地图片。建议不支持；如必须支持，需要明确复用 `preview/asset` 的只读读取规则。
+6. Markdown 默认视图是否为 split view。建议默认 `Split`，因为当前需求要求原始 Markdown 和 rendered preview 可以共存。
+7. Mermaid 第一版是否需要缩放、全屏、导出或复制 SVG。建议不做；第一版只做原位只读渲染。
+8. SVG 文件第一版是否需要 zoom、背景切换、导出或复制 SVG。建议不做；第一版只做默认 preview 和 source 切换。
 
 ## 参考
 
@@ -1030,3 +1430,9 @@ git diff 限制：
 - uFuzzy：后端高性能 fuzzy search 备选。https://github.com/leeoniya/uFuzzy
 - `@monaco-editor/react`：React Monaco Editor wrapper，提供 `Editor` 和 `DiffEditor`。https://github.com/suren-atoyan/monaco-react
 - Monaco Editor：编辑器和 worker 源依赖。https://github.com/microsoft/monaco-editor
+- `markdown-it`：Markdown parser。https://github.com/markdown-it/markdown-it
+- `markdown-it-anchor`：heading anchor 插件。https://github.com/valeriangalliat/markdown-it-anchor
+- `markdown-it-task-lists`：task list 插件。https://github.com/revin/markdown-it-task-lists
+- `markdown-it-footnote`：footnote 插件。https://github.com/markdown-it/markdown-it-footnote
+- Mermaid：diagram renderer。https://github.com/mermaid-js/mermaid
+- DOMPurify：HTML sanitizer。https://github.com/cure53/DOMPurify
