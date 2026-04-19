@@ -12,6 +12,16 @@ const DEFAULT_PACKAGED_AUTH = {
   AUTH_PASSWORD: "admin",
   AUTH_JWT_SECRET: "browser-viewer-local-jwt-secret",
 } as const;
+const PACKAGED_BACKEND_CLI_PATHS = [
+  "/opt/homebrew/bin",
+  "/opt/homebrew/sbin",
+  "/usr/local/bin",
+  "/usr/local/sbin",
+  "/usr/bin",
+  "/bin",
+  "/usr/sbin",
+  "/sbin",
+] as const;
 
 export interface PackagedBackendPaths {
   backendEntry: string;
@@ -41,6 +51,17 @@ export function resolvePackagedBackendPaths(
   };
 }
 
+function buildPackagedBackendPath(basePath: string | undefined): string {
+  const entries = [
+    ...(basePath?.split(path.delimiter) ?? []),
+    ...PACKAGED_BACKEND_CLI_PATHS,
+  ]
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(entries)).join(path.delimiter);
+}
+
 export function buildPackagedBackendEnv(options: {
   baseEnv: NodeJS.ProcessEnv;
   backendPort: number;
@@ -50,6 +71,7 @@ export function buildPackagedBackendEnv(options: {
     ...DEFAULT_PACKAGED_AUTH,
     ...options.baseEnv,
     ELECTRON_RUN_AS_NODE: "1",
+    PATH: buildPackagedBackendPath(options.baseEnv.PATH),
     HOST: LAN_BIND_HOST,
     PORT: String(options.backendPort),
     PORT_STRICT: "true",
@@ -196,12 +218,14 @@ export async function startPackagedBackend(
   const backendPaths = resolvePackagedBackendPaths();
   const backendPort = await findAvailablePort(DEFAULT_BACKEND_PORT);
   const backendUrl = `http://127.0.0.1:${backendPort}`;
+  const backendEnv = buildPackagedBackendEnv({
+    baseEnv: mergedEnv,
+    backendPort,
+    backendPaths,
+  });
+
   const child = spawn(process.execPath, [backendPaths.backendEntry], {
-    env: buildPackagedBackendEnv({
-      baseEnv: mergedEnv,
-      backendPort,
-      backendPaths,
-    }),
+    env: backendEnv,
     stdio: "pipe",
   });
 

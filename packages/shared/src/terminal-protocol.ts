@@ -1,10 +1,12 @@
+export type TerminalRuntimePreference = "auto" | "tmux" | "pty";
+
 export interface CreateTerminalSessionRequest {
   projectId?: string;
-  name?: string;
   command?: string;
   args?: string[];
   cwd?: string;
   inheritFromTerminalSessionId?: string;
+  runtimePreference?: TerminalRuntimePreference;
 }
 
 export interface CreateTerminalProjectRequest {
@@ -116,11 +118,12 @@ export interface CreateTerminalClipboardImageResponse {
 export interface TerminalSessionStatusResponse {
   terminalSessionId: string;
   projectId: string;
-  name: string;
   command: string;
   args: string[];
   cwd: string;
+  activeCommand: string | null;
   scrollback: string;
+  scrollbackSourceCols?: number;
   status: "running" | "exited";
   createdAt: string;
   exitCode?: number;
@@ -131,10 +134,10 @@ export type TerminalSessionHistoryResponse = TerminalSessionStatusResponse;
 export interface TerminalSessionListItem {
   terminalSessionId: string;
   projectId: string;
-  name: string;
   command: string;
   args: string[];
   cwd: string;
+  activeCommand: string | null;
   status: "running" | "exited";
   createdAt: string;
   exitCode?: number;
@@ -164,6 +167,7 @@ export type TerminalServerMessage =
   | {
       type: "connected";
       terminalSessionId: string;
+      runtimeKind?: "tmux" | "pty";
     }
   | {
       type: "snapshot";
@@ -171,8 +175,8 @@ export type TerminalServerMessage =
     }
   | {
       type: "metadata";
-      name: string;
       cwd: string;
+      activeCommand: string | null;
     }
   | {
       type: "output";

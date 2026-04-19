@@ -339,6 +339,58 @@ describe("PtyService", () => {
     vi.useRealTimers();
   });
 
+  it("uses a custom quick-exit message for non-shell runtimes", () => {
+    vi.useFakeTimers();
+    const exitListeners: Array<
+      (event: { exitCode: number; signal?: number }) => void
+    > = [];
+    const ptyProcess = {
+      onData: vi.fn(),
+      onExit: vi.fn(
+        (listener: (event: { exitCode: number; signal?: number }) => void) => {
+          exitListeners.push(listener);
+        },
+      ),
+      write: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      pid: 999,
+    };
+    const spawn = vi.fn(() => ptyProcess);
+    const service = new PtyService({ spawn });
+    const runtime = service.spawnSession({
+      command: "tmux",
+      args: ["new-session", "-A"],
+      cwd: "/tmp/demo",
+      fallback: null,
+      formatQuickExitMessage: ({ args, command, exitCode, runDuration }) => [
+        `tmux attach client exited in ${runDuration} ms with exit code ${exitCode}`,
+        `please check the tmux attach command: ${JSON.stringify(
+          { command, args },
+          undefined,
+          2,
+        )}`,
+      ],
+    });
+    const received: string[] = [];
+    const exits: Array<{ exitCode: number; signal?: number }> = [];
+
+    runtime.onData((data) => {
+      received.push(data);
+    });
+    runtime.onExit((event) => {
+      exits.push(event);
+    });
+
+    exitListeners[0]?.({ exitCode: 1 });
+
+    expect(received.join("")).toContain("tmux attach client exited");
+    expect(received.join("")).toContain("please check the tmux attach command");
+    expect(received.join("")).not.toContain("shell config");
+    expect(exits).toEqual([{ exitCode: 1 }]);
+    vi.useRealTimers();
+  });
+
   it("falls back when the initial shell cannot be spawned", () => {
     const fallbackPty = {
       onData: vi.fn(),

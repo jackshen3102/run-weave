@@ -14,20 +14,10 @@ const OSC_COMMAND_PATTERN = new RegExp(
 );
 const ZSH_HOOK_PREFIX = "browser-viewer-zsh-";
 
-function buildDirectoryLabel(cwd: string): string {
+export function buildDirectoryLabel(cwd: string): string {
   const normalized = cwd.replace(/\/+$/, "") || cwd;
   const baseName = path.basename(normalized);
   return baseName || normalized || "/";
-}
-
-function buildSessionLabel(
-  cwd: string,
-  activeCommand: string | null,
-): string {
-  const directoryLabel = buildDirectoryLabel(cwd);
-  return activeCommand
-    ? `${directoryLabel}(${activeCommand})`
-    : directoryLabel;
 }
 
 interface ShellPromptTrackerState {
@@ -42,7 +32,6 @@ export function createShellPromptTracker(
     output: string;
     cwd: string | null;
     activeCommand: string | null;
-    sessionName: string | null;
     metadataChanged: boolean;
   };
 } {
@@ -89,9 +78,6 @@ export function createShellPromptTracker(
         output,
         cwd: state.cwd,
         activeCommand: state.activeCommand,
-        sessionName: state.cwd
-          ? buildSessionLabel(state.cwd, state.activeCommand)
-          : null,
         metadataChanged,
       };
     },
@@ -101,7 +87,7 @@ export function createShellPromptTracker(
 export function extractShellPromptMetadata(chunk: string): {
   output: string;
   cwd: string | null;
-  sessionName: string | null;
+  activeCommand: string | null;
 } {
   const tracker = createShellPromptTracker();
   const metadata = tracker.consume(chunk);
@@ -109,7 +95,7 @@ export function extractShellPromptMetadata(chunk: string): {
   return {
     output: metadata.output,
     cwd: metadata.cwd,
-    sessionName: metadata.sessionName,
+    activeCommand: metadata.activeCommand,
   };
 }
 
@@ -121,7 +107,20 @@ function ensureZshHookDirectory(): string {
   }
 
   const hookDir = mkdtempSync(path.join(os.tmpdir(), ZSH_HOOK_PREFIX));
-  const hookScript = [
+  const sourceOriginalScript = (startupFile: string) =>
+    [
+      '_browser_viewer_original_zdotdir="${BROWSER_VIEWER_ORIGINAL_ZDOTDIR:-$HOME}"',
+      `if [[ -r "$_browser_viewer_original_zdotdir/${startupFile}" ]]; then`,
+      `  source "$_browser_viewer_original_zdotdir/${startupFile}"`,
+      "fi",
+      `export ZDOTDIR="${hookDir}"`,
+      "",
+    ].join("\n");
+  const zshrcScript = [
+    '_browser_viewer_original_zdotdir="${BROWSER_VIEWER_ORIGINAL_ZDOTDIR:-$HOME}"',
+    'if [[ -r "$_browser_viewer_original_zdotdir/.zshrc" ]]; then',
+    '  source "$_browser_viewer_original_zdotdir/.zshrc"',
+    "fi",
     'typeset -ga precmd_functions',
     'typeset -ga preexec_functions',
     '_browser_viewer_normalize_command() {',
@@ -130,10 +129,17 @@ function ensureZshHookDirectory(): string {
     '  printf "%s" "${raw_command%% *}"',
     '}',
     '_browser_viewer_emit_command() {',
-    '  printf "\\033]633;BrowserViewerCommand=%s\\007" "$(_browser_viewer_normalize_command "$1")"',
+    '  local command="$(_browser_viewer_normalize_command "$1")"',
+    '  printf "\\033]633;BrowserViewerCommand=%s\\007" "$command"',
+    '  if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" ]] && command -v tmux >/dev/null 2>&1; then',
+    '    tmux set-option -p -q @runweave_command "$command" >/dev/null 2>&1 || true',
+    "  fi",
     '}',
     '_browser_viewer_clear_command() {',
     '  printf "\\033]633;BrowserViewerCommand=\\007"',
+    '  if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" ]] && command -v tmux >/dev/null 2>&1; then',
+    '    tmux set-option -p -q @runweave_command "" >/dev/null 2>&1 || true',
+    "  fi",
     '}',
     '_browser_viewer_emit_cwd() {',
     '  printf "\\033]7;file://%s%s\\007" "${HOST:-localhost}" "$PWD"',
@@ -157,13 +163,16 @@ function ensureZshHookDirectory(): string {
     "else",
     "  unset ZDOTDIR",
     "fi",
-    'if [[ -r "${ZDOTDIR:-$HOME}/.zshenv" ]]; then',
-    '  source "${ZDOTDIR:-$HOME}/.zshenv"',
-    "fi",
     "",
   ].join("\n");
 
-  writeFileSync(path.join(hookDir, ".zshenv"), hookScript, "utf8");
+  writeFileSync(path.join(hookDir, ".zshenv"), sourceOriginalScript(".zshenv"), "utf8");
+  writeFileSync(
+    path.join(hookDir, ".zprofile"),
+    sourceOriginalScript(".zprofile"),
+    "utf8",
+  );
+  writeFileSync(path.join(hookDir, ".zshrc"), zshrcScript, "utf8");
   cachedZshHookDir = hookDir;
   return hookDir;
 }
@@ -190,10 +199,17 @@ export function applyShellIntegration(
       '  printf "%s" "${raw_command%% *}"',
       '}',
       '_browser_viewer_emit_command() {',
-      '  printf "\\033]633;BrowserViewerCommand=%s\\007" "$(_browser_viewer_normalize_command "$1")"',
+      '  local command="$(_browser_viewer_normalize_command "$1")"',
+      '  printf "\\033]633;BrowserViewerCommand=%s\\007" "$command"',
+      '  if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" ]] && command -v tmux >/dev/null 2>&1; then',
+      '    tmux set-option -p -q @runweave_command "$command" >/dev/null 2>&1 || true',
+      "  fi",
       '}',
       '_browser_viewer_clear_command() {',
       '  printf "\\033]633;BrowserViewerCommand=\\007"',
+      '  if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" ]] && command -v tmux >/dev/null 2>&1; then',
+      '    tmux set-option -p -q @runweave_command "" >/dev/null 2>&1 || true',
+      "  fi",
       '}',
       '_browser_viewer_emit_cwd() {',
       '  printf "\\033]7;file://%s%s\\007" "${HOSTNAME:-localhost}" "$PWD"',

@@ -100,7 +100,6 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
         },
         data: {
           projectId: project.projectId,
-          name: "Terminal One",
           command: "bash",
           cwd: repo,
         },
@@ -118,7 +117,6 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
         },
         data: {
           projectId: project.projectId,
-          name: "Terminal Two",
           command: "bash",
           cwd: repo,
         },

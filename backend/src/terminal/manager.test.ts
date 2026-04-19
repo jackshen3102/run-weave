@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
@@ -59,10 +62,10 @@ describe("TerminalSessionManager", () => {
       {
         id: "terminal-heavy",
         projectId: "project-default",
-        name: "heavy shell",
         command: "bash",
         args: ["-l"],
         cwd: "/tmp/heavy",
+        activeCommand: null,
         status: "running",
         createdAt: "2026-03-29T00:00:00.000Z",
       },
@@ -156,7 +159,6 @@ describe("TerminalSessionManager", () => {
       command: "bash",
       args: ["-l"],
       cwd: "/tmp/demo",
-      name: "Demo shell",
       projectId: "project-default",
     });
 
@@ -172,6 +174,31 @@ describe("TerminalSessionManager", () => {
         cwd: "/tmp/demo",
         scrollback: "",
         status: "running",
+      }),
+    );
+  });
+
+  it("creates terminal sessions without storing a display name", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    await manager.initialize();
+
+    const session = await manager.createSession({
+      command: "/bin/zsh",
+      args: ["-l"],
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      projectId: "project-default",
+    });
+
+    expect(session).toMatchObject({
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      activeCommand: null,
+    });
+    expect(store.insertSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: session.id,
+        command: "/bin/zsh",
+        activeCommand: null,
       }),
     );
   });
@@ -217,7 +244,6 @@ describe("TerminalSessionManager", () => {
       command: "claude",
       args: [],
       cwd: "/tmp/project",
-      name: "Claude",
       projectId: "project-default",
     });
 
@@ -352,7 +378,6 @@ describe("TerminalSessionManager", () => {
       command: "codex",
       args: [],
       cwd: "/tmp/project",
-      name: "Codex",
       projectId: "project-default",
     });
 
@@ -362,33 +387,70 @@ describe("TerminalSessionManager", () => {
   });
 
   it("updates session metadata and persists the latest cwd", async () => {
-    const store = createStoreMock();
-    const manager = new TerminalSessionManager(store);
-    await manager.initialize();
-    const session = await manager.createSession({
-      command: "zsh",
-      cwd: "/Users/bytedance",
-      projectId: "project-default",
-    });
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), "rw-meta-"));
+    try {
+      const store = createStoreMock();
+      const manager = new TerminalSessionManager(store);
+      await manager.initialize();
+      const session = await manager.createSession({
+        command: "zsh",
+        cwd: os.tmpdir(),
+        projectId: "project-default",
+      });
 
-    const updated = await manager.updateSessionMetadata(session.id, {
-      name: "browser-hub",
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-    });
+      const updated = await manager.updateSessionMetadata(session.id, {
+        cwd: tmpDir,
+        activeCommand: "codex",
+      });
 
-    expect(updated).toMatchObject({
-      id: session.id,
-      name: "browser-hub",
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-    });
-    expect(store.updateSessionMetadata).toHaveBeenCalledWith({
-      terminalSessionId: session.id,
-      name: "browser-hub",
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-    });
+      expect(updated).toMatchObject({
+        id: session.id,
+        cwd: tmpDir,
+        activeCommand: "codex",
+      });
+      expect(store.updateSessionMetadata).toHaveBeenCalledWith({
+        terminalSessionId: session.id,
+        cwd: tmpDir,
+        activeCommand: "codex",
+      });
+    } finally {
+      rmSync(tmpDir, { force: true, recursive: true });
+    }
   });
 
-  it("updates session launch config and renames command-derived tabs", async () => {
+  it("ignores session metadata with a cwd that no longer exists", async () => {
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), "rw-stale-"));
+    try {
+      const store = createStoreMock();
+      const manager = new TerminalSessionManager(store);
+      await manager.initialize();
+      const session = await manager.createSession({
+        command: "zsh",
+        cwd: tmpDir,
+        projectId: "project-default",
+      });
+
+      const updated = await manager.updateSessionMetadata(session.id, {
+        cwd: path.join(tmpDir, "nonexistent_subdir"),
+        activeCommand: "zsh",
+      });
+
+      expect(updated).toMatchObject({
+        id: session.id,
+        cwd: tmpDir,
+        activeCommand: null,
+      });
+      expect(store.updateSessionMetadata).not.toHaveBeenCalledWith({
+        terminalSessionId: session.id,
+        cwd: path.join(tmpDir, "nonexistent_subdir"),
+        activeCommand: "zsh",
+      });
+    } finally {
+      rmSync(tmpDir, { force: true, recursive: true });
+    }
+  });
+
+  it("updates session launch config without storing a display name", async () => {
     const store = createStoreMock();
     const manager = new TerminalSessionManager(store);
     await manager.initialize();
@@ -406,13 +468,11 @@ describe("TerminalSessionManager", () => {
 
     expect(updated).toMatchObject({
       id: session.id,
-      name: "/bin/zsh",
       command: "/bin/zsh",
       args: ["-l"],
     });
     expect(store.updateSessionLaunch).toHaveBeenCalledWith({
       terminalSessionId: session.id,
-      name: "/bin/zsh",
       command: "/bin/zsh",
       args: ["-l"],
     });

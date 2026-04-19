@@ -27,8 +27,12 @@ import {
   logTerminalPerf,
   summarizeTerminalChunk,
 } from "../../features/terminal/perf-logging";
+import { filterBrowserHandledTerminalOutput } from "../../features/terminal/output-filter";
 import { createResizeScheduler } from "../../features/terminal/resize-scheduler";
+import { buildTmuxScrollInput } from "../../features/terminal/tmux-scroll";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
+import { scheduleTerminalViewportRefresh } from "../../features/terminal/viewport-refresh";
+import { shouldSuppressWheelInput } from "../../features/terminal/wheel-input";
 import { HttpError } from "../../services/http";
 import {
   createTerminalSessionClipboardImage,
@@ -53,10 +57,11 @@ interface TerminalSurfaceProps {
   terminalSessionId: string;
   token: string;
   clientMode?: ClientMode;
+  layoutVersion?: string;
   onAuthExpired?: () => void;
   onActivity?: () => void;
   onBell?: () => void;
-  onMetadata?: (metadata: { name: string; cwd: string }) => void;
+  onMetadata?: (metadata: { cwd: string; activeCommand: string | null }) => void;
   onOpenHistory?: () => void;
 }
 
@@ -126,12 +131,6 @@ function recordTerminalPerfProbeEvent(
 function clampTerminalFontSize(value: number): number {
   return Math.max(MIN_TERMINAL_FONT_SIZE, Math.min(MAX_TERMINAL_FONT_SIZE, value));
 }
-
-// xterm.js 6.0.0 has a bug in requestMode(): the handler for DECRQM queries
-// (CSI ? Pn $ p) crashes with "r is not defined". Vim sends these to probe
-// terminal mode capabilities. Strip them before writing — xterm cannot respond
-// to them anyway, and vim falls back to defaults when it receives no reply.
-const DECRQM_QUERY_RE = new RegExp(`${ESCAPE}\\[\\?[\\d;]+\\$p`, "g");
 
 function isTerminalAutoResponse(data: string): boolean {
   if (!data.startsWith("\u001b")) {
@@ -227,6 +226,7 @@ export function TerminalSurface({
   terminalSessionId,
   token,
   clientMode = "desktop",
+  layoutVersion = "default",
   onAuthExpired,
   onActivity,
   onBell,
@@ -248,6 +248,7 @@ export function TerminalSurface({
   const onAuthExpiredRef = useRef(onAuthExpired);
   const onMetadataRef = useRef(onMetadata);
   const tokenRef = useRef(token);
+  const runtimeKindRef = useRef<"tmux" | "pty" | null>(null);
   const openedAtRef = useRef(Date.now());
   const lastActivityMarkedAtRef = useRef<number | null>(null);
   const lastResizedAtRef = useRef<number | null>(null);
@@ -283,7 +284,7 @@ export function TerminalSurface({
   });
 
   const renderTerminalSnapshot = useCallback((data: string) => {
-    const nextChunk = data.replace(DECRQM_QUERY_RE, "");
+    const nextChunk = filterBrowserHandledTerminalOutput(data);
     const terminal = terminalRef.current;
     if (!terminal) {
       return;
@@ -375,7 +376,7 @@ export function TerminalSurface({
   }, [renderTerminalSnapshot]);
 
   const onOutput = useCallback((data: string) => {
-    const nextChunk = data.replace(DECRQM_QUERY_RE, "");
+    const nextChunk = filterBrowserHandledTerminalOutput(data);
     if (!nextChunk) {
       return;
     }
@@ -474,7 +475,7 @@ export function TerminalSurface({
     });
   }, [markDeferredOutput, terminalSessionId]);
 
-  const { error, sendInput, sendResize } = useTerminalConnection({
+  const { error, sendInput, sendResize, runtimeKind } = useTerminalConnection({
     apiBase,
     terminalSessionId,
     token,
@@ -556,6 +557,9 @@ export function TerminalSurface({
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
+  useEffect(() => {
+    runtimeKindRef.current = runtimeKind;
+  }, [runtimeKind]);
 
   useEffect(() => {
     setPreferences(loadTerminalPreferences(apiBase));
@@ -609,6 +613,31 @@ export function TerminalSurface({
     );
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
+    terminal.attachCustomWheelEventHandler((event) => {
+      const canScroll = terminal.buffer.active.baseY > 0;
+      if (!shouldSuppressWheelInput(event, canScroll)) {
+        return true;
+      }
+
+      if (
+        runtimeKindRef.current === "tmux" &&
+        event.deltaY !== 0 &&
+        !event.shiftKey
+      ) {
+        const input = buildTmuxScrollInput(
+          event.deltaY,
+          terminal.cols,
+          terminal.rows,
+        );
+        if (input) {
+          sendTerminalInput(input);
+        }
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      return false;
+    });
 
     let rendererAddon: { dispose(): void } | null = null;
     const applyRendererPreference = (preference: TerminalRendererPreference) => {
@@ -909,7 +938,10 @@ export function TerminalSurface({
         if (cancelled) {
           return;
         }
-        onMetadataRef.current?.({ name: session.name, cwd: session.cwd });
+        onMetadataRef.current?.({
+          cwd: session.cwd,
+          activeCommand: session.activeCommand,
+        });
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -944,15 +976,15 @@ export function TerminalSurface({
       return;
     }
 
-    terminalRef.current.focus();
-    const frameId = requestAnimationFrame(() => {
-      refreshTerminalViewportRef.current?.();
-    });
+    return scheduleTerminalViewportRefresh(() => {
+      if (!activeRef.current || !terminalRef.current) {
+        return;
+      }
 
-    return () => {
-      cancelAnimationFrame(frameId);
-    };
-  }, [active]);
+      terminalRef.current.focus();
+      refreshTerminalViewportRef.current?.();
+    }, { delayMs: TERMINAL_RESIZE_DEBOUNCE_MS });
+  }, [active, layoutVersion]);
 
   useEffect(() => {
     if (!active || !terminalRef.current) {
@@ -1010,7 +1042,10 @@ export function TerminalSurface({
           }
         }
 
-        onMetadataRef.current?.({ name: session.name, cwd: session.cwd });
+        onMetadataRef.current?.({
+          cwd: session.cwd,
+          activeCommand: session.activeCommand,
+        });
         renderTerminalSnapshot(session.scrollback);
       } catch (error: unknown) {
         if (cancelled) {

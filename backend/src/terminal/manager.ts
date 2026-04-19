@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
+import { existsSync, statSync } from "node:fs";
 import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
   TERMINAL_LIVE_SCROLLBACK_BYTES,
@@ -30,10 +31,10 @@ export interface TerminalProjectRecord {
 export interface TerminalSessionRecord {
   id: string;
   projectId: string;
-  name: string;
   command: string;
   args: string[];
   cwd: string;
+  activeCommand: string | null;
   scrollback: string;
   status: "running" | "exited";
   createdAt: Date;
@@ -56,7 +57,6 @@ interface RuntimeTerminalSessionRecord extends Omit<
 
 export interface CreateTerminalSessionOptions {
   projectId?: string;
-  name?: string;
   command: string;
   args?: string[];
   cwd: string;
@@ -92,10 +92,10 @@ function buildRecord(
   return {
     id: persisted.id,
     projectId: persisted.projectId,
-    name: persisted.name,
     command: persisted.command,
     args: persisted.args,
     cwd: persisted.cwd,
+    activeCommand: persisted.activeCommand ?? null,
     scrollback: persisted.scrollback ?? "",
     status: persisted.status,
     createdAt: new Date(persisted.createdAt),
@@ -149,10 +149,10 @@ function toPersisted(
   return {
     id: session.id,
     projectId: session.projectId,
-    name: session.name,
     command: session.command,
     args: session.args,
     cwd: session.cwd,
+    activeCommand: session.activeCommand,
     scrollback: session.scrollback,
     status: session.status,
     createdAt: session.createdAt.toISOString(),
@@ -306,10 +306,10 @@ export class TerminalSessionManager {
     const session = createRuntimeRecord({
       id: uuidv4(),
       projectId,
-      name: options.name?.trim() || options.command,
       command: options.command,
       args: options.args ?? [],
       cwd: options.cwd,
+      activeCommand: null,
       scrollback: "",
       status: "running",
       createdAt: now,
@@ -425,8 +425,8 @@ export class TerminalSessionManager {
   async updateSessionMetadata(
     terminalSessionId: string,
     metadata: {
-      name: string;
       cwd: string;
+      activeCommand: string | null;
     },
   ): Promise<TerminalSessionRecord | undefined> {
     const session = this.sessions.get(terminalSessionId);
@@ -434,33 +434,25 @@ export class TerminalSessionManager {
       return undefined;
     }
 
-    if (session.name === metadata.name && session.cwd === metadata.cwd) {
+    if (!isExistingDirectory(metadata.cwd)) {
       return session;
     }
 
-    session.name = metadata.name;
-    session.cwd = metadata.cwd;
-    await this.sessionStore.updateSessionMetadata({
-      terminalSessionId,
-      name: metadata.name,
-      cwd: metadata.cwd,
-    });
-    return session;
-  }
-
-  async updateSessionName(
-    terminalSessionId: string,
-    name: string,
-  ): Promise<TerminalSessionRecord | undefined> {
-    const session = this.sessions.get(terminalSessionId);
-    if (!session) {
-      return undefined;
+    if (
+      session.cwd === metadata.cwd &&
+      session.activeCommand === metadata.activeCommand
+    ) {
+      return session;
     }
 
-    return this.updateSessionMetadata(terminalSessionId, {
-      name,
-      cwd: session.cwd,
+    session.cwd = metadata.cwd;
+    session.activeCommand = metadata.activeCommand;
+    await this.sessionStore.updateSessionMetadata({
+      terminalSessionId,
+      cwd: metadata.cwd,
+      activeCommand: metadata.activeCommand,
     });
+    return session;
   }
 
   async updateSessionLaunch(
@@ -475,23 +467,19 @@ export class TerminalSessionManager {
       return undefined;
     }
 
-    const nextName =
-      session.name === session.command ? launch.command : session.name;
     const nextArgs = [...launch.args];
     const commandUnchanged = session.command === launch.command;
     const argsUnchanged =
       session.args.length === nextArgs.length &&
       session.args.every((arg, index) => arg === nextArgs[index]);
-    if (commandUnchanged && argsUnchanged && nextName === session.name) {
+    if (commandUnchanged && argsUnchanged) {
       return session;
     }
 
-    session.name = nextName;
     session.command = launch.command;
     session.args = nextArgs;
     await this.sessionStore.updateSessionLaunch({
       terminalSessionId,
-      name: nextName,
       command: launch.command,
       args: nextArgs,
     });
@@ -589,5 +577,13 @@ export class TerminalSessionManager {
         this.flushScrollback(terminalSessionId),
       ),
     );
+  }
+}
+
+function isExistingDirectory(value: string): boolean {
+  try {
+    return existsSync(value) && statSync(value).isDirectory();
+  } catch {
+    return false;
   }
 }

@@ -6,6 +6,7 @@ import { execFile as nodeExecFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
 import { logTerminalPerf } from "./perf-logging";
+import { applyShellIntegration } from "./shell-integration";
 
 export interface TmuxTarget {
   sessionName: string;
@@ -20,6 +21,11 @@ export interface TmuxCommand {
 export interface TmuxLaunchCommand {
   command: string;
   args: string[];
+}
+
+export interface TmuxPaneMetadata {
+  cwd: string;
+  activeCommand: string | null;
 }
 
 export interface TmuxAvailability {
@@ -62,6 +68,13 @@ const CaptureHistoryLines = 5_000;
 const InteractivePaneReadyMinWaitMs = 1_000;
 const InteractivePaneReadyStableMs = 200;
 const InteractivePaneReadyTimeoutMs = 2_500;
+const TMUX_RUNTIME_OPTION_ARGS = ["set-option", "-g", "mouse", "on"];
+const SHELL_INTEGRATION_ENV_KEYS = [
+  "BROWSER_VIEWER_LAST_COMMAND",
+  "BROWSER_VIEWER_ORIGINAL_ZDOTDIR",
+  "PROMPT_COMMAND",
+  "ZDOTDIR",
+];
 
 export class TmuxRebuildLimitError extends Error {
   constructor(
@@ -186,6 +199,8 @@ export class TmuxService {
       command: this.binary,
       args: [
         ...this.buildServerArgs(target.socketPath),
+        ...TMUX_RUNTIME_OPTION_ARGS,
+        ";",
         "new-session",
         "-A",
         "-s",
@@ -204,10 +219,13 @@ export class TmuxService {
   ): Promise<void> {
     await this.runTmux(
       [
+        ...TMUX_RUNTIME_OPTION_ARGS,
+        ";",
         "new-session",
         "-d",
         "-s",
         target.sessionName,
+        ...this.buildShellIntegrationEnvArgs(launchCommand),
         "-c",
         cwd,
         formatShellCommand(launchCommand),
@@ -234,31 +252,85 @@ export class TmuxService {
   async capturePane(
     target: TmuxTarget,
     historyLines = CaptureHistoryLines,
-  ): Promise<{ data: string; durationMs: number }> {
+  ): Promise<{ data: string; durationMs: number; sourceCols?: number }> {
     const startedAt = performance.now();
-    const result = await this.runTmux(
-      [
-        "capture-pane",
-        "-p",
-        "-J",
-        "-S",
-        `-${historyLines}`,
-        "-t",
-        target.sessionName,
-      ],
-      target,
-    );
+    const [result, sourceCols] = await Promise.all([
+      this.runTmux(
+        [
+          "capture-pane",
+          "-p",
+          "-J",
+          "-S",
+          `-${historyLines}`,
+          "-t",
+          target.sessionName,
+        ],
+        target,
+      ),
+      this.readPaneWidth(target),
+    ]);
     const durationMs = Number((performance.now() - startedAt).toFixed(2));
     logTerminalPerf("terminal.tmux.capture-pane", {
       sessionName: target.sessionName,
       durationMs,
       historyLines,
+      sourceCols,
       bytes: Buffer.byteLength(result.stdout, "utf8"),
     });
     return {
       data: result.stdout,
       durationMs,
+      sourceCols,
     };
+  }
+
+  async readPaneMetadata(
+    target: TmuxTarget,
+    shellCommand?: string,
+  ): Promise<TmuxPaneMetadata | null> {
+    const result = await this.runTmux(
+      [
+        "display-message",
+        "-p",
+        "-t",
+        target.sessionName,
+        "#{pane_current_path}\t#{@runweave_command}\t#{pane_current_command}",
+      ],
+      target,
+    );
+    const [rawCwd = "", rawRunweaveCommand = "", rawCommand = ""] = result.stdout
+      .replace(/\r?\n$/, "")
+      .split("\t");
+    const cwd = rawCwd.trim();
+    if (!cwd) {
+      return null;
+    }
+    const activeCommand =
+      normalizePaneCommand(rawRunweaveCommand) ??
+      normalizePaneCommand(rawCommand, shellCommand);
+    return {
+      cwd,
+      activeCommand,
+    };
+  }
+
+  private async readPaneWidth(target: TmuxTarget): Promise<number | undefined> {
+    try {
+      const result = await this.runTmux(
+        [
+          "display-message",
+          "-p",
+          "-t",
+          target.sessionName,
+          "#{pane_width}",
+        ],
+        target,
+      );
+      const width = Number.parseInt(result.stdout.trim(), 10);
+      return Number.isFinite(width) && width > 0 ? width : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   async waitForPaneReady(target: TmuxTarget): Promise<void> {
@@ -373,6 +445,7 @@ export class TmuxService {
       this.configPath,
       [
         "set-option -g history-limit 5000",
+        "set-option -g mouse on",
         "set-option -g default-terminal \"tmux-256color\"",
         "set-option -as terminal-overrides ',xterm-256color:RGB'",
         "unbind-key C-b",
@@ -385,6 +458,24 @@ export class TmuxService {
 
   private buildServerArgs(socketPath: string): string[] {
     return ["-S", socketPath, "-f", this.configPath];
+  }
+
+  private buildShellIntegrationEnvArgs(
+    launchCommand: TmuxLaunchCommand,
+  ): string[] {
+    if (launchCommand.args.some((arg) => arg === "-c" || arg === "-lc")) {
+      return [];
+    }
+    const integratedEnv = applyShellIntegration(launchCommand.command, {
+      ...this.env,
+    });
+    return SHELL_INTEGRATION_ENV_KEYS.flatMap((key) => {
+      const value = integratedEnv[key];
+      if (value === undefined || value === this.env[key]) {
+        return [];
+      }
+      return ["-e", `${key}=${value}`];
+    });
   }
 
   private async runTmux(
@@ -424,6 +515,27 @@ function formatShellCommand(launchCommand: TmuxLaunchCommand): string {
   return [launchCommand.command, ...launchCommand.args]
     .map((part) => shellQuote(part))
     .join(" ");
+}
+
+function normalizePaneCommand(
+  paneCommand: string,
+  shellCommand?: string,
+): string | null {
+  const command = paneCommand.trim();
+  if (!command) {
+    return null;
+  }
+
+  const shellName = shellCommand ? path.basename(shellCommand) : null;
+  if (shellName && isInteractiveShellName(shellName) && command === shellName) {
+    return null;
+  }
+
+  return command;
+}
+
+function isInteractiveShellName(command: string): boolean {
+  return ["bash", "zsh", "sh", "fish"].includes(command);
 }
 
 function shellQuote(value: string): string {

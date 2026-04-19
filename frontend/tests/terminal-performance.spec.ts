@@ -231,7 +231,6 @@ async function createTerminalSession(
   request: APIRequestContext,
   token: string,
   payload: {
-    name: string;
     command: string;
     args?: string[];
     cwd: string;
@@ -615,7 +614,6 @@ test.describe("terminal performance", () => {
     const sessions: Array<{ terminalSessionId: string; terminalUrl: string }> =
       [];
     const activeSession = await createTerminalSession(request, token, {
-      name: "perf-active",
       command: "/bin/bash",
       args: ["-i"],
       cwd: "/tmp",
@@ -625,7 +623,6 @@ test.describe("terminal performance", () => {
     for (let index = 1; index < sessionCount; index += 1) {
       sessions.push(
         await createTerminalSession(request, token, {
-          name: `perf-background-${index}`,
           command: "/bin/bash",
           args: [
             "-lc",
@@ -718,7 +715,6 @@ test.describe("terminal performance", () => {
     const sessions: Array<{ terminalSessionId: string; terminalUrl: string }> =
       [];
     const activeSession = await createTerminalSession(request, token, {
-      name: "perf-active-silent",
       command: "/bin/bash",
       args: seedActiveScrollback
         ? [
@@ -740,7 +736,6 @@ test.describe("terminal performance", () => {
 
     for (let index = 1; index < sessionCount; index += 1) {
       const backgroundSession = await createTerminalSession(request, token, {
-        name: `perf-silent-background-${index}`,
         command: "/bin/bash",
         args: [
           "-lc",

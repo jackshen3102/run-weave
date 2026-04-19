@@ -119,6 +119,14 @@ export async function ensureTerminalRuntime(
           args: attachCommand.args,
           cwd: currentSession.cwd,
           fallback: null,
+          formatQuickExitMessage: ({ args, command, exitCode, runDuration }) => [
+            `tmux attach client exited in ${runDuration} ms with exit code ${exitCode}`,
+            `please check the tmux attach command and session state: ${JSON.stringify(
+              { command, args },
+              undefined,
+              2,
+            )}`,
+          ],
         }),
       );
       options.runtimeRegistry.createRuntime(currentSession.id, runtime);
@@ -259,12 +267,36 @@ export async function readTerminalScrollback(
   tmuxService: TmuxService | undefined,
   mode: "history" | "live",
 ): Promise<string> {
+  return (
+    await readTerminalScrollbackCapture(
+      session,
+      terminalSessionManager,
+      tmuxService,
+      mode,
+    )
+  ).data;
+}
+
+export interface TerminalScrollbackCapture {
+  data: string;
+  sourceCols?: number;
+}
+
+export async function readTerminalScrollbackCapture(
+  session: TerminalSessionRecord,
+  terminalSessionManager: TerminalSessionManager,
+  tmuxService: TmuxService | undefined,
+  mode: "history" | "live",
+): Promise<TerminalScrollbackCapture> {
   if (isTmuxBackedSession(session) && tmuxService) {
     try {
       const captured = await tmuxService.capturePane(
         resolveTmuxTarget(session, tmuxService),
       );
-      return captured.data;
+      return {
+        data: captured.data,
+        sourceCols: captured.sourceCols,
+      };
     } catch (error) {
       console.error("[viewer-be] tmux capture-pane failed", {
         terminalSessionId: session.id,
@@ -272,14 +304,14 @@ export async function readTerminalScrollback(
         tmuxSocketPath: session.tmuxSocketPath,
         error: String(error),
       });
-      return "";
+      return { data: "" };
     }
   }
 
   if (mode === "history") {
-    return terminalSessionManager.readScrollback(session.id);
+    return { data: await terminalSessionManager.readScrollback(session.id) };
   }
-  return terminalSessionManager.readLiveScrollback(session.id);
+  return { data: await terminalSessionManager.readLiveScrollback(session.id) };
 }
 
 export async function killTmuxSessionForTerminal(

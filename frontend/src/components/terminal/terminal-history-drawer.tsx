@@ -6,6 +6,11 @@ import { CanvasAddon } from "@xterm/addon-canvas";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import {
+  syncTerminalHistorySize,
+  writeTerminalHistoryOutput,
+} from "../../features/terminal/history-output";
+import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import { loadTerminalPreferences } from "../../features/terminal/preferences";
 import { HttpError } from "../../services/http";
 import { getTerminalHistory } from "../../services/terminal";
@@ -94,7 +99,14 @@ export function TerminalHistoryDrawer({
     };
   }, [apiBase, onAuthExpired, open, terminalSessionId, token]);
 
-  const renderedTitle = terminalName ?? history?.name ?? "Terminal History";
+  const renderedTitle =
+    terminalName ??
+    (history
+      ? formatTerminalSessionName({
+          cwd: history.cwd,
+          activeCommand: history.activeCommand,
+        })
+      : "Terminal History");
   const renderedStatus = useMemo(() => {
     if (!history) {
       return terminalSessionId ? terminalSessionId : "No terminal selected";
@@ -152,18 +164,18 @@ export function TerminalHistoryDrawer({
     terminal.unicode.activeVersion = "11";
 
     const syncSize = () => {
-      fitAddon.fit();
-      terminal.refresh(0, Math.max(terminal.rows - 1, 0));
+      syncTerminalHistorySize({
+        terminal,
+        fitAddon,
+        sourceCols: history?.scrollbackSourceCols,
+      });
     };
 
-    if (history?.scrollback) {
-      terminal.write(history.scrollback, () => {
-        syncSize();
-        terminal.scrollToBottom();
-      });
-    } else {
-      syncSize();
-    }
+    writeTerminalHistoryOutput({
+      terminal,
+      output: history?.scrollback ?? "",
+      syncSize,
+    });
 
     let mountFitFrameId: number | null = requestAnimationFrame(() => {
       mountFitFrameId = null;
@@ -203,7 +215,13 @@ export function TerminalHistoryDrawer({
       canvasAddon?.dispose();
       terminal.dispose();
     };
-  }, [apiBase, history?.scrollback, open, terminalSessionId]);
+  }, [
+    apiBase,
+    history?.scrollback,
+    history?.scrollbackSourceCols,
+    open,
+    terminalSessionId,
+  ]);
 
   return (
     <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
@@ -243,7 +261,7 @@ export function TerminalHistoryDrawer({
         <div className="min-h-0 flex-1 overflow-hidden p-3">
           <div
             ref={terminalContainerRef}
-            className="h-full min-h-full w-full overflow-hidden rounded-md border border-slate-800 bg-[#0b1220] px-1 py-1"
+            className="h-full min-h-full w-full overflow-x-auto overflow-y-hidden rounded-md border border-slate-800 bg-[#0b1220] px-1 py-1"
           />
         </div>
       </SheetContent>

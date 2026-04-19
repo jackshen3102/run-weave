@@ -4,6 +4,9 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
@@ -39,11 +42,10 @@ async function loginAndSeedToken(
   return payload.accessToken;
 }
 
-async function createNamedTerminalSession(
+async function createTerminalSession(
   request: APIRequestContext,
   token: string,
-  name: string,
-  options: { command?: string; args?: string[]; projectId?: string } = {},
+  options: { command?: string; args?: string[]; projectId?: string; cwd?: string } = {},
 ): Promise<{ terminalSessionId: string; terminalUrl: string }> {
   const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
     headers: {
@@ -51,10 +53,9 @@ async function createNamedTerminalSession(
     },
     data: {
       projectId: options.projectId,
-      name,
       command: options.command ?? "bash",
       args: options.args,
-      cwd: "/tmp",
+      cwd: options.cwd ?? "/tmp",
     },
   });
 
@@ -105,11 +106,7 @@ test("creates a terminal session and streams command output", async ({
   request,
 }) => {
   const token = await loginAndSeedToken(request, page);
-  const session = await createNamedTerminalSession(
-    request,
-    token,
-    `stream-${Date.now()}`,
-  );
+  const session = await createTerminalSession(request, token);
   await page.addInitScript((preferencesKey) => {
     window.localStorage.setItem(
       preferencesKey,
@@ -147,11 +144,7 @@ test("fits the terminal pane to the available viewport", async ({
 }) => {
   await page.setViewportSize({ width: 1780, height: 900 });
   const token = await loginAndSeedToken(request, page);
-  const session = await createNamedTerminalSession(
-    request,
-    token,
-    `fit-${Date.now()}`,
-  );
+  const session = await createTerminalSession(request, token);
   await page.addInitScript((preferencesKey) => {
     window.localStorage.setItem(
       preferencesKey,
@@ -208,18 +201,21 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
   });
   expect(projectResponse.ok()).toBe(true);
   const project = (await projectResponse.json()) as { projectId: string };
-  const firstSession = await createNamedTerminalSession(
-    request,
-    token,
-    `tab-keep-a-${suffix}`,
-    { projectId: project.projectId, command: "tail", args: ["-f", "/dev/null"] },
-  );
-  const secondSession = await createNamedTerminalSession(
-    request,
-    token,
-    `tab-keep-b-${suffix}`,
-    { projectId: project.projectId, command: "tail", args: ["-f", "/dev/null"] },
-  );
+  const firstCwd = await mkdtemp(path.join(os.tmpdir(), `tab-keep-a-${suffix}-`));
+  const secondCwd = await mkdtemp(path.join(os.tmpdir(), `tab-keep-b-${suffix}-`));
+  const secondLabel = path.basename(secondCwd);
+  const firstSession = await createTerminalSession(request, token, {
+    projectId: project.projectId,
+    command: "tail",
+    args: ["-f", "/dev/null"],
+    cwd: firstCwd,
+  });
+  const secondSession = await createTerminalSession(request, token, {
+    projectId: project.projectId,
+    command: "tail",
+    args: ["-f", "/dev/null"],
+    cwd: secondCwd,
+  });
 
   await page.goto(firstSession.terminalUrl);
 
@@ -228,7 +224,7 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
   );
 
   await page
-    .getByRole("button", { name: `tab-keep-b-${suffix}`, exact: true })
+    .getByRole("button", { name: secondLabel, exact: true })
     .click();
 
   await expect
@@ -240,6 +236,9 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
   await expect
     .poll(() => page.url())
     .toContain(`/terminal/${secondSession.terminalSessionId}`);
+
+  await rm(firstCwd, { force: true, recursive: true });
+  await rm(secondCwd, { force: true, recursive: true });
 });
 
 test("restores deferred background terminal output when selected", async ({
@@ -255,20 +254,17 @@ test("restores deferred background terminal output when selected", async ({
       JSON.stringify({ renderer: "dom", screenReaderMode: true }),
     );
   }, TERMINAL_PREFERENCES_KEY);
-  const activeSession = await createNamedTerminalSession(
-    request,
-    token,
-    `inactive-active-${suffix}`,
-  );
-  const backgroundSession = await createNamedTerminalSession(
-    request,
-    token,
-    `inactive-bg-${suffix}`,
-    {
-      command: "bash",
-      args: ["-lc", `printf '${backgroundMarker}\\n'; sleep 60`],
-    },
-  );
+  const activeCwd = await mkdtemp(path.join(os.tmpdir(), `inactive-active-${suffix}-`));
+  const backgroundCwd = await mkdtemp(path.join(os.tmpdir(), `inactive-bg-${suffix}-`));
+  const backgroundLabel = path.basename(backgroundCwd);
+  const activeSession = await createTerminalSession(request, token, {
+    cwd: activeCwd,
+  });
+  const backgroundSession = await createTerminalSession(request, token, {
+    command: "bash",
+    args: ["-lc", `printf '${backgroundMarker}\\n'; sleep 60`],
+    cwd: backgroundCwd,
+  });
 
   await expect
     .poll(() =>
@@ -280,11 +276,66 @@ test("restores deferred background terminal output when selected", async ({
   await expect(page.getByLabel("Terminal emulator").first()).toBeVisible();
 
   await page
-    .getByRole("button", { name: `inactive-bg-${suffix}`, exact: true })
+    .getByRole("button", { name: backgroundLabel, exact: true })
     .click();
   await expect
     .poll(() => page.url())
     .toContain(`/terminal/${backgroundSession.terminalSessionId}`);
 
   await expect.poll(() => getLiveTerminalText(page)).toContain(backgroundMarker);
+
+  await rm(activeCwd, { force: true, recursive: true });
+  await rm(backgroundCwd, { force: true, recursive: true });
+});
+
+test("tmux tab name follows the foreground command like pty", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "runweave-e2e-tmux-"));
+  const cwdLabel = path.basename(cwd);
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
+
+  try {
+    const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      data: {
+        command: "/bin/bash",
+        args: ["-l"],
+        cwd,
+        runtimePreference: "tmux",
+      },
+    });
+    expect(response.ok()).toBe(true);
+    const session = (await response.json()) as {
+      terminalSessionId: string;
+      terminalUrl: string;
+    };
+
+    await page.goto(session.terminalUrl);
+    await expect(
+      page.getByRole("button", { name: cwdLabel, exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Terminal emulator")).toBeVisible();
+    await page.getByLabel("Terminal emulator").click({ force: true });
+
+    await page.keyboard.type("codex(){ sleep 5; }");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("codex");
+    await page.keyboard.press("Enter");
+
+    await expect(
+      page.getByRole("button", { name: `${cwdLabel}(codex)`, exact: true }),
+    ).toBeVisible({ timeout: 3_000 });
+  } finally {
+    await rm(cwd, { force: true, recursive: true });
+  }
 });

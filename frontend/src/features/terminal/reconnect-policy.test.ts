@@ -33,6 +33,16 @@ describe("shouldAutoReconnectTerminalClose", () => {
     ).toBe(false);
   });
 
+  it("reconnects server tmux reattach closes even when they are immediate", () => {
+    expect(
+      shouldAutoReconnectTerminalClose({
+        code: 1012,
+        livedMs: 50,
+        reason: "Terminal tmux attach reattached",
+      }),
+    ).toBe(true);
+  });
+
   it("does not reconnect normal closes", () => {
     expect(
       shouldAutoReconnectTerminalClose({

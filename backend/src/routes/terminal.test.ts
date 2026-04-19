@@ -25,10 +25,10 @@ import { createTerminalRouter } from "./terminal";
 interface MockTerminalSession {
   id: string;
   projectId?: string;
-  name: string;
   command: string;
   args: string[];
   cwd: string;
+  activeCommand?: string | null;
   scrollback: string;
   status: "running" | "exited";
   createdAt: Date;
@@ -59,10 +59,13 @@ function createTestServer(sessionState: {
   runtimeRegistry?: unknown;
   tmuxService?: unknown;
 }) {
-  const resolveSession = (id: string) =>
+  const resolveRawSession = (id: string) =>
     sessionState.current?.id === id
       ? sessionState.current
       : sessionState.sessions?.find((session) => session.id === id);
+  const normalizeSession = (session: MockTerminalSession | undefined | null) =>
+    session ? { ...session, activeCommand: session.activeCommand ?? null } : undefined;
+  const resolveSession = (id: string) => normalizeSession(resolveRawSession(id));
   const projects = sessionState.projects ?? [
     {
       id: "project-default",
@@ -76,7 +79,6 @@ function createTestServer(sessionState: {
     createSession: vi.fn(
       async (options: {
         projectId?: string;
-        name?: string;
         command: string;
         args?: string[];
         cwd: string;
@@ -84,10 +86,10 @@ function createTestServer(sessionState: {
         const created: MockTerminalSession = {
           id: "terminal-1",
           projectId: options.projectId ?? projects[0]?.id ?? "project-default",
-          name: options.name ?? options.command,
           command: options.command,
           args: options.args ?? [],
           cwd: options.cwd,
+          activeCommand: null,
           scrollback: "",
           status: "running",
           createdAt: new Date("2026-03-29T00:00:00.000Z"),
@@ -159,8 +161,10 @@ function createTestServer(sessionState: {
     }),
     listSessions: vi.fn(
       () =>
-        sessionState.sessions ??
-        (sessionState.current ? [sessionState.current] : []),
+        (
+          sessionState.sessions ??
+          (sessionState.current ? [sessionState.current] : [])
+        ).map((session) => normalizeSession(session)),
     ),
     destroySession: vi.fn(async (id: string) => {
       if (sessionState.current?.id !== id) {
@@ -171,24 +175,14 @@ function createTestServer(sessionState: {
     }),
     updateRuntimeMetadata: vi.fn(
       async (id: string, metadata: Partial<MockTerminalSession>) => {
-        const session = resolveSession(id);
+        const session = resolveRawSession(id);
         if (!session) {
           return undefined;
         }
         Object.assign(session, metadata);
-        return session;
+        return normalizeSession(session);
       },
     ),
-    updateSessionName: vi.fn(async (id: string, name: string) => {
-      if (sessionState.current?.id !== id) {
-        return undefined;
-      }
-      sessionState.current = {
-        ...sessionState.current,
-        name,
-      };
-      return sessionState.current;
-    }),
   };
 
   const app = express();
@@ -385,6 +379,7 @@ describe("terminal routes", () => {
       ],
       cwd: "/tmp/demo",
       fallback: null,
+      formatQuickExitMessage: expect.any(Function),
     });
     expect(runtimeRegistry.createRuntime).toHaveBeenCalledWith(
       "terminal-1",
@@ -440,6 +435,60 @@ describe("terminal routes", () => {
         recoverable: false,
       },
     );
+    expect(ptyService.spawnSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        fallback: expect.any(Object),
+      }),
+    );
+    expect(runtimeRegistry.ensureRecorder).toHaveBeenCalled();
+  });
+
+  it("creates pty terminal sessions when explicitly requested even if tmux is available", async () => {
+    const state = { current: null as MockTerminalSession | null };
+    const runtime = { pid: 10 };
+    const ptyService = {
+      spawnSession: vi.fn(() => runtime),
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => undefined),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const tmuxService = {
+      isAvailable: vi.fn(async () => true),
+      buildTarget: vi.fn(),
+    };
+    const { server, terminalSessionManager } = createTestServer(state, {
+      ptyService,
+      runtimeRegistry,
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "project-default",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+          runtimePreference: "pty",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(tmuxService.isAvailable).not.toHaveBeenCalled();
+    expect(tmuxService.buildTarget).not.toHaveBeenCalled();
+    expect(terminalSessionManager.updateRuntimeMetadata).not.toHaveBeenCalled();
     expect(ptyService.spawnSession).toHaveBeenCalledWith(
       expect.objectContaining({
         command: "bash",
@@ -563,6 +612,8 @@ describe("terminal routes", () => {
   });
 
   it("inherits cwd from a referenced terminal session when cwd is omitted", async () => {
+    const inheritedCwd = await mkdtemp(path.join(os.tmpdir(), "terminal-inherit-"));
+    tempDirs.push(inheritedCwd);
     const state = {
       current: {
         id: "terminal-1",
@@ -570,7 +621,7 @@ describe("terminal routes", () => {
         name: "feat",
         command: "bash",
         args: ["-l"],
-        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        cwd: inheritedCwd,
         scrollback: "",
         status: "running" as const,
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
@@ -594,12 +645,65 @@ describe("terminal routes", () => {
     expect(response.status).toBe(201);
     expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        cwd: inheritedCwd,
       }),
     );
   });
 
+  it("falls back to the project path when inherited cwd no longer exists", async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), "runweave-project-"));
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "stale",
+        command: "bash",
+        args: ["-l"],
+        cwd: path.join(projectDir, "missing_zsh"),
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: projectDir,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${port}/api/terminal/session`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            inheritFromTerminalSessionId: "terminal-1",
+          }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cwd: projectDir,
+        }),
+      );
+    } finally {
+      await rm(projectDir, { force: true, recursive: true });
+    }
+  });
+
   it("prefers explicit cwd over inherited cwd when both are provided", async () => {
+    const inheritedCwd = await mkdtemp(path.join(os.tmpdir(), "terminal-inherit-"));
+    tempDirs.push(inheritedCwd);
     const state = {
       current: {
         id: "terminal-1",
@@ -607,7 +711,7 @@ describe("terminal routes", () => {
         name: "feat",
         command: "bash",
         args: ["-l"],
-        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        cwd: inheritedCwd,
         scrollback: "",
         status: "running" as const,
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
@@ -664,10 +768,10 @@ describe("terminal routes", () => {
       {
         terminalSessionId: "terminal-1",
         projectId: "project-default",
-        name: "bash",
         command: "bash",
         args: ["-l"],
         cwd: "/tmp/demo",
+        activeCommand: null,
         status: "running",
         createdAt: "2026-03-29T00:00:00.000Z",
       },
@@ -701,10 +805,10 @@ describe("terminal routes", () => {
     await expect(response.json()).resolves.toEqual({
       terminalSessionId: "terminal-1",
       projectId: "project-default",
-      name: "bash",
       command: "bash",
       args: ["-l"],
       cwd: "/tmp/demo",
+      activeCommand: null,
       scrollback: "bash$ ls\nREADME.md\n",
       status: "exited",
       createdAt: "2026-03-29T00:00:00.000Z",
@@ -733,6 +837,7 @@ describe("terminal routes", () => {
       capturePane: vi.fn(async () => ({
         data: "tmux pane history\n",
         durationMs: 12,
+        sourceCols: 120,
       })),
     };
     const { server, terminalSessionManager } = createTestServer(state, {
@@ -750,6 +855,7 @@ describe("terminal routes", () => {
       expect.objectContaining({
         terminalSessionId: "terminal-1",
         scrollback: "tmux pane history\n",
+        scrollbackSourceCols: 120,
       }),
     );
     expect(terminalSessionManager.readScrollback).not.toHaveBeenCalled();

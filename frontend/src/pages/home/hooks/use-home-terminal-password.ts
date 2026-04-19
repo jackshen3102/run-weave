@@ -1,50 +1,26 @@
 import { useCallback, useState } from "react";
-import type { TerminalSessionListItem } from "@browser-viewer/shared";
+import type { ClientMode } from "../../../features/client-mode";
+import { resolveNewTerminalRuntimePreference } from "../../../features/terminal/runtime-preference";
 import { HttpError } from "../../../services/http";
 import { changePassword as submitPasswordChange } from "../../../services/auth";
-import { loadRecentTerminalSelection } from "../../../features/terminal/recent-selection";
 import {
   createTerminalSession,
   listTerminalSessions,
 } from "../../../services/terminal";
+import { resolveReusableTerminalSession } from "../terminal-session-reuse";
 
 interface UseHomeTerminalPasswordParams {
   apiBase: string;
   token: string;
+  clientMode: ClientMode;
   onAuthExpired: () => void;
   onOpenTerminalSession: (terminalSessionId: string) => void;
-}
-
-function resolveReusableTerminalSession(
-  terminalSessions: TerminalSessionListItem[],
-  apiBase: string,
-): TerminalSessionListItem | null {
-  const recentSelection = loadRecentTerminalSelection(apiBase);
-  if (recentSelection) {
-    const recentSession = terminalSessions.find(
-      (session) =>
-        session.projectId === recentSelection.projectId &&
-        session.terminalSessionId === recentSelection.terminalSessionId,
-    );
-    if (recentSession) {
-      return recentSession;
-    }
-  }
-
-  const runningSessions = terminalSessions
-    .filter((session) => session.status === "running")
-    .sort((left, right) => {
-      return (
-        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-      );
-    });
-
-  return runningSessions[0] ?? null;
 }
 
 export function useHomeTerminalPassword({
   apiBase,
   token,
+  clientMode,
   onAuthExpired,
   onOpenTerminalSession,
 }: UseHomeTerminalPasswordParams) {
@@ -75,7 +51,9 @@ export function useHomeTerminalPassword({
         return;
       }
 
-      const data = await createTerminalSession(apiBase, token, {});
+      const data = await createTerminalSession(apiBase, token, {
+        runtimePreference: resolveNewTerminalRuntimePreference(clientMode),
+      });
       onOpenTerminalSession(data.terminalSessionId);
     } catch (createError) {
       if (createError instanceof HttpError && createError.status === 401) {
@@ -87,7 +65,14 @@ export function useHomeTerminalPassword({
     } finally {
       setTerminalLoading(false);
     }
-  }, [apiBase, onAuthExpired, onOpenTerminalSession, terminalLoading, token]);
+  }, [
+    apiBase,
+    clientMode,
+    onAuthExpired,
+    onOpenTerminalSession,
+    terminalLoading,
+    token,
+  ]);
 
   const openPasswordDialog = useCallback((): void => {
     setPasswordChangeError(null);

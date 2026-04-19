@@ -3,6 +3,7 @@ export const MAX_TERMINAL_RECONNECT_ATTEMPTS = 5;
 
 const MAX_RECONNECT_DELAY_MS = 5_000;
 const BASE_RECONNECT_DELAY_MS = 250;
+const TMUX_REATTACH_CLOSE_CODE = 1012;
 const NON_RECONNECT_CLOSE_CODES = new Set([1000, 1008, 1011]);
 const NON_RECONNECT_REASONS = new Set(["Terminal runtime not found"]);
 
@@ -25,6 +26,10 @@ export function shouldAutoReconnectTerminalClose(params: {
 
   if (NON_RECONNECT_CLOSE_CODES.has(params.code)) {
     return false;
+  }
+
+  if (params.code === TMUX_REATTACH_CLOSE_CODE) {
+    return true;
   }
 
   const reason = params.reason?.trim();
