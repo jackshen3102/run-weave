@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
@@ -384,57 +387,68 @@ describe("TerminalSessionManager", () => {
   });
 
   it("updates session metadata and persists the latest cwd", async () => {
-    const store = createStoreMock();
-    const manager = new TerminalSessionManager(store);
-    await manager.initialize();
-    const session = await manager.createSession({
-      command: "zsh",
-      cwd: "/Users/bytedance",
-      projectId: "project-default",
-    });
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), "rw-meta-"));
+    try {
+      const store = createStoreMock();
+      const manager = new TerminalSessionManager(store);
+      await manager.initialize();
+      const session = await manager.createSession({
+        command: "zsh",
+        cwd: os.tmpdir(),
+        projectId: "project-default",
+      });
 
-    const updated = await manager.updateSessionMetadata(session.id, {
-      name: "browser-hub",
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-    });
+      const updated = await manager.updateSessionMetadata(session.id, {
+        name: "browser-hub",
+        cwd: tmpDir,
+      });
 
-    expect(updated).toMatchObject({
-      id: session.id,
-      name: "browser-hub",
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-    });
-    expect(store.updateSessionMetadata).toHaveBeenCalledWith({
-      terminalSessionId: session.id,
-      name: "browser-hub",
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-    });
+      expect(updated).toMatchObject({
+        id: session.id,
+        name: "browser-hub",
+        cwd: tmpDir,
+      });
+      expect(store.updateSessionMetadata).toHaveBeenCalledWith({
+        terminalSessionId: session.id,
+        name: "browser-hub",
+        cwd: tmpDir,
+      });
+    } finally {
+      rmSync(tmpDir, { force: true, recursive: true });
+    }
   });
 
   it("ignores session metadata with a cwd that no longer exists", async () => {
-    const store = createStoreMock();
-    const manager = new TerminalSessionManager(store);
-    await manager.initialize();
-    const session = await manager.createSession({
-      command: "zsh",
-      cwd: "/Users/bytedance",
-      projectId: "project-default",
-    });
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), "rw-stale-"));
+    const baseName = path.basename(tmpDir);
+    try {
+      const store = createStoreMock();
+      const manager = new TerminalSessionManager(store);
+      await manager.initialize();
+      const session = await manager.createSession({
+        command: "zsh",
+        cwd: tmpDir,
+        projectId: "project-default",
+      });
 
-    const updated = await manager.updateSessionMetadata(session.id, {
-      name: "browser-viewer_zsh",
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/browser-viewer_zsh",
-    });
+      const updated = await manager.updateSessionMetadata(session.id, {
+        name: "browser-viewer_zsh",
+        cwd: path.join(tmpDir, "nonexistent_subdir"),
+      });
 
-    expect(updated).toMatchObject({
-      id: session.id,
-      name: "bytedance",
-      cwd: "/Users/bytedance",
-    });
-    expect(store.updateSessionMetadata).not.toHaveBeenCalledWith({
-      terminalSessionId: session.id,
-      name: "browser-viewer_zsh",
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/browser-viewer_zsh",
-    });
+      expect(updated).toMatchObject({
+        id: session.id,
+        name: baseName,
+        cwd: tmpDir,
+      });
+      expect(store.updateSessionMetadata).not.toHaveBeenCalledWith({
+        terminalSessionId: session.id,
+        name: "browser-viewer_zsh",
+        cwd: path.join(tmpDir, "nonexistent_subdir"),
+      });
+    } finally {
+      rmSync(tmpDir, { force: true, recursive: true });
+    }
   });
 
   it("updates session launch config and renames command-derived tabs", async () => {
