@@ -454,6 +454,61 @@ function rankFile(query: string, relativePath: string): TerminalPreviewFileSearc
   };
 }
 
+function isMarkdownPath(filePath: string): boolean {
+  return path.posix.extname(filePath).toLowerCase() === ".md";
+}
+
+function toChangedFileSearchItem(
+  file: TerminalPreviewChangeFile,
+): TerminalPreviewFileSearchItem {
+  const dirname = path.posix.dirname(file.path);
+  return {
+    path: file.path,
+    basename: path.posix.basename(file.path),
+    dirname: dirname === "." ? "" : dirname,
+    gitStatus: file.status,
+    reason: "git changed file",
+    score: 0,
+  };
+}
+
+function compareChangedFileSearchItems(
+  left: TerminalPreviewFileSearchItem,
+  right: TerminalPreviewFileSearchItem,
+): number {
+  const leftMarkdown = isMarkdownPath(left.path);
+  const rightMarkdown = isMarkdownPath(right.path);
+  if (leftMarkdown !== rightMarkdown) {
+    return leftMarkdown ? -1 : 1;
+  }
+  return left.path.localeCompare(right.path);
+}
+
+async function getChangedFileSearchItems(params: {
+  projectId: string;
+  projectPath: string;
+  limit: number;
+}): Promise<TerminalPreviewFileSearchItem[]> {
+  try {
+    const changes = await getPreviewGitChanges({
+      projectId: params.projectId,
+      projectPath: params.projectPath,
+    });
+    const byPath = new Map<string, TerminalPreviewChangeFile>();
+    for (const file of [...changes.staged, ...changes.working]) {
+      if (!byPath.has(file.path)) {
+        byPath.set(file.path, file);
+      }
+    }
+    return Array.from(byPath.values())
+      .map(toChangedFileSearchItem)
+      .sort(compareChangedFileSearchItems)
+      .slice(0, params.limit);
+  } catch {
+    return [];
+  }
+}
+
 function parseGitignoreRule(line: string): GitignoreRule | null {
   let pattern = line.trim();
   if (!pattern || pattern.startsWith("#")) {
@@ -848,7 +903,7 @@ export async function searchPreviewFiles(params: {
   const query = params.query.trim();
   const limit = Math.min(Math.max(params.limit ?? DEFAULT_SEARCH_LIMIT, 1), 100);
   const absoluteInput = path.isAbsolute(query);
-  if (!query || absoluteInput) {
+  if (absoluteInput) {
     return {
       kind: "file-search",
       projectId: params.projectId,
@@ -856,6 +911,20 @@ export async function searchPreviewFiles(params: {
       query,
       absoluteInput,
       items: [],
+    };
+  }
+  if (!query) {
+    return {
+      kind: "file-search",
+      projectId: params.projectId,
+      projectPath,
+      query,
+      absoluteInput,
+      items: await getChangedFileSearchItems({
+        projectId: params.projectId,
+        projectPath,
+        limit,
+      }),
     };
   }
 

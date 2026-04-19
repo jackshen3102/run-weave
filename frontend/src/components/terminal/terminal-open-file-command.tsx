@@ -48,7 +48,9 @@ export function TerminalOpenFileCommand({
       <Command.List className="min-h-0 flex-1 overflow-auto px-2 py-2">
         {!query.trim() ? (
           <Command.Empty className="px-3 py-8 text-sm text-slate-400">
-            Type to search files or paste an absolute path
+            {loading
+              ? "Loading changed files..."
+              : "No changed files. Type to search files or paste an absolute path."}
           </Command.Empty>
         ) : null}
         {absoluteInput ? (
@@ -61,9 +63,15 @@ export function TerminalOpenFileCommand({
             {error}
           </div>
         ) : null}
-        {query.trim() && !absoluteInput ? (
+        {!absoluteInput ? (
           <div className="px-3 pb-2 pt-1 text-[11px] uppercase tracking-[0.22em] text-slate-500">
-            {loading ? "Searching" : "Search results"}
+            {loading
+              ? query.trim()
+                ? "Searching"
+                : "Loading changes"
+              : query.trim()
+                ? "Search results"
+                : "Changed files"}
           </div>
         ) : null}
         <Command.Group>

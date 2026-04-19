@@ -342,12 +342,14 @@ export function TerminalPreviewPanel({
       mode !== "file" ||
       selectedFilePath ||
       !projectId ||
-      !query.trim() ||
       absoluteInput
     ) {
+      setSearchItems([]);
+      setSearchLoading(false);
       return;
     }
     const abort = new AbortController();
+    setSearchItems([]);
     const timeoutId = window.setTimeout(() => {
       setSearchLoading(true);
       setSearchError(null);
