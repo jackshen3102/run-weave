@@ -9,7 +9,10 @@ import type { TerminalSessionStatusResponse } from "@browser-viewer/shared";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { RuntimeMonitorBadge } from "./runtime-monitor-badge";
+import { filterBrowserHandledTerminalOutput } from "../features/terminal/output-filter";
+import { buildTmuxScrollInput } from "../features/terminal/tmux-scroll";
 import { useTerminalConnection } from "../features/terminal/use-terminal-connection";
+import { shouldSuppressWheelInput } from "../features/terminal/wheel-input";
 import { HttpError } from "../services/http";
 import { getTerminalSession } from "../services/terminal";
 
@@ -37,12 +40,6 @@ const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
   `${ESCAPE}\\[(?:\\?|>)[0-9;]+c`,
 );
 const FOCUS_REPORTING_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[(?:I|O)$`);
-
-// xterm.js 6.0.0 has a bug in requestMode(): the handler for DECRQM queries
-// (CSI ? Pn $ p) crashes with "r is not defined". Vim sends these to probe
-// terminal mode capabilities. Strip them before writing — xterm cannot respond
-// to them anyway, and vim falls back to defaults when it receives no reply.
-const DECRQM_QUERY_RE = new RegExp(`${ESCAPE}\\[\\?[\\d;]+\\$p`, "g");
 
 function isTerminalAutoResponse(data: string): boolean {
   if (!data.startsWith("\u001b")) {
@@ -82,9 +79,10 @@ export function TerminalPage({
   const [requestError, setRequestError] = useState<string | null>(null);
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const runtimeKindRef = useRef<"tmux" | "pty" | null>(null);
 
   const onSnapshot = useCallback((data: string) => {
-    const nextChunk = data.replace(DECRQM_QUERY_RE, "");
+    const nextChunk = filterBrowserHandledTerminalOutput(data);
     const terminal = terminalRef.current;
     if (!terminal) {
       return;
@@ -101,7 +99,7 @@ export function TerminalPage({
   }, []);
 
   const onOutput = useCallback((data: string) => {
-    const nextChunk = data.replace(DECRQM_QUERY_RE, "");
+    const nextChunk = filterBrowserHandledTerminalOutput(data);
     if (!nextChunk) {
       return;
     }
@@ -114,6 +112,7 @@ export function TerminalPage({
     terminalStatus,
     exitCode,
     error,
+    runtimeKind,
     sendInput,
     sendResize,
   } = useTerminalConnection({
@@ -124,6 +123,10 @@ export function TerminalPage({
     onSnapshot,
     onOutput,
   });
+
+  useEffect(() => {
+    runtimeKindRef.current = runtimeKind;
+  }, [runtimeKind]);
 
   const renderedCommand = useMemo(() => {
     return session
@@ -180,6 +183,31 @@ export function TerminalPage({
     );
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
+    terminal.attachCustomWheelEventHandler((event) => {
+      const canScroll = terminal.buffer.active.baseY > 0;
+      if (!shouldSuppressWheelInput(event, canScroll)) {
+        return true;
+      }
+
+      if (
+        runtimeKindRef.current === "tmux" &&
+        event.deltaY !== 0 &&
+        !event.shiftKey
+      ) {
+        const input = buildTmuxScrollInput(
+          event.deltaY,
+          terminal.cols,
+          terminal.rows,
+        );
+        if (input) {
+          sendInput(input);
+        }
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      return false;
+    });
 
     // Renderer: try WebGL → Canvas → DOM fallback.
     (() => {

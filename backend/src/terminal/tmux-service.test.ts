@@ -86,7 +86,7 @@ describe("TmuxService", () => {
     });
   });
 
-  it("sets mouse mode before attaching to an existing tmux server", () => {
+  it("forces tmux mouse mode on before attaching", () => {
     const service = createService(vi.fn(), { TMUX_BINARY: "/usr/bin/tmux" });
     const target = {
       sessionName: "runweave-terminal-1",
@@ -156,6 +156,11 @@ describe("TmuxService", () => {
         "/tmp/runweave-test/tmux.sock",
         "-f",
         "/tmp/runweave-test/tmux.conf",
+        "set-option",
+        "-g",
+        "mouse",
+        "on",
+        ";",
         "new-session",
         "-d",
         "-s",
@@ -168,7 +173,37 @@ describe("TmuxService", () => {
     );
   });
 
-  it("enables mouse support in the generated tmux config", async () => {
+  it("injects shell integration into interactive tmux sessions", async () => {
+    const execFileImpl = vi.fn(async () => ({ stdout: "", stderr: "" }));
+    const service = createService(execFileImpl);
+
+    await service.createDetachedSession(
+      {
+        sessionName: "runweave-terminal-1",
+        socketPath: "/tmp/runweave-test/tmux.sock",
+      },
+      "/tmp/demo",
+      {
+        command: "/bin/zsh",
+        args: ["-l"],
+      },
+    );
+
+    const firstCall = execFileImpl.mock.calls[0] as
+      | [string, string[], unknown]
+      | undefined;
+    const args = firstCall?.[1] ?? [];
+    expect(args).toEqual(
+      expect.arrayContaining([
+        "-e",
+        expect.stringMatching(/^BROWSER_VIEWER_ORIGINAL_ZDOTDIR=/),
+        "-e",
+        expect.stringMatching(/^ZDOTDIR=.+browser-viewer-zsh-/),
+      ]),
+    );
+  });
+
+  it("sets mouse mode on in the generated tmux config", async () => {
     const socketDir = await mkdtemp(path.join(os.tmpdir(), "runweave-tmux-"));
     const service = new TmuxService({
       execFile: vi.fn(async () => ({ stdout: "", stderr: "" })),
@@ -233,11 +268,16 @@ describe("TmuxService", () => {
     );
   });
 
-  it("captures pane history and exposes duration", async () => {
-    const execFileImpl = vi.fn(async () => ({
-      stdout: "line-1\nline-2\n",
-      stderr: "",
-    }));
+  it("captures pane history as logical wrapped lines", async () => {
+    const execFileImpl = vi.fn(async (_file: string, args: string[]) => {
+      if (args.includes("display-message")) {
+        return { stdout: "120\n", stderr: "" };
+      }
+      return {
+        stdout: "line-1\nline-2\n",
+        stderr: "",
+      };
+    });
     const service = createService(execFileImpl);
 
     await expect(
@@ -248,6 +288,7 @@ describe("TmuxService", () => {
     ).resolves.toEqual({
       data: "line-1\nline-2\n",
       durationMs: expect.any(Number),
+      sourceCols: 120,
     });
     expect(execFileImpl).toHaveBeenCalledWith(
       "tmux",
@@ -266,6 +307,81 @@ describe("TmuxService", () => {
       ],
       expect.any(Object),
     );
+    expect(execFileImpl).toHaveBeenCalledWith(
+      "tmux",
+      [
+        "-S",
+        "/tmp/runweave-test/tmux.sock",
+        "-f",
+        "/tmp/runweave-test/tmux.conf",
+        "display-message",
+        "-p",
+        "-t",
+        "runweave-terminal-1",
+        "#{pane_width}",
+      ],
+      expect.any(Object),
+    );
+  });
+
+  it("reads pane metadata as directory plus active command", async () => {
+    const execFileImpl = vi.fn(async (_file: string, args: string[]) => {
+      if (
+        args.includes(
+          "#{pane_current_path}\t#{@runweave_command}\t#{pane_current_command}",
+        )
+      ) {
+        return {
+          stdout: "/Users/bytedance/Desktop/vscode/browser-hub/feat\tcodex\tnode\n",
+          stderr: "",
+        };
+      }
+      return { stdout: "", stderr: "" };
+    });
+    const service = createService(execFileImpl);
+
+    await expect(
+      service.readPaneMetadata(
+        {
+          sessionName: "runweave-terminal-1",
+          socketPath: "/tmp/runweave-test/tmux.sock",
+        },
+        "/bin/zsh",
+      ),
+    ).resolves.toEqual({
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      name: "feat(codex)",
+    });
+  });
+
+  it("does not include the login shell as an active tmux command", async () => {
+    const execFileImpl = vi.fn(async (_file: string, args: string[]) => {
+      if (
+        args.includes(
+          "#{pane_current_path}\t#{@runweave_command}\t#{pane_current_command}",
+        )
+      ) {
+        return {
+          stdout: "/Users/bytedance/Desktop/vscode/browser-hub/feat\t\tzsh\n",
+          stderr: "",
+        };
+      }
+      return { stdout: "", stderr: "" };
+    });
+    const service = createService(execFileImpl);
+
+    await expect(
+      service.readPaneMetadata(
+        {
+          sessionName: "runweave-terminal-1",
+          socketPath: "/tmp/runweave-test/tmux.sock",
+        },
+        "/bin/zsh",
+      ),
+    ).resolves.toEqual({
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      name: "feat",
+    });
   });
 
   it("stops tmux rebuild attempts after three attempts in the window", () => {

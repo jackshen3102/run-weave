@@ -176,6 +176,28 @@ describe("TerminalSessionManager", () => {
     );
   });
 
+  it("uses the cwd basename as the default session name", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    await manager.initialize();
+
+    const session = await manager.createSession({
+      command: "/bin/zsh",
+      args: ["-l"],
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      projectId: "project-default",
+    });
+
+    expect(session.name).toBe("feat");
+    expect(store.insertSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: session.id,
+        name: "feat",
+        command: "/bin/zsh",
+      }),
+    );
+  });
+
   it("persists terminal runtime metadata", async () => {
     const store = createStoreMock();
     const manager = new TerminalSessionManager(store);
@@ -388,6 +410,33 @@ describe("TerminalSessionManager", () => {
     });
   });
 
+  it("ignores session metadata with a cwd that no longer exists", async () => {
+    const store = createStoreMock();
+    const manager = new TerminalSessionManager(store);
+    await manager.initialize();
+    const session = await manager.createSession({
+      command: "zsh",
+      cwd: "/Users/bytedance",
+      projectId: "project-default",
+    });
+
+    const updated = await manager.updateSessionMetadata(session.id, {
+      name: "browser-viewer_zsh",
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/browser-viewer_zsh",
+    });
+
+    expect(updated).toMatchObject({
+      id: session.id,
+      name: "bytedance",
+      cwd: "/Users/bytedance",
+    });
+    expect(store.updateSessionMetadata).not.toHaveBeenCalledWith({
+      terminalSessionId: session.id,
+      name: "browser-viewer_zsh",
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/browser-viewer_zsh",
+    });
+  });
+
   it("updates session launch config and renames command-derived tabs", async () => {
     const store = createStoreMock();
     const manager = new TerminalSessionManager(store);
@@ -406,13 +455,13 @@ describe("TerminalSessionManager", () => {
 
     expect(updated).toMatchObject({
       id: session.id,
-      name: "/bin/zsh",
+      name: "demo",
       command: "/bin/zsh",
       args: ["-l"],
     });
     expect(store.updateSessionLaunch).toHaveBeenCalledWith({
       terminalSessionId: session.id,
-      name: "/bin/zsh",
+      name: "demo",
       command: "/bin/zsh",
       args: ["-l"],
     });

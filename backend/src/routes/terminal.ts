@@ -1,5 +1,6 @@
 import { Router, type Response } from "express";
 import { randomBytes } from "node:crypto";
+import { existsSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -43,6 +44,7 @@ import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import {
   ensureTerminalRuntime,
   killTmuxSessionForTerminal,
+  readTerminalScrollbackCapture,
   readTerminalScrollback,
 } from "../terminal/runtime-launcher";
 import type { TmuxService } from "../terminal/tmux-service";
@@ -55,6 +57,7 @@ const createTerminalSessionSchema = z
     args: z.array(z.string()).optional(),
     cwd: z.string().trim().min(1).optional(),
     inheritFromTerminalSessionId: z.string().trim().min(1).optional(),
+    runtimePreference: z.enum(["auto", "tmux", "pty"]).optional(),
   })
   .strict();
 
@@ -144,7 +147,11 @@ function resolveTerminalCreateDefaults(
   const projectPath = projectId
     ? terminalSessionManager.getProject(projectId)?.path
     : undefined;
-  const cwd = payload.cwd?.trim() || inheritedCwd || projectPath || os.homedir();
+  const cwd =
+    payload.cwd?.trim() ||
+    (isExistingDirectory(inheritedCwd) ? inheritedCwd : undefined) ||
+    projectPath ||
+    os.homedir();
 
   return {
     projectId: payload.projectId,
@@ -153,6 +160,17 @@ function resolveTerminalCreateDefaults(
     args: payload.args ?? resolveDefaultTerminalArgs(command),
     cwd,
   };
+}
+
+function isExistingDirectory(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  try {
+    return existsSync(value) && statSync(value).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 function toProjectPayload(
@@ -213,8 +231,12 @@ function toHistoryPayload(
     ? NonNullable<T>
     : never,
   scrollback: string,
+  scrollbackSourceCols?: number,
 ): TerminalSessionHistoryResponse {
-  return toStatusPayload(session, scrollback);
+  return {
+    ...toStatusPayload(session, scrollback),
+    ...(scrollbackSourceCols ? { scrollbackSourceCols } : {}),
+  };
 }
 
 export function createTerminalRouter(
@@ -503,15 +525,18 @@ export function createTerminalRouter(
       if (options?.ptyService && options.runtimeRegistry) {
         try {
           let launchSession = session;
-          const tmuxAvailable = options.tmuxService
+          const runtimePreference = parsed.data.runtimePreference ?? "auto";
+          const shouldTryTmux =
+            runtimePreference === "auto" || runtimePreference === "tmux";
+          const tmuxAvailable = options.tmuxService && shouldTryTmux
             ? await options.tmuxService.isAvailable()
             : false;
           const tmuxUnavailableReason =
-            options.tmuxService && !tmuxAvailable
+            options.tmuxService && shouldTryTmux && !tmuxAvailable
               ? await options.tmuxService.getUnavailableReason()
               : null;
 
-          if (options.tmuxService && tmuxAvailable) {
+          if (options.tmuxService && shouldTryTmux && tmuxAvailable) {
             const target = options.tmuxService.buildTarget(session.id);
             launchSession =
               (await terminalSessionManager.updateRuntimeMetadata(session.id, {
@@ -520,7 +545,7 @@ export function createTerminalRouter(
                 tmuxSocketPath: target.socketPath,
                 recoverable: true,
               })) ?? session;
-          } else if (options.tmuxService) {
+          } else if (options.tmuxService && shouldTryTmux) {
             launchSession =
               (await terminalSessionManager.updateRuntimeMetadata(session.id, {
                 runtimeKind: "pty",
@@ -566,15 +591,18 @@ export function createTerminalRouter(
       return;
     }
 
+    const historyScrollback = await readTerminalScrollbackCapture(
+      session,
+      terminalSessionManager,
+      options?.tmuxService,
+      "history",
+    );
+
     res.json(
       toHistoryPayload(
         session,
-        await readTerminalScrollback(
-          session,
-          terminalSessionManager,
-          options?.tmuxService,
-          "history",
-        ),
+        historyScrollback.data,
+        historyScrollback.sourceCols,
       ),
     );
   });

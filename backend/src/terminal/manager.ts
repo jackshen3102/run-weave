@@ -1,8 +1,10 @@
 import { v4 as uuidv4 } from "uuid";
+import { existsSync, statSync } from "node:fs";
 import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
   TERMINAL_LIVE_SCROLLBACK_BYTES,
 } from "@browser-viewer/shared";
+import { buildDirectoryLabel } from "./shell-integration";
 import type {
   PersistedTerminalProjectRecord,
   PersistedTerminalSessionMetadataRecord,
@@ -306,7 +308,7 @@ export class TerminalSessionManager {
     const session = createRuntimeRecord({
       id: uuidv4(),
       projectId,
-      name: options.name?.trim() || options.command,
+      name: options.name?.trim() || buildDirectoryLabel(options.cwd),
       command: options.command,
       args: options.args ?? [],
       cwd: options.cwd,
@@ -432,6 +434,10 @@ export class TerminalSessionManager {
     const session = this.sessions.get(terminalSessionId);
     if (!session) {
       return undefined;
+    }
+
+    if (!isExistingDirectory(metadata.cwd)) {
+      return session;
     }
 
     if (session.name === metadata.name && session.cwd === metadata.cwd) {
@@ -589,5 +595,13 @@ export class TerminalSessionManager {
         this.flushScrollback(terminalSessionId),
       ),
     );
+  }
+}
+
+function isExistingDirectory(value: string): boolean {
+  try {
+    return existsSync(value) && statSync(value).isDirectory();
+  } catch {
+    return false;
   }
 }

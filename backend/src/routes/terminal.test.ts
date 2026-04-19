@@ -385,6 +385,7 @@ describe("terminal routes", () => {
       ],
       cwd: "/tmp/demo",
       fallback: null,
+      formatQuickExitMessage: expect.any(Function),
     });
     expect(runtimeRegistry.createRuntime).toHaveBeenCalledWith(
       "terminal-1",
@@ -440,6 +441,60 @@ describe("terminal routes", () => {
         recoverable: false,
       },
     );
+    expect(ptyService.spawnSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        fallback: expect.any(Object),
+      }),
+    );
+    expect(runtimeRegistry.ensureRecorder).toHaveBeenCalled();
+  });
+
+  it("creates pty terminal sessions when explicitly requested even if tmux is available", async () => {
+    const state = { current: null as MockTerminalSession | null };
+    const runtime = { pid: 10 };
+    const ptyService = {
+      spawnSession: vi.fn(() => runtime),
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => undefined),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const tmuxService = {
+      isAvailable: vi.fn(async () => true),
+      buildTarget: vi.fn(),
+    };
+    const { server, terminalSessionManager } = createTestServer(state, {
+      ptyService,
+      runtimeRegistry,
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "project-default",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+          runtimePreference: "pty",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(tmuxService.isAvailable).not.toHaveBeenCalled();
+    expect(tmuxService.buildTarget).not.toHaveBeenCalled();
+    expect(terminalSessionManager.updateRuntimeMetadata).not.toHaveBeenCalled();
     expect(ptyService.spawnSession).toHaveBeenCalledWith(
       expect.objectContaining({
         command: "bash",
@@ -599,6 +654,57 @@ describe("terminal routes", () => {
     );
   });
 
+  it("falls back to the project path when inherited cwd no longer exists", async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), "runweave-project-"));
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "stale",
+        command: "bash",
+        args: ["-l"],
+        cwd: path.join(projectDir, "missing_zsh"),
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: projectDir,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${port}/api/terminal/session`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            inheritFromTerminalSessionId: "terminal-1",
+          }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cwd: projectDir,
+        }),
+      );
+    } finally {
+      await rm(projectDir, { force: true, recursive: true });
+    }
+  });
+
   it("prefers explicit cwd over inherited cwd when both are provided", async () => {
     const state = {
       current: {
@@ -733,6 +839,7 @@ describe("terminal routes", () => {
       capturePane: vi.fn(async () => ({
         data: "tmux pane history\n",
         durationMs: 12,
+        sourceCols: 120,
       })),
     };
     const { server, terminalSessionManager } = createTestServer(state, {
@@ -750,6 +857,7 @@ describe("terminal routes", () => {
       expect.objectContaining({
         terminalSessionId: "terminal-1",
         scrollback: "tmux pane history\n",
+        scrollbackSourceCols: 120,
       }),
     );
     expect(terminalSessionManager.readScrollback).not.toHaveBeenCalled();

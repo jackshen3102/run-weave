@@ -15,6 +15,7 @@ import { toWebSocketBase } from "../viewer/url";
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type TerminalRuntimeStatus = "running" | "exited" | null;
+type TerminalRuntimeKind = "tmux" | "pty" | null;
 const MAX_PENDING_INPUT_CHARS = 8 * 1024;
 
 function buildTerminalWsUrl(
@@ -99,6 +100,7 @@ export function useTerminalConnection(params: {
   const [terminalStatus, setTerminalStatus] =
     useState<TerminalRuntimeStatus>(null);
   const [exitCode, setExitCode] = useState<number | null>(null);
+  const [runtimeKind, setRuntimeKind] = useState<TerminalRuntimeKind>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualReconnectNonce, setManualReconnectNonce] = useState(0);
 
@@ -289,6 +291,10 @@ export function useTerminalConnection(params: {
               String(event.data),
             ) as TerminalServerMessage;
             inboundSequenceRef.current += 1;
+            if (parsed.type === "connected") {
+              setRuntimeKind(parsed.runtimeKind ?? null);
+              return;
+            }
             if (parsed.type === "snapshot") {
               logTerminalPerf("ws.message.snapshot", {
                 terminalSessionId,
@@ -430,6 +436,7 @@ export function useTerminalConnection(params: {
     connectionStatus,
     terminalStatus,
     exitCode,
+    runtimeKind,
     error,
     sendInput: useCallback(
       (data: string) => {

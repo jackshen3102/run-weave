@@ -1,4 +1,6 @@
 import { useCallback, useState } from "react";
+import type { ClientMode } from "../../../features/client-mode";
+import { resolveNewTerminalRuntimePreference } from "../../../features/terminal/runtime-preference";
 import { HttpError } from "../../../services/http";
 import { changePassword as submitPasswordChange } from "../../../services/auth";
 import {
@@ -10,6 +12,7 @@ import { resolveReusableTerminalSession } from "../terminal-session-reuse";
 interface UseHomeTerminalPasswordParams {
   apiBase: string;
   token: string;
+  clientMode: ClientMode;
   onAuthExpired: () => void;
   onOpenTerminalSession: (terminalSessionId: string) => void;
 }
@@ -17,6 +20,7 @@ interface UseHomeTerminalPasswordParams {
 export function useHomeTerminalPassword({
   apiBase,
   token,
+  clientMode,
   onAuthExpired,
   onOpenTerminalSession,
 }: UseHomeTerminalPasswordParams) {
@@ -47,7 +51,9 @@ export function useHomeTerminalPassword({
         return;
       }
 
-      const data = await createTerminalSession(apiBase, token, {});
+      const data = await createTerminalSession(apiBase, token, {
+        runtimePreference: resolveNewTerminalRuntimePreference(clientMode),
+      });
       onOpenTerminalSession(data.terminalSessionId);
     } catch (createError) {
       if (createError instanceof HttpError && createError.status === 401) {
@@ -59,7 +65,14 @@ export function useHomeTerminalPassword({
     } finally {
       setTerminalLoading(false);
     }
-  }, [apiBase, onAuthExpired, onOpenTerminalSession, terminalLoading, token]);
+  }, [
+    apiBase,
+    clientMode,
+    onAuthExpired,
+    onOpenTerminalSession,
+    terminalLoading,
+    token,
+  ]);
 
   const openPasswordDialog = useCallback((): void => {
     setPasswordChangeError(null);

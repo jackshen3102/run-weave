@@ -288,3 +288,47 @@ test("restores deferred background terminal output when selected", async ({
 
   await expect.poll(() => getLiveTerminalText(page)).toContain(backgroundMarker);
 });
+
+test("tmux tab name follows the foreground command like pty", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
+
+  const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    data: {
+      command: "/bin/zsh",
+      args: ["-l"],
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      runtimePreference: "tmux",
+    },
+  });
+  expect(response.ok()).toBe(true);
+  const session = (await response.json()) as {
+    terminalSessionId: string;
+    terminalUrl: string;
+  };
+
+  await page.goto(session.terminalUrl);
+  await expect(page.getByRole("button", { name: "feat", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Terminal emulator")).toBeVisible();
+  await page.getByLabel("Terminal emulator").click({ force: true });
+
+  await page.keyboard.type("codex(){ sleep 5; }");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("codex");
+  await page.keyboard.press("Enter");
+
+  await expect(
+    page.getByRole("button", { name: "feat(codex)", exact: true }),
+  ).toBeVisible({ timeout: 3_000 });
+});

@@ -21,6 +21,12 @@ export interface SpawnTerminalSessionOptions {
   env?: NodeJS.ProcessEnv;
   fallback?: TerminalLaunchConfig | null;
   onFallbackActivated?: (fallback: TerminalLaunchConfig) => void;
+  formatQuickExitMessage?: (details: {
+    command: string;
+    args: string[];
+    exitCode: number;
+    runDuration: number;
+  }) => string[];
 }
 
 export interface PtyRuntime {
@@ -222,6 +228,30 @@ export class PtyService {
     const formatFallbackMessage = (lines: string[]): string =>
       `${lines.join("\r\n")}\r\n`;
 
+    const formatQuickExitMessage = (
+      command: string,
+      args: string[],
+      event: { exitCode: number; signal?: number },
+      runDuration: number,
+    ): string[] => {
+      if (options.formatQuickExitMessage) {
+        return options.formatQuickExitMessage({
+          command,
+          args,
+          exitCode: event.exitCode,
+          runDuration,
+        });
+      }
+      return [
+        `shell exited in ${runDuration} ms with exit code ${event.exitCode}`,
+        `please check the shell config: ${JSON.stringify(
+          { command, args },
+          undefined,
+          2,
+        )}`,
+      ];
+    };
+
     const spawnRuntime = (command: string, args: string[]): PtyRuntime => {
       ensureSpawnHelperExecutable();
 
@@ -336,14 +366,13 @@ export class PtyService {
           event.exitCode > 0 &&
           runDuration < QUICK_EXIT_FALLBACK_THRESHOLD_MS;
         if (shouldFallback) {
-          activateFallback([
-            `shell exited in ${runDuration} ms with exit code ${event.exitCode}`,
-            `please check the shell config: ${JSON.stringify(
-              { command, args },
-              undefined,
-              2,
-            )}`,
-          ]);
+          const canActivateFallback = Boolean(fallback);
+          activateFallback(
+            formatQuickExitMessage(command, args, event, runDuration),
+          );
+          if (!canActivateFallback) {
+            emitExit(event);
+          }
           return;
         }
 

@@ -7,6 +7,8 @@ import {
 } from "../../features/terminal/recent-selection";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { resolveCachedTerminalSurfaceIds } from "../../features/terminal/surface-cache";
+import { resolveNewTerminalRuntimePreference } from "../../features/terminal/runtime-preference";
+import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import { HttpError } from "../../services/http";
 import {
   createTerminalProject,
@@ -141,6 +143,9 @@ export function TerminalWorkspace({
   const isMobileMonitor = clientMode === "mobile";
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
   const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
+  const terminalLayoutVersion = isMobileMonitor
+    ? "mobile"
+    : `desktop:${previewOpen ? previewWidthPx : "full"}`;
   const activeProjectPreviewMode = useTerminalPreviewStore((state) =>
     activeProjectId ? state.projects[activeProjectId]?.mode ?? null : null,
   );
@@ -509,6 +514,7 @@ export function TerminalWorkspace({
       const created = await createTerminalSession(apiBase, token, {
         projectId: activeProjectId ?? undefined,
         inheritFromTerminalSessionId: activeSession?.terminalSessionId,
+        runtimePreference: resolveNewTerminalRuntimePreference(clientMode),
       });
       setRequestError(null);
       await loadSessions();
@@ -526,6 +532,7 @@ export function TerminalWorkspace({
     activeProjectId,
     activeSession?.terminalSessionId,
     apiBase,
+    clientMode,
     loadSessions,
     onAuthExpired,
     token,
@@ -588,6 +595,7 @@ export function TerminalWorkspace({
           });
           const createdSession = await createTerminalSession(apiBase, token, {
             projectId: createdProject.projectId,
+            runtimePreference: resolveNewTerminalRuntimePreference(clientMode),
           });
           setProjects((currentProjects) => [...currentProjects, createdProject]);
           setActiveProjectId(createdProject.projectId);
@@ -618,7 +626,15 @@ export function TerminalWorkspace({
         setLoading(false);
       }
     },
-    [activeProject, apiBase, loadSessions, onAuthExpired, projectDialogMode, token],
+    [
+      activeProject,
+      apiBase,
+      clientMode,
+      loadSessions,
+      onAuthExpired,
+      projectDialogMode,
+      token,
+    ],
   );
 
   const removeProject = useCallback(async (): Promise<void> => {
@@ -842,6 +858,10 @@ export function TerminalWorkspace({
                 session.terminalSessionId === activeSession?.terminalSessionId;
               const hasBell = !isActive && bellMarkers[session.terminalSessionId];
               const hasActivity = !isActive && activityMarkers[session.terminalSessionId];
+              const displayName = formatTerminalSessionName(session.name, {
+                command: session.command,
+                cwd: session.cwd,
+              });
               return (
                 <div
                   key={session.terminalSessionId}
@@ -858,7 +878,7 @@ export function TerminalWorkspace({
                     title={buildSessionLabel(session)}
                   >
                     <span className="inline-flex items-center gap-1.5">
-                      <span>{session.name}</span>
+                      <span>{displayName}</span>
                       {hasBell || hasActivity ? (
                         <span
                           className={`h-1.5 w-1.5 rounded-full ${
@@ -872,7 +892,7 @@ export function TerminalWorkspace({
                     <button
                       type="button"
                       className="rounded-full p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-                      aria-label={`Close terminal ${session.name}`}
+                      aria-label={`Close terminal ${displayName}`}
                       onClick={() => {
                         void closeSession(session.terminalSessionId);
                       }}
@@ -954,6 +974,7 @@ export function TerminalWorkspace({
                       active={isActive}
                       apiBase={apiBase}
                       clientMode={clientMode}
+                      layoutVersion={terminalLayoutVersion}
                       terminalSessionId={session.terminalSessionId}
                       token={token}
                       onAuthExpired={onAuthExpired}

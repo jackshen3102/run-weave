@@ -19,14 +19,16 @@ import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
   readTerminalScrollback,
+  resolveTmuxTarget,
 } from "../terminal/runtime-launcher";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
 import { createShellPromptTracker } from "../terminal/shell-integration";
-import type { TmuxService } from "../terminal/tmux-service";
+import type { TmuxPaneMetadata, TmuxService } from "../terminal/tmux-service";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
 
 const TMUX_INITIAL_REPAINT_SETTLE_MS = 50;
+const TMUX_METADATA_SYNC_DELAY_MS = 100;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -143,6 +145,27 @@ function resolveInitialSnapshot(
     fallbackScrollback,
     tmuxService,
   );
+}
+
+function getTmuxPaneMetadataReader(
+  tmuxService?: TmuxService,
+):
+  | ((
+      target: ReturnType<typeof resolveTmuxTarget>,
+      shellCommand?: string,
+    ) => Promise<TmuxPaneMetadata | null>)
+  | null {
+  const reader = (
+    tmuxService as
+      | {
+          readPaneMetadata?: (
+            target: ReturnType<typeof resolveTmuxTarget>,
+            shellCommand?: string,
+          ) => Promise<TmuxPaneMetadata | null>;
+        }
+      | undefined
+  )?.readPaneMetadata;
+  return reader ? reader.bind(tmuxService) : null;
 }
 
 function handleRuntimeActionError(
@@ -297,6 +320,81 @@ export function attachTerminalWebSocketServer(
     const shellPromptTracker = createShellPromptTracker({
       cwd: session?.cwd ?? null,
     });
+    const tmuxPaneMetadataReader = getTmuxPaneMetadataReader(tmuxService);
+    let tmuxMetadataSyncTimer: NodeJS.Timeout | null = null;
+    let tmuxMetadataSyncInFlight = false;
+    let shellPromptCommandActive = false;
+
+    const publishMetadata = async (metadata: {
+      name: string;
+      cwd: string;
+    }, options?: { forceSend?: boolean }): Promise<void> => {
+      const current = terminalSessionManager.getSession(terminalSessionId);
+      const metadataChanged =
+        current?.name !== metadata.name || current.cwd !== metadata.cwd;
+      if (!metadataChanged && !options?.forceSend) {
+        return;
+      }
+
+      if (metadataChanged) {
+        await terminalSessionManager.updateSessionMetadata(terminalSessionId, {
+          name: metadata.name,
+          cwd: metadata.cwd,
+        });
+      }
+      sendEvent(socket, {
+        type: "metadata",
+        name: metadata.name,
+        cwd: metadata.cwd,
+      });
+    };
+
+    const syncTmuxPaneMetadata = async (): Promise<void> => {
+      if (
+        !session ||
+        !tmuxService ||
+        !tmuxPaneMetadataReader ||
+        !isTmuxBackedSession(session) ||
+        shellPromptCommandActive ||
+        tmuxMetadataSyncInFlight
+      ) {
+        return;
+      }
+
+      tmuxMetadataSyncInFlight = true;
+      try {
+        const metadata = await tmuxPaneMetadataReader(
+          resolveTmuxTarget(session, tmuxService),
+          session.command,
+        );
+        if (metadata) {
+          await publishMetadata(metadata);
+        }
+      } catch (error) {
+        console.error("[viewer-be] tmux pane metadata sync failed", {
+          terminalSessionId,
+          error: String(error),
+        });
+      } finally {
+        tmuxMetadataSyncInFlight = false;
+      }
+    };
+
+    const scheduleTmuxPaneMetadataSync = (
+      delayMs = TMUX_METADATA_SYNC_DELAY_MS,
+    ): void => {
+      if (!session || !isTmuxBackedSession(session) || !tmuxPaneMetadataReader) {
+        return;
+      }
+      if (tmuxMetadataSyncTimer) {
+        clearTimeout(tmuxMetadataSyncTimer);
+      }
+      tmuxMetadataSyncTimer = setTimeout(() => {
+        tmuxMetadataSyncTimer = null;
+        void syncTmuxPaneMetadata();
+      }, delayMs);
+    };
+
     logTerminalPerf("terminal.ws.connected", {
       terminalSessionId,
       clientId,
@@ -317,14 +415,23 @@ export function attachTerminalWebSocketServer(
           ...summarizeTerminalChunk(data),
         });
         const metadata = shellPromptTracker.consume(data);
+        shellPromptCommandActive = Boolean(metadata.activeCommand);
 
         if (metadata.metadataChanged && metadata.sessionName && metadata.cwd) {
-          sendEvent(socket, {
-            type: "metadata",
-            name: metadata.sessionName,
-            cwd: metadata.cwd,
+          void publishMetadata(
+            {
+              name: metadata.sessionName,
+              cwd: metadata.cwd,
+            },
+            { forceSend: true },
+          ).catch((error: unknown) => {
+            console.error("[viewer-be] terminal metadata update failed", {
+              terminalSessionId,
+              error: String(error),
+            });
           });
         }
+        scheduleTmuxPaneMetadataSync();
 
         if (!metadata.output) {
           return;
@@ -362,12 +469,12 @@ export function attachTerminalWebSocketServer(
                 ptyService,
                 tmuxService,
               });
-              sendEvent(socket, {
-                type: "error",
-                message:
-                  ensured.warning ??
-                  "Terminal tmux attach client disconnected; reattaching.",
-              });
+              if (ensured.warning) {
+                sendEvent(socket, {
+                  type: "error",
+                  message: ensured.warning,
+                });
+              }
               sendEvent(socket, {
                 type: "status",
                 status: "running",
@@ -396,7 +503,13 @@ export function attachTerminalWebSocketServer(
       },
     });
 
-    sendEvent(socket, { type: "connected", terminalSessionId });
+    sendEvent(socket, {
+      type: "connected",
+      terminalSessionId,
+      runtimeKind:
+        session && isTmuxBackedSession(session) ? "tmux" : "pty",
+    });
+    await syncTmuxPaneMetadata();
     if (session) {
       if (sendInitialSnapshot) {
         if (settleInitialTmuxRepaint) {
@@ -459,6 +572,9 @@ export function attachTerminalWebSocketServer(
           outputBatcher.markNextChunkInteractive();
           const writeStartedAt = performance.now();
           activeRuntime.write(parsed.data);
+          if (/[\r\n]/.test(parsed.data)) {
+            scheduleTmuxPaneMetadataSync();
+          }
           logTerminalPerf("terminal.ws.input.written", {
             terminalSessionId,
             clientId,
@@ -509,6 +625,10 @@ export function attachTerminalWebSocketServer(
       heartbeat.stop();
       unsubscribe();
       outputBatcher.dispose();
+      if (tmuxMetadataSyncTimer) {
+        clearTimeout(tmuxMetadataSyncTimer);
+        tmuxMetadataSyncTimer = null;
+      }
       runtimeRegistry.detachClient(terminalSessionId, clientId);
     };
 

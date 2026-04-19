@@ -104,6 +104,7 @@ export function HomePage({
   } = useHomeTerminalPassword({
     apiBase,
     token,
+    clientMode,
     onAuthExpired: handleAuthExpired,
     onOpenTerminalSession: (terminalSessionId) => {
       navigate(`/terminal/${encodeURIComponent(terminalSessionId)}`);
