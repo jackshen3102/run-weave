@@ -618,6 +618,8 @@ describe("terminal routes", () => {
   });
 
   it("inherits cwd from a referenced terminal session when cwd is omitted", async () => {
+    const inheritedCwd = await mkdtemp(path.join(os.tmpdir(), "terminal-inherit-"));
+    tempDirs.push(inheritedCwd);
     const state = {
       current: {
         id: "terminal-1",
@@ -625,7 +627,7 @@ describe("terminal routes", () => {
         name: "feat",
         command: "bash",
         args: ["-l"],
-        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        cwd: inheritedCwd,
         scrollback: "",
         status: "running" as const,
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
@@ -649,7 +651,7 @@ describe("terminal routes", () => {
     expect(response.status).toBe(201);
     expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        cwd: inheritedCwd,
       }),
     );
   });
@@ -706,6 +708,8 @@ describe("terminal routes", () => {
   });
 
   it("prefers explicit cwd over inherited cwd when both are provided", async () => {
+    const inheritedCwd = await mkdtemp(path.join(os.tmpdir(), "terminal-inherit-"));
+    tempDirs.push(inheritedCwd);
     const state = {
       current: {
         id: "terminal-1",
@@ -713,7 +717,7 @@ describe("terminal routes", () => {
         name: "feat",
         command: "bash",
         args: ["-l"],
-        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        cwd: inheritedCwd,
         scrollback: "",
         status: "running" as const,
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
