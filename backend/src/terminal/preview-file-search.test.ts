@@ -1,15 +1,28 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { clearPreviewFileSearchCache, searchPreviewFiles } from "./preview";
 
+const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
 
 async function createProject(): Promise<string> {
   const projectPath = await mkdtemp(path.join(os.tmpdir(), "preview-search-"));
   tempDirs.push(projectPath);
   return projectPath;
+}
+
+async function initializeGitRepo(projectPath: string): Promise<void> {
+  await execFileAsync("git", ["init"], { cwd: projectPath });
+  await execFileAsync("git", ["config", "user.email", "test@example.com"], {
+    cwd: projectPath,
+  });
+  await execFileAsync("git", ["config", "user.name", "Preview Search Test"], {
+    cwd: projectPath,
+  });
 }
 
 describe("preview file search", () => {
@@ -169,6 +182,40 @@ describe("preview file search", () => {
     );
     expect(payload.items.map((item) => item.path)).not.toContain("terminal-only.md");
     expect(payload.items.map((item) => item.path)).not.toContain("preview-only.md");
+  });
+
+  it("returns changed files for an empty search with markdown first", async () => {
+    const projectPath = await createProject();
+    await mkdir(path.join(projectPath, "docs"), { recursive: true });
+    await mkdir(path.join(projectPath, "src"), { recursive: true });
+    await writeFile(path.join(projectPath, "README.md"), "old readme\n");
+    await writeFile(path.join(projectPath, "docs/plan.md"), "old plan\n");
+    await writeFile(path.join(projectPath, "src/app.ts"), "export {};\n");
+    await initializeGitRepo(projectPath);
+    await execFileAsync("git", ["add", "."], { cwd: projectPath });
+    await execFileAsync("git", ["commit", "-m", "initial"], { cwd: projectPath });
+
+    await writeFile(path.join(projectPath, "README.md"), "new readme\n");
+    await writeFile(path.join(projectPath, "docs/plan.md"), "new plan\n");
+    await writeFile(path.join(projectPath, "src/app.ts"), "export const value = 1;\n");
+
+    const payload = await searchPreviewFiles({
+      projectId: "project-1",
+      projectPath,
+      query: "",
+      limit: 20,
+    });
+
+    expect(payload.items.map((item) => item.path).slice(0, 2).sort()).toEqual([
+      "README.md",
+      "docs/plan.md",
+    ]);
+    expect(payload.items.map((item) => item.path).at(2)).toBe("src/app.ts");
+    expect(payload.items.map((item) => item.gitStatus)).toEqual([
+      "modified",
+      "modified",
+      "modified",
+    ]);
   });
 
   it("reuses cached candidate files for repeated project searches", async () => {

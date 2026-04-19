@@ -1,13 +1,8 @@
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { formatTerminalSessionName } from "./session-name";
 
-const fixtureBrowserViewerPath = path.resolve(process.cwd(), "..");
-const fixtureFeaturePath = path.resolve(
-  fixtureBrowserViewerPath,
-  "..",
-  "feat",
-);
+const fixtureBrowserViewerPath = "/workspace/browser-viewer";
+const fixtureFeaturePath = "/workspace/feat";
 
 describe("formatTerminalSessionName", () => {
   it("uses the cwd basename when no foreground command is active", () => {

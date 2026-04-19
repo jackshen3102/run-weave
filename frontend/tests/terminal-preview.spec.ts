@@ -137,6 +137,9 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
 
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     await page.getByText("Open file...").click();
+    await expect(page.getByText("README.md")).toBeVisible();
+    await expect(page.getByText("Changed files", { exact: true })).toBeVisible();
+    await expect(page.getByText("staged.txt")).toBeVisible();
     await page
       .getByPlaceholder("Search file or paste absolute path...")
       .fill("terminal preview");
