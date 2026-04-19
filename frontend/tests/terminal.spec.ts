@@ -4,6 +4,9 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
@@ -294,6 +297,8 @@ test("tmux tab name follows the foreground command like pty", async ({
   request,
 }) => {
   const token = await loginAndSeedToken(request, page);
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "runweave-e2e-tmux-"));
+  const cwdLabel = path.basename(cwd);
   await page.addInitScript((preferencesKey) => {
     window.localStorage.setItem(
       preferencesKey,
@@ -301,34 +306,40 @@ test("tmux tab name follows the foreground command like pty", async ({
     );
   }, TERMINAL_PREFERENCES_KEY);
 
-  const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    data: {
-      command: "/bin/zsh",
-      args: ["-l"],
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-      runtimePreference: "tmux",
-    },
-  });
-  expect(response.ok()).toBe(true);
-  const session = (await response.json()) as {
-    terminalSessionId: string;
-    terminalUrl: string;
-  };
+  try {
+    const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      data: {
+        command: "/bin/bash",
+        args: ["-l"],
+        cwd,
+        runtimePreference: "tmux",
+      },
+    });
+    expect(response.ok()).toBe(true);
+    const session = (await response.json()) as {
+      terminalSessionId: string;
+      terminalUrl: string;
+    };
 
-  await page.goto(session.terminalUrl);
-  await expect(page.getByRole("button", { name: "feat", exact: true })).toBeVisible();
-  await expect(page.getByLabel("Terminal emulator")).toBeVisible();
-  await page.getByLabel("Terminal emulator").click({ force: true });
+    await page.goto(session.terminalUrl);
+    await expect(
+      page.getByRole("button", { name: cwdLabel, exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Terminal emulator")).toBeVisible();
+    await page.getByLabel("Terminal emulator").click({ force: true });
 
-  await page.keyboard.type("codex(){ sleep 5; }");
-  await page.keyboard.press("Enter");
-  await page.keyboard.type("codex");
-  await page.keyboard.press("Enter");
+    await page.keyboard.type("codex(){ sleep 5; }");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("codex");
+    await page.keyboard.press("Enter");
 
-  await expect(
-    page.getByRole("button", { name: "feat(codex)", exact: true }),
-  ).toBeVisible({ timeout: 3_000 });
+    await expect(
+      page.getByRole("button", { name: `${cwdLabel}(codex)`, exact: true }),
+    ).toBeVisible({ timeout: 3_000 });
+  } finally {
+    await rm(cwd, { force: true, recursive: true });
+  }
 });
