@@ -319,6 +319,7 @@ export function attachTerminalWebSocketServer(
     let pendingInitialOutput = "";
     const shellPromptTracker = createShellPromptTracker({
       cwd: session?.cwd ?? null,
+      activeCommand: session?.activeCommand ?? null,
     });
     const tmuxPaneMetadataReader = getTmuxPaneMetadataReader(tmuxService);
     let tmuxMetadataSyncTimer: NodeJS.Timeout | null = null;
@@ -326,26 +327,27 @@ export function attachTerminalWebSocketServer(
     let shellPromptCommandActive = false;
 
     const publishMetadata = async (metadata: {
-      name: string;
       cwd: string;
+      activeCommand: string | null;
     }, options?: { forceSend?: boolean }): Promise<void> => {
       const current = terminalSessionManager.getSession(terminalSessionId);
       const metadataChanged =
-        current?.name !== metadata.name || current.cwd !== metadata.cwd;
+        current?.cwd !== metadata.cwd ||
+        current.activeCommand !== metadata.activeCommand;
       if (!metadataChanged && !options?.forceSend) {
         return;
       }
 
       if (metadataChanged) {
         await terminalSessionManager.updateSessionMetadata(terminalSessionId, {
-          name: metadata.name,
           cwd: metadata.cwd,
+          activeCommand: metadata.activeCommand,
         });
       }
       sendEvent(socket, {
         type: "metadata",
-        name: metadata.name,
         cwd: metadata.cwd,
+        activeCommand: metadata.activeCommand,
       });
     };
 
@@ -417,11 +419,11 @@ export function attachTerminalWebSocketServer(
         const metadata = shellPromptTracker.consume(data);
         shellPromptCommandActive = Boolean(metadata.activeCommand);
 
-        if (metadata.metadataChanged && metadata.sessionName && metadata.cwd) {
+        if (metadata.metadataChanged && metadata.cwd) {
           void publishMetadata(
             {
-              name: metadata.sessionName,
               cwd: metadata.cwd,
+              activeCommand: metadata.activeCommand,
             },
             { forceSend: true },
           ).catch((error: unknown) => {

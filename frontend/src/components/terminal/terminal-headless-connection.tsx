@@ -13,7 +13,7 @@ interface TerminalHeadlessConnectionProps {
   onAuthExpired?: () => void;
   onActivity?: () => void;
   onBell?: () => void;
-  onMetadata?: (metadata: { name: string; cwd: string }) => void;
+  onMetadata?: (metadata: { cwd: string; activeCommand: string | null }) => void;
 }
 
 export function TerminalHeadlessConnection({

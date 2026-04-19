@@ -6,7 +6,7 @@ import { execFile as nodeExecFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
 import { logTerminalPerf } from "./perf-logging";
-import { applyShellIntegration, buildSessionLabel } from "./shell-integration";
+import { applyShellIntegration } from "./shell-integration";
 
 export interface TmuxTarget {
   sessionName: string;
@@ -25,7 +25,7 @@ export interface TmuxLaunchCommand {
 
 export interface TmuxPaneMetadata {
   cwd: string;
-  name: string;
+  activeCommand: string | null;
 }
 
 export interface TmuxAvailability {
@@ -310,7 +310,7 @@ export class TmuxService {
       normalizePaneCommand(rawCommand, shellCommand);
     return {
       cwd,
-      name: buildSessionLabel(cwd, activeCommand),
+      activeCommand,
     };
   }
 

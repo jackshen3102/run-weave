@@ -10,6 +10,7 @@ import {
   syncTerminalHistorySize,
   writeTerminalHistoryOutput,
 } from "../../features/terminal/history-output";
+import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import { loadTerminalPreferences } from "../../features/terminal/preferences";
 import { HttpError } from "../../services/http";
 import { getTerminalHistory } from "../../services/terminal";
@@ -98,7 +99,14 @@ export function TerminalHistoryDrawer({
     };
   }, [apiBase, onAuthExpired, open, terminalSessionId, token]);
 
-  const renderedTitle = terminalName ?? history?.name ?? "Terminal History";
+  const renderedTitle =
+    terminalName ??
+    (history
+      ? formatTerminalSessionName({
+          cwd: history.cwd,
+          activeCommand: history.activeCommand,
+        })
+      : "Terminal History");
   const renderedStatus = useMemo(() => {
     if (!history) {
       return terminalSessionId ? terminalSessionId : "No terminal selected";

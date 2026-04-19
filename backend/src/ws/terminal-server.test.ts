@@ -396,15 +396,15 @@ describe("terminal websocket server", () => {
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
         id: "terminal-1",
-        name: "/bin/zsh",
         cwd: "/tmp",
+        activeCommand: null,
         scrollback: "",
         status: "running",
       })),
       updateSessionMetadata: vi.fn(async () => ({
         id: "terminal-1",
-        name: "browser-hub",
         cwd: "/Users/bytedance/Desktop/vscode/browser-hub",
+        activeCommand: null,
         scrollback: "",
         status: "running",
       })),
@@ -445,16 +445,16 @@ describe("terminal websocket server", () => {
     expect(terminalSessionManager.updateSessionMetadata).toHaveBeenCalledWith(
       "terminal-1",
       {
-        name: "browser-hub",
         cwd: "/Users/bytedance/Desktop/vscode/browser-hub",
+        activeCommand: null,
       },
     );
     expect(messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: "metadata",
-          name: "browser-hub",
           cwd: "/Users/bytedance/Desktop/vscode/browser-hub",
+          activeCommand: null,
         }),
       ]),
     );
@@ -473,15 +473,15 @@ describe("terminal websocket server", () => {
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
         id: "terminal-1",
-        name: "browser-viewer",
         cwd: "/Users/bytedance/Desktop/vscode/browser-viewer",
+        activeCommand: null,
         scrollback: "",
         status: "running",
       })),
       updateSessionMetadata: vi.fn(async () => ({
         id: "terminal-1",
-        name: "browser-viewer(codex)",
         cwd: "/Users/bytedance/Desktop/vscode/browser-viewer",
+        activeCommand: "codex",
         scrollback: "",
         status: "running",
       })),
@@ -520,8 +520,8 @@ describe("terminal websocket server", () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: "metadata",
-          name: "browser-viewer(codex)",
           cwd: "/Users/bytedance/Desktop/vscode/browser-viewer",
+          activeCommand: "codex",
         }),
       ]),
     );
@@ -1187,10 +1187,10 @@ describe("terminal websocket server", () => {
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
         id: "terminal-1",
-        name: "/bin/zsh",
         command: "/bin/zsh",
         args: ["-l"],
         cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        activeCommand: null,
         scrollback: "",
         status: "running",
         exitCode: undefined,
@@ -1200,8 +1200,8 @@ describe("terminal websocket server", () => {
       })),
       updateSessionMetadata: vi.fn(async () => ({
         id: "terminal-1",
-        name: "feat(codex)",
         cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        activeCommand: "codex",
         scrollback: "",
         status: "running",
       })),
@@ -1218,7 +1218,7 @@ describe("terminal websocket server", () => {
       })),
       readPaneMetadata: vi.fn(async () => ({
         cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-        name: "feat(codex)",
+        activeCommand: "codex",
       })),
     };
     const server = http.createServer();
@@ -1258,15 +1258,15 @@ describe("terminal websocket server", () => {
       "terminal-1",
       {
         cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-        name: "feat(codex)",
+        activeCommand: "codex",
       },
     );
     expect(messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: "metadata",
-          name: "feat(codex)",
           cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+          activeCommand: "codex",
         }),
       ]),
     );
@@ -1282,14 +1282,14 @@ describe("terminal websocket server", () => {
         ) => createTerminalTicketVerification(params.resource),
       ),
     };
-    let currentSessionName = "/bin/zsh";
+    let currentActiveCommand: string | null = null;
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
         id: "terminal-1",
-        name: currentSessionName,
         command: "/bin/zsh",
         args: ["-l"],
         cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        activeCommand: currentActiveCommand,
         scrollback: "",
         status: "running",
         exitCode: undefined,
@@ -1297,12 +1297,12 @@ describe("terminal websocket server", () => {
         tmuxSessionName: "runweave-terminal-1",
         tmuxSocketPath: "/tmp/runweave/tmux.sock",
       })),
-      updateSessionMetadata: vi.fn(async (_id: string, metadata: { name: string }) => {
-        currentSessionName = metadata.name;
+      updateSessionMetadata: vi.fn(async (_id: string, metadata: { activeCommand: string | null }) => {
+        currentActiveCommand = metadata.activeCommand;
         return {
           id: "terminal-1",
-          name: metadata.name,
           cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+          activeCommand: metadata.activeCommand,
           scrollback: "",
           status: "running",
         };
@@ -1322,11 +1322,11 @@ describe("terminal websocket server", () => {
         .fn()
         .mockResolvedValueOnce({
           cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-          name: "feat",
+          activeCommand: null,
         })
         .mockResolvedValue({
           cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-          name: "feat(codex)",
+          activeCommand: "codex",
         }),
     };
     const server = http.createServer();
@@ -1362,13 +1362,8 @@ describe("terminal websocket server", () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: "metadata",
-          name: "feat",
           cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-        }),
-        expect.objectContaining({
-          type: "metadata",
-          name: "feat(codex)",
-          cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+          activeCommand: "codex",
         }),
       ]),
     );
@@ -1384,14 +1379,14 @@ describe("terminal websocket server", () => {
         ) => createTerminalTicketVerification(params.resource),
       ),
     };
-    let currentSessionName = "/bin/zsh";
+    let currentActiveCommand: string | null = null;
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
         id: "terminal-1",
-        name: currentSessionName,
         command: "/bin/zsh",
         args: ["-l"],
         cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        activeCommand: currentActiveCommand,
         scrollback: "",
         status: "running",
         exitCode: undefined,
@@ -1399,12 +1394,12 @@ describe("terminal websocket server", () => {
         tmuxSessionName: "runweave-terminal-1",
         tmuxSocketPath: "/tmp/runweave/tmux.sock",
       })),
-      updateSessionMetadata: vi.fn(async (_id: string, metadata: { name: string }) => {
-        currentSessionName = metadata.name;
+      updateSessionMetadata: vi.fn(async (_id: string, metadata: { activeCommand: string | null }) => {
+        currentActiveCommand = metadata.activeCommand;
         return {
           id: "terminal-1",
-          name: metadata.name,
           cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+          activeCommand: metadata.activeCommand,
           scrollback: "",
           status: "running",
         };
@@ -1424,11 +1419,11 @@ describe("terminal websocket server", () => {
         .fn()
         .mockResolvedValueOnce({
           cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-          name: "feat",
+          activeCommand: null,
         })
         .mockResolvedValue({
           cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-          name: "feat(sleep)",
+          activeCommand: "sleep",
         }),
     };
     const server = http.createServer();
@@ -1463,8 +1458,8 @@ describe("terminal websocket server", () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: "metadata",
-          name: "feat(codex)",
           cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+          activeCommand: "codex",
         }),
       ]),
     );
@@ -1472,7 +1467,7 @@ describe("terminal websocket server", () => {
       expect.not.arrayContaining([
         expect.objectContaining({
           type: "metadata",
-          name: "feat(sleep)",
+          activeCommand: "sleep",
         }),
       ]),
     );

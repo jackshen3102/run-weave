@@ -25,10 +25,10 @@ import { createTerminalRouter } from "./terminal";
 interface MockTerminalSession {
   id: string;
   projectId?: string;
-  name: string;
   command: string;
   args: string[];
   cwd: string;
+  activeCommand?: string | null;
   scrollback: string;
   status: "running" | "exited";
   createdAt: Date;
@@ -59,10 +59,13 @@ function createTestServer(sessionState: {
   runtimeRegistry?: unknown;
   tmuxService?: unknown;
 }) {
-  const resolveSession = (id: string) =>
+  const resolveRawSession = (id: string) =>
     sessionState.current?.id === id
       ? sessionState.current
       : sessionState.sessions?.find((session) => session.id === id);
+  const normalizeSession = (session: MockTerminalSession | undefined | null) =>
+    session ? { ...session, activeCommand: session.activeCommand ?? null } : undefined;
+  const resolveSession = (id: string) => normalizeSession(resolveRawSession(id));
   const projects = sessionState.projects ?? [
     {
       id: "project-default",
@@ -76,7 +79,6 @@ function createTestServer(sessionState: {
     createSession: vi.fn(
       async (options: {
         projectId?: string;
-        name?: string;
         command: string;
         args?: string[];
         cwd: string;
@@ -84,10 +86,10 @@ function createTestServer(sessionState: {
         const created: MockTerminalSession = {
           id: "terminal-1",
           projectId: options.projectId ?? projects[0]?.id ?? "project-default",
-          name: options.name ?? options.command,
           command: options.command,
           args: options.args ?? [],
           cwd: options.cwd,
+          activeCommand: null,
           scrollback: "",
           status: "running",
           createdAt: new Date("2026-03-29T00:00:00.000Z"),
@@ -159,8 +161,10 @@ function createTestServer(sessionState: {
     }),
     listSessions: vi.fn(
       () =>
-        sessionState.sessions ??
-        (sessionState.current ? [sessionState.current] : []),
+        (
+          sessionState.sessions ??
+          (sessionState.current ? [sessionState.current] : [])
+        ).map((session) => normalizeSession(session)),
     ),
     destroySession: vi.fn(async (id: string) => {
       if (sessionState.current?.id !== id) {
@@ -171,24 +175,14 @@ function createTestServer(sessionState: {
     }),
     updateRuntimeMetadata: vi.fn(
       async (id: string, metadata: Partial<MockTerminalSession>) => {
-        const session = resolveSession(id);
+        const session = resolveRawSession(id);
         if (!session) {
           return undefined;
         }
         Object.assign(session, metadata);
-        return session;
+        return normalizeSession(session);
       },
     ),
-    updateSessionName: vi.fn(async (id: string, name: string) => {
-      if (sessionState.current?.id !== id) {
-        return undefined;
-      }
-      sessionState.current = {
-        ...sessionState.current,
-        name,
-      };
-      return sessionState.current;
-    }),
   };
 
   const app = express();
@@ -774,10 +768,10 @@ describe("terminal routes", () => {
       {
         terminalSessionId: "terminal-1",
         projectId: "project-default",
-        name: "bash",
         command: "bash",
         args: ["-l"],
         cwd: "/tmp/demo",
+        activeCommand: null,
         status: "running",
         createdAt: "2026-03-29T00:00:00.000Z",
       },
@@ -811,10 +805,10 @@ describe("terminal routes", () => {
     await expect(response.json()).resolves.toEqual({
       terminalSessionId: "terminal-1",
       projectId: "project-default",
-      name: "bash",
       command: "bash",
       args: ["-l"],
       cwd: "/tmp/demo",
+      activeCommand: null,
       scrollback: "bash$ ls\nREADME.md\n",
       status: "exited",
       createdAt: "2026-03-29T00:00:00.000Z",

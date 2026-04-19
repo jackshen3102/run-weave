@@ -52,7 +52,6 @@ import type { TmuxService } from "../terminal/tmux-service";
 const createTerminalSessionSchema = z
   .object({
     projectId: z.string().trim().min(1).optional(),
-    name: z.string().trim().min(1).optional(),
     command: z.string().trim().min(1).optional(),
     args: z.array(z.string()).optional(),
     cwd: z.string().trim().min(1).optional(),
@@ -92,10 +91,6 @@ const previewFileDiffSchema = z.object({
   kind: z.enum(["staged", "working"]),
 });
 
-const updateTerminalSessionSchema = z.object({
-  name: z.string().trim().min(1),
-});
-
 const createTerminalClipboardImageSchema = z.object({
   mimeType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
   dataBase64: z.string().min(1),
@@ -131,7 +126,6 @@ function resolveTerminalCreateDefaults(
   terminalSessionManager: TerminalSessionManager,
 ): {
   projectId?: string;
-  name?: string;
   command: string;
   args?: string[];
   cwd: string;
@@ -155,7 +149,6 @@ function resolveTerminalCreateDefaults(
 
   return {
     projectId: payload.projectId,
-    name: payload.name,
     command,
     args: payload.args ?? resolveDefaultTerminalArgs(command),
     cwd,
@@ -215,10 +208,10 @@ function toStatusPayload(
   return {
     terminalSessionId: session.id,
     projectId: session.projectId,
-    name: session.name,
     command: session.command,
     args: session.args,
     cwd: session.cwd,
+    activeCommand: session.activeCommand,
     scrollback,
     status: session.status,
     createdAt: session.createdAt.toISOString(),
@@ -494,10 +487,10 @@ export function createTerminalRouter(
       .map((session) => ({
         terminalSessionId: session.id,
         projectId: session.projectId,
-        name: session.name,
         command: session.command,
         args: session.args,
         cwd: session.cwd,
+        activeCommand: session.activeCommand,
         status: session.status,
         createdAt: session.createdAt.toISOString(),
         exitCode: session.exitCode,
@@ -656,28 +649,6 @@ export function createTerminalRouter(
       expiresIn: issued.expiresIn,
     };
     res.status(200).json(payload);
-  });
-
-  router.patch("/session/:id", async (req, res) => {
-    const parsed = updateTerminalSessionSchema.safeParse(req.body as unknown);
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    const session = await terminalSessionManager.updateSessionName(
-      req.params.id,
-      parsed.data.name,
-    );
-    if (!session) {
-      res.status(404).json({ message: "Terminal session not found" });
-      return;
-    }
-
-    res.json(toStatusPayload(session));
   });
 
   router.post("/session/:id/clipboard-image", async (req, res) => {

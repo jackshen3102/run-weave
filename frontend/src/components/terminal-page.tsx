@@ -10,6 +10,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { RuntimeMonitorBadge } from "./runtime-monitor-badge";
 import { filterBrowserHandledTerminalOutput } from "../features/terminal/output-filter";
+import { formatTerminalSessionName } from "../features/terminal/session-name";
 import { buildTmuxScrollInput } from "../features/terminal/tmux-scroll";
 import { useTerminalConnection } from "../features/terminal/use-terminal-connection";
 import { shouldSuppressWheelInput } from "../features/terminal/wheel-input";
@@ -132,6 +133,14 @@ export function TerminalPage({
     return session
       ? renderCommand(session.command, session.args)
       : "Loading...";
+  }, [session]);
+  const renderedTitle = useMemo(() => {
+    return session
+      ? formatTerminalSessionName({
+          cwd: session.cwd,
+          activeCommand: session.activeCommand,
+        })
+      : "Terminal Session";
   }, [session]);
   const renderedTerminalStatus = useMemo(() => {
     const effectiveStatus = terminalStatus ?? session?.status ?? "running";
@@ -328,7 +337,7 @@ export function TerminalPage({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-xl font-semibold">
-              {session?.name ?? "Terminal Session"}
+              {renderedTitle}
             </h1>
             <p className="mt-1 text-sm text-slate-400">{renderedCommand}</p>
             <div className="mt-2 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-slate-500">

@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { createTerminalRuntimeRecorder } from "./runtime-recorder";
 
 describe("createTerminalRuntimeRecorder", () => {
-  it("tracks the active foreground command in the session name", async () => {
+  it("tracks the active foreground command in session metadata", async () => {
     const terminalSessionManager = {
       getSession: vi.fn(() => ({
         id: "terminal-1",
-        name: "browser-viewer",
         cwd: "/Users/bytedance/Desktop/vscode/browser-viewer",
+        activeCommand: null,
       })),
       updateSessionMetadata: vi.fn(async () => undefined),
       appendOutput: vi.fn(),
@@ -26,8 +26,8 @@ describe("createTerminalRuntimeRecorder", () => {
     expect(terminalSessionManager.updateSessionMetadata).toHaveBeenCalledWith(
       "terminal-1",
       {
-        name: "browser-viewer(codex)",
         cwd: "/Users/bytedance/Desktop/vscode/browser-viewer",
+        activeCommand: "codex",
       },
     );
 
@@ -41,8 +41,8 @@ describe("createTerminalRuntimeRecorder", () => {
     expect(terminalSessionManager.updateSessionMetadata).toHaveBeenCalledWith(
       "terminal-1",
       {
-        name: "browser-viewer",
         cwd: "/Users/bytedance/Desktop/vscode/browser-viewer",
+        activeCommand: null,
       },
     );
     expect(terminalSessionManager.appendOutput).not.toHaveBeenCalled();

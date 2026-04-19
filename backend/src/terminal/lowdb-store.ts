@@ -39,13 +39,22 @@ interface TerminalSessionStoreData {
   sessions: PersistedTerminalSessionMetadataRecord[];
 }
 
+type LegacyTerminalSessionRecord = Partial<PersistedTerminalSessionRecord> & {
+  id: string;
+  command: string;
+  args: string[];
+  cwd: string;
+  createdAt: string;
+  status: "running" | "exited";
+  name?: string;
+  projectId?: string;
+  scrollback?: string;
+  activeCommand?: string | null;
+};
+
 interface LegacyTerminalSessionStoreData {
   projects?: PersistedTerminalProjectRecord[];
-  sessions?: Array<
-    | PersistedTerminalSessionRecord
-    | PersistedTerminalSessionMetadataRecord
-    | Omit<PersistedTerminalSessionRecord, "projectId">
-  >;
+  sessions?: LegacyTerminalSessionRecord[];
 }
 
 const DEFAULT_DATA: TerminalSessionStoreData = {
@@ -94,15 +103,19 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       projects.find((project) => project.isDefault)?.id ?? projects[0]?.id;
     const normalizedSessions: PersistedTerminalSessionMetadataRecord[] = [];
     for (const session of sessions) {
-      const { scrollback, ...metadata } =
-        session as PersistedTerminalSessionRecord;
+      const { scrollback, name: legacyName, ...metadata } = session;
       if (scrollback) {
         await this.writeScrollbackFile(session.id, scrollback);
       }
       normalizedSessions.push({
         ...metadata,
-        projectId:
-          "projectId" in session ? session.projectId : (defaultProjectId ?? ""),
+        projectId: session.projectId ?? defaultProjectId ?? "",
+        activeCommand: normalizeActiveCommand({
+          activeCommand: session.activeCommand,
+          command: session.command,
+          cwd: session.cwd,
+          legacyName,
+        }),
       });
     }
 
@@ -249,8 +262,8 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
         return;
       }
 
-      session.name = params.name;
       session.cwd = params.cwd;
+      session.activeCommand = params.activeCommand;
       await database.write();
     });
   }
@@ -267,7 +280,6 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
         return;
       }
 
-      session.name = params.name;
       session.command = params.command;
       session.args = [...params.args];
       await database.write();
@@ -527,17 +539,113 @@ function toMetadataRecord(
   return {
     id: session.id,
     projectId: session.projectId,
-    name: session.name,
     command: session.command,
     args: [...session.args],
     cwd: session.cwd,
+    activeCommand: session.activeCommand ?? null,
     status: session.status,
     createdAt: session.createdAt,
-    exitCode: session.exitCode,
-    runtimeKind: session.runtimeKind,
-    tmuxSessionName: session.tmuxSessionName,
-    tmuxSocketPath: session.tmuxSocketPath,
-    tmuxUnavailableReason: session.tmuxUnavailableReason,
-    recoverable: session.recoverable,
+    ...(session.exitCode !== undefined ? { exitCode: session.exitCode } : {}),
+    ...(session.runtimeKind !== undefined
+      ? { runtimeKind: session.runtimeKind }
+      : {}),
+    ...(session.tmuxSessionName !== undefined
+      ? { tmuxSessionName: session.tmuxSessionName }
+      : {}),
+    ...(session.tmuxSocketPath !== undefined
+      ? { tmuxSocketPath: session.tmuxSocketPath }
+      : {}),
+    ...(session.tmuxUnavailableReason !== undefined
+      ? { tmuxUnavailableReason: session.tmuxUnavailableReason }
+      : {}),
+    ...(session.recoverable !== undefined
+      ? { recoverable: session.recoverable }
+      : {}),
   };
+}
+
+const LEGACY_COMMAND_SUFFIXES = new Set([
+  "bash",
+  "bun",
+  "codex",
+  "coco",
+  "deno",
+  "fish",
+  "git",
+  "node",
+  "npm",
+  "pnpm",
+  "python",
+  "python3",
+  "sh",
+  "vim",
+  "zsh",
+]);
+const INTERACTIVE_SHELL_SUFFIXES = new Set(["bash", "fish", "sh", "zsh"]);
+const LEGACY_UNDERSCORE_NAME_RE = /^(.+)_([A-Za-z][A-Za-z0-9.-]*)$/;
+const LEGACY_WRAPPED_COMMAND_RE =
+  /^(.+)_([A-Za-z][A-Za-z0-9.-]*)\((node|bun)\)$/;
+
+function buildDirectoryLabel(cwd: string): string {
+  const normalized = cwd.replace(/\/+$/, "") || cwd;
+  const baseName = path.basename(normalized);
+  return baseName || normalized || "/";
+}
+
+function basename(value: string): string {
+  return value.trim().replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).at(-1) ?? value;
+}
+
+function normalizeLegacyCommand(command: string | undefined): string | null {
+  if (!command || !LEGACY_COMMAND_SUFFIXES.has(command)) {
+    return null;
+  }
+  return INTERACTIVE_SHELL_SUFFIXES.has(command) ? null : command;
+}
+
+function normalizeActiveCommand(params: {
+  activeCommand?: string | null;
+  command: string;
+  cwd: string;
+  legacyName?: string;
+}): string | null {
+  const activeCommand = params.activeCommand?.trim();
+  if (activeCommand) {
+    return activeCommand;
+  }
+
+  const legacyName = params.legacyName?.trim();
+  if (!legacyName) {
+    return null;
+  }
+
+  if (legacyName === params.command || legacyName === basename(params.command)) {
+    return null;
+  }
+
+  const directoryLabel = buildDirectoryLabel(params.cwd);
+  if (legacyName === directoryLabel) {
+    return null;
+  }
+
+  if (
+    legacyName.startsWith(`${directoryLabel}(`) &&
+    legacyName.endsWith(")")
+  ) {
+    return normalizeLegacyCommand(
+      legacyName.slice(directoryLabel.length + 1, -1),
+    );
+  }
+
+  const wrappedMatch = LEGACY_WRAPPED_COMMAND_RE.exec(legacyName);
+  if (wrappedMatch?.[1] === directoryLabel) {
+    return normalizeLegacyCommand(wrappedMatch[2]);
+  }
+
+  const underscoreMatch = LEGACY_UNDERSCORE_NAME_RE.exec(legacyName);
+  if (underscoreMatch?.[1] === directoryLabel) {
+    return normalizeLegacyCommand(underscoreMatch[2]);
+  }
+
+  return null;
 }

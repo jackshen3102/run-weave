@@ -61,7 +61,7 @@ interface TerminalSurfaceProps {
   onAuthExpired?: () => void;
   onActivity?: () => void;
   onBell?: () => void;
-  onMetadata?: (metadata: { name: string; cwd: string }) => void;
+  onMetadata?: (metadata: { cwd: string; activeCommand: string | null }) => void;
   onOpenHistory?: () => void;
 }
 
@@ -938,7 +938,10 @@ export function TerminalSurface({
         if (cancelled) {
           return;
         }
-        onMetadataRef.current?.({ name: session.name, cwd: session.cwd });
+        onMetadataRef.current?.({
+          cwd: session.cwd,
+          activeCommand: session.activeCommand,
+        });
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -1039,7 +1042,10 @@ export function TerminalSurface({
           }
         }
 
-        onMetadataRef.current?.({ name: session.name, cwd: session.cwd });
+        onMetadataRef.current?.({
+          cwd: session.cwd,
+          activeCommand: session.activeCommand,
+        });
         renderTerminalSnapshot(session.scrollback);
       } catch (error: unknown) {
         if (cancelled) {

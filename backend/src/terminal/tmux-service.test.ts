@@ -350,7 +350,7 @@ describe("TmuxService", () => {
       ),
     ).resolves.toEqual({
       cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-      name: "feat(codex)",
+      activeCommand: "codex",
     });
   });
 
@@ -380,7 +380,7 @@ describe("TmuxService", () => {
       ),
     ).resolves.toEqual({
       cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
-      name: "feat",
+      activeCommand: null,
     });
   });
 

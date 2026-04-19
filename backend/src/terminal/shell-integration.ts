@@ -20,16 +20,6 @@ export function buildDirectoryLabel(cwd: string): string {
   return baseName || normalized || "/";
 }
 
-export function buildSessionLabel(
-  cwd: string,
-  activeCommand: string | null,
-): string {
-  const directoryLabel = buildDirectoryLabel(cwd);
-  return activeCommand
-    ? `${directoryLabel}(${activeCommand})`
-    : directoryLabel;
-}
-
 interface ShellPromptTrackerState {
   cwd: string | null;
   activeCommand: string | null;
@@ -42,7 +32,6 @@ export function createShellPromptTracker(
     output: string;
     cwd: string | null;
     activeCommand: string | null;
-    sessionName: string | null;
     metadataChanged: boolean;
   };
 } {
@@ -89,9 +78,6 @@ export function createShellPromptTracker(
         output,
         cwd: state.cwd,
         activeCommand: state.activeCommand,
-        sessionName: state.cwd
-          ? buildSessionLabel(state.cwd, state.activeCommand)
-          : null,
         metadataChanged,
       };
     },
@@ -101,7 +87,7 @@ export function createShellPromptTracker(
 export function extractShellPromptMetadata(chunk: string): {
   output: string;
   cwd: string | null;
-  sessionName: string | null;
+  activeCommand: string | null;
 } {
   const tracker = createShellPromptTracker();
   const metadata = tracker.consume(chunk);
@@ -109,7 +95,7 @@ export function extractShellPromptMetadata(chunk: string): {
   return {
     output: metadata.output,
     cwd: metadata.cwd,
-    sessionName: metadata.sessionName,
+    activeCommand: metadata.activeCommand,
   };
 }
 

@@ -30,10 +30,10 @@ function createRecord(
   return {
     id: "terminal-1",
     projectId: "project-1",
-    name: "shell",
     command: "bash",
     args: ["-l"],
     cwd: "/tmp/demo",
+    activeCommand: null,
     scrollback: "",
     status: "running",
     createdAt: "2026-03-29T00:00:00.000Z",
@@ -119,10 +119,10 @@ describe("LowDbTerminalSessionStore", () => {
       {
         id: record.id,
         projectId: record.projectId,
-        name: record.name,
         command: record.command,
         args: record.args,
         cwd: record.cwd,
+        activeCommand: null,
         status: record.status,
         createdAt: record.createdAt,
         exitCode: record.exitCode,
@@ -148,6 +148,15 @@ describe("LowDbTerminalSessionStore", () => {
             status: "running",
             createdAt: "2026-03-29T00:00:00.000Z",
           },
+          {
+            id: "legacy-terminal-2",
+            name: "legacy-project_codex",
+            command: "bash",
+            args: [],
+            cwd: "/tmp/legacy-project",
+            status: "running",
+            createdAt: "2026-03-29T00:01:00.000Z",
+          },
         ],
       }),
       "utf8",
@@ -161,7 +170,7 @@ describe("LowDbTerminalSessionStore", () => {
         listProjects: () => Promise<PersistedTerminalProjectRecord[]>;
       }
     ).listProjects();
-    const [migratedSession] = await store.listSessions();
+    const [migratedSession, migratedCommandSession] = await store.listSessions();
 
     expect(defaultProject).toEqual(
       expect.objectContaining({
@@ -172,13 +181,23 @@ describe("LowDbTerminalSessionStore", () => {
       expect.objectContaining({
         id: "legacy-terminal-1",
         projectId: defaultProject?.id,
+        activeCommand: null,
         scrollback: "legacy transcript\n",
       }),
     );
+    expect(migratedCommandSession).toEqual(
+      expect.objectContaining({
+        id: "legacy-terminal-2",
+        projectId: defaultProject?.id,
+        activeCommand: "codex",
+      }),
+    );
     const migratedPersisted = JSON.parse(await readFile(storeFile, "utf8")) as {
-      sessions: Array<{ scrollback?: string }>;
+      sessions: Array<{ name?: string; scrollback?: string }>;
     };
     expect(migratedPersisted.sessions[0]).not.toHaveProperty("scrollback");
+    expect(migratedPersisted.sessions[0]).not.toHaveProperty("name");
+    expect(migratedPersisted.sessions[1]).not.toHaveProperty("name");
     await expect(
       readFile(resolveScrollbackFile(dir, "legacy-terminal-1"), "utf8"),
     ).resolves.toBe("legacy transcript\n");
@@ -190,8 +209,8 @@ describe("LowDbTerminalSessionStore", () => {
 
     await store.updateSessionMetadata({
       terminalSessionId: "terminal-1",
-      name: "browser-hub",
       cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      activeCommand: "codex",
     });
     await store.updateSessionScrollback({
       terminalSessionId: "terminal-1",
@@ -205,8 +224,8 @@ describe("LowDbTerminalSessionStore", () => {
 
     await expect(store.getSession("terminal-1")).resolves.toEqual(
       createRecord({
-        name: "browser-hub",
         cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        activeCommand: "codex",
         status: "exited",
         exitCode: 130,
         scrollback: "hello world",
@@ -338,8 +357,8 @@ describe("LowDbTerminalSessionStore", () => {
 
     const pendingMetadataWrite = store.updateSessionMetadata({
       terminalSessionId: "terminal-1",
-      name: "browser-hub",
       cwd: "/tmp/browser-hub",
+      activeCommand: null,
     });
     const appendResult = store
       .appendSessionScrollback({
@@ -372,14 +391,12 @@ describe("LowDbTerminalSessionStore", () => {
 
     await store.updateSessionLaunch({
       terminalSessionId: "terminal-1",
-      name: "/bin/zsh",
       command: "/bin/zsh",
       args: ["-l"],
     });
 
     await expect(store.getSession("terminal-1")).resolves.toEqual(
       createRecord({
-        name: "/bin/zsh",
         command: "/bin/zsh",
         args: ["-l"],
       }),
@@ -405,8 +422,8 @@ describe("LowDbTerminalSessionStore", () => {
     await expect(
       store.updateSessionMetadata({
         terminalSessionId: "terminal-1",
-        name: "browser-hub",
         cwd: "/tmp/browser-hub",
+        activeCommand: null,
       }),
     ).rejects.toThrow(writeError);
   });
@@ -430,8 +447,8 @@ describe("LowDbTerminalSessionStore", () => {
     await expect(
       store.updateSessionMetadata({
         terminalSessionId: "terminal-1",
-        name: "browser-hub",
         cwd: "/tmp/browser-hub",
+        activeCommand: null,
       }),
     ).rejects.toThrow(writeError);
     await expect(store.dispose()).rejects.toThrow(writeError);

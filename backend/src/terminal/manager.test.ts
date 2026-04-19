@@ -62,10 +62,10 @@ describe("TerminalSessionManager", () => {
       {
         id: "terminal-heavy",
         projectId: "project-default",
-        name: "heavy shell",
         command: "bash",
         args: ["-l"],
         cwd: "/tmp/heavy",
+        activeCommand: null,
         status: "running",
         createdAt: "2026-03-29T00:00:00.000Z",
       },
@@ -159,7 +159,6 @@ describe("TerminalSessionManager", () => {
       command: "bash",
       args: ["-l"],
       cwd: "/tmp/demo",
-      name: "Demo shell",
       projectId: "project-default",
     });
 
@@ -179,7 +178,7 @@ describe("TerminalSessionManager", () => {
     );
   });
 
-  it("uses the cwd basename as the default session name", async () => {
+  it("creates terminal sessions without storing a display name", async () => {
     const store = createStoreMock();
     const manager = new TerminalSessionManager(store);
     await manager.initialize();
@@ -191,12 +190,15 @@ describe("TerminalSessionManager", () => {
       projectId: "project-default",
     });
 
-    expect(session.name).toBe("feat");
+    expect(session).toMatchObject({
+      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      activeCommand: null,
+    });
     expect(store.insertSession).toHaveBeenCalledWith(
       expect.objectContaining({
         id: session.id,
-        name: "feat",
         command: "/bin/zsh",
+        activeCommand: null,
       }),
     );
   });
@@ -242,7 +244,6 @@ describe("TerminalSessionManager", () => {
       command: "claude",
       args: [],
       cwd: "/tmp/project",
-      name: "Claude",
       projectId: "project-default",
     });
 
@@ -377,7 +378,6 @@ describe("TerminalSessionManager", () => {
       command: "codex",
       args: [],
       cwd: "/tmp/project",
-      name: "Codex",
       projectId: "project-default",
     });
 
@@ -399,19 +399,19 @@ describe("TerminalSessionManager", () => {
       });
 
       const updated = await manager.updateSessionMetadata(session.id, {
-        name: "browser-hub",
         cwd: tmpDir,
+        activeCommand: "codex",
       });
 
       expect(updated).toMatchObject({
         id: session.id,
-        name: "browser-hub",
         cwd: tmpDir,
+        activeCommand: "codex",
       });
       expect(store.updateSessionMetadata).toHaveBeenCalledWith({
         terminalSessionId: session.id,
-        name: "browser-hub",
         cwd: tmpDir,
+        activeCommand: "codex",
       });
     } finally {
       rmSync(tmpDir, { force: true, recursive: true });
@@ -420,7 +420,6 @@ describe("TerminalSessionManager", () => {
 
   it("ignores session metadata with a cwd that no longer exists", async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "rw-stale-"));
-    const baseName = path.basename(tmpDir);
     try {
       const store = createStoreMock();
       const manager = new TerminalSessionManager(store);
@@ -432,26 +431,26 @@ describe("TerminalSessionManager", () => {
       });
 
       const updated = await manager.updateSessionMetadata(session.id, {
-        name: "browser-viewer_zsh",
         cwd: path.join(tmpDir, "nonexistent_subdir"),
+        activeCommand: "zsh",
       });
 
       expect(updated).toMatchObject({
         id: session.id,
-        name: baseName,
         cwd: tmpDir,
+        activeCommand: null,
       });
       expect(store.updateSessionMetadata).not.toHaveBeenCalledWith({
         terminalSessionId: session.id,
-        name: "browser-viewer_zsh",
         cwd: path.join(tmpDir, "nonexistent_subdir"),
+        activeCommand: "zsh",
       });
     } finally {
       rmSync(tmpDir, { force: true, recursive: true });
     }
   });
 
-  it("updates session launch config and renames command-derived tabs", async () => {
+  it("updates session launch config without storing a display name", async () => {
     const store = createStoreMock();
     const manager = new TerminalSessionManager(store);
     await manager.initialize();
@@ -469,13 +468,11 @@ describe("TerminalSessionManager", () => {
 
     expect(updated).toMatchObject({
       id: session.id,
-      name: "demo",
       command: "/bin/zsh",
       args: ["-l"],
     });
     expect(store.updateSessionLaunch).toHaveBeenCalledWith({
       terminalSessionId: session.id,
-      name: "demo",
       command: "/bin/zsh",
       args: ["-l"],
     });

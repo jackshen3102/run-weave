@@ -7,16 +7,18 @@ export function createTerminalRuntimeRecorder(
 ) {
   const tracker = createShellPromptTracker({
     cwd: terminalSessionManager.getSession(terminalSessionId)?.cwd ?? null,
+    activeCommand:
+      terminalSessionManager.getSession(terminalSessionId)?.activeCommand ?? null,
   });
 
   return {
     onData(data: string) {
       const metadata = tracker.consume(data);
 
-      if (metadata.metadataChanged && metadata.sessionName && metadata.cwd) {
+      if (metadata.metadataChanged && metadata.cwd) {
         void terminalSessionManager.updateSessionMetadata(terminalSessionId, {
-          name: metadata.sessionName,
           cwd: metadata.cwd,
+          activeCommand: metadata.activeCommand,
         });
       }
 

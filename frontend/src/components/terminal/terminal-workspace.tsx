@@ -605,10 +605,10 @@ export function TerminalWorkspace({
             {
               terminalSessionId: createdSession.terminalSessionId,
               projectId: createdProject.projectId,
-              name: trimmedName,
               command: "",
               args: [],
               cwd: "",
+              activeCommand: null,
               status: "running",
               createdAt: new Date().toISOString(),
             },
@@ -673,7 +673,10 @@ export function TerminalWorkspace({
   ]);
 
   const handleSessionMetadata = useCallback(
-    (terminalSessionId: string, metadata: { name: string; cwd: string }) => {
+    (
+      terminalSessionId: string,
+      metadata: { cwd: string; activeCommand: string | null },
+    ) => {
       setSessions((currentSessions) => {
         let changed = false;
         const nextSessions = currentSessions.map((session) => {
@@ -681,12 +684,19 @@ export function TerminalWorkspace({
             return session;
           }
 
-          if (session.name === metadata.name && session.cwd === metadata.cwd) {
+          if (
+            session.cwd === metadata.cwd &&
+            session.activeCommand === metadata.activeCommand
+          ) {
             return session;
           }
 
           changed = true;
-          return { ...session, name: metadata.name, cwd: metadata.cwd };
+          return {
+            ...session,
+            cwd: metadata.cwd,
+            activeCommand: metadata.activeCommand,
+          };
         });
 
         return changed ? nextSessions : currentSessions;
@@ -736,6 +746,12 @@ export function TerminalWorkspace({
     sessions.find(
       (session) => session.terminalSessionId === historyTerminalSessionId,
     ) ?? null;
+  const historyTerminalName = historySession
+    ? formatTerminalSessionName({
+        cwd: historySession.cwd,
+        activeCommand: historySession.activeCommand,
+      })
+    : undefined;
 
   return (
     <section
@@ -858,9 +874,9 @@ export function TerminalWorkspace({
                 session.terminalSessionId === activeSession?.terminalSessionId;
               const hasBell = !isActive && bellMarkers[session.terminalSessionId];
               const hasActivity = !isActive && activityMarkers[session.terminalSessionId];
-              const displayName = formatTerminalSessionName(session.name, {
-                command: session.command,
+              const displayName = formatTerminalSessionName({
                 cwd: session.cwd,
+                activeCommand: session.activeCommand,
               });
               return (
                 <div
@@ -1038,7 +1054,7 @@ export function TerminalWorkspace({
         apiBase={apiBase}
         token={token}
         terminalSessionId={historyTerminalSessionId}
-        terminalName={historySession?.name}
+        terminalName={historyTerminalName}
         onOpenChange={(open) => {
           setHistoryDrawerOpen(open);
           if (!open) {

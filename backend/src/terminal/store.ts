@@ -9,10 +9,10 @@ export interface PersistedTerminalProjectRecord {
 export interface PersistedTerminalSessionRecord {
   id: string;
   projectId: string;
-  name: string;
   command: string;
   args: string[];
   cwd: string;
+  activeCommand: string | null;
   scrollback: string;
   status: "running" | "exited";
   createdAt: string;
@@ -57,13 +57,12 @@ export interface AppendTerminalSessionScrollbackParams {
 
 export interface UpdateTerminalSessionMetadataParams {
   terminalSessionId: string;
-  name: string;
   cwd: string;
+  activeCommand: string | null;
 }
 
 export interface UpdateTerminalSessionLaunchParams {
   terminalSessionId: string;
-  name: string;
   command: string;
   args: string[];
 }

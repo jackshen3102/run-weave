@@ -42,14 +42,12 @@ async function loginAndSeedToken(
 async function createTerminalSession(
   request: APIRequestContext,
   token: string,
-  name: string,
 ): Promise<{ terminalSessionId: string; terminalUrl: string }> {
   const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
     data: {
-      name,
       command: "bash",
       cwd: "/tmp",
     },
@@ -87,11 +85,7 @@ test("supports vim write/exit and preserves interaction through resize", async (
   const targetPath = "/tmp/viewer-vim-e2e.txt";
 
   const token = await loginAndSeedToken(request, page);
-  const session = await createTerminalSession(
-    request,
-    token,
-    `vim-${Date.now()}`,
-  );
+  const session = await createTerminalSession(request, token);
   await page.addInitScript((preferencesKey) => {
     window.localStorage.setItem(
       preferencesKey,
@@ -131,11 +125,7 @@ test("preserves vim screen and input after page refresh", async ({
   const targetPath = `/tmp/viewer-vim-refresh-e2e-${Date.now()}.txt`;
 
   const token = await loginAndSeedToken(request, page);
-  const session = await createTerminalSession(
-    request,
-    token,
-    `vim-refresh-${Date.now()}`,
-  );
+  const session = await createTerminalSession(request, token);
   await page.addInitScript((preferencesKey) => {
     window.localStorage.setItem(
       preferencesKey,

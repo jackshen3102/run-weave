@@ -12,10 +12,10 @@ const TERMINAL_PREFERENCES_KEY = `viewer.terminal.preferences.${E2E_API_BASE}`;
 interface TerminalSessionStatusResponse {
   terminalSessionId: string;
   projectId: string;
-  name: string;
   command: string;
   args: string[];
   cwd: string;
+  activeCommand: string | null;
   scrollback: string;
   status: "running" | "exited";
   createdAt: string;
@@ -55,14 +55,12 @@ async function loginAndSeedToken(
 async function createTerminalSession(
   request: APIRequestContext,
   token: string,
-  name: string,
 ): Promise<{ terminalSessionId: string; terminalUrl: string }> {
   const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
     data: {
-      name,
       command: "bash",
       cwd: "/tmp",
     },
@@ -117,7 +115,7 @@ test("keeps live output when delayed HTTP snapshot returns", async ({
   const suffix = `${Date.now()}`;
   const liveMarker = `snapshot-race-live-${suffix}`;
   const staleMarker = `snapshot-race-stale-${suffix}`;
-  const session = await createTerminalSession(request, token, `race-${suffix}`);
+  const session = await createTerminalSession(request, token);
   const initialStatus = await getTerminalSession(
     request,
     token,

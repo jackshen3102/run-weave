@@ -11,10 +11,10 @@ function buildSession(
   return {
     terminalSessionId: patch.terminalSessionId,
     projectId: patch.projectId ?? "project-default",
-    name: patch.name ?? patch.terminalSessionId,
     command: patch.command ?? "bash",
     args: patch.args ?? ["-l"],
     cwd: patch.cwd ?? "/tmp/demo",
+    activeCommand: patch.activeCommand ?? null,
     status: patch.status ?? "running",
     createdAt: patch.createdAt,
     exitCode: patch.exitCode,

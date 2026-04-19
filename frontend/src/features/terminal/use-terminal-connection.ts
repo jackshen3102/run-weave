@@ -52,7 +52,7 @@ export function useTerminalConnection(params: {
   onAuthExpired?: () => void;
   onSnapshot?: (data: string) => void;
   onOutput?: (data: string) => void;
-  onMetadata?: (metadata: { name: string; cwd: string }) => void;
+  onMetadata?: (metadata: { cwd: string; activeCommand: string | null }) => void;
   includeSnapshot?: boolean;
 }) {
   const {
@@ -317,12 +317,12 @@ export function useTerminalConnection(params: {
               logTerminalPerf("ws.message.metadata", {
                 terminalSessionId,
                 seq: inboundSequenceRef.current,
-                name: parsed.name,
                 cwd: parsed.cwd,
+                activeCommand: parsed.activeCommand,
               });
               onMetadataRef.current?.({
-                name: parsed.name,
                 cwd: parsed.cwd,
+                activeCommand: parsed.activeCommand,
               });
               return;
             }
