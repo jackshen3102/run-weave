@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  body {
+    width: 1440px; height: 900px; overflow: hidden;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    background: #0f172a;
+  }
+  .mono { font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace; }
+
+  /* Workspace shell */
+  .workspace {
+    position: absolute; top: 24px; left: 24px; right: 24px; bottom: 24px;
+    border-radius: 18px; border: 1px solid #1e293b; background: #020617;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* Top bar */
+  .topbar {
+    background: #111827; padding: 0 16px; flex-shrink: 0;
+    border-bottom: 1px solid #1e293b;
+  }
+  .topbar-row {
+    display: flex; align-items: center; height: 46px; gap: 8px;
+  }
+  .topbar-row:first-child { padding-top: 4px; }
+  .traffic-lights { display: flex; gap: 8px; margin-right: 12px; }
+  .traffic-light { width: 14px; height: 14px; border-radius: 50%; }
+  .tl-red { background: #ef4444; }
+  .tl-yellow { background: #f59e0b; }
+  .tl-green { background: #22c55e; }
+
+  .pill {
+    display: inline-flex; align-items: center; height: 32px; padding: 0 16px;
+    border-radius: 16px; font-size: 13px; font-weight: 600; white-space: nowrap;
+  }
+  .pill-active { background: #f8fafc; color: #020617; }
+  .pill-inactive { background: transparent; border: 1px solid rgba(51,65,85,0.8); color: #94a3b8; }
+  .pill-preview { background: #334155; color: #e2e8f0; }
+  .pill-cta { background: #0ea5e9; color: #00111f; font-weight: 700; }
+
+  .session-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 30px; padding: 0 12px; border-radius: 15px; font-size: 13px;
+  }
+  .session-active { background: #f1f5f9; color: #0f172a; font-weight: 600; }
+  .session-inactive { background: rgba(15,23,42,0.6); border: 1px solid rgba(51,65,85,0.8); color: #94a3b8; }
+  .session-close { font-size: 11px; opacity: 0.6; cursor: pointer; }
+
+  .spacer { flex: 1; }
+
+  .shortcut-hint { font-size: 11px; color: #64748b; margin-right: 8px; }
+
+  /* Main content */
+  .main-content {
+    flex: 1; display: flex; min-height: 0;
+  }
+
+  /* Terminal area */
+  .terminal-area {
+    flex: 1; min-width: 0; padding: 20px 24px;
+    display: flex; flex-direction: column; gap: 6px;
+    overflow: hidden;
+  }
+  .term-line {
+    font-size: 14px; line-height: 1.7; white-space: pre;
+  }
+  .term-prompt { color: #22d3ee; }
+  .term-cmd { color: #e2e8f0; }
+  .term-output { color: #94a3b8; }
+  .term-success { color: #86efac; }
+  .term-path { color: #38bdf8; }
+  .term-cursor {
+    display: inline-block; width: 8px; height: 18px; background: #e2e8f0;
+    vertical-align: text-bottom; animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Preview panel */
+  .preview-panel {
+    width: 500px; flex-shrink: 0;
+    border-left: 1px solid #1e293b; background: #020617;
+    display: flex; flex-direction: column;
+  }
+
+  .preview-header {
+    padding: 14px 16px; border-bottom: 1px solid #1e293b;
+    display: flex; align-items: center; gap: 10px;
+    background: #0f172a;
+  }
+  .preview-title { font-size: 15px; font-weight: 700; color: #f1f5f9; flex: 1; }
+  .preview-subtitle { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .header-btn {
+    width: 32px; height: 32px; border-radius: 8px; border: none;
+    background: #1e293b; color: #e2e8f0; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; cursor: pointer;
+  }
+  .header-btn:hover { background: #334155; }
+
+  .file-bar {
+    padding: 10px 16px; border-bottom: 1px solid #1e293b;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .file-path { font-size: 12px; color: #94a3b8; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .view-btn {
+    padding: 4px 10px; border-radius: 5px; border: none;
+    font-size: 11px; font-weight: 500; cursor: pointer;
+  }
+  .view-btn-inactive { background: #1e293b; color: #94a3b8; }
+  .view-btn-active { background: #e2e8f0; color: #020617; font-weight: 700; }
+
+  /* Markdown rendered content */
+  .md-content {
+    flex: 1; overflow-y: auto; padding: 28px 32px;
+    background: #0b1120; margin: 16px; border-radius: 10px;
+  }
+  .md-content h1 {
+    font-size: 26px; font-weight: 700; color: #f1f5f9;
+    margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #1e293b;
+  }
+  .md-content p {
+    font-size: 15px; line-height: 1.7; color: #cbd5e1; margin-bottom: 16px;
+  }
+  .md-content ul {
+    list-style: disc; padding-left: 24px; margin-bottom: 16px;
+  }
+  .md-content li {
+    font-size: 15px; line-height: 1.7; color: #cbd5e1; margin-bottom: 4px;
+  }
+  .md-content code {
+    font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+    background: #1e293b; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #f472b6;
+  }
+  .md-content pre {
+    background: #111827; border: 1px solid #334155; border-radius: 8px;
+    padding: 16px 20px; margin-bottom: 16px; overflow-x: auto;
+  }
+  .md-content pre code {
+    background: none; padding: 0; font-size: 14px; line-height: 1.6; color: #e2e8f0;
+  }
+  .md-keyword { color: #c084fc; }
+  .md-string { color: #86efac; }
+  .md-comment { color: #64748b; }
+  .md-type { color: #38bdf8; }
+
+  .md-content blockquote {
+    border-left: 3px solid #3b82f6; padding: 8px 16px; margin-bottom: 16px;
+    background: rgba(59,130,246,0.08); border-radius: 0 6px 6px 0;
+  }
+  .md-content blockquote p { color: #94a3b8; margin-bottom: 0; }
+
+  /* Icon SVGs inline */
+  .icon { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+<div class="workspace">
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-row">
+      <div class="traffic-lights">
+        <div class="traffic-light tl-red"></div>
+        <div class="traffic-light tl-yellow"></div>
+        <div class="traffic-light tl-green"></div>
+      </div>
+      <div class="pill pill-active">
+        <svg class="icon" style="margin-right:6px;width:14px;height:14px;stroke:#020617"><path d="M3 9l4-4 4 4"/><path d="M7 5v10"/></svg>
+        my-project
+      </div>
+      <div class="pill pill-inactive">docs-site</div>
+      <div class="spacer"></div>
+      <div class="pill pill-preview">
+        <svg class="icon" style="margin-right:4px;width:14px;height:14px;stroke:#e2e8f0"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+        Preview: File
+      </div>
+      <div class="pill pill-cta">
+        <svg class="icon" style="margin-right:4px;width:14px;height:14px;stroke:#00111f"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        New Terminal
+      </div>
+    </div>
+    <div class="topbar-row">
+      <div class="session-pill session-active">
+        <svg class="icon" style="width:13px;height:13px;stroke:#0f172a"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        Shell 1
+        <span class="session-close">&times;</span>
+      </div>
+      <div class="session-pill session-inactive">
+        <svg class="icon" style="width:13px;height:13px;stroke:#94a3b8"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        Shell 2
+        <span class="session-close">&times;</span>
+      </div>
+      <div class="spacer"></div>
+      <span class="shortcut-hint">&#8984;T new &middot; &#8984;W close</span>
+      <div class="pill pill-inactive" style="height:30px;padding:0 12px;font-size:12px;">
+        <svg class="icon" style="margin-right:4px;width:12px;height:12px;stroke:#94a3b8"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        New Session
+      </div>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="main-content">
+    <!-- Terminal -->
+    <div class="terminal-area mono">
+      <div class="term-line"><span class="term-prompt">~/my-project $</span> <span class="term-cmd">pnpm dev</span></div>
+      <div class="term-line"><span class="term-success">VITE v5.4.0</span>  <span class="term-output">ready in</span> <span class="term-cmd">312ms</span></div>
+      <div class="term-line"><span class="term-output">&nbsp;</span></div>
+      <div class="term-line"><span class="term-output">  ➜  Local:   </span><span class="term-path">http://localhost:5173/</span></div>
+      <div class="term-line"><span class="term-output">  ➜  Network: </span><span class="term-output">use --host to expose</span></div>
+      <div class="term-line"><span class="term-output">&nbsp;</span></div>
+      <div class="term-line"><span class="term-prompt">~/my-project $</span> <span class="term-cmd">cat docs/architecture/terminal-code-preview.md</span></div>
+      <div class="term-line"><span class="term-output"># Terminal Preview Plan</span></div>
+      <div class="term-line"><span class="term-output">&nbsp;</span></div>
+      <div class="term-line"><span class="term-output">Preview opens Markdown in reading mode first.</span></div>
+      <div class="term-line"><span class="term-output">&nbsp;</span></div>
+      <div class="term-line"><span class="term-output">```ts</span></div>
+      <div class="term-line"><span class="term-output">const sourceOnlyMarker = "markdown-source-marker";</span></div>
+      <div class="term-line"><span class="term-output">```</span></div>
+      <div class="term-line"><span class="term-output">&nbsp;</span></div>
+      <div class="term-line"><span class="term-prompt">~/my-project $</span> <span class="term-cursor"></span></div>
+    </div>
+
+    <!-- Preview Panel -->
+    <div class="preview-panel">
+      <div class="preview-header">
+        <div>
+          <div class="preview-title">Open file</div>
+          <div class="preview-subtitle">my-project &middot; ~/my-project</div>
+        </div>
+        <!-- Expand button -->
+        <button class="header-btn" title="Expand preview">
+          <svg class="icon"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        </button>
+        <!-- Refresh -->
+        <button class="header-btn" title="Refresh">
+          <svg class="icon"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+        <!-- Copy -->
+        <button class="header-btn" title="Copy path">
+          <svg class="icon"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <!-- Close -->
+        <button class="header-btn" title="Close">
+          <svg class="icon"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="file-bar">
+        <span class="file-path mono">docs/architecture/terminal-code-preview.md</span>
+        <button class="view-btn view-btn-inactive">Source</button>
+        <button class="view-btn view-btn-inactive">Split</button>
+        <button class="view-btn view-btn-active">Preview</button>
+      </div>
+
+      <div class="md-content">
+        <h1>Terminal Preview Plan</h1>
+        <blockquote><p>This document describes the Preview workspace expansion feature.</p></blockquote>
+        <p>Preview opens Markdown in <strong>reading mode</strong> first. The rendered view provides a clean reading experience without source code noise.</p>
+        <ul>
+          <li>Default reading mode is <code>Preview</code></li>
+          <li><code>Source</code> and <code>Split</code> remain available</li>
+          <li>User preference is saved per project</li>
+        </ul>
+        <pre><code><span class="md-keyword">const</span> <span class="md-type">sourceOnlyMarker</span> = <span class="md-string">"markdown-source-marker"</span>;
+<span class="md-keyword">export</span> <span class="md-keyword">const</span> <span class="md-type">DEFAULT_VIEW</span> = <span class="md-string">"preview"</span>;</code></pre>
+        <p>The expand button in the header allows the preview to fill the entire workspace content area while keeping the project and session navigation visible.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
