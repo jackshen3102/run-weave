@@ -4,10 +4,14 @@ import type { TerminalPreviewChangeKind } from "@browser-viewer/shared";
 export type TerminalPreviewMode = "file" | "changes";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
 export type TerminalSvgViewMode = "preview" | "source";
+export type TerminalChangesViewMode = "diff" | "preview";
+
+export const DEFAULT_MARKDOWN_VIEW_MODE: TerminalMarkdownViewMode = "preview";
 
 interface TerminalPreviewUiState {
   open: boolean;
   widthPx?: number;
+  expanded: boolean;
 }
 
 export interface TerminalPreviewProjectState {
@@ -20,6 +24,7 @@ export interface TerminalPreviewProjectState {
   markdownViewMode?: TerminalMarkdownViewMode;
   markdownSplitSourceWidthPct?: number;
   svgViewMode?: TerminalSvgViewMode;
+  changesViewMode?: TerminalChangesViewMode;
 }
 
 interface TerminalPreviewStore {
@@ -28,6 +33,7 @@ interface TerminalPreviewStore {
   openPreview: (projectId: string, mode?: TerminalPreviewMode) => void;
   closePreview: () => void;
   setWidth: (widthPx: number) => void;
+  setExpanded: (expanded: boolean) => void;
   updateProjectPreview: (
     projectId: string,
     updates: Partial<TerminalPreviewProjectState>,
@@ -40,7 +46,7 @@ const DEFAULT_PROJECT_STATE: TerminalPreviewProjectState = {
 };
 
 export const useTerminalPreviewStore = create<TerminalPreviewStore>((set) => ({
-  ui: { open: false },
+  ui: { open: false, expanded: false },
   projects: {},
   openPreview: (projectId, mode) => {
     set((state) => {
@@ -59,12 +65,17 @@ export const useTerminalPreviewStore = create<TerminalPreviewStore>((set) => ({
   },
   closePreview: () => {
     set((state) => ({
-      ui: { ...state.ui, open: false },
+      ui: { ...state.ui, open: false, expanded: false },
     }));
   },
   setWidth: (widthPx) => {
     set((state) => ({
       ui: { ...state.ui, widthPx },
+    }));
+  },
+  setExpanded: (expanded) => {
+    set((state) => ({
+      ui: { ...state.ui, expanded },
     }));
   },
   updateProjectPreview: (projectId, updates) => {

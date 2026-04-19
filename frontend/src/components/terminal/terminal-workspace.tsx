@@ -143,9 +143,14 @@ export function TerminalWorkspace({
   const isMobileMonitor = clientMode === "mobile";
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
   const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
+  const previewExpanded = useTerminalPreviewStore((state) => state.ui.expanded);
   const terminalLayoutVersion = isMobileMonitor
     ? "mobile"
-    : `desktop:${previewOpen ? previewWidthPx : "full"}`;
+    : `desktop:${
+        previewOpen
+          ? `${previewWidthPx}:${previewExpanded ? "expanded" : "split"}`
+          : "full"
+      }`;
   const activeProjectPreviewMode = useTerminalPreviewStore((state) =>
     activeProjectId ? state.projects[activeProjectId]?.mode ?? null : null,
   );
@@ -948,7 +953,10 @@ export function TerminalWorkspace({
 
       <div className="min-h-0 flex-1">
         <div className="flex h-full min-h-0">
-          <div className="relative min-h-0 flex-1">
+          <div className={[
+            "relative min-h-0 flex-1",
+            previewOpen && previewExpanded ? "hidden" : "",
+          ].join(" ")}>
             {sessions.length > 0 ? (
               sessions.map((session) => {
                 const isActive =

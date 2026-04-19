@@ -18,15 +18,18 @@ import type {
   TerminalPreviewGitChangesResponse,
   TerminalProjectListItem,
 } from "@browser-viewer/shared";
-import { Copy, RefreshCw, X } from "lucide-react";
+import { Copy, Maximize2, Minimize2, RefreshCw, X } from "lucide-react";
 import {
   useTerminalPreviewStore,
+  DEFAULT_MARKDOWN_VIEW_MODE,
+  type TerminalChangesViewMode,
   type TerminalMarkdownViewMode,
   type TerminalSvgViewMode,
 } from "../../features/terminal/preview-store";
 import {
   getTerminalPreviewFileKind,
   getTerminalPreviewMonacoLanguage,
+  extensionToLanguageHint,
   isSupportedTerminalImagePreviewPath,
 } from "../../features/terminal/preview-file-types";
 import { HttpError } from "../../services/http";
@@ -119,6 +122,8 @@ export function TerminalPreviewPanel({
 }: TerminalPreviewPanelProps) {
   const closePreview = useTerminalPreviewStore((state) => state.closePreview);
   const setWidth = useTerminalPreviewStore((state) => state.setWidth);
+  const expanded = useTerminalPreviewStore((state) => state.ui.expanded);
+  const setExpanded = useTerminalPreviewStore((state) => state.setExpanded);
   const updateProjectPreview = useTerminalPreviewStore(
     (state) => state.updateProjectPreview,
   );
@@ -130,10 +135,11 @@ export function TerminalPreviewPanel({
   const selectedFilePath = projectState?.selectedFilePath;
   const selectedChangePath = projectState?.selectedChangePath;
   const selectedChangeKind = projectState?.selectedChangeKind;
-  const markdownViewMode = projectState?.markdownViewMode ?? "split";
+  const markdownViewMode = projectState?.markdownViewMode ?? DEFAULT_MARKDOWN_VIEW_MODE;
   const markdownSplitSourceWidthPct =
     projectState?.markdownSplitSourceWidthPct ?? 50;
   const svgViewMode = projectState?.svgViewMode ?? "preview";
+  const changesViewMode = projectState?.changesViewMode ?? "diff";
   const [searchItems, setSearchItems] = useState<TerminalPreviewFileSearchItem[]>(
     [],
   );
@@ -162,7 +168,11 @@ export function TerminalPreviewPanel({
   const projectId = activeProject?.projectId ?? null;
   const hasProjectPath = Boolean(activeProject?.path);
   const absoluteInput = query.trim().startsWith("/");
-  const panelWidth = widthPx ? `${widthPx}px` : "clamp(320px, 50vw, 60vw)";
+  const panelWidth = expanded
+    ? "100%"
+    : widthPx
+      ? `${widthPx}px`
+      : "clamp(320px, 50vw, 60vw)";
   const fileKind = selectedFilePath
     ? getTerminalPreviewFileKind(selectedFilePath, filePreview?.language)
     : "text";
@@ -377,6 +387,22 @@ export function TerminalPreviewPanel({
     token,
   ]);
 
+  useEffect(() => {
+    if (!expanded) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setExpanded(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [expanded, setExpanded]);
+
   const selectedPath = useMemo(() => {
     if (mode === "file") {
       return selectedFilePath ?? filePreview?.path ?? null;
@@ -413,6 +439,9 @@ export function TerminalPreviewPanel({
   };
 
   const startResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (expanded) {
+      return;
+    }
     event.preventDefault();
     const handlePointerMove = (moveEvent: globalThis.PointerEvent): void => {
       const nextWidth = Math.min(
@@ -455,6 +484,13 @@ export function TerminalPreviewPanel({
       return;
     }
     updateProjectPreview(projectId, { svgViewMode: nextMode });
+  };
+
+  const setChangesViewMode = (nextMode: TerminalChangesViewMode): void => {
+    if (!projectId) {
+      return;
+    }
+    updateProjectPreview(projectId, { changesViewMode: nextMode });
   };
 
   const startMarkdownResize = (
@@ -681,6 +717,82 @@ export function TerminalPreviewPanel({
   } else if (mode === "changes") {
     const noChanges =
       changes && changes.staged.length === 0 && changes.working.length === 0;
+    const changeDiffFileKind = selectedChangePath
+      ? getTerminalPreviewFileKind(selectedChangePath, null)
+      : "text";
+    const changeDiffLanguageHint = selectedChangePath
+      ? extensionToLanguageHint(selectedChangePath)
+      : null;
+    const changeDiffMonacoLanguage = getTerminalPreviewMonacoLanguage(changeDiffLanguageHint);
+    const isChangeImageDeleted =
+      changeDiffFileKind === "image" && fileDiff?.status === "deleted";
+
+    let changeContent: ReactNode;
+    if (diffLoading) {
+      changeContent = renderEmpty("Loading diff...");
+    } else if (diffError) {
+      changeContent = renderEmpty(diffError);
+    } else if (!fileDiff) {
+      changeContent = renderEmpty("Select a changed file");
+    } else if (changeDiffFileKind === "image") {
+      if (isChangeImageDeleted) {
+        changeContent = renderEmpty("Image deleted");
+      } else if (selectedChangePath && projectId) {
+        changeContent = (
+          <Suspense fallback={renderEmpty("Loading image preview...")}>
+            <TerminalImagePreview
+              apiBase={apiBase}
+              token={token}
+              projectId={projectId}
+              path={selectedChangePath}
+              refreshKey={0}
+              onAuthExpired={onAuthExpired}
+            />
+          </Suspense>
+        );
+      } else {
+        changeContent = renderEmpty("Binary file");
+      }
+    } else if (
+      changesViewMode === "preview" &&
+      changeDiffFileKind === "markdown" &&
+      activeProject
+    ) {
+      changeContent = (
+        <Suspense fallback={renderEmpty("Loading markdown preview...")}>
+          <TerminalMarkdownPreview
+            apiBase={apiBase}
+            token={token}
+            projectId={activeProject.projectId}
+            content={fileDiff.newContent}
+            path={fileDiff.path}
+            onAuthExpired={onAuthExpired}
+            onOpenFile={openFilePath}
+          />
+        </Suspense>
+      );
+    } else if (
+      changesViewMode === "preview" &&
+      changeDiffFileKind === "svg"
+    ) {
+      changeContent = (
+        <Suspense fallback={renderEmpty("Loading SVG preview...")}>
+          <TerminalSvgPreview content={fileDiff.newContent} />
+        </Suspense>
+      );
+    } else {
+      changeContent = (
+        <Suspense fallback={renderEmpty("Loading editor...")}>
+          <TerminalMonacoViewer
+            diff
+            language={changeDiffMonacoLanguage}
+            oldContent={fileDiff.oldContent}
+            newContent={fileDiff.newContent}
+          />
+        </Suspense>
+      );
+    }
+
     body = (
       <div className="grid h-full min-h-0 grid-cols-[190px_minmax(0,1fr)]">
         <aside className="min-h-0 overflow-auto border-r border-slate-800 p-2">
@@ -697,24 +809,7 @@ export function TerminalPreviewPanel({
             </div>
           ) : null}
         </aside>
-        <div className="min-h-0">
-          {diffLoading ? (
-            renderEmpty("Loading diff...")
-          ) : diffError ? (
-            renderEmpty(diffError)
-          ) : fileDiff ? (
-            <Suspense fallback={renderEmpty("Loading editor...")}>
-              <TerminalMonacoViewer
-                diff
-                language="plaintext"
-                oldContent={fileDiff.oldContent}
-                newContent={fileDiff.newContent}
-              />
-            </Suspense>
-          ) : (
-            renderEmpty("Select a changed file")
-          )}
-        </div>
+        <div className="min-h-0">{changeContent}</div>
       </div>
     );
   } else {
@@ -758,7 +853,10 @@ export function TerminalPreviewPanel({
       <div
         role="separator"
         aria-orientation="vertical"
-        className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-slate-600"
+        className={[
+          "absolute left-0 top-0 h-full w-1",
+          expanded ? "" : "cursor-col-resize hover:bg-slate-600",
+        ].join(" ")}
         onPointerDown={startResize}
       />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -779,6 +877,20 @@ export function TerminalPreviewPanel({
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 rounded-lg px-2"
+                onClick={() => setExpanded(!expanded)}
+                aria-label={expanded ? "Restore preview" : "Expand preview"}
+              >
+                {expanded ? (
+                  <Minimize2 className="h-4 w-4" />
+                ) : (
+                  <Maximize2 className="h-4 w-4" />
+                )}
+              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -849,6 +961,28 @@ export function TerminalPreviewPanel({
                         : "text-slate-400 hover:text-slate-200",
                     ].join(" ")}
                     onClick={() => setSvgViewMode(viewMode)}
+                  >
+                    {viewMode}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {mode === "changes" &&
+            selectedChangePath &&
+            (getTerminalPreviewFileKind(selectedChangePath, null) === "markdown" ||
+              getTerminalPreviewFileKind(selectedChangePath, null) === "svg") ? (
+              <div className="flex shrink-0 rounded-lg border border-slate-800 p-0.5">
+                {(["diff", "preview"] as const).map((viewMode) => (
+                  <button
+                    type="button"
+                    key={viewMode}
+                    className={[
+                      "rounded-md px-2 py-0.5 capitalize",
+                      changesViewMode === viewMode
+                        ? "bg-slate-800 text-slate-100"
+                        : "text-slate-400 hover:text-slate-200",
+                    ].join(" ")}
+                    onClick={() => setChangesViewMode(viewMode)}
                   >
                     {viewMode}
                   </button>
