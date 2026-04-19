@@ -364,6 +364,10 @@ export function TerminalSurface({
   const onSnapshot = useCallback((data: string) => {
     websocketContentVersionRef.current += 1;
     if (!activeRef.current) {
+      if (terminalRef.current) {
+        renderTerminalSnapshot(data);
+        return;
+      }
       if (data.length > 0) {
         hasDeferredOutputRef.current = true;
         deferredOutputRef.current = "";
@@ -425,12 +429,31 @@ export function TerminalSurface({
       ...summarizeTerminalChunk(nextChunk),
     });
 
+    const terminal = terminalRef.current;
     if (!activeRef.current) {
+      if (
+        terminal &&
+        hasRenderedSnapshotRef.current &&
+        !hasDeferredOutputRef.current &&
+        !requiresSnapshotRestoreRef.current
+      ) {
+        const renderStartedAt = performance.now();
+        terminal.write(nextChunk, () => {
+          logTerminalPerf("terminal.background-output.rendered", {
+            terminalSessionId,
+            seq: outputSequence,
+            renderDurationMs: Number(
+              (performance.now() - renderStartedAt).toFixed(2),
+            ),
+            ...summarizeTerminalChunk(nextChunk),
+          });
+        });
+        return;
+      }
       markDeferredOutput(nextChunk);
       return;
     }
 
-    const terminal = terminalRef.current;
     if (!terminal) {
       return;
     }
