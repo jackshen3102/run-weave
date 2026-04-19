@@ -13,6 +13,12 @@ import type {
 import { LowDbTerminalSessionStore } from "./lowdb-store";
 
 const tempDirs: string[] = [];
+const fixtureBrowserViewerPath = path.resolve(process.cwd(), "..");
+const fixtureFeaturePath = path.resolve(
+  fixtureBrowserViewerPath,
+  "..",
+  "feat",
+);
 
 async function createStore() {
   const dir = await mkdtemp(path.join(os.tmpdir(), "terminal-store-"));
@@ -209,7 +215,7 @@ describe("LowDbTerminalSessionStore", () => {
 
     await store.updateSessionMetadata({
       terminalSessionId: "terminal-1",
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      cwd: fixtureFeaturePath,
       activeCommand: "codex",
     });
     await store.updateSessionScrollback({
@@ -224,7 +230,7 @@ describe("LowDbTerminalSessionStore", () => {
 
     await expect(store.getSession("terminal-1")).resolves.toEqual(
       createRecord({
-        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        cwd: fixtureFeaturePath,
         activeCommand: "codex",
         status: "exited",
         exitCode: 130,

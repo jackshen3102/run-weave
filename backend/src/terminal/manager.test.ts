@@ -14,6 +14,13 @@ import type {
   TerminalSessionStore,
 } from "./store";
 
+const fixtureBrowserViewerPath = path.resolve(process.cwd(), "..");
+const fixtureFeaturePath = path.resolve(
+  fixtureBrowserViewerPath,
+  "..",
+  "feat",
+);
+
 function createStoreMock() {
   const defaultProject: PersistedTerminalProjectRecord = {
     id: "project-default",
@@ -186,12 +193,12 @@ describe("TerminalSessionManager", () => {
     const session = await manager.createSession({
       command: "/bin/zsh",
       args: ["-l"],
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      cwd: fixtureFeaturePath,
       projectId: "project-default",
     });
 
     expect(session).toMatchObject({
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      cwd: fixtureFeaturePath,
       activeCommand: null,
     });
     expect(store.insertSession).toHaveBeenCalledWith(

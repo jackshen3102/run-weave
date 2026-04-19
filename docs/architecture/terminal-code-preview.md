@@ -1051,7 +1051,7 @@ GET /api/terminal/project
 {
   "projectId": "project-1",
   "name": "browser-viewer",
-  "path": "/Users/bytedance/Desktop/vscode/browser-hub/browser-viewer",
+  "path": "/workspace/runweave",
   "createdAt": "2026-04-17T00:00:00.000Z",
   "isDefault": false
 }

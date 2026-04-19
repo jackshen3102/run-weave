@@ -1,11 +1,19 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { formatTerminalSessionName } from "./session-name";
+
+const fixtureBrowserViewerPath = path.resolve(process.cwd(), "..");
+const fixtureFeaturePath = path.resolve(
+  fixtureBrowserViewerPath,
+  "..",
+  "feat",
+);
 
 describe("formatTerminalSessionName", () => {
   it("uses the cwd basename when no foreground command is active", () => {
     expect(
       formatTerminalSessionName({
-        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        cwd: fixtureFeaturePath,
         activeCommand: null,
       }),
     ).toBe("feat");
@@ -14,7 +22,7 @@ describe("formatTerminalSessionName", () => {
   it("appends the active foreground command", () => {
     expect(
       formatTerminalSessionName({
-        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        cwd: fixtureFeaturePath,
         activeCommand: "codex",
       }),
     ).toBe("feat(codex)");
@@ -23,13 +31,13 @@ describe("formatTerminalSessionName", () => {
   it("hides interactive shell commands", () => {
     expect(
       formatTerminalSessionName({
-        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+        cwd: fixtureFeaturePath,
         activeCommand: "zsh",
       }),
     ).toBe("feat");
     expect(
       formatTerminalSessionName({
-        cwd: "/Users/bytedance/Desktop/vscode/browser-hub/browser-viewer",
+        cwd: fixtureBrowserViewerPath,
         activeCommand: "bash",
       }),
     ).toBe("browser-viewer");

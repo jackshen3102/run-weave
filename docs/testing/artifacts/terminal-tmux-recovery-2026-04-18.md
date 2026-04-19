@@ -4,7 +4,7 @@
 
 - Host: local macOS development machine
 - tmux: `/opt/homebrew/bin/tmux`, version `tmux 3.6a`
-- Repository: `/Users/bytedance/Desktop/vscode/browser-hub/feat`
+- Repository: `/workspace/runweave`
 
 ## capture-pane Performance Baseline
 

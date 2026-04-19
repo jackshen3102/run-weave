@@ -52,9 +52,9 @@
   <rect x="38" y="136" width="804" height="710" fill="url(#terminal)" stroke="#1e293b"/>
   <g class="mono" font-size="15">
     <text x="64" y="176" class="muted">$ pwd</text>
-    <text x="64" y="202" class="text">/Users/bytedance/Desktop/vscode/browser-hub/browser-viewer/frontend</text>
+    <text x="64" y="202" class="text">/workspace/runweave/frontend</text>
     <text x="64" y="250" class="muted">$ git rev-parse --show-toplevel</text>
-    <text x="64" y="276" fill="#38bdf8">/Users/bytedance/Desktop/vscode/browser-hub/browser-viewer</text>
+    <text x="64" y="276" fill="#38bdf8">/workspace/runweave</text>
     <text x="64" y="324" class="muted">$ codex</text>
     <text x="64" y="350" class="text">Use Open file like Spotlight: fuzzy search filenames, pick one, preview.</text>
     <text x="64" y="402" class="muted">$</text>

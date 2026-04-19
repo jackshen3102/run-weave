@@ -4,6 +4,13 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TmuxRebuildLimitError, TmuxService } from "./tmux-service";
 
+const fixtureBrowserViewerPath = path.resolve(process.cwd(), "..");
+const fixtureFeaturePath = path.resolve(
+  fixtureBrowserViewerPath,
+  "..",
+  "feat",
+);
+
 function createService(
   execFileImpl: TmuxService["execFileImpl"],
   env: NodeJS.ProcessEnv = {},
@@ -332,7 +339,7 @@ describe("TmuxService", () => {
         )
       ) {
         return {
-          stdout: "/Users/bytedance/Desktop/vscode/browser-hub/feat\tcodex\tnode\n",
+          stdout: `${fixtureFeaturePath}\tcodex\tnode\n`,
           stderr: "",
         };
       }
@@ -349,7 +356,7 @@ describe("TmuxService", () => {
         "/bin/zsh",
       ),
     ).resolves.toEqual({
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      cwd: fixtureFeaturePath,
       activeCommand: "codex",
     });
   });
@@ -362,7 +369,7 @@ describe("TmuxService", () => {
         )
       ) {
         return {
-          stdout: "/Users/bytedance/Desktop/vscode/browser-hub/feat\t\tzsh\n",
+          stdout: `${fixtureFeaturePath}\t\tzsh\n`,
           stderr: "",
         };
       }
@@ -379,7 +386,7 @@ describe("TmuxService", () => {
         "/bin/zsh",
       ),
     ).resolves.toEqual({
-      cwd: "/Users/bytedance/Desktop/vscode/browser-hub/feat",
+      cwd: fixtureFeaturePath,
       activeCommand: null,
     });
   });

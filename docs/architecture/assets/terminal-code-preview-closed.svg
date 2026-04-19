@@ -57,7 +57,7 @@
   <rect x="38" y="136" width="1364" height="710" fill="url(#terminal)" stroke="#1e293b"/>
   <g class="mono" font-size="15">
     <text x="64" y="176" class="muted">$ pwd</text>
-    <text x="64" y="202" class="text">/Users/bytedance/Desktop/vscode/browser-hub/browser-viewer</text>
+    <text x="64" y="202" class="text">/workspace/runweave</text>
     <text x="64" y="246" class="muted">$ codex</text>
     <text x="64" y="272" class="text">Design a lightweight markdown and diff preview beside Terminal.</text>
     <text x="64" y="298" class="text">Keep it read-only. Do not introduce a file tree.</text>
