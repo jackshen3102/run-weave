@@ -10,7 +10,9 @@ import { createRequireAuth } from "./auth/middleware";
 import { AuthService } from "./auth/service";
 import type { AuthStore } from "./auth/store";
 import { resolveDevtoolsEnabled } from "./config/devtools";
+import { diagnosticLogRecorder } from "./diagnostic-logs/recorder";
 import { createAuthRouter } from "./routes/auth";
+import { createDiagnosticLogsRouter } from "./routes/diagnostic-logs";
 import { createDevtoolsRouter } from "./routes/devtools";
 import { QualityProbeStore } from "./quality/probe-store";
 import { createQualityRouter } from "./routes/quality";
@@ -232,6 +234,11 @@ function createHttpApp(services: RuntimeServices): express.Express {
       services.qualityProbeStore,
       services.wsSessionController,
     ),
+  );
+  app.use(
+    "/api/diagnostic-logs",
+    requireAuth,
+    createDiagnosticLogsRouter(diagnosticLogRecorder),
   );
   app.use(
     "/api/terminal",

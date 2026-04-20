@@ -1,6 +1,6 @@
 {
   "name": "@browser-viewer/electron",
-  "version": "0.40.0",
+  "version": "0.44.0",
   "private": true,
   "license": "MIT",
   "type": "module",

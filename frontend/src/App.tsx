@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { useEffect, useState } from "react";
 import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
@@ -12,6 +13,12 @@ import { LoginPage } from "./pages/login-page";
 import { ConnectionsPage } from "./pages/connections-page";
 import { TerminalRoutePage } from "./pages/terminal-page";
 import { ViewerPage } from "./pages/viewer-page";
+import { DiagnosticLogEntry } from "./components/diagnostic-log-entry";
+import {
+  DIAGNOSTIC_LOG_ENTRY_VISIBILITY_EVENT,
+  installDiagnosticLogEntryVisibilityController,
+  isDiagnosticLogEntryEnabled,
+} from "./features/diagnostic-logs/entry-visibility";
 
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
@@ -61,6 +68,32 @@ export default function App() {
 
   const needsConnection = resolveNeedsConnection(isElectron, activeConnection);
   const isAuthChecking = !needsConnection && authStatus === "checking";
+  const [diagnosticLogEntryEnabled, setDiagnosticLogEntryEnabled] = useState(
+    isDiagnosticLogEntryEnabled,
+  );
+
+  useEffect(() => {
+    const uninstallController =
+      installDiagnosticLogEntryVisibilityController();
+    const syncVisibility = () => {
+      setDiagnosticLogEntryEnabled(isDiagnosticLogEntryEnabled());
+    };
+
+    window.addEventListener(
+      DIAGNOSTIC_LOG_ENTRY_VISIBILITY_EVENT,
+      syncVisibility,
+    );
+    window.addEventListener("storage", syncVisibility);
+
+    return () => {
+      window.removeEventListener(
+        DIAGNOSTIC_LOG_ENTRY_VISIBILITY_EVENT,
+        syncVisibility,
+      );
+      window.removeEventListener("storage", syncVisibility);
+      uninstallController();
+    };
+  }, []);
 
   const handleSelectConnection = (id: string) => {
     setActive(id);
@@ -77,7 +110,8 @@ export default function App() {
   const authPendingView = <main className="min-h-screen bg-background" />;
 
   return (
-    <Routes>
+    <>
+      <Routes>
       {isElectron && (
         <Route
           path="/connections"
@@ -192,6 +226,10 @@ export default function App() {
           />
         }
       />
-    </Routes>
+      </Routes>
+      {diagnosticLogEntryEnabled && !needsConnection && !isAuthChecking && token ? (
+        <DiagnosticLogEntry apiBase={apiBase} token={token} />
+      ) : null}
+    </>
   );
 }
