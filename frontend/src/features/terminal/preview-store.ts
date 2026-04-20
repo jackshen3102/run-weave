@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { StateCreator } from "zustand";
 import type { TerminalPreviewChangeKind } from "@browser-viewer/shared";
 
 export type TerminalPreviewMode = "file" | "changes";
@@ -45,11 +46,11 @@ const DEFAULT_PROJECT_STATE: TerminalPreviewProjectState = {
   mode: null,
 };
 
-export const useTerminalPreviewStore = create<TerminalPreviewStore>((set) => ({
+const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => ({
   ui: { open: false, expanded: false },
   projects: {},
-  openPreview: (projectId, mode) => {
-    set((state) => {
+  openPreview: (projectId: string, mode?: TerminalPreviewMode) => {
+    set((state: TerminalPreviewStore) => {
       const currentProject = state.projects[projectId] ?? DEFAULT_PROJECT_STATE;
       return {
         ui: { ...state.ui, open: true },
@@ -64,22 +65,25 @@ export const useTerminalPreviewStore = create<TerminalPreviewStore>((set) => ({
     });
   },
   closePreview: () => {
-    set((state) => ({
+    set((state: TerminalPreviewStore) => ({
       ui: { ...state.ui, open: false, expanded: false },
     }));
   },
-  setWidth: (widthPx) => {
-    set((state) => ({
+  setWidth: (widthPx: number) => {
+    set((state: TerminalPreviewStore) => ({
       ui: { ...state.ui, widthPx },
     }));
   },
-  setExpanded: (expanded) => {
-    set((state) => ({
+  setExpanded: (expanded: boolean) => {
+    set((state: TerminalPreviewStore) => ({
       ui: { ...state.ui, expanded },
     }));
   },
-  updateProjectPreview: (projectId, updates) => {
-    set((state) => ({
+  updateProjectPreview: (
+    projectId: string,
+    updates: Partial<TerminalPreviewProjectState>,
+  ) => {
+    set((state: TerminalPreviewStore) => ({
       projects: {
         ...state.projects,
         [projectId]: {
@@ -89,11 +93,15 @@ export const useTerminalPreviewStore = create<TerminalPreviewStore>((set) => ({
       },
     }));
   },
-  removeProjectPreview: (projectId) => {
-    set((state) => {
+  removeProjectPreview: (projectId: string) => {
+    set((state: TerminalPreviewStore) => {
       const nextProjects = { ...state.projects };
       delete nextProjects[projectId];
       return { projects: nextProjects };
     });
   },
-}));
+});
+
+export const useTerminalPreviewStore = create<TerminalPreviewStore>()(
+  createTerminalPreviewStore,
+);
