@@ -69,6 +69,7 @@ const InteractivePaneReadyMinWaitMs = 1_000;
 const InteractivePaneReadyStableMs = 200;
 const InteractivePaneReadyTimeoutMs = 2_500;
 const TMUX_RUNTIME_OPTION_ARGS = ["set-option", "-g", "mouse", "on"];
+const TMUX_METADATA_FIELD_SEPARATOR = "__RUNWEAVE_METADATA_FIELD__";
 const SHELL_INTEGRATION_ENV_KEYS = [
   "BROWSER_VIEWER_LAST_COMMAND",
   "BROWSER_VIEWER_ORIGINAL_ZDOTDIR",
@@ -294,13 +295,17 @@ export class TmuxService {
         "-p",
         "-t",
         target.sessionName,
-        "#{pane_current_path}\t#{@runweave_command}\t#{pane_current_command}",
+        [
+          "#{pane_current_path}",
+          "#{@runweave_command}",
+          "#{pane_current_command}",
+        ].join(TMUX_METADATA_FIELD_SEPARATOR),
       ],
       target,
     );
     const [rawCwd = "", rawRunweaveCommand = "", rawCommand = ""] = result.stdout
       .replace(/\r?\n$/, "")
-      .split("\t");
+      .split(TMUX_METADATA_FIELD_SEPARATOR);
     const cwd = rawCwd.trim();
     if (!cwd) {
       return null;

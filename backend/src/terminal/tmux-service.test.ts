@@ -10,6 +10,23 @@ const fixtureFeaturePath = path.resolve(
   "..",
   "feat",
 );
+const TMUX_METADATA_FIELD_SEPARATOR = "__RUNWEAVE_METADATA_FIELD__";
+const TMUX_METADATA_FORMAT = [
+  "#{pane_current_path}",
+  "#{@runweave_command}",
+  "#{pane_current_command}",
+].join(TMUX_METADATA_FIELD_SEPARATOR);
+
+function formatPaneMetadataStdout(
+  cwd: string,
+  runweaveCommand: string,
+  paneCommand: string,
+): string {
+  return (
+    [cwd, runweaveCommand, paneCommand].join(TMUX_METADATA_FIELD_SEPARATOR) +
+    "\n"
+  );
+}
 
 function createService(
   execFileImpl: TmuxService["execFileImpl"],
@@ -333,13 +350,35 @@ describe("TmuxService", () => {
 
   it("reads pane metadata as directory plus active command", async () => {
     const execFileImpl = vi.fn(async (_file: string, args: string[]) => {
-      if (
-        args.includes(
-          "#{pane_current_path}\t#{@runweave_command}\t#{pane_current_command}",
-        )
-      ) {
+      if (args.includes(TMUX_METADATA_FORMAT)) {
         return {
-          stdout: `${fixtureFeaturePath}\tcodex\tnode\n`,
+          stdout: formatPaneMetadataStdout(fixtureFeaturePath, "codex", "node"),
+          stderr: "",
+        };
+      }
+      return { stdout: "", stderr: "" };
+    });
+    const service = createService(execFileImpl);
+
+    await expect(
+      service.readPaneMetadata(
+        {
+          sessionName: "runweave-terminal-1",
+          socketPath: "/tmp/runweave-test/tmux.sock",
+        },
+        "/bin/zsh",
+      ),
+    ).resolves.toEqual({
+      cwd: fixtureFeaturePath,
+      activeCommand: "codex",
+    });
+  });
+
+  it("uses a stable printable delimiter for pane metadata fields", async () => {
+    const execFileImpl = vi.fn(async (_file: string, args: string[]) => {
+      if (args.includes(TMUX_METADATA_FORMAT)) {
+        return {
+          stdout: formatPaneMetadataStdout(fixtureFeaturePath, "codex", "node"),
           stderr: "",
         };
       }
@@ -365,11 +404,11 @@ describe("TmuxService", () => {
     const execFileImpl = vi.fn(async (_file: string, args: string[]) => {
       if (
         args.includes(
-          "#{pane_current_path}\t#{@runweave_command}\t#{pane_current_command}",
+          TMUX_METADATA_FORMAT,
         )
       ) {
         return {
-          stdout: `${fixtureFeaturePath}\t\tzsh\n`,
+          stdout: formatPaneMetadataStdout(fixtureFeaturePath, "", "zsh"),
           stderr: "",
         };
       }
