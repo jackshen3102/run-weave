@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import anchor from "markdown-it-anchor";
@@ -27,6 +27,12 @@ interface TerminalMarkdownPreviewProps {
 interface MarkdownRenderResult {
   html: string;
   mermaidBlocks: string[];
+}
+
+interface ZoomedMarkdownImage {
+  src: string;
+  alt: string;
+  assetPath?: string;
 }
 
 let markdown: MarkdownIt | null = null;
@@ -146,6 +152,65 @@ function renderMarkdown(content: string, currentPath: string): MarkdownRenderRes
   };
 }
 
+function TerminalMarkdownImageLightbox({
+  image,
+  onClose,
+}: {
+  image: ZoomedMarkdownImage | null;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!image) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [image, onClose]);
+
+  if (!image) {
+    return null;
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-label="Image preview"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        className="absolute right-4 top-4 rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-100 hover:border-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+        onClick={onClose}
+      >
+        Close
+      </button>
+      {image.assetPath ? (
+        <div className="absolute bottom-4 left-4 right-4 truncate text-center text-xs text-slate-300">
+          {image.assetPath}
+        </div>
+      ) : null}
+      <img
+        src={image.src}
+        alt={image.alt}
+        className="max-h-[90vh] max-w-[90vw] rounded-md object-contain"
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+      />
+    </div>
+  );
+}
+
 export function TerminalMarkdownPreview({
   apiBase,
   token,
@@ -159,7 +224,16 @@ export function TerminalMarkdownPreview({
 }: TerminalMarkdownPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [zoomedImage, setZoomedImage] = useState<ZoomedMarkdownImage | null>(null);
   const rendered = useMemo(() => renderMarkdown(content, path), [content, path]);
+  const renderedHtml = useMemo(() => ({ __html: rendered.html }), [rendered.html]);
+  const closeZoomedImage = useCallback(() => {
+    setZoomedImage(null);
+  }, []);
+
+  useEffect(() => {
+    setZoomedImage(null);
+  }, [content, path]);
 
   useEffect(() => {
     if (scrollRatio === undefined) {
@@ -288,28 +362,45 @@ export function TerminalMarkdownPreview({
         onScrollRatioChange(maxScrollTop > 0 ? element.scrollTop / maxScrollTop : 0);
       }}
       onClick={(event) => {
-        const anchorElement = (event.target as HTMLElement).closest("a[href]");
-        if (!(anchorElement instanceof HTMLAnchorElement)) {
+        if (!(event.target instanceof Element)) {
           return;
         }
-        const href = anchorElement.getAttribute("href") ?? "";
-        const resolved = resolveMarkdownPreviewHref(path, href);
-        if (resolved.kind === "preview-file") {
+        const target = event.target;
+        const anchorElement = target.closest("a[href]");
+        if (anchorElement instanceof HTMLAnchorElement) {
+          const href = anchorElement.getAttribute("href") ?? "";
+          const resolved = resolveMarkdownPreviewHref(path, href);
+          if (resolved.kind === "preview-file") {
+            event.preventDefault();
+            setLinkError(null);
+            onOpenFile(resolved.path, resolved.hash);
+          } else if (resolved.kind === "same-document-hash") {
+            event.preventDefault();
+            document.getElementById(resolved.hash)?.scrollIntoView({ block: "start" });
+          } else if (resolved.kind === "external") {
+            event.preventDefault();
+            window.open(resolved.href, "_blank", "noreferrer");
+          } else if (resolved.kind === "outside-project") {
+            event.preventDefault();
+            setLinkError("Path is outside the project path");
+          } else {
+            event.preventDefault();
+            setLinkError("Link is not supported");
+          }
+          return;
+        }
+
+        const imageElement = target.closest("img");
+        if (imageElement instanceof HTMLImageElement) {
           event.preventDefault();
-          setLinkError(null);
-          onOpenFile(resolved.path, resolved.hash);
-        } else if (resolved.kind === "same-document-hash") {
-          event.preventDefault();
-          document.getElementById(resolved.hash)?.scrollIntoView({ block: "start" });
-        } else if (resolved.kind === "external") {
-          event.preventDefault();
-          window.open(resolved.href, "_blank", "noreferrer");
-        } else if (resolved.kind === "outside-project") {
-          event.preventDefault();
-          setLinkError("Path is outside the project path");
-        } else {
-          event.preventDefault();
-          setLinkError("Link is not supported");
+          setZoomedImage({
+            src: imageElement.currentSrc || imageElement.src,
+            alt:
+              imageElement.alt ||
+              imageElement.dataset.previewAssetPath ||
+              "Preview image",
+            assetPath: imageElement.dataset.previewAssetPath,
+          });
         }
       }}
     >
@@ -319,8 +410,12 @@ export function TerminalMarkdownPreview({
         </div>
       ) : null}
       <div
-        className="max-w-none [&_a]:text-cyan-300 [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-slate-700 [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-slate-900 [&_code]:px-1 [&_h1]:group [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:group [&_h2]:mb-2 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:group [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:text-lg [&_h3]:font-semibold [&_hr]:border-slate-800 [&_img]:my-4 [&_img]:max-w-full [&_img]:rounded-lg [&_img]:border [&_img]:border-slate-800 [&_li]:my-1 [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:my-3 [&_pre]:my-4 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-slate-900 [&_pre]:p-3 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-800 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-slate-800 [&_th]:px-2 [&_th]:py-1 [&_ul]:ml-5 [&_ul]:list-disc"
-        dangerouslySetInnerHTML={{ __html: rendered.html }}
+        className="max-w-none [&_a]:text-cyan-300 [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-slate-700 [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-slate-900 [&_code]:px-1 [&_h1]:group [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:group [&_h2]:mb-2 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:group [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:text-lg [&_h3]:font-semibold [&_hr]:border-slate-800 [&_img]:my-4 [&_img]:max-w-full [&_img]:cursor-zoom-in [&_img]:rounded-lg [&_img]:border [&_img]:border-slate-800 [&_li]:my-1 [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:my-3 [&_pre]:my-4 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-slate-900 [&_pre]:p-3 [&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-800 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-slate-800 [&_th]:px-2 [&_th]:py-1 [&_ul]:ml-5 [&_ul]:list-disc"
+        dangerouslySetInnerHTML={renderedHtml}
+      />
+      <TerminalMarkdownImageLightbox
+        image={zoomedImage}
+        onClose={closeZoomedImage}
       />
     </div>
   );

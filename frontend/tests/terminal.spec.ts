@@ -4,7 +4,7 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -99,6 +99,10 @@ async function getLiveTerminalText(page: Page): Promise<string> {
   }
 
   return (await page.getByLabel("Terminal output").textContent()) ?? "";
+}
+
+function escapedPrefixPattern(value: string): RegExp {
+  return new RegExp(`^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
 }
 
 test("creates a terminal session and streams command output", async ({
@@ -283,6 +287,103 @@ test("restores deferred background terminal output when selected", async ({
     .toContain(`/terminal/${backgroundSession.terminalSessionId}`);
 
   await expect.poll(() => getLiveTerminalText(page)).toContain(backgroundMarker);
+
+  await rm(activeCwd, { force: true, recursive: true });
+  await rm(backgroundCwd, { force: true, recursive: true });
+});
+
+test("keeps cached background terminal state without snapshot restore", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  const suffix = `${Date.now()}`;
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
+  const activeCwd = await mkdtemp(path.join(os.tmpdir(), `cached-active-${suffix}-`));
+  const backgroundCwd = await mkdtemp(path.join(os.tmpdir(), `cached-bg-${suffix}-`));
+  const backgroundTriggerPath = path.join(backgroundCwd, "go");
+  const backgroundDonePath = path.join(backgroundCwd, "done");
+  const activeLabel = path.basename(activeCwd);
+  const backgroundLabel = path.basename(backgroundCwd);
+  const activeSession = await createTerminalSession(request, token, {
+    cwd: activeCwd,
+  });
+  const backgroundSession = await createTerminalSession(request, token, {
+    command: "python3",
+    args: [
+      "-c",
+      [
+        "import os, sys, time",
+        "sys.stdout.write('\\x1b[?1049h\\x1b[2J')",
+        "sys.stdout.write('\\x1b[Hcached background tui ready\\n')",
+        "sys.stdout.write('left column 000000')",
+        "sys.stdout.flush()",
+        `trigger_path = ${JSON.stringify(backgroundTriggerPath)}`,
+        `done_path = ${JSON.stringify(backgroundDonePath)}`,
+        "while not os.path.exists(trigger_path):",
+        "    time.sleep(0.05)",
+        "for index in range(3500):",
+        "    sys.stdout.write('\\x1b[Hcached background tui frame %06d\\n' % index)",
+        "    sys.stdout.write('left column %06d' % index)",
+        "    sys.stdout.write('\\x1b[10;60Hright column %06d' % index)",
+        "    sys.stdout.write('\\x1b[20;10Hbottom marker %06d' % index)",
+        "    if index % 20 == 0:",
+        "        sys.stdout.flush()",
+        "with open(done_path, 'w') as done_file:",
+        "    done_file.write('done')",
+        "sys.stdout.flush()",
+        "while True:",
+        "    sys.stdout.write('\\x1b[Hcached background tui frame %06d\\n' % index)",
+        "    sys.stdout.write('left column %06d' % index)",
+        "    sys.stdout.write('\\x1b[10;60Hright column %06d' % index)",
+        "    sys.stdout.write('\\x1b[20;10Hbottom marker %06d' % index)",
+        "    sys.stdout.flush()",
+        "    index += 1",
+        "    time.sleep(0.002)",
+      ].join("\n"),
+    ],
+    cwd: backgroundCwd,
+  });
+
+  await page.goto(backgroundSession.terminalUrl);
+  await expect(page.getByLabel("Terminal emulator").first()).toBeVisible();
+  await expect.poll(() => getLiveTerminalText(page)).toContain(
+    "cached background tui ready",
+  );
+
+  await page.getByRole("button", { name: escapedPrefixPattern(activeLabel) }).click();
+  await expect
+    .poll(() => page.url())
+    .toContain(`/terminal/${activeSession.terminalSessionId}`);
+  await page.waitForTimeout(300);
+  await writeFile(backgroundTriggerPath, "go");
+  await expect
+    .poll(async () => {
+      try {
+        await access(backgroundDonePath);
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .toBe(true);
+  await page
+    .getByRole("button", { name: escapedPrefixPattern(backgroundLabel) })
+    .click();
+  await expect
+    .poll(() => page.url())
+    .toContain(`/terminal/${backgroundSession.terminalSessionId}`);
+  await expect.poll(() => getLiveTerminalText(page)).toContain(
+    "cached background tui frame",
+  );
+  const visibleText = await getLiveTerminalText(page);
+  expect(visibleText).not.toMatch(/left column \d{6}left column \d{6}/);
+  expect(visibleText).not.toMatch(/right column \d{6}right column \d{6}/);
 
   await rm(activeCwd, { force: true, recursive: true });
   await rm(backgroundCwd, { force: true, recursive: true });

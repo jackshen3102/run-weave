@@ -47,11 +47,19 @@ async function loginAndSeedToken(
 async function createPreviewRepo(): Promise<string> {
   const repo = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-e2e-"));
   await mkdir(path.join(repo, "docs/architecture"), { recursive: true });
+  await mkdir(path.join(repo, "docs/architecture/assets"), { recursive: true });
   await mkdir(path.join(repo, "generated"), { recursive: true });
   await writeFile(path.join(repo, ".gitignore"), "generated/\n");
   await writeFile(
     path.join(repo, "docs/architecture/terminal-code-preview.md"),
-    "# Terminal Preview Plan\n",
+    "# Terminal Preview Plan\n\n![Preview screenshot](assets/preview.png)\n",
+  );
+  await writeFile(
+    path.join(repo, "docs/architecture/assets/preview.png"),
+    Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lY3pKAAAAABJRU5ErkJggg==",
+      "base64",
+    ),
   );
   await writeFile(
     path.join(repo, "generated/terminal-code-preview.js"),
@@ -168,6 +176,73 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     ).toBeVisible();
     await expect(page.getByText("Working Changes")).toBeVisible();
     await expect(page.getByRole("button", { name: /README\.md/ })).toBeVisible();
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test("terminal markdown preview opens clicked images in a lightbox", async ({
+  page,
+  request,
+}) => {
+  const repo = await createPreviewRepo();
+  try {
+    const token = await loginAndSeedToken(request, page);
+    const projectResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/project`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          name: "Preview Project",
+          path: repo,
+        },
+      },
+    );
+    expect(projectResponse.ok()).toBe(true);
+    const project = (await projectResponse.json()) as { projectId: string };
+    const sessionResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/session`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          projectId: project.projectId,
+          command: "bash",
+          cwd: repo,
+        },
+      },
+    );
+    expect(sessionResponse.ok()).toBe(true);
+    const session = (await sessionResponse.json()) as {
+      terminalSessionId: string;
+    };
+
+    await page.goto(`/terminal/${encodeURIComponent(session.terminalSessionId)}`);
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await page.getByText("Open file...").click();
+    await page
+      .getByPlaceholder("Search file or paste absolute path...")
+      .fill("terminal preview");
+    await page.getByText("terminal-code-preview.md").click();
+
+    const image = page.getByRole("img", { name: "Preview screenshot" });
+    await expect(image).toBeVisible();
+    await image.click();
+
+    const lightbox = page.getByRole("dialog", { name: "Image preview" });
+    await expect(lightbox).toBeVisible();
+    await expect(
+      lightbox.getByRole("img", { name: "Preview screenshot" }),
+    ).toBeVisible();
+
+    await lightbox.getByRole("button", { name: "Close" }).click();
+    await expect(lightbox).not.toBeVisible();
+    await expect(
+      page.getByRole("img", { name: "Preview screenshot" }).first(),
+    ).toBeVisible();
   } finally {
     await rm(repo, { recursive: true, force: true });
   }
