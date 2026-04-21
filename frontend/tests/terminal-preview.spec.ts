@@ -157,6 +157,21 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     await expect(
       page.getByText("docs/architecture/terminal-code-preview.md"),
     ).toBeVisible();
+    const terminalBeforeExpand = await page
+      .getByLabel("Terminal emulator")
+      .boundingBox();
+    expect(terminalBeforeExpand).not.toBeNull();
+
+    await page.getByRole("button", { name: "Expand preview" }).click();
+    await expect(
+      page.getByRole("button", { name: "Restore preview" }),
+    ).toBeVisible();
+
+    const terminalAfterExpand = await page.getByLabel("Terminal emulator").boundingBox();
+    expect(terminalAfterExpand).not.toBeNull();
+    expect(Math.round(terminalAfterExpand!.width)).toBe(
+      Math.round(terminalBeforeExpand!.width),
+    );
 
     previewFileRequestCount = 0;
     await page.getByRole("button", { name: "Preview Project" }).click();

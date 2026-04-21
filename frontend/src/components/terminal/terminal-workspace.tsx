@@ -144,13 +144,12 @@ export function TerminalWorkspace({
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
   const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
   const previewExpanded = useTerminalPreviewStore((state) => state.ui.expanded);
+  const previewReservedWidth = previewWidthPx
+    ? `${previewWidthPx}px`
+    : "clamp(320px, 50vw, 60vw)";
   const terminalLayoutVersion = isMobileMonitor
     ? "mobile"
-    : `desktop:${
-        previewOpen
-          ? `${previewWidthPx}:${previewExpanded ? "expanded" : "split"}`
-          : "full"
-      }`;
+    : `desktop:${previewOpen ? previewReservedWidth : "full"}`;
   const activeProjectPreviewMode = useTerminalPreviewStore((state) =>
     activeProjectId ? state.projects[activeProjectId]?.mode ?? null : null,
   );
@@ -952,11 +951,8 @@ export function TerminalWorkspace({
       </div>
 
       <div className="min-h-0 flex-1">
-        <div className="flex h-full min-h-0">
-          <div className={[
-            "relative min-h-0 flex-1",
-            previewOpen && previewExpanded ? "hidden" : "",
-          ].join(" ")}>
+        <div className="relative flex h-full min-h-0">
+          <div className="relative min-h-0 flex-1">
             {sessions.length > 0 ? (
               sessions.map((session) => {
                 const isActive =
@@ -1024,7 +1020,7 @@ export function TerminalWorkspace({
               </div>
             )}
           </div>
-          {previewOpen && !isMobileMonitor ? (
+          {previewOpen && !previewExpanded && !isMobileMonitor ? (
             <Suspense
               fallback={
                 <aside className="flex h-full w-[min(40vw,520px)] shrink-0 items-center justify-center border-l border-slate-800 bg-slate-950 text-sm text-slate-400">
@@ -1044,6 +1040,36 @@ export function TerminalWorkspace({
                 }}
               />
             </Suspense>
+          ) : null}
+          {previewOpen && previewExpanded && !isMobileMonitor ? (
+            <>
+              <div
+                aria-hidden="true"
+                className="min-h-0 shrink-0"
+                style={{ width: previewReservedWidth }}
+              />
+              <div className="absolute inset-0 z-20">
+                <Suspense
+                  fallback={
+                    <aside className="flex h-full w-full items-center justify-center bg-slate-950 text-sm text-slate-400">
+                      Loading preview...
+                    </aside>
+                  }
+                >
+                  <TerminalPreviewPanel
+                    apiBase={apiBase}
+                    token={token}
+                    activeProject={activeProject}
+                    widthPx={previewWidthPx}
+                    onAuthExpired={onAuthExpired}
+                    onEditProject={() => {
+                      setProjectDialogError(null);
+                      setProjectDialogMode("edit");
+                    }}
+                  />
+                </Suspense>
+              </div>
+            </>
           ) : null}
         </div>
       </div>
