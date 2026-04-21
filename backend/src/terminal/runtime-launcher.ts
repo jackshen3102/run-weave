@@ -21,6 +21,8 @@ interface EnsureTerminalRuntimeOptions {
 }
 
 const TmuxPostEnterInputDelayMs = 300;
+const BRACKETED_PASTE_START = "\u001b[200~";
+const BRACKETED_PASTE_END = "\u001b[201~";
 
 export function isTmuxBackedSession(
   session: Pick<TerminalSessionRecord, "runtimeKind">,
@@ -173,6 +175,7 @@ function createTmuxInputPacedRuntime(runtime: PtyRuntime): PtyRuntime {
   let holdInputUntil = 0;
   let flushTimer: NodeJS.Timeout | null = null;
   let disposed = false;
+  let insideBracketedPaste = false;
 
   const scheduleFlush = (delayMs: number): void => {
     if (flushTimer) {
@@ -201,7 +204,7 @@ function createTmuxInputPacedRuntime(runtime: PtyRuntime): PtyRuntime {
     }
 
     runtime.write(next);
-    if (/[\r\n]/.test(next)) {
+    if (next === "\r" || next === "\n") {
       holdInputUntil = Date.now() + TmuxPostEnterInputDelayMs;
     }
     if (queuedInput.length > 0) {
@@ -220,7 +223,9 @@ function createTmuxInputPacedRuntime(runtime: PtyRuntime): PtyRuntime {
       runtime.onExit(listener);
     },
     write(data) {
-      for (const chunk of splitInputAtLineBreaks(data)) {
+      const splitResult = splitInputAtLineBreaks(data, insideBracketedPaste);
+      insideBracketedPaste = splitResult.insideBracketedPaste;
+      for (const chunk of splitResult.chunks) {
         queuedInput.push(chunk);
       }
       flushInput();
@@ -243,10 +248,27 @@ function createTmuxInputPacedRuntime(runtime: PtyRuntime): PtyRuntime {
   };
 }
 
-function splitInputAtLineBreaks(data: string): string[] {
+function splitInputAtLineBreaks(
+  data: string,
+  initialInsideBracketedPaste = false,
+): { chunks: string[]; insideBracketedPaste: boolean } {
   const chunks: string[] = [];
+  let insideBracketedPaste = initialInsideBracketedPaste;
   let start = 0;
   for (let index = 0; index < data.length; index += 1) {
+    if (data.startsWith(BRACKETED_PASTE_START, index)) {
+      insideBracketedPaste = true;
+      index += BRACKETED_PASTE_START.length - 1;
+      continue;
+    }
+    if (data.startsWith(BRACKETED_PASTE_END, index)) {
+      insideBracketedPaste = false;
+      index += BRACKETED_PASTE_END.length - 1;
+      continue;
+    }
+    if (insideBracketedPaste) {
+      continue;
+    }
     if (data[index] === "\r" || data[index] === "\n") {
       if (index > start) {
         chunks.push(data.slice(start, index));
@@ -258,7 +280,10 @@ function splitInputAtLineBreaks(data: string): string[] {
   if (start < data.length) {
     chunks.push(data.slice(start));
   }
-  return chunks.length > 0 ? chunks : [data];
+  return {
+    chunks: chunks.length > 0 ? chunks : [data],
+    insideBracketedPaste,
+  };
 }
 
 export async function readTerminalScrollback(
