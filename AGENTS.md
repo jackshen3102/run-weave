@@ -26,12 +26,12 @@
 - 使用命令：`pnpm dist:electron:mac`
 - 不要默认打包 Windows 客户端，也不要为了兼容性额外生成 Windows 安装包，除非用户明确提出。
 
-## 前端测试 / TDD 约束
+## 前端测试约束
 
-- 前端 `*.tsx` 文件与面向 UI 的 React hooks 不写单测，不新增 `*.test.tsx`、`*.spec.tsx`、`*.ui.test.tsx`。
-- 使用 `test-driven-development` skill 时，只对非 UI 逻辑执行 TDD，例如 `*.ts` 的 service、store、协议适配、URL/状态工具与纯函数。
-- `*.tsx` 页面、组件以及 UI 侧 hooks 不要求 TDD 覆盖，相关变更通过 E2E、集成链路或必要的手工回归验证。
-- 如需调整前端测试配置，保持 `frontend` Vitest 仅收集 `*.test.ts`，并将 UI 侧代码排除在 coverage 阈值之外。
+- 前端项目禁止使用 TDD，不使用 `test-driven-development` skill 为前端代码补单测。
+- 前端 `src/` 下的 `*.ts`、`*.tsx` 与面向 UI 的 React hooks 均不新增单测，不新增 `*.test.ts`、`*.test.tsx`、`*.spec.tsx`、`*.ui.test.tsx`。
+- 前端变更只保留 E2E 作为正式自动化验证手段；必要时可补充手工回归，但不再为前端逻辑维护 Vitest 覆盖。
+- 如需调整前端测试配置，保持前端测试入口指向 Playwright E2E，不为前端设置 Vitest coverage 阈值。
 
 ## 文档路由（按需读取）
 

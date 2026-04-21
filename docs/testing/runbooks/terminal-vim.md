@@ -3,12 +3,11 @@
 ## 测试门槛
 
 - 后端单测：`pnpm --filter ./backend test -- src/terminal/pty-service.test.ts src/ws/heartbeat.test.ts src/ws/terminal-server.test.ts`
-- 前端逻辑单测：`pnpm --filter ./frontend test -- src/services/terminal.test.ts`
 - E2E：`pnpm --filter ./frontend e2e -- tests/terminal.spec.ts tests/terminal-vim.spec.ts`
 
 ## 发布规则
 
-- 三个门槛在同一提交范围内都通过，才视为终端兼容可发布。
+- 两个门槛在同一提交范围内都通过，才视为终端兼容可发布。
 
 ## 手动验证
 

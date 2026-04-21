@@ -17,7 +17,6 @@
 ## 分层思路（概念级）
 
 - **默认层**：纯逻辑与确定性回归。
-- **UI 层**：前端交互与状态逻辑。
 - **E2E 层**：关键路径闭环验证。
 - **Live 层**：外部依赖漂移检查。
 
@@ -26,7 +25,6 @@
 ## 入口命令（概览）
 
 - `pnpm run test:default`
-- `pnpm run test:ui`
 - `pnpm run test:e2e`
 - `pnpm run test:live`
 

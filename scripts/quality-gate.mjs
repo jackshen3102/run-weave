@@ -7,10 +7,9 @@ import { fileURLToPath } from "node:url";
 const ROOT = process.cwd();
 const ARTIFACT_DIR = path.join(ROOT, "artifacts");
 const REPORT_PATH = path.join(ARTIFACT_DIR, "quality-report.json");
-const LAYER_ORDER = ["default", "ui", "e2e", "live"];
+const LAYER_ORDER = ["default", "e2e", "live"];
 const LAYER_STEP_IDS = {
   default: ["default-tests", "quality-gate-self-test"],
-  ui: ["ui-tests"],
   e2e: ["e2e-smoke", "e2e-interaction"],
   live: ["live-smoke"],
 };
@@ -20,12 +19,6 @@ const ALL_STEPS = [
     id: "default-tests",
     command: ["pnpm", "run", "test:default"],
     layers: ["default"],
-    critical: true,
-  },
-  {
-    id: "ui-tests",
-    command: ["pnpm", "run", "test:ui"],
-    layers: ["ui"],
     critical: true,
   },
   {
@@ -171,13 +164,11 @@ export function selectLayersForChangedFiles(changedFiles) {
 
   if (touchesShared || touchesCriticalJourney) {
     layers.add("default");
-    layers.add("ui");
     layers.add("e2e");
   }
 
   if (touchesRootQualityInfra) {
     layers.add("default");
-    layers.add("ui");
     layers.add("e2e");
     layers.add("live");
   }
@@ -191,7 +182,7 @@ export function selectLayersForChangedFiles(changedFiles) {
   }
 
   if (touchesFrontend) {
-    layers.add("ui");
+    layers.add("e2e");
   }
 
   if (touchesE2EInfra) {
@@ -229,7 +220,6 @@ export function selectStepsForChangedFiles(changedFiles) {
 
   const isFull =
     selectedLayers.includes("default") &&
-    selectedLayers.includes("ui") &&
     selectedLayers.includes("e2e");
   const selectedSteps = expandStepsForLayers(selectedLayers);
 

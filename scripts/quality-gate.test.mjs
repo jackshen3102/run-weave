@@ -6,7 +6,7 @@ import {
 
 assert.deepEqual(
   selectLayersForChangedFiles(["frontend/src/components/viewer-page.tsx"]),
-  ["default", "ui", "e2e"],
+  ["default", "e2e"],
 );
 
 assert.deepEqual(
@@ -34,7 +34,7 @@ assert.deepEqual(
 
 assert.deepEqual(
   selectLayersForChangedFiles(["frontend/src/components/login-page.tsx"]),
-  ["ui"],
+  ["e2e"],
 );
 
 assert.deepEqual(selectLayersForChangedFiles(["scripts/quality-gate.mjs"]), [
@@ -43,7 +43,6 @@ assert.deepEqual(selectLayersForChangedFiles(["scripts/quality-gate.mjs"]), [
 
 assert.deepEqual(selectLayersForChangedFiles(["package.json"]), [
   "default",
-  "ui",
   "e2e",
   "live",
 ]);
@@ -68,6 +67,6 @@ assert.equal(
   true,
 );
 
-assert.deepEqual(selectLayersForChangedFiles([]), ["default", "ui", "e2e", "live"]);
+assert.deepEqual(selectLayersForChangedFiles([]), ["default", "e2e", "live"]);
 
 globalThis.console.log("quality-gate layer selection tests passed");
