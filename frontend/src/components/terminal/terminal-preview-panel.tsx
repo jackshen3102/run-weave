@@ -112,6 +112,42 @@ function dirname(filePath: string): string {
   return parts.join("/");
 }
 
+function resolveSelectedChange(params: {
+  changes: TerminalPreviewGitChangesResponse;
+  selectedChangePath?: string;
+  selectedChangeKind?: TerminalPreviewChangeKind;
+}):
+  | { path: string; kind: TerminalPreviewChangeKind }
+  | null {
+  const { changes, selectedChangeKind, selectedChangePath } = params;
+  if (selectedChangePath && selectedChangeKind) {
+    const candidates =
+      selectedChangeKind === "staged" ? changes.staged : changes.working;
+    if (candidates.some((file) => file.path === selectedChangePath)) {
+      return {
+        path: selectedChangePath,
+        kind: selectedChangeKind,
+      };
+    }
+  }
+
+  if (changes.staged[0]) {
+    return {
+      path: changes.staged[0].path,
+      kind: "staged",
+    };
+  }
+
+  if (changes.working[0]) {
+    return {
+      path: changes.working[0].path,
+      kind: "working",
+    };
+  }
+
+  return null;
+}
+
 export function TerminalPreviewPanel({
   apiBase,
   token,
@@ -223,44 +259,6 @@ export function TerminalPreviewPanel({
     [apiBase, handleRequestError, projectId, token],
   );
 
-  const loadChanges = useCallback(async (): Promise<void> => {
-    if (!projectId) {
-      return;
-    }
-    setChangesLoading(true);
-    setChangesError(null);
-    setFileDiff(null);
-    setDiffError(null);
-    try {
-      const payload = await getTerminalProjectPreviewGitChanges(
-        apiBase,
-        token,
-        projectId,
-      );
-      setChanges(payload);
-      const selected =
-        payload.staged[0] ?? payload.working[0] ?? null;
-      if (selected) {
-        updateProjectPreview(projectId, {
-          mode: "changes",
-          selectedChangePath: selected.path,
-          selectedChangeKind: payload.staged[0] ? "staged" : "working",
-        });
-      }
-    } catch (error) {
-      setChanges(null);
-      setChangesError(handleRequestError(error));
-    } finally {
-      setChangesLoading(false);
-    }
-  }, [
-    apiBase,
-    handleRequestError,
-    projectId,
-    token,
-    updateProjectPreview,
-  ]);
-
   const loadDiff = useCallback(
     async (filePath: string, kind: TerminalPreviewChangeKind): Promise<void> => {
       if (!projectId) {
@@ -295,6 +293,51 @@ export function TerminalPreviewPanel({
     },
     [apiBase, handleRequestError, projectId, token],
   );
+
+  const loadChanges = useCallback(async (): Promise<void> => {
+    if (!projectId) {
+      return;
+    }
+    setChangesLoading(true);
+    setChangesError(null);
+    setFileDiff(null);
+    setDiffError(null);
+    try {
+      const payload = await getTerminalProjectPreviewGitChanges(
+        apiBase,
+        token,
+        projectId,
+      );
+      setChanges(payload);
+      const selected = resolveSelectedChange({
+        changes: payload,
+        selectedChangePath,
+        selectedChangeKind,
+      });
+      if (selected) {
+        updateProjectPreview(projectId, {
+          mode: "changes",
+          selectedChangePath: selected.path,
+          selectedChangeKind: selected.kind,
+        });
+        void loadDiff(selected.path, selected.kind);
+      }
+    } catch (error) {
+      setChanges(null);
+      setChangesError(handleRequestError(error));
+    } finally {
+      setChangesLoading(false);
+    }
+  }, [
+    apiBase,
+    handleRequestError,
+    loadDiff,
+    projectId,
+    selectedChangeKind,
+    selectedChangePath,
+    token,
+    updateProjectPreview,
+  ]);
 
   useEffect(() => {
     fileRequestIdRef.current += 1;
@@ -555,6 +598,13 @@ export function TerminalPreviewPanel({
             ].join(" ")}
             onClick={() => {
               if (!projectId) {
+                return;
+              }
+              if (
+                selectedChangePath === file.path &&
+                selectedChangeKind === kind
+              ) {
+                void loadDiff(file.path, kind);
                 return;
               }
               updateProjectPreview(projectId, {
