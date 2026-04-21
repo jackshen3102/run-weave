@@ -1,5 +1,27 @@
-const SCROLL_LINES_PER_EVENT = 3;
-const WHEEL_DELTA_PER_LINE = 40;
+const SCROLL_LINES_PER_EVENT = 1;
+const WHEEL_DELTA_PER_LINE = 80;
+
+/**
+ * Minimum interval (ms) between tmux scroll inputs.
+ * Trackpads fire high-frequency wheel events; throttling prevents
+ * multiple screens from flying past on a single swipe.
+ */
+const TMUX_SCROLL_THROTTLE_MS = 60;
+
+let lastTmuxScrollAt = 0;
+
+/**
+ * Returns true when enough time has elapsed since the last accepted scroll.
+ * Call this **before** `buildTmuxScrollInput` to drop excessive events.
+ */
+export function shouldThrottleTmuxScroll(): boolean {
+  const now = performance.now();
+  if (now - lastTmuxScrollAt < TMUX_SCROLL_THROTTLE_MS) {
+    return true;
+  }
+  lastTmuxScrollAt = now;
+  return false;
+}
 
 /**
  * Converts a wheel deltaY into SGR-encoded mouse scroll escape sequences

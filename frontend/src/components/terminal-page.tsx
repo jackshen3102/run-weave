@@ -11,7 +11,7 @@ import "@xterm/xterm/css/xterm.css";
 import { RuntimeMonitorBadge } from "./runtime-monitor-badge";
 import { filterBrowserHandledTerminalOutput } from "../features/terminal/output-filter";
 import { formatTerminalSessionName } from "../features/terminal/session-name";
-import { buildTmuxScrollInput } from "../features/terminal/tmux-scroll";
+import { buildTmuxScrollInput, shouldThrottleTmuxScroll } from "../features/terminal/tmux-scroll";
 import { useTerminalConnection } from "../features/terminal/use-terminal-connection";
 import { shouldSuppressWheelInput } from "../features/terminal/wheel-input";
 import { HttpError } from "../services/http";
@@ -168,6 +168,7 @@ export function TerminalPage({
       fontSize: 14,
       lineHeight: 1.2,
       scrollback: TERMINAL_CLIENT_SCROLLBACK_LINES,
+      scrollSensitivity: 0.5,
       theme: {
         background: "#0f172a",
         foreground: "#e2e8f0",
@@ -203,13 +204,15 @@ export function TerminalPage({
         event.deltaY !== 0 &&
         !event.shiftKey
       ) {
-        const input = buildTmuxScrollInput(
-          event.deltaY,
-          terminal.cols,
-          terminal.rows,
-        );
-        if (input) {
-          sendInput(input);
+        if (!shouldThrottleTmuxScroll()) {
+          const input = buildTmuxScrollInput(
+            event.deltaY,
+            terminal.cols,
+            terminal.rows,
+          );
+          if (input) {
+            sendInput(input);
+          }
         }
       }
 

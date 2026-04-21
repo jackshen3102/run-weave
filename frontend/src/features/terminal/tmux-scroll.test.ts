@@ -18,12 +18,12 @@ describe("buildTmuxScrollInput", () => {
 
   it("repeats sequences for larger deltas", () => {
     const result = buildTmuxScrollInput(-80, 80, 24);
-    expect(result).toBe("\x1b[<64;40;12M\x1b[<64;40;12M");
+    expect(result).toBe("\x1b[<64;40;12M");
   });
 
   it("clamps repetitions to maximum scroll lines per event", () => {
     const result = buildTmuxScrollInput(-1000, 80, 24);
-    expect(result).toBe("\x1b[<64;40;12M".repeat(3));
+    expect(result).toBe("\x1b[<64;40;12M");
   });
 
   it("uses correct col and row based on terminal dimensions", () => {

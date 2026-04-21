@@ -29,7 +29,7 @@ import {
 } from "../../features/terminal/perf-logging";
 import { filterBrowserHandledTerminalOutput } from "../../features/terminal/output-filter";
 import { createResizeScheduler } from "../../features/terminal/resize-scheduler";
-import { buildTmuxScrollInput } from "../../features/terminal/tmux-scroll";
+import { buildTmuxScrollInput, shouldThrottleTmuxScroll } from "../../features/terminal/tmux-scroll";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
 import { scheduleTerminalViewportRefresh } from "../../features/terminal/viewport-refresh";
 import { shouldSuppressWheelInput } from "../../features/terminal/wheel-input";
@@ -610,6 +610,7 @@ export function TerminalSurface({
       lineHeight: 1.2,
       screenReaderMode: initialPreferences.screenReaderMode,
       scrollback: TERMINAL_CLIENT_SCROLLBACK_LINES,
+      scrollSensitivity: 0.5,
       theme: {
         background: "#0b1220",
         foreground: "#e2e8f0",
@@ -647,13 +648,15 @@ export function TerminalSurface({
         event.deltaY !== 0 &&
         !event.shiftKey
       ) {
-        const input = buildTmuxScrollInput(
-          event.deltaY,
-          terminal.cols,
-          terminal.rows,
-        );
-        if (input) {
-          sendTerminalInput(input);
+        if (!shouldThrottleTmuxScroll()) {
+          const input = buildTmuxScrollInput(
+            event.deltaY,
+            terminal.cols,
+            terminal.rows,
+          );
+          if (input) {
+            sendTerminalInput(input);
+          }
         }
       }
 
