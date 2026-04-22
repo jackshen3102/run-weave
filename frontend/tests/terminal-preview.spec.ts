@@ -133,8 +133,18 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     expect(secondSessionResponse.ok()).toBe(true);
 
     let previewFileRequestCount = 0;
+    let previewGitChangesRequestCount = 0;
+    let previewFileDiffRequestCount = 0;
     await page.route("**/api/terminal/**/preview/file?**", async (route) => {
       previewFileRequestCount += 1;
+      await route.continue();
+    });
+    await page.route("**/api/terminal/**/preview/git-changes", async (route) => {
+      previewGitChangesRequestCount += 1;
+      await route.continue();
+    });
+    await page.route("**/api/terminal/**/preview/file-diff?**", async (route) => {
+      previewFileDiffRequestCount += 1;
       await route.continue();
     });
 
@@ -186,11 +196,26 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
       .click();
     await page.getByText("Changes").click();
     await expect(page.getByText("Staged Changes")).toBeVisible();
+    await expect.poll(() => previewGitChangesRequestCount).toBe(1);
+    await expect.poll(() => previewFileDiffRequestCount).toBe(1);
     await expect(
       page.getByRole("button", { name: /staged\.txt/ }),
     ).toBeVisible();
     await expect(page.getByText("Working Changes")).toBeVisible();
     await expect(page.getByRole("button", { name: /README\.md/ })).toBeVisible();
+
+    await Promise.all([
+      page.waitForResponse((response) => {
+        return (
+          response.url().includes("/preview/file-diff?") &&
+          response.url().includes("path=README.md") &&
+          response.ok()
+        );
+      }),
+      page.getByRole("button", { name: /README\.md/ }).click(),
+    ]);
+    expect(previewGitChangesRequestCount).toBe(1);
+    await expect.poll(() => previewFileDiffRequestCount).toBe(2);
   } finally {
     await rm(repo, { recursive: true, force: true });
   }
