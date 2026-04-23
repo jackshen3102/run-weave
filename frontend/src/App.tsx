@@ -199,6 +199,34 @@ export default function App() {
         }
       />
       <Route
+        path="/terminal"
+        element={
+          needsConnection ? (
+            <Navigate to="/connections" replace />
+          ) : isAuthChecking ? (
+            authPendingView
+          ) : token ? (
+            <TerminalRoutePage
+              apiBase={apiBase}
+              token={token}
+              clientMode={clientMode}
+              connections={connections}
+              activeConnectionId={activeConnectionId}
+              connectionName={isElectron ? activeConnection?.name : undefined}
+              onSelectConnection={
+                isElectron ? handleSelectConnection : undefined
+              }
+              onOpenConnectionManager={
+                isElectron ? openConnectionManager : undefined
+              }
+              onAuthExpired={clearToken}
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
         path="/terminal/:terminalSessionId"
         element={
           needsConnection ? (
@@ -210,6 +238,15 @@ export default function App() {
               apiBase={apiBase}
               token={token}
               clientMode={clientMode}
+              connections={connections}
+              activeConnectionId={activeConnectionId}
+              connectionName={isElectron ? activeConnection?.name : undefined}
+              onSelectConnection={
+                isElectron ? handleSelectConnection : undefined
+              }
+              onOpenConnectionManager={
+                isElectron ? openConnectionManager : undefined
+              }
               onAuthExpired={clearToken}
             />
           ) : (

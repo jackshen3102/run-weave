@@ -1,11 +1,17 @@
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { TerminalWorkspace } from "../components/terminal/terminal-workspace";
 import type { ClientMode } from "../features/client-mode";
+import type { ConnectionConfig } from "../features/connection/types";
 
 interface TerminalRoutePageProps {
   apiBase: string;
   token: string;
   clientMode: ClientMode;
+  connections?: ConnectionConfig[];
+  activeConnectionId?: string | null;
+  connectionName?: string;
+  onSelectConnection?: (connectionId: string) => void;
+  onOpenConnectionManager?: () => void;
   onAuthExpired: () => void;
 }
 
@@ -13,14 +19,15 @@ export function TerminalRoutePage({
   apiBase,
   token,
   clientMode,
+  connections,
+  activeConnectionId,
+  connectionName,
+  onSelectConnection,
+  onOpenConnectionManager,
   onAuthExpired,
 }: TerminalRoutePageProps) {
   const { terminalSessionId } = useParams<{ terminalSessionId: string }>();
   const navigate = useNavigate();
-
-  if (!terminalSessionId) {
-    return <Navigate to="/" replace />;
-  }
 
   return (
     <main className="h-dvh overflow-hidden bg-slate-950 px-3 pt-3 pb-2">
@@ -28,6 +35,11 @@ export function TerminalRoutePage({
         apiBase={apiBase}
         token={token}
         clientMode={clientMode}
+        connections={connections}
+        activeConnectionId={activeConnectionId}
+        connectionName={connectionName}
+        onSelectConnection={onSelectConnection}
+        onOpenConnectionManager={onOpenConnectionManager}
         initialTerminalSessionId={terminalSessionId}
         onActiveSessionChange={(activeTerminalSessionId) => {
           if (activeTerminalSessionId === terminalSessionId) {
@@ -39,7 +51,9 @@ export function TerminalRoutePage({
           });
         }}
         onNoSessionAvailable={() => {
-          navigate("/", { replace: true });
+          if (terminalSessionId) {
+            navigate("/terminal", { replace: true });
+          }
         }}
         onNavigateHome={() => {
           navigate("/");

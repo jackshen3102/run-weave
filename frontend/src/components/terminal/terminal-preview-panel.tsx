@@ -197,7 +197,10 @@ export function TerminalPreviewPanel({
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
   const fileRequestIdRef = useRef(0);
+  const changesRequestIdRef = useRef(0);
   const diffRequestIdRef = useRef(0);
+  const selectedChangePathRef = useRef(selectedChangePath);
+  const selectedChangeKindRef = useRef(selectedChangeKind);
   const [assetRefreshKey, setAssetRefreshKey] = useState(0);
   const [markdownScrollRatio, setMarkdownScrollRatio] = useState(0);
 
@@ -298,49 +301,72 @@ export function TerminalPreviewPanel({
     if (!projectId) {
       return;
     }
+    const requestId = changesRequestIdRef.current + 1;
+    changesRequestIdRef.current = requestId;
     setChangesLoading(true);
     setChangesError(null);
-    setFileDiff(null);
-    setDiffError(null);
     try {
       const payload = await getTerminalProjectPreviewGitChanges(
         apiBase,
         token,
         projectId,
       );
+      if (changesRequestIdRef.current !== requestId) {
+        return;
+      }
       setChanges(payload);
       const selected = resolveSelectedChange({
         changes: payload,
-        selectedChangePath,
-        selectedChangeKind,
+        selectedChangePath: selectedChangePathRef.current,
+        selectedChangeKind: selectedChangeKindRef.current,
       });
-      if (selected) {
+      if (!selected) {
+        diffRequestIdRef.current += 1;
+        setFileDiff(null);
+        setDiffError(null);
+        setDiffLoading(false);
+        updateProjectPreview(projectId, {
+          mode: "changes",
+          selectedChangePath: undefined,
+          selectedChangeKind: undefined,
+        });
+        return;
+      }
+
+      const selectedChanged =
+        selected.path !== selectedChangePathRef.current ||
+        selected.kind !== selectedChangeKindRef.current;
+      if (selectedChanged) {
         updateProjectPreview(projectId, {
           mode: "changes",
           selectedChangePath: selected.path,
           selectedChangeKind: selected.kind,
         });
-        void loadDiff(selected.path, selected.kind);
+        return;
       }
+      void loadDiff(selected.path, selected.kind);
     } catch (error) {
-      setChanges(null);
+      if (changesRequestIdRef.current !== requestId) {
+        return;
+      }
       setChangesError(handleRequestError(error));
     } finally {
-      setChangesLoading(false);
+      if (changesRequestIdRef.current === requestId) {
+        setChangesLoading(false);
+      }
     }
   }, [
     apiBase,
     handleRequestError,
     loadDiff,
     projectId,
-    selectedChangeKind,
-    selectedChangePath,
     token,
     updateProjectPreview,
   ]);
 
   useEffect(() => {
     fileRequestIdRef.current += 1;
+    changesRequestIdRef.current += 1;
     diffRequestIdRef.current += 1;
     setSearchItems([]);
     setSearchError(null);
@@ -351,6 +377,11 @@ export function TerminalPreviewPanel({
     setFileDiff(null);
     setDiffError(null);
   }, [projectId]);
+
+  useEffect(() => {
+    selectedChangePathRef.current = selectedChangePath;
+    selectedChangeKindRef.current = selectedChangeKind;
+  }, [selectedChangeKind, selectedChangePath]);
 
   useEffect(() => {
     if (mode !== "file" || !selectedFilePath) {
@@ -780,7 +811,7 @@ export function TerminalPreviewPanel({
       changeDiffFileKind === "image" && fileDiff?.status === "deleted";
 
     let changeContent: ReactNode;
-    if (diffLoading) {
+    if (diffLoading && !fileDiff) {
       changeContent = renderEmpty("Loading diff...");
     } else if (diffError) {
       changeContent = renderEmpty(diffError);
@@ -848,7 +879,7 @@ export function TerminalPreviewPanel({
     body = (
       <div className="grid h-full min-h-0 grid-cols-[190px_minmax(0,1fr)]">
         <aside className="min-h-0 overflow-auto border-r border-slate-800 p-2">
-          {changesLoading ? (
+          {changesLoading && !changes ? (
             <div className="px-2 py-4 text-sm text-slate-400">Loading changes...</div>
           ) : changesError ? (
             <div className="px-2 py-4 text-sm text-rose-300">{changesError}</div>

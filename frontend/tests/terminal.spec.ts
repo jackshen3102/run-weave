@@ -12,6 +12,163 @@ const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
 const TERMINAL_PREFERENCES_KEY = `viewer.terminal.preferences.${E2E_API_BASE}`;
 
+interface Deferred {
+  promise: Promise<void>;
+  resolve: () => void;
+}
+
+function createDeferred(): Deferred {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
+async function seedElectronConnections(
+  page: Page,
+  options: {
+    activeId: string;
+    connections: Array<{ id: string; name: string; url: string }>;
+  },
+): Promise<void> {
+  await page.addInitScript(({ activeId, connections }) => {
+    Object.defineProperty(window, "electronAPI", {
+      configurable: true,
+      value: {
+        isElectron: true,
+        managesPackagedBackend: false,
+        platform: "darwin",
+      },
+    });
+
+    window.localStorage.setItem(
+      "viewer.connections",
+      JSON.stringify({
+        activeId,
+        connections: connections.map((connection) => ({
+          ...connection,
+          createdAt: Date.now(),
+        })),
+      }),
+    );
+    window.localStorage.setItem(
+      "viewer.auth.connection-auth",
+      JSON.stringify(
+        Object.fromEntries(
+          connections.map((connection) => [
+            connection.id,
+            {
+              accessToken: `token-${connection.id}`,
+              accessExpiresAt: Date.now() + 15 * 60 * 1000,
+              refreshToken: `refresh-${connection.id}`,
+              sessionId: `session-${connection.id}`,
+            },
+          ]),
+        ),
+      ),
+    );
+  }, options);
+}
+
+async function mockTerminalConnectionApi(
+  page: Page,
+  options: {
+    url: string;
+    projectId: string;
+    projectName: string;
+    terminalSessionId?: string;
+    cwd?: string;
+    delay?: Deferred;
+  },
+): Promise<void> {
+  const escapedUrl = options.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  await page.route(new RegExp(`^${escapedUrl}/api/.*`), async (route) => {
+    const request = route.request();
+    const headers = {
+      "Access-Control-Allow-Headers": "authorization, content-type",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Origin": "*",
+    };
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers });
+      return;
+    }
+
+    const requestUrl = new URL(request.url());
+    if (options.delay && requestUrl.pathname !== "/api/auth/verify") {
+      await options.delay.promise;
+    }
+
+    if (requestUrl.pathname === "/api/auth/verify") {
+      await route.fulfill({
+        status: 200,
+        headers,
+        json: { valid: true },
+      });
+      return;
+    }
+
+    if (requestUrl.pathname === "/api/terminal/project") {
+      await route.fulfill({
+        status: 200,
+        headers,
+        json: options.terminalSessionId
+          ? [
+              {
+                projectId: options.projectId,
+                name: options.projectName,
+                path: null,
+                createdAt: new Date().toISOString(),
+              },
+            ]
+          : [],
+      });
+      return;
+    }
+
+    if (requestUrl.pathname === "/api/terminal/session") {
+      await route.fulfill({
+        status: 200,
+        headers,
+        json: options.terminalSessionId
+          ? [
+              {
+                terminalSessionId: options.terminalSessionId,
+                projectId: options.projectId,
+                command: "bash",
+                args: [],
+                cwd: options.cwd ?? `/${options.projectName}`,
+                activeCommand: null,
+                status: "running",
+                createdAt: new Date().toISOString(),
+              },
+            ]
+          : [],
+      });
+      return;
+    }
+
+    if (requestUrl.pathname.endsWith("/ws-ticket")) {
+      await route.fulfill({
+        status: 200,
+        headers,
+        json: {
+          ticket: "mock-ticket",
+          expiresIn: 30,
+        },
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 404,
+      headers,
+      json: { message: "Not mocked" },
+    });
+  });
+}
+
 async function loginAndSeedToken(
   request: APIRequestContext,
   page: Page,
@@ -228,7 +385,7 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
   );
 
   await page
-    .getByRole("button", { name: secondLabel, exact: true })
+    .getByRole("button", { name: escapedPrefixPattern(secondLabel) })
     .click();
 
   await expect
@@ -243,6 +400,114 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
 
   await rm(firstCwd, { force: true, recursive: true });
   await rm(secondCwd, { force: true, recursive: true });
+});
+
+test("switches Electron terminal connections and ignores stale session loads", async ({
+  page,
+}) => {
+  const connectionA = {
+    id: "connection-a",
+    name: "Connection A",
+    url: "http://connection-a.test",
+  };
+  const connectionB = {
+    id: "connection-b",
+    name: "Connection B",
+    url: "http://connection-b.test",
+  };
+  const connectionC = {
+    id: "connection-c",
+    name: "Connection C",
+    url: "http://connection-c.test",
+  };
+  const delayedA = createDeferred();
+  const delayedB = createDeferred();
+
+  await seedElectronConnections(page, {
+    activeId: connectionA.id,
+    connections: [connectionA, connectionB, connectionC],
+  });
+  await mockTerminalConnectionApi(page, {
+    url: connectionA.url,
+    projectId: "project-a",
+    projectName: "Project A",
+    terminalSessionId: "terminal-a",
+    delay: delayedA,
+  });
+  await mockTerminalConnectionApi(page, {
+    url: connectionB.url,
+    projectId: "project-b",
+    projectName: "Project B",
+    terminalSessionId: "terminal-b",
+    delay: delayedB,
+  });
+  await mockTerminalConnectionApi(page, {
+    url: connectionC.url,
+    projectId: "project-c",
+    projectName: "Project C",
+    terminalSessionId: "terminal-c",
+  });
+
+  await page.goto("/terminal/terminal-a");
+  await page.getByRole("button", { name: /Connection A/ }).click();
+  await page.getByRole("menuitem", { name: /Connection B/ }).click();
+  await page.getByRole("button", { name: /Connection B/ }).click();
+  await page.getByRole("menuitem", { name: /Connection C/ }).click();
+
+  await expect(page.getByRole("button", { name: "Project C" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /Connection C/ })).toBeVisible();
+  await expect.poll(() => page.url()).toContain("/terminal/terminal-c");
+
+  delayedA.resolve();
+  delayedB.resolve();
+  await page.waitForTimeout(100);
+
+  await expect(page.getByRole("button", { name: "Project C" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Project A" }).first()).toBeHidden();
+  await expect(page.getByRole("button", { name: "Project B" }).first()).toBeHidden();
+  await expect.poll(() => page.url()).toContain("/terminal/terminal-c");
+});
+
+test("keeps terminal context when switched Electron connection has no sessions", async ({
+  page,
+}) => {
+  const connectionA = {
+    id: "connection-a",
+    name: "Connection A",
+    url: "http://empty-a.test",
+  };
+  const connectionB = {
+    id: "connection-b",
+    name: "Connection B",
+    url: "http://empty-b.test",
+  };
+
+  await seedElectronConnections(page, {
+    activeId: connectionA.id,
+    connections: [connectionA, connectionB],
+  });
+  await mockTerminalConnectionApi(page, {
+    url: connectionA.url,
+    projectId: "project-a",
+    projectName: "Project A",
+    terminalSessionId: "terminal-a",
+  });
+  await mockTerminalConnectionApi(page, {
+    url: connectionB.url,
+    projectId: "project-b",
+    projectName: "Project B",
+  });
+
+  await page.goto("/terminal/terminal-a");
+  await expect(page.getByRole("button", { name: "Project A" }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: /Connection A/ }).click();
+  await page.getByRole("menuitem", { name: /Connection B/ }).click();
+
+  await expect(page.getByText("No terminal tab yet. Create one to start.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Connection B/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New Terminal" })).toBeVisible();
+  await expect.poll(() => page.url()).toMatch(/\/terminal$/);
 });
 
 test("restores deferred background terminal output when selected", async ({
