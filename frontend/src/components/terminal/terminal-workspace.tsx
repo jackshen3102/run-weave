@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import type { TerminalProjectListItem, TerminalSessionListItem } from "@browser-viewer/shared";
-import { Home, Pencil, Plus, Trash2, X } from "lucide-react";
+import { History, Home, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { ConnectionConfig } from "../../features/connection/types";
 import {
   loadRecentTerminalSelection,
@@ -815,210 +815,236 @@ export function TerminalWorkspace({
   return (
     <section
       className={[
-        "flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-950",
+        "flex h-full min-h-0 flex-col overflow-hidden bg-slate-950 text-slate-100",
         className,
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      <div className="border-b border-slate-800/90 px-3 py-2">
-        <div className="mb-2 flex items-center gap-2">
-          {onNavigateHome && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-label="Go home"
-              className="h-9 shrink-0 rounded-full px-3"
-              onClick={onNavigateHome}
-            >
-              <Home className="h-4 w-4" />
-            </Button>
-          )}
-          {connections?.length &&
-          activeConnectionId &&
-          onSelectConnection &&
-          onOpenConnectionManager ? (
-            <ConnectionSwitcher
-              connections={connections ?? []}
-              activeConnectionId={activeConnectionId ?? null}
-              activeConnectionName={connectionName}
-              onSelectConnection={onSelectConnection}
-              onOpenConnectionManager={onOpenConnectionManager}
-              className="h-9 shrink-0 rounded-full border border-slate-700/80 bg-slate-900/70 px-3 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-            />
-          ) : null}
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {visibleProjects.map((project) => {
-              const isActive = project.projectId === activeProjectId;
-              const hasBell = sessions.some(
-                (session) =>
-                  session.projectId === project.projectId &&
-                  bellMarkers[session.terminalSessionId],
-              );
-              const hasActivity = sessions.some(
-                (session) =>
-                  session.projectId === project.projectId &&
-                  activityMarkers[session.terminalSessionId],
-              );
-              return (
-                <ContextMenu key={project.projectId}>
-                  <ContextMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-pressed={isActive}
-                      className={`shrink-0 rounded-full border px-3 py-1 text-xs ${
-                        isActive
-                          ? "border-slate-100 bg-slate-100 text-slate-900"
-                          : "border-slate-700/80 text-slate-300"
-                      }`}
-                      onClick={() => {
+      <div className="flex h-8 items-center gap-1.5 border-b border-slate-800 px-2">
+        {onNavigateHome && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Go home"
+            title="Go home"
+            className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+            onClick={onNavigateHome}
+          >
+            <Home className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {connections?.length &&
+        activeConnectionId &&
+        onSelectConnection &&
+        onOpenConnectionManager ? (
+          <ConnectionSwitcher
+            connections={connections ?? []}
+            activeConnectionId={activeConnectionId ?? null}
+            activeConnectionName={connectionName}
+            onSelectConnection={onSelectConnection}
+            onOpenConnectionManager={onOpenConnectionManager}
+            className="h-6 shrink-0 rounded-md border border-slate-800 bg-slate-900 px-2 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+          />
+        ) : null}
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {visibleProjects.map((project) => {
+            const isActive = project.projectId === activeProjectId;
+            const hasBell = sessions.some(
+              (session) =>
+                session.projectId === project.projectId &&
+                bellMarkers[session.terminalSessionId],
+            );
+            const hasActivity = sessions.some(
+              (session) =>
+                session.projectId === project.projectId &&
+                activityMarkers[session.terminalSessionId],
+            );
+            return (
+              <ContextMenu key={project.projectId}>
+                <ContextMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-pressed={isActive}
+                    className={[
+                      "inline-flex h-6 shrink-0 items-center gap-2 rounded-md border px-3 text-xs transition-colors",
+                      isActive
+                        ? "border-sky-700/70 bg-slate-800 text-slate-50 shadow-[inset_0_1px_0_rgba(148,163,184,0.18)]"
+                        : "border-slate-800 bg-slate-900/90 text-slate-200 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-100",
+                    ].join(" ")}
+                    onClick={() => {
+                      setActiveProjectId(project.projectId);
+                    }}
+                    title={project.name}
+                  >
+                    <span className="max-w-[160px] truncate">{project.name}</span>
+                    {hasBell || hasActivity ? (
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          hasBell ? "bg-amber-400" : "bg-emerald-400"
+                        }`}
+                      />
+                    ) : null}
+                  </button>
+                </ContextMenuTrigger>
+                {!isMobileMonitor ? (
+                  <ContextMenuContent className="w-44">
+                    <ContextMenuItem
+                      onSelect={() => {
                         setActiveProjectId(project.projectId);
+                        setProjectDialogError(null);
+                        setProjectDialogMode("edit");
                       }}
                     >
-                      <span className="inline-flex items-center gap-1.5">
-                        <span>{project.name}</span>
-                        {!isActive && (hasBell || hasActivity) ? (
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              hasBell ? "bg-amber-400" : "bg-emerald-400"
-                            }`}
-                          />
-                        ) : null}
-                      </span>
-                    </button>
-                  </ContextMenuTrigger>
-                  {!isMobileMonitor ? (
-                    <ContextMenuContent className="w-44">
-                      <ContextMenuItem
-                        onSelect={() => {
-                          setActiveProjectId(project.projectId);
-                          setProjectDialogError(null);
-                          setProjectDialogMode("edit");
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                        Edit
-                      </ContextMenuItem>
-                      <ContextMenuItem
-                        onSelect={() => {
-                          setActiveProjectId(project.projectId);
-                          setProjectPendingDeletion(project);
-                        }}
-                        className="text-rose-400 focus:text-rose-400"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </ContextMenuItem>
-                    </ContextMenuContent>
-                  ) : null}
-                </ContextMenu>
-              );
-            })}
-          </div>
-          {!isMobileMonitor ? (
-            <TerminalPreviewMenu
-              projectId={activeProjectId}
-              mode={activeProjectPreviewMode}
-              disabled={loading}
-            />
-          ) : null}
+                      <Pencil className="h-4 w-4" />
+                      Edit
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onSelect={() => {
+                        setActiveProjectId(project.projectId);
+                        setProjectPendingDeletion(project);
+                      }}
+                      className="text-rose-400 focus:text-rose-400"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                ) : null}
+              </ContextMenu>
+            );
+          })}
           {!isMobileMonitor ? (
             <Button
               type="button"
               size="sm"
+              variant="ghost"
               disabled={loading}
-              className="h-9 shrink-0 rounded-full px-4"
+              aria-label="New Project"
+              title="New Project"
+              className="h-6 w-8 shrink-0 rounded-md border border-slate-800 bg-slate-900/90 px-0 text-slate-300 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-100"
               onClick={() => {
                 setProjectDialogError(null);
                 setProjectDialogMode("create");
               }}
             >
-              <Plus className="mr-1 h-4 w-4" />
-              New Project
+              <Plus className="h-3.5 w-3.5" />
             </Button>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {visibleSessions.map((session) => {
-              const isActive =
-                session.terminalSessionId === activeSession?.terminalSessionId;
-              const hasBell = !isActive && bellMarkers[session.terminalSessionId];
-              const hasActivity = !isActive && activityMarkers[session.terminalSessionId];
-              const displayName = formatTerminalSessionName({
-                cwd: session.cwd,
-                activeCommand: session.activeCommand,
-              });
-              return (
-                <div
-                  key={session.terminalSessionId}
-                  className="flex items-center gap-1 rounded-full border border-slate-700/80 bg-slate-900/60 px-2 py-1"
+        {!isMobileMonitor ? (
+          <TerminalPreviewMenu
+            projectId={activeProjectId}
+            mode={activeProjectPreviewMode}
+            disabled={loading}
+            buttonClassName="h-6 shrink-0 rounded-md px-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+          />
+        ) : null}
+        {!isMobileMonitor ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={!activeSession?.terminalSessionId}
+            aria-label="Open terminal history"
+            title="Open terminal history"
+            className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40"
+            onClick={() => {
+              if (activeSession?.terminalSessionId) {
+                openHistoryDrawer(activeSession.terminalSessionId);
+              }
+            }}
+          >
+            <History className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
+      </div>
+      <div className="flex h-[26px] items-stretch border-b border-slate-800">
+        <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {visibleSessions.map((session) => {
+            const isActive =
+              session.terminalSessionId === activeSession?.terminalSessionId;
+            const hasBell = !isActive && bellMarkers[session.terminalSessionId];
+            const hasActivity = !isActive && activityMarkers[session.terminalSessionId];
+            const displayName = formatTerminalSessionName({
+              cwd: session.cwd,
+              activeCommand: session.activeCommand,
+            });
+            return (
+              <div
+                key={session.terminalSessionId}
+                className={[
+                  "relative flex h-full shrink-0 items-center gap-2 border-r border-slate-800 pl-2 pr-3",
+                  isActive
+                    ? "overflow-hidden bg-slate-900/35 text-slate-50 before:absolute before:inset-x-0 before:bottom-0 before:h-0.5 before:bg-sky-500"
+                    : "text-slate-300 hover:bg-slate-900/45 hover:text-slate-100",
+                ].join(" ")}
+              >
+                <button
+                  type="button"
+                  aria-label={displayName}
+                  className={[
+                    "inline-flex h-full max-w-[220px] items-center gap-1.5 py-0 text-xs",
+                    isActive ? "text-slate-50" : "text-slate-200",
+                  ].join(" ")}
+                  onClick={() => {
+                    setActiveSessionId(session.terminalSessionId);
+                  }}
+                  title={buildSessionLabel(session)}
                 >
+                  <span className="truncate">{displayName}</span>
+                  {hasBell || hasActivity ? (
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        hasBell ? "bg-amber-400" : "bg-emerald-400"
+                      }`}
+                    />
+                  ) : null}
+                </button>
+                {!isMobileMonitor ? (
                   <button
                     type="button"
-                    className={`max-w-[220px] truncate rounded-full px-2 py-0.5 text-xs ${
-                      isActive ? "bg-slate-100 text-slate-900" : "text-slate-300"
-                    }`}
+                    className={[
+                      "flex h-4 w-4 items-center justify-center rounded-sm transition-colors",
+                      isActive
+                        ? "text-slate-400 hover:text-slate-100"
+                        : "text-slate-500 hover:text-slate-200",
+                    ].join(" ")}
+                    aria-label={`Close terminal ${displayName}`}
                     onClick={() => {
-                      setActiveSessionId(session.terminalSessionId);
+                      void closeSession(session.terminalSessionId);
                     }}
-                    title={buildSessionLabel(session)}
                   >
-                    <span className="inline-flex items-center gap-1.5">
-                      <span>{displayName}</span>
-                      {hasBell || hasActivity ? (
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            hasBell ? "bg-amber-400" : "bg-emerald-400"
-                          }`}
-                        />
-                      ) : null}
-                    </span>
+                    <X className="h-3 w-3" />
                   </button>
-                  {!isMobileMonitor ? (
-                    <button
-                      type="button"
-                      className="rounded-full p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-                      aria-label={`Close terminal ${displayName}`}
-                      onClick={() => {
-                        void closeSession(session.terminalSessionId);
-                      }}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
+                ) : null}
+              </div>
+            );
+          })}
           {!isMobileMonitor ? (
-            <div className="hidden shrink-0 text-[11px] text-slate-500 xl:block">
-              Project Alt+[ / Alt+]  Tab Alt+Shift+[ / Alt+Shift+]
-            </div>
-          ) : null}
-          {!isMobileMonitor ? (
-            <Button
+            <button
               type="button"
-              size="sm"
               disabled={loading}
-              className="h-9 shrink-0 rounded-full px-4"
+              className="flex h-full w-10 shrink-0 items-center justify-center border-r border-slate-800 text-slate-300 hover:bg-slate-900/45 hover:text-slate-100 disabled:opacity-40"
+              aria-label="New Terminal"
+              title="New Terminal"
               onClick={() => {
                 void createSession();
               }}
             >
-              <Plus className="mr-1 h-4 w-4" />
-              New Terminal
-            </Button>
+              <Plus className="h-3.5 w-3.5" />
+            </button>
           ) : null}
         </div>
-
-        {requestError ? (
-          <p className="mt-2 text-xs text-rose-400">{requestError}</p>
-        ) : null}
       </div>
 
       <div className="min-h-0 flex-1">
+        {requestError ? (
+          <p className="border-b border-rose-900/60 bg-rose-950/30 px-3 py-1.5 text-xs text-rose-300">
+            {requestError}
+          </p>
+        ) : null}
         <div className="relative flex h-full min-h-0">
           <div className="relative min-h-0 flex-1">
             {sessions.length > 0 ? (

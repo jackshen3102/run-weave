@@ -30,7 +30,7 @@ export function TerminalRoutePage({
   const navigate = useNavigate();
 
   return (
-    <main className="h-dvh overflow-hidden bg-slate-950 px-3 pt-3 pb-2">
+    <main className="h-dvh overflow-hidden bg-slate-950">
       <TerminalWorkspace
         apiBase={apiBase}
         token={token}

@@ -12,12 +12,14 @@ interface TerminalPreviewMenuProps {
   projectId: string | null;
   mode: TerminalPreviewMode | null;
   disabled?: boolean;
+  buttonClassName?: string;
 }
 
 export function TerminalPreviewMenu({
   projectId,
   mode,
   disabled = false,
+  buttonClassName,
 }: TerminalPreviewMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
@@ -32,7 +34,7 @@ export function TerminalPreviewMenu({
         : "Preview: File"
       : "Preview";
   const itemClassName =
-    "flex w-full cursor-default select-none items-center rounded-xl px-3 py-2.5 text-left text-sm outline-none transition-colors hover:bg-muted focus:bg-muted";
+    "flex w-full cursor-default select-none items-center rounded-md px-2 py-1.5 text-left text-xs outline-none transition-colors hover:bg-muted focus:bg-muted";
 
   const cancelClose = (): void => {
     if (closeTimerRef.current === null) {
@@ -66,7 +68,7 @@ export function TerminalPreviewMenu({
           size="sm"
           variant={previewOpen ? "secondary" : "ghost"}
           disabled={disabled || !projectId}
-          className="h-9 shrink-0 rounded-full px-4"
+          className={buttonClassName ?? "h-7 shrink-0 rounded-md px-2 text-xs"}
           onMouseEnter={openMenu}
           onMouseLeave={scheduleClose}
           onFocus={openMenu}
@@ -76,6 +78,7 @@ export function TerminalPreviewMenu({
       </PopoverTrigger>
       <PopoverContent
         align="end"
+        className="w-40 p-1"
         onMouseEnter={cancelClose}
         onMouseLeave={scheduleClose}
       >

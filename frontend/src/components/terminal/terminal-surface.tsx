@@ -1469,7 +1469,7 @@ export function TerminalSurface({
         ) : null}
         <div
           aria-label="Terminal emulator"
-          className="h-full min-h-full w-full px-3 pt-2 pb-2"
+          className="h-full min-h-full w-full bg-[#0b1220] pl-2 pt-1.5 pb-1.5"
           role="application"
           tabIndex={0}
           onClick={() => {

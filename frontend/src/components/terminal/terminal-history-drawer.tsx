@@ -228,7 +228,7 @@ export function TerminalHistoryDrawer({
       <SheetContent
         side="right"
         showOverlay={false}
-        className="flex h-[calc(100vh-1rem)] w-[min(52rem,calc(100vw-1rem))] max-w-none flex-col gap-0 rounded-l-lg border-slate-800 bg-slate-950 p-0 text-slate-100"
+        className="flex h-dvh w-[min(48rem,100vw)] max-w-none flex-col gap-0 rounded-none border-l border-slate-800 bg-slate-950 p-0 text-slate-100"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
         }}
@@ -242,26 +242,28 @@ export function TerminalHistoryDrawer({
           event.preventDefault();
         }}
       >
-        <SheetHeader className="border-b border-slate-800 px-4 py-3 pr-14">
-          <SheetTitle className="truncate text-slate-100">{renderedTitle}</SheetTitle>
-          <SheetDescription className="truncate text-xs text-slate-400">
+        <SheetHeader className="border-b border-slate-800 px-3 py-2 pr-12">
+          <SheetTitle className="truncate text-sm text-slate-100">
+            {renderedTitle}
+          </SheetTitle>
+          <SheetDescription className="truncate text-[11px] text-slate-400">
             {renderedStatus}
           </SheetDescription>
         </SheetHeader>
         {requestError ? (
-          <p className="border-b border-slate-800 px-4 py-2 text-xs text-rose-400">
+          <p className="border-b border-slate-800 px-3 py-1.5 text-xs text-rose-400">
             {requestError}
           </p>
         ) : null}
         {loading ? (
-          <p className="border-b border-slate-800 px-4 py-2 text-xs text-slate-400">
+          <p className="border-b border-slate-800 px-3 py-1.5 text-xs text-slate-400">
             Loading output...
           </p>
         ) : null}
-        <div className="min-h-0 flex-1 overflow-hidden p-3">
+        <div className="min-h-0 flex-1 overflow-hidden p-2">
           <div
             ref={terminalContainerRef}
-            className="h-full min-h-full w-full overflow-x-auto overflow-y-hidden rounded-md border border-slate-800 bg-[#0b1220] px-1 py-1"
+            className="h-full min-h-full w-full overflow-x-auto overflow-y-hidden border border-slate-800 bg-[#0b1220] px-1 py-1"
           />
         </div>
       </SheetContent>
