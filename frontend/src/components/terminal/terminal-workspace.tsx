@@ -1,6 +1,15 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { TerminalProjectListItem, TerminalSessionListItem } from "@browser-viewer/shared";
 import { Home, Pencil, Plus, Trash2, X } from "lucide-react";
+import type { ConnectionConfig } from "../../features/connection/types";
 import {
   loadRecentTerminalSelection,
   saveRecentTerminalSelection,
@@ -20,6 +29,7 @@ import {
   updateTerminalProject,
 } from "../../services/terminal";
 import { Button } from "../ui/button";
+import { ConnectionSwitcher } from "../connection-switcher";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,6 +63,11 @@ interface TerminalWorkspaceProps {
   apiBase: string;
   token: string;
   clientMode?: ClientMode;
+  connections?: ConnectionConfig[];
+  activeConnectionId?: string | null;
+  connectionName?: string;
+  onSelectConnection?: (connectionId: string) => void;
+  onOpenConnectionManager?: () => void;
   initialTerminalSessionId?: string;
   onActiveSessionChange?: (terminalSessionId: string) => void;
   onNoSessionAvailable?: () => void;
@@ -111,6 +126,11 @@ export function TerminalWorkspace({
   apiBase,
   token,
   clientMode = "desktop",
+  connections,
+  activeConnectionId,
+  connectionName,
+  onSelectConnection,
+  onOpenConnectionManager,
   initialTerminalSessionId,
   onActiveSessionChange,
   onNoSessionAvailable,
@@ -140,6 +160,8 @@ export function TerminalWorkspace({
     null,
   );
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+  const loadSessionsRequestIdRef = useRef(0);
+  const currentApiBaseRef = useRef(apiBase);
   const isMobileMonitor = clientMode === "mobile";
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
   const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
@@ -156,6 +178,19 @@ export function TerminalWorkspace({
   const removeProjectPreview = useTerminalPreviewStore(
     (state) => state.removeProjectPreview,
   );
+  useEffect(() => {
+    loadSessionsRequestIdRef.current += 1;
+    currentApiBaseRef.current = apiBase;
+    setProjects([]);
+    setSessions([]);
+    setActiveProjectId(null);
+    setActiveSessionId(null);
+    setHasLoadedSessions(false);
+    setRequestError(null);
+    setActivityMarkers({});
+    setBellMarkers({});
+    setCachedSurfaceSessionIds([]);
+  }, [apiBase]);
 
   const visibleProjects = useMemo(() => {
     return [...projects].sort((left, right) => {
@@ -189,16 +224,30 @@ export function TerminalWorkspace({
     null;
 
   const loadSessions = useCallback(async (): Promise<void> => {
+    const requestId = loadSessionsRequestIdRef.current + 1;
+    loadSessionsRequestIdRef.current = requestId;
+    const requestApiBase = apiBase;
+    const isCurrentRequest = (): boolean =>
+      loadSessionsRequestIdRef.current === requestId &&
+      currentApiBaseRef.current === requestApiBase;
+
     setLoading(true);
     try {
       const [nextProjects, nextSessions] = await Promise.all([
         listTerminalProjects(apiBase, token),
         listTerminalSessions(apiBase, token),
       ]);
+      if (!isCurrentRequest()) {
+        return;
+      }
+
       setProjects(nextProjects);
       setSessions(nextSessions);
       setActiveProjectId((currentProjectId) => {
-        if (currentProjectId) {
+        if (
+          currentProjectId &&
+          nextProjects.some((project) => project.projectId === currentProjectId)
+        ) {
           return currentProjectId;
         }
 
@@ -215,14 +264,20 @@ export function TerminalWorkspace({
       });
       setRequestError(null);
     } catch (error) {
+      if (!isCurrentRequest()) {
+        return;
+      }
+
       if (error instanceof HttpError && error.status === 401) {
         onAuthExpired?.();
         return;
       }
       setRequestError(String(error));
     } finally {
-      setHasLoadedSessions(true);
-      setLoading(false);
+      if (isCurrentRequest()) {
+        setHasLoadedSessions(true);
+        setLoading(false);
+      }
     }
   }, [apiBase, initialTerminalSessionId, onAuthExpired, token]);
 
@@ -780,6 +835,19 @@ export function TerminalWorkspace({
               <Home className="h-4 w-4" />
             </Button>
           )}
+          {connections?.length &&
+          activeConnectionId &&
+          onSelectConnection &&
+          onOpenConnectionManager ? (
+            <ConnectionSwitcher
+              connections={connections ?? []}
+              activeConnectionId={activeConnectionId ?? null}
+              activeConnectionName={connectionName}
+              onSelectConnection={onSelectConnection}
+              onOpenConnectionManager={onOpenConnectionManager}
+              className="h-9 shrink-0 rounded-full border border-slate-700/80 bg-slate-900/70 px-3 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+            />
+          ) : null}
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {visibleProjects.map((project) => {
               const isActive = project.projectId === activeProjectId;
@@ -964,7 +1032,7 @@ export function TerminalWorkspace({
                   return (
                     <TerminalHeadlessConnection
                       apiBase={apiBase}
-                      key={session.terminalSessionId}
+                      key={`${apiBase}:${session.terminalSessionId}:headless`}
                       terminalSessionId={session.terminalSessionId}
                       token={token}
                       onAuthExpired={onAuthExpired}
@@ -988,7 +1056,7 @@ export function TerminalWorkspace({
                       "absolute top-0 h-full w-full",
                       isActive ? "left-0" : "-left-[9999em] pointer-events-none",
                     ].join(" ")}
-                    key={session.terminalSessionId}
+                    key={`${apiBase}:${session.terminalSessionId}:surface`}
                   >
                     <TerminalSurface
                       active={isActive}

@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Runweave 当前终端页连接切换草图</title>
+  <desc id="desc">严格按当前 Runweave Electron 终端页结构绘制的连接切换草图，展示 App、TerminalRoutePage、TerminalWorkspace、ConnectionSwitcher 和 useScopedAuth 的关系。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#7dd3fc" />
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#020617" flood-opacity="0.28" />
+    </filter>
+    <style>
+      .page { fill: #f6f7f2; }
+      .title { fill: #111827; font: 700 32px Inter, Arial, sans-serif; }
+      .subtitle { fill: #5d6a70; font: 21px Inter, Arial, sans-serif; }
+      .note { fill: #334155; font: 19px Inter, Arial, sans-serif; }
+      .small { fill: #64748b; font: 17px Inter, Arial, sans-serif; }
+      .tiny { fill: #94a3b8; font: 15px Inter, Arial, sans-serif; }
+      .code { fill: #0f172a; font: 18px ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .code-light { fill: #bae6fd; font: 17px ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .terminal-line { fill: #86efac; font: 20px ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .terminal-muted { fill: #94a3b8; font: 18px ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .chrome { fill: #0f172a; stroke: #334155; stroke-width: 2; filter: url(#shadow); }
+      .workspace { fill: #020617; stroke: #1e293b; stroke-width: 2; }
+      .toolbar { fill: #07111f; stroke: #1e293b; stroke-width: 2; }
+      .home-btn { fill: #0f172a; stroke: #334155; stroke-width: 2; }
+      .project-active { fill: #f8fafc; stroke: #f8fafc; stroke-width: 2; }
+      .project-inactive { fill: transparent; stroke: #334155; stroke-width: 2; }
+      .session-wrap { fill: #0f172a; stroke: #334155; stroke-width: 2; }
+      .session-active { fill: #f8fafc; }
+      .button { fill: #f8fafc; stroke: #f8fafc; stroke-width: 2; }
+      .button-text { fill: #0f172a; font: 700 18px Inter, Arial, sans-serif; }
+      .dark-text { fill: #f8fafc; font: 700 18px Inter, Arial, sans-serif; }
+      .muted-text { fill: #cbd5e1; font: 18px Inter, Arial, sans-serif; }
+      .panel { fill: #ffffff; stroke: #d7ddd5; stroke-width: 2; filter: url(#shadow); }
+      .green-panel { fill: #e8f3eb; stroke: #86b494; stroke-width: 2; }
+      .yellow-panel { fill: #fff4d7; stroke: #d6a752; stroke-width: 2; }
+      .blue-panel { fill: #e7f4f8; stroke: #7fb1bf; stroke-width: 2; }
+      .dropdown { fill: #ffffff; stroke: #d7ddd5; stroke-width: 2; }
+      .dropdown-active { fill: #e8f3eb; stroke: #86b494; stroke-width: 2; }
+      .dropdown-row { fill: #ffffff; stroke: #d7ddd5; stroke-width: 2; }
+      .switcher { fill: #0f172a; stroke: #334155; stroke-width: 2; }
+      .switcher-label { fill: #94a3b8; font: 700 14px Inter, Arial, sans-serif; letter-spacing: 2px; }
+      .switcher-text { fill: #f8fafc; font: 700 18px Inter, Arial, sans-serif; }
+      .arrow { stroke: #0ea5e9; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+      .thin-arrow { stroke: #64748b; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .divider { stroke: #d7ddd5; stroke-width: 2; }
+    </style>
+  </defs>
+
+  <rect class="page" width="1600" height="1000" />
+  <text x="70" y="76" class="title">Runweave 连接管理与终端复用草图</text>
+  <text x="70" y="112" class="subtitle">按当前项目代理和代码结构绘制：React + Vite 前端、Electron 多后端连接管理、终端页只做局部接线与 E2E 验证。</text>
+
+  <rect x="70" y="154" width="560" height="178" rx="18" class="panel" />
+  <text x="98" y="196" class="code">App.tsx</text>
+  <text x="98" y="230" class="note">activeConnection.url → apiBase</text>
+  <text x="98" y="262" class="note">activeConnection.id → connectionId</text>
+  <text x="98" y="294" class="note">传给 TerminalRoutePage：connections + onSelectConnection</text>
+
+  <rect x="690" y="154" width="400" height="178" rx="18" class="green-panel" />
+  <text x="718" y="196" class="code">useScopedAuth</text>
+  <text x="718" y="230" class="note">viewer.auth.connection-auth</text>
+  <text x="718" y="262" class="note">按 connectionId 保存 token / refreshToken</text>
+  <text x="718" y="294" class="note">401 才清当前连接认证</text>
+
+  <rect x="1150" y="154" width="380" height="178" rx="18" class="yellow-panel" />
+  <text x="1178" y="196" class="code">AGENTS.md 约束</text>
+  <text x="1178" y="230" class="note">Electron 多后端连接管理</text>
+  <text x="1178" y="262" class="note">前端正式验证只保留 E2E</text>
+  <text x="1178" y="294" class="note">局部改动，不改基础组件</text>
+
+  <path d="M630 244 C650 244, 668 244, 690 244" class="arrow" />
+  <path d="M1090 244 C1110 244, 1128 244, 1150 244" class="thin-arrow" />
+
+  <rect x="70" y="380" width="1460" height="470" rx="24" class="chrome" />
+  <text x="96" y="414" class="code-light">/terminal/:terminalSessionId · TerminalRoutePage</text>
+  <text x="1100" y="414" class="tiny">main: h-dvh overflow-hidden bg-slate-950 px-3 pt-3 pb-2</text>
+
+  <rect x="96" y="438" width="1408" height="376" rx="18" class="workspace" />
+  <rect x="96" y="438" width="1408" height="112" rx="18" class="toolbar" />
+  <text x="124" y="472" class="code-light">TerminalWorkspace</text>
+
+  <rect x="124" y="488" width="54" height="36" rx="18" class="home-btn" />
+  <text x="143" y="512" class="dark-text">⌂</text>
+
+  <rect x="194" y="488" width="250" height="36" rx="18" class="switcher" />
+  <text x="216" y="511" class="switcher-label">当前连接</text>
+  <text x="330" y="512" class="switcher-text">本地开发</text>
+  <text x="418" y="512" class="dark-text">⌄</text>
+
+  <rect x="460" y="488" width="118" height="36" rx="18" class="project-active" />
+  <text x="486" y="512" class="button-text">default</text>
+  <rect x="592" y="488" width="150" height="36" rx="18" class="project-inactive" />
+  <text x="620" y="512" class="muted-text">Runweave</text>
+  <rect x="1024" y="488" width="132" height="36" rx="18" class="project-inactive" />
+  <text x="1050" y="512" class="muted-text">Preview</text>
+  <rect x="1172" y="488" width="156" height="36" rx="18" class="button" />
+  <text x="1198" y="512" class="button-text">+ New Project</text>
+
+  <rect x="124" y="560" width="250" height="38" rx="19" class="session-wrap" />
+  <rect x="136" y="568" width="128" height="22" rx="11" class="session-active" />
+  <text x="152" y="585" class="button-text">pnpm dev</text>
+  <text x="278" y="585" class="dark-text">×</text>
+
+  <rect x="390" y="560" width="210" height="38" rx="19" class="session-wrap" />
+  <text x="410" y="585" class="muted-text">git status</text>
+  <text x="572" y="585" class="dark-text">×</text>
+
+  <text x="872" y="585" class="tiny">Project Alt+[ / Alt+]  Tab Alt+Shift+[ / Alt+Shift+]</text>
+  <rect x="1246" y="560" width="158" height="38" rx="19" class="button" />
+  <text x="1272" y="585" class="button-text">+ New Terminal</text>
+
+  <rect x="124" y="628" width="760" height="148" rx="12" fill="#0b1220" stroke="#1e293b" stroke-width="2" />
+  <text x="154" y="666" class="terminal-line">$ pnpm dev</text>
+  <text x="154" y="702" class="terminal-muted">ready on http://localhost:5173</text>
+  <text x="154" y="738" class="terminal-line">$ git status</text>
+  <text x="154" y="770" class="terminal-muted">working tree clean</text>
+
+  <rect x="930" y="626" width="420" height="150" rx="14" class="blue-panel" />
+  <text x="958" y="666" class="code">切换后的终端行为</text>
+  <text x="958" y="700" class="note">1. 不复用旧 backend 的 terminalSessionId</text>
+  <text x="958" y="732" class="note">2. 按新 apiBase 加载 projects/sessions</text>
+  <text x="958" y="764" class="note">3. 没有 session 时留在终端空态</text>
+
+  <rect x="194" y="526" width="350" height="204" rx="16" class="dropdown" />
+  <text x="220" y="562" class="note">切换连接</text>
+  <rect x="220" y="580" width="298" height="54" rx="10" class="dropdown-active" />
+  <text x="242" y="612" class="note">本地开发</text>
+  <text x="442" y="612" class="note">✓</text>
+  <rect x="220" y="648" width="298" height="54" rx="10" class="dropdown-row" />
+  <text x="242" y="680" class="note">远程 Mac mini</text>
+  <rect x="220" y="714" width="298" height="1" fill="#d7ddd5" />
+  <text x="242" y="742" class="note">连接管理</text>
+
+  <path d="M444 506 C540 506, 590 506, 460 612" class="arrow" />
+  <path d="M530 678 C706 732, 790 746, 930 700" class="arrow" />
+
+  <line x1="70" y1="890" x2="1530" y2="890" class="divider" />
+  <text x="90" y="930" class="small">草图对应当前代码插入点：TerminalWorkspace 顶栏第一行 Home 按钮后、project pills 前接入 ConnectionSwitcher。</text>
+  <text x="90" y="962" class="small">实现边界：只做连接 scope 接线和认证复用语义收紧；前端不新增 src 单测，使用 Playwright E2E 与手工回归验证。</text>
+</svg>

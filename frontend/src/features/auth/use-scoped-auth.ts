@@ -83,6 +83,26 @@ function isSessionFresh(session: AuthSessionState | null): boolean {
   return Boolean(session && session.accessExpiresAt > Date.now());
 }
 
+function resolveStoredSessionStatus(
+  apiBase: string,
+  isElectron: boolean,
+  session: AuthSessionState | null,
+): AuthStatus {
+  if (!apiBase || !session) {
+    return "unauthenticated";
+  }
+
+  if (isSessionFresh(session)) {
+    return "authenticated";
+  }
+
+  if (isElectron && !session.refreshToken) {
+    return "unauthenticated";
+  }
+
+  return "checking";
+}
+
 function loadElectronSession(
   connectionId: string | null,
 ): AuthSessionState | null {
@@ -123,6 +143,9 @@ export function useScopedAuth({
   clearToken: () => void;
 } {
   cleanupLegacyAuthStorage();
+  const authScopeKey = isElectron
+    ? `electron:${connectionId ?? ""}`
+    : `web:${webStorageKey}`;
 
   const initialSession = useMemo(() => {
     return isElectron
@@ -133,19 +156,22 @@ export function useScopedAuth({
   const [session, setSessionState] = useState<AuthSessionState | null>(
     initialSession,
   );
+  const [sessionScopeKey, setSessionScopeKey] = useState(authScopeKey);
   const [status, setStatus] = useState<AuthStatus>(() => {
-    return initialSession
-      ? isElectron
-        ? "checking"
-        : "authenticated"
-      : "unauthenticated";
+    return resolveStoredSessionStatus(apiBase, isElectron, initialSession);
   });
   const [validationNonce, setValidationNonce] = useState(0);
   const statusRef = useRef<AuthStatus>(status);
 
+  const sessionMatchesScope = sessionScopeKey === authScopeKey;
+  const effectiveSession = sessionMatchesScope ? session : initialSession;
+  const effectiveStatus = sessionMatchesScope
+    ? status
+    : resolveStoredSessionStatus(apiBase, isElectron, initialSession);
+
   useEffect(() => {
-    statusRef.current = status;
-  }, [status]);
+    statusRef.current = effectiveStatus;
+  }, [effectiveStatus]);
 
   const loadStoredSession = useCallback((): AuthSessionState | null => {
     return isElectron
@@ -163,10 +189,11 @@ export function useScopedAuth({
     }
 
     setSessionState(null);
+    setSessionScopeKey(authScopeKey);
     setStatus("unauthenticated");
     statusRef.current = "unauthenticated";
     setValidationNonce((value) => value + 1);
-  }, [connectionId, isElectron, webStorageKey]);
+  }, [authScopeKey, connectionId, isElectron, webStorageKey]);
 
   const setSession = useCallback(
     (nextSession: {
@@ -185,11 +212,12 @@ export function useScopedAuth({
       }
 
       setSessionState(storedSession);
+      setSessionScopeKey(authScopeKey);
       setStatus("authenticated");
       statusRef.current = "authenticated";
       setValidationNonce((value) => value + 1);
     },
-    [connectionId, isElectron, webStorageKey],
+    [authScopeKey, connectionId, isElectron, webStorageKey],
   );
 
   const setToken = useCallback(
@@ -197,11 +225,11 @@ export function useScopedAuth({
       setSession({
         accessToken: nextToken,
         expiresIn: 15 * 60,
-        sessionId: session?.sessionId ?? "legacy-session",
-        refreshToken: session?.refreshToken,
+        sessionId: effectiveSession?.sessionId ?? "legacy-session",
+        refreshToken: effectiveSession?.refreshToken,
       });
     },
-    [session?.refreshToken, session?.sessionId, setSession],
+    [effectiveSession?.refreshToken, effectiveSession?.sessionId, setSession],
   );
 
   useEffect(() => {
@@ -215,7 +243,39 @@ export function useScopedAuth({
       }
 
       setSessionState(nextSession);
+      setSessionScopeKey(authScopeKey);
       if (!apiBase || !nextSession) {
+        setStatus("unauthenticated");
+        return;
+      }
+
+      if (isSessionFresh(nextSession)) {
+        setSessionState(nextSession);
+        setStatus("authenticated");
+
+        if (isElectron) {
+          void verifyAuthToken(apiBase, nextSession.accessToken).catch(
+            (error: unknown) => {
+              if (cancelled) {
+                return;
+              }
+
+              if (error instanceof HttpError && error.status === 401) {
+                if (connectionId) {
+                  clearConnectionAuth(connectionId);
+                }
+                setSessionState(null);
+                setSessionScopeKey(authScopeKey);
+                setStatus("unauthenticated");
+              }
+            },
+          );
+        }
+
+        return;
+      }
+
+      if (isElectron && !nextSession.refreshToken) {
         setStatus("unauthenticated");
         return;
       }
@@ -223,19 +283,6 @@ export function useScopedAuth({
       setStatus("checking");
 
       try {
-        if (isSessionFresh(nextSession)) {
-          if (isElectron) {
-            await verifyAuthToken(apiBase, nextSession.accessToken);
-          }
-
-          if (cancelled) {
-            return;
-          }
-          setSessionState(nextSession);
-          setStatus("authenticated");
-          return;
-        }
-
         const refreshed = await refreshSession(
           apiBase,
           isElectron
@@ -258,6 +305,7 @@ export function useScopedAuth({
           saveWebSession(webStorageKey, storedSession);
         }
         setSessionState(storedSession);
+        setSessionScopeKey(authScopeKey);
         setStatus("authenticated");
       } catch (error) {
         if (cancelled) {
@@ -273,7 +321,15 @@ export function useScopedAuth({
           }
         }
 
+        if (isElectron && !(error instanceof HttpError && error.status === 401)) {
+          setSessionState(nextSession);
+          setSessionScopeKey(authScopeKey);
+          setStatus("authenticated");
+          return;
+        }
+
         setSessionState(null);
+        setSessionScopeKey(authScopeKey);
         setStatus("unauthenticated");
       }
     };
@@ -285,6 +341,7 @@ export function useScopedAuth({
     };
   }, [
     apiBase,
+    authScopeKey,
     connectionId,
     isElectron,
     loadStoredSession,
@@ -328,17 +385,17 @@ export function useScopedAuth({
   }, [apiBase, loadStoredSession]);
 
   useEffect(() => {
-    if (!apiBase || !session || status !== "authenticated") {
+    if (!apiBase || !effectiveSession || effectiveStatus !== "authenticated") {
       return;
     }
 
-    if (isElectron && !session.refreshToken) {
+    if (isElectron && !effectiveSession.refreshToken) {
       return;
     }
 
     let cancelled = false;
     const refreshDelayMs = Math.max(
-      session.accessExpiresAt - Date.now() - ACCESS_TOKEN_REFRESH_LEAD_MS,
+      effectiveSession.accessExpiresAt - Date.now() - ACCESS_TOKEN_REFRESH_LEAD_MS,
       0,
     );
     const timer = window.setTimeout(() => {
@@ -347,7 +404,7 @@ export function useScopedAuth({
         isElectron
           ? {
               clientType: "electron",
-              refreshToken: session.refreshToken ?? "",
+              refreshToken: effectiveSession.refreshToken ?? "",
             }
           : { clientType: "web" },
       )
@@ -365,6 +422,7 @@ export function useScopedAuth({
             saveWebSession(webStorageKey, storedSession);
           }
           setSessionState(storedSession);
+          setSessionScopeKey(authScopeKey);
           setStatus("authenticated");
         })
         .catch((error: unknown) => {
@@ -381,7 +439,12 @@ export function useScopedAuth({
             }
           }
 
+          if (isElectron && !(error instanceof HttpError && error.status === 401)) {
+            return;
+          }
+
           setSessionState(null);
+          setSessionScopeKey(authScopeKey);
           setStatus("unauthenticated");
         });
     }, refreshDelayMs);
@@ -390,11 +453,19 @@ export function useScopedAuth({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [apiBase, connectionId, isElectron, session, status, webStorageKey]);
+  }, [
+    apiBase,
+    authScopeKey,
+    connectionId,
+    effectiveSession,
+    effectiveStatus,
+    isElectron,
+    webStorageKey,
+  ]);
 
   return {
-    token: session?.accessToken ?? null,
-    status,
+    token: effectiveSession?.accessToken ?? null,
+    status: effectiveStatus,
     setSession,
     clearSession,
     setToken,
