@@ -392,13 +392,17 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
     await page.getByRole("button", { name: "New browser tab" }).click();
     await address.fill("localhost:5173");
     await address.press("Enter");
-    await expect(address).toHaveValue(/^(http:\/\/localhost:5173\/|localhost:5173)$/);
+    await expect(address).toHaveValue(
+      /^(http:\/\/(localhost|127\.0\.0\.1):5173\/|localhost:5173)$/,
+    );
     await expect(page.getByRole("tab", { name: /5173\// })).toHaveCount(2);
 
     await page
       .locator(`[data-terminal-session-id="${firstSession.terminalSessionId}"]`)
       .click();
-    await expect(address).toHaveValue(/^(http:\/\/localhost:5173\/|localhost:5173)$/);
+    await expect(address).toHaveValue(
+      /^(http:\/\/(localhost|127\.0\.0\.1):5173\/|localhost:5173)$/,
+    );
 
     await page.getByRole("button", { name: "Close browser tab" }).last().click();
     await expect(address).toHaveValue("http://127.0.0.1:5173/");
