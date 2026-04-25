@@ -24,11 +24,15 @@ export function TerminalPreviewMenu({
   const [menuOpen, setMenuOpen] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
   const openPreview = useTerminalPreviewStore((state) => state.openPreview);
+  const openBrowser = useTerminalPreviewStore((state) => state.openBrowser);
   const closePreview = useTerminalPreviewStore((state) => state.closePreview);
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
+  const activeTool = useTerminalPreviewStore((state) => state.ui.activeTool);
 
   const label =
-    previewOpen && mode
+    previewOpen && activeTool === "browser"
+      ? "Browser"
+      : previewOpen && mode
       ? mode === "changes"
         ? "Preview: Changes"
         : "Preview: File"
@@ -106,6 +110,16 @@ export function TerminalPreviewMenu({
         >
           Changes
         </button>
+        <button
+          type="button"
+          className={itemClassName}
+          onClick={() => {
+            openBrowser();
+            setMenuOpen(false);
+          }}
+        >
+          Browser
+        </button>
         {previewOpen ? (
           <>
             <div className="-mx-1 my-1 h-px bg-border/60" />
@@ -117,7 +131,7 @@ export function TerminalPreviewMenu({
                 setMenuOpen(false);
               }}
             >
-              Close preview
+              Close sidecar
             </button>
           </>
         ) : null}

@@ -40,6 +40,7 @@ import {
   searchTerminalProjectPreviewFiles,
 } from "../../services/terminal";
 import { Button } from "../ui/button";
+import { TerminalBrowserTool } from "./terminal-browser-tool";
 import { TerminalOpenFileCommand } from "./terminal-open-file-command";
 
 const TerminalMonacoViewer = lazy(() =>
@@ -159,6 +160,8 @@ export function TerminalPreviewPanel({
   const closePreview = useTerminalPreviewStore((state) => state.closePreview);
   const setWidth = useTerminalPreviewStore((state) => state.setWidth);
   const expanded = useTerminalPreviewStore((state) => state.ui.expanded);
+  const activeTool = useTerminalPreviewStore((state) => state.ui.activeTool);
+  const setActiveTool = useTerminalPreviewStore((state) => state.setActiveTool);
   const setExpanded = useTerminalPreviewStore((state) => state.setExpanded);
   const updateProjectPreview = useTerminalPreviewStore(
     (state) => state.updateProjectPreview,
@@ -519,6 +522,11 @@ export function TerminalPreviewPanel({
       return;
     }
     event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
     const handlePointerMove = (moveEvent: globalThis.PointerEvent): void => {
       const nextWidth = Math.min(
         Math.round(window.innerWidth * 0.6),
@@ -529,9 +537,13 @@ export function TerminalPreviewPanel({
     const stop = (): void => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
     };
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
   };
 
   const openFilePath = (filePath: string): void => {
@@ -935,29 +947,41 @@ export function TerminalPreviewPanel({
     >
       <div
         role="separator"
+        aria-label="Resize sidecar"
         aria-orientation="vertical"
         className={[
-          "absolute left-0 top-0 h-full w-1.5 transition-colors",
-          expanded ? "" : "cursor-col-resize bg-slate-950 hover:bg-slate-700",
+          "absolute left-0 top-0 z-20 h-full w-1.5 touch-none transition-colors",
+          expanded ? "" : "cursor-col-resize bg-transparent hover:bg-slate-700/70",
         ].join(" ")}
         onPointerDown={startResize}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-b border-slate-800 px-2 py-1.5">
-          <div className="flex min-h-[34px] items-start gap-2">
+          <div className="flex min-h-[34px] items-center gap-2">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <h2 className="truncate text-xs font-semibold text-slate-100">
-                  {describeMode(mode)}
-                </h2>
-                <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-400">
-                  Read only
-                </span>
+              <div
+                className="inline-flex rounded-md border border-slate-800 bg-slate-900/70 p-0.5"
+                role="tablist"
+                aria-label="Sidecar tools"
+              >
+                {(["preview", "browser"] as const).map((tool) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTool === tool}
+                    key={tool}
+                    className={[
+                      "h-6 rounded-sm px-2 text-xs",
+                      activeTool === tool
+                        ? "bg-slate-700 text-slate-50"
+                        : "text-slate-400 hover:text-slate-100",
+                    ].join(" ")}
+                    onClick={() => setActiveTool(tool)}
+                  >
+                    {tool === "preview" ? "Preview" : "Browser"}
+                  </button>
+                ))}
               </div>
-              <p className="mt-0.5 truncate text-[11px] text-slate-500">
-                {activeProject?.name ?? "No project"}
-                {activeProject?.path ? ` · root: ${activeProject.path}` : ""}
-              </p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <Button
@@ -966,7 +990,15 @@ export function TerminalPreviewPanel({
                 variant="ghost"
                 className="h-7 w-7 rounded-md px-0"
                 onClick={() => setExpanded(!expanded)}
-                aria-label={expanded ? "Restore preview" : "Expand preview"}
+                aria-label={
+                  activeTool === "preview"
+                    ? expanded
+                      ? "Restore preview"
+                      : "Expand preview"
+                    : expanded
+                      ? "Restore sidecar"
+                      : "Expand sidecar"
+                }
               >
                 {expanded ? (
                   <Minimize2 className="h-4 w-4" />
@@ -979,7 +1011,7 @@ export function TerminalPreviewPanel({
                 size="sm"
                 variant="ghost"
                 className="h-7 w-7 rounded-md px-0"
-                disabled={!mode || fileLoading || changesLoading}
+                disabled={activeTool !== "preview" || !mode || fileLoading || changesLoading}
                 onClick={refresh}
                 aria-label="Refresh preview"
               >
@@ -990,7 +1022,7 @@ export function TerminalPreviewPanel({
                 size="sm"
                 variant="ghost"
                 className="h-7 w-7 rounded-md px-0"
-                disabled={!selectedPath}
+                disabled={activeTool !== "preview" || !selectedPath}
                 onClick={copyPath}
                 aria-label="Copy path"
               >
@@ -1002,14 +1034,30 @@ export function TerminalPreviewPanel({
                 variant="ghost"
                 className="h-7 w-7 rounded-md px-0"
                 onClick={closePreview}
-                aria-label="Close preview"
+                aria-label="Close sidecar"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
           </div>
         </header>
-        {selectedPath ? (
+        {activeTool === "preview" ? (
+          <div className="border-b border-slate-800 px-2 py-1.5">
+            <div className="flex items-center gap-1.5">
+              <h2 className="truncate text-xs font-semibold text-slate-100">
+                {describeMode(mode)}
+              </h2>
+              <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-400">
+                Read only
+              </span>
+            </div>
+            <p className="mt-0.5 truncate text-[11px] text-slate-500">
+              {activeProject?.name ?? "No project"}
+              {activeProject?.path ? ` · root: ${activeProject.path}` : ""}
+            </p>
+          </div>
+        ) : null}
+        {activeTool === "preview" && selectedPath ? (
           <div className="flex items-center gap-2 border-b border-slate-800 px-2 py-1.5 text-[11px] text-slate-400">
             <span className="min-w-0 flex-1 truncate">{selectedPath}</span>
             {mode === "file" && fileKind === "markdown" ? (
@@ -1092,7 +1140,24 @@ export function TerminalPreviewPanel({
             ) : null}
           </div>
         ) : null}
-        <div className="min-h-0 flex-1">{body}</div>
+        <div className="relative min-h-0 flex-1">
+          <div
+            className={[
+              "absolute inset-0 min-h-0",
+              activeTool === "preview" ? "" : "pointer-events-none hidden",
+            ].join(" ")}
+          >
+            {body}
+          </div>
+          <div
+            className={[
+              "absolute inset-0 min-h-0",
+              activeTool === "browser" ? "" : "pointer-events-none hidden",
+            ].join(" ")}
+          >
+            <TerminalBrowserTool active={activeTool === "browser"} />
+          </div>
+        </div>
       </div>
     </aside>
   );

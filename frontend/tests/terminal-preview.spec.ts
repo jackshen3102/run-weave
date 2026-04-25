@@ -152,9 +152,14 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     await expect(
       page.getByRole("button", { name: "Preview", exact: true }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: "Preview", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
 
-    await page.getByRole("button", { name: "Preview", exact: true }).click();
-    await page.getByText("Open file...").click();
+    await page
+      .getByRole("button", { name: "Open file...", exact: true })
+      .first()
+      .click();
     await expect(page.getByText("README.md")).toBeVisible();
     await expect(page.getByText("Changed files", { exact: true })).toBeVisible();
     await expect(page.getByText("staged.txt")).toBeVisible();
@@ -261,8 +266,10 @@ test("terminal markdown preview opens clicked images in a lightbox", async ({
     };
 
     await page.goto(`/terminal/${encodeURIComponent(session.terminalSessionId)}`);
-    await page.getByRole("button", { name: "Preview", exact: true }).click();
-    await page.getByText("Open file...").click();
+    await page
+      .getByRole("button", { name: "Open file...", exact: true })
+      .first()
+      .click();
     await page
       .getByPlaceholder("Search file or paste absolute path...")
       .fill("terminal preview");
@@ -283,6 +290,120 @@ test("terminal markdown preview opens clicked images in a lightbox", async ({
     await expect(
       page.getByRole("img", { name: "Preview screenshot" }).first(),
     ).toBeVisible();
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test("terminal sidecar browser keeps global tabs in web mode", async ({
+  page,
+  request,
+}) => {
+  const repo = await createPreviewRepo();
+  try {
+    const token = await loginAndSeedToken(request, page);
+    const projectResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/project`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          name: "Browser Project",
+          path: repo,
+        },
+      },
+    );
+    expect(projectResponse.ok()).toBe(true);
+    const project = (await projectResponse.json()) as { projectId: string };
+    const firstSessionResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/session`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          projectId: project.projectId,
+          command: "bash",
+          cwd: repo,
+        },
+      },
+    );
+    expect(firstSessionResponse.ok()).toBe(true);
+    const firstSession = (await firstSessionResponse.json()) as {
+      terminalSessionId: string;
+    };
+    const secondSessionResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/session`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          projectId: project.projectId,
+          command: "bash",
+          cwd: repo,
+        },
+      },
+    );
+    expect(secondSessionResponse.ok()).toBe(true);
+
+    await page.goto(`/terminal/${encodeURIComponent(firstSession.terminalSessionId)}`);
+    await page.getByRole("tab", { name: "Browser", exact: true }).click();
+    await expect(
+      page.getByRole("tab", { name: "Browser", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(
+      page.getByText("Local browser is available in the desktop app."),
+    ).toBeVisible();
+
+    const terminalBeforeResize = await page
+      .getByLabel("Terminal emulator")
+      .boundingBox();
+    expect(terminalBeforeResize).not.toBeNull();
+    const resizeHandle = page.getByRole("separator", { name: "Resize sidecar" });
+    const resizeHandleBox = await resizeHandle.boundingBox();
+    expect(resizeHandleBox).not.toBeNull();
+    await page.mouse.move(
+      resizeHandleBox!.x + resizeHandleBox!.width / 2,
+      resizeHandleBox!.y + resizeHandleBox!.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      resizeHandleBox!.x - 100,
+      resizeHandleBox!.y + resizeHandleBox!.height / 2,
+      { steps: 5 },
+    );
+    await page.mouse.up();
+    await expect
+      .poll(async () => {
+        const terminalAfterResize = await page
+          .getByLabel("Terminal emulator")
+          .boundingBox();
+        return terminalAfterResize?.width ?? 0;
+      })
+      .toBeLessThan(terminalBeforeResize!.width - 50);
+
+    const address = page.getByLabel("Browser address");
+    await address.fill("5173");
+    await address.press("Enter");
+    await expect(address).toHaveValue("http://127.0.0.1:5173/");
+
+    await page.getByRole("button", { name: "New browser tab" }).click();
+    await address.fill("localhost:5173");
+    await address.press("Enter");
+    await expect(address).toHaveValue("http://localhost:5173/");
+    await expect(page.getByRole("tab", { name: /5173\// })).toHaveCount(2);
+
+    await page
+      .locator(`[data-terminal-session-id="${firstSession.terminalSessionId}"]`)
+      .click();
+    await expect(address).toHaveValue("http://localhost:5173/");
+
+    await page.getByRole("button", { name: "Close browser tab" }).last().click();
+    await expect(address).toHaveValue("http://127.0.0.1:5173/");
+    await page.getByRole("button", { name: "Close browser tab" }).click();
+    await expect(address).toHaveValue("http://127.0.0.1:5173");
   } finally {
     await rm(repo, { recursive: true, force: true });
   }

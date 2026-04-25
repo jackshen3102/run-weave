@@ -984,6 +984,7 @@ export function TerminalWorkspace({
                 <button
                   type="button"
                   aria-label={displayName}
+                  data-terminal-session-id={session.terminalSessionId}
                   className={[
                     "inline-flex h-full max-w-[220px] items-center gap-1.5 py-0 text-xs",
                     isActive ? "text-slate-50" : "text-slate-200",

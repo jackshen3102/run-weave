@@ -24,6 +24,20 @@ const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
 const CONNECTIONS_STORAGE_KEY = "viewer.connections";
 
+interface TerminalBrowserBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface TerminalBrowserSnapshot {
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -39,6 +53,24 @@ declare global {
       openExternal?: (url: string) => Promise<void>;
       getRuntimeStats?: () => Promise<RuntimeStatsSnapshot>;
       beep?: () => void;
+      terminalBrowserNavigate?: (
+        tabId: string,
+        url: string,
+      ) => Promise<TerminalBrowserSnapshot>;
+      terminalBrowserReload?: (tabId: string) => Promise<TerminalBrowserSnapshot>;
+      terminalBrowserStop?: (tabId: string) => Promise<void>;
+      terminalBrowserGoBack?: (tabId: string) => Promise<TerminalBrowserSnapshot>;
+      terminalBrowserGoForward?: (
+        tabId: string,
+      ) => Promise<TerminalBrowserSnapshot>;
+      terminalBrowserShow?: (tabId: string) => Promise<void>;
+      terminalBrowserHide?: (tabId: string) => Promise<void>;
+      terminalBrowserSetBounds?: (
+        tabId: string,
+        bounds: TerminalBrowserBounds | null,
+      ) => Promise<void>;
+      terminalBrowserOpenDevTools?: (tabId: string) => Promise<void>;
+      terminalBrowserCloseTab?: (tabId: string) => Promise<void>;
     };
   }
 }
