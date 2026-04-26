@@ -31,14 +31,10 @@ import {
 } from "../terminal/default-shell";
 import {
   clearPreviewFileSearchCache,
-  getPreviewFileDiff,
-  getPreviewGitChanges,
   normalizeProjectPath,
-  readPreviewAsset,
-  readPreviewFile,
-  searchPreviewFiles,
   TerminalPreviewError,
 } from "../terminal/preview";
+import { registerTerminalPreviewRoutes } from "./terminal-preview-routes";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import {
@@ -76,20 +72,6 @@ const updateTerminalProjectSchema = z
   .refine((payload) => payload.name !== undefined || "path" in payload, {
     message: "Project name or path is required",
   });
-
-const previewFileSearchSchema = z.object({
-  q: z.string().optional().default(""),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
-});
-
-const previewFileSchema = z.object({
-  path: z.string().min(1),
-});
-
-const previewFileDiffSchema = z.object({
-  path: z.string().min(1),
-  kind: z.enum(["staged", "working"]),
-});
 
 const createTerminalClipboardImageSchema = z.object({
   mimeType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
@@ -258,24 +240,16 @@ export function createTerminalRouter(
     return options.authService.verifyAccessToken(token)?.sessionId ?? null;
   };
 
-  const resolveProjectPreviewContext = (projectId: string) => {
-    const project = terminalSessionManager.getProject(projectId);
-    if (!project) {
-      throw new TerminalPreviewError("Terminal project not found", 404);
-    }
-    return { project };
-  };
-
-  const handlePreviewError = (res: Response, error: unknown) => {
+  const handleProjectError = (res: Response, error: unknown) => {
     if (error instanceof TerminalPreviewError) {
       res.status(error.statusCode).json({ message: error.message });
       return;
     }
-    console.error("[viewer-be] terminal preview request failed", {
+    console.error("[viewer-be] terminal project request failed", {
       error: String(error),
     });
     res.status(500).json({
-      message: "Terminal preview request failed",
+      message: "Terminal project request failed",
       error: String(error),
     });
   };
@@ -288,120 +262,7 @@ export function createTerminalRouter(
     res.json(payload);
   });
 
-  router.get("/project/:id/preview/files/search", async (req, res) => {
-    const parsed = previewFileSearchSchema.safeParse(req.query);
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request query",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    try {
-      const { project } = resolveProjectPreviewContext(req.params.id);
-      res.json(
-        await searchPreviewFiles({
-          projectId: project.id,
-          projectPath: project.path,
-          query: parsed.data.q,
-          limit: parsed.data.limit,
-        }),
-      );
-    } catch (error) {
-      handlePreviewError(res, error);
-    }
-  });
-
-  router.get("/project/:id/preview/file", async (req, res) => {
-    const parsed = previewFileSchema.safeParse(req.query);
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request query",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    try {
-      const { project } = resolveProjectPreviewContext(req.params.id);
-      res.json(
-        await readPreviewFile({
-          projectId: project.id,
-          projectPath: project.path,
-          requestedPath: parsed.data.path,
-        }),
-      );
-    } catch (error) {
-      handlePreviewError(res, error);
-    }
-  });
-
-  router.get("/project/:id/preview/asset", async (req, res) => {
-    const parsed = previewFileSchema.safeParse(req.query);
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request query",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    try {
-      const { project } = resolveProjectPreviewContext(req.params.id);
-      const payload = await readPreviewAsset({
-        projectId: project.id,
-        projectPath: project.path,
-        requestedPath: parsed.data.path,
-      });
-      res
-        .status(200)
-        .type(payload.mimeType)
-        .set("Cache-Control", payload.cacheControl)
-        .send(payload.content);
-    } catch (error) {
-      handlePreviewError(res, error);
-    }
-  });
-
-  router.get("/project/:id/preview/git-changes", async (req, res) => {
-    try {
-      const { project } = resolveProjectPreviewContext(req.params.id);
-      res.json(
-        await getPreviewGitChanges({
-          projectId: project.id,
-          projectPath: project.path,
-        }),
-      );
-    } catch (error) {
-      handlePreviewError(res, error);
-    }
-  });
-
-  router.get("/project/:id/preview/file-diff", async (req, res) => {
-    const parsed = previewFileDiffSchema.safeParse(req.query);
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request query",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    try {
-      const { project } = resolveProjectPreviewContext(req.params.id);
-      res.json(
-        await getPreviewFileDiff({
-          projectId: project.id,
-          projectPath: project.path,
-          requestedPath: parsed.data.path,
-          changeKind: parsed.data.kind,
-        }),
-      );
-    } catch (error) {
-      handlePreviewError(res, error);
-    }
-  });
+  registerTerminalPreviewRoutes(router, terminalSessionManager);
 
   router.post("/project", async (req, res) => {
     const parsed = createTerminalProjectSchema.safeParse(
@@ -423,7 +284,7 @@ export function createTerminalRouter(
       );
       res.status(201).json(toProjectPayload(project));
     } catch (error) {
-      handlePreviewError(res, error);
+      handleProjectError(res, error);
     }
   });
 
@@ -453,7 +314,7 @@ export function createTerminalRouter(
       clearPreviewFileSearchCache(project.id);
       res.json(toProjectPayload(project));
     } catch (error) {
-      handlePreviewError(res, error);
+      handleProjectError(res, error);
     }
   });
 
