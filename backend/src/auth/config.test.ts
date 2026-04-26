@@ -13,6 +13,7 @@ describe("loadAuthConfig", () => {
     process.env.AUTH_PASSWORD = "e2e-secret";
     process.env.AUTH_JWT_SECRET = "jwt-secret";
     delete process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS;
+    delete process.env.AUTH_TOKEN_TTL_SECONDS;
     delete process.env.AUTH_REFRESH_TOKEN_TTL_SECONDS;
 
     const config = loadAuthConfig();
@@ -29,6 +30,7 @@ describe("loadAuthConfig", () => {
     delete process.env.AUTH_USERNAME;
     delete process.env.AUTH_PASSWORD;
     process.env.AUTH_JWT_SECRET = "jwt-secret";
+    delete process.env.AUTH_TOKEN_TTL_SECONDS;
     process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS = "300";
     process.env.AUTH_REFRESH_TOKEN_TTL_SECONDS = "600";
 
@@ -49,6 +51,7 @@ describe("loadAuthConfig", () => {
   it("generates a jwt secret when none is provided", () => {
     delete process.env.AUTH_JWT_SECRET;
     delete process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS;
+    delete process.env.AUTH_TOKEN_TTL_SECONDS;
     delete process.env.AUTH_REFRESH_TOKEN_TTL_SECONDS;
 
     const config = loadAuthConfig();
