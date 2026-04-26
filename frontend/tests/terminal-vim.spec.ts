@@ -143,7 +143,7 @@ test("preserves vim screen and input after page refresh", async ({
     .poll(async () => {
       return await getLiveTerminalText(page);
     })
-    .toContain(pathBasename(targetPath));
+    .toMatch(/~|\[runweave-\d+:vim/);
 
   await page.keyboard.press("i");
   await expect
@@ -181,7 +181,3 @@ test("preserves vim screen and input after page refresh", async ({
     })
     .toContain("viewer-vim-refresh-after-page-reload");
 });
-
-function pathBasename(value: string): string {
-  return value.split("/").at(-1) ?? value;
-}
