@@ -1,16 +1,5 @@
-import {
-  lazy,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
-  useRef,
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import type {
-  TerminalPreviewChangeFile,
   TerminalPreviewChangeKind,
   TerminalPreviewFileDiffResponse,
   TerminalPreviewFileResponse,
@@ -18,18 +7,12 @@ import type {
   TerminalPreviewGitChangesResponse,
   TerminalProjectListItem,
 } from "@browser-viewer/shared";
-import { Copy, Maximize2, Minimize2, RefreshCw, X } from "lucide-react";
 import {
   useTerminalPreviewStore,
   DEFAULT_MARKDOWN_VIEW_MODE,
-  type TerminalChangesViewMode,
-  type TerminalMarkdownViewMode,
-  type TerminalSvgViewMode,
 } from "../../features/terminal/preview-store";
 import {
   getTerminalPreviewFileKind,
-  getTerminalPreviewMonacoLanguage,
-  extensionToLanguageHint,
   isSupportedTerminalImagePreviewPath,
 } from "../../features/terminal/preview-file-types";
 import { HttpError } from "../../services/http";
@@ -39,33 +22,9 @@ import {
   getTerminalProjectPreviewGitChanges,
   searchTerminalProjectPreviewFiles,
 } from "../../services/terminal";
-import { Button } from "../ui/button";
-import { TerminalBrowserTool } from "./terminal-browser-tool";
-import { TerminalOpenFileCommand } from "./terminal-open-file-command";
-
-const TerminalMonacoViewer = lazy(() =>
-  import("./terminal-monaco-viewer").then((module) => ({
-    default: module.TerminalMonacoViewer,
-  })),
-);
-
-const TerminalMarkdownPreview = lazy(() =>
-  import("./terminal-markdown-preview").then((module) => ({
-    default: module.TerminalMarkdownPreview,
-  })),
-);
-
-const TerminalSvgPreview = lazy(() =>
-  import("./terminal-svg-preview").then((module) => ({
-    default: module.TerminalSvgPreview,
-  })),
-);
-
-const TerminalImagePreview = lazy(() =>
-  import("./terminal-image-preview").then((module) => ({
-    default: module.TerminalImagePreview,
-  })),
-);
+import { TerminalPreviewPanelContent } from "./terminal-preview-panel-content";
+import { useTerminalPreviewPanelActions } from "./terminal-preview-panel-actions";
+import { TerminalPreviewPanelShell } from "./terminal-preview-panel-shell";
 
 interface TerminalPreviewPanelProps {
   apiBase: string;
@@ -74,43 +33,6 @@ interface TerminalPreviewPanelProps {
   widthPx?: number;
   onAuthExpired?: () => void;
   onEditProject: () => void;
-}
-
-function describeMode(mode: string | null | undefined): string {
-  if (mode === "file") {
-    return "Open file";
-  }
-  if (mode === "changes") {
-    return "Changes";
-  }
-  return "Preview";
-}
-
-function statusBadge(status: TerminalPreviewChangeFile["status"]): string {
-  switch (status) {
-    case "added":
-      return "A";
-    case "deleted":
-      return "D";
-    case "renamed":
-      return "R";
-    case "untracked":
-      return "U";
-    case "modified":
-      return "M";
-    default:
-      return "?";
-  }
-}
-
-function basename(filePath: string): string {
-  return filePath.split("/").at(-1) ?? filePath;
-}
-
-function dirname(filePath: string): string {
-  const parts = filePath.split("/");
-  parts.pop();
-  return parts.join("/");
 }
 
 function resolveSelectedChange(params: {
@@ -492,673 +414,147 @@ export function TerminalPreviewPanel({
     return null;
   }, [fileDiff?.path, filePreview?.path, mode, selectedChangePath, selectedFilePath]);
 
-  const refresh = (): void => {
-    if (mode === "file") {
-      if (selectedFilePath) {
-        if (isSupportedTerminalImagePreviewPath(selectedFilePath)) {
-          setAssetRefreshKey((current) => current + 1);
-          return;
-        }
-        void loadFile(selectedFilePath);
-      } else if (projectId) {
-        updateProjectPreview(projectId, { openFileQuery: query });
-      }
-      return;
-    }
-    if (mode === "changes") {
-      void loadChanges();
-    }
-  };
-
-  const copyPath = (): void => {
-    if (!selectedPath) {
-      return;
-    }
-    void navigator.clipboard?.writeText(selectedPath);
-  };
-
-  const startResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    if (expanded) {
-      return;
-    }
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    const handlePointerMove = (moveEvent: globalThis.PointerEvent): void => {
-      const nextWidth = Math.min(
-        Math.round(window.innerWidth * 0.6),
-        Math.max(320, window.innerWidth - moveEvent.clientX),
-      );
-      setWidth(nextWidth);
-    };
-    const stop = (): void => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-    };
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stop);
-    window.addEventListener("pointercancel", stop);
-  };
-
-  const openFilePath = (filePath: string): void => {
-    if (!projectId) {
-      return;
-    }
-    updateProjectPreview(projectId, {
-      mode: "file",
-      selectedFilePath: filePath,
-      path: filePath,
-    });
-    setFilePreview(null);
-    setFileError(null);
-    setMarkdownScrollRatio(0);
-  };
-
-  const setMarkdownViewMode = (nextMode: TerminalMarkdownViewMode): void => {
-    if (!projectId) {
-      return;
-    }
-    updateProjectPreview(projectId, { markdownViewMode: nextMode });
-  };
-
-  const setSvgViewMode = (nextMode: TerminalSvgViewMode): void => {
-    if (!projectId) {
-      return;
-    }
-    updateProjectPreview(projectId, { svgViewMode: nextMode });
-  };
-
-  const setChangesViewMode = (nextMode: TerminalChangesViewMode): void => {
-    if (!projectId) {
-      return;
-    }
-    updateProjectPreview(projectId, { changesViewMode: nextMode });
-  };
-
-  const startMarkdownResize = (
-    event: ReactPointerEvent<HTMLDivElement>,
-  ): void => {
-    if (!projectId) {
-      return;
-    }
-    event.preventDefault();
-    const container = event.currentTarget.parentElement;
-    const handlePointerMove = (moveEvent: globalThis.PointerEvent): void => {
-      const rect = container?.getBoundingClientRect();
-      if (!rect || rect.width <= 0) {
+  const {
+    copyPath,
+    openFilePath,
+    refresh,
+    setChangesViewMode,
+    setMarkdownViewMode,
+    setSvgViewMode,
+    startMarkdownResize,
+    startResize,
+  } = useTerminalPreviewPanelActions({
+    expanded,
+    mode,
+    projectId,
+    query,
+    selectedFilePath,
+    selectedPath,
+    loadFile: async (filePath) => {
+      if (isSupportedTerminalImagePreviewPath(filePath)) {
+        setAssetRefreshKey((current) => current + 1);
         return;
       }
-      const nextPct = Math.min(
-        70,
-        Math.max(30, ((moveEvent.clientX - rect.left) / rect.width) * 100),
-      );
-      updateProjectPreview(projectId, {
-        markdownSplitSourceWidthPct: Math.round(nextPct),
-      });
-    };
-    const stop = (): void => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stop);
-    };
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stop);
-  };
+      await loadFile(filePath);
+    },
+    loadChanges,
+    setWidth,
+    updateProjectPreview,
+    setFilePreview: () => setFilePreview(null),
+    setFileError,
+    setMarkdownScrollRatio,
+  });
 
-  const renderEmpty = (title: string, action?: ReactNode): ReactNode => (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-xs text-slate-400">
-      <p>{title}</p>
-      {action}
-    </div>
+  const body = (
+    <TerminalPreviewPanelContent
+      activeProject={activeProject}
+      apiBase={apiBase}
+      token={token}
+      mode={mode}
+      projectId={projectId}
+      hasProjectPath={hasProjectPath}
+      query={query}
+      absoluteInput={absoluteInput}
+      selectedFilePath={selectedFilePath}
+      selectedChangePath={selectedChangePath}
+      selectedChangeKind={selectedChangeKind}
+      markdownViewMode={markdownViewMode}
+      markdownSplitSourceWidthPct={markdownSplitSourceWidthPct}
+      svgViewMode={svgViewMode}
+      changesViewMode={changesViewMode}
+      searchItems={searchItems}
+      searchLoading={searchLoading}
+      searchError={searchError}
+      filePreview={filePreview}
+      fileLoading={fileLoading}
+      fileError={fileError}
+      changes={changes}
+      changesLoading={changesLoading}
+      changesError={changesError}
+      fileDiff={fileDiff}
+      diffLoading={diffLoading}
+      diffError={diffError}
+      assetRefreshKey={assetRefreshKey}
+      markdownScrollRatio={markdownScrollRatio}
+      onAuthExpired={onAuthExpired}
+      onEditProject={onEditProject}
+      onQueryChange={(nextQuery) => {
+        if (projectId) {
+          updateProjectPreview(projectId, {
+            mode: "file",
+            openFileQuery: nextQuery,
+            selectedFilePath: undefined,
+          });
+        }
+      }}
+      onOpenFilePath={openFilePath}
+      onSelectChange={(filePath, kind) => {
+        if (!projectId) {
+          return;
+        }
+        updateProjectPreview(projectId, {
+          mode: "changes",
+          selectedChangePath: filePath,
+          selectedChangeKind: kind,
+        });
+      }}
+      onReloadDiff={(filePath, kind) => {
+        void loadDiff(filePath, kind);
+      }}
+      onMarkdownScrollRatioChange={setMarkdownScrollRatio}
+      onStartMarkdownResize={startMarkdownResize}
+      onOpenModeFile={() => {
+        if (projectId) {
+          updateProjectPreview(projectId, { mode: "file" });
+        }
+      }}
+      onOpenModeChanges={() => {
+        if (projectId) {
+          updateProjectPreview(projectId, { mode: "changes" });
+        }
+      }}
+    />
   );
-
-  const renderChangesList = (
-    title: string,
-    kind: TerminalPreviewChangeKind,
-    files: TerminalPreviewChangeFile[],
-  ): ReactNode => (
-    <div className="flex flex-col gap-1">
-      <div className="px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">
-        {title}
-      </div>
-      {files.map((file) => {
-        const selected =
-          selectedChangePath === file.path && selectedChangeKind === kind;
-        return (
-          <button
-            type="button"
-            key={`${kind}:${file.path}`}
-            className={[
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs",
-              selected
-                ? "bg-slate-800 text-slate-100"
-                : "text-slate-300 hover:bg-slate-900",
-            ].join(" ")}
-            onClick={() => {
-              if (!projectId) {
-                return;
-              }
-              if (
-                selectedChangePath === file.path &&
-                selectedChangeKind === kind
-              ) {
-                void loadDiff(file.path, kind);
-                return;
-              }
-              updateProjectPreview(projectId, {
-                mode: "changes",
-                selectedChangePath: file.path,
-                selectedChangeKind: kind,
-              });
-            }}
-          >
-            <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[9px] text-slate-400">
-              {statusBadge(file.status)}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate">{basename(file.path)}</span>
-              {dirname(file.path) ? (
-                <span className="block truncate text-[11px] text-slate-500">
-                  {dirname(file.path)}
-                </span>
-              ) : null}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-
-  let body: ReactNode;
-  if (!activeProject) {
-    body = renderEmpty("No project selected");
-  } else if (!hasProjectPath) {
-    body = renderEmpty(
-      "Set a project path to use Preview",
-      <Button
-        type="button"
-        size="sm"
-        className="rounded-lg"
-        onClick={onEditProject}
-      >
-        Set project path
-      </Button>,
-    );
-  } else if (mode === "file" && !selectedFilePath) {
-    body = (
-      <TerminalOpenFileCommand
-        query={query}
-        loading={searchLoading}
-        error={searchError}
-        items={searchItems}
-        absoluteInput={absoluteInput}
-        onQueryChange={(nextQuery) => {
-          if (projectId) {
-            updateProjectPreview(projectId, {
-              mode: "file",
-              openFileQuery: nextQuery,
-              selectedFilePath: undefined,
-            });
-          }
-        }}
-        onOpenPath={openFilePath}
-      />
-    );
-  } else if (mode === "file") {
-    const monacoLanguage = getTerminalPreviewMonacoLanguage(filePreview?.language);
-    body = (
-      <div className="h-full min-h-0">
-        {fileKind === "image" && selectedFilePath && projectId ? (
-          <Suspense fallback={renderEmpty("Loading image preview...")}>
-            <TerminalImagePreview
-              apiBase={apiBase}
-              token={token}
-              projectId={projectId}
-              path={selectedFilePath}
-              refreshKey={assetRefreshKey}
-              onAuthExpired={onAuthExpired}
-            />
-          </Suspense>
-        ) : fileLoading ? (
-          renderEmpty("Loading preview...")
-        ) : fileError ? (
-          renderEmpty(fileError)
-        ) : filePreview && fileKind === "markdown" ? (
-          markdownViewMode === "source" ? (
-            <Suspense fallback={renderEmpty("Loading editor...")}>
-              <TerminalMonacoViewer
-                language="markdown"
-                content={filePreview.content}
-              />
-            </Suspense>
-          ) : markdownViewMode === "preview" ? (
-            <Suspense fallback={renderEmpty("Loading markdown preview...")}>
-              <TerminalMarkdownPreview
-                apiBase={apiBase}
-                token={token}
-                projectId={activeProject.projectId}
-                content={filePreview.content}
-                path={filePreview.path}
-                onAuthExpired={onAuthExpired}
-                onOpenFile={openFilePath}
-              />
-            </Suspense>
-          ) : (
-            <div
-              className="grid h-full min-h-0"
-              style={{
-                gridTemplateColumns: `${markdownSplitSourceWidthPct}% 4px minmax(0, 1fr)`,
-              }}
-            >
-              <Suspense fallback={renderEmpty("Loading editor...")}>
-                <TerminalMonacoViewer
-                  language="markdown"
-                  content={filePreview.content}
-                  scrollRatio={markdownScrollRatio}
-                  onScrollRatioChange={setMarkdownScrollRatio}
-                />
-              </Suspense>
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                className="cursor-col-resize bg-slate-900 hover:bg-slate-700"
-                onPointerDown={startMarkdownResize}
-              />
-              <Suspense fallback={renderEmpty("Loading markdown preview...")}>
-                <TerminalMarkdownPreview
-                  apiBase={apiBase}
-                  token={token}
-                  projectId={activeProject.projectId}
-                  content={filePreview.content}
-                  path={filePreview.path}
-                  scrollRatio={markdownScrollRatio}
-                  onScrollRatioChange={setMarkdownScrollRatio}
-                  onAuthExpired={onAuthExpired}
-                  onOpenFile={openFilePath}
-                />
-              </Suspense>
-            </div>
-          )
-        ) : filePreview && fileKind === "svg" ? (
-          svgViewMode === "source" ? (
-            <Suspense fallback={renderEmpty("Loading editor...")}>
-              <TerminalMonacoViewer
-                language="xml"
-                content={filePreview.content}
-              />
-            </Suspense>
-          ) : (
-            <Suspense fallback={renderEmpty("Loading SVG preview...")}>
-              <TerminalSvgPreview content={filePreview.content} />
-            </Suspense>
-          )
-        ) : filePreview ? (
-          <Suspense fallback={renderEmpty("Loading editor...")}>
-            <TerminalMonacoViewer
-              language={monacoLanguage}
-              content={filePreview.content}
-            />
-          </Suspense>
-        ) : (
-          renderEmpty("No file selected")
-        )}
-      </div>
-    );
-  } else if (mode === "changes") {
-    const noChanges =
-      changes && changes.staged.length === 0 && changes.working.length === 0;
-    const changeDiffFileKind = selectedChangePath
-      ? getTerminalPreviewFileKind(selectedChangePath, null)
-      : "text";
-    const changeDiffLanguageHint = selectedChangePath
-      ? extensionToLanguageHint(selectedChangePath)
-      : null;
-    const changeDiffMonacoLanguage = getTerminalPreviewMonacoLanguage(changeDiffLanguageHint);
-    const isChangeImageDeleted =
-      changeDiffFileKind === "image" && fileDiff?.status === "deleted";
-
-    let changeContent: ReactNode;
-    if (diffLoading && !fileDiff) {
-      changeContent = renderEmpty("Loading diff...");
-    } else if (diffError) {
-      changeContent = renderEmpty(diffError);
-    } else if (!fileDiff) {
-      changeContent = renderEmpty("Select a changed file");
-    } else if (changeDiffFileKind === "image") {
-      if (isChangeImageDeleted) {
-        changeContent = renderEmpty("Image deleted");
-      } else if (selectedChangePath && projectId) {
-        changeContent = (
-          <Suspense fallback={renderEmpty("Loading image preview...")}>
-            <TerminalImagePreview
-              apiBase={apiBase}
-              token={token}
-              projectId={projectId}
-              path={selectedChangePath}
-              refreshKey={0}
-              onAuthExpired={onAuthExpired}
-            />
-          </Suspense>
-        );
-      } else {
-        changeContent = renderEmpty("Binary file");
-      }
-    } else if (
-      changesViewMode === "preview" &&
-      changeDiffFileKind === "markdown" &&
-      activeProject
-    ) {
-      changeContent = (
-        <Suspense fallback={renderEmpty("Loading markdown preview...")}>
-          <TerminalMarkdownPreview
-            apiBase={apiBase}
-            token={token}
-            projectId={activeProject.projectId}
-            content={fileDiff.newContent}
-            path={fileDiff.path}
-            onAuthExpired={onAuthExpired}
-            onOpenFile={openFilePath}
-          />
-        </Suspense>
-      );
-    } else if (
-      changesViewMode === "preview" &&
-      changeDiffFileKind === "svg"
-    ) {
-      changeContent = (
-        <Suspense fallback={renderEmpty("Loading SVG preview...")}>
-          <TerminalSvgPreview content={fileDiff.newContent} />
-        </Suspense>
-      );
-    } else {
-      changeContent = (
-        <Suspense fallback={renderEmpty("Loading editor...")}>
-          <TerminalMonacoViewer
-            diff
-            language={changeDiffMonacoLanguage}
-            oldContent={fileDiff.oldContent}
-            newContent={fileDiff.newContent}
-          />
-        </Suspense>
-      );
-    }
-
-    body = (
-      <div className="grid h-full min-h-0 grid-cols-[180px_minmax(0,1fr)]">
-        <aside className="min-h-0 overflow-auto border-r border-slate-800 p-1.5">
-          {changesLoading && !changes ? (
-            <div className="px-2 py-3 text-xs text-slate-400">Loading changes...</div>
-          ) : changesError ? (
-            <div className="px-2 py-3 text-xs text-rose-300">{changesError}</div>
-          ) : noChanges ? (
-            <div className="px-2 py-3 text-xs text-slate-400">No changes</div>
-          ) : changes ? (
-            <div className="flex flex-col gap-2">
-              {renderChangesList("Staged Changes", "staged", changes.staged)}
-              {renderChangesList("Working Changes", "working", changes.working)}
-            </div>
-          ) : null}
-        </aside>
-        <div className="min-h-0">{changeContent}</div>
-      </div>
-    );
-  } else {
-    body = renderEmpty(
-      "No preview for this project",
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          size="sm"
-          className="rounded-lg"
-          onClick={() => {
-            if (projectId) {
-              updateProjectPreview(projectId, { mode: "file" });
-            }
-          }}
-        >
-          Open file...
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="rounded-lg"
-          onClick={() => {
-            if (projectId) {
-              updateProjectPreview(projectId, { mode: "changes" });
-            }
-          }}
-        >
-          Changes
-        </Button>
-      </div>,
-    );
-  }
 
   return (
-    <aside
-      className="relative flex h-full min-h-0 shrink-0 border-l border-slate-800 bg-slate-950"
-      style={{ width: panelWidth }}
-    >
-      <div
-        role="separator"
-        aria-label="Resize sidecar"
-        aria-orientation="vertical"
-        className={[
-          "absolute left-0 top-0 z-20 h-full w-1.5 touch-none transition-colors",
-          expanded ? "" : "cursor-col-resize bg-transparent hover:bg-slate-700/70",
-        ].join(" ")}
-        onPointerDown={startResize}
-      />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="border-b border-slate-800 px-2 py-1.5">
-          <div className="flex min-h-[34px] items-center gap-2">
-            <div className="min-w-0 flex-1">
-              <div
-                className="inline-flex rounded-md border border-slate-800 bg-slate-900/70 p-0.5"
-                role="tablist"
-                aria-label="Sidecar tools"
-              >
-                {(["preview", "browser"] as const).map((tool) => (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTool === tool}
-                    key={tool}
-                    className={[
-                      "h-6 rounded-sm px-2 text-xs",
-                      activeTool === tool
-                        ? "bg-slate-700 text-slate-50"
-                        : "text-slate-400 hover:text-slate-100",
-                    ].join(" ")}
-                    onClick={() => setActiveTool(tool)}
-                  >
-                    {tool === "preview" ? "Preview" : "Browser"}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 rounded-md px-0"
-                onClick={() => setExpanded(!expanded)}
-                aria-label={
-                  activeTool === "preview"
-                    ? expanded
-                      ? "Restore preview"
-                      : "Expand preview"
-                    : expanded
-                      ? "Restore sidecar"
-                      : "Expand sidecar"
-                }
-              >
-                {expanded ? (
-                  <Minimize2 className="h-4 w-4" />
-                ) : (
-                  <Maximize2 className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 rounded-md px-0"
-                disabled={activeTool !== "preview" || !mode || fileLoading || changesLoading}
-                onClick={refresh}
-                aria-label="Refresh preview"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 rounded-md px-0"
-                disabled={activeTool !== "preview" || !selectedPath}
-                onClick={copyPath}
-                aria-label="Copy path"
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 rounded-md px-0"
-                onClick={closePreview}
-                aria-label="Close sidecar"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </header>
-        {activeTool === "preview" ? (
-          <div className="border-b border-slate-800 px-2 py-1.5">
-            <div className="flex items-center gap-1.5">
-              <h2 className="truncate text-xs font-semibold text-slate-100">
-                {describeMode(mode)}
-              </h2>
-              <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-400">
-                Read only
-              </span>
-            </div>
-            <p className="mt-0.5 truncate text-[11px] text-slate-500">
-              {activeProject?.name ?? "No project"}
-              {activeProject?.path ? ` · root: ${activeProject.path}` : ""}
-            </p>
-          </div>
-        ) : null}
-        {activeTool === "preview" && selectedPath ? (
-          <div className="flex items-center gap-2 border-b border-slate-800 px-2 py-1.5 text-[11px] text-slate-400">
-            <span className="min-w-0 flex-1 truncate">{selectedPath}</span>
-            {mode === "file" && fileKind === "markdown" ? (
-              <div className="flex shrink-0 rounded-md border border-slate-800 p-0.5">
-                {(["source", "split", "preview"] as const).map((viewMode) => (
-                  <button
-                    type="button"
-                    key={viewMode}
-                    className={[
-                      "rounded-sm px-2 py-0.5 capitalize",
-                      markdownViewMode === viewMode
-                        ? "bg-slate-800 text-slate-100"
-                        : "text-slate-400 hover:text-slate-200",
-                    ].join(" ")}
-                    onClick={() => setMarkdownViewMode(viewMode)}
-                  >
-                    {viewMode}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {mode === "file" && fileKind === "svg" ? (
-              <div className="flex shrink-0 rounded-md border border-slate-800 p-0.5">
-                {(["preview", "source"] as const).map((viewMode) => (
-                  <button
-                    type="button"
-                    key={viewMode}
-                    className={[
-                      "rounded-sm px-2 py-0.5 capitalize",
-                      svgViewMode === viewMode
-                        ? "bg-slate-800 text-slate-100"
-                        : "text-slate-400 hover:text-slate-200",
-                    ].join(" ")}
-                    onClick={() => setSvgViewMode(viewMode)}
-                  >
-                    {viewMode}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {mode === "changes" &&
-            selectedChangePath &&
-            (getTerminalPreviewFileKind(selectedChangePath, null) === "markdown" ||
-              getTerminalPreviewFileKind(selectedChangePath, null) === "svg") ? (
-              <div className="flex shrink-0 rounded-md border border-slate-800 p-0.5">
-                {(["diff", "preview"] as const).map((viewMode) => (
-                  <button
-                    type="button"
-                    key={viewMode}
-                    className={[
-                      "rounded-sm px-2 py-0.5 capitalize",
-                      changesViewMode === viewMode
-                        ? "bg-slate-800 text-slate-100"
-                        : "text-slate-400 hover:text-slate-200",
-                    ].join(" ")}
-                    onClick={() => setChangesViewMode(viewMode)}
-                  >
-                    {viewMode}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {mode === "file" ? (
-              <button
-                type="button"
-                className="shrink-0 rounded-md px-2 py-1 text-slate-300 hover:bg-slate-800"
-                onClick={() => {
-                  if (projectId) {
-                    updateProjectPreview(projectId, {
-                      mode: "file",
-                      selectedFilePath: undefined,
-                    });
-                    setFilePreview(null);
-                    setFileError(null);
-                  }
-                }}
-              >
-                Open another...
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-        <div className="relative min-h-0 flex-1">
-          <div
-            className={[
-              "absolute inset-0 min-h-0",
-              activeTool === "preview" ? "" : "pointer-events-none hidden",
-            ].join(" ")}
-          >
-            {body}
-          </div>
-          <div
-            className={[
-              "absolute inset-0 min-h-0",
-              activeTool === "browser" ? "" : "pointer-events-none hidden",
-            ].join(" ")}
-          >
-            <TerminalBrowserTool active={activeTool === "browser"} />
-          </div>
-        </div>
-      </div>
-    </aside>
+    <TerminalPreviewPanelShell
+      panelWidth={panelWidth}
+      expanded={expanded}
+      activeTool={activeTool}
+      mode={mode}
+      fileKind={
+        mode === "changes" && selectedChangePath
+          ? getTerminalPreviewFileKind(selectedChangePath, null)
+          : fileKind
+      }
+      fileLoading={fileLoading}
+      changesLoading={changesLoading}
+      selectedPath={selectedPath}
+      markdownViewMode={markdownViewMode}
+      svgViewMode={svgViewMode}
+      changesViewMode={changesViewMode}
+      selectedChangePath={selectedChangePath}
+      activeProject={activeProject}
+      body={body}
+      onStartResize={startResize}
+      onSetActiveTool={setActiveTool}
+      onToggleExpanded={() => setExpanded(!expanded)}
+      onRefresh={refresh}
+      onCopyPath={copyPath}
+      onClosePreview={closePreview}
+      onSetMarkdownViewMode={setMarkdownViewMode}
+      onSetSvgViewMode={setSvgViewMode}
+      onSetChangesViewMode={setChangesViewMode}
+      onOpenAnother={() => {
+        if (projectId) {
+          updateProjectPreview(projectId, {
+            mode: "file",
+            selectedFilePath: undefined,
+          });
+          setFilePreview(null);
+          setFileError(null);
+        }
+      }}
+    />
   );
 }
