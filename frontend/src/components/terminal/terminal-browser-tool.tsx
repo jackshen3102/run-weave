@@ -144,6 +144,15 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
     [activeTabId, syncBoundsForTab],
   );
 
+  const syncActiveTabBounds = useCallback(
+    (tabId: string) => {
+      if (activeTabIdRef.current === tabId) {
+        syncBoundsForTab(tabId, true);
+      }
+    },
+    [syncBoundsForTab],
+  );
+
   const navigateTab = useCallback(
     async (tabId: string, rawInput: string): Promise<void> => {
       if (!tabId) {
@@ -171,9 +180,7 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         return;
       }
 
-      if (activeTabIdRef.current === tabId) {
-        syncBoundsForTab(tabId, true);
-      }
+      syncActiveTabBounds(tabId);
 
       try {
         loadedUrlByTabRef.current[tabId] = nextUrl.url;
@@ -182,23 +189,19 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
           nextUrl.url,
         );
         applyElectronSnapshot(tabId, snapshot);
-        if (activeTabIdRef.current === tabId) {
-          syncBoundsForTab(tabId, true);
-        }
+        syncActiveTabBounds(tabId);
       } catch (error) {
         updateBrowserTab(tabId, {
           loading: false,
           error: error instanceof Error ? error.message : "Navigation failed",
         });
-        if (activeTabIdRef.current === tabId) {
-          syncBoundsForTab(tabId, true);
-        }
+        syncActiveTabBounds(tabId);
       }
     },
     [
       applyElectronSnapshot,
       isElectron,
-      syncBoundsForTab,
+      syncActiveTabBounds,
       updateBrowserTab,
     ],
   );
