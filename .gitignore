@@ -14,3 +14,6 @@ artifacts/
 electron/release/
 .local-updates/
 .playwright-cli/
+deploy/nginx/certs/
+deploy/nginx/nginx.local.conf
+deploy/nginx/openssl-san.local.cnf
