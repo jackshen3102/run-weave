@@ -14,7 +14,10 @@ import {
   loadRecentTerminalSelection,
   saveRecentTerminalSelection,
 } from "../../features/terminal/recent-selection";
-import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
+import {
+  DEFAULT_TERMINAL_SIDECAR_WIDTH,
+  useTerminalPreviewStore,
+} from "../../features/terminal/preview-store";
 import { resolveCachedTerminalSurfaceIds } from "../../features/terminal/surface-cache";
 import { resolveNewTerminalRuntimePreference } from "../../features/terminal/runtime-preference";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
@@ -168,7 +171,7 @@ export function TerminalWorkspace({
   const previewExpanded = useTerminalPreviewStore((state) => state.ui.expanded);
   const previewReservedWidth = previewWidthPx
     ? `${previewWidthPx}px`
-    : "clamp(320px, 50vw, 60vw)";
+    : DEFAULT_TERMINAL_SIDECAR_WIDTH;
   const terminalLayoutVersion = isMobileMonitor
     ? "mobile"
     : `desktop:${previewOpen ? previewReservedWidth : "full"}`;
@@ -1118,7 +1121,10 @@ export function TerminalWorkspace({
           {previewOpen && !previewExpanded && !isMobileMonitor ? (
             <Suspense
               fallback={
-                <aside className="flex h-full w-[min(40vw,520px)] shrink-0 items-center justify-center border-l border-slate-800 bg-slate-950 text-sm text-slate-400">
+                <aside
+                  className="flex h-full shrink-0 items-center justify-center border-l border-slate-800 bg-slate-950 text-sm text-slate-400"
+                  style={{ width: DEFAULT_TERMINAL_SIDECAR_WIDTH }}
+                >
                   Loading preview...
                 </aside>
               }
