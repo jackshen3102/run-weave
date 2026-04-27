@@ -8,6 +8,8 @@ export type TerminalSvgViewMode = "preview" | "source";
 export type TerminalChangesViewMode = "diff" | "preview";
 export type TerminalSidecarTool = "preview" | "browser";
 
+export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
+
 export interface TerminalBrowserTabState {
   id: string;
   url: string;

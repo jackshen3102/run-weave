@@ -10,6 +10,7 @@ import type {
 import {
   useTerminalPreviewStore,
   DEFAULT_MARKDOWN_VIEW_MODE,
+  DEFAULT_TERMINAL_SIDECAR_WIDTH,
 } from "../../features/terminal/preview-store";
 import {
   getTerminalPreviewFileKind,
@@ -136,7 +137,7 @@ export function TerminalPreviewPanel({
     ? "100%"
     : widthPx
       ? `${widthPx}px`
-      : "clamp(320px, 50vw, 60vw)";
+      : DEFAULT_TERMINAL_SIDECAR_WIDTH;
   const fileKind = selectedFilePath
     ? getTerminalPreviewFileKind(selectedFilePath, filePreview?.language)
     : "text";

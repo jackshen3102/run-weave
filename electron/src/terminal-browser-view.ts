@@ -1,7 +1,6 @@
 import {
   BrowserWindow,
   ipcMain,
-  shell,
   WebContentsView,
   type WebContents,
 } from "electron";
@@ -172,7 +171,7 @@ function getOrCreateTerminalBrowserView(
     }
     const safeUrl = validateTerminalBrowserUrl(url);
     if (safeUrl) {
-      void shell.openExternal(safeUrl);
+      createTerminalBrowserTabFromPageOpen(win, safeUrl);
     }
     return { action: "deny" };
   });
@@ -211,6 +210,25 @@ function getOrCreateTerminalBrowserView(
 
   terminalBrowserEntries.set(key, entry);
   return view;
+}
+
+function createTerminalBrowserTabFromPageOpen(win: BrowserWindow, url: string): void {
+  const tabId = `browser-tab-${randomUUID().slice(0, 8)}`;
+  const view = getOrCreateTerminalBrowserView(win, tabId);
+  const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, tabId));
+  if (!entry) {
+    return;
+  }
+
+  attachTerminalBrowser(win, tabId, view);
+  win.webContents.send("terminal-browser:tab-created-from-proxy", {
+    tabId,
+    url,
+    title: "",
+  });
+  void view.webContents.loadURL(url).catch(() => {
+    sendTerminalBrowserTabUpdate(win, tabId, entry, false);
+  });
 }
 
 function detachTerminalBrowser(win: BrowserWindow, tabId?: string): void {
