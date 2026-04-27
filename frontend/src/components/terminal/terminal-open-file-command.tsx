@@ -7,6 +7,8 @@ interface TerminalOpenFileCommandProps {
   error: string | null;
   items: TerminalPreviewFileSearchItem[];
   absoluteInput: boolean;
+  selectedPath?: string;
+  className?: string;
   onQueryChange: (query: string) => void;
   onOpenPath: (path: string) => void;
 }
@@ -17,6 +19,8 @@ export function TerminalOpenFileCommand({
   error,
   items,
   absoluteInput,
+  selectedPath,
+  className,
   onQueryChange,
   onOpenPath,
 }: TerminalOpenFileCommandProps) {
@@ -25,7 +29,9 @@ export function TerminalOpenFileCommand({
   return (
     <Command
       shouldFilter={false}
-      className="flex h-full min-h-0 flex-col bg-slate-950"
+      className={
+        className ?? "flex h-full min-h-0 flex-col bg-slate-950"
+      }
       onKeyDown={(event) => {
         if (event.key !== "Enter") {
           return;
@@ -84,7 +90,11 @@ export function TerminalOpenFileCommand({
               }}
               className={[
                 "flex cursor-default items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none",
-                index === 0 ? "bg-slate-800" : "aria-selected:bg-slate-800/80",
+                selectedPath === item.path
+                  ? "bg-slate-800"
+                  : index === 0
+                    ? "bg-slate-900/80"
+                    : "aria-selected:bg-slate-800/80",
               ].join(" ")}
             >
               <span className="min-w-0 flex-1">

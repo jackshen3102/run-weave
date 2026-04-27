@@ -175,9 +175,6 @@ export function TerminalWorkspace({
   const terminalLayoutVersion = isMobileMonitor
     ? "mobile"
     : `desktop:${previewOpen ? previewReservedWidth : "full"}`;
-  const activeProjectPreviewMode = useTerminalPreviewStore((state) =>
-    activeProjectId ? state.projects[activeProjectId]?.mode ?? null : null,
-  );
   const removeProjectPreview = useTerminalPreviewStore(
     (state) => state.removeProjectPreview,
   );
@@ -939,7 +936,6 @@ export function TerminalWorkspace({
         {!isMobileMonitor ? (
           <TerminalPreviewMenu
             projectId={activeProjectId}
-            mode={activeProjectPreviewMode}
             disabled={loading}
             buttonClassName="h-6 shrink-0 rounded-md px-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100"
           />
