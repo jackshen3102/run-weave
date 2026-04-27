@@ -360,13 +360,13 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
     await page.getByLabel("Terminal emulator").click({ force: true });
     await page.keyboard.type("printf 'https://example.com/runweave-link\\n'");
     await page.keyboard.press("Enter");
-    await expect(page.getByText("https://example.com/runweave-link")).toBeVisible();
 
     const terminalLink = page
       .locator(".xterm-screen span", {
-        hasText: "https://example.com/runweave-link",
+        hasText: /^https:\/\/example\.com\/runweave-link$/,
       })
       .last();
+    await expect(terminalLink).toBeVisible();
     const terminalLinkBox = await terminalLink.boundingBox();
     expect(terminalLinkBox).not.toBeNull();
     const [popup] = await Promise.all([
