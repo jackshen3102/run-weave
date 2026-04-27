@@ -107,10 +107,16 @@ importers:
       pidusage:
         specifier: ^4.0.1
         version: 4.0.1
+      ws:
+        specifier: ^8.18.1
+        version: 8.19.0
     devDependencies:
       "@types/node":
         specifier: ^22.13.10
         version: 22.19.15
+      "@types/ws":
+        specifier: ^8.5.14
+        version: 8.18.1
       electron:
         specifier: ^33.4.0
         version: 33.4.11
@@ -3298,6 +3304,7 @@ packages:
         integrity: sha512-9k/gHF6n/pAi/9tqr3m3aqkuiNosYTurLLUtc7xQ9sxB/wm7WPygCv8GYa6mS0fLJEHhqMC1ATYhz++U/lRHqg==,
       }
     engines: { node: ">=10.0.0" }
+    deprecated: this version has critical issues, please update to the latest version
 
   "@xterm/addon-canvas@0.7.0":
     resolution:

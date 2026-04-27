@@ -1,6 +1,6 @@
 {
   "name": "@browser-viewer/electron",
-  "version": "0.56.0",
+  "version": "0.57.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -10,16 +10,19 @@
     "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\"",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
   "dependencies": {
     "@browser-viewer/shared": "workspace:*",
     "electron-updater": "^6.6.2",
-    "pidusage": "^4.0.1"
+    "pidusage": "^4.0.1",
+    "ws": "^8.18.1"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
+    "@types/ws": "^8.5.14",
     "electron": "^33.4.0",
     "electron-builder": "^25.1.8",
     "esbuild": "^0.25.0",

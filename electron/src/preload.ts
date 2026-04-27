@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, shell } from "electron";
 import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
+  TerminalBrowserCdpProxyInfo,
 } from "@browser-viewer/shared";
 
 contextBridge.exposeInMainWorld("electronAPI", {
@@ -39,6 +40,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("viewer:get-runtime-stats") as Promise<RuntimeStatsSnapshot>,
   terminalBrowserNavigate: (tabId: string, url: string) =>
     ipcRenderer.invoke("terminal-browser:navigate", tabId, url),
+  terminalBrowserListTabs: () =>
+    ipcRenderer.invoke("terminal-browser:list-tabs") as Promise<
+      Array<{
+        tabId: string;
+        url: string;
+        title: string;
+        canGoBack: boolean;
+        canGoForward: boolean;
+        loading: boolean;
+        active: boolean;
+        cdpProxyAttached: boolean;
+        devtoolsOpen: boolean;
+      }>
+    >,
   terminalBrowserReload: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:reload", tabId),
   terminalBrowserStop: (tabId: string) =>
@@ -57,7 +72,82 @@ contextBridge.exposeInMainWorld("electronAPI", {
   ) => ipcRenderer.invoke("terminal-browser:set-bounds", tabId, bounds),
   terminalBrowserOpenDevTools: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:open-devtools", tabId),
+  terminalBrowserGetCdpProxyInfo: (tabId: string) =>
+    ipcRenderer.invoke(
+      "terminal-browser:get-cdp-proxy-info",
+      tabId,
+    ) as Promise<TerminalBrowserCdpProxyInfo>,
   terminalBrowserCloseTab: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:close-tab", tabId),
+  onTerminalBrowserTabCreatedFromProxy: (
+    listener: (data: { tabId: string; url: string; title: string }) => void,
+  ) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      data: { tabId: string; url: string; title: string },
+    ) => {
+      listener(data);
+    };
+    ipcRenderer.on("terminal-browser:tab-created-from-proxy", wrapped);
+    return () => {
+      ipcRenderer.off("terminal-browser:tab-created-from-proxy", wrapped);
+    };
+  },
+  onTerminalBrowserTabUpdated: (
+    listener: (data: {
+      tabId: string;
+      url: string;
+      title: string;
+      canGoBack: boolean;
+      canGoForward: boolean;
+      loading: boolean;
+    }) => void,
+  ) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      data: {
+        tabId: string;
+        url: string;
+        title: string;
+        canGoBack: boolean;
+        canGoForward: boolean;
+        loading: boolean;
+      },
+    ) => {
+      listener(data);
+    };
+    ipcRenderer.on("terminal-browser:tab-updated", wrapped);
+    return () => {
+      ipcRenderer.off("terminal-browser:tab-updated", wrapped);
+    };
+  },
+  onTerminalBrowserTabActivatedFromProxy: (
+    listener: (data: {
+      tabId: string;
+      url: string;
+      title: string;
+      canGoBack: boolean;
+      canGoForward: boolean;
+      loading: boolean;
+    }) => void,
+  ) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      data: {
+        tabId: string;
+        url: string;
+        title: string;
+        canGoBack: boolean;
+        canGoForward: boolean;
+        loading: boolean;
+      },
+    ) => {
+      listener(data);
+    };
+    ipcRenderer.on("terminal-browser:tab-activated-from-proxy", wrapped);
+    return () => {
+      ipcRenderer.off("terminal-browser:tab-activated-from-proxy", wrapped);
+    };
+  },
   beep: () => shell.beep(),
 });

@@ -227,6 +227,7 @@ export class TmuxService {
         "-s",
         target.sessionName,
         ...this.buildShellIntegrationEnvArgs(launchCommand),
+        ...this.buildExtraEnvArgs(),
         "-c",
         cwd,
         formatShellCommand(launchCommand),
@@ -481,6 +482,19 @@ export class TmuxService {
       }
       return ["-e", `${key}=${value}`];
     });
+  }
+
+  /**
+   * Inject extra env vars into tmux sessions that may not be present
+   * in the tmux server's cached global environment.
+   */
+  private buildExtraEnvArgs(): string[] {
+    const args: string[] = [];
+    const cdpEndpoint = this.env.PLAYWRIGHT_MCP_CDP_ENDPOINT;
+    if (cdpEndpoint) {
+      args.push("-e", `PLAYWRIGHT_MCP_CDP_ENDPOINT=${cdpEndpoint}`);
+    }
+    return args;
   }
 
   private async runTmux(

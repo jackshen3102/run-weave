@@ -17,3 +17,4 @@ electron/release/
 deploy/nginx/certs/
 deploy/nginx/nginx.local.conf
 deploy/nginx/openssl-san.local.cnf
+.playwright-mcp
