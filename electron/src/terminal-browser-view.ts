@@ -1,4 +1,12 @@
-import { BrowserWindow, ipcMain, shell, WebContentsView } from "electron";
+import {
+  BrowserWindow,
+  ipcMain,
+  shell,
+  WebContentsView,
+  type WebContents,
+} from "electron";
+import { randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
 
 interface TerminalBrowserBounds {
   x: number;
@@ -14,14 +22,39 @@ interface TerminalBrowserSnapshot {
   canGoForward: boolean;
 }
 
+export interface TerminalBrowserUpdate extends TerminalBrowserSnapshot {
+  tabId: string;
+  loading: boolean;
+}
+
+export interface TerminalBrowserTabSnapshot extends TerminalBrowserUpdate {
+  active: boolean;
+  cdpProxyAttached: boolean;
+  devtoolsOpen: boolean;
+}
+
 interface TerminalBrowserEntry {
   windowId: number;
   view: WebContentsView;
   attached: boolean;
+  targetId: string;
+  cdpProxyAttached: boolean;
+  devtoolsOpen: boolean;
+}
+
+export interface TerminalBrowserCdpTarget {
+  key: string;
+  targetId: string;
+  windowId: number;
+  url: string;
+  title: string;
+  webContents: WebContents;
 }
 
 const terminalBrowserEntries = new Map<string, TerminalBrowserEntry>();
 const attachedTerminalBrowserByWindowId = new Map<number, string>();
+
+export const terminalBrowserEvents = new EventEmitter();
 
 function isTerminalBrowserBounds(value: unknown): value is TerminalBrowserBounds {
   if (!value || typeof value !== "object") {
@@ -36,6 +69,9 @@ function isTerminalBrowserBounds(value: unknown): value is TerminalBrowserBounds
 function validateTerminalBrowserUrl(url: string): string | null {
   if (typeof url !== "string") {
     return null;
+  }
+  if (url === "about:blank") {
+    return url;
   }
   try {
     const parsed = new URL(url);
@@ -52,13 +88,51 @@ function getTerminalBrowserKey(win: BrowserWindow, tabId: string): string {
   return `${win.id}:${tabId}`;
 }
 
+function makeKeyFromWindowIdAndTabId(windowId: number, tabId: string): string {
+  return `${windowId}:${tabId}`;
+}
+
 function getTerminalBrowserSnapshot(view: WebContentsView): TerminalBrowserSnapshot {
+  const history = view.webContents.navigationHistory;
   return {
     url: view.webContents.getURL(),
     title: view.webContents.getTitle(),
-    canGoBack: view.webContents.canGoBack(),
-    canGoForward: view.webContents.canGoForward(),
+    canGoBack: history.canGoBack(),
+    canGoForward: history.canGoForward(),
   };
+}
+
+function sendTerminalBrowserTabUpdate(
+  win: BrowserWindow,
+  tabId: string,
+  entry: TerminalBrowserEntry,
+  loading = entry.view.webContents.isLoading(),
+): void {
+  if (win.isDestroyed() || win.webContents.isDestroyed()) {
+    return;
+  }
+  const update: TerminalBrowserUpdate = {
+    tabId,
+    ...getTerminalBrowserSnapshot(entry.view),
+    loading,
+  };
+  win.webContents.send("terminal-browser:tab-updated", update);
+}
+
+function sendTerminalBrowserTabActivatedFromProxy(
+  win: BrowserWindow,
+  tabId: string,
+  entry: TerminalBrowserEntry,
+): void {
+  if (win.isDestroyed() || win.webContents.isDestroyed()) {
+    return;
+  }
+  const update: TerminalBrowserUpdate = {
+    tabId,
+    ...getTerminalBrowserSnapshot(entry.view),
+    loading: entry.view.webContents.isLoading(),
+  };
+  win.webContents.send("terminal-browser:tab-activated-from-proxy", update);
 }
 
 function getExistingTerminalBrowserEntry(
@@ -91,6 +165,11 @@ function getOrCreateTerminalBrowserView(
     },
   });
   view.webContents.setWindowOpenHandler(({ url }) => {
+    // When CDP proxy is attached, deny without opening externally —
+    // Playwright controls navigation via CDP commands.
+    if (entry.cdpProxyAttached) {
+      return { action: "deny" };
+    }
     const safeUrl = validateTerminalBrowserUrl(url);
     if (safeUrl) {
       void shell.openExternal(safeUrl);
@@ -98,7 +177,39 @@ function getOrCreateTerminalBrowserView(
     return { action: "deny" };
   });
   view.setVisible(false);
-  terminalBrowserEntries.set(key, { windowId: win.id, view, attached: false });
+
+  const entry: TerminalBrowserEntry = {
+    windowId: win.id,
+    view,
+    attached: false,
+    targetId: randomUUID(),
+    cdpProxyAttached: false,
+    devtoolsOpen: false,
+  };
+
+  view.webContents.on("devtools-opened", () => {
+    entry.devtoolsOpen = true;
+  });
+  view.webContents.on("devtools-closed", () => {
+    entry.devtoolsOpen = false;
+  });
+  view.webContents.on("did-start-loading", () => {
+    sendTerminalBrowserTabUpdate(win, tabId, entry, true);
+  });
+  view.webContents.on("did-stop-loading", () => {
+    sendTerminalBrowserTabUpdate(win, tabId, entry, false);
+  });
+  view.webContents.on("did-navigate", () => {
+    sendTerminalBrowserTabUpdate(win, tabId, entry);
+  });
+  view.webContents.on("did-navigate-in-page", () => {
+    sendTerminalBrowserTabUpdate(win, tabId, entry);
+  });
+  view.webContents.on("page-title-updated", () => {
+    sendTerminalBrowserTabUpdate(win, tabId, entry);
+  });
+
+  terminalBrowserEntries.set(key, entry);
   return view;
 }
 
@@ -147,6 +258,7 @@ function closeTerminalBrowserEntry(win: BrowserWindow, tabId: string): void {
     win.contentView.removeChildView(entry.view);
   }
   terminalBrowserEntries.delete(key);
+  terminalBrowserEvents.emit("tab-closed", { targetId: entry.targetId });
   entry.view.webContents.close();
 }
 
@@ -157,8 +269,10 @@ export function closeTerminalBrowsersForWindow(windowId: number): void {
       continue;
     }
     terminalBrowserEntries.delete(key);
+    terminalBrowserEvents.emit("tab-closed", { targetId: entry.targetId });
     entry.view.webContents.close();
   }
+  terminalBrowserEvents.emit("window-closed", { windowId });
 }
 
 function clampTerminalBrowserBounds(
@@ -176,7 +290,153 @@ function clampTerminalBrowserBounds(
   };
 }
 
+export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
+  const targets: TerminalBrowserCdpTarget[] = [];
+  for (const [key, entry] of terminalBrowserEntries) {
+    targets.push({
+      key,
+      targetId: entry.targetId,
+      windowId: entry.windowId,
+      url: entry.view.webContents.getURL(),
+      title: entry.view.webContents.getTitle(),
+      webContents: entry.view.webContents,
+    });
+  }
+  return targets;
+}
+
+export function getTerminalBrowserEntryByTargetId(
+  targetId: string,
+): { key: string; entry: TerminalBrowserEntry } | null {
+  for (const [key, entry] of terminalBrowserEntries) {
+    if (entry.targetId === targetId) {
+      return { key, entry };
+    }
+  }
+  return null;
+}
+
+export function getTerminalBrowserEntryByKey(
+  key: string,
+): TerminalBrowserEntry | null {
+  return terminalBrowserEntries.get(key) ?? null;
+}
+
+export function getTerminalBrowserTabsForWindow(
+  windowId: number,
+): TerminalBrowserTabSnapshot[] {
+  const activeTabId = attachedTerminalBrowserByWindowId.get(windowId) ?? null;
+  const prefix = `${windowId}:`;
+  const tabs: TerminalBrowserTabSnapshot[] = [];
+  for (const [key, entry] of terminalBrowserEntries) {
+    if (entry.windowId !== windowId || !key.startsWith(prefix)) {
+      continue;
+    }
+    const tabId = key.slice(prefix.length);
+    tabs.push({
+      tabId,
+      ...getTerminalBrowserSnapshot(entry.view),
+      loading: entry.view.webContents.isLoading(),
+      active: activeTabId === tabId,
+      cdpProxyAttached: entry.cdpProxyAttached,
+      devtoolsOpen: entry.devtoolsOpen,
+    });
+  }
+  return tabs;
+}
+
+export async function createTerminalBrowserTabFromProxy(
+  windowId: number,
+  url: string,
+): Promise<{ key: string; targetId: string; webContents: WebContents } | null> {
+  const win = BrowserWindow.fromId(windowId);
+  if (!win) {
+    return null;
+  }
+  const tabId = `ai-tab-${randomUUID().slice(0, 8)}`;
+  const view = getOrCreateTerminalBrowserView(win, tabId);
+  const key = makeKeyFromWindowIdAndTabId(windowId, tabId);
+  const entry = terminalBrowserEntries.get(key);
+  if (!entry) {
+    return null;
+  }
+
+  attachTerminalBrowser(win, tabId, view);
+
+  const safeUrl = validateTerminalBrowserUrl(url);
+  if (safeUrl) {
+    const load = view.webContents.loadURL(safeUrl);
+    if (safeUrl === "about:blank") {
+      await load;
+    } else {
+      void load.catch(() => {
+        // The proxy target remains usable even if the initial navigation fails.
+      });
+    }
+  }
+
+  // Notify the renderer so the frontend tab bar picks up the new tab.
+  win.webContents.send("terminal-browser:tab-created-from-proxy", {
+    tabId,
+    url: safeUrl ?? url,
+    title: "",
+  });
+
+  return { key, targetId: entry.targetId, webContents: view.webContents };
+}
+
+export function closeTerminalBrowserTabFromProxy(targetId: string): boolean {
+  const found = getTerminalBrowserEntryByTargetId(targetId);
+  if (!found) {
+    return false;
+  }
+  const parts = found.key.split(":");
+  const windowId = Number(parts[0]);
+  const tabId = parts.slice(1).join(":");
+  const win = BrowserWindow.fromId(windowId);
+  if (!win) {
+    return false;
+  }
+  closeTerminalBrowserEntry(win, tabId);
+  return true;
+}
+
+export function activateTerminalBrowserTabFromProxy(targetId: string): boolean {
+  const found = getTerminalBrowserEntryByTargetId(targetId);
+  if (!found) {
+    return false;
+  }
+  const parts = found.key.split(":");
+  const windowId = Number(parts[0]);
+  const tabId = parts.slice(1).join(":");
+  const win = BrowserWindow.fromId(windowId);
+  if (!win) {
+    return false;
+  }
+  attachTerminalBrowser(win, tabId, found.entry.view);
+  sendTerminalBrowserTabActivatedFromProxy(win, tabId, found.entry);
+  return true;
+}
+
+export function setTerminalBrowserCdpProxyAttached(
+  targetId: string,
+  attached: boolean,
+): void {
+  const found = getTerminalBrowserEntryByTargetId(targetId);
+  if (found) {
+    found.entry.cdpProxyAttached = attached;
+  }
+}
+
 export function registerTerminalBrowserHandlers(): void {
+  ipcMain.handle("terminal-browser:list-tabs", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) {
+      return [];
+    }
+    return getTerminalBrowserTabsForWindow(win.id);
+  });
+
   ipcMain.handle("terminal-browser:show", (event, tabId: string) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || typeof tabId !== "string") {
@@ -239,8 +499,8 @@ export function registerTerminalBrowserHandlers(): void {
         throw new Error("Invalid browser history request");
       }
       const { view } = getExistingTerminalBrowserEntry(win, tabId, "go back");
-      if (view.webContents.canGoBack()) {
-        view.webContents.goBack();
+      if (view.webContents.navigationHistory.canGoBack()) {
+        view.webContents.navigationHistory.goBack();
       }
       return getTerminalBrowserSnapshot(view);
     },
@@ -254,8 +514,8 @@ export function registerTerminalBrowserHandlers(): void {
         throw new Error("Invalid browser history request");
       }
       const { view } = getExistingTerminalBrowserEntry(win, tabId, "go forward");
-      if (view.webContents.canGoForward()) {
-        view.webContents.goForward();
+      if (view.webContents.navigationHistory.canGoForward()) {
+        view.webContents.navigationHistory.goForward();
       }
       return getTerminalBrowserSnapshot(view);
     },
@@ -290,7 +550,15 @@ export function registerTerminalBrowserHandlers(): void {
       return;
     }
     const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, tabId));
-    entry?.view.webContents.openDevTools({ mode: "detach" });
+    if (!entry) {
+      return;
+    }
+    if (entry.cdpProxyAttached) {
+      throw new Error(
+        "Cannot open DevTools while CDP proxy is attached to this tab",
+      );
+    }
+    entry.view.webContents.openDevTools({ mode: "detach" });
   });
 
   ipcMain.handle("terminal-browser:close-tab", (event, tabId: string) => {

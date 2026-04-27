@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
+  TerminalBrowserCdpProxyInfo,
 } from "@browser-viewer/shared";
 import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
@@ -38,6 +39,14 @@ interface TerminalBrowserSnapshot {
   canGoForward: boolean;
 }
 
+interface TerminalBrowserTabSnapshot extends TerminalBrowserSnapshot {
+  tabId: string;
+  loading: boolean;
+  active: boolean;
+  cdpProxyAttached: boolean;
+  devtoolsOpen: boolean;
+}
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -57,6 +66,7 @@ declare global {
         tabId: string,
         url: string,
       ) => Promise<TerminalBrowserSnapshot>;
+      terminalBrowserListTabs?: () => Promise<TerminalBrowserTabSnapshot[]>;
       terminalBrowserReload?: (tabId: string) => Promise<TerminalBrowserSnapshot>;
       terminalBrowserStop?: (tabId: string) => Promise<void>;
       terminalBrowserGoBack?: (tabId: string) => Promise<TerminalBrowserSnapshot>;
@@ -70,7 +80,23 @@ declare global {
         bounds: TerminalBrowserBounds | null,
       ) => Promise<void>;
       terminalBrowserOpenDevTools?: (tabId: string) => Promise<void>;
+      terminalBrowserGetCdpProxyInfo?: (
+        tabId: string,
+      ) => Promise<TerminalBrowserCdpProxyInfo>;
       terminalBrowserCloseTab?: (tabId: string) => Promise<void>;
+      onTerminalBrowserTabCreatedFromProxy?: (
+        listener: (data: { tabId: string; url: string; title: string }) => void,
+      ) => () => void;
+      onTerminalBrowserTabUpdated?: (
+        listener: (
+          data: TerminalBrowserSnapshot & { tabId: string; loading: boolean },
+        ) => void,
+      ) => () => void;
+      onTerminalBrowserTabActivatedFromProxy?: (
+        listener: (
+          data: TerminalBrowserSnapshot & { tabId: string; loading: boolean },
+        ) => void,
+      ) => () => void;
     };
   }
 }

@@ -14,8 +14,18 @@ import path from "node:path";
 import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
+  TerminalBrowserCdpProxyInfo,
 } from "@browser-viewer/shared";
 import { resolveProtocolFilePath } from "./protocol-path.js";
+import {
+  startCdpProxy,
+  type CdpProxyRuntime,
+} from "./terminal-browser-cdp-proxy.js";
+import {
+  resolveCdpProxyPort,
+  findAvailableCdpProxyPort,
+  CDP_PROXY_HOST,
+} from "./terminal-browser-cdp-proxy-port.js";
 import {
   startPackagedBackend,
   type PackagedBackendRuntime,
@@ -38,6 +48,8 @@ import { shouldAutoOpenWindowDevtools } from "./window-devtools.js";
 import {
   closeTerminalBrowsersForWindow,
   registerTerminalBrowserHandlers,
+  getTerminalBrowserEntryByTargetId,
+  getTerminalBrowserCdpTargets,
 } from "./terminal-browser-view.js";
 
 const isDev = !app.isPackaged;
@@ -231,6 +243,7 @@ function setupSessionIntercept(win: BrowserWindow) {
 app.commandLine.appendSwitch("ignore-certificate-errors");
 
 let packagedBackendRuntime: PackagedBackendRuntime | null = null;
+let cdpProxyRuntime: CdpProxyRuntime | null = null;
 let mainWindow: BrowserWindow | null = null;
 let packagedBackendState: PackagedBackendConnectionState = {
   kind: "packaged-local",
@@ -362,6 +375,51 @@ function registerPackagedBackendHandlers(): void {
   );
 }
 
+function registerCdpProxyHandlers(): void {
+  ipcMain.handle(
+    "terminal-browser:get-cdp-proxy-info",
+    (_event, tabId: string): TerminalBrowserCdpProxyInfo => {
+      const proxy = cdpProxyRuntime;
+      const targets = getTerminalBrowserCdpTargets();
+      const match = targets.find((t) => t.key.endsWith(`:${tabId}`));
+      const found = match
+        ? getTerminalBrowserEntryByTargetId(match.targetId)
+        : null;
+
+      if (!proxy) {
+        return {
+          available: false,
+          endpoint: null,
+          port: null,
+          host: "127.0.0.1",
+          tabId,
+          targetId: null,
+          url: "",
+          title: "",
+          attached: false,
+          devtoolsOpen: false,
+          env: null,
+          error: "CDP proxy is not running",
+        };
+      }
+
+      return {
+        available: true,
+        endpoint: proxy.endpoint,
+        port: proxy.port,
+        host: "127.0.0.1",
+        tabId,
+        targetId: match?.targetId ?? null,
+        url: match?.url ?? "",
+        title: match?.title ?? "",
+        attached: found?.entry.cdpProxyAttached ?? false,
+        devtoolsOpen: found?.entry.devtoolsOpen ?? false,
+        env: { PLAYWRIGHT_MCP_CDP_ENDPOINT: proxy.endpoint },
+      };
+    },
+  );
+}
+
 app.whenReady().then(async () => {
   try {
     setApplicationIcon();
@@ -369,6 +427,42 @@ app.whenReady().then(async () => {
     registerPackagedBackendHandlers();
     registerRuntimeStatsHandler(() => packagedBackendRuntime);
     registerTerminalBrowserHandlers();
+    registerCdpProxyHandlers();
+
+    const portConfig = resolveCdpProxyPort(process.env);
+    const cdpProxyPort = portConfig.strict
+      ? portConfig.port
+      : await findAvailableCdpProxyPort(portConfig.port);
+    cdpProxyRuntime = await startCdpProxy({
+      host: CDP_PROXY_HOST,
+      port: cdpProxyPort,
+    });
+    process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT = cdpProxyRuntime.endpoint;
+
+    if (isDev) {
+      // In dev mode, backend is an independent process started before Electron.
+      // Notify it of the CDP proxy endpoint so PTY terminals inherit the env var.
+      const backendUrl = process.env.BROWSER_VIEWER_BACKEND_URL;
+      if (backendUrl) {
+        try {
+          const resp = await net.fetch(`${backendUrl}/internal/cdp-endpoint`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: cdpProxyRuntime.endpoint }),
+          });
+          if (!resp.ok) {
+            console.warn("[electron] failed to propagate CDP endpoint to backend", {
+              status: resp.status,
+            });
+          }
+        } catch (error) {
+          console.warn("[electron] failed to propagate CDP endpoint to backend", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+
     if (!isDev) {
       registerCustomProtocol();
       await startPackagedBackendRuntime();
@@ -419,6 +513,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   setIsQuitting(true);
+  void cdpProxyRuntime?.stop();
   void packagedBackendRuntime?.stop();
 });
 

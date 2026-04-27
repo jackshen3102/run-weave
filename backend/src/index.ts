@@ -210,6 +210,19 @@ function createHttpApp(services: RuntimeServices): express.Express {
     res.json({ status: "ok" });
   });
 
+  // Internal endpoint for Electron to propagate CDP proxy endpoint in dev mode.
+  // In production, the env is inherited via child process spawn.
+  app.put("/internal/cdp-endpoint", (req, res) => {
+    const { endpoint } = req.body as { endpoint?: string };
+    if (typeof endpoint === "string" && endpoint) {
+      process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT = endpoint;
+      console.info("[viewer-be] CDP endpoint set via internal API", { endpoint });
+      res.json({ ok: true });
+    } else {
+      res.status(400).json({ error: "endpoint required" });
+    }
+  });
+
   app.use("/test", createTestRouter());
   app.use(
     "/api/auth",

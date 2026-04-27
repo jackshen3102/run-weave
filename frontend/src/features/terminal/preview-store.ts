@@ -17,6 +17,8 @@ export interface TerminalBrowserTabState {
   canGoBack: boolean;
   canGoForward: boolean;
   error?: string;
+  cdpProxyAttached?: boolean;
+  devtoolsOpen?: boolean;
 }
 
 export const DEFAULT_MARKDOWN_VIEW_MODE: TerminalMarkdownViewMode = "preview";
@@ -60,6 +62,7 @@ interface TerminalPreviewStore {
   ) => void;
   removeProjectPreview: (projectId: string) => void;
   createBrowserTab: (url?: string) => void;
+  addProxyBrowserTab: (tabId: string, url: string, title: string) => void;
   closeBrowserTab: (tabId: string) => void;
   setActiveBrowserTab: (tabId: string) => void;
   updateBrowserTab: (
@@ -176,6 +179,28 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
   createBrowserTab: (url?: string) => {
     set((state: TerminalPreviewStore) => {
       const nextTab = createBrowserTabState(url);
+      return {
+        browser: {
+          tabs: [...state.browser.tabs, nextTab],
+          activeTabId: nextTab.id,
+        },
+      };
+    });
+  },
+  addProxyBrowserTab: (tabId: string, url: string, title: string) => {
+    set((state: TerminalPreviewStore) => {
+      if (state.browser.tabs.some((tab) => tab.id === tabId)) {
+        return state;
+      }
+      const nextTab: TerminalBrowserTabState = {
+        id: tabId,
+        url,
+        addressInput: url,
+        title: title || labelBrowserUrl(url),
+        loading: false,
+        canGoBack: false,
+        canGoForward: false,
+      };
       return {
         browser: {
           tabs: [...state.browser.tabs, nextTab],
