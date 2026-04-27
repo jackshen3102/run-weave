@@ -1101,9 +1101,6 @@ export function TerminalWorkspace({
                       onMetadata={(metadata) => {
                         handleSessionMetadata(session.terminalSessionId, metadata);
                       }}
-                      onOpenHistory={() => {
-                        openHistoryDrawer(session.terminalSessionId);
-                      }}
                     />
                   </div>
                 );

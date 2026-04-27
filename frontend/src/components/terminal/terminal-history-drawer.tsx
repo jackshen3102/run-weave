@@ -11,7 +11,7 @@ import {
   writeTerminalHistoryOutput,
 } from "../../features/terminal/history-output";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
-import { loadTerminalPreferences } from "../../features/terminal/preferences";
+import { DEFAULT_TERMINAL_PREFERENCES } from "../../features/terminal/preferences";
 import { HttpError } from "../../services/http";
 import { getTerminalHistory } from "../../services/terminal";
 import {
@@ -127,7 +127,7 @@ export function TerminalHistoryDrawer({
       return;
     }
 
-    const preferences = loadTerminalPreferences(apiBase);
+    const preferences = DEFAULT_TERMINAL_PREFERENCES;
     const fitAddon = new FitAddon();
     const unicode11Addon = new Unicode11Addon();
     let canvasAddon: CanvasAddon | null = null;
@@ -216,7 +216,6 @@ export function TerminalHistoryDrawer({
       terminal.dispose();
     };
   }, [
-    apiBase,
     history?.scrollback,
     history?.scrollbackSourceCols,
     open,

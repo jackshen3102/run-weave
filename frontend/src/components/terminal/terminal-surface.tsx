@@ -7,21 +7,16 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
-import { Settings2 } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 import {
   containsTerminalActivityContent,
   shouldEmitTerminalActivityPulse,
   shouldMarkTerminalActivity,
 } from "../../features/terminal/activity-marker";
-import { createTerminalBellPlayer } from "../../features/terminal/bell";
 import type { ClientMode } from "../../features/client-mode";
 import {
   DEFAULT_TERMINAL_PREFERENCES,
-  type TerminalPreferences,
   type TerminalRendererPreference,
-  loadTerminalPreferences,
-  saveTerminalPreferences,
 } from "../../features/terminal/preferences";
 import {
   logTerminalPerf,
@@ -40,17 +35,6 @@ import {
   createTerminalSessionClipboardImage,
   getTerminalSession,
 } from "../../services/terminal";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
 import { TerminalMobileKeybar } from "./terminal-mobile-keybar";
 
 interface TerminalSurfaceProps {
@@ -64,7 +48,6 @@ interface TerminalSurfaceProps {
   onActivity?: () => void;
   onBell?: () => void;
   onMetadata?: (metadata: { cwd: string; activeCommand: string | null }) => void;
-  onOpenHistory?: () => void;
 }
 
 interface PastedImageReference {
@@ -88,16 +71,12 @@ const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
 );
 const FOCUS_REPORTING_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[(?:I|O)$`);
 const TERMINAL_RESIZE_DEBOUNCE_MS = 120;
-const MIN_TERMINAL_FONT_SIZE = 11;
-const MAX_TERMINAL_FONT_SIZE = 24;
 const DEFERRED_OUTPUT_REPLAY_MAX_CHARS = 128 * 1024;
 
 interface TerminalSearchResults {
   resultCount: number;
   resultIndex: number;
 }
-
-type ActiveRenderer = "webgl" | "canvas" | "dom";
 
 function recordTerminalPerfProbeEvent(
   event: string,
@@ -128,10 +107,6 @@ function recordTerminalPerfProbeEvent(
       probeText,
     },
   });
-}
-
-function clampTerminalFontSize(value: number): number {
-  return Math.max(MIN_TERMINAL_FONT_SIZE, Math.min(MAX_TERMINAL_FONT_SIZE, value));
 }
 
 function isTerminalAutoResponse(data: string): boolean {
@@ -233,7 +208,6 @@ export function TerminalSurface({
   onActivity,
   onBell,
   onMetadata,
-  onOpenHistory,
 }: TerminalSurfaceProps) {
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -244,10 +218,6 @@ export function TerminalSurface({
   const refreshTerminalViewportRef = useRef<(() => void) | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const applyRendererPreferenceRef = useRef<
-    ((preference: TerminalRendererPreference) => void) | null
-  >(null);
-  const bellPlayerRef = useRef(createTerminalBellPlayer());
   const activeRef = useRef(active);
   const onActivityRef = useRef(onActivity);
   const onBellRef = useRef(onBell);
@@ -272,13 +242,6 @@ export function TerminalSurface({
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<PastedImageReference[]>([]);
-  const [preferences, setPreferences] = useState<TerminalPreferences>(() =>
-    loadTerminalPreferences(apiBase),
-  );
-  const preferencesRef = useRef(preferences);
-  const [effectiveRenderer, setEffectiveRenderer] =
-    useState<ActiveRenderer>("dom");
-  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [mobileKeybarOpen, setMobileKeybarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -535,13 +498,6 @@ export function TerminalSurface({
     searchAddonRef.current?.clearActiveDecoration();
   }, []);
 
-  const updatePreferences = useCallback(
-    (updates: Partial<TerminalPreferences>) => {
-      setPreferences(saveTerminalPreferences(apiBase, updates));
-    },
-    [apiBase],
-  );
-
   const runSearch = useCallback(
     (direction: "next" | "previous", query = searchQuery) => {
       if (!query) {
@@ -608,20 +564,12 @@ export function TerminalSurface({
   }, [runtimeKind]);
 
   useEffect(() => {
-    setPreferences(loadTerminalPreferences(apiBase));
-  }, [apiBase]);
-
-  useEffect(() => {
-    preferencesRef.current = preferences;
-  }, [preferences]);
-
-  useEffect(() => {
     const container = terminalContainerRef.current;
     if (!container) {
       return;
     }
 
-    const initialPreferences = preferencesRef.current;
+    const initialPreferences = DEFAULT_TERMINAL_PREFERENCES;
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
     const unicode11Addon = new Unicode11Addon();
@@ -694,10 +642,8 @@ export function TerminalSurface({
           const canvas = new CanvasAddon();
           terminal.loadAddon(canvas);
           rendererAddon = canvas;
-          setEffectiveRenderer("canvas");
           return true;
         } catch {
-          setEffectiveRenderer("dom");
           return false;
         }
       };
@@ -708,16 +654,12 @@ export function TerminalSurface({
           webgl.onContextLoss(() => {
             webgl.dispose();
             if (allowCanvasFallback) {
-              if (!loadCanvas()) {
-                setEffectiveRenderer("dom");
-              }
+              loadCanvas();
               return;
             }
-            setEffectiveRenderer("dom");
           });
           terminal.loadAddon(webgl);
           rendererAddon = webgl;
-          setEffectiveRenderer("webgl");
           return true;
         } catch {
           if (allowCanvasFallback) {
@@ -728,7 +670,6 @@ export function TerminalSurface({
       };
 
       if (preference === "dom") {
-        setEffectiveRenderer("dom");
         return;
       }
 
@@ -742,11 +683,8 @@ export function TerminalSurface({
         return;
       }
 
-      if (!loadWebgl(true)) {
-        setEffectiveRenderer("dom");
-      }
+      loadWebgl(true);
     };
-    applyRendererPreferenceRef.current = applyRendererPreference;
     applyRendererPreference(initialPreferences.renderer);
 
     const syncSize = () => {
@@ -770,7 +708,7 @@ export function TerminalSurface({
       TERMINAL_RESIZE_DEBOUNCE_MS,
     );
     const selectionDisposable = terminal.onSelectionChange(() => {
-      if (!preferencesRef.current.copyOnSelect) {
+      if (!DEFAULT_TERMINAL_PREFERENCES.copyOnSelect) {
         return;
       }
 
@@ -801,9 +739,6 @@ export function TerminalSurface({
     const bellDisposable = terminal.onBell(() => {
       if (!activeRef.current) {
         onBellRef.current?.();
-      }
-      if (preferencesRef.current.bellMode === "sound") {
-        bellPlayerRef.current.play();
       }
     });
 
@@ -964,7 +899,6 @@ export function TerminalSurface({
       terminalRef.current = null;
       refreshTerminalViewportRef.current = null;
       searchAddonRef.current = null;
-      applyRendererPreferenceRef.current = null;
     };
   }, [
     apiBase,
@@ -1001,20 +935,6 @@ export function TerminalSurface({
       cancelled = true;
     };
   }, [apiBase, terminalSessionId, token]);
-
-  useEffect(() => {
-    const terminal = terminalRef.current;
-    if (!terminal) {
-      return;
-    }
-
-    terminal.options.fontFamily = preferences.fontFamily;
-    terminal.options.fontSize = preferences.fontSize;
-    terminal.options.cursorBlink = preferences.cursorBlink;
-    terminal.options.screenReaderMode = preferences.screenReaderMode;
-    applyRendererPreferenceRef.current?.(preferences.renderer);
-    refreshTerminalViewportRef.current?.();
-  }, [preferences]);
 
   useEffect(() => {
     if (!active || !terminalRef.current) {
@@ -1177,7 +1097,6 @@ export function TerminalSurface({
     }
 
     setSearchOpen(false);
-    setSettingsMenuOpen(false);
   }, [clientMode]);
 
   useEffect(() => {
@@ -1314,154 +1233,15 @@ export function TerminalSurface({
                 </button>
               </div>
             ) : (
-              <>
-                <DropdownMenu
-                  open={settingsMenuOpen}
-                  onOpenChange={setSettingsMenuOpen}
-                >
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-950/90 px-3 py-1.5 text-[11px] text-slate-300 backdrop-blur hover:border-slate-500"
-                    >
-                      <Settings2 className="h-3.5 w-3.5" />
-                      Terminal
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    className="max-h-[var(--radix-dropdown-menu-content-available-height)] w-64 overflow-y-auto overscroll-contain"
-                  >
-                    <DropdownMenuLabel>Terminal Settings</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-[11px] text-slate-500">
-                      Font Size {preferences.fontSize}px
-                    </DropdownMenuLabel>
-                    <div className="flex items-center gap-2 px-2 py-1.5">
-                      <button
-                        type="button"
-                        className="flex-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
-                        onClick={() => {
-                          updatePreferences({
-                            fontSize: clampTerminalFontSize(preferences.fontSize - 1),
-                          });
-                        }}
-                      >
-                        Smaller
-                      </button>
-                      <button
-                        type="button"
-                        className="flex-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
-                        onClick={() => {
-                          updatePreferences({
-                            fontSize: clampTerminalFontSize(preferences.fontSize + 1),
-                          });
-                        }}
-                      >
-                        Larger
-                      </button>
-                    </div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-[11px] text-slate-500">
-                      Font Family
-                    </DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={preferences.fontFamily}
-                      onValueChange={(value) => {
-                        updatePreferences({
-                          fontFamily: value as TerminalPreferences["fontFamily"],
-                        });
-                      }}
-                    >
-                      <DropdownMenuRadioItem value={DEFAULT_TERMINAL_PREFERENCES.fontFamily}>
-                        Fira Code
-                      </DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value={'"JetBrains Mono", "SFMono-Regular", ui-monospace, monospace'}>
-                        JetBrains Mono
-                      </DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value={'"SFMono-Regular", ui-monospace, monospace'}>
-                        SF Mono
-                      </DropdownMenuRadioItem>
-                    </DropdownMenuRadioGroup>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-[11px] text-slate-500">
-                      Renderer {effectiveRenderer.toUpperCase()}
-                    </DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={preferences.renderer}
-                      onValueChange={(value) => {
-                        updatePreferences({
-                          renderer: value as TerminalRendererPreference,
-                        });
-                      }}
-                    >
-                      <DropdownMenuRadioItem value="auto">Auto</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="webgl">WebGL</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="canvas">Canvas</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="dom">DOM</DropdownMenuRadioItem>
-                    </DropdownMenuRadioGroup>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuCheckboxItem
-                      checked={preferences.bellMode === "sound"}
-                      onCheckedChange={(checked) => {
-                        updatePreferences({
-                          bellMode: checked === true ? "sound" : "off",
-                        });
-                        if (checked === true) {
-                          void bellPlayerRef.current.play();
-                        }
-                      }}
-                    >
-                      Bell Sound
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={preferences.cursorBlink}
-                      onCheckedChange={(checked) => {
-                        updatePreferences({ cursorBlink: checked === true });
-                      }}
-                    >
-                      Cursor Blink
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={preferences.copyOnSelect}
-                      onCheckedChange={(checked) => {
-                        updatePreferences({ copyOnSelect: checked === true });
-                      }}
-                    >
-                      Copy On Select
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={preferences.screenReaderMode}
-                      onCheckedChange={(checked) => {
-                        updatePreferences({ screenReaderMode: checked === true });
-                      }}
-                    >
-                      Screen Reader Mode
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onSelect={(event) => {
-                        event.preventDefault();
-                        setSettingsMenuOpen(false);
-                        requestAnimationFrame(() => {
-                          onOpenHistory?.();
-                        });
-                      }}
-                    >
-                      View History
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <button
-                  type="button"
-                  className="pointer-events-auto rounded-full border border-slate-700 bg-slate-950/90 px-3 py-1.5 text-[11px] text-slate-300 backdrop-blur hover:border-slate-500"
-                  onClick={() => {
-                    setSearchOpen(true);
-                  }}
-                >
-                  Find
-                </button>
-              </>
+              <button
+                type="button"
+                className="pointer-events-auto rounded-full border border-slate-700 bg-slate-950/90 px-3 py-1.5 text-[11px] text-slate-300 backdrop-blur hover:border-slate-500"
+                onClick={() => {
+                  setSearchOpen(true);
+                }}
+              >
+                Find
+              </button>
             )}
           </div>
         ) : null}
