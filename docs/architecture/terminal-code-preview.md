@@ -41,6 +41,19 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - 后端已经把 `.md` / `.mdx` 识别为 `language: "markdown"`。因此 Markdown 预览不需要新增文件读取 API，属于前端渲染层能力。
 - 当前后端还没有把独立 `.svg` 文件识别成可渲染预览类型；SVG 文件预览需要在后端语言识别和前端 file mode 渲染层补齐。
 
+Terminal Browser 工具当前边界：
+
+- Browser 工具挂在 Preview 面板外壳内，是 Terminal Workspace 的本地 sidecar，不是后端 viewer session，也不是 `/ws/ai-bridge`。
+- Electron 桌面端用 `WebContentsView` 承载 Browser tab，tab 生命周期和可见区域由主进程管理，前端只同步 tab 状态、地址栏、工具栏和面板布局。
+- Web/PWA 模式不提供本地 Electron Browser，也不展示 CDP endpoint。
+- Browser tab 只允许 `http:`、`https:` 和 `about:blank` 导航；页面发起的新窗口会被收口成 Browser 工具内的新 tab 或被拒绝。
+- CDP Proxy 只监听 `127.0.0.1`，默认从 `9224` 开始找可用端口，并通过 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 传给 Runweave terminal 里的子进程。
+- 如果显式设置 `BROWSER_VIEWER_TERMINAL_BROWSER_CDP_PROXY_PORT`，端口必须是合法端口且不自动漂移；非法值会让 Electron 启动失败并给出明确错误。
+- CDP Proxy 暴露的是自研 browser-level endpoint，不开启 Electron 全局 `remote-debugging-port`，也不暴露 Runweave 主窗口 renderer、DevTools target 或后端 viewer session。
+- Playwright MCP / Playwright CLI 通过 `chromium.connectOverCDP(...)` 连接 Proxy 后，只能发现和操作 Terminal Browser tab。`Target.createTarget` 创建的是 Browser 工具内 AI tab，当前上限为 10；CDP 连接上限为 8。
+- Proxy 负责 target/session 仿真、frame id 重写、导航参数校验、危险命令拦截和 DevTools 状态隔离。`Browser.close`、`Browser.crash`、清 cookie/cache/origin storage、忽略 HTTPS 错误等命令不能影响用户主窗口或真实 profile。
+- Browser 工具的 CDP 能力是桌面端本机自动化边界，不是远端协作协议；不要把 endpoint 持久化到项目数据或对公网暴露。
+
 设计结论：
 
 - 预览面板应挂在 `TerminalWorkspace` 的内容区布局中。
