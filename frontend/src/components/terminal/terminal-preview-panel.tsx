@@ -223,10 +223,13 @@ export function TerminalPreviewPanel({
     [apiBase, handleRequestError, projectId, token],
   );
 
-  const loadChanges = useCallback(async (): Promise<void> => {
+  const loadChanges = useCallback(async (options?: {
+    reloadDiff?: boolean;
+  }): Promise<void> => {
     if (!projectId) {
       return;
     }
+    const reloadDiff = options?.reloadDiff ?? true;
     const requestId = changesRequestIdRef.current + 1;
     changesRequestIdRef.current = requestId;
     setChangesLoading(true);
@@ -270,7 +273,9 @@ export function TerminalPreviewPanel({
         });
         return;
       }
-      void loadDiff(selected.path, selected.kind);
+      if (reloadDiff) {
+        void loadDiff(selected.path, selected.kind);
+      }
     } catch (error) {
       if (changesRequestIdRef.current !== requestId) {
         return;
@@ -310,6 +315,13 @@ export function TerminalPreviewPanel({
   }, [selectedChangeKind, selectedChangePath]);
 
   useEffect(() => {
+    if (!projectId || !hasProjectPath || mode) {
+      return;
+    }
+    updateProjectPreview(projectId, { mode: "changes" });
+  }, [hasProjectPath, mode, projectId, updateProjectPreview]);
+
+  useEffect(() => {
     if (mode !== "file" || !selectedFilePath) {
       return;
     }
@@ -327,7 +339,10 @@ export function TerminalPreviewPanel({
     if (mode !== "changes" || !hasProjectPath || !projectId) {
       return;
     }
-    void loadChanges();
+    void loadChanges({
+      reloadDiff:
+        !selectedChangePathRef.current || !selectedChangeKindRef.current,
+    });
   }, [hasProjectPath, loadChanges, mode, projectId]);
 
   useEffect(() => {
@@ -340,7 +355,6 @@ export function TerminalPreviewPanel({
   useEffect(() => {
     if (
       mode !== "file" ||
-      selectedFilePath ||
       !projectId ||
       absoluteInput
     ) {
@@ -385,7 +399,6 @@ export function TerminalPreviewPanel({
     mode,
     projectId,
     query,
-    selectedFilePath,
     token,
   ]);
 
@@ -539,6 +552,11 @@ export function TerminalPreviewPanel({
       body={body}
       onStartResize={startResize}
       onSetActiveTool={setActiveTool}
+      onSetPreviewMode={(nextMode) => {
+        if (projectId) {
+          updateProjectPreview(projectId, { mode: nextMode });
+        }
+      }}
       onToggleExpanded={() => setExpanded(!expanded)}
       onRefresh={refresh}
       onCopyPath={copyPath}
@@ -546,16 +564,6 @@ export function TerminalPreviewPanel({
       onSetMarkdownViewMode={setMarkdownViewMode}
       onSetSvgViewMode={setSvgViewMode}
       onSetChangesViewMode={setChangesViewMode}
-      onOpenAnother={() => {
-        if (projectId) {
-          updateProjectPreview(projectId, {
-            mode: "file",
-            selectedFilePath: undefined,
-          });
-          setFilePreview(null);
-          setFileError(null);
-        }
-      }}
     />
   );
 }

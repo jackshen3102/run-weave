@@ -28,6 +28,8 @@ import {
   summarizeTerminalChunk,
 } from "../../features/terminal/perf-logging";
 import { filterBrowserHandledTerminalOutput } from "../../features/terminal/output-filter";
+import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
+import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { createResizeScheduler } from "../../features/terminal/resize-scheduler";
 import { buildTmuxScrollInput, shouldThrottleTmuxScroll } from "../../features/terminal/tmux-scroll";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
@@ -235,6 +237,10 @@ export function TerminalSurface({
 }: TerminalSurfaceProps) {
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const createBrowserTab = useTerminalPreviewStore(
+    (state) => state.createBrowserTab,
+  );
+  const openBrowser = useTerminalPreviewStore((state) => state.openBrowser);
   const refreshTerminalViewportRef = useRef<(() => void) | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -246,6 +252,7 @@ export function TerminalSurface({
   const onActivityRef = useRef(onActivity);
   const onBellRef = useRef(onBell);
   const onAuthExpiredRef = useRef(onAuthExpired);
+  const openTerminalLinkRef = useRef<(uri: string) => void>(() => undefined);
   const onMetadataRef = useRef(onMetadata);
   const tokenRef = useRef(token);
   const runtimeKindRef = useRef<"tmux" | "pty" | null>(null);
@@ -574,6 +581,22 @@ export function TerminalSurface({
   }, [onAuthExpired]);
 
   useEffect(() => {
+    openTerminalLinkRef.current = (uri: string): void => {
+      if (window.electronAPI?.isElectron !== true) {
+        window.open(uri, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      const nextUrl = normalizeTerminalBrowserUrl(uri);
+      if (!nextUrl.ok) {
+        return;
+      }
+      createBrowserTab(nextUrl.url);
+      openBrowser();
+    };
+  }, [createBrowserTab, openBrowser]);
+
+  useEffect(() => {
     onMetadataRef.current = onMetadata;
   }, [onMetadata]);
 
@@ -628,11 +651,7 @@ export function TerminalSurface({
     terminal.loadAddon(
       new WebLinksAddon((event, uri) => {
         event.preventDefault();
-        if (window.electronAPI?.openExternal) {
-          void window.electronAPI.openExternal(uri);
-          return;
-        }
-        window.open(uri, "_blank", "noopener,noreferrer");
+        openTerminalLinkRef.current(uri);
       }),
     );
     terminal.open(container);

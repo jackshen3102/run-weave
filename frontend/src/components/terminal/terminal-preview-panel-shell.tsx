@@ -25,6 +25,7 @@ interface TerminalPreviewPanelShellProps {
   body: ReactNode;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onSetActiveTool: (tool: "preview" | "browser") => void;
+  onSetPreviewMode: (mode: "changes" | "file") => void;
   onToggleExpanded: () => void;
   onRefresh: () => void;
   onCopyPath: () => void;
@@ -32,15 +33,14 @@ interface TerminalPreviewPanelShellProps {
   onSetMarkdownViewMode: (nextMode: "source" | "split" | "preview") => void;
   onSetSvgViewMode: (nextMode: "preview" | "source") => void;
   onSetChangesViewMode: (nextMode: "diff" | "preview") => void;
-  onOpenAnother: () => void;
 }
 
 function describeMode(mode: string | null | undefined): string {
   if (mode === "file") {
-    return "Open file";
+    return "Files";
   }
   if (mode === "changes") {
-    return "Changes";
+    return "Review changes";
   }
   return "Preview";
 }
@@ -62,6 +62,7 @@ export function TerminalPreviewPanelShell({
   body,
   onStartResize,
   onSetActiveTool,
+  onSetPreviewMode,
   onToggleExpanded,
   onRefresh,
   onCopyPath,
@@ -69,7 +70,6 @@ export function TerminalPreviewPanelShell({
   onSetMarkdownViewMode,
   onSetSvgViewMode,
   onSetChangesViewMode,
-  onOpenAnother,
 }: TerminalPreviewPanelShellProps) {
   return (
     <aside
@@ -174,11 +174,31 @@ export function TerminalPreviewPanelShell({
         </header>
         {activeTool === "preview" ? (
           <div className="border-b border-slate-800 px-2 py-1.5">
-            <div className="flex items-center gap-1.5">
-              <h2 className="truncate text-xs font-semibold text-slate-100">
-                {describeMode(mode)}
-              </h2>
-              <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-400">
+            <div className="flex min-w-0 items-center gap-2">
+              <div
+                className="inline-flex shrink-0 rounded-md border border-slate-800 bg-slate-900/70 p-0.5"
+                role="tablist"
+                aria-label="Preview tasks"
+              >
+                {(["changes", "file"] as const).map((previewMode) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={mode === previewMode}
+                    key={previewMode}
+                    className={[
+                      "h-6 rounded-sm px-2 text-xs",
+                      mode === previewMode
+                        ? "bg-slate-700 text-slate-50"
+                        : "text-slate-400 hover:text-slate-100",
+                    ].join(" ")}
+                    onClick={() => onSetPreviewMode(previewMode)}
+                  >
+                    {describeMode(previewMode)}
+                  </button>
+                ))}
+              </div>
+              <span className="shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-400">
                 Read only
               </span>
             </div>
@@ -249,15 +269,6 @@ export function TerminalPreviewPanelShell({
                   </button>
                 ))}
               </div>
-            ) : null}
-            {mode === "file" ? (
-              <button
-                type="button"
-                className="shrink-0 rounded-md px-2 py-1 text-slate-300 hover:bg-slate-800"
-                onClick={onOpenAnother}
-              >
-                Open another...
-              </button>
             ) : null}
           </div>
         ) : null}

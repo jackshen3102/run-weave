@@ -120,13 +120,14 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
   openPreview: (projectId: string, mode?: TerminalPreviewMode) => {
     set((state: TerminalPreviewStore) => {
       const currentProject = state.projects[projectId] ?? DEFAULT_PROJECT_STATE;
+      const nextMode = mode ?? currentProject.mode ?? "changes";
       return {
         ui: { ...state.ui, open: true, activeTool: "preview" },
         projects: {
           ...state.projects,
           [projectId]: {
             ...currentProject,
-            mode: mode ?? currentProject.mode,
+            mode: nextMode,
           },
         },
       };

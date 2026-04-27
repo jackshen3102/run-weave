@@ -13,6 +13,7 @@ import {
 const execFileAsync = promisify(execFile);
 const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
+const TERMINAL_PREFERENCES_KEY = `viewer.terminal.preferences.${E2E_API_BASE}`;
 
 async function loginAndSeedToken(
   request: APIRequestContext,
@@ -155,11 +156,12 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     await expect(
       page.getByRole("tab", { name: "Preview", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
+    await expect(
+      page.getByRole("tab", { name: "Review changes", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("Staged Changes")).toBeVisible();
 
-    await page
-      .getByRole("button", { name: "Open file...", exact: true })
-      .first()
-      .click();
+    await page.getByRole("tab", { name: "Files", exact: true }).click();
     await expect(page.getByText("README.md")).toBeVisible();
     await expect(page.getByText("Changed files", { exact: true })).toBeVisible();
     await expect(page.getByText("staged.txt")).toBeVisible();
@@ -171,6 +173,9 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     await page.getByText("terminal-code-preview.md").click();
     await expect(
       page.getByText("docs/architecture/terminal-code-preview.md"),
+    ).toBeVisible();
+    await expect(
+      page.getByPlaceholder("Search file or paste absolute path..."),
     ).toBeVisible();
     const terminalBeforeExpand = await page
       .getByLabel("Terminal emulator")
@@ -196,10 +201,9 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
       page.getByText("docs/architecture/terminal-code-preview.md"),
     ).toBeVisible();
 
-    await page
-      .getByRole("button", { name: "Preview: File", exact: true })
-      .click();
-    await page.getByText("Changes").click();
+    previewGitChangesRequestCount = 0;
+    previewFileDiffRequestCount = 0;
+    await page.getByRole("tab", { name: "Review changes", exact: true }).click();
     await expect(page.getByText("Staged Changes")).toBeVisible();
     await expect.poll(() => previewGitChangesRequestCount).toBe(1);
     await expect.poll(() => previewFileDiffRequestCount).toBe(1);
@@ -266,10 +270,7 @@ test("terminal markdown preview opens clicked images in a lightbox", async ({
     };
 
     await page.goto(`/terminal/${encodeURIComponent(session.terminalSessionId)}`);
-    await page
-      .getByRole("button", { name: "Open file...", exact: true })
-      .first()
-      .click();
+    await page.getByRole("tab", { name: "Files", exact: true }).click();
     await page
       .getByPlaceholder("Search file or paste absolute path...")
       .fill("terminal preview");
@@ -348,7 +349,36 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
     );
     expect(secondSessionResponse.ok()).toBe(true);
 
+    await page.addInitScript((preferencesKey) => {
+      window.localStorage.setItem(
+        preferencesKey,
+        JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+      );
+    }, TERMINAL_PREFERENCES_KEY);
+
     await page.goto(`/terminal/${encodeURIComponent(firstSession.terminalSessionId)}`);
+    await page.getByLabel("Terminal emulator").click({ force: true });
+    await page.keyboard.type("printf 'https://example.com/runweave-link\\n'");
+    await page.keyboard.press("Enter");
+
+    const terminalLink = page
+      .locator(".xterm-screen span", {
+        hasText: /^https:\/\/example\.com\/runweave-link$/,
+      })
+      .last();
+    await expect(terminalLink).toBeVisible();
+    const terminalLinkBox = await terminalLink.boundingBox();
+    expect(terminalLinkBox).not.toBeNull();
+    const [popup] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.mouse.click(
+        terminalLinkBox!.x + terminalLinkBox!.width / 2,
+        terminalLinkBox!.y + terminalLinkBox!.height / 2,
+      ),
+    ]);
+    await expect(popup).toHaveURL("https://example.com/runweave-link");
+    await popup.close();
+
     await page.getByRole("tab", { name: "Browser", exact: true }).click();
     await expect(
       page.getByRole("tab", { name: "Browser", exact: true }),
@@ -356,6 +386,7 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
     await expect(
       page.getByText("Local browser is available in the desktop app."),
     ).toBeVisible();
+    const address = page.getByLabel("Browser address");
 
     const terminalBeforeResize = await page
       .getByLabel("Terminal emulator")
@@ -384,7 +415,6 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
       })
       .toBeGreaterThan(terminalBeforeResize!.width + 50);
 
-    const address = page.getByLabel("Browser address");
     await address.fill("5173");
     await address.press("Enter");
     await expect(address).toHaveValue("http://127.0.0.1:5173/");
