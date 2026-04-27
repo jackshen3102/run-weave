@@ -370,7 +370,7 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
     );
     await page.mouse.down();
     await page.mouse.move(
-      resizeHandleBox!.x - 100,
+      resizeHandleBox!.x + 100,
       resizeHandleBox!.y + resizeHandleBox!.height / 2,
       { steps: 5 },
     );
@@ -382,7 +382,7 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
           .boundingBox();
         return terminalAfterResize?.width ?? 0;
       })
-      .toBeLessThan(terminalBeforeResize!.width - 50);
+      .toBeGreaterThan(terminalBeforeResize!.width + 50);
 
     const address = page.getByLabel("Browser address");
     await address.fill("5173");

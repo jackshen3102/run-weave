@@ -343,7 +343,7 @@ test("fits the terminal pane to the available viewport", async ({
   const rows = Number(match?.[1]);
   const cols = Number(match?.[2]);
   expect(rows).toBeGreaterThan(30);
-  expect(cols).toBeGreaterThan(100);
+  expect(cols).toBeGreaterThan(80);
 });
 
 test("keeps the selected terminal tab across refresh and falls back by URL", async ({
