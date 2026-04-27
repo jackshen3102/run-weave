@@ -55,10 +55,23 @@ export class CdpSessionManager {
 
     try {
       webContents.debugger.attach("1.3");
-    } catch (error) {
-      throw new Error(
-        `Failed to attach debugger: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
+      // Debugger may still be attached from a previous connection that did not
+      // cleanly close (e.g. process killed without WebSocket close frame).
+      // Detach first, then retry once — but only if DevTools is not open,
+      // since we must not forcibly steal the debugger from an active DevTools.
+      const entry = getTerminalBrowserEntryByTargetId(targetId);
+      if (entry?.entry.devtoolsOpen || webContents.isDevToolsOpened()) {
+        throw new Error("DevTools is already open for this browser tab");
+      }
+      try {
+        webContents.debugger.detach();
+        webContents.debugger.attach("1.3");
+      } catch (retryError) {
+        throw new Error(
+          `Failed to attach debugger: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
+        );
+      }
     }
 
     setTerminalBrowserCdpProxyAttached(targetId, true);

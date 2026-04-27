@@ -143,7 +143,7 @@ NODE
 | I01 | 表单文本输入       | 打开 `https://httpbin.org/forms/post`，向 `input[name="custname"]` 输入 `Runweave` | 输入框出现 `Runweave`                                         |
 | I02 | 表单提交点击       | 在 `https://httpbin.org/forms/post` 点击 `Submit order` 按钮                       | 跳转到 `https://httpbin.org/post`，返回内容包含提交的表单数据 |
 | I03 | textarea 键盘输入  | 打开 `https://httpbin.org/forms/post`，向 `textarea[name="comments"]` 输入文本     | 文本出现在 textarea 中                                        |
-| I04 | 鼠标点击链接       | 打开 `https://example.com`，点击 `More information...`                             | 页面跳转到 IANA 相关页面或新 URL                              |
+| I04 | 鼠标点击链接       | 打开 `https://example.com`，点击 `Learn more`                                      | 页面跳转到 IANA 相关页面或新 URL                              |
 | I05 | 滚动               | 打开 `https://httpbin.org/html` 后滚动                                             | 页面滚动                                                      |
 | I06 | 选择文本           | 在 example.com 选择页面文本                                                        | 页面响应，不影响 Runweave 外层 UI                             |
 | I07 | `Input.insertText` | 对输入框发送 `Input.insertText`                                                    | 文本插入成功                                                  |

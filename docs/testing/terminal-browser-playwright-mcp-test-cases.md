@@ -76,30 +76,30 @@ NODE
 
 ### browser_click — 点击能力
 
-| ID   | 用例           | 操作                                                           | 预期                                       |
-| ---- | -------------- | -------------------------------------------------------------- | ------------------------------------------ |
-| MC01 | 链接点击       | 打开 example.com，MCP 点击 `More information...` 链接          | 页面跳转到 IANA 页面                       |
-| MC02 | 按钮点击       | 打开 `https://httpbin.org/forms/post`，MCP 点击 `Submit order` | 表单提交成功                               |
-| MC03 | 输入框聚焦点击 | MCP 点击 `input[name="custname"]`                              | 输入框获得焦点                             |
-| MC04 | 坐标点击       | MCP 通过坐标 (100, 100) 点击                                   | 点击事件触发，不影响 Runweave 外层 UI      |
-| MC05 | 右键点击       | MCP 在页面元素上右键点击                                       | 触发 contextmenu，不弹出 Electron 原生菜单 |
-| MC06 | 双击           | MCP 在文本上双击                                               | 选中词汇，不影响外层                       |
-| MC07 | 跨 frame 点击  | 如果页面含 iframe，MCP 点击 iframe 内元素                      | 点击成功或返回明确的 frame 相关错误        |
+| ID   | 用例           | 操作                                                                                                    | 预期                                                                                                                                                                  |
+| ---- | -------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MC01 | 链接点击       | 打开 example.com，MCP 点击 `Learn more` 链接                                                            | 页面跳转到 IANA 页面                                                                                                                                                  |
+| MC02 | 按钮点击       | 打开 `https://httpbin.org/forms/post`，MCP 点击 `Submit order`                                          | 表单提交成功                                                                                                                                                          |
+| MC03 | 输入框聚焦点击 | MCP 点击 `input[name="custname"]`                                                                       | 输入框获得焦点                                                                                                                                                        |
+| MC04 | 坐标点击       | MCP 通过坐标 (100, 100) 点击                                                                            | 点击事件触发，不影响 Runweave 外层 UI                                                                                                                                 |
+| MC05 | 右键点击       | MCP 在页面元素上右键点击                                                                                | 触发 contextmenu，不弹出 Electron 原生菜单                                                                                                                            |
+| MC06 | 双击           | MCP 在文本上双击                                                                                        | 选中词汇，不影响外层                                                                                                                                                  |
+| MC07 | 跨 frame 点击  | 打开含 iframe 的公网页面（如 `https://www.w3schools.com/html/html_iframe.asp`），MCP 点击 iframe 内元素 | 点击成功或返回明确的 frame 相关错误；已知限制：`page.setContent` 构造的 iframe 页面可能因 Proxy `domcontentloaded` 事件延迟导致超时，建议使用真实公网 iframe 页面测试 |
 
 ### browser_type — 输入能力
 
-| ID   | 用例          | 操作                                                  | 预期                           |
-| ---- | ------------- | ----------------------------------------------------- | ------------------------------ |
-| MT01 | 文本框输入    | 打开 httpbin forms，MCP 在 `custname` 输入 `Runweave` | 输入框显示 `Runweave`          |
-| MT02 | textarea 输入 | MCP 在 `comments` textarea 输入多行文本               | 文本显示在 textarea            |
-| MT03 | 中文输入      | MCP 输入 `你好世界`                                   | 正确显示中文                   |
-| MT04 | 特殊字符输入  | MCP 输入 `<script>alert(1)</script>`                  | 作为纯文本显示在输入框，不执行 |
-| MT05 | Enter 键      | MCP 在搜索框输入后发送 Enter                          | 触发表单提交或搜索             |
-| MT06 | Tab 键        | MCP 发送 Tab 键                                       | 焦点切换到下一个表单元素       |
-| MT07 | Meta+Q 拦截   | MCP 发送 Meta+Q 组合键                                | 被 Proxy 拦截，Electron 不退出 |
-| MT08 | Meta+W 拦截   | MCP 发送 Meta+W 组合键                                | 被 Proxy 拦截，窗口不关闭      |
-| MT09 | 普通快捷键    | MCP 发送 Meta+A（全选）                               | 允许执行，页面内容被全选       |
-| MT10 | 连续快速输入  | MCP 快速输入 100 个字符                               | 全部字符正确显示，不丢字符     |
+| ID   | 用例          | 操作                                                  | 预期                                                                                                                                                                                                       |
+| ---- | ------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MT01 | 文本框输入    | 打开 httpbin forms，MCP 在 `custname` 输入 `Runweave` | 输入框显示 `Runweave`                                                                                                                                                                                      |
+| MT02 | textarea 输入 | MCP 在 `comments` textarea 输入多行文本               | 文本显示在 textarea                                                                                                                                                                                        |
+| MT03 | 中文输入      | MCP 输入 `你好世界`                                   | 正确显示中文                                                                                                                                                                                               |
+| MT04 | 特殊字符输入  | MCP 输入 `<script>alert(1)</script>`                  | 作为纯文本显示在输入框，不执行                                                                                                                                                                             |
+| MT05 | Enter 键      | MCP 在搜索框输入后发送 Enter                          | 触发表单提交或搜索                                                                                                                                                                                         |
+| MT06 | Tab 键        | MCP 发送 Tab 键                                       | 焦点切换到下一个表单元素                                                                                                                                                                                   |
+| MT07 | Meta+Q 拦截   | MCP 发送 Meta+Q 组合键                                | 被 Proxy 拦截，Electron 不退出                                                                                                                                                                             |
+| MT08 | Meta+W 拦截   | MCP 发送 Meta+W 组合键                                | 被 Proxy 拦截，窗口不关闭                                                                                                                                                                                  |
+| MT09 | 普通快捷键    | MCP 发送 Meta+A（全选）                               | 允许执行，不被 Proxy 拦截；已知限制：通过 CDP `Input.dispatchKeyEvent` 发送的 Meta 组合键可能不触发浏览器内置全选行为（Electron debugger 转发与原生键盘事件存在差异），验证重点是 Proxy 不拦截非危险组合键 |
+| MT10 | 连续快速输入  | MCP 快速输入 100 个字符                               | 全部字符正确显示，不丢字符                                                                                                                                                                                 |
 
 ### browser_screenshot — 截图能力
 
@@ -135,7 +135,7 @@ NODE
 | CP03 | 新开页面            | MCP 调用 `browser.newPage()` 或 `context.newPage()`              | 在 Terminal Browser 创建新 AI tab               |
 | CP04 | 新页面 UI 同步      | MCP 创建新 tab 后观察 Runweave UI                                | tab bar 出现新 tab                              |
 | CP05 | 新页面上限          | MCP 连续创建 10 个新 page 后再创建第 11 个                       | 返回 `Maximum AI tab limit` 错误                |
-| CP06 | 关闭页面 UI 同步    | MCP 关闭一个 page 后观察 UI                                      | tab 从 tab bar 消失                             |
+| CP06 | 关闭页面 UI 同步    | MCP 调用 `page.close()` 后观察 UI                                | tab 从 tab bar 消失，`page.close()` 正常返回    |
 | CP07 | 重新连接            | 断开 MCP 连接后重新连接                                          | 连接成功，能看到之前的 tab                      |
 | CP08 | 多客户端连接        | 两个 MCP 客户端同时连接                                          | 都能看到相同的 target 列表                      |
 | CP09 | 连接数上限          | 8 个客户端已连接后第 9 个尝试连接                                | 返回 503 或明确拒绝                             |
@@ -170,12 +170,12 @@ NODE
 
 ### DevTools 互斥
 
-| ID   | 用例                     | 操作                                             | 预期                                          |
-| ---- | ------------------------ | ------------------------------------------------ | --------------------------------------------- |
-| SD01 | MCP 连接中打开 DevTools  | MCP attached 期间在 UI 点击 DevTools 按钮        | 按钮 disabled 或主进程拒绝打开                |
-| SD02 | DevTools 已开时 MCP 连接 | 先打开某 tab 的 DevTools，再让 MCP attach 该 tab | attach 失败，错误包含 DevTools 相关信息       |
-| SD03 | MCP 断开后 DevTools 恢复 | 关闭 MCP 连接后点击 DevTools                     | DevTools 可正常打开                           |
-| SD04 | 外部 detach 感知         | DevTools 被强制打开导致 debugger detach          | MCP 收到 session 断开事件，Proxy 清理 session |
+| ID   | 用例                     | 操作                                                                   | 预期                                                                                                                                                                               |
+| ---- | ------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SD01 | MCP 连接中打开 DevTools  | MCP attached 期间在 UI 点击 DevTools 按钮                              | 按钮 disabled 或主进程拒绝打开                                                                                                                                                     |
+| SD02 | DevTools 已开时 MCP 连接 | 先打开某 tab 的 DevTools，再用 MCP connectOverCDP                      | CDP 连接成功，但 DevTools 已打开的 tab 不出现在 pages 中（attach 被跳过）；如果只有一个 tab 且 DevTools 已开，pages 为空                                                           |
+| SD03 | MCP 断开后 DevTools 恢复 | 关闭 MCP 连接后点击 DevTools                                           | DevTools 可正常打开                                                                                                                                                                |
+| SD04 | 外部 DevTools 共存       | MCP attached 期间通过主进程 `webContents.openDevTools()` 打开 DevTools | Electron 33+ 中 DevTools 和 `webContents.debugger` 可共存，MCP 不会收到 detach 事件；如果未来 Electron 版本恢复互斥行为，MCP 应收到 `Inspector.detached` 事件且 Proxy 清理 session |
 
 ## 端到端工作流
 

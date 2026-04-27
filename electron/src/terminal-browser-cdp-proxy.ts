@@ -236,7 +236,7 @@ export async function startCdpProxy(
       if (proxySessionId) {
         sendJson(conn.ws, {
           method: "Target.detachedFromTarget",
-          params: { sessionId: proxySessionId },
+          params: { sessionId: proxySessionId, targetId },
         });
       }
     }
@@ -632,6 +632,15 @@ async function handleSessionMessage(
       sendJson(ws, buildCdpSessionError(id, sessionId, -32602, keyCheck.error));
       return;
     }
+  }
+
+  if (method === "Page.close") {
+    const targetId = sessionManager.getTargetIdForSession(sessionId);
+    if (targetId) {
+      closeTerminalBrowserTabFromProxy(targetId);
+    }
+    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    return;
   }
 
   if (method === "Runtime.runIfWaitingForDebugger") {

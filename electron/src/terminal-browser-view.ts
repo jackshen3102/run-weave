@@ -293,13 +293,17 @@ function clampTerminalBrowserBounds(
 export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
   const targets: TerminalBrowserCdpTarget[] = [];
   for (const [key, entry] of terminalBrowserEntries) {
+    const wc = entry.view.webContents;
+    if (!wc || wc.isDestroyed()) {
+      continue;
+    }
     targets.push({
       key,
       targetId: entry.targetId,
       windowId: entry.windowId,
-      url: entry.view.webContents.getURL(),
-      title: entry.view.webContents.getTitle(),
-      webContents: entry.view.webContents,
+      url: wc.getURL(),
+      title: wc.getTitle(),
+      webContents: wc,
     });
   }
   return targets;
