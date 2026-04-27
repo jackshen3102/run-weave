@@ -106,7 +106,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 8. 提交、push 和创建 PR。
    - 验证通过后必须提交、push，并创建 PR。
    - 提交前再次确认 diff 只包含允许的文档范围变化。
-   - 分支名使用 `codex/daily-doc-maintenance-YYYYMMDD`；如已存在，追加短后缀避免覆盖。
+   - 分支名使用 `codex/daily-doc-maintenance-YYYYMMDD-HHMM`；如已存在，追加短后缀避免覆盖。
    - commit message 使用 `docs: refresh daily documentation`，或按实际整理主题使用更具体的 `docs: ...`。
    - PR target 使用本次范围对应的 `base_branch`。
    - PR 描述必须包含：整理范围、更新的权威文档、删除的冗余文档、未改原因、验证命令和结果。
