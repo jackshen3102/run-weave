@@ -1,16 +1,17 @@
 # 测试命令选择
 
-| 变更场景               | 推荐命令                                                                                                |
-| ---------------------- | ------------------------------------------------------------------------------------------------------- |
-| 前端文案/样式/TSX 组件 | `pnpm run test:e2e -- tests/interaction.spec.ts`                                                        |
-| 前端逻辑 / 状态 / URL  | `pnpm run test:e2e -- tests/interaction.spec.ts`                                                        |
-| 终端链路 / Vim / 预览  | `pnpm run test:e2e -- tests/terminal.spec.ts tests/terminal-vim.spec.ts tests/terminal-preview.spec.ts` |
-| 后端路由/服务逻辑      | `pnpm --filter ./backend test -- src/...`                                                               |
-| 共享协议类型变更       | `pnpm --filter ./packages/shared test && pnpm --filter ./backend test && pnpm run test:e2e`             |
-| 关键用户路径           | `pnpm run test:e2e -- tests/interaction.spec.ts`                                                        |
-| 外部依赖风险           | `pnpm run test:live`                                                                                    |
-| 预合并全量信心         | `pnpm run test:default && pnpm run test:e2e`                                                            |
-| Electron 客户端开发    | `pnpm dev:electron`                                                                                     |
+| 变更场景                            | 推荐命令                                                                                                                                           |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 前端文案/样式/TSX 组件              | `pnpm run test:e2e -- tests/interaction.spec.ts`                                                                                                   |
+| 前端逻辑 / 状态 / URL               | `pnpm run test:e2e -- tests/interaction.spec.ts`                                                                                                   |
+| 终端链路 / Vim / 预览               | `pnpm run test:e2e -- tests/terminal.spec.ts tests/terminal-vim.spec.ts tests/terminal-preview.spec.ts`                                            |
+| 后端路由/服务逻辑                   | `pnpm --filter ./backend test -- src/...`                                                                                                          |
+| 共享协议类型变更                    | `pnpm --filter ./packages/shared test && pnpm --filter ./backend test && pnpm run test:e2e`                                                        |
+| Electron Terminal Browser CDP Proxy | `pnpm --filter ./electron test -- terminal-browser-cdp-proxy.test.ts`，再按 `docs/testing/terminal-browser-cdp-mcp-test-cases.md` 做桌面端手工验收 |
+| 关键用户路径                        | `pnpm run test:e2e -- tests/interaction.spec.ts`                                                                                                   |
+| 外部依赖风险                        | `pnpm run test:live`                                                                                                                               |
+| 预合并全量信心                      | `pnpm run test:default && pnpm run test:e2e`                                                                                                       |
+| Electron 客户端开发                 | `pnpm dev:electron`                                                                                                                                |
 
 ## 反模式
 
