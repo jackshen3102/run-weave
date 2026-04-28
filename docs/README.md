@@ -12,6 +12,7 @@
 | AI 协作状态                              | architecture/ai-collaboration-state.md                |
 | 终端代码预览                             | architecture/terminal-code-preview.md                 |
 | 终端 tmux 恢复                           | architecture/terminal-tmux-recovery.md                |
+| 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md             |
 | 质量体系概览                             | quality/quality-harness.md                            |
 | AI 诊断日志                              | quality/ai-diagnostic-logging.md                      |
 | 终端性能优化                             | quality/terminal-performance-optimization.md          |

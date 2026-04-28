@@ -7,7 +7,7 @@ import { resolveNewTerminalRuntimePreference } from "../../features/terminal/run
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import type { ClientMode } from "../../features/client-mode";
 import { HttpError } from "../../services/http";
-import { createTerminalProject, createTerminalSession, deleteTerminalProject, deleteTerminalSession, listTerminalProjects, listTerminalSessions, updateTerminalProject } from "../../services/terminal";
+import { createTerminalProject, createTerminalSession, deleteTerminalProject, deleteTerminalSession, listTerminalCompletionEvents, listTerminalProjects, listTerminalSessions, updateTerminalProject } from "../../services/terminal";
 import { resolvePreferredSessionId, usePersistRecentSelection, useSessionMarkerCleanup, useSessionSelectionShortcuts } from "./terminal-workspace-effects";
 import { TerminalWorkspaceShell } from "./terminal-workspace-shell";
 interface TerminalWorkspaceProps {
@@ -50,7 +50,7 @@ export function TerminalWorkspace({
   const [hasLoadedSessions, setHasLoadedSessions] = useState(false);
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
-  const [activityMarkers, setActivityMarkers] = useState<Record<string, boolean>>({});
+  const [completionMarkers, setCompletionMarkers] = useState<Record<string, boolean>>({});
   const [bellMarkers, setBellMarkers] = useState<Record<string, boolean>>({});
   const [cachedSurfaceSessionIds, setCachedSurfaceSessionIds] = useState<string[]>([]);
   const [projectDialogMode, setProjectDialogMode] = useState<"create" | "edit" | null>(null);
@@ -60,6 +60,8 @@ export function TerminalWorkspace({
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const loadSessionsRequestIdRef = useRef(0);
   const currentApiBaseRef = useRef(apiBase);
+  const activeSessionIdRef = useRef(activeSessionId);
+  const completionEventCursorRef = useRef<string | null>(null);
   const isMobileMonitor = clientMode === "mobile";
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
   const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
@@ -80,10 +82,15 @@ export function TerminalWorkspace({
     setActiveSessionId(null);
     setHasLoadedSessions(false);
     setRequestError(null);
-    setActivityMarkers({});
+    setCompletionMarkers({});
     setBellMarkers({});
     setCachedSurfaceSessionIds([]);
+    completionEventCursorRef.current = null;
   }, [apiBase]);
+
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
   const visibleProjects = useMemo(() => {
     return [...projects].sort((left, right) => {
       return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
@@ -242,14 +249,13 @@ export function TerminalWorkspace({
     if (!activeSession?.terminalSessionId) {
       return;
     }
-    setActivityMarkers((current) => {
+    setCompletionMarkers((current) => {
       if (!current[activeSession.terminalSessionId]) {
         return current;
       }
-      return {
-        ...current,
-        [activeSession.terminalSessionId]: false,
-      };
+      const next = { ...current };
+      delete next[activeSession.terminalSessionId];
+      return next;
     });
   }, [activeSession?.terminalSessionId]);
   useEffect(() => {
@@ -268,11 +274,70 @@ export function TerminalWorkspace({
   useSessionMarkerCleanup({
     sessions,
     historyTerminalSessionId,
-    setActivityMarkers,
+    setCompletionMarkers,
     setBellMarkers,
     setHistoryDrawerOpen,
     setHistoryTerminalSessionId,
   });
+
+  useEffect(() => {
+    let disposed = false;
+    let stopped = false;
+
+    const pollCompletionEvents = async (): Promise<void> => {
+      if (disposed || stopped) {
+        return;
+      }
+
+      try {
+        const response = await listTerminalCompletionEvents(
+          apiBase,
+          token,
+          completionEventCursorRef.current,
+        );
+        if (disposed) {
+          return;
+        }
+
+        if (response.events.length > 0) {
+          completionEventCursorRef.current =
+            response.events[response.events.length - 1]?.id ??
+            completionEventCursorRef.current;
+        }
+
+        setCompletionMarkers((current) => {
+          let changed = false;
+          const next = { ...current };
+          for (const event of response.events) {
+            if (event.terminalSessionId === activeSessionIdRef.current) {
+              continue;
+            }
+            if (!next[event.terminalSessionId]) {
+              next[event.terminalSessionId] = true;
+              changed = true;
+            }
+          }
+          return changed ? next : current;
+        });
+      } catch (error) {
+        if (error instanceof HttpError && error.status === 401) {
+          stopped = true;
+          window.clearInterval(intervalId);
+          onAuthExpired?.();
+        }
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void pollCompletionEvents();
+    }, 2_000);
+    void pollCompletionEvents();
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, [apiBase, onAuthExpired, token]);
   const createSession = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
@@ -441,17 +506,6 @@ export function TerminalWorkspace({
       return changed ? nextSessions : currentSessions;
     });
   }, []);
-  const handleSessionActivity = useCallback((terminalSessionId: string) => {
-    setActivityMarkers((current) => {
-      if (current[terminalSessionId]) {
-        return current;
-      }
-      return {
-        ...current,
-        [terminalSessionId]: true,
-      };
-    });
-  }, []);
   const handleSessionBell = useCallback((terminalSessionId: string) => {
     setBellMarkers((current) => ({
       ...current,
@@ -515,7 +569,7 @@ export function TerminalWorkspace({
       projectDialogMode={projectDialogMode}
       projectDialogError={projectDialogError}
       projectPendingDeletion={projectPendingDeletion}
-      activityMarkers={activityMarkers}
+      completionMarkers={completionMarkers}
       bellMarkers={bellMarkers}
       terminalLayoutVersion={terminalLayoutVersion}
       onSelectProject={setActiveProjectId}
@@ -557,7 +611,6 @@ export function TerminalWorkspace({
           setHistoryTerminalSessionId(null);
         }
       }}
-      onSessionActivity={handleSessionActivity}
       onSessionBell={handleSessionBell}
       onSessionMetadata={handleSessionMetadata}
     />

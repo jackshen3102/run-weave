@@ -143,6 +143,20 @@ export interface TerminalSessionListItem {
   exitCode?: number;
 }
 
+export interface TerminalCompletionEvent {
+  id: string;
+  terminalSessionId: string;
+  projectId: string;
+  source: "claude" | "codex" | "trae" | "unknown";
+  hookEvent: string;
+  cwd: string | null;
+  createdAt: string;
+}
+
+export interface TerminalCompletionEventListResponse {
+  events: TerminalCompletionEvent[];
+}
+
 export type TerminalSignal = "SIGINT" | "SIGTERM" | "SIGKILL";
 
 export type TerminalClientMessage =

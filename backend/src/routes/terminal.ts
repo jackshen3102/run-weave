@@ -12,6 +12,7 @@ import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
+  TerminalCompletionEventListResponse,
   TerminalProjectListItem,
   TerminalSessionHistoryResponse,
   TerminalSessionListItem,
@@ -37,6 +38,7 @@ import {
 import { registerTerminalPreviewRoutes } from "./terminal-preview-routes";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
+import type { TerminalCompletionEventStore } from "../terminal/completion-events";
 import {
   ensureTerminalRuntime,
   killTmuxSessionForTerminal,
@@ -221,6 +223,7 @@ export function createTerminalRouter(
     runtimeRegistry?: TerminalRuntimeRegistry;
     tmuxService?: TmuxService;
     authService?: AuthService;
+    completionEventStore?: TerminalCompletionEventStore;
   },
 ): Router {
   const router = Router();
@@ -357,6 +360,17 @@ export function createTerminalRouter(
         exitCode: session.exitCode,
       }));
 
+    res.json(payload);
+  });
+
+  router.get("/completion-events", (req, res) => {
+    const after =
+      typeof req.query.after === "string" && req.query.after.trim()
+        ? req.query.after.trim()
+        : null;
+    const payload: TerminalCompletionEventListResponse = {
+      events: options?.completionEventStore?.listAfter(after) ?? [],
+    };
     res.json(payload);
   });
 

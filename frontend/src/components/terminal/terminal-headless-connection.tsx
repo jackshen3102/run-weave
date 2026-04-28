@@ -1,9 +1,4 @@
-import { useCallback, useRef } from "react";
-import {
-  containsTerminalActivityContent,
-  shouldEmitTerminalActivityPulse,
-  shouldMarkTerminalActivity,
-} from "../../features/terminal/activity-marker";
+import { useCallback } from "react";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
 
 interface TerminalHeadlessConnectionProps {
@@ -11,7 +6,6 @@ interface TerminalHeadlessConnectionProps {
   terminalSessionId: string;
   token: string;
   onAuthExpired?: () => void;
-  onActivity?: () => void;
   onBell?: () => void;
   onMetadata?: (metadata: { cwd: string; activeCommand: string | null }) => void;
 }
@@ -21,38 +15,16 @@ export function TerminalHeadlessConnection({
   terminalSessionId,
   token,
   onAuthExpired,
-  onActivity,
   onBell,
   onMetadata,
 }: TerminalHeadlessConnectionProps) {
-  const openedAtRef = useRef(Date.now());
-  const lastActivityMarkedAtRef = useRef<number | null>(null);
-
   const handleOutput = useCallback(
     (data: string) => {
-      const now = Date.now();
       if (data.includes("\u0007")) {
         onBell?.();
       }
-
-      if (
-        containsTerminalActivityContent(data) &&
-        shouldMarkTerminalActivity({
-          active: false,
-          now,
-          openedAt: openedAtRef.current,
-          lastResizedAt: null,
-        }) &&
-        shouldEmitTerminalActivityPulse({
-          now,
-          lastMarkedAt: lastActivityMarkedAtRef.current,
-        })
-      ) {
-        lastActivityMarkedAtRef.current = now;
-        onActivity?.();
-      }
     },
-    [onActivity, onBell],
+    [onBell],
   );
 
   useTerminalConnection({

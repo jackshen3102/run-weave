@@ -198,16 +198,17 @@ test("renders a stable trae hook block", () => {
   assert.match(block, /browser-viewer-hook-bridge --source trae/);
 });
 
-test("builds launcher script pointing at packaged hook bridge", () => {
-  const script = buildLauncherScript({
-    packagedBridgePath: "/Applications/Browser Viewer.app/Contents/Resources/hook-bridge.mjs",
-  });
+test("builds a self-contained launcher script that posts completion events", () => {
+  const script = buildLauncherScript();
 
-  assert.match(script, /HOOK_BRIDGE_PATH/);
-  assert.match(script, /if \[ -x "\$HOOK_BRIDGE_PATH" \]; then/);
-  assert.match(script, /exec "\$HOOK_BRIDGE_PATH" "\$@"/);
-  assert.match(script, /hook-bridge\.mjs/);
-  assert.match(script, /exec node/);
+  assert.match(script, /^#!\/usr\/bin\/env node/);
+  assert.match(script, /RUNWEAVE_HOOK_ENDPOINT/);
+  assert.match(script, /RUNWEAVE_HOOK_TOKEN/);
+  assert.match(script, /RUNWEAVE_TERMINAL_SESSION_ID/);
+  assert.match(script, /X-Runweave-Hook-Token/);
+  assert.match(script, /fetch\(endpoint/);
+  assert.doesNotMatch(script, /HOOK_BRIDGE_PATH/);
+  assert.doesNotMatch(script, /hook-bridge\.mjs/);
 });
 
 test("upserts trae hook into an existing top-level hooks section without duplicating it", () => {

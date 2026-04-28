@@ -145,7 +145,7 @@ export function useSessionSelectionShortcuts({
 interface SessionMarkerCleanupOptions {
   sessions: TerminalSessionListItem[];
   historyTerminalSessionId: string | null;
-  setActivityMarkers: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  setCompletionMarkers: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   setBellMarkers: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   setHistoryDrawerOpen: (open: boolean) => void;
   setHistoryTerminalSessionId: (terminalSessionId: string | null) => void;
@@ -154,14 +154,14 @@ interface SessionMarkerCleanupOptions {
 export function useSessionMarkerCleanup({
   sessions,
   historyTerminalSessionId,
-  setActivityMarkers,
+  setCompletionMarkers,
   setBellMarkers,
   setHistoryDrawerOpen,
   setHistoryTerminalSessionId,
 }: SessionMarkerCleanupOptions): void {
   useEffect(() => {
     const sessionIds = new Set(sessions.map((session) => session.terminalSessionId));
-    setActivityMarkers((current) => {
+    setCompletionMarkers((current) => {
       let changed = false;
       const nextEntries = Object.entries(current).filter(([terminalSessionId, active]) => {
         const keep = active && sessionIds.has(terminalSessionId);
@@ -177,7 +177,7 @@ export function useSessionMarkerCleanup({
 
       return Object.fromEntries(nextEntries);
     });
-  }, [sessions, setActivityMarkers]);
+  }, [sessions, setCompletionMarkers]);
 
   useEffect(() => {
     const sessionIds = new Set(sessions.map((session) => session.terminalSessionId));

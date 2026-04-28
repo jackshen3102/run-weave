@@ -270,6 +270,7 @@ describe("terminal routes", () => {
     servers.length = 0;
     tempDirs.length = 0;
     tempDirsForGit.length = 0;
+    vi.unstubAllEnvs();
   });
 
   it("creates terminal sessions through the API", async () => {
@@ -300,6 +301,11 @@ describe("terminal routes", () => {
   });
 
   it("creates tmux-backed terminal sessions when tmux is available", async () => {
+    vi.stubEnv(
+      "RUNWEAVE_HOOK_ENDPOINT",
+      "http://127.0.0.1:5000/internal/terminal-completion",
+    );
+    vi.stubEnv("RUNWEAVE_HOOK_TOKEN", "hook-token");
     const state = { current: null as MockTerminalSession | null };
     const runtime = { pid: 10 };
     const ptyService = {
@@ -365,6 +371,25 @@ describe("terminal routes", () => {
         tmuxSessionName: "runweave-terminal-1",
         tmuxSocketPath: "/tmp/runweave/tmux.sock",
         recoverable: true,
+      },
+    );
+    expect(tmuxService.createDetachedSession).toHaveBeenCalledWith(
+      {
+        sessionName: "runweave-terminal-1",
+        socketPath: "/tmp/runweave/tmux.sock",
+      },
+      "/tmp/demo",
+      {
+        command: "bash",
+        args: ["-l"],
+        env: {
+          RUNWEAVE_TERMINAL_SESSION_ID: "terminal-1",
+          RUNWEAVE_PROJECT_ID: "project-default",
+          RUNWEAVE_TMUX_SESSION_NAME: "runweave-terminal-1",
+          RUNWEAVE_HOOK_ENDPOINT:
+            "http://127.0.0.1:5000/internal/terminal-completion",
+          RUNWEAVE_HOOK_TOKEN: "hook-token",
+        },
       },
     );
     expect(ptyService.spawnSession).toHaveBeenCalledWith({

@@ -227,6 +227,54 @@ describe("TmuxService", () => {
     );
   });
 
+  it("injects launch env context into tmux sessions", async () => {
+    const execFileImpl = vi.fn(async () => ({ stdout: "", stderr: "" }));
+    const service = createService(execFileImpl, {
+      PLAYWRIGHT_MCP_CDP_ENDPOINT: "http://127.0.0.1:9222",
+    });
+
+    await service.createDetachedSession(
+      {
+        sessionName: "runweave-terminal-1",
+        socketPath: "/tmp/runweave-test/tmux.sock",
+      },
+      "/tmp/demo",
+      {
+        command: "bash",
+        args: ["-lc", "codex"],
+        env: {
+          RUNWEAVE_TERMINAL_SESSION_ID: "terminal-1",
+          RUNWEAVE_PROJECT_ID: "project-default",
+          RUNWEAVE_TMUX_SESSION_NAME: "runweave-terminal-1",
+          RUNWEAVE_HOOK_ENDPOINT:
+            "http://127.0.0.1:5000/internal/terminal-completion",
+          RUNWEAVE_HOOK_TOKEN: "hook-token",
+        },
+      },
+    );
+
+    const firstCall = execFileImpl.mock.calls[0] as
+      | [string, string[], unknown]
+      | undefined;
+    const args = firstCall?.[1] ?? [];
+    expect(args).toEqual(
+      expect.arrayContaining([
+        "-e",
+        "RUNWEAVE_TERMINAL_SESSION_ID=terminal-1",
+        "-e",
+        "RUNWEAVE_PROJECT_ID=project-default",
+        "-e",
+        "RUNWEAVE_TMUX_SESSION_NAME=runweave-terminal-1",
+        "-e",
+        "RUNWEAVE_HOOK_ENDPOINT=http://127.0.0.1:5000/internal/terminal-completion",
+        "-e",
+        "RUNWEAVE_HOOK_TOKEN=hook-token",
+        "-e",
+        "PLAYWRIGHT_MCP_CDP_ENDPOINT=http://127.0.0.1:9222",
+      ]),
+    );
+  });
+
   it("sets mouse mode on in the generated tmux config", async () => {
     const socketDir = await mkdtemp(path.join(os.tmpdir(), "runweave-tmux-"));
     const service = new TmuxService({

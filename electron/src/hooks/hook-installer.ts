@@ -6,12 +6,10 @@ import { constants as fsConstants } from "node:fs";
 type JsonRecord = Record<string, unknown>;
 type HookInstallerOptions = {
   homeDir?: string;
-  resourcesPath?: string | null;
 };
 
 type HookInstallerContext = {
   homeDir: string;
-  resourcesPath: string | null;
 };
 
 type JsonReadResult =
@@ -86,19 +84,112 @@ export function renderTraeHookBlock(command: string): string {
   ].join("\n");
 }
 
-export function buildLauncherScript(args: {
-  packagedBridgePath: string;
-}): string {
-  const packagedBridgePath = args.packagedBridgePath.replace(/"/g, '\\"');
-
+export function buildLauncherScript(): string {
   return [
-    "#!/usr/bin/env bash",
-    "set -euo pipefail",
-    `HOOK_BRIDGE_PATH="${packagedBridgePath}"`,
-    'if [ -x "$HOOK_BRIDGE_PATH" ]; then',
-    '  exec "$HOOK_BRIDGE_PATH" "$@"',
-    "fi",
-    'exec node "$HOOK_BRIDGE_PATH" "$@"',
+    "#!/usr/bin/env node",
+    "",
+    'const STOP_EVENTS = new Set(["stop", "subagent_stop", "subagentstop"]);',
+    "",
+    "function readStdin() {",
+    "  return new Promise((resolve) => {",
+    '    let data = "";',
+    '    process.stdin.setEncoding("utf8");',
+    '    process.stdin.on("data", (chunk) => {',
+    "      data += chunk;",
+    "    });",
+    '    process.stdin.on("end", () => {',
+    "      resolve(data);",
+    "    });",
+    "    process.stdin.resume();",
+    "  });",
+    "}",
+    "",
+    "function parseArgs(argv) {",
+    '  const args = { source: "unknown" };',
+    "  for (let index = 0; index < argv.length; index += 1) {",
+    '    if (argv[index] === "--source" && argv[index + 1]) {',
+    "      args.source = argv[index + 1];",
+    "      index += 1;",
+    "    }",
+    "  }",
+    "  return args;",
+    "}",
+    "",
+    "function parsePayload(raw) {",
+    "  if (!raw.trim()) {",
+    "    return {};",
+    "  }",
+    "",
+    "  try {",
+    "    const parsed = JSON.parse(raw);",
+    '    return parsed && typeof parsed === "object" ? parsed : {};',
+    "  } catch {",
+    "    return {};",
+    "  }",
+    "}",
+    "",
+    "function readHookEvent(payload) {",
+    "  return (",
+    "    payload.hook_event_name ??",
+    "    payload.hookEventName ??",
+    "    payload.eventName ??",
+    "    payload.event ??",
+    '    "Unknown"',
+    "  );",
+    "}",
+    "",
+    "function normalizeEventName(raw) {",
+    '  return String(raw || "Unknown")',
+    "    .trim()",
+    "    .toLowerCase()",
+    '    .replace(/[-\\s]+/g, "_");',
+    "}",
+    "",
+    "function normalizeSource(raw) {",
+    '  const source = String(raw || "unknown").trim().toLowerCase();',
+    '  if (source === "claude" || source === "codex" || source === "trae") {',
+    "    return source;",
+    "  }",
+    '  return "unknown";',
+    "}",
+    "",
+    "async function main() {",
+    "  const args = parseArgs(process.argv.slice(2));",
+    "  const payload = parsePayload(await readStdin());",
+    "  const rawEvent = readHookEvent(payload);",
+    "  const normalizedEvent = normalizeEventName(rawEvent);",
+    "  if (!STOP_EVENTS.has(normalizedEvent)) {",
+    "    return;",
+    "  }",
+    "",
+    "  const endpoint = process.env.RUNWEAVE_HOOK_ENDPOINT;",
+    "  const token = process.env.RUNWEAVE_HOOK_TOKEN;",
+    "  const terminalSessionId = process.env.RUNWEAVE_TERMINAL_SESSION_ID;",
+    "  if (!endpoint || !token || !terminalSessionId) {",
+    "    return;",
+    "  }",
+    "",
+    "  await fetch(endpoint, {",
+    '    method: "POST",',
+    "    headers: {",
+    '      "Content-Type": "application/json",',
+    '      "X-Runweave-Hook-Token": token,',
+    "    },",
+    "    body: JSON.stringify({",
+    "      terminalSessionId,",
+    "      source: normalizeSource(args.source),",
+    '      hookEvent: String(rawEvent || "Stop"),',
+    "      cwd:",
+    '        typeof payload.cwd === "string" && payload.cwd.trim()',
+    "          ? payload.cwd",
+    "          : process.env.PWD || null,",
+    "    }),",
+    "  }).catch(() => undefined);",
+    "}",
+    "",
+    "main().catch(() => {",
+    "  process.exitCode = 0;",
+    "});",
     "",
   ].join("\n");
 }
@@ -126,11 +217,7 @@ export async function writeLauncherScript(options: HookInstallerOptions = {}): P
   const launcherPath = getLauncherPath(context.homeDir);
 
   await mkdir(launcherDir, { recursive: true });
-  await writeFile(
-    launcherPath,
-    buildLauncherScript({ packagedBridgePath: resolvePackagedBridgePath(context) }),
-    "utf8",
-  );
+  await writeFile(launcherPath, buildLauncherScript(), "utf8");
   await chmod(launcherPath, 0o755);
 }
 
@@ -285,13 +372,7 @@ async function readTextFile(filePath: string): Promise<string> {
 function resolveHookInstallerContext(options: HookInstallerOptions): HookInstallerContext {
   return {
     homeDir: options.homeDir ?? os.homedir(),
-    resourcesPath: options.resourcesPath ?? getProcessResourcesPath(),
   };
-}
-
-function getProcessResourcesPath(): string | null {
-  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
-  return typeof resourcesPath === "string" && resourcesPath ? resourcesPath : null;
 }
 
 function getLauncherDir(homeDir: string): string {
@@ -324,10 +405,6 @@ async function hasAnyConfigDir(context: HookInstallerContext): Promise<boolean> 
 
 function launcherCommand(context: HookInstallerContext): string {
   return getLauncherPath(context.homeDir);
-}
-
-function resolvePackagedBridgePath(context: HookInstallerContext): string {
-  return path.join(context.resourcesPath ?? process.cwd(), "hook-bridge.mjs");
 }
 
 function toHookArrayMap(value: unknown): Record<string, Array<unknown>> {

@@ -5,6 +5,7 @@ import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
+  TerminalCompletionEventListResponse,
   TerminalPreviewChangeKind,
   TerminalPreviewFileDiffResponse,
   TerminalPreviewFileResponse,
@@ -70,6 +71,23 @@ export async function listTerminalSessions(
   return requestJson<TerminalSessionListItem[]>(
     apiBase,
     "/api/terminal/session",
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function listTerminalCompletionEvents(
+  apiBase: string,
+  token: string,
+  after: string | null,
+): Promise<TerminalCompletionEventListResponse> {
+  const query = after ? `?after=${encodeURIComponent(after)}` : "";
+  return requestJson<TerminalCompletionEventListResponse>(
+    apiBase,
+    `/api/terminal/completion-events${query}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
