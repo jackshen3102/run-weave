@@ -58,6 +58,13 @@ function openUrlExternally(url: string): void {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+function isNavigationAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return error.message.includes("ERR_ABORTED") || error.message.includes("(-3)");
+}
+
 export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   const tabs = useTerminalPreviewStore((state) => state.browser.tabs);
   const activeTabId = useTerminalPreviewStore(
@@ -81,6 +88,7 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<number | null>(null);
   const loadedUrlByTabRef = useRef<Record<string, string>>({});
+  const navigationSequenceByTabRef = useRef<Record<string, number>>({});
   const activeTabIdRef = useRef(activeTabId);
   const isElectron = window.electronAPI?.isElectron === true;
   const activeTab = useMemo(
@@ -239,6 +247,11 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
       }
 
       syncActiveTabBounds(tabId);
+      const navigationSequence =
+        (navigationSequenceByTabRef.current[tabId] ?? 0) + 1;
+      navigationSequenceByTabRef.current[tabId] = navigationSequence;
+      const isCurrentNavigation = (): boolean =>
+        navigationSequenceByTabRef.current[tabId] === navigationSequence;
 
       try {
         loadedUrlByTabRef.current[tabId] = nextUrl.url;
@@ -246,9 +259,20 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
           tabId,
           nextUrl.url,
         );
+        if (!isCurrentNavigation()) {
+          return;
+        }
         applyElectronSnapshot(tabId, snapshot);
         syncActiveTabBounds(tabId);
       } catch (error) {
+        if (!isCurrentNavigation()) {
+          return;
+        }
+        if (isNavigationAbortError(error)) {
+          updateBrowserTab(tabId, { error: undefined });
+          syncActiveTabBounds(tabId);
+          return;
+        }
         updateBrowserTab(tabId, {
           loading: false,
           error: error instanceof Error ? error.message : "Navigation failed",
@@ -359,18 +383,21 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   };
 
   const reload = async (): Promise<void> => {
-    updateBrowserTab(activeTab.id, { loading: true, error: undefined });
+    const tabId = activeTab.id;
+    navigationSequenceByTabRef.current[tabId] =
+      (navigationSequenceByTabRef.current[tabId] ?? 0) + 1;
+    updateBrowserTab(tabId, { loading: true, error: undefined });
     try {
       const snapshot = await window.electronAPI?.terminalBrowserReload?.(
-        activeTab.id,
+        tabId,
       );
       if (snapshot) {
-        applyElectronSnapshot(activeTab.id, snapshot);
+        applyElectronSnapshot(tabId, snapshot);
       } else {
-        updateBrowserTab(activeTab.id, { loading: false });
+        updateBrowserTab(tabId, { loading: false });
       }
     } catch (error) {
-      updateBrowserTab(activeTab.id, {
+      updateBrowserTab(tabId, {
         loading: false,
         error: error instanceof Error ? error.message : "Reload failed",
       });
@@ -392,6 +419,8 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   };
 
   const stop = (): void => {
+    navigationSequenceByTabRef.current[activeTab.id] =
+      (navigationSequenceByTabRef.current[activeTab.id] ?? 0) + 1;
     updateBrowserTab(activeTab.id, { loading: false });
     void window.electronAPI?.terminalBrowserStop?.(activeTab.id);
   };
@@ -400,6 +429,7 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
     event.stopPropagation();
     void window.electronAPI?.terminalBrowserCloseTab?.(tabId);
     delete loadedUrlByTabRef.current[tabId];
+    delete navigationSequenceByTabRef.current[tabId];
     closeBrowserTab(tabId);
   };
 

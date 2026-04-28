@@ -101,6 +101,14 @@ function getTerminalBrowserSnapshot(view: WebContentsView): TerminalBrowserSnaps
   };
 }
 
+function isNavigationAbortError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const message = String((error as { message?: unknown }).message ?? "");
+  return message.includes("ERR_ABORTED") || message.includes("(-3)");
+}
+
 function sendTerminalBrowserTabUpdate(
   win: BrowserWindow,
   tabId: string,
@@ -486,7 +494,13 @@ export function registerTerminalBrowserHandlers(): void {
       }
 
       const view = getOrCreateTerminalBrowserView(win, tabId);
-      await view.webContents.loadURL(safeUrl);
+      try {
+        await view.webContents.loadURL(safeUrl);
+      } catch (error) {
+        if (!isNavigationAbortError(error)) {
+          throw error;
+        }
+      }
       return getTerminalBrowserSnapshot(view);
     },
   );
