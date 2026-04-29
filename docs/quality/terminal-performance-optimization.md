@@ -115,7 +115,7 @@ Playwright / E2E / benchmark 使用固定端口和固定临时存储路径，不
 
 ### 2. active terminal 保留完整 surface，inactive terminal 改为 headless watcher
 
-优化前，`TerminalWorkspace` 会为每个 session 挂载一个完整 `TerminalSurface`。inactive terminal 虽然被移动到屏幕外，但仍然有完整 xterm 实例、renderer addon、WebSocket、输出写入和相关事件处理。
+优化前，Terminal 工作台会为每个 session 挂载一个完整 `TerminalSurface`。当前代码中具体承载这一布局的是 `TerminalWorkspaceShell`。inactive terminal 虽然被移动到屏幕外，但仍然有完整 xterm 实例、renderer addon、WebSocket、输出写入和相关事件处理。
 
 优化后：
 
