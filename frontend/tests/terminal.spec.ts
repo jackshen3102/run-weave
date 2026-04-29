@@ -223,6 +223,26 @@ async function createTerminalSession(
   };
 }
 
+async function createTerminalProject(
+  request: APIRequestContext,
+  token: string,
+  name: string,
+  projectPath?: string,
+): Promise<{ projectId: string }> {
+  const response = await request.post(`${E2E_API_BASE}/api/terminal/project`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    data: {
+      name,
+      path: projectPath,
+    },
+  });
+
+  expect(response.ok()).toBe(true);
+  return (await response.json()) as { projectId: string };
+}
+
 async function getTerminalScrollback(
   request: APIRequestContext,
   token: string,
@@ -400,6 +420,85 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
 
   await rm(firstCwd, { force: true, recursive: true });
   await rm(secondCwd, { force: true, recursive: true });
+});
+
+test("marks a background project when its shell command finishes", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  const suffix = `${Date.now()}`;
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
+
+  const projectAName = `Completion A ${suffix}`;
+  const projectBName = `Completion B ${suffix}`;
+  const projectA = await createTerminalProject(request, token, projectAName);
+  const projectB = await createTerminalProject(request, token, projectBName);
+  const cwdA = await mkdtemp(path.join(os.tmpdir(), `completion-a-${suffix}-`));
+  const cwdB = await mkdtemp(path.join(os.tmpdir(), `completion-b-${suffix}-`));
+  const cwdALabel = path.basename(cwdA);
+
+  try {
+    const sessionA = await createTerminalSession(request, token, {
+      projectId: projectA.projectId,
+      cwd: cwdA,
+    });
+    const sessionB = await createTerminalSession(request, token, {
+      projectId: projectB.projectId,
+      cwd: cwdB,
+    });
+
+    await page.goto(sessionA.terminalUrl);
+    await expect(
+      page.getByRole("button", { name: projectAName, exact: true }),
+    ).toBeVisible();
+    await page.getByLabel("Terminal emulator").click({ force: true });
+    await page.keyboard.type("sleep 2");
+    await page.keyboard.press("Enter");
+
+    await expect(
+      page.getByRole("button", {
+        name: new RegExp(
+          `^${cwdALabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\(sleep\\)$`,
+        ),
+      }),
+    ).toBeVisible({ timeout: 5_000 });
+
+    await page
+      .getByRole("button", { name: projectBName, exact: true })
+      .click();
+    await expect
+      .poll(() => page.url())
+      .toContain(`/terminal/${sessionB.terminalSessionId}`);
+
+    const projectADot = page
+      .getByRole("button", { name: projectAName, exact: true })
+      .locator("span")
+      .last();
+    await expect
+      .poll(async () => (await projectADot.getAttribute("class")) ?? "", {
+        timeout: 10_000,
+      })
+      .toContain("bg-emerald-400");
+
+    await page
+      .getByRole("button", { name: projectAName, exact: true })
+      .click();
+    await expect
+      .poll(() => page.url())
+      .toContain(`/terminal/${sessionA.terminalSessionId}`);
+    await expect
+      .poll(async () => (await projectADot.getAttribute("class")) ?? "")
+      .not.toContain("bg-emerald-400");
+  } finally {
+    await rm(cwdA, { force: true, recursive: true });
+    await rm(cwdB, { force: true, recursive: true });
+  }
 });
 
 test("switches Electron terminal connections and ignores stale session loads", async ({
