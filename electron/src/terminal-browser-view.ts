@@ -1,11 +1,13 @@
 import {
   BrowserWindow,
   ipcMain,
+  session as electronSession,
   WebContentsView,
   type WebContents,
 } from "electron";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import type { TerminalBrowserProxyState } from "@browser-viewer/shared";
 
 interface TerminalBrowserBounds {
   x: number;
@@ -54,6 +56,60 @@ const terminalBrowserEntries = new Map<string, TerminalBrowserEntry>();
 const attachedTerminalBrowserByWindowId = new Map<number, string>();
 
 export const terminalBrowserEvents = new EventEmitter();
+
+const TERMINAL_BROWSER_SESSION_PARTITION = "persist:runweave-terminal-browser";
+const TERMINAL_BROWSER_PROXY_HOST = "127.0.0.1";
+const TERMINAL_BROWSER_PROXY_PORT = 8899;
+const TERMINAL_BROWSER_PROXY_RULES =
+  `http=${TERMINAL_BROWSER_PROXY_HOST}:${TERMINAL_BROWSER_PROXY_PORT};https=${TERMINAL_BROWSER_PROXY_HOST}:${TERMINAL_BROWSER_PROXY_PORT}`;
+const TERMINAL_BROWSER_PROXY_BYPASS_RULES = "<local>";
+
+let terminalBrowserProxyEnabled = false;
+
+function getTerminalBrowserSession(): Electron.Session {
+  return electronSession.fromPartition(TERMINAL_BROWSER_SESSION_PARTITION);
+}
+
+function getTerminalBrowserProxyState(): TerminalBrowserProxyState {
+  return {
+    enabled: terminalBrowserProxyEnabled,
+    proxyRules: TERMINAL_BROWSER_PROXY_RULES,
+    proxyBypassRules: TERMINAL_BROWSER_PROXY_BYPASS_RULES,
+  };
+}
+
+function reloadTerminalBrowserTabsForProxyChange(): void {
+  for (const entry of terminalBrowserEntries.values()) {
+    const webContents = entry.view.webContents;
+    if (webContents.isDestroyed()) {
+      continue;
+    }
+    const url = webContents.getURL();
+    if (!url || url === "about:blank") {
+      continue;
+    }
+    webContents.reload();
+  }
+}
+
+async function setTerminalBrowserProxyEnabled(
+  enabled: boolean,
+): Promise<TerminalBrowserProxyState> {
+  const browserSession = getTerminalBrowserSession();
+  if (enabled) {
+    await browserSession.setProxy({
+      mode: "fixed_servers",
+      proxyRules: TERMINAL_BROWSER_PROXY_RULES,
+      proxyBypassRules: TERMINAL_BROWSER_PROXY_BYPASS_RULES,
+    });
+  } else {
+    await browserSession.setProxy({ mode: "direct" });
+  }
+  await browserSession.closeAllConnections();
+  terminalBrowserProxyEnabled = enabled;
+  reloadTerminalBrowserTabsForProxyChange();
+  return getTerminalBrowserProxyState();
+}
 
 function isTerminalBrowserBounds(value: unknown): value is TerminalBrowserBounds {
   if (!value || typeof value !== "object") {
@@ -168,6 +224,7 @@ function getOrCreateTerminalBrowserView(
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      partition: TERMINAL_BROWSER_SESSION_PARTITION,
       sandbox: true,
     },
   });
@@ -459,6 +516,20 @@ export function setTerminalBrowserCdpProxyAttached(
 }
 
 export function registerTerminalBrowserHandlers(): void {
+  ipcMain.handle("terminal-browser:get-proxy-state", () => {
+    return getTerminalBrowserProxyState();
+  });
+
+  ipcMain.handle(
+    "terminal-browser:set-proxy-enabled",
+    async (_event, enabled: unknown): Promise<TerminalBrowserProxyState> => {
+      if (typeof enabled !== "boolean") {
+        throw new Error("Invalid browser proxy state");
+      }
+      return await setTerminalBrowserProxyEnabled(enabled);
+    },
+  );
+
   ipcMain.handle("terminal-browser:list-tabs", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) {

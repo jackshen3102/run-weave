@@ -4,6 +4,7 @@ import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
   TerminalBrowserCdpProxyInfo,
+  TerminalBrowserProxyState,
 } from "@browser-viewer/shared";
 import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
@@ -83,6 +84,10 @@ declare global {
       terminalBrowserGetCdpProxyInfo?: (
         tabId: string,
       ) => Promise<TerminalBrowserCdpProxyInfo>;
+      terminalBrowserGetProxyState?: () => Promise<TerminalBrowserProxyState>;
+      terminalBrowserSetProxyEnabled?: (
+        enabled: boolean,
+      ) => Promise<TerminalBrowserProxyState>;
       terminalBrowserCloseTab?: (tabId: string) => Promise<void>;
       onTerminalBrowserTabCreatedFromProxy?: (
         listener: (data: { tabId: string; url: string; title: string }) => void,
