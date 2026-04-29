@@ -292,6 +292,30 @@ function buildRiskSummary(results, skippedCriticalSteps, selection) {
   return risks;
 }
 
+function buildStepEnv(baseEnv) {
+  const nextEnv = { ...baseEnv };
+  for (const key of [
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CONFIG",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_PREFIX",
+    "GIT_SHALLOW_FILE",
+    "GIT_COMMON_DIR",
+  ]) {
+    delete nextEnv[key];
+  }
+  return nextEnv;
+}
+
 function runStep(step) {
   const [cmd, ...args] = step.command;
   const startedAt = new Date().toISOString();
@@ -299,7 +323,7 @@ function runStep(step) {
     cwd: ROOT,
     encoding: "utf8",
     stdio: "pipe",
-    env: process.env,
+    env: buildStepEnv(process.env),
   });
   const endedAt = new Date().toISOString();
 

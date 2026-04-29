@@ -61,6 +61,7 @@ export function TerminalWorkspace({
   const loadSessionsRequestIdRef = useRef(0);
   const currentApiBaseRef = useRef(apiBase);
   const activeSessionIdRef = useRef(activeSessionId);
+  const sessionsRef = useRef<TerminalSessionListItem[]>([]);
   const completionEventCursorRef = useRef<string | null>(null);
   const isMobileMonitor = clientMode === "mobile";
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
@@ -91,6 +92,9 @@ export function TerminalWorkspace({
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
   const visibleProjects = useMemo(() => {
     return [...projects].sort((left, right) => {
       return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
@@ -487,6 +491,21 @@ export function TerminalWorkspace({
     }
   }, [activeProject, apiBase, loadSessions, onAuthExpired, projectPendingDeletion, removeProjectPreview, token]);
   const handleSessionMetadata = useCallback((terminalSessionId: string, metadata: { cwd: string; activeCommand: string | null }) => {
+    const previousSession = sessionsRef.current.find(
+      (session) => session.terminalSessionId === terminalSessionId,
+    );
+    if (
+      previousSession?.activeCommand &&
+      metadata.activeCommand === null &&
+      terminalSessionId !== activeSessionIdRef.current
+    ) {
+      setCompletionMarkers((current) =>
+        current[terminalSessionId]
+          ? current
+          : { ...current, [terminalSessionId]: true },
+      );
+    }
+
     setSessions((currentSessions) => {
       let changed = false;
       const nextSessions = currentSessions.map((session) => {
