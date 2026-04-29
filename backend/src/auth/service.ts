@@ -150,17 +150,16 @@ export class AuthService {
       return null;
     }
 
-    const nextSessionId = randomUUID();
     const nextRefreshToken = issueToken({
       username: verified.payload.sub,
-      sessionId: nextSessionId,
+      sessionId: refreshSession.id,
       secret: this.config.jwtSecret,
       ttlMs: this.config.refreshTokenTtlMs,
       tokenType: "refresh",
     });
     const accessToken = issueToken({
       username: verified.payload.sub,
-      sessionId: nextSessionId,
+      sessionId: refreshSession.id,
       secret: this.config.jwtSecret,
       ttlMs: this.config.accessTokenTtlMs,
       tokenType: "access",
@@ -168,20 +167,13 @@ export class AuthService {
     const now = new Date().toISOString();
     const nextSession: PersistedRefreshSessionRecord = {
       ...refreshSession,
-      id: nextSessionId,
       tokenHash: hashToken(nextRefreshToken.token),
-      createdAt: now,
       lastUsedAt: now,
       expiresAt: toIsoAfter(this.config.refreshTokenTtlMs),
       revokedAt: null,
       replacedBySessionId: null,
     };
-    this.refreshSessions.set(refreshSession.id, {
-      ...refreshSession,
-      revokedAt: now,
-      replacedBySessionId: nextSession.id,
-    });
-    this.refreshSessions.set(nextSession.id, nextSession);
+    this.refreshSessions.set(refreshSession.id, nextSession);
     await this.authStore?.replaceRefreshSession(refreshSession.id, nextSession);
 
     return {

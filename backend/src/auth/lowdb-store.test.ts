@@ -88,4 +88,57 @@ describe("LowDbAuthStore", () => {
       ],
     });
   });
+
+  it("updates a refresh session in place when the session id is unchanged", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "auth-store-"));
+    tempDirs.push(tempDir);
+    const store = new LowDbAuthStore(path.join(tempDir, "auth-store.json"));
+    await store.initialize({
+      username: "admin",
+      password: "admin",
+      jwtSecret: "jwt-secret",
+      updatedAt: "2026-04-03T00:00:00.000Z",
+      refreshSessions: [
+        {
+          id: "session-1",
+          username: "admin",
+          tokenHash: "hash-1",
+          createdAt: "2026-04-03T00:00:00.000Z",
+          lastUsedAt: "2026-04-03T00:00:00.000Z",
+          expiresAt: "2026-05-03T00:00:00.000Z",
+          revokedAt: null,
+          replacedBySessionId: null,
+          clientType: "electron",
+          connectionId: "conn-1",
+        },
+      ],
+    });
+
+    await store.replaceRefreshSession("session-1", {
+      id: "session-1",
+      username: "admin",
+      tokenHash: "hash-2",
+      createdAt: "2026-04-03T00:00:00.000Z",
+      lastUsedAt: "2026-04-03T00:10:00.000Z",
+      expiresAt: "2026-05-03T00:10:00.000Z",
+      revokedAt: null,
+      replacedBySessionId: null,
+      clientType: "electron",
+      connectionId: "conn-1",
+    });
+
+    const refreshed = await store.getRefreshSession("session-1");
+    expect(refreshed).toEqual({
+      id: "session-1",
+      username: "admin",
+      tokenHash: "hash-2",
+      createdAt: "2026-04-03T00:00:00.000Z",
+      lastUsedAt: "2026-04-03T00:10:00.000Z",
+      expiresAt: "2026-05-03T00:10:00.000Z",
+      revokedAt: null,
+      replacedBySessionId: null,
+      clientType: "electron",
+      connectionId: "conn-1",
+    });
+  });
 });
