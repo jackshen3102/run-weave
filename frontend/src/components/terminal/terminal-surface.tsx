@@ -8,11 +8,6 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import {
-  containsTerminalActivityContent,
-  shouldEmitTerminalActivityPulse,
-  shouldMarkTerminalActivity,
-} from "../../features/terminal/activity-marker";
 import type { ClientMode } from "../../features/client-mode";
 import {
   DEFAULT_TERMINAL_PREFERENCES,
@@ -45,7 +40,6 @@ interface TerminalSurfaceProps {
   clientMode?: ClientMode;
   layoutVersion?: string;
   onAuthExpired?: () => void;
-  onActivity?: () => void;
   onBell?: () => void;
   onMetadata?: (metadata: { cwd: string; activeCommand: string | null }) => void;
 }
@@ -205,7 +199,6 @@ export function TerminalSurface({
   clientMode = "desktop",
   layoutVersion = "default",
   onAuthExpired,
-  onActivity,
   onBell,
   onMetadata,
 }: TerminalSurfaceProps) {
@@ -219,15 +212,12 @@ export function TerminalSurface({
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeRef = useRef(active);
-  const onActivityRef = useRef(onActivity);
   const onBellRef = useRef(onBell);
   const onAuthExpiredRef = useRef(onAuthExpired);
   const openTerminalLinkRef = useRef<(uri: string) => void>(() => undefined);
   const onMetadataRef = useRef(onMetadata);
   const tokenRef = useRef(token);
   const runtimeKindRef = useRef<"tmux" | "pty" | null>(null);
-  const openedAtRef = useRef(Date.now());
-  const lastActivityMarkedAtRef = useRef<number | null>(null);
   const lastResizedAtRef = useRef<number | null>(null);
   const inputSequenceRef = useRef(0);
   const outputSequenceRef = useRef(0);
@@ -359,23 +349,6 @@ export function TerminalSurface({
     const now = Date.now();
     if (!activeRef.current && nextChunk.includes(BELL_CHARACTER)) {
       onBellRef.current?.();
-    }
-
-    if (
-      containsTerminalActivityContent(nextChunk) &&
-      shouldMarkTerminalActivity({
-        active: activeRef.current,
-        now,
-        openedAt: openedAtRef.current,
-        lastResizedAt: lastResizedAtRef.current,
-      }) &&
-      shouldEmitTerminalActivityPulse({
-        now,
-        lastMarkedAt: lastActivityMarkedAtRef.current,
-      })
-    ) {
-      lastActivityMarkedAtRef.current = now;
-      onActivityRef.current?.();
     }
 
     outputSequenceRef.current += 1;
@@ -523,10 +496,6 @@ export function TerminalSurface({
   useEffect(() => {
     activeRef.current = active;
   }, [active]);
-
-  useEffect(() => {
-    onActivityRef.current = onActivity;
-  }, [onActivity]);
 
   useEffect(() => {
     onBellRef.current = onBell;

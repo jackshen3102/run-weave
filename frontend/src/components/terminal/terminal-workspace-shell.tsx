@@ -72,7 +72,7 @@ interface TerminalWorkspaceShellProps {
   projectDialogMode: "create" | "edit" | null;
   projectDialogError: string | null;
   projectPendingDeletion: TerminalProjectListItem | null;
-  activityMarkers: Record<string, boolean>;
+  completionMarkers: Record<string, boolean>;
   bellMarkers: Record<string, boolean>;
   terminalLayoutVersion: string;
   onSelectProject: (projectId: string) => void;
@@ -88,7 +88,6 @@ interface TerminalWorkspaceShellProps {
   onConfirmDeleteProject: () => void;
   onProjectDeletionOpenChange: (open: boolean) => void;
   onHistoryDrawerOpenChange: (open: boolean) => void;
-  onSessionActivity: (terminalSessionId: string) => void;
   onSessionBell: (terminalSessionId: string) => void;
   onSessionMetadata: (
     terminalSessionId: string,
@@ -128,7 +127,7 @@ export function TerminalWorkspaceShell({
   projectDialogMode,
   projectDialogError,
   projectPendingDeletion,
-  activityMarkers,
+  completionMarkers,
   bellMarkers,
   terminalLayoutVersion,
   onSelectProject,
@@ -144,7 +143,6 @@ export function TerminalWorkspaceShell({
   onConfirmDeleteProject,
   onProjectDeletionOpenChange,
   onHistoryDrawerOpenChange,
-  onSessionActivity,
   onSessionBell,
   onSessionMetadata,
 }: TerminalWorkspaceShellProps) {
@@ -192,10 +190,10 @@ export function TerminalWorkspaceShell({
                 session.projectId === project.projectId &&
                 bellMarkers[session.terminalSessionId],
             );
-            const hasActivity = sessions.some(
+            const hasCompletion = sessions.some(
               (session) =>
                 session.projectId === project.projectId &&
-                activityMarkers[session.terminalSessionId],
+                completionMarkers[session.terminalSessionId],
             );
             return (
               <ContextMenu key={project.projectId}>
@@ -215,13 +213,17 @@ export function TerminalWorkspaceShell({
                     title={project.name}
                   >
                     <span className="max-w-[160px] truncate">{project.name}</span>
-                    {hasBell || hasActivity ? (
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          hasBell ? "bg-amber-400" : "bg-emerald-400"
-                        }`}
-                      />
-                    ) : null}
+                    <span
+                      aria-hidden="true"
+                      className={[
+                        "h-1.5 w-1.5 shrink-0 rounded-full",
+                        hasBell
+                          ? "bg-amber-400"
+                          : hasCompletion
+                            ? "bg-emerald-400"
+                            : "bg-transparent",
+                      ].join(" ")}
+                    />
                   </button>
                 </ContextMenuTrigger>
                 {!isMobileMonitor ? (
@@ -296,7 +298,8 @@ export function TerminalWorkspaceShell({
           {visibleSessions.map((session) => {
             const isActive = session.terminalSessionId === activeSession?.terminalSessionId;
             const hasBell = !isActive && bellMarkers[session.terminalSessionId];
-            const hasActivity = !isActive && activityMarkers[session.terminalSessionId];
+            const hasCompletion =
+              !isActive && completionMarkers[session.terminalSessionId];
             const displayName = formatTerminalSessionName({
               cwd: session.cwd,
               activeCommand: session.activeCommand,
@@ -316,7 +319,7 @@ export function TerminalWorkspaceShell({
                   aria-label={displayName}
                   data-terminal-session-id={session.terminalSessionId}
                   className={[
-                    "inline-flex h-full max-w-[220px] items-center gap-1.5 py-0 text-xs",
+                    "inline-flex h-full min-w-0 max-w-[220px] items-center gap-1.5 py-0 text-xs",
                     isActive ? "text-slate-50" : "text-slate-200",
                   ].join(" ")}
                   onClick={() => {
@@ -325,13 +328,17 @@ export function TerminalWorkspaceShell({
                   title={buildSessionLabel(session)}
                 >
                   <span className="truncate">{displayName}</span>
-                  {hasBell || hasActivity ? (
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        hasBell ? "bg-amber-400" : "bg-emerald-400"
-                      }`}
-                    />
-                  ) : null}
+                  <span
+                    aria-hidden="true"
+                    className={[
+                      "h-1.5 w-1.5 shrink-0 rounded-full",
+                      hasBell
+                        ? "bg-amber-400"
+                        : hasCompletion
+                          ? "bg-emerald-400"
+                          : "bg-transparent",
+                    ].join(" ")}
+                  />
                 </button>
                 {!isMobileMonitor ? (
                   <button
@@ -390,9 +397,6 @@ export function TerminalWorkspaceShell({
                       terminalSessionId={session.terminalSessionId}
                       token={token}
                       onAuthExpired={onAuthExpired}
-                      onActivity={() => {
-                        onSessionActivity(session.terminalSessionId);
-                      }}
                       onBell={() => {
                         onSessionBell(session.terminalSessionId);
                       }}
@@ -420,9 +424,6 @@ export function TerminalWorkspaceShell({
                       terminalSessionId={session.terminalSessionId}
                       token={token}
                       onAuthExpired={onAuthExpired}
-                      onActivity={() => {
-                        onSessionActivity(session.terminalSessionId);
-                      }}
                       onBell={() => {
                         onSessionBell(session.terminalSessionId);
                       }}

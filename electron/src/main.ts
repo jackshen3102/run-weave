@@ -51,6 +51,7 @@ import {
   getTerminalBrowserEntryByTargetId,
   getTerminalBrowserCdpTargets,
 } from "./terminal-browser-view.js";
+import { installHooksIfNeeded } from "./hooks/hook-installer.js";
 
 const isDev = !app.isPackaged;
 process.env.BROWSER_VIEWER_MANAGES_PACKAGED_BACKEND = isDev ? "false" : "true";
@@ -428,6 +429,7 @@ app.whenReady().then(async () => {
     registerRuntimeStatsHandler(() => packagedBackendRuntime);
     registerTerminalBrowserHandlers();
     registerCdpProxyHandlers();
+    await installHooksIfNeeded();
 
     const portConfig = resolveCdpProxyPort(process.env);
     const cdpProxyPort = portConfig.strict

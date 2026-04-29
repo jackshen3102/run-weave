@@ -21,6 +21,7 @@ export interface TmuxCommand {
 export interface TmuxLaunchCommand {
   command: string;
   args: string[];
+  env?: Record<string, string | undefined>;
 }
 
 export interface TmuxPaneMetadata {
@@ -227,6 +228,7 @@ export class TmuxService {
         "-s",
         target.sessionName,
         ...this.buildShellIntegrationEnvArgs(launchCommand),
+        ...this.buildLaunchEnvArgs(launchCommand.env),
         ...this.buildExtraEnvArgs(),
         "-c",
         cwd,
@@ -478,6 +480,21 @@ export class TmuxService {
     return SHELL_INTEGRATION_ENV_KEYS.flatMap((key) => {
       const value = integratedEnv[key];
       if (value === undefined || value === this.env[key]) {
+        return [];
+      }
+      return ["-e", `${key}=${value}`];
+    });
+  }
+
+  private buildLaunchEnvArgs(
+    env: Record<string, string | undefined> | undefined,
+  ): string[] {
+    if (!env) {
+      return [];
+    }
+
+    return Object.entries(env).flatMap(([key, value]) => {
+      if (!value) {
         return [];
       }
       return ["-e", `${key}=${value}`];

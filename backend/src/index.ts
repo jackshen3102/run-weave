@@ -1,6 +1,7 @@
 import "dotenv/config";
 import http from "node:http";
 import { existsSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import express from "express";
 import { LowDbAuthStore } from "./auth/lowdb-store";
@@ -17,6 +18,7 @@ import { createDevtoolsRouter } from "./routes/devtools";
 import { QualityProbeStore } from "./quality/probe-store";
 import { createQualityRouter } from "./routes/quality";
 import { createSessionRouter } from "./routes/session";
+import { createInternalTerminalCompletionRouter } from "./routes/terminal-completion";
 import { createTerminalRouter } from "./routes/terminal";
 import { createTestRouter } from "./routes/test";
 import { createCorsMiddleware } from "./server/cors";
@@ -25,6 +27,7 @@ import { SessionManager } from "./session/manager";
 import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/clipboard-image";
 import { LowDbSessionStore } from "./session/lowdb-store";
 import { TerminalSessionManager } from "./terminal/manager";
+import { TerminalCompletionEventStore } from "./terminal/completion-events";
 import { PtyService } from "./terminal/pty-service";
 import { TerminalRuntimeRegistry } from "./terminal/runtime-registry";
 import { TmuxService } from "./terminal/tmux-service";
@@ -54,6 +57,7 @@ interface RuntimeServices {
   wsSessionController: WebSocketSessionController;
   aiBridgeSessionController: WebSocketSessionController;
   terminalSessionManager: TerminalSessionManager;
+  terminalCompletionEventStore: TerminalCompletionEventStore;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
   ptyService: PtyService;
   tmuxService: TmuxService;
@@ -117,6 +121,15 @@ function resolveSessionRestoreEnabled(env: NodeJS.ProcessEnv): boolean {
   return env.SESSION_RESTORE_ENABLED?.trim().toLowerCase() === "true";
 }
 
+function resolveTerminalHookToken(env: NodeJS.ProcessEnv): string {
+  const existing = env.RUNWEAVE_HOOK_TOKEN?.trim();
+  if (existing) {
+    return existing;
+  }
+
+  return randomBytes(32).toString("hex");
+}
+
 async function createRuntimeServices(): Promise<RuntimeServices> {
   const storagePaths = resolveStoragePaths(process.env);
   const authConfig = loadAuthConfig();
@@ -164,7 +177,9 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   const terminalSessionManager = new TerminalSessionManager(
     terminalSessionStore,
   );
+  const terminalCompletionEventStore = new TerminalCompletionEventStore();
   const terminalRuntimeRegistry = new TerminalRuntimeRegistry();
+  process.env.RUNWEAVE_HOOK_TOKEN = resolveTerminalHookToken(process.env);
   const ptyService = new PtyService();
   const tmuxService = new TmuxService({
     socketPath:
@@ -190,6 +205,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     wsSessionController,
     aiBridgeSessionController,
     terminalSessionManager,
+    terminalCompletionEventStore,
     terminalRuntimeRegistry,
     ptyService,
     tmuxService,
@@ -222,6 +238,15 @@ function createHttpApp(services: RuntimeServices): express.Express {
       res.status(400).json({ error: "endpoint required" });
     }
   });
+
+  app.use(
+    "/internal/terminal-completion",
+    createInternalTerminalCompletionRouter({
+      completionEventStore: services.terminalCompletionEventStore,
+      terminalSessionManager: services.terminalSessionManager,
+      hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
+    }),
+  );
 
   app.use("/test", createTestRouter());
   app.use(
@@ -261,6 +286,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
       runtimeRegistry: services.terminalRuntimeRegistry,
       tmuxService: services.tmuxService,
       authService: services.authService,
+      completionEventStore: services.terminalCompletionEventStore,
     }),
   );
 
@@ -365,10 +391,13 @@ async function startRuntime(): Promise<void> {
     },
   );
 
-  await listenWithFallback(server, runtimeConfig.preferredPort, {
+  const port = await listenWithFallback(server, runtimeConfig.preferredPort, {
     host: runtimeConfig.host,
     maxAttempts: runtimeConfig.strictPort ? 1 : undefined,
   });
+  process.env.RUNWEAVE_HOOK_ENDPOINT =
+    process.env.RUNWEAVE_HOOK_ENDPOINT ??
+    `http://127.0.0.1:${port}/internal/terminal-completion`;
 
   attachLifecycleHandlers(
     server,
