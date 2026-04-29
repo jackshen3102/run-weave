@@ -3,6 +3,7 @@ import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
   TerminalBrowserCdpProxyInfo,
+  TerminalBrowserProxyState,
 } from "@browser-viewer/shared";
 
 contextBridge.exposeInMainWorld("electronAPI", {
@@ -77,6 +78,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
       "terminal-browser:get-cdp-proxy-info",
       tabId,
     ) as Promise<TerminalBrowserCdpProxyInfo>,
+  terminalBrowserGetProxyState: () =>
+    ipcRenderer.invoke(
+      "terminal-browser:get-proxy-state",
+    ) as Promise<TerminalBrowserProxyState>,
+  terminalBrowserSetProxyEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke(
+      "terminal-browser:set-proxy-enabled",
+      enabled,
+    ) as Promise<TerminalBrowserProxyState>,
   terminalBrowserCloseTab: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:close-tab", tabId),
   onTerminalBrowserTabCreatedFromProxy: (

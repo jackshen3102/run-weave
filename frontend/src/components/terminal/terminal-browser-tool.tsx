@@ -7,6 +7,8 @@ import {
   Plus,
   RotateCw,
   Square,
+  Wifi,
+  WifiOff,
   X,
 } from "lucide-react";
 import {
@@ -16,7 +18,9 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
+import type { TerminalBrowserProxyState } from "@browser-viewer/shared";
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { TerminalBrowserCdpEndpointPopover } from "./terminal-browser-cdp-endpoint-popover";
@@ -90,6 +94,10 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   const loadedUrlByTabRef = useRef<Record<string, string>>({});
   const navigationSequenceByTabRef = useRef<Record<string, number>>({});
   const activeTabIdRef = useRef(activeTabId);
+  const [proxyState, setProxyState] =
+    useState<TerminalBrowserProxyState | null>(null);
+  const [proxySwitching, setProxySwitching] = useState(false);
+  const [proxyError, setProxyError] = useState<string | null>(null);
   const isElectron = window.electronAPI?.isElectron === true;
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
@@ -330,6 +338,34 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
     if (!isElectron) {
       return;
     }
+    let cancelled = false;
+    const loadProxyState = async (): Promise<void> => {
+      try {
+        const state = await window.electronAPI?.terminalBrowserGetProxyState?.();
+        if (!cancelled && state) {
+          setProxyState(state);
+          setProxyError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setProxyError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load proxy state",
+          );
+        }
+      }
+    };
+    void loadProxyState();
+    return () => {
+      cancelled = true;
+    };
+  }, [isElectron]);
+
+  useEffect(() => {
+    if (!isElectron) {
+      return;
+    }
     void syncElectronTabs();
     return window.electronAPI?.onTerminalBrowserTabCreatedFromProxy?.(
       ({ tabId, url, title }) => {
@@ -401,6 +437,28 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         loading: false,
         error: error instanceof Error ? error.message : "Reload failed",
       });
+    }
+  };
+
+  const toggleProxy = async (): Promise<void> => {
+    if (!isElectron || proxySwitching) {
+      return;
+    }
+    const nextEnabled = !(proxyState?.enabled ?? false);
+    setProxySwitching(true);
+    setProxyError(null);
+    try {
+      const nextState =
+        await window.electronAPI?.terminalBrowserSetProxyEnabled?.(nextEnabled);
+      if (nextState) {
+        setProxyState(nextState);
+      }
+    } catch (error) {
+      setProxyError(
+        error instanceof Error ? error.message : "Failed to switch proxy",
+      );
+    } finally {
+      setProxySwitching(false);
     }
   };
 
@@ -540,6 +598,35 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
           type="button"
           size="sm"
           variant="ghost"
+          className={[
+            "h-7 w-7 rounded-md px-0",
+            proxyState?.enabled
+              ? "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-200"
+              : "",
+          ].join(" ")}
+          disabled={!isElectron || proxySwitching}
+          onClick={() => void toggleProxy()}
+          aria-label={
+            proxyState?.enabled
+              ? "Disable browser proxy"
+              : "Enable browser proxy"
+          }
+          title={
+            proxyState?.enabled
+              ? `Proxy enabled: ${proxyState.proxyRules}`
+              : "Enable browser proxy"
+          }
+        >
+          {proxyState?.enabled ? (
+            <Wifi className="h-4 w-4" />
+          ) : (
+            <WifiOff className="h-4 w-4" />
+          )}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
           className="h-7 w-7 rounded-md px-0"
           disabled={!isElectron || activeTab.cdpProxyAttached === true}
           onClick={() => {
@@ -573,6 +660,11 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
           <ExternalLink className="h-4 w-4" />
         </Button>
       </form>
+      {proxyError ? (
+        <div className="border-b border-rose-900/60 bg-rose-950/30 px-3 py-1.5 text-xs text-rose-300">
+          {proxyError}
+        </div>
+      ) : null}
       {activeTab.error ? (
         <div className="border-b border-rose-900/60 bg-rose-950/30 px-3 py-1.5 text-xs text-rose-300">
           {activeTab.error}
