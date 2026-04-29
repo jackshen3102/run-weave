@@ -26,6 +26,10 @@ function createMemoryAuthStore() {
       if (!current) {
         throw new Error("Missing session");
       }
+      if (nextSession.id === sessionId) {
+        sessions.set(sessionId, structuredClone(nextSession));
+        return;
+      }
       sessions.set(sessionId, {
         ...current,
         revokedAt: nextSession.createdAt,
@@ -113,7 +117,7 @@ describe("AuthService", () => {
     ).resolves.toBeNull();
   });
 
-  it("rotates refresh sessions and invalidates the previous refresh token", async () => {
+  it("rotates refresh tokens without invalidating the current access token", async () => {
     const { store } = createMemoryAuthStore();
     const service = new AuthService(
       {
@@ -136,11 +140,13 @@ describe("AuthService", () => {
 
     const refreshed = await service.refreshSession(issued!.refreshToken!);
     expect(refreshed).toBeTruthy();
+    expect(refreshed?.sessionId).toBe(issued?.sessionId);
     expect(refreshed?.refreshToken).not.toBe(issued?.refreshToken);
 
     await expect(
       service.refreshSession(issued!.refreshToken!),
     ).resolves.toBeNull();
+    expect(service.verifyAccessToken(issued!.accessToken)).toBeTruthy();
     expect(service.verifyAccessToken(refreshed!.accessToken)).toBeTruthy();
   });
 

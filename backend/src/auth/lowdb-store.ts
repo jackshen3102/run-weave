@@ -86,6 +86,11 @@ export class LowDbAuthStore implements AuthStore {
       if (sessionIndex < 0) {
         throw new Error("[viewer-be] refresh session not found");
       }
+      if (nextSession.id === sessionId) {
+        auth.refreshSessions[sessionIndex] = structuredClone(nextSession);
+        await this.getDatabase().write();
+        return;
+      }
       auth.refreshSessions[sessionIndex] = {
         ...auth.refreshSessions[sessionIndex]!,
         revokedAt: nextSession.createdAt,

@@ -20,6 +20,7 @@ interface BaseTokenPayload {
   sub: string;
   sid: string;
   exp: number;
+  jti?: string;
   resource?: TokenResource;
 }
 
@@ -50,6 +51,7 @@ function decodePayload(encodedPayload: string): BaseTokenPayload | null {
       sub: parsed.sub,
       sid: parsed.sid,
       exp: parsed.exp,
+      jti: typeof parsed.jti === "string" ? parsed.jti : undefined,
       type: parsed.type as SignedTokenType,
       resource:
         parsed.resource && typeof parsed.resource === "object"
@@ -95,6 +97,7 @@ export function issueToken(params: {
     sub: params.username,
     sid: params.sessionId,
     exp: Math.floor(nowMs / 1000) + expiresIn,
+    jti: crypto.randomUUID(),
     type: params.tokenType,
     resource: params.resource,
   };
