@@ -81,6 +81,22 @@ function isNavigationAbortError(error: unknown): boolean {
   );
 }
 
+function buildTabStateFromElectronSnapshot(
+  snapshot: ElectronBrowserTabSnapshot,
+) {
+  return {
+    id: snapshot.tabId,
+    url: snapshot.url,
+    addressInput: snapshot.url,
+    title: snapshot.title || browserTabLabel("", snapshot.url),
+    loading: snapshot.loading,
+    canGoBack: snapshot.canGoBack,
+    canGoForward: snapshot.canGoForward,
+    cdpProxyAttached: snapshot.cdpProxyAttached,
+    devtoolsOpen: snapshot.devtoolsOpen,
+  };
+}
+
 export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   const tabs = useTerminalPreviewStore((state) => state.browser.tabs);
   const activeTabId = useTerminalPreviewStore(
@@ -95,6 +111,9 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   const addProxyBrowserTab = useTerminalPreviewStore(
     (state) => state.addProxyBrowserTab,
   );
+  const replaceBrowserTabs = useTerminalPreviewStore(
+    (state) => state.replaceBrowserTabs,
+  );
   const setActiveBrowserTab = useTerminalPreviewStore(
     (state) => state.setActiveBrowserTab,
   );
@@ -106,6 +125,7 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   const loadedUrlByTabRef = useRef<Record<string, string>>({});
   const navigationSequenceByTabRef = useRef<Record<string, number>>({});
   const activeTabIdRef = useRef(activeTabId);
+  const isElectron = window.electronAPI?.isElectron === true;
   const [proxyState, setProxyState] =
     useState<TerminalBrowserProxyState | null>(null);
   const [proxySwitching, setProxySwitching] = useState(false);
@@ -113,10 +133,10 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   const [headerRules, setHeaderRules] = useState<TerminalBrowserHeaderRule[]>(
     [],
   );
+  const [electronTabsSynced, setElectronTabsSynced] = useState(!isElectron);
   const [headerSaving, setHeaderSaving] = useState(false);
   const [headerError, setHeaderError] = useState<string | null>(null);
   const [headerRulesPanelOpen, setHeaderRulesPanelOpen] = useState(false);
-  const isElectron = window.electronAPI?.isElectron === true;
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
     [activeTabId, tabs],
@@ -155,19 +175,6 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
       });
     },
     [updateBrowserTab],
-  );
-
-  const applyElectronTabSnapshot = useCallback(
-    (tab: ElectronBrowserTabSnapshot) => {
-      loadedUrlByTabRef.current[tab.tabId] = tab.url;
-      addProxyBrowserTab(tab.tabId, tab.url, tab.title);
-      applyElectronUpdate(tab.tabId, tab);
-      updateBrowserTab(tab.tabId, {
-        cdpProxyAttached: tab.cdpProxyAttached,
-        devtoolsOpen: tab.devtoolsOpen,
-      });
-    },
-    [addProxyBrowserTab, applyElectronUpdate, updateBrowserTab],
   );
 
   const syncBoundsForTab = useCallback(
@@ -231,19 +238,28 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   );
 
   const syncElectronTabs = useCallback(async (): Promise<void> => {
-    const snapshots = await window.electronAPI?.terminalBrowserListTabs?.();
-    if (!snapshots) {
-      return;
+    try {
+      const snapshots = await window.electronAPI?.terminalBrowserListTabs?.();
+      if (!snapshots) {
+        return;
+      }
+      if (snapshots.length > 0) {
+        for (const snapshot of snapshots) {
+          loadedUrlByTabRef.current[snapshot.tabId] = snapshot.url;
+        }
+        const activeSnapshot = snapshots.find((snapshot) => snapshot.active);
+        replaceBrowserTabs(
+          snapshots.map(buildTabStateFromElectronSnapshot),
+          activeSnapshot?.tabId,
+        );
+        if (activeSnapshot) {
+          syncActiveTabBounds(activeSnapshot.tabId);
+        }
+      }
+    } finally {
+      setElectronTabsSynced(true);
     }
-    for (const snapshot of snapshots) {
-      applyElectronTabSnapshot(snapshot);
-    }
-    const activeSnapshot = snapshots.find((snapshot) => snapshot.active);
-    if (activeSnapshot) {
-      setActiveBrowserTab(activeSnapshot.tabId);
-      syncActiveTabBounds(activeSnapshot.tabId);
-    }
-  }, [applyElectronTabSnapshot, setActiveBrowserTab, syncActiveTabBounds]);
+  }, [replaceBrowserTabs, syncActiveTabBounds]);
 
   const navigateTab = useCallback(
     async (tabId: string, rawInput: string): Promise<void> => {
@@ -310,6 +326,9 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   );
 
   useEffect(() => {
+    if (isElectron && !electronTabsSynced) {
+      return;
+    }
     if (!activeTabId || !activeTabUrl || !active || !isElectron) {
       syncBounds(true);
       return;
@@ -321,7 +340,15 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
     }
 
     syncBounds(true);
-  }, [active, activeTabId, activeTabUrl, isElectron, navigateTab, syncBounds]);
+  }, [
+    active,
+    activeTabId,
+    activeTabUrl,
+    electronTabsSynced,
+    isElectron,
+    navigateTab,
+    syncBounds,
+  ]);
 
   useEffect(() => {
     syncBounds(true);
@@ -448,6 +475,17 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
       },
     );
   }, [isElectron, applyElectronUpdate, syncActiveTabBounds]);
+
+  useEffect(() => {
+    if (!isElectron) {
+      return;
+    }
+    return window.electronAPI?.onTerminalBrowserTabClosed?.(({ tabId }) => {
+      delete loadedUrlByTabRef.current[tabId];
+      delete navigationSequenceByTabRef.current[tabId];
+      closeBrowserTab(tabId);
+    });
+  }, [isElectron, closeBrowserTab]);
 
   useEffect(() => {
     if (!isElectron) {

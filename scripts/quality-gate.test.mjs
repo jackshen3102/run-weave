@@ -32,6 +32,10 @@ assert.deepEqual(
   ["default"],
 );
 
+assert.deepEqual(selectLayersForChangedFiles(["electron/src/main.ts"]), [
+  "default",
+]);
+
 assert.deepEqual(
   selectLayersForChangedFiles(["frontend/src/components/login-page.tsx"]),
   ["e2e"],

@@ -1,4 +1,5 @@
 import {
+  app,
   BrowserWindow,
   ipcMain,
   session as electronSession,
@@ -7,12 +8,22 @@ import {
 } from "electron";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import {
   normalizeTerminalBrowserHeaderRules,
   type TerminalBrowserHeaderRule,
   type TerminalBrowserHeaderState,
   type TerminalBrowserProxyState,
 } from "@browser-viewer/shared";
+import {
+  normalizeTerminalBrowserPersistedState,
+  normalizeTerminalBrowserUrlForStorage,
+  selectTerminalBrowserTabsForRestore,
+  type TerminalBrowserPersistedState,
+  type TerminalBrowserPersistedTabRecord,
+} from "./terminal-browser-tabs-state.js";
+import { getIsQuitting } from "./app-state.js";
 
 interface TerminalBrowserBounds {
   x: number;
@@ -46,6 +57,8 @@ interface TerminalBrowserEntry {
   targetId: string;
   cdpProxyAttached: boolean;
   devtoolsOpen: boolean;
+  lastActiveAt: number;
+  lastKnownUrl: string;
 }
 
 export interface TerminalBrowserCdpTarget {
@@ -63,6 +76,7 @@ const attachedTerminalBrowserByWindowId = new Map<number, string>();
 export const terminalBrowserEvents = new EventEmitter();
 
 const TERMINAL_BROWSER_SESSION_PARTITION = "persist:runweave-terminal-browser";
+const TERMINAL_BROWSER_TABS_STORE_FILE = "terminal-browser-tabs.json";
 const TERMINAL_BROWSER_PROXY_HOST = "127.0.0.1";
 const TERMINAL_BROWSER_PROXY_PORT = 8899;
 const TERMINAL_BROWSER_PROXY_RULES =
@@ -72,9 +86,148 @@ const TERMINAL_BROWSER_PROXY_BYPASS_RULES = "<local>";
 let terminalBrowserProxyEnabled = false;
 let terminalBrowserHeaderRules: TerminalBrowserHeaderRule[] = [];
 let terminalBrowserHeaderDispatcherRegistered = false;
+let terminalBrowserSaveTimer: NodeJS.Timeout | null = null;
+let terminalBrowserPersistedStateRestored = false;
+
+const restoringTerminalBrowserWindows = new Set<number>();
 
 function getTerminalBrowserSession(): Electron.Session {
   return electronSession.fromPartition(TERMINAL_BROWSER_SESSION_PARTITION);
+}
+
+function getTerminalBrowserTabsStorePath(): string {
+  return path.join(app.getPath("userData"), TERMINAL_BROWSER_TABS_STORE_FILE);
+}
+
+async function readTerminalBrowserPersistedState(): Promise<TerminalBrowserPersistedState> {
+  const storePath = getTerminalBrowserTabsStorePath();
+  try {
+    const raw = await readFile(storePath, "utf8");
+    return normalizeTerminalBrowserPersistedState(JSON.parse(raw));
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      (error as { code?: unknown }).code === "ENOENT"
+    ) {
+      return { version: 1, activeTabId: null, tabs: [] };
+    }
+    console.warn("[electron] failed to read terminal browser tabs state", {
+      path: storePath,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await backupUnreadableTerminalBrowserTabsStore(storePath);
+    return { version: 1, activeTabId: null, tabs: [] };
+  }
+}
+
+async function backupUnreadableTerminalBrowserTabsStore(
+  storePath: string,
+): Promise<void> {
+  const backupPath = `${storePath}.bad-${Date.now()}`;
+  try {
+    await copyFile(storePath, backupPath);
+    console.warn("[electron] backed up unreadable terminal browser tabs state", {
+      backupPath,
+    });
+  } catch (error) {
+    console.warn("[electron] failed to back up terminal browser tabs state", {
+      path: storePath,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function writeTerminalBrowserPersistedState(
+  state: TerminalBrowserPersistedState,
+): Promise<void> {
+  const storePath = getTerminalBrowserTabsStorePath();
+  await mkdir(path.dirname(storePath), { recursive: true });
+  await writeFile(storePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+}
+
+function getTerminalBrowserTabRecords(): TerminalBrowserPersistedTabRecord[] {
+  const rawRecords: Array<TerminalBrowserPersistedTabRecord & { windowId: number }> =
+    [];
+  const idCounts = new Map<string, number>();
+
+  for (const [key, entry] of terminalBrowserEntries) {
+    const webContents = entry.view.webContents;
+    if (!webContents || webContents.isDestroyed()) {
+      continue;
+    }
+    const url = normalizeTerminalBrowserUrlForStorage(
+      webContents.getURL() || entry.lastKnownUrl,
+    );
+    if (!url) {
+      continue;
+    }
+    const prefix = `${entry.windowId}:`;
+    const id = key.startsWith(prefix) ? key.slice(prefix.length) : key;
+    idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+    rawRecords.push({
+      id,
+      windowId: entry.windowId,
+      url,
+      title: webContents.getTitle(),
+      lastActiveAt: entry.lastActiveAt,
+    });
+  }
+
+  return rawRecords.map(({ windowId, ...record }) => ({
+    ...record,
+    id:
+      (idCounts.get(record.id) ?? 0) > 1
+        ? `${windowId}-${record.id}`
+        : record.id,
+  }));
+}
+
+function getTerminalBrowserPersistedState(): TerminalBrowserPersistedState {
+  let activeRecord: { windowId: number; tabId: string; lastActiveAt: number } | null =
+    null;
+  for (const [windowId, tabId] of attachedTerminalBrowserByWindowId) {
+    const entry = terminalBrowserEntries.get(makeKeyFromWindowIdAndTabId(windowId, tabId));
+    if (!entry) {
+      continue;
+    }
+    if (!activeRecord || entry.lastActiveAt > activeRecord.lastActiveAt) {
+      activeRecord = { windowId, tabId, lastActiveAt: entry.lastActiveAt };
+    }
+  }
+
+  const tabs = getTerminalBrowserTabRecords();
+  const activeTabId = activeRecord
+    ? tabs.find((tab) => tab.id === activeRecord.tabId)?.id ??
+      tabs.find((tab) => tab.id === `${activeRecord.windowId}-${activeRecord.tabId}`)
+        ?.id ??
+      null
+    : null;
+
+  return {
+    version: 1,
+    activeTabId:
+      activeTabId && tabs.some((tab) => tab.id === activeTabId)
+        ? activeTabId
+        : (tabs[0]?.id ?? null),
+    tabs,
+  };
+}
+
+function scheduleTerminalBrowserTabsSave(): void {
+  if (restoringTerminalBrowserWindows.size > 0) {
+    return;
+  }
+  if (terminalBrowserSaveTimer) {
+    clearTimeout(terminalBrowserSaveTimer);
+  }
+  terminalBrowserSaveTimer = setTimeout(() => {
+    terminalBrowserSaveTimer = null;
+    const state = getTerminalBrowserPersistedState();
+    void writeTerminalBrowserPersistedState(state).catch(() => {
+      // Persistence failure should not break the embedded browser.
+    });
+  }, 150);
 }
 
 function getTerminalBrowserProxyState(): TerminalBrowserProxyState {
@@ -205,21 +358,7 @@ function isTerminalBrowserBounds(value: unknown): value is TerminalBrowserBounds
 }
 
 function validateTerminalBrowserUrl(url: string): string | null {
-  if (typeof url !== "string") {
-    return null;
-  }
-  if (url === "about:blank") {
-    return url;
-  }
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return null;
-    }
-    return parsed.toString();
-  } catch {
-    return null;
-  }
+  return normalizeTerminalBrowserUrlForStorage(url);
 }
 
 function getTerminalBrowserKey(win: BrowserWindow, tabId: string): string {
@@ -230,14 +369,70 @@ function makeKeyFromWindowIdAndTabId(windowId: number, tabId: string): string {
   return `${windowId}:${tabId}`;
 }
 
-function getTerminalBrowserSnapshot(view: WebContentsView): TerminalBrowserSnapshot {
+function getTerminalBrowserSnapshot(
+  view: WebContentsView,
+  fallbackUrl = "",
+): TerminalBrowserSnapshot {
   const history = view.webContents.navigationHistory;
   return {
-    url: view.webContents.getURL(),
+    url: view.webContents.getURL() || fallbackUrl,
     title: view.webContents.getTitle(),
     canGoBack: history.canGoBack(),
     canGoForward: history.canGoForward(),
   };
+}
+
+async function restoreTerminalBrowserTabsForWindow(
+  win: BrowserWindow,
+): Promise<void> {
+  if (terminalBrowserPersistedStateRestored) {
+    return;
+  }
+  terminalBrowserPersistedStateRestored = true;
+
+  if (getTerminalBrowserTabsForWindow(win.id).length > 0) {
+    return;
+  }
+
+  const state = await readTerminalBrowserPersistedState();
+  if (state.tabs.length === 0) {
+    return;
+  }
+
+  restoringTerminalBrowserWindows.add(win.id);
+  try {
+    const restoredTabs = selectTerminalBrowserTabsForRestore(
+      state.tabs,
+      state.activeTabId,
+    );
+    for (const tab of restoredTabs) {
+      const view = getOrCreateTerminalBrowserView(win, tab.id);
+      const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, tab.id));
+      if (!entry) {
+        continue;
+      }
+      entry.lastActiveAt = tab.lastActiveAt;
+      entry.lastKnownUrl = tab.url;
+      void view.webContents.loadURL(tab.url).catch(() => {
+        sendTerminalBrowserTabUpdate(win, tab.id, entry, false);
+      });
+    }
+
+    const activeTabId =
+      state.activeTabId && restoredTabs.some((tab) => tab.id === state.activeTabId)
+        ? state.activeTabId
+        : (restoredTabs[0]?.id ?? null);
+    if (activeTabId) {
+      const activeEntry = terminalBrowserEntries.get(
+        getTerminalBrowserKey(win, activeTabId),
+      );
+      if (activeEntry) {
+        attachTerminalBrowser(win, activeTabId, activeEntry.view);
+      }
+    }
+  } finally {
+    restoringTerminalBrowserWindows.delete(win.id);
+  }
 }
 
 function isNavigationAbortError(error: unknown): boolean {
@@ -257,12 +452,17 @@ function sendTerminalBrowserTabUpdate(
   if (win.isDestroyed() || win.webContents.isDestroyed()) {
     return;
   }
+  const snapshot = getTerminalBrowserSnapshot(entry.view, entry.lastKnownUrl);
+  if (snapshot.url) {
+    entry.lastKnownUrl = snapshot.url;
+  }
   const update: TerminalBrowserUpdate = {
     tabId,
-    ...getTerminalBrowserSnapshot(entry.view),
+    ...snapshot,
     loading,
   };
   win.webContents.send("terminal-browser:tab-updated", update);
+  scheduleTerminalBrowserTabsSave();
 }
 
 function sendTerminalBrowserTabActivatedFromProxy(
@@ -273,9 +473,13 @@ function sendTerminalBrowserTabActivatedFromProxy(
   if (win.isDestroyed() || win.webContents.isDestroyed()) {
     return;
   }
+  const snapshot = getTerminalBrowserSnapshot(entry.view, entry.lastKnownUrl);
+  if (snapshot.url) {
+    entry.lastKnownUrl = snapshot.url;
+  }
   const update: TerminalBrowserUpdate = {
     tabId,
-    ...getTerminalBrowserSnapshot(entry.view),
+    ...snapshot,
     loading: entry.view.webContents.isLoading(),
   };
   win.webContents.send("terminal-browser:tab-activated-from-proxy", update);
@@ -332,6 +536,8 @@ function getOrCreateTerminalBrowserView(
     targetId: randomUUID(),
     cdpProxyAttached: false,
     devtoolsOpen: false,
+    lastActiveAt: Date.now(),
+    lastKnownUrl: "",
   };
 
   view.webContents.on("devtools-opened", () => {
@@ -369,6 +575,7 @@ function createTerminalBrowserTabFromPageOpen(win: BrowserWindow, url: string): 
   }
 
   attachTerminalBrowser(win, tabId, view);
+  entry.lastKnownUrl = url;
   win.webContents.send("terminal-browser:tab-created-from-proxy", {
     tabId,
     url,
@@ -411,9 +618,19 @@ function attachTerminalBrowser(
   }
   view.setVisible(true);
   attachedTerminalBrowserByWindowId.set(win.id, tabId);
+  if (entry) {
+    entry.lastActiveAt = Date.now();
+  }
+  if (!restoringTerminalBrowserWindows.has(win.id)) {
+    scheduleTerminalBrowserTabsSave();
+  }
 }
 
-function closeTerminalBrowserEntry(win: BrowserWindow, tabId: string): void {
+function closeTerminalBrowserEntry(
+  win: BrowserWindow,
+  tabId: string,
+  options: { persist?: boolean } = {},
+): void {
   detachTerminalBrowser(win, tabId);
   const key = getTerminalBrowserKey(win, tabId);
   const entry = terminalBrowserEntries.get(key);
@@ -425,7 +642,13 @@ function closeTerminalBrowserEntry(win: BrowserWindow, tabId: string): void {
   }
   terminalBrowserEntries.delete(key);
   terminalBrowserEvents.emit("tab-closed", { targetId: entry.targetId });
+  if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+    win.webContents.send("terminal-browser:tab-closed", { tabId });
+  }
   entry.view.webContents.close();
+  if (options.persist !== false) {
+    scheduleTerminalBrowserTabsSave();
+  }
 }
 
 export function closeTerminalBrowsersForWindow(windowId: number): void {
@@ -439,6 +662,9 @@ export function closeTerminalBrowsersForWindow(windowId: number): void {
     entry.view.webContents.close();
   }
   terminalBrowserEvents.emit("window-closed", { windowId });
+  if (!getIsQuitting()) {
+    scheduleTerminalBrowserTabsSave();
+  }
 }
 
 function clampTerminalBrowserBounds(
@@ -467,7 +693,7 @@ export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
       key,
       targetId: entry.targetId,
       windowId: entry.windowId,
-      url: wc.getURL(),
+      url: wc.getURL() || entry.lastKnownUrl,
       title: wc.getTitle(),
       webContents: wc,
     });
@@ -505,7 +731,7 @@ export function getTerminalBrowserTabsForWindow(
     const tabId = key.slice(prefix.length);
     tabs.push({
       tabId,
-      ...getTerminalBrowserSnapshot(entry.view),
+      ...getTerminalBrowserSnapshot(entry.view, entry.lastKnownUrl),
       loading: entry.view.webContents.isLoading(),
       active: activeTabId === tabId,
       cdpProxyAttached: entry.cdpProxyAttached,
@@ -535,6 +761,7 @@ export async function createTerminalBrowserTabFromProxy(
 
   const safeUrl = validateTerminalBrowserUrl(url);
   if (safeUrl) {
+    entry.lastKnownUrl = safeUrl;
     const load = view.webContents.loadURL(safeUrl);
     if (safeUrl === "about:blank") {
       await load;
@@ -626,11 +853,12 @@ export function registerTerminalBrowserHandlers(): void {
     },
   );
 
-  ipcMain.handle("terminal-browser:list-tabs", (event) => {
+  ipcMain.handle("terminal-browser:list-tabs", async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) {
       return [];
     }
+    await restoreTerminalBrowserTabsForWindow(win);
     return getTerminalBrowserTabsForWindow(win.id);
   });
 
@@ -661,6 +889,10 @@ export function registerTerminalBrowserHandlers(): void {
       }
 
       const view = getOrCreateTerminalBrowserView(win, tabId);
+      const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, tabId));
+      if (entry) {
+        entry.lastKnownUrl = safeUrl;
+      }
       try {
         await view.webContents.loadURL(safeUrl);
       } catch (error) {
@@ -668,7 +900,7 @@ export function registerTerminalBrowserHandlers(): void {
           throw error;
         }
       }
-      return getTerminalBrowserSnapshot(view);
+      return getTerminalBrowserSnapshot(view, entry?.lastKnownUrl ?? safeUrl);
     },
   );
 
@@ -679,9 +911,10 @@ export function registerTerminalBrowserHandlers(): void {
       if (!win || typeof tabId !== "string") {
         throw new Error("Invalid browser reload request");
       }
-      const { view } = getExistingTerminalBrowserEntry(win, tabId, "reload");
+      const entry = getExistingTerminalBrowserEntry(win, tabId, "reload");
+      const { view } = entry;
       view.webContents.reload();
-      return getTerminalBrowserSnapshot(view);
+      return getTerminalBrowserSnapshot(view, entry.lastKnownUrl);
     },
   );
 
@@ -701,11 +934,12 @@ export function registerTerminalBrowserHandlers(): void {
       if (!win || typeof tabId !== "string") {
         throw new Error("Invalid browser history request");
       }
-      const { view } = getExistingTerminalBrowserEntry(win, tabId, "go back");
+      const entry = getExistingTerminalBrowserEntry(win, tabId, "go back");
+      const { view } = entry;
       if (view.webContents.navigationHistory.canGoBack()) {
         view.webContents.navigationHistory.goBack();
       }
-      return getTerminalBrowserSnapshot(view);
+      return getTerminalBrowserSnapshot(view, entry.lastKnownUrl);
     },
   );
 
@@ -716,11 +950,12 @@ export function registerTerminalBrowserHandlers(): void {
       if (!win || typeof tabId !== "string") {
         throw new Error("Invalid browser history request");
       }
-      const { view } = getExistingTerminalBrowserEntry(win, tabId, "go forward");
+      const entry = getExistingTerminalBrowserEntry(win, tabId, "go forward");
+      const { view } = entry;
       if (view.webContents.navigationHistory.canGoForward()) {
         view.webContents.navigationHistory.goForward();
       }
-      return getTerminalBrowserSnapshot(view);
+      return getTerminalBrowserSnapshot(view, entry.lastKnownUrl);
     },
   );
 
