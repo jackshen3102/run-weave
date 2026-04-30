@@ -169,5 +169,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.off("terminal-browser:tab-activated-from-proxy", wrapped);
     };
   },
+  onTerminalBrowserTabClosed: (listener: (data: { tabId: string }) => void) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      data: { tabId: string },
+    ) => {
+      listener(data);
+    };
+    ipcRenderer.on("terminal-browser:tab-closed", wrapped);
+    return () => {
+      ipcRenderer.off("terminal-browser:tab-closed", wrapped);
+    };
+  },
   beep: () => shell.beep(),
 });

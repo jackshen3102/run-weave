@@ -19,7 +19,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm run test:default && pnpm run test:e2e",
-    "test:default": "pnpm --filter ./backend test && pnpm --filter ./packages/shared test",
+    "test:default": "pnpm --filter ./backend test && pnpm --filter ./packages/shared test && pnpm --filter ./electron test",
     "test:e2e": "pnpm --filter ./frontend e2e",
     "test:e2e:list": "pnpm --filter ./frontend exec playwright test --list",
     "test:live": "pnpm --filter ./backend test:live",

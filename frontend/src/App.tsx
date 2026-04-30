@@ -107,6 +107,9 @@ declare global {
           data: TerminalBrowserSnapshot & { tabId: string; loading: boolean },
         ) => void,
       ) => () => void;
+      onTerminalBrowserTabClosed?: (
+        listener: (data: { tabId: string }) => void,
+      ) => () => void;
     };
   }
 }

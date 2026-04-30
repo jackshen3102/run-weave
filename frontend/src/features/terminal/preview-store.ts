@@ -65,6 +65,10 @@ interface TerminalPreviewStore {
   removeProjectPreview: (projectId: string) => void;
   createBrowserTab: (url?: string) => void;
   addProxyBrowserTab: (tabId: string, url: string, title: string) => void;
+  replaceBrowserTabs: (
+    tabs: TerminalBrowserTabState[],
+    activeTabId?: string,
+  ) => void;
   closeBrowserTab: (tabId: string) => void;
   setActiveBrowserTab: (tabId: string) => void;
   updateBrowserTab: (
@@ -91,6 +95,17 @@ function createBrowserTabState(url = DEFAULT_BROWSER_URL): TerminalBrowserTabSta
     canGoBack: false,
     canGoForward: false,
   };
+}
+
+function createUniqueBrowserTabState(
+  existingTabs: TerminalBrowserTabState[],
+  url?: string,
+): TerminalBrowserTabState {
+  let nextTab = createBrowserTabState(url);
+  while (existingTabs.some((tab) => tab.id === nextTab.id)) {
+    nextTab = createBrowserTabState(url);
+  }
+  return nextTab;
 }
 
 function labelBrowserUrl(url: string): string {
@@ -181,7 +196,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
   },
   createBrowserTab: (url?: string) => {
     set((state: TerminalPreviewStore) => {
-      const nextTab = createBrowserTabState(url);
+      const nextTab = createUniqueBrowserTabState(state.browser.tabs, url);
       return {
         browser: {
           tabs: [...state.browser.tabs, nextTab],
@@ -212,6 +227,25 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
       };
     });
   },
+  replaceBrowserTabs: (
+    tabs: TerminalBrowserTabState[],
+    activeTabId?: string,
+  ) => {
+    set((state: TerminalPreviewStore) => {
+      if (tabs.length === 0) {
+        return state;
+      }
+      const nextActiveTab = activeTabId
+        ? tabs.find((tab) => tab.id === activeTabId)
+        : undefined;
+      return {
+        browser: {
+          tabs,
+          activeTabId: nextActiveTab?.id ?? tabs[0]!.id,
+        },
+      };
+    });
+  },
   closeBrowserTab: (tabId: string) => {
     set((state: TerminalPreviewStore) => {
       const currentTabs = state.browser.tabs;
@@ -220,7 +254,10 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
         return state;
       }
       const remainingTabs = currentTabs.filter((tab) => tab.id !== tabId);
-      const tabs = remainingTabs.length > 0 ? remainingTabs : [createBrowserTabState()];
+      const tabs =
+        remainingTabs.length > 0
+          ? remainingTabs
+          : [createUniqueBrowserTabState(currentTabs)];
       const closingActiveTab = state.browser.activeTabId === tabId;
       const nextActiveTab = closingActiveTab
         ? (tabs[Math.min(closingIndex, tabs.length - 1)] as TerminalBrowserTabState)

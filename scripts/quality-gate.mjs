@@ -153,6 +153,9 @@ export function selectLayersForChangedFiles(changedFiles) {
   const touchesBackend = changedFiles.some((filePath) =>
     filePath.startsWith("backend/"),
   );
+  const touchesElectron = changedFiles.some((filePath) =>
+    filePath.startsWith("electron/"),
+  );
   const touchesFrontend = changedFiles.some((filePath) =>
     filePath.startsWith("frontend/"),
   );
@@ -177,7 +180,7 @@ export function selectLayersForChangedFiles(changedFiles) {
     layers.add("live");
   }
 
-  if (touchesBackend) {
+  if (touchesBackend || touchesElectron) {
     layers.add("default");
   }
 
