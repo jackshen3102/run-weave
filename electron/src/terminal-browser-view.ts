@@ -7,7 +7,12 @@ import {
 } from "electron";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import type { TerminalBrowserProxyState } from "@browser-viewer/shared";
+import {
+  normalizeTerminalBrowserHeaderRules,
+  type TerminalBrowserHeaderRule,
+  type TerminalBrowserHeaderState,
+  type TerminalBrowserProxyState,
+} from "@browser-viewer/shared";
 
 interface TerminalBrowserBounds {
   x: number;
@@ -65,6 +70,8 @@ const TERMINAL_BROWSER_PROXY_RULES =
 const TERMINAL_BROWSER_PROXY_BYPASS_RULES = "<local>";
 
 let terminalBrowserProxyEnabled = false;
+let terminalBrowserHeaderRules: TerminalBrowserHeaderRule[] = [];
+let terminalBrowserHeaderDispatcherRegistered = false;
 
 function getTerminalBrowserSession(): Electron.Session {
   return electronSession.fromPartition(TERMINAL_BROWSER_SESSION_PARTITION);
@@ -76,6 +83,82 @@ function getTerminalBrowserProxyState(): TerminalBrowserProxyState {
     proxyRules: TERMINAL_BROWSER_PROXY_RULES,
     proxyBypassRules: TERMINAL_BROWSER_PROXY_BYPASS_RULES,
   };
+}
+
+function getTerminalBrowserHeaderState(): TerminalBrowserHeaderState {
+  return {
+    rules: terminalBrowserHeaderRules,
+  };
+}
+
+function wildcardUrlPatternMatches(pattern: string, url: string): boolean {
+  const escapedPattern = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+  const regexPattern = `^${escapedPattern.replace(/\*/g, ".*")}$`;
+  return new RegExp(regexPattern).test(url);
+}
+
+function setRequestHeader(
+  requestHeaders: Record<string, string>,
+  name: string,
+  value: string,
+): void {
+  const normalizedName = name.toLowerCase();
+  for (const existingName of Object.keys(requestHeaders)) {
+    if (
+      existingName.toLowerCase() === normalizedName &&
+      existingName !== name
+    ) {
+      delete requestHeaders[existingName];
+    }
+  }
+  requestHeaders[name] = value;
+}
+
+function ensureTerminalBrowserHeaderDispatcher(): void {
+  if (terminalBrowserHeaderDispatcherRegistered) {
+    return;
+  }
+
+  getTerminalBrowserSession().webRequest.onBeforeSendHeaders(
+    { urls: ["<all_urls>"] },
+    (details, callback) => {
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(details.url);
+      } catch {
+        callback({});
+        return;
+      }
+
+      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+        callback({});
+        return;
+      }
+
+      let requestHeaders: Record<string, string> | null = null;
+      for (const rule of terminalBrowserHeaderRules) {
+        if (
+          !rule.enabled ||
+          !wildcardUrlPatternMatches(rule.urlPattern, parsedUrl.toString())
+        ) {
+          continue;
+        }
+        requestHeaders ??= { ...details.requestHeaders };
+        setRequestHeader(requestHeaders, rule.name, rule.value);
+      }
+
+      callback(requestHeaders ? { requestHeaders } : {});
+    },
+  );
+  terminalBrowserHeaderDispatcherRegistered = true;
+}
+
+function setTerminalBrowserHeaderRules(
+  rules: unknown,
+): TerminalBrowserHeaderState {
+  terminalBrowserHeaderRules = normalizeTerminalBrowserHeaderRules(rules);
+  ensureTerminalBrowserHeaderDispatcher();
+  return getTerminalBrowserHeaderState();
 }
 
 function reloadTerminalBrowserTabsForProxyChange(): void {
@@ -516,6 +599,8 @@ export function setTerminalBrowserCdpProxyAttached(
 }
 
 export function registerTerminalBrowserHandlers(): void {
+  ensureTerminalBrowserHeaderDispatcher();
+
   ipcMain.handle("terminal-browser:get-proxy-state", () => {
     return getTerminalBrowserProxyState();
   });
@@ -527,6 +612,17 @@ export function registerTerminalBrowserHandlers(): void {
         throw new Error("Invalid browser proxy state");
       }
       return await setTerminalBrowserProxyEnabled(enabled);
+    },
+  );
+
+  ipcMain.handle("terminal-browser:get-header-rules", () => {
+    return getTerminalBrowserHeaderState();
+  });
+
+  ipcMain.handle(
+    "terminal-browser:set-header-rules",
+    (_event, rules: unknown): TerminalBrowserHeaderState => {
+      return setTerminalBrowserHeaderRules(rules);
     },
   );
 

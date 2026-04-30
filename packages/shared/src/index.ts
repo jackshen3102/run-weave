@@ -6,4 +6,5 @@ export * from "./runtime-monitor";
 export * from "./terminal-protocol";
 export * from "./terminal-limits";
 export * from "./terminal-browser-cdp-proxy";
+export * from "./terminal-browser-headers";
 export * from "./terminal-browser-proxy";

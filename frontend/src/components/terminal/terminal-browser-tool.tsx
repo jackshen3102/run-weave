@@ -20,10 +20,18 @@ import {
   useRef,
   useState,
 } from "react";
-import type { TerminalBrowserProxyState } from "@browser-viewer/shared";
+import {
+  normalizeTerminalBrowserHeaderRules,
+  type TerminalBrowserHeaderRule,
+  type TerminalBrowserProxyState,
+} from "@browser-viewer/shared";
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { TerminalBrowserCdpEndpointPopover } from "./terminal-browser-cdp-endpoint-popover";
+import {
+  TerminalBrowserHeadersButton,
+  TerminalBrowserHeadersPanel,
+} from "./terminal-browser-headers-panel";
 import { Button } from "../ui/button";
 
 interface TerminalBrowserToolProps {
@@ -49,6 +57,8 @@ interface ElectronBrowserTabSnapshot extends ElectronBrowserUpdate {
 }
 
 const BROWSER_VIEW_GUTTER_PX = 6;
+const TERMINAL_BROWSER_SIDE_PANEL_WIDTH_PX = 320;
+const HEADER_RULES_STORAGE_KEY = "terminal.browser.headerRules";
 
 function browserTabLabel(title: string, url: string): string {
   return title.trim() || url.replace(/^https?:\/\//, "");
@@ -66,7 +76,9 @@ function isNavigationAbortError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
-  return error.message.includes("ERR_ABORTED") || error.message.includes("(-3)");
+  return (
+    error.message.includes("ERR_ABORTED") || error.message.includes("(-3)")
+  );
 }
 
 export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
@@ -98,6 +110,12 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
     useState<TerminalBrowserProxyState | null>(null);
   const [proxySwitching, setProxySwitching] = useState(false);
   const [proxyError, setProxyError] = useState<string | null>(null);
+  const [headerRules, setHeaderRules] = useState<TerminalBrowserHeaderRule[]>(
+    [],
+  );
+  const [headerSaving, setHeaderSaving] = useState(false);
+  const [headerError, setHeaderError] = useState<string | null>(null);
+  const [headerRulesPanelOpen, setHeaderRulesPanelOpen] = useState(false);
   const isElectron = window.electronAPI?.isElectron === true;
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
@@ -288,12 +306,7 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         syncActiveTabBounds(tabId);
       }
     },
-    [
-      applyElectronSnapshot,
-      isElectron,
-      syncActiveTabBounds,
-      updateBrowserTab,
-    ],
+    [applyElectronSnapshot, isElectron, syncActiveTabBounds, updateBrowserTab],
   );
 
   useEffect(() => {
@@ -309,6 +322,10 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
 
     syncBounds(true);
   }, [active, activeTabId, activeTabUrl, isElectron, navigateTab, syncBounds]);
+
+  useEffect(() => {
+    syncBounds(true);
+  }, [headerRulesPanelOpen, syncBounds]);
 
   useEffect(() => {
     if (!isElectron || !activeTabId) {
@@ -341,7 +358,8 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
     let cancelled = false;
     const loadProxyState = async (): Promise<void> => {
       try {
-        const state = await window.electronAPI?.terminalBrowserGetProxyState?.();
+        const state =
+          await window.electronAPI?.terminalBrowserGetProxyState?.();
         if (!cancelled && state) {
           setProxyState(state);
           setProxyError(null);
@@ -357,6 +375,49 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
       }
     };
     void loadProxyState();
+    return () => {
+      cancelled = true;
+    };
+  }, [isElectron]);
+
+  useEffect(() => {
+    if (!isElectron) {
+      return;
+    }
+    let cancelled = false;
+    const loadHeaderRules = async (): Promise<void> => {
+      try {
+        const rawRules = window.localStorage.getItem(HEADER_RULES_STORAGE_KEY);
+        const persistedRules = rawRules
+          ? normalizeTerminalBrowserHeaderRules(JSON.parse(rawRules))
+          : [];
+        if (cancelled) {
+          return;
+        }
+        setHeaderRules(persistedRules);
+        if (!window.electronAPI?.terminalBrowserSetHeaderRules) {
+          throw new Error("Header rules are unavailable");
+        }
+        const state =
+          await window.electronAPI.terminalBrowserSetHeaderRules(
+            persistedRules,
+          );
+        if (!cancelled && state) {
+          setHeaderRules(state.rules);
+          setHeaderError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setHeaderRules([]);
+          setHeaderError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load header rules",
+          );
+        }
+      }
+    };
+    void loadHeaderRules();
     return () => {
       cancelled = true;
     };
@@ -424,9 +485,7 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
       (navigationSequenceByTabRef.current[tabId] ?? 0) + 1;
     updateBrowserTab(tabId, { loading: true, error: undefined });
     try {
-      const snapshot = await window.electronAPI?.terminalBrowserReload?.(
-        tabId,
-      );
+      const snapshot = await window.electronAPI?.terminalBrowserReload?.(tabId);
       if (snapshot) {
         applyElectronSnapshot(tabId, snapshot);
       } else {
@@ -459,6 +518,52 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
       );
     } finally {
       setProxySwitching(false);
+    }
+  };
+
+  const saveHeaderRules = async (
+    nextRules: TerminalBrowserHeaderRule[],
+  ): Promise<boolean> => {
+    if (!isElectron) {
+      return false;
+    }
+    setHeaderSaving(true);
+    setHeaderError(null);
+    try {
+      const normalizedRules = normalizeTerminalBrowserHeaderRules(nextRules);
+      if (!window.electronAPI?.terminalBrowserSetHeaderRules) {
+        throw new Error("Header rules are unavailable");
+      }
+      const previousRules = window.localStorage.getItem(
+        HEADER_RULES_STORAGE_KEY,
+      );
+      window.localStorage.setItem(
+        HEADER_RULES_STORAGE_KEY,
+        JSON.stringify(normalizedRules),
+      );
+      let state;
+      try {
+        state =
+          await window.electronAPI.terminalBrowserSetHeaderRules(
+            normalizedRules,
+          );
+      } catch (error) {
+        if (previousRules === null) {
+          window.localStorage.removeItem(HEADER_RULES_STORAGE_KEY);
+        } else {
+          window.localStorage.setItem(HEADER_RULES_STORAGE_KEY, previousRules);
+        }
+        throw error;
+      }
+      setHeaderRules(state.rules);
+      return true;
+    } catch (error) {
+      setHeaderError(
+        error instanceof Error ? error.message : "Failed to save header rules",
+      );
+      return false;
+    } finally {
+      setHeaderSaving(false);
     }
   };
 
@@ -518,7 +623,9 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
                 onClick={() => setActiveBrowserTab(tab.id)}
               >
                 <Globe2 className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{browserTabLabel(tab.title, tab.url)}</span>
+                <span className="truncate">
+                  {browserTabLabel(tab.title, tab.url)}
+                </span>
               </button>
               <button
                 type="button"
@@ -623,6 +730,13 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
             <WifiOff className="h-4 w-4" />
           )}
         </Button>
+        {isElectron ? (
+          <TerminalBrowserHeadersButton
+            open={headerRulesPanelOpen}
+            rules={headerRules}
+            onOpenChange={setHeaderRulesPanelOpen}
+          />
+        ) : null}
         <Button
           type="button"
           size="sm"
@@ -630,7 +744,9 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
           className="h-7 w-7 rounded-md px-0"
           disabled={!isElectron || activeTab.cdpProxyAttached === true}
           onClick={() => {
-            void window.electronAPI?.terminalBrowserOpenDevTools?.(activeTab.id);
+            void window.electronAPI?.terminalBrowserOpenDevTools?.(
+              activeTab.id,
+            );
           }}
           aria-label={
             activeTab.cdpProxyAttached
@@ -665,6 +781,11 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
           {proxyError}
         </div>
       ) : null}
+      {headerError ? (
+        <div className="border-b border-rose-900/60 bg-rose-950/30 px-3 py-1.5 text-xs text-rose-300">
+          {headerError}
+        </div>
+      ) : null}
       {activeTab.error ? (
         <div className="border-b border-rose-900/60 bg-rose-950/30 px-3 py-1.5 text-xs text-rose-300">
           {activeTab.error}
@@ -674,8 +795,24 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         <div
           ref={surfaceRef}
           className="absolute inset-y-0 right-0"
-          style={{ left: BROWSER_VIEW_GUTTER_PX }}
+          style={{
+            left: BROWSER_VIEW_GUTTER_PX,
+            right: headerRulesPanelOpen
+              ? TERMINAL_BROWSER_SIDE_PANEL_WIDTH_PX
+              : 0,
+          }}
         />
+        {isElectron ? (
+          <TerminalBrowserHeadersPanel
+            open={headerRulesPanelOpen}
+            rules={headerRules}
+            saving={headerSaving}
+            error={headerError}
+            onClose={() => setHeaderRulesPanelOpen(false)}
+            onSave={saveHeaderRules}
+            onReload={() => void reload()}
+          />
+        ) : null}
         {!isElectron ? (
           <div
             className="absolute inset-y-0 right-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-xs text-slate-400"
