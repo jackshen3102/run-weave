@@ -28,6 +28,12 @@
 - `pnpm run test:e2e`
 - `pnpm run test:live`
 
+## 按需录屏验收
+
+当用户明确要求“最后录屏验证”时，可在常规验证后执行浏览器 MCP 录屏验收，并把录屏与元数据保存到本地 `artifacts/verification-runs/`。
+
+该能力是最终验收证据层，不替代 E2E 断言。详细设计见：`docs/quality/recorded-browser-mcp-verification.md`
+
 ## 关键路径（高层）
 
 - 登录成功
