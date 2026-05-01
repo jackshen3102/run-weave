@@ -145,7 +145,7 @@ RUNWEAVE_HOOK_TOKEN=<random per-backend token>
 
 其中：
 
-- `RUNWEAVE_TERMINAL_SESSION_ID` 是前端 tab 和后端 session 的主身份。
+- `RUNWEAVE_TERMINAL_SESSION_ID` 是前端 tab 和后端 session 的主身份。当前后端生成 8 位十六进制短 ID，并在运行中的 session 集合内做唯一性检查；它是临时不透明标识，不是 UUID，也不承诺跨重启长期稳定。
 - `RUNWEAVE_HOOK_ENDPOINT` 是本机 backend 内部写入接口。
 - `RUNWEAVE_HOOK_TOKEN` 是内部写入鉴权 token。
 

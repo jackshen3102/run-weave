@@ -26,8 +26,10 @@ type ClientMode = "desktop" | "mobile";
 
 - Electron 客户端始终使用 `desktop`。
 - `viewportWidth <= 767` 使用 `mobile`。
-- `pointer: coarse` 且 `viewportWidth <= 1024` 使用 `mobile`。
+- `pointer: coarse` 只在 `viewportWidth <= 767` 时使用 `mobile`。
 - `?clientMode=desktop` / `?clientMode=mobile` 可用于开发调试覆盖。
+
+触摸屏平板不再因为 `pointer: coarse` 自动进入移动端分支；只要视口超过手机宽度，就保留桌面端控制台体验。Home 的桌面布局从 `md` 断点开始展示双栏，平板宽度下仍保留会话管理与主内容并列的操作台形态。
 
 `ClientMode` 是体验分支开关，不应演变成散落在各处的按钮级临时判断。新增移动端能力时，优先让页面或 chrome 层根据模式切换，核心连接、状态和服务逻辑保持复用。
 
