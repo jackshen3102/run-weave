@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from "uuid";
-import { randomBytes } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
@@ -20,6 +19,8 @@ import {
   readScrollbackBufferTailLines,
   type ScrollbackBuffer,
 } from "./scrollback-buffer";
+import { getInitialTerminalActiveCommand } from "./session-launch";
+import { createUniqueTerminalSessionId } from "./session-id";
 
 export interface TerminalProjectRecord {
   id: string;
@@ -167,12 +168,6 @@ function toPersisted(
 }
 
 const SCROLLBACK_FLUSH_DELAY_MS = 250;
-const TERMINAL_SESSION_ID_BYTES = 4;
-const MAX_TERMINAL_SESSION_ID_GENERATION_ATTEMPTS = 16;
-
-function createTerminalSessionId(): string {
-  return randomBytes(TERMINAL_SESSION_ID_BYTES).toString("hex");
-}
 
 export class TerminalSessionManager {
   private readonly projects = new Map<string, TerminalProjectRecord>();
@@ -311,12 +306,14 @@ export class TerminalSessionManager {
     const now = new Date();
     const projectId = options.projectId ?? this.getDefaultProjectId();
     const session = createRuntimeRecord({
-      id: this.createUniqueTerminalSessionId(),
+      id: createUniqueTerminalSessionId((candidate) =>
+        this.sessions.has(candidate),
+      ),
       projectId,
       command: options.command,
       args: options.args ?? [],
       cwd: options.cwd,
-      activeCommand: null,
+      activeCommand: getInitialTerminalActiveCommand(options.command),
       scrollback: "",
       status: "running",
       createdAt: now,
@@ -327,21 +324,6 @@ export class TerminalSessionManager {
     await this.sessionStore.insertSession(toPersisted(session));
     this.sessions.set(session.id, session);
     return session;
-  }
-
-  private createUniqueTerminalSessionId(): string {
-    for (
-      let attempt = 0;
-      attempt < MAX_TERMINAL_SESSION_ID_GENERATION_ATTEMPTS;
-      attempt += 1
-    ) {
-      const candidate = createTerminalSessionId();
-      if (!this.sessions.has(candidate)) {
-        return candidate;
-      }
-    }
-
-    throw new Error("Failed to generate a unique terminal session id");
   }
 
   getScrollback(terminalSessionId: string): string {
