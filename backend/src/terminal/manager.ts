@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
+import { randomBytes } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
@@ -166,6 +167,12 @@ function toPersisted(
 }
 
 const SCROLLBACK_FLUSH_DELAY_MS = 250;
+const TERMINAL_SESSION_ID_BYTES = 4;
+const MAX_TERMINAL_SESSION_ID_GENERATION_ATTEMPTS = 16;
+
+function createTerminalSessionId(): string {
+  return randomBytes(TERMINAL_SESSION_ID_BYTES).toString("hex");
+}
 
 export class TerminalSessionManager {
   private readonly projects = new Map<string, TerminalProjectRecord>();
@@ -304,7 +311,7 @@ export class TerminalSessionManager {
     const now = new Date();
     const projectId = options.projectId ?? this.getDefaultProjectId();
     const session = createRuntimeRecord({
-      id: uuidv4(),
+      id: this.createUniqueTerminalSessionId(),
       projectId,
       command: options.command,
       args: options.args ?? [],
@@ -320,6 +327,21 @@ export class TerminalSessionManager {
     await this.sessionStore.insertSession(toPersisted(session));
     this.sessions.set(session.id, session);
     return session;
+  }
+
+  private createUniqueTerminalSessionId(): string {
+    for (
+      let attempt = 0;
+      attempt < MAX_TERMINAL_SESSION_ID_GENERATION_ATTEMPTS;
+      attempt += 1
+    ) {
+      const candidate = createTerminalSessionId();
+      if (!this.sessions.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    throw new Error("Failed to generate a unique terminal session id");
   }
 
   getScrollback(terminalSessionId: string): string {

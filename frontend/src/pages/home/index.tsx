@@ -201,7 +201,7 @@ export function HomePage({
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-8 sm:py-8">
+    <main className="relative min-h-screen overflow-hidden px-4 py-6 md:px-6 md:py-8 xl:px-8">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217,226,211,0.75),transparent_32%),radial-gradient(circle_at_80%_20%,rgba(68,136,146,0.16),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(191,166,122,0.18),transparent_28%)]" />
       <div className="relative mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl flex-col gap-8">
         <HomeHeader
@@ -231,7 +231,7 @@ export function HomePage({
           </p>
         ) : null}
 
-        <section className="grid flex-1 gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+        <section className="grid flex-1 gap-5 md:grid-cols-[360px_minmax(0,1fr)] xl:gap-6">
           <HomeSidebar
             sessionSourceType={sessionSourceType}
             onSessionSourceTypeChange={setSessionSourceType}

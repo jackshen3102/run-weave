@@ -8,7 +8,6 @@ interface ResolveClientModeParams {
 }
 
 const PHONE_MAX_WIDTH = 767;
-const COARSE_POINTER_MAX_WIDTH = 1024;
 
 export function resolveClientMode({
   viewportWidth,
@@ -28,7 +27,7 @@ export function resolveClientMode({
     return "mobile";
   }
 
-  if (coarsePointer && viewportWidth <= COARSE_POINTER_MAX_WIDTH) {
+  if (coarsePointer && viewportWidth <= PHONE_MAX_WIDTH) {
     return "mobile";
   }
 
