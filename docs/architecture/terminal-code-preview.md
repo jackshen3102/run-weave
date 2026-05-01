@@ -55,6 +55,14 @@ Terminal Browser 工具当前边界：
 - Playwright MCP / Playwright CLI 通过 `chromium.connectOverCDP(...)` 连接 Proxy 后，只能发现和操作 Terminal Browser tab。`Target.createTarget` 创建的是 Browser 工具内 AI tab，当前上限为 10；CDP 连接上限为 8。
 - Proxy 负责 target/session 仿真、frame id 重写、导航参数校验、危险命令拦截和 DevTools 状态隔离。`Browser.close`、`Browser.crash`、清 cookie/cache/origin storage、忽略 HTTPS 错误等命令不能影响用户主窗口或真实 profile。
 - Browser 工具的 CDP 能力是桌面端本机自动化边界，不是远端协作协议；不要把 endpoint 持久化到项目数据或对公网暴露。
+- Browser tab 状态会持久化到 Electron `userData` 下的 `terminal-browser-tabs.json`。重启客户端时会恢复合法的 `http:`、`https:`、`about:blank` tab，并丢弃不合法或空 URL。
+- 工具栏提供本地代理开关与 `Headers` 面板。代理开关使用同一个 `persist:runweave-terminal-browser` session 的 `setProxy`，当前固定走 `127.0.0.1:8899`，绕过 `<local>`。
+- `Headers` 面板只影响右侧 Terminal Browser 的网页请求，不影响首页 `New Browser` 创建的后端 Playwright session、Runweave 主窗口、登录/API 请求、Electron 更新请求或后端 viewer session。
+- Header 规则保存在前端 `localStorage` 的 `terminal.browser.headerRules`，Terminal Browser Tool 挂载时会同步到 Electron 主进程；保存失败会回滚本地存储并展示错误。
+- Header 规则通过 `terminal-browser:get-header-rules` / `terminal-browser:set-header-rules` IPC 进入主进程。主进程做最终校验，最多 20 条，字段为 `enabled`、固定操作 `set`、`name`、`value`、`urlPattern`，默认 URL 模式为 `*://*/*`。
+- Header 名必须符合 HTTP token 形态，禁止控制字符、冒号以及 `host`、`content-length`、`connection`、`upgrade`、`proxy-authorization`、`cookie`、`set-cookie`。Header 值不能为空且不能包含控制字符。
+- Electron 主进程只注册一个 `webRequest.onBeforeSendHeaders({ urls: ["<all_urls>"] })` dispatcher。dispatcher 只处理 `http:` / `https:` 请求，按规则列表顺序匹配轻量通配 URL；同名 Header 后命中的规则覆盖前面的规则。
+- Header 规则变更只影响后续新请求。面板保存后提供刷新入口，让当前页面主文档请求也重新携带新规则。
 
 设计结论：
 
