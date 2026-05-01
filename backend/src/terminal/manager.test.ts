@@ -169,7 +169,7 @@ describe("TerminalSessionManager", () => {
       projectId: "project-default",
     });
 
-    expect(session.id).toBeTruthy();
+    expect(session.id).toMatch(/^[a-f0-9]{8}$/);
     expect(manager.getSession(session.id)).toEqual(session);
     expect(manager.listSessions()).toHaveLength(1);
     expect(store.insertSession).toHaveBeenCalledWith(
