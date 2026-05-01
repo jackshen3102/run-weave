@@ -15,6 +15,7 @@
 | 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md             |
 | 质量体系概览                             | quality/quality-harness.md                            |
 | AI 诊断日志                              | quality/ai-diagnostic-logging.md                      |
+| 按需录屏的浏览器 MCP 验证                | quality/recorded-browser-mcp-verification.md          |
 | 终端性能优化                             | quality/terminal-performance-optimization.md          |
 | 测试层级与命名                           | testing/layers.md                                     |
 | 测试命令选择                             | testing/command-matrix.md                             |
