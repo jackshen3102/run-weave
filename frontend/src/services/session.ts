@@ -1,6 +1,4 @@
 import type {
-  CreateAiBridgeRequest,
-  CreateAiBridgeResponse,
   CreateDevtoolsTicketRequest,
   CreateDevtoolsTicketResponse,
   CreateSessionRequest,
@@ -8,7 +6,6 @@ import type {
   CreateViewerWsTicketResponse,
   SessionListItem,
   SessionStatusResponse,
-  UpdateSessionAiPreferenceRequest,
   UpdateSessionRequest,
 } from "@browser-viewer/shared";
 import { requestBlob, requestJson, requestVoid } from "./http";
@@ -54,36 +51,6 @@ export async function getDefaultCdpEndpoint(
   );
 }
 
-export async function getAiDefaultSession(
-  apiBase: string,
-  token: string,
-): Promise<SessionStatusResponse> {
-  return requestJson<SessionStatusResponse>(apiBase, "/api/session/ai-default", {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-}
-
-export async function ensureAiDefaultSession(
-  apiBase: string,
-  token: string,
-  name?: string,
-): Promise<SessionStatusResponse> {
-  return requestJson<SessionStatusResponse>(
-    apiBase,
-    "/api/session/ai-default/ensure",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(name ? { name } : {}),
-    },
-  );
-}
-
 export async function deleteSession(
   apiBase: string,
   token: string,
@@ -117,27 +84,6 @@ export async function updateSession(
   );
 }
 
-export async function updateSessionAiPreference(
-  apiBase: string,
-  token: string,
-  sessionId: string,
-  preferredForAi: boolean,
-): Promise<SessionStatusResponse> {
-  const payload: UpdateSessionAiPreferenceRequest = { preferredForAi };
-  return requestJson<SessionStatusResponse>(
-    apiBase,
-    `/api/session/${encodeURIComponent(sessionId)}/ai-preference`,
-    {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
 export async function createDevtoolsTicket(
   apiBase: string,
   token: string,
@@ -154,43 +100,6 @@ export async function createDevtoolsTicket(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
-    },
-  );
-}
-
-export async function createAiBridge(
-  apiBase: string,
-  token: string,
-  sessionId: string,
-  payload: CreateAiBridgeRequest,
-): Promise<CreateAiBridgeResponse> {
-  return requestJson<CreateAiBridgeResponse>(
-    apiBase,
-    `/api/session/${encodeURIComponent(sessionId)}/ai-bridge`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export async function revokeAiBridge(
-  apiBase: string,
-  token: string,
-  sessionId: string,
-): Promise<void> {
-  return requestVoid(
-    apiBase,
-    `/api/session/${encodeURIComponent(sessionId)}/ai-bridge`,
-    {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
     },
   );
 }

@@ -8,8 +8,6 @@
 | ---------------------------------------- | ----------------------------------------------------- |
 | 架构/网络拓扑                            | architecture/network-topology.md                      |
 | 移动端 Web 支持                          | architecture/mobile-web-support.md                    |
-| 默认 AI Viewer                           | architecture/default-ai-viewer-workflow.md            |
-| AI 协作状态                              | architecture/ai-collaboration-state.md                |
 | 终端代码预览 / Terminal Browser          | architecture/terminal-code-preview.md                 |
 | 终端 tmux 恢复                           | architecture/terminal-tmux-recovery.md                |
 | 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md             |

@@ -68,20 +68,14 @@ export function HomePage({
     setBrowserViewportWidthInput,
     browserViewportHeightInput,
     setBrowserViewportHeightInput,
-    preferredForAi,
-    setPreferredForAi,
     loading,
     error,
     sortedSessions,
     loadingSessions,
-    openingAiViewer,
     deletingSessionId,
-    updatingAiPreferenceSessionId,
-    openAiViewer,
     createSession,
     removeSession,
     renameSession,
-    updateSessionAiPreference,
   } = useHomeSessions({
     apiBase,
     token,
@@ -172,7 +166,9 @@ export function HomePage({
                   Sessions
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {loadingSessions ? "Refreshing..." : `${sortedSessions.length} total`}
+                  {loadingSessions
+                    ? "Refreshing..."
+                    : `${sortedSessions.length} total`}
                 </p>
               </div>
             </div>
@@ -188,7 +184,6 @@ export function HomePage({
                 sessions={sortedSessions}
                 loadingSessions={loadingSessions}
                 deletingSessionId={deletingSessionId}
-                updatingAiPreferenceSessionId={updatingAiPreferenceSessionId}
                 actions="open-only"
                 onRenameSession={(sessionId) => {
                   void renameSession(sessionId);
@@ -198,9 +193,6 @@ export function HomePage({
                 }}
                 onResumeSession={(sessionId) => {
                   navigate(`/viewer/${encodeURIComponent(sessionId)}`);
-                }}
-                onToggleAiPreference={(sessionId, nextPreferredForAi) => {
-                  void updateSessionAiPreference(sessionId, nextPreferredForAi);
                 }}
               />
             </div>
@@ -267,8 +259,6 @@ export function HomePage({
             onBrowserViewportWidthInputChange={setBrowserViewportWidthInput}
             browserViewportHeightInput={browserViewportHeightInput}
             onBrowserViewportHeightInputChange={setBrowserViewportHeightInput}
-            preferredForAi={preferredForAi}
-            onPreferredForAiChange={setPreferredForAi}
             loading={loading}
             onSubmitSession={() => {
               void createSession();
@@ -283,21 +273,11 @@ export function HomePage({
                   Sessions
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {loadingSessions ? "Refreshing quietly..." : `${sortedSessions.length} total`}
+                  {loadingSessions
+                    ? "Refreshing quietly..."
+                    : `${sortedSessions.length} total`}
                 </p>
               </div>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="rounded-full px-4"
-                onClick={() => {
-                  void openAiViewer();
-                }}
-                disabled={openingAiViewer}
-              >
-                {openingAiViewer ? "Opening..." : "Open Default AI Viewer"}
-              </Button>
             </div>
 
             <div className="mt-6 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
@@ -305,7 +285,6 @@ export function HomePage({
                 sessions={sortedSessions}
                 loadingSessions={loadingSessions}
                 deletingSessionId={deletingSessionId}
-                updatingAiPreferenceSessionId={updatingAiPreferenceSessionId}
                 onRenameSession={(sessionId) => {
                   void renameSession(sessionId);
                 }}
@@ -314,9 +293,6 @@ export function HomePage({
                 }}
                 onResumeSession={(sessionId) => {
                   navigate(`/viewer/${encodeURIComponent(sessionId)}`);
-                }}
-                onToggleAiPreference={(sessionId, nextPreferredForAi) => {
-                  void updateSessionAiPreference(sessionId, nextPreferredForAi);
                 }}
               />
             </div>

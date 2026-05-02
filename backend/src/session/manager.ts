@@ -1,8 +1,6 @@
-import { EventEmitter } from "node:events";
 import { rm } from "node:fs/promises";
 import type {
   BrowserProfile,
-  CollaborationState,
   CreateSessionSource,
   SessionHeaders,
 } from "@browser-viewer/shared";
@@ -18,7 +16,6 @@ import type { PersistedSessionRecord, SessionStore } from "./store";
 export interface SessionRecord {
   id: string;
   name: string;
-  preferredForAi: boolean;
   proxyEnabled: boolean;
   sourceType: "launch" | "connect-cdp";
   cdpEndpoint?: string;
@@ -27,7 +24,6 @@ export interface SessionRecord {
   createdAt: Date;
   lastActivityAt: Date;
   connected: boolean;
-  collaboration: CollaborationState;
   persisted: boolean;
   profilePath: string | null;
   browserSession: BrowserSession;
@@ -35,18 +31,12 @@ export interface SessionRecord {
 
 export interface CreateSessionOptions {
   name: string;
-  preferredForAi?: boolean;
   source?: CreateSessionSource;
 }
 
 export interface SessionManagerOptions {
   restorePersistedSessions?: boolean;
   qualityProbeStore?: QualityProbeStore;
-}
-
-interface AiBridgeIssuedOptions {
-  collaborationTabId?: string | null;
-  issuedAt?: string;
 }
 
 function buildLaunchBrowserSessionOptions(session: {
@@ -71,7 +61,6 @@ function buildSessionRecord(
   return {
     id: record.id,
     name: record.name,
-    preferredForAi: record.preferredForAi ?? false,
     proxyEnabled: record.proxyEnabled,
     sourceType: "launch",
     cdpEndpoint: undefined,
@@ -80,22 +69,9 @@ function buildSessionRecord(
     createdAt: new Date(record.createdAt),
     lastActivityAt: new Date(record.lastActivityAt),
     connected: false,
-    collaboration: createDefaultCollaborationState(),
     persisted: true,
     profilePath: record.profilePath,
     browserSession,
-  };
-}
-
-function createDefaultCollaborationState(): CollaborationState {
-  return {
-    controlOwner: "none",
-    aiStatus: "idle",
-    collaborationTabId: null,
-    aiBridgeIssuedAt: null,
-    aiBridgeExpiresAt: null,
-    aiLastAction: null,
-    aiLastError: null,
   };
 }
 
@@ -105,7 +81,6 @@ function buildPersistedSessionRecord(
   return {
     id: session.id,
     name: session.name,
-    preferredForAi: session.preferredForAi,
     proxyEnabled: session.proxyEnabled,
     connected: false,
     profilePath: session.profilePath ?? "",
@@ -117,7 +92,7 @@ function buildPersistedSessionRecord(
   };
 }
 
-export class SessionManager extends EventEmitter {
+export class SessionManager {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly disconnectTimers = new Map<string, NodeJS.Timeout>();
   private readonly restorePersistedSessionsEnabled: boolean;
@@ -128,7 +103,6 @@ export class SessionManager extends EventEmitter {
     private readonly sessionStore: SessionStore,
     options?: SessionManagerOptions,
   ) {
-    super();
     this.restorePersistedSessionsEnabled =
       options?.restorePersistedSessions ?? true;
     this.qualityProbeStore = options?.qualityProbeStore ?? null;
@@ -145,9 +119,6 @@ export class SessionManager extends EventEmitter {
   async createSession(options: CreateSessionOptions): Promise<SessionRecord> {
     const sessionId = uuidv4();
     const source = options.source ?? { type: "launch" };
-    if (options.preferredForAi && source.type !== "launch") {
-      throw new Error("Preferred AI session must be persisted");
-    }
 
     if (source.type === "connect-cdp") {
       const browserSession = await this.browserService.createSession(
@@ -157,7 +128,6 @@ export class SessionManager extends EventEmitter {
       const session: SessionRecord = {
         id: sessionId,
         name: options.name,
-        preferredForAi: false,
         proxyEnabled: false,
         sourceType: "connect-cdp",
         cdpEndpoint: source.endpoint,
@@ -166,7 +136,6 @@ export class SessionManager extends EventEmitter {
         createdAt: new Date(),
         lastActivityAt: new Date(),
         connected: false,
-        collaboration: createDefaultCollaborationState(),
         persisted: false,
         profilePath: null,
         browserSession,
@@ -174,9 +143,6 @@ export class SessionManager extends EventEmitter {
 
       this.sessions.set(session.id, session);
       this.qualityProbeStore?.createSession(session.id);
-      if (options.preferredForAi) {
-        await this.updateSessionAiPreference(session.id, true);
-      }
       return session;
     }
 
@@ -196,7 +162,6 @@ export class SessionManager extends EventEmitter {
     const session: SessionRecord = {
       id: sessionId,
       name: options.name,
-      preferredForAi: false,
       proxyEnabled,
       sourceType: "launch",
       persisted: true,
@@ -206,7 +171,6 @@ export class SessionManager extends EventEmitter {
       createdAt: new Date(),
       lastActivityAt: new Date(),
       connected: false,
-      collaboration: createDefaultCollaborationState(),
       browserSession,
     };
 
@@ -221,9 +185,6 @@ export class SessionManager extends EventEmitter {
 
     this.sessions.set(session.id, session);
     this.qualityProbeStore?.createSession(session.id);
-    if (options.preferredForAi) {
-      await this.updateSessionAiPreference(session.id, true);
-    }
     return session;
   }
 
@@ -244,30 +205,6 @@ export class SessionManager extends EventEmitter {
     if (session.persisted) {
       await this.sessionStore.updateSessionName(sessionId, name);
     }
-
-    return session;
-  }
-
-  async updateSessionAiPreference(
-    sessionId: string,
-    preferredForAi: boolean,
-  ): Promise<SessionRecord | undefined> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      return undefined;
-    }
-    if (preferredForAi && !session.persisted) {
-      throw new Error("Preferred AI session must be persisted");
-    }
-
-    for (const candidate of this.sessions.values()) {
-      candidate.preferredForAi =
-        preferredForAi && candidate.id === sessionId;
-    }
-
-    const persistedSessionId =
-      preferredForAi && session.persisted ? sessionId : null;
-    await this.sessionStore.setPreferredForAiSession(persistedSessionId);
 
     return session;
   }
@@ -330,117 +267,6 @@ export class SessionManager extends EventEmitter {
 
   listSessions(): SessionRecord[] {
     return Array.from(this.sessions.values());
-  }
-
-  getCollaborationState(sessionId: string): CollaborationState | undefined {
-    return this.sessions.get(sessionId)?.collaboration;
-  }
-
-  /**
-   * AI collaboration state transitions are intentionally centralized here.
-   *
-   * Canonical transitions:
-   * - issue bridge: owner stays none, status becomes attached
-   * - AI sends CDP method: owner becomes ai, status becomes running
-   * - AI bridge error: keep owner, status becomes error
-   * - AI bridge disconnect: owner becomes none, status becomes idle
-   * - AI bridge revoke: owner becomes none, status becomes idle, clear action/error
-   * - viewer selects tab: keep owner/status, update collaborationTabId
-   * - human input: attached/running stays unchanged; otherwise owner becomes human
-   *
-   * Routes and websocket layers should emit these events instead of patching
-   * CollaborationState directly.
-   */
-  onAiBridgeIssued(
-    sessionId: string,
-    options?: AiBridgeIssuedOptions,
-  ): CollaborationState | undefined {
-    return this.applyCollaborationState(sessionId, (current) => ({
-      ...current,
-      aiStatus: "attached",
-      collaborationTabId:
-        options?.collaborationTabId ?? current.collaborationTabId,
-      aiBridgeIssuedAt: options?.issuedAt ?? new Date().toISOString(),
-      aiBridgeExpiresAt: null,
-      aiLastError: null,
-    }));
-  }
-
-  onAiBridgeConnected(sessionId: string): CollaborationState | undefined {
-    return this.applyCollaborationState(sessionId, (current) => ({
-      ...current,
-      aiStatus: "attached",
-      aiLastError: null,
-    }));
-  }
-
-  onAiMessage(
-    sessionId: string,
-    aiLastAction: string,
-  ): CollaborationState | undefined {
-    return this.applyCollaborationState(sessionId, (current) => ({
-      ...current,
-      controlOwner: "ai",
-      aiStatus: "running",
-      aiLastAction,
-      aiLastError: null,
-    }));
-  }
-
-  onAiBridgeError(
-    sessionId: string,
-    aiLastError: string,
-  ): CollaborationState | undefined {
-    return this.applyCollaborationState(sessionId, (current) => ({
-      ...current,
-      aiStatus: "error",
-      aiLastError,
-    }));
-  }
-
-  onAiBridgeDisconnected(sessionId: string): CollaborationState | undefined {
-    return this.applyCollaborationState(sessionId, (current) => ({
-      ...current,
-      controlOwner: "none",
-      aiStatus: "idle",
-      aiBridgeIssuedAt: null,
-      aiBridgeExpiresAt: null,
-    }));
-  }
-
-  onAiBridgeRevoked(sessionId: string): CollaborationState | undefined {
-    return this.applyCollaborationState(sessionId, (current) => ({
-      ...current,
-      controlOwner: "none",
-      aiStatus: "idle",
-      aiBridgeIssuedAt: null,
-      aiBridgeExpiresAt: null,
-      aiLastAction: null,
-      aiLastError: null,
-    }));
-  }
-
-  onCollaborationTabSelected(
-    sessionId: string,
-    collaborationTabId: string,
-  ): CollaborationState | undefined {
-    return this.applyCollaborationState(sessionId, (current) => ({
-      ...current,
-      collaborationTabId,
-    }));
-  }
-
-  onHumanInput(sessionId: string): CollaborationState | undefined {
-    return this.applyCollaborationState(sessionId, (current) => {
-      if (current.aiStatus === "attached" || current.aiStatus === "running") {
-        return current;
-      }
-
-      return {
-        ...current,
-        controlOwner: "human",
-      };
-    });
   }
 
   getRemoteDebuggingPort(sessionId: string): number | null {
@@ -516,24 +342,5 @@ export class SessionManager extends EventEmitter {
     }
     clearTimeout(timer);
     this.disconnectTimers.delete(sessionId);
-  }
-
-  private applyCollaborationState(
-    sessionId: string,
-    update: (current: CollaborationState) => CollaborationState,
-  ): CollaborationState | undefined {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      return undefined;
-    }
-
-    const next = update(session.collaboration);
-    if (next === session.collaboration) {
-      return session.collaboration;
-    }
-
-    session.collaboration = next;
-    this.emit("collaboration-updated", sessionId, session.collaboration);
-    return session.collaboration;
   }
 }

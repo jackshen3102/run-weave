@@ -7,7 +7,7 @@
 推荐采用 **“Hermes 做自然语言编排层 + Runweave 做长驻终端/浏览器执行平面”** 的两层架构：
 
 - **Hermes**：接收飞书/手机消息，理解自然语言，做任务规划、定时任务、结果摘要、通知投递、安全确认。
-- **Runweave(browser-viewer)**：提供 24/7 的 tmux/PTY 终端、项目/会话管理、终端滚屏历史、WebSocket 输入输出、浏览器 Viewer、AI bridge/CDP 浏览器自动化通道。
+- **Runweave(browser-viewer)**：提供 24/7 的 tmux/PTY 终端、项目/会话管理、终端滚屏历史、WebSocket 输入输出、浏览器 Viewer、Terminal Browser/CDP 浏览器自动化通道。
 - **最小可跑版本**：先不大改 Runweave，只在 Hermes 新增一个 `runweave` toolset，通过现有 HTTP + WS API 操作终端。
 - **产品化版本**：给 Runweave 增加 AI/Agent 专用的 HTTP Action API、事件 Webhook、一次性 task API、细粒度令牌和审计；Hermes 侧新增工具与飞书快捷命令。
 
@@ -110,16 +110,14 @@ WebSocket 协议：`/ws/terminal?terminalSessionId=...&token=...`
 
 这能用于 Claude/Codex/Trae 等 CLI Agent 完成后，让 Hermes 从飞书通知用户“任务完成”，并附上 scrollback 摘要与下一步按钮/命令。
 
-### 2.5 浏览器/AI bridge 能力
+### 2.5 浏览器自动化能力
 
-已有 Browser Viewer 与 AI bridge：
+已有 Browser Viewer 与 Terminal Browser/CDP 代理能力：
 
-- `GET /api/session/ai-default`
-- `POST /api/session/ai-default/ensure`
-- `POST /api/session/:id/ai-bridge`
-- `/ws/ai-bridge?sessionId=...`
+- Viewer 会话通过 `/ws` 提供画面与人工交互。
+- Terminal Browser 通过 Electron 内置 Browser tab 与 CDP Proxy 提供自动化入口。
 
-这意味着 Hermes 未来不仅能操作终端，还能通过 Runweave 复用一个持久浏览器：登录态、页面调试、DevTools/CDP、自动化操作都可以沉到 Runweave。
+这意味着 Hermes 未来不仅能操作终端，还能通过 Runweave 的 Browser 代理使用持久浏览器：登录态、页面调试、DevTools/CDP、自动化操作都可以沉到 Runweave。
 
 ## 3. 目标体验
 
@@ -609,7 +607,7 @@ Runweave 任务完成：pnpm test
 
 ### 4.1 Browser Control Interface
 
-Hermes 通过 Runweave AI bridge 复用持久浏览器，增加工具：
+Hermes 通过 Runweave Browser 代理复用持久浏览器，增加工具：
 
 - `runweave_browser_ensure_default`
 - `runweave_browser_open_url`
@@ -617,12 +615,7 @@ Hermes 通过 Runweave AI bridge 复用持久浏览器，增加工具：
 - `runweave_browser_click/type/evaluate`
 - `runweave_browser_devtools_log`
 
-底层可以走：
-
-- 现有 `/api/session/ai-default/ensure`
-- `/api/session/:id/ai-bridge`
-- `/ws/ai-bridge`
-- 或 Playwright MCP/CDP。
+底层可以走 Terminal Browser CDP Proxy 或 Playwright MCP/CDP。
 
 用途：
 
@@ -790,7 +783,7 @@ Hermes 应做：
 1. **先做 Hermes runweave toolset（不改 Runweave）**：最快闭环。
 2. **再补 Runweave HTTP input/task API**：让工具稳定、低复杂度。
 3. **再做事件 webhook**：少轮询、结果更实时。
-4. **最后做 browser AI bridge 工具化**：把浏览器操作也纳入手机 AI 编排。
+4. **最后做 browser 代理工具化**：把浏览器操作也纳入手机 AI 编排。
 
 ## 9. 关键注意事项
 
