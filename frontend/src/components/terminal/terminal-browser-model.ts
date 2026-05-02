@@ -1,3 +1,4 @@
+import type { TerminalBrowserDeviceState } from "@browser-viewer/shared";
 import { browserTabLabel } from "./terminal-browser-tabs";
 
 export interface ElectronBrowserSnapshot {
@@ -9,6 +10,9 @@ export interface ElectronBrowserSnapshot {
 
 export interface ElectronBrowserUpdate extends ElectronBrowserSnapshot {
   loading: boolean;
+  cdpProxyAttached?: boolean;
+  devtoolsOpen?: boolean;
+  deviceState?: TerminalBrowserDeviceState;
 }
 
 export interface ElectronBrowserTabSnapshot extends ElectronBrowserUpdate {
@@ -16,6 +20,7 @@ export interface ElectronBrowserTabSnapshot extends ElectronBrowserUpdate {
   active: boolean;
   cdpProxyAttached: boolean;
   devtoolsOpen: boolean;
+  deviceState: TerminalBrowserDeviceState;
 }
 
 export function openUrlExternally(url: string): void {
@@ -59,6 +64,9 @@ export function buildTabUpdateFromElectronUpdate(
     loading: update.loading,
     canGoBack: update.canGoBack,
     canGoForward: update.canGoForward,
+    cdpProxyAttached: update.cdpProxyAttached,
+    devtoolsOpen: update.devtoolsOpen,
+    deviceState: update.deviceState,
     error: undefined,
   };
 }
@@ -76,5 +84,6 @@ export function buildTabStateFromElectronSnapshot(
     canGoForward: snapshot.canGoForward,
     cdpProxyAttached: snapshot.cdpProxyAttached,
     devtoolsOpen: snapshot.devtoolsOpen,
+    deviceState: snapshot.deviceState,
   };
 }

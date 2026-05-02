@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import type { StateCreator } from "zustand";
-import type { TerminalPreviewChangeKind } from "@browser-viewer/shared";
+import {
+  createTerminalBrowserDeviceState,
+  type TerminalBrowserDeviceState,
+  type TerminalPreviewChangeKind,
+} from "@browser-viewer/shared";
 
 export type TerminalPreviewMode = "file" | "changes";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
@@ -21,6 +25,7 @@ export interface TerminalBrowserTabState {
   error?: string;
   cdpProxyAttached?: boolean;
   devtoolsOpen?: boolean;
+  deviceState: TerminalBrowserDeviceState;
 }
 
 export const DEFAULT_MARKDOWN_VIEW_MODE: TerminalMarkdownViewMode = "preview";
@@ -94,6 +99,7 @@ function createBrowserTabState(url = DEFAULT_BROWSER_URL): TerminalBrowserTabSta
     loading: false,
     canGoBack: false,
     canGoForward: false,
+    deviceState: createTerminalBrowserDeviceState("desktop"),
   };
 }
 
@@ -218,6 +224,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
         loading: false,
         canGoBack: false,
         canGoForward: false,
+        deviceState: createTerminalBrowserDeviceState("desktop"),
       };
       return {
         browser: {

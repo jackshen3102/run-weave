@@ -1,8 +1,21 @@
-import { ArrowLeft, ArrowRight, Code2, ExternalLink, RotateCw, Square, Wifi, WifiOff } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Code2,
+  ExternalLink,
+  RotateCw,
+  Square,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import type { FormEvent } from "react";
-import type { TerminalBrowserHeaderRule, TerminalBrowserProxyState } from "@browser-viewer/shared";
+import {
+  type TerminalBrowserHeaderRule,
+  type TerminalBrowserProxyState,
+} from "@browser-viewer/shared";
 import type { TerminalBrowserTabState } from "../../features/terminal/preview-store";
 import { TerminalBrowserCdpEndpointPopover } from "./terminal-browser-cdp-endpoint-popover";
+import { TerminalBrowserDeviceButton } from "./terminal-browser-device-panel";
 import { TerminalBrowserHeadersButton } from "./terminal-browser-headers-panel";
 import { Button } from "../ui/button";
 
@@ -13,12 +26,15 @@ interface TerminalBrowserNavigationBarProps {
   proxySwitching: boolean;
   headerRulesPanelOpen: boolean;
   headerRules: TerminalBrowserHeaderRule[];
+  devicePanelOpen: boolean;
+  deviceSwitching: boolean;
   onSubmitAddress: (event: FormEvent<HTMLFormElement>) => void;
   onAddressInputChange: (value: string) => void;
   onGo: (direction: "back" | "forward") => void;
   onReload: () => void;
   onStop: () => void;
   onToggleProxy: () => void;
+  onDevicePanelOpenChange: (open: boolean) => void;
   onHeaderRulesPanelOpenChange: (open: boolean) => void;
   onOpenDevTools: () => void;
   onOpenExternal: () => void;
@@ -31,16 +47,21 @@ export function TerminalBrowserNavigationBar({
   proxySwitching,
   headerRulesPanelOpen,
   headerRules,
+  devicePanelOpen,
+  deviceSwitching,
   onSubmitAddress,
   onAddressInputChange,
   onGo,
   onReload,
   onStop,
   onToggleProxy,
+  onDevicePanelOpenChange,
   onHeaderRulesPanelOpenChange,
   onOpenDevTools,
   onOpenExternal,
 }: TerminalBrowserNavigationBarProps) {
+  const deviceState = activeTab.deviceState;
+
   return (
     <form
       className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-800 px-2"
@@ -125,21 +146,37 @@ export function TerminalBrowserNavigationBar({
           onOpenChange={onHeaderRulesPanelOpenChange}
         />
       ) : null}
+      {isElectron ? (
+        <TerminalBrowserDeviceButton
+          open={devicePanelOpen}
+          deviceState={deviceState}
+          switching={deviceSwitching}
+          onOpenChange={onDevicePanelOpenChange}
+        />
+      ) : null}
       <Button
         type="button"
         size="sm"
         variant="ghost"
         className="h-7 w-7 rounded-md px-0"
-        disabled={!isElectron || activeTab.cdpProxyAttached === true}
+        disabled={
+          !isElectron ||
+          activeTab.cdpProxyAttached === true ||
+          activeTab.deviceState.mobile
+        }
         onClick={onOpenDevTools}
         aria-label={
           activeTab.cdpProxyAttached
             ? "DevTools unavailable while CDP proxy is active"
+            : activeTab.deviceState.mobile
+              ? "DevTools unavailable while mobile mode is active"
             : "Open browser DevTools"
         }
         title={
           activeTab.cdpProxyAttached
             ? "DevTools unavailable while CDP proxy is active"
+            : activeTab.deviceState.mobile
+              ? "DevTools unavailable while mobile mode is active"
             : "Open browser DevTools"
         }
       >

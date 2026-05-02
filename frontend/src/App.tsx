@@ -4,6 +4,8 @@ import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
   TerminalBrowserCdpProxyInfo,
+  TerminalBrowserDevicePresetId,
+  TerminalBrowserDeviceState,
   TerminalBrowserHeaderState,
   TerminalBrowserProxyState,
 } from "@browser-viewer/shared";
@@ -33,6 +35,7 @@ interface TerminalBrowserBounds {
   y: number;
   width: number;
   height: number;
+  emulationScale?: number;
 }
 
 interface TerminalBrowserSnapshot {
@@ -48,6 +51,7 @@ interface TerminalBrowserTabSnapshot extends TerminalBrowserSnapshot {
   active: boolean;
   cdpProxyAttached: boolean;
   devtoolsOpen: boolean;
+  deviceState: TerminalBrowserDeviceState;
 }
 
 declare global {
@@ -78,6 +82,13 @@ declare global {
       ) => Promise<TerminalBrowserSnapshot>;
       terminalBrowserShow?: (tabId: string) => Promise<void>;
       terminalBrowserHide?: (tabId: string) => Promise<void>;
+      terminalBrowserGetDeviceState?: (
+        tabId: string,
+      ) => Promise<TerminalBrowserDeviceState>;
+      terminalBrowserSetDeviceState?: (
+        tabId: string,
+        presetId: TerminalBrowserDevicePresetId,
+      ) => Promise<TerminalBrowserDeviceState>;
       terminalBrowserSetBounds?: (
         tabId: string,
         bounds: TerminalBrowserBounds | null,
@@ -100,12 +111,24 @@ declare global {
       ) => () => void;
       onTerminalBrowserTabUpdated?: (
         listener: (
-          data: TerminalBrowserSnapshot & { tabId: string; loading: boolean },
+          data: TerminalBrowserSnapshot & {
+            tabId: string;
+            loading: boolean;
+            cdpProxyAttached: boolean;
+            devtoolsOpen: boolean;
+            deviceState: TerminalBrowserDeviceState;
+          },
         ) => void,
       ) => () => void;
       onTerminalBrowserTabActivatedFromProxy?: (
         listener: (
-          data: TerminalBrowserSnapshot & { tabId: string; loading: boolean },
+          data: TerminalBrowserSnapshot & {
+            tabId: string;
+            loading: boolean;
+            cdpProxyAttached: boolean;
+            devtoolsOpen: boolean;
+            deviceState: TerminalBrowserDeviceState;
+          },
         ) => void,
       ) => () => void;
       onTerminalBrowserTabClosed?: (
