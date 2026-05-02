@@ -45,7 +45,7 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 
 Terminal Browser 工具当前边界：
 
-- Browser 工具挂在 Preview 面板外壳内，是 Terminal Workspace 的本地 sidecar，不是后端 viewer session，也不是 `/ws/ai-bridge`。
+- Browser 工具挂在 Preview 面板外壳内，是 Terminal Workspace 的本地 sidecar，不是后端 viewer session。
 - Electron 桌面端用 `WebContentsView` 承载 Browser tab，tab 生命周期和可见区域由主进程管理，前端只同步 tab 状态、地址栏、工具栏和面板布局。
 - Web/PWA 模式不提供本地 Electron Browser，也不展示 CDP endpoint。
 - Browser tab 只允许 `http:`、`https:` 和 `about:blank` 导航；页面发起的新窗口会被收口成 Browser 工具内的新 tab 或被拒绝。

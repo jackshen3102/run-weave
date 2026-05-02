@@ -6,7 +6,6 @@ export type SignedTokenType =
   | "viewer-ws"
   | "terminal-ws"
   | "devtools"
-  | "ai-bridge"
   | "legacy-temp";
 
 export interface TokenResource {

@@ -2,7 +2,12 @@ import crypto from "node:crypto";
 import { randomUUID } from "node:crypto";
 import type { AuthConfig } from "./config";
 import type { AuthStore, PersistedRefreshSessionRecord } from "./store";
-import { issueToken, verifyToken, type SignedTokenType, type TokenResource } from "./jwt";
+import {
+  issueToken,
+  verifyToken,
+  type SignedTokenType,
+  type TokenResource,
+} from "./jwt";
 
 interface LoginParams {
   clientType: "web" | "electron";
@@ -36,7 +41,9 @@ function toIsoAfter(ttlMs: number): string {
   return new Date(Date.now() + ttlMs).toISOString();
 }
 
-function isRefreshSessionActive(session: PersistedRefreshSessionRecord): boolean {
+function isRefreshSessionActive(
+  session: PersistedRefreshSessionRecord,
+): boolean {
   if (session.revokedAt) {
     return false;
   }
@@ -44,7 +51,10 @@ function isRefreshSessionActive(session: PersistedRefreshSessionRecord): boolean
 }
 
 export class AuthService {
-  private readonly refreshSessions = new Map<string, PersistedRefreshSessionRecord>();
+  private readonly refreshSessions = new Map<
+    string,
+    PersistedRefreshSessionRecord
+  >();
 
   constructor(
     private readonly config: AuthConfig & {
@@ -121,7 +131,11 @@ export class AuthService {
 
   verifyAccessToken(token: string): AccessTokenSession | null {
     const verified = verifyToken(token, this.config.jwtSecret);
-    if (!verified.valid || !verified.payload || verified.payload.type !== "access") {
+    if (
+      !verified.valid ||
+      !verified.payload ||
+      verified.payload.type !== "access"
+    ) {
       return null;
     }
 
@@ -138,7 +152,11 @@ export class AuthService {
 
   async refreshSession(refreshToken: string): Promise<LoginResult | null> {
     const verified = verifyToken(refreshToken, this.config.jwtSecret);
-    if (!verified.valid || !verified.payload || verified.payload.type !== "refresh") {
+    if (
+      !verified.valid ||
+      !verified.payload ||
+      verified.payload.type !== "refresh"
+    ) {
       return null;
     }
 
@@ -192,7 +210,10 @@ export class AuthService {
     const now = new Date().toISOString();
     const record = this.refreshSessions.get(current.sessionId);
     if (record) {
-      this.refreshSessions.set(current.sessionId, { ...record, revokedAt: now });
+      this.refreshSessions.set(current.sessionId, {
+        ...record,
+        revokedAt: now,
+      });
     }
     await this.authStore?.revokeRefreshSession(current.sessionId, now);
     return true;
@@ -204,7 +225,7 @@ export class AuthService {
   ): { token: string; expiresIn: number };
   issueTemporaryToken(params: {
     sessionId: string;
-    tokenType: "viewer-ws" | "terminal-ws" | "devtools" | "ai-bridge";
+    tokenType: "viewer-ws" | "terminal-ws" | "devtools";
     resource: TokenResource;
     ttlMs: number;
   }): { token: string; expiresIn: number };
@@ -213,7 +234,7 @@ export class AuthService {
       | string
       | {
           sessionId: string;
-          tokenType: "viewer-ws" | "terminal-ws" | "devtools" | "ai-bridge";
+          tokenType: "viewer-ws" | "terminal-ws" | "devtools";
           resource: TokenResource;
           ttlMs: number;
         },
@@ -254,7 +275,7 @@ export class AuthService {
   verifyTemporaryToken(
     token: string,
     params: {
-      tokenType: "viewer-ws" | "terminal-ws" | "devtools" | "ai-bridge";
+      tokenType: "viewer-ws" | "terminal-ws" | "devtools";
       resource: TokenResource;
     },
   ): TemporaryTokenVerification | null {

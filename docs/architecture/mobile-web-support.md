@@ -6,7 +6,7 @@
 
 桌面 Web 端是完整控制台形态：
 
-1. Home 负责会话创建、会话列表、默认 AI Viewer、Terminal 入口等管理能力。
+1. Home 负责会话创建、会话列表、Terminal 入口等管理能力。
 2. Viewer 通过 `/ws` 接收浏览器 screencast，并可把鼠标、滚轮、键盘、剪贴板、tab、navigation、DevTools 等输入转发给后端。
 3. Terminal 提供完整 xterm 工作台，包括项目、会话、搜索、设置、输入、历史等能力。
 
@@ -40,7 +40,7 @@ Home 在 `mobile` 模式下展示 Mobile Dashboard：
 - 顶部展示产品名和当前连接名。
 - 保留 Terminal 快捷入口与 Logout。
 - 会话列表复用现有 session 数据、排序和卡片组件。
-- Session action 使用 `open-only`，只展示 Open，不展示 Rename、Remove、Set Default AI Viewer 等管理动作。
+- Session action 使用 `open-only`，只展示 Open，不展示 Rename、Remove 等管理动作。
 - 不展示桌面端的 CDP endpoint、proxy、headers、browser profile 等创建配置。
 
 桌面端 Home 保持完整控制台能力。
@@ -51,9 +51,9 @@ Viewer 在 `mobile` 模式下进入 observe chrome：
 
 - 展示 Home 返回入口、当前 tab 标题、当前 URL 或连接状态。
 - 在断线或重连状态下展示 Reconnect。
-- 继续复用现有 HTTP ticket、WebSocket、screencast canvas、tabs、navigation、collaboration 状态接收链路。
+- 继续复用现有 HTTP ticket、WebSocket、screencast canvas、tabs、navigation 状态接收链路。
 - 不挂载桌面输入桥接 textarea。
-- 不展示 DevTools / Inspect、New tab、Close tab、More actions、完整地址栏导航、AI Assist、AI Bridge URL 等桌面控制入口。
+- 不展示 DevTools / Inspect、New tab、Close tab、More actions、完整地址栏导航等桌面控制入口。
 - canvas 不绑定鼠标、滚轮、context menu 等桌面输入事件，触摸滚动也不会转发为远端浏览器输入。
 
 桌面端 Viewer 保留原有控制能力。
@@ -120,7 +120,6 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 - proxy、headers、browser profile 配置
 - tab 管理
 - DevTools
-- AI Assist / AI Bridge
 - 完整 Terminal 工作台
 
 移动端是观察台，适合放置：
@@ -128,7 +127,6 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 - session 状态
 - 当前页面画面
 - 页面加载、错误、重连状态
-- AI 协作状态摘要
 - Terminal 输出与状态
 - 少量安全的恢复动作，例如返回、打开、重连
 
@@ -168,8 +166,6 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 - Close tab
 - tab 管理菜单
 - 完整地址栏导航
-- AI Assist
-- Copy AI Bridge URL
 - 页面输入桥接入口
 - 鼠标、键盘、滚轮控制提示
 
@@ -181,7 +177,6 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 - 加载状态
 - 错误状态
 - 重连入口
-- 只读的 AI 协作状态摘要
 
 ### 核心组件复用优先
 
@@ -200,7 +195,7 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 - 复制一份 `ViewerPage` 再删按钮。
 - 复制一份 `TerminalWorkspace` 再删管理能力。
 - 为移动端重写一套 session service 或 WebSocket 状态管理。
-- 在多个分支里维护同一份 tab、navigation、collaboration 状态展示逻辑。
+- 在多个分支里维护同一份 tab、navigation 状态展示逻辑。
 
 ## 后端与协议演进
 
@@ -228,8 +223,6 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 
 - 看不到 Inspect / DevTools。
 - 看不到 New tab / Close tab。
-- 看不到 AI Assist。
-- 看不到 Copy AI Bridge URL。
 - 看不到完整地址栏导航。
 - 看不到桌面 More actions 菜单。
 - 不挂载桌面输入桥接 textarea。
@@ -239,7 +232,7 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 桌面端 Viewer：
 
 - 原有控制能力保持可见、可用。
-- tab、navigation、DevTools、AI Assist 不受移动端改造影响。
+- tab、navigation、DevTools 不受移动端改造影响。
 
 移动端 Terminal：
 

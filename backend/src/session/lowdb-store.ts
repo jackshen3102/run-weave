@@ -44,7 +44,9 @@ export class LowDbSessionStore implements SessionStore {
   }
 
   async getSession(sessionId: string): Promise<PersistedSessionRecord | null> {
-    return this.getSessions().find((session) => session.id === sessionId) ?? null;
+    return (
+      this.getSessions().find((session) => session.id === sessionId) ?? null
+    );
   }
 
   async insertSession(session: PersistedSessionRecord): Promise<void> {
@@ -88,17 +90,6 @@ export class LowDbSessionStore implements SessionStore {
     });
   }
 
-  async setPreferredForAiSession(sessionId: string | null): Promise<void> {
-    await this.enqueueWrite(async () => {
-      const database = this.getDatabase();
-      for (const session of database.data.sessions) {
-        session.preferredForAi =
-          sessionId !== null && session.id === sessionId;
-      }
-      await database.write();
-    });
-  }
-
   async deleteSession(sessionId: string): Promise<void> {
     await this.enqueueWrite(async () => {
       const database = this.getDatabase();
@@ -119,13 +110,9 @@ export class LowDbSessionStore implements SessionStore {
 
   private getSessions(): PersistedSessionRecord[] {
     return this.getDatabase()
-      .data.sessions
-      .slice()
+      .data.sessions.slice()
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-      .map((session) => ({
-        ...structuredClone(session),
-        preferredForAi: session.preferredForAi ?? false,
-      }));
+      .map((session) => structuredClone(session));
   }
 
   private enqueueWrite(operation: () => Promise<void>): Promise<void> {

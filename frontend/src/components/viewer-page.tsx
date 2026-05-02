@@ -19,11 +19,7 @@ import { getViewerSecurityState } from "../features/viewer/viewer-security";
 import { useViewerInput } from "../features/viewer/use-viewer-input";
 import { getViewerSurfaceState } from "../features/viewer/viewer-surface";
 import { HttpError } from "../services/http";
-import {
-  createAiBridge,
-  createDevtoolsTicket,
-  revokeAiBridge,
-} from "../services/session";
+import { createDevtoolsTicket } from "../services/session";
 import type { ClientMode } from "../features/client-mode";
 
 const HISTORY_GUARD_STATE_KEY = "__viewerHistoryGuard";
@@ -62,9 +58,6 @@ export function ViewerPage({
   const [isNavigationBarOpen, setIsNavigationBarOpen] = useState(false);
   const [devtoolsUrl, setDevtoolsUrl] = useState<string | null>(null);
   const [devtoolsError, setDevtoolsError] = useState<string | null>(null);
-  const [aiBridgeUrl, setAiBridgeUrl] = useState<string | null>(null);
-  const [aiBridgeError, setAiBridgeError] = useState<string | null>(null);
-  const [aiBridgeLoading, setAiBridgeLoading] = useState(false);
   const {
     status,
     error,
@@ -72,7 +65,6 @@ export function ViewerPage({
     navigationByTabId,
     devtoolsEnabled,
     devtoolsByTabId,
-    collaboration,
     sendInput,
     reconnect,
   } = useViewerConnection({
@@ -115,7 +107,6 @@ export function ViewerPage({
   const viewerControlsDisabled = status !== "connected";
   const viewerInputEnabled =
     clientMode === "desktop" && !isInspecting && !viewerControlsDisabled;
-  const aiAssistEnabled = collaboration.aiStatus !== "idle";
   const securityState = getViewerSecurityState(
     isEditingAddress ? addressInput : (activeNavigation?.url ?? ""),
   );
@@ -187,41 +178,6 @@ export function ViewerPage({
     });
   };
 
-  const toggleAiAssist = (): void => {
-    if (aiBridgeLoading) {
-      return;
-    }
-
-    setAiBridgeLoading(true);
-    setAiBridgeError(null);
-
-    const request = aiAssistEnabled
-      ? revokeAiBridge(apiBase, token, sessionId).then(() => {
-          setAiBridgeUrl(null);
-        })
-      : createAiBridge(apiBase, token, sessionId, {
-          tabId: activeTabId ?? undefined,
-        }).then((payload) => {
-          setAiBridgeUrl(payload.bridgeUrl);
-        });
-
-    void request
-      .catch((currentError: unknown) => {
-        if (currentError instanceof HttpError && currentError.status === 401) {
-          onAuthExpired?.();
-          return;
-        }
-        setAiBridgeError("Failed to update AI bridge.");
-        console.error("[viewer-fe] failed to update ai bridge", {
-          sessionId,
-          error: String(currentError),
-        });
-      })
-      .finally(() => {
-        setAiBridgeLoading(false);
-      });
-  };
-
   useEffect(() => {
     if (isEditingAddress) {
       return;
@@ -233,12 +189,6 @@ export function ViewerPage({
   useEffect(() => {
     setIsMoreMenuOpen(false);
   }, [activeTabId, isInspecting]);
-
-  useEffect(() => {
-    if (collaboration.aiStatus === "idle") {
-      setAiBridgeUrl(null);
-    }
-  }, [collaboration.aiStatus]);
 
   useEffect(() => {
     if (!isInspecting || !activeTabId) {
@@ -259,12 +209,7 @@ export function ViewerPage({
           return;
         }
         setDevtoolsUrl(
-          buildDevtoolsPageUrl(
-            apiBase,
-            sessionId,
-            activeTabId,
-            payload.ticket,
-          ),
+          buildDevtoolsPageUrl(apiBase, sessionId, activeTabId, payload.ticket),
         );
       })
       .catch((error: unknown) => {
@@ -415,72 +360,72 @@ export function ViewerPage({
                     ) : null}
                   </div>
                 ) : (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-full px-3 text-stone-300 hover:bg-white/8 hover:text-white"
-                    onClick={() => {
-                      if (onHome) {
-                        onHome();
-                        return;
-                      }
-                      window.location.assign("/");
-                    }}
-                  >
-                    Home
-                  </Button>
-
-                  <div className="min-w-0 flex-1">
-                    <ViewerTabList
-                      apiBase={apiBase}
-                      sessionId={sessionId}
-                      token={token}
-                      tabs={tabs}
-                      disabled={viewerControlsDisabled}
-                      onSwitchTab={(tabId) => {
-                        sendInput({ type: "tab", action: "switch", tabId });
-                      }}
-                      onAuthExpired={onAuthExpired}
-                    />
-                  </div>
-
-                  <div
-                    className="relative shrink-0"
-                    data-viewer-more-menu-root="true"
-                  >
+                  <div className="flex items-center gap-2">
                     <Button
                       variant="ghost"
                       size="sm"
                       className="rounded-full px-3 text-stone-300 hover:bg-white/8 hover:text-white"
-                      aria-label="More actions"
                       onClick={() => {
-                        setIsMoreMenuOpen((open) => !open);
+                        if (onHome) {
+                          onHome();
+                          return;
+                        }
+                        window.location.assign("/");
                       }}
                     >
-                      <MoreHorizontal className="h-4 w-4" />
+                      Home
                     </Button>
-                    {isMoreMenuOpen && (
-                      <div className="animate-scale-fade absolute right-0 top-11 z-20 min-w-44 rounded-2xl border border-white/10 bg-[rgba(12,17,25,0.94)] p-2 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)] backdrop-blur-xl">
-                        {!isInspecting && (
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8"
-                            onClick={() => {
-                              setIsMoreMenuOpen(false);
-                              setIsNavigationBarOpen((open) => !open);
-                            }}
-                          >
-                            {isNavigationBarOpen ? (
-                              <ChevronUp className="h-4 w-4 text-stone-400" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4 text-stone-400" />
-                            )}
-                            {isNavigationBarOpen
-                              ? "Hide address bar"
-                              : "Show address bar"}
-                          </button>
-                        )}
+
+                    <div className="min-w-0 flex-1">
+                      <ViewerTabList
+                        apiBase={apiBase}
+                        sessionId={sessionId}
+                        token={token}
+                        tabs={tabs}
+                        disabled={viewerControlsDisabled}
+                        onSwitchTab={(tabId) => {
+                          sendInput({ type: "tab", action: "switch", tabId });
+                        }}
+                        onAuthExpired={onAuthExpired}
+                      />
+                    </div>
+
+                    <div
+                      className="relative shrink-0"
+                      data-viewer-more-menu-root="true"
+                    >
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full px-3 text-stone-300 hover:bg-white/8 hover:text-white"
+                        aria-label="More actions"
+                        onClick={() => {
+                          setIsMoreMenuOpen((open) => !open);
+                        }}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                      {isMoreMenuOpen && (
+                        <div className="animate-scale-fade absolute right-0 top-11 z-20 min-w-44 rounded-2xl border border-white/10 bg-[rgba(12,17,25,0.94)] p-2 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)] backdrop-blur-xl">
+                          {!isInspecting && (
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8"
+                              onClick={() => {
+                                setIsMoreMenuOpen(false);
+                                setIsNavigationBarOpen((open) => !open);
+                              }}
+                            >
+                              {isNavigationBarOpen ? (
+                                <ChevronUp className="h-4 w-4 text-stone-400" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-stone-400" />
+                              )}
+                              {isNavigationBarOpen
+                                ? "Hide address bar"
+                                : "Show address bar"}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8 disabled:cursor-not-allowed disabled:opacity-50"
@@ -490,144 +435,91 @@ export function ViewerPage({
                             }}
                             disabled={viewerControlsDisabled}
                           >
-                          <Plus className="h-4 w-4 text-stone-400" />
-                          New tab
-                        </button>
-                        {activeTabId && (
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8 disabled:cursor-not-allowed disabled:opacity-50"
-                            onClick={() => {
-                              setIsMoreMenuOpen(false);
-                              sendInput({
-                                type: "tab",
-                                action: "close",
-                                tabId: activeTabId,
-                              });
-                            }}
-                            disabled={viewerControlsDisabled}
-                          >
-                            <X className="h-4 w-4 text-stone-400" />
-                            Close tab
+                            <Plus className="h-4 w-4 text-stone-400" />
+                            New tab
                           </button>
-                        )}
-                        {canReconnect && (
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8"
-                            onClick={() => {
-                              setIsMoreMenuOpen(false);
-                              reconnect();
-                            }}
-                          >
-                            <RotateCw className="h-4 w-4 text-stone-400" />
-                            Reconnect
-                          </button>
-                        )}
-                      </div>
+                          {activeTabId && (
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8 disabled:cursor-not-allowed disabled:opacity-50"
+                              onClick={() => {
+                                setIsMoreMenuOpen(false);
+                                sendInput({
+                                  type: "tab",
+                                  action: "close",
+                                  tabId: activeTabId,
+                                });
+                              }}
+                              disabled={viewerControlsDisabled}
+                            >
+                              <X className="h-4 w-4 text-stone-400" />
+                              Close tab
+                            </button>
+                          )}
+                          {canReconnect && (
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/8"
+                              onClick={() => {
+                                setIsMoreMenuOpen(false);
+                                reconnect();
+                              }}
+                            >
+                              <RotateCw className="h-4 w-4 text-stone-400" />
+                              Reconnect
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {canRenderDevtoolsControls && (
+                      <Button
+                        size="sm"
+                        variant={isInspecting ? "secondary" : "default"}
+                        className="rounded-full px-4 transition-all duration-300 ease-out"
+                        onClick={toggleInspectMode}
+                        disabled={viewerControlsDisabled}
+                      >
+                        {isInspecting ? "Page" : "Inspect"}
+                      </Button>
                     )}
                   </div>
+                )}
 
-                  {canRenderDevtoolsControls && (
-                    <Button
-                      size="sm"
-                      variant={isInspecting ? "secondary" : "default"}
-                      className="rounded-full px-4 transition-all duration-300 ease-out"
-                      onClick={toggleInspectMode}
-                      disabled={viewerControlsDisabled}
+                {clientMode === "desktop" &&
+                  isNavigationBarOpen &&
+                  !isInspecting && (
+                    <div
+                      className="mt-2 border-t border-white/10 pt-2"
+                      data-testid="navigation-bar"
                     >
-                      {isInspecting ? "Page" : "Inspect"}
-                    </Button>
+                      <ViewerNavigationBar
+                        activeTabId={activeTabId}
+                        activeNavigation={activeNavigation}
+                        addressInput={addressInput}
+                        securityState={securityState}
+                        disabled={viewerControlsDisabled}
+                        onAddressFocus={() => setIsEditingAddress(true)}
+                        onAddressChange={setAddressInput}
+                        onAddressBlur={() => {
+                          setIsEditingAddress(false);
+                          setAddressInput(activeNavigation?.url ?? "");
+                        }}
+                        onAddressSubmit={submitNavigation}
+                        onAddressCancel={() => {
+                          setIsEditingAddress(false);
+                          setAddressInput(activeNavigation?.url ?? "");
+                        }}
+                        onNavigationAction={submitTabNavigationAction}
+                      />
+                    </div>
                   )}
-
-                  <Button
-                    size="sm"
-                    variant={aiAssistEnabled ? "secondary" : "ghost"}
-                    className="rounded-full px-4 transition-all duration-300 ease-out"
-                    onClick={toggleAiAssist}
-                    disabled={aiBridgeLoading}
-                  >
-                    {aiBridgeLoading
-                      ? "Updating..."
-                      : aiAssistEnabled
-                        ? "Disable AI"
-                        : "AI Assist"}
-                  </Button>
-                </div>
-                )}
-
-                {clientMode === "desktop" && isNavigationBarOpen && !isInspecting && (
-                  <div
-                    className="mt-2 border-t border-white/10 pt-2"
-                    data-testid="navigation-bar"
-                  >
-                    <ViewerNavigationBar
-                      activeTabId={activeTabId}
-                      activeNavigation={activeNavigation}
-                      addressInput={addressInput}
-                      securityState={securityState}
-                      disabled={viewerControlsDisabled}
-                      onAddressFocus={() => setIsEditingAddress(true)}
-                      onAddressChange={setAddressInput}
-                      onAddressBlur={() => {
-                        setIsEditingAddress(false);
-                        setAddressInput(activeNavigation?.url ?? "");
-                      }}
-                      onAddressSubmit={submitNavigation}
-                      onAddressCancel={() => {
-                        setIsEditingAddress(false);
-                        setAddressInput(activeNavigation?.url ?? "");
-                      }}
-                      onNavigationAction={submitTabNavigationAction}
-                    />
-                  </div>
-                )}
 
                 {(status !== "connected" || error) && (
                   <div className="mt-2 px-1 text-xs text-amber-300">
                     {error ??
                       (status === "reconnecting" ? "Reconnecting..." : status)}
-                  </div>
-                )}
-
-                <div className="mt-2 px-1 text-xs text-stone-300/80">
-                  AI {collaboration.aiStatus}
-                  {collaboration.controlOwner !== "none"
-                    ? ` · owner ${collaboration.controlOwner}`
-                    : ""}
-                  {collaboration.collaborationTabId
-                    ? ` · tab ${collaboration.collaborationTabId}`
-                    : ""}
-                </div>
-
-                {clientMode === "desktop" && collaboration.aiLastAction && (
-                  <div className="mt-1 px-1 text-xs text-stone-300/72">
-                    Last AI action: {collaboration.aiLastAction}
-                  </div>
-                )}
-
-                {clientMode === "desktop" &&
-                (aiBridgeUrl || aiBridgeError || collaboration.aiLastError) && (
-                  <div className="mt-1 flex flex-wrap items-center gap-2 px-1 text-xs">
-                    {aiBridgeUrl && (
-                      <button
-                        type="button"
-                        className="rounded-full border border-white/12 px-2 py-1 text-stone-200 transition hover:bg-white/8"
-                        onClick={() => {
-                          void navigator.clipboard?.writeText(aiBridgeUrl);
-                        }}
-                      >
-                        Copy AI bridge URL
-                      </button>
-                    )}
-                    {aiBridgeError ? (
-                      <span className="text-amber-300">{aiBridgeError}</span>
-                    ) : null}
-                    {collaboration.aiLastError ? (
-                      <span className="text-amber-300">
-                        {collaboration.aiLastError}
-                      </span>
-                    ) : null}
                   </div>
                 )}
 
@@ -656,8 +548,7 @@ export function ViewerPage({
                     ref={canvasRef}
                     className="h-full w-auto max-w-full transition-opacity duration-300"
                     style={{
-                      touchAction:
-                        clientMode === "desktop" ? "none" : "auto",
+                      touchAction: clientMode === "desktop" ? "none" : "auto",
                     }}
                     tabIndex={viewerInputEnabled ? 0 : -1}
                     onMouseDown={
@@ -687,7 +578,9 @@ export function ViewerPage({
                           : "border-white/10 bg-[rgba(8,12,18,0.7)] text-stone-100"
                       }`}
                     >
-                      <p className="text-sm font-medium">{surfaceState.title}</p>
+                      <p className="text-sm font-medium">
+                        {surfaceState.title}
+                      </p>
                       {surfaceState.detail ? (
                         <p className="mt-1 text-xs text-current/75">
                           {surfaceState.detail}

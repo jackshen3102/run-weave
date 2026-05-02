@@ -22,8 +22,6 @@ interface HomeSidebarProps {
   onBrowserViewportWidthInputChange: (value: string) => void;
   browserViewportHeightInput: string;
   onBrowserViewportHeightInputChange: (value: string) => void;
-  preferredForAi: boolean;
-  onPreferredForAiChange: (value: boolean) => void;
   loading: boolean;
   onSubmitSession: () => void;
   error: string | null;
@@ -51,8 +49,6 @@ export function HomeSidebar({
   onBrowserViewportWidthInputChange,
   browserViewportHeightInput,
   onBrowserViewportHeightInputChange,
-  preferredForAi,
-  onPreferredForAiChange,
   loading,
   onSubmitSession,
   error,
@@ -81,8 +77,6 @@ export function HomeSidebar({
         onBrowserViewportWidthInputChange={onBrowserViewportWidthInputChange}
         browserViewportHeightInput={browserViewportHeightInput}
         onBrowserViewportHeightInputChange={onBrowserViewportHeightInputChange}
-        preferredForAi={preferredForAi}
-        onPreferredForAiChange={onPreferredForAiChange}
         loading={loading}
         onSubmit={onSubmitSession}
         error={error}

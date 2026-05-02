@@ -34,7 +34,6 @@ import { TmuxService } from "./terminal/tmux-service";
 import { LowDbTerminalSessionStore } from "./terminal/lowdb-store";
 import { listenWithFallback } from "./server/listen";
 import { resolveStoragePaths } from "./utils/path";
-import { attachAiBridgeProxyServer } from "./ws/ai-bridge-proxy";
 import { attachDevtoolsProxyServer } from "./ws/devtools-proxy";
 import { WebSocketSessionController } from "./ws/session-control";
 import { attachTerminalWebSocketServer } from "./ws/terminal-server";
@@ -55,7 +54,6 @@ interface RuntimeServices {
   browserService: BrowserService;
   qualityProbeStore: QualityProbeStore;
   wsSessionController: WebSocketSessionController;
-  aiBridgeSessionController: WebSocketSessionController;
   terminalSessionManager: TerminalSessionManager;
   terminalCompletionEventStore: TerminalCompletionEventStore;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
@@ -169,7 +167,6 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   );
   const qualityProbeStore = new QualityProbeStore();
   const wsSessionController = new WebSocketSessionController();
-  const aiBridgeSessionController = new WebSocketSessionController();
   const sessionManager = new SessionManager(browserService, sessionStore, {
     restorePersistedSessions: resolveSessionRestoreEnabled(process.env),
     qualityProbeStore,
@@ -203,7 +200,6 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     browserService,
     qualityProbeStore,
     wsSessionController,
-    aiBridgeSessionController,
     terminalSessionManager,
     terminalCompletionEventStore,
     terminalRuntimeRegistry,
@@ -232,7 +228,9 @@ function createHttpApp(services: RuntimeServices): express.Express {
     const { endpoint } = req.body as { endpoint?: string };
     if (typeof endpoint === "string" && endpoint) {
       process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT = endpoint;
-      console.info("[viewer-be] CDP endpoint set via internal API", { endpoint });
+      console.info("[viewer-be] CDP endpoint set via internal API", {
+        endpoint,
+      });
       res.json({ ok: true });
     } else {
       res.status(400).json({ error: "endpoint required" });
@@ -259,11 +257,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
   app.use(
     "/api",
     requireAuth,
-    createSessionRouter(
-      services.sessionManager,
-      services.authService,
-      services.aiBridgeSessionController,
-    ),
+    createSessionRouter(services.sessionManager, services.authService),
   );
   app.use(
     "/api",
@@ -382,15 +376,6 @@ async function startRuntime(): Promise<void> {
       enabled: devtoolsEnabled,
     },
   );
-  attachAiBridgeProxyServer(
-    server,
-    services.sessionManager,
-    services.authService,
-    {
-      aiBridgeSessionController: services.aiBridgeSessionController,
-    },
-  );
-
   const port = await listenWithFallback(server, runtimeConfig.preferredPort, {
     host: runtimeConfig.host,
     maxAttempts: runtimeConfig.strictPort ? 1 : undefined,
