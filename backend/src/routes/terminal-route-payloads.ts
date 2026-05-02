@@ -1,0 +1,76 @@
+import type {
+  TerminalProjectListItem,
+  TerminalSessionHistoryResponse,
+  TerminalSessionListItem,
+  TerminalSessionStatusResponse,
+} from "@browser-viewer/shared";
+import type { TerminalSessionManager } from "../terminal/manager";
+
+type TerminalProject = NonNullable<
+  ReturnType<TerminalSessionManager["getProject"]>
+>;
+
+type TerminalSession = NonNullable<
+  ReturnType<TerminalSessionManager["getSession"]>
+>;
+
+export function toProjectPayload(
+  project: TerminalProject,
+): TerminalProjectListItem {
+  return {
+    projectId: project.id,
+    name: project.name,
+    path: project.path ?? null,
+    createdAt: project.createdAt.toISOString(),
+    isDefault: project.isDefault,
+  };
+}
+
+export function toStatusPayload(
+  session: TerminalSession,
+  scrollback = session.scrollback,
+): TerminalSessionStatusResponse {
+  return {
+    terminalSessionId: session.id,
+    projectId: session.projectId,
+    command: session.command,
+    args: session.args,
+    cwd: session.cwd,
+    activeCommand: session.activeCommand,
+    tmuxSessionName: session.tmuxSessionName,
+    tmuxSocketPath: session.tmuxSocketPath,
+    scrollback,
+    status: session.status,
+    createdAt: session.createdAt.toISOString(),
+    exitCode: session.exitCode,
+  };
+}
+
+export function toSessionListItem(
+  session: TerminalSession,
+): TerminalSessionListItem {
+  return {
+    terminalSessionId: session.id,
+    projectId: session.projectId,
+    command: session.command,
+    args: session.args,
+    cwd: session.cwd,
+    activeCommand: session.activeCommand,
+    tmuxSessionName: session.tmuxSessionName,
+    tmuxSocketPath: session.tmuxSocketPath,
+    status: session.status,
+    createdAt: session.createdAt.toISOString(),
+    exitCode: session.exitCode,
+  };
+}
+
+export function toHistoryPayload(
+  session: TerminalSession,
+  scrollback: string,
+  scrollbackSourceCols?: number,
+): TerminalSessionHistoryResponse {
+  return {
+    ...toStatusPayload(session, scrollback),
+    ...(scrollbackSourceCols ? { scrollbackSourceCols } : {}),
+  };
+}
