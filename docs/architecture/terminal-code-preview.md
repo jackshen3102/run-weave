@@ -63,6 +63,12 @@ Terminal Browser 工具当前边界：
 - Header 名必须符合 HTTP token 形态，禁止控制字符、冒号以及 `host`、`content-length`、`connection`、`upgrade`、`proxy-authorization`、`cookie`、`set-cookie`。Header 值不能为空且不能包含控制字符。
 - Electron 主进程只注册一个 `webRequest.onBeforeSendHeaders({ urls: ["<all_urls>"] })` dispatcher。dispatcher 只处理 `http:` / `https:` 请求，按规则列表顺序匹配轻量通配 URL；同名 Header 后命中的规则覆盖前面的规则。
 - Header 规则变更只影响后续新请求。面板保存后提供刷新入口，让当前页面主文档请求也重新携带新规则。
+- Browser 工具提供当前 tab 级别的设备模式。`Desktop` 是默认状态；切到移动设备时，当前支持 `iPhone SE`、`iPhone 14` 和 `Pixel 7` 三个预设，分别应用移动端 viewport、device scale factor、移动端 user agent 和 touch emulation。
+- 设备预设定义在 `packages/shared/src/terminal-browser-device.ts`，由前端设备面板和 Electron 主进程共享。新建、恢复和 proxy-created tab 仍从 `Desktop` 开始，不继承其他 tab 的移动设备状态。
+- 移动设备模式只作用于 Terminal Browser 的 Electron `WebContentsView`。前端负责设备入口、预设选择、手机画布布局和 bounds 同步；真实 emulation 在 Electron 主进程里通过目标 tab 的 `webContents.debugger` 落地。
+- 移动设备画布使用显式缩放模型：前端计算设备逻辑 viewport、面板内展示 bounds 和 `emulationScale`，Electron `setBounds()` 使用展示 bounds，CDP emulation 使用逻辑 viewport 与 scale。不能用 CSS transform 代替 native view 缩放。
+- 设备模式和 CDP Proxy、detached DevTools 互斥。当前 tab 已附着 CDP Proxy 或打开 DevTools 时，主进程拒绝切到移动设备；当前 tab 处于移动设备时，也拒绝 CDP Proxy attach 和 DevTools 打开，避免多个 debugger owner 竞争同一个 `WebContents`。
+- 设备状态切换失败必须从 IPC 返回错误，前端不能显示假成功。设备按钮禁用只作为用户体验提示，主进程校验才是安全边界。
 
 设计结论：
 

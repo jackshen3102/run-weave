@@ -146,6 +146,17 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 
 当前 v1 不实现 Viewer 接管控制模式。
 
+### Terminal Browser 设备模拟不是移动端 Web 分支
+
+右侧 Terminal Browser 的设备模式用于在桌面 Electron 内验证移动端网页表现。它会对当前 Terminal Browser tab 应用移动端 viewport、user agent、device scale factor 和 touch emulation，并在右侧面板中展示手机画布。
+
+这和 Runweave 自身的 `ClientMode = "mobile"` 是两条边界：
+
+- `ClientMode` 决定 Runweave Web UI 在手机上的观察台体验。
+- Terminal Browser 设备模式决定被右侧 Browser tab 加载的网页如何感知运行环境。
+- 设备模式只作用于当前 Terminal Browser tab，不改变 Home、Viewer 或 Terminal 的移动端能力开放策略。
+- 移动设备模式和 CDP Proxy、detached DevTools 互斥，避免多个 debugger owner 同时控制同一个 Electron `WebContents`。
+
 ### 不泄露桌面-only 能力
 
 移动端 Viewer v1 不只是隐藏按钮，而是不挂载相关入口和交互。
