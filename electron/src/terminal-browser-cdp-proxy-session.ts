@@ -52,6 +52,9 @@ export class CdpSessionManager {
     if (found?.entry.devtoolsOpen) {
       throw new Error("DevTools is already open for this browser tab");
     }
+    if (found?.entry.deviceState.mobile) {
+      throw new Error("Mobile mode is already active for this browser tab");
+    }
 
     try {
       webContents.debugger.attach("1.3");

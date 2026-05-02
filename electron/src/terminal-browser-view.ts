@@ -11,7 +11,12 @@ import { EventEmitter } from "node:events";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  createTerminalBrowserDeviceState,
+  getTerminalBrowserDevicePreset,
+  normalizeTerminalBrowserDevicePresetId,
   normalizeTerminalBrowserHeaderRules,
+  type TerminalBrowserDevicePresetId,
+  type TerminalBrowserDeviceState,
   type TerminalBrowserHeaderRule,
   type TerminalBrowserHeaderState,
   type TerminalBrowserProxyState,
@@ -30,6 +35,7 @@ interface TerminalBrowserBounds {
   y: number;
   width: number;
   height: number;
+  emulationScale?: number;
 }
 
 interface TerminalBrowserSnapshot {
@@ -42,6 +48,9 @@ interface TerminalBrowserSnapshot {
 export interface TerminalBrowserUpdate extends TerminalBrowserSnapshot {
   tabId: string;
   loading: boolean;
+  cdpProxyAttached: boolean;
+  devtoolsOpen: boolean;
+  deviceState: TerminalBrowserDeviceState;
 }
 
 export interface TerminalBrowserTabSnapshot extends TerminalBrowserUpdate {
@@ -57,6 +66,11 @@ interface TerminalBrowserEntry {
   targetId: string;
   cdpProxyAttached: boolean;
   devtoolsOpen: boolean;
+  deviceState: TerminalBrowserDeviceState;
+  emulationScale: number;
+  defaultUserAgent: string;
+  deviceDebuggerAttached: boolean;
+  onDeviceDebuggerDetach: ((event: Electron.Event, reason: string) => void) | null;
   lastActiveAt: number;
   lastKnownUrl: string;
 }
@@ -244,6 +258,18 @@ function getTerminalBrowserHeaderState(): TerminalBrowserHeaderState {
   };
 }
 
+function getTerminalBrowserDeviceState(
+  entry: TerminalBrowserEntry,
+): TerminalBrowserDeviceState {
+  return createTerminalBrowserDeviceState(entry.deviceState.presetId);
+}
+
+function isTerminalBrowserMobileDeviceState(
+  entry: TerminalBrowserEntry,
+): boolean {
+  return entry.deviceState.mobile === true;
+}
+
 function wildcardUrlPatternMatches(pattern: string, url: string): boolean {
   const escapedPattern = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
   const regexPattern = `^${escapedPattern.replace(/\*/g, ".*")}$`;
@@ -352,8 +378,17 @@ function isTerminalBrowserBounds(value: unknown): value is TerminalBrowserBounds
     return false;
   }
   const candidate = value as Record<string, unknown>;
-  return ["x", "y", "width", "height"].every(
+  const hasBounds = ["x", "y", "width", "height"].every(
     (key) => typeof candidate[key] === "number" && Number.isFinite(candidate[key]),
+  );
+  if (!hasBounds) {
+    return false;
+  }
+  return (
+    candidate.emulationScale === undefined ||
+    (typeof candidate.emulationScale === "number" &&
+      Number.isFinite(candidate.emulationScale) &&
+      candidate.emulationScale > 0)
   );
 }
 
@@ -460,6 +495,9 @@ function sendTerminalBrowserTabUpdate(
     tabId,
     ...snapshot,
     loading,
+    cdpProxyAttached: entry.cdpProxyAttached,
+    devtoolsOpen: entry.devtoolsOpen,
+    deviceState: getTerminalBrowserDeviceState(entry),
   };
   win.webContents.send("terminal-browser:tab-updated", update);
   scheduleTerminalBrowserTabsSave();
@@ -481,6 +519,9 @@ function sendTerminalBrowserTabActivatedFromProxy(
     tabId,
     ...snapshot,
     loading: entry.view.webContents.isLoading(),
+    cdpProxyAttached: entry.cdpProxyAttached,
+    devtoolsOpen: entry.devtoolsOpen,
+    deviceState: getTerminalBrowserDeviceState(entry),
   };
   win.webContents.send("terminal-browser:tab-activated-from-proxy", update);
 }
@@ -536,15 +577,22 @@ function getOrCreateTerminalBrowserView(
     targetId: randomUUID(),
     cdpProxyAttached: false,
     devtoolsOpen: false,
+    deviceState: createTerminalBrowserDeviceState("desktop"),
+    emulationScale: 1,
+    defaultUserAgent: view.webContents.getUserAgent(),
+    deviceDebuggerAttached: false,
+    onDeviceDebuggerDetach: null,
     lastActiveAt: Date.now(),
     lastKnownUrl: "",
   };
 
   view.webContents.on("devtools-opened", () => {
     entry.devtoolsOpen = true;
+    sendTerminalBrowserTabUpdate(win, tabId, entry);
   });
   view.webContents.on("devtools-closed", () => {
     entry.devtoolsOpen = false;
+    sendTerminalBrowserTabUpdate(win, tabId, entry);
   });
   view.webContents.on("did-start-loading", () => {
     sendTerminalBrowserTabUpdate(win, tabId, entry, true);
@@ -640,6 +688,7 @@ function closeTerminalBrowserEntry(
   if (entry.attached) {
     win.contentView.removeChildView(entry.view);
   }
+  detachTerminalBrowserDeviceDebugger(entry);
   terminalBrowserEntries.delete(key);
   terminalBrowserEvents.emit("tab-closed", { targetId: entry.targetId });
   if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
@@ -659,6 +708,7 @@ export function closeTerminalBrowsersForWindow(windowId: number): void {
     }
     terminalBrowserEntries.delete(key);
     terminalBrowserEvents.emit("tab-closed", { targetId: entry.targetId });
+    detachTerminalBrowserDeviceDebugger(entry);
     entry.view.webContents.close();
   }
   terminalBrowserEvents.emit("window-closed", { windowId });
@@ -680,6 +730,137 @@ function clampTerminalBrowserBounds(
     width: Math.max(0, Math.min(Math.round(bounds.width), maxWidth)),
     height: Math.max(0, Math.min(Math.round(bounds.height), maxHeight)),
   };
+}
+
+function clampTerminalBrowserEmulationScale(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return 1;
+  }
+  return Math.max(0.1, Math.min(value, 1));
+}
+
+function attachTerminalBrowserDeviceDebugger(entry: TerminalBrowserEntry): void {
+  if (entry.deviceDebuggerAttached) {
+    return;
+  }
+  const webContents = entry.view.webContents;
+  if (webContents.isDestroyed()) {
+    throw new Error("Cannot emulate a closed browser tab");
+  }
+  if (entry.devtoolsOpen || webContents.isDevToolsOpened()) {
+    throw new Error("Cannot enable mobile mode while DevTools is open");
+  }
+  try {
+    webContents.debugger.attach("1.3");
+  } catch (error) {
+    throw new Error(
+      `Cannot enable mobile mode because the debugger is unavailable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  entry.deviceDebuggerAttached = true;
+  entry.onDeviceDebuggerDetach = (_event, reason) => {
+    entry.deviceDebuggerAttached = false;
+    entry.onDeviceDebuggerDetach = null;
+    console.info("[electron] terminal browser device debugger detached", {
+      targetId: entry.targetId,
+      reason,
+    });
+  };
+  webContents.debugger.on("detach", entry.onDeviceDebuggerDetach);
+}
+
+function detachTerminalBrowserDeviceDebugger(entry: TerminalBrowserEntry): void {
+  if (!entry.deviceDebuggerAttached) {
+    return;
+  }
+  const webContents = entry.view.webContents;
+  if (entry.onDeviceDebuggerDetach) {
+    webContents.debugger.off("detach", entry.onDeviceDebuggerDetach);
+    entry.onDeviceDebuggerDetach = null;
+  }
+  try {
+    webContents.debugger.detach();
+  } catch {
+    // Already detached.
+  }
+  entry.deviceDebuggerAttached = false;
+}
+
+async function applyTerminalBrowserDeviceEmulation(
+  entry: TerminalBrowserEntry,
+  presetId: TerminalBrowserDevicePresetId,
+): Promise<TerminalBrowserDeviceState> {
+  const preset = getTerminalBrowserDevicePreset(presetId);
+  const webContents = entry.view.webContents;
+  if (webContents.isDestroyed()) {
+    throw new Error("Cannot update a closed browser tab");
+  }
+
+  if (!preset.mobile) {
+    if (entry.deviceDebuggerAttached) {
+      await webContents.debugger.sendCommand("Emulation.clearDeviceMetricsOverride");
+      await webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+        enabled: false,
+      });
+      await webContents.debugger.sendCommand("Network.setUserAgentOverride", {
+        userAgent: entry.defaultUserAgent,
+      });
+      detachTerminalBrowserDeviceDebugger(entry);
+    }
+    webContents.setUserAgent(entry.defaultUserAgent);
+    entry.emulationScale = 1;
+    const state = createTerminalBrowserDeviceState("desktop");
+    entry.deviceState = state;
+    return state;
+  }
+
+  if (entry.cdpProxyAttached) {
+    throw new Error("Cannot enable mobile mode while CDP proxy is attached");
+  }
+  if (entry.devtoolsOpen || webContents.isDevToolsOpened()) {
+    throw new Error("Cannot enable mobile mode while DevTools is open");
+  }
+
+  const viewport = preset.viewport;
+  if (!viewport || !preset.userAgent) {
+    throw new Error("Invalid terminal browser device preset");
+  }
+
+  attachTerminalBrowserDeviceDebugger(entry);
+  webContents.setUserAgent(preset.userAgent);
+  await webContents.debugger.sendCommand("Network.setUserAgentOverride", {
+    userAgent: preset.userAgent,
+    platform: preset.id === "pixel-7" ? "Android" : "iPhone",
+  });
+  await webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
+    width: viewport.width,
+    height: viewport.height,
+    deviceScaleFactor: viewport.deviceScaleFactor,
+    mobile: true,
+    scale: entry.emulationScale,
+  });
+  await webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+    enabled: true,
+    configuration: "mobile",
+  });
+
+  const state = createTerminalBrowserDeviceState(preset.id);
+  entry.deviceState = state;
+  return state;
+}
+
+async function updateTerminalBrowserEmulationScale(
+  entry: TerminalBrowserEntry,
+  emulationScale: number,
+): Promise<void> {
+  entry.emulationScale = clampTerminalBrowserEmulationScale(emulationScale);
+  if (!entry.deviceState.mobile) {
+    return;
+  }
+  await applyTerminalBrowserDeviceEmulation(entry, entry.deviceState.presetId);
 }
 
 export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
@@ -736,6 +917,7 @@ export function getTerminalBrowserTabsForWindow(
       active: activeTabId === tabId,
       cdpProxyAttached: entry.cdpProxyAttached,
       devtoolsOpen: entry.devtoolsOpen,
+      deviceState: getTerminalBrowserDeviceState(entry),
     });
   }
   return tabs;
@@ -822,6 +1004,13 @@ export function setTerminalBrowserCdpProxyAttached(
   const found = getTerminalBrowserEntryByTargetId(targetId);
   if (found) {
     found.entry.cdpProxyAttached = attached;
+    const parts = found.key.split(":");
+    const windowId = Number(parts[0]);
+    const tabId = parts.slice(1).join(":");
+    const win = BrowserWindow.fromId(windowId);
+    if (win) {
+      sendTerminalBrowserTabUpdate(win, tabId, found.entry);
+    }
   }
 }
 
@@ -878,6 +1067,43 @@ export function registerTerminalBrowserHandlers(): void {
     }
     detachTerminalBrowser(win, tabId);
   });
+
+  ipcMain.handle(
+    "terminal-browser:get-device-state",
+    (event, tabId: string): TerminalBrowserDeviceState => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || typeof tabId !== "string") {
+        throw new Error("Invalid browser device state request");
+      }
+      const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, tabId));
+      if (!entry || entry.view.webContents.isDestroyed()) {
+        return createTerminalBrowserDeviceState("desktop");
+      }
+      return getTerminalBrowserDeviceState(entry);
+    },
+  );
+
+  ipcMain.handle(
+    "terminal-browser:set-device-state",
+    async (
+      event,
+      tabId: string,
+      presetId: unknown,
+    ): Promise<TerminalBrowserDeviceState> => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || typeof tabId !== "string") {
+        throw new Error("Invalid browser device state request");
+      }
+      const entry = getExistingTerminalBrowserEntry(win, tabId, "update device");
+      const normalizedPresetId = normalizeTerminalBrowserDevicePresetId(presetId);
+      const nextState = await applyTerminalBrowserDeviceEmulation(
+        entry,
+        normalizedPresetId,
+      );
+      sendTerminalBrowserTabUpdate(win, tabId, entry);
+      return nextState;
+    },
+  );
 
   ipcMain.handle(
     "terminal-browser:navigate",
@@ -961,7 +1187,7 @@ export function registerTerminalBrowserHandlers(): void {
 
   ipcMain.handle(
     "terminal-browser:set-bounds",
-    (event, tabId: string, bounds: unknown) => {
+    async (event, tabId: string, bounds: unknown) => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (!win || typeof tabId !== "string") {
         return;
@@ -979,6 +1205,10 @@ export function registerTerminalBrowserHandlers(): void {
       }
       const nextBounds = clampTerminalBrowserBounds(win, bounds);
       entry.view.setBounds(nextBounds);
+      await updateTerminalBrowserEmulationScale(
+        entry,
+        clampTerminalBrowserEmulationScale(bounds.emulationScale),
+      );
     },
   );
 
@@ -995,6 +1225,9 @@ export function registerTerminalBrowserHandlers(): void {
       throw new Error(
         "Cannot open DevTools while CDP proxy is attached to this tab",
       );
+    }
+    if (isTerminalBrowserMobileDeviceState(entry)) {
+      throw new Error("Cannot open DevTools while mobile mode is active");
     }
     entry.view.webContents.openDevTools({ mode: "detach" });
   });

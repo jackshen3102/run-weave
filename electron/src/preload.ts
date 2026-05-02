@@ -3,6 +3,7 @@ import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
   TerminalBrowserCdpProxyInfo,
+  TerminalBrowserDeviceState,
   TerminalBrowserHeaderState,
   TerminalBrowserProxyState,
 } from "@browser-viewer/shared";
@@ -54,6 +55,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
         active: boolean;
         cdpProxyAttached: boolean;
         devtoolsOpen: boolean;
+        deviceState: TerminalBrowserDeviceState;
       }>
     >,
   terminalBrowserReload: (tabId: string) =>
@@ -68,9 +70,28 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("terminal-browser:show", tabId),
   terminalBrowserHide: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:hide", tabId),
+  terminalBrowserGetDeviceState: (tabId: string) =>
+    ipcRenderer.invoke(
+      "terminal-browser:get-device-state",
+      tabId,
+    ) as Promise<TerminalBrowserDeviceState>,
+  terminalBrowserSetDeviceState: (tabId: string, presetId: string) =>
+    ipcRenderer.invoke(
+      "terminal-browser:set-device-state",
+      tabId,
+      presetId,
+    ) as Promise<TerminalBrowserDeviceState>,
   terminalBrowserSetBounds: (
     tabId: string,
-    bounds: { x: number; y: number; width: number; height: number } | null,
+    bounds:
+      | {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+          emulationScale?: number;
+        }
+      | null,
   ) => ipcRenderer.invoke("terminal-browser:set-bounds", tabId, bounds),
   terminalBrowserOpenDevTools: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:open-devtools", tabId),
@@ -121,6 +142,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
       canGoBack: boolean;
       canGoForward: boolean;
       loading: boolean;
+      cdpProxyAttached: boolean;
+      devtoolsOpen: boolean;
+      deviceState: TerminalBrowserDeviceState;
     }) => void,
   ) => {
     const wrapped = (
@@ -132,6 +156,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
         canGoBack: boolean;
         canGoForward: boolean;
         loading: boolean;
+        cdpProxyAttached: boolean;
+        devtoolsOpen: boolean;
+        deviceState: TerminalBrowserDeviceState;
       },
     ) => {
       listener(data);
@@ -149,6 +176,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
       canGoBack: boolean;
       canGoForward: boolean;
       loading: boolean;
+      cdpProxyAttached: boolean;
+      devtoolsOpen: boolean;
+      deviceState: TerminalBrowserDeviceState;
     }) => void,
   ) => {
     const wrapped = (
@@ -160,6 +190,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
         canGoBack: boolean;
         canGoForward: boolean;
         loading: boolean;
+        cdpProxyAttached: boolean;
+        devtoolsOpen: boolean;
+        deviceState: TerminalBrowserDeviceState;
       },
     ) => {
       listener(data);

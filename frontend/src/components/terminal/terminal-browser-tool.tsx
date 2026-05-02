@@ -9,9 +9,11 @@ import {
 } from "react";
 import {
   normalizeTerminalBrowserHeaderRules,
+  type TerminalBrowserDevicePresetId,
   type TerminalBrowserHeaderRule,
   type TerminalBrowserProxyState,
 } from "@browser-viewer/shared";
+import { aiDiagnosticLog } from "../../features/diagnostic-logs/recorder";
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { TerminalBrowserErrorBanners } from "./terminal-browser-error-banners";
@@ -32,6 +34,8 @@ interface TerminalBrowserToolProps {
   active: boolean;
 }
 const HEADER_RULES_STORAGE_KEY = "terminal.browser.headerRules";
+const TERMINAL_BROWSER_SIDE_PANEL_WIDTH_PX = 320;
+
 export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   const tabs = useTerminalPreviewStore((state) => state.browser.tabs);
   const activeTabId = useTerminalPreviewStore(
@@ -55,11 +59,28 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
   const updateBrowserTab = useTerminalPreviewStore(
     (state) => state.updateBrowserTab,
   );
-  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const surfaceContainerRef = useRef<HTMLDivElement | null>(null);
+  const browserViewRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<number | null>(null);
   const loadedUrlByTabRef = useRef<Record<string, string>>({});
   const navigationSequenceByTabRef = useRef<Record<string, number>>({});
+  const deviceViewportByTabRef = useRef<
+    Record<string, { mobile: boolean; width: number } | undefined>
+  >({});
+  const deviceInfoByTabRef = useRef<
+    | Record<
+        string,
+        {
+          presetId: string;
+          logicalWidth: number | null;
+          logicalHeight: number | null;
+        }
+      >
+    | undefined
+  >({});
+  const lastBoundsKeyByTabRef = useRef<Record<string, string>>({});
   const activeTabIdRef = useRef(activeTabId);
+  const activeRef = useRef(active);
   const isElectron = window.electronAPI?.isElectron === true;
   const [proxyState, setProxyState] =
     useState<TerminalBrowserProxyState | null>(null);
@@ -69,17 +90,50 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
     [],
   );
   const [electronTabsSynced, setElectronTabsSynced] = useState(!isElectron);
+  const [deviceSwitching, setDeviceSwitching] = useState(false);
   const [headerSaving, setHeaderSaving] = useState(false);
   const [headerError, setHeaderError] = useState<string | null>(null);
   const [headerRulesPanelOpen, setHeaderRulesPanelOpen] = useState(false);
+  const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
     [activeTabId, tabs],
   );
   const activeTabUrl = activeTab?.url;
+  const mobileDisabledReason = activeTab?.cdpProxyAttached
+    ? "Mobile mode unavailable while CDP proxy is active"
+    : activeTab?.devtoolsOpen
+      ? "Mobile mode unavailable while DevTools is open"
+      : null;
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+  useEffect(() => {
+    const nextViewports: Record<
+      string,
+      { mobile: boolean; width: number } | undefined
+    > = {};
+    for (const tab of tabs) {
+      nextViewports[tab.id] =
+        tab.deviceState.mobile && tab.deviceState.viewport
+          ? { mobile: true, width: tab.deviceState.viewport.width }
+          : { mobile: false, width: 1 };
+    }
+    deviceViewportByTabRef.current = nextViewports;
+    deviceInfoByTabRef.current = Object.fromEntries(
+      tabs.map((tab) => [
+        tab.id,
+        {
+          presetId: tab.deviceState.presetId,
+          logicalWidth: tab.deviceState.viewport?.width ?? null,
+          logicalHeight: tab.deviceState.viewport?.height ?? null,
+        },
+      ]),
+    );
+  }, [tabs]);
   const applyElectronSnapshot = useCallback(
     (tabId: string, snapshot: ElectronBrowserSnapshot) => {
       updateBrowserTab(tabId, buildTabUpdateFromElectronSnapshot(snapshot));
@@ -100,20 +154,89 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
 
       const sendBounds = (): void => {
         frameRef.current = null;
-        if (!active) {
+        if (!activeRef.current) {
           void window.electronAPI?.terminalBrowserHide?.(tabId);
+          delete lastBoundsKeyByTabRef.current[tabId];
           return;
         }
-        const rect = surfaceRef.current?.getBoundingClientRect();
+        const rect = browserViewRef.current?.getBoundingClientRect();
         if (!rect || rect.width <= 0 || rect.height <= 0) {
           return;
         }
-        void window.electronAPI?.terminalBrowserShow?.(tabId);
-        void window.electronAPI?.terminalBrowserSetBounds?.(tabId, {
+        const containerRect = surfaceContainerRef.current?.getBoundingClientRect();
+        const sidePanelOpen = headerRulesPanelOpen || devicePanelOpen;
+        const rawBounds = {
           x: Math.round(rect.left),
           y: Math.round(rect.top),
           width: Math.round(rect.width),
           height: Math.round(rect.height),
+        };
+        const maxRight =
+          containerRect && sidePanelOpen
+            ? Math.round(containerRect.right - TERMINAL_BROWSER_SIDE_PANEL_WIDTH_PX)
+            : null;
+        const clippedWidth =
+          maxRight === null
+            ? rawBounds.width
+            : Math.max(0, Math.min(rawBounds.x + rawBounds.width, maxRight) - rawBounds.x);
+        if (clippedWidth <= 0) {
+          return;
+        }
+        const viewport = deviceViewportByTabRef.current[tabId];
+        const emulationScale =
+          viewport?.mobile && viewport.width > 0
+            ? clippedWidth / viewport.width
+            : 1;
+        void window.electronAPI?.terminalBrowserShow?.(tabId);
+        const nextBounds = {
+          x: rawBounds.x,
+          y: rawBounds.y,
+          width: clippedWidth,
+          height: rawBounds.height,
+          emulationScale,
+        };
+        const boundsKey = [
+          nextBounds.x,
+          nextBounds.y,
+          nextBounds.width,
+          nextBounds.height,
+          nextBounds.emulationScale.toFixed(4),
+        ].join(":");
+        if (lastBoundsKeyByTabRef.current[tabId] === boundsKey) {
+          const deviceInfo = deviceInfoByTabRef.current?.[tabId];
+          aiDiagnosticLog("terminal browser bounds sync skipped", {
+            tabId,
+            boundsKey,
+            presetId: deviceInfo?.presetId ?? null,
+          });
+          return;
+        }
+        lastBoundsKeyByTabRef.current[tabId] = boundsKey;
+        const deviceInfo = deviceInfoByTabRef.current?.[tabId];
+        aiDiagnosticLog("terminal browser bounds syncing", {
+          tabId,
+          presetId: deviceInfo?.presetId ?? null,
+          logicalWidth: deviceInfo?.logicalWidth ?? null,
+          logicalHeight: deviceInfo?.logicalHeight ?? null,
+          x: nextBounds.x,
+          y: nextBounds.y,
+          width: nextBounds.width,
+          height: nextBounds.height,
+          emulationScale,
+          rawWidth: rawBounds.width,
+          clippedBySidePanel: clippedWidth !== rawBounds.width,
+        });
+        const boundsPromise = window.electronAPI?.terminalBrowserSetBounds?.(
+          tabId,
+          nextBounds,
+        );
+        void boundsPromise?.catch((error) => {
+          updateBrowserTab(tabId, {
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to sync browser bounds",
+          });
         });
       };
 
@@ -130,7 +253,7 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         frameRef.current = window.requestAnimationFrame(sendBounds);
       }
     },
-    [active, isElectron],
+    [devicePanelOpen, headerRulesPanelOpen, isElectron, updateBrowserTab],
   );
 
   const syncBounds = useCallback(
@@ -158,13 +281,16 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
       if (!snapshots) {
         return;
       }
-      if (snapshots.length > 0) {
-        for (const snapshot of snapshots) {
+      const navigatedSnapshots = snapshots.filter((snapshot) => snapshot.url);
+      if (navigatedSnapshots.length > 0) {
+        for (const snapshot of navigatedSnapshots) {
           loadedUrlByTabRef.current[snapshot.tabId] = snapshot.url;
         }
-        const activeSnapshot = snapshots.find((snapshot) => snapshot.active);
+        const activeSnapshot = navigatedSnapshots.find(
+          (snapshot) => snapshot.active,
+        );
         replaceBrowserTabs(
-          snapshots.map(buildTabStateFromElectronSnapshot),
+          navigatedSnapshots.map(buildTabStateFromElectronSnapshot),
           activeSnapshot?.tabId,
         );
         if (activeSnapshot) {
@@ -267,13 +393,48 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
 
   useEffect(() => {
     syncBounds(true);
-  }, [headerRulesPanelOpen, syncBounds]);
+  }, [devicePanelOpen, headerRulesPanelOpen, syncBounds]);
+
+  useEffect(() => {
+    syncBounds(true);
+  }, [activeTab?.deviceState, syncBounds]);
+
+  useEffect(() => {
+    if (!isElectron || !active || !activeTabId) {
+      return;
+    }
+    let cancelled = false;
+    const loadDeviceState = async (): Promise<void> => {
+      try {
+        const deviceState =
+          await window.electronAPI?.terminalBrowserGetDeviceState?.(
+            activeTabId,
+          );
+        if (!cancelled && deviceState) {
+          updateBrowserTab(activeTabId, { deviceState, error: undefined });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          updateBrowserTab(activeTabId, {
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to load browser device state",
+          });
+        }
+      }
+    };
+    void loadDeviceState();
+    return () => {
+      cancelled = true;
+    };
+  }, [active, activeTabId, isElectron, updateBrowserTab]);
 
   useEffect(() => {
     if (!isElectron || !activeTabId) {
       return;
     }
-    const element = surfaceRef.current;
+    const element = surfaceContainerRef.current;
     if (!element) {
       return;
     }
@@ -398,6 +559,8 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
     return window.electronAPI?.onTerminalBrowserTabClosed?.(({ tabId }) => {
       delete loadedUrlByTabRef.current[tabId];
       delete navigationSequenceByTabRef.current[tabId];
+      delete deviceViewportByTabRef.current[tabId];
+      delete lastBoundsKeyByTabRef.current[tabId];
       closeBrowserTab(tabId);
     });
   }, [isElectron, closeBrowserTab]);
@@ -541,6 +704,61 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
     void window.electronAPI?.terminalBrowserStop?.(activeTab.id);
   };
 
+  const setHeaderPanelOpen = (open: boolean): void => {
+    setHeaderRulesPanelOpen(open);
+    if (open) {
+      setDevicePanelOpen(false);
+    }
+  };
+
+  const setDevicePanelOpenState = (open: boolean): void => {
+    setDevicePanelOpen(open);
+    if (open) {
+      setHeaderRulesPanelOpen(false);
+    }
+  };
+
+  const selectDevicePreset = async (
+    presetId: TerminalBrowserDevicePresetId,
+  ): Promise<void> => {
+    if (!isElectron || deviceSwitching) {
+      return;
+    }
+    setDeviceSwitching(true);
+    updateBrowserTab(activeTab.id, { error: undefined });
+    aiDiagnosticLog("terminal browser device preset selected", {
+      tabId: activeTab.id,
+      previousPresetId: activeTab.deviceState.presetId,
+      nextPresetId: presetId,
+      previousLogicalWidth: activeTab.deviceState.viewport?.width ?? null,
+      previousLogicalHeight: activeTab.deviceState.viewport?.height ?? null,
+    });
+    try {
+      const deviceState =
+        await window.electronAPI?.terminalBrowserSetDeviceState?.(
+          activeTab.id,
+          presetId,
+        );
+      aiDiagnosticLog("terminal browser device preset applied", {
+        tabId: activeTab.id,
+        nextPresetId: presetId,
+        returnedPresetId: deviceState?.presetId ?? null,
+        returnedLogicalWidth: deviceState?.viewport?.width ?? null,
+        returnedLogicalHeight: deviceState?.viewport?.height ?? null,
+      });
+      if (deviceState) {
+        updateBrowserTab(activeTab.id, { deviceState, error: undefined });
+      }
+    } catch (error) {
+      updateBrowserTab(activeTab.id, {
+        error:
+          error instanceof Error ? error.message : "Failed to switch device mode",
+      });
+    } finally {
+      setDeviceSwitching(false);
+    }
+  };
+
   const closeTab = (event: ReactPointerEvent, tabId: string): void => {
     event.stopPropagation();
     void window.electronAPI?.terminalBrowserCloseTab?.(tabId);
@@ -565,6 +783,8 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         proxySwitching={proxySwitching}
         headerRulesPanelOpen={headerRulesPanelOpen}
         headerRules={headerRules}
+        devicePanelOpen={devicePanelOpen}
+        deviceSwitching={deviceSwitching}
         onSubmitAddress={submitAddress}
         onAddressInputChange={(addressInput) =>
           updateBrowserTab(activeTab.id, { addressInput })
@@ -573,7 +793,8 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         onReload={() => void reload()}
         onStop={stop}
         onToggleProxy={() => void toggleProxy()}
-        onHeaderRulesPanelOpenChange={setHeaderRulesPanelOpen}
+        onDevicePanelOpenChange={setDevicePanelOpenState}
+        onHeaderRulesPanelOpenChange={setHeaderPanelOpen}
         onOpenDevTools={() => {
           void window.electronAPI?.terminalBrowserOpenDevTools?.(activeTab.id);
         }}
@@ -583,13 +804,20 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         errors={[proxyError, headerError, activeTab.error]}
       />
       <TerminalBrowserSurface
-        surfaceRef={surfaceRef}
+        containerRef={surfaceContainerRef}
+        browserViewRef={browserViewRef}
         isElectron={isElectron}
         headerRulesPanelOpen={headerRulesPanelOpen}
         headerRules={headerRules}
+        devicePanelOpen={devicePanelOpen}
+        deviceState={activeTab.deviceState}
+        deviceSwitching={deviceSwitching}
+        mobileDisabledReason={mobileDisabledReason}
         headerSaving={headerSaving}
         headerError={headerError}
-        onCloseHeaderRulesPanel={() => setHeaderRulesPanelOpen(false)}
+        onCloseHeaderRulesPanel={() => setHeaderPanelOpen(false)}
+        onCloseDevicePanel={() => setDevicePanelOpenState(false)}
+        onSelectDevicePreset={(presetId) => void selectDevicePreset(presetId)}
         onSaveHeaderRules={saveHeaderRules}
         onReload={() => void reload()}
         onOpenExternal={() => openUrlExternally(activeTab.url)}
