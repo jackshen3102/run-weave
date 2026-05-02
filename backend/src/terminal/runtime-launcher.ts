@@ -35,7 +35,8 @@ export function resolveTmuxTarget(
   tmuxService: TmuxService,
 ): TmuxTarget {
   return {
-    sessionName: session.tmuxSessionName ?? tmuxService.buildSessionName(session.id),
+    sessionName:
+      session.tmuxSessionName ?? tmuxService.buildSessionName(session.id),
     socketPath: session.tmuxSocketPath ?? tmuxService.socketPath,
   };
 }
@@ -43,7 +44,9 @@ export function resolveTmuxTarget(
 export async function ensureTerminalRuntime(
   options: EnsureTerminalRuntimeOptions,
 ): Promise<EnsureTerminalRuntimeResult> {
-  const existingRuntime = options.runtimeRegistry.getRuntime(options.session.id);
+  const existingRuntime = options.runtimeRegistry.getRuntime(
+    options.session.id,
+  );
   if (existingRuntime) {
     return { runtime: existingRuntime };
   }
@@ -69,15 +72,17 @@ export async function ensureTerminalRuntime(
           const attempt = options.tmuxService!.recordRebuildAttempt(
             currentSession.id,
           );
-          warning =
-            `Original tmux session was lost; created a fresh terminal session (${attempt.count}/${attempt.maxAttempts}).`;
-          console.error("[viewer-be] tmux terminal session missing; rebuilding", {
-            terminalSessionId: currentSession.id,
-            sessionName: target.sessionName,
-            socketPath: target.socketPath,
-            rebuildCount: attempt.count,
-            rebuildWindowMs: attempt.windowMs,
-          });
+          warning = `Original tmux session was lost; created a fresh terminal session (${attempt.count}/${attempt.maxAttempts}).`;
+          console.error(
+            "[viewer-be] tmux terminal session missing; rebuilding",
+            {
+              terminalSessionId: currentSession.id,
+              sessionName: target.sessionName,
+              socketPath: target.socketPath,
+              rebuildCount: attempt.count,
+              rebuildWindowMs: attempt.windowMs,
+            },
+          );
         } catch (error) {
           if (error instanceof TmuxRebuildLimitError) {
             await options.terminalSessionManager.updateRuntimeMetadata(
@@ -128,7 +133,12 @@ export async function ensureTerminalRuntime(
           args: attachCommand.args,
           cwd: currentSession.cwd,
           fallback: null,
-          formatQuickExitMessage: ({ args, command, exitCode, runDuration }) => [
+          formatQuickExitMessage: ({
+            args,
+            command,
+            exitCode,
+            runDuration,
+          }) => [
             `tmux attach client exited in ${runDuration} ms with exit code ${exitCode}`,
             `please check the tmux attach command and session state: ${JSON.stringify(
               { command, args },
@@ -319,12 +329,15 @@ export async function readTerminalScrollbackCapture(
   terminalSessionManager: TerminalSessionManager,
   tmuxService: TmuxService | undefined,
   mode: "history" | "live",
+  tmuxHistoryLines?: number,
 ): Promise<TerminalScrollbackCapture> {
   if (isTmuxBackedSession(session) && tmuxService) {
     try {
-      const captured = await tmuxService.capturePane(
-        resolveTmuxTarget(session, tmuxService),
-      );
+      const target = resolveTmuxTarget(session, tmuxService);
+      const captured =
+        tmuxHistoryLines === undefined
+          ? await tmuxService.capturePane(target)
+          : await tmuxService.capturePane(target, tmuxHistoryLines);
       return {
         data: captured.data,
         sourceCols: captured.sourceCols,
