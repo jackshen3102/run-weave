@@ -122,6 +122,8 @@ export interface TerminalSessionStatusResponse {
   args: string[];
   cwd: string;
   activeCommand: string | null;
+  tmuxSessionName?: string;
+  tmuxSocketPath?: string;
   scrollback: string;
   scrollbackSourceCols?: number;
   status: "running" | "exited";
@@ -138,9 +140,22 @@ export interface TerminalSessionListItem {
   args: string[];
   cwd: string;
   activeCommand: string | null;
+  tmuxSessionName?: string;
+  tmuxSocketPath?: string;
   status: "running" | "exited";
   createdAt: string;
   exitCode?: number;
+}
+
+export interface TerminalMobileOverviewSession extends TerminalSessionListItem {
+  tailScrollback: string;
+  tailScrollbackSourceCols?: number;
+  tailError?: string;
+}
+
+export interface TerminalMobileOverviewResponse {
+  projects: TerminalProjectListItem[];
+  sessions: TerminalMobileOverviewSession[];
 }
 
 export interface TerminalCompletionEvent {

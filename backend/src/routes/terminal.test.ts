@@ -50,22 +50,28 @@ interface MockTerminalProject {
 
 const execFileAsync = promisify(execFile);
 
-function createTestServer(sessionState: {
-  current: MockTerminalSession | null;
-  sessions?: MockTerminalSession[];
-  projects?: MockTerminalProject[];
-}, options?: {
-  ptyService?: unknown;
-  runtimeRegistry?: unknown;
-  tmuxService?: unknown;
-}) {
+function createTestServer(
+  sessionState: {
+    current: MockTerminalSession | null;
+    sessions?: MockTerminalSession[];
+    projects?: MockTerminalProject[];
+  },
+  options?: {
+    ptyService?: unknown;
+    runtimeRegistry?: unknown;
+    tmuxService?: unknown;
+  },
+) {
   const resolveRawSession = (id: string) =>
     sessionState.current?.id === id
       ? sessionState.current
       : sessionState.sessions?.find((session) => session.id === id);
   const normalizeSession = (session: MockTerminalSession | undefined | null) =>
-    session ? { ...session, activeCommand: session.activeCommand ?? null } : undefined;
-  const resolveSession = (id: string) => normalizeSession(resolveRawSession(id));
+    session
+      ? { ...session, activeCommand: session.activeCommand ?? null }
+      : undefined;
+  const resolveSession = (id: string) =>
+    normalizeSession(resolveRawSession(id));
   const projects = sessionState.projects ?? [
     {
       id: "project-default",
@@ -110,17 +116,19 @@ function createTestServer(sessionState: {
       projects.push(created);
       return created;
     }),
-    updateProject: vi.fn(async (id: string, patch: { name: string; path?: string | null }) => {
-      const current = projects.find((project) => project.id === id);
-      if (!current) {
-        return undefined;
-      }
-      current.name = patch.name;
-      if ("path" in patch) {
-        current.path = patch.path ?? null;
-      }
-      return current;
-    }),
+    updateProject: vi.fn(
+      async (id: string, patch: { name: string; path?: string | null }) => {
+        const current = projects.find((project) => project.id === id);
+        if (!current) {
+          return undefined;
+        }
+        current.name = patch.name;
+        if ("path" in patch) {
+          current.path = patch.path ?? null;
+        }
+        return current;
+      },
+    ),
     deleteProject: vi.fn(async (id: string) => {
       const index = projects.findIndex((project) => project.id === id);
       if (index < 0) {
@@ -133,7 +141,9 @@ function createTestServer(sessionState: {
       return true;
     }),
     getSession: vi.fn((id: string) => resolveSession(id)),
-    getProject: vi.fn((id: string) => projects.find((project) => project.id === id)),
+    getProject: vi.fn((id: string) =>
+      projects.find((project) => project.id === id),
+    ),
     readScrollback: vi.fn(async (id: string) => {
       return resolveSession(id)?.scrollback ?? "";
     }),
@@ -159,12 +169,11 @@ function createTestServer(sessionState: {
       }
       return lines.slice(-TERMINAL_CLIENT_SCROLLBACK_LINES).join("\n");
     }),
-    listSessions: vi.fn(
-      () =>
-        (
-          sessionState.sessions ??
-          (sessionState.current ? [sessionState.current] : [])
-        ).map((session) => normalizeSession(session)),
+    listSessions: vi.fn(() =>
+      (
+        sessionState.sessions ??
+        (sessionState.current ? [sessionState.current] : [])
+      ).map((session) => normalizeSession(session)),
     ),
     destroySession: vi.fn(async (id: string) => {
       if (sessionState.current?.id !== id) {
@@ -637,7 +646,9 @@ describe("terminal routes", () => {
   });
 
   it("inherits cwd from a referenced terminal session when cwd is omitted", async () => {
-    const inheritedCwd = await mkdtemp(path.join(os.tmpdir(), "terminal-inherit-"));
+    const inheritedCwd = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-inherit-"),
+    );
     tempDirs.push(inheritedCwd);
     const state = {
       current: {
@@ -676,7 +687,9 @@ describe("terminal routes", () => {
   });
 
   it("falls back to the project path when inherited cwd no longer exists", async () => {
-    const projectDir = await mkdtemp(path.join(os.tmpdir(), "runweave-project-"));
+    const projectDir = await mkdtemp(
+      path.join(os.tmpdir(), "runweave-project-"),
+    );
     const state = {
       current: {
         id: "terminal-1",
@@ -727,7 +740,9 @@ describe("terminal routes", () => {
   });
 
   it("prefers explicit cwd over inherited cwd when both are provided", async () => {
-    const inheritedCwd = await mkdtemp(path.join(os.tmpdir(), "terminal-inherit-"));
+    const inheritedCwd = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-inherit-"),
+    );
     tempDirs.push(inheritedCwd);
     const state = {
       current: {
@@ -801,6 +816,60 @@ describe("terminal routes", () => {
         createdAt: "2026-03-29T00:00:00.000Z",
       },
     ]);
+  });
+
+  it("returns mobile overview with capped live tails without reading full history", async () => {
+    const scrollback = Array.from(
+      { length: 85 },
+      (_, index) => `line-${index + 1}`,
+    ).join("\n");
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "bash",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback,
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+    };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/mobile/overview`,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      projects: [
+        {
+          projectId: "project-default",
+          name: "Default Project",
+          path: null,
+          createdAt: "2026-03-29T00:00:00.000Z",
+          isDefault: true,
+        },
+      ],
+      sessions: [
+        expect.objectContaining({
+          terminalSessionId: "terminal-1",
+          projectId: "project-default",
+          tailScrollback: Array.from(
+            { length: 80 },
+            (_, index) => `line-${index + 6}`,
+          ).join("\n"),
+        }),
+      ],
+    });
+    expect(terminalSessionManager.readLiveScrollback).toHaveBeenCalledWith(
+      "terminal-1",
+    );
+    expect(terminalSessionManager.readScrollback).not.toHaveBeenCalled();
   });
 
   it("reads terminal session history through a dedicated API", async () => {
@@ -888,6 +957,62 @@ describe("terminal routes", () => {
       sessionName: "runweave-terminal-1",
       socketPath: "/tmp/runweave/tmux.sock",
     });
+  });
+
+  it("uses a short tmux capture for mobile overview tails", async () => {
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        name: "bash",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "persisted pty history",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        runtimeKind: "tmux" as const,
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      },
+    };
+    const tmuxService = {
+      capturePane: vi.fn(async () => ({
+        data: "tmux pane tail\n",
+        durationMs: 12,
+        sourceCols: 120,
+      })),
+    };
+    const { server, terminalSessionManager } = createTestServer(state, {
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/mobile/overview`,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        sessions: [
+          expect.objectContaining({
+            terminalSessionId: "terminal-1",
+            tailScrollback: "tmux pane tail",
+            tailScrollbackSourceCols: 120,
+          }),
+        ],
+      }),
+    );
+    expect(terminalSessionManager.readScrollback).not.toHaveBeenCalled();
+    expect(tmuxService.capturePane).toHaveBeenCalledWith(
+      {
+        sessionName: "runweave-terminal-1",
+        socketPath: "/tmp/runweave/tmux.sock",
+      },
+      80,
+    );
   });
 
   it("limits live terminal scrollback to the configured latest lines", async () => {
@@ -1092,7 +1217,9 @@ describe("terminal routes", () => {
   });
 
   it("stores a validated project path and uses it as the default terminal cwd", async () => {
-    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-project-"));
+    const projectPath = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-project-"),
+    );
     tempDirs.push(projectPath);
     const state = {
       current: null as MockTerminalSession | null,
@@ -1140,7 +1267,9 @@ describe("terminal routes", () => {
   });
 
   it("rejects project paths that are not directories", async () => {
-    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-project-"));
+    const projectPath = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-project-"),
+    );
     const filePath = path.join(projectPath, "README.md");
     tempDirs.push(projectPath);
     await writeFile(filePath, "# demo\n");
@@ -1170,7 +1299,9 @@ describe("terminal routes", () => {
   });
 
   it("previews a project file directly from the project route", async () => {
-    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    const projectPath = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-preview-"),
+    );
     tempDirs.push(projectPath);
     await writeFile(path.join(projectPath, "README.md"), "# Project Preview\n");
     const state = {
@@ -1208,7 +1339,9 @@ describe("terminal routes", () => {
   });
 
   it("serves project preview image assets with no-store caching", async () => {
-    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    const projectPath = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-preview-"),
+    );
     tempDirs.push(projectPath);
     const imageBytes = Buffer.from([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -1237,11 +1370,15 @@ describe("terminal routes", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("image/png");
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(Buffer.from(await response.arrayBuffer()).equals(imageBytes)).toBe(true);
+    expect(Buffer.from(await response.arrayBuffer()).equals(imageBytes)).toBe(
+      true,
+    );
   });
 
   it("does not expose legacy session-scoped preview routes", async () => {
-    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    const projectPath = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-preview-"),
+    );
     tempDirs.push(projectPath);
     await writeFile(path.join(projectPath, "README.md"), "# Preview\n");
     const state = {
@@ -1278,8 +1415,12 @@ describe("terminal routes", () => {
   });
 
   it("rejects project preview paths outside the project path", async () => {
-    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
-    const outsideDir = await mkdtemp(path.join(os.tmpdir(), "terminal-outside-"));
+    const projectPath = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-preview-"),
+    );
+    const outsideDir = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-outside-"),
+    );
     tempDirs.push(projectPath, outsideDir);
     const outsideFile = path.join(outsideDir, "secret.txt");
     await writeFile(outsideFile, "secret\n");
@@ -1310,8 +1451,12 @@ describe("terminal routes", () => {
   });
 
   it("rejects project preview files that symlink outside the project path", async () => {
-    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
-    const outsideDir = await mkdtemp(path.join(os.tmpdir(), "terminal-outside-"));
+    const projectPath = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-preview-"),
+    );
+    const outsideDir = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-outside-"),
+    );
     tempDirs.push(projectPath, outsideDir);
     const outsideFile = path.join(outsideDir, "secret.txt");
     await writeFile(outsideFile, "secret\n");
@@ -1343,14 +1488,21 @@ describe("terminal routes", () => {
   });
 
   it("searches project preview files by fuzzy relative path without returning absolute candidates", async () => {
-    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    const projectPath = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-preview-"),
+    );
     tempDirs.push(projectPath);
     await mkdir(path.join(projectPath, "frontend/src/components/terminal"), {
       recursive: true,
     });
-    await mkdir(path.join(projectPath, "docs/architecture"), { recursive: true });
+    await mkdir(path.join(projectPath, "docs/architecture"), {
+      recursive: true,
+    });
     await writeFile(
-      path.join(projectPath, "frontend/src/components/terminal/terminal-workspace.tsx"),
+      path.join(
+        projectPath,
+        "frontend/src/components/terminal/terminal-workspace.tsx",
+      ),
       "export {}\n",
     );
     await writeFile(
@@ -1388,17 +1540,27 @@ describe("terminal routes", () => {
         dirname: "frontend/src/components/terminal",
       }),
     );
-    expect(payload.items.every((item) => !path.isAbsolute(item.path))).toBe(true);
+    expect(payload.items.every((item) => !path.isAbsolute(item.path))).toBe(
+      true,
+    );
   });
 
   it("searches project preview files without returning gitignored files", async () => {
-    const projectPath = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-"));
+    const projectPath = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-preview-"),
+    );
     tempDirs.push(projectPath);
     await mkdir(path.join(projectPath, "src"), { recursive: true });
     await mkdir(path.join(projectPath, "generated"), { recursive: true });
     await writeFile(path.join(projectPath, ".gitignore"), "generated/\n");
-    await writeFile(path.join(projectPath, "src/terminal-preview.ts"), "export {};\n");
-    await writeFile(path.join(projectPath, "generated/terminal-preview.js"), "ignored\n");
+    await writeFile(
+      path.join(projectPath, "src/terminal-preview.ts"),
+      "export {};\n",
+    );
+    await writeFile(
+      path.join(projectPath, "generated/terminal-preview.js"),
+      "ignored\n",
+    );
     const state = {
       current: null,
       projects: [

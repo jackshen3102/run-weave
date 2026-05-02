@@ -16,6 +16,7 @@ import { LoginPage } from "./pages/login-page";
 import { ConnectionsPage } from "./pages/connections-page";
 import { TerminalRoutePage } from "./pages/terminal-page";
 import { ViewerPage } from "./pages/viewer-page";
+import { MobileTerminalPage } from "./features/terminal/mobile/MobileTerminalPage";
 import { DiagnosticLogEntry } from "./components/diagnostic-log-entry";
 import {
   DIAGNOSTIC_LOG_ENTRY_VISIBILITY_EVENT,
@@ -244,6 +245,24 @@ export default function App() {
               onOpenConnectionManager={
                 isElectron ? openConnectionManager : undefined
               }
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/mobile/terminals"
+        element={
+          needsConnection ? (
+            <Navigate to="/connections" replace />
+          ) : isAuthChecking ? (
+            authPendingView
+          ) : token ? (
+            <MobileTerminalPage
+              apiBase={apiBase}
+              token={token}
+              onAuthExpired={clearToken}
             />
           ) : (
             <Navigate to="/login" replace />

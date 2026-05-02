@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="430" height="930" viewBox="0 0 430 930">
+<defs><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.16"/></filter></defs>
+<rect width="430" height="930" rx="34" fill="#f6f8fb"/>
+<rect x="18" y="14" width="394" height="902" rx="30" fill="#ffffff" filter="url(#shadow)"/>
+<rect x="18" y="14" width="394" height="84" rx="30" fill="#0f172a"/>
+<text x="38" y="51" font-size="22" font-weight="700" font-family="Arial, PingFang SC" fill="#fff">终端详情</text>
+<text x="38" y="77" font-size="13" font-family="Arial, PingFang SC" fill="#cbd5e1">点卡片后确认 tail，再决定是否交给 Hermes</text>
+<rect x="34" y="116" width="362" height="120" rx="20" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="34" y="116" width="6" height="120" rx="3" fill="#f59e0b"/>
+<text x="54" y="144" font-size="16" font-weight="700" font-family="Arial, PingFang SC" fill="#0f172a">cdcbc9cd · Codex</text>
+<rect x="316" y="128" width="70" height="26" rx="13" fill="#fef3c7"/>
+<text x="351.0" y="146" text-anchor="middle" font-size="12" font-weight="700" font-family="Arial, PingFang SC" fill="#b45309">等待输入</text>
+<text x="54" y="170" font-size="12.5" font-family="Arial, PingFang SC" fill="#475569">Project: run-weave</text>
+<text x="54" y="189" font-size="12.5" font-family="Arial, PingFang SC" fill="#475569">CWD: /browser-hub/browser-viewer</text>
+<text x="54" y="208" font-size="12.5" font-family="Arial, PingFang SC" fill="#475569">State reason: 检测到 Codex prompt</text>
+<text x="34" y="250" font-size="17" font-weight="700" font-family="Arial, PingFang SC" fill="#0f172a">最近输出 tail</text>
+<rect x="34" y="268" width="362" height="210" rx="22" fill="#f8fafc" stroke="#cbd5e1"/>
+<text x="54" y="296" font-size="15" font-weight="700" font-family="Arial, PingFang SC" fill="#0f172a">Tail preview · 最近 80 行</text>
+<text x="54" y="322" font-size="12.3" font-family="Arial, PingFang SC" fill="#334155">pnpm --filter ./backend test 通过</text>
+<text x="54" y="340" font-size="12.3" font-family="Arial, PingFang SC" fill="#334155">pnpm --filter ./backend typecheck 通过</text>
+<text x="54" y="358" font-size="12.3" font-family="Arial, PingFang SC" fill="#334155"></text>
+<text x="54" y="376" font-size="12.3" font-family="Arial, PingFang SC" fill="#334155">› Explain this codebase</text>
+<text x="54" y="394" font-size="12.3" font-family="Arial, PingFang SC" fill="#334155"></text>
+<text x="54" y="412" font-size="12.3" font-family="Arial, PingFang SC" fill="#334155">gpt-5.5 high fast · ~/Desktop/...</text>
+<rect x="34" y="492" width="362" height="138" rx="20" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="34" y="492" width="6" height="138" rx="3" fill="#2563eb"/>
+<text x="54" y="520" font-size="16" font-weight="700" font-family="Arial, PingFang SC" fill="#0f172a">底部操作抽屉</text>
+<rect x="287" y="504" width="99" height="26" rx="13" fill="#dbeafe"/>
+<text x="336.5" y="522" text-anchor="middle" font-size="12" font-weight="700" font-family="Arial, PingFang SC" fill="#2563eb">Primary</text>
+<text x="54" y="546" font-size="12.5" font-family="Arial, PingFang SC" fill="#475569">主操作：发给 Hermes</text>
+<text x="54" y="565" font-size="12.5" font-family="Arial, PingFang SC" fill="#475569">次操作：复制上下文 / 总结终端 / 继续任务</text>
+<text x="54" y="584" font-size="12.5" font-family="Arial, PingFang SC" fill="#475569">安全原则：若正在执行，不直接插入新 prompt</text>
+<rect x="54" y="592" width="137" height="28" rx="14" fill="#2563eb" stroke="#2563eb"/>
+<text x="122.5" y="611" text-anchor="middle" font-size="12" font-family="Arial, PingFang SC" fill="#fff">发给 Hermes</text>
+<rect x="199" y="592" width="68" height="28" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
+<text x="233.0" y="611" text-anchor="middle" font-size="12" font-family="Arial, PingFang SC" fill="#334155">复制</text>
+<rect x="275" y="592" width="68" height="28" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
+<text x="309.0" y="611" text-anchor="middle" font-size="12" font-family="Arial, PingFang SC" fill="#334155">总结</text>
+</svg>

@@ -5,6 +5,7 @@ import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
+  TerminalMobileOverviewResponse,
   TerminalCompletionEventListResponse,
   TerminalPreviewChangeKind,
   TerminalPreviewFileDiffResponse,
@@ -24,14 +25,18 @@ export async function createTerminalProject(
   token: string,
   payload: CreateTerminalProjectRequest,
 ): Promise<TerminalProjectListItem> {
-  return requestJson<TerminalProjectListItem>(apiBase, "/api/terminal/project", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+  return requestJson<TerminalProjectListItem>(
+    apiBase,
+    "/api/terminal/project",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
+  );
 }
 
 export async function createTerminalSession(
@@ -57,11 +62,15 @@ export async function listTerminalProjects(
   apiBase: string,
   token: string,
 ): Promise<TerminalProjectListItem[]> {
-  return requestJson<TerminalProjectListItem[]>(apiBase, "/api/terminal/project", {
-    headers: {
-      Authorization: `Bearer ${token}`,
+  return requestJson<TerminalProjectListItem[]>(
+    apiBase,
+    "/api/terminal/project",
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     },
-  });
+  );
 }
 
 export async function listTerminalSessions(
@@ -71,6 +80,21 @@ export async function listTerminalSessions(
   return requestJson<TerminalSessionListItem[]>(
     apiBase,
     "/api/terminal/session",
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalMobileOverview(
+  apiBase: string,
+  token: string,
+): Promise<TerminalMobileOverviewResponse> {
+  return requestJson<TerminalMobileOverviewResponse>(
+    apiBase,
+    "/api/terminal/mobile/overview",
     {
       headers: {
         Authorization: `Bearer ${token}`,

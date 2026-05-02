@@ -13,6 +13,8 @@ import type {
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
   TerminalCompletionEventListResponse,
+  TerminalMobileOverviewResponse,
+  TerminalMobileOverviewSession,
   TerminalProjectListItem,
   TerminalSessionHistoryResponse,
   TerminalSessionListItem,
@@ -46,6 +48,15 @@ import {
   readTerminalScrollback,
 } from "../terminal/runtime-launcher";
 import type { TmuxService } from "../terminal/tmux-service";
+
+const MOBILE_TERMINAL_OVERVIEW_TAIL_LINES = 80;
+const MOBILE_TERMINAL_OVERVIEW_TAIL_TIMEOUT_MS = 1_500;
+
+interface MobileOverviewTailCapture {
+  data: string;
+  sourceCols?: number;
+  error?: string;
+}
 
 const createTerminalSessionSchema = z
   .object({
@@ -121,7 +132,8 @@ function resolveTerminalCreateDefaults(
     : undefined;
   const projectId =
     payload.projectId ??
-    terminalSessionManager.listProjects().find((project) => project.isDefault)?.id;
+    terminalSessionManager.listProjects().find((project) => project.isDefault)
+      ?.id;
   const projectPath = projectId
     ? terminalSessionManager.getProject(projectId)?.path
     : undefined;
@@ -196,7 +208,29 @@ function toStatusPayload(
     args: session.args,
     cwd: session.cwd,
     activeCommand: session.activeCommand,
+    tmuxSessionName: session.tmuxSessionName,
+    tmuxSocketPath: session.tmuxSocketPath,
     scrollback,
+    status: session.status,
+    createdAt: session.createdAt.toISOString(),
+    exitCode: session.exitCode,
+  };
+}
+
+function toSessionListItem(
+  session: ReturnType<TerminalSessionManager["getSession"]> extends infer T
+    ? NonNullable<T>
+    : never,
+): TerminalSessionListItem {
+  return {
+    terminalSessionId: session.id,
+    projectId: session.projectId,
+    command: session.command,
+    args: session.args,
+    cwd: session.cwd,
+    activeCommand: session.activeCommand,
+    tmuxSessionName: session.tmuxSessionName,
+    tmuxSocketPath: session.tmuxSocketPath,
     status: session.status,
     createdAt: session.createdAt.toISOString(),
     exitCode: session.exitCode,
@@ -214,6 +248,36 @@ function toHistoryPayload(
     ...toStatusPayload(session, scrollback),
     ...(scrollbackSourceCols ? { scrollbackSourceCols } : {}),
   };
+}
+
+function tailScrollbackLines(scrollback: string, maxLines: number): string {
+  const lines = scrollback.replace(/\r/g, "").split("\n");
+  return lines
+    .slice(Math.max(0, lines.length - maxLines))
+    .join("\n")
+    .trimEnd();
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(message));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
 }
 
 export function createTerminalRouter(
@@ -305,10 +369,13 @@ export function createTerminalRouter(
 
     try {
       const projectPath = await resolveProjectPathInput(parsed.data.path);
-      const project = await terminalSessionManager.updateProject(req.params.id, {
-        name: parsed.data.name,
-        ...(projectPath !== undefined ? { path: projectPath } : {}),
-      });
+      const project = await terminalSessionManager.updateProject(
+        req.params.id,
+        {
+          name: parsed.data.name,
+          ...(projectPath !== undefined ? { path: projectPath } : {}),
+        },
+      );
       if (!project) {
         res.status(404).json({ message: "Terminal project not found" });
         return;
@@ -348,19 +415,76 @@ export function createTerminalRouter(
   router.get("/session", (_req, res) => {
     const payload: TerminalSessionListItem[] = terminalSessionManager
       .listSessions()
-      .map((session) => ({
-        terminalSessionId: session.id,
-        projectId: session.projectId,
-        command: session.command,
-        args: session.args,
-        cwd: session.cwd,
-        activeCommand: session.activeCommand,
-        status: session.status,
-        createdAt: session.createdAt.toISOString(),
-        exitCode: session.exitCode,
-      }));
+      .map((session) => toSessionListItem(session));
 
     res.json(payload);
+  });
+
+  router.get("/mobile/overview", async (_req, res) => {
+    try {
+      const sessions = terminalSessionManager.listSessions();
+      const payload: TerminalMobileOverviewResponse = {
+        projects: terminalSessionManager
+          .listProjects()
+          .map((project) => toProjectPayload(project)),
+        sessions: await Promise.all(
+          sessions.map(
+            async (session): Promise<TerminalMobileOverviewSession> => {
+              const tailCapturePromise = readTerminalScrollbackCapture(
+                session,
+                terminalSessionManager,
+                options?.tmuxService,
+                "live",
+                MOBILE_TERMINAL_OVERVIEW_TAIL_LINES,
+              );
+              tailCapturePromise.catch(() => undefined);
+
+              const tailCapture: MobileOverviewTailCapture = await withTimeout(
+                tailCapturePromise,
+                MOBILE_TERMINAL_OVERVIEW_TAIL_TIMEOUT_MS,
+                "Terminal mobile overview tail read timed out",
+              ).catch((error: unknown) => {
+                console.error(
+                  "[viewer-be] terminal mobile overview tail read failed",
+                  {
+                    terminalSessionId: session.id,
+                    error: String(error),
+                  },
+                );
+                return {
+                  data: "",
+                  error: String(error),
+                };
+              });
+
+              return {
+                ...toSessionListItem(session),
+                tailScrollback: tailScrollbackLines(
+                  tailCapture.data,
+                  MOBILE_TERMINAL_OVERVIEW_TAIL_LINES,
+                ),
+                ...(tailCapture.sourceCols
+                  ? { tailScrollbackSourceCols: tailCapture.sourceCols }
+                  : {}),
+                ...(tailCapture.error
+                  ? { tailError: tailCapture.error }
+                  : {}),
+              };
+            },
+          ),
+        ),
+      };
+
+      res.json(payload);
+    } catch (error) {
+      console.error("[viewer-be] terminal mobile overview request failed", {
+        error: String(error),
+      });
+      res.status(500).json({
+        message: "Terminal mobile overview request failed",
+        error: String(error),
+      });
+    }
   });
 
   router.get("/completion-events", (req, res) => {
@@ -396,9 +520,10 @@ export function createTerminalRouter(
           const runtimePreference = parsed.data.runtimePreference ?? "auto";
           const shouldTryTmux =
             runtimePreference === "auto" || runtimePreference === "tmux";
-          const tmuxAvailable = options.tmuxService && shouldTryTmux
-            ? await options.tmuxService.isAvailable()
-            : false;
+          const tmuxAvailable =
+            options.tmuxService && shouldTryTmux
+              ? await options.tmuxService.isAvailable()
+              : false;
           const tmuxUnavailableReason =
             options.tmuxService && shouldTryTmux && !tmuxAvailable
               ? await options.tmuxService.getUnavailableReason()
