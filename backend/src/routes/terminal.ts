@@ -13,12 +13,6 @@ import type {
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
   TerminalCompletionEventListResponse,
-  TerminalMobileOverviewResponse,
-  TerminalMobileOverviewSession,
-  TerminalProjectListItem,
-  TerminalSessionHistoryResponse,
-  TerminalSessionListItem,
-  TerminalSessionStatusResponse,
   UpdateTerminalProjectRequest,
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
@@ -44,19 +38,17 @@ import type { TerminalCompletionEventStore } from "../terminal/completion-events
 import {
   ensureTerminalRuntime,
   killTmuxSessionForTerminal,
-  readTerminalScrollbackCapture,
   readTerminalScrollback,
+  readTerminalScrollbackCapture,
 } from "../terminal/runtime-launcher";
 import type { TmuxService } from "../terminal/tmux-service";
-
-const MOBILE_TERMINAL_OVERVIEW_TAIL_LINES = 80;
-const MOBILE_TERMINAL_OVERVIEW_TAIL_TIMEOUT_MS = 1_500;
-
-interface MobileOverviewTailCapture {
-  data: string;
-  sourceCols?: number;
-  error?: string;
-}
+import { buildTerminalMobileOverviewPayload } from "./terminal-mobile-overview";
+import {
+  toHistoryPayload,
+  toProjectPayload,
+  toSessionListItem,
+  toStatusPayload,
+} from "./terminal-route-payloads";
 
 const createTerminalSessionSchema = z
   .object({
@@ -162,20 +154,6 @@ function isExistingDirectory(value: string | undefined): boolean {
   }
 }
 
-function toProjectPayload(
-  project: ReturnType<TerminalSessionManager["getProject"]> extends infer T
-    ? NonNullable<T>
-    : never,
-): TerminalProjectListItem {
-  return {
-    projectId: project.id,
-    name: project.name,
-    path: project.path ?? null,
-    createdAt: project.createdAt.toISOString(),
-    isDefault: project.isDefault,
-  };
-}
-
 async function resolveProjectPathInput(
   rawPath: string | null | undefined,
 ): Promise<string | null | undefined> {
@@ -193,91 +171,6 @@ async function resolveProjectPathInput(
     );
   }
   return normalized;
-}
-
-function toStatusPayload(
-  session: ReturnType<TerminalSessionManager["getSession"]> extends infer T
-    ? NonNullable<T>
-    : never,
-  scrollback = session.scrollback,
-): TerminalSessionStatusResponse {
-  return {
-    terminalSessionId: session.id,
-    projectId: session.projectId,
-    command: session.command,
-    args: session.args,
-    cwd: session.cwd,
-    activeCommand: session.activeCommand,
-    tmuxSessionName: session.tmuxSessionName,
-    tmuxSocketPath: session.tmuxSocketPath,
-    scrollback,
-    status: session.status,
-    createdAt: session.createdAt.toISOString(),
-    exitCode: session.exitCode,
-  };
-}
-
-function toSessionListItem(
-  session: ReturnType<TerminalSessionManager["getSession"]> extends infer T
-    ? NonNullable<T>
-    : never,
-): TerminalSessionListItem {
-  return {
-    terminalSessionId: session.id,
-    projectId: session.projectId,
-    command: session.command,
-    args: session.args,
-    cwd: session.cwd,
-    activeCommand: session.activeCommand,
-    tmuxSessionName: session.tmuxSessionName,
-    tmuxSocketPath: session.tmuxSocketPath,
-    status: session.status,
-    createdAt: session.createdAt.toISOString(),
-    exitCode: session.exitCode,
-  };
-}
-
-function toHistoryPayload(
-  session: ReturnType<TerminalSessionManager["getSession"]> extends infer T
-    ? NonNullable<T>
-    : never,
-  scrollback: string,
-  scrollbackSourceCols?: number,
-): TerminalSessionHistoryResponse {
-  return {
-    ...toStatusPayload(session, scrollback),
-    ...(scrollbackSourceCols ? { scrollbackSourceCols } : {}),
-  };
-}
-
-function tailScrollbackLines(scrollback: string, maxLines: number): string {
-  const lines = scrollback.replace(/\r/g, "").split("\n");
-  return lines
-    .slice(Math.max(0, lines.length - maxLines))
-    .join("\n")
-    .trimEnd();
-}
-
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  message: string,
-): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          reject(new Error(message));
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) {
-      clearTimeout(timer);
-    }
-  }
 }
 
 export function createTerminalRouter(
@@ -322,7 +215,7 @@ export function createTerminalRouter(
   };
 
   router.get("/project", (_req, res) => {
-    const payload: TerminalProjectListItem[] = terminalSessionManager
+    const payload = terminalSessionManager
       .listProjects()
       .map((project) => toProjectPayload(project));
 
@@ -413,7 +306,7 @@ export function createTerminalRouter(
   });
 
   router.get("/session", (_req, res) => {
-    const payload: TerminalSessionListItem[] = terminalSessionManager
+    const payload = terminalSessionManager
       .listSessions()
       .map((session) => toSessionListItem(session));
 
@@ -422,60 +315,12 @@ export function createTerminalRouter(
 
   router.get("/mobile/overview", async (_req, res) => {
     try {
-      const sessions = terminalSessionManager.listSessions();
-      const payload: TerminalMobileOverviewResponse = {
-        projects: terminalSessionManager
-          .listProjects()
-          .map((project) => toProjectPayload(project)),
-        sessions: await Promise.all(
-          sessions.map(
-            async (session): Promise<TerminalMobileOverviewSession> => {
-              const tailCapturePromise = readTerminalScrollbackCapture(
-                session,
-                terminalSessionManager,
-                options?.tmuxService,
-                "live",
-                MOBILE_TERMINAL_OVERVIEW_TAIL_LINES,
-              );
-              tailCapturePromise.catch(() => undefined);
-
-              const tailCapture: MobileOverviewTailCapture = await withTimeout(
-                tailCapturePromise,
-                MOBILE_TERMINAL_OVERVIEW_TAIL_TIMEOUT_MS,
-                "Terminal mobile overview tail read timed out",
-              ).catch((error: unknown) => {
-                console.error(
-                  "[viewer-be] terminal mobile overview tail read failed",
-                  {
-                    terminalSessionId: session.id,
-                    error: String(error),
-                  },
-                );
-                return {
-                  data: "",
-                  error: String(error),
-                };
-              });
-
-              return {
-                ...toSessionListItem(session),
-                tailScrollback: tailScrollbackLines(
-                  tailCapture.data,
-                  MOBILE_TERMINAL_OVERVIEW_TAIL_LINES,
-                ),
-                ...(tailCapture.sourceCols
-                  ? { tailScrollbackSourceCols: tailCapture.sourceCols }
-                  : {}),
-                ...(tailCapture.error
-                  ? { tailError: tailCapture.error }
-                  : {}),
-              };
-            },
-          ),
+      res.json(
+        await buildTerminalMobileOverviewPayload(
+          terminalSessionManager,
+          options?.tmuxService,
         ),
-      };
-
-      res.json(payload);
+      );
     } catch (error) {
       console.error("[viewer-be] terminal mobile overview request failed", {
         error: String(error),
