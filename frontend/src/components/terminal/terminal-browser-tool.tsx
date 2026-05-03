@@ -434,6 +434,11 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
     if (!isElectron || !activeTabId) {
       return;
     }
+    if (!active) {
+      void window.electronAPI?.terminalBrowserHide?.(activeTabId);
+      delete lastBoundsKeyByTabRef.current[activeTabId];
+      return;
+    }
     const element = surfaceContainerRef.current;
     if (!element) {
       return;
@@ -452,7 +457,7 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         frameRef.current = null;
       }
     };
-  }, [activeTabId, isElectron, syncBounds]);
+  }, [active, activeTabId, isElectron, syncBounds]);
 
   useEffect(() => {
     if (!isElectron) {

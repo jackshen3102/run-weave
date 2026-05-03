@@ -67,6 +67,9 @@ export function TerminalWorkspace({
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
   const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
   const previewExpanded = useTerminalPreviewStore((state) => state.ui.expanded);
+  const setPreviewActiveTool = useTerminalPreviewStore(
+    (state) => state.setActiveTool,
+  );
   const previewReservedWidth = previewWidthPx
     ? `${previewWidthPx}px`
     : DEFAULT_TERMINAL_SIDECAR_WIDTH;
@@ -594,10 +597,12 @@ export function TerminalWorkspace({
       onSelectProject={setActiveProjectId}
       onSelectSession={setActiveSessionId}
       onRequestCreateProject={() => {
+        setPreviewActiveTool("preview");
         setProjectDialogError(null);
         setProjectDialogMode("create");
       }}
       onRequestEditProject={(projectId) => {
+        setPreviewActiveTool("preview");
         if (projectId) {
           setActiveProjectId(projectId);
         }
@@ -605,6 +610,7 @@ export function TerminalWorkspace({
         setProjectDialogMode("edit");
       }}
       onRequestDeleteProject={(project) => {
+        setPreviewActiveTool("preview");
         setProjectPendingDeletion(project);
       }}
       onRequestCreateSession={() => {
