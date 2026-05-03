@@ -1333,7 +1333,7 @@ describe("terminal routes", () => {
         projectPath,
         language: "markdown",
         content: "# Project Preview\n",
-        readonly: true,
+        readonly: false,
       }),
     );
   });
@@ -1414,7 +1414,7 @@ describe("terminal routes", () => {
     expect(response.status).toBe(404);
   });
 
-  it("rejects project preview paths outside the project path", async () => {
+  it("opens absolute project preview paths outside the project path as read only", async () => {
     const projectPath = await mkdtemp(
       path.join(os.tmpdir(), "terminal-preview-"),
     );
@@ -1424,6 +1424,7 @@ describe("terminal routes", () => {
     tempDirs.push(projectPath, outsideDir);
     const outsideFile = path.join(outsideDir, "secret.txt");
     await writeFile(outsideFile, "secret\n");
+    const realOutsideFile = await realpath(outsideFile);
     const state = {
       current: null,
       projects: [
@@ -1444,10 +1445,17 @@ describe("terminal routes", () => {
       `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file?path=${encodeURIComponent(outsideFile)}`,
     );
 
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
-      message: "Path is outside the project path",
-    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        kind: "file",
+        path: realOutsideFile,
+        absolutePath: realOutsideFile,
+        base: "filesystem",
+        content: "secret\n",
+        readonly: true,
+      }),
+    );
   });
 
   it("rejects project preview files that symlink outside the project path", async () => {

@@ -21,6 +21,7 @@ import {
   getTerminalProjectPreviewFile,
   getTerminalProjectPreviewFileDiff,
   getTerminalProjectPreviewGitChanges,
+  saveTerminalProjectPreviewFile,
   searchTerminalProjectPreviewFiles,
 } from "../../services/terminal";
 import { TerminalPreviewPanelContent } from "./terminal-preview-panel-content";
@@ -110,6 +111,13 @@ export function TerminalPreviewPanel({
   const [filePreview, setFilePreview] = useState<TerminalPreviewFileResponse | null>(
     null,
   );
+  const [editorContent, setEditorContent] = useState("");
+  const [loadedContent, setLoadedContent] = useState("");
+  const [loadedMtimeMs, setLoadedMtimeMs] = useState<number | undefined>(undefined);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveConflict, setSaveConflict] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [changes, setChanges] = useState<TerminalPreviewGitChangesResponse | null>(
@@ -141,6 +149,19 @@ export function TerminalPreviewPanel({
   const fileKind = selectedFilePath
     ? getTerminalPreviewFileKind(selectedFilePath, filePreview?.language)
     : "text";
+  const isFileEditable =
+    mode === "file" &&
+    Boolean(filePreview) &&
+    filePreview?.readonly === false &&
+    fileKind !== "image";
+  const isDirty = isFileEditable && editorContent !== loadedContent;
+
+  const confirmDiscardDraft = useCallback((): boolean => {
+    if (!isDirty) {
+      return true;
+    }
+    return window.confirm("Discard unsaved Preview changes?");
+  }, [isDirty]);
 
   const handleRequestError = useCallback(
     (error: unknown): string => {
@@ -173,6 +194,12 @@ export function TerminalPreviewPanel({
           return;
         }
         setFilePreview(payload);
+        setEditorContent(payload.content);
+        setLoadedContent(payload.content);
+        setLoadedMtimeMs(payload.mtimeMs);
+        setSaveError(null);
+        setSaveConflict(false);
+        setLastSavedAt(null);
       } catch (error) {
         if (fileRequestIdRef.current !== requestId) {
           return;
@@ -302,6 +329,13 @@ export function TerminalPreviewPanel({
     setSearchItems([]);
     setSearchError(null);
     setFilePreview(null);
+    setEditorContent("");
+    setLoadedContent("");
+    setLoadedMtimeMs(undefined);
+    setSaveLoading(false);
+    setSaveError(null);
+    setSaveConflict(false);
+    setLastSavedAt(null);
     setFileError(null);
     setChanges(null);
     setChangesError(null);
@@ -418,6 +452,84 @@ export function TerminalPreviewPanel({
     };
   }, [expanded, setExpanded]);
 
+  const saveFile = useCallback(
+    async (options?: { overwrite?: boolean }): Promise<void> => {
+      if (
+        !projectId ||
+        !filePreview ||
+        !isFileEditable ||
+        saveLoading ||
+        loadedMtimeMs === undefined
+      ) {
+        return;
+      }
+      setSaveLoading(true);
+      setSaveError(null);
+      setSaveConflict(false);
+      try {
+        const payload = await saveTerminalProjectPreviewFile(apiBase, token, projectId, {
+          path: filePreview.path,
+          content: editorContent,
+          expectedMtimeMs: loadedMtimeMs,
+          overwrite: options?.overwrite,
+        });
+        setFilePreview(payload);
+        setEditorContent(payload.content);
+        setLoadedContent(payload.content);
+        setLoadedMtimeMs(payload.mtimeMs);
+        setLastSavedAt(Date.now());
+      } catch (error) {
+        if (error instanceof HttpError && error.status === 409) {
+          setSaveConflict(true);
+        }
+        setSaveError(handleRequestError(error));
+      } finally {
+        setSaveLoading(false);
+      }
+    },
+    [
+      apiBase,
+      editorContent,
+      filePreview,
+      handleRequestError,
+      isFileEditable,
+      loadedMtimeMs,
+      projectId,
+      saveLoading,
+      token,
+    ],
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        if (!isFileEditable) {
+          return;
+        }
+        event.preventDefault();
+        void saveFile();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isFileEditable, saveFile]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent): void => {
+      if (!isDirty) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isDirty]);
+
   const selectedPath = useMemo(() => {
     if (mode === "file") {
       return selectedFilePath ?? filePreview?.path ?? null;
@@ -457,6 +569,7 @@ export function TerminalPreviewPanel({
     setFilePreview: () => setFilePreview(null),
     setFileError,
     setMarkdownScrollRatio,
+    confirmDiscardDraft,
   });
 
   const body = (
@@ -480,6 +593,21 @@ export function TerminalPreviewPanel({
       searchLoading={searchLoading}
       searchError={searchError}
       filePreview={filePreview}
+      editorContent={editorContent}
+      editable={isFileEditable}
+      onEditorContentChange={(content) => {
+        setEditorContent(content);
+        setSaveError(null);
+        setSaveConflict(false);
+      }}
+      saveError={saveError}
+      saveConflict={saveConflict}
+      onReloadFile={() => {
+        if (selectedFilePath && confirmDiscardDraft()) {
+          void loadFile(selectedFilePath);
+        }
+      }}
+      onOverwriteFile={() => void saveFile({ overwrite: true })}
       fileLoading={fileLoading}
       fileError={fileError}
       changes={changes}
@@ -523,7 +651,7 @@ export function TerminalPreviewPanel({
         }
       }}
       onOpenModeChanges={() => {
-        if (projectId) {
+        if (projectId && confirmDiscardDraft()) {
           updateProjectPreview(projectId, { mode: "changes" });
         }
       }}
@@ -543,6 +671,22 @@ export function TerminalPreviewPanel({
       }
       fileLoading={fileLoading}
       changesLoading={changesLoading}
+      saveLoading={saveLoading}
+      saveDisabled={!isDirty || !isFileEditable || saveLoading}
+      saveStatus={
+        saveConflict
+          ? "conflict"
+          : saveLoading
+            ? "saving"
+            : isDirty
+              ? "unsaved"
+              : isFileEditable && lastSavedAt
+                ? "saved"
+                : isFileEditable
+                  ? "editable"
+                  : "readonly"
+      }
+      canSave={isFileEditable}
       selectedPath={selectedPath}
       markdownViewMode={markdownViewMode}
       svgViewMode={svgViewMode}
@@ -553,14 +697,19 @@ export function TerminalPreviewPanel({
       onStartResize={startResize}
       onSetActiveTool={setActiveTool}
       onSetPreviewMode={(nextMode) => {
-        if (projectId) {
+        if (projectId && confirmDiscardDraft()) {
           updateProjectPreview(projectId, { mode: nextMode });
         }
       }}
       onToggleExpanded={() => setExpanded(!expanded)}
       onRefresh={refresh}
+      onSave={() => void saveFile()}
       onCopyPath={copyPath}
-      onClosePreview={closePreview}
+      onClosePreview={() => {
+        if (confirmDiscardDraft()) {
+          closePreview();
+        }
+      }}
       onSetMarkdownViewMode={setMarkdownViewMode}
       onSetSvgViewMode={setSvgViewMode}
       onSetChangesViewMode={setChangesViewMode}

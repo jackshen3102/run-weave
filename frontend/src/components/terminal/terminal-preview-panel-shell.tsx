@@ -1,5 +1,5 @@
 import { type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { Copy, Maximize2, Minimize2, RefreshCw, X } from "lucide-react";
+import { Copy, Maximize2, Minimize2, RefreshCw, Save, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { TerminalBrowserTool } from "./terminal-browser-tool";
 
@@ -16,6 +16,10 @@ interface TerminalPreviewPanelShellProps {
   fileKind: string;
   fileLoading: boolean;
   changesLoading: boolean;
+  saveLoading: boolean;
+  saveDisabled: boolean;
+  saveStatus: "readonly" | "editable" | "unsaved" | "saving" | "saved" | "conflict";
+  canSave: boolean;
   selectedPath: string | null;
   markdownViewMode: "source" | "split" | "preview";
   svgViewMode: "preview" | "source";
@@ -28,6 +32,7 @@ interface TerminalPreviewPanelShellProps {
   onSetPreviewMode: (mode: "changes" | "file") => void;
   onToggleExpanded: () => void;
   onRefresh: () => void;
+  onSave: () => void;
   onCopyPath: () => void;
   onClosePreview: () => void;
   onSetMarkdownViewMode: (nextMode: "source" | "split" | "preview") => void;
@@ -53,6 +58,10 @@ export function TerminalPreviewPanelShell({
   fileKind,
   fileLoading,
   changesLoading,
+  saveLoading,
+  saveDisabled,
+  saveStatus,
+  canSave,
   selectedPath,
   markdownViewMode,
   svgViewMode,
@@ -65,12 +74,26 @@ export function TerminalPreviewPanelShell({
   onSetPreviewMode,
   onToggleExpanded,
   onRefresh,
+  onSave,
   onCopyPath,
   onClosePreview,
   onSetMarkdownViewMode,
   onSetSvgViewMode,
   onSetChangesViewMode,
 }: TerminalPreviewPanelShellProps) {
+  const saveStatusLabel =
+    saveStatus === "conflict"
+      ? "Conflict"
+      : saveStatus === "saving"
+        ? "Saving..."
+        : saveStatus === "unsaved"
+          ? "Unsaved"
+          : saveStatus === "saved"
+            ? "Saved"
+            : saveStatus === "editable"
+              ? "Saved"
+              : "Read only";
+
   return (
     <aside
       className="relative flex h-full min-h-0 shrink-0 border-l border-slate-800 bg-slate-950"
@@ -137,6 +160,22 @@ export function TerminalPreviewPanelShell({
                   <Maximize2 className="h-4 w-4" />
                 )}
               </Button>
+              {canSave ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className={[
+                    "h-7 w-7 rounded-md px-0",
+                    saveStatus === "unsaved" ? "text-amber-300" : "",
+                  ].join(" ")}
+                  disabled={saveDisabled || saveLoading}
+                  onClick={onSave}
+                  aria-label="Save preview file"
+                >
+                  <Save className="h-4 w-4" />
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 size="sm"
@@ -173,39 +212,48 @@ export function TerminalPreviewPanelShell({
           </div>
         </header>
         {activeTool === "preview" ? (
-          <div className="border-b border-slate-800 px-2 py-1.5">
-            <div className="flex min-w-0 items-center gap-2">
-              <div
-                className="inline-flex shrink-0 rounded-md border border-slate-800 bg-slate-900/70 p-0.5"
-                role="tablist"
-                aria-label="Preview tasks"
-              >
-                {(["changes", "file"] as const).map((previewMode) => (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={mode === previewMode}
-                    key={previewMode}
-                    className={[
-                      "h-6 rounded-sm px-2 text-xs",
-                      mode === previewMode
-                        ? "bg-slate-700 text-slate-50"
-                        : "text-slate-400 hover:text-slate-100",
-                    ].join(" ")}
-                    onClick={() => onSetPreviewMode(previewMode)}
-                  >
-                    {describeMode(previewMode)}
-                  </button>
-                ))}
-              </div>
-              <span className="shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-400">
-                Read only
-              </span>
+          <div className="flex min-h-[34px] items-center gap-2 border-b border-slate-800 px-2 py-1">
+            <div
+              className="inline-flex shrink-0 rounded-md border border-slate-800 bg-slate-900/70 p-0.5"
+              role="tablist"
+              aria-label="Preview tasks"
+            >
+              {(["changes", "file"] as const).map((previewMode) => (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === previewMode}
+                  key={previewMode}
+                  className={[
+                    "h-6 rounded-sm px-2 text-xs",
+                    mode === previewMode
+                      ? "bg-slate-700 text-slate-50"
+                      : "text-slate-400 hover:text-slate-100",
+                  ].join(" ")}
+                  onClick={() => onSetPreviewMode(previewMode)}
+                >
+                  {describeMode(previewMode)}
+                </button>
+              ))}
             </div>
-            <p className="mt-0.5 truncate text-[11px] text-slate-500">
+            <p
+              className="min-w-0 flex-1 truncate text-[11px] text-slate-500"
+              title={activeProject?.path ?? activeProject?.name ?? undefined}
+            >
               {activeProject?.name ?? "No project"}
-              {activeProject?.path ? ` · root: ${activeProject.path}` : ""}
             </p>
+            <span
+              className={[
+                "shrink-0 rounded border px-1.5 py-0.5 text-[9px] uppercase",
+                saveStatus === "conflict"
+                  ? "border-rose-700 text-rose-300"
+                  : saveStatus === "unsaved"
+                    ? "border-amber-700 text-amber-300"
+                    : "border-slate-700 text-slate-400",
+              ].join(" ")}
+            >
+              {saveStatusLabel}
+            </span>
           </div>
         ) : null}
         {activeTool === "preview" && selectedPath ? (

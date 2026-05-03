@@ -6,6 +6,7 @@ import {
   getPreviewGitChanges,
   readPreviewAsset,
   readPreviewFile,
+  savePreviewFile,
   searchPreviewFiles,
   TerminalPreviewError,
 } from "../terminal/preview";
@@ -17,6 +18,13 @@ const previewFileSearchSchema = z.object({
 
 const previewFileSchema = z.object({
   path: z.string().min(1),
+});
+
+const previewSaveFileSchema = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+  expectedMtimeMs: z.number().finite(),
+  overwrite: z.boolean().optional(),
 });
 
 const previewFileDiffSchema = z.object({
@@ -101,6 +109,36 @@ export function registerTerminalPreviewRoutes(
           projectId: project.id,
           projectPath: project.path,
           requestedPath: parsed.data.path,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.put("/project/:id/preview/file", async (req, res) => {
+    const parsed = previewSaveFileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolveProjectPreviewContext(
+        terminalSessionManager,
+        req.params.id,
+      );
+      res.json(
+        await savePreviewFile({
+          projectId: project.id,
+          projectPath: project.path,
+          requestedPath: parsed.data.path,
+          content: parsed.data.content,
+          expectedMtimeMs: parsed.data.expectedMtimeMs,
+          overwrite: parsed.data.overwrite,
         }),
       );
     } catch (error) {

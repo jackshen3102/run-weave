@@ -26,6 +26,7 @@ interface TerminalPreviewPanelActionsArgs {
   setFilePreview: (value: null) => void;
   setFileError: (value: string | null) => void;
   setMarkdownScrollRatio: (value: number) => void;
+  confirmDiscardDraft: () => boolean;
 }
 
 export function useTerminalPreviewPanelActions({
@@ -42,8 +43,12 @@ export function useTerminalPreviewPanelActions({
   setFilePreview,
   setFileError,
   setMarkdownScrollRatio,
+  confirmDiscardDraft,
 }: TerminalPreviewPanelActionsArgs) {
   const refresh = (): void => {
+    if (!confirmDiscardDraft()) {
+      return;
+    }
     if (mode === "file") {
       if (selectedFilePath) {
         void loadFile(selectedFilePath);
@@ -94,7 +99,7 @@ export function useTerminalPreviewPanelActions({
   };
 
   const openFilePath = (filePath: string): void => {
-    if (!projectId) {
+    if (!projectId || !confirmDiscardDraft()) {
       return;
     }
     updateProjectPreview(projectId, {

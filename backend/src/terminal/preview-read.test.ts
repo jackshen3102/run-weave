@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,6 +46,29 @@ describe("preview file reading", () => {
 
     expect(payload.language).toBe("svg");
     expect(payload.content).toContain("<svg");
+    expect(payload.base).toBe("project");
+    expect(payload.readonly).toBe(false);
+  });
+
+  it("opens absolute text files outside the project as read only", async () => {
+    const projectPath = await createProject();
+    const outsidePath = await createProject();
+    const outsideFile = path.join(outsidePath, "SOUL.md");
+    await writeFile(outsideFile, "# Outside Preview\n");
+    const realOutsideFile = await realpath(outsideFile);
+
+    const payload = await readPreviewFile({
+      projectId: "project-1",
+      projectPath,
+      requestedPath: outsideFile,
+    });
+
+    expect(payload.path).toBe(realOutsideFile);
+    expect(payload.absolutePath).toBe(realOutsideFile);
+    expect(payload.base).toBe("filesystem");
+    expect(payload.language).toBe("markdown");
+    expect(payload.content).toBe("# Outside Preview\n");
+    expect(payload.readonly).toBe(true);
   });
 
   it("returns allowed image assets with detected mime type and no-store caching", async () => {
@@ -78,6 +108,31 @@ describe("preview file reading", () => {
     expect(payload.mimeType).toBe("image/svg+xml");
     expect(payload.cacheControl).toBe("no-store");
     expect(payload.content.toString("utf8")).toBe(svgContent);
+  });
+
+  it("returns absolute image assets outside the project as read only", async () => {
+    const projectPath = await createProject();
+    const outsidePath = await createProject();
+    const outsideImage = path.join(outsidePath, "preview.png");
+    const imageBytes = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      0x00, 0x00, 0x00, 0x0d,
+    ]);
+    await writeFile(outsideImage, imageBytes);
+    const realOutsideImage = await realpath(outsideImage);
+
+    const payload = await readPreviewAsset({
+      projectId: "project-1",
+      projectPath,
+      requestedPath: outsideImage,
+    });
+
+    expect(payload.path).toBe(realOutsideImage);
+    expect(payload.base).toBe("filesystem");
+    expect(payload.mimeType).toBe("image/png");
+    expect(payload.cacheControl).toBe("no-store");
+    expect(payload.readonly).toBe(true);
+    expect(payload.content.equals(imageBytes)).toBe(true);
   });
 
   it("rejects image assets whose bytes do not match the allowlist", async () => {

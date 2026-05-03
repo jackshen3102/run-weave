@@ -37,6 +37,8 @@ export type TerminalPreviewGitStatus =
   | "untracked"
   | "unknown";
 
+export type TerminalPreviewBase = "project" | "filesystem";
+
 export interface TerminalPreviewFileSearchItem {
   path: string;
   basename: string;
@@ -60,12 +62,24 @@ export interface TerminalPreviewFileResponse {
   projectId: string;
   path: string;
   absolutePath: string;
-  base: "project";
+  base: TerminalPreviewBase;
   projectPath: string;
   language: string;
   content: string;
   sizeBytes: number;
-  readonly: true;
+  mtimeMs: number;
+  readonly: boolean;
+}
+
+export interface TerminalPreviewSaveFileRequest {
+  path: string;
+  content: string;
+  expectedMtimeMs: number;
+  overwrite?: boolean;
+}
+
+export interface TerminalPreviewSaveFileResponse extends TerminalPreviewFileResponse {
+  readonly: false;
 }
 
 export interface TerminalPreviewChangeFile {
