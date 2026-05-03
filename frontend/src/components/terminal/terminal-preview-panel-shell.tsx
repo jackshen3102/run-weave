@@ -173,39 +173,39 @@ export function TerminalPreviewPanelShell({
           </div>
         </header>
         {activeTool === "preview" ? (
-          <div className="border-b border-slate-800 px-2 py-1.5">
-            <div className="flex min-w-0 items-center gap-2">
-              <div
-                className="inline-flex shrink-0 rounded-md border border-slate-800 bg-slate-900/70 p-0.5"
-                role="tablist"
-                aria-label="Preview tasks"
-              >
-                {(["changes", "file"] as const).map((previewMode) => (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={mode === previewMode}
-                    key={previewMode}
-                    className={[
-                      "h-6 rounded-sm px-2 text-xs",
-                      mode === previewMode
-                        ? "bg-slate-700 text-slate-50"
-                        : "text-slate-400 hover:text-slate-100",
-                    ].join(" ")}
-                    onClick={() => onSetPreviewMode(previewMode)}
-                  >
-                    {describeMode(previewMode)}
-                  </button>
-                ))}
-              </div>
-              <span className="shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-400">
-                Read only
-              </span>
+          <div className="flex min-h-[34px] items-center gap-2 border-b border-slate-800 px-2 py-1">
+            <div
+              className="inline-flex shrink-0 rounded-md border border-slate-800 bg-slate-900/70 p-0.5"
+              role="tablist"
+              aria-label="Preview tasks"
+            >
+              {(["changes", "file"] as const).map((previewMode) => (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === previewMode}
+                  key={previewMode}
+                  className={[
+                    "h-6 rounded-sm px-2 text-xs",
+                    mode === previewMode
+                      ? "bg-slate-700 text-slate-50"
+                      : "text-slate-400 hover:text-slate-100",
+                  ].join(" ")}
+                  onClick={() => onSetPreviewMode(previewMode)}
+                >
+                  {describeMode(previewMode)}
+                </button>
+              ))}
             </div>
-            <p className="mt-0.5 truncate text-[11px] text-slate-500">
+            <p
+              className="min-w-0 flex-1 truncate text-[11px] text-slate-500"
+              title={activeProject?.path ?? activeProject?.name ?? undefined}
+            >
               {activeProject?.name ?? "No project"}
-              {activeProject?.path ? ` · root: ${activeProject.path}` : ""}
             </p>
+            <span className="shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-400">
+              Read only
+            </span>
           </div>
         ) : null}
         {activeTool === "preview" && selectedPath ? (
