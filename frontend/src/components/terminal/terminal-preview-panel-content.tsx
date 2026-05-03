@@ -647,13 +647,13 @@ export function TerminalPreviewPanelContent({
           ) : changes ? (
             <div className="flex flex-col gap-1 p-1.5 pt-7">
               {renderChangesTreeSection(
-                "Staged",
+                "Staged Changes",
                 "staged",
                 changes.staged,
                 stagedChangeTree,
               )}
               {renderChangesTreeSection(
-                "Working",
+                "Working Changes",
                 "working",
                 changes.working,
                 workingChangeTree,
