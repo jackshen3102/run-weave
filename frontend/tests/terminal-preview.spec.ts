@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -82,6 +82,66 @@ async function createPreviewRepo(): Promise<string> {
   await writeFile(path.join(repo, "README.md"), "new readme\n");
   return repo;
 }
+
+test("terminal preview saves edited text files", async ({ page, request }) => {
+  const repo = await createPreviewRepo();
+  try {
+    const token = await loginAndSeedToken(request, page);
+    const projectResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/project`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          name: "Preview Save Project",
+          path: repo,
+        },
+      },
+    );
+    expect(projectResponse.ok()).toBe(true);
+    const project = (await projectResponse.json()) as { projectId: string };
+    const sessionResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/session`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          projectId: project.projectId,
+          command: "bash",
+          cwd: repo,
+        },
+      },
+    );
+    expect(sessionResponse.ok()).toBe(true);
+    const session = (await sessionResponse.json()) as {
+      terminalSessionId: string;
+    };
+
+    await page.goto(`/terminal/${encodeURIComponent(session.terminalSessionId)}`);
+    await page.getByRole("tab", { name: "Files", exact: true }).click();
+    await page.getByRole("option", { name: /README\.md/ }).click();
+    await expect(page.getByText("new readme")).toBeVisible();
+    await page.getByRole("button", { name: "source" }).click();
+
+    await page.locator(".monaco-editor .view-line").first().click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.insertText("updated from preview\n");
+    await expect(page.getByText("Unsaved")).toBeVisible();
+    await page.getByRole("button", { name: "Save preview file" }).click();
+    await expect(page.getByText("Saved")).toBeVisible();
+    await expect
+      .poll(async () => {
+        const savedContent = await readFile(path.join(repo, "README.md"), "utf8");
+        return savedContent.includes("updated from preview");
+      })
+      .toBe(true);
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
 
 test("terminal preview opens files and changes", async ({ page, request }) => {
   const repo = await createPreviewRepo();

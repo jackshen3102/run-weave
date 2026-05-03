@@ -65,5 +65,6 @@ describe("createCorsMiddleware", () => {
     expect(response.headers.get("access-control-allow-headers")).toContain(
       "X-Connection-Id",
     );
+    expect(response.headers.get("access-control-allow-methods")).toContain("PUT");
   });
 });

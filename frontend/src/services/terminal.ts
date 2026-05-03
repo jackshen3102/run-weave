@@ -10,6 +10,8 @@ import type {
   TerminalPreviewChangeKind,
   TerminalPreviewFileDiffResponse,
   TerminalPreviewFileResponse,
+  TerminalPreviewSaveFileRequest,
+  TerminalPreviewSaveFileResponse,
   TerminalPreviewFileSearchResponse,
   TerminalPreviewGitChangesResponse,
   TerminalProjectListItem,
@@ -280,6 +282,26 @@ export async function getTerminalProjectPreviewFile(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+  );
+}
+
+export async function saveTerminalProjectPreviewFile(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  payload: TerminalPreviewSaveFileRequest,
+): Promise<TerminalPreviewSaveFileResponse> {
+  return requestJson<TerminalPreviewSaveFileResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     },
   );
 }

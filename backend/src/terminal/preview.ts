@@ -6,6 +6,7 @@ import {
   readFile,
   realpath,
   stat,
+  writeFile,
 } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -14,6 +15,7 @@ import type {
   TerminalPreviewChangeKind,
   TerminalPreviewFileDiffResponse,
   TerminalPreviewFileResponse,
+  TerminalPreviewSaveFileResponse,
   TerminalPreviewFileSearchItem,
   TerminalPreviewFileSearchResponse,
   TerminalPreviewGitChangesResponse,
@@ -296,7 +298,65 @@ export async function readPreviewFile(params: {
     language: detectLanguage(relativePath),
     content: contentBuffer.toString("utf8"),
     sizeBytes: fileStats.size,
+    mtimeMs: fileStats.mtimeMs,
     readonly: true,
+  };
+}
+
+export async function savePreviewFile(params: {
+  projectId: string;
+  projectPath: string | null | undefined;
+  requestedPath: string;
+  content: string;
+  expectedMtimeMs: number;
+  overwrite?: boolean;
+}): Promise<TerminalPreviewSaveFileResponse> {
+  const projectPath = ensureProjectPath(params.projectPath);
+  const { absolutePath, relativePath } = await resolvePreviewPath(
+    projectPath,
+    params.requestedPath,
+  );
+  const fileStats = await stat(absolutePath).catch(() => null);
+  if (!fileStats) {
+    throw new TerminalPreviewError("File not found", 404);
+  }
+  if (fileStats.isDirectory()) {
+    throw new TerminalPreviewError("Directories are not supported", 400);
+  }
+  if (!fileStats.isFile()) {
+    throw new TerminalPreviewError("Only regular files can be saved", 400);
+  }
+  if (fileStats.size > FILE_PREVIEW_MAX_BYTES) {
+    throw new TerminalPreviewError("File exceeds preview limit", 413);
+  }
+  const contentBuffer = await readFile(absolutePath);
+  if (isLikelyBinary(contentBuffer)) {
+    throw new TerminalPreviewError("Binary files cannot be saved", 415);
+  }
+  const nextContentBuffer = Buffer.from(params.content, "utf8");
+  if (nextContentBuffer.length > FILE_PREVIEW_MAX_BYTES) {
+    throw new TerminalPreviewError("File exceeds preview limit", 413);
+  }
+  if (params.overwrite !== true && fileStats.mtimeMs !== params.expectedMtimeMs) {
+    throw new TerminalPreviewError("File was modified outside Preview", 409);
+  }
+
+  await writeFile(absolutePath, nextContentBuffer);
+  const latestStats = await stat(absolutePath);
+  clearPreviewFileSearchCache(params.projectId);
+
+  return {
+    kind: "file",
+    projectId: params.projectId,
+    path: relativePath,
+    absolutePath,
+    base: "project",
+    projectPath,
+    language: detectLanguage(relativePath),
+    content: nextContentBuffer.toString("utf8"),
+    sizeBytes: latestStats.size,
+    mtimeMs: latestStats.mtimeMs,
+    readonly: false,
   };
 }
 

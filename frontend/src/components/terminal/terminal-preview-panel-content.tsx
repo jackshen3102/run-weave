@@ -79,6 +79,13 @@ interface TerminalPreviewPanelContentProps {
   searchLoading: boolean;
   searchError: string | null;
   filePreview: TerminalPreviewFileResponse | null;
+  editorContent: string;
+  editable: boolean;
+  onEditorContentChange: (content: string) => void;
+  saveError: string | null;
+  saveConflict: boolean;
+  onReloadFile: () => void;
+  onOverwriteFile: () => void;
   fileLoading: boolean;
   fileError: string | null;
   changes: TerminalPreviewGitChangesResponse | null;
@@ -261,6 +268,13 @@ export function TerminalPreviewPanelContent({
   searchLoading,
   searchError,
   filePreview,
+  editorContent,
+  editable,
+  onEditorContentChange,
+  saveError,
+  saveConflict,
+  onReloadFile,
+  onOverwriteFile,
   fileLoading,
   fileError,
   changes,
@@ -429,7 +443,12 @@ export function TerminalPreviewPanelContent({
       fileContent =
         markdownViewMode === "source" ? (
           <Suspense fallback={renderEmpty("Loading editor...")}>
-            <TerminalMonacoViewer language="markdown" content={filePreview.content} />
+            <TerminalMonacoViewer
+              language="markdown"
+              content={editorContent}
+              editable={editable}
+              onContentChange={onEditorContentChange}
+            />
           </Suspense>
         ) : markdownViewMode === "preview" ? (
           <Suspense fallback={renderEmpty("Loading markdown preview...")}>
@@ -437,7 +456,7 @@ export function TerminalPreviewPanelContent({
               apiBase={apiBase}
               token={token}
               projectId={activeProject.projectId}
-              content={filePreview.content}
+              content={editorContent}
               path={filePreview.path}
               onAuthExpired={onAuthExpired}
               onOpenFile={onOpenFilePath}
@@ -453,9 +472,11 @@ export function TerminalPreviewPanelContent({
             <Suspense fallback={renderEmpty("Loading editor...")}>
               <TerminalMonacoViewer
                 language="markdown"
-                content={filePreview.content}
+                content={editorContent}
                 scrollRatio={markdownScrollRatio}
                 onScrollRatioChange={onMarkdownScrollRatioChange}
+                editable={editable}
+                onContentChange={onEditorContentChange}
               />
             </Suspense>
             <div
@@ -469,7 +490,7 @@ export function TerminalPreviewPanelContent({
                 apiBase={apiBase}
                 token={token}
                 projectId={activeProject.projectId}
-                content={filePreview.content}
+                content={editorContent}
                 path={filePreview.path}
                 scrollRatio={markdownScrollRatio}
                 onScrollRatioChange={onMarkdownScrollRatioChange}
@@ -483,17 +504,27 @@ export function TerminalPreviewPanelContent({
       fileContent =
         svgViewMode === "source" ? (
           <Suspense fallback={renderEmpty("Loading editor...")}>
-            <TerminalMonacoViewer language="xml" content={filePreview.content} />
+            <TerminalMonacoViewer
+              language="xml"
+              content={editorContent}
+              editable={editable}
+              onContentChange={onEditorContentChange}
+            />
           </Suspense>
         ) : (
           <Suspense fallback={renderEmpty("Loading SVG preview...")}>
-            <TerminalSvgPreview content={filePreview.content} />
+            <TerminalSvgPreview content={editorContent} />
           </Suspense>
         );
     } else if (filePreview) {
       fileContent = (
         <Suspense fallback={renderEmpty("Loading editor...")}>
-          <TerminalMonacoViewer language={monacoLanguage} content={filePreview.content} />
+          <TerminalMonacoViewer
+            language={monacoLanguage}
+            content={editorContent}
+            editable={editable}
+            onContentChange={onEditorContentChange}
+          />
         </Suspense>
       );
     } else {
@@ -515,7 +546,35 @@ export function TerminalPreviewPanelContent({
             onOpenPath={onOpenFilePath}
           />
         </aside>
-        <div className="min-h-0">{fileContent}</div>
+        <div className="relative min-h-0">
+          {saveError ? (
+            <div className="absolute left-2 right-2 top-2 z-10 rounded-md border border-rose-900/70 bg-rose-950/95 p-2 text-xs text-rose-100 shadow-lg">
+              <div>{saveError}</div>
+              {saveConflict ? (
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 rounded-md px-2 text-xs"
+                    onClick={onReloadFile}
+                  >
+                    Reload
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 rounded-md px-2 text-xs"
+                    onClick={onOverwriteFile}
+                  >
+                    Overwrite
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {fileContent}
+        </div>
       </div>
     );
   }

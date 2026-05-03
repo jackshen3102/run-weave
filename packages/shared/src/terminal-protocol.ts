@@ -65,7 +65,19 @@ export interface TerminalPreviewFileResponse {
   language: string;
   content: string;
   sizeBytes: number;
-  readonly: true;
+  mtimeMs: number;
+  readonly: boolean;
+}
+
+export interface TerminalPreviewSaveFileRequest {
+  path: string;
+  content: string;
+  expectedMtimeMs: number;
+  overwrite?: boolean;
+}
+
+export interface TerminalPreviewSaveFileResponse extends TerminalPreviewFileResponse {
+  readonly: false;
 }
 
 export interface TerminalPreviewChangeFile {

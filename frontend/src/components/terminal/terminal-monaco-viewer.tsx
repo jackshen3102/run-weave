@@ -12,6 +12,8 @@ interface TerminalMonacoViewerProps {
   diff?: boolean;
   scrollRatio?: number;
   onScrollRatioChange?: (ratio: number) => void;
+  editable?: boolean;
+  onContentChange?: (content: string) => void;
 }
 
 const EDITOR_OPTIONS = {
@@ -33,6 +35,8 @@ export function TerminalMonacoViewer({
   diff = false,
   scrollRatio,
   onScrollRatioChange,
+  editable = false,
+  onContentChange,
 }: TerminalMonacoViewerProps) {
   const editorRef = useRef<MonacoEditor | null>(null);
   const scrollDisposableRef = useRef<{ dispose: () => void } | null>(null);
@@ -82,7 +86,8 @@ export function TerminalMonacoViewer({
       language={language}
       value={content}
       theme="vs-dark"
-      options={EDITOR_OPTIONS}
+      options={{ ...EDITOR_OPTIONS, readOnly: !editable }}
+      onChange={(value) => onContentChange?.(value ?? "")}
       onMount={(editor) => {
         editorRef.current = editor;
         scrollDisposableRef.current?.dispose();
