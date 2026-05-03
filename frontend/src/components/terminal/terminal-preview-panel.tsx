@@ -149,7 +149,11 @@ export function TerminalPreviewPanel({
   const fileKind = selectedFilePath
     ? getTerminalPreviewFileKind(selectedFilePath, filePreview?.language)
     : "text";
-  const isFileEditable = mode === "file" && Boolean(filePreview) && fileKind !== "image";
+  const isFileEditable =
+    mode === "file" &&
+    Boolean(filePreview) &&
+    filePreview?.readonly === false &&
+    fileKind !== "image";
   const isDirty = isFileEditable && editorContent !== loadedContent;
 
   const confirmDiscardDraft = useCallback((): boolean => {

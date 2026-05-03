@@ -143,6 +143,67 @@ test("terminal preview saves edited text files", async ({ page, request }) => {
   }
 });
 
+test("terminal preview opens absolute files outside the project as read only", async ({
+  page,
+  request,
+}) => {
+  const repo = await createPreviewRepo();
+  const outsideDir = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-outside-"));
+  const outsideFile = path.join(outsideDir, "SOUL.md");
+  await writeFile(outsideFile, "outside preview file\n");
+  try {
+    const token = await loginAndSeedToken(request, page);
+    const projectResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/project`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          name: "Preview Outside Project",
+          path: repo,
+        },
+      },
+    );
+    expect(projectResponse.ok()).toBe(true);
+    const project = (await projectResponse.json()) as { projectId: string };
+    const sessionResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/session`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          projectId: project.projectId,
+          command: "bash",
+          cwd: repo,
+        },
+      },
+    );
+    expect(sessionResponse.ok()).toBe(true);
+    const session = (await sessionResponse.json()) as {
+      terminalSessionId: string;
+    };
+
+    await page.goto(`/terminal/${encodeURIComponent(session.terminalSessionId)}`);
+    await page.getByRole("tab", { name: "Files", exact: true }).click();
+    await page
+      .getByPlaceholder("Search file or paste absolute path...")
+      .fill(outsideFile);
+    await expect(page.getByText("Press Enter to open this path")).toBeVisible();
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByText("outside preview file")).toBeVisible();
+    await expect(page.getByText("Read only")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Save preview file" }),
+    ).not.toBeVisible();
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+    await rm(outsideDir, { recursive: true, force: true });
+  }
+});
+
 test("terminal preview opens files and changes", async ({ page, request }) => {
   const repo = await createPreviewRepo();
   try {

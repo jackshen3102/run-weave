@@ -4,7 +4,7 @@
 
 **目标：** 检查并补齐 Terminal Preview 右上角 `Files` 视图的文件编辑能力，让用户可以在 Preview 中打开文本/代码文件、编辑、显式保存，并能验证内容确实写回项目文件。
 
-**架构：** 保持 Preview 的 project-scoped 边界。文件读取、保存都只基于当前 Terminal Project path，不回退到 terminal session cwd。编辑能力只开放给已有文本类文件；Changes、Diff、图片、二进制、大文件和无 project path 的项目继续只读。
+**架构：** 保持 Preview 的写入 project-scoped 边界。相对路径读取、文件保存都基于当前 Terminal Project path，不回退到 terminal session cwd；绝对路径可以打开项目外文件，但返回 `base: "filesystem"` 且只能只读预览。编辑能力只开放给 project 内已有文本类文件；Changes、Diff、图片、二进制、大文件和无 project path 的项目继续只读。
 
 **交互草图：**
 
@@ -28,6 +28,7 @@
 - Save 必须是显式动作：用户编辑后出现 dirty 状态，点击右上角 Save 或按 `Cmd/Ctrl+S` 才写盘。
 - Markdown `Source` 与 `Split` 的 source pane 可以编辑；Markdown rendered preview 只展示当前 draft，不直接编辑。
 - SVG `Source` 可以编辑；SVG `Preview` 只展示当前 draft，不直接编辑。
+- 用户输入绝对路径时可以打开项目外文本/图片文件；项目外文件必须保持 `Read only`，不展示 Save 控制，也不允许写回。
 - Changes mode、Diff editor、图片和二进制文件全部保持只读。
 - 关闭 Preview、Refresh、切换文件、切换到 Changes 时，如果存在 unsaved draft，必须先确认是否丢弃。
 - 保存冲突使用 mtime v1 方案：打开文件时记录 `mtimeMs`，保存时发现磁盘文件已变化则返回 conflict，UI 给出 Reload 和 Overwrite 两个动作。
@@ -42,7 +43,7 @@ export interface TerminalPreviewFileResponse {
   projectId: string;
   path: string;
   absolutePath: string;
-  base: "project";
+  base: "project" | "filesystem";
   projectPath: string;
   language: string;
   content: string;
@@ -79,15 +80,15 @@ Content-Type: application/json
 
 状态码：
 
-| 状态  | 场景                                        |
-| ----- | ------------------------------------------- |
-| `200` | 保存成功，返回最新 file payload             |
-| `400` | body/path 无效、目录、非普通文件、home path |
-| `403` | 解析后路径逃逸 project path                 |
-| `404` | 文件不存在                                  |
-| `409` | `mtimeMs` 冲突                              |
-| `413` | 保存内容超过 Preview 文件大小限制           |
-| `415` | 目标或内容不适合作为 UTF-8 文本保存         |
+| 状态  | 场景                                                              |
+| ----- | ----------------------------------------------------------------- |
+| `200` | 保存成功，返回最新 file payload                                   |
+| `400` | body/path 无效、目录、非普通文件、home path                       |
+| `403` | 保存路径逃逸 project path，或相对路径经 symlink 逃逸 project path |
+| `404` | 文件不存在                                                        |
+| `409` | `mtimeMs` 冲突                                                    |
+| `413` | 保存内容超过 Preview 文件大小限制                                 |
+| `415` | 目标或内容不适合作为 UTF-8 文本保存                               |
 
 ## 实施任务
 
@@ -104,6 +105,7 @@ Content-Type: application/json
 
 - [ ] 给 `TerminalPreviewFileResponse` 增加 `mtimeMs`，新增 save request/response 类型。
 - [ ] 在 `readPreviewFile(...)` 返回当前文件 `mtimeMs`。
+- [ ] `readPreviewFile(...)` / `readPreviewAsset(...)` 支持绝对项目外路径，返回 `base: "filesystem"` 与 `readonly: true`。
 - [ ] 增加 `savePreviewFile(...)`，复用 `resolvePreviewPath(...)` 和现有文本/大小判断。
 - [ ] 保存前检查当前文件存在、是普通文件、不是目录、不是 binary。
 - [ ] 使用 `Buffer.from(content, "utf8")` 计算保存大小，超过 `FILE_PREVIEW_MAX_BYTES` 返回 `413`。
@@ -114,7 +116,7 @@ Content-Type: application/json
 
 验证：
 
-- [ ] 后端用例覆盖成功保存、路径逃逸、目录拒绝、binary 拒绝、mtime 冲突、overwrite 成功。
+- [ ] 后端用例覆盖成功保存、绝对项目外路径只读打开、相对 symlink 逃逸拒绝、保存路径逃逸拒绝、目录拒绝、binary 拒绝、mtime 冲突、overwrite 成功。
 - [ ] `pnpm --filter ./backend test -- preview-save`
 
 ### Task 2: 前端可编辑 viewer 与保存状态
@@ -135,7 +137,7 @@ Content-Type: application/json
 - [ ] `loadFile(...)` 成功时同步 draft 与 loaded state。
 - [ ] 保存成功后更新 `filePreview`、`loadedContent`、`loadedMtimeMs`，清除 dirty/conflict。
 - [ ] 保存失败时保留 draft，不覆盖用户编辑内容。
-- [ ] `Cmd/Ctrl+S` 在 editable file mode 下触发保存。
+- [ ] `Cmd/Ctrl+S` 仅在 project 内 editable file mode 下触发保存。
 - [ ] `TerminalPreviewPanelShell` 把固定 `Read only` 改成动态状态：`Read only`、`Unsaved`、`Saving...`、`Saved`、`Conflict`。
 - [ ] 右上工具栏增加 Save 图标按钮，仅在 file mode 且当前文件可编辑时可用；dirty 时高亮。
 
@@ -181,6 +183,7 @@ Content-Type: application/json
 - [ ] 模拟磁盘外部修改后保存，断言出现 conflict 状态，Reload/Overwrite 可用。
 - [ ] 打开 Changes mode 的 diff，断言没有 Save 控制，编辑器仍只读。
 - [ ] 打开图片文件，断言没有 Save 控制。
+- [ ] 输入绝对项目外路径，断言文件可打开、状态为 `Read only`，且没有 Save 控制。
 
 命令：
 
@@ -196,6 +199,7 @@ pnpm --filter ./frontend e2e -- tests/terminal-preview.spec.ts
 - Dirty、Saving、Saved、Conflict、Read only 状态在右上角清晰可见。
 - Unsaved draft 在切换文件、刷新、关闭、切到 Changes 时不会静默丢失。
 - Changes、Diff、图片、二进制、大文件仍保持只读。
+- 绝对项目外路径可打开但保持只读，不能触发 Save。
 - 文件写入不能逃逸当前 Terminal Project path。
 - 不新增前端 `src/**/*.test.ts`、`src/**/*.test.tsx`、UI hooks 单测。
 - 后端保存用例、frontend typecheck、frontend lint、Preview E2E 通过。

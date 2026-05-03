@@ -37,6 +37,8 @@ export type TerminalPreviewGitStatus =
   | "untracked"
   | "unknown";
 
+export type TerminalPreviewBase = "project" | "filesystem";
+
 export interface TerminalPreviewFileSearchItem {
   path: string;
   basename: string;
@@ -60,7 +62,7 @@ export interface TerminalPreviewFileResponse {
   projectId: string;
   path: string;
   absolutePath: string;
-  base: "project";
+  base: TerminalPreviewBase;
   projectPath: string;
   language: string;
   content: string;

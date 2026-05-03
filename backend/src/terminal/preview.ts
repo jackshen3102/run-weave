@@ -15,6 +15,7 @@ import type {
   TerminalPreviewChangeKind,
   TerminalPreviewFileDiffResponse,
   TerminalPreviewFileResponse,
+  TerminalPreviewBase,
   TerminalPreviewSaveFileResponse,
   TerminalPreviewFileSearchItem,
   TerminalPreviewFileSearchResponse,
@@ -99,7 +100,7 @@ export interface TerminalPreviewAssetResponse {
   projectId: string;
   path: string;
   absolutePath: string;
-  base: "project";
+  base: TerminalPreviewBase;
   projectPath: string;
   mimeType: string;
   content: Buffer;
@@ -147,7 +148,13 @@ function isInsidePath(rootPath: string, targetPath: string): boolean {
 async function resolvePreviewPath(
   projectPath: string,
   requestedPath: string,
-): Promise<{ absolutePath: string; relativePath: string }> {
+  options?: { allowAbsoluteOutsideProject?: boolean },
+): Promise<{
+  absolutePath: string;
+  base: TerminalPreviewBase;
+  previewPath: string;
+  relativePath: string;
+}> {
   const trimmedPath = requestedPath.trim();
   if (!trimmedPath) {
     throw new TerminalPreviewError("Enter a file path", 400);
@@ -157,7 +164,8 @@ async function resolvePreviewPath(
   }
 
   const rootPath = await realpath(projectPath);
-  const candidatePath = path.isAbsolute(trimmedPath)
+  const requestedAbsolutePath = path.isAbsolute(trimmedPath);
+  const candidatePath = requestedAbsolutePath
     ? path.resolve(trimmedPath)
     : path.resolve(rootPath, trimmedPath);
   const resolvedCandidatePath = await realpath(candidatePath).catch(() => null);
@@ -169,12 +177,23 @@ async function resolvePreviewPath(
     (parentPath ? path.join(parentPath, path.basename(candidatePath)) : candidatePath);
 
   if (!isInsidePath(rootPath, comparablePath)) {
+    if (options?.allowAbsoluteOutsideProject === true && requestedAbsolutePath) {
+      return {
+        absolutePath: comparablePath,
+        base: "filesystem",
+        previewPath: comparablePath,
+        relativePath: comparablePath,
+      };
+    }
     throw new TerminalPreviewError("Path is outside the project path", 403);
   }
 
+  const relativePath = toRelativePath(rootPath, comparablePath);
   return {
     absolutePath: comparablePath,
-    relativePath: toRelativePath(rootPath, comparablePath),
+    base: "project",
+    previewPath: relativePath,
+    relativePath,
   };
 }
 
@@ -265,9 +284,10 @@ export async function readPreviewFile(params: {
   requestedPath: string;
 }): Promise<TerminalPreviewFileResponse> {
   const projectPath = ensureProjectPath(params.projectPath);
-  const { absolutePath, relativePath } = await resolvePreviewPath(
+  const { absolutePath, base, previewPath } = await resolvePreviewPath(
     projectPath,
     params.requestedPath,
+    { allowAbsoluteOutsideProject: true },
   );
   const fileStats = await stat(absolutePath).catch(() => null);
   if (!fileStats) {
@@ -291,15 +311,15 @@ export async function readPreviewFile(params: {
   return {
     kind: "file",
     projectId: params.projectId,
-    path: relativePath,
+    path: previewPath,
     absolutePath,
-    base: "project",
+    base,
     projectPath,
-    language: detectLanguage(relativePath),
+    language: detectLanguage(previewPath),
     content: contentBuffer.toString("utf8"),
     sizeBytes: fileStats.size,
     mtimeMs: fileStats.mtimeMs,
-    readonly: true,
+    readonly: base !== "project",
   };
 }
 
@@ -366,9 +386,10 @@ export async function readPreviewAsset(params: {
   requestedPath: string;
 }): Promise<TerminalPreviewAssetResponse> {
   const projectPath = ensureProjectPath(params.projectPath);
-  const { absolutePath, relativePath } = await resolvePreviewPath(
+  const { absolutePath, base, previewPath } = await resolvePreviewPath(
     projectPath,
     params.requestedPath,
+    { allowAbsoluteOutsideProject: true },
   );
   const fileStats = await stat(absolutePath).catch(() => null);
   if (!fileStats) {
@@ -385,7 +406,7 @@ export async function readPreviewAsset(params: {
   }
 
   const content = await readFile(absolutePath);
-  const mimeType = detectImageMimeType(content, relativePath);
+  const mimeType = detectImageMimeType(content, previewPath);
   if (!mimeType) {
     throw new TerminalPreviewError("Image format is not supported", 415);
   }
@@ -393,9 +414,9 @@ export async function readPreviewAsset(params: {
   return {
     kind: "asset",
     projectId: params.projectId,
-    path: relativePath,
+    path: previewPath,
     absolutePath,
-    base: "project",
+    base,
     projectPath,
     mimeType,
     content,
