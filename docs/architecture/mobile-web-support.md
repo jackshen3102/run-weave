@@ -60,14 +60,27 @@ Viewer 在 `mobile` 模式下进入 observe chrome：
 
 ### Terminal
 
-Terminal 在 `mobile` 模式下是轻量 monitor，而不是完整 workspace：
+移动端 Terminal 当前分成两个入口，默认都保持“观察优先、必要时轻量恢复”的边界。
 
-- 项目与 terminal tab 列表可查看、切换。
+`/mobile/terminals` 是手机端主入口。它不挂载完整 xterm workspace，而是读取 `/api/terminal/mobile/overview`，按项目展示终端卡片：
+
+- 后端返回项目列表和 session 列表，并为每个 session 捕获最多 80 行 tail scrollback。
+- tail 捕获走短超时保护，失败时卡片仍可展示 session 元数据，并带上 tail error。
+- 前端根据 session status、exit code、active command、tail 是否变化、agent prompt 和 shell prompt 推断状态。
+- 状态包括 agent running、agent waiting input、idle shell、command running、completed、failed、possibly stuck、history unavailable、unknown。
+- 卡片默认展示短 tail、状态标签、详情入口、上下文复制入口和一个根据状态推导的主操作。
+- 项目切换与状态筛选只影响卡片列表，不创建、删除或重命名项目 / terminal。
+
+Hermes 接力是移动端 Terminal 的当前恢复方式。卡片可生成一段可复制上下文，包含项目名、tmux session、路径和 socket 信息。用户把它粘贴到飞书或其他 agent 对话后，由外部 agent 接管对应 tmux session。Runweave 本身只负责生成上下文和复制，不直接向飞书发消息，也不替用户远程执行接管。
+
+`/terminal/:id` 在手机上仍可打开单个 Terminal surface，用于受限输入和查看完整输出：
+
 - 不展示 New Project、Delete Project、New Terminal、Close Terminal、桌面快捷键提示、renderer / font 等复杂设置入口。
 - 仍复用 `TerminalWorkspace`、`TerminalSurface`、terminal session 状态、xterm 输出渲染、scrollback 恢复和 metadata 更新链路。
 - 移动端会关闭桌面搜索与设置浮层。
+- 新建 terminal 的 runtime preference 在 mobile client mode 下优先使用 `pty`，避免把手机端主路径绑定到 tmux 管理体验。
 
-当前 v1 已提供受限输入能力，用于处理手机键盘输入和常用终端控制键：
+当前受限输入能力用于处理手机键盘输入和常用终端控制键：
 
 - xterm helper textarea 的 `beforeinput` 会映射文本输入、回车、退格、Delete。
 - 顶部 `Keys` 开关可打开移动端快捷键条，提供 Up、Down、Tab、Esc、Ctrl-C。
@@ -199,7 +212,7 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 
 ## 后端与协议演进
 
-当前 v1 主要在前端完成，不强制改后端协议。
+当前 v1 大部分能力仍在前端完成，但移动端 Terminal 概览已经有一个受限后端入口：`/api/terminal/mobile/overview`。该入口只返回项目、session 元数据和短 tail，不提供创建、删除、输入或信号发送能力。
 
 后续为了把观察模式从 UI 约定升级为协议约束，可以引入：
 
@@ -208,6 +221,7 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 - screencast 支持移动端画质参数，例如最大宽高、quality、帧率提示。
 - browser profile 支持更完整的 mobile emulation 语义，例如 touch、device scale factor、mobile UA 策略。
 - Terminal ticket 可携带 client capability，便于后端区分 monitor、limited input、full control。
+- 移动端 Terminal 概览可进一步返回服务端计算的 workload state，减少前端对 tail 文本的启发式判断。
 
 这些增强不阻塞 v1，但应作为后续架构方向保留。
 
@@ -236,8 +250,10 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 
 移动端 Terminal：
 
-- 首要目标是输出查看和状态确认。
-- 管理类能力不进入移动端主路径。
+- `/mobile/terminals` 首要目标是按项目查看终端状态和短 tail。
+- 卡片状态推断能区分 agent 执行中、等待输入、shell 空闲、命令执行中、失败和可能卡住等常见状态。
+- Hermes 接力只生成和复制上下文，不自动向外部聊天发送消息。
+- `/terminal/:id` 可用于受限输入，但管理类能力不进入移动端主路径。
 - `Keys` 快捷键条只提供少量明确终端序列。
 - 普通手机键盘输入可以进入 terminal，但 terminal 已退出、鉴权失败、运行时缺失时不应被自动重连掩盖。
 
