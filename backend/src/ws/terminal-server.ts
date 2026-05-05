@@ -225,7 +225,8 @@ export function attachTerminalWebSocketServer(
       session,
       tmuxService,
     );
-    const pendingClientMessages: Array<{ data: string; isBinary: boolean }> = [];
+    const pendingClientMessages: Array<{ data: string; isBinary: boolean }> =
+      [];
     let handleClientMessage:
       | ((data: string, isBinary: boolean) => void)
       | null = null;
@@ -289,7 +290,10 @@ export function attachTerminalWebSocketServer(
     if (!session || !isTmuxBackedSession(session)) {
       runtimeRegistry.ensureRecorder(
         terminalSessionId,
-        createTerminalRuntimeRecorder(terminalSessionManager, terminalSessionId),
+        createTerminalRuntimeRecorder(
+          terminalSessionManager,
+          terminalSessionId,
+        ),
       );
     }
 
@@ -326,10 +330,13 @@ export function attachTerminalWebSocketServer(
     let tmuxMetadataSyncInFlight = false;
     let shellPromptCommandActive = false;
 
-    const publishMetadata = async (metadata: {
-      cwd: string;
-      activeCommand: string | null;
-    }, options?: { forceSend?: boolean }): Promise<void> => {
+    const publishMetadata = async (
+      metadata: {
+        cwd: string;
+        activeCommand: string | null;
+      },
+      options?: { forceSend?: boolean },
+    ): Promise<void> => {
       const current = terminalSessionManager.getSession(terminalSessionId);
       const metadataChanged =
         current?.cwd !== metadata.cwd ||
@@ -385,7 +392,11 @@ export function attachTerminalWebSocketServer(
     const scheduleTmuxPaneMetadataSync = (
       delayMs = TMUX_METADATA_SYNC_DELAY_MS,
     ): void => {
-      if (!session || !isTmuxBackedSession(session) || !tmuxPaneMetadataReader) {
+      if (
+        !session ||
+        !isTmuxBackedSession(session) ||
+        !tmuxPaneMetadataReader
+      ) {
         return;
       }
       if (tmuxMetadataSyncTimer) {
@@ -460,7 +471,12 @@ export function attachTerminalWebSocketServer(
       },
       onExit(event) {
         outputBatcher.flush();
-        if (session && isTmuxBackedSession(session) && ptyService && tmuxService) {
+        if (
+          session &&
+          isTmuxBackedSession(session) &&
+          ptyService &&
+          tmuxService
+        ) {
           void (async () => {
             await runtimeRegistry.disposeRuntime(terminalSessionId);
             try {
@@ -508,8 +524,7 @@ export function attachTerminalWebSocketServer(
     sendEvent(socket, {
       type: "connected",
       terminalSessionId,
-      runtimeKind:
-        session && isTmuxBackedSession(session) ? "tmux" : "pty",
+      runtimeKind: session && isTmuxBackedSession(session) ? "tmux" : "pty",
     });
     await syncTmuxPaneMetadata();
     if (session) {

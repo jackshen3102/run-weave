@@ -1974,6 +1974,204 @@ describe("terminal routes", () => {
     });
   });
 
+  it("accepts terminal input through the HTTP API", async () => {
+    const runtime = {
+      pid: 123,
+      write: vi.fn(),
+      resize: vi.fn(),
+      signal: vi.fn(),
+      dispose: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+    };
+    const state = {
+      current: {
+        id: "terminal-1",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => runtime),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const ptyService = {
+      spawnSession: vi.fn(),
+    };
+    const { server } = createTestServer(state, {
+      ptyService,
+      runtimeRegistry,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/input`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer access-token-1",
+        },
+        body: JSON.stringify({
+          operationId: "op-test-1",
+          data: "pwd\r",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      operationId: "op-test-1",
+      terminalSessionId: "terminal-1",
+      inputAccepted: true,
+      inputEnqueued: true,
+      runtimeKind: "pty",
+    });
+    expect(runtime.write).toHaveBeenCalledWith("pwd\r");
+    expect(ptyService.spawnSession).not.toHaveBeenCalled();
+  });
+
+  it("sends HTTP terminal input directly to tmux-backed panes", async () => {
+    const runtime = {
+      pid: 123,
+      write: vi.fn(),
+      resize: vi.fn(),
+      signal: vi.fn(),
+      dispose: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+    };
+    const state = {
+      current: {
+        id: "terminal-1",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        runtimeKind: "tmux" as const,
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      },
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => runtime),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const tmuxService = {
+      sendInput: vi.fn(async () => undefined),
+      buildSessionName: vi.fn(() => "runweave-terminal-1"),
+      socketPath: "/tmp/runweave/tmux.sock",
+    };
+    const { server } = createTestServer(state, {
+      ptyService: { spawnSession: vi.fn() },
+      runtimeRegistry,
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/input`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer access-token-1",
+        },
+        body: JSON.stringify({
+          operationId: "op-test-1",
+          data: "codex prompt\r",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      operationId: "op-test-1",
+      terminalSessionId: "terminal-1",
+      inputAccepted: true,
+      inputEnqueued: true,
+      runtimeKind: "tmux",
+    });
+    expect(tmuxService.sendInput).toHaveBeenCalledWith(
+      {
+        sessionName: "runweave-terminal-1",
+        socketPath: "/tmp/runweave/tmux.sock",
+      },
+      "codex prompt\r",
+    );
+    expect(runtime.write).not.toHaveBeenCalled();
+  });
+
+  it("returns an error when HTTP terminal input cannot be written", async () => {
+    const runtime = {
+      pid: 123,
+      write: vi.fn(() => {
+        throw new Error("pty write failed");
+      }),
+      resize: vi.fn(),
+      signal: vi.fn(),
+      dispose: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+    };
+    const state = {
+      current: {
+        id: "terminal-1",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => runtime),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const { server } = createTestServer(state, {
+      ptyService: { spawnSession: vi.fn() },
+      runtimeRegistry,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/input`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer access-token-1",
+        },
+        body: JSON.stringify({ data: "pwd\r" }),
+      },
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      message: "Terminal input failed",
+      error: expect.stringContaining("pty write failed"),
+    });
+  });
+
   it("stores uploaded clipboard images in the system temp directory", async () => {
     const cwd = await mkdtemp(path.join(os.tmpdir(), "terminal-upload-"));
     tempDirs.push(cwd);

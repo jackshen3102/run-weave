@@ -253,6 +253,21 @@ export class TmuxService {
     }
   }
 
+  async sendInput(target: TmuxTarget, data: string): Promise<void> {
+    for (const chunk of splitInputForSendKeys(data)) {
+      if (chunk.type === "enter") {
+        await this.runTmux(["send-keys", "-t", target.sessionName, "Enter"], target);
+        continue;
+      }
+      if (chunk.value) {
+        await this.runTmux(
+          ["send-keys", "-t", target.sessionName, "-l", chunk.value],
+          target,
+        );
+      }
+    }
+  }
+
   async capturePane(
     target: TmuxTarget,
     historyLines = CaptureHistoryLines,
@@ -530,6 +545,34 @@ export class TmuxService {
       maxBuffer: 10 * 1024 * 1024,
     });
   }
+}
+
+function splitInputForSendKeys(
+  data: string,
+): Array<{ type: "text"; value: string } | { type: "enter" }> {
+  const chunks: Array<{ type: "text"; value: string } | { type: "enter" }> = [];
+  let start = 0;
+
+  for (let index = 0; index < data.length; index += 1) {
+    const char = data[index];
+    if (char !== "\r" && char !== "\n") {
+      continue;
+    }
+    if (index > start) {
+      chunks.push({ type: "text", value: data.slice(start, index) });
+    }
+    chunks.push({ type: "enter" });
+    if (char === "\r" && data[index + 1] === "\n") {
+      index += 1;
+    }
+    start = index + 1;
+  }
+
+  if (start < data.length) {
+    chunks.push({ type: "text", value: data.slice(start) });
+  }
+
+  return chunks;
 }
 
 function isProcessExitCode(error: unknown, exitCode: number): boolean {

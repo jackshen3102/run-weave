@@ -11,6 +11,7 @@
 | 终端代码预览 / Terminal Browser          | architecture/terminal-code-preview.md                 |
 | 终端 tmux 恢复                           | architecture/terminal-tmux-recovery.md                |
 | 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md             |
+| Terminal CLI                             | cli/terminal-cli.md                                   |
 | 质量体系概览                             | quality/quality-harness.md                            |
 | AI 诊断日志                              | quality/ai-diagnostic-logging.md                      |
 | 按需录屏的浏览器 MCP 验证                | quality/recorded-browser-mcp-verification.md          |

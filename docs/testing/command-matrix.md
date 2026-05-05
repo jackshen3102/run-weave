@@ -7,6 +7,7 @@
 | 终端链路 / Vim / 预览                   | `pnpm run test:e2e -- tests/terminal.spec.ts tests/terminal-vim.spec.ts tests/terminal-preview.spec.ts`                                            |
 | 终端 session 生命周期 / ID 生成         | `pnpm --filter ./backend test -- src/terminal/manager.test.ts`                                                                                     |
 | 后端路由/服务逻辑                       | `pnpm --filter ./backend test -- src/...`                                                                                                          |
+| CLI / 外部控制面                        | `pnpm --filter ./packages/runweave-cli test && pnpm --filter ./packages/runweave-cli typecheck`                                                    |
 | 共享协议类型变更                        | `pnpm --filter ./packages/shared test && pnpm --filter ./backend test && pnpm run test:e2e`                                                        |
 | Electron Terminal Browser CDP Proxy     | `pnpm --filter ./electron test -- terminal-browser-cdp-proxy.test.ts`，再按 `docs/testing/terminal-browser-cdp-mcp-test-cases.md` 做桌面端手工验收 |
 | Electron Terminal Browser tab 恢复      | `pnpm --filter ./electron test -- terminal-browser-tabs-state.test.ts`                                                                             |
