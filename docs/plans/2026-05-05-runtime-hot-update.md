@@ -39,7 +39,7 @@
 使用 `app.getPath("userData")/runtime` 作为默认 runtime 根目录。mac 上默认会落在：
 
 ```text
-~/Library/Application Support/Browser Viewer/runtime
+~/Library/Application Support/@browser-viewer/electron/runtime
 ```
 
 目录结构：

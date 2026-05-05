@@ -68,7 +68,8 @@ function resolveDefaultRuntimeHome() {
     home,
     "Library",
     "Application Support",
-    "Browser Viewer",
+    "@browser-viewer",
+    "electron",
     "runtime",
   );
 }
