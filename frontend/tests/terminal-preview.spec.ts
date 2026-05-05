@@ -593,7 +593,9 @@ test("terminal markdown preview opens clicked images in a lightbox", async ({
     await page
       .getByPlaceholder("Search file or paste absolute path...")
       .fill("terminal preview");
-    await page.getByText("terminal-code-preview.md").click();
+    const previewFile = page.getByText("terminal-code-preview.md");
+    await expect(previewFile).toBeVisible();
+    await previewFile.click();
 
     const image = page.getByRole("img", { name: "Preview screenshot" });
     await expect(image).toBeVisible();
