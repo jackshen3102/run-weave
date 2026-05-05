@@ -1,5 +1,12 @@
 import { Command } from "cmdk";
+import { Pencil, Trash2 } from "lucide-react";
 import type { TerminalPreviewFileSearchItem } from "@browser-viewer/shared";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "../ui/context-menu";
 
 interface TerminalOpenFileCommandProps {
   query: string;
@@ -11,6 +18,8 @@ interface TerminalOpenFileCommandProps {
   className?: string;
   onQueryChange: (query: string) => void;
   onOpenPath: (path: string) => void;
+  onRequestRenameFile: (path: string) => void;
+  onRequestDeleteFile: (path: string) => void;
 }
 
 export function TerminalOpenFileCommand({
@@ -23,15 +32,15 @@ export function TerminalOpenFileCommand({
   className,
   onQueryChange,
   onOpenPath,
+  onRequestRenameFile,
+  onRequestDeleteFile,
 }: TerminalOpenFileCommandProps) {
   const highlightedPath = items[0]?.path;
 
   return (
     <Command
       shouldFilter={false}
-      className={
-        className ?? "flex h-full min-h-0 flex-col bg-slate-950"
-      }
+      className={className ?? "flex h-full min-h-0 flex-col bg-slate-950"}
       onKeyDown={(event) => {
         if (event.key !== "Enter") {
           return;
@@ -82,35 +91,55 @@ export function TerminalOpenFileCommand({
         ) : null}
         <Command.Group>
           {items.map((item, index) => (
-            <Command.Item
-              key={item.path}
-              value={item.path}
-              onSelect={() => {
-                onOpenPath(item.path);
-              }}
-              className={[
-                "flex cursor-default items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none",
-                selectedPath === item.path
-                  ? "bg-slate-800"
-                  : index === 0
-                    ? "bg-slate-900/80"
-                    : "aria-selected:bg-slate-800/80",
-              ].join(" ")}
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{item.basename}</span>
-                {item.dirname ? (
-                  <span className="block truncate text-xs text-slate-500">
-                    {item.dirname}
+            <ContextMenu key={item.path}>
+              <ContextMenuTrigger asChild>
+                <Command.Item
+                  value={item.path}
+                  onSelect={() => {
+                    onOpenPath(item.path);
+                  }}
+                  className={[
+                    "flex cursor-default items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none",
+                    selectedPath === item.path
+                      ? "bg-slate-800"
+                      : index === 0
+                        ? "bg-slate-900/80"
+                        : "aria-selected:bg-slate-800/80",
+                  ].join(" ")}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">
+                      {item.basename}
+                    </span>
+                    {item.dirname ? (
+                      <span className="block truncate text-xs text-slate-500">
+                        {item.dirname}
+                      </span>
+                    ) : null}
                   </span>
-                ) : null}
-              </span>
-              {item.gitStatus ? (
-                <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] uppercase text-slate-400">
-                  {item.gitStatus.slice(0, 1)}
-                </span>
-              ) : null}
-            </Command.Item>
+                  {item.gitStatus ? (
+                    <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] uppercase text-slate-400">
+                      {item.gitStatus.slice(0, 1)}
+                    </span>
+                  ) : null}
+                </Command.Item>
+              </ContextMenuTrigger>
+              <ContextMenuContent className="w-40">
+                <ContextMenuItem
+                  onSelect={() => onRequestRenameFile(item.path)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Rename
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onSelect={() => onRequestDeleteFile(item.path)}
+                  className="text-rose-400 focus:text-rose-400"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           ))}
         </Command.Group>
         {query.trim() && !absoluteInput && !loading && items.length === 0 ? (

@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+  mkdir,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -119,7 +126,9 @@ test("terminal preview saves edited text files", async ({ page, request }) => {
       terminalSessionId: string;
     };
 
-    await page.goto(`/terminal/${encodeURIComponent(session.terminalSessionId)}`);
+    await page.goto(
+      `/terminal/${encodeURIComponent(session.terminalSessionId)}`,
+    );
     await page.getByRole("tab", { name: "Files", exact: true }).click();
     await page.getByRole("option", { name: /README\.md/ }).click();
     await expect(page.getByText("new readme")).toBeVisible();
@@ -134,10 +143,136 @@ test("terminal preview saves edited text files", async ({ page, request }) => {
     await expect(page.getByText("Saved")).toBeVisible();
     await expect
       .poll(async () => {
-        const savedContent = await readFile(path.join(repo, "README.md"), "utf8");
+        const savedContent = await readFile(
+          path.join(repo, "README.md"),
+          "utf8",
+        );
         return savedContent.includes("updated from preview");
       })
       .toBe(true);
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test("terminal preview renames and deletes files", async ({
+  page,
+  request,
+}) => {
+  const repo = await createPreviewRepo();
+  try {
+    await writeFile(
+      path.join(repo, "docs/architecture/terminal-code-preview.md"),
+      "# Terminal Preview Plan\n\nchanged\n",
+    );
+    const token = await loginAndSeedToken(request, page);
+    const projectResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/project`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          name: "Preview Mutate Project",
+          path: repo,
+        },
+      },
+    );
+    expect(projectResponse.ok()).toBe(true);
+    const project = (await projectResponse.json()) as { projectId: string };
+    const sessionResponse = await request.post(
+      `${E2E_API_BASE}/api/terminal/session`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        data: {
+          projectId: project.projectId,
+          command: "bash",
+          cwd: repo,
+        },
+      },
+    );
+    expect(sessionResponse.ok()).toBe(true);
+    const session = (await sessionResponse.json()) as {
+      terminalSessionId: string;
+    };
+
+    await page.goto(
+      `/terminal/${encodeURIComponent(session.terminalSessionId)}`,
+    );
+    await page.getByRole("tab", { name: "Files", exact: true }).click();
+    const readmeOption = page.getByRole("option", { name: /README\.md/ });
+    await expect(readmeOption).toBeVisible();
+    await readmeOption.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Rename" }).click();
+    const renameDialog = page.getByRole("dialog", { name: "Rename File" });
+    await expect(renameDialog).toBeVisible();
+    await renameDialog
+      .getByRole("textbox", { name: "New file path" })
+      .fill("docs/renamed.md");
+    await renameDialog.getByRole("button", { name: "Rename File" }).click();
+
+    await expect(page.getByText("docs/renamed.md")).toBeVisible();
+    await expect(page.getByText("new readme")).toBeVisible();
+    await expect(
+      readFile(path.join(repo, "README.md"), "utf8"),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(repo, "docs/renamed.md"), "utf8"),
+    ).resolves.toBe("new readme\n");
+
+    const renamedOption = page.getByRole("option", { name: /renamed\.md/ });
+    await expect(renamedOption).toBeVisible();
+    await renamedOption.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+    const deleteDialog = page.getByRole("alertdialog", { name: "Delete File" });
+    await expect(deleteDialog).toBeVisible();
+    await expect(
+      deleteDialog.getByText(
+        "This deletes the file from disk. This cannot be undone.",
+      ),
+    ).toBeVisible();
+    await deleteDialog.getByRole("button", { name: "Delete File" }).click();
+
+    await expect(page.getByText("Select a file")).toBeVisible();
+    await expect(
+      readFile(path.join(repo, "docs/renamed.md"), "utf8"),
+    ).rejects.toThrow();
+
+    await page
+      .getByRole("tab", { name: "Review changes", exact: true })
+      .click();
+    await expect(page.getByText("Working Changes")).toBeVisible();
+    const changedFile = page.getByRole("button", {
+      name: /terminal-code-preview\.md/,
+    });
+    await expect(changedFile).toBeVisible();
+    await changedFile.click();
+    await expect(page.getByText("changed")).toBeVisible();
+    await changedFile.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Rename" }).click({ force: true });
+    const changeRenameDialog = page.getByRole("dialog", {
+      name: "Rename File",
+    });
+    await expect(changeRenameDialog).toBeVisible();
+    await changeRenameDialog.getByRole("button", { name: "Close" }).click();
+    await changedFile.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Delete" }).click({ force: true });
+    await expect(
+      page.getByRole("alertdialog", { name: "Delete File" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await page.getByRole("button", { name: "docs/architecture" }).click({
+      button: "right",
+    });
+    await expect(
+      page.getByRole("menuitem", { name: "Rename" }),
+    ).not.toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: "Delete" }),
+    ).not.toBeVisible();
   } finally {
     await rm(repo, { recursive: true, force: true });
   }
@@ -148,7 +283,9 @@ test("terminal preview opens absolute files outside the project as read only", a
   request,
 }) => {
   const repo = await createPreviewRepo();
-  const outsideDir = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-outside-"));
+  const outsideDir = await mkdtemp(
+    path.join(os.tmpdir(), "terminal-preview-outside-"),
+  );
   const outsideFile = path.join(outsideDir, "SOUL.md");
   await writeFile(outsideFile, "outside preview file\n");
   try {
@@ -185,7 +322,9 @@ test("terminal preview opens absolute files outside the project as read only", a
       terminalSessionId: string;
     };
 
-    await page.goto(`/terminal/${encodeURIComponent(session.terminalSessionId)}`);
+    await page.goto(
+      `/terminal/${encodeURIComponent(session.terminalSessionId)}`,
+    );
     await page.getByRole("tab", { name: "Files", exact: true }).click();
     await page
       .getByPlaceholder("Search file or paste absolute path...")
@@ -207,6 +346,21 @@ test("terminal preview opens absolute files outside the project as read only", a
 test("terminal preview opens files and changes", async ({ page, request }) => {
   const repo = await createPreviewRepo();
   try {
+    const realRepo = await realpath(repo);
+    await page.addInitScript(() => {
+      const writes: string[] = [];
+      Object.defineProperty(window, "__previewClipboardWrites", {
+        value: writes,
+      });
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            writes.push(text);
+          },
+        },
+      });
+    });
     const token = await loginAndSeedToken(request, page);
     const projectResponse = await request.post(
       `${E2E_API_BASE}/api/terminal/project`,
@@ -261,16 +415,24 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
       previewFileRequestCount += 1;
       await route.continue();
     });
-    await page.route("**/api/terminal/**/preview/git-changes", async (route) => {
-      previewGitChangesRequestCount += 1;
-      await route.continue();
-    });
-    await page.route("**/api/terminal/**/preview/file-diff?**", async (route) => {
-      previewFileDiffRequestCount += 1;
-      await route.continue();
-    });
+    await page.route(
+      "**/api/terminal/**/preview/git-changes",
+      async (route) => {
+        previewGitChangesRequestCount += 1;
+        await route.continue();
+      },
+    );
+    await page.route(
+      "**/api/terminal/**/preview/file-diff?**",
+      async (route) => {
+        previewFileDiffRequestCount += 1;
+        await route.continue();
+      },
+    );
 
-    await page.goto(`/terminal/${encodeURIComponent(session.terminalSessionId)}`);
+    await page.goto(
+      `/terminal/${encodeURIComponent(session.terminalSessionId)}`,
+    );
     await expect(
       page.getByRole("button", { name: "Preview", exact: true }),
     ).toBeVisible();
@@ -284,7 +446,9 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
 
     await page.getByRole("tab", { name: "Files", exact: true }).click();
     await expect(page.getByText("README.md")).toBeVisible();
-    await expect(page.getByText("Changed files", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Changed files", { exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("staged.txt")).toBeVisible();
     await page
       .getByPlaceholder("Search file or paste absolute path...")
@@ -295,6 +459,19 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     await expect(
       page.getByText("docs/architecture/terminal-code-preview.md"),
     ).toBeVisible();
+    await page.getByRole("button", { name: "Copy path" }).click();
+    await expect(
+      page.getByRole("button", { name: "Path copied" }),
+    ).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          return (
+            window as unknown as { __previewClipboardWrites?: string[] }
+          ).__previewClipboardWrites?.at(-1);
+        }),
+      )
+      .toBe(path.join(realRepo, "docs/architecture/terminal-code-preview.md"));
     await expect(
       page.getByPlaceholder("Search file or paste absolute path..."),
     ).toBeVisible();
@@ -308,7 +485,9 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
       page.getByRole("button", { name: "Restore preview" }),
     ).toBeVisible();
 
-    const terminalAfterExpand = await page.getByLabel("Terminal emulator").boundingBox();
+    const terminalAfterExpand = await page
+      .getByLabel("Terminal emulator")
+      .boundingBox();
     expect(terminalAfterExpand).not.toBeNull();
     expect(Math.round(terminalAfterExpand!.width)).toBe(
       Math.round(terminalBeforeExpand!.width),
@@ -324,7 +503,9 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
 
     previewGitChangesRequestCount = 0;
     previewFileDiffRequestCount = 0;
-    await page.getByRole("tab", { name: "Review changes", exact: true }).click();
+    await page
+      .getByRole("tab", { name: "Review changes", exact: true })
+      .click();
     await expect(page.getByText("Staged Changes")).toBeVisible();
     await expect.poll(() => previewGitChangesRequestCount).toBe(1);
     await expect.poll(() => previewFileDiffRequestCount).toBe(1);
@@ -332,7 +513,9 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
       page.getByRole("button", { name: /staged\.txt/ }),
     ).toBeVisible();
     await expect(page.getByText("Working Changes")).toBeVisible();
-    await expect(page.getByRole("button", { name: /README\.md/ })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /README\.md/ }),
+    ).toBeVisible();
 
     await Promise.all([
       page.waitForResponse((response) => {
@@ -344,6 +527,19 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
       }),
       page.getByRole("button", { name: /README\.md/ }).click(),
     ]);
+    await page.getByRole("button", { name: "Copy path" }).click();
+    await expect(
+      page.getByRole("button", { name: "Path copied" }),
+    ).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          return (
+            window as unknown as { __previewClipboardWrites?: string[] }
+          ).__previewClipboardWrites?.at(-1);
+        }),
+      )
+      .toBe(path.join(realRepo, "README.md"));
     expect(previewGitChangesRequestCount).toBe(1);
     await expect.poll(() => previewFileDiffRequestCount).toBe(2);
   } finally {
@@ -390,7 +586,9 @@ test("terminal markdown preview opens clicked images in a lightbox", async ({
       terminalSessionId: string;
     };
 
-    await page.goto(`/terminal/${encodeURIComponent(session.terminalSessionId)}`);
+    await page.goto(
+      `/terminal/${encodeURIComponent(session.terminalSessionId)}`,
+    );
     await page.getByRole("tab", { name: "Files", exact: true }).click();
     await page
       .getByPlaceholder("Search file or paste absolute path...")
@@ -477,7 +675,9 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
       );
     }, TERMINAL_PREFERENCES_KEY);
 
-    await page.goto(`/terminal/${encodeURIComponent(firstSession.terminalSessionId)}`);
+    await page.goto(
+      `/terminal/${encodeURIComponent(firstSession.terminalSessionId)}`,
+    );
     await page.getByLabel("Terminal emulator").click({ force: true });
     await page.keyboard.type("printf 'https://example.com/runweave-link\\n'");
     await page.keyboard.press("Enter");
@@ -513,7 +713,9 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
       .getByLabel("Terminal emulator")
       .boundingBox();
     expect(terminalBeforeResize).not.toBeNull();
-    const resizeHandle = page.getByRole("separator", { name: "Resize sidecar" });
+    const resizeHandle = page.getByRole("separator", {
+      name: "Resize sidecar",
+    });
     const resizeHandleBox = await resizeHandle.boundingBox();
     expect(resizeHandleBox).not.toBeNull();
     await page.mouse.move(
@@ -555,7 +757,10 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
       /^(http:\/\/(localhost|127\.0\.0\.1):5173\/|localhost:5173)$/,
     );
 
-    await page.getByRole("button", { name: "Close browser tab" }).last().click();
+    await page
+      .getByRole("button", { name: "Close browser tab" })
+      .last()
+      .click();
     await expect(address).toHaveValue("http://127.0.0.1:5173/");
     await page.getByRole("button", { name: "Close browser tab" }).click();
     await expect(address).toHaveValue("http://127.0.0.1:5173");

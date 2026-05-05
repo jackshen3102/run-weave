@@ -6,10 +6,7 @@ import type {
 } from "../../features/terminal/preview-store";
 
 interface UpdateProjectPreview {
-  (
-    projectId: string,
-    patch: Record<string, string | number | undefined>,
-  ): void;
+  (projectId: string, patch: Record<string, string | number | undefined>): void;
 }
 
 interface TerminalPreviewPanelActionsArgs {
@@ -18,7 +15,7 @@ interface TerminalPreviewPanelActionsArgs {
   projectId: string | null;
   query: string;
   selectedFilePath?: string;
-  selectedPath: string | null;
+  copyPath: string | null;
   loadFile: (filePath: string) => Promise<void>;
   loadChanges: () => Promise<void>;
   setWidth: (width: number) => void;
@@ -35,7 +32,7 @@ export function useTerminalPreviewPanelActions({
   projectId,
   query,
   selectedFilePath,
-  selectedPath,
+  copyPath,
   loadFile,
   loadChanges,
   setWidth,
@@ -62,11 +59,12 @@ export function useTerminalPreviewPanelActions({
     }
   };
 
-  const copyPath = (): void => {
-    if (!selectedPath) {
-      return;
+  const copySelectedPath = async (): Promise<boolean> => {
+    if (!copyPath || !navigator.clipboard) {
+      return false;
     }
-    void navigator.clipboard?.writeText(selectedPath);
+    await navigator.clipboard.writeText(copyPath);
+    return true;
   };
 
   const startResize = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -160,7 +158,7 @@ export function useTerminalPreviewPanelActions({
   };
 
   return {
-    copyPath,
+    copyPath: copySelectedPath,
     openFilePath,
     refresh,
     setChangesViewMode,

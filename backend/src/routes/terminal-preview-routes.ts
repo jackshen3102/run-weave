@@ -2,10 +2,12 @@ import type { Response, Router } from "express";
 import { z } from "zod";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
+  deletePreviewFile,
   getPreviewFileDiff,
   getPreviewGitChanges,
   readPreviewAsset,
   readPreviewFile,
+  renamePreviewFile,
   savePreviewFile,
   searchPreviewFiles,
   TerminalPreviewError,
@@ -25,6 +27,17 @@ const previewSaveFileSchema = z.object({
   content: z.string(),
   expectedMtimeMs: z.number().finite(),
   overwrite: z.boolean().optional(),
+});
+
+const previewDeleteFileSchema = z.object({
+  path: z.string().min(1),
+  expectedMtimeMs: z.number().finite().optional(),
+});
+
+const previewRenameFileSchema = z.object({
+  path: z.string().min(1),
+  nextPath: z.string().min(1),
+  expectedMtimeMs: z.number().finite().optional(),
 });
 
 const previewFileDiffSchema = z.object({
@@ -139,6 +152,63 @@ export function registerTerminalPreviewRoutes(
           content: parsed.data.content,
           expectedMtimeMs: parsed.data.expectedMtimeMs,
           overwrite: parsed.data.overwrite,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.delete("/project/:id/preview/file", async (req, res) => {
+    const parsed = previewDeleteFileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolveProjectPreviewContext(
+        terminalSessionManager,
+        req.params.id,
+      );
+      res.json(
+        await deletePreviewFile({
+          projectId: project.id,
+          projectPath: project.path,
+          requestedPath: parsed.data.path,
+          expectedMtimeMs: parsed.data.expectedMtimeMs,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.patch("/project/:id/preview/file/path", async (req, res) => {
+    const parsed = previewRenameFileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolveProjectPreviewContext(
+        terminalSessionManager,
+        req.params.id,
+      );
+      res.json(
+        await renamePreviewFile({
+          projectId: project.id,
+          projectPath: project.path,
+          requestedPath: parsed.data.path,
+          nextRequestedPath: parsed.data.nextPath,
+          expectedMtimeMs: parsed.data.expectedMtimeMs,
         }),
       );
     } catch (error) {

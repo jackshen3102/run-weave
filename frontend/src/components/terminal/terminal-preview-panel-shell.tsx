@@ -1,5 +1,13 @@
 import { type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { Copy, Maximize2, Minimize2, RefreshCw, Save, X } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Maximize2,
+  Minimize2,
+  RefreshCw,
+  Save,
+  X,
+} from "lucide-react";
 import { Button } from "../ui/button";
 import { TerminalBrowserTool } from "./terminal-browser-tool";
 
@@ -18,9 +26,16 @@ interface TerminalPreviewPanelShellProps {
   changesLoading: boolean;
   saveLoading: boolean;
   saveDisabled: boolean;
-  saveStatus: "readonly" | "editable" | "unsaved" | "saving" | "saved" | "conflict";
+  saveStatus:
+    | "readonly"
+    | "editable"
+    | "unsaved"
+    | "saving"
+    | "saved"
+    | "conflict";
   canSave: boolean;
   selectedPath: string | null;
+  pathCopied: boolean;
   markdownViewMode: "source" | "split" | "preview";
   svgViewMode: "preview" | "source";
   changesViewMode: "diff" | "preview";
@@ -63,6 +78,7 @@ export function TerminalPreviewPanelShell({
   saveStatus,
   canSave,
   selectedPath,
+  pathCopied,
   markdownViewMode,
   svgViewMode,
   changesViewMode,
@@ -105,7 +121,9 @@ export function TerminalPreviewPanelShell({
         aria-orientation="vertical"
         className={[
           "absolute left-0 top-0 z-20 h-full w-1.5 touch-none transition-colors",
-          expanded ? "" : "cursor-col-resize bg-transparent hover:bg-slate-700/70",
+          expanded
+            ? ""
+            : "cursor-col-resize bg-transparent hover:bg-slate-700/70",
         ].join(" ")}
         onPointerDown={onStartResize}
       />
@@ -181,7 +199,12 @@ export function TerminalPreviewPanelShell({
                 size="sm"
                 variant="ghost"
                 className="h-7 w-7 rounded-md px-0"
-                disabled={activeTool !== "preview" || !mode || fileLoading || changesLoading}
+                disabled={
+                  activeTool !== "preview" ||
+                  !mode ||
+                  fileLoading ||
+                  changesLoading
+                }
                 onClick={onRefresh}
                 aria-label="Refresh preview"
               >
@@ -194,9 +217,14 @@ export function TerminalPreviewPanelShell({
                 className="h-7 w-7 rounded-md px-0"
                 disabled={activeTool !== "preview" || !selectedPath}
                 onClick={onCopyPath}
-                aria-label="Copy path"
+                aria-label={pathCopied ? "Path copied" : "Copy path"}
+                title={pathCopied ? "Path copied" : "Copy path"}
               >
-                <Copy className="h-4 w-4" />
+                {pathCopied ? (
+                  <Check className="h-4 w-4 text-emerald-400" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
               </Button>
               <Button
                 type="button"
