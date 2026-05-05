@@ -56,7 +56,7 @@ pnpm --filter ./backend start -- --host 127.0.0.1 --port 5001
 - `AUTH_USERNAME`: login username (set to `admin`).
 - `AUTH_PASSWORD`: login password.
 - `AUTH_JWT_SECRET`: signing secret for auth token.
-- `AUTH_TOKEN_TTL_SECONDS`: auth token TTL in seconds (default: `28800`).
+- `AUTH_TOKEN_TTL_SECONDS`: auth token TTL in seconds (default: `86400`).
 - `BROWSER_PROFILE_DIR`: persistent browser profile directory used by Playwright.
   - Default: `~/.browser-profile`.
   - Set this to a custom path if you want to reuse or isolate login state.

@@ -11,6 +11,7 @@ type ConnectionAuthStore = Record<string, ConnectionAuthRecord>;
 export const REMEMBERED_CREDENTIALS_STORAGE_KEY =
   "viewer.auth.remembered-credentials";
 export const CONNECTION_AUTH_STORAGE_KEY = "viewer.auth.connection-auth";
+const LEGACY_ACCESS_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 function loadConnectionAuthStore(): ConnectionAuthStore {
   const raw = localStorage.getItem(CONNECTION_AUTH_STORAGE_KEY);
@@ -37,24 +38,29 @@ export function cleanupLegacyAuthStorage(): void {
   localStorage.removeItem(REMEMBERED_CREDENTIALS_STORAGE_KEY);
 
   const store = loadConnectionAuthStore();
-  const sanitizedEntries = Object.entries(store).flatMap(([connectionId, record]) =>
-    record.accessToken ||
-    record.token ||
-    record.refreshToken ||
-    record.sessionId ||
-    record.accessExpiresAt
-      ? [[
-          connectionId,
-          {
-            accessToken: record.accessToken ?? record.token,
-            accessExpiresAt:
-              record.accessExpiresAt ??
-              (record.accessToken ?? record.token ? Date.now() + 15 * 60 * 1000 : undefined),
-            refreshToken: record.refreshToken,
-            sessionId: record.sessionId ?? "legacy-session",
-          } satisfies ConnectionAuthRecord,
-        ]]
-      : [],
+  const sanitizedEntries = Object.entries(store).flatMap(
+    ([connectionId, record]) =>
+      record.accessToken ||
+      record.token ||
+      record.refreshToken ||
+      record.sessionId ||
+      record.accessExpiresAt
+        ? [
+            [
+              connectionId,
+              {
+                accessToken: record.accessToken ?? record.token,
+                accessExpiresAt:
+                  record.accessExpiresAt ??
+                  ((record.accessToken ?? record.token)
+                    ? Date.now() + LEGACY_ACCESS_TOKEN_TTL_MS
+                    : undefined),
+                refreshToken: record.refreshToken,
+                sessionId: record.sessionId ?? "legacy-session",
+              } satisfies ConnectionAuthRecord,
+            ],
+          ]
+        : [],
   );
   saveConnectionAuthStore(Object.fromEntries(sanitizedEntries));
 }
@@ -93,7 +99,7 @@ export function clearConnectionAuth(connectionId: string): void {
 export function setConnectionToken(connectionId: string, token: string): void {
   setConnectionAuth(connectionId, {
     accessToken: token,
-    accessExpiresAt: Date.now() + 15 * 60 * 1000,
+    accessExpiresAt: Date.now() + LEGACY_ACCESS_TOKEN_TTL_MS,
     sessionId: "legacy-session",
   });
 }
