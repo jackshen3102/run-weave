@@ -38,7 +38,7 @@ function primaryActionLabel(
   if (action === "summarize") {
     return "总结终端";
   }
-  return "发给 Hermes";
+  return "复制到飞书";
 }
 
 function PrimaryActionIcon({
