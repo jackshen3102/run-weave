@@ -22,7 +22,12 @@ function resolveIcon(): Electron.NativeImage {
   }
 }
 
-export function createTray(mainWindow: BrowserWindow): Tray {
+export function createTray(
+  mainWindow: BrowserWindow,
+  options: {
+    onReloadLocalRuntime?: () => void;
+  } = {},
+): Tray {
   const icon = resolveIcon();
   tray = new Tray(icon);
   tray.setToolTip("Browser Viewer");
@@ -42,6 +47,16 @@ export function createTray(mainWindow: BrowserWindow): Tray {
         checkForUpdates();
       },
     },
+    ...(options.onReloadLocalRuntime
+      ? [
+          {
+            label: "Reload Local Runtime",
+            click: () => {
+              void options.onReloadLocalRuntime?.();
+            },
+          },
+        ]
+      : []),
     { type: "separator" },
     {
       label: "退出",

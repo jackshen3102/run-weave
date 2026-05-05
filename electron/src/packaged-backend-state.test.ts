@@ -15,7 +15,21 @@ test("marks packaged backend state available when a backend url is present", () 
     backendUrl: "http://127.0.0.1:5001",
     statusMessage: null,
     canReconnect: true,
+    runtimeSource: null,
+    runtimeReleaseId: null,
   });
+});
+
+test("includes runtime metadata when packaged backend is available", () => {
+  const state = createAvailablePackagedBackendState("http://127.0.0.1:5001", {
+    runtimeSource: "external",
+    runtimeReleaseId: "manual-a",
+    statusMessage: "rolled back",
+  });
+
+  assert.equal(state.runtimeSource, "external");
+  assert.equal(state.runtimeReleaseId, "manual-a");
+  assert.equal(state.statusMessage, "rolled back");
 });
 
 test("marks packaged backend state unavailable after an unexpected exit", () => {
@@ -47,5 +61,7 @@ test("marks packaged backend state unavailable after a startup failure", () => {
     backendUrl: "",
     statusMessage: "内置本地后端不可用: Error: spawn failed",
     canReconnect: true,
+    runtimeSource: null,
+    runtimeReleaseId: null,
   });
 });

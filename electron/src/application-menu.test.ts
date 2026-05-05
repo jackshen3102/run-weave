@@ -22,11 +22,7 @@ test("adds a New Window action with a cross-platform accelerator", () => {
   assert.equal(newWindowItem.accelerator, "CmdOrCtrl+Shift+N");
   assert.equal(typeof newWindowItem.click, "function");
 
-  newWindowItem.click?.(
-    {} as never,
-    {} as never,
-    {} as never,
-  );
+  newWindowItem.click?.({} as never, {} as never, {} as never);
   assert.equal(opened, 1);
 });
 
@@ -42,4 +38,28 @@ test("includes the macOS app menu only on darwin", () => {
 
   assert.equal(macTemplate[0]?.role, "appMenu");
   assert.notEqual(windowsTemplate[0]?.role, "appMenu");
+});
+
+test("adds a Reload Local Runtime action when provided", () => {
+  let reloads = 0;
+  const template = buildApplicationMenuTemplate({
+    platform: "darwin",
+    onNewWindow: () => undefined,
+    onReloadLocalRuntime: () => {
+      reloads += 1;
+    },
+  });
+
+  const fileMenu = template.find((item) => item.label === "File");
+  assert.ok(fileMenu);
+  assert.ok(Array.isArray(fileMenu.submenu));
+
+  const reloadItem = fileMenu.submenu.find(
+    (item) => "label" in item && item.label === "Reload Local Runtime",
+  );
+  assert.ok(reloadItem);
+  assert.equal(typeof reloadItem.click, "function");
+
+  reloadItem.click?.({} as never, {} as never, {} as never);
+  assert.equal(reloads, 1);
 });

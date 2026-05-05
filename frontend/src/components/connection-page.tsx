@@ -262,6 +262,14 @@ export function ConnectionPage({
                           {conn.statusMessage}
                         </p>
                       ) : null}
+                      {conn.isSystem && conn.runtimeSource ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Runtime: {conn.runtimeSource}
+                          {conn.runtimeReleaseId
+                            ? ` ${conn.runtimeReleaseId}`
+                            : ""}
+                        </p>
+                      ) : null}
                     </button>
                     {(conn.canEdit !== false || conn.canDelete !== false) && (
                       <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">

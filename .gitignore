@@ -10,6 +10,7 @@ log
 backend/.browser-profile
 backend/.env
 .runtime/
+.runtime-artifacts/
 artifacts/
 electron/release/
 .local-updates/
