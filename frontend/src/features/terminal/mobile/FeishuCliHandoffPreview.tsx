@@ -1,45 +1,65 @@
-import { Clipboard, ExternalLink } from "lucide-react";
+import { Clipboard, Send } from "lucide-react";
 import type { MobileTerminalCardViewModel } from "./terminal-card-view-model";
 
-interface HermesHandoffPreviewProps {
+interface FeishuCliHandoffPreviewProps {
   terminal: MobileTerminalCardViewModel;
+  message: string;
   copied: boolean;
   copyError: string | null;
+  onMessageChange: (message: string) => void;
   onCopy: () => Promise<void>;
   onCopyAndPromptFeishu: () => Promise<void>;
 }
 
-export function buildHermesContext(
+export const DEFAULT_FEISHU_TERMINAL_MESSAGE = "继续";
+
+export function buildFeishuCliContext(
   terminal: MobileTerminalCardViewModel,
+  message: string = DEFAULT_FEISHU_TERMINAL_MESSAGE,
 ): string {
+  const terminalMessage = message.trim() || DEFAULT_FEISHU_TERMINAL_MESSAGE;
+
   return [
-    "Hermes，接管这个 Runweave 终端。",
+    "请用 Runweave CLI 继续这个终端对话。",
     "",
     `项目：${terminal.projectName}`,
-    `tmux session：${terminal.tmuxSessionName ?? `runweave-${terminal.terminalSessionId}`}`,
+    `终端 ID：${terminal.terminalSessionId}`,
     `路径：${terminal.cwd ?? "未绑定路径"}`,
-    `tmux socket：${terminal.tmuxSocketPath ?? "无"}`,
     "",
-    "请根据以上信息,找到 tmux session 并发送如下消息:",
-    "",
+    "要发送给终端的内容：",
+    terminalMessage,
   ].join("\n");
 }
 
-export function HermesHandoffPreview({
+export function FeishuCliHandoffPreview({
   terminal,
+  message,
   copied,
   copyError,
+  onMessageChange,
   onCopy,
   onCopyAndPromptFeishu,
-}: HermesHandoffPreviewProps) {
+}: FeishuCliHandoffPreviewProps) {
   return (
     <div className="flex flex-col gap-3">
+      <label className="flex flex-col gap-2">
+        <span className="text-xs font-semibold text-muted-foreground">
+          要发送的内容
+        </span>
+        <textarea
+          className="min-h-24 resize-none rounded-lg border border-border/60 bg-background px-3 py-2 text-sm leading-5 text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+          value={message}
+          onChange={(event) => {
+            onMessageChange(event.target.value);
+          }}
+        />
+      </label>
       <div className="rounded-xl border border-border/60 bg-card/70 p-3">
         <p className="text-xs font-semibold text-muted-foreground">
-          上下文预览
+          飞书粘贴内容
         </p>
         <pre className="mt-2 max-h-[45dvh] overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-4 text-foreground">
-          {buildHermesContext(terminal)}
+          {buildFeishuCliContext(terminal, message)}
         </pre>
       </div>
       {copied ? (
@@ -70,8 +90,8 @@ export function HermesHandoffPreview({
             void onCopyAndPromptFeishu();
           }}
         >
-          <ExternalLink className="h-4 w-4" />
-          复制并提示
+          <Send className="h-4 w-4" />
+          复制到飞书
         </button>
       </div>
     </div>

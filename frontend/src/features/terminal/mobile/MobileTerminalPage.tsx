@@ -21,7 +21,10 @@ import {
   TerminalStatusFilter,
   type MobileTerminalFilter,
 } from "./TerminalStatusFilter";
-import { buildHermesContext } from "./HermesHandoffPreview";
+import {
+  buildFeishuCliContext,
+  DEFAULT_FEISHU_TERMINAL_MESSAGE,
+} from "./FeishuCliHandoffPreview";
 
 interface MobileTerminalPageProps {
   apiBase: string;
@@ -96,6 +99,9 @@ export function MobileTerminalPage({
   const [selectedTerminal, setSelectedTerminal] =
     useState<MobileTerminalCardViewModel | null>(null);
   const [drawerMode, setDrawerMode] = useState<"detail" | "handoff">("detail");
+  const [handoffMessage, setHandoffMessage] = useState(
+    DEFAULT_FEISHU_TERMINAL_MESSAGE,
+  );
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -191,6 +197,7 @@ export function MobileTerminalPage({
   const openHandoff = (terminal: MobileTerminalCardViewModel): void => {
     setCopied(false);
     setCopyError(null);
+    setHandoffMessage(DEFAULT_FEISHU_TERMINAL_MESSAGE);
     setDrawerMode("handoff");
     setSelectedTerminal(terminal);
   };
@@ -200,11 +207,14 @@ export function MobileTerminalPage({
   ): Promise<void> => {
     setCopyError(null);
     try {
-      await copyText(buildHermesContext(terminal));
+      await copyText(
+        buildFeishuCliContext(terminal, DEFAULT_FEISHU_TERMINAL_MESSAGE),
+      );
     } catch (copyFailure) {
       setCopied(false);
       setDrawerMode("handoff");
       setSelectedTerminal(terminal);
+      setHandoffMessage(DEFAULT_FEISHU_TERMINAL_MESSAGE);
       setCopyError(
         copyFailure instanceof Error
           ? copyFailure.message
@@ -220,7 +230,7 @@ export function MobileTerminalPage({
     }
     setCopyError(null);
     try {
-      await copyText(buildHermesContext(selectedTerminal));
+      await copyText(buildFeishuCliContext(selectedTerminal, handoffMessage));
       setCopied(true);
     } catch (copyFailure) {
       setCopied(false);
@@ -329,12 +339,21 @@ export function MobileTerminalPage({
       <TerminalDetailDrawer
         terminal={selectedTerminal}
         mode={drawerMode}
+        message={handoffMessage}
         copied={copied}
         copyError={copyError}
         onModeChange={(nextMode) => {
           setCopied(false);
           setCopyError(null);
+          if (nextMode === "handoff") {
+            setHandoffMessage(DEFAULT_FEISHU_TERMINAL_MESSAGE);
+          }
           setDrawerMode(nextMode);
+        }}
+        onMessageChange={(nextMessage) => {
+          setHandoffMessage(nextMessage);
+          setCopied(false);
+          setCopyError(null);
         }}
         onOpenChange={(open) => {
           if (!open) {

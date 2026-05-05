@@ -7,14 +7,16 @@ import {
   SheetTitle,
 } from "../../../components/ui/sheet";
 import type { MobileTerminalCardViewModel } from "./terminal-card-view-model";
-import { HermesHandoffPreview } from "./HermesHandoffPreview";
+import { FeishuCliHandoffPreview } from "./FeishuCliHandoffPreview";
 
 interface TerminalDetailDrawerProps {
   terminal: MobileTerminalCardViewModel | null;
   mode: "detail" | "handoff";
+  message: string;
   copied: boolean;
   copyError: string | null;
   onModeChange: (mode: "detail" | "handoff") => void;
+  onMessageChange: (message: string) => void;
   onOpenChange: (open: boolean) => void;
   onCopy: () => Promise<void>;
   onCopyAndPromptFeishu: () => Promise<void>;
@@ -24,9 +26,11 @@ interface TerminalDetailDrawerProps {
 export function TerminalDetailDrawer({
   terminal,
   mode,
+  message,
   copied,
   copyError,
   onModeChange,
+  onMessageChange,
   onOpenChange,
   onCopy,
   onCopyAndPromptFeishu,
@@ -44,7 +48,7 @@ export function TerminalDetailDrawer({
           <>
             <SheetHeader className="pr-8">
               <SheetTitle className="text-base text-foreground">
-                {mode === "handoff" ? "发给 Hermes" : terminal.statusLabel}
+                {mode === "handoff" ? "复制到飞书" : terminal.statusLabel}
               </SheetTitle>
               <SheetDescription className="truncate text-xs">
                 {terminal.projectName} · {terminal.shortId}
@@ -52,10 +56,12 @@ export function TerminalDetailDrawer({
             </SheetHeader>
 
             {mode === "handoff" ? (
-              <HermesHandoffPreview
+              <FeishuCliHandoffPreview
                 terminal={terminal}
+                message={message}
                 copied={copied}
                 copyError={copyError}
+                onMessageChange={onMessageChange}
                 onCopy={onCopy}
                 onCopyAndPromptFeishu={onCopyAndPromptFeishu}
               />
@@ -90,7 +96,7 @@ export function TerminalDetailDrawer({
                     }}
                   >
                     <Send className="h-4 w-4" />
-                    发给 Hermes
+                    复制到飞书
                   </button>
                   <button
                     type="button"
