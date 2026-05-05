@@ -229,6 +229,19 @@ Authorization: Bearer <token>
 这个非当前 terminal 有任何新输出
 ```
 
+## CLI 消费边界
+
+`rw terminal send --confirm short --json` 不直接等待 completion event。它通过登录态 HTTPS input 接口把输入投递到指定 terminal，并短暂观察 echo 或运行态变化。Hermes/Feishu 场景默认应把这一步作为“已投递”的机器可读确认，任务完成仍由本页描述的 AI CLI hook / notify 链路主动上报。
+
+后续如果实现长等待模式，CLI 可以通过普通登录态调用：
+
+```http
+GET /api/terminal/completion-events?after=<last-event-id>
+Authorization: Bearer <token>
+```
+
+过滤条件至少应包含 `terminalSessionId`、`source` 和 `createdAt >= sendStartedAt`，避免误消费同一 terminal 的旧 completion event。CLI 不能读取或复用 `RUNWEAVE_HOOK_TOKEN`；该 token 仍只用于 tmux pane 内部写入。
+
 ## 安全边界
 
 这条链路的安全边界分两层：

@@ -138,6 +138,20 @@ export interface CreateTerminalWsTicketResponse {
   expiresIn: number;
 }
 
+export interface SendTerminalInputRequest {
+  data: string;
+  operationId?: string;
+}
+
+export interface SendTerminalInputResponse {
+  operationId: string;
+  terminalSessionId: string;
+  inputAccepted: true;
+  inputEnqueued: true;
+  runtimeKind: "tmux" | "pty";
+  acceptedAt: string;
+}
+
 export interface CreateTerminalClipboardImageRequest {
   mimeType: string;
   dataBase64: string;

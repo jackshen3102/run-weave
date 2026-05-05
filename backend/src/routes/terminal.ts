@@ -12,6 +12,8 @@ import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
+  SendTerminalInputRequest,
+  SendTerminalInputResponse,
   TerminalCompletionEventListResponse,
   UpdateTerminalProjectRequest,
 } from "@browser-viewer/shared";
@@ -37,9 +39,11 @@ import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TerminalCompletionEventStore } from "../terminal/completion-events";
 import {
   ensureTerminalRuntime,
+  isTmuxBackedSession,
   killTmuxSessionForTerminal,
   readTerminalScrollback,
   readTerminalScrollbackCapture,
+  resolveTmuxTarget,
 } from "../terminal/runtime-launcher";
 import type { TmuxService } from "../terminal/tmux-service";
 import { buildTerminalMobileOverviewPayload } from "./terminal-mobile-overview";
@@ -82,6 +86,17 @@ const createTerminalClipboardImageSchema = z.object({
   mimeType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
   dataBase64: z.string().min(1),
 });
+
+const sendTerminalInputSchema = z
+  .object({
+    data: z.string(),
+    operationId: z.string().trim().min(1).optional(),
+  })
+  .strict();
+
+function buildTerminalInputOperationId(): string {
+  return `op_${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}_${randomBytes(4).toString("hex")}`;
+}
 
 function resolveClipboardImageExtension(mimeType: string): string {
   switch (mimeType) {
@@ -494,6 +509,73 @@ export function createTerminalRouter(
       expiresIn: issued.expiresIn,
     };
     res.status(200).json(payload);
+  });
+
+  router.post("/session/:id/input", async (req, res) => {
+    const parsed = sendTerminalInputSchema.safeParse(
+      req.body as SendTerminalInputRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const session = terminalSessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Terminal session not found" });
+      return;
+    }
+    if (session.status !== "running") {
+      res.status(409).json({ message: "Terminal session is not running" });
+      return;
+    }
+    if (!options?.runtimeRegistry || !options.ptyService) {
+      res.status(503).json({ message: "Terminal runtime service unavailable" });
+      return;
+    }
+    if (isTmuxBackedSession(session) && !options.tmuxService) {
+      res.status(503).json({ message: "Terminal tmux service unavailable" });
+      return;
+    }
+
+    try {
+      const ensured = await ensureTerminalRuntime({
+        session,
+        terminalSessionManager,
+        runtimeRegistry: options.runtimeRegistry,
+        ptyService: options.ptyService,
+        tmuxService: options.tmuxService,
+      });
+      if (isTmuxBackedSession(session) && options.tmuxService) {
+        await options.tmuxService.sendInput(
+          resolveTmuxTarget(session, options.tmuxService),
+          parsed.data.data,
+        );
+      } else {
+        ensured.runtime.write(parsed.data.data);
+      }
+      const payload: SendTerminalInputResponse = {
+        operationId: parsed.data.operationId ?? buildTerminalInputOperationId(),
+        terminalSessionId: session.id,
+        inputAccepted: true,
+        inputEnqueued: true,
+        runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
+        acceptedAt: new Date().toISOString(),
+      };
+      res.status(200).json(payload);
+    } catch (error) {
+      console.error("[viewer-be] terminal input failed", {
+        terminalSessionId: session.id,
+        error: String(error),
+      });
+      res.status(500).json({
+        message: "Terminal input failed",
+        error: String(error),
+      });
+    }
   });
 
   router.post("/session/:id/clipboard-image", async (req, res) => {

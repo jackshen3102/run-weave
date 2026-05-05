@@ -1302,16 +1302,18 @@ describe("terminal websocket server", () => {
         tmuxSessionName: "runweave-terminal-1",
         tmuxSocketPath: "/tmp/runweave/tmux.sock",
       })),
-      updateSessionMetadata: vi.fn(async (_id: string, metadata: { activeCommand: string | null }) => {
-        currentActiveCommand = metadata.activeCommand;
-        return {
-          id: "terminal-1",
-          cwd: fixtureFeaturePath,
-          activeCommand: metadata.activeCommand,
-          scrollback: "",
-          status: "running",
-        };
-      }),
+      updateSessionMetadata: vi.fn(
+        async (_id: string, metadata: { activeCommand: string | null }) => {
+          currentActiveCommand = metadata.activeCommand;
+          return {
+            id: "terminal-1",
+            cwd: fixtureFeaturePath,
+            activeCommand: metadata.activeCommand,
+            scrollback: "",
+            status: "running",
+          };
+        },
+      ),
       markActivity: vi.fn(),
       appendOutput: vi.fn(),
       markExited: vi.fn(),
@@ -1399,16 +1401,18 @@ describe("terminal websocket server", () => {
         tmuxSessionName: "runweave-terminal-1",
         tmuxSocketPath: "/tmp/runweave/tmux.sock",
       })),
-      updateSessionMetadata: vi.fn(async (_id: string, metadata: { activeCommand: string | null }) => {
-        currentActiveCommand = metadata.activeCommand;
-        return {
-          id: "terminal-1",
-          cwd: fixtureFeaturePath,
-          activeCommand: metadata.activeCommand,
-          scrollback: "",
-          status: "running",
-        };
-      }),
+      updateSessionMetadata: vi.fn(
+        async (_id: string, metadata: { activeCommand: string | null }) => {
+          currentActiveCommand = metadata.activeCommand;
+          return {
+            id: "terminal-1",
+            cwd: fixtureFeaturePath,
+            activeCommand: metadata.activeCommand,
+            scrollback: "",
+            status: "running",
+          };
+        },
+      ),
       markActivity: vi.fn(),
       appendOutput: vi.fn(),
       markExited: vi.fn(),
@@ -1555,8 +1559,7 @@ describe("terminal websocket server", () => {
     expect(
       messages.some(
         (message) =>
-          message.type === "output" &&
-          message.data === " after repaint settle",
+          message.type === "output" && message.data === " after repaint settle",
       ),
     ).toBe(false);
     expect(tmuxService.capturePane).not.toHaveBeenCalled();
@@ -1605,7 +1608,10 @@ describe("terminal websocket server", () => {
         command: "tmux",
         args: ["new-session", "-A", "-s", "runweave-terminal-1"],
       })),
-      capturePane: vi.fn(async () => ({ data: "plain history", durationMs: 1 })),
+      capturePane: vi.fn(async () => ({
+        data: "plain history",
+        durationMs: 1,
+      })),
     };
 
     const server = http.createServer();

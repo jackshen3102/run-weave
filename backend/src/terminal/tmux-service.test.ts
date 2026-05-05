@@ -122,6 +122,49 @@ describe("TmuxService", () => {
     );
   });
 
+  it("sends literal text and enter directly to the target pane", async () => {
+    const execFileImpl = vi.fn(async () => ({ stdout: "", stderr: "" }));
+    const service = createService(execFileImpl, { TMUX_BINARY: "/usr/bin/tmux" });
+    const target = {
+      sessionName: "runweave-terminal-1",
+      socketPath: "/tmp/runweave-test/tmux.sock",
+    };
+
+    await service.sendInput(target, "codex prompt\r");
+
+    expect(execFileImpl).toHaveBeenNthCalledWith(
+      1,
+      "/usr/bin/tmux",
+      [
+        "-S",
+        "/tmp/runweave-test/tmux.sock",
+        "-f",
+        "/tmp/runweave-test/tmux.conf",
+        "send-keys",
+        "-t",
+        "runweave-terminal-1",
+        "-l",
+        "codex prompt",
+      ],
+      expect.any(Object),
+    );
+    expect(execFileImpl).toHaveBeenNthCalledWith(
+      2,
+      "/usr/bin/tmux",
+      [
+        "-S",
+        "/tmp/runweave-test/tmux.sock",
+        "-f",
+        "/tmp/runweave-test/tmux.conf",
+        "send-keys",
+        "-t",
+        "runweave-terminal-1",
+        "Enter",
+      ],
+      expect.any(Object),
+    );
+  });
+
   it("includes the original launch command when creating a missing tmux session", () => {
     const service = createService(vi.fn(), { TMUX_BINARY: "/usr/bin/tmux" });
     const target = {
