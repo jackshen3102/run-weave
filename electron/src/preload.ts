@@ -37,10 +37,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke(
       "viewer:restart-packaged-backend",
     ) as Promise<PackagedBackendConnectionState>,
+  reloadRuntime: () =>
+    ipcRenderer.invoke(
+      "viewer:reload-runtime",
+    ) as Promise<PackagedBackendConnectionState>,
   openExternal: (url: string) =>
     ipcRenderer.invoke("viewer:open-external", url),
   getRuntimeStats: () =>
-    ipcRenderer.invoke("viewer:get-runtime-stats") as Promise<RuntimeStatsSnapshot>,
+    ipcRenderer.invoke(
+      "viewer:get-runtime-stats",
+    ) as Promise<RuntimeStatsSnapshot>,
   terminalBrowserNavigate: (tabId: string, url: string) =>
     ipcRenderer.invoke("terminal-browser:navigate", tabId, url),
   terminalBrowserListTabs: () =>
@@ -83,15 +89,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ) as Promise<TerminalBrowserDeviceState>,
   terminalBrowserSetBounds: (
     tabId: string,
-    bounds:
-      | {
-          x: number;
-          y: number;
-          width: number;
-          height: number;
-          emulationScale?: number;
-        }
-      | null,
+    bounds: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      emulationScale?: number;
+    } | null,
   ) => ipcRenderer.invoke("terminal-browser:set-bounds", tabId, bounds),
   terminalBrowserOpenDevTools: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:open-devtools", tabId),

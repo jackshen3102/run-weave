@@ -6,6 +6,8 @@ export interface ConnectionConfig {
   available?: boolean;
   statusMessage?: string | null;
   canReconnect?: boolean;
+  runtimeSource?: "external" | "bundled" | null;
+  runtimeReleaseId?: string | null;
   isSystem?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;

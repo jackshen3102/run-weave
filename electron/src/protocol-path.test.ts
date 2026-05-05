@@ -22,5 +22,17 @@ test("resolves asset files without SPA fallback", () => {
   );
 
   assert.equal(resolved.status, "ok");
-  assert.equal(resolved.filePath, path.join(rendererDist, "assets", "index.js"));
+  assert.equal(
+    resolved.filePath,
+    path.join(rendererDist, "assets", "index.js"),
+  );
+});
+
+test("rejects paths that escape the renderer dist", () => {
+  const resolved = resolveProtocolFilePath(
+    "browser-viewer://app/%2e%2e/package.json",
+    rendererDist,
+  );
+
+  assert.equal(resolved.status, "forbidden");
 });

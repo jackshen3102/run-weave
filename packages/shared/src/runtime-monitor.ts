@@ -28,4 +28,6 @@ export interface PackagedBackendConnectionState {
   backendUrl: string;
   statusMessage: string | null;
   canReconnect: boolean;
+  runtimeSource: "external" | "bundled" | null;
+  runtimeReleaseId: string | null;
 }

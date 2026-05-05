@@ -66,6 +66,7 @@ declare global {
         listener: (state: PackagedBackendConnectionState) => void,
       ) => (() => void) | void;
       restartPackagedBackend?: () => Promise<PackagedBackendConnectionState>;
+      reloadRuntime?: () => Promise<PackagedBackendConnectionState>;
       openExternal?: (url: string) => Promise<void>;
       getRuntimeStats?: () => Promise<RuntimeStatsSnapshot>;
       beep?: () => void;

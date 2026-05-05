@@ -23,6 +23,7 @@ import { createTerminalRouter } from "./routes/terminal";
 import { createTestRouter } from "./routes/test";
 import { createCorsMiddleware } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
+import { buildHealthPayload } from "./server/health";
 import { SessionManager } from "./session/manager";
 import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/clipboard-image";
 import { LowDbSessionStore } from "./session/lowdb-store";
@@ -219,7 +220,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
   );
 
   app.get("/health", (_req, res) => {
-    res.json({ status: "ok" });
+    res.json(buildHealthPayload(process.env));
   });
 
   // Internal endpoint for Electron to propagate CDP proxy endpoint in dev mode.

@@ -3,6 +3,7 @@ import type { MenuItemConstructorOptions } from "electron";
 export function buildApplicationMenuTemplate(params: {
   platform: NodeJS.Platform;
   onNewWindow: () => void;
+  onReloadLocalRuntime?: () => void;
 }): MenuItemConstructorOptions[] {
   const template: MenuItemConstructorOptions[] = [];
 
@@ -20,6 +21,17 @@ export function buildApplicationMenuTemplate(params: {
           params.onNewWindow();
         },
       },
+      ...(params.onReloadLocalRuntime
+        ? [
+            { type: "separator" as const },
+            {
+              label: "Reload Local Runtime",
+              click: () => {
+                void params.onReloadLocalRuntime?.();
+              },
+            },
+          ]
+        : []),
       { type: "separator" },
       { role: params.platform === "darwin" ? "close" : "quit" },
     ],

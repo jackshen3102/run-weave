@@ -25,6 +25,8 @@ export function buildLocalDevelopmentConnection(
     available: state.available,
     statusMessage: state.statusMessage,
     canReconnect: state.canReconnect,
+    runtimeSource: state.runtimeSource,
+    runtimeReleaseId: state.runtimeReleaseId,
     isSystem: true,
     canEdit: false,
     canDelete: false,

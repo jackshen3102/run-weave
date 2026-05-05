@@ -30,6 +30,11 @@ import {
   startPackagedBackend,
   type PackagedBackendRuntime,
 } from "./backend-runtime.js";
+import {
+  resolveActiveRuntimeRelease,
+  resolveRuntimeRoot,
+  type RuntimeRelease,
+} from "./runtime-release.js";
 import { createTray } from "./tray.js";
 import { initAutoUpdater, checkForUpdates } from "./updater.js";
 import { getIsQuitting, setIsQuitting } from "./app-state.js";
@@ -59,7 +64,7 @@ process.env.BROWSER_VIEWER_MANAGES_PACKAGED_BACKEND = isDev ? "false" : "true";
 const DEV_SERVER_URL =
   process.env.BROWSER_VIEWER_DEV_URL ?? "http://localhost:5173";
 
-const RENDERER_DIST = path.join(__dirname, "../../frontend/dist");
+const DEV_RENDERER_DIST = path.join(__dirname, "../../frontend/dist");
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const DEV_DOCK_ICON_PATH = path.join(
   __dirname,
@@ -81,9 +86,9 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-function registerCustomProtocol() {
+function registerCustomProtocol(getFrontendDistDir: () => string) {
   protocol.handle(CUSTOM_PROTOCOL, (request) => {
-    const resolved = resolveProtocolFilePath(request.url, RENDERER_DIST);
+    const resolved = resolveProtocolFilePath(request.url, getFrontendDistDir());
 
     if (resolved.status === "forbidden") {
       return new Response("Forbidden", { status: 403 });
@@ -246,22 +251,53 @@ app.commandLine.appendSwitch("ignore-certificate-errors");
 let packagedBackendRuntime: PackagedBackendRuntime | null = null;
 let cdpProxyRuntime: CdpProxyRuntime | null = null;
 let mainWindow: BrowserWindow | null = null;
+let activeRuntimeRelease: RuntimeRelease | null = null;
 let packagedBackendState: PackagedBackendConnectionState = {
   kind: "packaged-local",
   available: false,
   backendUrl: process.env.BROWSER_VIEWER_BACKEND_URL ?? "",
   statusMessage: null,
   canReconnect: true,
+  runtimeSource: null,
+  runtimeReleaseId: null,
 };
-let packagedBackendRestartPromise:
-  | Promise<PackagedBackendConnectionState>
-  | null = null;
+let packagedBackendRestartPromise: Promise<PackagedBackendConnectionState> | null =
+  null;
 const expectedPackagedBackendExits = new WeakSet<object>();
+
+function getPackagedRuntimeRoot(): string | null {
+  if (isDev) {
+    return null;
+  }
+
+  return resolveRuntimeRoot(app.getPath("userData"));
+}
+
+function refreshActiveRuntimeRelease(): RuntimeRelease {
+  activeRuntimeRelease = resolveActiveRuntimeRelease({
+    runtimeRoot: getPackagedRuntimeRoot(),
+    resourcesPath: process.resourcesPath,
+    shellVersion: app.getVersion(),
+  });
+  return activeRuntimeRelease;
+}
+
+function getActiveFrontendDistDir(): string {
+  if (isDev) {
+    return DEV_RENDERER_DIST;
+  }
+
+  return (activeRuntimeRelease ?? refreshActiveRuntimeRelease())
+    .frontendDistDir;
+}
 
 function broadcastPackagedBackendState(): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
-      window.webContents.send("viewer:packaged-backend-state", packagedBackendState);
+      window.webContents.send(
+        "viewer:packaged-backend-state",
+        packagedBackendState,
+      );
     }
   }
 }
@@ -275,7 +311,9 @@ function setPackagedBackendState(
   return packagedBackendState;
 }
 
-function attachPackagedBackendExitHandler(runtime: PackagedBackendRuntime): void {
+function attachPackagedBackendExitHandler(
+  runtime: PackagedBackendRuntime,
+): void {
   runtime.child.once("exit", (code, signal) => {
     const expectedExit = expectedPackagedBackendExits.has(runtime.child);
     expectedPackagedBackendExits.delete(runtime.child);
@@ -321,12 +359,20 @@ async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionS
   try {
     const runtime = await startPackagedBackend({
       baseEnv: process.env,
+      runtimeRoot: getPackagedRuntimeRoot(),
+      resourcesPath: process.resourcesPath,
+      shellVersion: app.getVersion(),
     });
 
     packagedBackendRuntime = runtime;
+    activeRuntimeRelease = runtime.runtimeRelease;
     attachPackagedBackendExitHandler(runtime);
     return setPackagedBackendState(
-      createAvailablePackagedBackendState(runtime.backendUrl),
+      createAvailablePackagedBackendState(runtime.backendUrl, {
+        runtimeSource: runtime.runtimeRelease.source,
+        runtimeReleaseId: runtime.runtimeRelease.releaseId,
+        statusMessage: runtime.startupWarning,
+      }),
     );
   } catch (error) {
     console.error("[electron] packaged backend unavailable", error);
@@ -356,6 +402,37 @@ async function restartPackagedBackendRuntime(): Promise<PackagedBackendConnectio
   }
 }
 
+async function reloadLocalRuntime(): Promise<PackagedBackendConnectionState> {
+  if (isDev) {
+    return packagedBackendState;
+  }
+
+  const state = await restartPackagedBackendRuntime();
+  if (!state.available) {
+    dialog.showErrorBox(
+      "Reload Local Runtime Failed",
+      state.statusMessage ?? "Local runtime reload failed.",
+    );
+    return state;
+  }
+
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.reloadIgnoringCache();
+    }
+  }
+
+  if (state.statusMessage) {
+    dialog.showMessageBox({
+      type: "warning",
+      title: "Local Runtime Rolled Back",
+      message: state.statusMessage,
+    });
+  }
+
+  return state;
+}
+
 function registerPackagedBackendHandlers(): void {
   ipcMain.handle(
     "viewer:get-packaged-backend-state",
@@ -372,6 +449,13 @@ function registerPackagedBackendHandlers(): void {
       }
 
       return await restartPackagedBackendRuntime();
+    },
+  );
+
+  ipcMain.handle(
+    "viewer:reload-runtime",
+    async (): Promise<PackagedBackendConnectionState> => {
+      return await reloadLocalRuntime();
     },
   );
 }
@@ -453,20 +537,27 @@ app.whenReady().then(async () => {
             body: JSON.stringify({ endpoint: cdpProxyRuntime.endpoint }),
           });
           if (!resp.ok) {
-            console.warn("[electron] failed to propagate CDP endpoint to backend", {
-              status: resp.status,
-            });
+            console.warn(
+              "[electron] failed to propagate CDP endpoint to backend",
+              {
+                status: resp.status,
+              },
+            );
           }
         } catch (error) {
-          console.warn("[electron] failed to propagate CDP endpoint to backend", {
-            error: error instanceof Error ? error.message : String(error),
-          });
+          console.warn(
+            "[electron] failed to propagate CDP endpoint to backend",
+            {
+              error: error instanceof Error ? error.message : String(error),
+            },
+          );
         }
       }
     }
 
     if (!isDev) {
-      registerCustomProtocol();
+      refreshActiveRuntimeRelease();
+      registerCustomProtocol(getActiveFrontendDistDir);
       await startPackagedBackendRuntime();
     }
 
@@ -479,13 +570,14 @@ app.whenReady().then(async () => {
         buildApplicationMenuTemplate({
           platform: process.platform,
           onNewWindow: openNewWindow,
+          onReloadLocalRuntime: reloadLocalRuntime,
         }),
       ),
     );
 
     mainWindow = createWindow({ hideOnClose: true });
 
-    createTray(mainWindow);
+    createTray(mainWindow, { onReloadLocalRuntime: reloadLocalRuntime });
 
     if (
       shouldEnableAutoUpdates({
@@ -500,7 +592,7 @@ app.whenReady().then(async () => {
     app.on("activate", () => {
       if (!mainWindow || mainWindow.isDestroyed()) {
         mainWindow = createWindow({ hideOnClose: true });
-        createTray(mainWindow);
+        createTray(mainWindow, { onReloadLocalRuntime: reloadLocalRuntime });
         return;
       }
       mainWindow.show();

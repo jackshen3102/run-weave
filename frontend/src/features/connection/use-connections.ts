@@ -25,6 +25,8 @@ function getInitialPackagedBackendState(): PackagedBackendConnectionState | null
     backendUrl: electronBackendUrl,
     statusMessage: electronBackendUrl ? null : "内置本地后端不可用",
     canReconnect: true,
+    runtimeSource: null,
+    runtimeReleaseId: null,
   };
 }
 

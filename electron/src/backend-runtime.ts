@@ -1,6 +1,14 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
+import {
+  recordLastKnownGoodRuntimeRelease,
+  resolveActiveRuntimeRelease,
+  resolveBundledRuntimeRelease,
+  resolveCurrentRuntimeReleaseId,
+  resolveLastKnownGoodRuntimeRelease,
+  type RuntimeRelease,
+} from "./runtime-release.js";
 
 const DEFAULT_BACKEND_PORT = 5001;
 const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 30_000;
@@ -27,27 +35,76 @@ export interface PackagedBackendPaths {
   backendEntry: string;
   frontendDistDir: string;
   nodePtyDir: string;
+  releaseId: string;
+  source: "external" | "bundled";
 }
 
 export interface PackagedBackendRuntime {
   backendUrl: string;
   stop(): Promise<void>;
   child: ChildProcess;
+  runtimeRelease: RuntimeRelease;
+  startupWarning: string | null;
+}
+
+export interface PackagedBackendRuntimeCandidatePlan {
+  activeRelease: RuntimeRelease;
+  candidates: RuntimeRelease[];
+  currentReleaseId: string | null;
+  currentReleaseInvalid: boolean;
 }
 
 export function resolvePackagedBackendPaths(
   resourcesPath: string = process.resourcesPath,
 ): PackagedBackendPaths {
+  const release = resolveBundledRuntimeRelease(resourcesPath);
   return {
-    backendEntry: path.join(
-      resourcesPath,
-      "app.asar",
-      "dist",
-      "backend",
-      "index.cjs",
-    ),
-    frontendDistDir: path.join(resourcesPath, "frontend", "dist"),
-    nodePtyDir: path.join(resourcesPath, "backend", "node_modules", "node-pty"),
+    backendEntry: release.backendEntry,
+    frontendDistDir: release.frontendDistDir,
+    nodePtyDir: release.nodePtyDir,
+    releaseId: release.releaseId,
+    source: release.source,
+  };
+}
+
+export function resolvePackagedBackendRuntimeCandidates(options: {
+  runtimeRoot: string | null;
+  resourcesPath: string;
+  shellVersion?: string;
+}): PackagedBackendRuntimeCandidatePlan {
+  const activeRelease = resolveActiveRuntimeRelease({
+    runtimeRoot: options.runtimeRoot,
+    resourcesPath: options.resourcesPath,
+    shellVersion: options.shellVersion,
+  });
+  const bundledRelease = resolveBundledRuntimeRelease(options.resourcesPath);
+  const candidates: RuntimeRelease[] = [activeRelease];
+  const lastKnownGoodRelease = resolveLastKnownGoodRuntimeRelease({
+    runtimeRoot: options.runtimeRoot,
+    resourcesPath: options.resourcesPath,
+    shellVersion: options.shellVersion,
+  });
+  const currentReleaseId = resolveCurrentRuntimeReleaseId(options.runtimeRoot);
+  const currentReleaseInvalid =
+    currentReleaseId !== null && activeRelease.source === "bundled";
+
+  if (currentReleaseInvalid && lastKnownGoodRelease) {
+    candidates.unshift(lastKnownGoodRelease);
+  } else if (
+    lastKnownGoodRelease &&
+    lastKnownGoodRelease.releaseId !== activeRelease.releaseId
+  ) {
+    candidates.push(lastKnownGoodRelease);
+  }
+  if (activeRelease.source !== "bundled") {
+    candidates.push(bundledRelease);
+  }
+
+  return {
+    activeRelease,
+    candidates,
+    currentReleaseId,
+    currentReleaseInvalid,
   };
 }
 
@@ -76,6 +133,7 @@ export function buildPackagedBackendEnv(options: {
     PORT: String(options.backendPort),
     PORT_STRICT: "true",
     FRONTEND_DIST_DIR: options.backendPaths.frontendDistDir,
+    RUNWEAVE_RUNTIME_RELEASE_ID: options.backendPaths.releaseId,
     BROWSER_VIEWER_NODE_PTY_DIR: options.backendPaths.nodePtyDir,
   };
 }
@@ -205,21 +263,66 @@ async function stopChildProcess(child: ChildProcess): Promise<void> {
 export async function startPackagedBackend(
   options: {
     baseEnv?: NodeJS.ProcessEnv;
+    resourcesPath?: string;
+    runtimeRoot?: string | null;
+    shellVersion?: string;
   } = {},
 ): Promise<PackagedBackendRuntime> {
   const baseEnv = options.baseEnv ?? process.env;
+  const resourcesPath = options.resourcesPath ?? process.resourcesPath;
   const mergedEnv = buildPackagedBackendEnv({
     baseEnv,
     backendPort: 0,
-    backendPaths: resolvePackagedBackendPaths(),
+    backendPaths: resolvePackagedBackendPaths(resourcesPath),
   });
   readRequiredAuthEnv(mergedEnv);
 
-  const backendPaths = resolvePackagedBackendPaths();
+  const candidatePlan = resolvePackagedBackendRuntimeCandidates({
+    runtimeRoot: options.runtimeRoot ?? null,
+    resourcesPath,
+    shellVersion: options.shellVersion,
+  });
+
+  const failures: string[] = [];
+
+  for (const release of candidatePlan.candidates) {
+    try {
+      const runtime = await startPackagedBackendForRelease({
+        baseEnv: mergedEnv,
+        release,
+      });
+      runtime.startupWarning =
+        failures.length > 0
+          ? `Runtime ${candidatePlan.currentReleaseId ?? candidatePlan.activeRelease.releaseId} 启动失败，已回滚到 ${release.releaseId}: ${failures[0]}`
+          : candidatePlan.currentReleaseInvalid &&
+              candidatePlan.currentReleaseId
+            ? `Runtime ${candidatePlan.currentReleaseId} 无效，已回滚到 ${release.releaseId}`
+            : null;
+      return runtime;
+    } catch (error) {
+      failures.push(`${release.releaseId}: ${String(error)}`);
+    }
+  }
+
+  throw new Error(failures.join("; "));
+}
+
+async function startPackagedBackendForRelease(options: {
+  baseEnv: NodeJS.ProcessEnv;
+  release: RuntimeRelease;
+}): Promise<PackagedBackendRuntime> {
+  const release = options.release;
+  const backendPaths: PackagedBackendPaths = {
+    backendEntry: release.backendEntry,
+    frontendDistDir: release.frontendDistDir,
+    nodePtyDir: release.nodePtyDir,
+    releaseId: release.releaseId,
+    source: release.source,
+  };
   const backendPort = await findAvailablePort(DEFAULT_BACKEND_PORT);
   const backendUrl = `http://127.0.0.1:${backendPort}`;
   const backendEnv = buildPackagedBackendEnv({
-    baseEnv: mergedEnv,
+    baseEnv: options.baseEnv,
     backendPort,
     backendPaths,
   });
@@ -243,9 +346,13 @@ export async function startPackagedBackend(
     throw error;
   }
 
+  recordLastKnownGoodRuntimeRelease(release);
+
   return {
     backendUrl,
     child,
+    runtimeRelease: release,
+    startupWarning: null,
     stop: async () => {
       await stopChildProcess(child);
     },
