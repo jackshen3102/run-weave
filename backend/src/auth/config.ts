@@ -10,7 +10,11 @@ interface AuthConfig {
   secureCookies: boolean;
 }
 
-function parsePositiveMs(rawTtl: string | undefined, fallbackMs: number, envName: string): number {
+function parsePositiveMs(
+  rawTtl: string | undefined,
+  fallbackMs: number,
+  envName: string,
+): number {
   if (!rawTtl) {
     return fallbackMs;
   }
@@ -36,7 +40,7 @@ export function loadAuthConfig(): AuthConfig {
     accessTokenTtlMs: parsePositiveMs(
       process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS ??
         process.env.AUTH_TOKEN_TTL_SECONDS,
-      15 * 60 * 1000,
+      24 * 60 * 60 * 1000,
       process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS != null
         ? "AUTH_ACCESS_TOKEN_TTL_SECONDS"
         : "AUTH_TOKEN_TTL_SECONDS",

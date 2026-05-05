@@ -20,7 +20,7 @@ describe("loadAuthConfig", () => {
     expect(config.username).toBe("e2e-admin");
     expect(config.password).toBe("e2e-secret");
     expect(config.jwtSecret).toBe("jwt-secret");
-    expect(config.accessTokenTtlMs).toBe(15 * 60 * 1000);
+    expect(config.accessTokenTtlMs).toBe(24 * 60 * 60 * 1000);
     expect(config.refreshTokenTtlMs).toBe(30 * 24 * 60 * 60 * 1000);
     expect(config.refreshCookieName).toBe("viewer_refresh");
     expect(config.secureCookies).toBe(true);

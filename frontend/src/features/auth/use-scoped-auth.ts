@@ -17,6 +17,8 @@ interface UseScopedAuthParams {
 
 type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 const ACCESS_TOKEN_REFRESH_LEAD_MS = 60 * 1000;
+const LEGACY_ACCESS_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const LEGACY_ACCESS_TOKEN_TTL_SECONDS = LEGACY_ACCESS_TOKEN_TTL_MS / 1000;
 
 interface AuthSessionState {
   accessToken: string;
@@ -35,7 +37,7 @@ function loadWebSession(storageKey: string): AuthSessionState | null {
   if (!raw.trim().startsWith("{")) {
     return {
       accessToken: raw,
-      accessExpiresAt: Date.now() + 15 * 60 * 1000,
+      accessExpiresAt: Date.now() + LEGACY_ACCESS_TOKEN_TTL_MS,
       sessionId: "legacy-session",
     };
   }
@@ -53,7 +55,9 @@ function loadWebSession(storageKey: string): AuthSessionState | null {
       accessToken: parsed.accessToken,
       accessExpiresAt: parsed.accessExpiresAt,
       refreshToken:
-        typeof parsed.refreshToken === "string" ? parsed.refreshToken : undefined,
+        typeof parsed.refreshToken === "string"
+          ? parsed.refreshToken
+          : undefined,
       sessionId: parsed.sessionId,
     };
   } catch {
@@ -109,7 +113,9 @@ function loadElectronSession(
   const record = getConnectionAuth(connectionId);
   if (
     !(record?.accessToken ?? record?.token) ||
-    typeof (record.accessExpiresAt ?? Date.now() + 15 * 60 * 1000) !== "number" ||
+    typeof (
+      record.accessExpiresAt ?? Date.now() + LEGACY_ACCESS_TOKEN_TTL_MS
+    ) !== "number" ||
     !(record.sessionId ?? "legacy-session")
   ) {
     return null;
@@ -118,7 +124,7 @@ function loadElectronSession(
   return {
     accessToken: record.accessToken ?? record.token ?? "",
     accessExpiresAt:
-      record.accessExpiresAt ?? Date.now() + 15 * 60 * 1000,
+      record.accessExpiresAt ?? Date.now() + LEGACY_ACCESS_TOKEN_TTL_MS,
     refreshToken: record.refreshToken,
     sessionId: record.sessionId ?? "legacy-session",
   };
@@ -224,7 +230,7 @@ export function useScopedAuth({
     (nextToken: string) => {
       setSession({
         accessToken: nextToken,
-        expiresIn: 15 * 60,
+        expiresIn: LEGACY_ACCESS_TOKEN_TTL_SECONDS,
         sessionId: effectiveSession?.sessionId ?? "legacy-session",
         refreshToken: effectiveSession?.refreshToken,
       });
@@ -321,7 +327,10 @@ export function useScopedAuth({
           }
         }
 
-        if (isElectron && !(error instanceof HttpError && error.status === 401)) {
+        if (
+          isElectron &&
+          !(error instanceof HttpError && error.status === 401)
+        ) {
           setSessionState(nextSession);
           setSessionScopeKey(authScopeKey);
           setStatus("authenticated");
@@ -395,7 +404,9 @@ export function useScopedAuth({
 
     let cancelled = false;
     const refreshDelayMs = Math.max(
-      effectiveSession.accessExpiresAt - Date.now() - ACCESS_TOKEN_REFRESH_LEAD_MS,
+      effectiveSession.accessExpiresAt -
+        Date.now() -
+        ACCESS_TOKEN_REFRESH_LEAD_MS,
       0,
     );
     const timer = window.setTimeout(() => {
@@ -439,7 +450,10 @@ export function useScopedAuth({
             }
           }
 
-          if (isElectron && !(error instanceof HttpError && error.status === 401)) {
+          if (
+            isElectron &&
+            !(error instanceof HttpError && error.status === 401)
+          ) {
             return;
           }
 
