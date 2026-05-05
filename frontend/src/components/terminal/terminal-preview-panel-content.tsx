@@ -12,6 +12,8 @@ import {
   ChevronRight,
   Folder,
   PanelLeftOpen,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import type {
   TerminalPreviewChangeFile,
@@ -33,6 +35,12 @@ import {
   getTerminalPreviewMonacoLanguage,
 } from "../../features/terminal/preview-file-types";
 import { Button } from "../ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "../ui/context-menu";
 import { TerminalOpenFileCommand } from "./terminal-open-file-command";
 
 const TerminalMonacoViewer = lazy(() =>
@@ -100,6 +108,8 @@ interface TerminalPreviewPanelContentProps {
   onEditProject: () => void;
   onQueryChange: (nextQuery: string) => void;
   onOpenFilePath: (filePath: string) => void;
+  onRequestRenameFile: (filePath: string) => void;
+  onRequestDeleteFile: (filePath: string) => void;
   onSelectChange: (filePath: string, kind: TerminalPreviewChangeKind) => void;
   onReloadDiff: (filePath: string, kind: TerminalPreviewChangeKind) => void;
   onMarkdownScrollRatioChange: (ratio: number) => void;
@@ -159,7 +169,9 @@ function statusBadge(status: TerminalPreviewChangeFile["status"]): string {
   }
 }
 
-function compactDirectory(node: ChangeTreeDirectoryNode): ChangeTreeDirectoryNode {
+function compactDirectory(
+  node: ChangeTreeDirectoryNode,
+): ChangeTreeDirectoryNode {
   let current = node;
   while (
     current.children.length === 1 &&
@@ -245,7 +257,9 @@ function buildChangeTree(files: TerminalPreviewChangeFile[]): ChangeTreeNode[] {
     });
   }
 
-  return sortChangeTreeNodes([...root.children.values()].map(convertChangeTreeNode));
+  return sortChangeTreeNodes(
+    [...root.children.values()].map(convertChangeTreeNode),
+  );
 }
 
 export function TerminalPreviewPanelContent({
@@ -289,6 +303,8 @@ export function TerminalPreviewPanelContent({
   onEditProject,
   onQueryChange,
   onOpenFilePath,
+  onRequestRenameFile,
+  onRequestDeleteFile,
   onSelectChange,
   onReloadDiff,
   onMarkdownScrollRatioChange,
@@ -344,38 +360,66 @@ export function TerminalPreviewPanelContent({
               <Folder className="h-3.5 w-3.5 shrink-0 text-slate-500" />
               <span className="min-w-0 flex-1 truncate">{node.name}</span>
             </button>
-            {collapsed ? null : renderChangeTreeNodes(kind, node.children, depth + 1)}
+            {collapsed
+              ? null
+              : renderChangeTreeNodes(kind, node.children, depth + 1)}
           </div>
         );
       }
 
       const selected =
         selectedChangePath === node.file.path && selectedChangeKind === kind;
+      const selectChangeFile = () => {
+        if (selected) {
+          onReloadDiff(node.file.path, kind);
+          return;
+        }
+        onSelectChange(node.file.path, kind);
+      };
       return (
-        <button
-          type="button"
-          key={`${kind}:file:${node.file.path}`}
-          className={[
-            "flex h-7 w-full items-center gap-1 rounded-md pr-2 text-left text-xs",
-            selected
-              ? "bg-slate-800 text-slate-100"
-              : "text-slate-300 hover:bg-slate-900",
-          ].join(" ")}
-          style={{ paddingLeft: 8 + depth * 12 }}
-          title={node.file.path}
-          onClick={() => {
-            if (selected) {
-              onReloadDiff(node.file.path, kind);
-              return;
-            }
-            onSelectChange(node.file.path, kind);
-          }}
-        >
-          <span className="w-3.5 shrink-0 text-center text-[9px] text-slate-500">
-            {statusBadge(node.file.status)}
-          </span>
-          <span className="min-w-0 flex-1 truncate">{node.name}</span>
-        </button>
+        <ContextMenu key={`${kind}:file:${node.file.path}`}>
+          <ContextMenuTrigger asChild>
+            <div
+              role="button"
+              tabIndex={0}
+              className={[
+                "flex h-7 w-full items-center gap-1 rounded-md pr-2 text-left text-xs",
+                selected
+                  ? "bg-slate-800 text-slate-100"
+                  : "text-slate-300 hover:bg-slate-900",
+              ].join(" ")}
+              style={{ paddingLeft: 8 + depth * 12 }}
+              title={node.file.path}
+              onClick={selectChangeFile}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  selectChangeFile();
+                }
+              }}
+            >
+              <span className="w-3.5 shrink-0 text-center text-[9px] text-slate-500">
+                {statusBadge(node.file.status)}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{node.name}</span>
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent className="w-40">
+            <ContextMenuItem
+              onSelect={() => onRequestRenameFile(node.file.path)}
+            >
+              <Pencil className="h-4 w-4" />
+              Rename
+            </ContextMenuItem>
+            <ContextMenuItem
+              onSelect={() => onRequestDeleteFile(node.file.path)}
+              className="text-rose-400 focus:text-rose-400"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
       );
     });
 
@@ -419,7 +463,9 @@ export function TerminalPreviewPanelContent({
   }
 
   if (mode === "file") {
-    const monacoLanguage = getTerminalPreviewMonacoLanguage(filePreview?.language);
+    const monacoLanguage = getTerminalPreviewMonacoLanguage(
+      filePreview?.language,
+    );
     let fileContent: ReactNode;
 
     if (fileKind === "image" && selectedFilePath && projectId) {
@@ -544,6 +590,8 @@ export function TerminalPreviewPanelContent({
             className="flex h-full min-h-0 flex-col bg-slate-950"
             onQueryChange={onQueryChange}
             onOpenPath={onOpenFilePath}
+            onRequestRenameFile={onRequestRenameFile}
+            onRequestDeleteFile={onRequestDeleteFile}
           />
         </aside>
         <div className="relative min-h-0">
@@ -588,7 +636,9 @@ export function TerminalPreviewPanelContent({
     const changeDiffLanguageHint = selectedChangePath
       ? extensionToLanguageHint(selectedChangePath)
       : null;
-    const changeDiffMonacoLanguage = getTerminalPreviewMonacoLanguage(changeDiffLanguageHint);
+    const changeDiffMonacoLanguage = getTerminalPreviewMonacoLanguage(
+      changeDiffLanguageHint,
+    );
     const isChangeImageDeleted =
       changeDiffFileKind === "image" && fileDiff?.status === "deleted";
 
@@ -668,7 +718,9 @@ export function TerminalPreviewPanelContent({
           <button
             type="button"
             className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-md bg-slate-950/90 text-slate-500 opacity-0 transition-opacity hover:bg-slate-900 hover:text-slate-200 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none group-hover:opacity-100"
-            aria-label={collapsedChangeTree ? "Show changes tree" : "Hide changes tree"}
+            aria-label={
+              collapsedChangeTree ? "Show changes tree" : "Hide changes tree"
+            }
             onClick={() => setCollapsedChangeTree((current) => !current)}
           >
             {collapsedChangeTree ? (
@@ -687,9 +739,13 @@ export function TerminalPreviewPanelContent({
               <span className="[writing-mode:vertical-rl]">Changes</span>
             </button>
           ) : changesLoading && !changes ? (
-            <div className="px-2 py-3 text-xs text-slate-400">Loading changes...</div>
+            <div className="px-2 py-3 text-xs text-slate-400">
+              Loading changes...
+            </div>
           ) : changesError ? (
-            <div className="px-2 py-3 text-xs text-rose-300">{changesError}</div>
+            <div className="px-2 py-3 text-xs text-rose-300">
+              {changesError}
+            </div>
           ) : noChanges ? (
             <div className="flex flex-col gap-2 px-2 py-3 text-xs text-slate-400">
               <span>No changes</span>
@@ -728,7 +784,12 @@ export function TerminalPreviewPanelContent({
   return renderEmpty(
     "No preview for this project",
     <div className="flex gap-2">
-      <Button type="button" size="sm" className="rounded-lg" onClick={onOpenModeFile}>
+      <Button
+        type="button"
+        size="sm"
+        className="rounded-lg"
+        onClick={onOpenModeFile}
+      >
         Open file...
       </Button>
       <Button

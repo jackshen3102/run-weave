@@ -82,6 +82,24 @@ export interface TerminalPreviewSaveFileResponse extends TerminalPreviewFileResp
   readonly: false;
 }
 
+export interface TerminalPreviewDeleteFileRequest {
+  path: string;
+  expectedMtimeMs?: number;
+}
+
+export interface TerminalPreviewDeleteFileResponse {
+  kind: "file-delete";
+  projectId: string;
+  path: string;
+  absolutePath: string;
+}
+
+export interface TerminalPreviewRenameFileRequest {
+  path: string;
+  nextPath: string;
+  expectedMtimeMs?: number;
+}
+
 export interface TerminalPreviewChangeFile {
   path: string;
   status: TerminalPreviewGitStatus;
@@ -103,6 +121,7 @@ export interface TerminalPreviewFileDiffResponse {
   repoRoot: string;
   changeKind: TerminalPreviewChangeKind;
   path: string;
+  absolutePath: string;
   status: TerminalPreviewGitStatus;
   oldContent: string;
   newContent: string;

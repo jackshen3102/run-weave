@@ -8,8 +8,11 @@ import type {
   TerminalMobileOverviewResponse,
   TerminalCompletionEventListResponse,
   TerminalPreviewChangeKind,
+  TerminalPreviewDeleteFileRequest,
+  TerminalPreviewDeleteFileResponse,
   TerminalPreviewFileDiffResponse,
   TerminalPreviewFileResponse,
+  TerminalPreviewRenameFileRequest,
   TerminalPreviewSaveFileRequest,
   TerminalPreviewSaveFileResponse,
   TerminalPreviewFileSearchResponse,
@@ -297,6 +300,46 @@ export async function saveTerminalProjectPreviewFile(
     `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file`,
     {
       method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function deleteTerminalProjectPreviewFile(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  payload: TerminalPreviewDeleteFileRequest,
+): Promise<TerminalPreviewDeleteFileResponse> {
+  return requestJson<TerminalPreviewDeleteFileResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function renameTerminalProjectPreviewFile(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  payload: TerminalPreviewRenameFileRequest,
+): Promise<TerminalPreviewFileResponse> {
+  return requestJson<TerminalPreviewFileResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file/path`,
+    {
+      method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,

@@ -7,6 +7,7 @@ import {
   readFile,
   realpath,
   rm,
+  stat,
   symlink,
   writeFile,
   mkdir,
@@ -1338,6 +1339,171 @@ describe("terminal routes", () => {
     );
   });
 
+  it("renames and deletes project preview files through the project route", async () => {
+    const projectPath = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-preview-"),
+    );
+    tempDirs.push(projectPath);
+    await mkdir(path.join(projectPath, "docs"));
+    const filePath = path.join(projectPath, "README.md");
+    await writeFile(filePath, "# Project Preview\n");
+    const before = await stat(filePath);
+    const state = {
+      current: null,
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: projectPath,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const renameResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file/path`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "README.md",
+          nextPath: "docs/renamed.md",
+          expectedMtimeMs: before.mtimeMs,
+        }),
+      },
+    );
+
+    expect(renameResponse.status).toBe(200);
+    await expect(renameResponse.json()).resolves.toEqual(
+      expect.objectContaining({
+        kind: "file",
+        projectId: "project-default",
+        path: "docs/renamed.md",
+        language: "markdown",
+        content: "# Project Preview\n",
+        readonly: false,
+      }),
+    );
+    await expect(readFile(filePath, "utf8")).rejects.toThrow();
+    const renamedPath = path.join(projectPath, "docs/renamed.md");
+    const realRenamedPath = await realpath(renamedPath);
+    const renamedStats = await stat(renamedPath);
+
+    const deleteResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "docs/renamed.md",
+          expectedMtimeMs: renamedStats.mtimeMs,
+        }),
+      },
+    );
+
+    expect(deleteResponse.status).toBe(200);
+    await expect(deleteResponse.json()).resolves.toEqual({
+      kind: "file-delete",
+      projectId: "project-default",
+      path: "docs/renamed.md",
+      absolutePath: realRenamedPath,
+    });
+    await expect(readFile(renamedPath, "utf8")).rejects.toThrow();
+  });
+
+  it("returns preview mutate validation errors from the project route", async () => {
+    const projectPath = await mkdtemp(
+      path.join(os.tmpdir(), "terminal-preview-"),
+    );
+    tempDirs.push(projectPath);
+    await mkdir(path.join(projectPath, "src"));
+    await writeFile(path.join(projectPath, "README.md"), "# Project Preview\n");
+    await writeFile(path.join(projectPath, "existing.md"), "exists\n");
+    const outsideFile = path.join(
+      os.tmpdir(),
+      `terminal-preview-${Date.now()}.md`,
+    );
+    const state = {
+      current: null,
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: projectPath,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const deleteDirectoryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "src" }),
+      },
+    );
+    const deleteOutsideResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: outsideFile }),
+      },
+    );
+    const renameExistingResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file/path`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "README.md",
+          nextPath: "existing.md",
+        }),
+      },
+    );
+    const renameMissingParentResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file/path`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "README.md",
+          nextPath: "missing/renamed.md",
+        }),
+      },
+    );
+    const before = await stat(path.join(projectPath, "README.md"));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await writeFile(path.join(projectPath, "README.md"), "external\n");
+    const renameConflictResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/project/project-default/preview/file/path`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "README.md",
+          nextPath: "renamed.md",
+          expectedMtimeMs: before.mtimeMs,
+        }),
+      },
+    );
+
+    expect(deleteDirectoryResponse.status).toBe(400);
+    expect(deleteOutsideResponse.status).toBe(403);
+    expect(renameExistingResponse.status).toBe(409);
+    expect(renameMissingParentResponse.status).toBe(400);
+    expect(renameConflictResponse.status).toBe(409);
+  });
+
   it("serves project preview image assets with no-store caching", async () => {
     const projectPath = await mkdtemp(
       path.join(os.tmpdir(), "terminal-preview-"),
@@ -1643,11 +1809,13 @@ describe("terminal routes", () => {
     );
 
     expect(diffResponse.status).toBe(200);
+    const realRepo = await realpath(repo);
     await expect(diffResponse.json()).resolves.toEqual(
       expect.objectContaining({
         kind: "file-diff",
         changeKind: "staged",
         path: "staged.txt",
+        absolutePath: path.join(realRepo, "staged.txt"),
         status: "modified",
         oldContent: "old staged\n",
         newContent: "new staged\n",

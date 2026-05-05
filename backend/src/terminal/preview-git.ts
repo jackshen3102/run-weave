@@ -44,12 +44,15 @@ async function resolveGitContext(projectPath: string): Promise<{
   repoRoot: string;
   projectRelativeToRepo: string;
 }> {
-  const repoRoot = (await runGit(projectPath, ["rev-parse", "--show-toplevel"])).trim();
+  const repoRoot = (
+    await runGit(projectPath, ["rev-parse", "--show-toplevel"])
+  ).trim();
   const realProjectPath = await realpath(projectPath);
   const projectRelativeToRepo = toRelativePath(repoRoot, realProjectPath);
   return {
     repoRoot,
-    projectRelativeToRepo: projectRelativeToRepo === "." ? "" : projectRelativeToRepo,
+    projectRelativeToRepo:
+      projectRelativeToRepo === "." ? "" : projectRelativeToRepo,
   };
 }
 
@@ -71,7 +74,10 @@ function stripProjectPrefix(
   return normalizedRepoPath.slice(prefix.length);
 }
 
-function toRepoPath(projectRelativeToRepo: string, projectRelativePath: string): string {
+function toRepoPath(
+  projectRelativeToRepo: string,
+  projectRelativePath: string,
+): string {
   return projectRelativeToRepo
     ? `${projectRelativeToRepo}/${projectRelativePath}`
     : projectRelativePath;
@@ -109,7 +115,9 @@ function parseGitStatus(
     const indexStatus = line[0] ?? " ";
     const workingStatus = line[1] ?? " ";
     const rawPath = line.slice(3);
-    const repoPath = rawPath.includes(" -> ") ? rawPath.split(" -> ").at(-1)! : rawPath;
+    const repoPath = rawPath.includes(" -> ")
+      ? rawPath.split(" -> ").at(-1)!
+      : rawPath;
     const projectPath = stripProjectPrefix(repoPath, projectRelativeToRepo);
     if (!projectPath) {
       continue;
@@ -150,7 +158,8 @@ export async function getPreviewGitChanges(params: {
   projectPath: string | null | undefined;
 }): Promise<TerminalPreviewGitChangesResponse> {
   const projectPath = ensureProjectPath(params.projectPath);
-  const { repoRoot, projectRelativeToRepo } = await resolveGitContext(projectPath);
+  const { repoRoot, projectRelativeToRepo } =
+    await resolveGitContext(projectPath);
   const pathspec = projectRelativeToRepo || ".";
   const output = await runGit(
     repoRoot,
@@ -199,7 +208,8 @@ function findChangeStatus(
   relativePath: string,
 ): TerminalPreviewGitStatus {
   return (
-    changes[kind].find((change) => change.path === relativePath)?.status ?? "unknown"
+    changes[kind].find((change) => change.path === relativePath)?.status ??
+    "unknown"
   );
 }
 
@@ -214,7 +224,8 @@ export async function getPreviewFileDiff(params: {
     projectPath,
     params.requestedPath,
   );
-  const { repoRoot, projectRelativeToRepo } = await resolveGitContext(projectPath);
+  const { repoRoot, projectRelativeToRepo } =
+    await resolveGitContext(projectPath);
   const repoPath = toRepoPath(projectRelativeToRepo, relativePath);
   const pathspec = projectRelativeToRepo || ".";
   const statusOutput = await runGit(
@@ -240,6 +251,7 @@ export async function getPreviewFileDiff(params: {
     repoRoot,
     changeKind: params.changeKind,
     path: relativePath,
+    absolutePath,
     status,
     oldContent,
     newContent,

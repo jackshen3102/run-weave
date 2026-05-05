@@ -33,11 +33,11 @@ export function createCorsMiddleware(
       res.setHeader("Vary", "Origin");
     }
 
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     res.setHeader(
-      "Access-Control-Allow-Headers",
-      allowedHeaders.join(","),
+      "Access-Control-Allow-Methods",
+      "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     );
+    res.setHeader("Access-Control-Allow-Headers", allowedHeaders.join(","));
 
     if (req.method === "OPTIONS") {
       res.status(204).end();
