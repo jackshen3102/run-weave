@@ -16,7 +16,7 @@
 
 ## 分层思路（概念级）
 
-- **默认层**：纯逻辑与确定性回归。
+- **默认层**：纯逻辑与确定性回归，覆盖 backend、shared、electron 和 Runweave CLI。
 - **E2E 层**：关键路径闭环验证。
 - **Live 层**：外部依赖漂移检查。
 
@@ -24,9 +24,9 @@
 
 ## 入口命令（概览）
 
-- `pnpm run test:default`
-- `pnpm run test:e2e`
-- `pnpm run test:live`
+- `pnpm run test:default`：backend、shared、electron、`packages/runweave-cli` 的确定性测试。
+- `pnpm run test:e2e`：前端 Playwright 关键路径。
+- `pnpm run test:live`：外部依赖漂移检查。
 
 ## 按需录屏验收
 
