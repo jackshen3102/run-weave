@@ -214,6 +214,7 @@ export function TerminalPreviewPanelContent({
               content={editorContent}
               editable={editable}
               onContentChange={onEditorContentChange}
+              lineReferencePath={filePreview.absolutePath}
             />
           </Suspense>
         ) : markdownViewMode === "preview" ? (
@@ -243,6 +244,7 @@ export function TerminalPreviewPanelContent({
                 onScrollRatioChange={onMarkdownScrollRatioChange}
                 editable={editable}
                 onContentChange={onEditorContentChange}
+                lineReferencePath={filePreview.absolutePath}
               />
             </Suspense>
             <div
@@ -275,6 +277,7 @@ export function TerminalPreviewPanelContent({
               content={editorContent}
               editable={editable}
               onContentChange={onEditorContentChange}
+              lineReferencePath={filePreview.absolutePath}
             />
           </Suspense>
         ) : (
@@ -290,6 +293,7 @@ export function TerminalPreviewPanelContent({
             content={editorContent}
             editable={editable}
             onContentChange={onEditorContentChange}
+            lineReferencePath={filePreview.absolutePath}
           />
         </Suspense>
       );
@@ -418,6 +422,7 @@ export function TerminalPreviewPanelContent({
             language={changeDiffMonacoLanguage}
             oldContent={fileDiff.oldContent}
             newContent={fileDiff.newContent}
+            lineReferencePath={fileDiff.absolutePath}
           />
         </Suspense>
       );
