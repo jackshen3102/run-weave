@@ -618,6 +618,7 @@ test("terminal markdown preview opens clicked images in a lightbox", async ({
 });
 
 test("terminal sidecar browser keeps global tabs in web mode", async ({
+  context,
   page,
   request,
 }) => {
@@ -669,6 +670,8 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
       },
     );
     expect(secondSessionResponse.ok()).toBe(true);
+
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 
     await page.addInitScript((preferencesKey) => {
       window.localStorage.setItem(
@@ -743,6 +746,13 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
     await address.fill("5173");
     await address.press("Enter");
     await expect(address).toHaveValue("http://127.0.0.1:5173/");
+    await page.getByRole("button", { name: "Copy address" }).click();
+    await expect(
+      page.getByRole("button", { name: "Address copied" }),
+    ).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe("http://127.0.0.1:5173/");
 
     await page.getByRole("button", { name: "New browser tab" }).click();
     await address.fill("localhost:5173");
