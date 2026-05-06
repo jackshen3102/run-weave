@@ -33,13 +33,18 @@
 }
 
 html {
-  min-height: -webkit-fill-available;
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
-  min-height: -webkit-fill-available;
+  min-height: 100dvh;
+  overflow-x: hidden;
   color: hsl(var(--foreground));
   background:
     radial-gradient(circle at top, rgba(80, 132, 142, 0.18), transparent 28%),
@@ -54,8 +59,11 @@ body {
 }
 
 #root {
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
-  min-height: -webkit-fill-available;
+  min-height: 100dvh;
+  overflow-x: hidden;
 }
 
 button,
