@@ -6,6 +6,11 @@ import type {
   TerminalServerMessage,
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
+import {
+  isTunnelRequestAuthorized,
+  rejectUnauthorizedTunnelUpgrade,
+  type TunnelAuthConfig,
+} from "../server/tunnel-auth";
 import { getLiveTerminalScrollback } from "../terminal/live-scrollback";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { TerminalOutputBatcher } from "../terminal/output-batcher";
@@ -192,12 +197,19 @@ export function attachTerminalWebSocketServer(
   authService: AuthService,
   ptyService?: PtyService,
   tmuxService?: TmuxService,
+  options?: {
+    tunnelAuthConfig?: TunnelAuthConfig | null;
+  },
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
   server.on("upgrade", (request, socket, head) => {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
     if (pathname !== "/ws/terminal") {
+      return;
+    }
+    if (!isTunnelRequestAuthorized(request, options?.tunnelAuthConfig)) {
+      rejectUnauthorizedTunnelUpgrade(socket);
       return;
     }
 

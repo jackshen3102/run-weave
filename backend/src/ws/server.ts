@@ -5,6 +5,11 @@ import type { ServerEventMessage } from "@browser-viewer/shared";
 import type { SessionManager } from "../session/manager";
 import type { AuthService } from "../auth/service";
 import { QualityProbeStore } from "../quality/probe-store";
+import {
+  isTunnelRequestAuthorized,
+  rejectUnauthorizedTunnelUpgrade,
+  type TunnelAuthConfig,
+} from "../server/tunnel-auth";
 import { WebSocketSessionController } from "./session-control";
 import { parseClientMessage } from "./client-message";
 import { getNavigationCapability } from "./navigation";
@@ -28,6 +33,7 @@ export function attachWebSocketServer(
     devtoolsEnabled?: boolean;
     qualityProbeStore?: QualityProbeStore;
     wsSessionController?: WebSocketSessionController;
+    tunnelAuthConfig?: TunnelAuthConfig | null;
   },
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
@@ -39,6 +45,10 @@ export function attachWebSocketServer(
   server.on("upgrade", (request, socket, head) => {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
     if (pathname !== "/ws") {
+      return;
+    }
+    if (!isTunnelRequestAuthorized(request, options?.tunnelAuthConfig)) {
+      rejectUnauthorizedTunnelUpgrade(socket);
       return;
     }
 
