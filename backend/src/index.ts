@@ -24,6 +24,12 @@ import { createTestRouter } from "./routes/test";
 import { createCorsMiddleware } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
 import { buildHealthPayload } from "./server/health";
+import {
+  createTunnelAuthMiddleware,
+  createTunnelTokenBootstrapMiddleware,
+  loadTunnelAuthConfig,
+  type TunnelAuthConfig,
+} from "./server/tunnel-auth";
 import { SessionManager } from "./session/manager";
 import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/clipboard-image";
 import { LowDbSessionStore } from "./session/lowdb-store";
@@ -209,23 +215,28 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   };
 }
 
-function createHttpApp(services: RuntimeServices): express.Express {
+function createHttpApp(
+  services: RuntimeServices,
+  tunnelAuthConfig: TunnelAuthConfig | null,
+): express.Express {
   const app = express();
   const requireAuth = createRequireAuth(services.authService);
+  const requireTunnelAuth = createTunnelAuthMiddleware(tunnelAuthConfig);
   const devtoolsEnabled = services.sessionManager.isDevtoolsEnabled();
 
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
   app.use(
     createCorsMiddleware(parseConfiguredOrigins(process.env.FRONTEND_ORIGIN)),
   );
+  app.use(createTunnelTokenBootstrapMiddleware(tunnelAuthConfig));
 
-  app.get("/health", (_req, res) => {
+  app.get("/health", requireTunnelAuth, (_req, res) => {
     res.json(buildHealthPayload(process.env));
   });
 
   // Internal endpoint for Electron to propagate CDP proxy endpoint in dev mode.
   // In production, the env is inherited via child process spawn.
-  app.put("/internal/cdp-endpoint", (req, res) => {
+  app.put("/internal/cdp-endpoint", requireTunnelAuth, (req, res) => {
     const { endpoint } = req.body as { endpoint?: string };
     if (typeof endpoint === "string" && endpoint) {
       process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT = endpoint;
@@ -240,6 +251,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
 
   app.use(
     "/internal/terminal-completion",
+    requireTunnelAuth,
     createInternalTerminalCompletionRouter({
       completionEventStore: services.terminalCompletionEventStore,
       terminalSessionManager: services.terminalSessionManager,
@@ -248,6 +260,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
   );
 
   app.use("/test", createTestRouter());
+  app.use("/api", requireTunnelAuth);
   app.use(
     "/api/auth",
     createAuthRouter(services.authService, {
@@ -288,6 +301,7 @@ function createHttpApp(services: RuntimeServices): express.Express {
   if (devtoolsEnabled) {
     app.use(
       "/devtools",
+      requireTunnelAuth,
       createDevtoolsRouter({
         authService: services.authService,
         sessionManager: services.sessionManager,
@@ -350,8 +364,9 @@ function attachLifecycleHandlers(
 
 async function startRuntime(): Promise<void> {
   const runtimeConfig = resolveRuntimeConfig();
+  const tunnelAuthConfig = loadTunnelAuthConfig(process.env);
   const services = await createRuntimeServices();
-  const app = createHttpApp(services);
+  const app = createHttpApp(services, tunnelAuthConfig);
   const server = http.createServer(app);
 
   const devtoolsEnabled = services.sessionManager.isDevtoolsEnabled();
@@ -360,6 +375,7 @@ async function startRuntime(): Promise<void> {
     devtoolsEnabled,
     qualityProbeStore: services.qualityProbeStore,
     wsSessionController: services.wsSessionController,
+    tunnelAuthConfig,
   });
   attachTerminalWebSocketServer(
     server,
@@ -368,6 +384,7 @@ async function startRuntime(): Promise<void> {
     services.authService,
     services.ptyService,
     services.tmuxService,
+    { tunnelAuthConfig },
   );
   attachDevtoolsProxyServer(
     server,
@@ -375,6 +392,7 @@ async function startRuntime(): Promise<void> {
     services.authService,
     {
       enabled: devtoolsEnabled,
+      tunnelAuthConfig,
     },
   );
   const port = await listenWithFallback(server, runtimeConfig.preferredPort, {

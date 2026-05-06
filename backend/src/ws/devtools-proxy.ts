@@ -1,12 +1,18 @@
 import type { Server as HttpServer } from "node:http";
 import WebSocket, { WebSocketServer, type RawData } from "ws";
 import type { AuthService } from "../auth/service";
+import {
+  isTunnelRequestAuthorized,
+  rejectUnauthorizedTunnelUpgrade,
+  type TunnelAuthConfig,
+} from "../server/tunnel-auth";
 import type { SessionManager } from "../session/manager";
 import { validateWebSocketHandshake } from "./handshake";
 import { resolvePageByTargetId } from "./tab-target";
 
 interface AttachDevtoolsProxyServerOptions {
   enabled: boolean;
+  tunnelAuthConfig?: TunnelAuthConfig | null;
 }
 
 function closeWithReason(
@@ -76,6 +82,10 @@ export function attachDevtoolsProxyServer(
   server.on("upgrade", (request, socket, head) => {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
     if (pathname !== "/ws/devtools-proxy") {
+      return;
+    }
+    if (!isTunnelRequestAuthorized(request, options.tunnelAuthConfig)) {
+      rejectUnauthorizedTunnelUpgrade(socket);
       return;
     }
 

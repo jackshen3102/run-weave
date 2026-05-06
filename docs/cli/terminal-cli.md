@@ -64,6 +64,35 @@ rw terminal handoff "$TERMINAL_ID" --tail 120 --json
 
 `handoff` 会聚合 `cwd`、`sessionStatus`、`foregroundCommand`、`inferredAgent`、`inferredWorkloadState`、`stateConfidence`、`stateReasons`、tail 和建议命令。`inferredAgent` / `inferredWorkloadState` 是弱推断，只能用于展示或辅助判断，不能作为权限或调度依据。仅有 `activeCommand=codex` 这类前台进程信号时，CLI 会返回低置信度 `unknown`，不会直接断言 agent 正在执行。
 
+## 临时公网访问
+
+本地 backend 启动时设置 tunnel token：
+
+```bash
+RUNWEAVE_TUNNEL_TOKEN="<random-token>" pnpm start
+```
+
+再启动 Cloudflare Quick Tunnel：
+
+```bash
+RUNWEAVE_TUNNEL_TOKEN="<random-token>" rw tunnel start
+```
+
+默认目标是 `http://localhost:5001`。如果 backend 跑在其他地址：
+
+```bash
+rw tunnel start --url http://localhost:5011 --token "<random-token>"
+```
+
+CLI 会先检查服务端接口是否已经启用 tunnel token 鉴权，然后打印带 `?token=` 的公网 URL。命令需要保持运行，停止命令后公网入口也会断开。
+
+CLI 默认会把公网 URL 生成二维码图片，路径为 `.runtime-artifacts/runweave-tunnel-qr.png`，方便 Hermes 等上层系统直接发图给手机扫码。可用 `--qr-file <path>` 指定图片位置，或用 `--no-qr` 只打印链接：
+
+```bash
+rw tunnel start --token "<random-token>" --qr-file /tmp/runweave-tunnel.png
+rw tunnel start --token "<random-token>" --no-qr
+```
+
 ## Completion Event 边界
 
 Hermes/Feishu 默认应使用 `send --confirm short`，任务完成通知由已有 AI CLI hooks 主动发出，不要默认长时间阻塞等待。
