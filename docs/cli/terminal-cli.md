@@ -86,6 +86,13 @@ rw tunnel start --url http://localhost:5011 --token "<random-token>"
 
 CLI 会先检查服务端接口是否已经启用 tunnel token 鉴权，然后打印带 `?token=` 的公网 URL。命令需要保持运行，停止命令后公网入口也会断开。
 
+CLI 默认会把公网 URL 生成二维码图片，路径为 `.runtime-artifacts/runweave-tunnel-qr.png`，方便 Hermes 等上层系统直接发图给手机扫码。可用 `--qr-file <path>` 指定图片位置，或用 `--no-qr` 只打印链接：
+
+```bash
+rw tunnel start --token "<random-token>" --qr-file /tmp/runweave-tunnel.png
+rw tunnel start --token "<random-token>" --no-qr
+```
+
 ## Completion Event 边界
 
 Hermes/Feishu 默认应使用 `send --confirm short`，任务完成通知由已有 AI CLI hooks 主动发出，不要默认长时间阻塞等待。

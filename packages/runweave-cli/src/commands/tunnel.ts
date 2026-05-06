@@ -1,11 +1,15 @@
 import { spawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import type { Readable } from "node:stream";
+import QRCode from "qrcode";
 import { getStringOption, parseArgs, resolveOutputMode } from "../args.js";
 import { CliError } from "../errors.js";
 import { writeOutput } from "../output/format.js";
 
 const DEFAULT_TARGET_URL = "http://localhost:5001";
 const DEFAULT_TIMEOUT_MS = 90_000;
+const DEFAULT_QR_FILE = ".runtime-artifacts/runweave-tunnel-qr.png";
 const QUICK_TUNNEL_URL_PATTERN =
   /https:\/\/[a-z0-9-]+\.trycloudflare\.com(?=$|[\s"',)\]])/;
 
@@ -16,7 +20,10 @@ interface TunnelProcess {
   stdout?: Readable | null;
   stderr?: Readable | null;
   kill?: (signal?: NodeJS.Signals) => boolean;
-  on(event: "close", listener: (code: number | null, signal: NodeJS.Signals | null) => void): this;
+  on(
+    event: "close",
+    listener: (code: number | null, signal: NodeJS.Signals | null) => void,
+  ): this;
   on(event: "error", listener: (error: Error) => void): this;
 }
 
@@ -46,12 +53,15 @@ export async function runTunnelCommand(
 ): Promise<void> {
   if (subcommand !== "start") {
     throw new CliError(
-      "Usage: rw tunnel start [--url http://localhost:5001] [--token <token>]",
+      "Usage: rw tunnel start [--url http://localhost:5001] [--token <token>] [--qr-file <path>]",
       2,
     );
   }
 
-  const parsed = parseArgs(args, new Set(["json", "plain", "skip-check"]));
+  const parsed = parseArgs(
+    args,
+    new Set(["json", "plain", "skip-check", "no-qr"]),
+  );
   const mode = resolveOutputMode(parsed.options);
   const targetUrl = normalizeTargetUrl(
     getStringOption(parsed.options, "url") ??
@@ -60,7 +70,9 @@ export async function runTunnelCommand(
       DEFAULT_TARGET_URL,
   );
   const token = resolveTunnelToken(parsed.options, io.env);
-  const timeoutMs = parseTimeoutMs(getStringOption(parsed.options, "timeout-ms"));
+  const timeoutMs = parseTimeoutMs(
+    getStringOption(parsed.options, "timeout-ms"),
+  );
 
   if (parsed.options["skip-check"] !== true) {
     await verifyTunnelTokenProtection(targetUrl, token.value);
@@ -68,12 +80,19 @@ export async function runTunnelCommand(
 
   const launch = buildCloudflaredLaunch(parsed.options, io.env, targetUrl);
   const child = launcher.spawn(launch.command, launch.args);
+  const processClose = waitForProcessClose(child);
+  void processClose.catch(() => undefined);
   const started = await waitForTunnelUrl(child, timeoutMs);
   const publicUrl = appendTokenToUrl(started.url, token.value);
+  const qrFile = await writeQrCodeIfEnabled(
+    publicUrl,
+    resolveQrFilePath(parsed.options, io.env),
+  );
   const payload = {
     publicUrl,
     tunnelUrl: started.url,
     targetUrl,
+    qrFile,
     token: token.value,
     tokenSource: token.source,
     pid: child.pid ?? null,
@@ -85,10 +104,13 @@ export async function runTunnelCommand(
     io.stdout.write(`Public URL: ${publicUrl}\n`);
     io.stdout.write(`Tunnel URL: ${started.url}\n`);
     io.stdout.write(`Target URL: ${targetUrl}\n`);
+    if (qrFile) {
+      io.stdout.write(`QR Code: ${qrFile}\n`);
+    }
     io.stdout.write("Keep this command running while the tunnel is needed.\n");
   }
 
-  await waitForProcessClose(child);
+  await processClose;
 }
 
 function resolveTunnelToken(
@@ -136,6 +158,56 @@ function parseTimeoutMs(rawValue: string | undefined): number {
   return value;
 }
 
+function resolveQrFilePath(
+  options: Record<string, string | boolean>,
+  env: NodeJS.ProcessEnv,
+): string | null {
+  if (options["no-qr"] === true) {
+    return null;
+  }
+
+  const rawPath =
+    getStringOption(options, "qr-file") ??
+    env.RUNWEAVE_TUNNEL_QR_FILE ??
+    DEFAULT_QR_FILE;
+  const trimmedPath = rawPath.trim();
+  if (!trimmedPath) {
+    throw new CliError("--qr-file must not be empty", 2);
+  }
+  return resolve(trimmedPath);
+}
+
+async function writeQrCodeIfEnabled(
+  publicUrl: string,
+  qrFilePath: string | null,
+): Promise<string | null> {
+  if (!qrFilePath) {
+    return null;
+  }
+
+  try {
+    await mkdir(dirname(qrFilePath), { recursive: true });
+    await QRCode.toFile(qrFilePath, publicUrl, {
+      type: "png",
+      width: 512,
+      margin: 2,
+      errorCorrectionLevel: "M",
+      color: {
+        dark: "#111827",
+        light: "#ffffff",
+      },
+    });
+    return qrFilePath;
+  } catch (error) {
+    throw new CliError(
+      `Failed to write tunnel QR code to ${qrFilePath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      1,
+    );
+  }
+}
+
 function buildCloudflaredLaunch(
   options: Record<string, string | boolean>,
   env: NodeJS.ProcessEnv,
@@ -145,13 +217,7 @@ function buildCloudflaredLaunch(
     getStringOption(options, "cloudflared-command") ??
     env.RUNWEAVE_CLOUDFLARED_COMMAND;
 
-  const tunnelArgs = [
-    "tunnel",
-    "--protocol",
-    "http2",
-    "--url",
-    targetUrl,
-  ];
+  const tunnelArgs = ["tunnel", "--protocol", "http2", "--url", targetUrl];
 
   if (explicitCommand?.trim()) {
     return {
