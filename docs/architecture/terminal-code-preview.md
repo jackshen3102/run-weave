@@ -27,11 +27,12 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - `frontend/src/components/terminal/terminal-surface.tsx`：xterm 渲染与输入连接，不应承载代码预览业务。
 - `frontend/src/components/terminal/terminal-preview-panel.tsx`：右侧 Preview 面板的数据编排层，负责按 active project 读取 Preview 状态、发起文件和 diff 请求，并把动作与渲染层连接起来。
 - `frontend/src/components/terminal/terminal-preview-panel-actions.ts`：Preview 面板动作层，负责刷新、复制路径、面板宽度拖拽、Markdown split 拖拽和视图模式切换。
-- `frontend/src/components/terminal/terminal-preview-panel-content.tsx`：Preview 面板内容层，负责 Open file、Markdown、SVG、图片和 Changes 的只读内容渲染。
+- `frontend/src/components/terminal/terminal-preview-panel-content.tsx`：Preview 面板内容层，负责 Open file、Markdown、SVG、图片和内容渲染。
+- `frontend/src/components/terminal/terminal-preview-change-tree.tsx`：Changes 左栏渲染层，负责 staged / working 文件分组、文件选择和文件项上的重命名 / 删除入口。
 - `frontend/src/components/terminal/terminal-preview-panel-shell.tsx`：Preview 面板外壳层，负责 Header、工具 tab、路径栏、视图切换控件和右侧 Browser 工具挂载。
 - `frontend/src/components/terminal/terminal-preview-menu.tsx`：Terminal 顶部栏里的 Preview 入口按钮，负责打开右侧 Sidecar，默认恢复当前 project 上次的 Preview 状态，没有单独的 `Open file...` / `Changes` 下拉菜单。
 - `frontend/src/components/terminal/terminal-open-file-command.tsx`：Open file 的搜索输入和结果列表，不依赖 Monaco。
-- `frontend/src/components/terminal/terminal-monaco-viewer.tsx`：只读 Monaco Editor / Diff Editor 封装，已通过 lazy boundary 加载。
+- `frontend/src/components/terminal/terminal-monaco-viewer.tsx`：Monaco Editor / Diff Editor 封装，已通过 lazy boundary 加载；在文件或 diff 选区非空时可复制 `path:line` / `path:start-end` 行引用。
 - `frontend/src/features/terminal/preview-store.ts`：Preview 专用 Zustand store，当前 mode 为 `file | changes`，并按 project 保存 query、selected file、selected change。
 - `frontend/src/services/terminal.ts`：Terminal HTTP API client 已提供 project-scoped Preview wrappers：文件搜索、文件读取、git changes、单文件 diff。
 - `backend/src/routes/terminal.ts`：Terminal HTTP API 主路由，负责项目、session 和 clipboard image 等非 Preview 路由，并注册 Preview 子路由。
@@ -63,6 +64,7 @@ Terminal Browser 工具当前边界：
 - Header 名必须符合 HTTP token 形态，禁止控制字符、冒号以及 `host`、`content-length`、`connection`、`upgrade`、`proxy-authorization`、`cookie`、`set-cookie`。Header 值不能为空且不能包含控制字符。
 - Electron 主进程只注册一个 `webRequest.onBeforeSendHeaders({ urls: ["<all_urls>"] })` dispatcher。dispatcher 只处理 `http:` / `https:` 请求，按规则列表顺序匹配轻量通配 URL；同名 Header 后命中的规则覆盖前面的规则。
 - Header 规则变更只影响后续新请求。面板保存后提供刷新入口，让当前页面主文档请求也重新携带新规则。
+- Browser 工具栏的地址输入框旁提供复制当前地址按钮，只复制当前 tab 的地址文本，不触发导航、分享或外部打开；复制成功后短暂显示完成状态。
 - Browser 工具提供当前 tab 级别的设备模式。`Desktop` 是默认状态；切到移动设备时，当前支持 `iPhone SE`、`iPhone 14` 和 `Pixel 7` 三个预设，分别应用移动端 viewport、device scale factor、移动端 user agent 和 touch emulation。
 - 设备预设定义在 `packages/shared/src/terminal-browser-device.ts`，由前端设备面板和 Electron 主进程共享。新建、恢复和 proxy-created tab 仍从 `Desktop` 开始，不继承其他 tab 的移动设备状态。
 - 移动设备模式只作用于 Terminal Browser 的 Electron `WebContentsView`。前端负责设备入口、预设选择、手机画布布局和 bounds 同步；真实 emulation 在 Electron 主进程里通过目标 tab 的 `webContents.debugger` 落地。
@@ -1411,6 +1413,7 @@ git diff 限制：
 - Changes 左栏不显示新增/删除行数。
 - Monaco Editor：project 内普通文本/代码文件可编辑，readonly 文件保持只读。
 - Monaco Diff Editor。
+- Monaco 文件和 Diff modified 侧支持选中行后复制稳定行引用，格式为 `relative/path.ext:line` 或 `relative/path.ext:start-end`。
 - Vite / Electron renderer 下显式配置 Monaco web workers。
 - 后端提供 project-scoped file-search、file read、file save、file delete、file rename、git-changes 和 file-diff API；写入只允许 project 内普通文件。
 - Markdown rendered mode，使用 `markdown-it` 和受控插件渲染 `.md` / `.mdx`。
@@ -1462,6 +1465,7 @@ git diff 限制：
 - Project 内普通文本/代码文件打开后可以编辑；修改后状态变为 `Unsaved`，保存中显示 `Saving...`，成功后显示 `Saved`。
 - 保存只通过显式 Save 或 `Cmd/Ctrl+S` 触发；Changes、Diff、图片、二进制、大文件和 project 外绝对路径不响应保存。
 - 文件保存请求带 `expectedMtimeMs`；外部修改导致冲突时显示 `Conflict`，并提供 Reload 和 Overwrite。
+- Monaco 文件正文和 diff modified 侧有非空选区时显示复制行引用按钮；`Cmd/Ctrl+Shift+C` 也复制同一引用，单行输出 `path:line`，多行输出 `path:start-end`。
 - Project 内普通文件可从 Files 结果或 Changes 文件项触发 Rename / Delete；目录、批量操作、project 外绝对路径和只读文件不显示或不允许这些操作。
 - 删除必须二次确认；删除或重命名请求可带 `expectedMtimeMs`，mtime 冲突时显示明确错误并保留当前状态。
 - 重命名成功后，Preview 选中态切到新路径并刷新 changes；删除成功后清空旧文件选中态并刷新 changes。
@@ -1502,6 +1506,11 @@ git diff 限制：
 - PR 需要记录引入 Monaco 后的构建产物变化，确认体积增长来自 lazy chunk，而不是 Terminal 首屏 chunk。
 - 面板关闭后释放空间。
 - xterm 连接和 renderer 行为不受影响。
+
+Terminal Browser：
+
+- 地址栏复制按钮只在当前地址非空时可用，复制的是地址输入框当前值。
+- 复制地址成功后显示短暂完成态，不改变当前 tab 导航状态，不打开系统分享，也不修改历史记录。
 
 移动端：
 

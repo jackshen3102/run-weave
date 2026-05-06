@@ -118,7 +118,9 @@ Terminal WebSocket 重连策略收紧为确定性规则：
 
 ### 移动端 viewport
 
-全局样式为 `html`、`body`、`#root` 增加 `-webkit-fill-available`，用于缓解 iOS Safari 动态地址栏导致的高度计算问题。移动端页面优先使用 `dvh` / `-webkit-fill-available` 组合，避免首屏布局被浏览器 chrome 挤压。
+全局样式为 `html`、`body`、`#root` 固定 `width: 100%` / `max-width: 100%`，并在根容器上使用 `min-height: 100dvh` 与 `overflow-x: hidden`。这让手机浏览器动态地址栏变化时优先由动态视口高度吸收，同时避免页面根节点产生横向溢出。
+
+移动端页面仍应优先使用语义上的观察台布局，而不是依赖全局 CSS 兜底。新增全屏区域时要显式检查窄屏宽度、动态地址栏和 safe area 下的首屏稳定性。
 
 ## 设计原则
 
