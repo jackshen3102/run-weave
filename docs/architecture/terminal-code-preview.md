@@ -86,16 +86,18 @@ Terminal Browser 工具当前边界：
 2. 默认关闭，不影响终端主体验。
 3. 不展示项目级文件树。
 4. 在 `Files` 中对 project path 内已存在的文本/代码文件提供显式编辑保存；Changes、Diff、图片、二进制、大文件和 project 外绝对路径保持只读。
-5. 使用 `@monaco-editor/react` 承载 Monaco Editor 和 Diff Editor，普通文件可按 `readonly` 能力切换编辑态，Diff Editor 始终只读。
-6. 预览和保存都基于当前 Terminal Project 的项目路径，不基于 terminal session 的 `cwd`。
-7. 桌面端优先，移动端默认不开放。
+5. 对 project 内普通文件提供受限删除和重命名；不支持目录、批量操作、project 外绝对路径或 git stage/unstage。
+6. 使用 `@monaco-editor/react` 承载 Monaco Editor 和 Diff Editor，普通文件可按 `readonly` 能力切换编辑态，Diff Editor 始终只读。
+7. 预览、保存、删除和重命名都基于当前 Terminal Project 的项目路径，不基于 terminal session 的 `cwd`。
+8. 桌面端优先，移动端默认不开放。
 
 ## 非目标
 
 - 不嵌入 VS Code。
 - 不接入 VS Code extension host。
 - 不做文件树、全局搜索、符号索引、LSP diagnostics。
-- 不做新建、重命名、删除、移动、格式化、git stage 或 commit；文件保存只覆盖 project 内已存在的文本/代码文件。
+- 不做新建、目录移动、批量重命名、格式化、git stage 或 commit；文件写操作只覆盖 project 内受支持的普通文件。
+- 不对 project 外绝对路径、目录、二进制、大文件或只读文件做保存、删除、重命名。
 - 不做 git commit、stage、unstage 等写操作。
 - 不在 v1 处理大型二进制文件或超大文件。图片预览是受 MIME allowlist 和大小上限约束的例外，不扩展为通用二进制预览。
 
@@ -1215,6 +1217,43 @@ Content-Type: application/json
 - 成功后返回最新 `TerminalPreviewFileResponse`，其中 `readonly: false`，并清理当前 project 的 Preview 文件搜索缓存。
 
 ```http
+DELETE /api/terminal/project/:id/preview/file
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "path": "docs/draft.md",
+  "expectedMtimeMs": 1713520000000.123
+}
+```
+
+删除语义：
+
+- 只允许删除当前 project path 内的普通文件，拒绝目录、project 外绝对路径和 symlink 逃逸。
+- `expectedMtimeMs` 可选；提供时若磁盘文件已变化，返回 `409`。
+- 成功后返回 `{ kind: "file-delete", projectId, path, absolutePath }`，并清理当前 project 的 Preview 文件搜索缓存。
+- 前端必须二次确认破坏性删除；如果当前文件有未保存 draft，先要求用户确认丢弃。
+
+```http
+PATCH /api/terminal/project/:id/preview/file/path
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "path": "docs/draft.md",
+  "nextPath": "docs/renamed.md",
+  "expectedMtimeMs": 1713520000000.123
+}
+```
+
+重命名语义：
+
+- 源路径和目标路径都必须在当前 project path 内，且源必须是普通文件。
+- 不创建父目录；目标父目录不存在或不是目录时返回 `400`，目标已存在时返回 `409`。
+- `expectedMtimeMs` 可选；提供时若源文件已变化，返回 `409`。
+- 成功后返回重命名后文件的 `TerminalPreviewFileResponse`，前端用新 `path` 替换当前选中态并刷新 changes。
+
+```http
 GET /api/terminal/project/:id/preview/asset?path=<path>
 Authorization: Bearer <accessToken>
 ```
@@ -1373,7 +1412,7 @@ git diff 限制：
 - Monaco Editor：project 内普通文本/代码文件可编辑，readonly 文件保持只读。
 - Monaco Diff Editor。
 - Vite / Electron renderer 下显式配置 Monaco web workers。
-- 后端提供 project-scoped file-search、file read、file save、git-changes 和 file-diff API；写入只允许 project 内文件。
+- 后端提供 project-scoped file-search、file read、file save、file delete、file rename、git-changes 和 file-diff API；写入只允许 project 内普通文件。
 - Markdown rendered mode，使用 `markdown-it` 和受控插件渲染 `.md` / `.mdx`。
 - Markdown `Source` / `Split` / `Preview` 三种视图切换，其中 `Split` 左 source、右 preview，当前默认落在 `Preview`。
 - Markdown project 内相对链接跳转。
@@ -1423,7 +1462,10 @@ git diff 限制：
 - Project 内普通文本/代码文件打开后可以编辑；修改后状态变为 `Unsaved`，保存中显示 `Saving...`，成功后显示 `Saved`。
 - 保存只通过显式 Save 或 `Cmd/Ctrl+S` 触发；Changes、Diff、图片、二进制、大文件和 project 外绝对路径不响应保存。
 - 文件保存请求带 `expectedMtimeMs`；外部修改导致冲突时显示 `Conflict`，并提供 Reload 和 Overwrite。
-- 有 unsaved draft 时切换文件、Refresh、关闭 Preview 或切换到 Changes，必须先确认是否丢弃。
+- Project 内普通文件可从 Files 结果或 Changes 文件项触发 Rename / Delete；目录、批量操作、project 外绝对路径和只读文件不显示或不允许这些操作。
+- 删除必须二次确认；删除或重命名请求可带 `expectedMtimeMs`，mtime 冲突时显示明确错误并保留当前状态。
+- 重命名成功后，Preview 选中态切到新路径并刷新 changes；删除成功后清空旧文件选中态并刷新 changes。
+- 有 unsaved draft 时切换文件、Refresh、关闭 Preview、切换到 Changes、删除或重命名，必须先确认是否丢弃。
 - Markdown 当前默认以 `Preview` 打开；切到 `Split` 后左侧是 Monaco source，右侧是 rendered preview。
 - Markdown `Split` 默认左右 50% / 50%，支持拖拽内部 source / preview 分隔线调整宽度。
 - Markdown `Source` / `Split` / `Preview` 切换不改变 selected file，也不重新走文件搜索。
