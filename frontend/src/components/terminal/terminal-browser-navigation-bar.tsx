@@ -1,20 +1,21 @@
 import {
   ArrowLeft,
   ArrowRight,
+  Check,
   Code2,
+  Copy,
   ExternalLink,
   RotateCw,
   Square,
   Wifi,
   WifiOff,
 } from "lucide-react";
-import type { FormEvent } from "react";
+import { useCallback, useState, type FormEvent } from "react";
 import {
   type TerminalBrowserHeaderRule,
   type TerminalBrowserProxyState,
 } from "@browser-viewer/shared";
 import type { TerminalBrowserTabState } from "../../features/terminal/preview-store";
-import { TerminalBrowserCdpEndpointPopover } from "./terminal-browser-cdp-endpoint-popover";
 import { TerminalBrowserDeviceButton } from "./terminal-browser-device-panel";
 import { TerminalBrowserHeadersButton } from "./terminal-browser-headers-panel";
 import { Button } from "../ui/button";
@@ -61,6 +62,16 @@ export function TerminalBrowserNavigationBar({
   onOpenExternal,
 }: TerminalBrowserNavigationBarProps) {
   const deviceState = activeTab.deviceState;
+  const [addressCopied, setAddressCopied] = useState(false);
+
+  const copyAddress = useCallback(async () => {
+    if (!activeTab.addressInput || !navigator.clipboard?.writeText) {
+      return;
+    }
+    await navigator.clipboard.writeText(activeTab.addressInput);
+    setAddressCopied(true);
+    setTimeout(() => setAddressCopied(false), 1500);
+  }, [activeTab.addressInput]);
 
   return (
     <form
@@ -112,6 +123,22 @@ export function TerminalBrowserNavigationBar({
         value={activeTab.addressInput}
         onChange={(event) => onAddressInputChange(event.target.value)}
       />
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 w-7 rounded-md px-0"
+        disabled={!activeTab.addressInput}
+        onClick={() => void copyAddress()}
+        aria-label={addressCopied ? "Address copied" : "Copy address"}
+        title={addressCopied ? "Address copied" : "Copy address"}
+      >
+        {addressCopied ? (
+          <Check className="h-3.5 w-3.5 text-emerald-400" />
+        ) : (
+          <Copy className="h-4 w-4" />
+        )}
+      </Button>
       <Button
         type="button"
         size="sm"
@@ -182,7 +209,6 @@ export function TerminalBrowserNavigationBar({
       >
         <Code2 className="h-4 w-4" />
       </Button>
-      {isElectron ? <TerminalBrowserCdpEndpointPopover tabId={activeTab.id} /> : null}
       <Button
         type="button"
         size="sm"
