@@ -459,6 +459,62 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     await expect(
       page.getByText("docs/architecture/terminal-code-preview.md"),
     ).toBeVisible();
+    await page.getByRole("button", { name: "source" }).click();
+    await expect(
+      page.locator(".monaco-editor .view-line").first(),
+    ).toContainText("# Terminal Preview Plan");
+    await page.evaluate(() => {
+      const monacoWindow = window as unknown as {
+        monaco: {
+          editor: {
+            getEditors: () => Array<{
+              focus: () => void;
+              setSelection: (selection: {
+                startLineNumber: number;
+                startColumn: number;
+                endLineNumber: number;
+                endColumn: number;
+              }) => void;
+            }>;
+          };
+        };
+      };
+      const editor = monacoWindow.monaco.editor.getEditors().at(-1);
+      editor?.focus();
+      editor?.setSelection({
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: 3,
+        endColumn: 100,
+      });
+    });
+    await page.getByRole("button", { name: "Copy line reference" }).click();
+    await expect(
+      page.getByRole("button", { name: "Line reference copied" }),
+    ).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          return (
+            window as unknown as { __previewClipboardWrites?: string[] }
+          ).__previewClipboardWrites?.at(-1);
+        }),
+      )
+      .toBe(
+        `${path.join(realRepo, "docs/architecture/terminal-code-preview.md")}:1-3`,
+      );
+    await page.keyboard.press("ControlOrMeta+Shift+C");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          return (
+            window as unknown as { __previewClipboardWrites?: string[] }
+          ).__previewClipboardWrites?.at(-1);
+        }),
+      )
+      .toBe(
+        `${path.join(realRepo, "docs/architecture/terminal-code-preview.md")}:1-3`,
+      );
     await page.getByRole("button", { name: "Copy path" }).click();
     await expect(
       page.getByRole("button", { name: "Path copied" }),
@@ -527,6 +583,55 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
       }),
       page.getByRole("button", { name: /README\.md/ }).click(),
     ]);
+    const modifiedReadmeLine = page
+      .locator(".monaco-diff-editor .modified .view-line", {
+        hasText: "new readme",
+      })
+      .first();
+    await expect(modifiedReadmeLine).toContainText("new readme");
+    await page.evaluate(() => {
+      const monacoWindow = window as unknown as {
+        monaco: {
+          editor: {
+            getDiffEditors: () => Array<{
+              getModifiedEditor: () => {
+                focus: () => void;
+                setSelection: (selection: {
+                  startLineNumber: number;
+                  startColumn: number;
+                  endLineNumber: number;
+                  endColumn: number;
+                }) => void;
+              };
+            }>;
+          };
+        };
+      };
+      const editor = monacoWindow.monaco.editor
+        .getDiffEditors()
+        .at(-1)
+        ?.getModifiedEditor();
+      editor?.focus();
+      editor?.setSelection({
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: 1,
+        endColumn: 100,
+      });
+    });
+    await page.getByRole("button", { name: "Copy line reference" }).click();
+    await expect(
+      page.getByRole("button", { name: "Line reference copied" }),
+    ).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          return (
+            window as unknown as { __previewClipboardWrites?: string[] }
+          ).__previewClipboardWrites?.at(-1);
+        }),
+      )
+      .toBe(`${path.join(realRepo, "README.md")}:1`);
     await page.getByRole("button", { name: "Copy path" }).click();
     await expect(
       page.getByRole("button", { name: "Path copied" }),
