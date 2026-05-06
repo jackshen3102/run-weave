@@ -40,6 +40,91 @@ const EDITOR_OPTIONS = {
   automaticLayout: true,
 };
 
+const LINE_REFERENCE_COPY_RESET_MS = 1500;
+const LINE_REFERENCE_BUTTON_MIN_TOP = 8;
+
+function getEditorScrollRatio(editor: MonacoEditor): number {
+  const scrollHeight = editor.getScrollHeight();
+  const visibleHeight = editor.getLayoutInfo().height;
+  const maxScrollTop = Math.max(0, scrollHeight - visibleHeight);
+  return maxScrollTop > 0 ? editor.getScrollTop() / maxScrollTop : 0;
+}
+
+function applyEditorScrollRatio(editor: MonacoEditor, ratio: number): void {
+  const scrollHeight = editor.getScrollHeight();
+  const visibleHeight = editor.getLayoutInfo().height;
+  const maxScrollTop = Math.max(0, scrollHeight - visibleHeight);
+  const clampedRatio = Math.min(Math.max(ratio, 0), 1);
+  editor.setScrollTop(maxScrollTop * clampedRatio);
+}
+
+function getSelectedLineReferenceRange(
+  editor: MonacoEditor,
+  lineReferencePath?: string,
+): LineReferenceRange | null {
+  const selection = editor.getSelection();
+  if (!selection || selection.isEmpty() || !lineReferencePath) {
+    return null;
+  }
+
+  const startLine = Math.min(
+    selection.startLineNumber,
+    selection.endLineNumber,
+  );
+  let endLine = Math.max(selection.startLineNumber, selection.endLineNumber);
+  if (endLine > startLine && selection.endColumn === 1) {
+    endLine -= 1;
+  }
+
+  const visiblePosition = editor.getScrolledVisiblePosition({
+    lineNumber: startLine,
+    column: 1,
+  });
+  return {
+    startLine,
+    endLine,
+    top: Math.max(
+      LINE_REFERENCE_BUTTON_MIN_TOP,
+      visiblePosition?.top ?? LINE_REFERENCE_BUTTON_MIN_TOP,
+    ),
+  };
+}
+
+interface LineReferenceCopyButtonProps {
+  range: LineReferenceRange | null;
+  copied: boolean;
+  onCopy: () => void;
+}
+
+function LineReferenceCopyButton({
+  range,
+  copied,
+  onCopy,
+}: LineReferenceCopyButtonProps) {
+  if (!range) {
+    return null;
+  }
+
+  const label = copied ? "Line reference copied" : "Copy line reference";
+  return (
+    <button
+      type="button"
+      className="absolute right-3 z-20 inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 shadow-lg hover:border-slate-500 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+      style={{ top: range.top }}
+      aria-label={label}
+      title={label}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onCopy}
+    >
+      {copied ? (
+        <Check className="h-4 w-4 text-emerald-400" />
+      ) : (
+        <Copy className="h-4 w-4" />
+      )}
+    </button>
+  );
+}
+
 export function TerminalMonacoViewer({
   language = "plaintext",
   content = "",
@@ -71,15 +156,18 @@ export function TerminalMonacoViewer({
     copiedTimeoutRef.current = null;
   }, []);
 
-  const formatLineReference = useCallback((range: LineReferenceRange): string | null => {
-    const path = lineReferencePathRef.current;
-    if (!path) {
-      return null;
-    }
-    return range.startLine === range.endLine
-      ? `${path}:${range.startLine}`
-      : `${path}:${range.startLine}-${range.endLine}`;
-  }, []);
+  const formatLineReference = useCallback(
+    (range: LineReferenceRange): string | null => {
+      const path = lineReferencePathRef.current;
+      if (!path) {
+        return null;
+      }
+      return range.startLine === range.endLine
+        ? `${path}:${range.startLine}`
+        : `${path}:${range.startLine}-${range.endLine}`;
+    },
+    [],
+  );
 
   const copyLineReference = useCallback(async (): Promise<boolean> => {
     const range = lineReferenceRangeRef.current;
@@ -93,34 +181,21 @@ export function TerminalMonacoViewer({
     copiedTimeoutRef.current = window.setTimeout(() => {
       setLineReferenceCopied(false);
       copiedTimeoutRef.current = null;
-    }, 1500);
+    }, LINE_REFERENCE_COPY_RESET_MS);
     return true;
   }, [clearLineReferenceCopiedTimer, formatLineReference]);
 
   const updateLineReferenceRange = useCallback((): void => {
     const editor = editorRef.current;
-    const selection = editor?.getSelection();
-    if (!editor || !selection || selection.isEmpty() || !lineReferencePathRef.current) {
+    const nextRange = editor
+      ? getSelectedLineReferenceRange(editor, lineReferencePathRef.current)
+      : null;
+    if (!nextRange) {
       lineReferenceRangeRef.current = null;
       setLineReferenceRange(null);
       setLineReferenceCopied(false);
       return;
     }
-
-    const startLine = Math.min(selection.startLineNumber, selection.endLineNumber);
-    let endLine = Math.max(selection.startLineNumber, selection.endLineNumber);
-    if (endLine > startLine && selection.endColumn === 1) {
-      endLine -= 1;
-    }
-    const visiblePosition = editor.getScrolledVisiblePosition({
-      lineNumber: startLine,
-      column: 1,
-    });
-    const nextRange = {
-      startLine,
-      endLine,
-      top: Math.max(8, visiblePosition?.top ?? 8),
-    };
     lineReferenceRangeRef.current = nextRange;
     setLineReferenceRange(nextRange);
     setLineReferenceCopied(false);
@@ -137,12 +212,7 @@ export function TerminalMonacoViewer({
         if (!onScrollRatioChange || diff) {
           return;
         }
-        const scrollHeight = editor.getScrollHeight();
-        const visibleHeight = editor.getLayoutInfo().height;
-        const maxScrollTop = Math.max(0, scrollHeight - visibleHeight);
-        onScrollRatioChange(
-          maxScrollTop > 0 ? editor.getScrollTop() / maxScrollTop : 0,
-        );
+        onScrollRatioChange(getEditorScrollRatio(editor));
       });
       selectionDisposableRef.current = editor.onDidChangeCursorSelection(() => {
         updateLineReferenceRange();
@@ -189,10 +259,7 @@ export function TerminalMonacoViewer({
     if (!editor) {
       return;
     }
-    const scrollHeight = editor.getScrollHeight();
-    const visibleHeight = editor.getLayoutInfo().height;
-    const maxScrollTop = Math.max(0, scrollHeight - visibleHeight);
-    editor.setScrollTop(maxScrollTop * Math.min(Math.max(scrollRatio, 0), 1));
+    applyEditorScrollRatio(editor, scrollRatio);
   }, [diff, scrollRatio]);
 
   useEffect(() => {
@@ -207,29 +274,15 @@ export function TerminalMonacoViewer({
     };
   }, [clearLineReferenceCopiedTimer]);
 
-  const lineReferenceButton = lineReferenceRange ? (
-    <button
-      type="button"
-      className="absolute right-3 z-20 inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 shadow-lg hover:border-slate-500 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-      style={{ top: lineReferenceRange.top }}
-      aria-label={
-        lineReferenceCopied ? "Line reference copied" : "Copy line reference"
-      }
-      title={
-        lineReferenceCopied ? "Line reference copied" : "Copy line reference"
-      }
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={() => {
+  const lineReferenceButton = (
+    <LineReferenceCopyButton
+      range={lineReferenceRange}
+      copied={lineReferenceCopied}
+      onCopy={() => {
         void copyLineReference();
       }}
-    >
-      {lineReferenceCopied ? (
-        <Check className="h-4 w-4 text-emerald-400" />
-      ) : (
-        <Copy className="h-4 w-4" />
-      )}
-    </button>
-  ) : null;
+    />
+  );
 
   if (diff) {
     return (
