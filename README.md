@@ -1,75 +1,175 @@
 # Runweave
 
-Runweave is a 24/7 CLI-first agent workspace for turning ideas into running
-programs from anywhere. The current implementation combines a browser viewer,
-terminal workspace, Express/WebSocket backend, Playwright control plane, and
-Electron desktop client.
+[中文](README.zh-CN.md)
 
-Note: the code namespace still uses `browser-viewer` in package names, protocol
-identifiers, storage keys, and some internal paths. Treat those as technical
-identifiers until a separate code-level rename is done.
+Runweave is a local-first terminal workspace for AI CLI workflows. It helps you
+run, observe, hand off, and continue long-lived command-line tasks such as
+`codex`, `claude`, shell commands, and project scripts from desktop, browser,
+CLI, and phone.
 
-## Run modes
+![Runweave terminal management demo](docs/assets/readme/runweave-terminal-management.gif)
 
-### Development
+Runweave is useful when your real work is happening inside terminals: an AI CLI
+is editing code, a dev server is running, a command is waiting for input, or a
+teammate/agent needs a stable way to continue from the current terminal context.
+
+> Note: some package names, storage keys, and internal identifiers still use
+> `browser-viewer`. Treat those as technical identifiers until a separate
+> code-level rename is completed.
+
+## What Runweave Does
+
+### Terminal Workspace
+
+- Create projects and terminal sessions.
+- Run arbitrary CLI commands, including `codex`, `claude`, `opencode`, shell
+  commands, and project scripts.
+- Watch live terminal output, switch between terminals, and send follow-up input
+  to an existing session.
+- Keep terminal work separate from browser viewer sessions, so agent work can be
+  managed as its own workflow.
+
+### Long-Running Task Continuity
+
+Runweave is designed for long-running terminal tasks. When the local environment
+supports recoverable terminal sessions, you can keep observing or reconnect to
+work that is still running. If that recovery path is not available, Runweave
+still works as a normal managed terminal workspace.
+
+Runweave does not claim that tasks survive machine or container destruction, and
+it does not semantically prove that an AI task is complete.
+
+### Desktop and Web
+
+- Use the web app during local development or self-hosted deployment.
+- Use the Electron desktop app for a local desktop workflow.
+- In Electron, manage connections to different Runweave backends from one
+  client.
+
+### Runweave CLI
+
+`rw` is the command-line entry point for humans and external agents. It can log
+in, ensure a project exists, create terminals, list sessions, read snapshots,
+build handoff context, and send input to an existing terminal.
+
+Source checkout usage:
 
 ```bash
-# setup backend env
-cp backend/.env.example backend/.env
-
-# start backend + frontend dev servers
-pnpm dev
-
-# headed browser mode for debugging
-BROWSER_HEADLESS=false pnpm dev
+pnpm cli:build
+node packages/runweave-cli/dist/index.js auth login \
+  --base-url http://127.0.0.1:5001 \
+  --username admin
 ```
 
-### Production run (`pnpm start`)
+After the CLI is linked or installed as `rw`:
 
 ```bash
-# setup backend env
+rw auth status --json
+rw project ensure --name my-project --path "$PWD" --json
+rw terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --json
+rw terminal send "$TERMINAL_ID" --text "codex" --enter --confirm short --json
+rw terminal snapshot "$TERMINAL_ID" --tail 120 --plain
+rw terminal handoff "$TERMINAL_ID" --tail 120 --json
+```
+
+`send --confirm short` confirms that input was delivered or briefly observed; it
+does not mean the AI task has finished.
+
+Runweave also supports temporary public access through the CLI:
+
+```bash
+RUNWEAVE_TUNNEL_TOKEN="<random-token>" pnpm start
+rw tunnel start --token "<random-token>"
+```
+
+The tunnel command prints a public URL and can generate a QR code for phone
+handoff.
+
+### Mobile Handoff
+
+Runweave has a mobile-first terminal overview for observation and handoff:
+
+- Open `/mobile/terminals` from a phone.
+- Review projects, terminal sessions, status, and recent output.
+- Copy handoff context for Feishu/Hermes or another external agent.
+- Open a terminal directly when limited phone-side input is needed.
+
+Mobile is intentionally observe-first. It is not a full desktop control surface,
+and Runweave does not automatically send Feishu messages or execute hidden
+recovery actions on your behalf.
+
+## Quick Start
+
+```bash
+pnpm install
 cp backend/.env.example backend/.env
+pnpm dev
+```
 
-# build all workspaces
+Useful development variants:
+
+```bash
+# Run with a visible browser for debugging
+BROWSER_HEADLESS=false pnpm dev
+
+# Start backend, frontend, and Electron
+pnpm dev:electron
+```
+
+## Local Deployment
+
+For a production-style local run:
+
+```bash
+cp backend/.env.example backend/.env
 pnpm build
-
-# start backend for nginx proxying
 pnpm start
 ```
 
-What `pnpm start` does:
+`pnpm start` starts the backend service and binds it to `127.0.0.1:5001` by
+default. It is intended to run behind a reverse proxy for production-style
+deployments. See [docs/deployment/overview.md](docs/deployment/overview.md) for
+deployment details.
 
-- Starts backend only.
-- Binds Node to `127.0.0.1:5001`.
-- Intended for Nginx reverse proxy deployment.
+Important environment variables:
 
-Examples:
+- `AUTH_USERNAME`: login username. The example file uses `admin`.
+- `AUTH_PASSWORD`: login password. Replace the example value before sharing a
+  service.
+- `AUTH_JWT_SECRET`: signing secret for auth tokens.
+- `FRONTEND_ORIGIN`: allowed frontend origins for CORS.
+- `BROWSER_PROFILE_DIR`: persistent browser/session data directory.
+- `TERMINAL_SESSION_STORE_FILE`: persisted terminal session store path.
+- `BROWSER_HEADLESS`: browser headless mode switch.
+
+Electron mac packaging:
 
 ```bash
-pnpm --filter ./backend start -- --host 127.0.0.1 --port 5001
+pnpm dist:electron:mac
 ```
 
-## Backend environment variables
+## Documentation
 
-- `PORT`: backend preferred service port (default: `5000`).
-- `FRONTEND_ORIGIN`: allowed frontend origins for CORS, comma-separated.
-- `AUTH_USERNAME`: login username (set to `admin`).
-- `AUTH_PASSWORD`: login password.
-- `AUTH_JWT_SECRET`: signing secret for auth token.
-- `AUTH_TOKEN_TTL_SECONDS`: auth token TTL in seconds (default: `86400`).
-- `BROWSER_PROFILE_DIR`: persistent browser profile directory used by Playwright.
-  - Default: `~/.browser-profile`.
-  - Set this to a custom path if you want to reuse or isolate login state.
-- `SESSION_STORE_FILE`: persisted browser session store path.
-  - Default: `<BROWSER_PROFILE_DIR>/session-store.json`.
-- `TERMINAL_SESSION_STORE_FILE`: persisted terminal session store path.
-  - Default: `<BROWSER_PROFILE_DIR>/terminal-session-store.json`.
-- `FRONTEND_DIST_DIR`: optional frontend build output directory served by the backend.
-  - `pnpm start` normally finds `frontend/dist` automatically.
-  - Packaged Electron sets this to the bundled `frontend/dist` resource.
-- `BROWSER_HEADLESS`: browser headless mode switch.
-  - Default: `true` (headless).
-  - Set to `false` to run headed for debugging.
+| Topic                             | Link                                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------------------------ |
+| CLI                               | [docs/cli/terminal-cli.md](docs/cli/terminal-cli.md)                                       |
+| Deployment                        | [docs/deployment/overview.md](docs/deployment/overview.md)                                 |
+| Mobile web support                | [docs/architecture/mobile-web-support.md](docs/architecture/mobile-web-support.md)         |
+| Terminal recovery                 | [docs/architecture/terminal-tmux-recovery.md](docs/architecture/terminal-tmux-recovery.md) |
+| Architecture and network topology | [docs/architecture/network-topology.md](docs/architecture/network-topology.md)             |
+| Testing commands                  | [docs/testing/command-matrix.md](docs/testing/command-matrix.md)                           |
+
+## Verification
+
+```bash
+pnpm typecheck
+pnpm lint
+pnpm test:e2e
+pnpm test
+```
+
+Frontend formal automation is E2E-first. Do not add frontend unit tests under
+`frontend/src` for README-only work.
 
 ## License
 
