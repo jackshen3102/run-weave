@@ -6,6 +6,7 @@
 
 | 需求                                     | 阅读                                                  |
 | ---------------------------------------- | ----------------------------------------------------- |
+| 开源项目入口与快速开始                   | ../README.md 或 ../README.zh-CN.md                    |
 | 架构/网络拓扑                            | architecture/network-topology.md                      |
 | 移动端 Web 支持                          | architecture/mobile-web-support.md                    |
 | 终端代码预览 / Terminal Browser          | architecture/terminal-code-preview.md                 |
