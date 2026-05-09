@@ -290,6 +290,23 @@ export function TerminalWorkspace({
   useEffect(() => {
     let disposed = false;
     let stopped = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let idleStreak = 0;
+
+    const BASE_INTERVAL = 2_000;
+    const MAX_INTERVAL = 30_000;
+
+    const nextInterval = (): number => {
+      if (idleStreak <= 1) return BASE_INTERVAL;
+      return Math.min(BASE_INTERVAL * 2 ** (idleStreak - 1), MAX_INTERVAL);
+    };
+
+    const scheduleNext = (): void => {
+      if (disposed || stopped) return;
+      timerId = setTimeout(() => {
+        void pollCompletionEvents();
+      }, nextInterval());
+    };
 
     const pollCompletionEvents = async (): Promise<void> => {
       if (disposed || stopped) {
@@ -307,9 +324,12 @@ export function TerminalWorkspace({
         }
 
         if (response.events.length > 0) {
+          idleStreak = 0;
           completionEventCursorRef.current =
             response.events[response.events.length - 1]?.id ??
             completionEventCursorRef.current;
+        } else {
+          idleStreak += 1;
         }
 
         setCompletionMarkers((current) => {
@@ -329,20 +349,20 @@ export function TerminalWorkspace({
       } catch (error) {
         if (error instanceof HttpError && error.status === 401) {
           stopped = true;
-          window.clearInterval(intervalId);
           onAuthExpired?.();
+          return;
         }
+        idleStreak += 1;
       }
+
+      scheduleNext();
     };
 
-    const intervalId = window.setInterval(() => {
-      void pollCompletionEvents();
-    }, 2_000);
     void pollCompletionEvents();
 
     return () => {
       disposed = true;
-      window.clearInterval(intervalId);
+      if (timerId !== null) clearTimeout(timerId);
     };
   }, [apiBase, onAuthExpired, token]);
   const createSession = useCallback(async (): Promise<void> => {
