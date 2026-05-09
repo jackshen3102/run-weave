@@ -772,6 +772,7 @@ export function TerminalSurface({
       }
 
       event.preventDefault();
+      event.stopImmediatePropagation();
       setPasteError(null);
 
       void fileToBase64(file)
