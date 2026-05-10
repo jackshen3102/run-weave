@@ -364,6 +364,34 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
     });
   }
 
+  async reorderProjects(orderedIds: string[]): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      for (const project of database.data.projects) {
+        const index = orderedIds.indexOf(project.id);
+        project.order = index >= 0 ? index : project.order;
+      }
+      await database.write();
+    });
+  }
+
+  async reorderSessions(
+    projectId: string,
+    orderedIds: string[],
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      for (const session of database.data.sessions) {
+        if (session.projectId !== projectId) {
+          continue;
+        }
+        const index = orderedIds.indexOf(session.id);
+        session.order = index >= 0 ? index : session.order;
+      }
+      await database.write();
+    });
+  }
+
   async deleteSession(terminalSessionId: string): Promise<void> {
     await this.enqueueWrite(async () => {
       const database = this.getDatabase();
@@ -386,7 +414,16 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
   private getSessionMetadataRecords(): PersistedTerminalSessionMetadataRecord[] {
     return this.getDatabase()
       .data.sessions.slice()
-      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .sort((left, right) => {
+        const leftOrder = left.order;
+        const rightOrder = right.order;
+        if (leftOrder !== undefined && rightOrder !== undefined) {
+          return leftOrder - rightOrder;
+        }
+        if (leftOrder !== undefined) return -1;
+        if (rightOrder !== undefined) return 1;
+        return left.createdAt.localeCompare(right.createdAt);
+      })
       .map((session) => structuredClone(session));
   }
 
@@ -403,7 +440,16 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
   private getProjects(): PersistedTerminalProjectRecord[] {
     return this.getDatabase()
       .data.projects.slice()
-      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .sort((left, right) => {
+        const leftOrder = left.order;
+        const rightOrder = right.order;
+        if (leftOrder !== undefined && rightOrder !== undefined) {
+          return leftOrder - rightOrder;
+        }
+        if (leftOrder !== undefined) return -1;
+        if (rightOrder !== undefined) return 1;
+        return left.createdAt.localeCompare(right.createdAt);
+      })
       .map((project) => structuredClone(project));
   }
 
@@ -545,6 +591,7 @@ function toMetadataRecord(
     activeCommand: session.activeCommand ?? null,
     status: session.status,
     createdAt: session.createdAt,
+    ...(session.order !== undefined ? { order: session.order } : {}),
     ...(session.exitCode !== undefined ? { exitCode: session.exitCode } : {}),
     ...(session.runtimeKind !== undefined
       ? { runtimeKind: session.runtimeKind }

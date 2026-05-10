@@ -4,6 +4,7 @@ export interface PersistedTerminalProjectRecord {
   path?: string | null;
   createdAt: string;
   isDefault: boolean;
+  order?: number;
 }
 
 export interface PersistedTerminalSessionRecord {
@@ -22,6 +23,7 @@ export interface PersistedTerminalSessionRecord {
   tmuxSocketPath?: string;
   tmuxUnavailableReason?: string;
   recoverable?: boolean;
+  order?: number;
 }
 
 export type PersistedTerminalSessionMetadataRecord = Omit<
@@ -109,5 +111,7 @@ export interface TerminalSessionStore {
     params: AppendTerminalSessionScrollbackParams,
   ): Promise<void>;
   updateSessionExit(params: UpdateTerminalSessionExitParams): Promise<void>;
+  reorderProjects(orderedIds: string[]): Promise<void>;
+  reorderSessions(projectId: string, orderedIds: string[]): Promise<void>;
   deleteSession(terminalSessionId: string): Promise<void>;
 }

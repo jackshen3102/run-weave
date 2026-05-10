@@ -55,6 +55,8 @@ function createStoreMock() {
     appendSessionScrollback: vi.fn(async () => undefined),
     updateSessionScrollback: vi.fn(async () => undefined),
     updateSessionExit: vi.fn(async () => undefined),
+    reorderProjects: vi.fn(async () => undefined),
+    reorderSessions: vi.fn(async () => undefined),
     deleteSession: vi.fn(async () => undefined),
   } satisfies TerminalSessionStore;
 }

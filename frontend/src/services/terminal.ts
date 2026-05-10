@@ -211,6 +211,45 @@ export async function deleteTerminalSession(
   );
 }
 
+export async function reorderTerminalProjects(
+  apiBase: string,
+  token: string,
+  orderedIds: string[],
+): Promise<void> {
+  return requestVoid(
+    apiBase,
+    "/api/terminal/project/reorder",
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ orderedIds }),
+    },
+  );
+}
+
+export async function reorderTerminalSessions(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  orderedIds: string[],
+): Promise<void> {
+  return requestVoid(
+    apiBase,
+    "/api/terminal/session/reorder",
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ projectId, orderedIds }),
+    },
+  );
+}
+
 export async function createTerminalWsTicket(
   apiBase: string,
   token: string,
