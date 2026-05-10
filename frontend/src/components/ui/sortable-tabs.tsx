@@ -42,7 +42,6 @@ interface SortableTabItemProps {
 
 function SortableTabItem({ id, children }: SortableTabItemProps) {
   const {
-    attributes,
     listeners,
     setNodeRef,
     transform,
@@ -57,7 +56,7 @@ function SortableTabItem({ id, children }: SortableTabItemProps) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...listeners}>
       {children}
     </div>
   );
