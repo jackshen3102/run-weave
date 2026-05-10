@@ -296,6 +296,70 @@ export function createTerminalRouter(
     }
   });
 
+  const reorderProjectsSchema = z
+    .object({
+      orderedIds: z.array(z.string().min(1)).min(1),
+    })
+    .strict();
+
+  router.put("/project/reorder", async (req, res) => {
+    const parsed = reorderProjectsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      await terminalSessionManager.reorderProjects(parsed.data.orderedIds);
+      res.status(204).send();
+    } catch (error) {
+      console.error("[viewer-be] terminal project reorder failed", {
+        error: String(error),
+      });
+      res.status(500).json({
+        message: "Terminal project reorder failed",
+        error: String(error),
+      });
+    }
+  });
+
+  const reorderSessionsSchema = z
+    .object({
+      projectId: z.string().trim().min(1),
+      orderedIds: z.array(z.string().min(1)).min(1),
+    })
+    .strict();
+
+  router.put("/session/reorder", async (req, res) => {
+    const parsed = reorderSessionsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      await terminalSessionManager.reorderSessions(
+        parsed.data.projectId,
+        parsed.data.orderedIds,
+      );
+      res.status(204).send();
+    } catch (error) {
+      console.error("[viewer-be] terminal session reorder failed", {
+        error: String(error),
+      });
+      res.status(500).json({
+        message: "Terminal session reorder failed",
+        error: String(error),
+      });
+    }
+  });
+
   router.delete("/project/:id", async (req, res) => {
     const childSessions = terminalSessionManager
       .listSessions()

@@ -52,6 +52,9 @@ export function useTerminalBrowserController({
   const setActiveBrowserTab = useTerminalPreviewStore(
     (state) => state.setActiveBrowserTab,
   );
+  const reorderBrowserTabs = useTerminalPreviewStore(
+    (state) => state.reorderBrowserTabs,
+  );
   const updateBrowserTab = useTerminalPreviewStore(
     (state) => state.updateBrowserTab,
   );
@@ -541,6 +544,7 @@ export function useTerminalBrowserController({
     proxyState,
     proxySwitching,
     reload,
+    reorderBrowserTabs,
     saveHeaderRules,
     selectDevicePreset,
     setActiveBrowserTab,

@@ -76,6 +76,7 @@ interface TerminalPreviewStore {
   ) => void;
   closeBrowserTab: (tabId: string) => void;
   setActiveBrowserTab: (tabId: string) => void;
+  reorderBrowserTabs: (fromIndex: number, toIndex: number) => void;
   updateBrowserTab: (
     tabId: string,
     updates: Partial<TerminalBrowserTabState>,
@@ -249,6 +250,28 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
         browser: {
           tabs,
           activeTabId: nextActiveTab?.id ?? tabs[0]!.id,
+        },
+      };
+    });
+  },
+  reorderBrowserTabs: (fromIndex: number, toIndex: number) => {
+    set((state: TerminalPreviewStore) => {
+      const tabs = [...state.browser.tabs];
+      if (
+        fromIndex < 0 ||
+        fromIndex >= tabs.length ||
+        toIndex < 0 ||
+        toIndex >= tabs.length ||
+        fromIndex === toIndex
+      ) {
+        return state;
+      }
+      const [moved] = tabs.splice(fromIndex, 1);
+      tabs.splice(toIndex, 0, moved!);
+      return {
+        browser: {
+          ...state.browser,
+          tabs,
         },
       };
     });

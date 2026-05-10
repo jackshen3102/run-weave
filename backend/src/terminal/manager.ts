@@ -28,6 +28,7 @@ export interface TerminalProjectRecord {
   path: string | null;
   createdAt: Date;
   isDefault: boolean;
+  order?: number;
 }
 
 export interface TerminalSessionRecord {
@@ -41,6 +42,7 @@ export interface TerminalSessionRecord {
   status: "running" | "exited";
   createdAt: Date;
   exitCode?: number;
+  order?: number;
   runtimeKind: TerminalRuntimeKind;
   tmuxSessionName?: string;
   tmuxSocketPath?: string;
@@ -73,6 +75,7 @@ function buildProjectRecord(
     path: persisted.path ?? null,
     createdAt: new Date(persisted.createdAt),
     isDefault: persisted.isDefault,
+    ...(persisted.order !== undefined ? { order: persisted.order } : {}),
   };
 }
 
@@ -102,6 +105,7 @@ function buildRecord(
     status: persisted.status,
     createdAt: new Date(persisted.createdAt),
     exitCode: persisted.exitCode,
+    ...(persisted.order !== undefined ? { order: persisted.order } : {}),
     runtimeKind: persisted.runtimeKind ?? "pty",
     tmuxSessionName: persisted.tmuxSessionName,
     tmuxSocketPath: persisted.tmuxSocketPath,
@@ -196,9 +200,16 @@ export class TerminalSessionManager {
   }
 
   listProjects(): TerminalProjectRecord[] {
-    return Array.from(this.projects.values()).sort(
-      (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
-    );
+    return Array.from(this.projects.values()).sort((left, right) => {
+      const leftOrder = left.order;
+      const rightOrder = right.order;
+      if (leftOrder !== undefined && rightOrder !== undefined) {
+        return leftOrder - rightOrder;
+      }
+      if (leftOrder !== undefined) return -1;
+      if (rightOrder !== undefined) return 1;
+      return left.createdAt.getTime() - right.createdAt.getTime();
+    });
   }
 
   getProject(projectId: string): TerminalProjectRecord | undefined {
@@ -280,6 +291,46 @@ export class TerminalSessionManager {
     }
 
     return true;
+  }
+
+  async reorderProjects(orderedIds: string[]): Promise<void> {
+    const orderMap = new Map<string, number>();
+    for (let index = 0; index < orderedIds.length; index += 1) {
+      const id = orderedIds[index];
+      if (id !== undefined) {
+        orderMap.set(id, index);
+      }
+    }
+    for (const project of this.projects.values()) {
+      const order = orderMap.get(project.id);
+      if (order !== undefined) {
+        project.order = order;
+      }
+    }
+    await this.sessionStore.reorderProjects(orderedIds);
+  }
+
+  async reorderSessions(
+    projectId: string,
+    orderedIds: string[],
+  ): Promise<void> {
+    const orderMap = new Map<string, number>();
+    for (let index = 0; index < orderedIds.length; index += 1) {
+      const id = orderedIds[index];
+      if (id !== undefined) {
+        orderMap.set(id, index);
+      }
+    }
+    for (const session of this.sessions.values()) {
+      if (session.projectId !== projectId) {
+        continue;
+      }
+      const order = orderMap.get(session.id);
+      if (order !== undefined) {
+        session.order = order;
+      }
+    }
+    await this.sessionStore.reorderSessions(projectId, orderedIds);
   }
 
   private getDefaultProjectId(): string {
@@ -408,7 +459,16 @@ export class TerminalSessionManager {
   }
 
   listSessions(): TerminalSessionRecord[] {
-    return Array.from(this.sessions.values());
+    return Array.from(this.sessions.values()).sort((left, right) => {
+      const leftOrder = left.order;
+      const rightOrder = right.order;
+      if (leftOrder !== undefined && rightOrder !== undefined) {
+        return leftOrder - rightOrder;
+      }
+      if (leftOrder !== undefined) return -1;
+      if (rightOrder !== undefined) return 1;
+      return left.createdAt.getTime() - right.createdAt.getTime();
+    });
   }
 
   markExited(terminalSessionId: string, exitCode?: number): void {

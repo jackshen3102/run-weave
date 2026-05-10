@@ -7,7 +7,7 @@ import { resolveNewTerminalRuntimePreference } from "../../features/terminal/run
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import type { ClientMode } from "../../features/client-mode";
 import { HttpError } from "../../services/http";
-import { createTerminalProject, createTerminalSession, deleteTerminalProject, deleteTerminalSession, listTerminalCompletionEvents, listTerminalProjects, listTerminalSessions, updateTerminalProject } from "../../services/terminal";
+import { createTerminalProject, createTerminalSession, deleteTerminalProject, deleteTerminalSession, listTerminalCompletionEvents, listTerminalProjects, listTerminalSessions, reorderTerminalProjects, reorderTerminalSessions, updateTerminalProject } from "../../services/terminal";
 import { resolvePreferredSessionId, usePersistRecentSelection, useSessionMarkerCleanup, useSessionSelectionShortcuts } from "./terminal-workspace-effects";
 import { TerminalWorkspaceShell } from "./terminal-workspace-shell";
 interface TerminalWorkspaceProps {
@@ -99,18 +99,12 @@ export function TerminalWorkspace({
     sessionsRef.current = sessions;
   }, [sessions]);
   const visibleProjects = useMemo(() => {
-    return [...projects].sort((left, right) => {
-      return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-    });
+    return [...projects];
   }, [projects]);
   const visibleSessions = useMemo(() => {
-    return sessions
-      .filter((session) =>
-        activeProjectId ? session.projectId === activeProjectId : true,
-      )
-      .sort((left, right) => {
-        return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-      });
+    return sessions.filter((session) =>
+      activeProjectId ? session.projectId === activeProjectId : true,
+    );
   }, [activeProjectId, sessions]);
   const sessionIds = useMemo(() => sessions.map((session) => session.terminalSessionId), [sessions]);
   const cachedSurfaceSessionIdSet = useMemo(() => new Set(cachedSurfaceSessionIds), [cachedSurfaceSessionIds]);
@@ -564,6 +558,56 @@ export function TerminalWorkspace({
       });
     }, BELL_MARKER_DURATION_MS);
   }, []);
+  const handleProjectReorder = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      setProjects((current) => {
+        const reordered = [...current];
+        const [moved] = reordered.splice(fromIndex, 1);
+        if (moved) {
+          reordered.splice(toIndex, 0, moved);
+        }
+        const orderedIds = reordered.map((p) => p.projectId);
+        void reorderTerminalProjects(apiBase, token, orderedIds).catch(() => {
+          void loadSessions();
+        });
+        return reordered;
+      });
+    },
+    [apiBase, loadSessions, token],
+  );
+
+  const handleSessionReorder = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (!activeProjectId) {
+        return;
+      }
+      setSessions((current) => {
+        const projectSessions = current.filter(
+          (s) => s.projectId === activeProjectId,
+        );
+        const reordered = [...projectSessions];
+        const [moved] = reordered.splice(fromIndex, 1);
+        if (moved) {
+          reordered.splice(toIndex, 0, moved);
+        }
+        const orderedIds = reordered.map((s) => s.terminalSessionId);
+        void reorderTerminalSessions(
+          apiBase,
+          token,
+          activeProjectId,
+          orderedIds,
+        ).catch(() => {
+          void loadSessions();
+        });
+        let ri = 0;
+        return current.map((s) =>
+          s.projectId === activeProjectId ? reordered[ri++]! : s,
+        );
+      });
+    },
+    [activeProjectId, apiBase, loadSessions, token],
+  );
+
   const openHistoryDrawer = useCallback((terminalSessionId: string) => {
     setHistoryTerminalSessionId(terminalSessionId);
     setHistoryDrawerOpen(true);
@@ -656,6 +700,8 @@ export function TerminalWorkspace({
           setHistoryTerminalSessionId(null);
         }
       }}
+      onReorderProjects={handleProjectReorder}
+      onReorderSessions={handleSessionReorder}
       onSessionBell={handleSessionBell}
       onSessionMetadata={handleSessionMetadata}
     />
