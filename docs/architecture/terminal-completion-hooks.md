@@ -210,7 +210,7 @@ Authorization: Bearer <token>
 
 前端行为：
 
-- 轮询 completion events。
+- 轮询 completion events。轮询以 2 秒为基础间隔；连续空响应或非鉴权错误会指数退避，最高 30 秒；收到新事件后恢复 2 秒。
 - 只对非当前 active terminal 设置 completion marker。
 - 当前 active terminal 收到完成事件时不点亮，因为用户已经在看它。
 - 用户切到对应 terminal 后清除 marker。
@@ -259,7 +259,7 @@ token 是 backend 启动时生成或从环境读取的随机值，只通过 tmux
 - tmux session 必须是在 Runweave 注入 hook 环境变量之后创建的。
 - Codex/Coco/Trae 必须实际执行了对应 hook 或 notify 命令。
 - backend 必须正在运行，并且 `RUNWEAVE_HOOK_ENDPOINT` 指向当前可用端口。
-- frontend 必须能通过登录态调用 `/api/terminal/completion-events`。
+- frontend 必须能通过登录态调用 `/api/terminal/completion-events`。空闲时前端会退避到最多 30 秒轮询，因此完成 marker 可能不是严格实时，但收到新事件后会恢复短间隔。
 
 不会覆盖的情况：
 

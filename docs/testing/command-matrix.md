@@ -6,6 +6,7 @@
 | 前端逻辑 / 状态 / URL                   | `pnpm run test:e2e -- tests/interaction.spec.ts`                                                                                                   |
 | 终端链路 / Vim / 预览                   | `pnpm run test:e2e -- tests/terminal.spec.ts tests/terminal-vim.spec.ts tests/terminal-preview.spec.ts`                                            |
 | 终端 session 生命周期 / ID 生成         | `pnpm --filter ./backend test -- src/terminal/manager.test.ts`                                                                                     |
+| 终端 project / session 排序持久化       | `pnpm --filter ./backend test -- src/terminal/manager.test.ts`，必要时补 `pnpm run test:e2e -- tests/terminal.spec.ts` 做拖拽交互回归              |
 | 后端路由/服务逻辑                       | `pnpm --filter ./backend test -- src/...`                                                                                                          |
 | CLI / 外部控制面                        | `pnpm --filter ./packages/runweave-cli test && pnpm --filter ./packages/runweave-cli typecheck`                                                    |
 | 共享协议类型变更                        | `pnpm --filter ./packages/shared test && pnpm --filter ./backend test && pnpm run test:e2e`                                                        |

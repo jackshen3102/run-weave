@@ -22,7 +22,7 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 
 - `frontend/src/pages/terminal-page.tsx`：Terminal 路由入口，负责把路由参数传给工作台。
 - `frontend/src/components/terminal/terminal-workspace.tsx`：Terminal 工作台协调层，负责项目、会话、活动标记、预览状态接线，以及向 shell 组合数据与动作。
-- `frontend/src/components/terminal/terminal-workspace-shell.tsx`：Terminal 工作台展示层，负责顶部栏、活动 session 容器、历史抽屉、Preview sidecar 挂载，以及 active surface 与 headless watcher 的布局。
+- `frontend/src/components/terminal/terminal-workspace-shell.tsx`：Terminal 工作台展示层，负责顶部栏、活动 session 容器、历史抽屉、Preview sidecar 挂载，以及 active surface 与 headless watcher 的布局；项目 tab 和 terminal session tab 支持拖拽排序。
 - `frontend/src/components/terminal/terminal-workspace-effects.ts`：Terminal 工作台副作用层，负责 recent selection、快捷键切换和 marker 清理等衍生逻辑。
 - `frontend/src/components/terminal/terminal-surface.tsx`：xterm 渲染与输入连接，不应承载代码预览业务。
 - `frontend/src/components/terminal/terminal-preview-panel.tsx`：右侧 Preview 面板的数据编排层，负责按 active project 读取 Preview 状态、发起文件和 diff 请求，并把动作与渲染层连接起来。
@@ -33,9 +33,11 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - `frontend/src/components/terminal/terminal-preview-menu.tsx`：Terminal 顶部栏里的 Preview 入口按钮，负责打开右侧 Sidecar，默认恢复当前 project 上次的 Preview 状态，没有单独的 `Open file...` / `Changes` 下拉菜单。
 - `frontend/src/components/terminal/terminal-open-file-command.tsx`：Open file 的搜索输入和结果列表，不依赖 Monaco。
 - `frontend/src/components/terminal/terminal-monaco-viewer.tsx`：Monaco Editor / Diff Editor 封装，已通过 lazy boundary 加载；在文件或 diff 选区非空时可复制 `path:line` / `path:start-end` 行引用。
+- `frontend/src/components/terminal/terminal-line-reference.tsx`：行引用复制的选择范围、按钮和 clipboard 状态封装，避免 Monaco viewer 继续堆叠行引用细节。
+- `frontend/src/components/ui/sortable-tabs.tsx`：项目 tab、terminal session tab 和 Browser tab 共用的拖拽排序基础组件；交互容器不额外声明 `role=button`，避免与内部 tab/button 语义重复。
 - `frontend/src/features/terminal/preview-store.ts`：Preview 专用 Zustand store，当前 mode 为 `file | changes`，并按 project 保存 query、selected file、selected change。
-- `frontend/src/services/terminal.ts`：Terminal HTTP API client 已提供 project-scoped Preview wrappers：文件搜索、文件读取、git changes、单文件 diff。
-- `backend/src/routes/terminal.ts`：Terminal HTTP API 主路由，负责项目、session 和 clipboard image 等非 Preview 路由，并注册 Preview 子路由。
+- `frontend/src/services/terminal.ts`：Terminal HTTP API client 已提供 project-scoped Preview wrappers：文件搜索、文件读取、git changes、单文件 diff，并提供项目与 session 排序 API wrapper。
+- `backend/src/routes/terminal.ts`：Terminal HTTP API 主路由，负责项目、session、clipboard image、项目排序和 session 排序等非 Preview 路由，并注册 Preview 子路由。
 - `backend/src/routes/terminal-preview-routes.ts`：Terminal Preview HTTP 子路由，提供 `/api/terminal/project/:id/preview/...` project-scoped Preview API。
 - `backend/src/terminal/preview.ts`：后端 Preview service 已基于 project path 做路径约束、文件读取、语言识别、搜索、git changes 和 diff。
 - `packages/shared/src/terminal-protocol.ts`：Terminal 共享协议已包含 Preview search/file/git changes/file diff 类型。
@@ -57,6 +59,7 @@ Terminal Browser 工具当前边界：
 - Proxy 负责 target/session 仿真、frame id 重写、导航参数校验、危险命令拦截和 DevTools 状态隔离。`Browser.close`、`Browser.crash`、清 cookie/cache/origin storage、忽略 HTTPS 错误等命令不能影响用户主窗口或真实 profile。
 - Browser 工具的 CDP 能力是桌面端本机自动化边界，不是远端协作协议；不要把 endpoint 持久化到项目数据或对公网暴露。
 - Browser tab 状态会持久化到 Electron `userData` 下的 `terminal-browser-tabs.json`。重启客户端时会恢复合法的 `http:`、`https:`、`about:blank` tab，并丢弃不合法或空 URL。
+- Browser tab 支持在右侧工具内部拖拽排序；排序只改变当前 Browser 工具的 tab 顺序和 active tab 组织方式，不影响网页会话、CDP target 身份或项目 / terminal session 顺序。
 - 工具栏提供本地代理开关与 `Headers` 面板。代理开关使用同一个 `persist:runweave-terminal-browser` session 的 `setProxy`，当前固定走 `127.0.0.1:8899`，绕过 `<local>`。
 - `Headers` 面板只影响右侧 Terminal Browser 的网页请求，不影响首页 `New Browser` 创建的后端 Playwright session、Runweave 主窗口、登录/API 请求、Electron 更新请求或后端 viewer session。
 - Header 规则保存在前端 `localStorage` 的 `terminal.browser.headerRules`，Terminal Browser Tool 挂载时会同步到 Electron 主进程；保存失败会回滚本地存储并展示错误。
@@ -402,7 +405,16 @@ terminal: codex-agent
 
 ### 切换 Project
 
-Project 切换本质上会切换 active terminal session，因此沿用 terminal tab 切换规则：
+Project 切换本质上会切换 active terminal session，因此沿用 terminal tab 切换规则。项目 tab 和 terminal session tab 的用户排序由后端持久化 `order` 字段保存；没有 `order` 的旧记录仍按 `createdAt` fallback 排序。
+
+排序相关 API：
+
+- `PUT /api/terminal/project/reorder`，body 为 `{ orderedIds: string[] }`。
+- `PUT /api/terminal/session/reorder`，body 为 `{ projectId: string, orderedIds: string[] }`。
+
+排序 API 只接受当前列表的重新排列，不创建、删除或跨 project 移动 session。前端可以先乐观重排，失败后重新加载后端列表。
+
+Project / terminal tab 切换继续遵守以下规则：
 
 - 面板保持打开。
 - 右侧内容切到新 active project。
