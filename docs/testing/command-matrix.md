@@ -17,6 +17,7 @@
 | 外部依赖风险                            | `pnpm run test:live`                                                                                                                               |
 | 预合并全量信心                          | `pnpm run test:default && pnpm run test:e2e`                                                                                                       |
 | Electron 客户端开发                     | `pnpm dev:electron`                                                                                                                                |
+| 纯文档整理 / 文档保鲜                   | `git diff --check`，再用 `git diff --name-only` 确认只改允许的文档范围；删除文档或资产后补 `rg` 检查残留引用                                       |
 
 ## 反模式
 
