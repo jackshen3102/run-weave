@@ -23,3 +23,9 @@
 | Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md |
 | 终端回归                                 | testing/runbooks/terminal-vim.md                      |
 | 部署/环境概览                            | deployment/overview.md                                |
+
+## 维护边界
+
+文档整理只维护当前事实、稳定边界和验证入口。新增计划、一次性执行记录或临时排障过程，默认应沉淀进上表的权威文档；如果核心结论已经被吸收，冗余材料可以删除。
+
+纯文档保鲜不修改代码、配置、测试或 lockfile。发现代码侧问题时，先在整理报告里列为待处理项，不顺手修代码。
