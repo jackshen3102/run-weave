@@ -1104,14 +1104,14 @@ export function TerminalPreviewPanel({
           }
         }}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
+        <AlertDialogContent className="w-[calc(100vw-2rem)] overflow-hidden">
+          <AlertDialogHeader className="min-w-0">
             <AlertDialogTitle>Delete File</AlertDialogTitle>
             <AlertDialogDescription>
               This deletes the file from disk. This cannot be undone.
             </AlertDialogDescription>
             {deleteTarget ? (
-              <p className="truncate text-sm text-slate-300">
+              <p className="min-w-0 break-all text-sm leading-6 text-slate-300">
                 {deleteTarget.path}
               </p>
             ) : null}

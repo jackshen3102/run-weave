@@ -21,10 +21,14 @@ import { filterBrowserHandledTerminalOutput } from "../../features/terminal/outp
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { createResizeScheduler } from "../../features/terminal/resize-scheduler";
-import { buildTmuxScrollInput, shouldThrottleTmuxScroll } from "../../features/terminal/tmux-scroll";
+import {
+  buildTmuxScrollInput,
+  shouldThrottleTmuxScroll,
+} from "../../features/terminal/tmux-scroll";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
 import { scheduleTerminalViewportRefresh } from "../../features/terminal/viewport-refresh";
 import { shouldSuppressWheelInput } from "../../features/terminal/wheel-input";
+import { createTerminalWrappedWebLinkProvider } from "../../features/terminal/web-link-provider";
 import { HttpError } from "../../services/http";
 import {
   createTerminalSessionClipboardImage,
@@ -41,7 +45,10 @@ interface TerminalSurfaceProps {
   layoutVersion?: string;
   onAuthExpired?: () => void;
   onBell?: () => void;
-  onMetadata?: (metadata: { cwd: string; activeCommand: string | null }) => void;
+  onMetadata?: (metadata: {
+    cwd: string;
+    activeCommand: string | null;
+  }) => void;
 }
 
 interface PastedImageReference {
@@ -257,39 +264,44 @@ export function TerminalSurface({
     regex: false,
   });
 
-  const renderTerminalSnapshot = useCallback((data: string) => {
-    const nextChunk = filterBrowserHandledTerminalOutput(data);
-    const terminal = terminalRef.current;
-    if (!terminal) {
-      return;
-    }
+  const renderTerminalSnapshot = useCallback(
+    (data: string) => {
+      const nextChunk = filterBrowserHandledTerminalOutput(data);
+      const terminal = terminalRef.current;
+      if (!terminal) {
+        return;
+      }
 
-    logTerminalPerf("terminal.snapshot.received", {
-      terminalSessionId,
-      ...summarizeTerminalChunk(nextChunk),
-    });
-
-    hasRenderedSnapshotRef.current = true;
-    hasDeferredOutputRef.current = false;
-    deferredOutputRef.current = "";
-    requiresSnapshotRestoreRef.current = false;
-    terminal.reset();
-    if (!nextChunk) {
-      refreshTerminalViewportRef.current?.();
-      return;
-    }
-
-    const renderStartedAt = performance.now();
-    terminal.write(nextChunk, () => {
-      logTerminalPerf("terminal.snapshot.rendered", {
+      logTerminalPerf("terminal.snapshot.received", {
         terminalSessionId,
-        renderDurationMs: Number((performance.now() - renderStartedAt).toFixed(2)),
         ...summarizeTerminalChunk(nextChunk),
       });
-      terminal.scrollToBottom();
-      refreshTerminalViewportRef.current?.();
-    });
-  }, [terminalSessionId]);
+
+      hasRenderedSnapshotRef.current = true;
+      hasDeferredOutputRef.current = false;
+      deferredOutputRef.current = "";
+      requiresSnapshotRestoreRef.current = false;
+      terminal.reset();
+      if (!nextChunk) {
+        refreshTerminalViewportRef.current?.();
+        return;
+      }
+
+      const renderStartedAt = performance.now();
+      terminal.write(nextChunk, () => {
+        logTerminalPerf("terminal.snapshot.rendered", {
+          terminalSessionId,
+          renderDurationMs: Number(
+            (performance.now() - renderStartedAt).toFixed(2),
+          ),
+          ...summarizeTerminalChunk(nextChunk),
+        });
+        terminal.scrollToBottom();
+        refreshTerminalViewportRef.current?.();
+      });
+    },
+    [terminalSessionId],
+  );
 
   const markDeferredOutput = useCallback((data: string) => {
     hasDeferredOutputRef.current = true;
@@ -324,7 +336,9 @@ export function TerminalSurface({
     terminal.write(deferredOutput, () => {
       logTerminalPerf("terminal.deferred-output.rendered", {
         terminalSessionId,
-        renderDurationMs: Number((performance.now() - renderStartedAt).toFixed(2)),
+        renderDurationMs: Number(
+          (performance.now() - renderStartedAt).toFixed(2),
+        ),
         ...summarizeTerminalChunk(deferredOutput),
       });
       refreshTerminalViewportRef.current?.();
@@ -335,125 +349,133 @@ export function TerminalSurface({
 
   // onOutput is stable so it never triggers a reconnect inside
   // useTerminalConnection.
-  const onSnapshot = useCallback((data: string) => {
-    websocketContentVersionRef.current += 1;
-    if (!activeRef.current) {
-      if (terminalRef.current) {
-        renderTerminalSnapshot(data);
+  const onSnapshot = useCallback(
+    (data: string) => {
+      websocketContentVersionRef.current += 1;
+      if (!activeRef.current) {
+        if (terminalRef.current) {
+          renderTerminalSnapshot(data);
+          return;
+        }
+        if (data.length > 0) {
+          hasDeferredOutputRef.current = true;
+          deferredOutputRef.current = "";
+          requiresSnapshotRestoreRef.current = true;
+        }
         return;
       }
-      if (data.length > 0) {
-        hasDeferredOutputRef.current = true;
-        deferredOutputRef.current = "";
-        requiresSnapshotRestoreRef.current = true;
+
+      renderTerminalSnapshot(data);
+    },
+    [renderTerminalSnapshot],
+  );
+
+  const onOutput = useCallback(
+    (data: string) => {
+      const nextChunk = filterBrowserHandledTerminalOutput(data);
+      if (!nextChunk) {
+        return;
       }
-      return;
-    }
+      websocketContentVersionRef.current += 1;
 
-    renderTerminalSnapshot(data);
-  }, [renderTerminalSnapshot]);
+      const now = Date.now();
+      if (!activeRef.current && nextChunk.includes(BELL_CHARACTER)) {
+        onBellRef.current?.();
+      }
 
-  const onOutput = useCallback((data: string) => {
-    const nextChunk = filterBrowserHandledTerminalOutput(data);
-    if (!nextChunk) {
-      return;
-    }
-    websocketContentVersionRef.current += 1;
+      outputSequenceRef.current += 1;
+      const outputSequence = outputSequenceRef.current;
+      logTerminalPerf("terminal.output.received", {
+        terminalSessionId,
+        seq: outputSequence,
+        sinceLastInputMs:
+          lastInputSentAtRef.current === null
+            ? null
+            : now - lastInputSentAtRef.current,
+        ...summarizeTerminalChunk(nextChunk),
+      });
+      recordTerminalPerfProbeEvent("terminal.output.received", nextChunk, {
+        terminalSessionId,
+        seq: outputSequence,
+        sinceLastInputMs:
+          lastInputSentAtRef.current === null
+            ? null
+            : now - lastInputSentAtRef.current,
+        ...summarizeTerminalChunk(nextChunk),
+      });
 
-    const now = Date.now();
-    if (!activeRef.current && nextChunk.includes(BELL_CHARACTER)) {
-      onBellRef.current?.();
-    }
-
-    outputSequenceRef.current += 1;
-    const outputSequence = outputSequenceRef.current;
-    logTerminalPerf("terminal.output.received", {
-      terminalSessionId,
-      seq: outputSequence,
-      sinceLastInputMs:
-        lastInputSentAtRef.current === null
-          ? null
-          : now - lastInputSentAtRef.current,
-      ...summarizeTerminalChunk(nextChunk),
-    });
-    recordTerminalPerfProbeEvent("terminal.output.received", nextChunk, {
-      terminalSessionId,
-      seq: outputSequence,
-      sinceLastInputMs:
-        lastInputSentAtRef.current === null
-          ? null
-          : now - lastInputSentAtRef.current,
-      ...summarizeTerminalChunk(nextChunk),
-    });
-
-    const terminal = terminalRef.current;
-    if (!activeRef.current) {
-      if (
-        terminal &&
-        hasRenderedSnapshotRef.current &&
-        !hasDeferredOutputRef.current &&
-        !requiresSnapshotRestoreRef.current
-      ) {
-        const renderStartedAt = performance.now();
-        terminal.write(nextChunk, () => {
-          logTerminalPerf("terminal.background-output.rendered", {
-            terminalSessionId,
-            seq: outputSequence,
-            renderDurationMs: Number(
-              (performance.now() - renderStartedAt).toFixed(2),
-            ),
-            ...summarizeTerminalChunk(nextChunk),
+      const terminal = terminalRef.current;
+      if (!activeRef.current) {
+        if (
+          terminal &&
+          hasRenderedSnapshotRef.current &&
+          !hasDeferredOutputRef.current &&
+          !requiresSnapshotRestoreRef.current
+        ) {
+          const renderStartedAt = performance.now();
+          terminal.write(nextChunk, () => {
+            logTerminalPerf("terminal.background-output.rendered", {
+              terminalSessionId,
+              seq: outputSequence,
+              renderDurationMs: Number(
+                (performance.now() - renderStartedAt).toFixed(2),
+              ),
+              ...summarizeTerminalChunk(nextChunk),
+            });
           });
-        });
+          return;
+        }
+        markDeferredOutput(nextChunk);
         return;
       }
-      markDeferredOutput(nextChunk);
-      return;
-    }
 
-    if (!terminal) {
-      return;
-    }
+      if (!terminal) {
+        return;
+      }
 
-    const renderStartedAt = performance.now();
-    terminal.write(nextChunk, () => {
-      const renderedAt = performance.now();
-      const sinceLastInputMs =
-        lastInputSentAtRef.current === null
-          ? null
-          : Date.now() - lastInputSentAtRef.current;
-      logTerminalPerf("terminal.output.rendered", {
-        terminalSessionId,
-        seq: outputSequence,
-        sinceLastInputMs,
-        renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
-        ...summarizeTerminalChunk(nextChunk),
-      });
-      recordTerminalPerfProbeEvent("terminal.output.rendered", nextChunk, {
-        terminalSessionId,
-        seq: outputSequence,
-        sinceLastInputMs,
-        renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
-        ...summarizeTerminalChunk(nextChunk),
-      });
-      requestAnimationFrame(() => {
+      const renderStartedAt = performance.now();
+      terminal.write(nextChunk, () => {
+        const renderedAt = performance.now();
+        const sinceLastInputMs =
+          lastInputSentAtRef.current === null
+            ? null
+            : Date.now() - lastInputSentAtRef.current;
+        logTerminalPerf("terminal.output.rendered", {
+          terminalSessionId,
+          seq: outputSequence,
+          sinceLastInputMs,
+          renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
+          ...summarizeTerminalChunk(nextChunk),
+        });
+        recordTerminalPerfProbeEvent("terminal.output.rendered", nextChunk, {
+          terminalSessionId,
+          seq: outputSequence,
+          sinceLastInputMs,
+          renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
+          ...summarizeTerminalChunk(nextChunk),
+        });
         requestAnimationFrame(() => {
-          const paintDelayMs = Number((performance.now() - renderedAt).toFixed(2));
-          const paintedSinceLastInputMs =
-            lastInputSentAtRef.current === null
-              ? null
-              : Date.now() - lastInputSentAtRef.current;
-          recordTerminalPerfProbeEvent("terminal.output.painted", nextChunk, {
-            terminalSessionId,
-            seq: outputSequence,
-            sinceLastInputMs: paintedSinceLastInputMs,
-            paintDelayMs,
-            ...summarizeTerminalChunk(nextChunk),
+          requestAnimationFrame(() => {
+            const paintDelayMs = Number(
+              (performance.now() - renderedAt).toFixed(2),
+            );
+            const paintedSinceLastInputMs =
+              lastInputSentAtRef.current === null
+                ? null
+                : Date.now() - lastInputSentAtRef.current;
+            recordTerminalPerfProbeEvent("terminal.output.painted", nextChunk, {
+              terminalSessionId,
+              seq: outputSequence,
+              sinceLastInputMs: paintedSinceLastInputMs,
+              paintDelayMs,
+              ...summarizeTerminalChunk(nextChunk),
+            });
           });
         });
       });
-    });
-  }, [markDeferredOutput, terminalSessionId]);
+    },
+    [markDeferredOutput, terminalSessionId],
+  );
 
   const { error, sendInput, sendResize, runtimeKind } = useTerminalConnection({
     apiBase,
@@ -601,6 +623,14 @@ export function TerminalSurface({
         openTerminalLinkRef.current(uri);
       }),
     );
+    const linkProviderDisposable = terminal.registerLinkProvider(
+      createTerminalWrappedWebLinkProvider(terminal, {
+        activate: (event, uri) => {
+          event.preventDefault();
+          openTerminalLinkRef.current(uri);
+        },
+      }),
+    );
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
     terminal.attachCustomWheelEventHandler((event) => {
@@ -632,7 +662,9 @@ export function TerminalSurface({
     });
 
     let rendererAddon: { dispose(): void } | null = null;
-    const applyRendererPreference = (preference: TerminalRendererPreference) => {
+    const applyRendererPreference = (
+      preference: TerminalRendererPreference,
+    ) => {
       rendererAddon?.dispose();
       rendererAddon = null;
 
@@ -699,7 +731,10 @@ export function TerminalSurface({
         return;
       }
       lastResizedAtRef.current = Date.now();
-      lastSentResizeRef.current = { cols: dimensions.cols, rows: dimensions.rows };
+      lastSentResizeRef.current = {
+        cols: dimensions.cols,
+        rows: dimensions.rows,
+      };
       sendResize(dimensions.cols, dimensions.rows);
     };
     const resizeScheduler = createResizeScheduler(
@@ -748,16 +783,18 @@ export function TerminalSurface({
       mountFitFrameId = null;
       syncSize();
     });
-    const searchResultsDisposable = searchAddon.onDidChangeResults((results) => {
-      setSearchResults(
-        results
-          ? {
-              resultCount: results.resultCount,
-              resultIndex: results.resultIndex,
-            }
-          : null,
-      );
-    });
+    const searchResultsDisposable = searchAddon.onDidChangeResults(
+      (results) => {
+        setSearchResults(
+          results
+            ? {
+                resultCount: results.resultCount,
+                resultIndex: results.resultIndex,
+              }
+            : null,
+        );
+      },
+    );
 
     const refreshTerminalViewport = () => {
       if (!terminalRef.current || document.visibilityState !== "visible") {
@@ -893,9 +930,17 @@ export function TerminalSurface({
       };
     };
     helperTextarea?.addEventListener("paste", handlePasteEvent, true);
-    helperTextarea?.addEventListener("compositionend", handleCompositionEnd, true);
+    helperTextarea?.addEventListener(
+      "compositionend",
+      handleCompositionEnd,
+      true,
+    );
     helperTextarea?.addEventListener("beforeinput", handleBeforeInput, true);
-    helperTextarea?.addEventListener("beforeinput", handleMobileBeforeInput, true);
+    helperTextarea?.addEventListener(
+      "beforeinput",
+      handleMobileBeforeInput,
+      true,
+    );
 
     return () => {
       disposed = true;
@@ -918,7 +963,11 @@ export function TerminalSurface({
         handleCompositionEnd,
         true,
       );
-      helperTextarea?.removeEventListener("beforeinput", handleBeforeInput, true);
+      helperTextarea?.removeEventListener(
+        "beforeinput",
+        handleBeforeInput,
+        true,
+      );
       helperTextarea?.removeEventListener(
         "beforeinput",
         handleMobileBeforeInput,
@@ -928,6 +977,7 @@ export function TerminalSurface({
       dataDisposable.dispose();
       bellDisposable.dispose();
       selectionDisposable.dispose();
+      linkProviderDisposable.dispose();
       resizeScheduler.dispose();
       rendererAddon?.dispose();
       terminal.dispose();
@@ -976,14 +1026,17 @@ export function TerminalSurface({
       return;
     }
 
-    return scheduleTerminalViewportRefresh(() => {
-      if (!activeRef.current || !terminalRef.current) {
-        return;
-      }
+    return scheduleTerminalViewportRefresh(
+      () => {
+        if (!activeRef.current || !terminalRef.current) {
+          return;
+        }
 
-      terminalRef.current.focus();
-      refreshTerminalViewportRef.current?.();
-    }, { delayMs: TERMINAL_RESIZE_DEBOUNCE_MS });
+        terminalRef.current.focus();
+        refreshTerminalViewportRef.current?.();
+      },
+      { delayMs: TERMINAL_RESIZE_DEBOUNCE_MS },
+    );
   }, [active, layoutVersion]);
 
   useEffect(() => {
@@ -1018,21 +1071,22 @@ export function TerminalSurface({
     }
 
     const restoreSnapshot = async (attempt: number): Promise<void> => {
-      const websocketContentVersionAtRequest = websocketContentVersionRef.current;
+      const websocketContentVersionAtRequest =
+        websocketContentVersionRef.current;
       try {
         const session = await getTerminalSession(
           apiBase,
           tokenRef.current,
           terminalSessionId,
         );
-        if (
-          cancelled ||
-          restoreSnapshotRequestRef.current !== requestId
-        ) {
+        if (cancelled || restoreSnapshotRequestRef.current !== requestId) {
           return;
         }
 
-        if (websocketContentVersionRef.current !== websocketContentVersionAtRequest) {
+        if (
+          websocketContentVersionRef.current !==
+          websocketContentVersionAtRequest
+        ) {
           if (requiresSnapshotRestoreRef.current && attempt < 2) {
             await restoreSnapshot(attempt + 1);
             return;
@@ -1106,7 +1160,8 @@ export function TerminalSurface({
         return;
       }
 
-      const openSearch = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f";
+      const openSearch =
+        (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f";
       if (openSearch) {
         event.preventDefault();
         setSearchOpen(true);

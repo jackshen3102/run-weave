@@ -5,11 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TmuxRebuildLimitError, TmuxService } from "./tmux-service";
 
 const fixtureBrowserViewerPath = path.resolve(process.cwd(), "..");
-const fixtureFeaturePath = path.resolve(
-  fixtureBrowserViewerPath,
-  "..",
-  "feat",
-);
+const fixtureFeaturePath = path.resolve(fixtureBrowserViewerPath, "..", "feat");
 const TMUX_METADATA_FIELD_SEPARATOR = "__RUNWEAVE_METADATA_FIELD__";
 const TMUX_METADATA_FORMAT = [
   "#{pane_current_path}",
@@ -124,7 +120,9 @@ describe("TmuxService", () => {
 
   it("sends literal text and enter directly to the target pane", async () => {
     const execFileImpl = vi.fn(async () => ({ stdout: "", stderr: "" }));
-    const service = createService(execFileImpl, { TMUX_BINARY: "/usr/bin/tmux" });
+    const service = createService(execFileImpl, {
+      TMUX_BINARY: "/usr/bin/tmux",
+    });
     const target = {
       sessionName: "runweave-terminal-1",
       socketPath: "/tmp/runweave-test/tmux.sock",
@@ -161,6 +159,53 @@ describe("TmuxService", () => {
         "runweave-terminal-1",
         "Enter",
       ],
+      expect.any(Object),
+    );
+  });
+
+  it("lists and kills runweave tmux sessions that are missing from the store", async () => {
+    const execFileImpl = vi.fn(async (_file: string, args: string[]) => {
+      if (args.includes("list-sessions")) {
+        return {
+          stdout:
+            "runweave-known\t1\t1\nrunweave-orphan\t0\t1\nrunweave-attached-orphan\t1\t1\npersonal-session\t1\t2\n",
+          stderr: "",
+        };
+      }
+      return { stdout: "", stderr: "" };
+    });
+    const service = createService(execFileImpl);
+
+    await expect(
+      service.killOrphanedSessions(new Set(["runweave-known"])),
+    ).resolves.toEqual([
+      {
+        sessionName: "runweave-orphan",
+        attachedClients: 0,
+        windows: 1,
+      },
+    ]);
+
+    expect(execFileImpl).toHaveBeenCalledWith(
+      "tmux",
+      [
+        "-S",
+        "/tmp/runweave-test/tmux.sock",
+        "-f",
+        "/tmp/runweave-test/tmux.conf",
+        "kill-session",
+        "-t",
+        "runweave-orphan",
+      ],
+      expect.any(Object),
+    );
+    expect(execFileImpl).not.toHaveBeenCalledWith(
+      "tmux",
+      expect.arrayContaining([
+        "kill-session",
+        "-t",
+        "runweave-attached-orphan",
+      ]),
       expect.any(Object),
     );
   });
@@ -353,19 +398,24 @@ describe("TmuxService", () => {
     });
 
     await expect(service.isAvailable()).resolves.toBe(false);
-    await expect(service.getUnavailableReason()).resolves.toContain(
-      "disabled",
-    );
+    await expect(service.getUnavailableReason()).resolves.toContain("disabled");
     expect(execFileImpl).not.toHaveBeenCalled();
   });
 
   it("probes version, create, has-session, and kill-session when available", async () => {
-    const execFileImpl = vi.fn(async () => ({ stdout: "tmux 3.4\n", stderr: "" }));
+    const execFileImpl = vi.fn(async () => ({
+      stdout: "tmux 3.4\n",
+      stderr: "",
+    }));
     const service = createService(execFileImpl);
 
     await expect(service.isAvailable()).resolves.toBe(true);
 
-    expect(execFileImpl).toHaveBeenCalledWith("tmux", ["-V"], expect.any(Object));
+    expect(execFileImpl).toHaveBeenCalledWith(
+      "tmux",
+      ["-V"],
+      expect.any(Object),
+    );
     expect(execFileImpl).toHaveBeenCalledWith(
       "tmux",
       expect.arrayContaining(["new-session", "-d"]),
@@ -493,11 +543,7 @@ describe("TmuxService", () => {
 
   it("does not include the login shell as an active tmux command", async () => {
     const execFileImpl = vi.fn(async (_file: string, args: string[]) => {
-      if (
-        args.includes(
-          TMUX_METADATA_FORMAT,
-        )
-      ) {
+      if (args.includes(TMUX_METADATA_FORMAT)) {
         return {
           stdout: formatPaneMetadataStdout(fixtureFeaturePath, "", "zsh"),
           stderr: "",

@@ -45,7 +45,7 @@ import {
   readTerminalScrollbackCapture,
   resolveTmuxTarget,
 } from "../terminal/runtime-launcher";
-import type { TmuxService } from "../terminal/tmux-service";
+import type { TmuxService, TmuxSessionInfo } from "../terminal/tmux-service";
 import { buildTerminalMobileOverviewPayload } from "./terminal-mobile-overview";
 import {
   toHistoryPayload,
@@ -167,6 +167,41 @@ function isExistingDirectory(value: string | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+function sanitizeTerminalError(error: unknown): string {
+  const hookToken = process.env.RUNWEAVE_HOOK_TOKEN?.trim();
+  const raw = String(error);
+  const withoutKnownToken = hookToken
+    ? raw.replaceAll(hookToken, "[redacted]")
+    : raw;
+  return withoutKnownToken.replace(
+    /RUNWEAVE_HOOK_TOKEN=[^\s'"]+/g,
+    "RUNWEAVE_HOOK_TOKEN=[redacted]",
+  );
+}
+
+function resolveKnownTmuxSessionNames(
+  terminalSessionManager: TerminalSessionManager,
+  tmuxService: TmuxService,
+): Set<string> {
+  return new Set(
+    terminalSessionManager
+      .listSessions()
+      .filter((session) => isTmuxBackedSession(session))
+      .map(
+        (session) =>
+          session.tmuxSessionName ?? tmuxService.buildSessionName(session.id),
+      ),
+  );
+}
+
+function toTmuxOrphanPayload(session: TmuxSessionInfo): TmuxSessionInfo {
+  return {
+    sessionName: session.sessionName,
+    attachedClients: session.attachedClients,
+    windows: session.windows,
+  };
 }
 
 async function resolveProjectPathInput(
@@ -444,6 +479,9 @@ export function createTerminalRouter(
           const runtimePreference = parsed.data.runtimePreference ?? "auto";
           const shouldTryTmux =
             runtimePreference === "auto" || runtimePreference === "tmux";
+          let attemptedTmuxTarget: ReturnType<
+            TmuxService["buildTarget"]
+          > | null = null;
           const tmuxAvailable =
             options.tmuxService && shouldTryTmux
               ? await options.tmuxService.isAvailable()
@@ -455,6 +493,7 @@ export function createTerminalRouter(
 
           if (options.tmuxService && shouldTryTmux && tmuxAvailable) {
             const target = options.tmuxService.buildTarget(session.id);
+            attemptedTmuxTarget = target;
             launchSession =
               (await terminalSessionManager.updateRuntimeMetadata(session.id, {
                 runtimeKind: "tmux",
@@ -472,14 +511,53 @@ export function createTerminalRouter(
               })) ?? session;
           }
 
-          await ensureTerminalRuntime({
-            session: launchSession,
-            terminalSessionManager,
-            runtimeRegistry: options.runtimeRegistry,
-            ptyService: options.ptyService,
-            tmuxService: options.tmuxService,
-            allowMissingTmuxSession: true,
-          });
+          try {
+            await ensureTerminalRuntime({
+              session: launchSession,
+              terminalSessionManager,
+              runtimeRegistry: options.runtimeRegistry,
+              ptyService: options.ptyService,
+              tmuxService: options.tmuxService,
+              allowMissingTmuxSession: true,
+            });
+          } catch (error) {
+            if (
+              runtimePreference !== "auto" ||
+              !options.tmuxService ||
+              !isTmuxBackedSession(launchSession)
+            ) {
+              throw error;
+            }
+
+            const sanitizedError = sanitizeTerminalError(error);
+            console.error(
+              "[viewer-be] tmux launch failed; falling back to pty",
+              {
+                terminalSessionId: session.id,
+                tmuxSessionName: attemptedTmuxTarget?.sessionName,
+                tmuxSocketPath: attemptedTmuxTarget?.socketPath,
+                error: sanitizedError,
+              },
+            );
+            if (attemptedTmuxTarget) {
+              await options.tmuxService.killSession(attemptedTmuxTarget);
+            }
+
+            launchSession =
+              (await terminalSessionManager.updateRuntimeMetadata(session.id, {
+                runtimeKind: "pty",
+                tmuxUnavailableReason: "tmux launch failed; fell back to pty",
+                recoverable: false,
+              })) ?? session;
+            await ensureTerminalRuntime({
+              session: launchSession,
+              terminalSessionManager,
+              runtimeRegistry: options.runtimeRegistry,
+              ptyService: options.ptyService,
+              tmuxService: options.tmuxService,
+              allowMissingTmuxSession: true,
+            });
+          }
         } catch (error) {
           await terminalSessionManager.destroySession(session.id);
           throw error;
@@ -491,11 +569,84 @@ export function createTerminalRouter(
       };
       res.status(201).json(payload);
     } catch (error) {
+      const sanitizedError = sanitizeTerminalError(error);
       console.error("[viewer-be] create terminal session failed", {
-        error: String(error),
+        error: sanitizedError,
       });
       res.status(500).json({
         message: "Failed to create terminal session",
+        error: sanitizedError,
+      });
+    }
+  });
+
+  router.get("/tmux/orphans", async (_req, res) => {
+    if (!options?.tmuxService) {
+      res.status(503).json({ message: "Terminal tmux service unavailable" });
+      return;
+    }
+
+    try {
+      const knownSessionNames = resolveKnownTmuxSessionNames(
+        terminalSessionManager,
+        options.tmuxService,
+      );
+      const orphanedSessions =
+        await options.tmuxService.listOrphanedSessions(knownSessionNames);
+      res.json({ items: orphanedSessions.map(toTmuxOrphanPayload) });
+    } catch (error) {
+      console.error("[viewer-be] tmux orphan scan failed", {
+        error: String(error),
+      });
+      res.status(500).json({
+        message: "Terminal tmux orphan scan failed",
+        error: String(error),
+      });
+    }
+  });
+
+  router.delete("/tmux/orphans", async (req, res) => {
+    if (!options?.tmuxService) {
+      res.status(503).json({ message: "Terminal tmux service unavailable" });
+      return;
+    }
+    if (req.query.confirm !== "true") {
+      res.status(400).json({
+        message: "Set confirm=true to clean orphaned tmux sessions",
+      });
+      return;
+    }
+
+    try {
+      const knownSessionNames = resolveKnownTmuxSessionNames(
+        terminalSessionManager,
+        options.tmuxService,
+      );
+      const includeAttached = req.query.includeAttached === "true";
+      const orphanedSessions =
+        await options.tmuxService.listOrphanedSessions(knownSessionNames);
+      const killedSessions = await options.tmuxService.killOrphanedSessions(
+        knownSessionNames,
+        {
+          includeAttached,
+        },
+      );
+      const killedSessionNames = new Set(
+        killedSessions.map((session) => session.sessionName),
+      );
+      const skippedSessions = orphanedSessions.filter(
+        (session) => !killedSessionNames.has(session.sessionName),
+      );
+      res.json({
+        killed: killedSessions.map(toTmuxOrphanPayload),
+        skipped: skippedSessions.map(toTmuxOrphanPayload),
+      });
+    } catch (error) {
+      console.error("[viewer-be] tmux orphan cleanup failed", {
+        error: String(error),
+      });
+      res.status(500).json({
+        message: "Terminal tmux orphan cleanup failed",
         error: String(error),
       });
     }
