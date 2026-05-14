@@ -421,14 +421,23 @@ new backend attaches tmux session on demand
 
 如果部署系统必须销毁整个容器或 Pod，应把 tmux server 移出该销毁单元，否则 tmux-backed 终端仍会断。
 
-服务端还需要 tmux session GC，避免 deploy、异常退出或删除流程中断后留下孤儿 session。推荐策略：
+服务端还需要 tmux session 观测和清理入口，避免 deploy、异常退出或删除流程中断后留下孤儿 session。当前实现把清理分成“安全观测”和“显式维护操作”两层：
+
+- backend 启动时只有在 `TERMINAL_TMUX_SCAN_ORPHANS_ON_START=true` 时执行一次 orphan scan/log。
+- 启动 scan 先走 tmux 可用性探测；tmux 不可用或扫描失败时只记录 skip/failure，不阻塞 backend 启动，也不影响 pty fallback。
+- `GET /api/terminal/tmux/orphans` 返回当前 Runweave 专用 socket 下、不在 terminal session store 中的 `runweave-*` session。
+- `DELETE /api/terminal/tmux/orphans?confirm=true` 是显式维护操作，默认只清理 detached orphan；只有传入额外选项时才会包含 attached session。
+
+这类删除能力仍然属于高风险运维边界，不应被当作普通产品路径使用。生产化前需要把权限、owner/lease、最小年龄、审计日志和锁边界补齐；否则多 backend、不同 session store 共享 socket、用户手动 attach、或 metadata 尚未落盘时，都可能把仍有价值的长任务误判为 orphan。
+
+推荐策略：
 
 - 周期性枚举 Runweave 专用 socket 下的 `runweave-*` tmux session。
 - 读取 terminal session store，构建仍有效的 `tmuxSessionName` 集合。
 - 如果 tmux server 上存在 `runweave-*` session，但 session store 中没有对应记录，则视为 orphan。
-- orphan session 先记录日志和指标，再执行 `tmux kill-session -t <name>` 清理。
-- GC 需要和 create/attach/delete 共用 session-level lock，避免刚创建但 metadata 尚未落盘的 session 被误删。
-- 首期可以只在 backend 启动时执行一次 dry-run 日志；产品化后再启用定期清理。
+- orphan session 先记录日志和指标，再由人工或受控维护流程决定是否执行 `tmux kill-session -t <name>`。
+- 删除流程需要和 create/attach/delete 共用 session-level lock，避免刚创建但 metadata 尚未落盘的 session 被误删。
+- 首期保持 backend 启动 dry-run 日志和显式维护接口；产品化后再评估是否启用定期自动清理。
 
 ### 恢复链路
 
