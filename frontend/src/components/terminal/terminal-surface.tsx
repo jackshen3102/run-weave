@@ -1,18 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
-import { FitAddon } from "@xterm/addon-fit";
-import { SearchAddon } from "@xterm/addon-search";
-import { CanvasAddon } from "@xterm/addon-canvas";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
-import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { Terminal } from "@xterm/xterm";
+import type { SearchAddon } from "@xterm/addon-search";
+import type { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import type { ClientMode } from "../../features/client-mode";
-import {
-  DEFAULT_TERMINAL_PREFERENCES,
-  type TerminalRendererPreference,
-} from "../../features/terminal/preferences";
 import {
   logTerminalPerf,
   summarizeTerminalChunk,
@@ -20,21 +10,26 @@ import {
 import { filterBrowserHandledTerminalOutput } from "../../features/terminal/output-filter";
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
-import { createResizeScheduler } from "../../features/terminal/resize-scheduler";
-import {
-  buildTmuxScrollInput,
-  shouldThrottleTmuxScroll,
-} from "../../features/terminal/tmux-scroll";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
 import { scheduleTerminalViewportRefresh } from "../../features/terminal/viewport-refresh";
-import { shouldSuppressWheelInput } from "../../features/terminal/wheel-input";
-import { createTerminalWrappedWebLinkProvider } from "../../features/terminal/web-link-provider";
 import { HttpError } from "../../services/http";
+import { getTerminalSession } from "../../services/terminal";
+import { TerminalSurfaceLayout } from "./terminal-surface-layout";
+import { useTerminalEmulator } from "./use-terminal-emulator";
+import { useTerminalSnapshotRestore } from "./use-terminal-snapshot-restore";
 import {
-  createTerminalSessionClipboardImage,
-  getTerminalSession,
-} from "../../services/terminal";
-import { TerminalMobileKeybar } from "./terminal-mobile-keybar";
+  BELL_CHARACTER,
+  DEFERRED_OUTPUT_REPLAY_MAX_CHARS,
+  IME_COMMIT_DUPLICATE_WINDOW_MS,
+  IME_COMMIT_WINDOW_MS,
+  TERMINAL_RESIZE_DEBOUNCE_MS,
+  hasNonAsciiInput,
+  recordTerminalPerfProbeEvent,
+  type PastedImageReference,
+  type SearchDirection,
+  type TerminalSearchOptions,
+  type TerminalSearchResults,
+} from "./terminal-surface-utils";
 
 interface TerminalSurfaceProps {
   active: boolean;
@@ -49,164 +44,6 @@ interface TerminalSurfaceProps {
     cwd: string;
     activeCommand: string | null;
   }) => void;
-}
-
-interface PastedImageReference {
-  id: string;
-  label: string;
-  filePath: string;
-}
-
-const ESCAPE = "\\u001b";
-const BELL = "\\u0007";
-const BELL_CHARACTER = "\u0007";
-const OSC_COLOR_RESPONSE_PATTERN = new RegExp(
-  `${ESCAPE}\\]1[01];rgb:[0-9a-f/]+(?:${BELL}|${ESCAPE}\\\\)`,
-  "i",
-);
-const DECRPM_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[\\?[0-9;]+\\$y`);
-const DCS_RESPONSE_PATTERN = new RegExp(`${ESCAPE}P[01]\\$r.*${ESCAPE}\\\\`);
-const CURSOR_POSITION_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[[0-9;]+R`);
-const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
-  `${ESCAPE}\\[(?:\\?|>)[0-9;]+c`,
-);
-const FOCUS_REPORTING_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[(?:I|O)$`);
-const TERMINAL_RESIZE_DEBOUNCE_MS = 120;
-const DEFERRED_OUTPUT_REPLAY_MAX_CHARS = 128 * 1024;
-const IME_COMMIT_DUPLICATE_WINDOW_MS = 50;
-const IME_COMMIT_WINDOW_MS = 250;
-
-interface TerminalSearchResults {
-  resultCount: number;
-  resultIndex: number;
-}
-
-function recordTerminalPerfProbeEvent(
-  event: string,
-  data: string,
-  details: Record<string, unknown>,
-): void {
-  const target = window as unknown as {
-    __terminalPerfProbeEvents?: Array<{
-      event: string;
-      at: number;
-      details: Record<string, unknown>;
-    }>;
-  };
-  if (!target.__terminalPerfProbeEvents) {
-    return;
-  }
-
-  const probeText = data.match(/BV_[^\s\r\n]+/)?.[0];
-  if (!probeText) {
-    return;
-  }
-
-  target.__terminalPerfProbeEvents.push({
-    event,
-    at: performance.now(),
-    details: {
-      ...details,
-      probeText,
-    },
-  });
-}
-
-function isTerminalAutoResponse(data: string): boolean {
-  if (!data.startsWith("\u001b")) {
-    return false;
-  }
-
-  return (
-    OSC_COLOR_RESPONSE_PATTERN.test(data) ||
-    DECRPM_RESPONSE_PATTERN.test(data) ||
-    DCS_RESPONSE_PATTERN.test(data) ||
-    CURSOR_POSITION_RESPONSE_PATTERN.test(data) ||
-    DEVICE_ATTRIBUTES_RESPONSE_PATTERN.test(data) ||
-    FOCUS_REPORTING_RESPONSE_PATTERN.test(data)
-  );
-}
-
-function isShiftEnterLineFeed(event: KeyboardEvent): boolean {
-  return (
-    event.type === "keydown" &&
-    event.key === "Enter" &&
-    event.shiftKey &&
-    !event.altKey &&
-    !event.ctrlKey &&
-    !event.metaKey
-  );
-}
-
-async function fileToBase64(file: File): Promise<string> {
-  if (typeof file.arrayBuffer === "function") {
-    const buffer = await file.arrayBuffer();
-    return btoa(
-      Array.from(new Uint8Array(buffer), (byte) =>
-        String.fromCharCode(byte),
-      ).join(""),
-    );
-  }
-
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => {
-      reject(reader.error ?? new Error("Failed to read clipboard image"));
-    };
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string") {
-        reject(new Error("Failed to read clipboard image"));
-        return;
-      }
-      resolve(result.split(",", 2)[1] ?? "");
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\"'\"'")}'`;
-}
-
-function resolveMobileBeforeInputData(
-  event: InputEvent,
-  helperTextarea: HTMLTextAreaElement,
-): string | null {
-  if (
-    event.inputType === "insertText" ||
-    event.inputType === "insertReplacementText" ||
-    event.inputType === "insertCompositionText" ||
-    event.inputType === "insertFromPaste"
-  ) {
-    return (event.data ?? helperTextarea.value) || null;
-  }
-
-  if (
-    event.inputType === "insertLineBreak" ||
-    event.inputType === "insertParagraph"
-  ) {
-    return "\r";
-  }
-
-  if (event.inputType === "deleteContentBackward") {
-    return "\u007f";
-  }
-
-  if (event.inputType === "deleteContentForward") {
-    return "\u001b[3~";
-  }
-
-  return null;
-}
-
-function hasNonAsciiInput(data: string): boolean {
-  for (let index = 0; index < data.length; index += 1) {
-    if (data.charCodeAt(index) > 0x7f) {
-      return true;
-    }
-  }
-  return false;
 }
 
 export function TerminalSurface({
@@ -258,7 +95,7 @@ export function TerminalSurface({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] =
     useState<TerminalSearchResults | null>(null);
-  const [searchOptions, setSearchOptions] = useState({
+  const [searchOptions, setSearchOptions] = useState<TerminalSearchOptions>({
     caseSensitive: false,
     wholeWord: false,
     regex: false,
@@ -524,7 +361,7 @@ export function TerminalSurface({
   }, []);
 
   const runSearch = useCallback(
-    (direction: "next" | "previous", query = searchQuery) => {
+    (direction: SearchDirection, query = searchQuery) => {
       if (!query) {
         clearSearch();
         return;
@@ -584,415 +421,31 @@ export function TerminalSurface({
     runtimeKindRef.current = runtimeKind;
   }, [runtimeKind]);
 
-  useEffect(() => {
-    const container = terminalContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const initialPreferences = DEFAULT_TERMINAL_PREFERENCES;
-    const fitAddon = new FitAddon();
-    const searchAddon = new SearchAddon();
-    const unicode11Addon = new Unicode11Addon();
-    const terminal = new Terminal({
-      allowProposedApi: true,
-      cursorBlink: initialPreferences.cursorBlink,
-      fontFamily: initialPreferences.fontFamily,
-      fontSize: initialPreferences.fontSize,
-      lineHeight: 1.2,
-      screenReaderMode: initialPreferences.screenReaderMode,
-      scrollback: TERMINAL_CLIENT_SCROLLBACK_LINES,
-      scrollSensitivity: 0.5,
-      theme: {
-        background: "#0b1220",
-        foreground: "#e2e8f0",
-        cursor: "#f8fafc",
-        selectionBackground: "rgba(148, 163, 184, 0.28)",
-      },
-    });
-
-    terminalRef.current = terminal;
-    searchAddonRef.current = searchAddon;
-
-    terminal.loadAddon(fitAddon);
-    terminal.loadAddon(searchAddon);
-    terminal.loadAddon(unicode11Addon);
-    terminal.loadAddon(
-      new WebLinksAddon((event, uri) => {
-        event.preventDefault();
-        openTerminalLinkRef.current(uri);
-      }),
-    );
-    const linkProviderDisposable = terminal.registerLinkProvider(
-      createTerminalWrappedWebLinkProvider(terminal, {
-        activate: (event, uri) => {
-          event.preventDefault();
-          openTerminalLinkRef.current(uri);
-        },
-      }),
-    );
-    terminal.open(container);
-    terminal.unicode.activeVersion = "11";
-    terminal.attachCustomWheelEventHandler((event) => {
-      const canScroll = terminal.buffer.active.baseY > 0;
-      if (!shouldSuppressWheelInput(event, canScroll)) {
-        return true;
-      }
-
-      if (
-        runtimeKindRef.current === "tmux" &&
-        event.deltaY !== 0 &&
-        !event.shiftKey
-      ) {
-        if (!shouldThrottleTmuxScroll()) {
-          const input = buildTmuxScrollInput(
-            event.deltaY,
-            terminal.cols,
-            terminal.rows,
-          );
-          if (input) {
-            sendTerminalInput(input);
-          }
-        }
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      return false;
-    });
-
-    let rendererAddon: { dispose(): void } | null = null;
-    const applyRendererPreference = (
-      preference: TerminalRendererPreference,
-    ) => {
-      rendererAddon?.dispose();
-      rendererAddon = null;
-
-      const loadCanvas = (): boolean => {
-        try {
-          const canvas = new CanvasAddon();
-          terminal.loadAddon(canvas);
-          rendererAddon = canvas;
-          return true;
-        } catch {
-          return false;
-        }
-      };
-
-      const loadWebgl = (allowCanvasFallback: boolean): boolean => {
-        try {
-          const webgl = new WebglAddon();
-          webgl.onContextLoss(() => {
-            webgl.dispose();
-            if (allowCanvasFallback) {
-              loadCanvas();
-              return;
-            }
-          });
-          terminal.loadAddon(webgl);
-          rendererAddon = webgl;
-          return true;
-        } catch {
-          if (allowCanvasFallback) {
-            return loadCanvas();
-          }
-          return loadCanvas();
-        }
-      };
-
-      if (preference === "dom") {
-        return;
-      }
-
-      if (preference === "canvas") {
-        loadCanvas();
-        return;
-      }
-
-      if (preference === "webgl") {
-        loadWebgl(false);
-        return;
-      }
-
-      loadWebgl(true);
-    };
-    applyRendererPreference(initialPreferences.renderer);
-
-    const syncSize = () => {
-      fitAddon.fit();
-      const dimensions = fitAddon.proposeDimensions();
-      if (!dimensions) {
-        return;
-      }
-      if (
-        lastSentResizeRef.current?.cols === dimensions.cols &&
-        lastSentResizeRef.current.rows === dimensions.rows
-      ) {
-        return;
-      }
-      lastResizedAtRef.current = Date.now();
-      lastSentResizeRef.current = {
-        cols: dimensions.cols,
-        rows: dimensions.rows,
-      };
-      sendResize(dimensions.cols, dimensions.rows);
-    };
-    const resizeScheduler = createResizeScheduler(
-      syncSize,
-      TERMINAL_RESIZE_DEBOUNCE_MS,
-    );
-    const selectionDisposable = terminal.onSelectionChange(() => {
-      if (!DEFAULT_TERMINAL_PREFERENCES.copyOnSelect) {
-        return;
-      }
-
-      const selection = terminal.getSelection();
-      if (!selection || !navigator.clipboard?.writeText) {
-        return;
-      }
-
-      void navigator.clipboard.writeText(selection).catch(() => undefined);
-    });
-
-    terminal.attachCustomKeyEventHandler((event) => {
-      if (isShiftEnterLineFeed(event)) {
-        event.preventDefault();
-        sendTerminalInput("\n");
-        return false;
-      }
-
-      return true;
-    });
-    const dataDisposable = terminal.onData((data) => {
-      if (isTerminalAutoResponse(data)) {
-        return;
-      }
-      xtermUserInputSequenceRef.current += 1;
-      sendTerminalInput(data);
-    });
-    const bellDisposable = terminal.onBell(() => {
-      if (!activeRef.current) {
-        onBellRef.current?.();
-      }
-    });
-
-    syncSize();
-
-    let mountFitFrameId: number | null = null;
-    mountFitFrameId = requestAnimationFrame(() => {
-      mountFitFrameId = null;
-      syncSize();
-    });
-    const searchResultsDisposable = searchAddon.onDidChangeResults(
-      (results) => {
-        setSearchResults(
-          results
-            ? {
-                resultCount: results.resultCount,
-                resultIndex: results.resultIndex,
-              }
-            : null,
-        );
-      },
-    );
-
-    const refreshTerminalViewport = () => {
-      if (!terminalRef.current || document.visibilityState !== "visible") {
-        return;
-      }
-      syncSize();
-      terminalRef.current.refresh(0, Math.max(terminalRef.current.rows - 1, 0));
-    };
-    refreshTerminalViewportRef.current = refreshTerminalViewport;
-
-    let disposed = false;
-    const fontFaceSet = document.fonts;
-    let fontReadyPromise: Promise<unknown> | null = null;
-    if (fontFaceSet?.ready) {
-      fontReadyPromise = fontFaceSet.ready.then(() => {
-        if (disposed) {
-          return;
-        }
-        syncSize();
-      });
-    }
-
-    let resizeObserver: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined") {
-      resizeObserver = new ResizeObserver(() => {
-        resizeScheduler.schedule();
-      });
-      resizeObserver.observe(container);
-    } else {
-      window.addEventListener("resize", resizeScheduler.schedule);
-    }
-    document.addEventListener("visibilitychange", refreshTerminalViewport);
-    window.addEventListener("focus", refreshTerminalViewport);
-
-    const handlePaste = (event: ClipboardEvent) => {
-      const imageItem = Array.from(event.clipboardData?.items ?? []).find(
-        (item) => item.kind === "file" && item.type.startsWith("image/"),
-      );
-      const file = imageItem?.getAsFile();
-      if (!file) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      setPasteError(null);
-
-      void fileToBase64(file)
-        .then((dataBase64) =>
-          createTerminalSessionClipboardImage(
-            apiBase,
-            tokenRef.current,
-            terminalSessionId,
-            {
-              mimeType: file.type,
-              dataBase64,
-            },
-          ),
-        )
-        .then((payload) => {
-          setPastedImages((current) => [
-            ...current,
-            {
-              id: payload.filePath,
-              label: `[Image #${current.length + 1}]`,
-              filePath: payload.filePath,
-            },
-          ]);
-          sendTerminalInput(shellQuote(payload.filePath));
-        })
-        .catch((nextError: unknown) => {
-          if (nextError instanceof HttpError && nextError.status === 401) {
-            onAuthExpired?.();
-            return;
-          }
-          setPasteError(String(nextError));
-        });
-    };
-    const helperTextarea = container.querySelector<HTMLTextAreaElement>(
-      ".xterm-helper-textarea",
-    );
-    const handlePasteEvent: EventListener = (event) => {
-      handlePaste(event as ClipboardEvent);
-    };
-    const handleMobileBeforeInput: EventListener = (event) => {
-      if (clientMode !== "mobile" || !helperTextarea) {
-        return;
-      }
-
-      const inputEvent = event as InputEvent;
-      const data = resolveMobileBeforeInputData(inputEvent, helperTextarea);
-      if (!data) {
-        return;
-      }
-
-      const xtermUserInputSequence = xtermUserInputSequenceRef.current;
-      window.setTimeout(() => {
-        if (disposed) {
-          return;
-        }
-        if (xtermUserInputSequenceRef.current !== xtermUserInputSequence) {
-          return;
-        }
-
-        sendTerminalInput(data);
-      }, 20);
-    };
-    const handleCompositionEnd: EventListener = (event) => {
-      const compositionEvent = event as CompositionEvent;
-      imeCompositionEndedAtRef.current = performance.now();
-      if (compositionEvent.data) {
-        imeCommitRef.current = {
-          data: compositionEvent.data,
-          at: imeCompositionEndedAtRef.current,
-        };
-      }
-    };
-    const handleBeforeInput: EventListener = (event) => {
-      const inputEvent = event as InputEvent;
-      const compositionEndedAt = imeCompositionEndedAtRef.current;
-      if (
-        inputEvent.inputType !== "insertText" ||
-        !inputEvent.data ||
-        compositionEndedAt === null ||
-        performance.now() - compositionEndedAt > IME_COMMIT_WINDOW_MS
-      ) {
-        return;
-      }
-
-      imeCommitRef.current = {
-        data: inputEvent.data,
-        at: performance.now(),
-      };
-    };
-    helperTextarea?.addEventListener("paste", handlePasteEvent, true);
-    helperTextarea?.addEventListener(
-      "compositionend",
-      handleCompositionEnd,
-      true,
-    );
-    helperTextarea?.addEventListener("beforeinput", handleBeforeInput, true);
-    helperTextarea?.addEventListener(
-      "beforeinput",
-      handleMobileBeforeInput,
-      true,
-    );
-
-    return () => {
-      disposed = true;
-      void fontReadyPromise;
-      if (mountFitFrameId !== null) {
-        cancelAnimationFrame(mountFitFrameId);
-        mountFitFrameId = null;
-      }
-
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      } else {
-        window.removeEventListener("resize", resizeScheduler.schedule);
-      }
-      document.removeEventListener("visibilitychange", refreshTerminalViewport);
-      window.removeEventListener("focus", refreshTerminalViewport);
-      helperTextarea?.removeEventListener("paste", handlePasteEvent, true);
-      helperTextarea?.removeEventListener(
-        "compositionend",
-        handleCompositionEnd,
-        true,
-      );
-      helperTextarea?.removeEventListener(
-        "beforeinput",
-        handleBeforeInput,
-        true,
-      );
-      helperTextarea?.removeEventListener(
-        "beforeinput",
-        handleMobileBeforeInput,
-        true,
-      );
-      searchResultsDisposable.dispose();
-      dataDisposable.dispose();
-      bellDisposable.dispose();
-      selectionDisposable.dispose();
-      linkProviderDisposable.dispose();
-      resizeScheduler.dispose();
-      rendererAddon?.dispose();
-      terminal.dispose();
-      terminalRef.current = null;
-      refreshTerminalViewportRef.current = null;
-      searchAddonRef.current = null;
-    };
-  }, [
+  useTerminalEmulator({
+    activeRef,
     apiBase,
     clientMode,
+    imeCommitRef,
+    imeCompositionEndedAtRef,
+    lastResizedAtRef,
+    lastSentResizeRef,
     onAuthExpired,
-    sendTerminalInput,
+    onBellRef,
+    openTerminalLinkRef,
+    refreshTerminalViewportRef,
+    runtimeKindRef,
+    searchAddonRef,
     sendResize,
+    sendTerminalInput,
+    setPasteError,
+    setPastedImages,
+    setSearchResults,
+    terminalContainerRef,
+    terminalRef,
     terminalSessionId,
-  ]);
+    tokenRef,
+    xtermUserInputSequenceRef,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -1039,92 +492,22 @@ export function TerminalSurface({
     );
   }, [active, layoutVersion]);
 
-  useEffect(() => {
-    if (!active || !terminalRef.current) {
-      return;
-    }
-
-    let cancelled = false;
-    const requestId = restoreSnapshotRequestRef.current + 1;
-    restoreSnapshotRequestRef.current = requestId;
-
-    if (
-      hasRenderedSnapshotRef.current &&
-      !hasDeferredOutputRef.current &&
-      !requiresSnapshotRestoreRef.current
-    ) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (hasRenderedSnapshotRef.current && !requiresSnapshotRestoreRef.current) {
-      if (replayDeferredOutput()) {
-        return () => {
-          cancelled = true;
-        };
-      }
-      hasDeferredOutputRef.current = false;
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const restoreSnapshot = async (attempt: number): Promise<void> => {
-      const websocketContentVersionAtRequest =
-        websocketContentVersionRef.current;
-      try {
-        const session = await getTerminalSession(
-          apiBase,
-          tokenRef.current,
-          terminalSessionId,
-        );
-        if (cancelled || restoreSnapshotRequestRef.current !== requestId) {
-          return;
-        }
-
-        if (
-          websocketContentVersionRef.current !==
-          websocketContentVersionAtRequest
-        ) {
-          if (requiresSnapshotRestoreRef.current && attempt < 2) {
-            await restoreSnapshot(attempt + 1);
-            return;
-          }
-          if (!requiresSnapshotRestoreRef.current) {
-            return;
-          }
-        }
-
-        onMetadataRef.current?.({
-          cwd: session.cwd,
-          activeCommand: session.activeCommand,
-        });
-        renderTerminalSnapshot(session.scrollback);
-      } catch (error: unknown) {
-        if (cancelled) {
-          return;
-        }
-        hasDeferredOutputRef.current = true;
-        requiresSnapshotRestoreRef.current = true;
-        if (error instanceof HttpError && error.status === 401) {
-          onAuthExpiredRef.current?.();
-        }
-      }
-    };
-
-    void restoreSnapshot(0);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
+  useTerminalSnapshotRestore({
     active,
     apiBase,
+    hasDeferredOutputRef,
+    hasRenderedSnapshotRef,
+    onAuthExpiredRef,
+    onMetadataRef,
     renderTerminalSnapshot,
     replayDeferredOutput,
+    requiresSnapshotRestoreRef,
+    restoreSnapshotRequestRef,
+    terminalRef,
     terminalSessionId,
-  ]);
+    tokenRef,
+    websocketContentVersionRef,
+  });
 
   useEffect(() => {
     if (!searchOpen) {
@@ -1201,183 +584,28 @@ export function TerminalSurface({
   const showMobileKeybarToggle = active && clientMode === "mobile";
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {error || pasteError ? (
-        <p className="px-3 py-2 text-xs text-rose-400">{error ?? pasteError}</p>
-      ) : null}
-      {pastedImages.length > 0 ? (
-        <div className="flex flex-wrap gap-2 px-3 pb-2">
-          {pastedImages.map((image) => (
-            <span
-              className="rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 font-mono text-xs text-slate-200"
-              key={image.id}
-              title={image.filePath}
-            >
-              {image.label}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        {showTerminalToolbar ? (
-          <div className="pointer-events-none absolute top-3 right-4 z-10 flex items-start gap-2">
-            {searchOpen ? (
-              <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/95 px-2 py-2 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.9)] backdrop-blur">
-                <input
-                  ref={searchInputRef}
-                  value={searchQuery}
-                  onChange={(event) => {
-                    setSearchQuery(event.target.value);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      runSearch(event.shiftKey ? "previous" : "next");
-                    }
-                  }}
-                  className="w-44 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 outline-none placeholder:text-slate-500"
-                  placeholder="Find in terminal"
-                />
-                <span className="min-w-16 text-center text-[11px] text-slate-400">
-                  {searchResults?.resultCount
-                    ? `${searchResults.resultIndex + 1}/${searchResults.resultCount}`
-                    : searchQuery
-                      ? "0/0"
-                      : "--"}
-                </span>
-                <button
-                  type="button"
-                  className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:border-slate-500"
-                  onClick={() => {
-                    runSearch("previous");
-                  }}
-                >
-                  Prev
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:border-slate-500"
-                  onClick={() => {
-                    runSearch("next");
-                  }}
-                >
-                  Next
-                </button>
-                <button
-                  type="button"
-                  className={`rounded-md border px-2 py-1 text-[11px] ${
-                    searchOptions.caseSensitive
-                      ? "border-slate-100 bg-slate-100 text-slate-950"
-                      : "border-slate-700 text-slate-300"
-                  }`}
-                  onClick={() => {
-                    setSearchOptions((current) => ({
-                      ...current,
-                      caseSensitive: !current.caseSensitive,
-                    }));
-                  }}
-                >
-                  Aa
-                </button>
-                <button
-                  type="button"
-                  className={`rounded-md border px-2 py-1 text-[11px] ${
-                    searchOptions.wholeWord
-                      ? "border-slate-100 bg-slate-100 text-slate-950"
-                      : "border-slate-700 text-slate-300"
-                  }`}
-                  onClick={() => {
-                    setSearchOptions((current) => ({
-                      ...current,
-                      wholeWord: !current.wholeWord,
-                    }));
-                  }}
-                >
-                  Word
-                </button>
-                <button
-                  type="button"
-                  className={`rounded-md border px-2 py-1 text-[11px] ${
-                    searchOptions.regex
-                      ? "border-slate-100 bg-slate-100 text-slate-950"
-                      : "border-slate-700 text-slate-300"
-                  }`}
-                  onClick={() => {
-                    setSearchOptions((current) => ({
-                      ...current,
-                      regex: !current.regex,
-                    }));
-                  }}
-                >
-                  .*
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:border-slate-500"
-                  onClick={() => {
-                    setSearchOpen(false);
-                    terminalRef.current?.focus();
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="pointer-events-auto rounded-full border border-slate-700 bg-slate-950/90 px-3 py-1.5 text-[11px] text-slate-300 backdrop-blur hover:border-slate-500"
-                onClick={() => {
-                  setSearchOpen(true);
-                }}
-              >
-                Find
-              </button>
-            )}
-          </div>
-        ) : null}
-        {showMobileKeybarToggle ? (
-          <div className="pointer-events-none absolute top-3 right-4 z-30">
-            <button
-              type="button"
-              aria-expanded={mobileKeybarOpen}
-              aria-label="Toggle terminal shortcut keys"
-              className="pointer-events-auto rounded-md border border-slate-700 bg-slate-950/90 px-2 py-1 text-[10px] leading-none text-slate-300 backdrop-blur active:bg-slate-800"
-              onPointerDown={(event) => {
-                event.preventDefault();
-              }}
-              onClick={() => {
-                setMobileKeybarOpen((current) => !current);
-                requestAnimationFrame(() => {
-                  terminalRef.current?.focus();
-                });
-              }}
-            >
-              Keys
-            </button>
-          </div>
-        ) : null}
-        <div
-          aria-label="Terminal emulator"
-          className="h-full min-h-full w-full bg-[#0b1220] pl-2 pt-1.5 pb-1.5"
-          role="application"
-          tabIndex={0}
-          onClick={() => {
-            if (active) {
-              terminalRef.current?.focus();
-            }
-          }}
-          onFocus={() => {
-            if (active) {
-              terminalRef.current?.focus();
-            }
-          }}
-          ref={terminalContainerRef}
-        />
-        <TerminalMobileKeybar
-          visible={active && clientMode === "mobile" && mobileKeybarOpen}
-          onSendInput={sendTerminalInput}
-        />
-      </div>
-    </div>
+    <TerminalSurfaceLayout
+      active={active}
+      clientMode={clientMode}
+      error={error}
+      mobileKeybarOpen={mobileKeybarOpen}
+      pasteError={pasteError}
+      pastedImages={pastedImages}
+      searchInputRef={searchInputRef}
+      searchOpen={searchOpen}
+      searchOptions={searchOptions}
+      searchQuery={searchQuery}
+      searchResults={searchResults}
+      showMobileKeybarToggle={showMobileKeybarToggle}
+      showTerminalToolbar={showTerminalToolbar}
+      terminalContainerRef={terminalContainerRef}
+      terminalRef={terminalRef}
+      onRunSearch={runSearch}
+      onSearchOpenChange={setSearchOpen}
+      onSearchOptionsChange={setSearchOptions}
+      onSearchQueryChange={setSearchQuery}
+      onSendInput={sendTerminalInput}
+      onMobileKeybarOpenChange={setMobileKeybarOpen}
+    />
   );
 }
