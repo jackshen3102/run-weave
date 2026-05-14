@@ -202,7 +202,13 @@ async function loginAndSeedToken(
 async function createTerminalSession(
   request: APIRequestContext,
   token: string,
-  options: { command?: string; args?: string[]; projectId?: string; cwd?: string } = {},
+  options: {
+    command?: string;
+    args?: string[];
+    projectId?: string;
+    cwd?: string;
+    runtimePreference?: "auto" | "tmux" | "pty";
+  } = {},
 ): Promise<{ terminalSessionId: string; terminalUrl: string }> {
   const response = await request.post(`${E2E_API_BASE}/api/terminal/session`, {
     headers: {
@@ -213,6 +219,7 @@ async function createTerminalSession(
       command: options.command ?? "bash",
       args: options.args,
       cwd: options.cwd ?? "/tmp",
+      runtimePreference: options.runtimePreference,
     },
   });
 
@@ -317,6 +324,146 @@ test("creates a terminal session and streams command output", async ({
       return await getLiveTerminalText(page);
     })
     .toContain("terminal-e2e-ok");
+});
+
+test("does not duplicate committed IME text", async ({ page, request }) => {
+  const token = await loginAndSeedToken(request, page);
+  const session = await createTerminalSession(request, token, {
+    command: "/bin/bash",
+    runtimePreference: "pty",
+  });
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
+
+  await page.goto(session.terminalUrl);
+  await expect(page.getByLabel("Terminal emulator")).toBeVisible();
+  await page.getByLabel("Terminal emulator").click({ force: true });
+
+  const inputMessages = await page.evaluate(async () => {
+    const helperTextarea =
+      document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea");
+    if (!helperTextarea) {
+      throw new Error("Missing xterm helper textarea");
+    }
+
+    const sentInputs: string[] = [];
+    const originalSend = WebSocket.prototype.send;
+    WebSocket.prototype.send = function patchedSend(
+      data: string | ArrayBufferLike | Blob | ArrayBufferView,
+    ) {
+      try {
+        const parsed = JSON.parse(String(data)) as { type?: string; data?: string };
+        if (parsed.type === "input" && typeof parsed.data === "string") {
+          sentInputs.push(parsed.data);
+        }
+      } catch {
+        // Ignore non-JSON WebSocket frames.
+      }
+      return originalSend.call(this, data);
+    };
+
+    const dispatch = (event: Event): void => {
+      helperTextarea.dispatchEvent(event);
+    };
+
+    helperTextarea.focus();
+    helperTextarea.value = "";
+    dispatch(
+      new CompositionEvent("compositionstart", {
+        data: "",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    dispatch(
+      new CompositionEvent("compositionupdate", {
+        data: "中",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    helperTextarea.value = "中";
+    dispatch(
+      new InputEvent("beforeinput", {
+        inputType: "insertCompositionText",
+        data: "中",
+        bubbles: true,
+        cancelable: true,
+        isComposing: true,
+      }),
+    );
+    dispatch(
+      new InputEvent("input", {
+        inputType: "insertCompositionText",
+        data: "中",
+        bubbles: true,
+        cancelable: true,
+        isComposing: true,
+      }),
+    );
+    dispatch(
+      new CompositionEvent("compositionupdate", {
+        data: "中文",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    helperTextarea.value = "中文";
+    dispatch(
+      new InputEvent("beforeinput", {
+        inputType: "insertCompositionText",
+        data: "文",
+        bubbles: true,
+        cancelable: true,
+        isComposing: true,
+      }),
+    );
+    dispatch(
+      new InputEvent("input", {
+        inputType: "insertCompositionText",
+        data: "文",
+        bubbles: true,
+        cancelable: true,
+        isComposing: true,
+      }),
+    );
+    dispatch(
+      new CompositionEvent("compositionend", {
+        data: "中文",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    helperTextarea.value = "中文";
+    dispatch(
+      new InputEvent("beforeinput", {
+        inputType: "insertText",
+        data: "中文",
+        bubbles: true,
+        cancelable: true,
+        isComposing: false,
+      }),
+    );
+    dispatch(
+      new InputEvent("input", {
+        inputType: "insertText",
+        data: "中文",
+        bubbles: true,
+        cancelable: true,
+        isComposing: false,
+      }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    WebSocket.prototype.send = originalSend;
+    return sentInputs;
+  });
+
+  expect(inputMessages).toEqual(["中文"]);
 });
 
 test("fits the terminal pane to the available viewport", async ({

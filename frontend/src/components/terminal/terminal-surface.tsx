@@ -66,6 +66,8 @@ const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
 const FOCUS_REPORTING_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[(?:I|O)$`);
 const TERMINAL_RESIZE_DEBOUNCE_MS = 120;
 const DEFERRED_OUTPUT_REPLAY_MAX_CHARS = 128 * 1024;
+const IME_COMMIT_DUPLICATE_WINDOW_MS = 50;
+const IME_COMMIT_WINDOW_MS = 250;
 
 interface TerminalSearchResults {
   resultCount: number;
@@ -191,6 +193,15 @@ function resolveMobileBeforeInputData(
   return null;
 }
 
+function hasNonAsciiInput(data: string): boolean {
+  for (let index = 0; index < data.length; index += 1) {
+    if (data.charCodeAt(index) > 0x7f) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function TerminalSurface({
   active,
   apiBase,
@@ -223,6 +234,9 @@ export function TerminalSurface({
   const outputSequenceRef = useRef(0);
   const xtermUserInputSequenceRef = useRef(0);
   const lastInputSentAtRef = useRef<number | null>(null);
+  const lastInputDataRef = useRef<{ data: string; at: number } | null>(null);
+  const imeCommitRef = useRef<{ data: string; at: number } | null>(null);
+  const imeCompositionEndedAtRef = useRef<number | null>(null);
   const hasDeferredOutputRef = useRef(false);
   const deferredOutputRef = useRef("");
   const requiresSnapshotRestoreRef = useRef(false);
@@ -453,6 +467,22 @@ export function TerminalSurface({
 
   const sendTerminalInput = useCallback(
     (data: string): void => {
+      const now = performance.now();
+      const lastInput = lastInputDataRef.current;
+      const imeCommit = imeCommitRef.current;
+      if (
+        lastInput &&
+        imeCommit &&
+        hasNonAsciiInput(data) &&
+        data === lastInput.data &&
+        data === imeCommit.data &&
+        now - lastInput.at <= IME_COMMIT_DUPLICATE_WINDOW_MS &&
+        now - imeCommit.at <= IME_COMMIT_WINDOW_MS
+      ) {
+        return;
+      }
+
+      lastInputDataRef.current = { data, at: now };
       inputSequenceRef.current += 1;
       lastInputSentAtRef.current = Date.now();
       logTerminalPerf("terminal.input.captured", {
@@ -835,7 +865,36 @@ export function TerminalSurface({
         sendTerminalInput(data);
       }, 20);
     };
+    const handleCompositionEnd: EventListener = (event) => {
+      const compositionEvent = event as CompositionEvent;
+      imeCompositionEndedAtRef.current = performance.now();
+      if (compositionEvent.data) {
+        imeCommitRef.current = {
+          data: compositionEvent.data,
+          at: imeCompositionEndedAtRef.current,
+        };
+      }
+    };
+    const handleBeforeInput: EventListener = (event) => {
+      const inputEvent = event as InputEvent;
+      const compositionEndedAt = imeCompositionEndedAtRef.current;
+      if (
+        inputEvent.inputType !== "insertText" ||
+        !inputEvent.data ||
+        compositionEndedAt === null ||
+        performance.now() - compositionEndedAt > IME_COMMIT_WINDOW_MS
+      ) {
+        return;
+      }
+
+      imeCommitRef.current = {
+        data: inputEvent.data,
+        at: performance.now(),
+      };
+    };
     helperTextarea?.addEventListener("paste", handlePasteEvent, true);
+    helperTextarea?.addEventListener("compositionend", handleCompositionEnd, true);
+    helperTextarea?.addEventListener("beforeinput", handleBeforeInput, true);
     helperTextarea?.addEventListener("beforeinput", handleMobileBeforeInput, true);
 
     return () => {
@@ -854,6 +913,12 @@ export function TerminalSurface({
       document.removeEventListener("visibilitychange", refreshTerminalViewport);
       window.removeEventListener("focus", refreshTerminalViewport);
       helperTextarea?.removeEventListener("paste", handlePasteEvent, true);
+      helperTextarea?.removeEventListener(
+        "compositionend",
+        handleCompositionEnd,
+        true,
+      );
+      helperTextarea?.removeEventListener("beforeinput", handleBeforeInput, true);
       helperTextarea?.removeEventListener(
         "beforeinput",
         handleMobileBeforeInput,
