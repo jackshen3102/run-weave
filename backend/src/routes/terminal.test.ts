@@ -481,6 +481,146 @@ describe("terminal routes", () => {
     expect(runtimeRegistry.ensureRecorder).toHaveBeenCalled();
   });
 
+  it("falls back to pty sessions when auto tmux launch fails", async () => {
+    vi.stubEnv("RUNWEAVE_HOOK_TOKEN", "super-secret-hook-token");
+    const state = { current: null as MockTerminalSession | null };
+    const runtime = { pid: 10 };
+    const ptyService = {
+      spawnSession: vi.fn(() => runtime),
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => undefined),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const tmuxService = {
+      isAvailable: vi.fn(async () => true),
+      buildTarget: vi.fn(() => ({
+        sessionName: "runweave-terminal-1",
+        socketPath: "/tmp/runweave/tmux.sock",
+      })),
+      withSessionLock: vi.fn(
+        async (_id: string, action: () => Promise<unknown>) => action(),
+      ),
+      hasSession: vi.fn(async () => false),
+      createDetachedSession: vi.fn(async () => {
+        throw new Error(
+          "Command failed: tmux new-session -e RUNWEAVE_HOOK_TOKEN=super-secret-hook-token\ncreate window failed: fork failed: Device not configured",
+        );
+      }),
+      waitForPaneReady: vi.fn(async () => undefined),
+      buildAttachCommand: vi.fn(() => ({
+        command: "tmux",
+        args: ["new-session", "-A", "-s", "runweave-terminal-1"],
+      })),
+      killSession: vi.fn(async () => undefined),
+    };
+    const { server, terminalSessionManager } = createTestServer(state, {
+      ptyService,
+      runtimeRegistry,
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "project-default",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(
+      terminalSessionManager.updateRuntimeMetadata,
+    ).toHaveBeenLastCalledWith("terminal-1", {
+      runtimeKind: "pty",
+      tmuxUnavailableReason: "tmux launch failed; fell back to pty",
+      recoverable: false,
+    });
+    expect(terminalSessionManager.destroySession).not.toHaveBeenCalled();
+    expect(tmuxService.killSession).toHaveBeenCalledWith({
+      sessionName: "runweave-terminal-1",
+      socketPath: "/tmp/runweave/tmux.sock",
+    });
+    expect(ptyService.spawnSession).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        fallback: expect.any(Object),
+      }),
+    );
+    expect(runtimeRegistry.ensureRecorder).toHaveBeenCalled();
+  });
+
+  it("redacts hook tokens when explicit tmux launch fails", async () => {
+    vi.stubEnv("RUNWEAVE_HOOK_TOKEN", "super-secret-hook-token");
+    const state = { current: null as MockTerminalSession | null };
+    const ptyService = {
+      spawnSession: vi.fn(),
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => undefined),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const tmuxService = {
+      isAvailable: vi.fn(async () => true),
+      buildTarget: vi.fn(() => ({
+        sessionName: "runweave-terminal-1",
+        socketPath: "/tmp/runweave/tmux.sock",
+      })),
+      withSessionLock: vi.fn(
+        async (_id: string, action: () => Promise<unknown>) => action(),
+      ),
+      hasSession: vi.fn(async () => false),
+      createDetachedSession: vi.fn(async () => {
+        throw new Error(
+          "Command failed: tmux new-session -e RUNWEAVE_HOOK_TOKEN=super-secret-hook-token",
+        );
+      }),
+      waitForPaneReady: vi.fn(async () => undefined),
+      buildAttachCommand: vi.fn(),
+    };
+    const { server } = createTestServer(state, {
+      ptyService,
+      runtimeRegistry,
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "project-default",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+          runtimePreference: "tmux",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toContain("RUNWEAVE_HOOK_TOKEN=[redacted]");
+    expect(body.error).not.toContain("super-secret-hook-token");
+  });
+
   it("creates pty terminal sessions when explicitly requested even if tmux is available", async () => {
     const state = { current: null as MockTerminalSession | null };
     const runtime = { pid: 10 };
@@ -871,6 +1011,86 @@ describe("terminal routes", () => {
       "terminal-1",
     );
     expect(terminalSessionManager.readScrollback).not.toHaveBeenCalled();
+  });
+
+  it("reports and cleans up tmux sessions that are missing from the store", async () => {
+    const state = {
+      current: null,
+      sessions: [
+        {
+          id: "terminal-1",
+          projectId: "project-default",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+          scrollback: "",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          runtimeKind: "tmux" as const,
+          tmuxSessionName: "runweave-terminal-1",
+        },
+        {
+          id: "terminal-2",
+          projectId: "project-default",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+          scrollback: "",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          runtimeKind: "pty" as const,
+        },
+      ],
+    };
+    const orphan = {
+      sessionName: "runweave-orphan",
+      attachedClients: 0,
+      windows: 1,
+    };
+    const attachedOrphan = {
+      sessionName: "runweave-attached-orphan",
+      attachedClients: 1,
+      windows: 1,
+    };
+    const tmuxService = {
+      buildSessionName: vi.fn((id: string) => `runweave-${id}`),
+      listOrphanedSessions: vi.fn(async () => [orphan, attachedOrphan]),
+      killOrphanedSessions: vi.fn(async () => [orphan]),
+    };
+    const { server } = createTestServer(state, { tmuxService });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const scanResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/tmux/orphans`,
+    );
+    expect(scanResponse.status).toBe(200);
+    await expect(scanResponse.json()).resolves.toEqual({
+      items: [orphan, attachedOrphan],
+    });
+    expect(tmuxService.listOrphanedSessions).toHaveBeenCalledWith(
+      new Set(["runweave-terminal-1"]),
+    );
+
+    const missingConfirmResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/tmux/orphans`,
+      { method: "DELETE" },
+    );
+    expect(missingConfirmResponse.status).toBe(400);
+
+    const cleanupResponse = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/tmux/orphans?confirm=true`,
+      { method: "DELETE" },
+    );
+    expect(cleanupResponse.status).toBe(200);
+    await expect(cleanupResponse.json()).resolves.toEqual({
+      killed: [orphan],
+      skipped: [attachedOrphan],
+    });
+    expect(tmuxService.killOrphanedSessions).toHaveBeenCalledWith(
+      new Set(["runweave-terminal-1"]),
+      { includeAttached: false },
+    );
   });
 
   it("reads terminal session history through a dedicated API", async () => {

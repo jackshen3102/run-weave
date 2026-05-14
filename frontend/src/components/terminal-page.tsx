@@ -11,8 +11,12 @@ import "@xterm/xterm/css/xterm.css";
 import { RuntimeMonitorBadge } from "./runtime-monitor-badge";
 import { filterBrowserHandledTerminalOutput } from "../features/terminal/output-filter";
 import { formatTerminalSessionName } from "../features/terminal/session-name";
-import { buildTmuxScrollInput, shouldThrottleTmuxScroll } from "../features/terminal/tmux-scroll";
+import {
+  buildTmuxScrollInput,
+  shouldThrottleTmuxScroll,
+} from "../features/terminal/tmux-scroll";
 import { useTerminalConnection } from "../features/terminal/use-terminal-connection";
+import { createTerminalWrappedWebLinkProvider } from "../features/terminal/web-link-provider";
 import { shouldSuppressWheelInput } from "../features/terminal/wheel-input";
 import { HttpError } from "../services/http";
 import { getTerminalSession } from "../services/terminal";
@@ -191,6 +195,18 @@ export function TerminalPage({
         window.open(uri, "_blank", "noopener,noreferrer");
       }),
     );
+    const linkProviderDisposable = terminal.registerLinkProvider(
+      createTerminalWrappedWebLinkProvider(terminal, {
+        activate: (event, uri) => {
+          event.preventDefault();
+          if (window.electronAPI?.openExternal) {
+            void window.electronAPI.openExternal(uri);
+            return;
+          }
+          window.open(uri, "_blank", "noopener,noreferrer");
+        },
+      }),
+    );
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
     terminal.attachCustomWheelEventHandler((event) => {
@@ -303,6 +319,7 @@ export function TerminalPage({
       document.removeEventListener("visibilitychange", refreshTerminalViewport);
       window.removeEventListener("focus", refreshTerminalViewport);
       dataDisposable.dispose();
+      linkProviderDisposable.dispose();
       terminal.dispose();
       terminalRef.current = null;
     };
@@ -339,9 +356,7 @@ export function TerminalPage({
       <header className="border-b border-slate-800 px-6 py-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold">
-              {renderedTitle}
-            </h1>
+            <h1 className="text-xl font-semibold">{renderedTitle}</h1>
             <p className="mt-1 text-sm text-slate-400">{renderedCommand}</p>
             <div className="mt-2 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-slate-500">
               <span>{renderedTerminalStatus}</span>

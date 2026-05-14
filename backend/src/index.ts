@@ -39,6 +39,7 @@ import { PtyService } from "./terminal/pty-service";
 import { TerminalRuntimeRegistry } from "./terminal/runtime-registry";
 import { TmuxService } from "./terminal/tmux-service";
 import { LowDbTerminalSessionStore } from "./terminal/lowdb-store";
+import { logOrphanedTmuxSessions } from "./terminal/tmux-orphan-scan";
 import { listenWithFallback } from "./server/listen";
 import { resolveStoragePaths } from "./utils/path";
 import { attachDevtoolsProxyServer } from "./ws/devtools-proxy";
@@ -135,6 +136,15 @@ function resolveTerminalHookToken(env: NodeJS.ProcessEnv): string {
   return randomBytes(32).toString("hex");
 }
 
+function resolveTerminalTmuxScanOrphansOnStartEnabled(
+  env: NodeJS.ProcessEnv,
+): boolean {
+  return (
+    env.TERMINAL_TMUX_SCAN_ORPHANS_ON_START?.trim().toLowerCase() === "true" ||
+    env.TERMINAL_TMUX_CLEANUP_ORPHANS?.trim().toLowerCase() === "true"
+  );
+}
+
 async function createRuntimeServices(): Promise<RuntimeServices> {
   const storagePaths = resolveStoragePaths(process.env);
   const authConfig = loadAuthConfig();
@@ -197,6 +207,9 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   });
   await sessionManager.initialize();
   await terminalSessionManager.initialize();
+  if (resolveTerminalTmuxScanOrphansOnStartEnabled(process.env)) {
+    await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
+  }
 
   return {
     authStore,

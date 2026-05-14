@@ -22,10 +22,15 @@ const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
 const TERMINAL_PREFERENCES_KEY = `viewer.terminal.preferences.${E2E_API_BASE}`;
 
-async function loginAndSeedToken(
+interface AuthPayload {
+  accessToken: string;
+  expiresIn: number;
+  sessionId: string;
+}
+
+async function loginForRequest(
   request: APIRequestContext,
-  page: Page,
-): Promise<string> {
+): Promise<AuthPayload> {
   const response = await request.post(`${E2E_API_BASE}/api/auth/login`, {
     data: {
       username: "e2e-admin",
@@ -34,11 +39,14 @@ async function loginAndSeedToken(
   });
 
   expect(response.ok()).toBe(true);
-  const payload = (await response.json()) as {
-    accessToken: string;
-    expiresIn: number;
-    sessionId: string;
-  };
+  return (await response.json()) as AuthPayload;
+}
+
+async function loginAndSeedToken(
+  request: APIRequestContext,
+  page: Page,
+): Promise<string> {
+  const payload = await loginForRequest(request);
 
   await page.addInitScript(({ accessToken, expiresIn, sessionId }) => {
     const session = {
@@ -51,6 +59,42 @@ async function loginAndSeedToken(
 
   return payload.accessToken;
 }
+
+async function deleteAllTerminalSessions(
+  request: APIRequestContext,
+): Promise<void> {
+  const { accessToken } = await loginForRequest(request);
+  const listResponse = await request.get(
+    `${E2E_API_BASE}/api/terminal/session`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  if (!listResponse.ok()) {
+    return;
+  }
+  const sessions = (await listResponse.json()) as Array<{
+    terminalSessionId: string;
+  }>;
+  for (const session of sessions) {
+    await request.delete(
+      `${E2E_API_BASE}/api/terminal/session/${encodeURIComponent(
+        session.terminalSessionId,
+      )}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+  }
+}
+
+test.afterEach(async ({ request }) => {
+  await deleteAllTerminalSessions(request);
+});
 
 async function createPreviewRepo(): Promise<string> {
   const repo = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-e2e-"));
@@ -160,6 +204,8 @@ test("terminal preview renames and deletes files", async ({
   request,
 }) => {
   const repo = await createPreviewRepo();
+  const renamedPath =
+    "docs/architecture/very-long-delete-target-file-name-that-should-wrap-inside-the-confirmation-dialog.md";
   try {
     await writeFile(
       path.join(repo, "docs/architecture/terminal-code-preview.md"),
@@ -210,24 +256,36 @@ test("terminal preview renames and deletes files", async ({
     await expect(renameDialog).toBeVisible();
     await renameDialog
       .getByRole("textbox", { name: "New file path" })
-      .fill("docs/renamed.md");
+      .fill(renamedPath);
     await renameDialog.getByRole("button", { name: "Rename File" }).click();
 
-    await expect(page.getByText("docs/renamed.md")).toBeVisible();
+    await expect(page.getByText(renamedPath)).toBeVisible();
     await expect(page.getByText("new readme")).toBeVisible();
     await expect(
       readFile(path.join(repo, "README.md"), "utf8"),
     ).rejects.toThrow();
-    await expect(
-      readFile(path.join(repo, "docs/renamed.md"), "utf8"),
-    ).resolves.toBe("new readme\n");
+    await expect(readFile(path.join(repo, renamedPath), "utf8")).resolves.toBe(
+      "new readme\n",
+    );
 
-    const renamedOption = page.getByRole("option", { name: /renamed\.md/ });
+    const renamedOption = page.getByRole("option", {
+      name: /very-long-delete-target-file-name/,
+    });
     await expect(renamedOption).toBeVisible();
     await renamedOption.click({ button: "right" });
     await page.getByRole("menuitem", { name: "Delete" }).click();
     const deleteDialog = page.getByRole("alertdialog", { name: "Delete File" });
     await expect(deleteDialog).toBeVisible();
+    const deletePath = deleteDialog.getByText(renamedPath);
+    await expect(deletePath).toBeVisible();
+    const deleteDialogBox = await deleteDialog.boundingBox();
+    const deletePathBox = await deletePath.boundingBox();
+    expect(deleteDialogBox).not.toBeNull();
+    expect(deletePathBox).not.toBeNull();
+    expect(deletePathBox!.x).toBeGreaterThanOrEqual(deleteDialogBox!.x);
+    expect(deletePathBox!.x + deletePathBox!.width).toBeLessThanOrEqual(
+      deleteDialogBox!.x + deleteDialogBox!.width + 1,
+    );
     await expect(
       deleteDialog.getByText(
         "This deletes the file from disk. This cannot be undone.",
@@ -237,7 +295,7 @@ test("terminal preview renames and deletes files", async ({
 
     await expect(page.getByText("Select a file")).toBeVisible();
     await expect(
-      readFile(path.join(repo, "docs/renamed.md"), "utf8"),
+      readFile(path.join(repo, renamedPath), "utf8"),
     ).rejects.toThrow();
 
     await page
@@ -809,6 +867,30 @@ test("terminal sidecar browser keeps global tabs in web mode", async ({
     ]);
     await expect(popup).toHaveURL("https://example.com/runweave-link");
     await popup.close();
+
+    await page.keyboard.type(
+      'python3 -c \'print("https://example.com/" + "a" * 120 + "-wrapped-link")\'',
+    );
+    await page.keyboard.press("Enter");
+    const wrappedTerminalLinkContinuation = page
+      .locator(".xterm-screen span", {
+        hasText: /wrapped-link$/,
+      })
+      .last();
+    await expect(wrappedTerminalLinkContinuation).toBeVisible();
+    const wrappedLinkBox = await wrappedTerminalLinkContinuation.boundingBox();
+    expect(wrappedLinkBox).not.toBeNull();
+    const [wrappedPopup] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.mouse.click(
+        wrappedLinkBox!.x + wrappedLinkBox!.width / 2,
+        wrappedLinkBox!.y + wrappedLinkBox!.height / 2,
+      ),
+    ]);
+    await expect(wrappedPopup).toHaveURL(
+      /^https:\/\/example\.com\/a+-wrapped-link$/,
+    );
+    await wrappedPopup.close();
 
     await page.getByRole("tab", { name: "Browser", exact: true }).click();
     await expect(

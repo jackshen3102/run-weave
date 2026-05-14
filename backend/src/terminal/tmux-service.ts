@@ -29,6 +29,16 @@ export interface TmuxPaneMetadata {
   activeCommand: string | null;
 }
 
+export interface TmuxSessionInfo {
+  sessionName: string;
+  attachedClients: number;
+  windows: number;
+}
+
+export interface KillOrphanedTmuxSessionsOptions {
+  includeAttached?: boolean;
+}
+
 export interface TmuxAvailability {
   available: boolean;
   reason: string | null;
@@ -156,7 +166,8 @@ export class TmuxService {
     terminalSessionId: string,
     action: () => Promise<T>,
   ): Promise<T> {
-    const previous = this.sessionLocks.get(terminalSessionId) ?? Promise.resolve();
+    const previous =
+      this.sessionLocks.get(terminalSessionId) ?? Promise.resolve();
     let releaseCurrent: () => void = () => undefined;
     const current = new Promise<void>((resolve) => {
       releaseCurrent = resolve;
@@ -253,10 +264,73 @@ export class TmuxService {
     }
   }
 
+  async listSessions(): Promise<TmuxSessionInfo[]> {
+    try {
+      const result = await this.runTmux([
+        "list-sessions",
+        "-F",
+        ["#{session_name}", "#{session_attached}", "#{session_windows}"].join(
+          "\t",
+        ),
+      ]);
+      return result.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const [sessionName = "", rawAttached = "0", rawWindows = "0"] =
+            line.split("\t");
+          return {
+            sessionName,
+            attachedClients: parsePositiveInteger(rawAttached),
+            windows: parsePositiveInteger(rawWindows),
+          };
+        })
+        .filter((session) =>
+          session.sessionName.startsWith(RUNWEAVE_TMUX_PREFIX),
+        );
+    } catch (error) {
+      if (isProcessExitCode(error, 1)) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  async listOrphanedSessions(
+    knownSessionNames: ReadonlySet<string>,
+  ): Promise<TmuxSessionInfo[]> {
+    const sessions = await this.listSessions();
+    return sessions.filter(
+      (session) => !knownSessionNames.has(session.sessionName),
+    );
+  }
+
+  async killOrphanedSessions(
+    knownSessionNames: ReadonlySet<string>,
+    options?: KillOrphanedTmuxSessionsOptions,
+  ): Promise<TmuxSessionInfo[]> {
+    const orphanedSessions = (
+      await this.listOrphanedSessions(knownSessionNames)
+    ).filter(
+      (session) => options?.includeAttached || session.attachedClients === 0,
+    );
+    for (const session of orphanedSessions) {
+      await this.killSession({
+        sessionName: session.sessionName,
+        socketPath: this.socketPath,
+      });
+    }
+    return orphanedSessions;
+  }
+
   async sendInput(target: TmuxTarget, data: string): Promise<void> {
     for (const chunk of splitInputForSendKeys(data)) {
       if (chunk.type === "enter") {
-        await this.runTmux(["send-keys", "-t", target.sessionName, "Enter"], target);
+        await this.runTmux(
+          ["send-keys", "-t", target.sessionName, "Enter"],
+          target,
+        );
         continue;
       }
       if (chunk.value) {
@@ -321,9 +395,8 @@ export class TmuxService {
       ],
       target,
     );
-    const [rawCwd = "", rawRunweaveCommand = "", rawCommand = ""] = result.stdout
-      .replace(/\r?\n$/, "")
-      .split(TMUX_METADATA_FIELD_SEPARATOR);
+    const [rawCwd = "", rawRunweaveCommand = "", rawCommand = ""] =
+      result.stdout.replace(/\r?\n$/, "").split(TMUX_METADATA_FIELD_SEPARATOR);
     const cwd = rawCwd.trim();
     if (!cwd) {
       return null;
@@ -340,13 +413,7 @@ export class TmuxService {
   private async readPaneWidth(target: TmuxTarget): Promise<number | undefined> {
     try {
       const result = await this.runTmux(
-        [
-          "display-message",
-          "-p",
-          "-t",
-          target.sessionName,
-          "#{pane_width}",
-        ],
+        ["display-message", "-p", "-t", target.sessionName, "#{pane_width}"],
         target,
       );
       const width = Number.parseInt(result.stdout.trim(), 10);
@@ -469,7 +536,7 @@ export class TmuxService {
       [
         "set-option -g history-limit 5000",
         "set-option -g mouse on",
-        "set-option -g default-terminal \"tmux-256color\"",
+        'set-option -g default-terminal "tmux-256color"',
         "set-option -as terminal-overrides ',xterm-256color:RGB'",
         "unbind-key C-b",
         "set-option -g prefix C-\\\\",
@@ -537,14 +604,18 @@ export class TmuxService {
     const serverArgs = target
       ? this.buildServerArgs(target.socketPath)
       : this.buildServerArgs(this.socketPath);
-    const normalizedArgs =
-      args[0] === "-V" ? args : [...serverArgs, ...args];
+    const normalizedArgs = args[0] === "-V" ? args : [...serverArgs, ...args];
     return this.execFileImpl(this.binary, normalizedArgs, {
       env: this.env,
       timeout: TmuxCommandTimeoutMs,
       maxBuffer: 10 * 1024 * 1024,
     });
   }
+}
+
+function parsePositiveInteger(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
 function splitInputForSendKeys(
