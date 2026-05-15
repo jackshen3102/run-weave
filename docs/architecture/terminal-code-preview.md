@@ -21,10 +21,17 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 相关代码边界：
 
 - `frontend/src/pages/terminal-page.tsx`：Terminal 路由入口，负责把路由参数传给工作台。
+- `frontend/src/components/terminal-page.tsx`：独立 Terminal 页面入口，直接承载单 session 终端；仍使用同一套 wrapped URL link provider，但不承担 Workspace Preview 能力。
 - `frontend/src/components/terminal/terminal-workspace.tsx`：Terminal 工作台协调层，负责项目、会话、活动标记、预览状态接线，以及向 shell 组合数据与动作。
 - `frontend/src/components/terminal/terminal-workspace-shell.tsx`：Terminal 工作台展示层，负责顶部栏、活动 session 容器、历史抽屉、Preview sidecar 挂载，以及 active surface 与 headless watcher 的布局；项目 tab 和 terminal session tab 支持拖拽排序。
 - `frontend/src/components/terminal/terminal-workspace-effects.ts`：Terminal 工作台副作用层，负责 recent selection、快捷键切换和 marker 清理等衍生逻辑。
-- `frontend/src/components/terminal/terminal-surface.tsx`：xterm 渲染与输入连接，不应承载代码预览业务。
+- `frontend/src/components/terminal/terminal-surface.tsx`：Workspace 内 active session 的终端协调层，负责连接、输出快照、搜索状态、粘贴图片和 Browser link 动作接线；不承载代码预览业务，也不直接堆叠 xterm 初始化细节。
+- `frontend/src/components/terminal/use-terminal-emulator.ts`：xterm 初始化与输入侧能力 hook，封装 renderer addon、fit/search、移动端输入、粘贴图片、tmux 滚轮输入和 wrapped URL link provider 注册。
+- `frontend/src/components/terminal/use-terminal-snapshot-restore.ts`：active surface 恢复 hook，负责在 inactive session 重新激活时用服务端 snapshot 或 deferred output 恢复终端内容。
+- `frontend/src/components/terminal/terminal-surface-layout.tsx`：终端展示壳层，负责错误、粘贴图片 badge、search toolbar、mobile keybar 和 emulator 容器布局。
+- `frontend/src/components/terminal/terminal-search-toolbar.tsx`：终端搜索 toolbar 展示层，封装 query、方向、匹配大小写、整词和 regex 开关。
+- `frontend/src/components/terminal/terminal-surface-utils.ts`：TerminalSurface 的稳定工具与类型边界，包含终端自动响应过滤、IME 去重窗口、搜索结果类型、移动端 beforeinput 解析和性能探针记录。
+- `frontend/src/features/terminal/web-link-provider.ts`：窄范围 wrapped URL 兼容 provider，只处理 xterm 标记为跨行 wrapped 的 `http:` / `https:` 链接，不接管普通 URL 或文件路径预览。
 - `frontend/src/components/terminal/terminal-preview-panel.tsx`：右侧 Preview 面板的数据编排层，负责按 active project 读取 Preview 状态、发起文件和 diff 请求，并把动作与渲染层连接起来。
 - `frontend/src/components/terminal/terminal-preview-panel-actions.ts`：Preview 面板动作层，负责刷新、复制路径、面板宽度拖拽、Markdown split 拖拽和视图模式切换。
 - `frontend/src/components/terminal/terminal-preview-panel-content.tsx`：Preview 面板内容层，负责 Open file、Markdown、SVG、图片和内容渲染。
