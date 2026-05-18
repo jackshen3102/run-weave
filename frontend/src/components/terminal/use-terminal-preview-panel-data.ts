@@ -28,6 +28,10 @@ import {
   resolveSelectedPreviewChange,
   useTerminalPreviewPanelKeyboardEffects,
 } from "./use-terminal-preview-panel-keyboard-effects";
+import {
+  getSelectedTerminalPreviewPath,
+  getTerminalPreviewCopyPath,
+} from "./terminal-preview-panel-paths";
 
 interface PreviewFileMutationTarget {
   path: string;
@@ -485,47 +489,29 @@ export function useTerminalPreviewPanelData({
     pathCopiedTimeoutRef,
   });
 
-  const selectedPath = useMemo(() => {
-    if (mode === "file") {
-      return selectedFilePath ?? filePreview?.path ?? null;
-    }
-    if (mode === "changes") {
-      return selectedChangePath ?? fileDiff?.path ?? null;
-    }
-    return null;
-  }, [
-    fileDiff?.path,
-    filePreview?.path,
-    mode,
-    selectedChangePath,
-    selectedFilePath,
-  ]);
+  const selectedPath = useMemo(
+    () =>
+      getSelectedTerminalPreviewPath({
+        mode,
+        selectedFilePath,
+        selectedChangePath,
+        filePreview,
+        fileDiff,
+      }),
+    [fileDiff, filePreview, mode, selectedChangePath, selectedFilePath],
+  );
 
-  const copyPath = useMemo(() => {
-    if (!selectedPath) {
-      return null;
-    }
-    if (mode === "file" && filePreview?.absolutePath) {
-      return filePreview.absolutePath;
-    }
-    if (mode === "changes" && fileDiff?.absolutePath) {
-      return fileDiff.absolutePath;
-    }
-    if (selectedPath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(selectedPath)) {
-      return selectedPath;
-    }
-    if (!activeProject?.path) {
-      return selectedPath;
-    }
-    const separator = activeProject.path.includes("\\") ? "\\" : "/";
-    return `${activeProject.path.replace(/[\\/]+$/, "")}${separator}${selectedPath.replace(/^[\\/]+/, "")}`;
-  }, [
-    activeProject?.path,
-    fileDiff?.absolutePath,
-    filePreview?.absolutePath,
-    mode,
-    selectedPath,
-  ]);
+  const copyPath = useMemo(
+    () =>
+      getTerminalPreviewCopyPath({
+        mode,
+        selectedPath,
+        filePreview,
+        fileDiff,
+        activeProject,
+      }),
+    [activeProject, fileDiff, filePreview, mode, selectedPath],
+  );
 
   useEffect(() => {
     setPathCopied(false);
