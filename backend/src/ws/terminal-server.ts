@@ -659,6 +659,20 @@ export function attachTerminalWebSocketServer(
         tmuxMetadataSyncTimer = null;
       }
       runtimeRegistry.detachClient(terminalSessionId, clientId);
+      if (
+        session &&
+        isTmuxBackedSession(session) &&
+        runtimeRegistry.getAttachedClientCount(terminalSessionId) === 0
+      ) {
+        void runtimeRegistry
+          .disposeRuntime(terminalSessionId)
+          .catch((error: unknown) => {
+            console.error("[viewer-be] failed to dispose idle tmux runtime", {
+              terminalSessionId,
+              error: String(error),
+            });
+          });
+      }
     };
 
     socket.on("close", () => {

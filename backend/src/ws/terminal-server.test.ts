@@ -1565,6 +1565,74 @@ describe("terminal websocket server", () => {
     expect(tmuxService.capturePane).not.toHaveBeenCalled();
   });
 
+  it("disposes idle tmux attach runtime after the last websocket client disconnects", async () => {
+    const runtime = new FakeRuntime();
+    const authService = {
+      verifyTemporaryToken: vi.fn(
+        (
+          _token: string,
+          params: { resource: { terminalSessionId?: string } },
+        ) => createTerminalTicketVerification(params.resource),
+      ),
+    };
+    const terminalSessionManager = {
+      getSession: vi.fn(() => ({
+        id: "terminal-1",
+        command: "bash",
+        args: ["-l"],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running",
+        exitCode: undefined,
+        runtimeKind: "tmux",
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      })),
+      markActivity: vi.fn(),
+      appendOutput: vi.fn(),
+      markExited: vi.fn(),
+      updateRuntimeMetadata: vi.fn(),
+    };
+    const runtimeRegistry = new TerminalRuntimeRegistry();
+    runtimeRegistry.createRuntime("terminal-1", runtime);
+    const tmuxService = {
+      capturePane: vi.fn(async () => ({ data: "", durationMs: 1 })),
+    };
+
+    const server = http.createServer();
+    servers.push(server);
+    attachTerminalWebSocketServer(
+      server,
+      terminalSessionManager as never,
+      runtimeRegistry,
+      authService as never,
+      undefined,
+      tmuxService as never,
+    );
+    const port = await startServer(server);
+    const firstSocket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    const secondSocket = new WebSocket(
+      `ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=terminal-1&token=valid-token`,
+    );
+    sockets.push(firstSocket, secondSocket);
+
+    await Promise.all([waitForOpen(firstSocket), waitForOpen(secondSocket)]);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await closeSocket(firstSocket);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(runtime.dispose).not.toHaveBeenCalled();
+    expect(runtimeRegistry.getRuntime("terminal-1")).toBe(runtime);
+
+    await closeSocket(secondSocket);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(runtime.dispose).toHaveBeenCalledTimes(1);
+    expect(runtimeRegistry.getRuntime("terminal-1")).toBeUndefined();
+  });
+
   it("recycles idle tmux attach runtimes so reconnecting clients get a fresh tmux repaint", async () => {
     const staleRuntime = new FakeRuntime();
     const freshRuntime = new FakeRuntime();
