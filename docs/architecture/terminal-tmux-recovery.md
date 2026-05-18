@@ -293,6 +293,8 @@ else if session.runtimeKind == "pty":
 
 这一步是 backend 重启或部署切换后接回原终端的核心。
 
+当前 WebSocket 清理还有一个运行时边界：tmux-backed session 的最后一个 WebSocket client 断开后，后端会 dispose 当前 node-pty attach runtime，并从 `TerminalRuntimeRegistry` 移除它，但不会 kill tmux session，也不会把 Runweave terminal session 标记为 exited。这样可以避免下次连接复用已经空闲的 attach runtime，让重连路径重新 attach tmux 并拿到新的 pane repaint。仍有其他 WebSocket client 连接时不 dispose runtime，避免中断并发查看同一终端的客户端。
+
 `TmuxService.hasSession()` 需要区分正常 missing 和 tmux 命令失败：
 
 - `has-session` 正常返回不存在：说明原 tmux session 已消失。
@@ -499,6 +501,7 @@ Runweave 专用 tmux 配置首期统一设置 `history-limit 5000`，和现有 R
 - tmux 不可用时降级到 `runtimeKind: "pty"`，并记录该 session 不具备恢复能力。
 - fallback pty session 与现状保持一致，继续使用当前 recorder、persisted scrollback 和删除语义。
 - WebSocket runtime 缺失时 attach 同名 tmux session。
+- 最后一个 WebSocket client 断开后只释放 node-pty attach runtime，不结束 tmux session；下次连接通过 runtime 缺失恢复路径重新 attach。
 - 删除终端时 kill 对应 tmux session。
 - tmux-backed session 的 snapshot/history 改为读取 `tmux capture-pane`。
 - 删除终端时不保存 final scrollback。
@@ -544,6 +547,7 @@ Runweave 专用 tmux 配置首期统一设置 `history-limit 5000`，和现有 R
 - tmux 不可用时返回明确错误。
 - `tmux capture-pane -p -J -S -5000` 在满 5000 行 pane history 下有性能基线测试，记录耗时并校验低于 200 ms。
 - tmux-backed runtime exit 且 `has-session=true` 时不 mark exited。
+- 最后一个 WebSocket client 断开后，idle attach runtime 会被 dispose 并注销，tmux session 仍保持 running；仍有 client 连接时不会 dispose。
 - tmux-backed runtime exit 且 `has-session=false` 时重新创建同名 tmux session 并生成用户提示。
 - tmux-backed runtime exit 且 `has-session` 命令失败时记录日志、重新创建同名 tmux session，并生成用户提示。
 - 同一 session 在 60 秒内 tmux 重建超过 3 次时，停止自动重建，标记不可恢复/退出，并向用户返回明确错误。
