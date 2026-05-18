@@ -33,6 +33,7 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - `frontend/src/components/terminal/terminal-surface-utils.ts`：TerminalSurface 的稳定工具与类型边界，包含终端自动响应过滤、IME 去重窗口、搜索结果类型、移动端 beforeinput 解析和性能探针记录。
 - `frontend/src/features/terminal/web-link-provider.ts`：窄范围 wrapped URL 兼容 provider，只处理 xterm 标记为跨行 wrapped 的 `http:` / `https:` 链接，不接管普通 URL 或文件路径预览。
 - `frontend/src/components/terminal/terminal-preview-panel.tsx`：右侧 Preview 面板的数据编排层，负责按 active project 读取 Preview 状态、发起文件和 diff 请求，并把动作与渲染层连接起来。
+- `frontend/src/components/terminal/terminal-preview-panel-paths.ts`：Preview 路径选择与复制路径的纯函数边界，负责从 Files / Changes 状态、后端 `absolutePath` 和 active project path 中得出当前选中路径与可复制路径。
 - `frontend/src/components/terminal/terminal-preview-panel-actions.ts`：Preview 面板动作层，负责刷新、复制路径、面板宽度拖拽、Markdown split 拖拽和视图模式切换。
 - `frontend/src/components/terminal/terminal-preview-panel-content.tsx`：Preview 面板内容层，负责 Open file、Markdown、SVG、图片和内容渲染。
 - `frontend/src/components/terminal/terminal-preview-change-tree.tsx`：Changes 左栏渲染层，负责 staged / working 文件分组、文件选择和文件项上的重命名 / 删除入口。
@@ -299,15 +300,15 @@ File no longer exists
 
 不同模式下的行为：
 
-| 当前模式       | Copy path 行为                 |
-| -------------- | ------------------------------ |
-| Open file 搜索 | 置灰或隐藏                     |
-| Open file 预览 | 复制当前文件相对项目路径的路径 |
-| Markdown 预览  | 复制当前 Markdown 文件相对路径 |
-| SVG 预览       | 复制当前 SVG 文件相对路径      |
-| 图片预览       | 复制当前图片文件相对路径       |
-| Changes        | 复制当前选中变更文件路径       |
-| 空状态         | 置灰或隐藏                     |
+| 当前模式       | Copy path 行为                                                                      |
+| -------------- | ----------------------------------------------------------------------------------- |
+| Open file 搜索 | 置灰或隐藏                                                                          |
+| Open file 预览 | 优先复制后端返回的文件绝对路径；缺少绝对路径时，用 active project path 补齐相对路径 |
+| Markdown 预览  | 与普通文件一致，复制当前 Markdown 文件的可定位路径                                  |
+| SVG 预览       | 与普通文件一致，复制当前 SVG 文件的可定位路径                                       |
+| 图片预览       | 与普通文件一致，复制当前图片文件的可定位路径                                        |
+| Changes        | 优先复制 diff 响应里的绝对路径；缺少绝对路径时，用 active project path 补齐变更路径 |
+| 空状态         | 置灰或隐藏                                                                          |
 
 v1 不提供复制全文和复制完整 diff。后续如果需要，可把 `Copy path` 扩展为菜单：
 
