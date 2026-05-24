@@ -30,13 +30,27 @@ describe("terminal browser header rules", () => {
     ]);
   });
 
+  it("accepts cookie headers", () => {
+    const result = validateTerminalBrowserHeaderRule({
+      id: "rule-1",
+      enabled: true,
+      operation: "set",
+      name: "Cookie",
+      value: "a=b",
+      urlPattern: "*://*/*",
+    });
+
+    expect(result.fieldErrors).toEqual({});
+    expect(result.rule?.name).toBe("Cookie");
+  });
+
   it("rejects blocked or malformed headers", () => {
     expect(
       validateTerminalBrowserHeaderRule({
         id: "rule-1",
         enabled: true,
         operation: "set",
-        name: "Cookie",
+        name: "Set-Cookie",
         value: "a=b",
         urlPattern: "*://*/*",
       }).fieldErrors.name,

@@ -35,7 +35,6 @@ const BLOCKED_HEADER_NAMES = new Set([
   "connection",
   "upgrade",
   "proxy-authorization",
-  "cookie",
   "set-cookie",
 ]);
 
