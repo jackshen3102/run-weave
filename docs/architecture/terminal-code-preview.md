@@ -71,10 +71,10 @@ Terminal Browser 工具当前边界：
 - 工具栏提供本地代理开关与 `Headers` 面板。代理开关使用同一个 `persist:runweave-terminal-browser` session 的 `setProxy`，当前固定走 `127.0.0.1:8899`，绕过 `<local>`。
 - `Headers` 面板只影响右侧 Terminal Browser 的网页请求，不影响首页 `New Browser` 创建的后端 Playwright session、Runweave 主窗口、登录/API 请求、Electron 更新请求或后端 viewer session。
 - Header 规则保存在前端 `localStorage` 的 `terminal.browser.headerRules`，Terminal Browser Tool 挂载时会同步到 Electron 主进程；保存失败会回滚本地存储并展示错误。
-- Header 规则通过 `terminal-browser:get-header-rules` / `terminal-browser:set-header-rules` IPC 进入主进程。主进程做最终校验，最多 20 条，字段为 `enabled`、固定操作 `set`、`name`、`value`、`urlPattern`，默认 URL 模式为 `*://*/*`。
+- Header 规则通过 `terminal-browser:get-header-rules` / `terminal-browser:set-header-rules` IPC 进入主进程。主进程做最终校验，最多 20 条，字段为 `enabled`、固定操作 `set`、`name`、`value`，URL 模式固定为 `*://*/*`，当前前端不暴露单条规则的 URL pattern 编辑。
 - Header 名必须符合 HTTP token 形态，禁止控制字符、冒号以及 `host`、`content-length`、`connection`、`upgrade`、`proxy-authorization`、`set-cookie`。Header 值不能为空且不能包含控制字符。
-- Electron 主进程只注册一个 `webRequest.onBeforeSendHeaders({ urls: ["<all_urls>"] })` dispatcher。dispatcher 只处理 `http:` / `https:` 请求，按规则列表顺序匹配轻量通配 URL；同名 Header 后命中的规则覆盖前面的规则。
-- Header 规则变更只影响后续新请求。面板保存后提供刷新入口，让当前页面主文档请求也重新携带新规则。
+- Electron 主进程只注册一个 `webRequest.onBeforeSendHeaders({ urls: ["<all_urls>"] })` dispatcher。dispatcher 只处理 `http:` / `https:` 请求，按规则列表顺序匹配固定全局 URL 模式；同名 Header 后命中的规则覆盖前面的规则。
+- Header 规则变更只影响后续新请求。面板保存成功后会关闭面板；如需让当前页面主文档请求携带新规则，用户需要通过工具栏刷新当前 Browser tab。
 - Browser 工具栏的地址输入框旁提供复制当前地址按钮，只复制当前 tab 的地址文本，不触发导航、分享或外部打开；复制成功后短暂显示完成状态。
 - Browser 工具提供当前 tab 级别的设备模式。`Desktop` 是默认状态；切到移动设备时，当前支持 `iPhone SE`、`iPhone 14` 和 `Pixel 7` 三个预设，分别应用移动端 viewport、device scale factor、移动端 user agent 和 touch emulation。
 - 设备预设定义在 `packages/shared/src/terminal-browser-device.ts`，由前端设备面板和 Electron 主进程共享。新建、恢复和 proxy-created tab 仍从 `Desktop` 开始，不继承其他 tab 的移动设备状态。
