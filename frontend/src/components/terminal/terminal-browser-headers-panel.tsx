@@ -1,4 +1,4 @@
-import { Braces, Check, Plus, RotateCw, Trash2, X } from "lucide-react";
+import { Braces, Check, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   TERMINAL_BROWSER_DEFAULT_HEADER_URL_PATTERN,
@@ -24,7 +24,6 @@ interface TerminalBrowserHeadersPanelProps {
   error: string | null;
   onClose: () => void;
   onSave: (rules: TerminalBrowserHeaderRule[]) => Promise<boolean>;
-  onReload: () => void;
 }
 
 function createRule(): TerminalBrowserHeaderRule {
@@ -53,6 +52,15 @@ function validateRules(
     }
   }
   return errors;
+}
+
+function withDefaultUrlPatterns(
+  rules: TerminalBrowserHeaderRule[],
+): TerminalBrowserHeaderRule[] {
+  return rules.map((rule) => ({
+    ...rule,
+    urlPattern: TERMINAL_BROWSER_DEFAULT_HEADER_URL_PATTERN,
+  }));
 }
 
 function firstRuleError(errors: HeaderRuleErrors): string | null {
@@ -105,20 +113,17 @@ export function TerminalBrowserHeadersPanel({
   error,
   onClose,
   onSave,
-  onReload,
 }: TerminalBrowserHeadersPanelProps) {
   const [draftRules, setDraftRules] =
     useState<TerminalBrowserHeaderRule[]>(rules);
   const [fieldErrors, setFieldErrors] = useState<
     Record<string, HeaderRuleErrors>
   >({});
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (!open) {
       setDraftRules(rules);
       setFieldErrors({});
-      setSaved(false);
     }
   }, [open, rules]);
 
@@ -126,14 +131,12 @@ export function TerminalBrowserHeadersPanel({
     id: string,
     updates: Partial<TerminalBrowserHeaderRule>,
   ): void => {
-    setSaved(false);
     setDraftRules((current) =>
       current.map((rule) => (rule.id === id ? { ...rule, ...updates } : rule)),
     );
   };
 
   const addRule = (): void => {
-    setSaved(false);
     setDraftRules((current) =>
       current.length >= TERMINAL_BROWSER_HEADER_RULE_LIMIT
         ? current
@@ -142,7 +145,6 @@ export function TerminalBrowserHeadersPanel({
   };
 
   const removeRule = (id: string): void => {
-    setSaved(false);
     setDraftRules((current) => current.filter((rule) => rule.id !== id));
     setFieldErrors((current) => {
       const next = { ...current };
@@ -152,15 +154,17 @@ export function TerminalBrowserHeadersPanel({
   };
 
   const saveRules = async (): Promise<void> => {
-    const nextErrors = validateRules(draftRules);
+    const nextRules = withDefaultUrlPatterns(draftRules);
+    const nextErrors = validateRules(nextRules);
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
-      setSaved(false);
       return;
     }
 
-    const didSave = await onSave(draftRules);
-    setSaved(didSave);
+    const didSave = await onSave(nextRules);
+    if (didSave) {
+      onClose();
+    }
   };
 
   if (!open) {
@@ -239,7 +243,7 @@ export function TerminalBrowserHeadersPanel({
               </div>
 
               <div className="space-y-2">
-                <label className="space-y-1">
+                <label className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-2">
                   <span className="text-[10px] font-medium text-slate-500">
                     Header
                   </span>
@@ -254,7 +258,7 @@ export function TerminalBrowserHeadersPanel({
                     }
                   />
                 </label>
-                <label className="space-y-1">
+                <label className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-2">
                   <span className="text-[10px] font-medium text-slate-500">
                     Value
                   </span>
@@ -271,24 +275,6 @@ export function TerminalBrowserHeadersPanel({
                 </label>
               </div>
 
-              <label className="block space-y-1">
-                <span className="text-[10px] font-medium text-slate-500">
-                  URL pattern
-                </span>
-                <input
-                  className={[
-                    "h-8 w-full rounded-md border bg-slate-900 px-2 text-xs text-slate-100 outline-none focus:border-sky-500",
-                    ruleErrors.urlPattern
-                      ? "border-rose-700"
-                      : "border-slate-800",
-                  ].join(" ")}
-                  value={rule.urlPattern}
-                  onChange={(event) =>
-                    updateRule(rule.id, { urlPattern: event.target.value })
-                  }
-                />
-              </label>
-
               {firstRuleError(ruleErrors) ? (
                 <p className="text-xs text-rose-400">
                   {firstRuleError(ruleErrors)}
@@ -301,21 +287,6 @@ export function TerminalBrowserHeadersPanel({
 
       <div className="shrink-0 space-y-2 border-t border-slate-800 p-3">
         {error ? <p className="text-xs text-rose-400">{error}</p> : null}
-        {saved && !error ? (
-          <div className="flex items-center justify-between gap-2 rounded-md border border-emerald-900/60 bg-emerald-950/30 px-2 py-1.5">
-            <p className="text-xs text-emerald-300">Saved</p>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 rounded-md px-2 text-xs"
-              onClick={onReload}
-            >
-              <RotateCw className="mr-1 h-3.5 w-3.5" />
-              Reload
-            </Button>
-          </div>
-        ) : null}
 
         <div className="flex justify-end gap-2">
           <Button

@@ -119,18 +119,18 @@ export function useTerminalEmulator({
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);
     terminal.loadAddon(unicode11Addon);
-    terminal.loadAddon(
-      new WebLinksAddon((event, uri) => {
-        event.preventDefault();
-        openTerminalLinkRef.current(uri);
-      }),
-    );
     const linkProviderDisposable = terminal.registerLinkProvider(
       createTerminalWrappedWebLinkProvider(terminal, {
         activate: (event, uri) => {
           event.preventDefault();
           openTerminalLinkRef.current(uri);
         },
+      }),
+    );
+    terminal.loadAddon(
+      new WebLinksAddon((event, uri) => {
+        event.preventDefault();
+        openTerminalLinkRef.current(uri);
       }),
     );
     terminal.open(container);

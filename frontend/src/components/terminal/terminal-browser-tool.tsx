@@ -101,7 +101,6 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         onCloseDevicePanel={() => setDevicePanelOpenState(false)}
         onSelectDevicePreset={(presetId) => void selectDevicePreset(presetId)}
         onSaveHeaderRules={saveHeaderRules}
-        onReload={() => void reload()}
         onOpenExternal={() => openUrlExternally(activeTab.url)}
       />
     </div>
