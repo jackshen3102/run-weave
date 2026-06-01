@@ -26,6 +26,8 @@ frontend / Electron
 
 前端已有 WebSocket 自动重连能力，后端也会在 runtime 缺失时尝试重新 spawn 终端，但当前重新 spawn 的是原始 shell 命令，不能恢复已在运行中的 `codex` TUI。
 
+当前后端 WebSocket 边界已经拆成两层：`backend/src/ws/terminal-server.ts` 负责握手、runtime attach、client 连接生命周期、output batching 和 metadata 同步；`backend/src/ws/terminal-server-connection-helpers.ts` 承担消息解析、初始 snapshot/scrollback 选择、tmux repaint settle 判断和 runtime action 错误回传等连接辅助逻辑。tmux attach runtime 生命周期、最后一个客户端断开后的 dispose 边界，以及初始快照选择，应优先在这两层保持一致，避免 WebSocket 主流程和 helper 对 tmux-backed session 作出不同判断。
+
 ## 目标
 
 - 客户端更新、客户端重启、后端进程重启或服务端滚动部署后，tmux-backed 终端里的 shell、TUI、长任务继续运行。
@@ -503,12 +505,11 @@ Runweave 专用 tmux 配置首期统一设置 `history-limit 5000`，和现有 R
 - tmux 不可用时降级到 `runtimeKind: "pty"`，并记录该 session 不具备恢复能力。
 - fallback pty session 与现状保持一致，继续使用当前 recorder、persisted scrollback 和删除语义。
 - WebSocket runtime 缺失时 attach 同名 tmux session。
-- 最后一个 WebSocket client 断开后只释放 node-pty attach runtime，不结束 tmux session；下次连接通过 runtime 缺失恢复路径重新 attach。
+- 最后一个 WebSocket client 断开后只释放 node-pty attach runtime，不结束 tmux session；下次连接通过 runtime 缺失恢复路径重新 attach，并读取 fresh snapshot。
 - 删除终端时 kill 对应 tmux session。
 - tmux-backed session 的 snapshot/history 改为读取 `tmux capture-pane`。
 - 删除终端时不保存 final scrollback。
 - 保留现有 inactive terminal 交互和前端性能优化，只改后端 runtime、恢复、删除和 scrollback 读取逻辑。
-- 最后一个 WebSocket 客户端断开后释放 tmux attach runtime，但保留 tmux session，下一次连接重新 attach 并读取 fresh snapshot。
 - 暂不改 UI，只通过环境变量验证本地 backend、Electron packaged、同机服务端 backend restart 三种入口。
 
 成功标准：
@@ -551,7 +552,7 @@ Runweave 专用 tmux 配置首期统一设置 `history-limit 5000`，和现有 R
 - tmux 不可用时返回明确错误。
 - `tmux capture-pane -p -J -S -5000` 在满 5000 行 pane history 下有性能基线测试，记录耗时并校验低于 200 ms。
 - tmux-backed runtime exit 且 `has-session=true` 时不 mark exited。
-- 最后一个 WebSocket client 断开后，idle attach runtime 会被 dispose 并注销，tmux session 仍保持 running；仍有 client 连接时不会 dispose。
+- 最后一个 WebSocket client 断开后，idle attach runtime 会被 dispose 并注销，tmux session 仍保持 running；仍有 client 连接时不会 dispose；下一次连接应重新 attach 并读取 fresh snapshot。
 - tmux-backed runtime exit 且 `has-session=false` 时重新创建同名 tmux session 并生成用户提示。
 - tmux-backed runtime exit 且 `has-session` 命令失败时记录日志、重新创建同名 tmux session，并生成用户提示。
 - 同一 session 在 60 秒内 tmux 重建超过 3 次时，停止自动重建，标记不可恢复/退出，并向用户返回明确错误。
@@ -561,7 +562,6 @@ Runweave 专用 tmux 配置首期统一设置 `history-limit 5000`，和现有 R
 - 删除 tmux-backed session 后 history API 不再返回历史。
 - fallback pty session 的 recorder、history API、delete session 行为与现状一致。
 - inactive terminal 的 activity/bell/metadata 回调保持现状。
-- 最后一个 WebSocket 客户端断开后，tmux-backed attach runtime 会被 dispose，runtime registry 中不再保留该 runtime。
 
 集成测试：
 
