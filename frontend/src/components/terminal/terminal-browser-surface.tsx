@@ -36,7 +36,6 @@ interface TerminalBrowserSurfaceProps {
   onCloseDevicePanel: () => void;
   onSelectDevicePreset: (presetId: TerminalBrowserDevicePresetId) => void;
   onSaveHeaderRules: (rules: TerminalBrowserHeaderRule[]) => Promise<boolean>;
-  onReload: () => void;
   onOpenExternal: () => void;
 }
 
@@ -56,7 +55,6 @@ export function TerminalBrowserSurface({
   onCloseDevicePanel,
   onSelectDevicePreset,
   onSaveHeaderRules,
-  onReload,
   onOpenExternal,
 }: TerminalBrowserSurfaceProps) {
   const [mobileDisplaySize, setMobileDisplaySize] =
@@ -173,7 +171,6 @@ export function TerminalBrowserSurface({
           error={headerError}
           onClose={onCloseHeaderRulesPanel}
           onSave={onSaveHeaderRules}
-          onReload={onReload}
         />
       ) : null}
       {isElectron ? (

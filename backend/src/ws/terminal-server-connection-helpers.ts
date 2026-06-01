@@ -1,18 +1,25 @@
 import type { IncomingMessage } from "node:http";
-import type { WebSocket } from "ws";
 import type {
   TerminalClientMessage,
   TerminalServerMessage,
 } from "@browser-viewer/shared";
+import type { WebSocket } from "ws";
 import { getLiveTerminalScrollback } from "../terminal/live-scrollback";
 import type { TerminalSessionManager } from "../terminal/manager";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
+import type { TmuxPaneMetadata, TmuxService } from "../terminal/tmux-service";
 import {
   isTmuxBackedSession,
   readTerminalScrollback,
   resolveTmuxTarget,
 } from "../terminal/runtime-launcher";
-import type { TmuxPaneMetadata, TmuxService } from "../terminal/tmux-service";
+
+export const TMUX_INITIAL_REPAINT_SETTLE_MS = 50;
+export const TMUX_METADATA_SYNC_DELAY_MS = 100;
+
+export function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export function parseTerminalClientMessage(
   rawData: string,
@@ -83,7 +90,7 @@ export function shouldSettleInitialTmuxRepaint(
   return Boolean(session && isTmuxBackedSession(session) && tmuxService);
 }
 
-async function resolveLiveScrollback(
+export async function resolveLiveScrollback(
   terminalSessionManager: TerminalSessionManager,
   terminalSessionId: string,
   fallbackScrollback: string,
@@ -149,4 +156,21 @@ export function getTmuxPaneMetadataReader(
       | undefined
   )?.readPaneMetadata;
   return reader ? reader.bind(tmuxService) : null;
+}
+
+export function handleRuntimeActionError(
+  socket: WebSocket,
+  terminalSessionId: string,
+  action: "input" | "resize" | "signal",
+  error: unknown,
+): void {
+  console.error("[viewer-be] terminal runtime action failed", {
+    terminalSessionId,
+    action,
+    error: String(error),
+  });
+  sendEvent(socket, {
+    type: "error",
+    message: `Terminal ${action} failed: ${String(error)}`,
+  });
 }

@@ -72,7 +72,7 @@ Terminal Browser 工具当前边界：
 - `Headers` 面板只影响右侧 Terminal Browser 的网页请求，不影响首页 `New Browser` 创建的后端 Playwright session、Runweave 主窗口、登录/API 请求、Electron 更新请求或后端 viewer session。
 - Header 规则保存在前端 `localStorage` 的 `terminal.browser.headerRules`，Terminal Browser Tool 挂载时会同步到 Electron 主进程；保存失败会回滚本地存储并展示错误。
 - Header 规则通过 `terminal-browser:get-header-rules` / `terminal-browser:set-header-rules` IPC 进入主进程。主进程做最终校验，最多 20 条，字段为 `enabled`、固定操作 `set`、`name`、`value`、`urlPattern`，默认 URL 模式为 `*://*/*`。
-- Header 名必须符合 HTTP token 形态，禁止控制字符、冒号以及 `host`、`content-length`、`connection`、`upgrade`、`proxy-authorization`、`cookie`、`set-cookie`。Header 值不能为空且不能包含控制字符。
+- Header 名必须符合 HTTP token 形态，禁止控制字符、冒号以及 `host`、`content-length`、`connection`、`upgrade`、`proxy-authorization`、`set-cookie`。Header 值不能为空且不能包含控制字符。
 - Electron 主进程只注册一个 `webRequest.onBeforeSendHeaders({ urls: ["<all_urls>"] })` dispatcher。dispatcher 只处理 `http:` / `https:` 请求，按规则列表顺序匹配轻量通配 URL；同名 Header 后命中的规则覆盖前面的规则。
 - Header 规则变更只影响后续新请求。面板保存后提供刷新入口，让当前页面主文档请求也重新携带新规则。
 - Browser 工具栏的地址输入框旁提供复制当前地址按钮，只复制当前 tab 的地址文本，不触发导航、分享或外部打开；复制成功后短暂显示完成状态。

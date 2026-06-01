@@ -185,16 +185,6 @@ export function TerminalPage({
 
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(unicode11Addon);
-    terminal.loadAddon(
-      new WebLinksAddon((event, uri) => {
-        event.preventDefault();
-        if (window.electronAPI?.openExternal) {
-          void window.electronAPI.openExternal(uri);
-          return;
-        }
-        window.open(uri, "_blank", "noopener,noreferrer");
-      }),
-    );
     const linkProviderDisposable = terminal.registerLinkProvider(
       createTerminalWrappedWebLinkProvider(terminal, {
         activate: (event, uri) => {
@@ -205,6 +195,16 @@ export function TerminalPage({
           }
           window.open(uri, "_blank", "noopener,noreferrer");
         },
+      }),
+    );
+    terminal.loadAddon(
+      new WebLinksAddon((event, uri) => {
+        event.preventDefault();
+        if (window.electronAPI?.openExternal) {
+          void window.electronAPI.openExternal(uri);
+          return;
+        }
+        window.open(uri, "_blank", "noopener,noreferrer");
       }),
     );
     terminal.open(container);

@@ -1,6 +1,5 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
-import type { WebSocket } from "ws";
 import type { AuthService } from "../auth/service";
 import {
   isTunnelRequestAuthorized,
@@ -26,37 +25,17 @@ import type { TmuxService } from "../terminal/tmux-service";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
 import {
+  delay,
   getTmuxPaneMetadataReader,
+  handleRuntimeActionError,
   parseTerminalClientMessage,
   resolveInitialSnapshot,
   sendEvent,
   shouldSendInitialSnapshot,
   shouldSettleInitialTmuxRepaint,
-} from "./terminal-server-helpers";
-
-const TMUX_INITIAL_REPAINT_SETTLE_MS = 50;
-const TMUX_METADATA_SYNC_DELAY_MS = 100;
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function handleRuntimeActionError(
-  socket: WebSocket,
-  terminalSessionId: string,
-  action: "input" | "resize" | "signal",
-  error: unknown,
-): void {
-  console.error("[viewer-be] terminal runtime action failed", {
-    terminalSessionId,
-    action,
-    error: String(error),
-  });
-  sendEvent(socket, {
-    type: "error",
-    message: `Terminal ${action} failed: ${String(error)}`,
-  });
-}
+  TMUX_INITIAL_REPAINT_SETTLE_MS,
+  TMUX_METADATA_SYNC_DELAY_MS,
+} from "./terminal-server-connection-helpers";
 
 export function attachTerminalWebSocketServer(
   server: HttpServer,
