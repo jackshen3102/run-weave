@@ -31,6 +31,7 @@ import {
   parseTerminalClientMessage,
   resolveInitialSnapshot,
   sendEvent,
+  sendStatusEvent,
   shouldSendInitialSnapshot,
   shouldSettleInitialTmuxRepaint,
   TMUX_INITIAL_REPAINT_SETTLE_MS,
@@ -352,10 +353,7 @@ export function attachTerminalWebSocketServer(
                   message: ensured.warning,
                 });
               }
-              sendEvent(socket, {
-                type: "status",
-                status: "running",
-              });
+              sendStatusEvent(socket, "running");
               socket.close(1012, "Terminal tmux attach reattached");
             } catch (error) {
               sendEvent(socket, {
@@ -368,11 +366,7 @@ export function attachTerminalWebSocketServer(
           return;
         }
         terminalSessionManager.markExited(terminalSessionId, event.exitCode);
-        sendEvent(socket, {
-          type: "status",
-          status: "exited",
-          exitCode: event.exitCode,
-        });
+        sendStatusEvent(socket, "exited", event.exitCode);
         sendEvent(socket, {
           type: "exit",
           exitCode: event.exitCode,
@@ -403,11 +397,7 @@ export function attachTerminalWebSocketServer(
         });
       }
       snapshotDelivered = true;
-      sendEvent(socket, {
-        type: "status",
-        status: session.status,
-        exitCode: session.exitCode,
-      });
+      sendStatusEvent(socket, session.status, session.exitCode);
     } else {
       sendEvent(socket, {
         type: "snapshot",
@@ -482,11 +472,7 @@ export function attachTerminalWebSocketServer(
         return;
       }
       const current = terminalSessionManager.getSession(terminalSessionId);
-      sendEvent(socket, {
-        type: "status",
-        status: current?.status ?? "running",
-        exitCode: current?.exitCode,
-      });
+      sendStatusEvent(socket, current?.status ?? "running", current?.exitCode);
     };
     for (const pendingMessage of pendingClientMessages.splice(0)) {
       handleClientMessage(pendingMessage.data, pendingMessage.isBinary);
