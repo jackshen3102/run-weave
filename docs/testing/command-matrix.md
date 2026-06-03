@@ -5,6 +5,7 @@
 | 前端文案/样式/TSX 组件                  | `pnpm run test:e2e -- tests/interaction.spec.ts`                                                                                                   |
 | 前端逻辑 / 状态 / URL                   | `pnpm run test:e2e -- tests/interaction.spec.ts`                                                                                                   |
 | 终端链路 / Vim / 预览                   | `pnpm run test:e2e -- tests/terminal.spec.ts tests/terminal-vim.spec.ts tests/terminal-preview.spec.ts`                                            |
+| 终端 Git Submit UI                      | `pnpm --filter ./frontend typecheck`，再手工确认弹层向当前 terminal 发送 AI submit prompt                                                          |
 | 终端 session 生命周期 / ID 生成         | `pnpm --filter ./backend test -- src/terminal/manager.test.ts`                                                                                     |
 | 终端 project / session 排序持久化       | `pnpm --filter ./backend test -- src/terminal/manager.test.ts`，必要时补 `pnpm run test:e2e -- tests/terminal.spec.ts` 做拖拽交互回归              |
 | 后端路由/服务逻辑                       | `pnpm --filter ./backend test -- src/...`                                                                                                          |
@@ -26,3 +27,7 @@
 - 不要把 live 当作日常回归默认。
 - 协议变更不要跳过 shared / backend / frontend 联动测试。
 - 不要为前端 `*.tsx` 组件、页面、hooks 或 `*.ts` 状态逻辑新增单测。
+
+## Terminal Git Submit 边界
+
+Terminal Git Submit 首期只把提交任务 prompt 发送到当前 terminal，让正在运行的 Codex、Coco 或其他 AI agent 负责检查 diff、总结提交标题、处理 rebase 冲突、lint/hook 失败和 push 结果。前端不直接执行 Git，不新增后端 Git executor，也不依赖 `rw submit` CLI。

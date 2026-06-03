@@ -30,6 +30,7 @@ import {
 import { TerminalHistoryDrawer } from "./terminal-history-drawer";
 import { TerminalPreviewMenu } from "./terminal-preview-menu";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
+import { TerminalSubmitPopover } from "./terminal-submit-popover";
 import { TerminalHeadlessConnection } from "./terminal-headless-connection";
 import { TerminalSurface } from "./terminal-surface";
 
@@ -283,6 +284,15 @@ export function TerminalWorkspaceShell({
             </Button>
           ) : null}
         </div>
+        {!isMobileMonitor ? (
+          <TerminalSubmitPopover
+            apiBase={apiBase}
+            token={token}
+            activeProject={activeProject}
+            activeSession={activeSession}
+            disabled={loading}
+          />
+        ) : null}
         {!isMobileMonitor ? (
           <TerminalPreviewMenu
             projectId={activeProjectId}

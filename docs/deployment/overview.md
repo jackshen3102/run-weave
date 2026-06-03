@@ -20,6 +20,7 @@
 - 后端应用与调试端口仅在服务端内部可达。
 - 浏览器仅访问公网入口与同源 WebSocket。
 - 运行时 API 地址不依赖 `VITE_PROXY_TARGET` 兜底；需要跨源后端时应显式传入连接地址或通过入口代理收口。
+- Terminal 内执行的用户命令运行在用户项目 `cwd` 下；Terminal Git Submit 首期只向当前 terminal 发送 AI submit prompt，由已在 terminal 中运行的 agent 处理 Git 提交、冲突、hook 和 push，不新增后端 Git executor，也不要求 `rw` 在用户项目 `PATH` 中可用。
 
 如需部署模板与配置示例，参考 `deploy/` 目录：
 
