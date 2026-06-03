@@ -5,7 +5,10 @@ import type {
 } from "@browser-viewer/shared";
 import type { WebSocket } from "ws";
 import { getLiveTerminalScrollback } from "../terminal/live-scrollback";
-import type { TerminalSessionManager } from "../terminal/manager";
+import type {
+  TerminalSessionManager,
+  TerminalSessionRecord,
+} from "../terminal/manager";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TmuxPaneMetadata, TmuxService } from "../terminal/tmux-service";
 import {
@@ -75,6 +78,18 @@ export function sendEvent(
   }
 
   socket.send(JSON.stringify(event));
+}
+
+export function sendStatusEvent(
+  socket: WebSocket,
+  status: TerminalSessionRecord["status"],
+  exitCode?: number,
+): void {
+  sendEvent(socket, {
+    type: "status",
+    status,
+    exitCode,
+  });
 }
 
 export function shouldSendInitialSnapshot(request: IncomingMessage): boolean {
