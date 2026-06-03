@@ -205,11 +205,17 @@ export interface TerminalMobileOverviewResponse {
   sessions: TerminalMobileOverviewSession[];
 }
 
+export type TerminalCompletionReason = "hook_stop" | "notify" | "ai_process_exit" | "manual";
+
 export interface TerminalCompletionEvent {
   id: string;
   terminalSessionId: string;
   projectId: string;
   source: "claude" | "codex" | "trae" | "unknown";
+  completionReason: TerminalCompletionReason;
+  commandName: string | null;
+  rawHookEvent: string | null;
+  /** @deprecated Use rawHookEvent instead. Kept for short-term backward compatibility. */
   hookEvent: string;
   cwd: string | null;
   createdAt: string;

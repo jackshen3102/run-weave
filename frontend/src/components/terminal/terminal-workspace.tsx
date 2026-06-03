@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TerminalProjectListItem, TerminalSessionListItem } from "@browser-viewer/shared";
 import type { ConnectionConfig } from "../../features/connection/types";
+import { createTerminalBellPlayer } from "../../features/terminal/bell";
 import { DEFAULT_TERMINAL_SIDECAR_WIDTH, useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { resolveCachedTerminalSurfaceIds } from "../../features/terminal/surface-cache";
 import { resolveNewTerminalRuntimePreference } from "../../features/terminal/runtime-preference";
@@ -63,6 +64,8 @@ export function TerminalWorkspace({
   const activeSessionIdRef = useRef(activeSessionId);
   const sessionsRef = useRef<TerminalSessionListItem[]>([]);
   const completionEventCursorRef = useRef<string | null>(null);
+  const hasInitializedCompletionCursorRef = useRef(false);
+  const completionBellPlayerRef = useRef<ReturnType<typeof createTerminalBellPlayer> | null>(null);
   const isMobileMonitor = clientMode === "mobile";
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
   const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
@@ -90,6 +93,7 @@ export function TerminalWorkspace({
     setBellMarkers({});
     setCachedSurfaceSessionIds([]);
     completionEventCursorRef.current = null;
+    hasInitializedCompletionCursorRef.current = false;
   }, [apiBase]);
 
   useEffect(() => {
@@ -322,8 +326,18 @@ export function TerminalWorkspace({
           completionEventCursorRef.current =
             response.events[response.events.length - 1]?.id ??
             completionEventCursorRef.current;
+
+          if (!hasInitializedCompletionCursorRef.current) {
+            // First batch may include pre-existing events; establish a baseline
+            // without playing the completion sound for historical events.
+            hasInitializedCompletionCursorRef.current = true;
+          } else if (window.electronAPI?.isElectron === true) {
+            completionBellPlayerRef.current ??= createTerminalBellPlayer();
+            void completionBellPlayerRef.current.play();
+          }
         } else {
           idleStreak += 1;
+          hasInitializedCompletionCursorRef.current = true;
         }
 
         setCompletionMarkers((current) => {
@@ -508,21 +522,6 @@ export function TerminalWorkspace({
     }
   }, [activeProject, apiBase, loadSessions, onAuthExpired, projectPendingDeletion, removeProjectPreview, token]);
   const handleSessionMetadata = useCallback((terminalSessionId: string, metadata: { cwd: string; activeCommand: string | null }) => {
-    const previousSession = sessionsRef.current.find(
-      (session) => session.terminalSessionId === terminalSessionId,
-    );
-    if (
-      previousSession?.activeCommand &&
-      metadata.activeCommand === null &&
-      terminalSessionId !== activeSessionIdRef.current
-    ) {
-      setCompletionMarkers((current) =>
-        current[terminalSessionId]
-          ? current
-          : { ...current, [terminalSessionId]: true },
-      );
-    }
-
     setSessions((currentSessions) => {
       let changed = false;
       const nextSessions = currentSessions.map((session) => {

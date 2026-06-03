@@ -513,7 +513,9 @@ app.whenReady().then(async () => {
     registerRuntimeStatsHandler(() => packagedBackendRuntime);
     registerTerminalBrowserHandlers();
     registerCdpProxyHandlers();
-    await installHooksIfNeeded();
+    await installHooksIfNeeded({
+      resourcesDir: path.join(__dirname, "..", "resources"),
+    });
 
     const portConfig = resolveCdpProxyPort(process.env);
     const cdpProxyPort = portConfig.strict

@@ -4,11 +4,17 @@ import type { TerminalCompletionEvent } from "@browser-viewer/shared";
 import type { TerminalCompletionEventStore } from "../terminal/completion-events";
 import type { TerminalSessionManager } from "../terminal/manager";
 
+const completionReasonEnum = z.enum(["hook_stop", "notify", "ai_process_exit", "manual"]);
+
 const completionEventSchema = z
   .object({
     terminalSessionId: z.string().trim().min(1),
     source: z.enum(["claude", "codex", "trae", "unknown"]).default("unknown"),
-    hookEvent: z.string().trim().min(1),
+    completionReason: completionReasonEnum.optional(),
+    commandName: z.string().trim().min(1).nullable().optional(),
+    rawHookEvent: z.string().trim().min(1).nullable().optional(),
+    // deprecated: accepted for backward compat, mapped to rawHookEvent
+    hookEvent: z.string().trim().min(1).optional(),
     cwd: z.string().trim().min(1).nullable().optional(),
   })
   .strict();
@@ -53,7 +59,9 @@ export function createInternalTerminalCompletionRouter(options: {
       {
         terminalSessionId: parsed.data.terminalSessionId,
         source: parsed.data.source,
-        hookEvent: parsed.data.hookEvent,
+        completionReason: parsed.data.completionReason ?? "hook_stop",
+        commandName: parsed.data.commandName ?? null,
+        rawHookEvent: parsed.data.rawHookEvent ?? parsed.data.hookEvent ?? null,
         cwd: parsed.data.cwd ?? null,
       },
       session,

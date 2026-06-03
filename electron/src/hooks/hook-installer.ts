@@ -1,15 +1,18 @@
 import { access, chmod, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { constants as fsConstants } from "node:fs";
 
 type JsonRecord = Record<string, unknown>;
 type HookInstallerOptions = {
   homeDir?: string;
+  resourcesDir?: string;
 };
 
 type HookInstallerContext = {
   homeDir: string;
+  resourcesDir: string;
 };
 
 type JsonReadResult =
@@ -19,6 +22,8 @@ type JsonReadResult =
 
 const BRIDGE_BASENAME = "browser-viewer-hook-bridge";
 const BACKUP_SUFFIX = ".browser-viewer-hook-backup";
+const FEISHU_SCRIPT_BASENAME = "feishu_stop_notify.sh";
+const RUNWEAVE_HOOK_MARKER = "_runweaveManaged";
 
 const CLAUDE_EVENTS = [
   "SessionStart",
@@ -72,6 +77,60 @@ export function mergeJsonHookEntry(args: {
   return merged;
 }
 
+// Exact command paths that early Runweave versions wrote into ~/.codex/hooks.json.
+// The launcher now handles desktop/sound/Feishu, so these legacy entries would
+// otherwise double-notify. We only remove commands that exactly match these
+// known legacy paths (optionally followed by arguments) to avoid deleting a
+// user's or third-party tool's own notify.sh / feishu_stop_notify.sh.
+const LEGACY_CODEX_NOTIFY_RELATIVE_PATHS = [
+  ".codex/hooks/feishu_stop_notify.sh",
+  ".codex/notify.sh",
+];
+
+export function pruneSupersededCodexHooks(
+  entries: Array<unknown>,
+  homeDir: string,
+): Array<unknown> {
+  const legacyCommands = new Set(
+    LEGACY_CODEX_NOTIFY_RELATIVE_PATHS.map((relative) => path.join(homeDir, relative)),
+  );
+  const result: Array<unknown> = [];
+
+  for (const entry of entries) {
+    if (!isRecord(entry) || !Array.isArray(entry.hooks)) {
+      result.push(entry);
+      continue;
+    }
+
+    const keptHooks = entry.hooks.filter((hook) => !isLegacyCodexNotifyHook(hook, legacyCommands));
+    if (keptHooks.length === entry.hooks.length) {
+      result.push(entry);
+      continue;
+    }
+
+    if (keptHooks.length > 0) {
+      result.push({ ...entry, hooks: keptHooks });
+    }
+  }
+
+  return result;
+}
+
+function isLegacyCodexNotifyHook(hook: unknown, legacyCommands: Set<string>): boolean {
+  if (!isRecord(hook)) {
+    return false;
+  }
+
+  const command = hook.command;
+  if (typeof command !== "string") {
+    return false;
+  }
+
+  // The command may carry trailing arguments; match on the executable path only.
+  const executable = command.trim().split(/\s+/)[0] ?? "";
+  return legacyCommands.has(executable);
+}
+
 export function renderTraeHookBlock(command: string): string {
   const hookCommand = `${command} --source trae`;
   const quotedCommand = hookCommand.replace(/'/g, "''");
@@ -89,6 +148,39 @@ export function buildLauncherScript(): string {
     "#!/usr/bin/env node",
     "",
     'const STOP_EVENTS = new Set(["stop", "subagent_stop", "subagentstop"]);',
+    'const COMPLETION_REASONS = new Set(["hook_stop", "notify", "ai_process_exit", "manual"]);',
+    'const { spawn } = require("node:child_process");',
+    'const os = require("node:os");',
+    'const fs = require("node:fs");',
+    "",
+    "function notifyDesktop(source) {",
+    '  if (process.platform !== "darwin") {',
+    "    return;",
+    "  }",
+    '  const labels = { claude: "Claude", codex: "Codex", trae: "Trae" };',
+    '  const name = labels[source] || "AI";',
+    "  try {",
+    '    spawn("/usr/bin/osascript", ["-e", `display notification "回来接管终端" with title "${name} 完成了"`], { stdio: "ignore", detached: true }).unref();',
+    '    spawn("/usr/bin/afplay", ["/System/Library/Sounds/Glass.aiff"], { stdio: "ignore", detached: true }).unref();',
+    "  } catch {",
+    "    // Ignore desktop notification failures.",
+    "  }",
+    "}",
+    "",
+    "function notifyFeishu(payload, source) {",
+    "  const script = `${os.homedir()}/.browser-viewer/hooks/feishu_stop_notify.sh`;",
+    "  try {",
+    "    if (!fs.existsSync(script)) {",
+    "      return;",
+    "    }",
+    '    const child = spawn(script, [], { stdio: ["pipe", "ignore", "ignore"], detached: true });',
+    '    child.on("error", () => {});',
+    "    child.stdin.end(JSON.stringify({ ...payload, source }));",
+    "    child.unref();",
+    "  } catch {",
+    "    // Ignore Feishu notification failures.",
+    "  }",
+    "}",
     "",
     "function readStdin() {",
     "  return new Promise((resolve) => {",
@@ -105,10 +197,16 @@ export function buildLauncherScript(): string {
     "}",
     "",
     "function parseArgs(argv) {",
-    '  const args = { source: "unknown" };',
+    '  const args = { source: "unknown", reason: "hook_stop", commandName: null };',
     "  for (let index = 0; index < argv.length; index += 1) {",
     '    if (argv[index] === "--source" && argv[index + 1]) {',
     "      args.source = argv[index + 1];",
+    "      index += 1;",
+    '    } else if (argv[index] === "--reason" && argv[index + 1]) {',
+    "      args.reason = argv[index + 1];",
+    "      index += 1;",
+    '    } else if (argv[index] === "--command-name" && argv[index + 1]) {',
+    "      args.commandName = argv[index + 1];",
     "      index += 1;",
     "    }",
     "  }",
@@ -153,21 +251,34 @@ export function buildLauncherScript(): string {
     '  return "unknown";',
     "}",
     "",
+    "function normalizeReason(raw) {",
+    '  const reason = String(raw || "hook_stop").trim().toLowerCase();',
+    "  return COMPLETION_REASONS.has(reason) ? reason : \"hook_stop\";",
+    "}",
+    "",
     "async function main() {",
     "  const args = parseArgs(process.argv.slice(2));",
     "  const payload = parsePayload(await readStdin());",
     "  const rawEvent = readHookEvent(payload);",
     "  const normalizedEvent = normalizeEventName(rawEvent);",
-    "  if (!STOP_EVENTS.has(normalizedEvent)) {",
+    "  const completionReason = normalizeReason(args.reason);",
+    '  if (completionReason === "hook_stop" && !STOP_EVENTS.has(normalizedEvent)) {',
     "    return;",
     "  }",
     "",
     "  const endpoint = process.env.RUNWEAVE_HOOK_ENDPOINT;",
     "  const token = process.env.RUNWEAVE_HOOK_TOKEN;",
     "  const terminalSessionId = process.env.RUNWEAVE_TERMINAL_SESSION_ID;",
+    "  // Only notify / report for completions inside a Runweave terminal. The hook",
+    "  // is installed into the user's global Claude/Codex/Trae config, so without",
+    "  // this gate every AI CLI stop in any external terminal would trigger desktop",
+    "  // and Feishu notifications.",
     "  if (!endpoint || !token || !terminalSessionId) {",
     "    return;",
     "  }",
+    "",
+    "  notifyDesktop(normalizeSource(args.source));",
+    "  notifyFeishu(payload, normalizeSource(args.source));",
     "",
     "  await fetch(endpoint, {",
     '    method: "POST",',
@@ -178,6 +289,9 @@ export function buildLauncherScript(): string {
     "    body: JSON.stringify({",
     "      terminalSessionId,",
     "      source: normalizeSource(args.source),",
+    "      completionReason,",
+    "      commandName: args.commandName || null,",
+    '      rawHookEvent: String(rawEvent || "Stop"),',
     '      hookEvent: String(rawEvent || "Stop"),',
     "      cwd:",
     '        typeof payload.cwd === "string" && payload.cwd.trim()',
@@ -205,10 +319,25 @@ export async function installHooksIfNeeded(options: HookInstallerOptions = {}): 
 
 export async function installAllHooks(options: HookInstallerOptions = {}): Promise<void> {
   const context = resolveHookInstallerContext(options);
+  await installNotifyAssets(context);
   await writeLauncherScript(context);
   await installClaudeHooks(context);
   await installCodexHooks(context);
   await installTraeHooks(context);
+}
+
+export async function installNotifyAssets(options: HookInstallerOptions = {}): Promise<void> {
+  const context = resolveHookInstallerContext(options);
+  const source = path.join(context.resourcesDir, "hooks", FEISHU_SCRIPT_BASENAME);
+  if (!(await fileExists(source))) {
+    return;
+  }
+
+  const targetDir = getNotifyHooksDir(context.homeDir);
+  const target = getFeishuScriptPath(context.homeDir);
+  await mkdir(targetDir, { recursive: true });
+  await copyFile(source, target);
+  await chmod(target, 0o755);
 }
 
 export async function writeLauncherScript(options: HookInstallerOptions = {}): Promise<void> {
@@ -275,6 +404,12 @@ export async function installCodexHooks(options: HookInstallerOptions = {}): Pro
     });
   }
 
+  // Remove superseded codex notify entries that the launcher now handles,
+  // so desktop notification / sound / Feishu are not sent twice.
+  for (const event of Object.keys(hooks)) {
+    hooks[event] = pruneSupersededCodexHooks(toUnknownArray(hooks[event]), context.homeDir);
+  }
+
   existing.hooks = hooks;
   await writeJsonFile(hooksPath, existing);
 }
@@ -299,6 +434,15 @@ export async function installTraeHooks(options: HookInstallerOptions = {}): Prom
 async function directoryExists(dirPath: string): Promise<boolean> {
   try {
     await access(dirPath, fsConstants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath, fsConstants.F_OK);
     return true;
   } catch {
     return false;
@@ -372,7 +516,28 @@ async function readTextFile(filePath: string): Promise<string> {
 function resolveHookInstallerContext(options: HookInstallerOptions): HookInstallerContext {
   return {
     homeDir: options.homeDir ?? os.homedir(),
+    resourcesDir: options.resourcesDir ?? getDefaultResourcesDir(),
   };
+}
+
+function getDefaultResourcesDir(): string {
+  // Packaged/bundled CJS runtime: this module is bundled into dist/main.cjs, so
+  // `__dirname` is app.asar/dist and resources live at ../resources.
+  if (typeof __dirname !== "undefined") {
+    return path.join(__dirname, "..", "resources");
+  }
+  // ESM dev/test runtime: this source file lives at src/hooks/, so resources
+  // live at ../../resources. Callers (main.ts, tests) normally inject an
+  // explicit resourcesDir; this default is only a fallback.
+  return path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "resources");
+}
+
+function getNotifyHooksDir(homeDir: string): string {
+  return path.join(homeDir, ".browser-viewer", "hooks");
+}
+
+function getFeishuScriptPath(homeDir: string): string {
+  return path.join(getNotifyHooksDir(homeDir), FEISHU_SCRIPT_BASENAME);
 }
 
 function getLauncherDir(homeDir: string): string {
@@ -453,6 +618,9 @@ function createBrowserViewerHook(command: string, timeout: number): JsonRecord {
     type: "command",
     command,
     timeout,
+    // Stable marker identifying entries Runweave owns, so future migrations can
+    // safely clean up only our own hooks instead of matching on command strings.
+    [RUNWEAVE_HOOK_MARKER]: true,
   };
 }
 

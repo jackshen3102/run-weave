@@ -1,4 +1,4 @@
-import type { TerminalCompletionEvent } from "@browser-viewer/shared";
+import type { TerminalCompletionEvent, TerminalCompletionReason } from "@browser-viewer/shared";
 import type { TerminalSessionRecord } from "./manager";
 
 const MAX_COMPLETION_EVENTS = 200;
@@ -6,7 +6,9 @@ const MAX_COMPLETION_EVENTS = 200;
 export interface RecordTerminalCompletionEventInput {
   terminalSessionId: string;
   source: TerminalCompletionEvent["source"];
-  hookEvent: string;
+  completionReason: TerminalCompletionReason;
+  commandName: string | null;
+  rawHookEvent: string | null;
   cwd: string | null;
 }
 
@@ -23,7 +25,10 @@ export class TerminalCompletionEventStore {
       terminalSessionId: input.terminalSessionId,
       projectId: session.projectId,
       source: input.source,
-      hookEvent: input.hookEvent,
+      completionReason: input.completionReason,
+      commandName: input.commandName,
+      rawHookEvent: input.rawHookEvent,
+      hookEvent: input.rawHookEvent ?? input.completionReason,
       cwd: input.cwd,
       createdAt: new Date().toISOString(),
     };
