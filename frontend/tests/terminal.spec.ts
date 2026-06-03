@@ -11,6 +11,7 @@ import path from "node:path";
 const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
 const TERMINAL_PREFERENCES_KEY = `viewer.terminal.preferences.${E2E_API_BASE}`;
+const E2E_HOOK_TOKEN = "e2e-hook-token";
 
 interface Deferred {
   promise: Promise<void>;
@@ -569,7 +570,7 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
   await rm(secondCwd, { force: true, recursive: true });
 });
 
-test("marks a background project when its shell command finishes", async ({
+test("marks a background project from an explicit completion event, not shell command exit", async ({
   page,
   request,
 }) => {
@@ -627,6 +628,39 @@ test("marks a background project when its shell command finishes", async ({
       .getByRole("button", { name: projectAName, exact: true })
       .locator("span")
       .last();
+
+    await page.waitForTimeout(2_500);
+    await expect
+      .poll(async () => (await projectADot.getAttribute("class")) ?? "")
+      .not.toContain("bg-emerald-400");
+
+    const recordResponse = await request.post(
+      `${E2E_API_BASE}/internal/terminal-completion`,
+      {
+        headers: {
+          "X-Runweave-Hook-Token": E2E_HOOK_TOKEN,
+        },
+        data: {
+          terminalSessionId: sessionA.terminalSessionId,
+          source: "codex",
+          completionReason: "hook_stop",
+          commandName: "codex",
+          rawHookEvent: "Stop",
+          cwd: cwdA,
+        },
+      },
+    );
+    expect(recordResponse.status()).toBe(202);
+    await expect(recordResponse.json()).resolves.toMatchObject({
+      event: {
+        terminalSessionId: sessionA.terminalSessionId,
+        source: "codex",
+        completionReason: "hook_stop",
+        commandName: "codex",
+        rawHookEvent: "Stop",
+      },
+    });
+
     await expect
       .poll(async () => (await projectADot.getAttribute("class")) ?? "", {
         timeout: 10_000,
