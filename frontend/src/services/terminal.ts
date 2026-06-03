@@ -5,6 +5,8 @@ import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalWsTicketResponse,
+  SendTerminalInputRequest,
+  SendTerminalInputResponse,
   TerminalMobileOverviewResponse,
   TerminalCompletionEventListResponse,
   TerminalPreviewChangeKind,
@@ -174,6 +176,26 @@ export async function getTerminalSession(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+  );
+}
+
+export async function sendTerminalInput(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  payload: SendTerminalInputRequest,
+): Promise<SendTerminalInputResponse> {
+  return requestJson<SendTerminalInputResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/input`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     },
   );
 }
