@@ -6,9 +6,12 @@ import { Button } from "../ui/button";
 import {
   buildTerminalSubmitInput,
   buildSubmitPrompt,
-  SUBMIT_MODES,
   type SubmitMode,
 } from "./terminal-submit-prompt";
+import {
+  TerminalSubmitContextDetails,
+  TerminalSubmitModeTabs,
+} from "./terminal-submit-fields";
 import {
   Popover,
   PopoverContent,
@@ -105,44 +108,12 @@ export function TerminalSubmitPopover({
         className="w-[360px] rounded-lg border-slate-800 bg-slate-950 p-3 text-slate-100 shadow-[0_24px_80px_-34px_rgba(2,6,23,0.95)]"
       >
         <div className="flex flex-col gap-3" data-testid="terminal-submit-popover">
-          <div
-            className="grid h-8 grid-cols-4 overflow-hidden rounded-md border border-slate-800 bg-slate-900"
-            role="tablist"
-            aria-label="Git submit mode"
-          >
-            {SUBMIT_MODES.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                role="tab"
-                aria-selected={mode === item.value}
-                className={[
-                  "min-w-0 px-2 text-[11px] font-medium text-slate-300 transition-colors",
-                  mode === item.value
-                    ? "bg-sky-500 text-white"
-                    : "hover:bg-slate-800 hover:text-slate-100",
-                ].join(" ")}
-                onClick={() => {
-                  setMode(item.value);
-                }}
-              >
-                <span className="block truncate">{item.label}</span>
-              </button>
-            ))}
-          </div>
+          <TerminalSubmitModeTabs mode={mode} onModeChange={setMode} />
 
-          <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-2 gap-y-1 text-[11px] leading-5">
-            <span className="text-slate-500">Target</span>
-            <span className="truncate text-sky-300">active AI terminal</span>
-            <span className="text-slate-500">Project</span>
-            <span className="truncate text-slate-300" title={activeProject?.path ?? ""}>
-              {activeProject?.path ?? "Unavailable"}
-            </span>
-            <span className="text-slate-500">Terminal cwd</span>
-            <span className="truncate text-slate-300" title={activeSession?.cwd ?? ""}>
-              {activeSession?.cwd ?? "No active terminal"}
-            </span>
-          </div>
+          <TerminalSubmitContextDetails
+            activeProject={activeProject}
+            activeSession={activeSession}
+          />
 
           <label className="flex flex-col gap-1 text-[11px] text-slate-400">
             Notes
