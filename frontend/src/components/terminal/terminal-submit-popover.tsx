@@ -4,6 +4,7 @@ import { Check, Clipboard, GitBranch, Send } from "lucide-react";
 import { sendTerminalInput } from "../../services/terminal";
 import { Button } from "../ui/button";
 import {
+  buildTerminalSubmitInput,
   buildSubmitPrompt,
   SUBMIT_MODES,
   type SubmitMode,
@@ -65,7 +66,7 @@ export function TerminalSubmitPopover({
         apiBase,
         token,
         activeSession.terminalSessionId,
-        { data: `${prompt}\n` },
+        { data: `${buildTerminalSubmitInput(prompt)}\n` },
       );
       setFeedback("Sent");
     } catch (error) {

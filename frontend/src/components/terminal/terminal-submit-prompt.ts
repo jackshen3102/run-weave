@@ -49,6 +49,14 @@ export function buildSubmitPrompt(options: BuildSubmitPromptOptions): string {
     .join("\n");
 }
 
+export function buildTerminalSubmitInput(prompt: string): string {
+  return prompt
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 function resolveModeInstruction(
   mode: SubmitMode,
   base: string,
