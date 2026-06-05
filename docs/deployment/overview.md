@@ -34,6 +34,7 @@
 - 带浏览器界面开发：`pnpm dev:electron:headed`
 - 默认监听 `0.0.0.0`，可通过 `DEV_HOST` 环境变量覆盖
 - 构建配置：`electron/electron-builder.yml`
+- macOS 打包当前使用 ad-hoc codesign hook 清理隔离属性并对 `.app` bundle 做本地签名；这只保证本地可运行，不等同于 Developer ID 公证发布
 - Electron 客户端支持多后端连接管理，用户可在连接页面添加、切换不同后端地址
 - 打包后的 Electron 客户端会拉起内置后端；内置后端绑定 `0.0.0.0`，同一内网可通过 `http://<本机内网 IP>:<端口>/` 访问同一套 Web 前端
 - 内置后端通过 `FRONTEND_DIST_DIR` 指向当前 runtime 的 `frontend/dist`，因此后端地址既提供 API / WebSocket，也提供前端静态页面
