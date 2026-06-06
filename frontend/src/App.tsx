@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
+  SystemMonitorSnapshot,
   TerminalBrowserCdpProxyInfo,
   TerminalBrowserDevicePresetId,
   TerminalBrowserDeviceState,
@@ -16,6 +17,7 @@ import { useClientMode } from "./features/use-client-mode";
 import { HomePage } from "./pages/home-page";
 import { LoginPage } from "./pages/login-page";
 import { ConnectionsPage } from "./pages/connections-page";
+import { SystemMonitorPage } from "./pages/system-monitor-page";
 import { TerminalRoutePage } from "./pages/terminal-page";
 import { ViewerPage } from "./pages/viewer-page";
 import { MobileTerminalPage } from "./features/terminal/mobile/MobileTerminalPage";
@@ -69,6 +71,7 @@ declare global {
       reloadRuntime?: () => Promise<PackagedBackendConnectionState>;
       openExternal?: (url: string) => Promise<void>;
       getRuntimeStats?: () => Promise<RuntimeStatsSnapshot>;
+      getSystemMonitorSnapshot?: () => Promise<SystemMonitorSnapshot>;
       beep?: () => void;
       terminalBrowserNavigate?: (
         tabId: string,
@@ -208,6 +211,16 @@ export default function App() {
   return (
     <>
       <Routes>
+      <Route
+        path="/system-monitor"
+        element={
+          <SystemMonitorPage
+            onNavigateHome={() => {
+              window.location.assign("/");
+            }}
+          />
+        }
+      />
       {isElectron && (
         <Route
           path="/connections"

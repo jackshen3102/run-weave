@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, shell } from "electron";
 import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
+  SystemMonitorSnapshot,
   TerminalBrowserCdpProxyInfo,
   TerminalBrowserDeviceState,
   TerminalBrowserHeaderState,
@@ -47,6 +48,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke(
       "viewer:get-runtime-stats",
     ) as Promise<RuntimeStatsSnapshot>,
+  getSystemMonitorSnapshot: () =>
+    ipcRenderer.invoke("system-monitor:get") as Promise<SystemMonitorSnapshot>,
   terminalBrowserNavigate: (tabId: string, url: string) =>
     ipcRenderer.invoke("terminal-browser:navigate", tabId, url),
   terminalBrowserListTabs: () =>

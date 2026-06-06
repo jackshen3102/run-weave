@@ -25,6 +25,7 @@ function resolveIcon(): Electron.NativeImage {
 export function createTray(
   mainWindow: BrowserWindow,
   options: {
+    onOpenSystemMonitor?: () => void;
     onReloadLocalRuntime?: () => void;
   } = {},
 ): Tray {
@@ -40,6 +41,16 @@ export function createTray(
         mainWindow.focus();
       },
     },
+    ...(options.onOpenSystemMonitor
+      ? [
+          {
+            label: "打开 System Monitor",
+            click: () => {
+              void options.onOpenSystemMonitor?.();
+            },
+          },
+        ]
+      : []),
     { type: "separator" },
     {
       label: "检查更新",

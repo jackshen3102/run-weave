@@ -14,6 +14,7 @@ import path from "node:path";
 import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
+  SystemMonitorSnapshot,
   TerminalBrowserCdpProxyInfo,
 } from "@browser-viewer/shared";
 import { resolveProtocolFilePath } from "./protocol-path.js";
@@ -43,6 +44,7 @@ import {
   buildRuntimeStatsSnapshot,
   type ElectronProcessMetric,
 } from "./runtime-monitor.js";
+import { buildSystemMonitorSnapshot } from "./system-monitor.js";
 import {
   createAvailablePackagedBackendState,
   createUnavailablePackagedBackendStateFromError,
@@ -151,7 +153,53 @@ function registerRuntimeStatsHandler(
   );
 }
 
-function createWindow(options?: { hideOnClose?: boolean }): BrowserWindow {
+function registerSystemMonitorHandler(
+  getPackagedBackendRuntime: () => PackagedBackendRuntime | null,
+): void {
+  ipcMain.handle(
+    "system-monitor:get",
+    async (event): Promise<SystemMonitorSnapshot> => {
+      if (!isSystemMonitorSenderAllowed(event.senderFrame?.url ?? "")) {
+        throw new Error("System Monitor is only available from the local app.");
+      }
+
+      const electronProcessIds = app
+        .getAppMetrics()
+        .map((metric) => metric.pid)
+        .filter((pid): pid is number => typeof pid === "number");
+      const backendPid = getPackagedBackendRuntime()?.child.pid;
+      const currentProcessIds =
+        typeof backendPid === "number"
+          ? [...electronProcessIds, backendPid]
+          : electronProcessIds;
+
+      return await buildSystemMonitorSnapshot({ currentProcessIds });
+    },
+  );
+}
+
+function isSystemMonitorSenderAllowed(senderUrl: string): boolean {
+  try {
+    const parsed = new URL(senderUrl);
+    if (isDev) {
+      const devUrl = new URL(DEV_SERVER_URL);
+      if (parsed.origin !== devUrl.origin) {
+        return false;
+      }
+    } else if (parsed.protocol !== `${CUSTOM_PROTOCOL}:`) {
+      return false;
+    }
+
+    return parsed.pathname === "/system-monitor";
+  } catch {
+    return false;
+  }
+}
+
+function createWindow(options?: {
+  hideOnClose?: boolean;
+  initialPath?: string;
+}): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -174,12 +222,17 @@ function createWindow(options?: { hideOnClose?: boolean }): BrowserWindow {
   });
 
   if (isDev) {
-    win.loadURL(DEV_SERVER_URL);
+    win.loadURL(`${DEV_SERVER_URL}${options?.initialPath ?? ""}`);
     if (shouldAutoOpenWindowDevtools({ isDev })) {
       win.webContents.openDevTools({ mode: "detach" });
     }
   } else {
     win.loadURL(`${CUSTOM_PROTOCOL}://app/index.html`);
+    if (options?.initialPath) {
+      win.webContents.once("did-finish-load", () => {
+        navigateWindowToPath(win, options.initialPath ?? "/");
+      });
+    }
   }
 
   setupSessionIntercept(win);
@@ -194,6 +247,31 @@ function createWindow(options?: { hideOnClose?: boolean }): BrowserWindow {
   }
 
   return win;
+}
+
+function navigateWindowToPath(win: BrowserWindow, routePath: string): void {
+  if (win.isDestroyed()) {
+    return;
+  }
+
+  if (isDev) {
+    void win.loadURL(`${DEV_SERVER_URL}${routePath}`);
+    return;
+  }
+
+  const serializedPath = JSON.stringify(routePath);
+  void win.webContents
+    .executeJavaScript(
+      `window.history.pushState(null, "", ${serializedPath}); window.dispatchEvent(new PopStateEvent("popstate"));`,
+    )
+    .catch(() => {
+      if (win.isDestroyed()) {
+        return;
+      }
+      void win.loadURL(`${CUSTOM_PROTOCOL}://app/index.html`).then(() => {
+        navigateWindowToPath(win, routePath);
+      });
+    });
 }
 
 function setApplicationIcon(): void {
@@ -511,6 +589,7 @@ app.whenReady().then(async () => {
     registerOpenExternalHandler();
     registerPackagedBackendHandlers();
     registerRuntimeStatsHandler(() => packagedBackendRuntime);
+    registerSystemMonitorHandler(() => packagedBackendRuntime);
     registerTerminalBrowserHandlers();
     registerCdpProxyHandlers();
     await installHooksIfNeeded({
@@ -567,11 +646,26 @@ app.whenReady().then(async () => {
       return createWindow();
     };
 
+    const openSystemMonitor = (): void => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        mainWindow = createWindow({
+          hideOnClose: true,
+          initialPath: "/system-monitor",
+        });
+        return;
+      }
+
+      mainWindow.show();
+      mainWindow.focus();
+      navigateWindowToPath(mainWindow, "/system-monitor");
+    };
+
     Menu.setApplicationMenu(
       Menu.buildFromTemplate(
         buildApplicationMenuTemplate({
           platform: process.platform,
           onNewWindow: openNewWindow,
+          onOpenSystemMonitor: openSystemMonitor,
           onReloadLocalRuntime: reloadLocalRuntime,
         }),
       ),
@@ -579,7 +673,10 @@ app.whenReady().then(async () => {
 
     mainWindow = createWindow({ hideOnClose: true });
 
-    createTray(mainWindow, { onReloadLocalRuntime: reloadLocalRuntime });
+    createTray(mainWindow, {
+      onOpenSystemMonitor: openSystemMonitor,
+      onReloadLocalRuntime: reloadLocalRuntime,
+    });
 
     if (
       shouldEnableAutoUpdates({
@@ -594,7 +691,10 @@ app.whenReady().then(async () => {
     app.on("activate", () => {
       if (!mainWindow || mainWindow.isDestroyed()) {
         mainWindow = createWindow({ hideOnClose: true });
-        createTray(mainWindow, { onReloadLocalRuntime: reloadLocalRuntime });
+        createTray(mainWindow, {
+          onOpenSystemMonitor: openSystemMonitor,
+          onReloadLocalRuntime: reloadLocalRuntime,
+        });
         return;
       }
       mainWindow.show();

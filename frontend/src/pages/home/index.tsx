@@ -219,6 +219,13 @@ export function HomePage({
           onOpenMobileTerminals={() => {
             navigate("/mobile/terminals");
           }}
+          onOpenSystemMonitor={
+            window.electronAPI?.isElectron === true
+              ? () => {
+                  navigate("/system-monitor");
+                }
+              : undefined
+          }
           onOpenChangePassword={openPasswordDialog}
           onLogout={handleAuthExpired}
         />
