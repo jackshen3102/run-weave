@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import type { TerminalProjectListItem } from "@browser-viewer/shared";
 import {
   getTerminalPreviewFileKind,
@@ -13,6 +13,7 @@ import { useTerminalPreviewPanelActions } from "./terminal-preview-panel-actions
 import { useTerminalPreviewPanelData } from "./use-terminal-preview-panel-data";
 import { TerminalPreviewPanelMutationDialogs } from "./terminal-preview-panel-mutation-dialogs";
 import { TerminalPreviewPanelShell } from "./terminal-preview-panel-shell";
+import { useTerminalFileTree } from "./use-terminal-file-tree";
 
 interface TerminalPreviewPanelProps {
   apiBase: string;
@@ -26,6 +27,12 @@ interface TerminalPreviewPanelProps {
 interface PreviewFileMutationTarget {
   path: string;
   expectedMtimeMs?: number;
+}
+
+function getPreviewParentDirectory(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/").replace(/\/+$/g, "");
+  const lastSlashIndex = normalized.lastIndexOf("/");
+  return lastSlashIndex > 0 ? normalized.slice(0, lastSlashIndex) : ".";
 }
 
 export function TerminalPreviewPanel({
@@ -151,7 +158,14 @@ export function TerminalPreviewPanel({
       setRenameTarget(target);
       setRenamePath(target.path);
     },
-    [confirmDiscardDraft, getMutationTarget, projectId, setMutationError, setRenamePath, setRenameTarget],
+    [
+      confirmDiscardDraft,
+      getMutationTarget,
+      projectId,
+      setMutationError,
+      setRenamePath,
+      setRenameTarget,
+    ],
   );
 
   const requestDeleteFile = useCallback(
@@ -162,7 +176,74 @@ export function TerminalPreviewPanel({
       setMutationError(null);
       setDeleteTarget(getMutationTarget(filePath));
     },
-    [confirmDiscardDraft, getMutationTarget, projectId, setDeleteTarget, setMutationError],
+    [
+      confirmDiscardDraft,
+      getMutationTarget,
+      projectId,
+      setDeleteTarget,
+      setMutationError,
+    ],
+  );
+
+  const {
+    copyPath: copySelectedPath,
+    openFilePath,
+    refresh,
+    setChangesViewMode,
+    setMarkdownViewMode,
+    setSvgViewMode,
+    startMarkdownResize,
+    startResize,
+  } = useTerminalPreviewPanelActions({
+    expanded,
+    mode,
+    projectId,
+    query,
+    selectedFilePath,
+    copyPath,
+    loadFile: async (filePath) => {
+      if (isSupportedTerminalImagePreviewPath(filePath)) {
+        setAssetRefreshKey((current) => current + 1);
+        return;
+      }
+      await loadFile(filePath);
+    },
+    loadChanges,
+    setWidth,
+    updateProjectPreview,
+    setFilePreview: () => setFilePreview(null),
+    setFileError,
+    setMarkdownScrollRatio,
+    confirmDiscardDraft,
+  });
+
+  const fileTree = useTerminalFileTree({
+    apiBase,
+    token,
+    projectId,
+    hasProjectPath,
+    onOpenFilePath: openFilePath,
+  });
+  const { loadRootDirectory, resetTree, invalidateDirectory } = fileTree;
+
+  useEffect(() => {
+    resetTree();
+  }, [projectId, hasProjectPath, resetTree]);
+
+  useEffect(() => {
+    if (mode === "explorer") {
+      loadRootDirectory();
+    }
+  }, [loadRootDirectory, mode]);
+
+  const invalidateFileTreeParents = useCallback(
+    (paths: string[]): void => {
+      const directories = new Set(paths.map(getPreviewParentDirectory));
+      for (const directoryPath of directories) {
+        invalidateDirectory(directoryPath);
+      }
+    },
+    [invalidateDirectory],
   );
 
   const submitRenameFile = useCallback(async (): Promise<void> => {
@@ -203,6 +284,7 @@ export function TerminalPreviewPanel({
       setFileDiff(null);
       setDiffError(null);
       setDiffLoading(false);
+      invalidateFileTreeParents([renameTarget.path, payload.path]);
       updateProjectPreview(projectId, {
         mode: "file",
         selectedFilePath: payload.path,
@@ -224,6 +306,7 @@ export function TerminalPreviewPanel({
     diffRequestIdRef,
     fileRequestIdRef,
     handleRequestError,
+    invalidateFileTreeParents,
     loadChanges,
     mutationPending,
     projectId,
@@ -299,6 +382,7 @@ export function TerminalPreviewPanel({
         });
       }
       setDeleteTarget(null);
+      invalidateFileTreeParents([deleteTarget.path]);
       await refreshFileSearch();
       void loadChanges({
         reloadDiff: !deletedSelectedChange,
@@ -316,6 +400,7 @@ export function TerminalPreviewPanel({
     filePreview?.path,
     fileRequestIdRef,
     handleRequestError,
+    invalidateFileTreeParents,
     loadChanges,
     mode,
     mutationPending,
@@ -344,38 +429,6 @@ export function TerminalPreviewPanel({
     token,
     updateProjectPreview,
   ]);
-
-  const {
-    copyPath: copySelectedPath,
-    openFilePath,
-    refresh,
-    setChangesViewMode,
-    setMarkdownViewMode,
-    setSvgViewMode,
-    startMarkdownResize,
-    startResize,
-  } = useTerminalPreviewPanelActions({
-    expanded,
-    mode,
-    projectId,
-    query,
-    selectedFilePath,
-    copyPath,
-    loadFile: async (filePath) => {
-      if (isSupportedTerminalImagePreviewPath(filePath)) {
-        setAssetRefreshKey((current) => current + 1);
-        return;
-      }
-      await loadFile(filePath);
-    },
-    loadChanges,
-    setWidth,
-    updateProjectPreview,
-    setFilePreview: () => setFilePreview(null),
-    setFileError,
-    setMarkdownScrollRatio,
-    confirmDiscardDraft,
-  });
 
   const body = (
     <TerminalPreviewPanelContent
@@ -421,6 +474,7 @@ export function TerminalPreviewPanel({
       fileDiff={fileDiff}
       diffLoading={diffLoading}
       diffError={diffError}
+      fileTree={fileTree}
       assetRefreshKey={assetRefreshKey}
       markdownScrollRatio={markdownScrollRatio}
       onAuthExpired={onAuthExpired}

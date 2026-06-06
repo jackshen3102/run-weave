@@ -27,7 +27,7 @@ const SAFE_ENV_TEMPLATE_FILES = new Set([
   ".env.template",
   ".env.defaults",
 ]);
-const EXCLUDED_DIRECTORIES = new Set([
+export const EXCLUDED_DIRECTORIES = new Set([
   ".cache",
   ".git",
   ".hg",
@@ -44,7 +44,7 @@ const EXCLUDED_DIRECTORIES = new Set([
   "test-results",
   "vendor",
 ]);
-const EXCLUDED_FILE_BASENAMES = new Set([".DS_Store", "Thumbs.db"]);
+export const EXCLUDED_FILE_BASENAMES = new Set([".DS_Store", "Thumbs.db"]);
 const EXCLUDED_FILE_SUFFIXES = [".code-search"];
 
 interface FileSearchCacheEntry {

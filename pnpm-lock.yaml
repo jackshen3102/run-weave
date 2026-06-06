@@ -228,6 +228,9 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.4
+      react-complex-tree:
+        specifier: ^2.6.1
+        version: 2.6.1(react@19.2.4)
       react-dom:
         specifier: ^19.0.0
         version: 19.2.4(react@19.2.4)
@@ -7891,6 +7894,14 @@ packages:
       }
     engines: { node: ">= 0.8" }
 
+  react-complex-tree@2.6.1:
+    resolution:
+      {
+        integrity: sha512-RZubW4lh086/R38bbNKpkRpLWG+PdEMBIvYvSUelYNJfv/xaAboRKguWN8hfBvoV9O4NSi6jcMv/AcCm2PbJRg==,
+      }
+    peerDependencies:
+      react: ">=16.0.0"
+
   react-dom@19.2.4:
     resolution:
       {
@@ -14690,6 +14701,10 @@ snapshots:
       http-errors: 2.0.1
       iconv-lite: 0.4.24
       unpipe: 1.0.0
+
+  react-complex-tree@2.6.1(react@19.2.4):
+    dependencies:
+      react: 19.2.4
 
   react-dom@19.2.4(react@19.2.4):
     dependencies:

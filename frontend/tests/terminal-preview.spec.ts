@@ -173,7 +173,7 @@ test("terminal preview saves edited text files", async ({ page, request }) => {
     await page.goto(
       `/terminal/${encodeURIComponent(session.terminalSessionId)}`,
     );
-    await page.getByRole("tab", { name: "Files", exact: true }).click();
+    await page.getByRole("tab", { name: "Open", exact: true }).click();
     await page.getByRole("option", { name: /README\.md/ }).click();
     await expect(page.getByText("new readme")).toBeVisible();
     await page.getByRole("button", { name: "source" }).click();
@@ -247,7 +247,7 @@ test("terminal preview renames and deletes files", async ({
     await page.goto(
       `/terminal/${encodeURIComponent(session.terminalSessionId)}`,
     );
-    await page.getByRole("tab", { name: "Files", exact: true }).click();
+    await page.getByRole("tab", { name: "Open", exact: true }).click();
     const readmeOption = page.getByRole("option", { name: /README\.md/ });
     await expect(readmeOption).toBeVisible();
     await readmeOption.click({ button: "right" });
@@ -299,7 +299,7 @@ test("terminal preview renames and deletes files", async ({
     ).rejects.toThrow();
 
     await page
-      .getByRole("tab", { name: "Review changes", exact: true })
+      .getByRole("tab", { name: "Changes", exact: true })
       .click();
     await expect(page.getByText("Working Changes")).toBeVisible();
     const changedFile = page.getByRole("button", {
@@ -383,7 +383,7 @@ test("terminal preview opens absolute files outside the project as read only", a
     await page.goto(
       `/terminal/${encodeURIComponent(session.terminalSessionId)}`,
     );
-    await page.getByRole("tab", { name: "Files", exact: true }).click();
+    await page.getByRole("tab", { name: "Open", exact: true }).click();
     await page
       .getByPlaceholder("Search file or paste absolute path...")
       .fill(outsideFile);
@@ -498,11 +498,11 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
       page.getByRole("tab", { name: "Preview", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
     await expect(
-      page.getByRole("tab", { name: "Review changes", exact: true }),
+      page.getByRole("tab", { name: "Changes", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
     await expect(page.getByText("Staged Changes")).toBeVisible();
 
-    await page.getByRole("tab", { name: "Files", exact: true }).click();
+    await page.getByRole("tab", { name: "Open", exact: true }).click();
     await expect(page.getByText("README.md")).toBeVisible();
     await expect(
       page.getByText("Changed files", { exact: true }),
@@ -618,7 +618,7 @@ test("terminal preview opens files and changes", async ({ page, request }) => {
     previewGitChangesRequestCount = 0;
     previewFileDiffRequestCount = 0;
     await page
-      .getByRole("tab", { name: "Review changes", exact: true })
+      .getByRole("tab", { name: "Changes", exact: true })
       .click();
     await expect(page.getByText("Staged Changes")).toBeVisible();
     await expect.poll(() => previewGitChangesRequestCount).toBe(1);
@@ -752,7 +752,7 @@ test("terminal markdown preview opens clicked images in a lightbox", async ({
     await page.goto(
       `/terminal/${encodeURIComponent(session.terminalSessionId)}`,
     );
-    await page.getByRole("tab", { name: "Files", exact: true }).click();
+    await page.getByRole("tab", { name: "Open", exact: true }).click();
     await page
       .getByPlaceholder("Search file or paste absolute path...")
       .fill("terminal preview");

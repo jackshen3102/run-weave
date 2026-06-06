@@ -6,7 +6,7 @@ import {
   type TerminalPreviewChangeKind,
 } from "@browser-viewer/shared";
 
-export type TerminalPreviewMode = "file" | "changes";
+export type TerminalPreviewMode = "file" | "changes" | "explorer";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
 export type TerminalSvgViewMode = "preview" | "source";
 export type TerminalChangesViewMode = "diff" | "preview";

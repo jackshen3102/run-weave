@@ -48,6 +48,29 @@ export interface TerminalPreviewFileSearchItem {
   score: number;
 }
 
+export type TerminalPreviewTreeEntryKind = "directory" | "file";
+
+export interface TerminalPreviewTreeEntry {
+  kind: TerminalPreviewTreeEntryKind;
+  path: string;
+  basename: string;
+  dirname: string;
+  hasChildren?: boolean;
+  sizeBytes?: number;
+  mtimeMs?: number;
+}
+
+export interface TerminalPreviewDirectoryResponse {
+  kind: "directory";
+  projectId: string;
+  projectPath: string;
+  path: string;
+  absolutePath: string;
+  entries: TerminalPreviewTreeEntry[];
+  limit: number;
+  truncated: boolean;
+}
+
 export interface TerminalPreviewFileSearchResponse {
   kind: "file-search";
   projectId: string;
