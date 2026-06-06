@@ -28,7 +28,7 @@ export function getSelectedTerminalPreviewPath({
   filePreview,
   fileDiff,
 }: SelectedPreviewPathArgs): string | null {
-  if (mode === "file") {
+  if (mode === "file" || mode === "explorer") {
     return selectedFilePath ?? filePreview?.path ?? null;
   }
   if (mode === "changes") {
@@ -47,7 +47,7 @@ export function getTerminalPreviewCopyPath({
   if (!selectedPath) {
     return null;
   }
-  if (mode === "file" && filePreview?.absolutePath) {
+  if ((mode === "file" || mode === "explorer") && filePreview?.absolutePath) {
     return filePreview.absolutePath;
   }
   if (mode === "changes" && fileDiff?.absolutePath) {

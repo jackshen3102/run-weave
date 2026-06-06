@@ -46,7 +46,7 @@ export function useTerminalPreviewPanelActions({
     if (!confirmDiscardDraft()) {
       return;
     }
-    if (mode === "file") {
+    if (mode === "file" || mode === "explorer") {
       if (selectedFilePath) {
         void loadFile(selectedFilePath);
       } else if (projectId) {
@@ -100,8 +100,9 @@ export function useTerminalPreviewPanelActions({
     if (!projectId || !confirmDiscardDraft()) {
       return;
     }
+    const targetMode = mode === "explorer" ? "explorer" : "file";
     updateProjectPreview(projectId, {
-      mode: "file",
+      mode: targetMode,
       selectedFilePath: filePath,
       path: filePath,
     });

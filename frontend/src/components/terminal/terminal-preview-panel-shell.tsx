@@ -44,7 +44,7 @@ interface TerminalPreviewPanelShellProps {
   body: ReactNode;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onSetActiveTool: (tool: "preview" | "browser") => void;
-  onSetPreviewMode: (mode: "changes" | "file") => void;
+  onSetPreviewMode: (mode: "changes" | "file" | "explorer") => void;
   onToggleExpanded: () => void;
   onRefresh: () => void;
   onSave: () => void;
@@ -57,10 +57,13 @@ interface TerminalPreviewPanelShellProps {
 
 function describeMode(mode: string | null | undefined): string {
   if (mode === "file") {
-    return "Files";
+    return "Open";
+  }
+  if (mode === "explorer") {
+    return "Explorer";
   }
   if (mode === "changes") {
-    return "Review changes";
+    return "Changes";
   }
   return "Preview";
 }
@@ -246,7 +249,7 @@ export function TerminalPreviewPanelShell({
               role="tablist"
               aria-label="Preview tasks"
             >
-              {(["changes", "file"] as const).map((previewMode) => (
+              {(["changes", "explorer", "file"] as const).map((previewMode) => (
                 <button
                   type="button"
                   role="tab"
@@ -287,7 +290,7 @@ export function TerminalPreviewPanelShell({
         {activeTool === "preview" && selectedPath ? (
           <div className="flex items-center gap-2 border-b border-slate-800 px-2 py-1.5 text-[11px] text-slate-400">
             <span className="min-w-0 flex-1 truncate">{selectedPath}</span>
-            {mode === "file" && fileKind === "markdown" ? (
+            {(mode === "file" || mode === "explorer") && fileKind === "markdown" ? (
               <div className="flex shrink-0 rounded-md border border-slate-800 p-0.5">
                 {(["source", "split", "preview"] as const).map((viewMode) => (
                   <button
@@ -306,7 +309,7 @@ export function TerminalPreviewPanelShell({
                 ))}
               </div>
             ) : null}
-            {mode === "file" && fileKind === "svg" ? (
+            {(mode === "file" || mode === "explorer") && fileKind === "svg" ? (
               <div className="flex shrink-0 rounded-md border border-slate-800 p-0.5">
                 {(["preview", "source"] as const).map((viewMode) => (
                   <button

@@ -12,6 +12,7 @@ import type {
   TerminalPreviewChangeKind,
   TerminalPreviewDeleteFileRequest,
   TerminalPreviewDeleteFileResponse,
+  TerminalPreviewDirectoryResponse,
   TerminalPreviewFileDiffResponse,
   TerminalPreviewFileResponse,
   TerminalPreviewRenameFileRequest,
@@ -457,6 +458,31 @@ export async function getTerminalProjectPreviewFileDiff(
   return requestJson<TerminalPreviewFileDiffResponse>(
     apiBase,
     `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file-diff?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function listTerminalProjectPreviewDirectory(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  params: { path?: string; limit?: number },
+): Promise<TerminalPreviewDirectoryResponse> {
+  const query = new URLSearchParams();
+  if (params.path) {
+    query.set("path", params.path);
+  }
+  if (params.limit !== undefined) {
+    query.set("limit", String(params.limit));
+  }
+
+  return requestJson<TerminalPreviewDirectoryResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/directory?${query.toString()}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,

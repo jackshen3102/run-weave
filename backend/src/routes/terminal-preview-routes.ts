@@ -1,6 +1,7 @@
 import type { Response, Router } from "express";
 import { z } from "zod";
 import type { TerminalSessionManager } from "../terminal/manager";
+import { listPreviewDirectory } from "../terminal/preview-directory";
 import {
   deletePreviewFile,
   getPreviewFileDiff,
@@ -16,6 +17,11 @@ import {
 const previewFileSearchSchema = z.object({
   q: z.string().optional().default(""),
   limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+const previewDirectorySchema = z.object({
+  path: z.string().optional().default(""),
+  limit: z.coerce.number().int().min(1).max(1000).optional(),
 });
 
 const previewFileSchema = z.object({
@@ -284,6 +290,34 @@ export function registerTerminalPreviewRoutes(
           projectPath: project.path,
           requestedPath: parsed.data.path,
           changeKind: parsed.data.kind,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.get("/project/:id/preview/directory", async (req, res) => {
+    const parsed = previewDirectorySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolveProjectPreviewContext(
+        terminalSessionManager,
+        req.params.id,
+      );
+      res.json(
+        await listPreviewDirectory({
+          projectId: project.id,
+          projectPath: project.path,
+          relativePath: parsed.data.path,
+          limit: parsed.data.limit,
         }),
       );
     } catch (error) {

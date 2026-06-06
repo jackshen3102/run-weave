@@ -133,7 +133,7 @@ export function useTerminalPreviewPanelData({
     ? getTerminalPreviewFileKind(selectedFilePath, filePreview?.language)
     : "text";
   const isFileEditable =
-    mode === "file" &&
+    (mode === "file" || mode === "explorer") &&
     Boolean(filePreview) &&
     filePreview?.readonly === false &&
     fileKind !== "image";
@@ -351,7 +351,7 @@ export function useTerminalPreviewPanelData({
   }, [hasProjectPath, mode, projectId, updateProjectPreview]);
 
   useEffect(() => {
-    if (mode !== "file" || !selectedFilePath) {
+    if ((mode !== "file" && mode !== "explorer") || !selectedFilePath) {
       return;
     }
     if (isSupportedTerminalImagePreviewPath(selectedFilePath)) {
