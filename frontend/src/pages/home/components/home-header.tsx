@@ -3,6 +3,7 @@ import { ConnectionSwitcher } from "../../../components/connection-switcher";
 import { RuntimeMonitorBadge } from "../../../components/runtime-monitor-badge";
 import { ThemeToggle } from "../../../components/theme-toggle";
 import { Button } from "../../../components/ui/button";
+import { Activity } from "lucide-react";
 
 interface HomeHeaderProps {
   terminalLoading: boolean;
@@ -13,6 +14,7 @@ interface HomeHeaderProps {
   onOpenConnectionManager?: () => void;
   onOpenTerminal: () => void;
   onOpenMobileTerminals: () => void;
+  onOpenSystemMonitor?: () => void;
   onOpenChangePassword: () => void;
   onLogout: () => void;
 }
@@ -26,6 +28,7 @@ export function HomeHeader({
   onOpenConnectionManager,
   onOpenTerminal,
   onOpenMobileTerminals,
+  onOpenSystemMonitor,
   onOpenChangePassword,
   onLogout,
 }: HomeHeaderProps) {
@@ -44,11 +47,12 @@ export function HomeHeader({
             onOpenConnectionManager={onOpenConnectionManager}
           />
         )}
-        {connectionName && (!onSelectConnection || !onOpenConnectionManager) && (
-          <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1 text-[0.65rem] text-muted-foreground">
-            {connectionName}
-          </span>
-        )}
+        {connectionName &&
+          (!onSelectConnection || !onOpenConnectionManager) && (
+            <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1 text-[0.65rem] text-muted-foreground">
+              {connectionName}
+            </span>
+          )}
       </div>
       <div className="flex items-center gap-2">
         <Button
@@ -67,6 +71,17 @@ export function HomeHeader({
         >
           Mobile Terminals
         </Button>
+        {onOpenSystemMonitor ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="rounded-full px-4"
+            onClick={onOpenSystemMonitor}
+          >
+            <Activity className="mr-2 h-4 w-4" />
+            System Monitor
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           size="sm"

@@ -3,6 +3,7 @@ import type { MenuItemConstructorOptions } from "electron";
 export function buildApplicationMenuTemplate(params: {
   platform: NodeJS.Platform;
   onNewWindow: () => void;
+  onOpenSystemMonitor?: () => void;
   onReloadLocalRuntime?: () => void;
 }): MenuItemConstructorOptions[] {
   const template: MenuItemConstructorOptions[] = [];
@@ -37,7 +38,32 @@ export function buildApplicationMenuTemplate(params: {
     ],
   });
   template.push({ role: "editMenu" });
-  template.push({ role: "viewMenu" });
+  template.push({
+    label: "View",
+    submenu: [
+      { role: "reload" },
+      { role: "forceReload" },
+      { role: "toggleDevTools" },
+      { type: "separator" },
+      { role: "resetZoom" },
+      { role: "zoomIn" },
+      { role: "zoomOut" },
+      { type: "separator" },
+      { role: "togglefullscreen" },
+      ...(params.onOpenSystemMonitor
+        ? [
+            { type: "separator" as const },
+            {
+              label: "System Monitor",
+              accelerator: "CmdOrCtrl+Shift+M",
+              click: () => {
+                params.onOpenSystemMonitor?.();
+              },
+            },
+          ]
+        : []),
+    ],
+  });
   template.push({ role: "windowMenu" });
 
   return template;
