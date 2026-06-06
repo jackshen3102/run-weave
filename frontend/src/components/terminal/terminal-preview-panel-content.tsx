@@ -1,5 +1,4 @@
 import {
-  lazy,
   Suspense,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -23,43 +22,16 @@ import {
   getTerminalPreviewMonacoLanguage,
 } from "../../features/terminal/preview-file-types";
 import { Button } from "../ui/button";
-import { TerminalFileExplorer } from "./terminal-file-explorer";
-import { TerminalOpenFileCommand } from "./terminal-open-file-command";
+import {
+  renderPreviewEmpty,
+  TerminalImagePreview,
+  TerminalMarkdownPreview,
+  TerminalMonacoViewer,
+  TerminalPreviewFileView,
+  TerminalSvgPreview,
+} from "./terminal-preview-file-view";
 import { TerminalPreviewChangeTree } from "./terminal-preview-change-tree";
 import type { UseTerminalFileTreeReturn } from "./use-terminal-file-tree";
-
-const TerminalMonacoViewer = lazy(() =>
-  import("./terminal-monaco-viewer").then((module) => ({
-    default: module.TerminalMonacoViewer,
-  })),
-);
-
-const TerminalMarkdownPreview = lazy(() =>
-  import("./terminal-markdown-preview").then((module) => ({
-    default: module.TerminalMarkdownPreview,
-  })),
-);
-
-const TerminalSvgPreview = lazy(() =>
-  import("./terminal-svg-preview").then((module) => ({
-    default: module.TerminalSvgPreview,
-  })),
-);
-
-const TerminalImagePreview = lazy(() =>
-  import("./terminal-image-preview").then((module) => ({
-    default: module.TerminalImagePreview,
-  })),
-);
-
-function renderEmpty(title: string, action?: ReactNode): ReactNode {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-xs text-slate-400">
-      <p>{title}</p>
-      {action}
-    </div>
-  );
-}
 
 interface TerminalPreviewPanelContentProps {
   activeProject: TerminalProjectListItem | null;
@@ -169,11 +141,11 @@ export function TerminalPreviewPanelContent({
     : "text";
 
   if (!activeProject) {
-    return renderEmpty("No project selected");
+    return renderPreviewEmpty("No project selected");
   }
 
   if (!hasProjectPath) {
-    return renderEmpty(
+    return renderPreviewEmpty(
       "Set a project path to use Preview",
       <Button
         type="button"
@@ -186,335 +158,45 @@ export function TerminalPreviewPanelContent({
     );
   }
 
-  if (mode === "explorer") {
-    const monacoLanguage = getTerminalPreviewMonacoLanguage(
-      filePreview?.language,
-    );
-    let fileContent: ReactNode;
-
-    if (fileKind === "image" && selectedFilePath && projectId) {
-      fileContent = (
-        <Suspense fallback={renderEmpty("Loading image preview...")}>
-          <TerminalImagePreview
-            apiBase={apiBase}
-            token={token}
-            projectId={projectId}
-            path={selectedFilePath}
-            refreshKey={assetRefreshKey}
-            onAuthExpired={onAuthExpired}
-          />
-        </Suspense>
-      );
-    } else if (fileLoading) {
-      fileContent = renderEmpty("Loading preview...");
-    } else if (fileError) {
-      fileContent = renderEmpty(fileError);
-    } else if (filePreview && fileKind === "markdown") {
-      fileContent =
-        markdownViewMode === "source" ? (
-          <Suspense fallback={renderEmpty("Loading editor...")}>
-            <TerminalMonacoViewer
-              language="markdown"
-              content={editorContent}
-              editable={editable}
-              onContentChange={onEditorContentChange}
-              lineReferencePath={filePreview.absolutePath}
-            />
-          </Suspense>
-        ) : markdownViewMode === "preview" ? (
-          <Suspense fallback={renderEmpty("Loading markdown preview...")}>
-            <TerminalMarkdownPreview
-              apiBase={apiBase}
-              token={token}
-              projectId={activeProject.projectId}
-              content={editorContent}
-              path={filePreview.path}
-              onAuthExpired={onAuthExpired}
-              onOpenFile={onOpenFilePath}
-            />
-          </Suspense>
-        ) : (
-          <div
-            className="grid h-full min-h-0"
-            style={{
-              gridTemplateColumns: `${markdownSplitSourceWidthPct}% 4px minmax(0, 1fr)`,
-            }}
-          >
-            <Suspense fallback={renderEmpty("Loading editor...")}>
-              <TerminalMonacoViewer
-                language="markdown"
-                content={editorContent}
-                scrollRatio={markdownScrollRatio}
-                onScrollRatioChange={onMarkdownScrollRatioChange}
-                editable={editable}
-                onContentChange={onEditorContentChange}
-                lineReferencePath={filePreview.absolutePath}
-              />
-            </Suspense>
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              className="cursor-col-resize bg-slate-900 hover:bg-slate-700"
-              onPointerDown={onStartMarkdownResize}
-            />
-            <Suspense fallback={renderEmpty("Loading markdown preview...")}>
-              <TerminalMarkdownPreview
-                apiBase={apiBase}
-                token={token}
-                projectId={activeProject.projectId}
-                content={editorContent}
-                path={filePreview.path}
-                scrollRatio={markdownScrollRatio}
-                onScrollRatioChange={onMarkdownScrollRatioChange}
-                onAuthExpired={onAuthExpired}
-                onOpenFile={onOpenFilePath}
-              />
-            </Suspense>
-          </div>
-        );
-    } else if (filePreview && fileKind === "svg") {
-      fileContent =
-        svgViewMode === "source" ? (
-          <Suspense fallback={renderEmpty("Loading editor...")}>
-            <TerminalMonacoViewer
-              language="xml"
-              content={editorContent}
-              editable={editable}
-              onContentChange={onEditorContentChange}
-              lineReferencePath={filePreview.absolutePath}
-            />
-          </Suspense>
-        ) : (
-          <Suspense fallback={renderEmpty("Loading SVG preview...")}>
-            <TerminalSvgPreview content={editorContent} />
-          </Suspense>
-        );
-    } else if (filePreview) {
-      fileContent = (
-        <Suspense fallback={renderEmpty("Loading editor...")}>
-          <TerminalMonacoViewer
-            language={monacoLanguage}
-            content={editorContent}
-            editable={editable}
-            onContentChange={onEditorContentChange}
-            lineReferencePath={filePreview.absolutePath}
-          />
-        </Suspense>
-      );
-    } else {
-      fileContent = renderEmpty("Select a file");
-    }
-
+  if (mode === "explorer" || mode === "file") {
     return (
-      <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="flex min-h-0 flex-col border-r border-slate-800">
-          <TerminalFileExplorer
-            tree={fileTree}
-            selectedFilePath={selectedFilePath}
-            onOpenFilePath={onOpenFilePath}
-            onRequestRenameFile={onRequestRenameFile}
-            onRequestDeleteFile={onRequestDeleteFile}
-          />
-        </aside>
-        <div className="relative min-h-0">
-          {saveError ? (
-            <div className="absolute left-2 right-2 top-2 z-10 rounded-md border border-rose-900/70 bg-rose-950/95 p-2 text-xs text-rose-100 shadow-lg">
-              <div>{saveError}</div>
-              {saveConflict ? (
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 rounded-md px-2 text-xs"
-                    onClick={onReloadFile}
-                  >
-                    Reload
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 rounded-md px-2 text-xs"
-                    onClick={onOverwriteFile}
-                  >
-                    Overwrite
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {fileContent}
-        </div>
-      </div>
-    );
-  }
-
-  if (mode === "file") {
-    const monacoLanguage = getTerminalPreviewMonacoLanguage(
-      filePreview?.language,
-    );
-    let fileContent: ReactNode;
-
-    if (fileKind === "image" && selectedFilePath && projectId) {
-      fileContent = (
-        <Suspense fallback={renderEmpty("Loading image preview...")}>
-          <TerminalImagePreview
-            apiBase={apiBase}
-            token={token}
-            projectId={projectId}
-            path={selectedFilePath}
-            refreshKey={assetRefreshKey}
-            onAuthExpired={onAuthExpired}
-          />
-        </Suspense>
-      );
-    } else if (fileLoading) {
-      fileContent = renderEmpty("Loading preview...");
-    } else if (fileError) {
-      fileContent = renderEmpty(fileError);
-    } else if (filePreview && fileKind === "markdown") {
-      fileContent =
-        markdownViewMode === "source" ? (
-          <Suspense fallback={renderEmpty("Loading editor...")}>
-            <TerminalMonacoViewer
-              language="markdown"
-              content={editorContent}
-              editable={editable}
-              onContentChange={onEditorContentChange}
-              lineReferencePath={filePreview.absolutePath}
-            />
-          </Suspense>
-        ) : markdownViewMode === "preview" ? (
-          <Suspense fallback={renderEmpty("Loading markdown preview...")}>
-            <TerminalMarkdownPreview
-              apiBase={apiBase}
-              token={token}
-              projectId={activeProject.projectId}
-              content={editorContent}
-              path={filePreview.path}
-              onAuthExpired={onAuthExpired}
-              onOpenFile={onOpenFilePath}
-            />
-          </Suspense>
-        ) : (
-          <div
-            className="grid h-full min-h-0"
-            style={{
-              gridTemplateColumns: `${markdownSplitSourceWidthPct}% 4px minmax(0, 1fr)`,
-            }}
-          >
-            <Suspense fallback={renderEmpty("Loading editor...")}>
-              <TerminalMonacoViewer
-                language="markdown"
-                content={editorContent}
-                scrollRatio={markdownScrollRatio}
-                onScrollRatioChange={onMarkdownScrollRatioChange}
-                editable={editable}
-                onContentChange={onEditorContentChange}
-                lineReferencePath={filePreview.absolutePath}
-              />
-            </Suspense>
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              className="cursor-col-resize bg-slate-900 hover:bg-slate-700"
-              onPointerDown={onStartMarkdownResize}
-            />
-            <Suspense fallback={renderEmpty("Loading markdown preview...")}>
-              <TerminalMarkdownPreview
-                apiBase={apiBase}
-                token={token}
-                projectId={activeProject.projectId}
-                content={editorContent}
-                path={filePreview.path}
-                scrollRatio={markdownScrollRatio}
-                onScrollRatioChange={onMarkdownScrollRatioChange}
-                onAuthExpired={onAuthExpired}
-                onOpenFile={onOpenFilePath}
-              />
-            </Suspense>
-          </div>
-        );
-    } else if (filePreview && fileKind === "svg") {
-      fileContent =
-        svgViewMode === "source" ? (
-          <Suspense fallback={renderEmpty("Loading editor...")}>
-            <TerminalMonacoViewer
-              language="xml"
-              content={editorContent}
-              editable={editable}
-              onContentChange={onEditorContentChange}
-              lineReferencePath={filePreview.absolutePath}
-            />
-          </Suspense>
-        ) : (
-          <Suspense fallback={renderEmpty("Loading SVG preview...")}>
-            <TerminalSvgPreview content={editorContent} />
-          </Suspense>
-        );
-    } else if (filePreview) {
-      fileContent = (
-        <Suspense fallback={renderEmpty("Loading editor...")}>
-          <TerminalMonacoViewer
-            language={monacoLanguage}
-            content={editorContent}
-            editable={editable}
-            onContentChange={onEditorContentChange}
-            lineReferencePath={filePreview.absolutePath}
-          />
-        </Suspense>
-      );
-    } else {
-      fileContent = renderEmpty("Select a file");
-    }
-
-    return (
-      <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="flex min-h-0 flex-col border-r border-slate-800">
-          <TerminalOpenFileCommand
-            query={query}
-            loading={searchLoading}
-            error={searchError}
-            items={searchItems}
-            absoluteInput={absoluteInput}
-            selectedPath={selectedFilePath}
-            className="flex h-full min-h-0 flex-col bg-slate-950"
-            onQueryChange={onQueryChange}
-            onOpenPath={onOpenFilePath}
-            onRequestRenameFile={onRequestRenameFile}
-            onRequestDeleteFile={onRequestDeleteFile}
-          />
-        </aside>
-        <div className="relative min-h-0">
-          {saveError ? (
-            <div className="absolute left-2 right-2 top-2 z-10 rounded-md border border-rose-900/70 bg-rose-950/95 p-2 text-xs text-rose-100 shadow-lg">
-              <div>{saveError}</div>
-              {saveConflict ? (
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 rounded-md px-2 text-xs"
-                    onClick={onReloadFile}
-                  >
-                    Reload
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 rounded-md px-2 text-xs"
-                    onClick={onOverwriteFile}
-                  >
-                    Overwrite
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {fileContent}
-        </div>
-      </div>
+      <TerminalPreviewFileView
+        activeProject={activeProject}
+        apiBase={apiBase}
+        token={token}
+        mode={mode}
+        projectId={projectId}
+        query={query}
+        absoluteInput={absoluteInput}
+        selectedFilePath={selectedFilePath}
+        fileKind={fileKind}
+        markdownViewMode={markdownViewMode}
+        markdownSplitSourceWidthPct={markdownSplitSourceWidthPct}
+        svgViewMode={svgViewMode}
+        searchItems={searchItems}
+        searchLoading={searchLoading}
+        searchError={searchError}
+        filePreview={filePreview}
+        editorContent={editorContent}
+        editable={editable}
+        onEditorContentChange={onEditorContentChange}
+        saveError={saveError}
+        saveConflict={saveConflict}
+        onReloadFile={onReloadFile}
+        onOverwriteFile={onOverwriteFile}
+        fileLoading={fileLoading}
+        fileError={fileError}
+        fileTree={fileTree}
+        assetRefreshKey={assetRefreshKey}
+        markdownScrollRatio={markdownScrollRatio}
+        onAuthExpired={onAuthExpired}
+        onQueryChange={onQueryChange}
+        onOpenFilePath={onOpenFilePath}
+        onRequestRenameFile={onRequestRenameFile}
+        onRequestDeleteFile={onRequestDeleteFile}
+        onMarkdownScrollRatioChange={onMarkdownScrollRatioChange}
+        onStartMarkdownResize={onStartMarkdownResize}
+      />
     );
   }
 
@@ -533,17 +215,17 @@ export function TerminalPreviewPanelContent({
 
     let changeContent: ReactNode;
     if (diffLoading && !fileDiff) {
-      changeContent = renderEmpty("Loading diff...");
+      changeContent = renderPreviewEmpty("Loading diff...");
     } else if (diffError) {
-      changeContent = renderEmpty(diffError);
+      changeContent = renderPreviewEmpty(diffError);
     } else if (!fileDiff) {
-      changeContent = renderEmpty("Select a changed file");
+      changeContent = renderPreviewEmpty("Select a changed file");
     } else if (changeDiffFileKind === "image") {
       if (isChangeImageDeleted) {
-        changeContent = renderEmpty("Image deleted");
+        changeContent = renderPreviewEmpty("Image deleted");
       } else if (selectedChangePath && projectId) {
         changeContent = (
-          <Suspense fallback={renderEmpty("Loading image preview...")}>
+          <Suspense fallback={renderPreviewEmpty("Loading image preview...")}>
             <TerminalImagePreview
               apiBase={apiBase}
               token={token}
@@ -555,7 +237,7 @@ export function TerminalPreviewPanelContent({
           </Suspense>
         );
       } else {
-        changeContent = renderEmpty("Binary file");
+        changeContent = renderPreviewEmpty("Binary file");
       }
     } else if (
       changesViewMode === "preview" &&
@@ -563,7 +245,7 @@ export function TerminalPreviewPanelContent({
       activeProject
     ) {
       changeContent = (
-        <Suspense fallback={renderEmpty("Loading markdown preview...")}>
+        <Suspense fallback={renderPreviewEmpty("Loading markdown preview...")}>
           <TerminalMarkdownPreview
             apiBase={apiBase}
             token={token}
@@ -577,13 +259,13 @@ export function TerminalPreviewPanelContent({
       );
     } else if (changesViewMode === "preview" && changeDiffFileKind === "svg") {
       changeContent = (
-        <Suspense fallback={renderEmpty("Loading SVG preview...")}>
+        <Suspense fallback={renderPreviewEmpty("Loading SVG preview...")}>
           <TerminalSvgPreview content={fileDiff.newContent} />
         </Suspense>
       );
     } else {
       changeContent = (
-        <Suspense fallback={renderEmpty("Loading editor...")}>
+        <Suspense fallback={renderPreviewEmpty("Loading editor...")}>
           <TerminalMonacoViewer
             diff
             language={changeDiffMonacoLanguage}
@@ -619,7 +301,7 @@ export function TerminalPreviewPanelContent({
     );
   }
 
-  return renderEmpty(
+  return renderPreviewEmpty(
     "No preview for this project",
     <div className="flex gap-2">
       <Button
