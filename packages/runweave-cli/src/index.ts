@@ -3,7 +3,6 @@ import { stdin, stdout, stderr } from "node:process";
 import { runAuthCommand } from "./commands/auth.js";
 import { runProjectCommand } from "./commands/project.js";
 import { runTerminalCommand } from "./commands/terminal.js";
-import { runTunnelCommand } from "./commands/tunnel.js";
 import { toCliError } from "./errors.js";
 import { readCliVersion } from "./version.js";
 
@@ -43,12 +42,8 @@ export async function runCli(
       await runTerminalCommand(subcommand, args, io);
       return 0;
     }
-    if (group === "tunnel") {
-      await runTunnelCommand(subcommand, args, io);
-      return 0;
-    }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw <auth|project|terminal|tunnel> <command> [options]\n",
+      "Usage: rw [--version|version] | rw <auth|project|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

@@ -75,16 +75,6 @@ rw terminal handoff "$TERMINAL_ID" --tail 120 --json
 `send --confirm short` confirms that input was delivered or briefly observed; it
 does not mean the AI task has finished.
 
-Runweave also supports temporary public access through the CLI:
-
-```bash
-RUNWEAVE_TUNNEL_TOKEN="<random-token>" pnpm start
-rw tunnel start --token "<random-token>"
-```
-
-The tunnel command prints a public URL and can generate a QR code for phone
-handoff.
-
 ### Mobile Handoff
 
 Runweave has a mobile-first terminal overview for observation and handoff:

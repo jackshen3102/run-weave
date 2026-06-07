@@ -66,15 +66,6 @@ rw terminal handoff "$TERMINAL_ID" --tail 120 --json
 
 `send --confirm short` 确认的是输入已经投递或被短暂观察到，不代表 AI 任务已经完成。
 
-Runweave 也支持通过 CLI 创建临时公网访问：
-
-```bash
-RUNWEAVE_TUNNEL_TOKEN="<random-token>" pnpm start
-rw tunnel start --token "<random-token>"
-```
-
-tunnel 命令会打印公网 URL，也可以生成二维码，方便手机接力。
-
 ### 手机接力
 
 Runweave 提供面向手机的终端概览，用于观察和接力：
