@@ -1,7 +1,10 @@
 import type { ClientInputMessage } from "@browser-viewer/shared";
 import type { Page } from "playwright";
+import { logger } from "../logging";
 import { applyInputToPage } from "./input";
 import { getClipboardCopyTextBeforeInput } from "./clipboard";
+
+const viewerWsLogger = logger.child({ component: "viewer-ws" });
 
 type PageInputMessage = Exclude<
   ClientInputMessage,
@@ -42,10 +45,11 @@ export function handlePageInputMessage(params: {
       }
     })
     .catch((error) => {
-      console.error("[viewer-be] input apply failed", {
+      viewerWsLogger.error("viewer-ws.input.apply.failed", {
+        message: "Viewer websocket input apply failed",
         sessionId,
         eventType: parsed.type,
-        error: String(error),
+        error,
       });
       sendError(String(error));
     });

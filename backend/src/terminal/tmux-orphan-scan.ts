@@ -1,6 +1,9 @@
 import type { TerminalSessionManager } from "./manager";
+import { logger } from "../logging";
 import { isTmuxBackedSession } from "./runtime-launcher";
 import type { TmuxSessionInfo, TmuxService } from "./tmux-service";
+
+const terminalLogger = logger.child({ component: "terminal" });
 
 interface TmuxOrphanScanner {
   readonly socketPath: string;
@@ -37,7 +40,8 @@ export async function logOrphanedTmuxSessions(
   }
 
   if (!available) {
-    console.warn("[viewer-be] skipped orphaned tmux session scan", {
+    terminalLogger.warn("terminal.tmux.orphan.scan.skipped", {
+      message: "Skipped orphaned tmux session scan",
       socketPath: scanner.socketPath,
       reason: unavailableReason ?? "tmux unavailable",
     });
@@ -58,16 +62,18 @@ export async function logOrphanedTmuxSessions(
     const orphanedSessions =
       await scanner.listOrphanedSessions(knownSessionNames);
     if (orphanedSessions.length > 0) {
-      console.warn("[viewer-be] found orphaned tmux sessions", {
+      terminalLogger.warn("terminal.tmux.orphan.found", {
+        message: "Found orphaned tmux sessions",
         count: orphanedSessions.length,
         socketPath: scanner.socketPath,
         sessionNames: orphanedSessions.map((session) => session.sessionName),
       });
     }
   } catch (error) {
-    console.warn("[viewer-be] failed to scan orphaned tmux sessions", {
+    terminalLogger.warn("terminal.tmux.orphan.scan.failed", {
+      message: "Failed to scan orphaned tmux sessions",
       socketPath: scanner.socketPath,
-      error: String(error),
+      error,
     });
   }
 }

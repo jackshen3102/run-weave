@@ -4,6 +4,7 @@ import type { WebSocket } from "ws";
 import type { ServerEventMessage } from "@browser-viewer/shared";
 import type { SessionManager } from "../session/manager";
 import type { AuthService } from "../auth/service";
+import { logger } from "../logging";
 import { QualityProbeStore } from "../quality/probe-store";
 import {
   isTunnelRequestAuthorized,
@@ -24,6 +25,8 @@ import { validateWebSocketHandshake } from "./handshake";
 import { handleTabMessage } from "./tab-handler";
 import { handlePageInputMessage } from "./input-handler";
 import { handleDevtoolsMessage } from "./devtools-handler";
+
+const viewerWsLogger = logger.child({ component: "viewer-ws" });
 
 export function attachWebSocketServer(
   server: HttpServer,
@@ -73,12 +76,22 @@ export function attachWebSocketServer(
     });
 
     if (!handshake.ok) {
+      viewerWsLogger.warn("viewer-ws.handshake.rejected", {
+        message: handshake.logMessage,
+        reason: handshake.closeReason,
+        ...handshake.logMeta,
+      });
       sendEvent(socket, { type: "error", message: handshake.errorMessage });
       socket.close(1008, handshake.closeReason);
       return;
     }
 
     const { sessionId, session } = handshake;
+    const connectedAt = Date.now();
+    viewerWsLogger.info("viewer-ws.connected", {
+      message: "Viewer websocket connected",
+      sessionId,
+    });
     const state = createConnectionContext(session.browserSession.page);
     wsSessionController?.register(sessionId, socket);
 
@@ -171,9 +184,10 @@ export function attachWebSocketServer(
       .initializeTabs(session.browserSession.page)
       .catch((error) => {
         sendError(String(error));
-        console.error("[viewer-be] failed to initialize tabs", {
+        viewerWsLogger.error("viewer-ws.tabs.initialize.failed", {
+          message: "Failed to initialize tabs",
           sessionId,
-          error: String(error),
+          error,
         });
         socket.close(1011, "Failed to initialize tabs");
       });
@@ -186,9 +200,10 @@ export function attachWebSocketServer(
     });
     void screencast.start().catch((error) => {
       sendError(String(error));
-      console.error("[viewer-be] failed to start screencast", {
+      viewerWsLogger.error("viewer-ws.screencast.failed", {
+        message: "Failed to start screencast",
         sessionId,
-        error: String(error),
+        error,
       });
       socket.close(1011, "Failed to start screencast");
     });
@@ -200,6 +215,11 @@ export function attachWebSocketServer(
 
       const parsed = parseClientMessage(String(data));
       if (!parsed) {
+        viewerWsLogger.warn("viewer-ws.invalid-message", {
+          message: "Viewer websocket invalid message",
+          sessionId,
+          messageLength: String(data).length,
+        });
         sendError("Invalid message");
         return;
       }
@@ -299,7 +319,14 @@ export function attachWebSocketServer(
       }
     };
 
-    socket.on("close", () => {
+    socket.on("close", (code, reason) => {
+      viewerWsLogger.info("viewer-ws.closed", {
+        message: "Viewer websocket closed",
+        sessionId,
+        code,
+        reason: String(reason),
+        durationMs: Date.now() - connectedAt,
+      });
       closeConnection(true);
     });
 

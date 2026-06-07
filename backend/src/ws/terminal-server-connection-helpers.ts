@@ -4,6 +4,7 @@ import type {
   TerminalServerMessage,
 } from "@browser-viewer/shared";
 import type { WebSocket } from "ws";
+import { logger } from "../logging";
 import { getLiveTerminalScrollback } from "../terminal/live-scrollback";
 import type {
   TerminalSessionManager,
@@ -19,6 +20,7 @@ import {
 
 export const TMUX_INITIAL_REPAINT_SETTLE_MS = 50;
 export const TMUX_METADATA_SYNC_DELAY_MS = 100;
+const terminalWsLogger = logger.child({ component: "terminal-ws" });
 
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -179,10 +181,11 @@ export function handleRuntimeActionError(
   action: "input" | "resize" | "signal",
   error: unknown,
 ): void {
-  console.error("[viewer-be] terminal runtime action failed", {
+  terminalWsLogger.error("terminal.input.failed", {
+    message: "Terminal runtime action failed",
     terminalSessionId,
     action,
-    error: String(error),
+    error,
   });
   sendEvent(socket, {
     type: "error",

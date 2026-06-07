@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from "node:http";
 import WebSocket, { WebSocketServer, type RawData } from "ws";
 import type { AuthService } from "../auth/service";
+import { logger } from "../logging";
 import {
   isTunnelRequestAuthorized,
   rejectUnauthorizedTunnelUpgrade,
@@ -9,6 +10,8 @@ import {
 import type { SessionManager } from "../session/manager";
 import { validateWebSocketHandshake } from "./handshake";
 import { resolvePageByTargetId } from "./tab-target";
+
+const devtoolsLogger = logger.child({ component: "devtools" });
 
 interface AttachDevtoolsProxyServerOptions {
   enabled: boolean;
@@ -182,25 +185,28 @@ export function attachDevtoolsProxyServer(
       });
 
       clientSocket.on("error", (error) => {
-        console.error("[viewer-be] devtools proxy client error", {
+        devtoolsLogger.error("devtools.proxy.client.error", {
+          message: "DevTools proxy client socket error",
           sessionId,
           tabId,
-          error: String(error),
+          error,
         });
         closeBoth(1011, "Client socket error");
       });
 
       upstreamSocket.on("error", (error) => {
-        console.error("[viewer-be] devtools proxy upstream error", {
+        devtoolsLogger.error("devtools.proxy.upstream.error", {
+          message: "DevTools proxy upstream socket error",
           sessionId,
           tabId,
-          error: String(error),
+          error,
         });
         closeBoth(1011, "Upstream socket error");
       });
     })().catch((error) => {
-      console.error("[viewer-be] devtools proxy setup failed", {
-        error: String(error),
+      devtoolsLogger.error("devtools.proxy.upstream.error", {
+        message: "DevTools proxy setup failed",
+        error,
       });
       closeWithReason(clientSocket, 1011, "DevTools proxy setup failed");
     });

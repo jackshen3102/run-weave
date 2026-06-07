@@ -74,6 +74,7 @@ export function validateWebSocketHandshake(params: {
       errorMessage: "Unauthorized",
       closeReason: "Unauthorized",
       logMessage: "[viewer-be] websocket rejected: unauthorized",
+      logMeta: { sessionId },
     };
   }
 

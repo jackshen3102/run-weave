@@ -19,6 +19,7 @@ import type {
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
 import { readBearerToken } from "../auth/middleware";
+import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
   TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
@@ -53,6 +54,8 @@ import {
   toSessionListItem,
   toStatusPayload,
 } from "./terminal-route-payloads";
+
+const terminalLogger = logger.child({ component: "terminal" });
 
 const createTerminalSessionSchema = z
   .object({
@@ -255,8 +258,9 @@ export function createTerminalRouter(
       res.status(error.statusCode).json({ message: error.message });
       return;
     }
-    console.error("[viewer-be] terminal project request failed", {
-      error: String(error),
+    terminalLogger.error("terminal.project.request.failed", {
+      message: "Terminal project request failed",
+      error,
     });
     res.status(500).json({
       message: "Terminal project request failed",
@@ -351,8 +355,9 @@ export function createTerminalRouter(
       await terminalSessionManager.reorderProjects(parsed.data.orderedIds);
       res.status(204).send();
     } catch (error) {
-      console.error("[viewer-be] terminal project reorder failed", {
-        error: String(error),
+      terminalLogger.error("terminal.project.reorder.failed", {
+        message: "Terminal project reorder failed",
+        error,
       });
       res.status(500).json({
         message: "Terminal project reorder failed",
@@ -385,8 +390,9 @@ export function createTerminalRouter(
       );
       res.status(204).send();
     } catch (error) {
-      console.error("[viewer-be] terminal session reorder failed", {
-        error: String(error),
+      terminalLogger.error("terminal.session.reorder.failed", {
+        message: "Terminal session reorder failed",
+        error,
       });
       res.status(500).json({
         message: "Terminal session reorder failed",
@@ -436,8 +442,9 @@ export function createTerminalRouter(
         ),
       );
     } catch (error) {
-      console.error("[viewer-be] terminal mobile overview request failed", {
-        error: String(error),
+      terminalLogger.error("terminal.mobile-overview.request.failed", {
+        message: "Terminal mobile overview request failed",
+        error,
       });
       res.status(500).json({
         message: "Terminal mobile overview request failed",
@@ -470,6 +477,13 @@ export function createTerminalRouter(
     }
 
     try {
+      terminalLogger.info("terminal.session.create.requested", {
+        message: "Terminal session create requested",
+        projectId: parsed.data.projectId,
+        runtimePreference: parsed.data.runtimePreference ?? "auto",
+        cwdProvided: Boolean(parsed.data.cwd),
+        commandProvided: Boolean(parsed.data.command),
+      });
       const session = await terminalSessionManager.createSession(
         resolveTerminalCreateDefaults(parsed.data, terminalSessionManager),
       );
@@ -502,6 +516,11 @@ export function createTerminalRouter(
                 recoverable: true,
               })) ?? session;
           } else if (options.tmuxService && shouldTryTmux) {
+            terminalLogger.warn("terminal.session.runtime.tmux-unavailable", {
+              message: "Terminal tmux unavailable; using pty runtime",
+              terminalSessionId: session.id,
+              reason: tmuxUnavailableReason ?? "tmux unavailable",
+            });
             launchSession =
               (await terminalSessionManager.updateRuntimeMetadata(session.id, {
                 runtimeKind: "pty",
@@ -530,15 +549,13 @@ export function createTerminalRouter(
             }
 
             const sanitizedError = sanitizeTerminalError(error);
-            console.error(
-              "[viewer-be] tmux launch failed; falling back to pty",
-              {
-                terminalSessionId: session.id,
-                tmuxSessionName: attemptedTmuxTarget?.sessionName,
-                tmuxSocketPath: attemptedTmuxTarget?.socketPath,
-                error: sanitizedError,
-              },
-            );
+            terminalLogger.warn("terminal.session.runtime.tmux-launch-fallback", {
+              message: "Tmux launch failed; falling back to pty",
+              terminalSessionId: session.id,
+              tmuxSessionName: attemptedTmuxTarget?.sessionName,
+              tmuxSocketPath: attemptedTmuxTarget?.socketPath,
+              error: sanitizedError,
+            });
             if (attemptedTmuxTarget) {
               await options.tmuxService.killSession(attemptedTmuxTarget);
             }
@@ -570,7 +587,8 @@ export function createTerminalRouter(
       res.status(201).json(payload);
     } catch (error) {
       const sanitizedError = sanitizeTerminalError(error);
-      console.error("[viewer-be] create terminal session failed", {
+      terminalLogger.error("terminal.session.create.failed", {
+        message: "Create terminal session failed",
         error: sanitizedError,
       });
       res.status(500).json({
@@ -595,8 +613,9 @@ export function createTerminalRouter(
         await options.tmuxService.listOrphanedSessions(knownSessionNames);
       res.json({ items: orphanedSessions.map(toTmuxOrphanPayload) });
     } catch (error) {
-      console.error("[viewer-be] tmux orphan scan failed", {
-        error: String(error),
+      terminalLogger.error("terminal.tmux.orphan.scan.failed", {
+        message: "Tmux orphan scan failed",
+        error,
       });
       res.status(500).json({
         message: "Terminal tmux orphan scan failed",
@@ -642,8 +661,9 @@ export function createTerminalRouter(
         skipped: skippedSessions.map(toTmuxOrphanPayload),
       });
     } catch (error) {
-      console.error("[viewer-be] tmux orphan cleanup failed", {
-        error: String(error),
+      terminalLogger.error("terminal.tmux.orphan.cleanup.failed", {
+        message: "Tmux orphan cleanup failed",
+        error,
       });
       res.status(500).json({
         message: "Terminal tmux orphan cleanup failed",
@@ -782,9 +802,13 @@ export function createTerminalRouter(
       };
       res.status(200).json(payload);
     } catch (error) {
-      console.error("[viewer-be] terminal input failed", {
+      terminalLogger.error("terminal.input.failed", {
+        message: "Terminal input failed",
         terminalSessionId: session.id,
-        error: String(error),
+        inputLength: parsed.data.data.length,
+        hasNewline: parsed.data.data.includes("\n"),
+        operationId: parsed.data.operationId,
+        error,
       });
       res.status(500).json({
         message: "Terminal input failed",
@@ -821,6 +845,12 @@ export function createTerminalRouter(
       const filePath = path.join(terminalTempDir, fileName);
       const imageBuffer = Buffer.from(parsed.data.dataBase64, "base64");
       if (imageBuffer.length > TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES) {
+        terminalLogger.warn("terminal.clipboard-image.too-large", {
+          message: "Terminal clipboard image exceeded size limit",
+          terminalSessionId: session.id,
+          bytes: imageBuffer.length,
+          limitBytes: TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
+        });
         res.status(413).json({
           message: `Clipboard image exceeds ${TERMINAL_CLIPBOARD_IMAGE_MAX_MIB} MiB limit`,
         });
@@ -836,9 +866,10 @@ export function createTerminalRouter(
       };
       res.status(201).json(payload);
     } catch (error) {
-      console.error("[viewer-be] store terminal clipboard image failed", {
+      terminalLogger.error("terminal.clipboard-image.store.failed", {
+        message: "Store terminal clipboard image failed",
         terminalSessionId: req.params.id,
-        error: String(error),
+        error,
       });
       res.status(500).json({
         message: "Failed to store terminal clipboard image",
@@ -849,15 +880,33 @@ export function createTerminalRouter(
 
   router.delete("/session/:id", async (req, res) => {
     const session = terminalSessionManager.getSession(req.params.id);
-    if (options?.runtimeRegistry) {
-      await options.runtimeRegistry.disposeRuntime(req.params.id);
-    }
-    if (session) {
-      await killTmuxSessionForTerminal(session, options?.tmuxService);
-    }
-    const deleted = await terminalSessionManager.destroySession(req.params.id);
-    if (!deleted) {
-      res.status(404).json({ message: "Terminal session not found" });
+    terminalLogger.info("terminal.session.delete.started", {
+      message: "Terminal session delete started",
+      terminalSessionId: req.params.id,
+      existed: Boolean(session),
+    });
+    try {
+      if (options?.runtimeRegistry) {
+        await options.runtimeRegistry.disposeRuntime(req.params.id);
+      }
+      if (session) {
+        await killTmuxSessionForTerminal(session, options?.tmuxService);
+      }
+      const deleted = await terminalSessionManager.destroySession(req.params.id);
+      if (!deleted) {
+        res.status(404).json({ message: "Terminal session not found" });
+        return;
+      }
+    } catch (error) {
+      terminalLogger.error("terminal.session.delete.failed", {
+        message: "Terminal session delete failed",
+        terminalSessionId: req.params.id,
+        error,
+      });
+      res.status(500).json({
+        message: "Failed to delete terminal session",
+        error: String(error),
+      });
       return;
     }
 

@@ -11,6 +11,12 @@ import { AuthService } from "./auth/service";
 import type { AuthStore } from "./auth/store";
 import { resolveDevtoolsEnabled } from "./config/devtools";
 import { diagnosticLogRecorder } from "./diagnostic-logs/recorder";
+import {
+  createRequestContextMiddleware,
+  flushAndCloseLogger,
+  initializeLogger,
+  logger,
+} from "./logging";
 import { createAuthRouter } from "./routes/auth";
 import { createDiagnosticLogsRouter } from "./routes/diagnostic-logs";
 import { createDevtoolsRouter } from "./routes/devtools";
@@ -68,6 +74,25 @@ interface RuntimeServices {
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
   ptyService: PtyService;
   tmuxService: TmuxService;
+}
+
+type BackendStartStage =
+  | "runtime-config"
+  | "tunnel-auth-config"
+  | "runtime-services"
+  | "http-app"
+  | "websocket-servers"
+  | "listen"
+  | "lifecycle-handlers";
+
+class BackendStartError extends Error {
+  constructor(
+    readonly stage: BackendStartStage,
+    readonly originalError: unknown,
+  ) {
+    super(`Backend start failed during ${stage}`);
+    this.name = "BackendStartError";
+  }
 }
 
 function readCliOption(optionName: string): string | undefined {
@@ -248,6 +273,7 @@ function createHttpApp(
   const requireTunnelAuth = createTunnelAuthMiddleware(tunnelAuthConfig);
   const devtoolsEnabled = services.sessionManager.isDevtoolsEnabled();
 
+  app.use(createRequestContextMiddleware());
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
   app.use(
     createCorsMiddleware(parseConfiguredOrigins(process.env.FRONTEND_ORIGIN)),
@@ -264,7 +290,9 @@ function createHttpApp(
     const { endpoint } = req.body as { endpoint?: string };
     if (typeof endpoint === "string" && endpoint) {
       process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT = endpoint;
-      console.info("[viewer-be] CDP endpoint set via internal API", {
+      logger.info("backend.cdp-endpoint.updated", {
+        component: "backend",
+        message: "CDP endpoint set via internal API",
         endpoint,
       });
       res.json({ ok: true });
@@ -356,10 +384,7 @@ function createHttpApp(
 
 function attachLifecycleHandlers(
   server: http.Server,
-  authStore: AuthStore,
-  sessionManager: SessionManager,
-  terminalSessionManager: TerminalSessionManager,
-  terminalRuntimeRegistry: TerminalRuntimeRegistry,
+  services: RuntimeServices,
 ): void {
   let shuttingDown = false;
 
@@ -369,12 +394,31 @@ function attachLifecycleHandlers(
     }
 
     shuttingDown = true;
-    server.close();
-    await terminalRuntimeRegistry.disposeAll();
-    await terminalSessionManager.dispose();
-    await sessionManager.dispose();
-    await authStore.dispose();
-    process.exit(0);
+    logger.info("backend.shutdown.started", {
+      component: "backend",
+      message: "Backend shutdown started",
+    });
+    try {
+      await closeServer(server);
+      await services.terminalRuntimeRegistry.disposeAll();
+      await services.terminalSessionManager.dispose();
+      await services.sessionManager.dispose();
+      await services.authStore.dispose();
+      logger.info("backend.shutdown.completed", {
+        component: "backend",
+        message: "Backend shutdown completed",
+      });
+      await flushAndCloseLogger();
+      process.exit(0);
+    } catch (error) {
+      logger.error("backend.shutdown.failed", {
+        component: "backend",
+        message: "Backend shutdown failed",
+        error,
+      });
+      await flushAndCloseLogger();
+      process.exit(1);
+    }
   };
 
   process.on("SIGINT", () => {
@@ -386,55 +430,100 @@ function attachLifecycleHandlers(
   });
 }
 
-async function startRuntime(): Promise<void> {
-  const runtimeConfig = resolveRuntimeConfig();
-  const tunnelAuthConfig = loadTunnelAuthConfig(process.env);
-  const services = await createRuntimeServices();
-  const app = createHttpApp(services, tunnelAuthConfig);
-  const server = http.createServer(app);
-
-  const devtoolsEnabled = services.sessionManager.isDevtoolsEnabled();
-
-  attachWebSocketServer(server, services.sessionManager, services.authService, {
-    devtoolsEnabled,
-    qualityProbeStore: services.qualityProbeStore,
-    wsSessionController: services.wsSessionController,
-    tunnelAuthConfig,
+async function closeServer(server: http.Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
   });
-  attachTerminalWebSocketServer(
-    server,
-    services.terminalSessionManager,
-    services.terminalRuntimeRegistry,
-    services.authService,
-    services.ptyService,
-    services.tmuxService,
-    { tunnelAuthConfig },
-  );
-  attachDevtoolsProxyServer(
-    server,
-    services.sessionManager,
-    services.authService,
-    {
-      enabled: devtoolsEnabled,
-      tunnelAuthConfig,
-    },
-  );
-  const port = await listenWithFallback(server, runtimeConfig.preferredPort, {
-    host: runtimeConfig.host,
-    maxAttempts: runtimeConfig.strictPort ? 1 : undefined,
-  });
-  // Always pin the hook endpoint to THIS backend's listening port. Inheriting
-  // it from a parent shell spawned by another Runweave backend would deliver
-  // codex hook events to the wrong process.
-  process.env.RUNWEAVE_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal-completion`;
-
-  attachLifecycleHandlers(
-    server,
-    services.authStore,
-    services.sessionManager,
-    services.terminalSessionManager,
-    services.terminalRuntimeRegistry,
-  );
 }
 
-void startRuntime();
+async function startRuntime(): Promise<void> {
+  let stage: BackendStartStage = "runtime-config";
+  try {
+    const runtimeConfig = resolveRuntimeConfig();
+    stage = "tunnel-auth-config";
+    const tunnelAuthConfig = loadTunnelAuthConfig(process.env);
+    stage = "runtime-services";
+    const services = await createRuntimeServices();
+    stage = "http-app";
+    const app = createHttpApp(services, tunnelAuthConfig);
+    const server = http.createServer(app);
+
+    const devtoolsEnabled = services.sessionManager.isDevtoolsEnabled();
+
+    stage = "websocket-servers";
+    attachWebSocketServer(server, services.sessionManager, services.authService, {
+      devtoolsEnabled,
+      qualityProbeStore: services.qualityProbeStore,
+      wsSessionController: services.wsSessionController,
+      tunnelAuthConfig,
+    });
+    attachTerminalWebSocketServer(
+      server,
+      services.terminalSessionManager,
+      services.terminalRuntimeRegistry,
+      services.authService,
+      services.ptyService,
+      services.tmuxService,
+      { tunnelAuthConfig },
+    );
+    attachDevtoolsProxyServer(
+      server,
+      services.sessionManager,
+      services.authService,
+      {
+        enabled: devtoolsEnabled,
+        tunnelAuthConfig,
+      },
+    );
+    stage = "listen";
+    const port = await listenWithFallback(server, runtimeConfig.preferredPort, {
+      host: runtimeConfig.host,
+      maxAttempts: runtimeConfig.strictPort ? 1 : undefined,
+    });
+    // Always pin the hook endpoint to THIS backend's listening port. Inheriting
+    // it from a parent shell spawned by another Runweave backend would deliver
+    // codex hook events to the wrong process.
+    process.env.RUNWEAVE_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal-completion`;
+
+    stage = "lifecycle-handlers";
+    attachLifecycleHandlers(server, services);
+    logger.info("backend.started", {
+      component: "backend",
+      message: "Backend started",
+      logDir: resolveStoragePaths(process.env).backendLogDir,
+      host: runtimeConfig.host,
+      port,
+      runtimeReleaseId: process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || null,
+    });
+  } catch (error) {
+    throw new BackendStartError(stage, error);
+  }
+}
+
+const loggerState = initializeLogger({ env: process.env });
+logger.debug("backend.logger.initialized", {
+  component: "backend",
+  logDir: loggerState.logDir,
+  logToFile: loggerState.logToFile,
+});
+
+startRuntime().catch(async (error: unknown) => {
+  const startError =
+    error instanceof BackendStartError
+      ? error
+      : new BackendStartError("runtime-config", error);
+  logger.error("backend.start.failed", {
+    component: "backend",
+    message: "Backend start failed",
+    stage: startError.stage,
+    error: startError.originalError,
+  });
+  await flushAndCloseLogger();
+  process.exitCode = 1;
+});
