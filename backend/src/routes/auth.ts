@@ -1,9 +1,13 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type {
   ChangePasswordRequest,
   LoginRequest,
 } from "@browser-viewer/shared";
+import {
+  LoginAttemptGuard,
+  type LoginAttemptDecision,
+} from "../auth/login-attempt-guard";
 import type { AuthService } from "../auth/service";
 import { readBearerToken } from "../auth/middleware";
 
@@ -73,16 +77,57 @@ function resolveClientType(request: { headers: Record<string, unknown> }): "web"
   return request.headers["x-auth-client"] === "electron" ? "electron" : "web";
 }
 
+function readFirstHeader(value: string | string[] | undefined): string | null {
+  const header = Array.isArray(value) ? value[0] : value;
+  return header?.trim() || null;
+}
+
+function readForwardedIp(request: Request): string | null {
+  const cloudflareIp = readFirstHeader(request.headers["cf-connecting-ip"]);
+  if (cloudflareIp) {
+    return cloudflareIp;
+  }
+
+  const forwardedFor = readFirstHeader(request.headers["x-forwarded-for"]);
+  return forwardedFor?.split(",")[0]?.trim() || null;
+}
+
+function resolveLoginRequestIp(
+  request: Request,
+  trustProxyHeaders: boolean,
+): string {
+  return (
+    (trustProxyHeaders ? readForwardedIp(request) : null) ??
+    request.ip ??
+    request.socket.remoteAddress ??
+    "unknown"
+  );
+}
+
+function sendRateLimitedLoginResponse(
+  res: Response,
+  decision: LoginAttemptDecision,
+): void {
+  if (decision.retryAfterSeconds != null) {
+    res.setHeader("Retry-After", String(decision.retryAfterSeconds));
+  }
+  res.status(429).json({ message: "Too many login attempts" });
+}
+
 export function createAuthRouter(
   authService: AuthService,
   options?: {
     refreshCookieName?: string;
     secureCookies?: boolean;
+    loginAttemptGuard?: LoginAttemptGuard;
+    trustProxyHeaders?: boolean;
   },
 ): Router {
   const router = Router();
   const refreshCookieName = options?.refreshCookieName ?? "viewer_refresh";
   const secureCookies = options?.secureCookies ?? true;
+  const loginAttemptGuard = options?.loginAttemptGuard ?? new LoginAttemptGuard();
+  const trustProxyHeaders = options?.trustProxyHeaders ?? false;
 
   router.post("/login", async (req, res) => {
     const parsed = loginSchema.safeParse(req.body as LoginRequest);
@@ -95,6 +140,21 @@ export function createAuthRouter(
     }
 
     const clientType = resolveClientType(req);
+    const loginIdentity = {
+      ip: resolveLoginRequestIp(req, trustProxyHeaders),
+      username: parsed.data.username,
+    };
+    const existingLimit = loginAttemptGuard.check(loginIdentity);
+    if (!existingLimit.allowed) {
+      sendRateLimitedLoginResponse(res, existingLimit);
+      return;
+    }
+    const attemptLimit = loginAttemptGuard.recordAttempt(loginIdentity);
+    if (!attemptLimit.allowed) {
+      sendRateLimitedLoginResponse(res, attemptLimit);
+      return;
+    }
+
     const result = await authService.login(
       parsed.data.username,
       parsed.data.password,
@@ -107,10 +167,12 @@ export function createAuthRouter(
       },
     );
     if (!result) {
+      loginAttemptGuard.recordFailure(loginIdentity);
       res.status(401).json({ message: "Invalid credentials" });
       return;
     }
 
+    loginAttemptGuard.recordSuccess(loginIdentity);
     if (clientType === "web") {
       res.setHeader(
         "Set-Cookie",

@@ -76,6 +76,17 @@ interface RuntimeServices {
   tmuxService: TmuxService;
 }
 
+const LOCAL_ONLY_FORWARDED_HEADER_NAMES = [
+  "cf-connecting-ip",
+  "cf-ray",
+  "forwarded",
+  "via",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-real-ip",
+] as const;
+
 type BackendStartStage =
   | "runtime-config"
   | "tunnel-auth-config"
@@ -147,6 +158,46 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+}
+
+function hasForwardedHeaders(req: express.Request): boolean {
+  return LOCAL_ONLY_FORWARDED_HEADER_NAMES.some(
+    (headerName) => req.headers[headerName] !== undefined,
+  );
+}
+
+function isLoopbackAddress(address: string | undefined): boolean {
+  return (
+    address === "127.0.0.1" ||
+    address === "::1" ||
+    address === "::ffff:127.0.0.1"
+  );
+}
+
+function isLocalDirectRequest(req: express.Request): boolean {
+  return isLoopbackAddress(req.socket.remoteAddress) && !hasForwardedHeaders(req);
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === "127.0.0.1" || hostname === "::1" || hostname === "localhost";
+}
+
+function isValidLocalCdpEndpoint(endpoint: string): boolean {
+  try {
+    const parsed = new URL(endpoint);
+    return (
+      parsed.protocol === "http:" &&
+      isLoopbackHostname(parsed.hostname) &&
+      parsed.port !== "" &&
+      parsed.pathname === "/" &&
+      parsed.search === "" &&
+      parsed.hash === "" &&
+      parsed.username === "" &&
+      parsed.password === ""
+    );
+  } catch {
+    return false;
+  }
 }
 
 function resolveSessionRestoreEnabled(env: NodeJS.ProcessEnv): boolean {
@@ -287,18 +338,24 @@ function createHttpApp(
   // Internal endpoint for Electron to propagate CDP proxy endpoint in dev mode.
   // In production, the env is inherited via child process spawn.
   app.put("/internal/cdp-endpoint", requireTunnelAuth, (req, res) => {
-    const { endpoint } = req.body as { endpoint?: string };
-    if (typeof endpoint === "string" && endpoint) {
-      process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT = endpoint;
-      logger.info("backend.cdp-endpoint.updated", {
-        component: "backend",
-        message: "CDP endpoint set via internal API",
-        endpoint,
-      });
-      res.json({ ok: true });
-    } else {
-      res.status(400).json({ error: "endpoint required" });
+    if (!isLocalDirectRequest(req)) {
+      res.status(403).json({ error: "Local request required" });
+      return;
     }
+
+    const { endpoint } = req.body as { endpoint?: string };
+    if (typeof endpoint !== "string" || !isValidLocalCdpEndpoint(endpoint)) {
+      res.status(400).json({ error: "valid local endpoint required" });
+      return;
+    }
+
+    process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT = endpoint;
+    logger.info("backend.cdp-endpoint.updated", {
+      component: "backend",
+      message: "CDP endpoint set via internal API",
+      endpoint,
+    });
+    res.json({ ok: true });
   });
 
   app.use(
@@ -311,13 +368,19 @@ function createHttpApp(
     }),
   );
 
-  app.use("/test", createTestRouter());
+  if (process.env.RUNWEAVE_E2E_TEST_ROUTES === "true") {
+    app.use("/test", createTestRouter());
+  }
+  app.use("/test", (_req, res) => {
+    res.status(404).json({ message: "Not found" });
+  });
   app.use("/api", requireTunnelAuth);
   app.use(
     "/api/auth",
     createAuthRouter(services.authService, {
       refreshCookieName: services.authCookieName,
       secureCookies: services.authSecureCookies,
+      trustProxyHeaders: tunnelAuthConfig !== null,
     }),
   );
   app.use(
