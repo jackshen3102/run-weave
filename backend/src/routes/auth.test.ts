@@ -5,27 +5,29 @@ import { createAuthRouter } from "./auth";
 
 function createTestServer() {
   const authService = {
-    login: vi.fn(async (username: string, password: string, params: unknown) => {
-      if (username !== "admin" || password !== "secret") {
-        return null;
-      }
+    login: vi.fn(
+      async (username: string, password: string, params: unknown) => {
+        if (username !== "admin" || password !== "secret") {
+          return null;
+        }
 
-      if ((params as { clientType?: string }).clientType === "web") {
+        if ((params as { clientType?: string }).clientType === "web") {
+          return {
+            accessToken: "access-token-abc",
+            refreshToken: "refresh-token-abc",
+            expiresIn: 900,
+            sessionId: "session-web-1",
+          };
+        }
+
         return {
           accessToken: "access-token-abc",
           refreshToken: "refresh-token-abc",
           expiresIn: 900,
-          sessionId: "session-web-1",
+          sessionId: "session-electron-1",
         };
-      }
-
-      return {
-        accessToken: "access-token-abc",
-        refreshToken: "refresh-token-abc",
-        expiresIn: 900,
-        sessionId: "session-electron-1",
-      };
-    }),
+      },
+    ),
     verifyAccessToken: vi.fn((token: string) =>
       token === "access-token-abc" ? { sessionId: "session-web-1" } : null,
     ),
@@ -56,10 +58,13 @@ function createTestServer() {
 
   const app = express();
   app.use(express.json());
-  app.use("/api/auth", createAuthRouter(authService as never, {
-    refreshCookieName: "viewer_refresh",
-    secureCookies: false,
-  }));
+  app.use(
+    "/api/auth",
+    createAuthRouter(authService as never, {
+      refreshCookieName: "viewer_refresh",
+      secureCookies: false,
+    }),
+  );
   const server = http.createServer(app);
 
   return { server, authService };
@@ -119,7 +124,9 @@ describe("auth routes", () => {
       expiresIn: 900,
       sessionId: "session-web-1",
     });
-    expect(response.headers.get("set-cookie")).toContain("viewer_refresh=refresh-token-abc");
+    expect(response.headers.get("set-cookie")).toContain(
+      "viewer_refresh=refresh-token-abc",
+    );
     expect(authService.login).toHaveBeenCalledWith("admin", "secret", {
       clientType: "web",
       connectionId: undefined,
@@ -154,6 +161,33 @@ describe("auth routes", () => {
     });
   });
 
+  it("returns refresh token in the response for app login", async () => {
+    const { server, authService } = createTestServer();
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-auth-client": "app",
+      },
+      body: JSON.stringify({ username: "admin", password: "secret" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      accessToken: "access-token-abc",
+      refreshToken: "refresh-token-abc",
+      expiresIn: 900,
+      sessionId: "session-electron-1",
+    });
+    expect(authService.login).toHaveBeenCalledWith("admin", "secret", {
+      clientType: "app",
+      connectionId: undefined,
+    });
+  });
+
   it("refreshes a web session from the refresh cookie", async () => {
     const { server, authService } = createTestServer();
     servers.push(server);
@@ -172,8 +206,12 @@ describe("auth routes", () => {
       expiresIn: 900,
       sessionId: "session-web-1",
     });
-    expect(response.headers.get("set-cookie")).toContain("viewer_refresh=refresh-token-next");
-    expect(authService.refreshSession).toHaveBeenCalledWith("refresh-token-abc");
+    expect(response.headers.get("set-cookie")).toContain(
+      "viewer_refresh=refresh-token-next",
+    );
+    expect(authService.refreshSession).toHaveBeenCalledWith(
+      "refresh-token-abc",
+    );
   });
 
   it("refreshes an electron session from the request body", async () => {
@@ -197,7 +235,35 @@ describe("auth routes", () => {
       expiresIn: 900,
       sessionId: "session-web-1",
     });
-    expect(authService.refreshSession).toHaveBeenCalledWith("refresh-token-abc");
+    expect(authService.refreshSession).toHaveBeenCalledWith(
+      "refresh-token-abc",
+    );
+  });
+
+  it("refreshes an app session from the request body", async () => {
+    const { server, authService } = createTestServer();
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-auth-client": "app",
+      },
+      body: JSON.stringify({ refreshToken: "refresh-token-abc" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      accessToken: "access-token-next",
+      refreshToken: "refresh-token-next",
+      expiresIn: 900,
+      sessionId: "session-web-1",
+    });
+    expect(authService.refreshSession).toHaveBeenCalledWith(
+      "refresh-token-abc",
+    );
   });
 
   it("verifies a valid bearer access token", async () => {
@@ -211,7 +277,9 @@ describe("auth routes", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ valid: true });
-    expect(authService.verifyAccessToken).toHaveBeenCalledWith("access-token-abc");
+    expect(authService.verifyAccessToken).toHaveBeenCalledWith(
+      "access-token-abc",
+    );
   });
 
   it("logs out the current session and clears the refresh cookie", async () => {

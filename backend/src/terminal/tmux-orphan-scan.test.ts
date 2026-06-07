@@ -16,6 +16,7 @@ function createSession(
     scrollback: "",
     status: "running",
     createdAt: new Date("2026-05-15T00:00:00.000Z"),
+    lastActivityAt: new Date("2026-05-15T00:00:00.000Z"),
     runtimeKind: "pty",
     ...overrides,
   };

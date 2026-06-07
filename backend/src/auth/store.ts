@@ -1,3 +1,5 @@
+import type { AuthClientType } from "@browser-viewer/shared";
+
 export interface PersistedRefreshSessionRecord {
   id: string;
   username: string;
@@ -7,7 +9,7 @@ export interface PersistedRefreshSessionRecord {
   expiresAt: string;
   revokedAt: string | null;
   replacedBySessionId: string | null;
-  clientType: "web" | "electron";
+  clientType: AuthClientType;
   connectionId: string | null;
 }
 

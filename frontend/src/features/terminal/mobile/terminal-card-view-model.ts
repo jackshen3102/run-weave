@@ -116,7 +116,9 @@ export function buildMobileTerminalCards(params: {
       };
     }
 
-    const scrollback = stripTerminalControlSequences(session.tailScrollback);
+    const scrollback = stripTerminalControlSequences(
+      session.tailScrollback ?? "",
+    );
     const tailPreview = tailLines(scrollback, 80);
     const inference = inferTerminalState({
       sessionStatus: session.status,

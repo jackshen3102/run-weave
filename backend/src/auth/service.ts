@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { randomUUID } from "node:crypto";
+import type { AuthClientType } from "@browser-viewer/shared";
 import type { AuthConfig } from "./config";
 import type { AuthStore, PersistedRefreshSessionRecord } from "./store";
 import {
@@ -10,7 +11,7 @@ import {
 } from "./jwt";
 
 interface LoginParams {
-  clientType: "web" | "electron";
+  clientType: AuthClientType;
   connectionId?: string;
 }
 
@@ -279,7 +280,11 @@ export class AuthService {
   verifyTemporaryToken(
     token: string,
     params: {
-      tokenType: "viewer-ws" | "terminal-ws" | "terminal-events-ws" | "devtools";
+      tokenType:
+        | "viewer-ws"
+        | "terminal-ws"
+        | "terminal-events-ws"
+        | "devtools";
       resource: TokenResource;
     },
   ): TemporaryTokenVerification | null {

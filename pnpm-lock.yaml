@@ -40,6 +40,9 @@ importers:
 
   app:
     dependencies:
+      "@browser-viewer/shared":
+        specifier: workspace:*
+        version: link:../packages/shared
       "@capacitor/core":
         specifier: ^8.4.0
         version: 8.4.0

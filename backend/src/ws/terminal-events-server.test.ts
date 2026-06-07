@@ -58,7 +58,9 @@ function waitForMessage<T>(socket: WebSocket): Promise<T> {
     };
     const onClose = (code: number, reason: Buffer): void => {
       cleanup();
-      reject(new Error(`Socket closed before message: ${code} ${String(reason)}`));
+      reject(
+        new Error(`Socket closed before message: ${code} ${String(reason)}`),
+      );
     };
     socket.once("message", onMessage);
     socket.once("error", onError);
@@ -66,7 +68,9 @@ function waitForMessage<T>(socket: WebSocket): Promise<T> {
   });
 }
 
-function waitForClose(socket: WebSocket): Promise<{ code: number; reason: string }> {
+function waitForClose(
+  socket: WebSocket,
+): Promise<{ code: number; reason: string }> {
   return new Promise((resolve) => {
     socket.once("close", (code, reason) => {
       resolve({ code, reason: String(reason) });
@@ -92,6 +96,7 @@ describe("terminal events websocket server", () => {
       scrollback: "",
       status: "running" as const,
       createdAt: new Date("2026-06-07T00:00:00.000Z"),
+      lastActivityAt: new Date("2026-06-07T00:00:00.000Z"),
       runtimeKind: "tmux" as const,
     };
     completionEventService.record(

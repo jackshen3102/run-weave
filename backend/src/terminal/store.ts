@@ -17,6 +17,7 @@ export interface PersistedTerminalSessionRecord {
   scrollback: string;
   status: "running" | "exited";
   createdAt: string;
+  lastActivityAt?: string;
   exitCode?: number;
   runtimeKind?: TerminalRuntimeKind;
   tmuxSessionName?: string;
@@ -44,6 +45,7 @@ export interface TerminalRuntimeMetadata {
 export interface UpdateTerminalSessionExitParams {
   terminalSessionId: string;
   status: "exited";
+  lastActivityAt?: string;
   exitCode?: number;
 }
 
@@ -61,6 +63,12 @@ export interface UpdateTerminalSessionMetadataParams {
   terminalSessionId: string;
   cwd: string;
   activeCommand: string | null;
+  lastActivityAt?: string;
+}
+
+export interface UpdateTerminalSessionActivityParams {
+  terminalSessionId: string;
+  lastActivityAt: string;
 }
 
 export interface UpdateTerminalSessionLaunchParams {
@@ -69,8 +77,7 @@ export interface UpdateTerminalSessionLaunchParams {
   args: string[];
 }
 
-export interface UpdateTerminalSessionRuntimeMetadataParams
-  extends TerminalRuntimeMetadata {
+export interface UpdateTerminalSessionRuntimeMetadataParams extends TerminalRuntimeMetadata {
   terminalSessionId: string;
 }
 
@@ -99,6 +106,9 @@ export interface TerminalSessionStore {
   insertSession(session: PersistedTerminalSessionRecord): Promise<void>;
   updateSessionMetadata(
     params: UpdateTerminalSessionMetadataParams,
+  ): Promise<void>;
+  updateSessionActivity(
+    params: UpdateTerminalSessionActivityParams,
   ): Promise<void>;
   updateSessionLaunch(params: UpdateTerminalSessionLaunchParams): Promise<void>;
   updateSessionRuntimeMetadata(

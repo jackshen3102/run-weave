@@ -434,12 +434,13 @@ export function createTerminalRouter(
     res.json(payload);
   });
 
-  router.get("/mobile/overview", async (_req, res) => {
+  router.get("/mobile/overview", async (req, res) => {
     try {
       res.json(
         await buildTerminalMobileOverviewPayload(
           terminalSessionManager,
           options?.tmuxService,
+          { includeTail: req.query.includeTail !== "false" },
         ),
       );
     } catch (error) {
@@ -577,13 +578,16 @@ export function createTerminalRouter(
             }
 
             const sanitizedError = sanitizeTerminalError(error);
-            terminalLogger.warn("terminal.session.runtime.tmux-launch-fallback", {
-              message: "Tmux launch failed; falling back to pty",
-              terminalSessionId: session.id,
-              tmuxSessionName: attemptedTmuxTarget?.sessionName,
-              tmuxSocketPath: attemptedTmuxTarget?.socketPath,
-              error: sanitizedError,
-            });
+            terminalLogger.warn(
+              "terminal.session.runtime.tmux-launch-fallback",
+              {
+                message: "Tmux launch failed; falling back to pty",
+                terminalSessionId: session.id,
+                tmuxSessionName: attemptedTmuxTarget?.sessionName,
+                tmuxSocketPath: attemptedTmuxTarget?.socketPath,
+                error: sanitizedError,
+              },
+            );
             if (attemptedTmuxTarget) {
               await options.tmuxService.killSession(attemptedTmuxTarget);
             }
@@ -920,7 +924,9 @@ export function createTerminalRouter(
       if (session) {
         await killTmuxSessionForTerminal(session, options?.tmuxService);
       }
-      const deleted = await terminalSessionManager.destroySession(req.params.id);
+      const deleted = await terminalSessionManager.destroySession(
+        req.params.id,
+      );
       if (!deleted) {
         res.status(404).json({ message: "Terminal session not found" });
         return;

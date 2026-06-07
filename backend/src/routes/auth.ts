@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type {
+  AuthClientType,
   ChangePasswordRequest,
   LoginRequest,
 } from "@browser-viewer/shared";
@@ -25,7 +26,9 @@ const changePasswordSchema = z.object({
   newPassword: z.string().min(1),
 });
 
-function parseCookieHeader(cookieHeader: string | undefined): Record<string, string> {
+function parseCookieHeader(
+  cookieHeader: string | undefined,
+): Record<string, string> {
   if (!cookieHeader) {
     return {};
   }
@@ -73,8 +76,15 @@ function buildRefreshCookie(params: {
   return segments.join("; ");
 }
 
-function resolveClientType(request: { headers: Record<string, unknown> }): "web" | "electron" {
-  return request.headers["x-auth-client"] === "electron" ? "electron" : "web";
+function resolveClientType(request: {
+  headers: Record<string, unknown>;
+}): AuthClientType {
+  const header = request.headers["x-auth-client"];
+  return header === "electron" || header === "app" ? header : "web";
+}
+
+function usesBodyRefreshToken(clientType: AuthClientType): boolean {
+  return clientType === "electron" || clientType === "app";
 }
 
 function readFirstHeader(value: string | string[] | undefined): string | null {
@@ -126,7 +136,8 @@ export function createAuthRouter(
   const router = Router();
   const refreshCookieName = options?.refreshCookieName ?? "viewer_refresh";
   const secureCookies = options?.secureCookies ?? true;
-  const loginAttemptGuard = options?.loginAttemptGuard ?? new LoginAttemptGuard();
+  const loginAttemptGuard =
+    options?.loginAttemptGuard ?? new LoginAttemptGuard();
   const trustProxyHeaders = options?.trustProxyHeaders ?? false;
 
   router.post("/login", async (req, res) => {
@@ -173,7 +184,7 @@ export function createAuthRouter(
     }
 
     loginAttemptGuard.recordSuccess(loginIdentity);
-    if (clientType === "web") {
+    if (!usesBodyRefreshToken(clientType)) {
       res.setHeader(
         "Set-Cookie",
         buildRefreshCookie({
@@ -201,12 +212,11 @@ export function createAuthRouter(
 
   router.post("/refresh", async (req, res) => {
     const clientType = resolveClientType(req);
-    const refreshToken =
-      clientType === "electron"
-        ? refreshSchema.safeParse(req.body).success
-          ? refreshSchema.parse(req.body).refreshToken
-          : null
-        : parseCookieHeader(req.headers.cookie)[refreshCookieName] ?? null;
+    const refreshToken = usesBodyRefreshToken(clientType)
+      ? refreshSchema.safeParse(req.body).success
+        ? refreshSchema.parse(req.body).refreshToken
+        : null
+      : (parseCookieHeader(req.headers.cookie)[refreshCookieName] ?? null);
     if (!refreshToken) {
       res.status(401).json({ message: "Unauthorized" });
       return;

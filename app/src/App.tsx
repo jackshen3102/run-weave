@@ -1,44 +1,166 @@
-import {
-  IonApp,
-  IonButton,
-  IonContent,
-  IonHeader,
-  IonPage,
-  IonText,
-  IonTitle,
-  IonToolbar,
-} from '@ionic/react';
+import { IonApp } from "@ionic/react";
+import { useCallback, useEffect, useState } from "react";
+import type { TerminalMobileOverviewResponse } from "@browser-viewer/shared";
 
-import { useHelloStore } from './store/use-hello-store';
+import { HomePage } from "./pages/HomePage";
+import { LoginPage } from "./pages/LoginPage";
+import {
+  login,
+  logout,
+  refreshSession,
+  verifySession,
+  type AppAuthSession,
+} from "./services/auth";
+import { ApiError } from "./services/http";
+import { getTerminalMobileOverview } from "./services/terminal";
+import { useAuthStore } from "./store/use-auth-store";
+
+type StartupState = "checking" | "ready";
 
 function App() {
-  const greeting = useHelloStore((state) => state.greeting);
-  const count = useHelloStore((state) => state.count);
-  const increment = useHelloStore((state) => state.increment);
+  const {
+    apiBase,
+    accessToken,
+    refreshToken,
+    isAuthenticated,
+    setApiBase,
+    setAuthenticated,
+    clearSession,
+  } = useAuthStore();
+  const [startupState, setStartupState] = useState<StartupState>("checking");
+  const [overview, setOverview] =
+    useState<TerminalMobileOverviewResponse | null>(null);
+  const [homeLoading, setHomeLoading] = useState(false);
+  const [homeError, setHomeError] = useState<string | null>(null);
+
+  const persistSession = useCallback(
+    (nextApiBase: string, session: AppAuthSession) => {
+      setAuthenticated(nextApiBase, session);
+    },
+    [setAuthenticated],
+  );
+
+  const refreshStoredSession = useCallback(async (): Promise<string | null> => {
+    if (!refreshToken) {
+      return null;
+    }
+    try {
+      const refreshed = await refreshSession(apiBase, refreshToken);
+      persistSession(apiBase, refreshed);
+      return refreshed.accessToken;
+    } catch {
+      clearSession();
+      return null;
+    }
+  }, [apiBase, clearSession, persistSession, refreshToken]);
+
+  const loadOverview = useCallback(
+    async (token = accessToken, targetApiBase = apiBase) => {
+      if (!token) {
+        return;
+      }
+      setHomeLoading(true);
+      setHomeError(null);
+      try {
+        setOverview(await getTerminalMobileOverview(targetApiBase, token));
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          const refreshedToken = await refreshStoredSession();
+          if (!refreshedToken) {
+            clearSession();
+            setOverview(null);
+            return;
+          }
+          setOverview(
+            await getTerminalMobileOverview(targetApiBase, refreshedToken),
+          );
+        } else {
+          setHomeError(error instanceof Error ? error.message : "加载失败");
+        }
+      } finally {
+        setHomeLoading(false);
+      }
+    },
+    [accessToken, apiBase, clearSession, refreshStoredSession],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkSession = async () => {
+      if (!accessToken) {
+        if (!cancelled) {
+          setStartupState("ready");
+        }
+        return;
+      }
+
+      try {
+        await verifySession(apiBase, accessToken);
+        if (!cancelled) {
+          setStartupState("ready");
+          await loadOverview(accessToken);
+        }
+      } catch {
+        const refreshedToken = await refreshStoredSession();
+        if (!cancelled) {
+          setStartupState("ready");
+          if (refreshedToken) {
+            await loadOverview(refreshedToken);
+          }
+        }
+      }
+    };
+
+    void checkSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, apiBase, loadOverview, refreshStoredSession]);
+
+  const handleLogin = async (params: {
+    apiBase: string;
+    username: string;
+    password: string;
+  }) => {
+    const nextApiBase = params.apiBase.replace(/\/+$/, "");
+    const session = await login(nextApiBase, {
+      username: params.username,
+      password: params.password,
+    });
+    persistSession(nextApiBase, session);
+    await loadOverview(session.accessToken, nextApiBase);
+  };
+
+  const handleLogout = () => {
+    if (accessToken) {
+      void logout(apiBase, accessToken).catch(() => undefined);
+    }
+    clearSession();
+    setOverview(null);
+  };
+
+  if (startupState === "checking") {
+    return <IonApp className="app-loading" />;
+  }
 
   return (
     <IonApp>
-      <IonPage>
-        <IonHeader translucent>
-          <IonToolbar>
-            <IonTitle>Runweave</IonTitle>
-          </IonToolbar>
-        </IonHeader>
-        <IonContent fullscreen>
-          <main className="hello-screen">
-            <section className="hello-panel" aria-labelledby="hello-title">
-              <p className="hello-kicker">Ionic React + iOS</p>
-              <h1 id="hello-title">{greeting}</h1>
-              <IonText color="medium">
-                <p>Ready for the next mobile capabilities.</p>
-              </IonText>
-              <IonButton expand="block" onClick={increment}>
-                Tap {count === 1 ? '1 time' : `${count} times`}
-              </IonButton>
-            </section>
-          </main>
-        </IonContent>
-      </IonPage>
+      {isAuthenticated ? (
+        <HomePage
+          apiBase={apiBase}
+          error={homeError}
+          loading={homeLoading}
+          onLogout={handleLogout}
+          onRefresh={loadOverview}
+          overview={overview}
+        />
+      ) : (
+        <LoginPage
+          apiBase={apiBase}
+          onApiBaseChange={setApiBase}
+          onLogin={handleLogin}
+        />
+      )}
     </IonApp>
   );
 }

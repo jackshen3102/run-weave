@@ -39,6 +39,8 @@ export interface LoginRequest {
   password: string;
 }
 
+export type AuthClientType = "web" | "electron" | "app";
+
 export interface LoginResponse {
   accessToken: string;
   refreshToken?: string;
