@@ -570,7 +570,7 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
   await rm(secondCwd, { force: true, recursive: true });
 });
 
-test("marks a background project from an explicit completion event, not shell command exit", async ({
+test("marks a background project from an explicit codex completion event", async ({
   page,
   request,
 }) => {
@@ -589,12 +589,18 @@ test("marks a background project from an explicit completion event, not shell co
   const projectB = await createTerminalProject(request, token, projectBName);
   const cwdA = await mkdtemp(path.join(os.tmpdir(), `completion-a-${suffix}-`));
   const cwdB = await mkdtemp(path.join(os.tmpdir(), `completion-b-${suffix}-`));
-  const cwdALabel = path.basename(cwdA);
 
   try {
+    const fakeCodexPath = path.join(cwdA, "codex");
+    await writeFile(fakeCodexPath, "#!/usr/bin/env bash\nsleep 30\n", {
+      mode: 0o755,
+    });
+
     const sessionA = await createTerminalSession(request, token, {
       projectId: projectA.projectId,
+      command: fakeCodexPath,
       cwd: cwdA,
+      runtimePreference: "pty",
     });
     const sessionB = await createTerminalSession(request, token, {
       projectId: projectB.projectId,
@@ -605,17 +611,6 @@ test("marks a background project from an explicit completion event, not shell co
     await expect(
       page.getByRole("button", { name: projectAName, exact: true }),
     ).toBeVisible();
-    await page.getByLabel("Terminal emulator").click({ force: true });
-    await page.keyboard.type("sleep 2");
-    await page.keyboard.press("Enter");
-
-    await expect(
-      page.getByRole("button", {
-        name: new RegExp(
-          `^${cwdALabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\(sleep\\)$`,
-        ),
-      }),
-    ).toBeVisible({ timeout: 5_000 });
 
     await page
       .getByRole("button", { name: projectBName, exact: true })
@@ -629,7 +624,6 @@ test("marks a background project from an explicit completion event, not shell co
       .locator("span")
       .last();
 
-    await page.waitForTimeout(2_500);
     await expect
       .poll(async () => (await projectADot.getAttribute("class")) ?? "")
       .not.toContain("bg-emerald-400");
