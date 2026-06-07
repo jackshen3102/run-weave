@@ -31,6 +31,16 @@ function buildInitialExpanded(groups: TerminalHomeProjectGroup[]): Set<string> {
   return new Set(groups.slice(0, 4).map((group) => group.project.projectId));
 }
 
+function formatApiBaseLabel(apiBase: string): string {
+  if (apiBase) {
+    return apiBase.replace(/^https?:\/\//, "");
+  }
+  if (typeof window !== "undefined") {
+    return window.location.host;
+  }
+  return "local";
+}
+
 export function HomePage({
   apiBase,
   overview,
@@ -91,7 +101,7 @@ export function HomePage({
           <header className="home-header">
             <div>
               <p>Runweave</p>
-              <span>{apiBase.replace(/^https?:\/\//, "")}</span>
+              <span>{formatApiBaseLabel(apiBase)}</span>
             </div>
             <nav aria-label="Home actions">
               <IonButton fill="clear" onClick={() => void onRefresh()}>

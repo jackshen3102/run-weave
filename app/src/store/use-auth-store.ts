@@ -5,18 +5,14 @@ import type { AppAuthSession } from "../services/auth";
 
 const STORAGE_KEY = "runweave-app-auth-session";
 
-interface StoredAuthSession extends AppAuthSession {
+type AuthState = AppAuthSession & {
   apiBase: string;
-}
-
-type AuthState = StoredAuthSession & {
   isAuthenticated: boolean;
-  setApiBase: (apiBase: string) => void;
-  setAuthenticated: (apiBase: string, session: AppAuthSession) => void;
+  setAuthenticated: (session: AppAuthSession) => void;
   clearSession: () => void;
 };
 
-function readStoredSession(): StoredAuthSession | null {
+function readStoredSession(): AppAuthSession | null {
   if (typeof window === "undefined") {
     return null;
   }
@@ -27,12 +23,11 @@ function readStoredSession(): StoredAuthSession | null {
     if (
       parsed &&
       typeof parsed === "object" &&
-      typeof parsed.apiBase === "string" &&
       typeof parsed.accessToken === "string" &&
       typeof parsed.refreshToken === "string" &&
       typeof parsed.sessionId === "string"
     ) {
-      return parsed as StoredAuthSession;
+      return parsed as AppAuthSession;
     }
   } catch {
     window.localStorage.removeItem(STORAGE_KEY);
@@ -40,7 +35,7 @@ function readStoredSession(): StoredAuthSession | null {
   return null;
 }
 
-function persistSession(session: StoredAuthSession): void {
+function persistSession(session: AppAuthSession): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -55,7 +50,7 @@ function clearStoredSession(): void {
 }
 
 const storedSession = readStoredSession();
-const defaultApiBase = storedSession?.apiBase ?? resolveDefaultApiBase();
+const defaultApiBase = resolveDefaultApiBase();
 
 export const useAuthStore = create<AuthState>((set) => ({
   apiBase: defaultApiBase,
@@ -65,11 +60,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   expiresAt: storedSession?.expiresAt ?? 0,
   sessionId: storedSession?.sessionId ?? "",
   isAuthenticated: Boolean(storedSession?.accessToken),
-  setApiBase: (apiBase) => set({ apiBase: apiBase.trim() || defaultApiBase }),
-  setAuthenticated: (apiBase, session) => {
-    const stored = { apiBase: apiBase.replace(/\/+$/, ""), ...session };
-    persistSession(stored);
-    set({ ...stored, isAuthenticated: true });
+  setAuthenticated: (session) => {
+    persistSession(session);
+    set({ ...session, isAuthenticated: true });
   },
   clearSession: () => {
     clearStoredSession();

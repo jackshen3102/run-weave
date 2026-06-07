@@ -8,17 +8,10 @@ import {
 } from "@ionic/react";
 import { FormEvent, useState } from "react";
 
-import { isLocalApiBaseEditable } from "../config/api-base";
 import { ApiError } from "../services/http";
 
 interface LoginPageProps {
-  apiBase: string;
-  onApiBaseChange: (apiBase: string) => void;
-  onLogin: (params: {
-    apiBase: string;
-    username: string;
-    password: string;
-  }) => Promise<void>;
+  onLogin: (params: { username: string; password: string }) => Promise<void>;
 }
 
 function resolveLoginError(error: unknown): string {
@@ -31,16 +24,11 @@ function resolveLoginError(error: unknown): string {
   return "无法连接服务";
 }
 
-export function LoginPage({
-  apiBase,
-  onApiBaseChange,
-  onLogin,
-}: LoginPageProps) {
+export function LoginPage({ onLogin }: LoginPageProps) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const editableApiBase = isLocalApiBaseEditable();
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -48,7 +36,6 @@ export function LoginPage({
     setSubmitting(true);
     try {
       await onLogin({
-        apiBase: apiBase.trim(),
         username: username.trim(),
         password,
       });
@@ -68,17 +55,6 @@ export function LoginPage({
             <h1>Sign in</h1>
           </section>
           <form className="login-form" onSubmit={handleSubmit}>
-            <IonInput
-              className="app-input"
-              disabled={!editableApiBase || submitting}
-              label="Service"
-              labelPlacement="stacked"
-              onIonInput={(event) =>
-                onApiBaseChange(String(event.detail.value ?? ""))
-              }
-              readonly={!editableApiBase}
-              value={apiBase}
-            />
             <IonInput
               className="app-input"
               autocomplete="username"

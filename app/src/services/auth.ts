@@ -24,7 +24,7 @@ function toAppAuthSession(
   response: LoginResponse | RefreshSessionResponse,
 ): AppAuthSession {
   if (!response.refreshToken) {
-    throw new Error("Login response did not include an app refresh token");
+    throw new Error("当前后端未启用 App 登录协议，请重启或更新后端后再试");
   }
   return {
     accessToken: response.accessToken,

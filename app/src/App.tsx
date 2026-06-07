@@ -23,7 +23,6 @@ function App() {
     accessToken,
     refreshToken,
     isAuthenticated,
-    setApiBase,
     setAuthenticated,
     clearSession,
   } = useAuthStore();
@@ -34,8 +33,8 @@ function App() {
   const [homeError, setHomeError] = useState<string | null>(null);
 
   const persistSession = useCallback(
-    (nextApiBase: string, session: AppAuthSession) => {
-      setAuthenticated(nextApiBase, session);
+    (session: AppAuthSession) => {
+      setAuthenticated(session);
     },
     [setAuthenticated],
   );
@@ -46,7 +45,7 @@ function App() {
     }
     try {
       const refreshed = await refreshSession(apiBase, refreshToken);
-      persistSession(apiBase, refreshed);
+      persistSession(refreshed);
       return refreshed.accessToken;
     } catch {
       clearSession();
@@ -118,17 +117,15 @@ function App() {
   }, [accessToken, apiBase, loadOverview, refreshStoredSession]);
 
   const handleLogin = async (params: {
-    apiBase: string;
     username: string;
     password: string;
   }) => {
-    const nextApiBase = params.apiBase.replace(/\/+$/, "");
-    const session = await login(nextApiBase, {
+    const session = await login(apiBase, {
       username: params.username,
       password: params.password,
     });
-    persistSession(nextApiBase, session);
-    await loadOverview(session.accessToken, nextApiBase);
+    persistSession(session);
+    await loadOverview(session.accessToken, apiBase);
   };
 
   const handleLogout = () => {
@@ -155,11 +152,7 @@ function App() {
           overview={overview}
         />
       ) : (
-        <LoginPage
-          apiBase={apiBase}
-          onApiBaseChange={setApiBase}
-          onLogin={handleLogin}
-        />
+        <LoginPage onLogin={handleLogin} />
       )}
     </IonApp>
   );
