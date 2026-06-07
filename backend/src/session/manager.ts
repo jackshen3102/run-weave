@@ -376,6 +376,11 @@ export class SessionManager {
       message: "Failed to restore session",
       sessionId,
       error,
+      legacyConsole: {
+        method: "error",
+        message: "[viewer-be] failed to restore session",
+        meta: { sessionId, error: String(error) },
+      },
     });
   }
 

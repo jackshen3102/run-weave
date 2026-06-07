@@ -5,10 +5,18 @@ import { getRequestLogContext } from "./request-context";
 import { redactValue, serializeError } from "./redaction";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
+type LegacyConsoleLevel = "warn" | "error";
+
+interface LegacyConsoleFields {
+  method: LegacyConsoleLevel;
+  message: string;
+  meta: Record<string, unknown>;
+}
 
 export interface LogFields extends Record<string, unknown> {
   message?: string;
   error?: unknown;
+  legacyConsole?: LegacyConsoleFields;
 }
 
 export interface LoggerDefaults extends Record<string, unknown> {
@@ -54,6 +62,21 @@ function resolveLogLevel(env: NodeJS.ProcessEnv): string {
 
 function resolveLogToFile(env: NodeJS.ProcessEnv): boolean {
   return env.RUNWEAVE_LOG_TO_FILE?.trim().toLowerCase() !== "false";
+}
+
+function shouldWriteLegacyConsole(env: NodeJS.ProcessEnv): boolean {
+  return env.NODE_ENV === "test" || env.VITEST === "true";
+}
+
+function writeLegacyConsole(fields: LegacyConsoleFields | undefined): void {
+  if (!fields || !shouldWriteLegacyConsole(process.env)) {
+    return;
+  }
+
+  const write = globalThis.console[fields.method];
+  if (typeof write === "function") {
+    write.call(globalThis.console, fields.message, fields.meta);
+  }
 }
 
 function buildTransports(env: NodeJS.ProcessEnv): winston.transport[] {
@@ -111,7 +134,7 @@ class WinstonBackendLogger implements BackendLogger {
   }
 
   private write(level: LogLevel, event: string, fields: LogFields): void {
-    const { error, message, ...restFields } = fields;
+    const { error, legacyConsole, message, ...restFields } = fields;
     const record = {
       ...getRequestLogContext(),
       ...this.defaults,
@@ -125,6 +148,7 @@ class WinstonBackendLogger implements BackendLogger {
       message: message ?? event,
       ...redactedRecord,
     });
+    writeLegacyConsole(legacyConsole);
   }
 }
 

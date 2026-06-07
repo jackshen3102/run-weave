@@ -44,6 +44,14 @@ export async function logOrphanedTmuxSessions(
       message: "Skipped orphaned tmux session scan",
       socketPath: scanner.socketPath,
       reason: unavailableReason ?? "tmux unavailable",
+      legacyConsole: {
+        method: "warn",
+        message: "[viewer-be] skipped orphaned tmux session scan",
+        meta: {
+          socketPath: scanner.socketPath,
+          reason: unavailableReason ?? "tmux unavailable",
+        },
+      },
     });
     return;
   }
@@ -74,6 +82,11 @@ export async function logOrphanedTmuxSessions(
       message: "Failed to scan orphaned tmux sessions",
       socketPath: scanner.socketPath,
       error,
+      legacyConsole: {
+        method: "warn",
+        message: "[viewer-be] failed to scan orphaned tmux sessions",
+        meta: { socketPath: scanner.socketPath, error: String(error) },
+      },
     });
   }
 }

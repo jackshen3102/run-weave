@@ -75,11 +75,19 @@ export function resolveStoragePaths(
       path.join(browserProfileDir, "logs", "backend"),
   );
 
-  return {
+  const storagePaths = {
     browserProfileDir,
     authStoreFile,
     sessionStoreFile,
     terminalSessionStoreFile,
-    backendLogDir,
-  };
+  } as StoragePaths;
+
+  Object.defineProperty(storagePaths, "backendLogDir", {
+    value: backendLogDir,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+
+  return storagePaths;
 }
