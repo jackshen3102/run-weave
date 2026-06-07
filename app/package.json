@@ -1,0 +1,31 @@
+{
+  "name": "@runweave/app",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -p tsconfig.json && vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "cap": "capacitor",
+    "ios:sync": "pnpm build && capacitor sync ios",
+    "ios:open": "pnpm ios:sync && capacitor open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.4.0",
+    "@ionic/react": "^8.8.9",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/ios": "^8.4.0",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.4.1",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.2"
+  }
+}
