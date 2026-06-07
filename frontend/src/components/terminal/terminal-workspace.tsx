@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TerminalProjectListItem, TerminalSessionListItem } from "@browser-viewer/shared";
+import type { TerminalCompletionEvent, TerminalProjectListItem, TerminalSessionListItem } from "@browser-viewer/shared";
 import type { ConnectionConfig } from "../../features/connection/types";
 import { createTerminalBellPlayer } from "../../features/terminal/bell";
 import { DEFAULT_TERMINAL_SIDECAR_WIDTH, useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { resolveCachedTerminalSurfaceIds } from "../../features/terminal/surface-cache";
 import { resolveNewTerminalRuntimePreference } from "../../features/terminal/runtime-preference";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
+import { useTerminalEventsConnection } from "../../features/terminal/use-terminal-events-connection";
 import type { ClientMode } from "../../features/client-mode";
 import { HttpError } from "../../services/http";
-import { createTerminalProject, createTerminalSession, deleteTerminalProject, deleteTerminalSession, listTerminalCompletionEvents, listTerminalProjects, listTerminalSessions, reorderTerminalProjects, reorderTerminalSessions, updateTerminalProject } from "../../services/terminal";
+import { createTerminalProject, createTerminalSession, deleteTerminalProject, deleteTerminalSession, listTerminalProjects, listTerminalSessions, reorderTerminalProjects, reorderTerminalSessions, updateTerminalProject } from "../../services/terminal";
 import { resolvePreferredSessionId, usePersistRecentSelection, useSessionMarkerCleanup, useSessionSelectionShortcuts } from "./terminal-workspace-effects";
 import { TerminalWorkspaceShell } from "./terminal-workspace-shell";
 interface TerminalWorkspaceProps {
@@ -64,7 +65,6 @@ export function TerminalWorkspace({
   const activeSessionIdRef = useRef(activeSessionId);
   const sessionsRef = useRef<TerminalSessionListItem[]>([]);
   const completionEventCursorRef = useRef<string | null>(null);
-  const hasInitializedCompletionCursorRef = useRef(false);
   const completionBellPlayerRef = useRef<ReturnType<typeof createTerminalBellPlayer> | null>(null);
   const isMobileMonitor = clientMode === "mobile";
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
@@ -93,7 +93,6 @@ export function TerminalWorkspace({
     setBellMarkers({});
     setCachedSurfaceSessionIds([]);
     completionEventCursorRef.current = null;
-    hasInitializedCompletionCursorRef.current = false;
   }, [apiBase]);
 
   useEffect(() => {
@@ -285,94 +284,65 @@ export function TerminalWorkspace({
     setHistoryTerminalSessionId,
   });
 
-  useEffect(() => {
-    let disposed = false;
-    let stopped = false;
-    let timerId: ReturnType<typeof setTimeout> | null = null;
-    let idleStreak = 0;
+  const applyCompletionEvents = useCallback(
+    (
+      events: TerminalCompletionEvent[],
+      delivery: "catchup" | "live",
+    ): void => {
+      const latestEvent = events[events.length - 1];
+      if (latestEvent) {
+        completionEventCursorRef.current = latestEvent.id;
+      }
 
-    const BASE_INTERVAL = 2_000;
-    const MAX_INTERVAL = 30_000;
-
-    const nextInterval = (): number => {
-      if (idleStreak <= 1) return BASE_INTERVAL;
-      return Math.min(BASE_INTERVAL * 2 ** (idleStreak - 1), MAX_INTERVAL);
-    };
-
-    const scheduleNext = (): void => {
-      if (disposed || stopped) return;
-      timerId = setTimeout(() => {
-        void pollCompletionEvents();
-      }, nextInterval());
-    };
-
-    const pollCompletionEvents = async (): Promise<void> => {
-      if (disposed || stopped) {
+      const knownSessionIds = new Set(
+        sessionsRef.current.map((session) => session.terminalSessionId),
+      );
+      const markerSessionIds = events
+        .map((event) => event.terminalSessionId)
+        .filter(
+          (terminalSessionId) =>
+            terminalSessionId !== activeSessionIdRef.current &&
+            knownSessionIds.has(terminalSessionId),
+        );
+      if (markerSessionIds.length === 0) {
         return;
       }
 
-      try {
-        const response = await listTerminalCompletionEvents(
-          apiBase,
-          token,
-          completionEventCursorRef.current,
-        );
-        if (disposed) {
-          return;
-        }
-
-        if (response.events.length > 0) {
-          idleStreak = 0;
-          completionEventCursorRef.current =
-            response.events[response.events.length - 1]?.id ??
-            completionEventCursorRef.current;
-
-          if (!hasInitializedCompletionCursorRef.current) {
-            // First batch may include pre-existing events; establish a baseline
-            // without playing the completion sound for historical events.
-            hasInitializedCompletionCursorRef.current = true;
-          } else if (window.electronAPI?.isElectron === true) {
-            completionBellPlayerRef.current ??= createTerminalBellPlayer();
-            void completionBellPlayerRef.current.play();
+      setCompletionMarkers((current) => {
+        let changed = false;
+        const next = { ...current };
+        for (const terminalSessionId of markerSessionIds) {
+          if (!next[terminalSessionId]) {
+            next[terminalSessionId] = true;
+            changed = true;
           }
-        } else {
-          idleStreak += 1;
-          hasInitializedCompletionCursorRef.current = true;
         }
+        return changed ? next : current;
+      });
 
-        setCompletionMarkers((current) => {
-          let changed = false;
-          const next = { ...current };
-          for (const event of response.events) {
-            if (event.terminalSessionId === activeSessionIdRef.current) {
-              continue;
-            }
-            if (!next[event.terminalSessionId]) {
-              next[event.terminalSessionId] = true;
-              changed = true;
-            }
-          }
-          return changed ? next : current;
-        });
-      } catch (error) {
-        if (error instanceof HttpError && error.status === 401) {
-          stopped = true;
-          onAuthExpired?.();
-          return;
-        }
-        idleStreak += 1;
+      if (delivery === "live" && window.electronAPI?.isElectron === true) {
+        completionBellPlayerRef.current ??= createTerminalBellPlayer();
+        void completionBellPlayerRef.current.play();
       }
+    },
+    [],
+  );
 
-      scheduleNext();
-    };
-
-    void pollCompletionEvents();
-
-    return () => {
-      disposed = true;
-      if (timerId !== null) clearTimeout(timerId);
-    };
-  }, [apiBase, onAuthExpired, token]);
+  const getCompletionEventCursor = useCallback(
+    () => completionEventCursorRef.current,
+    [],
+  );
+  const setCompletionEventCursor = useCallback((cursor: string) => {
+    completionEventCursorRef.current = cursor;
+  }, []);
+  useTerminalEventsConnection({
+    apiBase,
+    token,
+    getCursor: getCompletionEventCursor,
+    setCursor: setCompletionEventCursor,
+    onAuthExpired,
+    onCompletionEvents: applyCompletionEvents,
+  });
   const createSession = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {

@@ -225,7 +225,7 @@ export class AuthService {
   ): { token: string; expiresIn: number };
   issueTemporaryToken(params: {
     sessionId: string;
-    tokenType: "viewer-ws" | "terminal-ws" | "devtools";
+    tokenType: "viewer-ws" | "terminal-ws" | "terminal-events-ws" | "devtools";
     resource: TokenResource;
     ttlMs: number;
   }): { token: string; expiresIn: number };
@@ -234,7 +234,11 @@ export class AuthService {
       | string
       | {
           sessionId: string;
-          tokenType: "viewer-ws" | "terminal-ws" | "devtools";
+          tokenType:
+            | "viewer-ws"
+            | "terminal-ws"
+            | "terminal-events-ws"
+            | "devtools";
           resource: TokenResource;
           ttlMs: number;
         },
@@ -275,7 +279,7 @@ export class AuthService {
   verifyTemporaryToken(
     token: string,
     params: {
-      tokenType: "viewer-ws" | "terminal-ws" | "devtools";
+      tokenType: "viewer-ws" | "terminal-ws" | "terminal-events-ws" | "devtools";
       resource: TokenResource;
     },
   ): TemporaryTokenVerification | null {

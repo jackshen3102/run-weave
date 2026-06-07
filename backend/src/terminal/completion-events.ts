@@ -49,4 +49,8 @@ export class TerminalCompletionEventStore {
 
     return this.events.filter((event) => Number(event.id) > after);
   }
+
+  getLatestId(): string | null {
+    return this.events[this.events.length - 1]?.id ?? null;
+  }
 }

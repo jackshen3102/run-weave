@@ -39,6 +39,7 @@ import { SessionManager } from "./session/manager";
 import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/clipboard-image";
 import { LowDbSessionStore } from "./session/lowdb-store";
 import { TerminalSessionManager } from "./terminal/manager";
+import { TerminalCompletionEventService } from "./terminal/completion-event-service";
 import { TerminalCompletionEventStore } from "./terminal/completion-events";
 import { loadOrCreateHookToken } from "./terminal/hook-token";
 import { PtyService } from "./terminal/pty-service";
@@ -51,6 +52,7 @@ import { listenWithFallback } from "./server/listen";
 import { resolveStoragePaths } from "./utils/path";
 import { attachDevtoolsProxyServer } from "./ws/devtools-proxy";
 import { WebSocketSessionController } from "./ws/session-control";
+import { attachTerminalEventsWebSocketServer } from "./ws/terminal-events-server";
 import { attachTerminalWebSocketServer } from "./ws/terminal-server";
 import { attachWebSocketServer } from "./ws/server";
 
@@ -70,7 +72,7 @@ interface RuntimeServices {
   qualityProbeStore: QualityProbeStore;
   wsSessionController: WebSocketSessionController;
   terminalSessionManager: TerminalSessionManager;
-  terminalCompletionEventStore: TerminalCompletionEventStore;
+  terminalCompletionEventService: TerminalCompletionEventService;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
   ptyService: PtyService;
   tmuxService: TmuxService;
@@ -276,6 +278,9 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalSessionStore,
   );
   const terminalCompletionEventStore = new TerminalCompletionEventStore();
+  const terminalCompletionEventService = new TerminalCompletionEventService(
+    terminalCompletionEventStore,
+  );
   const terminalRuntimeRegistry = new TerminalRuntimeRegistry();
   process.env.RUNWEAVE_HOOK_TOKEN = resolveTerminalHookToken(
     process.env,
@@ -308,7 +313,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     qualityProbeStore,
     wsSessionController,
     terminalSessionManager,
-    terminalCompletionEventStore,
+    terminalCompletionEventService,
     terminalRuntimeRegistry,
     ptyService,
     tmuxService,
@@ -362,7 +367,7 @@ function createHttpApp(
     "/internal/terminal-completion",
     requireTunnelAuth,
     createInternalTerminalCompletionRouter({
-      completionEventStore: services.terminalCompletionEventStore,
+      completionEventService: services.terminalCompletionEventService,
       terminalSessionManager: services.terminalSessionManager,
       hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
     }),
@@ -409,7 +414,7 @@ function createHttpApp(
       runtimeRegistry: services.terminalRuntimeRegistry,
       tmuxService: services.tmuxService,
       authService: services.authService,
-      completionEventStore: services.terminalCompletionEventStore,
+      completionEventService: services.terminalCompletionEventService,
     }),
   );
 
@@ -533,6 +538,12 @@ async function startRuntime(): Promise<void> {
       services.authService,
       services.ptyService,
       services.tmuxService,
+      { tunnelAuthConfig },
+    );
+    attachTerminalEventsWebSocketServer(
+      server,
+      services.authService,
+      services.terminalCompletionEventService,
       { tunnelAuthConfig },
     );
     attachDevtoolsProxyServer(

@@ -607,7 +607,15 @@ test("marks a background project from an explicit codex completion event", async
       cwd: cwdB,
     });
 
+    const eventsTicketResponse = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .endsWith("/api/terminal/completion-events/ws-ticket") &&
+        response.status() === 200,
+    );
     await page.goto(sessionA.terminalUrl);
+    await eventsTicketResponse;
     await expect(
       page.getByRole("button", { name: projectAName, exact: true }),
     ).toBeVisible();
@@ -657,7 +665,7 @@ test("marks a background project from an explicit codex completion event", async
 
     await expect
       .poll(async () => (await projectADot.getAttribute("class")) ?? "", {
-        timeout: 10_000,
+        timeout: 1_500,
       })
       .toContain("bg-emerald-400");
 
@@ -669,6 +677,29 @@ test("marks a background project from an explicit codex completion event", async
       .toContain(`/terminal/${sessionA.terminalSessionId}`);
     await expect
       .poll(async () => (await projectADot.getAttribute("class")) ?? "")
+      .not.toContain("bg-emerald-400");
+
+    const activeRecordResponse = await request.post(
+      `${E2E_API_BASE}/internal/terminal-completion`,
+      {
+        headers: {
+          "X-Runweave-Hook-Token": E2E_HOOK_TOKEN,
+        },
+        data: {
+          terminalSessionId: sessionA.terminalSessionId,
+          source: "codex",
+          completionReason: "hook_stop",
+          commandName: "codex",
+          rawHookEvent: "Stop",
+          cwd: cwdA,
+        },
+      },
+    );
+    expect(activeRecordResponse.status()).toBe(202);
+    await expect
+      .poll(async () => (await projectADot.getAttribute("class")) ?? "", {
+        timeout: 1_000,
+      })
       .not.toContain("bg-emerald-400");
   } finally {
     await rm(cwdA, { force: true, recursive: true });

@@ -5,6 +5,7 @@ export type SignedTokenType =
   | "refresh"
   | "viewer-ws"
   | "terminal-ws"
+  | "terminal-events-ws"
   | "devtools"
   | "legacy-temp";
 

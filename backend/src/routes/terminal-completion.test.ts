@@ -1,6 +1,7 @@
 import http from "node:http";
 import express from "express";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { TerminalCompletionEventService } from "../terminal/completion-event-service";
 import { TerminalCompletionEventStore } from "../terminal/completion-events";
 import { createInternalTerminalCompletionRouter } from "./terminal-completion";
 import { createTerminalRouter } from "./terminal";
@@ -28,9 +29,13 @@ async function stopServer(server: http.Server): Promise<void> {
   });
 }
 
+function createCompletionEventService(): TerminalCompletionEventService {
+  return new TerminalCompletionEventService(new TerminalCompletionEventStore());
+}
+
 describe("terminal completion routes", () => {
   it("records internal hook events and exposes them through terminal API", async () => {
-    const completionEventStore = new TerminalCompletionEventStore();
+    const completionEventService = createCompletionEventService();
     const terminalSessionManager = {
       getSession: () => ({
         id: "terminal-1",
@@ -44,6 +49,7 @@ describe("terminal completion routes", () => {
         createdAt: new Date("2026-04-28T00:00:00.000Z"),
         runtimeKind: "tmux" as const,
       }),
+      getLastAiActiveCommand: () => null,
       listProjects: () => [],
       listSessions: () => [],
     };
@@ -52,7 +58,7 @@ describe("terminal completion routes", () => {
     app.use(
       "/internal/terminal-completion",
       createInternalTerminalCompletionRouter({
-        completionEventStore,
+        completionEventService,
         terminalSessionManager: terminalSessionManager as never,
         hookToken: "hook-token",
       }),
@@ -60,7 +66,7 @@ describe("terminal completion routes", () => {
     app.use(
       "/api/terminal",
       createTerminalRouter(terminalSessionManager as never, {
-        completionEventStore,
+        completionEventService,
       }),
     );
     const server = http.createServer(app);
@@ -112,7 +118,7 @@ describe("terminal completion routes", () => {
     app.use(
       "/internal/terminal-completion",
       createInternalTerminalCompletionRouter({
-        completionEventStore: new TerminalCompletionEventStore(),
+        completionEventService: createCompletionEventService(),
         terminalSessionManager: { getSession: () => undefined } as never,
         hookToken: "hook-token",
       }),
@@ -141,7 +147,7 @@ describe("terminal completion routes", () => {
   });
 
   it("ignores completion events when the pane is not running codex", async () => {
-    const completionEventStore = new TerminalCompletionEventStore();
+    const completionEventService = createCompletionEventService();
     const terminalSessionManager = {
       getSession: () => ({
         id: "terminal-1",
@@ -155,6 +161,7 @@ describe("terminal completion routes", () => {
         createdAt: new Date("2026-04-28T00:00:00.000Z"),
         runtimeKind: "tmux" as const,
       }),
+      getLastAiActiveCommand: () => null,
       listProjects: () => [],
       listSessions: () => [],
     };
@@ -163,7 +170,7 @@ describe("terminal completion routes", () => {
     app.use(
       "/internal/terminal-completion",
       createInternalTerminalCompletionRouter({
-        completionEventStore,
+        completionEventService,
         terminalSessionManager: terminalSessionManager as never,
         hookToken: "hook-token",
       }),
@@ -171,7 +178,7 @@ describe("terminal completion routes", () => {
     app.use(
       "/api/terminal",
       createTerminalRouter(terminalSessionManager as never, {
-        completionEventStore,
+        completionEventService,
       }),
     );
     const server = http.createServer(app);
@@ -209,8 +216,165 @@ describe("terminal completion routes", () => {
     }
   });
 
+  it("records late completion events inside the active command grace window", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(20_000);
+    const completionEventService = createCompletionEventService();
+    const terminalSessionManager = {
+      getSession: () => ({
+        id: "terminal-1",
+        projectId: "project-default",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        activeCommand: null,
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-04-28T00:00:00.000Z"),
+        runtimeKind: "tmux" as const,
+      }),
+      getLastAiActiveCommand: () => ({
+        command: "codex",
+        source: "codex" as const,
+        observedAt: 1_000,
+        clearedAt: 10_000,
+      }),
+      listProjects: () => [],
+      listSessions: () => [],
+    };
+    const app = express();
+    app.use(express.json());
+    app.use(
+      "/internal/terminal-completion",
+      createInternalTerminalCompletionRouter({
+        completionEventService,
+        terminalSessionManager: terminalSessionManager as never,
+        hookToken: "hook-token",
+      }),
+    );
+    app.use(
+      "/api/terminal",
+      createTerminalRouter(terminalSessionManager as never, {
+        completionEventService,
+      }),
+    );
+    const server = http.createServer(app);
+
+    try {
+      const port = await startServer(server);
+      const recordResponse = await fetch(
+        `http://127.0.0.1:${port}/internal/terminal-completion`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Runweave-Hook-Token": "hook-token",
+          },
+          body: JSON.stringify({
+            terminalSessionId: "terminal-1",
+            source: "codex",
+            completionReason: "hook_stop",
+            rawHookEvent: "Stop",
+          }),
+        },
+      );
+
+      expect(recordResponse.status).toBe(202);
+      const listResponse = await fetch(
+        `http://127.0.0.1:${port}/api/terminal/completion-events`,
+      );
+      await expect(listResponse.json()).resolves.toMatchObject({
+        events: [
+          {
+            terminalSessionId: "terminal-1",
+            source: "codex",
+            rawHookEvent: "Stop",
+          },
+        ],
+      });
+    } finally {
+      nowSpy.mockRestore();
+      await stopServer(server);
+    }
+  });
+
+  it("ignores late completion events outside the active command grace window", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(40_001);
+    const completionEventService = createCompletionEventService();
+    const terminalSessionManager = {
+      getSession: () => ({
+        id: "terminal-1",
+        projectId: "project-default",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        activeCommand: null,
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-04-28T00:00:00.000Z"),
+        runtimeKind: "tmux" as const,
+      }),
+      getLastAiActiveCommand: () => ({
+        command: "codex",
+        source: "codex" as const,
+        observedAt: 1_000,
+        clearedAt: 10_000,
+      }),
+      listProjects: () => [],
+      listSessions: () => [],
+    };
+    const app = express();
+    app.use(express.json());
+    app.use(
+      "/internal/terminal-completion",
+      createInternalTerminalCompletionRouter({
+        completionEventService,
+        terminalSessionManager: terminalSessionManager as never,
+        hookToken: "hook-token",
+      }),
+    );
+    app.use(
+      "/api/terminal",
+      createTerminalRouter(terminalSessionManager as never, {
+        completionEventService,
+      }),
+    );
+    const server = http.createServer(app);
+
+    try {
+      const port = await startServer(server);
+      const recordResponse = await fetch(
+        `http://127.0.0.1:${port}/internal/terminal-completion`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Runweave-Hook-Token": "hook-token",
+          },
+          body: JSON.stringify({
+            terminalSessionId: "terminal-1",
+            source: "codex",
+            completionReason: "hook_stop",
+            rawHookEvent: "Stop",
+          }),
+        },
+      );
+
+      expect(recordResponse.status).toBe(202);
+      await expect(recordResponse.json()).resolves.toMatchObject({
+        ignored: true,
+      });
+      const listResponse = await fetch(
+        `http://127.0.0.1:${port}/api/terminal/completion-events`,
+      );
+      await expect(listResponse.json()).resolves.toMatchObject({ events: [] });
+    } finally {
+      nowSpy.mockRestore();
+      await stopServer(server);
+    }
+  });
+
   it("ignores completion events from non-codex sources", async () => {
-    const completionEventStore = new TerminalCompletionEventStore();
+    const completionEventService = createCompletionEventService();
     const terminalSessionManager = {
       getSession: () => ({
         id: "terminal-1",
@@ -224,6 +388,7 @@ describe("terminal completion routes", () => {
         createdAt: new Date("2026-04-28T00:00:00.000Z"),
         runtimeKind: "tmux" as const,
       }),
+      getLastAiActiveCommand: () => null,
       listProjects: () => [],
       listSessions: () => [],
     };
@@ -232,7 +397,7 @@ describe("terminal completion routes", () => {
     app.use(
       "/internal/terminal-completion",
       createInternalTerminalCompletionRouter({
-        completionEventStore,
+        completionEventService,
         terminalSessionManager: terminalSessionManager as never,
         hookToken: "hook-token",
       }),
@@ -240,7 +405,7 @@ describe("terminal completion routes", () => {
     app.use(
       "/api/terminal",
       createTerminalRouter(terminalSessionManager as never, {
-        completionEventStore,
+        completionEventService,
       }),
     );
     const server = http.createServer(app);
@@ -281,7 +446,7 @@ describe("terminal completion routes", () => {
   it.each(["trae", "traex", "traecli"])(
     "records trae completion events when the pane is running %s",
     async (activeCommand) => {
-      const completionEventStore = new TerminalCompletionEventStore();
+      const completionEventService = createCompletionEventService();
       const terminalSessionManager = {
         getSession: () => ({
           id: "terminal-1",
@@ -295,6 +460,7 @@ describe("terminal completion routes", () => {
           createdAt: new Date("2026-04-28T00:00:00.000Z"),
           runtimeKind: "tmux" as const,
         }),
+        getLastAiActiveCommand: () => null,
         listProjects: () => [],
         listSessions: () => [],
       };
@@ -303,7 +469,7 @@ describe("terminal completion routes", () => {
       app.use(
         "/internal/terminal-completion",
         createInternalTerminalCompletionRouter({
-          completionEventStore,
+          completionEventService,
           terminalSessionManager: terminalSessionManager as never,
           hookToken: "hook-token",
         }),
@@ -311,7 +477,7 @@ describe("terminal completion routes", () => {
       app.use(
         "/api/terminal",
         createTerminalRouter(terminalSessionManager as never, {
-          completionEventStore,
+          completionEventService,
         }),
       );
       const server = http.createServer(app);
@@ -354,7 +520,7 @@ describe("terminal completion routes", () => {
   );
 
   it("ignores trae completion events when the pane is not running a trae CLI", async () => {
-    const completionEventStore = new TerminalCompletionEventStore();
+    const completionEventService = createCompletionEventService();
     const terminalSessionManager = {
       getSession: () => ({
         id: "terminal-1",
@@ -368,6 +534,7 @@ describe("terminal completion routes", () => {
         createdAt: new Date("2026-04-28T00:00:00.000Z"),
         runtimeKind: "tmux" as const,
       }),
+      getLastAiActiveCommand: () => null,
       listProjects: () => [],
       listSessions: () => [],
     };
@@ -376,7 +543,7 @@ describe("terminal completion routes", () => {
     app.use(
       "/internal/terminal-completion",
       createInternalTerminalCompletionRouter({
-        completionEventStore,
+        completionEventService,
         terminalSessionManager: terminalSessionManager as never,
         hookToken: "hook-token",
       }),
@@ -384,7 +551,7 @@ describe("terminal completion routes", () => {
     app.use(
       "/api/terminal",
       createTerminalRouter(terminalSessionManager as never, {
-        completionEventStore,
+        completionEventService,
       }),
     );
     const server = http.createServer(app);

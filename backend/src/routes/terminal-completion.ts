@@ -2,7 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import type { TerminalCompletionEvent } from "@browser-viewer/shared";
 import { logger } from "../logging";
-import type { TerminalCompletionEventStore } from "../terminal/completion-events";
+import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
+import {
+  AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS,
+  isCompletionSourceAllowedForCommand,
+} from "../terminal/completion-source-gate";
 import type { TerminalSessionManager } from "../terminal/manager";
 
 const completionReasonEnum = z.enum(["hook_stop", "notify", "ai_process_exit", "manual"]);
@@ -24,7 +28,7 @@ const completionEventSchema = z
   .strict();
 
 export function createInternalTerminalCompletionRouter(options: {
-  completionEventStore: TerminalCompletionEventStore;
+  completionEventService: TerminalCompletionEventService;
   terminalSessionManager: TerminalSessionManager;
   hookToken: string | undefined;
 }): Router {
@@ -73,37 +77,45 @@ export function createInternalTerminalCompletionRouter(options: {
       return;
     }
 
-    // Strict gate: only light up the green dot when the (source, activeCommand)
-    // pair matches a known AI CLI we support end-to-end. Late-arriving Stop
-    // hooks (CLI already exited) and unknown sources are ignored on purpose.
-    const allowedActiveCommandsBySource: Record<string, ReadonlySet<string>> = {
-      codex: new Set(["codex"]),
-      trae: new Set(["trae", "traex", "traecli"]),
-    };
-    const allowedActiveCommands = allowedActiveCommandsBySource[parsed.data.source];
-    if (
-      !allowedActiveCommands ||
-      !session.activeCommand ||
-      !allowedActiveCommands.has(session.activeCommand)
-    ) {
+    const rawHookEvent = parsed.data.rawHookEvent ?? parsed.data.hookEvent ?? null;
+    const lastAiActiveCommand =
+      options.terminalSessionManager.getLastAiActiveCommand(session.id);
+    const currentCommandMatches = isCompletionSourceAllowedForCommand(
+      parsed.data.source,
+      session.activeCommand,
+    );
+    const now = Date.now();
+    const graceCommandMatches =
+      session.activeCommand === null &&
+      lastAiActiveCommand !== null &&
+      lastAiActiveCommand.source === parsed.data.source &&
+      lastAiActiveCommand.clearedAt !== null &&
+      now - lastAiActiveCommand.clearedAt <=
+        AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS;
+
+    if (!currentCommandMatches && !graceCommandMatches) {
       terminalCompletionLogger.info("terminal-completion.ignored", {
         message: "Terminal completion event ignored",
         terminalSessionId: parsed.data.terminalSessionId,
         source: parsed.data.source,
         activeCommand: session.activeCommand,
-        rawHookEvent: parsed.data.rawHookEvent ?? parsed.data.hookEvent ?? null,
+        lastAiActiveCommand: lastAiActiveCommand?.command ?? null,
+        lastAiActiveCommandClearedAt: lastAiActiveCommand?.clearedAt
+          ? new Date(lastAiActiveCommand.clearedAt).toISOString()
+          : null,
+        rawHookEvent,
       });
       res.status(202).json({ event: null, ignored: true });
       return;
     }
 
-    const event: TerminalCompletionEvent = options.completionEventStore.record(
+    const event: TerminalCompletionEvent = options.completionEventService.record(
       {
         terminalSessionId: parsed.data.terminalSessionId,
         source: parsed.data.source,
         completionReason: parsed.data.completionReason ?? "hook_stop",
         commandName: parsed.data.commandName ?? null,
-        rawHookEvent: parsed.data.rawHookEvent ?? parsed.data.hookEvent ?? null,
+        rawHookEvent,
         cwd: parsed.data.cwd ?? null,
       },
       session,
@@ -114,6 +126,11 @@ export function createInternalTerminalCompletionRouter(options: {
       terminalSessionId: event.terminalSessionId,
       source: event.source,
       activeCommand: session.activeCommand,
+      lastAiActiveCommand: lastAiActiveCommand?.command ?? null,
+      lastAiActiveCommandClearedAt: lastAiActiveCommand?.clearedAt
+        ? new Date(lastAiActiveCommand.clearedAt).toISOString()
+        : null,
+      rawHookEvent,
     });
     res.status(202).json({ event });
   });

@@ -161,6 +161,12 @@ export interface CreateTerminalWsTicketResponse {
   expiresIn: number;
 }
 
+export interface CreateTerminalEventsWsTicketResponse {
+  ticket: string;
+  expiresIn: number;
+  baselineEventId: string | null;
+}
+
 export interface SendTerminalInputRequest {
   data: string;
   operationId?: string;
@@ -247,6 +253,26 @@ export interface TerminalCompletionEvent {
 export interface TerminalCompletionEventListResponse {
   events: TerminalCompletionEvent[];
 }
+
+export type TerminalEventServerMessage =
+  | {
+      type: "connected";
+      acceptedAfter: string | null;
+    }
+  | {
+      type: "completion-events";
+      delivery: "catchup";
+      events: TerminalCompletionEvent[];
+    }
+  | {
+      type: "completion-event";
+      delivery: "live";
+      event: TerminalCompletionEvent;
+    }
+  | {
+      type: "error";
+      message: string;
+    };
 
 export type TerminalSignal = "SIGINT" | "SIGTERM" | "SIGKILL";
 

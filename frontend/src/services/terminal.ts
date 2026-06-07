@@ -4,6 +4,7 @@ import type {
   CreateTerminalClipboardImageResponse,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
+  CreateTerminalEventsWsTicketResponse,
   CreateTerminalWsTicketResponse,
   SendTerminalInputRequest,
   SendTerminalInputResponse,
@@ -281,6 +282,22 @@ export async function createTerminalWsTicket(
   return requestJson<CreateTerminalWsTicketResponse>(
     apiBase,
     `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/ws-ticket`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function createTerminalEventsWsTicket(
+  apiBase: string,
+  token: string,
+): Promise<CreateTerminalEventsWsTicketResponse> {
+  return requestJson<CreateTerminalEventsWsTicketResponse>(
+    apiBase,
+    "/api/terminal/completion-events/ws-ticket",
     {
       method: "POST",
       headers: {
