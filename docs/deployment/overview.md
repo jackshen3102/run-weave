@@ -8,11 +8,13 @@
 - 后端服务不直接暴露公网端口。
 - DevTools 通过同源代理访问服务端本机调试端口。
 - 生产环境避免暴露远端调试端口。
+- 登录接口默认有内存态限流与失败锁定，代理部署时只在 tunnel auth 开启后信任转发 IP 头。
+- `/test/*` 只在 `RUNWEAVE_E2E_TEST_ROUTES=true` 时启用；生产和普通开发环境返回 404。
 
 ## 对外入口（概览）
 
-- HTTPS：登录与会话管理
-- WSS：Runweave Viewer 与 DevTools 代理
+- HTTPS：登录、会话管理、Terminal API、completion event ticket
+- WSS：Runweave Viewer、Terminal IO、Terminal completion events 与 DevTools 代理
 - 前端 `apiBase` 为空时，HTTP / WebSocket 默认使用当前页面同源入口
 
 ## 运行位置
@@ -21,6 +23,14 @@
 - 浏览器仅访问公网入口与同源 WebSocket。
 - 运行时 API 地址不依赖 `VITE_PROXY_TARGET` 兜底；需要跨源后端时应显式传入连接地址或通过入口代理收口。
 - Terminal 内执行的用户命令运行在用户项目 `cwd` 下；Terminal Git Submit 首期只向当前 terminal 发送 AI submit prompt，由已在 terminal 中运行的 agent 处理 Git 提交、冲突、hook 和 push，不新增后端 Git executor，也不要求 `rw` 在用户项目 `PATH` 中可用。
+
+## 鉴权与内部接口
+
+- `/api/auth/login` 对同一 IP、同一用户名和 IP+用户名组合做内存态频率限制；超过阈值时返回 `429` 和 `Retry-After`。
+- Web 客户端 refresh token 使用 `HttpOnly`、`SameSite=Lax` cookie；Electron 客户端继续通过 `x-auth-client: electron` 获取 JSON refresh token。
+- tunnel auth 开启时，`/health`、`/api/*`、`/internal/terminal-completion` 等入口先经过 tunnel auth；这时登录限流才会信任 `CF-Connecting-IP` / `X-Forwarded-For` 等代理头。
+- `/internal/cdp-endpoint` 只接受本机直连请求，用于开发态同步本机 CDP endpoint。
+- `/internal/terminal-completion` 还需要 `X-Runweave-Hook-Token`，用于 tmux pane 内 AI CLI hook 写入完成事件。
 
 如需部署模板与配置示例，参考 `deploy/` 目录：
 
