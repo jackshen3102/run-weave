@@ -53,7 +53,7 @@ pnpm runtime:install -- --latest
 pnpm runtime:pack-and-install
 ```
 
-默认 runtime 目录位于 Electron `userData` 下的 `runtime/`，包含 `current.json` 和 `releases/<releaseId>/manifest.json`。外部 runtime 有效时优先加载外部前端和后端；没有外部 runtime、manifest 无效、关键文件缺失或后端 `/health` 失败时，回退到最近可用 release 或打包内置 runtime。
+默认 runtime 目录位于 Electron `userData` 下的 `runtime/`，包含 `current.json` 和 `releases/<releaseId>/manifest.json`。外部 runtime 仅在 manifest 有效且 shell 版本与当前客户端版本一致时优先加载；客户端版本升级后会优先使用新客户端自带的打包内置 runtime。没有外部 runtime、manifest 无效、版本不匹配、关键文件缺失或后端 `/health` 失败时，回退到最近可用 release 或打包内置 runtime。
 
 边界：
 
