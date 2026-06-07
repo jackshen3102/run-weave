@@ -1,7 +1,6 @@
 import "dotenv/config";
 import http from "node:http";
 import { existsSync } from "node:fs";
-import { randomBytes } from "node:crypto";
 import path from "node:path";
 import express from "express";
 import { LowDbAuthStore } from "./auth/lowdb-store";
@@ -35,9 +34,11 @@ import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/clipboard-image"
 import { LowDbSessionStore } from "./session/lowdb-store";
 import { TerminalSessionManager } from "./terminal/manager";
 import { TerminalCompletionEventStore } from "./terminal/completion-events";
+import { loadOrCreateHookToken } from "./terminal/hook-token";
 import { PtyService } from "./terminal/pty-service";
 import { TerminalRuntimeRegistry } from "./terminal/runtime-registry";
 import { TmuxService } from "./terminal/tmux-service";
+import { sanitizeCurrentTerminalProcessEnv } from "./terminal/env";
 import { LowDbTerminalSessionStore } from "./terminal/lowdb-store";
 import { logOrphanedTmuxSessions } from "./terminal/tmux-orphan-scan";
 import { listenWithFallback } from "./server/listen";
@@ -127,14 +128,21 @@ function resolveSessionRestoreEnabled(env: NodeJS.ProcessEnv): boolean {
   return env.SESSION_RESTORE_ENABLED?.trim().toLowerCase() === "true";
 }
 
-function resolveTerminalHookToken(env: NodeJS.ProcessEnv): string {
+function resolveTerminalHookToken(
+  env: NodeJS.ProcessEnv,
+  tokenFilePath: string,
+): string {
   const existing = env.RUNWEAVE_HOOK_TOKEN?.trim();
   if (existing) {
     return existing;
   }
 
-  return randomBytes(32).toString("hex");
+  // Persist the generated token so existing tmux panes continue to
+  // authenticate against the new backend after a restart / app upgrade.
+  return loadOrCreateHookToken(tokenFilePath);
 }
+
+sanitizeCurrentTerminalProcessEnv();
 
 function resolveTerminalTmuxScanOrphansOnStartEnabled(
   env: NodeJS.ProcessEnv,
@@ -193,7 +201,10 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   );
   const terminalCompletionEventStore = new TerminalCompletionEventStore();
   const terminalRuntimeRegistry = new TerminalRuntimeRegistry();
-  process.env.RUNWEAVE_HOOK_TOKEN = resolveTerminalHookToken(process.env);
+  process.env.RUNWEAVE_HOOK_TOKEN = resolveTerminalHookToken(
+    process.env,
+    path.join(storagePaths.browserProfileDir, "runweave-hook-token"),
+  );
   const ptyService = new PtyService();
   const tmuxService = new TmuxService({
     socketPath:
@@ -412,9 +423,10 @@ async function startRuntime(): Promise<void> {
     host: runtimeConfig.host,
     maxAttempts: runtimeConfig.strictPort ? 1 : undefined,
   });
-  process.env.RUNWEAVE_HOOK_ENDPOINT =
-    process.env.RUNWEAVE_HOOK_ENDPOINT ??
-    `http://127.0.0.1:${port}/internal/terminal-completion`;
+  // Always pin the hook endpoint to THIS backend's listening port. Inheriting
+  // it from a parent shell spawned by another Runweave backend would deliver
+  // codex hook events to the wrong process.
+  process.env.RUNWEAVE_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal-completion`;
 
   attachLifecycleHandlers(
     server,

@@ -183,6 +183,10 @@ function isVersionGreaterThan(left: string, right: string): boolean {
   return false;
 }
 
+function isSameVersion(left: string, right: string): boolean {
+  return !isVersionGreaterThan(left, right) && !isVersionGreaterThan(right, left);
+}
+
 function sha256(filePath: string): string {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
@@ -208,9 +212,12 @@ function validateManifestPaths(
     return false;
   }
 
+  // Runtime packages are built with the shell version that produced them. Once
+  // the app upgrades, the bundled runtime should not be shadowed by an older
+  // hot-update pointer.
   if (
     shellVersion &&
-    isVersionGreaterThan(manifest.minimumShellVersion, shellVersion)
+    !isSameVersion(manifest.minimumShellVersion, shellVersion)
   ) {
     return false;
   }

@@ -9,6 +9,7 @@ import {
   logTerminalPerf,
   summarizeTerminalChunk,
 } from "./perf-logging";
+import { sanitizeTerminalProcessEnv } from "./env";
 import { applyShellIntegration } from "./shell-integration";
 import backendPackageJson from "../../package.json";
 
@@ -136,10 +137,12 @@ function buildPtyEnv(
   sessionEnv: NodeJS.ProcessEnv | undefined,
   command: string,
 ): NodeJS.ProcessEnv {
-  const merged: NodeJS.ProcessEnv = {
-    ...baseEnv,
-    ...sessionEnv,
-  };
+  const merged = sanitizeTerminalProcessEnv(
+    {
+      ...baseEnv,
+      ...sessionEnv,
+    },
+  );
   const currentTerm = merged.TERM?.trim();
   if (!currentTerm || currentTerm === "dumb") {
     merged.TERM = "xterm-256color";

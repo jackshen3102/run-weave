@@ -7,13 +7,16 @@ import test from "node:test";
 import {
   mergeJsonHookEntry,
   pruneSupersededCodexHooks,
-  renderTraeHookBlock,
+  pruneCodexConfigNotify,
+  renderTraeTomlHookBlock,
   buildLauncherScript,
-  upsertTraeHookBlock,
+  stripLegacyCodexNotifyKey,
+  upsertTraeTomlHookBlock,
   installHooksIfNeeded,
   installAllHooks,
   installClaudeHooks,
   installCodexHooks,
+  installTraeHooks,
 } from "./hook-installer.js";
 
 const REPO_RESOURCES_DIR = path.join(
@@ -205,12 +208,17 @@ test("preserves third-party hooks when a matcher entry contains browser-viewer a
   });
 });
 
-test("renders a stable trae hook block", () => {
-  const block = renderTraeHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge");
+test("renders a stable trae TOML hook block covering the lifecycle events we care about", () => {
+  const block = renderTraeTomlHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge");
 
-  assert.match(block, /user_prompt_submit/);
-  assert.match(block, /subagent_stop/);
-  assert.match(block, /browser-viewer-hook-bridge --source trae/);
+  assert.match(block, /\[\[hooks\.Stop\]\]/);
+  assert.match(block, /\[\[hooks\.SubagentStop\]\]/);
+  assert.match(block, /\[\[hooks\.PostToolUse\]\]/);
+  assert.match(block, /\[\[hooks\.UserPromptSubmit\]\]/);
+  assert.match(block, /command = '\/Users\/me\/\.browser-viewer\/bin\/browser-viewer-hook-bridge --source trae'/);
+  assert.match(block, /timeout = "unlimited"/);
+  assert.match(block, /^# >>> runweave-hooks/m);
+  assert.match(block, /^# <<< runweave-hooks/m);
 });
 
 test("builds a self-contained launcher script that posts completion events", () => {
@@ -235,143 +243,155 @@ test("builds a self-contained launcher script that posts completion events", () 
   assert.doesNotMatch(script, /\.codex\/hooks\/feishu_stop_notify\.sh/);
 });
 
-test("upserts trae hook into an existing top-level hooks section without duplicating it", () => {
+test("appends a runweave fenced block when traecli.toml has no existing block", () => {
   const input = [
-    "version: 1",
-    "hooks:",
-    "  - type: command",
-    "    command: 'other-tool'",
-    "    matchers:",
-    "      - event: user_prompt_submit",
+    'model = "openrouter-2o"',
     "",
-    "profiles:",
-    "  default: true",
+    "[profiles.yolo]",
+    'approval_policy = "never"',
     "",
   ].join("\n");
 
-  const output = upsertTraeHookBlock(
+  const output = upsertTraeTomlHookBlock(
     input,
-    renderTraeHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
+    renderTraeTomlHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
   );
 
-  assert.equal((output.match(/^hooks:/gm) ?? []).length, 1);
-  assert.match(output, /other-tool/);
-  assert.match(output, /browser-viewer-hook-bridge --source trae/);
-  assert.match(output, /profiles:/);
+  assert.match(output, /^model = "openrouter-2o"/);
+  assert.match(output, /\[profiles\.yolo\]/);
+  assert.match(output, /\[\[hooks\.Stop\]\]/);
+  assert.equal((output.match(/# >>> runweave-hooks/g) ?? []).length, 1);
+  assert.equal((output.match(/# <<< runweave-hooks/g) ?? []).length, 1);
 });
 
-test("upserts trae hooks only in the top-level hooks section and leaves nested profile hooks untouched", () => {
+test("replaces the runweave fenced block in place without duplicating it", () => {
+  const initial = upsertTraeTomlHookBlock(
+    'model = "openrouter-2o"\n',
+    renderTraeTomlHookBlock("/old/browser-viewer-hook-bridge"),
+  );
+
+  const output = upsertTraeTomlHookBlock(
+    initial,
+    renderTraeTomlHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
+  );
+
+  assert.equal((output.match(/# >>> runweave-hooks/g) ?? []).length, 1);
+  assert.equal(
+    (output.match(/browser-viewer-hook-bridge --source trae/g) ?? []).length,
+    4,
+  );
+  assert.doesNotMatch(output, /\/old\/browser-viewer-hook-bridge/);
+});
+
+test("preserves unrelated trae TOML config (model, profiles, hooks.state) when upserting", () => {
   const input = [
-    "version: 1",
-    "profiles:",
-    "  default:",
-    "    hooks:",
-    "      - type: command",
-    "        command: '/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source trae'",
-    "        matchers:",
-    "          - event: user_prompt_submit",
+    'model = "openrouter-2o"',
     "",
-    "hooks:",
-    "  - type: command",
-    "    command: 'third-party-tool'",
-    "    matchers:",
-    "      - event: stop",
+    "[profiles.yolo]",
+    'sandbox_mode = "danger-full-access"',
+    "",
+    "[hooks.state]",
+    "",
+    '[hooks.state."/Users/me/.trae/traecli.toml:stop:0:0"]',
+    'trusted_hash = "sha256:abc"',
+    "",
+    '[projects."/Users/me"]',
+    'trust_level = "trusted"',
     "",
   ].join("\n");
 
-  const output = upsertTraeHookBlock(
+  const output = upsertTraeTomlHookBlock(
     input,
-    renderTraeHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
+    renderTraeTomlHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
   );
 
-  assert.equal((output.match(/^hooks:/gm) ?? []).length, 1);
-  assert.ok(
-    output.includes(
-      "profiles:\n  default:\n    hooks:\n      - type: command\n        command: '/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source trae'",
-    ),
-  );
-  assert.match(output, /third-party-tool/);
-  assert.equal((output.match(/browser-viewer-hook-bridge --source trae/g) ?? []).length, 2);
+  assert.match(output, /\[profiles\.yolo\]/);
+  assert.match(output, /\[hooks\.state\]/);
+  assert.match(output, /trusted_hash = "sha256:abc"/);
+  assert.match(output, /\[projects\."\/Users\/me"\]/);
+  assert.match(output, /\[\[hooks\.Stop\]\]/);
 });
 
-test("replaces a browser-viewer trae list item even when its keys are reordered", () => {
+test("writes the runweave hook block into ~/.trae/traecli.toml on install", async () => {
+  const homeDir = await createTempHome();
+  try {
+    const traeDir = path.join(homeDir, ".trae");
+    await mkdir(traeDir, { recursive: true });
+    const tomlPath = path.join(traeDir, "traecli.toml");
+    await writeFile(tomlPath, 'model = "openrouter-2o"\n', "utf8");
+
+    await installTraeHooks({ homeDir });
+
+    const updated = await readFile(tomlPath, "utf8");
+    assert.match(updated, /\[\[hooks\.Stop\]\]/);
+    assert.match(updated, /\[\[hooks\.SubagentStop\]\]/);
+    assert.match(
+      updated,
+      new RegExp(
+        `command = '${homeDir.replace(
+          /[.*+?^${}()|[\]\\]/g,
+          "\\\\$&",
+        )}/.browser-viewer/bin/browser-viewer-hook-bridge --source trae'`,
+      ),
+    );
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
+  }
+});
+
+test("install is idempotent: re-running upsert does not duplicate the runweave block", async () => {
+  const homeDir = await createTempHome();
+  try {
+    const traeDir = path.join(homeDir, ".trae");
+    await mkdir(traeDir, { recursive: true });
+    const tomlPath = path.join(traeDir, "traecli.toml");
+    await writeFile(tomlPath, 'model = "openrouter-2o"\n', "utf8");
+
+    await installTraeHooks({ homeDir });
+    await installTraeHooks({ homeDir });
+
+    const updated = await readFile(tomlPath, "utf8");
+    assert.equal((updated.match(/# >>> runweave-hooks/g) ?? []).length, 1);
+    assert.equal((updated.match(/# <<< runweave-hooks/g) ?? []).length, 1);
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
+  }
+});
+
+test("strips pre-existing un-fenced runweave [[hooks.X]] entries when upserting", () => {
   const input = [
-    "version: 1",
-    "hooks:",
-    "  - command: 'third-party-tool'",
-    "    type: command",
-    "    matchers:",
-    "      - event: stop",
-    "  - command: '/tmp/browser-viewer-hook-bridge --source trae'",
-    "    matchers:",
-    "      - event: stop",
-    "      - event: user_prompt_submit",
-    "    type: command",
-    "  - command: 'neighbor-tool'",
-    "    type: command",
-    "    matchers:",
-    "      - event: post_tool_use",
+    'model = "openrouter-2o"',
+    "",
+    "[[hooks.PostToolUse]]",
+    "",
+    "[[hooks.PostToolUse.hooks]]",
+    'command = "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source trae"',
+    'timeout = "unlimited"',
+    'type = "command"',
+    "",
+    "[[hooks.Stop]]",
+    "",
+    "[[hooks.Stop.hooks]]",
+    'command = "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source trae"',
+    'timeout = "unlimited"',
+    'type = "command"',
+    "",
+    "[hooks.state]",
+    "",
     "",
   ].join("\n");
 
-  const output = upsertTraeHookBlock(
+  const output = upsertTraeTomlHookBlock(
     input,
-    renderTraeHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
+    renderTraeTomlHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
   );
 
-  assert.match(output, /third-party-tool/);
-  assert.match(output, /neighbor-tool/);
-  assert.equal((output.match(/browser-viewer-hook-bridge --source trae/g) ?? []).length, 1);
-  assert.doesNotMatch(output, /\/tmp\/browser-viewer-hook-bridge --source trae/);
-});
-
-test("collapses multiple top-level trae browser-viewer blocks down to one block", () => {
-  const input = [
-    "version: 1",
-    "hooks:",
-    "  - type: command",
-    "    command: 'third-party-tool'",
-    "    matchers:",
-    "      - event: stop",
-    "  - type: command",
-    "    command: '/tmp/browser-viewer-hook-bridge --source trae'",
-    "    matchers:",
-    "      - event: stop",
-    "  - type: command",
-    "    command: '/other/browser-viewer-hook-bridge --source trae'",
-    "    matchers:",
-    "      - event: user_prompt_submit",
-    "  - type: command",
-    "    command: 'neighbor-tool'",
-    "    matchers:",
-    "      - event: post_tool_use",
-    "",
-  ].join("\n");
-
-  const output = upsertTraeHookBlock(
-    input,
-    renderTraeHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
-  );
-
-  assert.match(output, /third-party-tool/);
-  assert.match(output, /neighbor-tool/);
-  assert.equal((output.match(/browser-viewer-hook-bridge --source trae/g) ?? []).length, 1);
-  assert.doesNotMatch(output, /\/tmp\/browser-viewer-hook-bridge --source trae/);
-  assert.doesNotMatch(output, /\/other\/browser-viewer-hook-bridge --source trae/);
-});
-
-test("expands an inline top-level hooks array instead of appending a second hooks key", () => {
-  const input = ["version: 1", "hooks: []", "profiles:", "  default: true", ""].join("\n");
-
-  const output = upsertTraeHookBlock(
-    input,
-    renderTraeHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
-  );
-
-  assert.equal((output.match(/^hooks:/gm) ?? []).length, 1);
-  assert.ok(output.includes("hooks:\n  - type: command"));
-  assert.match(output, /browser-viewer-hook-bridge --source trae/);
-  assert.match(output, /profiles:/);
+  // Only the fenced block contributes Stop/PostToolUse entries — exactly one each.
+  assert.equal((output.match(/\[\[hooks\.Stop\]\]/g) ?? []).length, 1);
+  assert.equal((output.match(/\[\[hooks\.PostToolUse\]\]/g) ?? []).length, 1);
+  assert.equal((output.match(/# >>> runweave-hooks/g) ?? []).length, 1);
+  // Unrelated [hooks.state] section must remain.
+  assert.match(output, /\[hooks\.state\]/);
 });
 
 test("preserves unknown array members when merging browser-viewer hooks", () => {
@@ -572,6 +592,147 @@ test("removes superseded codex notify hooks from hooks.json on install", async (
       commands.some((command) => command.includes("browser-viewer-hook-bridge --source codex")),
       true,
     );
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
+  }
+});
+
+test("strips a legacy top-level notify key that points at notify.sh (single-line array)", () => {
+  const input = [
+    'model = "gpt-5.5"',
+    'approval_policy = "never"',
+    'notify = ["bash", "/Users/me/.codex/notify.sh"]',
+    "",
+    '[projects."/Users/me"]',
+    'trust_level = "trusted"',
+    "",
+  ].join("\n");
+
+  const output = stripLegacyCodexNotifyKey(input);
+  assert.doesNotMatch(output, /^notify\s*=/m);
+  assert.match(output, /^model = "gpt-5\.5"/m);
+  assert.match(output, /\[projects\."\/Users\/me"\]/);
+});
+
+test("strips a legacy top-level notify key spanning multiple lines (SkyComputerUseClient wrapper)", () => {
+  const input = [
+    'model = "gpt-5.5"',
+    "",
+    "notify = [",
+    '  "/Users/me/.codex/computer-use/Sky.app/Contents/MacOS/SkyComputerUseClient",',
+    '  "turn-ended",',
+    '  "--previous-notify",',
+    '  "[\\"bash\\",\\"/Users/me/.codex/notify.sh\\"]",',
+    "]",
+    "",
+    '[projects."/Users/me"]',
+    'trust_level = "trusted"',
+    "",
+  ].join("\n");
+
+  const output = stripLegacyCodexNotifyKey(input);
+  assert.doesNotMatch(output, /^notify\s*=/m);
+  assert.doesNotMatch(output, /SkyComputerUseClient/);
+  assert.match(output, /^model = "gpt-5\.5"/m);
+  assert.match(output, /\[projects\."\/Users\/me"\]/);
+});
+
+test("keeps a third-party notify key that does not reference notify.sh", () => {
+  const input = [
+    'model = "gpt-5.5"',
+    'notify = ["/usr/local/bin/my-third-party-notifier"]',
+    "",
+  ].join("\n");
+
+  assert.equal(stripLegacyCodexNotifyKey(input), input);
+});
+
+test("does not touch a notify key nested inside a section table", () => {
+  const input = [
+    'model = "gpt-5.5"',
+    "",
+    "[some.section]",
+    'notify = ["/Users/me/.codex/notify.sh"]',
+    "",
+  ].join("\n");
+
+  // Section-scoped notify is not the legacy top-level field; leave it alone.
+  assert.equal(stripLegacyCodexNotifyKey(input), input);
+});
+
+test("is a no-op when config.toml has no notify key", () => {
+  const input = 'model = "gpt-5.5"\n';
+  assert.equal(stripLegacyCodexNotifyKey(input), input);
+});
+
+test("pruneCodexConfigNotify writes back when notify.sh-shaped notify exists", async () => {
+  const homeDir = await createTempHome();
+  try {
+    const codexDir = path.join(homeDir, ".codex");
+    await mkdir(codexDir, { recursive: true });
+    const configPath = path.join(codexDir, "config.toml");
+    await writeFile(
+      configPath,
+      [
+        'model = "gpt-5.5"',
+        'notify = ["bash", "' + path.join(homeDir, ".codex", "notify.sh") + '"]',
+        "",
+        '[projects."/Users/me"]',
+        'trust_level = "trusted"',
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await pruneCodexConfigNotify({ homeDir });
+
+    const updated = await readFile(configPath, "utf8");
+    assert.doesNotMatch(updated, /^notify\s*=/m);
+    assert.match(updated, /^model = "gpt-5\.5"/m);
+    assert.match(updated, /\[projects\."\/Users\/me"\]/);
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
+  }
+});
+
+test("pruneCodexConfigNotify is a no-op when config.toml is missing", async () => {
+  const homeDir = await createTempHome();
+  try {
+    const codexDir = path.join(homeDir, ".codex");
+    await mkdir(codexDir, { recursive: true });
+    await pruneCodexConfigNotify({ homeDir });
+    await assertRejectsMissing(path.join(codexDir, "config.toml"));
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
+  }
+});
+
+test("installCodexHooks also prunes the legacy notify key from config.toml", async () => {
+  const homeDir = await createTempHome();
+  try {
+    const codexDir = path.join(homeDir, ".codex");
+    await mkdir(codexDir, { recursive: true });
+    const configPath = path.join(codexDir, "config.toml");
+    await writeFile(
+      configPath,
+      [
+        'model = "gpt-5.5"',
+        "notify = [",
+        '  "/Users/me/.codex/computer-use/Sky.app/Contents/MacOS/SkyComputerUseClient",',
+        '  "turn-ended",',
+        '  "--previous-notify",',
+        '  "[\\"bash\\",\\"' + path.join(homeDir, ".codex", "notify.sh") + '\\"]",',
+        "]",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    await writeFile(path.join(codexDir, "hooks.json"), '{"hooks":{}}\n', "utf8");
+
+    await installCodexHooks({ homeDir, resourcesDir: REPO_RESOURCES_DIR });
+
+    const updated = await readFile(configPath, "utf8");
+    assert.doesNotMatch(updated, /^notify\s*=/m);
   } finally {
     await rm(homeDir, { recursive: true, force: true });
   }

@@ -36,8 +36,18 @@ const CLAUDE_EVENTS = [
   "PostToolUse",
 ];
 
-const CODEX_EVENTS = ["SessionStart", "UserPromptSubmit", "Stop"];
-const TRAE_EVENTS = ["user_prompt_submit", "post_tool_use", "stop", "subagent_stop"];
+const CODEX_EVENTS = ["Stop"];
+// trae cli reads `~/.trae/traecli.toml` and uses TOML CamelCase event names.
+const TRAE_TOML_EVENTS = [
+  "PostToolUse",
+  "Stop",
+  "SubagentStop",
+  "UserPromptSubmit",
+] as const;
+const RUNWEAVE_TRAE_TOML_FENCE_BEGIN =
+  "# >>> runweave-hooks (managed by Browser Viewer) >>>";
+const RUNWEAVE_TRAE_TOML_FENCE_END =
+  "# <<< runweave-hooks (managed by Browser Viewer) <<<";
 
 export function mergeJsonHookEntry(args: {
   existing: Array<unknown>;
@@ -131,16 +141,25 @@ function isLegacyCodexNotifyHook(hook: unknown, legacyCommands: Set<string>): bo
   return legacyCommands.has(executable);
 }
 
-export function renderTraeHookBlock(command: string): string {
+export function renderTraeTomlHookBlock(command: string): string {
   const hookCommand = `${command} --source trae`;
-  const quotedCommand = hookCommand.replace(/'/g, "''");
-
-  return [
-    "  - type: command",
-    `    command: '${quotedCommand}'`,
-    "    matchers:",
-    ...TRAE_EVENTS.map((event) => `      - event: ${event}`),
-  ].join("\n");
+  // Single-quoted TOML strings are literal — no escaping needed for paths
+  // and arguments without single quotes. The bridge path and `--source trae`
+  // never contain single quotes, so this is safe.
+  const lines: string[] = [RUNWEAVE_TRAE_TOML_FENCE_BEGIN];
+  for (const event of TRAE_TOML_EVENTS) {
+    lines.push(
+      `[[hooks.${event}]]`,
+      "",
+      `[[hooks.${event}.hooks]]`,
+      `command = '${hookCommand}'`,
+      'timeout = "unlimited"',
+      'type = "command"',
+      "",
+    );
+  }
+  lines.push(RUNWEAVE_TRAE_TOML_FENCE_END);
+  return lines.join("\n");
 }
 
 export function buildLauncherScript(): string {
@@ -321,7 +340,9 @@ export async function installAllHooks(options: HookInstallerOptions = {}): Promi
   const context = resolveHookInstallerContext(options);
   await installNotifyAssets(context);
   await writeLauncherScript(context);
-  await installClaudeHooks(context);
+  // Phase 1: only codex + trae completion are supported end-to-end. Claude
+  // installer stays in-source for a future re-enable but is not invoked yet,
+  // so the green-dot path remains strictly limited to known AI CLIs.
   await installCodexHooks(context);
   await installTraeHooks(context);
 }
@@ -412,6 +433,105 @@ export async function installCodexHooks(options: HookInstallerOptions = {}): Pro
 
   existing.hooks = hooks;
   await writeJsonFile(hooksPath, existing);
+
+  // Strip the legacy top-level `notify = [...]` from ~/.codex/config.toml
+  // when it points at our own ~/.codex/notify.sh shim. Without this the
+  // bridge launcher (osascript + afplay) and notify.sh fire in parallel,
+  // producing duplicated desktop notifications + sounds for every codex Stop.
+  await pruneCodexConfigNotify(context);
+}
+
+export async function pruneCodexConfigNotify(
+  options: HookInstallerOptions = {},
+): Promise<void> {
+  const context = resolveHookInstallerContext(options);
+  const configPath = path.join(getCodexDir(context.homeDir), "config.toml");
+  const current = await readTextFile(configPath);
+  if (!current) {
+    return;
+  }
+
+  const next = stripLegacyCodexNotifyKey(current);
+  if (next === current) {
+    return;
+  }
+
+  await backupFile(configPath);
+  await writeFile(configPath, next, "utf8");
+}
+
+// Remove a top-level `notify = [...]` key from ~/.codex/config.toml when its
+// value references our legacy ~/.codex/notify.sh shim (directly, or via the
+// SkyComputerUseClient `--previous-notify` wrapper). Sections like
+// `[some.table]\nnotify = [...]` are left untouched, and unrelated notify
+// configurations (third-party, not pointing at notify.sh) are kept as-is.
+export function stripLegacyCodexNotifyKey(content: string): string {
+  const lines = content.split("\n");
+  const result: string[] = [];
+  let insideSection = false;
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    const trimmed = line.trim();
+
+    if (/^\[\[?[^\]]+\]?\]/.test(trimmed)) {
+      insideSection = true;
+      result.push(line);
+      index += 1;
+      continue;
+    }
+
+    if (!insideSection && /^notify\s*=\s*\[/.test(line)) {
+      const arrayEnd = findTomlArrayEnd(lines, index);
+      if (arrayEnd !== -1) {
+        const captured = lines.slice(index, arrayEnd + 1).join("\n");
+        if (captured.includes("notify.sh")) {
+          index = arrayEnd + 1;
+          continue;
+        }
+      }
+    }
+
+    result.push(line);
+    index += 1;
+  }
+
+  return result.join("\n");
+}
+
+function findTomlArrayEnd(lines: string[], startIndex: number): number {
+  let depth = 0;
+  let inString: '"' | "'" | null = null;
+  for (let lineIndex = startIndex; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex] ?? "";
+    for (let charIndex = 0; charIndex < line.length; charIndex += 1) {
+      const ch = line[charIndex];
+      if (inString) {
+        if (ch === "\\" && inString === '"') {
+          charIndex += 1;
+          continue;
+        }
+        if (ch === inString) {
+          inString = null;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        inString = ch;
+        continue;
+      }
+      if (ch === "[") {
+        depth += 1;
+      } else if (ch === "]") {
+        depth -= 1;
+        if (depth === 0) {
+          return lineIndex;
+        }
+      }
+    }
+  }
+  return -1;
 }
 
 export async function installTraeHooks(options: HookInstallerOptions = {}): Promise<void> {
@@ -421,14 +541,59 @@ export async function installTraeHooks(options: HookInstallerOptions = {}): Prom
     return;
   }
 
-  const yamlPath = path.join(configDir, "traecli.yaml");
-  await backupFile(yamlPath);
+  const tomlPath = path.join(configDir, "traecli.toml");
+  await backupFile(tomlPath);
 
-  const current = await readTextFile(yamlPath);
-  const nextBlock = renderTraeHookBlock(launcherCommand(context));
-  const nextContent = upsertTraeHookBlock(current, nextBlock);
+  const current = await readTextFile(tomlPath);
+  const nextBlock = renderTraeTomlHookBlock(launcherCommand(context));
+  const nextContent = upsertTraeTomlHookBlock(current, nextBlock);
 
-  await writeFile(yamlPath, ensureTrailingNewline(nextContent), "utf8");
+  await writeFile(tomlPath, ensureTrailingNewline(nextContent), "utf8");
+}
+
+export function upsertTraeTomlHookBlock(content: string, block: string): string {
+  const fenceRegex = new RegExp(
+    `${escapeRegex(RUNWEAVE_TRAE_TOML_FENCE_BEGIN)}[\\s\\S]*?${escapeRegex(
+      RUNWEAVE_TRAE_TOML_FENCE_END,
+    )}`,
+    "g",
+  );
+
+  const fenceMatch = fenceRegex.exec(content);
+  if (fenceMatch) {
+    const before = stripLegacyTraeBridgeEntries(content.slice(0, fenceMatch.index));
+    const after = stripLegacyTraeBridgeEntries(
+      content.slice(fenceMatch.index + fenceMatch[0].length),
+    );
+    return collapseBlankLines(`${before}${block}${after}`);
+  }
+
+  const stripped = stripLegacyTraeBridgeEntries(content);
+  if (!stripped.trim()) {
+    return block;
+  }
+  return collapseBlankLines(`${stripped.trimEnd()}\n\n${block}`);
+}
+
+// Strip any pre-existing un-fenced [[hooks.<Event>]] paragraphs that point at
+// the Runweave bridge so we can replace them with the fenced canonical block.
+// Earlier installer revisions wrote individual entries without fence markers,
+// and some users edited traecli.toml by hand — both leave un-fenced entries.
+function stripLegacyTraeBridgeEntries(content: string): string {
+  // Match a top-level [[hooks.<Event>]] paragraph followed by its
+  // [[hooks.<Event>.hooks]] sub-table whose command references the bridge.
+  // The body runs up to the next TOML section header (line starting with `[`).
+  const legacyRegex =
+    /\[\[hooks\.[A-Za-z][A-Za-z0-9_]*\]\][^[]*\[\[hooks\.[A-Za-z][A-Za-z0-9_]*\.hooks\]\][^[]*?browser-viewer-hook-bridge[^[]*/g;
+  return content.replace(legacyRegex, "");
+}
+
+function collapseBlankLines(content: string): string {
+  return content.replace(/\n{3,}/g, "\n\n");
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function directoryExists(dirPath: string): Promise<boolean> {
@@ -561,11 +726,15 @@ function getTraeDir(homeDir: string): string {
 }
 
 async function hasAnyConfigDir(context: HookInstallerContext): Promise<boolean> {
-  return (
-    (await directoryExists(getClaudeDir(context.homeDir))) ||
-    (await directoryExists(getCodexDir(context.homeDir))) ||
-    (await directoryExists(getTraeDir(context.homeDir)))
-  );
+  // Phase 1 supports codex + trae only, so the trigger is whichever of those
+  // config dirs exist on the host.
+  if (await directoryExists(getCodexDir(context.homeDir))) {
+    return true;
+  }
+  if (await directoryExists(getTraeDir(context.homeDir))) {
+    return true;
+  }
+  return false;
 }
 
 function launcherCommand(context: HookInstallerContext): string {
@@ -661,130 +830,6 @@ function isBrowserViewerHookObject(hook: Record<string, unknown>): boolean {
 
 function ensureTrailingNewline(content: string): string {
   return content.endsWith("\n") ? content : `${content}\n`;
-}
-
-export function upsertTraeHookBlock(content: string, block: string): string {
-  if (!content.trim()) {
-    return `hooks:\n${block}`;
-  }
-
-  const lines = content.split("\n");
-  const blockLines = block.split("\n");
-  const hooksSection = findTopLevelHooksSection(lines);
-  if (hooksSection) {
-    if (hooksSection.inlineEmpty) {
-      const nextLines = [...lines.slice(0, hooksSection.start), "hooks:", ...blockLines, ...lines.slice(hooksSection.start + 1)];
-      return joinYamlLines(nextLines);
-    }
-
-    const browserViewerLocations = findTraeBrowserViewerBlocks(
-      lines,
-      hooksSection.start + 1,
-      hooksSection.end,
-      lineIndent(lines[hooksSection.start] ?? ""),
-    );
-    const insertAt = browserViewerLocations[0]?.start ?? hooksSection.end;
-    const nextLines: string[] = [];
-    nextLines.push(...lines.slice(0, insertAt), ...blockLines);
-
-    let cursor = insertAt;
-    for (const location of browserViewerLocations) {
-      nextLines.push(...lines.slice(cursor, location.start));
-      cursor = location.end;
-    }
-    nextLines.push(...lines.slice(cursor));
-
-    return joinYamlLines(nextLines);
-  }
-
-  return `${content.trimEnd()}\n\nhooks:\n${block}`;
-}
-
-function findTraeBrowserViewerBlocks(
-  lines: string[],
-  startIndex: number,
-  endIndex: number,
-  hooksIndent: number,
-): Array<{ start: number; end: number }> {
-  const locations: Array<{ start: number; end: number }> = [];
-
-  for (let index = startIndex; index < endIndex; index += 1) {
-    if (!isTraeTopLevelListItem(lines[index] ?? "", hooksIndent)) {
-      continue;
-    }
-
-    const start = index;
-    const end = findTraeBlockEnd(lines, start, endIndex);
-    const blockLines = lines.slice(start, end);
-    if (blockLines.some((line) => line.includes(BRIDGE_BASENAME))) {
-      locations.push({ start, end });
-    }
-
-    index = end - 1;
-  }
-
-  return locations;
-}
-
-function findTraeBlockEnd(lines: string[], start: number, ceiling: number): number {
-  const startIndent = lineIndent(lines[start] ?? "");
-  let current = start + 1;
-
-  while (current < lines.length && current < ceiling) {
-    const line = lines[current] ?? "";
-    const trimmed = line.trim();
-    const indent = lineIndent(line);
-    if (trimmed !== "" && indent <= startIndent) {
-      break;
-    }
-
-    current += 1;
-  }
-
-  return current;
-}
-
-function findTopLevelHooksSection(lines: string[]): { start: number; end: number; inlineEmpty: boolean } | null {
-  const start = lines.findIndex(
-    (line) =>
-      lineIndent(line) === 0 && /^(hooks:|hooks:\s*\[\s*\])\s*$/.test(line.trim()),
-  );
-  if (start < 0) {
-    return null;
-  }
-
-  const inlineEmpty = /^hooks:\s*\[\s*\]\s*$/.test(lines[start]?.trim() ?? "");
-  if (inlineEmpty) {
-    return { start, end: start + 1, inlineEmpty };
-  }
-
-  let end = lines.length;
-  for (let index = start + 1; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    if (!line.trim()) {
-      continue;
-    }
-
-    if (lineIndent(line) === 0) {
-      end = index;
-      break;
-    }
-  }
-
-  return { start, end, inlineEmpty };
-}
-
-function joinYamlLines(lines: string[]): string {
-  return lines.join("\n").replace(/\n{3,}/g, "\n\n");
-}
-
-function lineIndent(line: string): number {
-  const match = line.match(/^(\s*)/);
-  return match?.[1]?.length ?? 0;
-}
-
-function isTraeTopLevelListItem(line: string, hooksIndent: number): boolean {
-  return lineIndent(line) > hooksIndent && line.trimStart().startsWith("- ");
 }
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {

@@ -6,6 +6,7 @@ import { execFile as nodeExecFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
 import { logTerminalPerf } from "./perf-logging";
+import { sanitizeTerminalProcessEnv } from "./env";
 import { applyShellIntegration } from "./shell-integration";
 
 export interface TmuxTarget {
@@ -80,6 +81,18 @@ const InteractivePaneReadyMinWaitMs = 1_000;
 const InteractivePaneReadyStableMs = 200;
 const InteractivePaneReadyTimeoutMs = 2_500;
 const TMUX_RUNTIME_OPTION_ARGS = ["set-option", "-g", "mouse", "on"];
+const TMUX_SANITIZE_NPM_PREFIX_ENV_ARGS = [
+  "set-environment",
+  "-g",
+  "-u",
+  "npm_config_prefix",
+  ";",
+  "set-environment",
+  "-g",
+  "-u",
+  "NPM_CONFIG_PREFIX",
+  ";",
+];
 const TMUX_METADATA_FIELD_SEPARATOR = "__RUNWEAVE_METADATA_FIELD__";
 const SHELL_INTEGRATION_ENV_KEYS = [
   "BROWSER_VIEWER_LAST_COMMAND",
@@ -112,7 +125,7 @@ export class TmuxService {
   private availability: Promise<TmuxAvailability> | null = null;
 
   constructor(options?: TmuxServiceOptions) {
-    this.env = options?.env ?? process.env;
+    this.env = sanitizeTerminalProcessEnv(options?.env ?? process.env);
     this.execFileImpl = options?.execFile ?? execFileAsync;
     this.now = options?.now ?? (() => Date.now());
     this.socketPath =
@@ -212,6 +225,7 @@ export class TmuxService {
       command: this.binary,
       args: [
         ...this.buildServerArgs(target.socketPath),
+        ...TMUX_SANITIZE_NPM_PREFIX_ENV_ARGS,
         ...TMUX_RUNTIME_OPTION_ARGS,
         ";",
         "new-session",
@@ -232,6 +246,7 @@ export class TmuxService {
   ): Promise<void> {
     await this.runTmux(
       [
+        ...TMUX_SANITIZE_NPM_PREFIX_ENV_ARGS,
         ...TMUX_RUNTIME_OPTION_ARGS,
         ";",
         "new-session",
@@ -662,9 +677,31 @@ async function delay(delayMs: number): Promise<void> {
 }
 
 function formatShellCommand(launchCommand: TmuxLaunchCommand): string {
-  return [launchCommand.command, ...launchCommand.args]
+  const commandParts = isInteractiveShellLaunchCommand(launchCommand)
+    ? [
+        "env",
+        "-u",
+        "npm_config_prefix",
+        "-u",
+        "NPM_CONFIG_PREFIX",
+        launchCommand.command,
+        ...launchCommand.args,
+      ]
+    : [launchCommand.command, ...launchCommand.args];
+  return commandParts
     .map((part) => shellQuote(part))
     .join(" ");
+}
+
+function isInteractiveShellLaunchCommand(
+  launchCommand: TmuxLaunchCommand,
+): boolean {
+  const commandName =
+    launchCommand.command.split(/[\\/]/).at(-1) ?? launchCommand.command;
+  if (!["bash", "zsh", "sh", "fish"].includes(commandName)) {
+    return false;
+  }
+  return !launchCommand.args.some((arg) => arg === "-c" || arg === "-lc");
 }
 
 function normalizePaneCommand(
