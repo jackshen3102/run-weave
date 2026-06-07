@@ -1,10 +1,14 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { TerminalCompletionEvent } from "@browser-viewer/shared";
+import { logger } from "../logging";
 import type { TerminalCompletionEventStore } from "../terminal/completion-events";
 import type { TerminalSessionManager } from "../terminal/manager";
 
 const completionReasonEnum = z.enum(["hook_stop", "notify", "ai_process_exit", "manual"]);
+const terminalCompletionLogger = logger.child({
+  component: "terminal-completion",
+});
 
 const completionEventSchema = z
   .object({
@@ -29,21 +33,25 @@ export function createInternalTerminalCompletionRouter(options: {
   router.post("/", (req, res) => {
     const expectedToken = options.hookToken;
     if (!expectedToken) {
-      console.warn("[viewer-be] terminal-completion: hook unavailable (no token)");
+      terminalCompletionLogger.warn("terminal-completion.hook.unavailable", {
+        message: "Terminal completion hook unavailable; no token configured",
+      });
       res.status(503).json({ message: "Terminal completion hook unavailable" });
       return;
     }
 
     if (req.header("x-runweave-hook-token") !== expectedToken) {
-      console.warn("[viewer-be] terminal-completion: bad hook token");
+      terminalCompletionLogger.warn("terminal-completion.hook.unauthorized", {
+        message: "Terminal completion hook token rejected",
+      });
       res.status(401).json({ message: "Unauthorized" });
       return;
     }
 
     const parsed = completionEventSchema.safeParse(req.body);
     if (!parsed.success) {
-      console.warn("[viewer-be] terminal-completion: invalid body", {
-        body: req.body,
+      terminalCompletionLogger.warn("terminal-completion.body.invalid", {
+        message: "Terminal completion request body invalid",
         errors: parsed.error.flatten(),
       });
       res.status(400).json({
@@ -57,7 +65,8 @@ export function createInternalTerminalCompletionRouter(options: {
       parsed.data.terminalSessionId,
     );
     if (!session) {
-      console.warn("[viewer-be] terminal-completion: session not found", {
+      terminalCompletionLogger.warn("terminal-completion.session.missing", {
+        message: "Terminal completion session not found",
         terminalSessionId: parsed.data.terminalSessionId,
       });
       res.status(404).json({ message: "Terminal session not found" });
@@ -77,7 +86,8 @@ export function createInternalTerminalCompletionRouter(options: {
       !session.activeCommand ||
       !allowedActiveCommands.has(session.activeCommand)
     ) {
-      console.info("[viewer-be] terminal-completion: ignored", {
+      terminalCompletionLogger.info("terminal-completion.ignored", {
+        message: "Terminal completion event ignored",
         terminalSessionId: parsed.data.terminalSessionId,
         source: parsed.data.source,
         activeCommand: session.activeCommand,
@@ -98,7 +108,8 @@ export function createInternalTerminalCompletionRouter(options: {
       },
       session,
     );
-    console.info("[viewer-be] terminal-completion: recorded", {
+    terminalCompletionLogger.info("terminal-completion.recorded", {
+      message: "Terminal completion event recorded",
       id: event.id,
       terminalSessionId: event.terminalSessionId,
       source: event.source,

@@ -3,6 +3,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import type { IPty } from "node-pty";
 import type { TerminalSignal } from "@browser-viewer/shared";
+import { logger } from "../logging";
 import type { TerminalLaunchConfig } from "./default-shell";
 import { resolveNodePtyDirectory } from "./node-pty-path";
 import {
@@ -65,6 +66,7 @@ interface PtyServiceDependencies {
 
 const QUICK_EXIT_FALLBACK_THRESHOLD_MS = 1_000;
 const TERMINAL_PROGRAM_NAME = "browser-viewer";
+const ptyLogger = logger.child({ component: "terminal" });
 
 const require = createRequire(
   path.join(process.cwd(), "__browser_viewer_node_pty_loader__.cjs"),
@@ -102,8 +104,9 @@ function ensureSpawnHelperExecutable(): void {
       chmodSync(helperPath, executableMode);
     }
   } catch (error) {
-    console.error("[viewer-be] failed to prepare node-pty spawn-helper", {
-      error: String(error),
+    ptyLogger.error("terminal.pty.spawn-helper.prepare.failed", {
+      message: "Failed to prepare node-pty spawn-helper",
+      error,
     });
   }
 }
@@ -305,6 +308,11 @@ export class PtyService {
       }
 
       fallbackActivated = true;
+      ptyLogger.warn("terminal.pty.fallback.activated", {
+        message: "Terminal pty fallback activated",
+        command: fallback.command,
+        argsCount: fallback.args.length,
+      });
       emitData(
         formatFallbackMessage([
           ...reasonLines,
@@ -315,6 +323,12 @@ export class PtyService {
       try {
         launch(fallback.command, fallback.args, true);
       } catch (fallbackError) {
+        ptyLogger.error("terminal.pty.fallback.failed", {
+          message: "Terminal pty fallback failed",
+          command: fallback.command,
+          argsCount: fallback.args.length,
+          error: fallbackError,
+        });
         emitData(
           formatFallbackMessage([
             `fallback shell failed to start: ${String(fallbackError)}`,
@@ -331,6 +345,13 @@ export class PtyService {
       try {
         runtime = spawnRuntime(command, args);
       } catch (error) {
+        ptyLogger.error("terminal.pty.spawn.failed", {
+          message: "Terminal pty spawn failed",
+          command,
+          argsCount: args.length,
+          cwd: options.cwd,
+          error,
+        });
         activateFallback(
           [
             `failed to spawn shell: ${String(error)}`,
@@ -369,6 +390,15 @@ export class PtyService {
           event.exitCode > 0 &&
           runDuration < QUICK_EXIT_FALLBACK_THRESHOLD_MS;
         if (shouldFallback) {
+          ptyLogger.warn("terminal.pty.quick-exit", {
+            message: "Terminal pty exited quickly",
+            command,
+            argsCount: args.length,
+            exitCode: event.exitCode,
+            signal: event.signal,
+            runDurationMs: runDuration,
+            fallbackAvailable: Boolean(fallback),
+          });
           const canActivateFallback = Boolean(fallback);
           activateFallback(
             formatQuickExitMessage(command, args, event, runDuration),

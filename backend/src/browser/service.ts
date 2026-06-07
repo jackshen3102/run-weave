@@ -4,10 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import type { BrowserProfile, SessionHeaders } from "@browser-viewer/shared";
 import type { Browser, BrowserContext, Page } from "playwright";
+import { logger } from "../logging";
 import { findAvailablePort } from "../server/listen";
 
 const LOCAL_BYPASS_RULE = "127.0.0.1,localhost";
 const WHISTLE_PROXY_SERVER = "http://127.0.0.1:8899";
+const browserLogger = logger.child({ component: "browser" });
 
 export interface BrowserSession {
   type: "launch" | "connect-cdp";
@@ -118,6 +120,12 @@ export class BrowserService {
     await mkdir(profileDir, { recursive: true });
     let context: BrowserContext;
     try {
+      browserLogger.info("browser.session.launch.started", {
+        message: "Browser session launch started",
+        sessionId,
+        proxyEnabled: options.proxyEnabled,
+        remoteDebuggingPort,
+      });
       context = await chromium.launchPersistentContext(profileDir, {
         headless: this.headless,
         args: buildLaunchArgs({
@@ -140,12 +148,23 @@ export class BrowserService {
       });
     } catch (error) {
       this.remoteDebuggingPorts.delete(sessionId);
+      browserLogger.error("browser.session.launch.failed", {
+        message: "Browser session launch failed",
+        sessionId,
+        proxyEnabled: options.proxyEnabled,
+        remoteDebuggingPort,
+        error,
+      });
       throw error;
     }
 
     context.on("close", () => {
       const current = this.contexts.get(sessionId);
       if (current === context) {
+        browserLogger.info("browser.session.context.closed", {
+          message: "Browser session context closed",
+          sessionId,
+        });
         this.cleanupSessionResources(sessionId);
       }
     });
@@ -162,7 +181,17 @@ export class BrowserService {
       return existingContext;
     }
 
-    const browser = await chromium.connectOverCDP(endpoint);
+    let browser: Browser;
+    try {
+      browser = await chromium.connectOverCDP(endpoint);
+    } catch (error) {
+      browserLogger.error("browser.session.cdp.connect.failed", {
+        message: "Browser CDP connection failed",
+        sessionId,
+        error,
+      });
+      throw error;
+    }
     const context = browser.contexts()[0];
     if (!context) {
       await browser.close().catch(() => undefined);
@@ -334,6 +363,12 @@ export class BrowserService {
       }
     }
 
+    browserLogger.error("browser.remote-debugging-port.allocate.failed", {
+      message: "Remote debugging port allocation failed",
+      sessionId,
+      basePort: this.remoteDebuggingPortBase,
+      attempts: 50,
+    });
     throw new Error(
       `[viewer-be] failed to allocate remote debugging port for session ${sessionId}`,
     );

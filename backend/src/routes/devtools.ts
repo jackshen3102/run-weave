@@ -1,8 +1,11 @@
 import type { TLSSocket } from "node:tls";
 import { Router } from "express";
 import type { Request, RequestHandler } from "express";
+import { logger } from "../logging";
 import type { SessionManager } from "../session/manager";
 import { resolvePageByTargetId } from "../ws/tab-target";
+
+const devtoolsLogger = logger.child({ component: "devtools" });
 
 interface CreateDevtoolsRouterOptions {
   authService: {
@@ -216,14 +219,19 @@ export function createDevtoolsHandler(
     const remoteDebuggingPort =
       options.sessionManager.getRemoteDebuggingPort(sessionId);
     if (remoteDebuggingPort == null) {
-      console.error("[viewer-be] devtools shell missing remote debugging port");
+      devtoolsLogger.error("devtools.remote-debugging-port.missing", {
+        message: "DevTools shell missing remote debugging port",
+        sessionId,
+        tabId,
+      });
       res.status(503).send("Remote debugging is unavailable");
       return;
     }
 
     const revision = await resolveChromiumRevision(remoteDebuggingPort);
     if (!revision) {
-      console.error("[viewer-be] devtools shell failed to resolve revision", {
+      devtoolsLogger.error("devtools.revision.resolve.failed", {
+        message: "DevTools shell failed to resolve Chromium revision",
         remoteDebuggingPort,
       });
       res.status(502).send("Failed to resolve Chromium revision");
@@ -236,7 +244,8 @@ export function createDevtoolsHandler(
       tabId,
     });
     if (!targetId) {
-      console.error("[viewer-be] devtools shell failed to resolve target id", {
+      devtoolsLogger.error("devtools.target.resolve.failed", {
+        message: "DevTools shell failed to resolve target id",
         sessionId,
         tabId,
       });

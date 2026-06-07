@@ -1,4 +1,5 @@
 import type { TerminalSessionManager, TerminalSessionRecord } from "./manager";
+import { logger } from "../logging";
 import { resolveTerminalFallbackLaunchConfig } from "./default-shell";
 import type { PtyRuntime, PtyService } from "./pty-service";
 import type { TerminalRuntimeRegistry } from "./runtime-registry";
@@ -23,6 +24,7 @@ interface EnsureTerminalRuntimeOptions {
 const TmuxPostEnterInputDelayMs = 300;
 const BRACKETED_PASTE_START = "\u001b[200~";
 const BRACKETED_PASTE_END = "\u001b[201~";
+const terminalLogger = logger.child({ component: "terminal" });
 
 export function isTmuxBackedSession(
   session: Pick<TerminalSessionRecord, "runtimeKind">,
@@ -73,18 +75,24 @@ export async function ensureTerminalRuntime(
             currentSession.id,
           );
           warning = `Original tmux session was lost; created a fresh terminal session (${attempt.count}/${attempt.maxAttempts}).`;
-          console.error(
-            "[viewer-be] tmux terminal session missing; rebuilding",
-            {
-              terminalSessionId: currentSession.id,
-              sessionName: target.sessionName,
-              socketPath: target.socketPath,
-              rebuildCount: attempt.count,
-              rebuildWindowMs: attempt.windowMs,
-            },
-          );
+          terminalLogger.warn("terminal.tmux.session-missing.rebuild", {
+            message: "Tmux terminal session missing; rebuilding",
+            terminalSessionId: currentSession.id,
+            sessionName: target.sessionName,
+            socketPath: target.socketPath,
+            rebuildCount: attempt.count,
+            rebuildWindowMs: attempt.windowMs,
+          });
         } catch (error) {
           if (error instanceof TmuxRebuildLimitError) {
+            terminalLogger.error("terminal.tmux.rebuild-limit.exceeded", {
+              message: "Tmux rebuild limit exceeded",
+              terminalSessionId: currentSession.id,
+              count: error.count,
+              windowMs: error.windowMs,
+              maxAttempts: error.maxAttempts,
+              error,
+            });
             await options.terminalSessionManager.updateRuntimeMetadata(
               currentSession.id,
               {
@@ -162,6 +170,12 @@ export async function ensureTerminalRuntime(
       args: options.session.args,
     }),
     onFallbackActivated: (fallback) => {
+      terminalLogger.warn("terminal.pty.fallback.activated", {
+        message: "Terminal pty fallback activated",
+        terminalSessionId: options.session.id,
+        command: fallback.command,
+        argsCount: fallback.args.length,
+      });
       void options.terminalSessionManager.updateSessionLaunch(
         options.session.id,
         fallback,
@@ -343,11 +357,12 @@ export async function readTerminalScrollbackCapture(
         sourceCols: captured.sourceCols,
       };
     } catch (error) {
-      console.error("[viewer-be] tmux capture-pane failed", {
+      terminalLogger.error("terminal.tmux.capture-pane.failed", {
+        message: "Tmux capture-pane failed",
         terminalSessionId: session.id,
         tmuxSessionName: session.tmuxSessionName,
         tmuxSocketPath: session.tmuxSocketPath,
-        error: String(error),
+        error,
       });
       return { data: "" };
     }

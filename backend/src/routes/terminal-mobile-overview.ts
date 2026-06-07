@@ -1,4 +1,5 @@
 import type { TerminalMobileOverviewResponse } from "@browser-viewer/shared";
+import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { readTerminalScrollbackCapture } from "../terminal/runtime-launcher";
 import type { TmuxService } from "../terminal/tmux-service";
@@ -6,6 +7,7 @@ import { toProjectPayload, toSessionListItem } from "./terminal-route-payloads";
 
 const MOBILE_TERMINAL_OVERVIEW_TAIL_LINES = 80;
 const MOBILE_TERMINAL_OVERVIEW_TAIL_TIMEOUT_MS = 1_500;
+const terminalLogger = logger.child({ component: "terminal" });
 
 interface MobileOverviewTailCapture {
   data: string;
@@ -68,9 +70,10 @@ export async function buildTerminalMobileOverviewPayload(
           MOBILE_TERMINAL_OVERVIEW_TAIL_TIMEOUT_MS,
           "Terminal mobile overview tail read timed out",
         ).catch((error: unknown) => {
-          console.error("[viewer-be] terminal mobile overview tail read failed", {
+          terminalLogger.error("terminal.mobile-overview.tail-read.failed", {
+            message: "Terminal mobile overview tail read failed",
             terminalSessionId: session.id,
-            error: String(error),
+            error,
           });
           return {
             data: "",

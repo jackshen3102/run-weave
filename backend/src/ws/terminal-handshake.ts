@@ -11,6 +11,7 @@ interface HandshakeFailure {
   ok: false;
   errorMessage: "Unauthorized" | "Missing terminalSessionId" | "Terminal session not found";
   closeReason: "Unauthorized" | "Missing terminalSessionId" | "Terminal session not found";
+  logMeta?: Record<string, unknown>;
 }
 
 export type TerminalHandshakeResult = HandshakeSuccess | HandshakeFailure;
@@ -44,6 +45,7 @@ export function validateTerminalWebSocketHandshake(params: {
       ok: false,
       errorMessage: "Unauthorized",
       closeReason: "Unauthorized",
+      logMeta: { terminalSessionId },
     };
   }
 
@@ -52,6 +54,7 @@ export function validateTerminalWebSocketHandshake(params: {
       ok: false,
       errorMessage: "Terminal session not found",
       closeReason: "Terminal session not found",
+      logMeta: { terminalSessionId },
     };
   }
 

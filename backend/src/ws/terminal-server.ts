@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
 import type { AuthService } from "../auth/service";
+import { logger } from "../logging";
 import {
   isTunnelRequestAuthorized,
   rejectUnauthorizedTunnelUpgrade,
@@ -38,6 +39,8 @@ import {
   TMUX_METADATA_SYNC_DELAY_MS,
 } from "./terminal-server-connection-helpers";
 
+const terminalWsLogger = logger.child({ component: "terminal-ws" });
+
 export function attachTerminalWebSocketServer(
   server: HttpServer,
   terminalSessionManager: TerminalSessionManager,
@@ -73,12 +76,18 @@ export function attachTerminalWebSocketServer(
       terminalSessionManager,
     });
     if (!handshake.ok) {
+      terminalWsLogger.warn("terminal-ws.handshake.rejected", {
+        message: "Terminal websocket handshake rejected",
+        reason: handshake.closeReason,
+        ...handshake.logMeta,
+      });
       sendEvent(socket, { type: "error", message: handshake.errorMessage });
       socket.close(1008, handshake.closeReason);
       return;
     }
 
     const { terminalSessionId } = handshake;
+    const connectedAt = Date.now();
     const session = terminalSessionManager.getSession(terminalSessionId);
     const sendInitialSnapshot = shouldSendInitialSnapshot(request);
     const settleInitialTmuxRepaint = shouldSettleInitialTmuxRepaint(
@@ -109,6 +118,10 @@ export function attachTerminalWebSocketServer(
       tmuxService &&
       runtimeRegistry.getAttachedClientCount(terminalSessionId) === 0
     ) {
+      terminalWsLogger.info("terminal.tmux.attach-runtime.disposed", {
+        message: "Disposed idle tmux runtime before attaching terminal websocket",
+        terminalSessionId,
+      });
       await runtimeRegistry.disposeRuntime(terminalSessionId);
       runtime = undefined;
     }
@@ -129,6 +142,11 @@ export function attachTerminalWebSocketServer(
           });
         }
       } catch (error) {
+        terminalWsLogger.error("terminal.runtime.recreate.failed", {
+          message: "Failed to recreate terminal runtime",
+          terminalSessionId,
+          error,
+        });
         sendEvent(socket, {
           type: "error",
           message: `Failed to recreate terminal runtime: ${String(error)}`,
@@ -138,6 +156,11 @@ export function attachTerminalWebSocketServer(
       }
     }
     if (!runtime) {
+      terminalWsLogger.error("terminal.runtime.missing", {
+        message: "Terminal runtime not found",
+        terminalSessionId,
+        sessionStatus: session?.status ?? null,
+      });
       sendEvent(socket, {
         type: "error",
         message: "Terminal runtime not found",
@@ -240,9 +263,10 @@ export function attachTerminalWebSocketServer(
           await publishMetadata(metadata);
         }
       } catch (error) {
-        console.error("[viewer-be] tmux pane metadata sync failed", {
+        terminalWsLogger.error("terminal.tmux.metadata-sync.failed", {
+          message: "Tmux pane metadata sync failed",
           terminalSessionId,
-          error: String(error),
+          error,
         });
       } finally {
         tmuxMetadataSyncInFlight = false;
@@ -274,6 +298,13 @@ export function attachTerminalWebSocketServer(
       runtimeExists: Boolean(runtime),
       sessionStatus: session?.status ?? null,
     });
+    terminalWsLogger.info("terminal-ws.connected", {
+      message: "Terminal websocket connected",
+      terminalSessionId,
+      clientId,
+      runtimeKind: session && isTmuxBackedSession(session) ? "tmux" : "pty",
+      sessionStatus: session?.status ?? null,
+    });
     runtimeRegistry.attachClient(terminalSessionId, clientId);
     const unsubscribe = runtimeRegistry.subscribe(terminalSessionId, {
       onData(data) {
@@ -298,9 +329,10 @@ export function attachTerminalWebSocketServer(
             },
             { forceSend: true },
           ).catch((error: unknown) => {
-            console.error("[viewer-be] terminal metadata update failed", {
+            terminalWsLogger.error("terminal.tmux.metadata-sync.failed", {
+              message: "Terminal metadata update failed",
               terminalSessionId,
-              error: String(error),
+              error,
             });
           });
         }
@@ -356,6 +388,11 @@ export function attachTerminalWebSocketServer(
               sendStatusEvent(socket, "running");
               socket.close(1012, "Terminal tmux attach reattached");
             } catch (error) {
+              terminalWsLogger.error("terminal.runtime.recreate.failed", {
+                message: "Failed to recover tmux terminal runtime",
+                terminalSessionId,
+                error,
+              });
               sendEvent(socket, {
                 type: "error",
                 message: `Failed to recover tmux terminal runtime: ${String(error)}`,
@@ -421,6 +458,11 @@ export function attachTerminalWebSocketServer(
 
       const parsed = parseTerminalClientMessage(data);
       if (!parsed) {
+        terminalWsLogger.warn("terminal-ws.invalid-message", {
+          message: "Terminal websocket invalid message",
+          terminalSessionId,
+          messageLength: data.length,
+        });
         sendEvent(socket, { type: "error", message: "Invalid message" });
         return;
       }
@@ -500,15 +542,24 @@ export function attachTerminalWebSocketServer(
         void runtimeRegistry
           .disposeRuntime(terminalSessionId)
           .catch((error: unknown) => {
-            console.error("[viewer-be] failed to dispose idle tmux runtime", {
+            terminalWsLogger.error("terminal.tmux.attach-runtime.disposed", {
+              message: "Failed to dispose idle tmux runtime",
               terminalSessionId,
-              error: String(error),
+              error,
             });
           });
       }
     };
 
-    socket.on("close", () => {
+    socket.on("close", (code, reason) => {
+      terminalWsLogger.info("terminal-ws.closed", {
+        message: "Terminal websocket closed",
+        terminalSessionId,
+        clientId,
+        code,
+        reason: String(reason),
+        durationMs: Date.now() - connectedAt,
+      });
       cleanupConnection();
     });
 

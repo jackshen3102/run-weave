@@ -1,4 +1,6 @@
-const TERMINAL_PERF_LOG_PREFIX = "[terminal-perf-be]";
+import { logger } from "../logging";
+
+const terminalPerfLogger = logger.child({ component: "terminal-perf" });
 
 function isTerminalPerfLoggingEnabled(): boolean {
   return process.env.TERMINAL_PERF_LOGS === "true";
@@ -19,7 +21,9 @@ export function logTerminalPerf(
     return;
   }
 
-  console.info(TERMINAL_PERF_LOG_PREFIX, event, {
+  terminalPerfLogger.info("terminal.perf", {
+    message: "Terminal performance event",
+    perfEvent: event,
     at: new Date().toISOString(),
     ...details,
   });

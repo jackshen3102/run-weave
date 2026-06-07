@@ -15,8 +15,11 @@ import type {
 import { validateBrowserProfile } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
 import { readBearerToken } from "../auth/middleware";
+import { logger } from "../logging";
 import { createSessionFaviconHandler } from "./session-favicon";
 import type { SessionManager } from "../session/manager";
+
+const sessionLogger = logger.child({ component: "session" });
 
 const browserViewportSchema = z.object({
   width: z.number().int().min(1).max(10000),
@@ -214,13 +217,14 @@ async function resolveDefaultCdpEndpoint(): Promise<string> {
     if (endpoint) {
       return endpoint;
     }
-    console.warn(
-      "[viewer-be] resolve default CDP endpoint failed, fallback to 9222",
-    );
+    sessionLogger.warn("session.default-cdp-endpoint.fallback", {
+      message: "Resolve default CDP endpoint failed; falling back to 9222",
+    });
     return DEFAULT_CDP_ENDPOINT;
   } catch (error) {
-    console.error("[viewer-be] resolve default CDP endpoint failed", {
-      error: String(error),
+    sessionLogger.error("session.default-cdp-endpoint.fallback", {
+      message: "Resolve default CDP endpoint failed; falling back to 9222",
+      error,
     });
     return DEFAULT_CDP_ENDPOINT;
   }
@@ -326,8 +330,9 @@ export function createSessionRouter(
       };
       res.status(201).json(payload);
     } catch (error) {
-      console.error("[viewer-be] create session failed", {
-        error: String(error),
+      sessionLogger.error("session.create.failed", {
+        message: "Create session failed",
+        error,
       });
       res
         .status(500)
@@ -389,6 +394,10 @@ export function createSessionRouter(
       req.headers.authorization,
     );
     if (!authSessionId) {
+      sessionLogger.warn("session.ws-ticket.unauthorized", {
+        message: "Viewer websocket ticket request unauthorized",
+        sessionId: session.id,
+      });
       res.status(401).json({ message: "Unauthorized" });
       return;
     }
@@ -416,6 +425,10 @@ export function createSessionRouter(
       req.headers.authorization,
     );
     if (!authSessionId) {
+      sessionLogger.warn("session.devtools-ticket.unauthorized", {
+        message: "DevTools ticket request unauthorized",
+        sessionId: session.id,
+      });
       res.status(401).json({ message: "Unauthorized" });
       return;
     }

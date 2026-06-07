@@ -2,9 +2,11 @@ import { execFile } from "node:child_process";
 import { readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { logger } from "../logging";
 import { toRelativePath } from "./preview-paths";
 
 const execFileAsync = promisify(execFile);
+const terminalPreviewLogger = logger.child({ component: "terminal-preview" });
 
 const SEARCH_MAX_FILES = 20_000;
 const RG_SEARCH_TIMEOUT_MS = 5_000;
@@ -365,10 +367,17 @@ async function collectSearchCandidateFiles(rootPath: string): Promise<string[]> 
     return await collectFilesWithRipgrep(rootPath);
   } catch (error) {
     if (shouldWarnRipgrepFailure(error)) {
-      console.warn("[viewer-be] preview rg file search failed; falling back", {
-        rootPath,
-        error: describeRipgrepFailure(error),
-      });
+      const describedError = describeRipgrepFailure(error);
+      terminalPreviewLogger.warn(
+        describedError.includes("ETIMEDOUT") || describedError.includes("killed=true")
+          ? "terminal-preview.search.timeout"
+          : "terminal-preview.search.rg-fallback",
+        {
+          message: "Preview rg file search failed; falling back",
+          rootPath,
+          error: describedError,
+        },
+      );
     }
     return (await collectFiles(rootPath)).filter(shouldIncludeSearchCandidate);
   }

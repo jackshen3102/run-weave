@@ -1,5 +1,8 @@
 import type http from "node:http";
 import net from "node:net";
+import { logger } from "../logging";
+
+const serverLogger = logger.child({ component: "server" });
 
 interface ListenWithFallbackOptions {
   host?: string;
@@ -109,6 +112,14 @@ export async function listenWithFallback(
 
     try {
       await listenOnPort(server, port, options.host);
+      if (port !== startPort) {
+        serverLogger.warn("server.port.fallback", {
+          message: "Server bound to fallback port",
+          requestedPort: startPort,
+          port,
+          host: options.host,
+        });
+      }
       return port;
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;

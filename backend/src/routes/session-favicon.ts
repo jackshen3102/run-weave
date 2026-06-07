@@ -2,9 +2,12 @@ import { Buffer } from "node:buffer";
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import type { Page } from "playwright";
+import { logger } from "../logging";
 import type { SessionManager } from "../session/manager";
 import { resolvePageByTargetId } from "../ws/tab-target";
 import { resolveTabFaviconUrl } from "../ws/tabs";
+
+const sessionLogger = logger.child({ component: "session" });
 
 interface FaviconPayload {
   body: Buffer;
@@ -187,10 +190,11 @@ export function createSessionFaviconHandler(
       });
       sendFaviconResponse(res, payload, cacheTtlMs);
     } catch (error) {
-      console.error("[viewer-be] favicon proxy failed", {
+      sessionLogger.error("session.favicon.proxy.failed", {
+        message: "Favicon proxy failed",
         sessionId,
         tabId,
-        error: String(error),
+        error,
       });
       res.status(502).json({ message: "Failed to load favicon" });
     }

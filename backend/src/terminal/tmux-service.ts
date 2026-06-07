@@ -5,6 +5,7 @@ import path from "node:path";
 import { execFile as nodeExecFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
+import { logger } from "../logging";
 import { logTerminalPerf } from "./perf-logging";
 import { sanitizeTerminalProcessEnv } from "./env";
 import { applyShellIntegration } from "./shell-integration";
@@ -100,6 +101,7 @@ const SHELL_INTEGRATION_ENV_KEYS = [
   "PROMPT_COMMAND",
   "ZDOTDIR",
 ];
+const tmuxLogger = logger.child({ component: "terminal" });
 
 export class TmuxRebuildLimitError extends Error {
   constructor(
@@ -207,10 +209,11 @@ export class TmuxService {
       if (isProcessExitCode(error, 1)) {
         return false;
       }
-      console.error("[viewer-be] tmux has-session failed", {
+      tmuxLogger.error("terminal.tmux.has-session.failed", {
+        message: "Tmux has-session failed",
         sessionName: target.sessionName,
         socketPath: target.socketPath,
-        error: String(error),
+        error,
       });
       return false;
     }
@@ -271,10 +274,11 @@ export class TmuxService {
       if (isProcessExitCode(error, 1)) {
         return;
       }
-      console.error("[viewer-be] tmux kill-session failed", {
+      tmuxLogger.error("terminal.tmux.kill-session.failed", {
+        message: "Tmux kill-session failed",
         sessionName: target.sessionName,
         socketPath: target.socketPath,
-        error: String(error),
+        error,
       });
     }
   }
@@ -466,6 +470,12 @@ export class TmuxService {
       }
       await delay(100);
     }
+    tmuxLogger.warn("terminal.tmux.wait-pane-ready.timeout", {
+      message: "Tmux pane ready wait timed out",
+      sessionName: target.sessionName,
+      socketPath: target.socketPath,
+      timeoutMs: InteractivePaneReadyTimeoutMs,
+    });
   }
 
   recordRebuildAttempt(terminalSessionId: string): TmuxRebuildAttempt {
@@ -537,6 +547,11 @@ export class TmuxService {
       }
       return { available: true, reason: null };
     } catch (error) {
+      tmuxLogger.error("terminal.tmux.availability.probe.failed", {
+        message: "Tmux availability probe failed",
+        socketPath: this.socketPath,
+        error,
+      });
       return {
         available: false,
         reason: `tmux probe failed: ${String(error)}`,
@@ -620,11 +635,25 @@ export class TmuxService {
       ? this.buildServerArgs(target.socketPath)
       : this.buildServerArgs(this.socketPath);
     const normalizedArgs = args[0] === "-V" ? args : [...serverArgs, ...args];
-    return this.execFileImpl(this.binary, normalizedArgs, {
-      env: this.env,
-      timeout: TmuxCommandTimeoutMs,
-      maxBuffer: 10 * 1024 * 1024,
-    });
+    try {
+      return await this.execFileImpl(this.binary, normalizedArgs, {
+        env: this.env,
+        timeout: TmuxCommandTimeoutMs,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        tmuxLogger.error("terminal.tmux.command.timeout", {
+          message: "Tmux command timed out",
+          commandCategory: categorizeTmuxCommand(args),
+          sessionName: target?.sessionName,
+          socketPath: target?.socketPath ?? this.socketPath,
+          timeoutMs: TmuxCommandTimeoutMs,
+          error,
+        });
+      }
+      throw error;
+    }
   }
 }
 
@@ -668,6 +697,27 @@ function isProcessExitCode(error: unknown, exitCode: number): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === exitCode
   );
+}
+
+function isTimeoutError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+  const errorWithDetails = error as {
+    signal?: unknown;
+    killed?: unknown;
+    code?: unknown;
+  };
+  return (
+    errorWithDetails.killed === true ||
+    errorWithDetails.signal === "SIGTERM" ||
+    errorWithDetails.code === "ETIMEDOUT"
+  );
+}
+
+function categorizeTmuxCommand(args: string[]): string {
+  const firstCommand = args.find((arg) => !arg.startsWith("-")) ?? "unknown";
+  return firstCommand === ";" ? "compound" : firstCommand;
 }
 
 async function delay(delayMs: number): Promise<void> {

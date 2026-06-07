@@ -10,8 +10,11 @@ import {
   type BrowserSession,
   type LaunchBrowserSessionOptions,
 } from "../browser/service";
+import { logger } from "../logging";
 import { QualityProbeStore } from "../quality/probe-store";
 import type { PersistedSessionRecord, SessionStore } from "./store";
+
+const sessionLogger = logger.child({ component: "session" });
 
 export interface SessionRecord {
   id: string;
@@ -119,73 +122,100 @@ export class SessionManager {
   async createSession(options: CreateSessionOptions): Promise<SessionRecord> {
     const sessionId = uuidv4();
     const source = options.source ?? { type: "launch" };
+    sessionLogger.info("session.create.started", {
+      message: "Session create started",
+      sessionId,
+      sourceType: source.type,
+      name: options.name,
+    });
 
-    if (source.type === "connect-cdp") {
+    try {
+      if (source.type === "connect-cdp") {
+        const browserSession = await this.browserService.createSession(
+          sessionId,
+          source,
+        );
+        const session: SessionRecord = {
+          id: sessionId,
+          name: options.name,
+          proxyEnabled: false,
+          sourceType: "connect-cdp",
+          cdpEndpoint: source.endpoint,
+          headers: {},
+          browserProfile: undefined,
+          createdAt: new Date(),
+          lastActivityAt: new Date(),
+          connected: false,
+          persisted: false,
+          profilePath: null,
+          browserSession,
+        };
+
+        this.sessions.set(session.id, session);
+        this.qualityProbeStore?.createSession(session.id);
+        sessionLogger.info("session.create.completed", {
+          message: "Session create completed",
+          sessionId,
+          sourceType: source.type,
+        });
+        return session;
+      }
+
+      const profilePath = this.browserService.getSessionProfileDir(sessionId);
+      const proxyEnabled = source.proxyEnabled ?? false;
+      const headers = source.headers ?? {};
+      const browserProfile = source.browserProfile;
       const browserSession = await this.browserService.createSession(
         sessionId,
-        source,
+        buildLaunchBrowserSessionOptions({
+          profilePath,
+          proxyEnabled,
+          headers,
+          browserProfile,
+        }),
       );
       const session: SessionRecord = {
         id: sessionId,
         name: options.name,
-        proxyEnabled: false,
-        sourceType: "connect-cdp",
-        cdpEndpoint: source.endpoint,
-        headers: {},
-        browserProfile: undefined,
+        proxyEnabled,
+        sourceType: "launch",
+        persisted: true,
+        profilePath,
+        headers,
+        browserProfile,
         createdAt: new Date(),
         lastActivityAt: new Date(),
         connected: false,
-        persisted: false,
-        profilePath: null,
         browserSession,
       };
 
+      try {
+        await this.sessionStore.insertSession(
+          buildPersistedSessionRecord(session),
+        );
+      } catch (error) {
+        await this.browserService.destroySession(sessionId, browserSession);
+        throw error;
+      }
+
       this.sessions.set(session.id, session);
       this.qualityProbeStore?.createSession(session.id);
-      return session;
-    }
-
-    const profilePath = this.browserService.getSessionProfileDir(sessionId);
-    const proxyEnabled = source.proxyEnabled ?? false;
-    const headers = source.headers ?? {};
-    const browserProfile = source.browserProfile;
-    const browserSession = await this.browserService.createSession(
-      sessionId,
-      buildLaunchBrowserSessionOptions({
-        profilePath,
+      sessionLogger.info("session.create.completed", {
+        message: "Session create completed",
+        sessionId,
+        sourceType: source.type,
         proxyEnabled,
-        headers,
-        browserProfile,
-      }),
-    );
-    const session: SessionRecord = {
-      id: sessionId,
-      name: options.name,
-      proxyEnabled,
-      sourceType: "launch",
-      persisted: true,
-      profilePath,
-      headers,
-      browserProfile,
-      createdAt: new Date(),
-      lastActivityAt: new Date(),
-      connected: false,
-      browserSession,
-    };
-
-    try {
-      await this.sessionStore.insertSession(
-        buildPersistedSessionRecord(session),
-      );
+      });
+      return session;
     } catch (error) {
-      await this.browserService.destroySession(sessionId, browserSession);
+      sessionLogger.error("session.create.failed", {
+        message: "Session create failed",
+        sessionId,
+        sourceType: source.type,
+        error,
+      });
       throw error;
     }
-
-    this.sessions.set(session.id, session);
-    this.qualityProbeStore?.createSession(session.id);
-    return session;
   }
 
   getSession(sessionId: string): SessionRecord | undefined {
@@ -215,9 +245,17 @@ export class SessionManager {
       return;
     }
 
+    const previousConnected = session.connected;
     session.lastActivityAt = new Date();
     session.connected = connected;
     this.qualityProbeStore?.markViewerConnected(sessionId, connected);
+    if (previousConnected !== connected) {
+      sessionLogger.info("session.connection.changed", {
+        message: "Session connection state changed",
+        sessionId,
+        connected,
+      });
+    }
     if (connected) {
       this.cancelPendingDestroy(sessionId);
     }
@@ -256,9 +294,10 @@ export class SessionManager {
         });
       }
     } catch (error) {
-      console.error("[viewer-be] failed to remove session profile", {
+      sessionLogger.error("session.destroy.failed-profile-cleanup", {
+        message: "Failed to remove session profile",
         sessionId,
-        error: String(error),
+        error,
       });
     }
 
@@ -290,6 +329,10 @@ export class SessionManager {
       return;
     }
 
+    sessionLogger.info("session.restore.started", {
+      message: "Session restore started",
+      count: records.length,
+    });
     for (const record of records) {
       try {
         await this.restorePersistedSession(record);
@@ -329,9 +372,15 @@ export class SessionManager {
     sessionId: string,
     error: unknown,
   ): Promise<void> {
-    console.error("[viewer-be] failed to restore session", {
+    sessionLogger.error("session.restore.failed", {
+      message: "Failed to restore session",
       sessionId,
-      error: String(error),
+      error,
+      legacyConsole: {
+        method: "error",
+        message: "[viewer-be] failed to restore session",
+        meta: { sessionId, error: String(error) },
+      },
     });
   }
 

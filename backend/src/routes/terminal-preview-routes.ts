@@ -1,5 +1,6 @@
 import type { Response, Router } from "express";
 import { z } from "zod";
+import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { listPreviewDirectory } from "../terminal/preview-directory";
 import {
@@ -13,6 +14,8 @@ import {
   searchPreviewFiles,
   TerminalPreviewError,
 } from "../terminal/preview";
+
+const terminalPreviewLogger = logger.child({ component: "terminal-preview" });
 
 const previewFileSearchSchema = z.object({
   q: z.string().optional().default(""),
@@ -64,11 +67,18 @@ function resolveProjectPreviewContext(
 
 function handlePreviewError(res: Response, error: unknown) {
   if (error instanceof TerminalPreviewError) {
+    if (error.statusCode === 409) {
+      terminalPreviewLogger.warn("terminal-preview.file.mutation.conflict", {
+        message: "Terminal preview file mutation conflict",
+        statusCode: error.statusCode,
+      });
+    }
     res.status(error.statusCode).json({ message: error.message });
     return;
   }
-  console.error("[viewer-be] terminal preview request failed", {
-    error: String(error),
+  terminalPreviewLogger.error("terminal-preview.request.failed", {
+    message: "Terminal preview request failed",
+    error,
   });
   res.status(500).json({
     message: "Terminal preview request failed",

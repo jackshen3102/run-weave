@@ -7,6 +7,7 @@ export interface StoragePaths {
   authStoreFile: string;
   sessionStoreFile: string;
   terminalSessionStoreFile: string;
+  backendLogDir: string;
 }
 
 interface StorageEnv {
@@ -14,6 +15,7 @@ interface StorageEnv {
   AUTH_STORE_FILE?: string;
   SESSION_STORE_FILE?: string;
   TERMINAL_SESSION_STORE_FILE?: string;
+  RUNWEAVE_BACKEND_LOG_DIR?: string;
 }
 
 export function expandHomePath(
@@ -68,11 +70,24 @@ export function resolveStoragePaths(
     expandHomePath(env.TERMINAL_SESSION_STORE_FILE, homeDir) ??
       path.join(browserProfileDir, "terminal-session-store.json"),
   );
+  const backendLogDir = path.resolve(
+    expandHomePath(env.RUNWEAVE_BACKEND_LOG_DIR, homeDir) ??
+      path.join(browserProfileDir, "logs", "backend"),
+  );
 
-  return {
+  const storagePaths = {
     browserProfileDir,
     authStoreFile,
     sessionStoreFile,
     terminalSessionStoreFile,
-  };
+  } as StoragePaths;
+
+  Object.defineProperty(storagePaths, "backendLogDir", {
+    value: backendLogDir,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+
+  return storagePaths;
 }

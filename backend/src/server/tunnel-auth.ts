@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type { Request, RequestHandler, Response } from "express";
+import { logger } from "../logging";
 
 export interface TunnelAuthConfig {
   token: string;
@@ -20,6 +21,7 @@ const FORWARDED_HEADER_NAMES = [
   "x-forwarded-proto",
   "x-real-ip",
 ];
+const tunnelAuthLogger = logger.child({ component: "tunnel-auth" });
 
 function safeDecodeURIComponent(value: string): string {
   try {
@@ -88,6 +90,24 @@ function hasForwardedHeaders(request: IncomingMessage): boolean {
   return FORWARDED_HEADER_NAMES.some(
     (headerName) => request.headers[headerName] !== undefined,
   );
+}
+
+function getRemoteAddressType(request: IncomingMessage): "ipv4" | "ipv6" | "unknown" {
+  const remoteAddress = request.socket.remoteAddress;
+  if (!remoteAddress) {
+    return "unknown";
+  }
+  return remoteAddress.includes(":") ? "ipv6" : "ipv4";
+}
+
+function logTunnelAuthRejected(request: IncomingMessage): void {
+  const requestUrl = new URL(request.url ?? "/", "http://localhost");
+  tunnelAuthLogger.warn("tunnel-auth.rejected", {
+    message: "Tunnel auth rejected request",
+    path: requestUrl.pathname,
+    forwarded: hasForwardedHeaders(request),
+    remoteAddressType: getRemoteAddressType(request),
+  });
 }
 
 function isLoopbackAddress(address: string | undefined): boolean {
@@ -182,11 +202,14 @@ export function isTunnelRequestAuthorized(
   }
 
   const includeGenericQueryToken = options?.includeGenericQueryToken ?? false;
-  return (
+  const authorized =
     matchesToken(readCookieToken(request, config.cookieName), config.token) ||
     matchesToken(readQueryToken(request, includeGenericQueryToken), config.token) ||
-    matchesToken(readBearerToken(request), config.token)
-  );
+    matchesToken(readBearerToken(request), config.token);
+  if (!authorized) {
+    logTunnelAuthRejected(request);
+  }
+  return authorized;
 }
 
 export function createTunnelAuthMiddleware(
@@ -211,6 +234,7 @@ export function createTunnelAuthMiddleware(
       return;
     }
 
+    logTunnelAuthRejected(req);
     res.status(401).json({ message: "Tunnel token required" });
   };
 }
