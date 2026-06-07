@@ -21,6 +21,10 @@ import {
 } from "./scrollback-buffer";
 import { getInitialTerminalActiveCommand } from "./session-launch";
 import { createUniqueTerminalSessionId } from "./session-id";
+import {
+  getCompletionSourceForCommand,
+  type LastAiActiveCommandRecord,
+} from "./completion-source-gate";
 
 export interface TerminalProjectRecord {
   id: string;
@@ -176,6 +180,10 @@ const SCROLLBACK_FLUSH_DELAY_MS = 250;
 export class TerminalSessionManager {
   private readonly projects = new Map<string, TerminalProjectRecord>();
   private readonly sessions = new Map<string, RuntimeTerminalSessionRecord>();
+  private readonly lastAiActiveCommands = new Map<
+    string,
+    LastAiActiveCommandRecord
+  >();
   private readonly scrollbackFlushTimers = new Map<string, NodeJS.Timeout>();
   private readonly pendingScrollbackChunks = new Map<string, string[]>();
 
@@ -374,6 +382,7 @@ export class TerminalSessionManager {
 
     await this.sessionStore.insertSession(toPersisted(session));
     this.sessions.set(session.id, session);
+    this.observeActiveCommand(session.id, session.activeCommand);
     return session;
   }
 
@@ -509,6 +518,7 @@ export class TerminalSessionManager {
       return session;
     }
 
+    this.observeActiveCommand(terminalSessionId, metadata.activeCommand);
     session.cwd = metadata.cwd;
     session.activeCommand = metadata.activeCommand;
     await this.sessionStore.updateSessionMetadata({
@@ -517,6 +527,12 @@ export class TerminalSessionManager {
       activeCommand: metadata.activeCommand,
     });
     return session;
+  }
+
+  getLastAiActiveCommand(
+    terminalSessionId: string,
+  ): LastAiActiveCommandRecord | null {
+    return this.lastAiActiveCommands.get(terminalSessionId) ?? null;
   }
 
   async updateSessionLaunch(
@@ -583,9 +599,41 @@ export class TerminalSessionManager {
 
     this.clearPendingScrollbackFlush(terminalSessionId);
     this.pendingScrollbackChunks.delete(terminalSessionId);
+    this.lastAiActiveCommands.delete(terminalSessionId);
     this.sessions.delete(terminalSessionId);
     await this.sessionStore.deleteSession(terminalSessionId);
     return true;
+  }
+
+  private observeActiveCommand(
+    terminalSessionId: string,
+    activeCommand: string | null,
+  ): void {
+    const now = Date.now();
+    const source = getCompletionSourceForCommand(activeCommand);
+    if (source && activeCommand) {
+      this.lastAiActiveCommands.set(terminalSessionId, {
+        command: activeCommand,
+        source,
+        observedAt: now,
+        clearedAt: null,
+      });
+      return;
+    }
+
+    if (activeCommand !== null) {
+      this.lastAiActiveCommands.delete(terminalSessionId);
+      return;
+    }
+
+    const previous = this.lastAiActiveCommands.get(terminalSessionId);
+    if (!previous || previous.clearedAt !== null) {
+      return;
+    }
+    this.lastAiActiveCommands.set(terminalSessionId, {
+      ...previous,
+      clearedAt: now,
+    });
   }
 
   async dispose(): Promise<void> {

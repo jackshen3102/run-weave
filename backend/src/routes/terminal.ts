@@ -11,6 +11,7 @@ import type {
   CreateTerminalClipboardImageResponse,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
+  CreateTerminalEventsWsTicketResponse,
   CreateTerminalWsTicketResponse,
   SendTerminalInputRequest,
   SendTerminalInputResponse,
@@ -37,7 +38,7 @@ import {
 import { registerTerminalPreviewRoutes } from "./terminal-preview-routes";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import type { TerminalCompletionEventStore } from "../terminal/completion-events";
+import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
 import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
@@ -233,7 +234,7 @@ export function createTerminalRouter(
     runtimeRegistry?: TerminalRuntimeRegistry;
     tmuxService?: TmuxService;
     authService?: AuthService;
-    completionEventStore?: TerminalCompletionEventStore;
+    completionEventService?: TerminalCompletionEventService;
   },
 ): Router {
   const router = Router();
@@ -459,9 +460,36 @@ export function createTerminalRouter(
         ? req.query.after.trim()
         : null;
     const payload: TerminalCompletionEventListResponse = {
-      events: options?.completionEventStore?.listAfter(after) ?? [],
+      events: options?.completionEventService?.listAfter(after) ?? [],
     };
     res.json(payload);
+  });
+
+  router.post("/completion-events/ws-ticket", (req, res) => {
+    if (!options?.authService) {
+      res.status(503).json({ message: "Terminal ticket service unavailable" });
+      return;
+    }
+    const authSessionId = resolveAuthenticatedSessionId(
+      req.headers.authorization,
+    );
+    if (!authSessionId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const issued = options.authService.issueTemporaryToken({
+      sessionId: authSessionId,
+      tokenType: "terminal-events-ws",
+      resource: {},
+      ttlMs: 60_000,
+    });
+    const payload: CreateTerminalEventsWsTicketResponse = {
+      ticket: issued.token,
+      expiresIn: issued.expiresIn,
+      baselineEventId: options.completionEventService?.getLatestId() ?? null,
+    };
+    res.status(200).json(payload);
   });
 
   router.post("/session", async (req, res) => {
