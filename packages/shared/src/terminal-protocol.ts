@@ -204,6 +204,7 @@ export interface TerminalSessionStatusResponse {
   scrollbackSourceCols?: number;
   status: "running" | "exited";
   createdAt: string;
+  lastActivityAt: string;
   exitCode?: number;
 }
 
@@ -220,11 +221,16 @@ export interface TerminalSessionListItem {
   tmuxSocketPath?: string;
   status: "running" | "exited";
   createdAt: string;
+  lastActivityAt: string;
   exitCode?: number;
 }
 
 export interface TerminalMobileOverviewSession extends TerminalSessionListItem {
-  tailScrollback: string;
+  title: string;
+  subtitle: string;
+  displayStatus: "running" | "idle" | "exited";
+  displayStatusLabel: "Running" | "Idle" | "Exited";
+  tailScrollback?: string;
   tailScrollbackSourceCols?: number;
   tailError?: string;
 }
@@ -234,7 +240,11 @@ export interface TerminalMobileOverviewResponse {
   sessions: TerminalMobileOverviewSession[];
 }
 
-export type TerminalCompletionReason = "hook_stop" | "notify" | "ai_process_exit" | "manual";
+export type TerminalCompletionReason =
+  | "hook_stop"
+  | "notify"
+  | "ai_process_exit"
+  | "manual";
 
 export interface TerminalCompletionEvent {
   id: string;

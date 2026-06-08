@@ -23,6 +23,7 @@ import type {
   TerminalSessionStore,
   UpdateTerminalProjectParams,
   UpdateTerminalSessionExitParams,
+  UpdateTerminalSessionActivityParams,
   UpdateTerminalSessionLaunchParams,
   UpdateTerminalSessionMetadataParams,
   UpdateTerminalSessionRuntimeMetadataParams,
@@ -116,6 +117,7 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
           cwd: session.cwd,
           legacyName,
         }),
+        lastActivityAt: session.lastActivityAt ?? session.createdAt,
       });
     }
 
@@ -264,6 +266,26 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
 
       session.cwd = params.cwd;
       session.activeCommand = params.activeCommand;
+      if (params.lastActivityAt !== undefined) {
+        session.lastActivityAt = params.lastActivityAt;
+      }
+      await database.write();
+    });
+  }
+
+  async updateSessionActivity(
+    params: UpdateTerminalSessionActivityParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const session = database.data.sessions.find(
+        (candidate) => candidate.id === params.terminalSessionId,
+      );
+      if (!session) {
+        return;
+      }
+
+      session.lastActivityAt = params.lastActivityAt;
       await database.write();
     });
   }
@@ -360,6 +382,9 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
 
       session.status = params.status;
       session.exitCode = params.exitCode;
+      if (params.lastActivityAt !== undefined) {
+        session.lastActivityAt = params.lastActivityAt;
+      }
       await database.write();
     });
   }
@@ -592,6 +617,9 @@ function toMetadataRecord(
     status: session.status,
     createdAt: session.createdAt,
     ...(session.order !== undefined ? { order: session.order } : {}),
+    ...(session.lastActivityAt !== undefined
+      ? { lastActivityAt: session.lastActivityAt }
+      : {}),
     ...(session.exitCode !== undefined ? { exitCode: session.exitCode } : {}),
     ...(session.runtimeKind !== undefined
       ? { runtimeKind: session.runtimeKind }
@@ -640,7 +668,14 @@ function buildDirectoryLabel(cwd: string): string {
 }
 
 function basename(value: string): string {
-  return value.trim().replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).at(-1) ?? value;
+  return (
+    value
+      .trim()
+      .replace(/[\\/]+$/, "")
+      .split(/[\\/]/)
+      .filter(Boolean)
+      .at(-1) ?? value
+  );
 }
 
 function normalizeLegacyCommand(command: string | undefined): string | null {
@@ -666,7 +701,10 @@ function normalizeActiveCommand(params: {
     return null;
   }
 
-  if (legacyName === params.command || legacyName === basename(params.command)) {
+  if (
+    legacyName === params.command ||
+    legacyName === basename(params.command)
+  ) {
     return null;
   }
 
@@ -675,10 +713,7 @@ function normalizeActiveCommand(params: {
     return null;
   }
 
-  if (
-    legacyName.startsWith(`${directoryLabel}(`) &&
-    legacyName.endsWith(")")
-  ) {
+  if (legacyName.startsWith(`${directoryLabel}(`) && legacyName.endsWith(")")) {
     return normalizeLegacyCommand(
       legacyName.slice(directoryLabel.length + 1, -1),
     );

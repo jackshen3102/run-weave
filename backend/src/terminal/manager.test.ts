@@ -15,11 +15,7 @@ import type {
 } from "./store";
 
 const fixtureBrowserViewerPath = path.resolve(process.cwd(), "..");
-const fixtureFeaturePath = path.resolve(
-  fixtureBrowserViewerPath,
-  "..",
-  "feat",
-);
+const fixtureFeaturePath = path.resolve(fixtureBrowserViewerPath, "..", "feat");
 
 function createStoreMock() {
   const defaultProject: PersistedTerminalProjectRecord = {
@@ -50,6 +46,7 @@ function createStoreMock() {
     setDefaultProject: vi.fn(async () => undefined),
     insertSession: vi.fn(async () => undefined),
     updateSessionMetadata: vi.fn(async () => undefined),
+    updateSessionActivity: vi.fn(async () => undefined),
     updateSessionRuntimeMetadata: vi.fn(async () => undefined),
     updateSessionLaunch: vi.fn(async () => undefined),
     appendSessionScrollback: vi.fn(async () => undefined),
@@ -261,10 +258,14 @@ describe("TerminalSessionManager", () => {
     expect(store.updateSessionExit).toHaveBeenCalledWith({
       terminalSessionId: session.id,
       status: "exited",
+      lastActivityAt: expect.any(String),
       exitCode: 130,
     });
     expect(manager.getSession(session.id)?.status).toBe("exited");
     expect(manager.getSession(session.id)?.exitCode).toBe(130);
+    expect(
+      manager.getSession(session.id)?.lastActivityAt.getTime(),
+    ).toBeGreaterThanOrEqual(session.createdAt.getTime());
   });
 
   it("appends output and flushes only the pending scrollback chunk", async () => {
@@ -282,7 +283,11 @@ describe("TerminalSessionManager", () => {
     manager.appendOutput(session.id, " world");
 
     expect(manager.getScrollback(session.id)).toBe("hello world");
+    expect(
+      manager.getSession(session.id)?.lastActivityAt.getTime(),
+    ).toBeGreaterThanOrEqual(session.createdAt.getTime());
     expect(store.appendSessionScrollback).not.toHaveBeenCalled();
+    expect(store.updateSessionActivity).not.toHaveBeenCalled();
     expect(store.updateSessionScrollback).not.toHaveBeenCalled();
 
     await vi.runAllTimersAsync();
@@ -291,6 +296,11 @@ describe("TerminalSessionManager", () => {
     expect(store.appendSessionScrollback).toHaveBeenCalledWith({
       terminalSessionId: session.id,
       chunk: "hello world",
+    });
+    expect(store.updateSessionActivity).toHaveBeenCalledTimes(1);
+    expect(store.updateSessionActivity).toHaveBeenCalledWith({
+      terminalSessionId: session.id,
+      lastActivityAt: expect.any(String),
     });
     expect(store.updateSessionScrollback).not.toHaveBeenCalled();
     vi.useRealTimers();
@@ -421,6 +431,7 @@ describe("TerminalSessionManager", () => {
         terminalSessionId: session.id,
         cwd: tmpDir,
         activeCommand: "codex",
+        lastActivityAt: expect.any(String),
       });
     } finally {
       rmSync(tmpDir, { force: true, recursive: true });

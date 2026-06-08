@@ -42,6 +42,7 @@ export function toStatusPayload(
     scrollback,
     status: session.status,
     createdAt: session.createdAt.toISOString(),
+    lastActivityAt: session.lastActivityAt.toISOString(),
     exitCode: session.exitCode,
   };
 }
@@ -60,6 +61,7 @@ export function toSessionListItem(
     tmuxSocketPath: session.tmuxSocketPath,
     status: session.status,
     createdAt: session.createdAt.toISOString(),
+    lastActivityAt: session.lastActivityAt.toISOString(),
     exitCode: session.exitCode,
   };
 }

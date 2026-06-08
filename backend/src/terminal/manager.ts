@@ -45,6 +45,7 @@ export interface TerminalSessionRecord {
   scrollback: string;
   status: "running" | "exited";
   createdAt: Date;
+  lastActivityAt: Date;
   exitCode?: number;
   order?: number;
   runtimeKind: TerminalRuntimeKind;
@@ -108,6 +109,7 @@ function buildRecord(
     scrollback: persisted.scrollback ?? "",
     status: persisted.status,
     createdAt: new Date(persisted.createdAt),
+    lastActivityAt: new Date(persisted.lastActivityAt ?? persisted.createdAt),
     exitCode: persisted.exitCode,
     ...(persisted.order !== undefined ? { order: persisted.order } : {}),
     runtimeKind: persisted.runtimeKind ?? "pty",
@@ -166,6 +168,7 @@ function toPersisted(
     scrollback: session.scrollback,
     status: session.status,
     createdAt: session.createdAt.toISOString(),
+    lastActivityAt: session.lastActivityAt.toISOString(),
     exitCode: session.exitCode,
     runtimeKind: session.runtimeKind,
     tmuxSessionName: session.tmuxSessionName,
@@ -176,6 +179,7 @@ function toPersisted(
 }
 
 const SCROLLBACK_FLUSH_DELAY_MS = 250;
+const ACTIVITY_FLUSH_DELAY_MS = 10_000;
 
 export class TerminalSessionManager {
   private readonly projects = new Map<string, TerminalProjectRecord>();
@@ -186,6 +190,8 @@ export class TerminalSessionManager {
   >();
   private readonly scrollbackFlushTimers = new Map<string, NodeJS.Timeout>();
   private readonly pendingScrollbackChunks = new Map<string, string[]>();
+  private readonly activityFlushTimers = new Map<string, NodeJS.Timeout>();
+  private readonly pendingActivityUpdates = new Map<string, Date>();
 
   constructor(private readonly sessionStore: TerminalSessionStore) {}
 
@@ -376,6 +382,7 @@ export class TerminalSessionManager {
       scrollback: "",
       status: "running",
       createdAt: now,
+      lastActivityAt: now,
       runtimeKind: "pty",
       recoverable: false,
     });
@@ -454,6 +461,7 @@ export class TerminalSessionManager {
     }
 
     appendToScrollbackBuffer(session.scrollbackBuffer, chunk);
+    this.touchSessionActivity(session, "deferred");
     const pendingChunks = this.pendingScrollbackChunks.get(terminalSessionId);
     if (pendingChunks) {
       pendingChunks.push(chunk);
@@ -488,9 +496,11 @@ export class TerminalSessionManager {
 
     session.status = "exited";
     session.exitCode = exitCode;
+    const lastActivityAt = this.touchSessionActivity(session, "immediate");
     void this.sessionStore.updateSessionExit({
       terminalSessionId,
       status: "exited",
+      lastActivityAt: lastActivityAt.toISOString(),
       exitCode,
     });
   }
@@ -521,10 +531,12 @@ export class TerminalSessionManager {
     this.observeActiveCommand(terminalSessionId, metadata.activeCommand);
     session.cwd = metadata.cwd;
     session.activeCommand = metadata.activeCommand;
+    const lastActivityAt = this.touchSessionActivity(session, "immediate");
     await this.sessionStore.updateSessionMetadata({
       terminalSessionId,
       cwd: metadata.cwd,
       activeCommand: metadata.activeCommand,
+      lastActivityAt: lastActivityAt.toISOString(),
     });
     return session;
   }
@@ -599,6 +611,8 @@ export class TerminalSessionManager {
 
     this.clearPendingScrollbackFlush(terminalSessionId);
     this.pendingScrollbackChunks.delete(terminalSessionId);
+    this.clearPendingActivityFlush(terminalSessionId);
+    this.pendingActivityUpdates.delete(terminalSessionId);
     this.lastAiActiveCommands.delete(terminalSessionId);
     this.sessions.delete(terminalSessionId);
     await this.sessionStore.deleteSession(terminalSessionId);
@@ -638,7 +652,62 @@ export class TerminalSessionManager {
 
   async dispose(): Promise<void> {
     await this.flushAllPendingScrollback();
+    await this.flushAllPendingActivity();
     await this.sessionStore.dispose();
+  }
+
+  private touchSessionActivity(
+    session: RuntimeTerminalSessionRecord,
+    persistence: "deferred" | "immediate",
+  ): Date {
+    const lastActivityAt = new Date();
+    session.lastActivityAt = lastActivityAt;
+    if (persistence === "immediate") {
+      this.clearPendingActivityFlush(session.id);
+      this.pendingActivityUpdates.delete(session.id);
+      return lastActivityAt;
+    }
+    this.pendingActivityUpdates.set(session.id, lastActivityAt);
+    this.scheduleActivityFlush(session.id);
+    return lastActivityAt;
+  }
+
+  private scheduleActivityFlush(terminalSessionId: string): void {
+    this.clearPendingActivityFlush(terminalSessionId);
+
+    const timer = setTimeout(() => {
+      this.activityFlushTimers.delete(terminalSessionId);
+      void this.flushActivity(terminalSessionId);
+    }, ACTIVITY_FLUSH_DELAY_MS);
+    this.activityFlushTimers.set(terminalSessionId, timer);
+  }
+
+  private clearPendingActivityFlush(terminalSessionId: string): void {
+    const timer = this.activityFlushTimers.get(terminalSessionId);
+    if (!timer) {
+      return;
+    }
+
+    clearTimeout(timer);
+    this.activityFlushTimers.delete(terminalSessionId);
+  }
+
+  private async flushActivity(terminalSessionId: string): Promise<void> {
+    if (!this.sessions.has(terminalSessionId)) {
+      this.pendingActivityUpdates.delete(terminalSessionId);
+      return;
+    }
+
+    const lastActivityAt = this.pendingActivityUpdates.get(terminalSessionId);
+    if (!lastActivityAt) {
+      return;
+    }
+    this.pendingActivityUpdates.delete(terminalSessionId);
+
+    await this.sessionStore.updateSessionActivity({
+      terminalSessionId,
+      lastActivityAt: lastActivityAt.toISOString(),
+    });
   }
 
   private scheduleScrollbackFlush(terminalSessionId: string): void {
@@ -687,6 +756,18 @@ export class TerminalSessionManager {
     await Promise.all(
       pendingSessionIds.map((terminalSessionId) =>
         this.flushScrollback(terminalSessionId),
+      ),
+    );
+  }
+
+  private async flushAllPendingActivity(): Promise<void> {
+    const pendingSessionIds = Array.from(this.activityFlushTimers.keys());
+    pendingSessionIds.forEach((terminalSessionId) =>
+      this.clearPendingActivityFlush(terminalSessionId),
+    );
+    await Promise.all(
+      pendingSessionIds.map((terminalSessionId) =>
+        this.flushActivity(terminalSessionId),
       ),
     );
   }

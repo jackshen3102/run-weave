@@ -430,6 +430,7 @@ export function TerminalWorkspace({
           setProjects((currentProjects) => [...currentProjects, createdProject]);
           setActiveProjectId(createdProject.projectId);
           setActiveSessionId(createdSession.terminalSessionId);
+          const createdAt = new Date().toISOString();
           setSessions((currentSessions) => [
             ...currentSessions,
             {
@@ -440,7 +441,8 @@ export function TerminalWorkspace({
               cwd: "",
               activeCommand: null,
               status: "running",
-              createdAt: new Date().toISOString(),
+              createdAt,
+              lastActivityAt: createdAt,
             },
           ]);
           await loadSessions();

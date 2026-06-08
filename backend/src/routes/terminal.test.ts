@@ -33,6 +33,7 @@ interface MockTerminalSession {
   scrollback: string;
   status: "running" | "exited";
   createdAt: Date;
+  lastActivityAt?: Date;
   exitCode?: number;
   runtimeKind?: "pty" | "tmux";
   tmuxSessionName?: string;
@@ -69,7 +70,11 @@ function createTestServer(
       : sessionState.sessions?.find((session) => session.id === id);
   const normalizeSession = (session: MockTerminalSession | undefined | null) =>
     session
-      ? { ...session, activeCommand: session.activeCommand ?? null }
+      ? {
+          ...session,
+          activeCommand: session.activeCommand ?? null,
+          lastActivityAt: session.lastActivityAt ?? session.createdAt,
+        }
       : undefined;
   const resolveSession = (id: string) =>
     normalizeSession(resolveRawSession(id));
@@ -100,6 +105,7 @@ function createTestServer(
           scrollback: "",
           status: "running",
           createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          lastActivityAt: new Date("2026-03-29T00:00:00.000Z"),
         };
         sessionState.current = created;
         return created;
@@ -955,6 +961,7 @@ describe("terminal routes", () => {
         activeCommand: null,
         status: "running",
         createdAt: "2026-03-29T00:00:00.000Z",
+        lastActivityAt: "2026-03-29T00:00:00.000Z",
       },
     ]);
   });
@@ -1010,6 +1017,90 @@ describe("terminal routes", () => {
     expect(terminalSessionManager.readLiveScrollback).toHaveBeenCalledWith(
       "terminal-1",
     );
+    expect(terminalSessionManager.readScrollback).not.toHaveBeenCalled();
+  });
+
+  it("returns mobile overview display fields without reading tails when includeTail is false", async () => {
+    const state = {
+      current: null as MockTerminalSession | null,
+      sessions: [
+        {
+          id: "terminal-idle",
+          projectId: "project-default",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+          activeCommand: null,
+          scrollback: "idle tail",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          lastActivityAt: new Date("2026-03-29T00:02:00.000Z"),
+        },
+        {
+          id: "terminal-running",
+          projectId: "project-default",
+          command: "zsh",
+          args: ["-l"],
+          cwd: "/tmp/browser-viewer",
+          activeCommand: "codex",
+          scrollback: "running tail",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          lastActivityAt: new Date("2026-03-29T00:03:00.000Z"),
+        },
+        {
+          id: "terminal-exited",
+          projectId: "project-default",
+          command: "node",
+          args: [],
+          cwd: "/tmp/old",
+          activeCommand: "node",
+          scrollback: "exited tail",
+          status: "exited" as const,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          lastActivityAt: new Date("2026-03-29T00:01:00.000Z"),
+        },
+      ],
+    };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/mobile/overview?includeTail=false`,
+    );
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload).toEqual(
+      expect.objectContaining({
+        sessions: [
+          expect.objectContaining({
+            terminalSessionId: "terminal-running",
+            title: "codex · browser-viewer",
+            subtitle: "/tmp/browser-viewer",
+            displayStatus: "running",
+            displayStatusLabel: "Running",
+            lastActivityAt: "2026-03-29T00:03:00.000Z",
+          }),
+          expect.objectContaining({
+            terminalSessionId: "terminal-idle",
+            title: "bash · demo",
+            displayStatus: "idle",
+            displayStatusLabel: "Idle",
+          }),
+          expect.objectContaining({
+            terminalSessionId: "terminal-exited",
+            displayStatus: "exited",
+            displayStatusLabel: "Exited",
+          }),
+        ],
+      }),
+    );
+    for (const session of payload.sessions) {
+      expect(session).not.toHaveProperty("tailScrollback");
+    }
+    expect(terminalSessionManager.readLiveScrollback).not.toHaveBeenCalled();
     expect(terminalSessionManager.readScrollback).not.toHaveBeenCalled();
   });
 
@@ -1127,6 +1218,7 @@ describe("terminal routes", () => {
       scrollback: "bash$ ls\nREADME.md\n",
       status: "exited",
       createdAt: "2026-03-29T00:00:00.000Z",
+      lastActivityAt: "2026-03-29T00:00:00.000Z",
       exitCode: 0,
     });
   });

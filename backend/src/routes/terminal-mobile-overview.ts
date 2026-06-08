@@ -1,4 +1,5 @@
 import type { TerminalMobileOverviewResponse } from "@browser-viewer/shared";
+import path from "node:path";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { readTerminalScrollbackCapture } from "../terminal/runtime-launcher";
@@ -13,6 +14,10 @@ interface MobileOverviewTailCapture {
   data: string;
   sourceCols?: number;
   error?: string;
+}
+
+export interface TerminalMobileOverviewOptions {
+  includeTail?: boolean;
 }
 
 function tailScrollbackLines(scrollback: string, maxLines: number): string {
@@ -45,17 +50,74 @@ async function withTimeout<T>(
   }
 }
 
+function basename(value: string): string {
+  const normalized = value.trim().replace(/[\\/]+$/, "");
+  return path.basename(normalized) || normalized || value;
+}
+
+function buildSessionTitle(
+  session: ReturnType<TerminalSessionManager["listSessions"]>[number],
+): string {
+  const commandLabel =
+    session.activeCommand?.trim() || basename(session.command);
+  const directoryLabel = basename(session.cwd);
+  return directoryLabel ? `${commandLabel} · ${directoryLabel}` : commandLabel;
+}
+
+function buildDisplayStatus(
+  session: ReturnType<TerminalSessionManager["listSessions"]>[number],
+): {
+  displayStatus: "running" | "idle" | "exited";
+  displayStatusLabel: "Running" | "Idle" | "Exited";
+} {
+  if (session.status === "exited") {
+    return { displayStatus: "exited", displayStatusLabel: "Exited" };
+  }
+  if (session.activeCommand?.trim()) {
+    return { displayStatus: "running", displayStatusLabel: "Running" };
+  }
+  return { displayStatus: "idle", displayStatusLabel: "Idle" };
+}
+
+function sortSessionsForMobileOverview(
+  sessions: ReturnType<TerminalSessionManager["listSessions"]>,
+): ReturnType<TerminalSessionManager["listSessions"]> {
+  return sessions
+    .map((session, index) => ({ session, index }))
+    .sort((left, right) => {
+      const activityDelta =
+        right.session.lastActivityAt.getTime() -
+        left.session.lastActivityAt.getTime();
+      return activityDelta || left.index - right.index;
+    })
+    .map((entry) => entry.session);
+}
+
 export async function buildTerminalMobileOverviewPayload(
   terminalSessionManager: TerminalSessionManager,
   tmuxService?: TmuxService,
+  options?: TerminalMobileOverviewOptions,
 ): Promise<TerminalMobileOverviewResponse> {
-  const sessions = terminalSessionManager.listSessions();
+  const includeTail = options?.includeTail ?? true;
+  const sessions = sortSessionsForMobileOverview(
+    terminalSessionManager.listSessions(),
+  );
   return {
     projects: terminalSessionManager
       .listProjects()
       .map((project) => toProjectPayload(project)),
     sessions: await Promise.all(
       sessions.map(async (session) => {
+        const basePayload = {
+          ...toSessionListItem(session),
+          title: buildSessionTitle(session),
+          subtitle: session.cwd,
+          ...buildDisplayStatus(session),
+        };
+        if (!includeTail) {
+          return basePayload;
+        }
+
         const tailCapturePromise = readTerminalScrollbackCapture(
           session,
           terminalSessionManager,
@@ -82,7 +144,7 @@ export async function buildTerminalMobileOverviewPayload(
         });
 
         return {
-          ...toSessionListItem(session),
+          ...basePayload,
           tailScrollback: tailScrollbackLines(
             tailCapture.data,
             MOBILE_TERMINAL_OVERVIEW_TAIL_LINES,
