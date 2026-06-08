@@ -116,7 +116,7 @@ export function MobileTerminalPage({
       const nextChangedSessionIds = new Set<string>();
 
       for (const session of overview.sessions) {
-        const nextTail = session.tailScrollback;
+        const nextTail = session.tailScrollback ?? "";
         const previousTail =
           previousScrollbackRef.current[session.terminalSessionId];
         if (previousTail !== undefined && previousTail !== nextTail) {

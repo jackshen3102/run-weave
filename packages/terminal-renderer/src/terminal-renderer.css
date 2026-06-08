@@ -1,0 +1,13 @@
+@import "@xterm/xterm/css/xterm.css";
+
+.terminal-renderer {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terminal-renderer .xterm {
+  height: 100%;
+}

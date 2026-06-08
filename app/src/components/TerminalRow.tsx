@@ -4,11 +4,16 @@ import { formatRelativeTime } from "../lib/terminal-home-view-model";
 
 interface TerminalRowProps {
   session: TerminalMobileOverviewSession;
+  onOpenTerminal: (terminalSessionId: string) => void;
 }
 
-export function TerminalRow({ session }: TerminalRowProps) {
+export function TerminalRow({ session, onOpenTerminal }: TerminalRowProps) {
   return (
-    <article className="terminal-row">
+    <button
+      className="terminal-row"
+      onClick={() => onOpenTerminal(session.terminalSessionId)}
+      type="button"
+    >
       <div className="terminal-row__main">
         <div className="terminal-row__title-line">
           <h3>{session.title}</h3>
@@ -21,6 +26,6 @@ export function TerminalRow({ session }: TerminalRowProps) {
       <time dateTime={session.lastActivityAt}>
         {formatRelativeTime(session.lastActivityAt)}
       </time>
-    </article>
+    </button>
   );
 }

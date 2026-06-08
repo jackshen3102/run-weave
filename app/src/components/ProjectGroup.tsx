@@ -7,9 +7,15 @@ interface ProjectGroupProps {
   group: TerminalHomeProjectGroup;
   expanded: boolean;
   onToggle: () => void;
+  onOpenTerminal: (terminalSessionId: string) => void;
 }
 
-export function ProjectGroup({ group, expanded, onToggle }: ProjectGroupProps) {
+export function ProjectGroup({
+  group,
+  expanded,
+  onToggle,
+  onOpenTerminal,
+}: ProjectGroupProps) {
   return (
     <section className="project-group">
       <IonButton
@@ -31,7 +37,11 @@ export function ProjectGroup({ group, expanded, onToggle }: ProjectGroupProps) {
         <div className="project-group__sessions">
           {group.sessions.length > 0 ? (
             group.sessions.map((session) => (
-              <TerminalRow key={session.terminalSessionId} session={session} />
+              <TerminalRow
+                key={session.terminalSessionId}
+                session={session}
+                onOpenTerminal={onOpenTerminal}
+              />
             ))
           ) : (
             <p className="project-group__empty">暂无终端</p>

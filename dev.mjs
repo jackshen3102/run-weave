@@ -1,14 +1,30 @@
 import net from "node:net";
+import { createHash } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
+import os from "node:os";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const FORCE_SHUTDOWN_TIMEOUT_MS = 5_000;
 const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 30_000;
 const HEALTHCHECK_INTERVAL_MS = 200;
 
+function resolveDevBrowserProfileDir(baseEnv) {
+  if (baseEnv.BROWSER_PROFILE_DIR?.trim()) {
+    return baseEnv.BROWSER_PROFILE_DIR;
+  }
+
+  const packagedDefaultProfileId = createHash("sha256")
+    .update("/")
+    .digest("hex")
+    .slice(0, 8);
+  return path.join(os.homedir(), ".browser-profile", packagedDefaultProfileId);
+}
+
 export function createBackendEnv({ baseEnv, backendPort }) {
   return {
     ...baseEnv,
+    BROWSER_PROFILE_DIR: resolveDevBrowserProfileDir(baseEnv),
     BROWSER_DEVTOOLS_ENABLED: baseEnv.BROWSER_DEVTOOLS_ENABLED ?? "true",
     PORT: String(backendPort),
     PORT_STRICT: "true",

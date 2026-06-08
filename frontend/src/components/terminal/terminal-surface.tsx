@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal } from "@xterm/xterm";
-import "@xterm/xterm/css/xterm.css";
 import type { ClientMode } from "../../features/client-mode";
 import {
   logTerminalPerf,

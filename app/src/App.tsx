@@ -2,6 +2,7 @@ import { IonApp } from "@ionic/react";
 import { useCallback, useEffect, useState } from "react";
 import type { TerminalMobileOverviewResponse } from "@browser-viewer/shared";
 
+import { AppTerminalPage } from "./pages/AppTerminalPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import {
@@ -29,6 +30,9 @@ function App() {
   const [startupState, setStartupState] = useState<StartupState>("checking");
   const [overview, setOverview] =
     useState<TerminalMobileOverviewResponse | null>(null);
+  const [selectedTerminalSessionId, setSelectedTerminalSessionId] = useState<
+    string | null
+  >(null);
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeError, setHomeError] = useState<string | null>(null);
 
@@ -134,6 +138,13 @@ function App() {
     }
     clearSession();
     setOverview(null);
+    setSelectedTerminalSessionId(null);
+  };
+
+  const handleAuthExpired = () => {
+    clearSession();
+    setOverview(null);
+    setSelectedTerminalSessionId(null);
   };
 
   if (startupState === "checking") {
@@ -142,12 +153,25 @@ function App() {
 
   return (
     <IonApp>
-      {isAuthenticated ? (
+      {isAuthenticated && selectedTerminalSessionId ? (
+        <AppTerminalPage
+          accessToken={accessToken}
+          apiBase={apiBase}
+          initialSession={overview?.sessions.find(
+            (session) =>
+              session.terminalSessionId === selectedTerminalSessionId,
+          )}
+          terminalSessionId={selectedTerminalSessionId}
+          onAuthExpired={handleAuthExpired}
+          onBack={() => setSelectedTerminalSessionId(null)}
+        />
+      ) : isAuthenticated ? (
         <HomePage
           apiBase={apiBase}
           error={homeError}
           loading={homeLoading}
           onLogout={handleLogout}
+          onOpenTerminal={setSelectedTerminalSessionId}
           onRefresh={loadOverview}
           overview={overview}
         />

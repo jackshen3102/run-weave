@@ -25,6 +25,7 @@ interface HomePageProps {
   error: string | null;
   onRefresh: () => Promise<void>;
   onLogout: () => void;
+  onOpenTerminal: (terminalSessionId: string) => void;
 }
 
 function buildInitialExpanded(groups: TerminalHomeProjectGroup[]): Set<string> {
@@ -48,6 +49,7 @@ export function HomePage({
   error,
   onRefresh,
   onLogout,
+  onOpenTerminal,
 }: HomePageProps) {
   const [query, setQuery] = useState("");
   const groups = useMemo(
@@ -138,6 +140,7 @@ export function HomePage({
                 expanded={expandedProjectIds.has(group.project.projectId)}
                 group={group}
                 key={group.project.projectId}
+                onOpenTerminal={onOpenTerminal}
                 onToggle={() => toggleProject(group.project.projectId)}
               />
             ))}
