@@ -14,6 +14,8 @@
     "publish:electron:local-updates": "pnpm dist:electron:mac:local-updates && node ./scripts/publish-local-updates.mjs",
     "serve:electron:local-updates": "node ./scripts/serve-local-updates.mjs",
     "app:dev": "node ./app-dev.mjs",
+    "app:dev:web": "node ./app-dev.mjs",
+    "app:dev:ios": "APP_DEV_IOS=true node ./app-dev.mjs",
     "app:build": "pnpm --filter @runweave/app build",
     "app:ios": "pnpm --filter @runweave/app ios:open",
     "app:ios:local": "node ./scripts/app-ios-local.mjs",

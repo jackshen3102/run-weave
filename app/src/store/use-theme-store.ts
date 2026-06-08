@@ -34,6 +34,8 @@ function applyThemeMode(mode: ThemeMode) {
 
   const root = document.documentElement;
   root.classList.toggle("ion-palette-dark", mode === "dark");
+  root.classList.toggle("dark", mode === "dark");
+  root.classList.toggle("ion-palette-light", mode === "light");
   root.style.colorScheme = mode;
 
   document

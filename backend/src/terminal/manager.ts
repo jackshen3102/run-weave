@@ -541,6 +541,29 @@ export class TerminalSessionManager {
     return session;
   }
 
+  async updateSessionActivity(
+    terminalSessionId: string,
+    lastActivityAt: Date,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    if (lastActivityAt.getTime() <= session.lastActivityAt.getTime()) {
+      return session;
+    }
+
+    session.lastActivityAt = lastActivityAt;
+    this.pendingActivityUpdates.delete(terminalSessionId);
+    this.clearPendingActivityFlush(terminalSessionId);
+    await this.sessionStore.updateSessionActivity({
+      terminalSessionId,
+      lastActivityAt: lastActivityAt.toISOString(),
+    });
+    return session;
+  }
+
   getLastAiActiveCommand(
     terminalSessionId: string,
   ): LastAiActiveCommandRecord | null {

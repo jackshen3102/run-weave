@@ -95,15 +95,17 @@ export function HomePage({
 
   return (
     <IonPage>
-      <IonContent fullscreen className="home-page">
+      <IonContent fullscreen className="home-page bg-background text-foreground">
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent />
         </IonRefresher>
-        <main className="home-shell">
+        <main className="home-shell min-h-full">
           <header className="home-header">
             <div>
-              <p>Runweave</p>
-              <span>{formatApiBaseLabel(apiBase)}</span>
+              <p className="text-muted-foreground">Runweave</p>
+              <span className="text-muted-foreground">
+                {formatApiBaseLabel(apiBase)}
+              </span>
             </div>
             <nav aria-label="Home actions">
               <IonButton fill="clear" onClick={() => void onRefresh()}>
@@ -132,9 +134,9 @@ export function HomePage({
             </IonText>
           ) : null}
           {!loading && overview && overview.projects.length === 0 ? (
-            <p className="home-empty">暂无项目</p>
+            <p className="home-empty text-muted-foreground">暂无项目</p>
           ) : null}
-          <div className="project-list">
+          <div className="project-list grid">
             {groups.map((group) => (
               <ProjectGroup
                 expanded={expandedProjectIds.has(group.project.projectId)}

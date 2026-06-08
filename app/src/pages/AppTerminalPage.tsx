@@ -10,11 +10,14 @@ import {
   IonSpinner,
   IonText,
 } from "@ionic/react";
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
+import { fileToBase64, shellQuote } from "../lib/terminal-input-assets";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
+import { ApiError } from "../services/http";
+import { createTerminalSessionClipboardImage } from "../services/terminal";
 
 interface AppTerminalPageProps {
   accessToken: string;
@@ -50,6 +53,8 @@ export function AppTerminalPage({
   onBack,
 }: AppTerminalPageProps) {
   const rendererRef = useRef<TerminalRendererHandle | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [isPickingImage, setIsPickingImage] = useState(false);
   const {
     connectionStatus,
     error,
@@ -58,6 +63,7 @@ export function AppTerminalPage({
     runtimeStatus,
     sendInput,
     sendResize,
+    sendSignal,
   } = useAppTerminalConnection({
     apiBase,
     accessToken,
@@ -77,20 +83,66 @@ export function AppTerminalPage({
   }, [initialSession?.title, metadata?.activeCommand, metadata?.command]);
   const subtitle = metadata?.cwd
     ? shortPath(metadata.cwd)
-    : initialSession?.subtitle ?? "";
-  const lastActivityAt = metadata?.lastActivityAt ?? initialSession?.lastActivityAt;
+    : (initialSession?.subtitle ?? "");
+  const lastActivityAt =
+    metadata?.lastActivityAt ?? initialSession?.lastActivityAt;
   const statusLabel =
     connectionStatus === "connected"
       ? runtimeStatus === "exited"
         ? "Exited"
         : "Connected"
       : "Connecting";
+  const isCommandActive =
+    connectionStatus === "connected" &&
+    runtimeStatus === "running" &&
+    Boolean(metadata?.activeCommand);
+  const handleStop = useCallback(() => {
+    sendSignal("SIGINT");
+  }, [sendSignal]);
+  const handlePickImage = useCallback(
+    (file: File) => {
+      setImageError(null);
+      setIsPickingImage(true);
+      void fileToBase64(file)
+        .then((dataBase64) =>
+          createTerminalSessionClipboardImage(
+            apiBase,
+            accessToken,
+            terminalSessionId,
+            {
+              mimeType: file.type,
+              dataBase64,
+            },
+          ),
+        )
+        .then((payload) => {
+          sendInput(shellQuote(payload.filePath));
+        })
+        .catch((nextError: unknown) => {
+          if (nextError instanceof ApiError && nextError.status === 401) {
+            onAuthExpired();
+            return;
+          }
+          setImageError(
+            nextError instanceof Error ? nextError.message : "图片选择失败",
+          );
+        })
+        .finally(() => {
+          setIsPickingImage(false);
+        });
+    },
+    [accessToken, apiBase, onAuthExpired, sendInput, terminalSessionId],
+  );
 
   return (
     <IonPage>
-      <IonContent fullscreen scrollY={false} className="terminal-page">
-        <main className="terminal-page-shell">
-          <header className="terminal-page-header">
+      <IonContent
+        fullscreen
+        scrollY={false}
+        className="terminal-page bg-background text-foreground"
+      >
+        <main className="terminal-page-shell min-h-dvh bg-background">
+          <header className="terminal-page-header border-border bg-card">
             <IonButton
               aria-label="Back"
               className="terminal-page-header__back"
@@ -99,11 +151,15 @@ export function AppTerminalPage({
             >
               ‹
             </IonButton>
-            <div className="terminal-page-header__identity">
-              <h1>{title}</h1>
-              <p>{subtitle || terminalSessionId}</p>
-              <div className="terminal-page-header__meta">
-                <span className={`terminal-page-header__status is-${connectionStatus}`}>
+            <div className="terminal-page-header__identity min-w-0">
+              <h1 className="text-foreground">{title}</h1>
+              <p className="text-muted-foreground">
+                {subtitle || terminalSessionId}
+              </p>
+              <div className="terminal-page-header__meta text-muted-foreground">
+                <span
+                  className={`terminal-page-header__status is-${connectionStatus}`}
+                >
                   {statusLabel}
                 </span>
                 {lastActivityAt ? (
@@ -122,7 +178,7 @@ export function AppTerminalPage({
               ↻
             </IonButton>
           </header>
-          <section className="terminal-page-body">
+          <section className="terminal-page-body bg-background">
             {notFound ? (
               <div className="terminal-page-state">
                 <IonText color="danger">{error}</IonText>
@@ -135,7 +191,9 @@ export function AppTerminalPage({
                     <IonSpinner name="crescent" />
                   </div>
                 ) : null}
-                {error ? <p className="terminal-page-error">{error}</p> : null}
+                {error ? (
+                  <p className="terminal-page-error text-sm">{error}</p>
+                ) : null}
                 <TerminalRenderer
                   active
                   className="terminal-page-renderer"
@@ -149,7 +207,17 @@ export function AppTerminalPage({
               </>
             )}
           </section>
-          <TerminalCommandComposer disabled={notFound} onSendInput={sendInput} />
+          {imageError ? (
+            <p className="terminal-composer-error">{imageError}</p>
+          ) : null}
+          <TerminalCommandComposer
+            disabled={notFound}
+            isPickingImage={isPickingImage}
+            isStopping={isCommandActive}
+            onPickImage={handlePickImage}
+            onSendInput={sendInput}
+            onStop={handleStop}
+          />
         </main>
       </IonContent>
     </IonPage>

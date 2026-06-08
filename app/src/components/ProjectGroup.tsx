@@ -17,7 +17,7 @@ export function ProjectGroup({
   onOpenTerminal,
 }: ProjectGroupProps) {
   return (
-    <section className="project-group">
+    <section className="project-group border-border">
       <IonButton
         aria-expanded={expanded}
         className="project-group__header"
@@ -25,13 +25,17 @@ export function ProjectGroup({
         onClick={onToggle}
       >
         <span className="project-group__chevron">{expanded ? "⌄" : "›"}</span>
-        <span className="project-group__identity">
-          <span className="project-group__name">{group.project.name}</span>
-          <span className="project-group__path">
+        <span className="project-group__identity min-w-0">
+          <span className="project-group__name text-foreground">
+            {group.project.name}
+          </span>
+          <span className="project-group__path text-muted-foreground">
             {group.project.path ?? "No path"}
           </span>
         </span>
-        <span className="project-group__count">{group.terminalCount}</span>
+        <span className="project-group__count text-muted-foreground">
+          {group.terminalCount}
+        </span>
       </IonButton>
       {expanded ? (
         <div className="project-group__sessions">
@@ -44,7 +48,7 @@ export function ProjectGroup({
               />
             ))
           ) : (
-            <p className="project-group__empty">暂无终端</p>
+            <p className="project-group__empty text-muted-foreground">暂无终端</p>
           )}
         </div>
       ) : null}

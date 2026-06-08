@@ -29,6 +29,7 @@ export interface TmuxLaunchCommand {
 export interface TmuxPaneMetadata {
   cwd: string;
   activeCommand: string | null;
+  activityAt?: Date;
 }
 
 export interface TmuxSessionInfo {
@@ -400,20 +401,23 @@ export class TmuxService {
     target: TmuxTarget,
     shellCommand?: string,
   ): Promise<TmuxPaneMetadata | null> {
-    const result = await this.runTmux(
-      [
-        "display-message",
-        "-p",
-        "-t",
-        target.sessionName,
+    const [result, activityAt] = await Promise.all([
+      this.runTmux(
         [
-          "#{pane_current_path}",
-          "#{@runweave_command}",
-          "#{pane_current_command}",
-        ].join(TMUX_METADATA_FIELD_SEPARATOR),
-      ],
-      target,
-    );
+          "display-message",
+          "-p",
+          "-t",
+          target.sessionName,
+          [
+            "#{pane_current_path}",
+            "#{@runweave_command}",
+            "#{pane_current_command}",
+          ].join(TMUX_METADATA_FIELD_SEPARATOR),
+        ],
+        target,
+      ),
+      this.readPaneActivityAt(target),
+    ]);
     const [rawCwd = "", rawRunweaveCommand = "", rawCommand = ""] =
       result.stdout.replace(/\r?\n$/, "").split(TMUX_METADATA_FIELD_SEPARATOR);
     const cwd = rawCwd.trim();
@@ -426,7 +430,38 @@ export class TmuxService {
     return {
       cwd,
       activeCommand,
+      ...(activityAt ? { activityAt } : {}),
     };
+  }
+
+  private async readPaneActivityAt(target: TmuxTarget): Promise<Date | null> {
+    try {
+      const result = await this.runTmux(
+        [
+          "display-message",
+          "-p",
+          "-t",
+          target.sessionName,
+          [
+            "#{pane_activity}",
+            "#{window_activity}",
+            "#{session_activity}",
+          ].join(TMUX_METADATA_FIELD_SEPARATOR),
+        ],
+        target,
+      );
+      const activitySeconds = result.stdout
+        .replace(/\r?\n$/, "")
+        .split(TMUX_METADATA_FIELD_SEPARATOR)
+        .map((value) => Number.parseInt(value.trim(), 10))
+        .find((value) => Number.isFinite(value) && value > 0);
+      if (activitySeconds === undefined) {
+        return null;
+      }
+      return new Date(activitySeconds * 1000);
+    } catch {
+      return null;
+    }
   }
 
   private async readPaneWidth(target: TmuxTarget): Promise<number | undefined> {

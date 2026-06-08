@@ -2,12 +2,17 @@ import type { TerminalMobileOverviewResponse } from "@browser-viewer/shared";
 import path from "node:path";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
-import { readTerminalScrollbackCapture } from "../terminal/runtime-launcher";
+import {
+  isTmuxBackedSession,
+  readTerminalScrollbackCapture,
+  resolveTmuxTarget,
+} from "../terminal/runtime-launcher";
 import type { TmuxService } from "../terminal/tmux-service";
 import { toProjectPayload, toSessionListItem } from "./terminal-route-payloads";
 
 const MOBILE_TERMINAL_OVERVIEW_TAIL_LINES = 80;
 const MOBILE_TERMINAL_OVERVIEW_TAIL_TIMEOUT_MS = 1_500;
+const MOBILE_TERMINAL_OVERVIEW_METADATA_TIMEOUT_MS = 800;
 const terminalLogger = logger.child({ component: "terminal" });
 
 interface MobileOverviewTailCapture {
@@ -93,15 +98,67 @@ function sortSessionsForMobileOverview(
     .map((entry) => entry.session);
 }
 
+async function syncTmuxSessionActivityForMobileOverview(
+  terminalSessionManager: TerminalSessionManager,
+  tmuxService: TmuxService | undefined,
+  sessions: ReturnType<TerminalSessionManager["listSessions"]>,
+): Promise<void> {
+  if (!tmuxService) {
+    return;
+  }
+
+  await Promise.all(
+    sessions.map(async (session) => {
+      if (session.status !== "running" || !isTmuxBackedSession(session)) {
+        return;
+      }
+
+      try {
+        const metadata = await withTimeout(
+          tmuxService.readPaneMetadata(
+            resolveTmuxTarget(session, tmuxService),
+            session.command,
+          ),
+          MOBILE_TERMINAL_OVERVIEW_METADATA_TIMEOUT_MS,
+          "Terminal mobile overview metadata read timed out",
+        );
+        if (!metadata) {
+          return;
+        }
+        await terminalSessionManager.updateSessionMetadata(session.id, {
+          cwd: metadata.cwd,
+          activeCommand: metadata.activeCommand,
+        });
+        if (metadata.activityAt) {
+          await terminalSessionManager.updateSessionActivity(
+            session.id,
+            metadata.activityAt,
+          );
+        }
+      } catch (error) {
+        terminalLogger.debug("terminal.mobile-overview.metadata-sync.failed", {
+          message: "Terminal mobile overview metadata sync failed",
+          terminalSessionId: session.id,
+          error,
+        });
+      }
+    }),
+  );
+}
+
 export async function buildTerminalMobileOverviewPayload(
   terminalSessionManager: TerminalSessionManager,
   tmuxService?: TmuxService,
   options?: TerminalMobileOverviewOptions,
 ): Promise<TerminalMobileOverviewResponse> {
   const includeTail = options?.includeTail ?? true;
-  const sessions = sortSessionsForMobileOverview(
-    terminalSessionManager.listSessions(),
+  const sessionsForSync = terminalSessionManager.listSessions();
+  await syncTmuxSessionActivityForMobileOverview(
+    terminalSessionManager,
+    tmuxService,
+    sessionsForSync,
   );
+  const sessions = sortSessionsForMobileOverview(sessionsForSync);
   return {
     projects: terminalSessionManager
       .listProjects()

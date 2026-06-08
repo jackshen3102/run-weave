@@ -1,0 +1,33 @@
+{
+  "tool": "image2",
+  "artifact": "docs/plans/assets/2026-06-09-ios-terminal-composer-image2.png",
+  "purpose": "Generate a code-grounded interaction sketch for the Runweave iOS terminal detail composer redesign.",
+  "codeFacts": {
+    "page": "app/src/pages/AppTerminalPage.tsx",
+    "composer": "app/src/components/TerminalCommandComposer.tsx",
+    "connectionHook": "app/src/hooks/use-app-terminal-connection.ts",
+    "styles": "app/src/main.css",
+    "currentPageStructure": "IonPage > IonContent > terminal-page-shell with header, terminal body, and bottom TerminalCommandComposer.",
+    "currentComposer": "A footer with IonTextarea and a text Send IonButton.",
+    "currentInputPath": "TerminalCommandComposer calls onSendInput(text + newline); AppTerminalPage passes useAppTerminalConnection().sendInput.",
+    "stopCapabilityAlreadyExists": "Ctrl-C can be sent through sendInput('\\u0003'); backend websocket protocol also supports a signal message with SIGINT, but App hook currently exposes only sendInput.",
+    "imageCapabilityAlreadyExistsOutsideApp": "Backend exposes POST /api/terminal/session/:id/clipboard-image and Web frontend has createTerminalSessionClipboardImage(); App does not yet expose an image picker service."
+  },
+  "targetBehaviorShown": {
+    "chooseImage": "Show a leading image/add attachment button as the entry point only. Do not show uploaded thumbnail previews or success states.",
+    "inputText": "Show one auto-growing mobile chat-style text field with placeholder 'Type a command...'.",
+    "send": "Show a compact circular send button when there is typed text.",
+    "stop": "Show the same trailing circular action in stop mode with a square stop icon when the terminal has an active command and is still connected/running; this maps to Ctrl-C/SIGINT behavior.",
+    "noShortcutBar": "Do not render the existing TerminalShortcutBar in the sketch because AppTerminalPage does not currently mount it."
+  },
+  "visualConstraints": {
+    "device": "single iPhone portrait screen",
+    "theme": "Runweave dark terminal theme from current AppTerminalPage",
+    "layout": "Keep the existing terminal detail page: compact header, full terminal output area, bottom safe-area composer.",
+    "composerStyle": "Modern mobile chatbox composer inspired by common iOS/Ionic chat inputs: translucent dark bottom bar, rounded input capsule, icon-only buttons, stable 44px tap targets.",
+    "colors": "Use the existing dark palette: page #05070b, terminal #0b1220, header #0c1118, text #eef3f8, muted #9aa8b6, connected green #42d986.",
+    "textPolicy": "No explanatory product text, no labels that describe features. Use only realistic terminal header/status text, terminal output, placeholder text, and iconography.",
+    "accuracy": "Do not show git branch, AI status, image thumbnails, file upload progress, or backend fields not present in the current App terminal page code."
+  },
+  "imagePrompt": "Create a high-fidelity mobile app interaction sketch for the current Runweave iOS terminal detail page. It must be grounded in the existing code: the screen has a compact dark header with back button, terminal title, cwd subtitle, connected status, a full-height terminal output area, and a bottom TerminalCommandComposer. Redesign only the bottom composer as a modern mobile chatbox. The bottom composer is a translucent dark safe-area bar. Inside it, place a left circular icon-only image/add attachment button, a rounded auto-growing input capsule with placeholder 'Type a command...', and a right circular action button. Show two stacked mini state callouts within the same sketch: normal typing state with an up-arrow send icon, and running command state with a square stop icon. The stop state maps to Ctrl-C/SIGINT and should not invent new backend UI. Keep visual style consistent with Ionic/iOS chat inputs: 44px tap targets, soft 16-22px radii, subtle borders, no heavy card nesting. Do not show uploaded image thumbnails, upload progress, git branch, AI labels, or feature explanation text. Use Runweave dark colors: black page, #0b1220 terminal, #0c1118 header/composer, #eef3f8 text, #9aa8b6 muted text, #42d986 status dot. The terminal output should look like realistic logs and shell prompt, but the focus is the composer design."
+}

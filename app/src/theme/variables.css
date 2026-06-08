@@ -1,4 +1,67 @@
 :root {
+  --ion-background-color: #080b10;
+  --ion-text-color: #f8fafc;
+  --ion-color-primary: #42d986;
+  --ion-color-primary-rgb: 66, 217, 134;
+  --ion-color-primary-contrast: #06100b;
+  --ion-color-primary-contrast-rgb: 6, 16, 11;
+  --ion-color-primary-shade: #3abd76;
+  --ion-color-primary-tint: #55dd92;
+
+  --ion-font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+
+  --background: 216 33% 5%;
+  --foreground: 210 40% 98%;
+  --card: 215 28% 10%;
+  --card-foreground: 210 40% 98%;
+  --primary: 146 66% 55%;
+  --primary-foreground: 144 45% 4%;
+  --muted: 215 21% 18%;
+  --muted-foreground: 215 14% 66%;
+  --border: 214 18% 22%;
+
+  --rw-app-bg: hsl(var(--background));
+  --rw-app-surface: hsl(var(--card));
+  --rw-app-border: hsl(var(--border) / 0.62);
+  --rw-app-text: hsl(var(--foreground));
+  --rw-app-muted: hsl(var(--muted-foreground));
+  --rw-app-subtle: hsl(215 12% 52%);
+}
+
+:root.ion-palette-dark,
+:root.dark {
+  --ion-background-color: #080b10;
+  --ion-text-color: #f8fafc;
+  --ion-color-primary: #42d986;
+  --ion-color-primary-rgb: 66, 217, 134;
+  --ion-color-primary-contrast: #06100b;
+  --ion-color-primary-contrast-rgb: 6, 16, 11;
+  --ion-color-primary-shade: #3abd76;
+  --ion-color-primary-tint: #55dd92;
+
+  --background: 216 33% 5%;
+  --foreground: 210 40% 98%;
+  --card: 215 28% 10%;
+  --card-foreground: 210 40% 98%;
+  --primary: 146 66% 55%;
+  --primary-foreground: 144 45% 4%;
+  --muted: 215 21% 18%;
+  --muted-foreground: 215 14% 66%;
+  --border: 214 18% 22%;
+
+  --rw-app-bg: #080b10;
+  --rw-app-surface: #121821;
+  --rw-app-border: rgba(226, 232, 240, 0.1);
+  --rw-app-text: #f8fafc;
+  --rw-app-muted: #9aa7b8;
+  --rw-app-subtle: #768397;
+}
+
+:root.ion-palette-light {
+  --ion-background-color: #f5f7fb;
+  --ion-text-color: #0f172a;
   --ion-color-primary: #2c7df0;
   --ion-color-primary-rgb: 44, 125, 240;
   --ion-color-primary-contrast: #ffffff;
@@ -6,25 +69,20 @@
   --ion-color-primary-shade: #276ed3;
   --ion-color-primary-tint: #418af2;
 
-  --ion-font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
+  --background: 220 43% 97%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --primary: 215 87% 56%;
+  --primary-foreground: 0 0% 100%;
+  --muted: 214 32% 91%;
+  --muted-foreground: 215 16% 47%;
+  --border: 214 32% 85%;
 
-  --rw-app-bg: #f5f7fb;
-  --rw-app-surface: #ffffff;
-  --rw-app-border: rgba(15, 23, 42, 0.1);
-  --rw-app-text: #0f172a;
-  --rw-app-muted: #475569;
+  --rw-app-bg: hsl(var(--background));
+  --rw-app-surface: hsl(var(--card));
+  --rw-app-border: hsl(var(--border));
+  --rw-app-text: hsl(var(--foreground));
+  --rw-app-muted: hsl(var(--muted-foreground));
   --rw-app-subtle: #64748b;
-}
-
-:root.ion-palette-dark {
-  --ion-background-color: #080b10;
-  --ion-text-color: #f8fafc;
-  --rw-app-bg: #080b10;
-  --rw-app-surface: #121821;
-  --rw-app-border: rgba(226, 232, 240, 0.1);
-  --rw-app-text: #f8fafc;
-  --rw-app-muted: #9aa7b8;
-  --rw-app-subtle: #768397;
 }

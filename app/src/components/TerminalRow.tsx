@@ -10,20 +10,20 @@ interface TerminalRowProps {
 export function TerminalRow({ session, onOpenTerminal }: TerminalRowProps) {
   return (
     <button
-      className="terminal-row"
+      className="terminal-row text-foreground"
       onClick={() => onOpenTerminal(session.terminalSessionId)}
       type="button"
     >
-      <div className="terminal-row__main">
-        <div className="terminal-row__title-line">
-          <h3>{session.title}</h3>
+      <div className="terminal-row__main min-w-0">
+        <div className="terminal-row__title-line min-w-0">
+          <h3 className="text-foreground">{session.title}</h3>
           <span className={`terminal-row__status is-${session.displayStatus}`}>
             {session.displayStatusLabel}
           </span>
         </div>
-        <p>{session.subtitle}</p>
+        <p className="text-muted-foreground">{session.subtitle}</p>
       </div>
-      <time dateTime={session.lastActivityAt}>
+      <time className="text-muted-foreground" dateTime={session.lastActivityAt}>
         {formatRelativeTime(session.lastActivityAt)}
       </time>
     </button>

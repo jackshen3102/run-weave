@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   TerminalClientMessage,
   TerminalServerMessage,
+  TerminalSignal,
   TerminalSessionStatusResponse,
 } from "@browser-viewer/shared";
 import type { TerminalRendererHandle } from "@browser-viewer/terminal-renderer";
@@ -320,31 +321,32 @@ export function useAppTerminalConnection({
     terminalSessionId,
   ]);
 
-  const sendInput = useCallback(
-    (data: string) => {
-      if (!data) {
-        return;
-      }
-      const socket = socketRef.current;
-      if (socket?.readyState === WebSocket.OPEN) {
-        sendMessage(socket, { type: "input", data });
-        return;
-      }
+  const sendInput = useCallback((data: string) => {
+    if (!data) {
+      return;
+    }
+    const socket = socketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      sendMessage(socket, { type: "input", data });
+      return;
+    }
 
-      const currentLength = pendingInputRef.current.reduce(
-        (total, chunk) => total + chunk.length,
-        0,
-      );
-      if (currentLength + data.length <= MAX_PENDING_INPUT_CHARS) {
-        pendingInputRef.current.push(data);
-      }
-    },
-    [],
-  );
+    const currentLength = pendingInputRef.current.reduce(
+      (total, chunk) => total + chunk.length,
+      0,
+    );
+    if (currentLength + data.length <= MAX_PENDING_INPUT_CHARS) {
+      pendingInputRef.current.push(data);
+    }
+  }, []);
 
   const sendResize = useCallback((cols: number, rows: number) => {
     pendingResizeRef.current = { cols, rows };
     sendMessage(socketRef.current, { type: "resize", cols, rows });
+  }, []);
+
+  const sendSignal = useCallback((signal: TerminalSignal) => {
+    sendMessage(socketRef.current, { type: "signal", signal });
   }, []);
 
   return {
@@ -355,5 +357,6 @@ export function useAppTerminalConnection({
     runtimeStatus,
     sendInput,
     sendResize,
+    sendSignal,
   };
 }

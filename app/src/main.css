@@ -1,5 +1,8 @@
 @import "@browser-viewer/terminal-renderer/terminal-renderer.css";
 
+@tailwind base;
+@tailwind components;
+
 html,
 body,
 #root {
@@ -425,11 +428,20 @@ ion-content::part(background) {
 }
 
 .terminal-composer {
-  display: grid;
-  gap: 8px;
-  padding: 8px 10px calc(env(safe-area-inset-bottom) + 10px);
-  border-top: 1px solid rgba(148, 163, 184, 0.16);
-  background: #0c1118;
+  padding: 10px 12px calc(env(safe-area-inset-bottom) + 10px);
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(12, 17, 24, 0.94);
+  backdrop-filter: blur(18px);
+}
+
+.terminal-composer-error {
+  margin: 0;
+  padding: 7px 12px;
+  border-top: 1px solid rgba(255, 154, 168, 0.18);
+  background: rgba(12, 17, 24, 0.94);
+  color: #ff9aa8;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .terminal-shortcut-bar {
@@ -451,30 +463,128 @@ ion-content::part(background) {
 
 .terminal-composer__input-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: end;
-  gap: 8px;
+  gap: 10px;
+}
+
+.terminal-composer__file-input {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.terminal-composer__icon-button,
+.terminal-composer__action {
+  --border-radius: 999px;
+  --padding-bottom: 0;
+  --padding-end: 0;
+  --padding-start: 0;
+  --padding-top: 0;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0;
+  overflow: hidden;
+  font-weight: 700;
+}
+
+.terminal-composer__icon-button {
+  --background: rgba(148, 163, 184, 0.14);
+  --color: #eef3f8;
+  font-size: 28px;
+  line-height: 1;
 }
 
 .terminal-composer__input {
-  --background: #151c27;
-  --border-color: rgba(148, 163, 184, 0.22);
-  --border-radius: 8px;
+  --background: rgba(21, 28, 39, 0.94);
+  --border-color: rgba(148, 163, 184, 0.2);
+  --border-radius: 22px;
   --color: #eef3f8;
   --highlight-color-focused: #42d986;
-  --padding-bottom: 8px;
-  --padding-end: 10px;
-  --padding-start: 10px;
-  --padding-top: 8px;
-  min-height: 42px;
+  --padding-bottom: 10px;
+  --padding-end: 14px;
+  --padding-start: 14px;
+  --padding-top: 10px;
+  min-height: 44px;
   max-height: 120px;
   overflow-y: auto;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 13px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 22px;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 15px;
+  line-height: 1.25;
 }
 
-.terminal-composer__send {
-  --border-radius: 8px;
-  min-height: 42px;
-  margin: 0;
+.terminal-composer__action {
+  --background: #eef3f8;
+  --border-color: rgba(238, 243, 248, 0.86);
+  --color: #05070b;
+  border: 1px solid rgba(238, 243, 248, 0.86);
+  border-radius: 999px;
 }
+
+.terminal-composer__action.is-stop {
+  --background: rgba(255, 154, 168, 0.1);
+  --border-color: rgba(255, 154, 168, 0.9);
+  --color: #ff8fa3;
+}
+
+.terminal-composer__action.button-disabled,
+.terminal-composer__icon-button.button-disabled {
+  opacity: 0.42;
+}
+
+.terminal-composer__send-icon,
+.terminal-composer__stop-icon {
+  display: block;
+  margin: auto;
+}
+
+.terminal-composer__send-icon {
+  position: relative;
+  width: 16px;
+  height: 18px;
+}
+
+.terminal-composer__send-icon::before {
+  position: absolute;
+  top: 0;
+  left: 3px;
+  width: 10px;
+  height: 10px;
+  border-top: 2.4px solid currentColor;
+  border-left: 2.4px solid currentColor;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.terminal-composer__send-icon::after {
+  position: absolute;
+  top: 3px;
+  left: 7px;
+  width: 2.4px;
+  height: 15px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.terminal-composer__stop-icon {
+  width: 13px;
+  height: 13px;
+  border-radius: 4px;
+  background: currentColor;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+@tailwind utilities;

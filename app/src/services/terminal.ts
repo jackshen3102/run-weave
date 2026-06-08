@@ -1,4 +1,6 @@
 import type {
+  CreateTerminalClipboardImageRequest,
+  CreateTerminalClipboardImageResponse,
   CreateTerminalWsTicketResponse,
   SendTerminalInputResponse,
   TerminalMobileOverviewResponse,
@@ -71,6 +73,26 @@ export async function sendTerminalInput(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ data }),
+    },
+  );
+}
+
+export async function createTerminalSessionClipboardImage(
+  apiBase: string,
+  accessToken: string,
+  terminalSessionId: string,
+  payload: CreateTerminalClipboardImageRequest,
+): Promise<CreateTerminalClipboardImageResponse> {
+  return requestJson<CreateTerminalClipboardImageResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/clipboard-image`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     },
   );
 }

@@ -48,13 +48,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <IonPage>
-      <IonContent fullscreen className="login-page">
-        <main className="login-shell">
+      <IonContent fullscreen className="login-page bg-background text-foreground">
+        <main className="login-shell min-h-full">
           <section className="login-brand">
-            <p>Runweave</p>
-            <h1>Sign in</h1>
+            <p className="text-muted-foreground">Runweave</p>
+            <h1 className="text-foreground">Sign in</h1>
           </section>
-          <form className="login-form" onSubmit={handleSubmit}>
+          <form className="login-form grid" onSubmit={handleSubmit}>
             <IonInput
               className="app-input"
               autocomplete="username"
@@ -80,7 +80,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             />
             {error ? (
               <IonText color="danger">
-                <p className="login-error">{error}</p>
+                <p className="login-error text-sm">{error}</p>
               </IonText>
             ) : null}
             <IonButton
