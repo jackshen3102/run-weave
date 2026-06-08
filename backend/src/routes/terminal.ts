@@ -1,14 +1,9 @@
-import { Router, type Response } from "express";
+import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
-import path from "node:path";
 import { z } from "zod";
 import type {
-  CreateTerminalProjectRequest,
-  CreateTerminalClipboardImageRequest,
-  CreateTerminalClipboardImageResponse,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalEventsWsTicketResponse,
@@ -16,26 +11,19 @@ import type {
   SendTerminalInputRequest,
   SendTerminalInputResponse,
   TerminalCompletionEventListResponse,
-  UpdateTerminalProjectRequest,
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
 import { readBearerToken } from "../auth/middleware";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
-  TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
-  TERMINAL_CLIPBOARD_IMAGE_MAX_MIB,
-} from "../terminal/clipboard-image";
-import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,
 } from "../terminal/default-shell";
-import {
-  clearPreviewFileSearchCache,
-  normalizeProjectPath,
-  TerminalPreviewError,
-} from "../terminal/preview";
 import { registerTerminalPreviewRoutes } from "./terminal-preview-routes";
+import { registerTerminalProjectRoutes } from "./terminal-project-routes";
+import { registerTerminalClipboardImageRoutes } from "./terminal-clipboard-image-routes";
+import { registerTerminalTmuxOrphanRoutes } from "./terminal-tmux-orphan-routes";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
@@ -47,11 +35,10 @@ import {
   readTerminalScrollbackCapture,
   resolveTmuxTarget,
 } from "../terminal/runtime-launcher";
-import type { TmuxService, TmuxSessionInfo } from "../terminal/tmux-service";
+import type { TmuxService } from "../terminal/tmux-service";
 import { buildTerminalMobileOverviewPayload } from "./terminal-mobile-overview";
 import {
   toHistoryPayload,
-  toProjectPayload,
   toSessionListItem,
   toStatusPayload,
 } from "./terminal-route-payloads";
@@ -69,28 +56,6 @@ const createTerminalSessionSchema = z
   })
   .strict();
 
-const createTerminalProjectSchema = z
-  .object({
-    name: z.string().trim().min(1),
-    path: z.string().nullable().optional(),
-  })
-  .strict();
-
-const updateTerminalProjectSchema = z
-  .object({
-    name: z.string().trim().min(1).optional(),
-    path: z.string().nullable().optional(),
-  })
-  .strict()
-  .refine((payload) => payload.name !== undefined || "path" in payload, {
-    message: "Project name or path is required",
-  });
-
-const createTerminalClipboardImageSchema = z.object({
-  mimeType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
-  dataBase64: z.string().min(1),
-});
-
 const sendTerminalInputSchema = z
   .object({
     data: z.string(),
@@ -100,31 +65,6 @@ const sendTerminalInputSchema = z
 
 function buildTerminalInputOperationId(): string {
   return `op_${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}_${randomBytes(4).toString("hex")}`;
-}
-
-function resolveClipboardImageExtension(mimeType: string): string {
-  switch (mimeType) {
-    case "image/png":
-      return "png";
-    case "image/jpeg":
-      return "jpg";
-    case "image/webp":
-      return "webp";
-    case "image/gif":
-      return "gif";
-    default:
-      throw new Error(`Unsupported clipboard image mime type: ${mimeType}`);
-  }
-}
-
-function buildClipboardImageFileName(
-  now: Date,
-  extension: string,
-  randomHex = randomBytes(3).toString("hex"),
-): string {
-  const date = now.toISOString().slice(0, 10).replaceAll("-", "");
-  const time = now.toISOString().slice(11, 19).replaceAll(":", "");
-  return `browser-viewer-terminal-image-${date}-${time}-${randomHex}.${extension}`;
 }
 
 function resolveTerminalCreateDefaults(
@@ -185,48 +125,6 @@ function sanitizeTerminalError(error: unknown): string {
   );
 }
 
-function resolveKnownTmuxSessionNames(
-  terminalSessionManager: TerminalSessionManager,
-  tmuxService: TmuxService,
-): Set<string> {
-  return new Set(
-    terminalSessionManager
-      .listSessions()
-      .filter((session) => isTmuxBackedSession(session))
-      .map(
-        (session) =>
-          session.tmuxSessionName ?? tmuxService.buildSessionName(session.id),
-      ),
-  );
-}
-
-function toTmuxOrphanPayload(session: TmuxSessionInfo): TmuxSessionInfo {
-  return {
-    sessionName: session.sessionName,
-    attachedClients: session.attachedClients,
-    windows: session.windows,
-  };
-}
-
-async function resolveProjectPathInput(
-  rawPath: string | null | undefined,
-): Promise<string | null | undefined> {
-  if (rawPath === undefined) {
-    return undefined;
-  }
-  if (rawPath === null || rawPath.trim() === "") {
-    return null;
-  }
-  const normalized = await normalizeProjectPath(rawPath);
-  if (!normalized) {
-    throw new TerminalPreviewError(
-      "Project path must be a readable directory",
-      400,
-    );
-  }
-  return normalized;
-}
-
 export function createTerminalRouter(
   terminalSessionManager: TerminalSessionManager,
   options?: {
@@ -254,118 +152,12 @@ export function createTerminalRouter(
     return options.authService.verifyAccessToken(token)?.sessionId ?? null;
   };
 
-  const handleProjectError = (res: Response, error: unknown) => {
-    if (error instanceof TerminalPreviewError) {
-      res.status(error.statusCode).json({ message: error.message });
-      return;
-    }
-    terminalLogger.error("terminal.project.request.failed", {
-      message: "Terminal project request failed",
-      error,
-    });
-    res.status(500).json({
-      message: "Terminal project request failed",
-      error: String(error),
-    });
-  };
-
-  router.get("/project", (_req, res) => {
-    const payload = terminalSessionManager
-      .listProjects()
-      .map((project) => toProjectPayload(project));
-
-    res.json(payload);
+  registerTerminalProjectRoutes(router, terminalSessionManager, {
+    runtimeRegistry: options?.runtimeRegistry,
+    tmuxService: options?.tmuxService,
   });
 
   registerTerminalPreviewRoutes(router, terminalSessionManager);
-
-  router.post("/project", async (req, res) => {
-    const parsed = createTerminalProjectSchema.safeParse(
-      req.body as CreateTerminalProjectRequest,
-    );
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    try {
-      const projectPath = await resolveProjectPathInput(parsed.data.path);
-      const project = await terminalSessionManager.createProject(
-        parsed.data.name,
-        projectPath ?? null,
-      );
-      res.status(201).json(toProjectPayload(project));
-    } catch (error) {
-      handleProjectError(res, error);
-    }
-  });
-
-  router.patch("/project/:id", async (req, res) => {
-    const parsed = updateTerminalProjectSchema.safeParse(
-      req.body as UpdateTerminalProjectRequest,
-    );
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    try {
-      const projectPath = await resolveProjectPathInput(parsed.data.path);
-      const project = await terminalSessionManager.updateProject(
-        req.params.id,
-        {
-          name: parsed.data.name,
-          ...(projectPath !== undefined ? { path: projectPath } : {}),
-        },
-      );
-      if (!project) {
-        res.status(404).json({ message: "Terminal project not found" });
-        return;
-      }
-
-      clearPreviewFileSearchCache(project.id);
-      res.json(toProjectPayload(project));
-    } catch (error) {
-      handleProjectError(res, error);
-    }
-  });
-
-  const reorderProjectsSchema = z
-    .object({
-      orderedIds: z.array(z.string().min(1)).min(1),
-    })
-    .strict();
-
-  router.put("/project/reorder", async (req, res) => {
-    const parsed = reorderProjectsSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    try {
-      await terminalSessionManager.reorderProjects(parsed.data.orderedIds);
-      res.status(204).send();
-    } catch (error) {
-      terminalLogger.error("terminal.project.reorder.failed", {
-        message: "Terminal project reorder failed",
-        error,
-      });
-      res.status(500).json({
-        message: "Terminal project reorder failed",
-        error: String(error),
-      });
-    }
-  });
 
   const reorderSessionsSchema = z
     .object({
@@ -400,30 +192,6 @@ export function createTerminalRouter(
         error: String(error),
       });
     }
-  });
-
-  router.delete("/project/:id", async (req, res) => {
-    const childSessions = terminalSessionManager
-      .listSessions()
-      .filter((session) => session.projectId === req.params.id);
-
-    if (options?.runtimeRegistry) {
-      for (const session of childSessions) {
-        await options.runtimeRegistry.disposeRuntime(session.id);
-      }
-    }
-    for (const session of childSessions) {
-      await killTmuxSessionForTerminal(session, options?.tmuxService);
-    }
-
-    const deleted = await terminalSessionManager.deleteProject(req.params.id);
-    if (!deleted) {
-      res.status(404).json({ message: "Terminal project not found" });
-      return;
-    }
-
-    clearPreviewFileSearchCache(req.params.id);
-    res.status(204).send();
   });
 
   router.get("/session", (_req, res) => {
@@ -630,79 +398,11 @@ export function createTerminalRouter(
     }
   });
 
-  router.get("/tmux/orphans", async (_req, res) => {
-    if (!options?.tmuxService) {
-      res.status(503).json({ message: "Terminal tmux service unavailable" });
-      return;
-    }
-
-    try {
-      const knownSessionNames = resolveKnownTmuxSessionNames(
-        terminalSessionManager,
-        options.tmuxService,
-      );
-      const orphanedSessions =
-        await options.tmuxService.listOrphanedSessions(knownSessionNames);
-      res.json({ items: orphanedSessions.map(toTmuxOrphanPayload) });
-    } catch (error) {
-      terminalLogger.error("terminal.tmux.orphan.scan.failed", {
-        message: "Tmux orphan scan failed",
-        error,
-      });
-      res.status(500).json({
-        message: "Terminal tmux orphan scan failed",
-        error: String(error),
-      });
-    }
-  });
-
-  router.delete("/tmux/orphans", async (req, res) => {
-    if (!options?.tmuxService) {
-      res.status(503).json({ message: "Terminal tmux service unavailable" });
-      return;
-    }
-    if (req.query.confirm !== "true") {
-      res.status(400).json({
-        message: "Set confirm=true to clean orphaned tmux sessions",
-      });
-      return;
-    }
-
-    try {
-      const knownSessionNames = resolveKnownTmuxSessionNames(
-        terminalSessionManager,
-        options.tmuxService,
-      );
-      const includeAttached = req.query.includeAttached === "true";
-      const orphanedSessions =
-        await options.tmuxService.listOrphanedSessions(knownSessionNames);
-      const killedSessions = await options.tmuxService.killOrphanedSessions(
-        knownSessionNames,
-        {
-          includeAttached,
-        },
-      );
-      const killedSessionNames = new Set(
-        killedSessions.map((session) => session.sessionName),
-      );
-      const skippedSessions = orphanedSessions.filter(
-        (session) => !killedSessionNames.has(session.sessionName),
-      );
-      res.json({
-        killed: killedSessions.map(toTmuxOrphanPayload),
-        skipped: skippedSessions.map(toTmuxOrphanPayload),
-      });
-    } catch (error) {
-      terminalLogger.error("terminal.tmux.orphan.cleanup.failed", {
-        message: "Tmux orphan cleanup failed",
-        error,
-      });
-      res.status(500).json({
-        message: "Terminal tmux orphan cleanup failed",
-        error: String(error),
-      });
-    }
-  });
+  registerTerminalTmuxOrphanRoutes(
+    router,
+    terminalSessionManager,
+    options?.tmuxService,
+  );
 
   router.get("/session/:id/history", async (req, res) => {
     const session = terminalSessionManager.getSession(req.params.id);
@@ -849,66 +549,7 @@ export function createTerminalRouter(
     }
   });
 
-  router.post("/session/:id/clipboard-image", async (req, res) => {
-    const parsed = createTerminalClipboardImageSchema.safeParse(
-      req.body as CreateTerminalClipboardImageRequest,
-    );
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    const session = terminalSessionManager.getSession(req.params.id);
-    if (!session) {
-      res.status(404).json({ message: "Terminal session not found" });
-      return;
-    }
-
-    try {
-      const extension = resolveClipboardImageExtension(parsed.data.mimeType);
-      const fileName = buildClipboardImageFileName(new Date(), extension);
-      const terminalTempDir = path.join(
-        os.tmpdir(),
-        "browser-viewer-terminal-images",
-      );
-      const filePath = path.join(terminalTempDir, fileName);
-      const imageBuffer = Buffer.from(parsed.data.dataBase64, "base64");
-      if (imageBuffer.length > TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES) {
-        terminalLogger.warn("terminal.clipboard-image.too-large", {
-          message: "Terminal clipboard image exceeded size limit",
-          terminalSessionId: session.id,
-          bytes: imageBuffer.length,
-          limitBytes: TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
-        });
-        res.status(413).json({
-          message: `Clipboard image exceeds ${TERMINAL_CLIPBOARD_IMAGE_MAX_MIB} MiB limit`,
-        });
-        return;
-      }
-
-      await mkdir(terminalTempDir, { recursive: true });
-      await writeFile(filePath, imageBuffer);
-
-      const payload: CreateTerminalClipboardImageResponse = {
-        fileName,
-        filePath,
-      };
-      res.status(201).json(payload);
-    } catch (error) {
-      terminalLogger.error("terminal.clipboard-image.store.failed", {
-        message: "Store terminal clipboard image failed",
-        terminalSessionId: req.params.id,
-        error,
-      });
-      res.status(500).json({
-        message: "Failed to store terminal clipboard image",
-        error: String(error),
-      });
-    }
-  });
+  registerTerminalClipboardImageRoutes(router, terminalSessionManager);
 
   router.delete("/session/:id", async (req, res) => {
     const session = terminalSessionManager.getSession(req.params.id);
