@@ -5,6 +5,7 @@ import type { PtyRuntime, PtyService } from "./pty-service";
 import type { TerminalRuntimeRegistry } from "./runtime-registry";
 import { createTerminalRuntimeRecorder } from "./runtime-recorder";
 import type { TmuxService, TmuxTarget } from "./tmux-service";
+import type { TmuxOutputWatcher } from "./tmux-output-watcher";
 import { TmuxRebuildLimitError } from "./tmux-service";
 
 export interface EnsureTerminalRuntimeResult {
@@ -18,6 +19,7 @@ interface EnsureTerminalRuntimeOptions {
   runtimeRegistry: TerminalRuntimeRegistry;
   ptyService: PtyService;
   tmuxService?: TmuxService;
+  tmuxOutputWatcher?: TmuxOutputWatcher;
   allowMissingTmuxSession?: boolean;
 }
 
@@ -130,6 +132,7 @@ export async function ensureTerminalRuntime(
           await options.tmuxService!.waitForPaneReady(target);
         }
       }
+      await options.tmuxOutputWatcher?.watchSession(currentSession);
 
       const attachCommand = options.tmuxService!.buildAttachCommand(
         target,

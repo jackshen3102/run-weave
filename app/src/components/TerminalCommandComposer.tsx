@@ -1,4 +1,5 @@
-import { IonButton, IonTextarea } from "@ionic/react";
+import { IonButton, IonIcon, IonTextarea } from "@ionic/react";
+import { arrowUp, imageOutline, stop } from "ionicons/icons";
 import type { ChangeEvent } from "react";
 import { useRef, useState } from "react";
 
@@ -66,7 +67,7 @@ export function TerminalCommandComposer({
           onClick={handlePickImage}
           type="button"
         >
-          +
+          <IonIcon aria-hidden="true" icon={imageOutline} />
         </IonButton>
         <IonTextarea
           autoGrow
@@ -85,14 +86,7 @@ export function TerminalCommandComposer({
           onClick={showStop ? onStop : handleSubmit}
           type="button"
         >
-          <span
-            aria-hidden="true"
-            className={
-              showStop
-                ? "terminal-composer__stop-icon"
-                : "terminal-composer__send-icon"
-            }
-          />
+          <IonIcon aria-hidden="true" icon={showStop ? stop : arrowUp} />
         </IonButton>
       </div>
     </footer>

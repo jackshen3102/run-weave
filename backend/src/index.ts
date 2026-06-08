@@ -44,6 +44,7 @@ import { TerminalCompletionEventStore } from "./terminal/completion-events";
 import { loadOrCreateHookToken } from "./terminal/hook-token";
 import { PtyService } from "./terminal/pty-service";
 import { TerminalRuntimeRegistry } from "./terminal/runtime-registry";
+import { TmuxOutputWatcher } from "./terminal/tmux-output-watcher";
 import { TmuxService } from "./terminal/tmux-service";
 import { sanitizeCurrentTerminalProcessEnv } from "./terminal/env";
 import { LowDbTerminalSessionStore } from "./terminal/lowdb-store";
@@ -76,6 +77,7 @@ interface RuntimeServices {
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
   ptyService: PtyService;
   tmuxService: TmuxService;
+  tmuxOutputWatcher: TmuxOutputWatcher;
 }
 
 const LOCAL_ONLY_FORWARDED_HEADER_NAMES = [
@@ -177,11 +179,15 @@ function isLoopbackAddress(address: string | undefined): boolean {
 }
 
 function isLocalDirectRequest(req: express.Request): boolean {
-  return isLoopbackAddress(req.socket.remoteAddress) && !hasForwardedHeaders(req);
+  return (
+    isLoopbackAddress(req.socket.remoteAddress) && !hasForwardedHeaders(req)
+  );
 }
 
 function isLoopbackHostname(hostname: string): boolean {
-  return hostname === "127.0.0.1" || hostname === "::1" || hostname === "localhost";
+  return (
+    hostname === "127.0.0.1" || hostname === "::1" || hostname === "localhost"
+  );
 }
 
 function isValidLocalCdpEndpoint(endpoint: string): boolean {
@@ -297,11 +303,20 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
       ),
     env: process.env,
   });
+  const tmuxOutputWatcher = new TmuxOutputWatcher({
+    outputDir: path.join(
+      path.dirname(storagePaths.terminalSessionStoreFile),
+      "tmux-output",
+    ),
+    terminalSessionManager,
+    tmuxService,
+  });
   await sessionManager.initialize();
   await terminalSessionManager.initialize();
   if (resolveTerminalTmuxScanOrphansOnStartEnabled(process.env)) {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
   }
+  await tmuxOutputWatcher.watchExistingSessions();
 
   return {
     authStore,
@@ -317,6 +332,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalRuntimeRegistry,
     ptyService,
     tmuxService,
+    tmuxOutputWatcher,
   };
 }
 
@@ -413,6 +429,7 @@ function createHttpApp(
       ptyService: services.ptyService,
       runtimeRegistry: services.terminalRuntimeRegistry,
       tmuxService: services.tmuxService,
+      tmuxOutputWatcher: services.tmuxOutputWatcher,
       authService: services.authService,
       completionEventService: services.terminalCompletionEventService,
     }),
@@ -468,6 +485,7 @@ function attachLifecycleHandlers(
     });
     try {
       await closeServer(server);
+      await services.tmuxOutputWatcher.dispose();
       await services.terminalRuntimeRegistry.disposeAll();
       await services.terminalSessionManager.dispose();
       await services.sessionManager.dispose();
@@ -525,12 +543,17 @@ async function startRuntime(): Promise<void> {
     const devtoolsEnabled = services.sessionManager.isDevtoolsEnabled();
 
     stage = "websocket-servers";
-    attachWebSocketServer(server, services.sessionManager, services.authService, {
-      devtoolsEnabled,
-      qualityProbeStore: services.qualityProbeStore,
-      wsSessionController: services.wsSessionController,
-      tunnelAuthConfig,
-    });
+    attachWebSocketServer(
+      server,
+      services.sessionManager,
+      services.authService,
+      {
+        devtoolsEnabled,
+        qualityProbeStore: services.qualityProbeStore,
+        wsSessionController: services.wsSessionController,
+        tunnelAuthConfig,
+      },
+    );
     attachTerminalWebSocketServer(
       server,
       services.terminalSessionManager,
@@ -538,7 +561,10 @@ async function startRuntime(): Promise<void> {
       services.authService,
       services.ptyService,
       services.tmuxService,
-      { tunnelAuthConfig },
+      {
+        tunnelAuthConfig,
+        tmuxOutputWatcher: services.tmuxOutputWatcher,
+      },
     );
     attachTerminalEventsWebSocketServer(
       server,

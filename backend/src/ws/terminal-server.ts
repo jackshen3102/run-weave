@@ -23,6 +23,7 @@ import {
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
 import { createShellPromptTracker } from "../terminal/shell-integration";
 import type { TmuxService } from "../terminal/tmux-service";
+import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
 import {
@@ -50,6 +51,7 @@ export function attachTerminalWebSocketServer(
   tmuxService?: TmuxService,
   options?: {
     tunnelAuthConfig?: TunnelAuthConfig | null;
+    tmuxOutputWatcher?: TmuxOutputWatcher;
   },
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
@@ -119,7 +121,8 @@ export function attachTerminalWebSocketServer(
       runtimeRegistry.getAttachedClientCount(terminalSessionId) === 0
     ) {
       terminalWsLogger.info("terminal.tmux.attach-runtime.disposed", {
-        message: "Disposed idle tmux runtime before attaching terminal websocket",
+        message:
+          "Disposed idle tmux runtime before attaching terminal websocket",
         terminalSessionId,
       });
       await runtimeRegistry.disposeRuntime(terminalSessionId);
@@ -133,6 +136,7 @@ export function attachTerminalWebSocketServer(
           runtimeRegistry,
           ptyService,
           tmuxService,
+          tmuxOutputWatcher: options?.tmuxOutputWatcher,
         });
         runtime = ensured.runtime;
         if (ensured.warning) {
@@ -378,6 +382,7 @@ export function attachTerminalWebSocketServer(
                 runtimeRegistry,
                 ptyService,
                 tmuxService,
+                tmuxOutputWatcher: options?.tmuxOutputWatcher,
               });
               if (ensured.warning) {
                 sendEvent(socket, {

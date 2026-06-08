@@ -14,6 +14,7 @@ import {
 import { killTmuxSessionForTerminal } from "../terminal/runtime-launcher";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TmuxService } from "../terminal/tmux-service";
+import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import { toProjectPayload } from "./terminal-route-payloads";
 
 const terminalProjectLogger = logger.child({ component: "terminal" });
@@ -81,6 +82,7 @@ export function registerTerminalProjectRoutes(
   options?: {
     runtimeRegistry?: TerminalRuntimeRegistry;
     tmuxService?: TmuxService;
+    tmuxOutputWatcher?: TmuxOutputWatcher;
   },
 ): void {
   router.get("/project", (_req, res) => {
@@ -182,6 +184,9 @@ export function registerTerminalProjectRoutes(
       for (const session of childSessions) {
         await options.runtimeRegistry.disposeRuntime(session.id);
       }
+    }
+    for (const session of childSessions) {
+      await options?.tmuxOutputWatcher?.unwatchSession(session.id);
     }
     for (const session of childSessions) {
       await killTmuxSessionForTerminal(session, options?.tmuxService);

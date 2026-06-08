@@ -494,8 +494,11 @@ ion-content::part(background) {
 .terminal-composer__icon-button {
   --background: rgba(148, 163, 184, 0.14);
   --color: #eef3f8;
-  font-size: 28px;
-  line-height: 1;
+}
+
+.terminal-composer__icon-button ion-icon {
+  width: 21px;
+  height: 21px;
 }
 
 .terminal-composer__input {
@@ -539,52 +542,14 @@ ion-content::part(background) {
   --color: #ff8fa3;
 }
 
+.terminal-composer__action ion-icon {
+  width: 22px;
+  height: 22px;
+}
+
 .terminal-composer__action.button-disabled,
 .terminal-composer__icon-button.button-disabled {
   opacity: 0.42;
-}
-
-.terminal-composer__send-icon,
-.terminal-composer__stop-icon {
-  display: block;
-  margin: auto;
-}
-
-.terminal-composer__send-icon {
-  position: relative;
-  width: 16px;
-  height: 18px;
-}
-
-.terminal-composer__send-icon::before {
-  position: absolute;
-  top: 0;
-  left: 3px;
-  width: 10px;
-  height: 10px;
-  border-top: 2.4px solid currentColor;
-  border-left: 2.4px solid currentColor;
-  content: "";
-  transform: rotate(45deg);
-}
-
-.terminal-composer__send-icon::after {
-  position: absolute;
-  top: 3px;
-  left: 7px;
-  width: 2.4px;
-  height: 15px;
-  border-radius: 999px;
-  background: currentColor;
-  content: "";
-}
-
-.terminal-composer__stop-icon {
-  width: 13px;
-  height: 13px;
-  border-radius: 4px;
-  background: currentColor;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
 }
 
 @tailwind utilities;

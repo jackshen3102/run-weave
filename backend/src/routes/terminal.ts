@@ -36,6 +36,7 @@ import {
   resolveTmuxTarget,
 } from "../terminal/runtime-launcher";
 import type { TmuxService } from "../terminal/tmux-service";
+import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import { buildTerminalMobileOverviewPayload } from "./terminal-mobile-overview";
 import {
   toHistoryPayload,
@@ -131,6 +132,7 @@ export function createTerminalRouter(
     ptyService?: PtyService;
     runtimeRegistry?: TerminalRuntimeRegistry;
     tmuxService?: TmuxService;
+    tmuxOutputWatcher?: TmuxOutputWatcher;
     authService?: AuthService;
     completionEventService?: TerminalCompletionEventService;
   },
@@ -155,6 +157,7 @@ export function createTerminalRouter(
   registerTerminalProjectRoutes(router, terminalSessionManager, {
     runtimeRegistry: options?.runtimeRegistry,
     tmuxService: options?.tmuxService,
+    tmuxOutputWatcher: options?.tmuxOutputWatcher,
   });
 
   registerTerminalPreviewRoutes(router, terminalSessionManager);
@@ -334,6 +337,7 @@ export function createTerminalRouter(
               runtimeRegistry: options.runtimeRegistry,
               ptyService: options.ptyService,
               tmuxService: options.tmuxService,
+              tmuxOutputWatcher: options.tmuxOutputWatcher,
               allowMissingTmuxSession: true,
             });
           } catch (error) {
@@ -372,6 +376,7 @@ export function createTerminalRouter(
               runtimeRegistry: options.runtimeRegistry,
               ptyService: options.ptyService,
               tmuxService: options.tmuxService,
+              tmuxOutputWatcher: options.tmuxOutputWatcher,
               allowMissingTmuxSession: true,
             });
           }
@@ -515,6 +520,7 @@ export function createTerminalRouter(
         runtimeRegistry: options.runtimeRegistry,
         ptyService: options.ptyService,
         tmuxService: options.tmuxService,
+        tmuxOutputWatcher: options.tmuxOutputWatcher,
       });
       if (isTmuxBackedSession(session) && options.tmuxService) {
         await options.tmuxService.sendInput(
@@ -562,6 +568,7 @@ export function createTerminalRouter(
       if (options?.runtimeRegistry) {
         await options.runtimeRegistry.disposeRuntime(req.params.id);
       }
+      await options?.tmuxOutputWatcher?.unwatchSession(req.params.id);
       if (session) {
         await killTmuxSessionForTerminal(session, options?.tmuxService);
       }

@@ -519,6 +519,58 @@ describe("TmuxService", () => {
     );
   });
 
+  it("pipes future pane output to a backend transport file", async () => {
+    const execFileImpl = vi.fn(async () => ({ stdout: "", stderr: "" }));
+    const service = createService(execFileImpl);
+
+    await service.pipePaneOutput(
+      {
+        sessionName: "runweave-terminal-1",
+        socketPath: "/tmp/runweave-test/tmux.sock",
+      },
+      "/tmp/runweave output/terminal-1.log",
+    );
+
+    expect(execFileImpl).toHaveBeenCalledWith(
+      "tmux",
+      [
+        "-S",
+        "/tmp/runweave-test/tmux.sock",
+        "-f",
+        "/tmp/runweave-test/tmux.conf",
+        "pipe-pane",
+        "-t",
+        "runweave-terminal-1",
+        "cat >> '/tmp/runweave output/terminal-1.log'",
+      ],
+      expect.any(Object),
+    );
+  });
+
+  it("stops a pane output pipe", async () => {
+    const execFileImpl = vi.fn(async () => ({ stdout: "", stderr: "" }));
+    const service = createService(execFileImpl);
+
+    await service.stopPaneOutputPipe({
+      sessionName: "runweave-terminal-1",
+      socketPath: "/tmp/runweave-test/tmux.sock",
+    });
+
+    expect(execFileImpl).toHaveBeenCalledWith(
+      "tmux",
+      [
+        "-S",
+        "/tmp/runweave-test/tmux.sock",
+        "-f",
+        "/tmp/runweave-test/tmux.conf",
+        "pipe-pane",
+        "-t",
+        "runweave-terminal-1",
+      ],
+      expect.any(Object),
+    );
+  });
+
   it("reads pane metadata as directory plus active command", async () => {
     const execFileImpl = vi.fn(async (_file: string, args: string[]) => {
       if (args.includes(TMUX_METADATA_FORMAT)) {

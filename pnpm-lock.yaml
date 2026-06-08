@@ -55,6 +55,9 @@ importers:
       "@ionic/react-router":
         specifier: ^8.8.9
         version: 8.8.9(react-dom@19.2.4(react@19.2.4))(react-router-dom@5.3.4(react@19.2.4))(react-router@5.3.4(react@19.2.4))(react@19.2.4)
+      ionicons:
+        specifier: 8.0.13
+        version: 8.0.13
       react:
         specifier: ^19.0.0
         version: 19.2.4

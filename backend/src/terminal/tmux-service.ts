@@ -29,7 +29,6 @@ export interface TmuxLaunchCommand {
 export interface TmuxPaneMetadata {
   cwd: string;
   activeCommand: string | null;
-  activityAt?: Date;
 }
 
 export interface TmuxSessionInfo {
@@ -401,23 +400,20 @@ export class TmuxService {
     target: TmuxTarget,
     shellCommand?: string,
   ): Promise<TmuxPaneMetadata | null> {
-    const [result, activityAt] = await Promise.all([
-      this.runTmux(
+    const result = await this.runTmux(
+      [
+        "display-message",
+        "-p",
+        "-t",
+        target.sessionName,
         [
-          "display-message",
-          "-p",
-          "-t",
-          target.sessionName,
-          [
-            "#{pane_current_path}",
-            "#{@runweave_command}",
-            "#{pane_current_command}",
-          ].join(TMUX_METADATA_FIELD_SEPARATOR),
-        ],
-        target,
-      ),
-      this.readPaneActivityAt(target),
-    ]);
+          "#{pane_current_path}",
+          "#{@runweave_command}",
+          "#{pane_current_command}",
+        ].join(TMUX_METADATA_FIELD_SEPARATOR),
+      ],
+      target,
+    );
     const [rawCwd = "", rawRunweaveCommand = "", rawCommand = ""] =
       result.stdout.replace(/\r?\n$/, "").split(TMUX_METADATA_FIELD_SEPARATOR);
     const cwd = rawCwd.trim();
@@ -430,38 +426,23 @@ export class TmuxService {
     return {
       cwd,
       activeCommand,
-      ...(activityAt ? { activityAt } : {}),
     };
   }
 
-  private async readPaneActivityAt(target: TmuxTarget): Promise<Date | null> {
-    try {
-      const result = await this.runTmux(
-        [
-          "display-message",
-          "-p",
-          "-t",
-          target.sessionName,
-          [
-            "#{pane_activity}",
-            "#{window_activity}",
-            "#{session_activity}",
-          ].join(TMUX_METADATA_FIELD_SEPARATOR),
-        ],
-        target,
-      );
-      const activitySeconds = result.stdout
-        .replace(/\r?\n$/, "")
-        .split(TMUX_METADATA_FIELD_SEPARATOR)
-        .map((value) => Number.parseInt(value.trim(), 10))
-        .find((value) => Number.isFinite(value) && value > 0);
-      if (activitySeconds === undefined) {
-        return null;
-      }
-      return new Date(activitySeconds * 1000);
-    } catch {
-      return null;
-    }
+  async pipePaneOutput(target: TmuxTarget, outputPath: string): Promise<void> {
+    await this.runTmux(
+      [
+        "pipe-pane",
+        "-t",
+        target.sessionName,
+        `cat >> ${shellQuote(outputPath)}`,
+      ],
+      target,
+    );
+  }
+
+  async stopPaneOutputPipe(target: TmuxTarget): Promise<void> {
+    await this.runTmux(["pipe-pane", "-t", target.sessionName], target);
   }
 
   private async readPaneWidth(target: TmuxTarget): Promise<number | undefined> {
@@ -773,9 +754,7 @@ function formatShellCommand(launchCommand: TmuxLaunchCommand): string {
         ...launchCommand.args,
       ]
     : [launchCommand.command, ...launchCommand.args];
-  return commandParts
-    .map((part) => shellQuote(part))
-    .join(" ");
+  return commandParts.map((part) => shellQuote(part)).join(" ");
 }
 
 function isInteractiveShellLaunchCommand(
