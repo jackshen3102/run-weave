@@ -1226,6 +1226,9 @@ describe("terminal websocket server", () => {
         activeCommand: "codex",
       })),
     };
+    const terminalStateService = {
+      setShellActiveCommand: vi.fn(),
+    };
     const server = http.createServer();
     servers.push(server);
     attachTerminalWebSocketServer(
@@ -1235,6 +1238,7 @@ describe("terminal websocket server", () => {
       authService as never,
       undefined,
       tmuxService as never,
+      { terminalStateService: terminalStateService as never },
     );
     const port = await startServer(server);
     const socket = new WebSocket(
@@ -1265,6 +1269,13 @@ describe("terminal websocket server", () => {
         cwd: fixtureFeaturePath,
         activeCommand: "codex",
       },
+    );
+    expect(terminalStateService.setShellActiveCommand).toHaveBeenCalledWith(
+      "terminal-1",
+      expect.objectContaining({
+        activeCommand: "codex",
+        status: "running",
+      }),
     );
     expect(messages).toEqual(
       expect.arrayContaining([

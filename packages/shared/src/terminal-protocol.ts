@@ -181,6 +181,16 @@ export interface SendTerminalInputResponse {
   acceptedAt: string;
 }
 
+export interface SendTerminalInterruptRequest {
+  operationId?: string;
+}
+
+export interface SendTerminalInterruptResponse
+  extends SendTerminalInputResponse {
+  interruptAccepted: true;
+  interruptSequence: "escape";
+}
+
 export interface CreateTerminalClipboardImageRequest {
   mimeType: string;
   dataBase64: string;
@@ -262,6 +272,34 @@ export interface TerminalCompletionEvent {
 
 export interface TerminalCompletionEventListResponse {
   events: TerminalCompletionEvent[];
+}
+
+export type TerminalAgentKind = "codex";
+
+export type TerminalStateValue =
+  | "shell_idle"
+  | "agent_idle"
+  | "agent_running";
+
+export interface TerminalState {
+  state: TerminalStateValue;
+  agent: TerminalAgentKind | null;
+}
+
+export interface TerminalStateResponse {
+  terminalState: TerminalState;
+}
+
+export type AgentHookStateEvent =
+  | "SessionStart"
+  | "UserPromptSubmit"
+  | "Stop";
+
+export interface AgentHookStateRequest {
+  terminalSessionId: string;
+  projectId?: string;
+  agent: TerminalAgentKind;
+  hookEvent: AgentHookStateEvent;
 }
 
 export type TerminalEventServerMessage =

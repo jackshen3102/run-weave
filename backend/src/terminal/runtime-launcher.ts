@@ -122,6 +122,8 @@ export async function ensureTerminalRuntime(
               RUNWEAVE_PROJECT_ID: currentSession.projectId,
               RUNWEAVE_TMUX_SESSION_NAME: target.sessionName,
               RUNWEAVE_HOOK_ENDPOINT: process.env.RUNWEAVE_HOOK_ENDPOINT,
+              RUNWEAVE_COMPLETION_HOOK_ENDPOINT:
+                process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT,
               RUNWEAVE_HOOK_TOKEN: process.env.RUNWEAVE_HOOK_TOKEN,
             },
           },

@@ -22,6 +22,7 @@ import {
 } from "../terminal/runtime-launcher";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
 import { createShellPromptTracker } from "../terminal/shell-integration";
+import type { TerminalStateService } from "../terminal/terminal-state-service";
 import type { TmuxService } from "../terminal/tmux-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import { createHeartbeatController } from "./heartbeat";
@@ -52,6 +53,7 @@ export function attachTerminalWebSocketServer(
   options?: {
     tunnelAuthConfig?: TunnelAuthConfig | null;
     tmuxOutputWatcher?: TmuxOutputWatcher;
+    terminalStateService?: TerminalStateService;
   },
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
@@ -222,21 +224,31 @@ export function attachTerminalWebSocketServer(
         cwd: string;
         activeCommand: string | null;
       },
-      options?: { forceSend?: boolean },
+      publishOptions?: { forceSend?: boolean },
     ): Promise<void> => {
       const current = terminalSessionManager.getSession(terminalSessionId);
       const metadataChanged =
         current?.cwd !== metadata.cwd ||
         current.activeCommand !== metadata.activeCommand;
-      if (!metadataChanged && !options?.forceSend) {
+      if (!metadataChanged && !publishOptions?.forceSend) {
         return;
       }
 
       if (metadataChanged) {
-        await terminalSessionManager.updateSessionMetadata(terminalSessionId, {
-          cwd: metadata.cwd,
-          activeCommand: metadata.activeCommand,
-        });
+        const updatedSession =
+          await terminalSessionManager.updateSessionMetadata(
+            terminalSessionId,
+            {
+              cwd: metadata.cwd,
+              activeCommand: metadata.activeCommand,
+            },
+          );
+        if (updatedSession) {
+          options?.terminalStateService?.setShellActiveCommand(
+            terminalSessionId,
+            updatedSession,
+          );
+        }
       }
       sendEvent(socket, {
         type: "metadata",

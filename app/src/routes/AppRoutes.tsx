@@ -90,12 +90,13 @@ function TerminalRoute({ session }: { session: AppSessionController }) {
     [session.overview?.sessions, terminalSessionId],
   );
   const goBack = useCallback(() => {
+    void session.refreshOverview();
     if (location.state?.fromHome) {
       history.goBack();
       return;
     }
     history.replace(HOME_ROUTE);
-  }, [history, location.state?.fromHome]);
+  }, [history, location.state?.fromHome, session.refreshOverview]);
 
   if (!terminalSessionId) {
     return <Redirect to={HOME_ROUTE} />;

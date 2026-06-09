@@ -23,6 +23,10 @@ import { createDevtoolsRouter } from "./routes/devtools";
 import { QualityProbeStore } from "./quality/probe-store";
 import { createQualityRouter } from "./routes/quality";
 import { createSessionRouter } from "./routes/session";
+import {
+  createInternalTerminalAgentHookRouter,
+  createTerminalStateRouter,
+} from "./routes/terminal-state";
 import { createInternalTerminalCompletionRouter } from "./routes/terminal-completion";
 import { createTerminalRouter } from "./routes/terminal";
 import { createTestRouter } from "./routes/test";
@@ -41,6 +45,8 @@ import { LowDbSessionStore } from "./session/lowdb-store";
 import { TerminalSessionManager } from "./terminal/manager";
 import { TerminalCompletionEventService } from "./terminal/completion-event-service";
 import { TerminalCompletionEventStore } from "./terminal/completion-events";
+import { TerminalStateService } from "./terminal/terminal-state-service";
+import { TerminalStateStore } from "./terminal/terminal-state-store";
 import { loadOrCreateHookToken } from "./terminal/hook-token";
 import { PtyService } from "./terminal/pty-service";
 import { TerminalRuntimeRegistry } from "./terminal/runtime-registry";
@@ -73,6 +79,7 @@ interface RuntimeServices {
   qualityProbeStore: QualityProbeStore;
   wsSessionController: WebSocketSessionController;
   terminalSessionManager: TerminalSessionManager;
+  terminalStateService: TerminalStateService;
   terminalCompletionEventService: TerminalCompletionEventService;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
   ptyService: PtyService;
@@ -283,6 +290,9 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   const terminalSessionManager = new TerminalSessionManager(
     terminalSessionStore,
   );
+  const terminalStateService = new TerminalStateService(
+    new TerminalStateStore(),
+  );
   const terminalCompletionEventStore = new TerminalCompletionEventStore();
   const terminalCompletionEventService = new TerminalCompletionEventService(
     terminalCompletionEventStore,
@@ -328,6 +338,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     qualityProbeStore,
     wsSessionController,
     terminalSessionManager,
+    terminalStateService,
     terminalCompletionEventService,
     terminalRuntimeRegistry,
     ptyService,
@@ -380,6 +391,15 @@ function createHttpApp(
   });
 
   app.use(
+    "/internal/terminal/agent-hook",
+    requireTunnelAuth,
+    createInternalTerminalAgentHookRouter({
+      terminalSessionManager: services.terminalSessionManager,
+      terminalStateService: services.terminalStateService,
+      hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
+    }),
+  );
+  app.use(
     "/internal/terminal-completion",
     requireTunnelAuth,
     createInternalTerminalCompletionRouter({
@@ -425,6 +445,14 @@ function createHttpApp(
   app.use(
     "/api/terminal",
     requireAuth,
+    createTerminalStateRouter({
+      terminalSessionManager: services.terminalSessionManager,
+      terminalStateService: services.terminalStateService,
+    }),
+  );
+  app.use(
+    "/api/terminal",
+    requireAuth,
     createTerminalRouter(services.terminalSessionManager, {
       ptyService: services.ptyService,
       runtimeRegistry: services.terminalRuntimeRegistry,
@@ -432,6 +460,7 @@ function createHttpApp(
       tmuxOutputWatcher: services.tmuxOutputWatcher,
       authService: services.authService,
       completionEventService: services.terminalCompletionEventService,
+      terminalStateService: services.terminalStateService,
     }),
   );
 
@@ -564,6 +593,7 @@ async function startRuntime(): Promise<void> {
       {
         tunnelAuthConfig,
         tmuxOutputWatcher: services.tmuxOutputWatcher,
+        terminalStateService: services.terminalStateService,
       },
     );
     attachTerminalEventsWebSocketServer(
@@ -589,7 +619,8 @@ async function startRuntime(): Promise<void> {
     // Always pin the hook endpoint to THIS backend's listening port. Inheriting
     // it from a parent shell spawned by another Runweave backend would deliver
     // codex hook events to the wrong process.
-    process.env.RUNWEAVE_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal-completion`;
+    process.env.RUNWEAVE_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal/agent-hook`;
+    process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal-completion`;
 
     stage = "lifecycle-handlers";
     attachLifecycleHandlers(server, services);

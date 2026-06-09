@@ -112,6 +112,81 @@ describe("terminal completion routes", () => {
     }
   });
 
+  it("records codex completion events for codex sessions when tmux reports node", async () => {
+    const completionEventService = createCompletionEventService();
+    const terminalSessionManager = {
+      getSession: () => ({
+        id: "terminal-1",
+        projectId: "project-default",
+        command: "codex",
+        args: [],
+        cwd: "/tmp/demo",
+        activeCommand: "node",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-04-28T00:00:00.000Z"),
+        runtimeKind: "tmux" as const,
+      }),
+      getLastAiActiveCommand: () => null,
+      listProjects: () => [],
+      listSessions: () => [],
+    };
+    const app = express();
+    app.use(express.json());
+    app.use(
+      "/internal/terminal-completion",
+      createInternalTerminalCompletionRouter({
+        completionEventService,
+        terminalSessionManager: terminalSessionManager as never,
+        hookToken: "hook-token",
+      }),
+    );
+    app.use(
+      "/api/terminal",
+      createTerminalRouter(terminalSessionManager as never, {
+        completionEventService,
+      }),
+    );
+    const server = http.createServer(app);
+
+    try {
+      const port = await startServer(server);
+      const recordResponse = await fetch(
+        `http://127.0.0.1:${port}/internal/terminal-completion`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Runweave-Hook-Token": "hook-token",
+          },
+          body: JSON.stringify({
+            terminalSessionId: "terminal-1",
+            source: "codex",
+            rawHookEvent: "Stop",
+          }),
+        },
+      );
+
+      expect(recordResponse.status).toBe(202);
+
+      const listResponse = await fetch(
+        `http://127.0.0.1:${port}/api/terminal/completion-events`,
+      );
+      await expect(listResponse.json()).resolves.toMatchObject({
+        events: [
+          {
+            id: "1",
+            terminalSessionId: "terminal-1",
+            source: "codex",
+            hookEvent: "Stop",
+          },
+        ],
+      });
+    } finally {
+      await stopServer(server);
+    }
+  });
+
   it("rejects internal hook events without the hook token", async () => {
     const app = express();
     app.use(express.json());
