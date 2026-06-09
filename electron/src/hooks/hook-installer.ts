@@ -1,4 +1,11 @@
-import { access, chmod, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  copyFile,
+  mkdir,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,7 +43,7 @@ const CLAUDE_EVENTS = [
   "PostToolUse",
 ];
 
-const CODEX_EVENTS = ["Stop"];
+const CODEX_EVENTS = ["SessionStart", "UserPromptSubmit", "Stop"];
 // trae cli reads `~/.trae/traecli.toml` and uses TOML CamelCase event names.
 const TRAE_TOML_EVENTS = [
   "PostToolUse",
@@ -102,7 +109,9 @@ export function pruneSupersededCodexHooks(
   homeDir: string,
 ): Array<unknown> {
   const legacyCommands = new Set(
-    LEGACY_CODEX_NOTIFY_RELATIVE_PATHS.map((relative) => path.join(homeDir, relative)),
+    LEGACY_CODEX_NOTIFY_RELATIVE_PATHS.map((relative) =>
+      path.join(homeDir, relative),
+    ),
   );
   const result: Array<unknown> = [];
 
@@ -112,7 +121,9 @@ export function pruneSupersededCodexHooks(
       continue;
     }
 
-    const keptHooks = entry.hooks.filter((hook) => !isLegacyCodexNotifyHook(hook, legacyCommands));
+    const keptHooks = entry.hooks.filter(
+      (hook) => !isLegacyCodexNotifyHook(hook, legacyCommands),
+    );
     if (keptHooks.length === entry.hooks.length) {
       result.push(entry);
       continue;
@@ -126,7 +137,10 @@ export function pruneSupersededCodexHooks(
   return result;
 }
 
-function isLegacyCodexNotifyHook(hook: unknown, legacyCommands: Set<string>): boolean {
+function isLegacyCodexNotifyHook(
+  hook: unknown,
+  legacyCommands: Set<string>,
+): boolean {
   if (!isRecord(hook)) {
     return false;
   }
@@ -272,33 +286,30 @@ export function buildLauncherScript(): string {
     "",
     "function normalizeReason(raw) {",
     '  const reason = String(raw || "hook_stop").trim().toLowerCase();',
-    "  return COMPLETION_REASONS.has(reason) ? reason : \"hook_stop\";",
+    '  return COMPLETION_REASONS.has(reason) ? reason : "hook_stop";',
     "}",
     "",
-    "async function main() {",
-    "  const args = parseArgs(process.argv.slice(2));",
-    "  const payload = parsePayload(await readStdin());",
-    "  const rawEvent = readHookEvent(payload);",
-    "  const normalizedEvent = normalizeEventName(rawEvent);",
-    "  const completionReason = normalizeReason(args.reason);",
-    '  if (completionReason === "hook_stop" && !STOP_EVENTS.has(normalizedEvent)) {',
-    "    return;",
+    "function deriveCompletionEndpoint(endpoint) {",
+    "  if (!endpoint) {",
+    "    return undefined;",
     "  }",
+    '  return endpoint.replace(/\\/internal\\/terminal\\/agent-hook\\/?$/, "/internal/terminal-completion");',
+    "}",
     "",
-    "  const endpoint = process.env.RUNWEAVE_HOOK_ENDPOINT;",
-    "  const token = process.env.RUNWEAVE_HOOK_TOKEN;",
-    "  const terminalSessionId = process.env.RUNWEAVE_TERMINAL_SESSION_ID;",
-    "  // Only notify / report for completions inside a Runweave terminal. The hook",
-    "  // is installed into the user's global Claude/Codex/Trae config, so without",
-    "  // this gate every AI CLI stop in any external terminal would trigger desktop",
-    "  // and Feishu notifications.",
-    "  if (!endpoint || !token || !terminalSessionId) {",
-    "    return;",
+    "function toAgentHookStateEvent(normalizedEvent) {",
+    '  if (normalizedEvent === "sessionstart" || normalizedEvent === "session_start") {',
+    '    return "SessionStart";',
     "  }",
+    '  if (normalizedEvent === "userpromptsubmit" || normalizedEvent === "user_prompt_submit") {',
+    '    return "UserPromptSubmit";',
+    "  }",
+    "  if (STOP_EVENTS.has(normalizedEvent)) {",
+    '    return "Stop";',
+    "  }",
+    "  return null;",
+    "}",
     "",
-    "  notifyDesktop(normalizeSource(args.source));",
-    "  notifyFeishu(payload, normalizeSource(args.source));",
-    "",
+    "async function postAgentHook({ endpoint, token, terminalSessionId, hookEvent }) {",
     "  await fetch(endpoint, {",
     '    method: "POST",',
     "    headers: {",
@@ -307,9 +318,25 @@ export function buildLauncherScript(): string {
     "    },",
     "    body: JSON.stringify({",
     "      terminalSessionId,",
-    "      source: normalizeSource(args.source),",
+    "      projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,",
+    '      agent: "codex",',
+    "      hookEvent,",
+    "    }),",
+    "  }).catch(() => undefined);",
+    "}",
+    "",
+    "async function postCompletionHook({ endpoint, token, terminalSessionId, payload, source, completionReason, rawEvent, commandName }) {",
+    "  await fetch(endpoint, {",
+    '    method: "POST",',
+    "    headers: {",
+    '      "Content-Type": "application/json",',
+    '      "X-Runweave-Hook-Token": token,',
+    "    },",
+    "    body: JSON.stringify({",
+    "      terminalSessionId,",
+    "      source,",
     "      completionReason,",
-    "      commandName: args.commandName || null,",
+    "      commandName: commandName || null,",
     '      rawHookEvent: String(rawEvent || "Stop"),',
     '      hookEvent: String(rawEvent || "Stop"),',
     "      cwd:",
@@ -320,6 +347,49 @@ export function buildLauncherScript(): string {
     "  }).catch(() => undefined);",
     "}",
     "",
+    "async function main() {",
+    "  const args = parseArgs(process.argv.slice(2));",
+    "  const payload = parsePayload(await readStdin());",
+    "  const rawEvent = readHookEvent(payload);",
+    "  const normalizedEvent = normalizeEventName(rawEvent);",
+    "  const source = normalizeSource(args.source);",
+    "  const completionReason = normalizeReason(args.reason);",
+    "  const stateHookEvent = source === \"codex\" ? toAgentHookStateEvent(normalizedEvent) : null;",
+    '  const shouldRecordCompletion = completionReason !== "hook_stop" || STOP_EVENTS.has(normalizedEvent);',
+    "",
+    "  const endpoint = process.env.RUNWEAVE_HOOK_ENDPOINT;",
+    "  const completionEndpoint =",
+    "    process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT || deriveCompletionEndpoint(endpoint);",
+    "  const token = process.env.RUNWEAVE_HOOK_TOKEN;",
+    "  const terminalSessionId = process.env.RUNWEAVE_TERMINAL_SESSION_ID;",
+    "  // Only notify / report for completions inside a Runweave terminal. The hook",
+    "  // is installed into the user's global Claude/Codex/Trae config, so without",
+    "  // this gate every AI CLI stop in any external terminal would trigger desktop",
+    "  // and Feishu notifications.",
+    "  if (!token || !terminalSessionId) {",
+    "    return;",
+    "  }",
+    "",
+    "  if (stateHookEvent && endpoint) {",
+    "    await postAgentHook({ endpoint, token, terminalSessionId, hookEvent: stateHookEvent });",
+    "  }",
+    "",
+    "  if (shouldRecordCompletion && completionEndpoint) {",
+    "    notifyDesktop(source);",
+    "    notifyFeishu(payload, source);",
+    "    await postCompletionHook({",
+    "      endpoint: completionEndpoint,",
+    "      token,",
+    "      terminalSessionId,",
+    "      payload,",
+    "      source,",
+    "      completionReason,",
+    "      rawEvent,",
+    "      commandName: args.commandName,",
+    "    });",
+    "  }",
+    "}",
+    "",
     "main().catch(() => {",
     "  process.exitCode = 0;",
     "});",
@@ -327,7 +397,9 @@ export function buildLauncherScript(): string {
   ].join("\n");
 }
 
-export async function installHooksIfNeeded(options: HookInstallerOptions = {}): Promise<void> {
+export async function installHooksIfNeeded(
+  options: HookInstallerOptions = {},
+): Promise<void> {
   const context = resolveHookInstallerContext(options);
   if (!(await hasAnyConfigDir(context))) {
     return;
@@ -336,7 +408,9 @@ export async function installHooksIfNeeded(options: HookInstallerOptions = {}): 
   await installAllHooks(context);
 }
 
-export async function installAllHooks(options: HookInstallerOptions = {}): Promise<void> {
+export async function installAllHooks(
+  options: HookInstallerOptions = {},
+): Promise<void> {
   const context = resolveHookInstallerContext(options);
   await installNotifyAssets(context);
   await writeLauncherScript(context);
@@ -347,9 +421,15 @@ export async function installAllHooks(options: HookInstallerOptions = {}): Promi
   await installTraeHooks(context);
 }
 
-export async function installNotifyAssets(options: HookInstallerOptions = {}): Promise<void> {
+export async function installNotifyAssets(
+  options: HookInstallerOptions = {},
+): Promise<void> {
   const context = resolveHookInstallerContext(options);
-  const source = path.join(context.resourcesDir, "hooks", FEISHU_SCRIPT_BASENAME);
+  const source = path.join(
+    context.resourcesDir,
+    "hooks",
+    FEISHU_SCRIPT_BASENAME,
+  );
   if (!(await fileExists(source))) {
     return;
   }
@@ -361,7 +441,9 @@ export async function installNotifyAssets(options: HookInstallerOptions = {}): P
   await chmod(target, 0o755);
 }
 
-export async function writeLauncherScript(options: HookInstallerOptions = {}): Promise<void> {
+export async function writeLauncherScript(
+  options: HookInstallerOptions = {},
+): Promise<void> {
   const context = resolveHookInstallerContext(options);
   const launcherDir = getLauncherDir(context.homeDir);
   const launcherPath = getLauncherPath(context.homeDir);
@@ -371,7 +453,9 @@ export async function writeLauncherScript(options: HookInstallerOptions = {}): P
   await chmod(launcherPath, 0o755);
 }
 
-export async function installClaudeHooks(options: HookInstallerOptions = {}): Promise<void> {
+export async function installClaudeHooks(
+  options: HookInstallerOptions = {},
+): Promise<void> {
   const context = resolveHookInstallerContext(options);
   const configDir = getClaudeDir(context.homeDir);
   if (!(await directoryExists(configDir))) {
@@ -384,7 +468,8 @@ export async function installClaudeHooks(options: HookInstallerOptions = {}): Pr
     return;
   }
 
-  const existing = existingResult.status === "valid" ? existingResult.value : {};
+  const existing =
+    existingResult.status === "valid" ? existingResult.value : {};
   await backupFile(settingsPath);
 
   const hooks = toHookArrayMap(existing.hooks);
@@ -400,7 +485,9 @@ export async function installClaudeHooks(options: HookInstallerOptions = {}): Pr
   await writeJsonFile(settingsPath, existing);
 }
 
-export async function installCodexHooks(options: HookInstallerOptions = {}): Promise<void> {
+export async function installCodexHooks(
+  options: HookInstallerOptions = {},
+): Promise<void> {
   const context = resolveHookInstallerContext(options);
   const configDir = getCodexDir(context.homeDir);
   if (!(await directoryExists(configDir))) {
@@ -413,7 +500,8 @@ export async function installCodexHooks(options: HookInstallerOptions = {}): Pro
     return;
   }
 
-  const existing = existingResult.status === "valid" ? existingResult.value : {};
+  const existing =
+    existingResult.status === "valid" ? existingResult.value : {};
   await backupFile(hooksPath);
 
   const hooks = toHookArrayMap(existing.hooks);
@@ -428,7 +516,10 @@ export async function installCodexHooks(options: HookInstallerOptions = {}): Pro
   // Remove superseded codex notify entries that the launcher now handles,
   // so desktop notification / sound / Feishu are not sent twice.
   for (const event of Object.keys(hooks)) {
-    hooks[event] = pruneSupersededCodexHooks(toUnknownArray(hooks[event]), context.homeDir);
+    hooks[event] = pruneSupersededCodexHooks(
+      toUnknownArray(hooks[event]),
+      context.homeDir,
+    );
   }
 
   existing.hooks = hooks;
@@ -534,7 +625,9 @@ function findTomlArrayEnd(lines: string[], startIndex: number): number {
   return -1;
 }
 
-export async function installTraeHooks(options: HookInstallerOptions = {}): Promise<void> {
+export async function installTraeHooks(
+  options: HookInstallerOptions = {},
+): Promise<void> {
   const context = resolveHookInstallerContext(options);
   const configDir = getTraeDir(context.homeDir);
   if (!(await directoryExists(configDir))) {
@@ -551,7 +644,10 @@ export async function installTraeHooks(options: HookInstallerOptions = {}): Prom
   await writeFile(tomlPath, ensureTrailingNewline(nextContent), "utf8");
 }
 
-export function upsertTraeTomlHookBlock(content: string, block: string): string {
+export function upsertTraeTomlHookBlock(
+  content: string,
+  block: string,
+): string {
   const fenceRegex = new RegExp(
     `${escapeRegex(RUNWEAVE_TRAE_TOML_FENCE_BEGIN)}[\\s\\S]*?${escapeRegex(
       RUNWEAVE_TRAE_TOML_FENCE_END,
@@ -561,7 +657,9 @@ export function upsertTraeTomlHookBlock(content: string, block: string): string 
 
   const fenceMatch = fenceRegex.exec(content);
   if (fenceMatch) {
-    const before = stripLegacyTraeBridgeEntries(content.slice(0, fenceMatch.index));
+    const before = stripLegacyTraeBridgeEntries(
+      content.slice(0, fenceMatch.index),
+    );
     const after = stripLegacyTraeBridgeEntries(
       content.slice(fenceMatch.index + fenceMatch[0].length),
     );
@@ -640,7 +738,11 @@ async function readJsonObjectFile(filePath: string): Promise<JsonReadResult> {
       return { status: "invalid" };
     }
 
-    if ("hooks" in parsed && parsed.hooks !== undefined && !isRecord(parsed.hooks)) {
+    if (
+      "hooks" in parsed &&
+      parsed.hooks !== undefined &&
+      !isRecord(parsed.hooks)
+    ) {
       return { status: "invalid" };
     }
 
@@ -662,7 +764,10 @@ async function readJsonObjectFile(filePath: string): Promise<JsonReadResult> {
   }
 }
 
-async function writeJsonFile(filePath: string, value: JsonRecord): Promise<void> {
+async function writeJsonFile(
+  filePath: string,
+  value: JsonRecord,
+): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
@@ -678,7 +783,9 @@ async function readTextFile(filePath: string): Promise<string> {
   }
 }
 
-function resolveHookInstallerContext(options: HookInstallerOptions): HookInstallerContext {
+function resolveHookInstallerContext(
+  options: HookInstallerOptions,
+): HookInstallerContext {
   return {
     homeDir: options.homeDir ?? os.homedir(),
     resourcesDir: options.resourcesDir ?? getDefaultResourcesDir(),
@@ -694,7 +801,12 @@ function getDefaultResourcesDir(): string {
   // ESM dev/test runtime: this source file lives at src/hooks/, so resources
   // live at ../../resources. Callers (main.ts, tests) normally inject an
   // explicit resourcesDir; this default is only a fallback.
-  return path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "resources");
+  return path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "resources",
+  );
 }
 
 function getNotifyHooksDir(homeDir: string): string {
@@ -725,7 +837,9 @@ function getTraeDir(homeDir: string): string {
   return path.join(homeDir, ".trae");
 }
 
-async function hasAnyConfigDir(context: HookInstallerContext): Promise<boolean> {
+async function hasAnyConfigDir(
+  context: HookInstallerContext,
+): Promise<boolean> {
   // Phase 1 supports codex + trae only, so the trigger is whichever of those
   // config dirs exist on the host.
   if (await directoryExists(getCodexDir(context.homeDir))) {
@@ -808,7 +922,9 @@ function rewriteBrowserViewerHooks(
   };
 }
 
-function removeBrowserViewerHooks(entry: Record<string, unknown>): Record<string, unknown> | null {
+function removeBrowserViewerHooks(
+  entry: Record<string, unknown>,
+): Record<string, unknown> | null {
   const hooks = Array.isArray(entry.hooks) ? entry.hooks : [];
   const remainingHooks = hooks.filter(
     (hook) => !(isRecord(hook) && isBrowserViewerHookObject(hook)),

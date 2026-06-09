@@ -1,4 +1,7 @@
-import type { TerminalMobileOverviewSession } from "@browser-viewer/shared";
+import type {
+  TerminalMobileOverviewSession,
+  TerminalState,
+} from "@browser-viewer/shared";
 import {
   TerminalRenderer,
   type TerminalRendererHandle,
@@ -10,14 +13,19 @@ import {
   IonSpinner,
   IonText,
 } from "@ionic/react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
 import { fileToBase64, shellQuote } from "../lib/terminal-input-assets";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
 import { ApiError } from "../services/http";
-import { createTerminalSessionClipboardImage } from "../services/terminal";
+import {
+  createTerminalSessionClipboardImage,
+  getCurrentTerminalState,
+  interruptTerminalSession,
+  sendTerminalInput,
+} from "../services/terminal";
 
 interface AppTerminalPageProps {
   accessToken: string;
@@ -55,6 +63,10 @@ export function AppTerminalPage({
   const rendererRef = useRef<TerminalRendererHandle | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [isPickingImage, setIsPickingImage] = useState(false);
+  const [terminalState, setTerminalState] = useState<TerminalState>({
+    state: "shell_idle",
+    agent: null,
+  });
   const {
     connectionStatus,
     error,
@@ -63,7 +75,6 @@ export function AppTerminalPage({
     runtimeStatus,
     sendInput,
     sendResize,
-    sendSignal,
   } = useAppTerminalConnection({
     apiBase,
     accessToken,
@@ -92,13 +103,79 @@ export function AppTerminalPage({
         ? "Exited"
         : "Connected"
       : "Connecting";
-  const isCommandActive =
-    connectionStatus === "connected" &&
-    runtimeStatus === "running" &&
-    Boolean(metadata?.activeCommand);
+  useEffect(() => {
+    if (notFound) {
+      return;
+    }
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const refreshTerminalState = () => {
+      void getCurrentTerminalState(apiBase, accessToken, terminalSessionId)
+        .then((payload) => {
+          if (!cancelled) {
+            setTerminalState(payload.terminalState);
+          }
+        })
+        .catch((nextError: unknown) => {
+          if (cancelled) {
+            return;
+          }
+          if (nextError instanceof ApiError && nextError.status === 401) {
+            onAuthExpired();
+            return;
+          }
+          if (nextError instanceof ApiError && nextError.status === 404) {
+            setTerminalState({ state: "shell_idle", agent: null });
+            return;
+          }
+        });
+    };
+
+    refreshTerminalState();
+    timer = window.setInterval(refreshTerminalState, 2000);
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) {
+        window.clearInterval(timer);
+      }
+    };
+  }, [accessToken, apiBase, notFound, onAuthExpired, terminalSessionId]);
+
+  const isCommandActive = terminalState.state === "agent_running";
   const handleStop = useCallback(() => {
-    sendSignal("SIGINT");
-  }, [sendSignal]);
+    setImageError(null);
+    void interruptTerminalSession(
+      apiBase,
+      accessToken,
+      terminalSessionId,
+    ).catch((nextError: unknown) => {
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        onAuthExpired();
+        return;
+      }
+      setImageError(
+        nextError instanceof Error ? nextError.message : "中断命令失败",
+      );
+    });
+  }, [accessToken, apiBase, onAuthExpired, terminalSessionId]);
+  const handleSendCommand = useCallback(
+    async (data: string): Promise<void> => {
+      try {
+        await sendTerminalInput(apiBase, accessToken, terminalSessionId, data);
+      } catch (nextError: unknown) {
+        if (nextError instanceof ApiError && nextError.status === 401) {
+          onAuthExpired();
+          return;
+        }
+        setImageError(
+          nextError instanceof Error ? nextError.message : "命令发送失败",
+        );
+      }
+    },
+    [accessToken, apiBase, onAuthExpired, terminalSessionId],
+  );
   const handlePickImage = useCallback(
     (file: File) => {
       setImageError(null);
@@ -215,7 +292,7 @@ export function AppTerminalPage({
             isPickingImage={isPickingImage}
             isStopping={isCommandActive}
             onPickImage={handlePickImage}
-            onSendInput={sendInput}
+            onSendInput={handleSendCommand}
             onStop={handleStop}
           />
         </main>

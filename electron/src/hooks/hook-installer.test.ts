@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, access, rm, mkdir, stat } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  writeFile,
+  access,
+  rm,
+  mkdir,
+  stat,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,8 +36,11 @@ const REPO_RESOURCES_DIR = path.join(
 
 test("merges browser-viewer command into codex hook config without dropping existing hooks", () => {
   const merged = mergeJsonHookEntry({
-    existing: [{ matcher: "*", hooks: [{ type: "command", command: "other-tool" }] }],
-    command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+    existing: [
+      { matcher: "*", hooks: [{ type: "command", command: "other-tool" }] },
+    ],
+    command:
+      "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
     timeout: 5,
   });
 
@@ -43,7 +54,8 @@ test("merges browser-viewer command into codex hook config without dropping exis
     hooks: [
       {
         type: "command",
-        command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+        command:
+          "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
         timeout: 5,
         _runweaveManaged: true,
       },
@@ -56,14 +68,20 @@ test("replaces an existing browser-viewer entry instead of duplicating it", () =
     existing: [
       {
         matcher: "*",
-        hooks: [{ type: "command", command: "browser-viewer-hook-bridge --source codex" }],
+        hooks: [
+          {
+            type: "command",
+            command: "browser-viewer-hook-bridge --source codex",
+          },
+        ],
       },
       {
         matcher: "*",
         hooks: [{ type: "command", command: "other-tool" }],
       },
     ],
-    command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+    command:
+      "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
     timeout: 5,
   });
 
@@ -79,7 +97,8 @@ test("replaces an existing browser-viewer entry instead of duplicating it", () =
     hooks: [
       {
         type: "command",
-        command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+        command:
+          "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
         timeout: 5,
         _runweaveManaged: true,
       },
@@ -96,18 +115,31 @@ test("collapses duplicate browser-viewer entries for the same event down to one 
     existing: [
       {
         matcher: "*",
-        hooks: [{ type: "command", command: "browser-viewer-hook-bridge --source codex", timeout: 1 }],
+        hooks: [
+          {
+            type: "command",
+            command: "browser-viewer-hook-bridge --source codex",
+            timeout: 1,
+          },
+        ],
       },
       {
         matcher: "*",
-        hooks: [{ type: "command", command: "/tmp/browser-viewer-hook-bridge --source codex", timeout: 2 }],
+        hooks: [
+          {
+            type: "command",
+            command: "/tmp/browser-viewer-hook-bridge --source codex",
+            timeout: 2,
+          },
+        ],
       },
       {
         matcher: "*",
         hooks: [{ type: "command", command: "other-tool", timeout: 9 }],
       },
     ],
-    command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+    command:
+      "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
     timeout: 5,
   });
 
@@ -117,7 +149,8 @@ test("collapses duplicate browser-viewer entries for the same event down to one 
     hooks: [
       {
         type: "command",
-        command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+        command:
+          "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
         timeout: 5,
         _runweaveManaged: true,
       },
@@ -134,17 +167,28 @@ test("keeps third-party hooks from later duplicate browser-viewer entries", () =
     existing: [
       {
         matcher: "*",
-        hooks: [{ type: "command", command: "browser-viewer-hook-bridge --source codex", timeout: 1 }],
+        hooks: [
+          {
+            type: "command",
+            command: "browser-viewer-hook-bridge --source codex",
+            timeout: 1,
+          },
+        ],
       },
       {
         matcher: "*",
         hooks: [
-          { type: "command", command: "/tmp/browser-viewer-hook-bridge --source codex", timeout: 2 },
+          {
+            type: "command",
+            command: "/tmp/browser-viewer-hook-bridge --source codex",
+            timeout: 2,
+          },
           { type: "command", command: "third-party-tool", timeout: 9 },
         ],
       },
     ],
-    command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+    command:
+      "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
     timeout: 5,
   });
 
@@ -154,7 +198,8 @@ test("keeps third-party hooks from later duplicate browser-viewer entries", () =
     hooks: [
       {
         type: "command",
-        command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+        command:
+          "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
         timeout: 5,
         _runweaveManaged: true,
       },
@@ -185,7 +230,8 @@ test("preserves third-party hooks when a matcher entry contains browser-viewer a
         ],
       },
     ],
-    command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+    command:
+      "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
     timeout: 5,
   });
 
@@ -195,7 +241,8 @@ test("preserves third-party hooks when a matcher entry contains browser-viewer a
     hooks: [
       {
         type: "command",
-        command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+        command:
+          "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
         timeout: 5,
         _runweaveManaged: true,
       },
@@ -209,38 +256,75 @@ test("preserves third-party hooks when a matcher entry contains browser-viewer a
 });
 
 test("renders a stable trae TOML hook block covering the lifecycle events we care about", () => {
-  const block = renderTraeTomlHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge");
+  const block = renderTraeTomlHookBlock(
+    "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge",
+  );
 
   assert.match(block, /\[\[hooks\.Stop\]\]/);
   assert.match(block, /\[\[hooks\.SubagentStop\]\]/);
   assert.match(block, /\[\[hooks\.PostToolUse\]\]/);
   assert.match(block, /\[\[hooks\.UserPromptSubmit\]\]/);
-  assert.match(block, /command = '\/Users\/me\/\.browser-viewer\/bin\/browser-viewer-hook-bridge --source trae'/);
+  assert.match(
+    block,
+    /command = '\/Users\/me\/\.browser-viewer\/bin\/browser-viewer-hook-bridge --source trae'/,
+  );
   assert.match(block, /timeout = "unlimited"/);
   assert.match(block, /^# >>> runweave-hooks/m);
   assert.match(block, /^# <<< runweave-hooks/m);
 });
 
-test("builds a self-contained launcher script that posts completion events", () => {
+test("builds a self-contained launcher script that posts state and completion hooks", () => {
   const script = buildLauncherScript();
 
   assert.match(script, /^#!\/usr\/bin\/env node/);
   assert.match(script, /RUNWEAVE_HOOK_ENDPOINT/);
+  assert.match(script, /RUNWEAVE_COMPLETION_HOOK_ENDPOINT/);
   assert.match(script, /RUNWEAVE_HOOK_TOKEN/);
   assert.match(script, /RUNWEAVE_TERMINAL_SESSION_ID/);
   assert.match(script, /X-Runweave-Hook-Token/);
-  assert.match(script, /COMPLETION_REASONS/);
-  assert.match(script, /completionReason === "hook_stop"/);
-  assert.match(script, /notifyDesktop/);
-  assert.match(script, /osascript/);
-  assert.match(script, /afplay/);
-  assert.match(script, /notifyFeishu/);
-  assert.match(script, /\.browser-viewer\/hooks\/feishu_stop_notify\.sh/);
+  assert.match(script, /toAgentHookStateEvent/);
+  assert.match(script, /SessionStart/);
+  assert.match(script, /UserPromptSubmit/);
+  assert.match(script, /Stop/);
+  assert.match(script, /agent: "codex"/);
   assert.match(script, /fetch\(endpoint/);
+  assert.match(script, /COMPLETION_REASONS/);
+  assert.match(script, /completionReason/);
+  assert.match(script, /notifyDesktop/);
+  assert.match(script, /notifyFeishu/);
+  assert.doesNotMatch(script, new RegExp("agent" + "-run-events"));
   assert.doesNotMatch(script, /HOOK_BRIDGE_PATH/);
   assert.doesNotMatch(script, /hook-bridge\.mjs/);
-  // Notifications are unified across sources; Feishu no longer points at ~/.codex.
-  assert.doesNotMatch(script, /\.codex\/hooks\/feishu_stop_notify\.sh/);
+});
+
+test("installs codex lifecycle hooks for terminal state", async () => {
+  const homeDir = await createTempHome();
+  try {
+    const codexDir = path.join(homeDir, ".codex");
+    await mkdir(codexDir, { recursive: true });
+
+    await installCodexHooks({ homeDir });
+
+    const updated = JSON.parse(
+      await readFile(path.join(codexDir, "hooks.json"), "utf8"),
+    ) as {
+      hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>;
+    };
+    for (const event of ["SessionStart", "UserPromptSubmit", "Stop"]) {
+      const commands =
+        updated.hooks[event]?.flatMap((entry) =>
+          entry.hooks.map((hook) => hook.command),
+        ) ?? [];
+      assert.equal(
+        commands.some((command) =>
+          command.includes("browser-viewer-hook-bridge --source codex"),
+        ),
+        true,
+      );
+    }
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
+  }
 });
 
 test("appends a runweave fenced block when traecli.toml has no existing block", () => {
@@ -254,7 +338,9 @@ test("appends a runweave fenced block when traecli.toml has no existing block", 
 
   const output = upsertTraeTomlHookBlock(
     input,
-    renderTraeTomlHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
+    renderTraeTomlHookBlock(
+      "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge",
+    ),
   );
 
   assert.match(output, /^model = "openrouter-2o"/);
@@ -272,7 +358,9 @@ test("replaces the runweave fenced block in place without duplicating it", () =>
 
   const output = upsertTraeTomlHookBlock(
     initial,
-    renderTraeTomlHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
+    renderTraeTomlHookBlock(
+      "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge",
+    ),
   );
 
   assert.equal((output.match(/# >>> runweave-hooks/g) ?? []).length, 1);
@@ -302,7 +390,9 @@ test("preserves unrelated trae TOML config (model, profiles, hooks.state) when u
 
   const output = upsertTraeTomlHookBlock(
     input,
-    renderTraeTomlHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
+    renderTraeTomlHookBlock(
+      "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge",
+    ),
   );
 
   assert.match(output, /\[profiles\.yolo\]/);
@@ -383,7 +473,9 @@ test("strips pre-existing un-fenced runweave [[hooks.X]] entries when upserting"
 
   const output = upsertTraeTomlHookBlock(
     input,
-    renderTraeTomlHookBlock("/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge"),
+    renderTraeTomlHookBlock(
+      "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge",
+    ),
   );
 
   // Only the fenced block contributes Stop/PostToolUse entries — exactly one each.
@@ -415,7 +507,8 @@ test("preserves unknown array members when merging browser-viewer hooks", () => 
         ],
       },
     ],
-    command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+    command:
+      "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
     timeout: 5,
   });
 
@@ -426,7 +519,8 @@ test("preserves unknown array members when merging browser-viewer hooks", () => 
       "unexpected-string",
       {
         type: "command",
-        command: "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
+        command:
+          "/Users/me/.browser-viewer/bin/browser-viewer-hook-bridge --source codex",
         timeout: 5,
         _runweaveManaged: true,
       },
@@ -452,7 +546,9 @@ test("leaves invalid existing JSON untouched in a temp home", async () => {
     await installClaudeHooks({ homeDir });
 
     assert.equal(await readFile(settingsPath, "utf8"), invalid);
-    await assertRejectsMissing(path.join(claudeDir, "settings.json.browser-viewer-hook-backup"));
+    await assertRejectsMissing(
+      path.join(claudeDir, "settings.json.browser-viewer-hook-backup"),
+    );
   } finally {
     await rm(homeDir, { recursive: true, force: true });
   }
@@ -467,7 +563,17 @@ test("preserves an existing backup file when installing codex hooks in a temp ho
     const backupPath = `${hooksPath}.browser-viewer-hook-backup`;
     await writeFile(
       hooksPath,
-      JSON.stringify({ hooks: { SessionStart: [{ matcher: "*", hooks: [{ type: "command", command: "old" }] }] } }, null, 2),
+      JSON.stringify(
+        {
+          hooks: {
+            SessionStart: [
+              { matcher: "*", hooks: [{ type: "command", command: "old" }] },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
       "utf8",
     );
     await writeFile(backupPath, "first-backup\n", "utf8");
@@ -485,7 +591,14 @@ test("skips launcher creation when no hook config directories exist in a temp ho
   try {
     await installHooksIfNeeded({ homeDir });
 
-    await assertRejectsMissing(path.join(homeDir, ".browser-viewer", "bin", "browser-viewer-hook-bridge"));
+    await assertRejectsMissing(
+      path.join(
+        homeDir,
+        ".browser-viewer",
+        "bin",
+        "browser-viewer-hook-bridge",
+      ),
+    );
   } finally {
     await rm(homeDir, { recursive: true, force: true });
   }
@@ -497,16 +610,28 @@ test("prunes only legacy codex notify entries at known paths, keeping launcher a
     [
       {
         matcher: "*",
-        hooks: [{ type: "command", command: `${home}/.codex/hooks/feishu_stop_notify.sh`, timeout: 10 }],
-      },
-      {
-        matcher: "*",
-        hooks: [{ type: "command", command: `${home}/.codex/notify.sh`, timeout: 5 }],
+        hooks: [
+          {
+            type: "command",
+            command: `${home}/.codex/hooks/feishu_stop_notify.sh`,
+            timeout: 10,
+          },
+        ],
       },
       {
         matcher: "*",
         hooks: [
-          { type: "command", command: `${home}/.browser-viewer/bin/browser-viewer-hook-bridge --source codex`, timeout: 5 },
+          { type: "command", command: `${home}/.codex/notify.sh`, timeout: 5 },
+        ],
+      },
+      {
+        matcher: "*",
+        hooks: [
+          {
+            type: "command",
+            command: `${home}/.browser-viewer/bin/browser-viewer-hook-bridge --source codex`,
+            timeout: 5,
+          },
         ],
       },
       {
@@ -516,22 +641,40 @@ test("prunes only legacy codex notify entries at known paths, keeping launcher a
       // Third-party scripts that merely share the same file name must be kept.
       {
         matcher: "*",
-        hooks: [{ type: "command", command: `${home}/bin/notify.sh`, timeout: 3 }],
+        hooks: [
+          { type: "command", command: `${home}/bin/notify.sh`, timeout: 3 },
+        ],
       },
       {
         matcher: "*",
-        hooks: [{ type: "command", command: "/opt/tool/feishu_stop_notify.sh", timeout: 3 }],
+        hooks: [
+          {
+            type: "command",
+            command: "/opt/tool/feishu_stop_notify.sh",
+            timeout: 3,
+          },
+        ],
       },
     ],
     home,
   );
 
   const commands = pruned.flatMap((entry) =>
-    (entry as { hooks: Array<{ command: string }> }).hooks.map((hook) => hook.command),
+    (entry as { hooks: Array<{ command: string }> }).hooks.map(
+      (hook) => hook.command,
+    ),
   );
-  assert.equal(commands.includes(`${home}/.codex/hooks/feishu_stop_notify.sh`), false);
+  assert.equal(
+    commands.includes(`${home}/.codex/hooks/feishu_stop_notify.sh`),
+    false,
+  );
   assert.equal(commands.includes(`${home}/.codex/notify.sh`), false);
-  assert.equal(commands.includes(`${home}/.browser-viewer/bin/browser-viewer-hook-bridge --source codex`), true);
+  assert.equal(
+    commands.includes(
+      `${home}/.browser-viewer/bin/browser-viewer-hook-bridge --source codex`,
+    ),
+    true,
+  );
   assert.equal(commands.includes("third-party-tool"), true);
   assert.equal(commands.includes(`${home}/bin/notify.sh`), true);
   assert.equal(commands.includes("/opt/tool/feishu_stop_notify.sh"), true);
@@ -543,7 +686,12 @@ test("copies the bundled Feishu notify script into the user home as executable",
     await mkdir(path.join(homeDir, ".codex"), { recursive: true });
     await installAllHooks({ homeDir, resourcesDir: REPO_RESOURCES_DIR });
 
-    const scriptPath = path.join(homeDir, ".browser-viewer", "hooks", "feishu_stop_notify.sh");
+    const scriptPath = path.join(
+      homeDir,
+      ".browser-viewer",
+      "hooks",
+      "feishu_stop_notify.sh",
+    );
     const stats = await stat(scriptPath);
     assert.equal(stats.isFile(), true);
     assert.equal((stats.mode & 0o111) !== 0, true);
@@ -564,11 +712,42 @@ test("removes superseded codex notify hooks from hooks.json on install", async (
         {
           hooks: {
             Stop: [
-              { hooks: [{ type: "command", command: `${homeDir}/.codex/hooks/feishu_stop_notify.sh`, timeout: 10 }] },
-              { matcher: "*", hooks: [{ type: "command", command: `${homeDir}/.codex/notify.sh`, timeout: 5 }] },
-              { matcher: "*", hooks: [{ type: "command", command: "third-party-tool", timeout: 9 }] },
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command: `${homeDir}/.codex/hooks/feishu_stop_notify.sh`,
+                    timeout: 10,
+                  },
+                ],
+              },
+              {
+                matcher: "*",
+                hooks: [
+                  {
+                    type: "command",
+                    command: `${homeDir}/.codex/notify.sh`,
+                    timeout: 5,
+                  },
+                ],
+              },
+              {
+                matcher: "*",
+                hooks: [
+                  { type: "command", command: "third-party-tool", timeout: 9 },
+                ],
+              },
               // Third-party script with the same basename but a different path must survive.
-              { matcher: "*", hooks: [{ type: "command", command: `${homeDir}/bin/notify.sh`, timeout: 3 }] },
+              {
+                matcher: "*",
+                hooks: [
+                  {
+                    type: "command",
+                    command: `${homeDir}/bin/notify.sh`,
+                    timeout: 3,
+                  },
+                ],
+              },
             ],
           },
         },
@@ -583,13 +762,20 @@ test("removes superseded codex notify hooks from hooks.json on install", async (
     const updated = JSON.parse(await readFile(hooksPath, "utf8")) as {
       hooks: { Stop: Array<{ hooks: Array<{ command: string }> }> };
     };
-    const commands = updated.hooks.Stop.flatMap((entry) => entry.hooks.map((hook) => hook.command));
-    assert.equal(commands.includes(`${homeDir}/.codex/hooks/feishu_stop_notify.sh`), false);
+    const commands = updated.hooks.Stop.flatMap((entry) =>
+      entry.hooks.map((hook) => hook.command),
+    );
+    assert.equal(
+      commands.includes(`${homeDir}/.codex/hooks/feishu_stop_notify.sh`),
+      false,
+    );
     assert.equal(commands.includes(`${homeDir}/.codex/notify.sh`), false);
     assert.equal(commands.includes("third-party-tool"), true);
     assert.equal(commands.includes(`${homeDir}/bin/notify.sh`), true);
     assert.equal(
-      commands.some((command) => command.includes("browser-viewer-hook-bridge --source codex")),
+      commands.some((command) =>
+        command.includes("browser-viewer-hook-bridge --source codex"),
+      ),
       true,
     );
   } finally {
@@ -675,7 +861,9 @@ test("pruneCodexConfigNotify writes back when notify.sh-shaped notify exists", a
       configPath,
       [
         'model = "gpt-5.5"',
-        'notify = ["bash", "' + path.join(homeDir, ".codex", "notify.sh") + '"]',
+        'notify = ["bash", "' +
+          path.join(homeDir, ".codex", "notify.sh") +
+          '"]',
         "",
         '[projects."/Users/me"]',
         'trust_level = "trusted"',
@@ -721,13 +909,19 @@ test("installCodexHooks also prunes the legacy notify key from config.toml", asy
         '  "/Users/me/.codex/computer-use/Sky.app/Contents/MacOS/SkyComputerUseClient",',
         '  "turn-ended",',
         '  "--previous-notify",',
-        '  "[\\"bash\\",\\"' + path.join(homeDir, ".codex", "notify.sh") + '\\"]",',
+        '  "[\\"bash\\",\\"' +
+          path.join(homeDir, ".codex", "notify.sh") +
+          '\\"]",',
         "]",
         "",
       ].join("\n"),
       "utf8",
     );
-    await writeFile(path.join(codexDir, "hooks.json"), '{"hooks":{}}\n', "utf8");
+    await writeFile(
+      path.join(codexDir, "hooks.json"),
+      '{"hooks":{}}\n',
+      "utf8",
+    );
 
     await installCodexHooks({ homeDir, resourcesDir: REPO_RESOURCES_DIR });
 

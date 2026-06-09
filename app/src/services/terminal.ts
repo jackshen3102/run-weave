@@ -2,9 +2,11 @@ import type {
   CreateTerminalClipboardImageRequest,
   CreateTerminalClipboardImageResponse,
   CreateTerminalWsTicketResponse,
+  SendTerminalInterruptResponse,
   SendTerminalInputResponse,
   TerminalMobileOverviewResponse,
   TerminalSessionStatusResponse,
+  TerminalStateResponse,
 } from "@browser-viewer/shared";
 
 import { requestJson } from "./http";
@@ -32,6 +34,22 @@ export async function getTerminalSession(
   return requestJson<TerminalSessionStatusResponse>(
     apiBase,
     `/api/terminal/session/${encodeURIComponent(terminalSessionId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+}
+
+export async function getCurrentTerminalState(
+  apiBase: string,
+  accessToken: string,
+  terminalSessionId: string,
+): Promise<TerminalStateResponse> {
+  return requestJson<TerminalStateResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/state`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -73,6 +91,25 @@ export async function sendTerminalInput(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ data }),
+    },
+  );
+}
+
+export async function interruptTerminalSession(
+  apiBase: string,
+  accessToken: string,
+  terminalSessionId: string,
+): Promise<SendTerminalInterruptResponse> {
+  return requestJson<SendTerminalInterruptResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/interrupt`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
     },
   );
 }

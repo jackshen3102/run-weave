@@ -102,8 +102,18 @@ describe("inferHandoffWorkloadState", () => {
         throw new Error(`Unexpected request: ${url}`);
       }),
     );
-    const stdout = { value: "", write(chunk: string) { this.value += chunk; } };
-    const stderr = { value: "", write(chunk: string) { this.value += chunk; } };
+    const stdout = {
+      value: "",
+      write(chunk: string) {
+        this.value += chunk;
+      },
+    };
+    const stderr = {
+      value: "",
+      write(chunk: string) {
+        this.value += chunk;
+      },
+    };
 
     const exitCode = await runCli(
       [
@@ -142,6 +152,169 @@ describe("inferHandoffWorkloadState", () => {
       inputAccepted: true,
       inputEnqueued: true,
       runtimeKind: "pty",
+    });
+  });
+
+  it("interrupts terminal input through the HTTP API", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/terminal/session/terminal-1/interrupt")) {
+          expect(init?.method).toBe("POST");
+          expect(JSON.parse(String(init?.body))).toMatchObject({
+            operationId: expect.stringMatching(/^op_/),
+          });
+          return Response.json({
+            operationId: "op-interrupt-1",
+            terminalSessionId: "terminal-1",
+            inputAccepted: true,
+            inputEnqueued: true,
+            interruptAccepted: true,
+            interruptSequence: "escape",
+            runtimeKind: "pty",
+            acceptedAt: "2026-05-05T00:00:01.000Z",
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+    const stdout = {
+      value: "",
+      write(chunk: string) {
+        this.value += chunk;
+      },
+    };
+    const stderr = {
+      value: "",
+      write(chunk: string) {
+        this.value += chunk;
+      },
+    };
+
+    const exitCode = await runCli(
+      ["terminal", "interrupt", "terminal-1", "--json"],
+      {
+        stdout,
+        stderr,
+        stdin: process.stdin,
+        env: {
+          RUNWEAVE_BASE_URL: "http://127.0.0.1:5001",
+          RUNWEAVE_ACCESS_TOKEN: "access-token",
+        },
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr.value).toBe("");
+    expect(JSON.parse(stdout.value)).toMatchObject({
+      operationId: "op-interrupt-1",
+      terminalSessionId: "terminal-1",
+      transport: "http",
+      inputAccepted: true,
+      inputEnqueued: true,
+      interruptAccepted: true,
+      interruptSequence: "escape",
+      runtimeKind: "pty",
+    });
+  });
+
+  it("uses current terminal state for terminal handoff", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/terminal/project")) {
+          return Response.json([
+            {
+              projectId: "project-1",
+              name: "Demo",
+              path: "/tmp/demo",
+              createdAt: "2026-06-09T00:00:00.000Z",
+              isDefault: true,
+            },
+          ]);
+        }
+        if (url.endsWith("/api/terminal/session")) {
+          return Response.json([
+            {
+              terminalSessionId: "terminal-1",
+              projectId: "project-1",
+              command: "bash",
+              args: [],
+              cwd: "/tmp/demo",
+              activeCommand: "codex",
+              status: "running",
+              createdAt: "2026-06-09T00:00:00.000Z",
+              lastActivityAt: "2026-06-09T00:00:01.000Z",
+            },
+          ]);
+        }
+        if (url.endsWith("/api/terminal/session/terminal-1")) {
+          return Response.json({
+            terminalSessionId: "terminal-1",
+            projectId: "project-1",
+            command: "bash",
+            args: [],
+            cwd: "/tmp/demo",
+            activeCommand: "codex",
+            scrollback: "last output without activity markers",
+            status: "running",
+            createdAt: "2026-06-09T00:00:00.000Z",
+            lastActivityAt: "2026-06-09T00:00:01.000Z",
+          });
+        }
+        if (url.endsWith("/api/terminal/session/terminal-1/state")) {
+          return Response.json({
+            terminalState: {
+              state: "agent_running",
+              agent: "codex",
+            },
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+    const stdout = {
+      value: "",
+      write(chunk: string) {
+        this.value += chunk;
+      },
+    };
+    const stderr = {
+      value: "",
+      write(chunk: string) {
+        this.value += chunk;
+      },
+    };
+
+    const exitCode = await runCli(
+      ["terminal", "handoff", "terminal-1", "--json"],
+      {
+        stdout,
+        stderr,
+        stdin: process.stdin,
+        env: {
+          RUNWEAVE_BASE_URL: "http://127.0.0.1:5001",
+          RUNWEAVE_ACCESS_TOKEN: "access-token",
+        },
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr.value).toBe("");
+    expect(JSON.parse(stdout.value)).toMatchObject({
+      terminalState: "agent_running",
+      agent: "codex",
+      inferredAgent: "codex",
+      inferredState: "agent_running",
+      inferredWorkloadState: "agent_running",
+      stateConfidence: "strong",
+      stateReasons: [
+        "terminalState=agent_running",
+        "agent=codex",
+        "activeCommand=codex",
+      ],
     });
   });
 });

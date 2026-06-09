@@ -13,6 +13,7 @@ import type {
   TerminalProjectListItem,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
+  TerminalState,
 } from "@browser-viewer/shared";
 
 const DEFAULT_TAIL_LINES = 120;
@@ -34,7 +35,7 @@ type HandoffWorkloadState =
   | "failed"
   | "unknown";
 
-type StateConfidence = "high" | "medium" | "low";
+type StateConfidence = "strong" | "high" | "medium" | "weak" | "low";
 
 export async function runTerminalCommand(
   subcommand: string | undefined,
@@ -47,7 +48,7 @@ export async function runTerminalCommand(
 ): Promise<void> {
   if (!subcommand) {
     throw new CliError(
-      "Usage: rw terminal <create|list|show|snapshot|handoff|send>",
+      "Usage: rw terminal <create|list|show|snapshot|handoff|send|interrupt>",
       2,
     );
   }
@@ -96,26 +97,33 @@ export async function runTerminalCommand(
 
   if (subcommand === "handoff") {
     const terminalSessionId = requireTerminalId(parsed.positionals);
-    const [projects, sessions, session] = await Promise.all([
+    const [projects, sessions, session, statePayload] = await Promise.all([
       client.listProjects(),
       client.listSessions(),
       client.getSession(terminalSessionId),
+      client.getCurrentTerminalState(terminalSessionId),
     ]);
     writeOutput(
       io.stdout,
       mode,
-      buildHandoff(session, projects, sessions, resolveTail(parsed.options)),
+      buildHandoff(
+        session,
+        projects,
+        sessions,
+        resolveTail(parsed.options),
+        statePayload.terminalState,
+      ),
     );
     return;
   }
 
   if (subcommand === "send") {
     const terminalSessionId = requireTerminalId(parsed.positionals);
-      const result = await sendWithConfirmation({
-        client,
-        terminalSessionId,
-        text: await resolveInputText(parsed.options, io.stdin),
-        enter: getBooleanOption(parsed.options, "enter"),
+    const result = await sendWithConfirmation({
+      client,
+      terminalSessionId,
+      text: await resolveInputText(parsed.options, io.stdin),
+      enter: getBooleanOption(parsed.options, "enter"),
       confirmMode: getStringOption(parsed.options, "confirm") ?? "none",
       confirmTimeoutMs: Number(
         getStringOption(parsed.options, "confirm-timeout-ms") ??
@@ -123,6 +131,18 @@ export async function runTerminalCommand(
       ),
     });
     writeOutput(io.stdout, mode, result);
+    return;
+  }
+
+  if (subcommand === "interrupt") {
+    const terminalSessionId = requireTerminalId(parsed.positionals);
+    const result = await client.interruptSession(terminalSessionId, {
+      operationId: buildOperationId(),
+    });
+    writeOutput(io.stdout, mode, {
+      ...result,
+      transport: "http",
+    });
     return;
   }
 
@@ -177,14 +197,21 @@ function buildHandoff(
   projects: TerminalProjectListItem[],
   sessions: TerminalSessionListItem[],
   tailLineCount: number,
+  terminalState: TerminalState,
 ): Record<string, unknown> {
   const project = projects.find((item) => item.projectId === session.projectId);
   const listed = sessions.find(
     (item) => item.terminalSessionId === session.terminalSessionId,
   );
   const tail = tailLines(session.scrollback, tailLineCount);
-  const inferredAgent = inferAgent(session.activeCommand, tail);
   const workload = inferHandoffWorkloadState(session, tail);
+  const stateReasons = [`terminalState=${terminalState.state}`];
+  if (terminalState.agent) {
+    stateReasons.push(`agent=${terminalState.agent}`);
+  }
+  if (workload.foregroundCommand) {
+    stateReasons.push(`activeCommand=${commandName(workload.foregroundCommand)}`);
+  }
 
   return {
     terminalSessionId: session.terminalSessionId,
@@ -197,11 +224,13 @@ function buildHandoff(
     activeCommand: workload.foregroundCommand ?? listed?.activeCommand ?? null,
     foregroundCommand:
       workload.foregroundCommand ?? listed?.activeCommand ?? null,
-    inferredAgent,
-    inferredState: workload.inferredWorkloadState,
-    inferredWorkloadState: workload.inferredWorkloadState,
-    stateConfidence: workload.stateConfidence,
-    stateReasons: workload.stateReasons,
+    terminalState: terminalState.state,
+    agent: terminalState.agent,
+    inferredAgent: terminalState.agent ?? "unknown",
+    inferredState: terminalState.state,
+    inferredWorkloadState: terminalState.state,
+    stateConfidence: "strong",
+    stateReasons,
     tail,
     suggestedCommands: [
       `rw terminal send ${session.terminalSessionId} --text "继续" --enter --confirm short --json`,

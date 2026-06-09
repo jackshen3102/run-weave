@@ -8,6 +8,8 @@ import type {
   CreateTerminalSessionResponse,
   CreateTerminalEventsWsTicketResponse,
   CreateTerminalWsTicketResponse,
+  SendTerminalInterruptRequest,
+  SendTerminalInterruptResponse,
   SendTerminalInputRequest,
   SendTerminalInputResponse,
   TerminalCompletionEventListResponse,
@@ -15,7 +17,10 @@ import type {
 import type { AuthService } from "../auth/service";
 import { readBearerToken } from "../auth/middleware";
 import { logger } from "../logging";
-import type { TerminalSessionManager } from "../terminal/manager";
+import type {
+  TerminalSessionManager,
+  TerminalSessionRecord,
+} from "../terminal/manager";
 import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,
@@ -37,6 +42,7 @@ import {
 } from "../terminal/runtime-launcher";
 import type { TmuxService } from "../terminal/tmux-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
+import type { TerminalStateService } from "../terminal/terminal-state-service";
 import { buildTerminalMobileOverviewPayload } from "./terminal-mobile-overview";
 import {
   toHistoryPayload,
@@ -63,6 +69,14 @@ const sendTerminalInputSchema = z
     operationId: z.string().trim().min(1).optional(),
   })
   .strict();
+
+const sendTerminalInterruptSchema = z
+  .object({
+    operationId: z.string().trim().min(1).optional(),
+  })
+  .strict();
+
+const TERMINAL_INTERRUPT_ESCAPE_INPUT = "\x1b";
 
 function buildTerminalInputOperationId(): string {
   return `op_${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}_${randomBytes(4).toString("hex")}`;
@@ -135,6 +149,7 @@ export function createTerminalRouter(
     tmuxOutputWatcher?: TmuxOutputWatcher;
     authService?: AuthService;
     completionEventService?: TerminalCompletionEventService;
+    terminalStateService?: TerminalStateService;
   },
 ): Router {
   const router = Router();
@@ -152,6 +167,45 @@ export function createTerminalRouter(
       return null;
     }
     return options.authService.verifyAccessToken(token)?.sessionId ?? null;
+  };
+
+  const sendInputToSession = async (
+    session: TerminalSessionRecord,
+    data: string,
+    operationId?: string,
+  ): Promise<SendTerminalInputResponse> => {
+    if (!options?.runtimeRegistry || !options.ptyService) {
+      throw new Error("Terminal runtime service unavailable");
+    }
+    if (isTmuxBackedSession(session) && !options.tmuxService) {
+      throw new Error("Terminal tmux service unavailable");
+    }
+
+    const ensured = await ensureTerminalRuntime({
+      session,
+      terminalSessionManager,
+      runtimeRegistry: options.runtimeRegistry,
+      ptyService: options.ptyService,
+      tmuxService: options.tmuxService,
+      tmuxOutputWatcher: options.tmuxOutputWatcher,
+    });
+    if (isTmuxBackedSession(session) && options.tmuxService) {
+      await options.tmuxService.sendInput(
+        resolveTmuxTarget(session, options.tmuxService),
+        data,
+      );
+    } else {
+      ensured.runtime.write(data);
+    }
+
+    return {
+      operationId: operationId ?? buildTerminalInputOperationId(),
+      terminalSessionId: session.id,
+      inputAccepted: true,
+      inputEnqueued: true,
+      runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
+      acceptedAt: new Date().toISOString(),
+    };
   };
 
   registerTerminalProjectRoutes(router, terminalSessionManager, {
@@ -211,7 +265,10 @@ export function createTerminalRouter(
         await buildTerminalMobileOverviewPayload(
           terminalSessionManager,
           options?.tmuxService,
-          { includeTail: req.query.includeTail !== "false" },
+          {
+            includeTail: req.query.includeTail !== "false",
+            terminalStateService: options?.terminalStateService,
+          },
         ),
       );
     } catch (error) {
@@ -514,30 +571,11 @@ export function createTerminalRouter(
     }
 
     try {
-      const ensured = await ensureTerminalRuntime({
+      const payload = await sendInputToSession(
         session,
-        terminalSessionManager,
-        runtimeRegistry: options.runtimeRegistry,
-        ptyService: options.ptyService,
-        tmuxService: options.tmuxService,
-        tmuxOutputWatcher: options.tmuxOutputWatcher,
-      });
-      if (isTmuxBackedSession(session) && options.tmuxService) {
-        await options.tmuxService.sendInput(
-          resolveTmuxTarget(session, options.tmuxService),
-          parsed.data.data,
-        );
-      } else {
-        ensured.runtime.write(parsed.data.data);
-      }
-      const payload: SendTerminalInputResponse = {
-        operationId: parsed.data.operationId ?? buildTerminalInputOperationId(),
-        terminalSessionId: session.id,
-        inputAccepted: true,
-        inputEnqueued: true,
-        runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
-        acceptedAt: new Date().toISOString(),
-      };
+        parsed.data.data,
+        parsed.data.operationId,
+      );
       res.status(200).json(payload);
     } catch (error) {
       terminalLogger.error("terminal.input.failed", {
@@ -551,6 +589,63 @@ export function createTerminalRouter(
       res.status(500).json({
         message: "Terminal input failed",
         error: String(error),
+      });
+    }
+  });
+
+  router.post("/session/:id/interrupt", async (req, res) => {
+    const parsed = sendTerminalInterruptSchema.safeParse(
+      req.body as SendTerminalInterruptRequest | undefined,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const session = terminalSessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Terminal session not found" });
+      return;
+    }
+    if (session.status !== "running") {
+      res.status(409).json({ message: "Terminal session is not running" });
+      return;
+    }
+    if (!options?.runtimeRegistry || !options.ptyService) {
+      res.status(503).json({ message: "Terminal runtime service unavailable" });
+      return;
+    }
+    if (isTmuxBackedSession(session) && !options.tmuxService) {
+      res.status(503).json({ message: "Terminal tmux service unavailable" });
+      return;
+    }
+
+    try {
+      const inputPayload = await sendInputToSession(
+        session,
+        TERMINAL_INTERRUPT_ESCAPE_INPUT,
+        parsed.data.operationId,
+      );
+      const payload: SendTerminalInterruptResponse = {
+        ...inputPayload,
+        interruptAccepted: true,
+        interruptSequence: "escape",
+      };
+      res.status(200).json(payload);
+    } catch (error) {
+      terminalLogger.error("terminal.interrupt.failed", {
+        message: "Terminal interrupt failed",
+        terminalSessionId: session.id,
+        operationId: parsed.data.operationId,
+        error,
+      });
+      res.status(500).json({
+        message: "Terminal interrupt failed",
+        error: error instanceof Error ? error.message : String(error),
+        operationId: parsed.data.operationId,
       });
     }
   });

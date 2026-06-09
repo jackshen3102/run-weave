@@ -365,6 +365,8 @@ describe("TmuxService", () => {
           RUNWEAVE_PROJECT_ID: "project-default",
           RUNWEAVE_TMUX_SESSION_NAME: "runweave-terminal-1",
           RUNWEAVE_HOOK_ENDPOINT:
+            "http://127.0.0.1:5000/internal/terminal/agent-hook",
+          RUNWEAVE_COMPLETION_HOOK_ENDPOINT:
             "http://127.0.0.1:5000/internal/terminal-completion",
           RUNWEAVE_HOOK_TOKEN: "hook-token",
         },
@@ -384,7 +386,9 @@ describe("TmuxService", () => {
         "-e",
         "RUNWEAVE_TMUX_SESSION_NAME=runweave-terminal-1",
         "-e",
-        "RUNWEAVE_HOOK_ENDPOINT=http://127.0.0.1:5000/internal/terminal-completion",
+        "RUNWEAVE_HOOK_ENDPOINT=http://127.0.0.1:5000/internal/terminal/agent-hook",
+        "-e",
+        "RUNWEAVE_COMPLETION_HOOK_ENDPOINT=http://127.0.0.1:5000/internal/terminal-completion",
         "-e",
         "RUNWEAVE_HOOK_TOKEN=hook-token",
         "-e",

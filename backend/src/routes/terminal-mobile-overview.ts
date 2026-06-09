@@ -3,6 +3,10 @@ import path from "node:path";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { readTerminalScrollbackCapture } from "../terminal/runtime-launcher";
+import {
+  isCodexSession,
+  type TerminalStateService,
+} from "../terminal/terminal-state-service";
 import type { TmuxService } from "../terminal/tmux-service";
 import { toProjectPayload, toSessionListItem } from "./terminal-route-payloads";
 
@@ -18,6 +22,7 @@ interface MobileOverviewTailCapture {
 
 export interface TerminalMobileOverviewOptions {
   includeTail?: boolean;
+  terminalStateService?: TerminalStateService;
 }
 
 function tailScrollbackLines(scrollback: string, maxLines: number): string {
@@ -58,14 +63,16 @@ function basename(value: string): string {
 function buildSessionTitle(
   session: ReturnType<TerminalSessionManager["listSessions"]>[number],
 ): string {
-  const commandLabel =
-    session.activeCommand?.trim() || basename(session.command);
+  const commandLabel = isCodexSession(session)
+    ? "codex"
+    : session.activeCommand?.trim() || basename(session.command);
   const directoryLabel = basename(session.cwd);
   return directoryLabel ? `${commandLabel} · ${directoryLabel}` : commandLabel;
 }
 
 function buildDisplayStatus(
   session: ReturnType<TerminalSessionManager["listSessions"]>[number],
+  terminalStateService?: TerminalStateService,
 ): {
   displayStatus: "running" | "idle" | "exited";
   displayStatusLabel: "Running" | "Idle" | "Exited";
@@ -73,9 +80,12 @@ function buildDisplayStatus(
   if (session.status === "exited") {
     return { displayStatus: "exited", displayStatusLabel: "Exited" };
   }
-  if (session.activeCommand?.trim()) {
+
+  const terminalState = terminalStateService?.getCurrent(session.id, session);
+  if (terminalState?.state === "agent_running") {
     return { displayStatus: "running", displayStatusLabel: "Running" };
   }
+
   return { displayStatus: "idle", displayStatusLabel: "Idle" };
 }
 
@@ -112,7 +122,7 @@ export async function buildTerminalMobileOverviewPayload(
           ...toSessionListItem(session),
           title: buildSessionTitle(session),
           subtitle: session.cwd,
-          ...buildDisplayStatus(session),
+          ...buildDisplayStatus(session, options?.terminalStateService),
         };
         if (!includeTail) {
           return basePayload;

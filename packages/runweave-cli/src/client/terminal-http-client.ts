@@ -2,11 +2,14 @@ import type {
   CreateTerminalProjectRequest,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
+  SendTerminalInterruptRequest,
+  SendTerminalInterruptResponse,
   SendTerminalInputRequest,
   SendTerminalInputResponse,
   TerminalProjectListItem,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
+  TerminalStateResponse,
 } from "@browser-viewer/shared";
 import type { AuthContext } from "./auth-context.js";
 
@@ -51,9 +54,19 @@ export class TerminalHttpClient {
     );
   }
 
-  getSession(terminalSessionId: string): Promise<TerminalSessionStatusResponse> {
+  getSession(
+    terminalSessionId: string,
+  ): Promise<TerminalSessionStatusResponse> {
     return this.auth.requestJson<TerminalSessionStatusResponse>(
       `/api/terminal/session/${encodeURIComponent(terminalSessionId)}`,
+    );
+  }
+
+  getCurrentTerminalState(
+    terminalSessionId: string,
+  ): Promise<TerminalStateResponse> {
+    return this.auth.requestJson<TerminalStateResponse>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/state`,
     );
   }
 
@@ -63,6 +76,20 @@ export class TerminalHttpClient {
   ): Promise<SendTerminalInputResponse> {
     return this.auth.requestJson<SendTerminalInputResponse>(
       `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/input`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  interruptSession(
+    terminalSessionId: string,
+    payload: SendTerminalInterruptRequest = {},
+  ): Promise<SendTerminalInterruptResponse> {
+    return this.auth.requestJson<SendTerminalInterruptResponse>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/interrupt`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

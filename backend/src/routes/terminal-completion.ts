@@ -8,8 +8,14 @@ import {
   isCompletionSourceAllowedForCommand,
 } from "../terminal/completion-source-gate";
 import type { TerminalSessionManager } from "../terminal/manager";
+import { isCodexSession } from "../terminal/terminal-state-service";
 
-const completionReasonEnum = z.enum(["hook_stop", "notify", "ai_process_exit", "manual"]);
+const completionReasonEnum = z.enum([
+  "hook_stop",
+  "notify",
+  "ai_process_exit",
+  "manual",
+]);
 const terminalCompletionLogger = logger.child({
   component: "terminal-completion",
 });
@@ -77,13 +83,16 @@ export function createInternalTerminalCompletionRouter(options: {
       return;
     }
 
-    const rawHookEvent = parsed.data.rawHookEvent ?? parsed.data.hookEvent ?? null;
+    const rawHookEvent =
+      parsed.data.rawHookEvent ?? parsed.data.hookEvent ?? null;
     const lastAiActiveCommand =
       options.terminalSessionManager.getLastAiActiveCommand(session.id);
-    const currentCommandMatches = isCompletionSourceAllowedForCommand(
-      parsed.data.source,
-      session.activeCommand,
-    );
+    const currentCommandMatches =
+      isCompletionSourceAllowedForCommand(
+        parsed.data.source,
+        session.activeCommand,
+      ) ||
+      (parsed.data.source === "codex" && isCodexSession(session));
     const now = Date.now();
     const graceCommandMatches =
       session.activeCommand === null &&
@@ -109,17 +118,18 @@ export function createInternalTerminalCompletionRouter(options: {
       return;
     }
 
-    const event: TerminalCompletionEvent = options.completionEventService.record(
-      {
-        terminalSessionId: parsed.data.terminalSessionId,
-        source: parsed.data.source,
-        completionReason: parsed.data.completionReason ?? "hook_stop",
-        commandName: parsed.data.commandName ?? null,
-        rawHookEvent,
-        cwd: parsed.data.cwd ?? null,
-      },
-      session,
-    );
+    const event: TerminalCompletionEvent =
+      options.completionEventService.record(
+        {
+          terminalSessionId: parsed.data.terminalSessionId,
+          source: parsed.data.source,
+          completionReason: parsed.data.completionReason ?? "hook_stop",
+          commandName: parsed.data.commandName ?? null,
+          rawHookEvent,
+          cwd: parsed.data.cwd ?? null,
+        },
+        session,
+      );
     terminalCompletionLogger.info("terminal-completion.recorded", {
       message: "Terminal completion event recorded",
       id: event.id,

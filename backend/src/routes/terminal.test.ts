@@ -22,6 +22,9 @@ import {
 } from "../terminal/clipboard-image";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
 import { createTerminalRouter } from "./terminal";
+import { createTerminalStateRouter } from "./terminal-state";
+import { TerminalStateService } from "../terminal/terminal-state-service";
+import { TerminalStateStore } from "../terminal/terminal-state-store";
 
 interface MockTerminalSession {
   id: string;
@@ -218,7 +221,17 @@ function createTestServer(
     ensureRecorder: vi.fn(),
     disposeRuntime: vi.fn(async () => undefined),
   };
+  const terminalStateService = new TerminalStateService(
+    new TerminalStateStore(),
+  );
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
+  app.use(
+    "/api/terminal",
+    createTerminalStateRouter({
+      terminalSessionManager: terminalSessionManager as never,
+      terminalStateService,
+    }),
+  );
   app.use(
     "/api/terminal",
     createTerminalRouter(terminalSessionManager as never, {
@@ -226,11 +239,18 @@ function createTestServer(
       ptyService: options?.ptyService as never,
       runtimeRegistry: (options?.runtimeRegistry ?? runtimeRegistry) as never,
       tmuxService: options?.tmuxService as never,
+      terminalStateService,
     }),
   );
   const server = http.createServer(app);
 
-  return { server, terminalSessionManager, authService, runtimeRegistry };
+  return {
+    server,
+    terminalSessionManager,
+    terminalStateService,
+    authService,
+    runtimeRegistry,
+  };
 }
 
 async function createGitRepo(): Promise<string> {
@@ -316,10 +336,85 @@ describe("terminal routes", () => {
     });
   });
 
+  it("returns terminal state from current session metadata", async () => {
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        activeCommand: "codex",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/state`,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      terminalState: { state: "agent_idle", agent: "codex" },
+    });
+  });
+
+  it("returns shell idle for non-codex and exited sessions", async () => {
+    const state = {
+      current: {
+        id: "terminal-1",
+        projectId: "project-default",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        activeCommand: "node",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+      sessions: [
+        {
+          id: "terminal-exited",
+          projectId: "project-default",
+          command: "bash",
+          args: [],
+          cwd: "/tmp/demo",
+          activeCommand: "codex",
+          scrollback: "",
+          status: "exited" as const,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        },
+      ],
+    };
+    const { server } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    await expect(
+      fetch(
+        `http://127.0.0.1:${port}/api/terminal/session/terminal-1/state`,
+      ).then((response) => response.json()),
+    ).resolves.toEqual({
+      terminalState: { state: "shell_idle", agent: null },
+    });
+    await expect(
+      fetch(
+        `http://127.0.0.1:${port}/api/terminal/session/terminal-exited/state`,
+      ).then((response) => response.json()),
+    ).resolves.toEqual({
+      terminalState: { state: "shell_idle", agent: null },
+    });
+  });
+
   it("creates tmux-backed terminal sessions when tmux is available", async () => {
     vi.stubEnv(
       "RUNWEAVE_HOOK_ENDPOINT",
-      "http://127.0.0.1:5000/internal/terminal-completion",
+      "http://127.0.0.1:5000/internal/terminal/agent-hook",
     );
     vi.stubEnv("RUNWEAVE_HOOK_TOKEN", "hook-token");
     const state = { current: null as MockTerminalSession | null };
@@ -403,7 +498,7 @@ describe("terminal routes", () => {
           RUNWEAVE_PROJECT_ID: "project-default",
           RUNWEAVE_TMUX_SESSION_NAME: "runweave-terminal-1",
           RUNWEAVE_HOOK_ENDPOINT:
-            "http://127.0.0.1:5000/internal/terminal-completion",
+            "http://127.0.0.1:5000/internal/terminal/agent-hook",
           RUNWEAVE_HOOK_TOKEN: "hook-token",
         },
       },
@@ -1049,6 +1144,18 @@ describe("terminal routes", () => {
           lastActivityAt: new Date("2026-03-29T00:03:00.000Z"),
         },
         {
+          id: "terminal-codex-idle",
+          projectId: "project-default",
+          command: "codex",
+          args: [],
+          cwd: "/tmp/browser-viewer",
+          activeCommand: "node",
+          scrollback: "codex idle tail",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          lastActivityAt: new Date("2026-03-29T00:02:30.000Z"),
+        },
+        {
           id: "terminal-exited",
           projectId: "project-default",
           command: "node",
@@ -1062,7 +1169,13 @@ describe("terminal routes", () => {
         },
       ],
     };
-    const { server, terminalSessionManager } = createTestServer(state);
+    const { server, terminalSessionManager, terminalStateService } =
+      createTestServer(state);
+    terminalStateService.handleAgentHook(
+      "terminal-running",
+      "codex",
+      "UserPromptSubmit",
+    );
     servers.push(server);
     const port = await startServer(server);
 
@@ -1082,6 +1195,12 @@ describe("terminal routes", () => {
             displayStatus: "running",
             displayStatusLabel: "Running",
             lastActivityAt: "2026-03-29T00:03:00.000Z",
+          }),
+          expect.objectContaining({
+            terminalSessionId: "terminal-codex-idle",
+            title: "codex · browser-viewer",
+            displayStatus: "idle",
+            displayStatusLabel: "Idle",
           }),
           expect.objectContaining({
             terminalSessionId: "terminal-idle",
@@ -2351,6 +2470,67 @@ describe("terminal routes", () => {
     expect(ptyService.spawnSession).not.toHaveBeenCalled();
   });
 
+  it("interrupts terminal sessions through the HTTP API with escape input", async () => {
+    const runtime = {
+      pid: 123,
+      write: vi.fn(),
+      resize: vi.fn(),
+      signal: vi.fn(),
+      dispose: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+    };
+    const state = {
+      current: {
+        id: "terminal-1",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+      },
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => runtime),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const { server } = createTestServer(state, {
+      ptyService: { spawnSession: vi.fn() },
+      runtimeRegistry,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/interrupt`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer access-token-1",
+        },
+        body: JSON.stringify({ operationId: "op-interrupt-1" }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      operationId: "op-interrupt-1",
+      terminalSessionId: "terminal-1",
+      inputAccepted: true,
+      inputEnqueued: true,
+      interruptAccepted: true,
+      interruptSequence: "escape",
+      runtimeKind: "pty",
+    });
+    expect(runtime.write).toHaveBeenCalledWith("\x1b");
+    expect(runtime.signal).not.toHaveBeenCalled();
+  });
+
   it("sends HTTP terminal input directly to tmux-backed panes", async () => {
     const runtime = {
       pid: 123,
@@ -2425,6 +2605,82 @@ describe("terminal routes", () => {
       },
       "codex prompt\r",
     );
+    expect(runtime.write).not.toHaveBeenCalled();
+  });
+
+  it("interrupts tmux-backed panes through the HTTP API with escape input", async () => {
+    const runtime = {
+      pid: 123,
+      write: vi.fn(),
+      resize: vi.fn(),
+      signal: vi.fn(),
+      dispose: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+    };
+    const state = {
+      current: {
+        id: "terminal-1",
+        name: "bash",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        runtimeKind: "tmux" as const,
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      },
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => runtime),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const tmuxService = {
+      sendInput: vi.fn(async () => undefined),
+      buildSessionName: vi.fn(() => "runweave-terminal-1"),
+      socketPath: "/tmp/runweave/tmux.sock",
+    };
+    const { server } = createTestServer(state, {
+      ptyService: { spawnSession: vi.fn() },
+      runtimeRegistry,
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/interrupt`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer access-token-1",
+        },
+        body: JSON.stringify({}),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      terminalSessionId: "terminal-1",
+      inputAccepted: true,
+      inputEnqueued: true,
+      interruptAccepted: true,
+      interruptSequence: "escape",
+      runtimeKind: "tmux",
+    });
+    expect(tmuxService.sendInput).toHaveBeenCalledWith(
+      {
+        sessionName: "runweave-terminal-1",
+        socketPath: "/tmp/runweave/tmux.sock",
+      },
+      "\x1b",
+    );
+    expect(runtime.signal).not.toHaveBeenCalled();
     expect(runtime.write).not.toHaveBeenCalled();
   });
 

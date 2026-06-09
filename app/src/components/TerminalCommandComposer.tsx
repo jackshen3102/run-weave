@@ -15,18 +15,19 @@ export function TerminalCommandComposer({
   isPickingImage: boolean;
   isStopping: boolean;
   onPickImage: (file: File) => void;
-  onSendInput: (data: string) => void;
+  onSendInput: (data: string) => Promise<void>;
   onStop: () => void;
 }) {
   const [value, setValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const text = value.trimEnd();
     if (!text) {
       return;
     }
-    onSendInput(`${text}\n`);
+    await onSendInput(text);
+    await onSendInput("\n");
     setValue("");
   };
 

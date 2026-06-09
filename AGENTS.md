@@ -20,6 +20,10 @@
 - Lint：`pnpm lint`
 - 测试：`pnpm test`
 
+## 本地 URL 复现约束
+
+- 打开页面复现或修复问题时，使用 `$playwright-cli`。
+
 ## Electron 打包约束
 
 - 默认仅打包当前本地可用的 mac 客户端。

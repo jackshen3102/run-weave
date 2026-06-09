@@ -83,7 +83,7 @@ function buildTransports(env: NodeJS.ProcessEnv): winston.transport[] {
   const storagePaths = resolveStoragePaths(env);
   const transports: winston.transport[] = [
     new winston.transports.Console({
-      level: resolveLogLevel(env),
+      level: "error",
     }),
   ];
 
@@ -164,7 +164,7 @@ function createWinstonLogger(env: NodeJS.ProcessEnv): winston.Logger {
 let activeWinstonLogger = winston.createLogger({
   level: "info",
   format: jsonLineFormat,
-  transports: [new winston.transports.Console()],
+  transports: [new winston.transports.Console({ level: "error" })],
   exitOnError: false,
 });
 let activeLogger: BackendLogger = new WinstonBackendLogger(activeWinstonLogger);
