@@ -1,15 +1,10 @@
 import { v4 as uuidv4 } from "uuid";
-import { existsSync, statSync } from "node:fs";
 import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
   TERMINAL_LIVE_SCROLLBACK_BYTES,
 } from "@browser-viewer/shared";
 import type {
-  PersistedTerminalProjectRecord,
-  PersistedTerminalSessionMetadataRecord,
-  PersistedTerminalSessionRecord,
   TerminalSessionStore,
-  TerminalRuntimeKind,
   TerminalRuntimeMetadata,
 } from "./store";
 import {
@@ -17,166 +12,36 @@ import {
   createScrollbackBuffer,
   readScrollbackBuffer,
   readScrollbackBufferTailLines,
-  type ScrollbackBuffer,
 } from "./scrollback-buffer";
+import {
+  buildProjectRecord,
+  buildSessionRecord,
+  createRuntimeRecord,
+  toPersistedProject,
+  toPersistedSession,
+  type CreateTerminalSessionOptions,
+  type RuntimeTerminalSessionRecord,
+  type TerminalProjectRecord,
+  type TerminalSessionRecord,
+} from "./manager-records";
+import {
+  applyProjectOrder,
+  applySessionOrder,
+  sortTerminalProjects,
+  sortTerminalSessions,
+} from "./manager-ordering";
+import { isExistingDirectory } from "./manager-path";
+export type {
+  CreateTerminalSessionOptions,
+  TerminalProjectRecord,
+  TerminalSessionRecord,
+} from "./manager-records";
 import { getInitialTerminalActiveCommand } from "./session-launch";
 import { createUniqueTerminalSessionId } from "./session-id";
 import {
   getCompletionSourceForCommand,
   type LastAiActiveCommandRecord,
 } from "./completion-source-gate";
-
-export interface TerminalProjectRecord {
-  id: string;
-  name: string;
-  path: string | null;
-  createdAt: Date;
-  isDefault: boolean;
-  order?: number;
-}
-
-export interface TerminalSessionRecord {
-  id: string;
-  projectId: string;
-  command: string;
-  args: string[];
-  cwd: string;
-  activeCommand: string | null;
-  scrollback: string;
-  status: "running" | "exited";
-  createdAt: Date;
-  lastActivityAt: Date;
-  exitCode?: number;
-  order?: number;
-  runtimeKind: TerminalRuntimeKind;
-  tmuxSessionName?: string;
-  tmuxSocketPath?: string;
-  tmuxUnavailableReason?: string;
-  recoverable?: boolean;
-}
-
-interface RuntimeTerminalSessionRecord extends Omit<
-  TerminalSessionRecord,
-  "scrollback"
-> {
-  readonly scrollback: string;
-  scrollbackBuffer: ScrollbackBuffer;
-  scrollbackLoaded: boolean;
-}
-
-export interface CreateTerminalSessionOptions {
-  projectId?: string;
-  command: string;
-  args?: string[];
-  cwd: string;
-}
-
-function buildProjectRecord(
-  persisted: PersistedTerminalProjectRecord,
-): TerminalProjectRecord {
-  return {
-    id: persisted.id,
-    name: persisted.name,
-    path: persisted.path ?? null,
-    createdAt: new Date(persisted.createdAt),
-    isDefault: persisted.isDefault,
-    ...(persisted.order !== undefined ? { order: persisted.order } : {}),
-  };
-}
-
-function toPersistedProject(
-  project: TerminalProjectRecord,
-): PersistedTerminalProjectRecord {
-  return {
-    id: project.id,
-    name: project.name,
-    path: project.path,
-    createdAt: project.createdAt.toISOString(),
-    isDefault: project.isDefault,
-  };
-}
-
-function buildRecord(
-  persisted: PersistedTerminalSessionMetadataRecord & { scrollback?: string },
-): TerminalSessionRecord {
-  return {
-    id: persisted.id,
-    projectId: persisted.projectId,
-    command: persisted.command,
-    args: persisted.args,
-    cwd: persisted.cwd,
-    activeCommand: persisted.activeCommand ?? null,
-    scrollback: persisted.scrollback ?? "",
-    status: persisted.status,
-    createdAt: new Date(persisted.createdAt),
-    lastActivityAt: new Date(persisted.lastActivityAt ?? persisted.createdAt),
-    exitCode: persisted.exitCode,
-    ...(persisted.order !== undefined ? { order: persisted.order } : {}),
-    runtimeKind: persisted.runtimeKind ?? "pty",
-    tmuxSessionName: persisted.tmuxSessionName,
-    tmuxSocketPath: persisted.tmuxSocketPath,
-    tmuxUnavailableReason: persisted.tmuxUnavailableReason,
-    recoverable: persisted.recoverable,
-  };
-}
-
-function createRuntimeRecord(
-  record: TerminalSessionRecord,
-  options?: { scrollbackLoaded?: boolean },
-): RuntimeTerminalSessionRecord {
-  const { scrollback, ...rest } = record;
-  const runtimeRecord = { ...rest } as Omit<
-    RuntimeTerminalSessionRecord,
-    "scrollback" | "scrollbackBuffer"
-  > &
-    Partial<Pick<RuntimeTerminalSessionRecord, "scrollbackBuffer">>;
-
-  Object.defineProperty(runtimeRecord, "scrollbackBuffer", {
-    configurable: false,
-    enumerable: false,
-    value: createScrollbackBuffer(scrollback),
-    writable: true,
-  });
-  Object.defineProperty(runtimeRecord, "scrollbackLoaded", {
-    configurable: false,
-    enumerable: false,
-    value: options?.scrollbackLoaded ?? true,
-    writable: true,
-  });
-
-  Object.defineProperty(runtimeRecord, "scrollback", {
-    configurable: false,
-    enumerable: true,
-    get() {
-      return readScrollbackBuffer(runtimeRecord.scrollbackBuffer!);
-    },
-  });
-
-  return runtimeRecord as RuntimeTerminalSessionRecord;
-}
-
-function toPersisted(
-  session: TerminalSessionRecord,
-): PersistedTerminalSessionRecord {
-  return {
-    id: session.id,
-    projectId: session.projectId,
-    command: session.command,
-    args: session.args,
-    cwd: session.cwd,
-    activeCommand: session.activeCommand,
-    scrollback: session.scrollback,
-    status: session.status,
-    createdAt: session.createdAt.toISOString(),
-    lastActivityAt: session.lastActivityAt.toISOString(),
-    exitCode: session.exitCode,
-    runtimeKind: session.runtimeKind,
-    tmuxSessionName: session.tmuxSessionName,
-    tmuxSocketPath: session.tmuxSocketPath,
-    tmuxUnavailableReason: session.tmuxUnavailableReason,
-    recoverable: session.recoverable,
-  };
-}
 
 const SCROLLBACK_FLUSH_DELAY_MS = 250;
 const ACTIVITY_FLUSH_DELAY_MS = 10_000;
@@ -206,7 +71,7 @@ export class TerminalSessionManager {
     for (const persisted of persistedSessions) {
       this.sessions.set(
         persisted.id,
-        createRuntimeRecord(buildRecord(persisted), {
+        createRuntimeRecord(buildSessionRecord(persisted), {
           scrollbackLoaded: false,
         }),
       );
@@ -214,16 +79,7 @@ export class TerminalSessionManager {
   }
 
   listProjects(): TerminalProjectRecord[] {
-    return Array.from(this.projects.values()).sort((left, right) => {
-      const leftOrder = left.order;
-      const rightOrder = right.order;
-      if (leftOrder !== undefined && rightOrder !== undefined) {
-        return leftOrder - rightOrder;
-      }
-      if (leftOrder !== undefined) return -1;
-      if (rightOrder !== undefined) return 1;
-      return left.createdAt.getTime() - right.createdAt.getTime();
-    });
+    return sortTerminalProjects(this.projects.values());
   }
 
   getProject(projectId: string): TerminalProjectRecord | undefined {
@@ -308,19 +164,7 @@ export class TerminalSessionManager {
   }
 
   async reorderProjects(orderedIds: string[]): Promise<void> {
-    const orderMap = new Map<string, number>();
-    for (let index = 0; index < orderedIds.length; index += 1) {
-      const id = orderedIds[index];
-      if (id !== undefined) {
-        orderMap.set(id, index);
-      }
-    }
-    for (const project of this.projects.values()) {
-      const order = orderMap.get(project.id);
-      if (order !== undefined) {
-        project.order = order;
-      }
-    }
+    applyProjectOrder(this.projects.values(), orderedIds);
     await this.sessionStore.reorderProjects(orderedIds);
   }
 
@@ -328,22 +172,7 @@ export class TerminalSessionManager {
     projectId: string,
     orderedIds: string[],
   ): Promise<void> {
-    const orderMap = new Map<string, number>();
-    for (let index = 0; index < orderedIds.length; index += 1) {
-      const id = orderedIds[index];
-      if (id !== undefined) {
-        orderMap.set(id, index);
-      }
-    }
-    for (const session of this.sessions.values()) {
-      if (session.projectId !== projectId) {
-        continue;
-      }
-      const order = orderMap.get(session.id);
-      if (order !== undefined) {
-        session.order = order;
-      }
-    }
+    applySessionOrder(this.sessions.values(), projectId, orderedIds);
     await this.sessionStore.reorderSessions(projectId, orderedIds);
   }
 
@@ -387,7 +216,7 @@ export class TerminalSessionManager {
       recoverable: false,
     });
 
-    await this.sessionStore.insertSession(toPersisted(session));
+    await this.sessionStore.insertSession(toPersistedSession(session));
     this.sessions.set(session.id, session);
     this.observeActiveCommand(session.id, session.activeCommand);
     return session;
@@ -476,16 +305,7 @@ export class TerminalSessionManager {
   }
 
   listSessions(): TerminalSessionRecord[] {
-    return Array.from(this.sessions.values()).sort((left, right) => {
-      const leftOrder = left.order;
-      const rightOrder = right.order;
-      if (leftOrder !== undefined && rightOrder !== undefined) {
-        return leftOrder - rightOrder;
-      }
-      if (leftOrder !== undefined) return -1;
-      if (rightOrder !== undefined) return 1;
-      return left.createdAt.getTime() - right.createdAt.getTime();
-    });
+    return sortTerminalSessions(this.sessions.values());
   }
 
   markExited(terminalSessionId: string, exitCode?: number): void {
@@ -770,13 +590,5 @@ export class TerminalSessionManager {
         this.flushActivity(terminalSessionId),
       ),
     );
-  }
-}
-
-function isExistingDirectory(value: string): boolean {
-  try {
-    return existsSync(value) && statSync(value).isDirectory();
-  } catch {
-    return false;
   }
 }
