@@ -5,6 +5,7 @@ import type {
 import {
   TerminalRenderer,
   type TerminalRendererHandle,
+  type TerminalRendererExtensionContext,
 } from "@browser-viewer/terminal-renderer";
 import {
   IonButton,
@@ -50,6 +51,144 @@ function shortPath(value: string): string {
     return value;
   }
   return `.../${parts.slice(-2).join("/")}`;
+}
+
+const APP_TERMINAL_TOUCH_SCROLL_MULTIPLIER = 3;
+const APP_TERMINAL_EDGE_SWIPE_ZONE = 24;
+
+function installTerminalTouchBehavior({
+  terminal,
+  container,
+}: TerminalRendererExtensionContext): { dispose(): void } {
+  let lastTouchY: number | null = null;
+  let accumulatedDelta = 0;
+  let edgeSwipeActive = false;
+
+  const resolveLineHeight = () => {
+    const firstRow = container.querySelector<HTMLElement>(
+      ".xterm-rows > div",
+    );
+    const measuredLineHeight = firstRow?.getBoundingClientRect().height ?? 0;
+    if (measuredLineHeight > 0) {
+      return measuredLineHeight;
+    }
+    return container.clientHeight / Math.max(terminal.rows, 1);
+  };
+
+  const suppressTerminalFocus = (event: Event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    terminal.blur();
+  };
+
+  const suppressPointerFocus = (event: PointerEvent) => {
+    if (event.pointerType === "touch") {
+      return;
+    }
+    suppressTerminalFocus(event);
+  };
+
+  const handleTouchStart = (event: TouchEvent) => {
+    const startX = event.touches[0]?.clientX ?? null;
+    edgeSwipeActive =
+      event.touches.length === 1 &&
+      startX !== null &&
+      startX <= APP_TERMINAL_EDGE_SWIPE_ZONE;
+    if (edgeSwipeActive) {
+      lastTouchY = null;
+      accumulatedDelta = 0;
+      return;
+    }
+    event.stopPropagation();
+    if (event.touches.length !== 1) {
+      lastTouchY = null;
+      accumulatedDelta = 0;
+      return;
+    }
+    lastTouchY = event.touches[0]?.clientY ?? null;
+    accumulatedDelta = 0;
+  };
+
+  const handleTouchMove = (event: TouchEvent) => {
+    if (edgeSwipeActive) {
+      return;
+    }
+    event.stopPropagation();
+    const currentY = event.touches[0]?.clientY;
+    if (lastTouchY === null || currentY === undefined) {
+      return;
+    }
+
+    accumulatedDelta +=
+      (currentY - lastTouchY) * APP_TERMINAL_TOUCH_SCROLL_MULTIPLIER;
+    lastTouchY = currentY;
+
+    const lineHeight = resolveLineHeight();
+    if (lineHeight <= 0) {
+      return;
+    }
+
+    const lines = Math.trunc(accumulatedDelta / lineHeight);
+    if (lines === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    terminal.scrollLines(-lines);
+    accumulatedDelta -= lines * lineHeight;
+  };
+
+  const handleTouchEnd = () => {
+    lastTouchY = null;
+    accumulatedDelta = 0;
+    edgeSwipeActive = false;
+  };
+
+  container.addEventListener("pointerdown", suppressPointerFocus, {
+    capture: true,
+  });
+  container.addEventListener("mousedown", suppressTerminalFocus, {
+    capture: true,
+  });
+  container.addEventListener("click", suppressTerminalFocus, {
+    capture: true,
+  });
+  container.addEventListener("touchstart", handleTouchStart, {
+    capture: true,
+    passive: true,
+  });
+  container.addEventListener("touchmove", handleTouchMove, {
+    capture: true,
+    passive: false,
+  });
+  container.addEventListener("touchend", handleTouchEnd, { capture: true });
+  container.addEventListener("touchcancel", handleTouchEnd, { capture: true });
+
+  return {
+    dispose() {
+      container.removeEventListener("pointerdown", suppressPointerFocus, {
+        capture: true,
+      });
+      container.removeEventListener("mousedown", suppressTerminalFocus, {
+        capture: true,
+      });
+      container.removeEventListener("click", suppressTerminalFocus, {
+        capture: true,
+      });
+      container.removeEventListener("touchstart", handleTouchStart, {
+        capture: true,
+      });
+      container.removeEventListener("touchmove", handleTouchMove, {
+        capture: true,
+      });
+      container.removeEventListener("touchend", handleTouchEnd, {
+        capture: true,
+      });
+      container.removeEventListener("touchcancel", handleTouchEnd, {
+        capture: true,
+      });
+    },
+  };
 }
 
 export function AppTerminalPage({
@@ -274,9 +413,11 @@ export function AppTerminalPage({
                 <TerminalRenderer
                   active
                   className="terminal-page-renderer"
+                  focusOnInteraction={false}
                   fontSize={12}
                   onInput={sendInput}
                   onResize={sendResize}
+                  onTerminalReady={installTerminalTouchBehavior}
                   ref={rendererRef}
                   renderer="dom"
                   scrollbackLines={5000}

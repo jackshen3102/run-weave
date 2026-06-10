@@ -1,1 +1,5 @@
 CAPACITOR_DEBUG = true
+
+// Optional local-only signing overrides (DEVELOPMENT_TEAM, etc.).
+// Missing file is silently ignored, so CI and other machines are unaffected.
+#include? "Signing.local.xcconfig"

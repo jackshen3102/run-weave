@@ -11,3 +11,6 @@ capacitor-cordova-ios-plugins
 # Generated Config files
 App/App/capacitor.config.json
 App/App/config.xml
+
+# Local-only signing identity (per-developer Apple Development Team)
+Signing.local.xcconfig

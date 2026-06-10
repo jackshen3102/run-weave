@@ -31,6 +31,7 @@ export type TerminalRendererDisposable = { dispose(): void } | (() => void);
 export interface TerminalRendererProps {
   active: boolean;
   className?: string;
+  focusOnInteraction?: boolean;
   fontFamily?: string;
   fontSize?: number;
   lineHeight?: number;
