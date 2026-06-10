@@ -423,6 +423,10 @@ describe("terminal routes", () => {
       "RUNWEAVE_HOOK_ENDPOINT",
       "http://127.0.0.1:5000/internal/terminal/agent-hook",
     );
+    vi.stubEnv(
+      "RUNWEAVE_COMPLETION_HOOK_ENDPOINT",
+      "http://127.0.0.1:5001/internal/terminal-completion",
+    );
     vi.stubEnv("RUNWEAVE_HOOK_TOKEN", "hook-token");
     const state = { current: null as MockTerminalSession | null };
     const runtime = { pid: 10 };
