@@ -133,16 +133,6 @@ export function HomePage({
                 {terminalLoading ? "Opening..." : "Terminal"}
               </Button>
               <Button
-                variant="secondary"
-                size="sm"
-                className="rounded-full px-4"
-                onClick={() => {
-                  navigate("/mobile/terminals");
-                }}
-              >
-                Cards
-              </Button>
-              <Button
                 variant="ghost"
                 size="sm"
                 className="rounded-full px-4 text-muted-foreground"
@@ -215,9 +205,6 @@ export function HomePage({
           onOpenConnectionManager={onOpenConnectionManager}
           onOpenTerminal={() => {
             void createTerminal();
-          }}
-          onOpenMobileTerminals={() => {
-            navigate("/mobile/terminals");
           }}
           onOpenSystemMonitor={
             window.electronAPI?.isElectron === true

@@ -235,19 +235,22 @@ export interface TerminalSessionListItem {
   exitCode?: number;
 }
 
-export interface TerminalMobileOverviewSession extends TerminalSessionListItem {
+export interface AppHomeOverviewSession extends TerminalSessionListItem {
   title: string;
   subtitle: string;
-  displayStatus: "running" | "idle" | "exited";
-  displayStatusLabel: "Running" | "Idle" | "Exited";
-  tailScrollback?: string;
-  tailScrollbackSourceCols?: number;
-  tailError?: string;
+  displayStatus: "running" | "agent-idle" | "idle" | "exited";
+  displayStatusLabel:
+    | "Agent Running"
+    | "Agent Idle"
+    | "Running"
+    | "Idle"
+    | "Exited";
+  terminalState: TerminalState;
 }
 
-export interface TerminalMobileOverviewResponse {
+export interface AppHomeOverviewResponse {
   projects: TerminalProjectListItem[];
-  sessions: TerminalMobileOverviewSession[];
+  sessions: AppHomeOverviewSession[];
 }
 
 export type TerminalCompletionReason =

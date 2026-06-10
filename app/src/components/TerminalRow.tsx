@@ -1,9 +1,9 @@
-import type { TerminalMobileOverviewSession } from "@browser-viewer/shared";
+import type { AppHomeOverviewSession } from "@browser-viewer/shared";
 
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 
 interface TerminalRowProps {
-  session: TerminalMobileOverviewSession;
+  session: AppHomeOverviewSession;
   onOpenTerminal: (terminalSessionId: string) => void;
 }
 

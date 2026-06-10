@@ -21,6 +21,7 @@ import {
   TERMINAL_CLIPBOARD_IMAGE_MAX_MIB,
 } from "../terminal/clipboard-image";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
+import { createAppHomeOverviewRouter } from "./app-home-overview";
 import { createTerminalRouter } from "./terminal";
 import { createTerminalStateRouter } from "./terminal-state";
 import { TerminalStateService } from "../terminal/terminal-state-service";
@@ -233,13 +234,19 @@ function createTestServer(
     }),
   );
   app.use(
+    "/api/app",
+    createAppHomeOverviewRouter({
+      terminalSessionManager: terminalSessionManager as never,
+      terminalStateService,
+    }),
+  );
+  app.use(
     "/api/terminal",
     createTerminalRouter(terminalSessionManager as never, {
       authService: authService as never,
       ptyService: options?.ptyService as never,
       runtimeRegistry: (options?.runtimeRegistry ?? runtimeRegistry) as never,
       tmuxService: options?.tmuxService as never,
-      terminalStateService,
     }),
   );
   const server = http.createServer(app);
@@ -416,6 +423,10 @@ describe("terminal routes", () => {
       "RUNWEAVE_HOOK_ENDPOINT",
       "http://127.0.0.1:5000/internal/terminal/agent-hook",
     );
+    vi.stubEnv(
+      "RUNWEAVE_COMPLETION_HOOK_ENDPOINT",
+      "http://127.0.0.1:5001/internal/terminal-completion",
+    );
     vi.stubEnv("RUNWEAVE_HOOK_TOKEN", "hook-token");
     const state = { current: null as MockTerminalSession | null };
     const runtime = { pid: 10 };
@@ -499,6 +510,8 @@ describe("terminal routes", () => {
           RUNWEAVE_TMUX_SESSION_NAME: "runweave-terminal-1",
           RUNWEAVE_HOOK_ENDPOINT:
             "http://127.0.0.1:5000/internal/terminal/agent-hook",
+          RUNWEAVE_COMPLETION_HOOK_ENDPOINT:
+            "http://127.0.0.1:5001/internal/terminal-completion",
           RUNWEAVE_HOOK_TOKEN: "hook-token",
         },
       },
@@ -1061,61 +1074,7 @@ describe("terminal routes", () => {
     ]);
   });
 
-  it("returns mobile overview with capped live tails without reading full history", async () => {
-    const scrollback = Array.from(
-      { length: 85 },
-      (_, index) => `line-${index + 1}`,
-    ).join("\n");
-    const state = {
-      current: {
-        id: "terminal-1",
-        projectId: "project-default",
-        name: "bash",
-        command: "bash",
-        args: ["-l"],
-        cwd: "/tmp/demo",
-        scrollback,
-        status: "running" as const,
-        createdAt: new Date("2026-03-29T00:00:00.000Z"),
-      },
-    };
-    const { server, terminalSessionManager } = createTestServer(state);
-    servers.push(server);
-    const port = await startServer(server);
-
-    const response = await fetch(
-      `http://127.0.0.1:${port}/api/terminal/mobile/overview`,
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      projects: [
-        {
-          projectId: "project-default",
-          name: "Default Project",
-          path: null,
-          createdAt: "2026-03-29T00:00:00.000Z",
-          isDefault: true,
-        },
-      ],
-      sessions: [
-        expect.objectContaining({
-          terminalSessionId: "terminal-1",
-          projectId: "project-default",
-          tailScrollback: Array.from(
-            { length: 80 },
-            (_, index) => `line-${index + 6}`,
-          ).join("\n"),
-        }),
-      ],
-    });
-    expect(terminalSessionManager.readLiveScrollback).toHaveBeenCalledWith(
-      "terminal-1",
-    );
-    expect(terminalSessionManager.readScrollback).not.toHaveBeenCalled();
-  });
-
-  it("returns mobile overview display fields without reading tails when includeTail is false", async () => {
+  it("returns app home overview display fields without reading tails", async () => {
     const state = {
       current: null as MockTerminalSession | null,
       sessions: [
@@ -1180,7 +1139,7 @@ describe("terminal routes", () => {
     const port = await startServer(server);
 
     const response = await fetch(
-      `http://127.0.0.1:${port}/api/terminal/mobile/overview?includeTail=false`,
+      `http://127.0.0.1:${port}/api/app/home/overview`,
     );
 
     expect(response.status).toBe(200);
@@ -1193,25 +1152,29 @@ describe("terminal routes", () => {
             title: "codex · browser-viewer",
             subtitle: "/tmp/browser-viewer",
             displayStatus: "running",
-            displayStatusLabel: "Running",
+            displayStatusLabel: "Agent Running",
+            terminalState: { state: "agent_running", agent: "codex" },
             lastActivityAt: "2026-03-29T00:03:00.000Z",
           }),
           expect.objectContaining({
             terminalSessionId: "terminal-codex-idle",
             title: "codex · browser-viewer",
-            displayStatus: "idle",
-            displayStatusLabel: "Idle",
+            displayStatus: "agent-idle",
+            displayStatusLabel: "Agent Idle",
+            terminalState: { state: "agent_idle", agent: "codex" },
           }),
           expect.objectContaining({
             terminalSessionId: "terminal-idle",
             title: "bash · demo",
             displayStatus: "idle",
             displayStatusLabel: "Idle",
+            terminalState: { state: "shell_idle", agent: null },
           }),
           expect.objectContaining({
             terminalSessionId: "terminal-exited",
             displayStatus: "exited",
             displayStatusLabel: "Exited",
+            terminalState: { state: "shell_idle", agent: null },
           }),
         ],
       }),
@@ -1389,62 +1352,6 @@ describe("terminal routes", () => {
       sessionName: "runweave-terminal-1",
       socketPath: "/tmp/runweave/tmux.sock",
     });
-  });
-
-  it("uses a short tmux capture for mobile overview tails", async () => {
-    const state = {
-      current: {
-        id: "terminal-1",
-        projectId: "project-default",
-        name: "bash",
-        command: "bash",
-        args: ["-l"],
-        cwd: "/tmp/demo",
-        scrollback: "persisted pty history",
-        status: "running" as const,
-        createdAt: new Date("2026-03-29T00:00:00.000Z"),
-        runtimeKind: "tmux" as const,
-        tmuxSessionName: "runweave-terminal-1",
-        tmuxSocketPath: "/tmp/runweave/tmux.sock",
-      },
-    };
-    const tmuxService = {
-      capturePane: vi.fn(async () => ({
-        data: "tmux pane tail\n",
-        durationMs: 12,
-        sourceCols: 120,
-      })),
-    };
-    const { server, terminalSessionManager } = createTestServer(state, {
-      tmuxService,
-    });
-    servers.push(server);
-    const port = await startServer(server);
-
-    const response = await fetch(
-      `http://127.0.0.1:${port}/api/terminal/mobile/overview`,
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual(
-      expect.objectContaining({
-        sessions: [
-          expect.objectContaining({
-            terminalSessionId: "terminal-1",
-            tailScrollback: "tmux pane tail",
-            tailScrollbackSourceCols: 120,
-          }),
-        ],
-      }),
-    );
-    expect(terminalSessionManager.readScrollback).not.toHaveBeenCalled();
-    expect(tmuxService.capturePane).toHaveBeenCalledWith(
-      {
-        sessionName: "runweave-terminal-1",
-        socketPath: "/tmp/runweave/tmux.sock",
-      },
-      80,
-    );
   });
 
   it("limits live terminal scrollback to the configured latest lines", async () => {

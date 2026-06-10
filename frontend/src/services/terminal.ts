@@ -8,7 +8,6 @@ import type {
   CreateTerminalWsTicketResponse,
   SendTerminalInputRequest,
   SendTerminalInputResponse,
-  TerminalMobileOverviewResponse,
   TerminalCompletionEventListResponse,
   TerminalPreviewChangeKind,
   TerminalPreviewDeleteFileRequest,
@@ -89,21 +88,6 @@ export async function listTerminalSessions(
   return requestJson<TerminalSessionListItem[]>(
     apiBase,
     "/api/terminal/session",
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  );
-}
-
-export async function getTerminalMobileOverview(
-  apiBase: string,
-  token: string,
-): Promise<TerminalMobileOverviewResponse> {
-  return requestJson<TerminalMobileOverviewResponse>(
-    apiBase,
-    "/api/terminal/mobile/overview",
     {
       headers: {
         Authorization: `Bearer ${token}`,

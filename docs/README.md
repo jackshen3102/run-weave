@@ -8,7 +8,6 @@
 | ---------------------------------------- | ----------------------------------------------------- |
 | 开源项目入口与快速开始                   | ../README.md 或 ../README.zh-CN.md                    |
 | 架构/网络拓扑                            | architecture/network-topology.md                      |
-| 移动端 Web 支持                          | architecture/mobile-web-support.md                    |
 | 终端代码预览 / Terminal Browser          | architecture/terminal-code-preview.md                 |
 | 终端 tmux 恢复                           | architecture/terminal-tmux-recovery.md                |
 | 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md             |

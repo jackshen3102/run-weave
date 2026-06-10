@@ -75,18 +75,16 @@ rw terminal handoff "$TERMINAL_ID" --tail 120 --json
 `send --confirm short` confirms that input was delivered or briefly observed; it
 does not mean the AI task has finished.
 
-### Mobile Handoff
+### Mobile App
 
-Runweave has a mobile-first terminal overview for observation and handoff:
+Runweave mobile workflows are handled by the dedicated App client:
 
-- Open `/mobile/terminals` from a phone.
-- Review projects, terminal sessions, status, and recent output.
-- Copy handoff context for Feishu/Hermes or another external agent.
-- Open a terminal directly when limited phone-side input is needed.
+- Review projects, terminal sessions, status, and recent activity.
+- Open a terminal directly from the App when phone-side input is needed.
+- Keep mobile UI and API contracts separate from the Web desktop frontend.
 
-Mobile is intentionally observe-first. It is not a full desktop control surface,
-and Runweave does not automatically send Feishu messages or execute hidden
-recovery actions on your behalf.
+The old Web mobile page has been removed. App home data is served by the
+App-only `/api/app/home/overview` endpoint.
 
 ## Quick Start
 
@@ -144,7 +142,6 @@ pnpm dist:electron:mac
 | --------------------------------- | ------------------------------------------------------------------------------------------ |
 | CLI                               | [docs/cli/terminal-cli.md](docs/cli/terminal-cli.md)                                       |
 | Deployment                        | [docs/deployment/overview.md](docs/deployment/overview.md)                                 |
-| Mobile web support                | [docs/architecture/mobile-web-support.md](docs/architecture/mobile-web-support.md)         |
 | Terminal recovery                 | [docs/architecture/terminal-tmux-recovery.md](docs/architecture/terminal-tmux-recovery.md) |
 | Architecture and network topology | [docs/architecture/network-topology.md](docs/architecture/network-topology.md)             |
 | Testing commands                  | [docs/testing/command-matrix.md](docs/testing/command-matrix.md)                           |

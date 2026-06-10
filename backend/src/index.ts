@@ -18,6 +18,7 @@ import {
   logger,
 } from "./logging";
 import { createAuthRouter } from "./routes/auth";
+import { createAppHomeOverviewRouter } from "./routes/app-home-overview";
 import { createDiagnosticLogsRouter } from "./routes/diagnostic-logs";
 import { createDevtoolsRouter } from "./routes/devtools";
 import { QualityProbeStore } from "./quality/probe-store";
@@ -443,11 +444,20 @@ function createHttpApp(
     createDiagnosticLogsRouter(diagnosticLogRecorder),
   );
   app.use(
+    "/api/app",
+    requireAuth,
+    createAppHomeOverviewRouter({
+      terminalSessionManager: services.terminalSessionManager,
+      terminalStateService: services.terminalStateService,
+    }),
+  );
+  app.use(
     "/api/terminal",
     requireAuth,
     createTerminalStateRouter({
       terminalSessionManager: services.terminalSessionManager,
       terminalStateService: services.terminalStateService,
+      tmuxService: services.tmuxService,
     }),
   );
   app.use(
@@ -460,7 +470,6 @@ function createHttpApp(
       tmuxOutputWatcher: services.tmuxOutputWatcher,
       authService: services.authService,
       completionEventService: services.terminalCompletionEventService,
-      terminalStateService: services.terminalStateService,
     }),
   );
 

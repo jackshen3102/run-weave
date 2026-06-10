@@ -1,5 +1,5 @@
 import type {
-  TerminalMobileOverviewSession,
+  AppHomeOverviewSession,
   TerminalState,
 } from "@browser-viewer/shared";
 import {
@@ -31,7 +31,7 @@ import {
 interface AppTerminalPageProps {
   accessToken: string;
   apiBase: string;
-  initialSession?: TerminalMobileOverviewSession;
+  initialSession?: AppHomeOverviewSession;
   terminalSessionId: string;
   onAuthExpired: () => void;
   onBack: () => void;

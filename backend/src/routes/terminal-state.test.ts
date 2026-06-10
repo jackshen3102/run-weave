@@ -47,6 +47,7 @@ function createTestServer() {
   const terminalSessionManager = {
     getSession: (id: string) => (id === session.id ? session : undefined),
     getLastAiActiveCommand: () => null,
+    readLiveScrollback: async () => "",
   };
   const terminalStateService = new TerminalStateService(
     new TerminalStateStore(),
