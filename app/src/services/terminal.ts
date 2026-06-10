@@ -1,23 +1,23 @@
 import type {
+  AppHomeOverviewResponse,
   CreateTerminalClipboardImageRequest,
   CreateTerminalClipboardImageResponse,
   CreateTerminalWsTicketResponse,
   SendTerminalInterruptResponse,
   SendTerminalInputResponse,
-  TerminalMobileOverviewResponse,
   TerminalSessionStatusResponse,
   TerminalStateResponse,
 } from "@browser-viewer/shared";
 
 import { requestJson } from "./http";
 
-export async function getTerminalMobileOverview(
+export async function getAppHomeOverview(
   apiBase: string,
   accessToken: string,
-): Promise<TerminalMobileOverviewResponse> {
-  return requestJson<TerminalMobileOverviewResponse>(
+): Promise<AppHomeOverviewResponse> {
+  return requestJson<AppHomeOverviewResponse>(
     apiBase,
-    "/api/terminal/mobile/overview?includeTail=false",
+    "/api/app/home/overview",
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,

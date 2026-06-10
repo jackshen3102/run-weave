@@ -1,4 +1,4 @@
-import type { TerminalMobileOverviewResponse } from "@browser-viewer/shared";
+import type { AppHomeOverviewResponse } from "@browser-viewer/shared";
 import {
   IonButton,
   IonContent,
@@ -20,7 +20,7 @@ import { ProjectGroup } from "../components/ProjectGroup";
 
 interface HomePageProps {
   apiBase: string;
-  overview: TerminalMobileOverviewResponse | null;
+  overview: AppHomeOverviewResponse | null;
   loading: boolean;
   error: string | null;
   onRefresh: () => Promise<void>;

@@ -42,8 +42,6 @@ import {
 } from "../terminal/runtime-launcher";
 import type { TmuxService } from "../terminal/tmux-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
-import { buildTerminalMobileOverviewPayload } from "./terminal-mobile-overview";
 import {
   toHistoryPayload,
   toSessionListItem,
@@ -149,7 +147,6 @@ export function createTerminalRouter(
     tmuxOutputWatcher?: TmuxOutputWatcher;
     authService?: AuthService;
     completionEventService?: TerminalCompletionEventService;
-    terminalStateService?: TerminalStateService;
   },
 ): Router {
   const router = Router();
@@ -257,30 +254,6 @@ export function createTerminalRouter(
       .map((session) => toSessionListItem(session));
 
     res.json(payload);
-  });
-
-  router.get("/mobile/overview", async (req, res) => {
-    try {
-      res.json(
-        await buildTerminalMobileOverviewPayload(
-          terminalSessionManager,
-          options?.tmuxService,
-          {
-            includeTail: req.query.includeTail !== "false",
-            terminalStateService: options?.terminalStateService,
-          },
-        ),
-      );
-    } catch (error) {
-      terminalLogger.error("terminal.mobile-overview.request.failed", {
-        message: "Terminal mobile overview request failed",
-        error,
-      });
-      res.status(500).json({
-        message: "Terminal mobile overview request failed",
-        error: String(error),
-      });
-    }
   });
 
   router.get("/completion-events", (req, res) => {

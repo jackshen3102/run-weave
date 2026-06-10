@@ -1,4 +1,4 @@
-import type { TerminalMobileOverviewResponse } from "@browser-viewer/shared";
+import type { AppHomeOverviewResponse } from "@browser-viewer/shared";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -9,7 +9,7 @@ import {
   type AppAuthSession,
 } from "../services/auth";
 import { ApiError } from "../services/http";
-import { getTerminalMobileOverview } from "../services/terminal";
+import { getAppHomeOverview } from "../services/terminal";
 import { useAuthStore } from "../store/use-auth-store";
 
 export type StartupState = "checking" | "ready";
@@ -28,7 +28,7 @@ export interface AppSessionController {
   login: (params: AppLoginParams) => Promise<void>;
   logout: () => void;
   onAuthExpired: () => void;
-  overview: TerminalMobileOverviewResponse | null;
+  overview: AppHomeOverviewResponse | null;
   refreshOverview: () => Promise<void>;
   startupState: StartupState;
 }
@@ -44,7 +44,7 @@ export function useAppSession(): AppSessionController {
   } = useAuthStore();
   const [startupState, setStartupState] = useState<StartupState>("checking");
   const [overview, setOverview] =
-    useState<TerminalMobileOverviewResponse | null>(null);
+    useState<AppHomeOverviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,7 +82,7 @@ export function useAppSession(): AppSessionController {
       setLoading(true);
       setError(null);
       try {
-        setOverview(await getTerminalMobileOverview(targetApiBase, token));
+        setOverview(await getAppHomeOverview(targetApiBase, token));
       } catch (nextError) {
         if (nextError instanceof ApiError && nextError.status === 401) {
           const refreshedToken = await refreshStoredSession();
@@ -91,7 +91,7 @@ export function useAppSession(): AppSessionController {
             return;
           }
           setOverview(
-            await getTerminalMobileOverview(targetApiBase, refreshedToken),
+            await getAppHomeOverview(targetApiBase, refreshedToken),
           );
           return;
         }

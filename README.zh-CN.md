@@ -66,17 +66,16 @@ rw terminal handoff "$TERMINAL_ID" --tail 120 --json
 
 `send --confirm short` 确认的是输入已经投递或被短暂观察到，不代表 AI 任务已经完成。
 
-### 手机接力
+### 移动 App
 
-Runweave 提供面向手机的终端概览，用于观察和接力：
+Runweave 的移动端工作流由专门的 App 客户端承载：
 
-- 在手机上打开 `/mobile/terminals`。
-- 查看项目、终端会话、状态和最近输出。
-- 复制接力上下文，交给飞书/Hermes 或其他外部 Agent。
-- 必要时直接打开某个终端，进行受限的手机端输入。
+- 查看项目、终端会话、状态和最近活动。
+- 必要时直接从 App 打开某个终端，进行手机端输入。
+- 移动端 UI 与 API 契约和 Web 桌面前端保持分离。
 
-移动端默认是观察优先，不是完整桌面控制台。Runweave 不会自动发送飞书消息，也不会
-替用户执行隐藏的恢复动作。
+旧的 Web 移动端页面已删除。App 首页数据由仅服务 App 的 `/api/app/home/overview`
+接口提供。
 
 ## 快速开始
 
@@ -128,14 +127,13 @@ pnpm dist:electron:mac
 
 ## 文档
 
-| 主题            | 链接                                                                                       |
-| --------------- | ------------------------------------------------------------------------------------------ |
-| CLI             | [docs/cli/terminal-cli.md](docs/cli/terminal-cli.md)                                       |
-| 部署            | [docs/deployment/overview.md](docs/deployment/overview.md)                                 |
-| 移动端 Web 支持 | [docs/architecture/mobile-web-support.md](docs/architecture/mobile-web-support.md)         |
-| 终端恢复        | [docs/architecture/terminal-tmux-recovery.md](docs/architecture/terminal-tmux-recovery.md) |
-| 架构与网络拓扑  | [docs/architecture/network-topology.md](docs/architecture/network-topology.md)             |
-| 测试命令        | [docs/testing/command-matrix.md](docs/testing/command-matrix.md)                           |
+| 主题           | 链接                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| CLI            | [docs/cli/terminal-cli.md](docs/cli/terminal-cli.md)                                       |
+| 部署           | [docs/deployment/overview.md](docs/deployment/overview.md)                                 |
+| 终端恢复       | [docs/architecture/terminal-tmux-recovery.md](docs/architecture/terminal-tmux-recovery.md) |
+| 架构与网络拓扑 | [docs/architecture/network-topology.md](docs/architecture/network-topology.md)             |
+| 测试命令       | [docs/testing/command-matrix.md](docs/testing/command-matrix.md)                           |
 
 ## 验证
 

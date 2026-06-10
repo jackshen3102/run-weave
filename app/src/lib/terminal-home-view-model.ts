@@ -1,12 +1,12 @@
 import type {
-  TerminalMobileOverviewResponse,
-  TerminalMobileOverviewSession,
+  AppHomeOverviewResponse,
+  AppHomeOverviewSession,
   TerminalProjectListItem,
 } from "@browser-viewer/shared";
 
 export interface TerminalHomeProjectGroup {
   project: TerminalProjectListItem;
-  sessions: TerminalMobileOverviewSession[];
+  sessions: AppHomeOverviewSession[];
   terminalCount: number;
 }
 
@@ -15,7 +15,7 @@ function normalize(value: string | null | undefined): string {
 }
 
 function matchesSession(
-  session: TerminalMobileOverviewSession,
+  session: AppHomeOverviewSession,
   query: string,
 ): boolean {
   return [
@@ -37,11 +37,11 @@ function matchesProject(
 }
 
 export function buildTerminalHomeGroups(
-  overview: TerminalMobileOverviewResponse,
+  overview: AppHomeOverviewResponse,
   rawQuery: string,
 ): TerminalHomeProjectGroup[] {
   const query = rawQuery.trim().toLowerCase();
-  const sessionsByProject = new Map<string, TerminalMobileOverviewSession[]>();
+  const sessionsByProject = new Map<string, AppHomeOverviewSession[]>();
 
   for (const session of overview.sessions) {
     const current = sessionsByProject.get(session.projectId) ?? [];

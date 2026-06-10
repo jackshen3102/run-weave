@@ -17,6 +17,8 @@ const CODEX_RUNNING: TerminalState = {
   state: "agent_running",
   agent: "codex",
 };
+const CODEX_WORKING_PATTERN =
+  /(?:^|\n)\s*(?:[•●]\s*)?Working\s*\([^)]*esc to interrupt[^)]*\)/i;
 
 export class TerminalStateService {
   constructor(private readonly store: TerminalStateStore) {}
@@ -78,6 +80,24 @@ export class TerminalStateService {
       ? CODEX_IDLE
       : SHELL_IDLE;
   }
+
+  reconcileCurrentFromOutput(
+    terminalSessionId: string,
+    sessionSnapshot: TerminalStateSessionSnapshot | undefined,
+    output: string,
+  ): TerminalState {
+    const current = this.getCurrent(terminalSessionId, sessionSnapshot);
+    if (
+      current.state === "agent_idle" &&
+      sessionSnapshot &&
+      isCodexSession(sessionSnapshot) &&
+      isCodexWorkingOutput(output)
+    ) {
+      return this.store.set(terminalSessionId, CODEX_RUNNING);
+    }
+
+    return current;
+  }
 }
 
 export function isCodexSession(
@@ -96,4 +116,8 @@ export function isCodexActiveCommand(activeCommand: string | null): boolean {
   const normalized = activeCommand.trim().replace(/\\+/g, "/");
   const basename = normalized.split("/").filter(Boolean).at(-1) ?? normalized;
   return basename === "codex";
+}
+
+export function isCodexWorkingOutput(output: string): boolean {
+  return CODEX_WORKING_PATTERN.test(output);
 }
