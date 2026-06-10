@@ -101,6 +101,7 @@ export const TerminalRenderer = forwardRef<
   {
     active,
     className,
+    focusOnInteraction = true,
     fontFamily = DEFAULT_FONT_FAMILY,
     fontSize = 13,
     lineHeight = 1.2,
@@ -324,12 +325,18 @@ export const TerminalRenderer = forwardRef<
   ]);
 
   const handleClick = () => {
+    if (!focusOnInteraction) {
+      return;
+    }
     if (activeRef.current) {
       terminalRef.current?.focus();
     }
   };
 
   const handleFocus = (event: FocusEvent<HTMLDivElement>) => {
+    if (!focusOnInteraction) {
+      return;
+    }
     event.currentTarget.blur();
     if (activeRef.current) {
       terminalRef.current?.focus();
@@ -344,7 +351,7 @@ export const TerminalRenderer = forwardRef<
       onFocus={handleFocus}
       ref={containerRef}
       role="application"
-      tabIndex={0}
+      tabIndex={focusOnInteraction ? 0 : undefined}
     />
   );
 });

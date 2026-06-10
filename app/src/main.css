@@ -403,6 +403,7 @@ ion-content::part(background) {
   height: 100%;
   padding: 8px 8px 6px;
   background: #0b1220;
+  touch-action: none;
 }
 
 .terminal-page-error {
@@ -428,6 +429,8 @@ ion-content::part(background) {
 }
 
 .terminal-composer {
+  position: relative;
+  z-index: 3;
   padding: 10px 12px calc(env(safe-area-inset-bottom) + 10px);
   border-top: 1px solid rgba(148, 163, 184, 0.14);
   background: rgba(12, 17, 24, 0.94);
