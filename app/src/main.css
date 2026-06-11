@@ -35,8 +35,8 @@ ion-content::part(background) {
   flex-direction: column;
   justify-content: center;
   gap: 28px;
-  padding: calc(env(safe-area-inset-top) + 28px) 20px
-    calc(env(safe-area-inset-bottom) + 28px);
+  padding: calc(var(--rw-app-safe-area-top) + 28px) 20px
+    calc(var(--rw-app-safe-area-bottom) + 28px);
 }
 
 .login-brand p,
@@ -91,8 +91,8 @@ ion-content::part(background) {
 
 .home-shell {
   min-height: 100%;
-  padding: calc(env(safe-area-inset-top) + 14px) 14px
-    calc(env(safe-area-inset-bottom) + 18px);
+  padding: calc(var(--rw-app-safe-area-top) + 14px) 14px
+    calc(var(--rw-app-safe-area-bottom) + 18px);
 }
 
 .home-header {
@@ -342,10 +342,10 @@ ion-content::part(background) {
   position: relative;
   z-index: 5;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
   align-items: center;
-  gap: 8px;
-  padding: calc(env(safe-area-inset-top) + 6px) 8px 8px;
+  gap: 6px;
+  padding: calc(var(--rw-app-safe-area-top) + 4px) 8px 6px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.16);
   background: #0c1118;
 }
@@ -354,10 +354,10 @@ ion-content::part(background) {
   display: grid;
   position: relative;
   z-index: 1;
-  width: 48px;
-  height: 48px;
-  min-width: 48px;
-  min-height: 48px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -379,17 +379,17 @@ ion-content::part(background) {
 }
 
 .terminal-page-header__back {
-  font-size: 26px;
+  font-size: 24px;
 }
 
 .terminal-page-header__action {
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .terminal-page-header__icon {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   place-items: center;
   pointer-events: none;
   line-height: 1;
@@ -398,6 +398,15 @@ ion-content::part(background) {
 
 .terminal-page-header__identity {
   min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.terminal-page-header__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
 }
 
 .terminal-page-header h1,
@@ -409,31 +418,43 @@ ion-content::part(background) {
 }
 
 .terminal-page-header h1 {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(42vw, 160px);
   font-size: 16px;
   font-weight: 800;
   letter-spacing: 0;
-  line-height: 1.2;
+  line-height: 1.1;
 }
 
 .terminal-page-header p {
   color: #9aa8b6;
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.25;
 }
 
 .terminal-page-header__meta {
   display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 6px;
   color: #7f8c99;
   font-size: 11px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.terminal-page-header__meta time {
+  flex: 0 0 auto;
 }
 
 .terminal-page-header__status {
   display: inline-flex;
+  min-width: 0;
   align-items: center;
   gap: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .terminal-page-header__status::before {
@@ -644,7 +665,7 @@ ion-content::part(background) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 2px;
-  padding: 7px 10px calc(env(safe-area-inset-bottom) + 7px);
+  padding: 7px 10px calc(var(--rw-app-safe-area-bottom) + 7px);
   border-top: 1px solid rgba(148, 163, 184, 0.16);
   background: rgba(8, 11, 16, 0.96);
   backdrop-filter: blur(18px);

@@ -559,22 +559,24 @@ export function AppTerminalPage({
               </span>
             </button>
             <div className="terminal-page-header__identity min-w-0">
-              <h1 className="text-foreground">{title}</h1>
+              <div className="terminal-page-header__title-row">
+                <h1 className="text-foreground">{title}</h1>
+                <div className="terminal-page-header__meta text-muted-foreground">
+                  <span
+                    className={`terminal-page-header__status is-${connectionStatus}`}
+                  >
+                    {statusLabel}
+                  </span>
+                  {lastActivityAt ? (
+                    <time dateTime={lastActivityAt}>
+                      {formatRelativeTime(lastActivityAt)}
+                    </time>
+                  ) : null}
+                </div>
+              </div>
               <p className="text-muted-foreground">
                 {subtitle || terminalSessionId}
               </p>
-              <div className="terminal-page-header__meta text-muted-foreground">
-                <span
-                  className={`terminal-page-header__status is-${connectionStatus}`}
-                >
-                  {statusLabel}
-                </span>
-                {lastActivityAt ? (
-                  <time dateTime={lastActivityAt}>
-                    {formatRelativeTime(lastActivityAt)}
-                  </time>
-                ) : null}
-              </div>
             </div>
             <button
               aria-label="Refresh terminal"
