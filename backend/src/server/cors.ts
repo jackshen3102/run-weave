@@ -1,6 +1,14 @@
 import type { RequestHandler } from "express";
 
+const ALWAYS_ALLOWED_APP_ORIGINS = new Set([
+  "capacitor://localhost",
+  "ionic://localhost",
+]);
+
 function isAllowedLocalOrigin(origin: string): boolean {
+  if (ALWAYS_ALLOWED_APP_ORIGINS.has(origin)) {
+    return true;
+  }
   try {
     const parsed = new URL(origin);
     return (

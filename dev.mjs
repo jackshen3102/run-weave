@@ -10,15 +10,28 @@ const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 30_000;
 const HEALTHCHECK_INTERVAL_MS = 200;
 
 function resolveDevBrowserProfileDir(baseEnv) {
-  if (baseEnv.BROWSER_PROFILE_DIR?.trim()) {
+  const devProfileDir = baseEnv.RUNWEAVE_DEV_BROWSER_PROFILE_DIR?.trim();
+  if (devProfileDir) {
+    return devProfileDir;
+  }
+
+  const isRunweaveChildShell = Boolean(
+    baseEnv.RUNWEAVE_TERMINAL_SESSION_ID?.trim(),
+  );
+  const allowParentProfile =
+    baseEnv.RUNWEAVE_DEV_ALLOW_PARENT_PROFILE?.trim().toLowerCase() === "true";
+  if (
+    baseEnv.BROWSER_PROFILE_DIR?.trim() &&
+    (!isRunweaveChildShell || allowParentProfile)
+  ) {
     return baseEnv.BROWSER_PROFILE_DIR;
   }
 
-  const packagedDefaultProfileId = createHash("sha256")
-    .update("/")
+  const devDefaultProfileId = createHash("sha256")
+    .update(process.cwd())
     .digest("hex")
     .slice(0, 8);
-  return path.join(os.homedir(), ".browser-profile", packagedDefaultProfileId);
+  return path.join(os.homedir(), ".browser-profile", devDefaultProfileId);
 }
 
 export function createBackendEnv({ baseEnv, backendPort }) {

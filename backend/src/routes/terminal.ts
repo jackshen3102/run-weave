@@ -9,11 +9,13 @@ import type {
   SendTerminalInterruptResponse,
   SendTerminalInputRequest,
   SendTerminalInputResponse,
+  TerminalInputMode,
   TerminalCompletionEventListResponse,
 } from "@browser-viewer/shared";
 import type { AuthService } from "../auth/service";
 import { readBearerToken } from "../auth/middleware";
 import { logger } from "../logging";
+import { aiDiagnosticLog } from "../diagnostic-logs/recorder";
 import type {
   TerminalSessionManager,
   TerminalSessionRecord,
@@ -26,6 +28,10 @@ import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
 import {
+  isCodexSession,
+  type TerminalStateService,
+} from "../terminal/terminal-state-service";
+import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
   killTmuxSessionForTerminal,
@@ -33,7 +39,7 @@ import {
   readTerminalScrollbackCapture,
   resolveTmuxTarget,
 } from "../terminal/runtime-launcher";
-import type { TmuxService } from "../terminal/tmux-service";
+import type { TmuxKeySequenceItem, TmuxService } from "../terminal/tmux-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import {
   toHistoryPayload,
@@ -52,6 +58,75 @@ import {
 
 const terminalLogger = logger.child({ component: "terminal" });
 
+const CODEX_COMPOSER_SUBMIT_DELAY_MS = 200;
+
+function describeTerminalInput(data: string): Record<string, unknown> {
+  return {
+    byteLength: Buffer.byteLength(data, "utf8"),
+    charLength: data.length,
+    hasNewline: data.includes("\n") || data.includes("\r"),
+    isEscapeOnly: data === TERMINAL_INTERRUPT_ESCAPE_INPUT,
+    firstCodePoints: Array.from(data.slice(0, 8)).map((char) =>
+      char.codePointAt(0),
+    ),
+  };
+}
+
+function normalizeCodexSlashCommand(data: string): string | null {
+  const command = data.trim();
+  if (
+    !command.startsWith("/") ||
+    command.includes("\n") ||
+    command.includes("\r")
+  ) {
+    return null;
+  }
+  return command;
+}
+
+function resolveTerminalInputData(
+  data: string,
+  mode: TerminalInputMode | undefined,
+): string {
+  if (mode === "line") {
+    return `${data}\r`;
+  }
+  return data;
+}
+
+function buildCodexSlashCommandSequence(
+  command: string,
+  submitKey: "C-m" | "Tab",
+): TmuxKeySequenceItem[] {
+  return [
+    { type: "key", key: "C-u" },
+    {
+      type: "literal",
+      value: command,
+      delayAfterMs: CODEX_COMPOSER_SUBMIT_DELAY_MS,
+    },
+    { type: "key", key: submitKey },
+  ];
+}
+
+function buildCodexSlashCommandPtyInput(
+  command: string,
+  submitKey: "C-m" | "Tab",
+): string {
+  return `\x15${command}${submitKey === "Tab" ? "\t" : "\r"}`;
+}
+
+function buildTerminalLineSequence(data: string): TmuxKeySequenceItem[] {
+  return [
+    {
+      type: "literal",
+      value: data,
+      delayAfterMs: CODEX_COMPOSER_SUBMIT_DELAY_MS,
+    },
+    { type: "key", key: "C-m" },
+  ];
+}
+
 export function createTerminalRouter(
   terminalSessionManager: TerminalSessionManager,
   options?: {
@@ -61,6 +136,7 @@ export function createTerminalRouter(
     tmuxOutputWatcher?: TmuxOutputWatcher;
     authService?: AuthService;
     completionEventService?: TerminalCompletionEventService;
+    terminalStateService?: TerminalStateService;
   },
 ): Router {
   const router = Router();
@@ -83,6 +159,7 @@ export function createTerminalRouter(
   const sendInputToSession = async (
     session: TerminalSessionRecord,
     data: string,
+    mode?: TerminalInputMode,
     operationId?: string,
   ): Promise<SendTerminalInputResponse> => {
     if (!options?.runtimeRegistry || !options.ptyService) {
@@ -100,13 +177,63 @@ export function createTerminalRouter(
       tmuxService: options.tmuxService,
       tmuxOutputWatcher: options.tmuxOutputWatcher,
     });
+    const currentTerminalState = options.terminalStateService?.getCurrent(
+      session.id,
+      session,
+    );
+    const codexSlashCommand =
+      mode === "codex_slash_command" ? normalizeCodexSlashCommand(data) : null;
+    const codexSlashSubmitKey =
+      currentTerminalState?.state === "agent_running" ? "Tab" : "C-m";
+    const dispatchData =
+      codexSlashCommand === null ? resolveTerminalInputData(data, mode) : null;
+    aiDiagnosticLog("terminal input dispatch requested", {
+      terminalSessionId: session.id,
+      runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
+      operationId: operationId ?? null,
+      inputMode: mode ?? "raw",
+      input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
+      codexSlashSubmitKey: codexSlashCommand ? codexSlashSubmitKey : null,
+    });
     if (isTmuxBackedSession(session) && options.tmuxService) {
-      await options.tmuxService.sendInput(
-        resolveTmuxTarget(session, options.tmuxService),
-        data,
-      );
+      const target = resolveTmuxTarget(session, options.tmuxService);
+      aiDiagnosticLog("terminal tmux input dispatch selected", {
+        terminalSessionId: session.id,
+        operationId: operationId ?? null,
+        tmuxSessionName: target.sessionName,
+        socketPath: target.socketPath,
+        inputMode: mode ?? "raw",
+        input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
+        codexSlashSubmitKey: codexSlashCommand ? codexSlashSubmitKey : null,
+      });
+      if (codexSlashCommand) {
+        await options.tmuxService.sendKeySequence(
+          target,
+          buildCodexSlashCommandSequence(
+            codexSlashCommand,
+            codexSlashSubmitKey,
+          ),
+        );
+      } else if (mode === "line") {
+        await options.tmuxService.sendKeySequence(
+          target,
+          buildTerminalLineSequence(data),
+        );
+      } else {
+        await options.tmuxService.sendInput(
+          target,
+          dispatchData ?? "",
+        );
+      }
     } else {
-      ensured.runtime.write(data);
+      ensured.runtime.write(
+        codexSlashCommand
+          ? buildCodexSlashCommandPtyInput(
+              codexSlashCommand,
+              codexSlashSubmitKey,
+            )
+          : (dispatchData ?? ""),
+      );
     }
 
     return {
@@ -456,11 +583,20 @@ export function createTerminalRouter(
       res.status(503).json({ message: "Terminal tmux service unavailable" });
       return;
     }
+    if (
+      parsed.data.mode === "codex_slash_command" &&
+      !normalizeCodexSlashCommand(parsed.data.data)
+    ) {
+      res.status(400).json({ message: "Invalid Codex slash command input" });
+      return;
+    }
 
     try {
+      const inputMode = parsed.data.mode as TerminalInputMode | undefined;
       const payload = await sendInputToSession(
         session,
         parsed.data.data,
+        inputMode,
         parsed.data.operationId,
       );
       res.status(200).json(payload);
@@ -511,9 +647,16 @@ export function createTerminalRouter(
     }
 
     try {
+      aiDiagnosticLog("terminal interrupt requested", {
+        terminalSessionId: session.id,
+        operationId: parsed.data.operationId ?? null,
+        runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
+        interruptSequence: "escape",
+      });
       const inputPayload = await sendInputToSession(
         session,
         TERMINAL_INTERRUPT_ESCAPE_INPUT,
+        undefined,
         parsed.data.operationId,
       );
       const payload: SendTerminalInterruptResponse = {
@@ -521,8 +664,38 @@ export function createTerminalRouter(
         interruptAccepted: true,
         interruptSequence: "escape",
       };
+      if (options.terminalStateService && isCodexSession(session)) {
+        const terminalState = options.terminalStateService.handleAgentHook(
+          session.id,
+          "codex",
+          "Stop",
+        );
+        aiDiagnosticLog("terminal interrupt updated codex state", {
+          terminalSessionId: session.id,
+          operationId: parsed.data.operationId ?? null,
+          state: terminalState.state,
+          agent: terminalState.agent,
+        });
+        terminalLogger.info("terminal.interrupt.agent-state-updated", {
+          message: "Terminal interrupt updated Codex state",
+          terminalSessionId: session.id,
+          state: terminalState.state,
+          agent: terminalState.agent,
+        });
+      }
+      aiDiagnosticLog("terminal interrupt accepted", {
+        terminalSessionId: session.id,
+        operationId: parsed.data.operationId ?? null,
+        runtimeKind: payload.runtimeKind,
+        interruptSequence: payload.interruptSequence,
+      });
       res.status(200).json(payload);
     } catch (error) {
+      aiDiagnosticLog("terminal interrupt failed", {
+        terminalSessionId: session.id,
+        operationId: parsed.data.operationId ?? null,
+        error: error instanceof Error ? error.message : String(error),
+      });
       terminalLogger.error("terminal.interrupt.failed", {
         message: "Terminal interrupt failed",
         terminalSessionId: session.id,

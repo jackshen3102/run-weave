@@ -26,6 +26,7 @@ interface HomePageProps {
   onRefresh: () => Promise<void>;
   onLogout: () => void;
   onOpenTerminal: (terminalSessionId: string) => void;
+  onCreateTerminal: (projectId: string) => Promise<void>;
 }
 
 function buildInitialExpanded(groups: TerminalHomeProjectGroup[]): Set<string> {
@@ -50,8 +51,13 @@ export function HomePage({
   onRefresh,
   onLogout,
   onOpenTerminal,
+  onCreateTerminal,
 }: HomePageProps) {
   const [query, setQuery] = useState("");
+  const [creatingProjectId, setCreatingProjectId] = useState<string | null>(
+    null,
+  );
+  const [createError, setCreateError] = useState<string | null>(null);
   const groups = useMemo(
     () =>
       buildTerminalHomeGroups(
@@ -91,6 +97,24 @@ export function HomePage({
       }
       return next;
     });
+  };
+
+  const handleCreateTerminal = async (projectId: string) => {
+    if (creatingProjectId) {
+      return;
+    }
+
+    setCreatingProjectId(projectId);
+    setCreateError(null);
+    try {
+      await onCreateTerminal(projectId);
+    } catch (nextError) {
+      setCreateError(
+        nextError instanceof Error ? nextError.message : "创建终端失败",
+      );
+    } finally {
+      setCreatingProjectId(null);
+    }
   };
 
   return (
@@ -133,6 +157,11 @@ export function HomePage({
               <p className="home-error">{error}</p>
             </IonText>
           ) : null}
+          {createError ? (
+            <IonText color="danger">
+              <p className="home-error">{createError}</p>
+            </IonText>
+          ) : null}
           {!loading && overview && overview.projects.length === 0 ? (
             <p className="home-empty text-muted-foreground">暂无项目</p>
           ) : null}
@@ -142,6 +171,10 @@ export function HomePage({
                 expanded={expandedProjectIds.has(group.project.projectId)}
                 group={group}
                 key={group.project.projectId}
+                creatingTerminal={creatingProjectId === group.project.projectId}
+                onCreateTerminal={(projectId) => {
+                  void handleCreateTerminal(projectId);
+                }}
                 onOpenTerminal={onOpenTerminal}
                 onToggle={() => toggleProject(group.project.projectId)}
               />

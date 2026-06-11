@@ -1,6 +1,9 @@
 import type { TerminalSessionManager, TerminalSessionRecord } from "./manager";
 import { logger } from "../logging";
-import { resolveTerminalFallbackLaunchConfig } from "./default-shell";
+import {
+  resolveDefaultTerminalLaunchConfig,
+  resolveTerminalFallbackLaunchConfig,
+} from "./default-shell";
 import type { PtyRuntime, PtyService } from "./pty-service";
 import type { TerminalRuntimeRegistry } from "./runtime-registry";
 import { createTerminalRuntimeRecorder } from "./runtime-recorder";
@@ -64,49 +67,81 @@ export async function ensureTerminalRuntime(
         return { runtime: existingLockedRuntime };
       }
 
-      const currentSession =
+      let currentSession =
         options.terminalSessionManager.getSession(options.session.id) ??
         options.session;
       const target = resolveTmuxTarget(currentSession, options.tmuxService!);
       const hasSession = await options.tmuxService!.hasSession(target);
+      const wasInteractiveShellLaunch = isInteractiveShellLaunch(
+        currentSession.command,
+        currentSession.args,
+      );
       let warning: string | undefined;
 
       if (!hasSession && !options.allowMissingTmuxSession) {
-        try {
-          const attempt = options.tmuxService!.recordRebuildAttempt(
-            currentSession.id,
-          );
-          warning = `Original tmux session was lost; created a fresh terminal session (${attempt.count}/${attempt.maxAttempts}).`;
-          terminalLogger.warn("terminal.tmux.session-missing.rebuild", {
-            message: "Tmux terminal session missing; rebuilding",
+        if (!wasInteractiveShellLaunch) {
+          const shellLaunch = resolveDefaultTerminalLaunchConfig();
+          terminalLogger.info("terminal.tmux.session-missing.shell-rebuild", {
+            message: "Tmux command session missing; rebuilding as shell",
             terminalSessionId: currentSession.id,
             sessionName: target.sessionName,
             socketPath: target.socketPath,
-            rebuildCount: attempt.count,
-            rebuildWindowMs: attempt.windowMs,
+            previousCommand: currentSession.command,
+            nextCommand: shellLaunch.command,
           });
-        } catch (error) {
-          if (error instanceof TmuxRebuildLimitError) {
-            terminalLogger.error("terminal.tmux.rebuild-limit.exceeded", {
-              message: "Tmux rebuild limit exceeded",
-              terminalSessionId: currentSession.id,
-              count: error.count,
-              windowMs: error.windowMs,
-              maxAttempts: error.maxAttempts,
-              error,
-            });
-            await options.terminalSessionManager.updateRuntimeMetadata(
+          currentSession =
+            (await options.terminalSessionManager.updateSessionLaunch(
+              currentSession.id,
+              shellLaunch,
+            )) ?? currentSession;
+          currentSession =
+            (await options.terminalSessionManager.updateSessionMetadata(
               currentSession.id,
               {
-                runtimeKind: "tmux",
-                tmuxSessionName: target.sessionName,
-                tmuxSocketPath: target.socketPath,
-                recoverable: false,
+                cwd: currentSession.cwd,
+                activeCommand: null,
               },
+            )) ?? currentSession;
+          warning = "Command exited; returned to a shell.";
+        }
+
+        if (wasInteractiveShellLaunch) {
+          try {
+            const attempt = options.tmuxService!.recordRebuildAttempt(
+              currentSession.id,
             );
-            options.terminalSessionManager.markExited(currentSession.id, 1);
+            warning = `Original tmux session was lost; created a fresh terminal session (${attempt.count}/${attempt.maxAttempts}).`;
+            terminalLogger.warn("terminal.tmux.session-missing.rebuild", {
+              message: "Tmux terminal session missing; rebuilding",
+              terminalSessionId: currentSession.id,
+              sessionName: target.sessionName,
+              socketPath: target.socketPath,
+              rebuildCount: attempt.count,
+              rebuildWindowMs: attempt.windowMs,
+            });
+          } catch (error) {
+            if (error instanceof TmuxRebuildLimitError) {
+              terminalLogger.error("terminal.tmux.rebuild-limit.exceeded", {
+                message: "Tmux rebuild limit exceeded",
+                terminalSessionId: currentSession.id,
+                count: error.count,
+                windowMs: error.windowMs,
+                maxAttempts: error.maxAttempts,
+                error,
+              });
+              await options.terminalSessionManager.updateRuntimeMetadata(
+                currentSession.id,
+                {
+                  runtimeKind: "tmux",
+                  tmuxSessionName: target.sessionName,
+                  tmuxSocketPath: target.socketPath,
+                  recoverable: false,
+                },
+              );
+              options.terminalSessionManager.markExited(currentSession.id, 1);
+            }
+            throw error;
           }
-          throw error;
         }
       }
 
@@ -124,6 +159,7 @@ export async function ensureTerminalRuntime(
               RUNWEAVE_HOOK_ENDPOINT: process.env.RUNWEAVE_HOOK_ENDPOINT,
               RUNWEAVE_COMPLETION_HOOK_ENDPOINT:
                 process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT,
+              RUNWEAVE_HOOK_DEBUG_LOG: process.env.RUNWEAVE_HOOK_DEBUG_LOG,
               RUNWEAVE_HOOK_TOKEN: process.env.RUNWEAVE_HOOK_TOKEN,
             },
           },

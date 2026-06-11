@@ -1,7 +1,9 @@
 import { IonButton, IonIcon, IonTextarea } from "@ionic/react";
 import { arrowUp, imageOutline, stop } from "ionicons/icons";
 import type { ChangeEvent } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { aiDiagnosticLog } from "../lib/app-diagnostics";
 
 export function TerminalCommandComposer({
   disabled,
@@ -26,9 +28,12 @@ export function TerminalCommandComposer({
     if (!text) {
       return;
     }
-    await onSendInput(text);
-    await onSendInput("\n");
-    setValue("");
+    try {
+      await onSendInput(text);
+      setValue("");
+    } catch {
+      // Keep the user's input so failed sends can be retried.
+    }
   };
 
   const handlePickImage = () => {
@@ -47,6 +52,26 @@ export function TerminalCommandComposer({
   const hasText = value.trimEnd().length > 0;
   const showStop = isStopping && !hasText;
   const actionDisabled = disabled || (!showStop && !hasText);
+
+  useEffect(() => {
+    aiDiagnosticLog("app terminal composer action mode", {
+      disabled,
+      isPickingImage,
+      isStopping,
+      valueLength: value.length,
+      trimmedEndLength: value.trimEnd().length,
+      showStop,
+      actionDisabled,
+      actionLabel: showStop ? "Stop terminal command" : "Send command",
+    });
+  }, [
+    actionDisabled,
+    disabled,
+    isPickingImage,
+    isStopping,
+    showStop,
+    value,
+  ]);
 
   return (
     <footer className="terminal-composer">

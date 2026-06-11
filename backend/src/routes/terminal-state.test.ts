@@ -1,6 +1,6 @@
 import http from "node:http";
 import express from "express";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createInternalTerminalAgentHookRouter,
   createTerminalStateRouter,
@@ -47,7 +47,7 @@ function createTestServer() {
   const terminalSessionManager = {
     getSession: (id: string) => (id === session.id ? session : undefined),
     getLastAiActiveCommand: () => null,
-    readLiveScrollback: async () => "",
+    readLiveScrollback: vi.fn(async () => "Working (esc to interrupt)"),
   };
   const terminalStateService = new TerminalStateService(
     new TerminalStateStore(),
@@ -69,7 +69,11 @@ function createTestServer() {
       terminalStateService,
     }),
   );
-  return { server: http.createServer(app) };
+  return {
+    server: http.createServer(app),
+    terminalSessionManager,
+    terminalStateService,
+  };
 }
 
 describe("terminal state routes", () => {
@@ -122,6 +126,31 @@ describe("terminal state routes", () => {
       ).resolves.toEqual({
         terminalState: { state: "agent_idle", agent: "codex" },
       });
+    } finally {
+      await stopServer(server);
+    }
+  });
+
+  it("does not infer agent running from terminal output tail", async () => {
+    const { server, terminalSessionManager, terminalStateService } =
+      createTestServer();
+    try {
+      terminalStateService.handleAgentHook(
+        "terminal-1",
+        "codex",
+        "SessionStart",
+      );
+      const port = await startServer(server);
+
+      const response = await fetch(
+        `http://127.0.0.1:${port}/api/terminal/session/terminal-1/state`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        terminalState: { state: "agent_idle", agent: "codex" },
+      });
+      expect(terminalSessionManager.readLiveScrollback).not.toHaveBeenCalled();
     } finally {
       await stopServer(server);
     }
