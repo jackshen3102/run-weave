@@ -40,11 +40,12 @@ Runweave 创建 tmux-backed terminal 时注入：
 RUNWEAVE_TERMINAL_SESSION_ID=<terminal session id>
 RUNWEAVE_PROJECT_ID=<project id>
 RUNWEAVE_TMUX_SESSION_NAME=<tmux session name>
-RUNWEAVE_HOOK_ENDPOINT=http://127.0.0.1:<backend-port>/internal/terminal-completion
+RUNWEAVE_HOOK_ENDPOINT=http://127.0.0.1:<backend-port>/internal/terminal/agent-hook
+RUNWEAVE_COMPLETION_HOOK_ENDPOINT=http://127.0.0.1:<backend-port>/internal/terminal-completion
 RUNWEAVE_HOOK_TOKEN=<random per-backend token>
 ```
 
-这让多个客户端或多个 dev checkout 可以共享同一个用户级 launcher。事件归属由启动该 tmux pane 时注入的 endpoint、token 和 terminal id 决定，而不是由“最后启动哪个客户端”决定。
+`RUNWEAVE_HOOK_ENDPOINT` 是 Codex `TerminalState` 的写入入口；`RUNWEAVE_COMPLETION_HOOK_ENDPOINT` 是完成提醒入口。为了兼容旧 pane，launcher 在缺少 completion endpoint 时会从 agent hook endpoint 派生 `/internal/terminal-completion`。这让多个客户端或多个 dev checkout 可以共享同一个用户级 launcher。事件归属由启动该 tmux pane 时注入的 endpoint、token 和 terminal id 决定，而不是由“最后启动哪个客户端”决定。
 
 旧 pane、PTY session、外部系统终端或缺少 `RUNWEAVE_*` 的进程不会上报完成事件。
 
@@ -64,10 +65,13 @@ launcher 行为很窄：
 2. 解析事件名，兼容 `hook_event_name`、`hookEventName`、`eventName`、`event`。
 3. 只接受 `stop`、`subagent_stop`、`subagentstop`。
 4. 读取 `RUNWEAVE_HOOK_ENDPOINT`、`RUNWEAVE_HOOK_TOKEN`、`RUNWEAVE_TERMINAL_SESSION_ID`，缺任一则静默退出。
-5. 身份存在时发出桌面/飞书完成通知，并向 backend 上报 completion event。
-6. 所有错误静默失败，不影响原 AI CLI 结束流程。
+5. Codex 的 `SessionStart`、`UserPromptSubmit`、`Stop` 会上报到 agent hook endpoint，用于维护 `TerminalState`。
+6. Stop / notify 类完成事件会发出桌面/飞书完成通知，并向 backend 上报 completion event。
+7. 所有错误静默失败，不影响原 AI CLI 结束流程。
 
-Codex 的 `notify` 命令也可以在系统通知后调用同一个 launcher。这不是另一套协议，只是把 Codex 的“通知已发生”转成同一个 Runweave completion event。
+Codex 的 `notify` 命令也可以在系统通知后调用同一个 launcher。这不是另一套状态协议，只是把 Codex 的“通知已发生”转成同一个 Runweave completion event。
+
+完成提醒和 `TerminalState` 是两条链路：完成提醒点亮非当前终端的小绿点，`TerminalState` 只表达当前终端是否处在 `shell_idle`、`agent_idle` 或 `agent_running`。completion event/feed 不能写入或修正 `TerminalState`。
 
 上报 payload 示例：
 
