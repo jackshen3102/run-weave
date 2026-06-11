@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+  <title id="title">Mobile terminal Changes and Files detailed sketch</title>
+  <desc id="desc">Detailed readonly Changes and Files mobile tab sketch based on existing preview APIs and App terminal layout.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#020617" flood-opacity="0.25"/>
+    </filter>
+    <style>
+      .label { font: 800 24px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #172033; }
+      .note { font: 500 16px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #667085; }
+      .phone-title { font: 800 17px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #eef3f8; }
+      .body-text { font: 650 14px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #dbe6f2; }
+      .muted { font: 500 12px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #9aa8b6; }
+      .tab { font: 800 13px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .mono { font: 500 12px "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace; fill: #cbd5e1; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1100" fill="#f5f7fb"/>
+  <text x="80" y="76" class="label">Changes / Files detailed readonly flow</text>
+  <text x="80" y="108" class="note">Built from current AppTerminalPage + TerminalCommandComposer layout and existing project preview APIs. No mobile-only Ask, Explain, or Fix actions.</text>
+
+  <g transform="translate(78 156)">
+    <text x="0" y="0" class="label">Changes list</text>
+    <g transform="translate(0 34)" filter="url(#shadow)">
+      <rect width="330" height="790" rx="34" fill="#05070b"/>
+      <rect x="16" y="16" width="298" height="758" rx="26" fill="#05070b"/>
+      <rect x="16" y="16" width="298" height="86" rx="26" fill="#0c1118"/>
+      <text x="38" y="62" fill="#dce5ee" font-size="25" font-family="Inter, sans-serif">‹</text>
+      <text x="76" y="51" class="phone-title">codex</text>
+      <text x="76" y="75" class="muted">Connected · project session</text>
+      <rect x="16" y="102" width="298" height="594" fill="#0b1220"/>
+      <text x="34" y="136" class="phone-title">Changes</text>
+      <text x="248" y="136" class="muted">Refresh</text>
+      <rect x="34" y="154" width="70" height="32" rx="16" fill="#eef3f8"/>
+      <text x="58" y="175" class="tab" fill="#05070b">All</text>
+      <rect x="112" y="154" width="78" height="32" rx="16" fill="#172033" stroke="#2d3a4d"/>
+      <text x="130" y="175" class="tab" fill="#94a3b8">Staged</text>
+      <rect x="198" y="154" width="84" height="32" rx="16" fill="#172033" stroke="#2d3a4d"/>
+      <text x="214" y="175" class="tab" fill="#94a3b8">Working</text>
+      <g transform="translate(34 210)">
+        <rect width="248" height="62" rx="12" fill="#111827" stroke="#263449"/>
+        <rect x="12" y="18" width="28" height="26" rx="7" fill="#264f3b"/>
+        <text x="21" y="36" class="tab" fill="#7ee6a4">M</text>
+        <text x="52" y="27" class="body-text">AppTerminalPage.tsx</text>
+        <text x="52" y="48" class="muted">app/src/pages · working</text>
+        <rect y="76" width="248" height="62" rx="12" fill="#111827" stroke="#263449"/>
+        <rect x="12" y="94" width="28" height="26" rx="7" fill="#2e405f"/>
+        <text x="21" y="112" class="tab" fill="#9fc2ff">A</text>
+        <text x="52" y="103" class="body-text">TerminalChangesTab.tsx</text>
+        <text x="52" y="124" class="muted">app/src/components · staged</text>
+        <rect y="152" width="248" height="62" rx="12" fill="#111827" stroke="#263449"/>
+        <rect x="12" y="170" width="28" height="26" rx="7" fill="#4b2633"/>
+        <text x="21" y="188" class="tab" fill="#ff9aa8">D</text>
+        <text x="52" y="179" class="body-text">legacy-context.tsx</text>
+        <text x="52" y="200" class="muted">not part of this plan</text>
+      </g>
+      <rect x="16" y="696" width="298" height="78" fill="#080d14"/>
+      <text x="54" y="740" class="tab" fill="#94a3b8">Chat</text>
+      <rect x="118" y="718" width="102" height="38" rx="19" fill="#eef3f8"/>
+      <text x="139" y="743" class="tab" fill="#05070b">Changes</text>
+      <text x="252" y="740" class="tab" fill="#94a3b8">Files</text>
+    </g>
+  </g>
+
+  <g transform="translate(446 156)">
+    <text x="0" y="0" class="label">Diff detail</text>
+    <g transform="translate(0 34)" filter="url(#shadow)">
+      <rect width="330" height="790" rx="34" fill="#05070b"/>
+      <rect x="16" y="16" width="298" height="758" rx="26" fill="#05070b"/>
+      <rect x="16" y="16" width="298" height="86" rx="26" fill="#0c1118"/>
+      <text x="38" y="62" fill="#dce5ee" font-size="25" font-family="Inter, sans-serif">‹</text>
+      <text x="76" y="51" class="phone-title">codex</text>
+      <text x="76" y="75" class="muted">Connected · renderer hidden</text>
+      <rect x="16" y="102" width="298" height="594" fill="#0b1220"/>
+      <text x="34" y="136" class="body-text">‹ Changes</text>
+      <text x="34" y="166" class="phone-title">AppTerminalPage.tsx</text>
+      <text x="34" y="188" class="muted">working · modified · readonly</text>
+      <rect x="34" y="210" width="108" height="34" rx="17" fill="#eef3f8"/>
+      <text x="70" y="232" class="tab" fill="#05070b">Diff</text>
+      <rect x="150" y="210" width="108" height="34" rx="17" fill="#172033" stroke="#2d3a4d"/>
+      <text x="177" y="232" class="tab" fill="#94a3b8">Preview</text>
+      <g transform="translate(34 266)">
+        <rect width="248" height="332" rx="12" fill="#0f172a" stroke="#334155"/>
+        <text x="14" y="32" class="mono" fill="#94a3b8">@@ AppTerminalPage.tsx</text>
+        <text x="14" y="64" class="mono" fill="#7ee6a4">+ type AppTerminalDetailTab</text>
+        <text x="14" y="92" class="mono" fill="#7ee6a4">+ const [activeTab, setActiveTab]</text>
+        <text x="14" y="120" class="mono">  useAppTerminalConnection(...)</text>
+        <text x="14" y="148" class="mono" fill="#ffb4a8">- TerminalCommandComposer always</text>
+        <text x="14" y="176" class="mono" fill="#7ee6a4">+ Chat only composer</text>
+        <text x="14" y="224" class="muted">Readonly surface:</text>
+        <text x="14" y="252" class="muted">refresh · copy path · scroll</text>
+        <text x="14" y="284" class="muted">No Ask / Explain / Fix controls</text>
+      </g>
+      <rect x="16" y="696" width="298" height="78" fill="#080d14"/>
+      <text x="54" y="740" class="tab" fill="#94a3b8">Chat</text>
+      <rect x="118" y="718" width="102" height="38" rx="19" fill="#eef3f8"/>
+      <text x="139" y="743" class="tab" fill="#05070b">Changes</text>
+      <text x="252" y="740" class="tab" fill="#94a3b8">Files</text>
+    </g>
+  </g>
+
+  <g transform="translate(814 156)">
+    <text x="0" y="0" class="label">Files browser</text>
+    <g transform="translate(0 34)" filter="url(#shadow)">
+      <rect width="330" height="790" rx="34" fill="#05070b"/>
+      <rect x="16" y="16" width="298" height="758" rx="26" fill="#05070b"/>
+      <rect x="16" y="16" width="298" height="86" rx="26" fill="#0c1118"/>
+      <text x="38" y="62" fill="#dce5ee" font-size="25" font-family="Inter, sans-serif">‹</text>
+      <text x="76" y="51" class="phone-title">codex</text>
+      <text x="76" y="75" class="muted">Connected · renderer hidden</text>
+      <rect x="16" y="102" width="298" height="594" fill="#0b1220"/>
+      <text x="34" y="136" class="phone-title">Files</text>
+      <text x="248" y="136" class="muted">Refresh</text>
+      <rect x="34" y="154" width="248" height="42" rx="12" fill="#111827" stroke="#334155"/>
+      <text x="52" y="180" class="muted">Search files</text>
+      <text x="34" y="222" class="muted">/ app / src</text>
+      <g transform="translate(34 244)">
+        <rect width="248" height="48" rx="10" fill="#111827" stroke="#263449"/>
+        <text x="14" y="30" class="body-text">⌃  ..</text>
+        <rect y="58" width="248" height="48" rx="10" fill="#111827" stroke="#263449"/>
+        <text x="14" y="88" class="body-text">› components</text>
+        <rect y="116" width="248" height="48" rx="10" fill="#111827" stroke="#263449"/>
+        <text x="14" y="146" class="body-text">› hooks</text>
+        <rect y="174" width="248" height="58" rx="10" fill="#111827" stroke="#263449"/>
+        <rect x="12" y="191" width="34" height="24" rx="7" fill="#263449"/>
+        <text x="19" y="208" class="muted">tsx</text>
+        <text x="58" y="199" class="body-text">AppTerminalPage.tsx</text>
+        <text x="58" y="220" class="muted">modified</text>
+      </g>
+      <rect x="16" y="696" width="298" height="78" fill="#080d14"/>
+      <text x="54" y="740" class="tab" fill="#94a3b8">Chat</text>
+      <text x="140" y="740" class="tab" fill="#94a3b8">Changes</text>
+      <rect x="232" y="718" width="64" height="38" rx="19" fill="#eef3f8"/>
+      <text x="248" y="743" class="tab" fill="#05070b">Files</text>
+    </g>
+  </g>
+
+  <g transform="translate(1182 156)">
+    <text x="0" y="0" class="label">File preview</text>
+    <g transform="translate(0 34)" filter="url(#shadow)">
+      <rect width="330" height="790" rx="34" fill="#05070b"/>
+      <rect x="16" y="16" width="298" height="758" rx="26" fill="#05070b"/>
+      <rect x="16" y="16" width="298" height="86" rx="26" fill="#0c1118"/>
+      <text x="38" y="62" fill="#dce5ee" font-size="25" font-family="Inter, sans-serif">‹</text>
+      <text x="76" y="51" class="phone-title">codex</text>
+      <text x="76" y="75" class="muted">Connected · renderer hidden</text>
+      <rect x="16" y="102" width="298" height="594" fill="#0b1220"/>
+      <text x="34" y="136" class="phone-title">Files</text>
+      <rect x="34" y="158" width="248" height="310" rx="14" fill="#111827" stroke="#263449"/>
+      <text x="52" y="190" class="body-text">AppTerminalPage.tsx</text>
+      <text x="52" y="212" class="muted">readonly · 22 KB · tsx</text>
+      <rect x="52" y="232" width="84" height="30" rx="15" fill="#172033" stroke="#334155"/>
+      <text x="68" y="252" class="muted">Copy path</text>
+      <rect x="146" y="232" width="112" height="30" rx="15" fill="#172033" stroke="#334155"/>
+      <text x="164" y="252" class="muted">Show changes</text>
+      <g transform="translate(52 288)">
+        <text x="0" y="0" class="mono">export function AppTerminalPage({</text>
+        <text x="0" y="28" class="mono">  accessToken, apiBase,</text>
+        <text x="0" y="56" class="mono">  terminalSessionId,</text>
+        <text x="0" y="84" class="mono">}: AppTerminalPageProps) {</text>
+        <text x="0" y="132" class="muted">Preview is readonly.</text>
+        <text x="0" y="160" class="muted">No file chat or save action.</text>
+      </g>
+      <rect x="16" y="696" width="298" height="78" fill="#080d14"/>
+      <text x="54" y="740" class="tab" fill="#94a3b8">Chat</text>
+      <text x="140" y="740" class="tab" fill="#94a3b8">Changes</text>
+      <rect x="232" y="718" width="64" height="38" rx="19" fill="#eef3f8"/>
+      <text x="248" y="743" class="tab" fill="#05070b">Files</text>
+    </g>
+  </g>
+
+  <rect x="80" y="1000" width="1440" height="52" rx="16" fill="#e8edf5"/>
+  <text x="108" y="1033" class="note">Implementation boundary: Changes and Files use project preview APIs only. Chat remains the only place with TerminalCommandComposer and terminal input.</text>
+</svg>
