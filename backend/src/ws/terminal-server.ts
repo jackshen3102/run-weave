@@ -247,6 +247,11 @@ export function attachTerminalWebSocketServer(
           options?.terminalStateService?.setShellActiveCommand(
             terminalSessionId,
             updatedSession,
+            {
+              projectId: updatedSession.projectId,
+              reason:
+                updatedSession.status === "exited" ? "exit" : "metadata",
+            },
           );
         }
       }
@@ -420,6 +425,17 @@ export function attachTerminalWebSocketServer(
           return;
         }
         terminalSessionManager.markExited(terminalSessionId, event.exitCode);
+        const exitedSession = terminalSessionManager.getSession(terminalSessionId);
+        if (exitedSession) {
+          options?.terminalStateService?.setShellActiveCommand(
+            terminalSessionId,
+            exitedSession,
+            {
+              projectId: exitedSession.projectId,
+              reason: "exit",
+            },
+          );
+        }
         sendStatusEvent(socket, "exited", event.exitCode);
         sendEvent(socket, {
           type: "exit",

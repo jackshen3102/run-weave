@@ -45,7 +45,7 @@ import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/clipboard-image"
 import { LowDbSessionStore } from "./session/lowdb-store";
 import { TerminalSessionManager } from "./terminal/manager";
 import { TerminalCompletionEventService } from "./terminal/completion-event-service";
-import { TerminalCompletionEventStore } from "./terminal/completion-events";
+import { TerminalEventService } from "./terminal/terminal-event-service";
 import { TerminalStateService } from "./terminal/terminal-state-service";
 import { TerminalStateStore } from "./terminal/terminal-state-store";
 import { loadOrCreateHookToken } from "./terminal/hook-token";
@@ -85,6 +85,7 @@ interface RuntimeServices {
   wsSessionController: WebSocketSessionController;
   terminalSessionManager: TerminalSessionManager;
   terminalStateService: TerminalStateService;
+  terminalEventService: TerminalEventService;
   terminalCompletionEventService: TerminalCompletionEventService;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
   ptyService: PtyService;
@@ -296,12 +297,13 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   const terminalSessionManager = new TerminalSessionManager(
     terminalSessionStore,
   );
+  const terminalEventService = new TerminalEventService();
   const terminalStateService = new TerminalStateService(
     new TerminalStateStore(),
+    terminalEventService,
   );
-  const terminalCompletionEventStore = new TerminalCompletionEventStore();
   const terminalCompletionEventService = new TerminalCompletionEventService(
-    terminalCompletionEventStore,
+    terminalEventService,
   );
   const terminalRuntimeRegistry = new TerminalRuntimeRegistry();
   process.env.RUNWEAVE_HOOK_TOKEN = resolveTerminalHookToken(
@@ -350,6 +352,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     wsSessionController,
     terminalSessionManager,
     terminalStateService,
+    terminalEventService,
     terminalCompletionEventService,
     terminalRuntimeRegistry,
     ptyService,
@@ -479,6 +482,7 @@ function createHttpApp(
       tmuxOutputWatcher: services.tmuxOutputWatcher,
       authService: services.authService,
       completionEventService: services.terminalCompletionEventService,
+      terminalEventService: services.terminalEventService,
       terminalStateService: services.terminalStateService,
     }),
   );
@@ -629,7 +633,7 @@ async function startRuntime(): Promise<void> {
     attachTerminalEventsWebSocketServer(
       server,
       services.authService,
-      services.terminalCompletionEventService,
+      services.terminalEventService,
       { tunnelAuthConfig },
     );
     attachDevtoolsProxyServer(

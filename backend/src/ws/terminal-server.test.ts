@@ -1276,6 +1276,10 @@ describe("terminal websocket server", () => {
         activeCommand: "codex",
         status: "running",
       }),
+      {
+        projectId: undefined,
+        reason: "metadata",
+      },
     );
     expect(messages).toEqual(
       expect.arrayContaining([

@@ -3,7 +3,6 @@ import {
   Redirect,
   Route,
   useHistory,
-  useLocation,
   useParams,
 } from "react-router-dom";
 import { useCallback, useMemo, type ReactElement } from "react";
@@ -23,10 +22,6 @@ const TERMINAL_ROUTE = "/terminal/:terminalSessionId";
 
 interface TerminalRouteParams {
   terminalSessionId?: string;
-}
-
-interface TerminalRouteState {
-  fromHome?: boolean;
 }
 
 function RequireAuth({
@@ -94,7 +89,6 @@ function HomeRoute({ session }: { session: AppSessionController }) {
 
 function TerminalRoute({ session }: { session: AppSessionController }) {
   const history = useHistory();
-  const location = useLocation<TerminalRouteState | undefined>();
   const { terminalSessionId } = useParams<TerminalRouteParams>();
   const initialSession = useMemo(
     () =>
@@ -105,12 +99,8 @@ function TerminalRoute({ session }: { session: AppSessionController }) {
   );
   const goBack = useCallback(() => {
     void session.refreshOverview();
-    if (location.state?.fromHome) {
-      history.goBack();
-      return;
-    }
     history.replace(HOME_ROUTE);
-  }, [history, location.state?.fromHome, session.refreshOverview]);
+  }, [history, session.refreshOverview]);
 
   if (!terminalSessionId) {
     return <Redirect to={HOME_ROUTE} />;

@@ -609,9 +609,7 @@ test("marks a background project from an explicit codex completion event", async
 
     const eventsTicketResponse = page.waitForResponse(
       (response) =>
-        response
-          .url()
-          .endsWith("/api/terminal/completion-events/ws-ticket") &&
+        response.url().endsWith("/api/terminal/events/ws-ticket") &&
         response.status() === 200,
     );
     await page.goto(sessionA.terminalUrl);
@@ -655,11 +653,14 @@ test("marks a background project from an explicit codex completion event", async
     expect(recordResponse.status()).toBe(202);
     await expect(recordResponse.json()).resolves.toMatchObject({
       event: {
+        kind: "completion",
         terminalSessionId: sessionA.terminalSessionId,
-        source: "codex",
-        completionReason: "hook_stop",
-        commandName: "codex",
-        rawHookEvent: "Stop",
+        payload: {
+          source: "codex",
+          completionReason: "hook_stop",
+          commandName: "codex",
+          rawHookEvent: "Stop",
+        },
       },
     });
 

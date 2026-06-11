@@ -276,8 +276,13 @@ export interface TerminalCompletionEvent {
   createdAt: string;
 }
 
-export interface TerminalCompletionEventListResponse {
-  events: TerminalCompletionEvent[];
+export interface TerminalCompletionEventPayload {
+  source: TerminalCompletionEvent["source"];
+  completionReason: TerminalCompletionReason;
+  commandName: string | null;
+  rawHookEvent: string | null;
+  hookEvent: string;
+  cwd: string | null;
 }
 
 export type TerminalAgentKind = "codex";
@@ -290,6 +295,60 @@ export type TerminalStateValue =
 export interface TerminalState {
   state: TerminalStateValue;
   agent: TerminalAgentKind | null;
+}
+
+export type TerminalStateChangeReason =
+  | "agent_hook"
+  | "metadata"
+  | "interrupt"
+  | "exit";
+
+export interface TerminalStateChangedEventPayload {
+  previous: TerminalState;
+  next: TerminalState;
+  reason: TerminalStateChangeReason;
+}
+
+export interface TerminalNotificationEventPayload {
+  level: "info" | "success" | "warning" | "error";
+  title: string;
+  message?: string;
+  source: "codex" | "terminal" | "system";
+  dedupeKey?: string;
+  action?: {
+    type: "open_terminal";
+    terminalSessionId: string;
+  };
+}
+
+export type TerminalEventKind =
+  | "completion"
+  | "terminal_state_changed"
+  | "terminal_notification";
+
+interface TerminalEventEnvelopeBase {
+  id: string;
+  terminalSessionId: string;
+  projectId: string | null;
+  createdAt: string;
+}
+
+export type TerminalEventEnvelope =
+  | (TerminalEventEnvelopeBase & {
+      kind: "completion";
+      payload: TerminalCompletionEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_state_changed";
+      payload: TerminalStateChangedEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_notification";
+      payload: TerminalNotificationEventPayload;
+    });
+
+export interface TerminalCompletionEventListResponse {
+  events: TerminalEventEnvelope[];
 }
 
 export interface TerminalStateResponse {
@@ -314,14 +373,14 @@ export type TerminalEventServerMessage =
       acceptedAfter: string | null;
     }
   | {
-      type: "completion-events";
+      type: "terminal-events";
       delivery: "catchup";
-      events: TerminalCompletionEvent[];
+      events: TerminalEventEnvelope[];
     }
   | {
-      type: "completion-event";
+      type: "terminal-event";
       delivery: "live";
-      event: TerminalCompletionEvent;
+      event: TerminalEventEnvelope;
     }
   | {
       type: "error";

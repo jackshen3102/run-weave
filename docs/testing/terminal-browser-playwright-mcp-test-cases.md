@@ -177,6 +177,13 @@ NODE
 | SD03 | MCP 断开后 DevTools 恢复 | 关闭 MCP 连接后点击 DevTools                                           | DevTools 可正常打开                                                                                                                                                                |
 | SD04 | 外部 DevTools 共存       | MCP attached 期间通过主进程 `webContents.openDevTools()` 打开 DevTools | Electron 33+ 中 DevTools 和 `webContents.debugger` 可共存，MCP 不会收到 detach 事件；如果未来 Electron 版本恢复互斥行为，MCP 应收到 `Inspector.detached` 事件且 Proxy 清理 session |
 
+### 设备模式与 MCP 共存
+
+| ID   | 用例                    | 操作                                             | 预期                                           |
+| ---- | ----------------------- | ------------------------------------------------ | ---------------------------------------------- |
+| SD05 | MCP 连接中切移动设备    | MCP attached 期间在 Device 面板选择 iPhone/Pixel | 设备模式切换成功，MCP 连接保持可用             |
+| SD06 | 移动设备中建立 MCP 连接 | 先选择 iPhone/Pixel，再用 MCP connectOverCDP     | MCP attach 成功，断开 MCP 后设备模式仍保持可用 |
+
 ## 端到端工作流
 
 ### Playwright MCP 典型 AI 工作流

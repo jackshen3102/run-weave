@@ -281,7 +281,7 @@ export async function createTerminalEventsWsTicket(
 ): Promise<CreateTerminalEventsWsTicketResponse> {
   return requestJson<CreateTerminalEventsWsTicketResponse>(
     apiBase,
-    "/api/terminal/completion-events/ws-ticket",
+    "/api/terminal/events/ws-ticket",
     {
       method: "POST",
       headers: {

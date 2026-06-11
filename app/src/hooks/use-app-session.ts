@@ -1,4 +1,9 @@
-import type { AppHomeOverviewResponse } from "@browser-viewer/shared";
+import type {
+  AppHomeOverviewResponse,
+  AppHomeOverviewSession,
+  TerminalEventEnvelope,
+  TerminalState,
+} from "@browser-viewer/shared";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -11,6 +16,7 @@ import {
 import { ApiError } from "../services/http";
 import { getAppHomeOverview } from "../services/terminal";
 import { useAuthStore } from "../store/use-auth-store";
+import { useAppTerminalEventsConnection } from "./use-app-terminal-events-connection";
 
 export type StartupState = "checking" | "ready";
 
@@ -31,6 +37,37 @@ export interface AppSessionController {
   overview: AppHomeOverviewResponse | null;
   refreshOverview: () => Promise<void>;
   startupState: StartupState;
+}
+
+function resolveSessionDisplayStatus(
+  session: AppHomeOverviewSession,
+  terminalState: TerminalState,
+): Pick<AppHomeOverviewSession, "displayStatus" | "displayStatusLabel"> {
+  if (session.status === "exited") {
+    return {
+      displayStatus: "exited",
+      displayStatusLabel: "Exited",
+    };
+  }
+
+  if (terminalState.state === "agent_running") {
+    return {
+      displayStatus: "running",
+      displayStatusLabel: "Agent Running",
+    };
+  }
+
+  if (terminalState.state === "agent_idle") {
+    return {
+      displayStatus: "agent-idle",
+      displayStatusLabel: "Agent Idle",
+    };
+  }
+
+  return {
+    displayStatus: "idle",
+    displayStatusLabel: "Idle",
+  };
 }
 
 export function useAppSession(): AppSessionController {
@@ -154,6 +191,69 @@ export function useAppSession(): AppSessionController {
     }
     resetSession();
   }, [accessToken, apiBase, resetSession]);
+
+  const handleTerminalEvents = useCallback((events: TerminalEventEnvelope[]) => {
+    const stateEvents = events.filter(
+      (event) => event.kind === "terminal_state_changed",
+    );
+    if (stateEvents.length === 0) {
+      return;
+    }
+
+    setOverview((currentOverview) => {
+      if (!currentOverview) {
+        return currentOverview;
+      }
+
+      let changed = false;
+      const nextStateBySessionId = new Map(
+        stateEvents.map((event) => [event.terminalSessionId, event.payload.next]),
+      );
+      const nextSessions = currentOverview.sessions.map((session) => {
+        const terminalState = nextStateBySessionId.get(
+          session.terminalSessionId,
+        );
+        if (!terminalState) {
+          return session;
+        }
+
+        const displayStatus = resolveSessionDisplayStatus(
+          session,
+          terminalState,
+        );
+        if (
+          session.terminalState.state === terminalState.state &&
+          session.terminalState.agent === terminalState.agent &&
+          session.displayStatus === displayStatus.displayStatus &&
+          session.displayStatusLabel === displayStatus.displayStatusLabel
+        ) {
+          return session;
+        }
+
+        changed = true;
+        return {
+          ...session,
+          ...displayStatus,
+          terminalState,
+        };
+      });
+
+      return changed
+        ? {
+            ...currentOverview,
+            sessions: nextSessions,
+          }
+        : currentOverview;
+    });
+  }, []);
+
+  useAppTerminalEventsConnection({
+    apiBase,
+    accessToken,
+    enabled: isAuthenticated && Boolean(accessToken),
+    onAuthExpired: resetSession,
+    onTerminalEvents: handleTerminalEvents,
+  });
 
   return {
     accessToken,

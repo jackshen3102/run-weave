@@ -82,7 +82,7 @@ Terminal Browser 工具当前边界：
 - 设备预设定义在 `packages/shared/src/terminal-browser-device.ts`，由前端设备面板和 Electron 主进程共享。新建、恢复和 proxy-created tab 仍从 `Desktop` 开始，不继承其他 tab 的移动设备状态。
 - 移动设备模式只作用于 Terminal Browser 的 Electron `WebContentsView`。前端负责设备入口、预设选择、手机画布布局和 bounds 同步；真实 emulation 在 Electron 主进程里通过目标 tab 的 `webContents.debugger` 落地。
 - 移动设备画布使用显式缩放模型：前端计算设备逻辑 viewport、面板内展示 bounds 和 `emulationScale`，Electron `setBounds()` 使用展示 bounds，CDP emulation 使用逻辑 viewport 与 scale。不能用 CSS transform 代替 native view 缩放。
-- 设备模式和 CDP Proxy、detached DevTools 互斥。当前 tab 已附着 CDP Proxy 或打开 DevTools 时，主进程拒绝切到移动设备；当前 tab 处于移动设备时，也拒绝 CDP Proxy attach 和 DevTools 打开，避免多个 debugger owner 竞争同一个 `WebContents`。
+- 设备模式可与 CDP Proxy 共存：如果当前 tab 已附着 CDP Proxy，设备切换复用同一个 `webContents.debugger` 发送 emulation 命令；如果先进入移动设备再被 CDP attach，CDP Proxy 复用设备模式已有的 debugger attach。detached DevTools 仍与设备模式和 CDP Proxy 互斥。
 - 设备状态切换失败必须从 IPC 返回错误，前端不能显示假成功。设备按钮禁用只作为用户体验提示，主进程校验才是安全边界。
 
 设计结论：

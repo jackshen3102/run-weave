@@ -1,56 +1,33 @@
-import type { TerminalCompletionEvent } from "@browser-viewer/shared";
-import { logger } from "../logging";
-import type {
-  RecordTerminalCompletionEventInput,
-  TerminalCompletionEventStore,
-} from "./completion-events";
+import type { TerminalEventEnvelope } from "@browser-viewer/shared";
+import type { RecordTerminalCompletionEventInput } from "./completion-events";
+import type { TerminalEventService } from "./terminal-event-service";
 import type { TerminalSessionRecord } from "./manager";
 
-export type TerminalCompletionEventListener = (
-  event: TerminalCompletionEvent,
-) => void;
-
-const completionEventServiceLogger = logger.child({
-  component: "terminal-completion-event-service",
-});
-
 export class TerminalCompletionEventService {
-  private readonly listeners = new Set<TerminalCompletionEventListener>();
-
-  constructor(private readonly store: TerminalCompletionEventStore) {}
+  constructor(private readonly terminalEventService: TerminalEventService) {}
 
   record(
     input: RecordTerminalCompletionEventInput,
     session: TerminalSessionRecord,
-  ): TerminalCompletionEvent {
-    const event = this.store.record(input, session);
-    for (const listener of this.listeners) {
-      try {
-        listener(event);
-      } catch (error) {
-        completionEventServiceLogger.error("terminal-completion.listener.failed", {
-          message: "Terminal completion event listener failed",
-          eventId: event.id,
-          terminalSessionId: event.terminalSessionId,
-          error,
-        });
-      }
-    }
-    return event;
+  ): TerminalEventEnvelope {
+    return this.terminalEventService.record({
+      kind: "completion",
+      terminalSessionId: input.terminalSessionId,
+      projectId: session.projectId,
+      payload: {
+        source: input.source,
+        completionReason: input.completionReason,
+        commandName: input.commandName,
+        rawHookEvent: input.rawHookEvent,
+        hookEvent: input.rawHookEvent ?? input.completionReason,
+        cwd: input.cwd,
+      },
+    });
   }
 
-  listAfter(afterId: string | null): TerminalCompletionEvent[] {
-    return this.store.listAfter(afterId);
-  }
-
-  getLatestId(): string | null {
-    return this.store.getLatestId();
-  }
-
-  subscribe(listener: TerminalCompletionEventListener): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
+  listAfter(afterId: string | null): TerminalEventEnvelope[] {
+    return this.terminalEventService
+      .listAfter(afterId)
+      .filter((event) => event.kind === "completion");
   }
 }

@@ -143,6 +143,10 @@ export function createInternalTerminalAgentHookRouter(options: {
       session.id,
       parsed.data.agent,
       parsed.data.hookEvent,
+      {
+        projectId: session.projectId,
+        reason: "agent_hook",
+      },
     );
     terminalStateLogger.info("terminal-state.hook.recorded", {
       message: "Terminal agent hook recorded",

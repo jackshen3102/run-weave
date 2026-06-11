@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type {
   CreateTerminalSessionRequest,
@@ -27,6 +27,7 @@ import { registerTerminalTmuxOrphanRoutes } from "./terminal-tmux-orphan-routes"
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
+import type { TerminalEventService } from "../terminal/terminal-event-service";
 import {
   isCodexSession,
   type TerminalStateService,
@@ -136,6 +137,7 @@ export function createTerminalRouter(
     tmuxOutputWatcher?: TmuxOutputWatcher;
     authService?: AuthService;
     completionEventService?: TerminalCompletionEventService;
+    terminalEventService?: TerminalEventService;
     terminalStateService?: TerminalStateService;
   },
 ): Router {
@@ -308,7 +310,10 @@ export function createTerminalRouter(
     res.json(payload);
   });
 
-  router.post("/completion-events/ws-ticket", (req, res) => {
+  const handleTerminalEventsWsTicket = (
+    req: Request,
+    res: Response,
+  ): void => {
     if (!options?.authService) {
       res.status(503).json({ message: "Terminal ticket service unavailable" });
       return;
@@ -330,10 +335,13 @@ export function createTerminalRouter(
     const payload: CreateTerminalEventsWsTicketResponse = {
       ticket: issued.token,
       expiresIn: issued.expiresIn,
-      baselineEventId: options.completionEventService?.getLatestId() ?? null,
+      baselineEventId: options.terminalEventService?.getLatestId() ?? null,
     };
     res.status(200).json(payload);
-  });
+  };
+
+  router.post("/events/ws-ticket", handleTerminalEventsWsTicket);
+  router.post("/completion-events/ws-ticket", handleTerminalEventsWsTicket);
 
   router.post("/session", async (req, res) => {
     const parsed = createTerminalSessionSchema.safeParse(
@@ -669,6 +677,10 @@ export function createTerminalRouter(
           session.id,
           "codex",
           "Stop",
+          {
+            projectId: session.projectId,
+            reason: "interrupt",
+          },
         );
         aiDiagnosticLog("terminal interrupt updated codex state", {
           terminalSessionId: session.id,

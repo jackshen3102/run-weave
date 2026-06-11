@@ -339,23 +339,43 @@ ion-content::part(background) {
 }
 
 .terminal-page-header {
+  position: relative;
+  z-index: 5;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
   align-items: center;
   gap: 8px;
-  padding: calc(env(safe-area-inset-top) + 8px) 10px 10px;
+  padding: calc(env(safe-area-inset-top) + 6px) 8px 8px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.16);
   background: #0c1118;
 }
 
-.terminal-page-header ion-button {
-  --border-radius: 8px;
-  --color: #dce5ee;
-  --padding-end: 0;
-  --padding-start: 0;
-  min-width: 36px;
-  min-height: 36px;
+.terminal-page-header__button {
+  display: grid;
+  position: relative;
+  z-index: 1;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
   margin: 0;
+  appearance: none;
+  place-items: center;
+  background: transparent;
+  color: #dce5ee;
+  cursor: pointer;
+  line-height: 1;
+  pointer-events: auto;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.terminal-page-header__button:active {
+  background: rgba(148, 163, 184, 0.12);
 }
 
 .terminal-page-header__back {
@@ -364,6 +384,16 @@ ion-content::part(background) {
 
 .terminal-page-header__action {
   font-size: 18px;
+}
+
+.terminal-page-header__icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  pointer-events: none;
+  line-height: 1;
+  transform: translateY(-1px);
 }
 
 .terminal-page-header__identity {
