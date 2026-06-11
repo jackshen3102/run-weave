@@ -57,6 +57,10 @@ import { sanitizeCurrentTerminalProcessEnv } from "./terminal/env";
 import { LowDbTerminalSessionStore } from "./terminal/lowdb-store";
 import { logOrphanedTmuxSessions } from "./terminal/tmux-orphan-scan";
 import { listenWithFallback } from "./server/listen";
+import {
+  acquireBackendProfileLock,
+  type BackendProfileLock,
+} from "./server/profile-lock";
 import { resolveStoragePaths } from "./utils/path";
 import { attachDevtoolsProxyServer } from "./ws/devtools-proxy";
 import { WebSocketSessionController } from "./ws/session-control";
@@ -101,6 +105,7 @@ const LOCAL_ONLY_FORWARDED_HEADER_NAMES = [
 
 type BackendStartStage =
   | "runtime-config"
+  | "profile-lock"
   | "tunnel-auth-config"
   | "runtime-services"
   | "http-app"
@@ -303,6 +308,11 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     process.env,
     path.join(storagePaths.browserProfileDir, "runweave-hook-token"),
   );
+  process.env.RUNWEAVE_HOOK_DEBUG_LOG ??= path.join(
+    storagePaths.browserProfileDir,
+    "logs",
+    "hook-bridge-debug.jsonl",
+  );
   const ptyService = new PtyService();
   const tmuxService = new TmuxService({
     socketPath:
@@ -457,7 +467,6 @@ function createHttpApp(
     createTerminalStateRouter({
       terminalSessionManager: services.terminalSessionManager,
       terminalStateService: services.terminalStateService,
-      tmuxService: services.tmuxService,
     }),
   );
   app.use(
@@ -470,6 +479,7 @@ function createHttpApp(
       tmuxOutputWatcher: services.tmuxOutputWatcher,
       authService: services.authService,
       completionEventService: services.terminalCompletionEventService,
+      terminalStateService: services.terminalStateService,
     }),
   );
 
@@ -508,6 +518,7 @@ function createHttpApp(
 function attachLifecycleHandlers(
   server: http.Server,
   services: RuntimeServices,
+  profileLock: BackendProfileLock,
 ): void {
   let shuttingDown = false;
 
@@ -528,6 +539,7 @@ function attachLifecycleHandlers(
       await services.terminalSessionManager.dispose();
       await services.sessionManager.dispose();
       await services.authStore.dispose();
+      await profileLock.release();
       logger.info("backend.shutdown.completed", {
         component: "backend",
         message: "Backend shutdown completed",
@@ -568,8 +580,17 @@ async function closeServer(server: http.Server): Promise<void> {
 
 async function startRuntime(): Promise<void> {
   let stage: BackendStartStage = "runtime-config";
+  let profileLock: BackendProfileLock | null = null;
   try {
     const runtimeConfig = resolveRuntimeConfig();
+    const storagePaths = resolveStoragePaths(process.env);
+    stage = "profile-lock";
+    profileLock = await acquireBackendProfileLock({
+      profileDir: storagePaths.browserProfileDir,
+      port: runtimeConfig.preferredPort,
+      host: runtimeConfig.host,
+      runtimeReleaseId: process.env.RUNWEAVE_RUNTIME_RELEASE_ID,
+    });
     stage = "tunnel-auth-config";
     const tunnelAuthConfig = loadTunnelAuthConfig(process.env);
     stage = "runtime-services";
@@ -625,6 +646,7 @@ async function startRuntime(): Promise<void> {
       host: runtimeConfig.host,
       maxAttempts: runtimeConfig.strictPort ? 1 : undefined,
     });
+    await profileLock.update({ port, host: runtimeConfig.host ?? null });
     // Always pin the hook endpoint to THIS backend's listening port. Inheriting
     // it from a parent shell spawned by another Runweave backend would deliver
     // codex hook events to the wrong process.
@@ -632,7 +654,7 @@ async function startRuntime(): Promise<void> {
     process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal-completion`;
 
     stage = "lifecycle-handlers";
-    attachLifecycleHandlers(server, services);
+    attachLifecycleHandlers(server, services, profileLock);
     logger.info("backend.started", {
       component: "backend",
       message: "Backend started",
@@ -642,6 +664,7 @@ async function startRuntime(): Promise<void> {
       runtimeReleaseId: process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || null,
     });
   } catch (error) {
+    await profileLock?.release();
     throw new BackendStartError(stage, error);
   }
 }

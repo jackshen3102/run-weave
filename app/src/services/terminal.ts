@@ -1,10 +1,13 @@
 import type {
   AppHomeOverviewResponse,
+  CreateTerminalSessionRequest,
+  CreateTerminalSessionResponse,
   CreateTerminalClipboardImageRequest,
   CreateTerminalClipboardImageResponse,
   CreateTerminalWsTicketResponse,
   SendTerminalInterruptResponse,
   SendTerminalInputResponse,
+  TerminalInputMode,
   TerminalPreviewChangeKind,
   TerminalPreviewDirectoryResponse,
   TerminalPreviewFileDiffResponse,
@@ -48,6 +51,25 @@ export async function getTerminalSession(
   );
 }
 
+export async function createTerminalSession(
+  apiBase: string,
+  accessToken: string,
+  payload: CreateTerminalSessionRequest,
+): Promise<CreateTerminalSessionResponse> {
+  return requestJson<CreateTerminalSessionResponse>(
+    apiBase,
+    "/api/terminal/session",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export async function getCurrentTerminalState(
   apiBase: string,
   accessToken: string,
@@ -86,6 +108,7 @@ export async function sendTerminalInput(
   accessToken: string,
   terminalSessionId: string,
   data: string,
+  mode?: TerminalInputMode,
 ): Promise<SendTerminalInputResponse> {
   return requestJson<SendTerminalInputResponse>(
     apiBase,
@@ -96,7 +119,7 @@ export async function sendTerminalInput(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ data }),
+      body: JSON.stringify(mode ? { data, mode } : { data }),
     },
   );
 }

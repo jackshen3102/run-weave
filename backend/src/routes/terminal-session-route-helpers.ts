@@ -23,6 +23,7 @@ export const createTerminalSessionSchema = z
 export const sendTerminalInputSchema = z
   .object({
     data: z.string(),
+    mode: z.enum(["raw", "line", "codex_slash_command"]).optional(),
     operationId: z.string().trim().min(1).optional(),
   })
   .strict();

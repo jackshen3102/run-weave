@@ -153,16 +153,23 @@ ion-content::part(background) {
 }
 
 .project-group__header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.project-group__toggle {
   --color: var(--rw-app-text);
   --padding-end: 0;
   --padding-start: 0;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   min-height: 54px;
   margin: 0;
   text-transform: none;
 }
 
-.project-group__header::part(native) {
+.project-group__toggle::part(native) {
   justify-content: flex-start;
 }
 
@@ -209,6 +216,24 @@ ion-content::part(background) {
   color: var(--rw-app-muted);
   font-size: 13px;
   text-align: right;
+}
+
+.project-group__create {
+  --color: var(--rw-app-muted);
+  --padding-end: 0;
+  --padding-start: 0;
+  flex: 0 0 36px;
+  width: 36px;
+  min-height: 36px;
+  margin: 0;
+}
+
+.project-group__create::part(native) {
+  border-radius: 8px;
+}
+
+.project-group__create ion-icon {
+  font-size: 22px;
 }
 
 .project-group__sessions {

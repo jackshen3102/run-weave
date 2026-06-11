@@ -85,7 +85,7 @@ describe("TerminalStateService", () => {
     });
   });
 
-  it("keeps hook-derived agent state until an active command event clears it", () => {
+  it("does not let stale hook state override cleared active command metadata", () => {
     const service = createService();
     service.handleAgentHook("terminal-1", "codex", "SessionStart");
 
@@ -95,7 +95,7 @@ describe("TerminalStateService", () => {
         command: "zsh",
         activeCommand: null,
       }),
-    ).toEqual({ state: "agent_idle", agent: "codex" });
+    ).toEqual({ state: "shell_idle", agent: null });
 
     service.setShellActiveCommand("terminal-1", {
       status: "running",

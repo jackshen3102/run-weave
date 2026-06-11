@@ -6,6 +6,7 @@ import { execFile as nodeExecFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
 import { logger } from "../logging";
+import { aiDiagnosticLog } from "../diagnostic-logs/recorder";
 import { logTerminalPerf } from "./perf-logging";
 import { sanitizeTerminalProcessEnv } from "./env";
 import { applyShellIntegration } from "./shell-integration";
@@ -30,6 +31,10 @@ export interface TmuxPaneMetadata {
   cwd: string;
   activeCommand: string | null;
 }
+
+export type TmuxKeySequenceItem =
+  | { type: "literal"; value: string; delayAfterMs?: number }
+  | { type: "key"; key: string; delayAfterMs?: number };
 
 export interface TmuxSessionInfo {
   sessionName: string;
@@ -102,6 +107,21 @@ const SHELL_INTEGRATION_ENV_KEYS = [
   "ZDOTDIR",
 ];
 const tmuxLogger = logger.child({ component: "terminal" });
+
+function describeTmuxInputChunk(chunk: ReturnType<typeof splitInputForSendKeys>[number]) {
+  if (chunk.type === "enter") {
+    return { type: "enter" };
+  }
+
+  return {
+    type: "literal",
+    byteLength: Buffer.byteLength(chunk.value, "utf8"),
+    charLength: chunk.value.length,
+    firstCodePoints: Array.from(chunk.value.slice(0, 8)).map((char) =>
+      char.codePointAt(0),
+    ),
+  };
+}
 
 export class TmuxRebuildLimitError extends Error {
   constructor(
@@ -344,8 +364,23 @@ export class TmuxService {
   }
 
   async sendInput(target: TmuxTarget, data: string): Promise<void> {
-    for (const chunk of splitInputForSendKeys(data)) {
+    const chunks = splitInputForSendKeys(data);
+    aiDiagnosticLog("terminal tmux send-input started", {
+      tmuxSessionName: target.sessionName,
+      socketPath: target.socketPath,
+      chunkCount: chunks.length,
+      inputByteLength: Buffer.byteLength(data, "utf8"),
+      inputCharLength: data.length,
+      isEscapeOnly: data === "\u001b",
+    });
+    for (const chunk of chunks) {
       if (chunk.type === "enter") {
+        aiDiagnosticLog("terminal tmux send-key", {
+          tmuxSessionName: target.sessionName,
+          keyMode: "key",
+          key: "Enter",
+          chunk: describeTmuxInputChunk(chunk),
+        });
         await this.runTmux(
           ["send-keys", "-t", target.sessionName, "Enter"],
           target,
@@ -353,11 +388,57 @@ export class TmuxService {
         continue;
       }
       if (chunk.value) {
+        aiDiagnosticLog("terminal tmux send-key", {
+          tmuxSessionName: target.sessionName,
+          keyMode: "literal",
+          chunk: describeTmuxInputChunk(chunk),
+        });
         await this.runTmux(
           ["send-keys", "-t", target.sessionName, "-l", chunk.value],
           target,
         );
       }
+    }
+  }
+
+  async sendKeySequence(
+    target: TmuxTarget,
+    sequence: TmuxKeySequenceItem[],
+  ): Promise<void> {
+    aiDiagnosticLog("terminal tmux send-key-sequence started", {
+      tmuxSessionName: target.sessionName,
+      socketPath: target.socketPath,
+      itemCount: sequence.length,
+    });
+    for (const item of sequence) {
+      if (item.type === "key") {
+        aiDiagnosticLog("terminal tmux send-key", {
+          tmuxSessionName: target.sessionName,
+          keyMode: "key",
+          key: item.key,
+        });
+        await this.runTmux(
+          ["send-keys", "-t", target.sessionName, item.key],
+          target,
+        );
+        await delayAfterTmuxKey(item.delayAfterMs);
+        continue;
+      }
+      if (item.value) {
+        aiDiagnosticLog("terminal tmux send-key", {
+          tmuxSessionName: target.sessionName,
+          keyMode: "literal",
+          chunk: describeTmuxInputChunk({
+            type: "text",
+            value: item.value,
+          }),
+        });
+        await this.runTmux(
+          ["send-keys", "-t", target.sessionName, "-l", item.value],
+          target,
+        );
+      }
+      await delayAfterTmuxKey(item.delayAfterMs);
     }
   }
 
@@ -704,6 +785,13 @@ function splitInputForSendKeys(
   }
 
   return chunks;
+}
+
+async function delayAfterTmuxKey(delayAfterMs: number | undefined): Promise<void> {
+  if (!delayAfterMs) {
+    return;
+  }
+  await new Promise((resolve) => setTimeout(resolve, delayAfterMs));
 }
 
 function isProcessExitCode(error: unknown, exitCode: number): boolean {

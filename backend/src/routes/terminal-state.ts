@@ -14,11 +14,8 @@ import {
   isCodexSession,
   type TerminalStateService,
 } from "../terminal/terminal-state-service";
-import { readTerminalScrollbackCapture } from "../terminal/runtime-launcher";
-import type { TmuxService } from "../terminal/tmux-service";
 
 const terminalStateLogger = logger.child({ component: "terminal-state" });
-const TERMINAL_STATE_LIVE_TAIL_LINES = 80;
 
 const agentHookStateSchema = z
   .object({
@@ -32,7 +29,6 @@ const agentHookStateSchema = z
 export function createTerminalStateRouter(options: {
   terminalSessionManager: TerminalSessionManager;
   terminalStateService: TerminalStateService;
-  tmuxService?: TmuxService;
 }): Router {
   const router = Router();
 
@@ -45,24 +41,10 @@ export function createTerminalStateRouter(options: {
       return;
     }
 
-    let terminalState = options.terminalStateService.getCurrent(
+    const terminalState = options.terminalStateService.getCurrent(
       session.id,
       session,
     );
-    if (terminalState.state === "agent_idle" && isCodexSession(session)) {
-      const liveOutput = await readTerminalScrollbackCapture(
-        session,
-        options.terminalSessionManager,
-        options.tmuxService,
-        "live",
-        TERMINAL_STATE_LIVE_TAIL_LINES,
-      );
-      terminalState = options.terminalStateService.reconcileCurrentFromOutput(
-        session.id,
-        session,
-        liveOutput.data,
-      );
-    }
 
     const payload: TerminalStateResponse = { terminalState };
     res.json(payload);

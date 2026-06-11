@@ -17,8 +17,6 @@ const CODEX_RUNNING: TerminalState = {
   state: "agent_running",
   agent: "codex",
 };
-const CODEX_WORKING_PATTERN =
-  /(?:^|\n)\s*(?:[•●]\s*)?Working\s*\([^)]*esc to interrupt[^)]*\)/i;
 
 export class TerminalStateService {
   constructor(private readonly store: TerminalStateStore) {}
@@ -27,24 +25,17 @@ export class TerminalStateService {
     terminalSessionId: string,
     sessionSnapshot: TerminalStateSessionSnapshot,
   ): TerminalState {
-    if (sessionSnapshot.status === "exited") {
+    if (sessionSnapshot.status === "exited" || !isCodexSession(sessionSnapshot)) {
       return this.store.set(terminalSessionId, SHELL_IDLE);
     }
 
-    if (isCodexSession(sessionSnapshot)) {
-      const stored = this.store.get(terminalSessionId);
-      return this.store.set(
-        terminalSessionId,
-        stored?.agent === "codex" && stored.state !== "shell_idle"
-          ? stored
-          : CODEX_IDLE,
-      );
-    }
-
-    const nextState = isCodexActiveCommand(sessionSnapshot.activeCommand)
-      ? CODEX_IDLE
-      : SHELL_IDLE;
-    return this.store.set(terminalSessionId, nextState);
+    const stored = this.store.get(terminalSessionId);
+    return this.store.set(
+      terminalSessionId,
+      stored?.agent === "codex" && stored.state !== "shell_idle"
+        ? stored
+        : CODEX_IDLE,
+    );
   }
 
   handleAgentHook(
@@ -71,32 +62,16 @@ export class TerminalStateService {
       return SHELL_IDLE;
     }
 
+    if (!isCodexSession(sessionSnapshot)) {
+      return SHELL_IDLE;
+    }
+
     const stored = this.store.get(terminalSessionId);
     if (stored?.agent === "codex" && stored.state !== "shell_idle") {
       return stored;
     }
 
-    return isCodexSession(sessionSnapshot)
-      ? CODEX_IDLE
-      : SHELL_IDLE;
-  }
-
-  reconcileCurrentFromOutput(
-    terminalSessionId: string,
-    sessionSnapshot: TerminalStateSessionSnapshot | undefined,
-    output: string,
-  ): TerminalState {
-    const current = this.getCurrent(terminalSessionId, sessionSnapshot);
-    if (
-      current.state === "agent_idle" &&
-      sessionSnapshot &&
-      isCodexSession(sessionSnapshot) &&
-      isCodexWorkingOutput(output)
-    ) {
-      return this.store.set(terminalSessionId, CODEX_RUNNING);
-    }
-
-    return current;
+    return CODEX_IDLE;
   }
 }
 
@@ -105,7 +80,8 @@ export function isCodexSession(
 ): boolean {
   return (
     isCodexActiveCommand(sessionSnapshot.activeCommand) ||
-    isCodexActiveCommand(sessionSnapshot.command)
+    (sessionSnapshot.activeCommand !== null &&
+      isCodexActiveCommand(sessionSnapshot.command))
   );
 }
 
@@ -116,8 +92,4 @@ export function isCodexActiveCommand(activeCommand: string | null): boolean {
   const normalized = activeCommand.trim().replace(/\\+/g, "/");
   const basename = normalized.split("/").filter(Boolean).at(-1) ?? normalized;
   return basename === "codex";
-}
-
-export function isCodexWorkingOutput(output: string): boolean {
-  return CODEX_WORKING_PATTERN.test(output);
 }

@@ -1,5 +1,6 @@
 import type {
   AppHomeOverviewSession,
+  TerminalInputMode,
   TerminalState,
 } from "@browser-viewer/shared";
 import {
@@ -26,6 +27,7 @@ import {
 } from "../components/TerminalChangesTab";
 import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
 import { TerminalFilesTab } from "../components/TerminalFilesTab";
+import { aiDiagnosticLog } from "../lib/app-diagnostics";
 import { fileToBase64, shellQuote } from "../lib/terminal-input-assets";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
@@ -64,6 +66,16 @@ function shortPath(value: string): string {
 
 const APP_TERMINAL_TOUCH_SCROLL_MULTIPLIER = 3;
 const APP_TERMINAL_EDGE_SWIPE_ZONE = 24;
+
+function resolveComposerInputMode(
+  terminalState: TerminalState,
+  data: string,
+): TerminalInputMode {
+  if (terminalState.agent === "codex" && data.trimStart().startsWith("/")) {
+    return "codex_slash_command";
+  }
+  return "line";
+}
 
 function installTerminalTouchBehavior({
   terminal,
@@ -213,12 +225,17 @@ export function AppTerminalPage({
   const [changesCount, setChangesCount] = useState(0);
   const [requestedChange, setRequestedChange] =
     useState<SelectedTerminalChange | null>(null);
+  const terminalStateRef = useRef<TerminalState>({
+    state: "shell_idle",
+    agent: null,
+  });
   const [imageError, setImageError] = useState<string | null>(null);
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [terminalState, setTerminalState] = useState<TerminalState>({
     state: "shell_idle",
     agent: null,
   });
+  terminalStateRef.current = terminalState;
   const {
     connectionStatus,
     error,
@@ -263,10 +280,26 @@ export function AppTerminalPage({
     let cancelled = false;
     let timer: number | null = null;
 
+    aiDiagnosticLog("app terminal page mounted", {
+      terminalSessionId,
+      initialState: terminalStateRef.current.state,
+      initialAgent: terminalStateRef.current.agent,
+    });
+
     const refreshTerminalState = () => {
+      aiDiagnosticLog("app terminal state request started", {
+        terminalSessionId,
+      });
       void getCurrentTerminalState(apiBase, accessToken, terminalSessionId)
         .then((payload) => {
           if (!cancelled) {
+            aiDiagnosticLog("app terminal state request completed", {
+              terminalSessionId,
+              previousState: terminalStateRef.current.state,
+              previousAgent: terminalStateRef.current.agent,
+              nextState: payload.terminalState.state,
+              nextAgent: payload.terminalState.agent,
+            });
             setTerminalState(payload.terminalState);
           }
         })
@@ -279,9 +312,17 @@ export function AppTerminalPage({
             return;
           }
           if (nextError instanceof ApiError && nextError.status === 404) {
+            aiDiagnosticLog("app terminal state request not found", {
+              terminalSessionId,
+              previousState: terminalStateRef.current.state,
+            });
             setTerminalState({ state: "shell_idle", agent: null });
             return;
           }
+          aiDiagnosticLog("app terminal state request failed", {
+            terminalSessionId,
+            error: nextError instanceof Error ? nextError.message : String(nextError),
+          });
         });
     };
 
@@ -290,6 +331,11 @@ export function AppTerminalPage({
 
     return () => {
       cancelled = true;
+      aiDiagnosticLog("app terminal page unmounted", {
+        terminalSessionId,
+        lastState: terminalStateRef.current.state,
+        lastAgent: terminalStateRef.current.agent,
+      });
       if (timer !== null) {
         window.clearInterval(timer);
       }
@@ -306,15 +352,36 @@ export function AppTerminalPage({
 
   const handleStop = useCallback(() => {
     setImageError(null);
+    aiDiagnosticLog("app terminal stop clicked", {
+      terminalSessionId,
+      stateAtClick: terminalStateRef.current.state,
+      agentAtClick: terminalStateRef.current.agent,
+    });
     void interruptTerminalSession(
       apiBase,
       accessToken,
       terminalSessionId,
-    ).catch((nextError: unknown) => {
+    )
+      .then(() => {
+        aiDiagnosticLog("app terminal stop request succeeded", {
+          terminalSessionId,
+          stateAfterSuccess: terminalStateRef.current.state,
+          agentAfterSuccess: terminalStateRef.current.agent,
+        });
+      })
+      .catch((nextError: unknown) => {
       if (nextError instanceof ApiError && nextError.status === 401) {
+        aiDiagnosticLog("app terminal stop request unauthorized", {
+          terminalSessionId,
+        });
         onAuthExpired();
         return;
       }
+      aiDiagnosticLog("app terminal stop request failed", {
+        terminalSessionId,
+        stateAfterFailure: terminalStateRef.current.state,
+        error: nextError instanceof Error ? nextError.message : String(nextError),
+      });
       setImageError(
         nextError instanceof Error ? nextError.message : "中断命令失败",
       );
@@ -323,7 +390,13 @@ export function AppTerminalPage({
   const handleSendCommand = useCallback(
     async (data: string): Promise<void> => {
       try {
-        await sendTerminalInput(apiBase, accessToken, terminalSessionId, data);
+        await sendTerminalInput(
+          apiBase,
+          accessToken,
+          terminalSessionId,
+          data,
+          resolveComposerInputMode(terminalStateRef.current, data),
+        );
       } catch (nextError: unknown) {
         if (nextError instanceof ApiError && nextError.status === 401) {
           onAuthExpired();
@@ -332,6 +405,7 @@ export function AppTerminalPage({
         setImageError(
           nextError instanceof Error ? nextError.message : "命令发送失败",
         );
+        throw nextError;
       }
     },
     [accessToken, apiBase, onAuthExpired, terminalSessionId],
