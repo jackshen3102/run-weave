@@ -52,28 +52,28 @@ export class CdpSessionManager {
     if (found?.entry.devtoolsOpen) {
       throw new Error("DevTools is already open for this browser tab");
     }
-    if (found?.entry.deviceState.mobile) {
-      throw new Error("Mobile mode is already active for this browser tab");
-    }
-
-    try {
-      webContents.debugger.attach("1.3");
-    } catch {
-      // Debugger may still be attached from a previous connection that did not
-      // cleanly close (e.g. process killed without WebSocket close frame).
-      // Detach first, then retry once — but only if DevTools is not open,
-      // since we must not forcibly steal the debugger from an active DevTools.
-      const entry = getTerminalBrowserEntryByTargetId(targetId);
-      if (entry?.entry.devtoolsOpen || webContents.isDevToolsOpened()) {
-        throw new Error("DevTools is already open for this browser tab");
-      }
+    if (!found?.entry.deviceDebuggerAttached) {
       try {
-        webContents.debugger.detach();
         webContents.debugger.attach("1.3");
-      } catch (retryError) {
-        throw new Error(
-          `Failed to attach debugger: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
-        );
+      } catch {
+        // Debugger may still be attached from a previous connection that did not
+        // cleanly close (e.g. process killed without WebSocket close frame).
+        // Detach first, then retry once — but only if DevTools is not open,
+        // since we must not forcibly steal the debugger from an active DevTools.
+        const entry = getTerminalBrowserEntryByTargetId(targetId);
+        if (entry?.entry.devtoolsOpen || webContents.isDevToolsOpened()) {
+          throw new Error("DevTools is already open for this browser tab");
+        }
+        if (!entry?.entry.deviceDebuggerAttached) {
+          try {
+            webContents.debugger.detach();
+            webContents.debugger.attach("1.3");
+          } catch (retryError) {
+            throw new Error(
+              `Failed to attach debugger: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
+            );
+          }
+        }
       }
     }
 
@@ -124,10 +124,13 @@ export class CdpSessionManager {
     target.detached = true;
     this.removeDebuggerListeners(target);
 
-    try {
-      target.webContents.debugger.detach();
-    } catch {
-      // Already detached.
+    const found = getTerminalBrowserEntryByTargetId(targetId);
+    if (!found?.entry.deviceDebuggerAttached) {
+      try {
+        target.webContents.debugger.detach();
+      } catch {
+        // Already detached.
+      }
     }
 
     setTerminalBrowserCdpProxyAttached(targetId, false);

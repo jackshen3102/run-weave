@@ -17,6 +17,8 @@ const DEV_HOST = process.env.DEV_HOST?.trim() || "0.0.0.0";
 const APP_DEV_IOS_ENABLED = process.env.APP_DEV_IOS === "true";
 const APP_DEV_READY_TIMEOUT_MS = 30_000;
 const APP_DEV_READY_INTERVAL_MS = 200;
+const DEFAULT_IOS_TARGET_NAME = "iPhone 17 Pro";
+const IOS_CAP_ARGS = process.argv.slice(2);
 
 function isWildcardHost(host) {
   return host === "0.0.0.0" || host === "::" || host === "";
@@ -82,7 +84,7 @@ function startApp({ host, backendPort, appPort, env }) {
   );
 }
 
-function startIosLiveReload({ host, appPort, env }) {
+function startIosLiveReload({ host, appPort, env, capArgs = [] }) {
   return spawnRawProcess(
     "ios",
     "pnpm",
@@ -97,9 +99,27 @@ function startIosLiveReload({ host, appPort, env }) {
       host,
       "--port",
       String(appPort),
+      ...capArgs,
     ],
     env,
   );
+}
+
+function hasIosTargetArg(capArgs) {
+  return capArgs.some(
+    (arg) =>
+      arg === "--target" ||
+      arg.startsWith("--target=") ||
+      arg === "--target-name" ||
+      arg.startsWith("--target-name="),
+  );
+}
+
+function resolveIosCapArgs(capArgs) {
+  if (hasIosTargetArg(capArgs)) {
+    return capArgs;
+  }
+  return ["--target-name", DEFAULT_IOS_TARGET_NAME, ...capArgs];
 }
 
 async function waitForAppReady(app, appUrl) {
@@ -209,6 +229,7 @@ function watchAppDevProcesses(requiredProcesses, transientProcesses = []) {
 
 async function run() {
   const reservedPorts = new Set();
+  const iosCapArgs = resolveIosCapArgs(IOS_CAP_ARGS);
 
   const backendPort = await resolvePort(DEFAULT_BACKEND_PORT, {
     reservedPorts,
@@ -233,6 +254,7 @@ async function run() {
   console.log(`[app-dev] app url: ${appUrl}`);
   if (APP_DEV_IOS_ENABLED) {
     console.log(`[app-dev] iOS live reload url: ${liveReloadUrl}`);
+    console.log(`[app-dev] iOS capacitor args: ${iosCapArgs.join(" ")}`);
   }
 
   const backend = startBackend({
@@ -272,6 +294,7 @@ async function run() {
         host: liveReloadHost,
         appPort,
         env: process.env,
+        capArgs: iosCapArgs,
       }),
     );
   } else {

@@ -190,6 +190,7 @@ S05-S08 属于高风险安全命令。如果代理没有正确拦截，可能改
 | U08 | MCP 断开后 DevTools          | 关闭 MCP 连接后点击 DevTools                             | DevTools 可打开                                |
 | U09 | endpoint popover 状态        | 打开 CDP endpoint popover                                | endpoint 正确，attached/devtools 状态能刷新    |
 | U10 | 复制 endpoint                | 点击复制按钮                                             | 剪贴板内容等于当前 CDP endpoint                |
+| U11 | MCP attached 时切设备        | CDP attached 后在 Device 面板选择 iPhone/Pixel 预设      | 设备模式切换成功，MCP 连接保持可用             |
 
 ## 并发与稳定性
 

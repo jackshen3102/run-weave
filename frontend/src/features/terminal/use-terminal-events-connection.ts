@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  TerminalCompletionEvent,
+  TerminalEventEnvelope,
   TerminalEventServerMessage,
 } from "@browser-viewer/shared";
 import { HttpError } from "../../services/http";
@@ -9,7 +9,7 @@ import { toWebSocketBase } from "../viewer/url";
 import { getTerminalReconnectDelay } from "./reconnect-policy";
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
-type CompletionEventDelivery = "catchup" | "live";
+type TerminalEventDelivery = "catchup" | "live";
 
 function buildTerminalEventsWsUrl(
   apiBase: string,
@@ -23,7 +23,7 @@ function buildTerminalEventsWsUrl(
   return `${toWebSocketBase(apiBase)}/ws/terminal-events?${searchParams.toString()}`;
 }
 
-function getMaxEventId(events: TerminalCompletionEvent[]): string | null {
+function getMaxEventId(events: TerminalEventEnvelope[]): string | null {
   let maxId: string | null = null;
   for (const event of events) {
     if (maxId === null || Number(event.id) > Number(maxId)) {
@@ -39,9 +39,9 @@ export function useTerminalEventsConnection(params: {
   getCursor: () => string | null;
   setCursor: (cursor: string) => void;
   onAuthExpired?: () => void;
-  onCompletionEvents: (
-    events: TerminalCompletionEvent[],
-    delivery: CompletionEventDelivery,
+  onTerminalEvents: (
+    events: TerminalEventEnvelope[],
+    delivery: TerminalEventDelivery,
   ) => void;
 }) {
   const {
@@ -50,7 +50,7 @@ export function useTerminalEventsConnection(params: {
     getCursor,
     setCursor,
     onAuthExpired,
-    onCompletionEvents,
+    onTerminalEvents,
   } = params;
   const socketRef = useRef<WebSocket | null>(null);
   const tokenRef = useRef(token);
@@ -60,7 +60,7 @@ export function useTerminalEventsConnection(params: {
   const closeReasonRef = useRef<string | null>(null);
   const getCursorRef = useRef(getCursor);
   const setCursorRef = useRef(setCursor);
-  const onCompletionEventsRef = useRef(onCompletionEvents);
+  const onTerminalEventsRef = useRef(onTerminalEvents);
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
@@ -75,13 +75,13 @@ export function useTerminalEventsConnection(params: {
     setCursorRef.current = setCursor;
   }, [setCursor]);
   useEffect(() => {
-    onCompletionEventsRef.current = onCompletionEvents;
-  }, [onCompletionEvents]);
+    onTerminalEventsRef.current = onTerminalEvents;
+  }, [onTerminalEvents]);
 
   const handleEvents = useCallback(
     (
-      events: TerminalCompletionEvent[],
-      delivery: CompletionEventDelivery,
+      events: TerminalEventEnvelope[],
+      delivery: TerminalEventDelivery,
     ): void => {
       const unseenEvents = events.filter((event) => {
         if (seenEventIdsRef.current.has(event.id)) {
@@ -94,7 +94,7 @@ export function useTerminalEventsConnection(params: {
         return;
       }
 
-      onCompletionEventsRef.current(unseenEvents, delivery);
+      onTerminalEventsRef.current(unseenEvents, delivery);
       const maxId = getMaxEventId(unseenEvents);
       if (maxId) {
         setCursorRef.current(maxId);
@@ -195,11 +195,11 @@ export function useTerminalEventsConnection(params: {
             if (parsed.type === "connected") {
               return;
             }
-            if (parsed.type === "completion-events") {
+            if (parsed.type === "terminal-events") {
               handleEvents(parsed.events, parsed.delivery);
               return;
             }
-            if (parsed.type === "completion-event") {
+            if (parsed.type === "terminal-event") {
               handleEvents([parsed.event], parsed.delivery);
               return;
             }

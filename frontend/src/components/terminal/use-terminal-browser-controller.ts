@@ -78,9 +78,7 @@ export function useTerminalBrowserController({
     [activeTabId, tabs],
   );
   const activeTabUrl = activeTab?.url;
-  const mobileDisabledReason = activeTab?.cdpProxyAttached
-    ? "Mobile mode unavailable while CDP proxy is active"
-    : activeTab?.devtoolsOpen
+  const mobileDisabledReason = activeTab?.devtoolsOpen
       ? "Mobile mode unavailable while DevTools is open"
       : null;
   const {

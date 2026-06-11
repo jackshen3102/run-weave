@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import type { TerminalCompletionEvent } from "@browser-viewer/shared";
+import type { TerminalEventEnvelope } from "@browser-viewer/shared";
 import { logger } from "../logging";
 import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
 import {
@@ -118,7 +118,7 @@ export function createInternalTerminalCompletionRouter(options: {
       return;
     }
 
-    const event: TerminalCompletionEvent =
+    const event: TerminalEventEnvelope =
       options.completionEventService.record(
         {
           terminalSessionId: parsed.data.terminalSessionId,
@@ -134,7 +134,7 @@ export function createInternalTerminalCompletionRouter(options: {
       message: "Terminal completion event recorded",
       id: event.id,
       terminalSessionId: event.terminalSessionId,
-      source: event.source,
+      source: event.kind === "completion" ? event.payload.source : null,
       activeCommand: session.activeCommand,
       lastAiActiveCommand: lastAiActiveCommand?.command ?? null,
       lastAiActiveCommandClearedAt: lastAiActiveCommand?.clearedAt

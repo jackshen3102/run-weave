@@ -2,8 +2,10 @@ import type {
   AgentHookStateEvent,
   TerminalAgentKind,
   TerminalState,
+  TerminalStateChangeReason,
 } from "@browser-viewer/shared";
 import type { TerminalSessionRecord } from "./manager";
+import type { TerminalEventService } from "./terminal-event-service";
 import type { TerminalStateStore } from "./terminal-state-store";
 
 type TerminalStateSessionSnapshot = Pick<
@@ -18,23 +20,33 @@ const CODEX_RUNNING: TerminalState = {
   agent: "codex",
 };
 
+interface TerminalStatePublishContext {
+  projectId: string | null;
+  reason: TerminalStateChangeReason;
+}
+
 export class TerminalStateService {
-  constructor(private readonly store: TerminalStateStore) {}
+  constructor(
+    private readonly store: TerminalStateStore,
+    private readonly eventService?: TerminalEventService,
+  ) {}
 
   setShellActiveCommand(
     terminalSessionId: string,
     sessionSnapshot: TerminalStateSessionSnapshot,
+    context?: TerminalStatePublishContext,
   ): TerminalState {
     if (sessionSnapshot.status === "exited" || !isCodexSession(sessionSnapshot)) {
-      return this.store.set(terminalSessionId, SHELL_IDLE);
+      return this.setAndPublish(terminalSessionId, SHELL_IDLE, context);
     }
 
     const stored = this.store.get(terminalSessionId);
-    return this.store.set(
+    return this.setAndPublish(
       terminalSessionId,
       stored?.agent === "codex" && stored.state !== "shell_idle"
         ? stored
         : CODEX_IDLE,
+      context,
     );
   }
 
@@ -42,16 +54,28 @@ export class TerminalStateService {
     terminalSessionId: string,
     agent: TerminalAgentKind,
     hookEvent: AgentHookStateEvent,
+    context?: Partial<TerminalStatePublishContext>,
   ): TerminalState {
+    const publishContext = context
+      ? {
+          projectId: context.projectId ?? null,
+          reason: context.reason ?? "agent_hook",
+        }
+      : undefined;
+
     if (agent !== "codex") {
-      return this.store.set(terminalSessionId, SHELL_IDLE);
+      return this.setAndPublish(terminalSessionId, SHELL_IDLE, publishContext);
     }
 
     if (hookEvent === "UserPromptSubmit") {
-      return this.store.set(terminalSessionId, CODEX_RUNNING);
+      return this.setAndPublish(
+        terminalSessionId,
+        CODEX_RUNNING,
+        publishContext,
+      );
     }
 
-    return this.store.set(terminalSessionId, CODEX_IDLE);
+    return this.setAndPublish(terminalSessionId, CODEX_IDLE, publishContext);
   }
 
   getCurrent(
@@ -72,6 +96,31 @@ export class TerminalStateService {
     }
 
     return CODEX_IDLE;
+  }
+
+  private setAndPublish(
+    terminalSessionId: string,
+    next: TerminalState,
+    context: TerminalStatePublishContext | undefined,
+  ): TerminalState {
+    const previous = this.store.get(terminalSessionId) ?? SHELL_IDLE;
+    const saved = this.store.set(terminalSessionId, next);
+    if (
+      context &&
+      (previous.state !== next.state || previous.agent !== next.agent)
+    ) {
+      this.eventService?.record({
+        kind: "terminal_state_changed",
+        terminalSessionId,
+        projectId: context.projectId,
+        payload: {
+          previous,
+          next,
+          reason: context.reason,
+        },
+      });
+    }
+    return saved;
   }
 }
 

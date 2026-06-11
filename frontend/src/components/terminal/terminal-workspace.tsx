@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TerminalCompletionEvent, TerminalProjectListItem, TerminalSessionListItem } from "@browser-viewer/shared";
+import type {
+  TerminalEventEnvelope,
+  TerminalProjectListItem,
+  TerminalSessionListItem,
+  TerminalState,
+} from "@browser-viewer/shared";
 import type { ConnectionConfig } from "../../features/connection/types";
 import { createTerminalBellPlayer } from "../../features/terminal/bell";
 import { DEFAULT_TERMINAL_SIDECAR_WIDTH, useTerminalPreviewStore } from "../../features/terminal/preview-store";
@@ -52,6 +57,7 @@ export function TerminalWorkspace({
   const [hasLoadedSessions, setHasLoadedSessions] = useState(false);
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [terminalStateBySessionId, setTerminalStateBySessionId] = useState<Record<string, TerminalState>>({});
   const [completionMarkers, setCompletionMarkers] = useState<Record<string, boolean>>({});
   const [bellMarkers, setBellMarkers] = useState<Record<string, boolean>>({});
   const [cachedSurfaceSessionIds, setCachedSurfaceSessionIds] = useState<string[]>([]);
@@ -64,7 +70,8 @@ export function TerminalWorkspace({
   const currentApiBaseRef = useRef(apiBase);
   const activeSessionIdRef = useRef(activeSessionId);
   const sessionsRef = useRef<TerminalSessionListItem[]>([]);
-  const completionEventCursorRef = useRef<string | null>(null);
+  const terminalStateBySessionIdRef = useRef(terminalStateBySessionId);
+  const terminalEventCursorRef = useRef<string | null>(null);
   const completionBellPlayerRef = useRef<ReturnType<typeof createTerminalBellPlayer> | null>(null);
   const isMobileMonitor = clientMode === "mobile";
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
@@ -89,10 +96,11 @@ export function TerminalWorkspace({
     setActiveSessionId(null);
     setHasLoadedSessions(false);
     setRequestError(null);
+    setTerminalStateBySessionId({});
     setCompletionMarkers({});
     setBellMarkers({});
     setCachedSurfaceSessionIds([]);
-    completionEventCursorRef.current = null;
+    terminalEventCursorRef.current = null;
   }, [apiBase]);
 
   useEffect(() => {
@@ -101,6 +109,9 @@ export function TerminalWorkspace({
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
+  useEffect(() => {
+    terminalStateBySessionIdRef.current = terminalStateBySessionId;
+  }, [terminalStateBySessionId]);
   const visibleProjects = useMemo(() => {
     return [...projects];
   }, [projects]);
@@ -283,21 +294,63 @@ export function TerminalWorkspace({
     setHistoryDrawerOpen,
     setHistoryTerminalSessionId,
   });
+  useEffect(() => {
+    const knownSessionIds = new Set(sessionIds);
+    setTerminalStateBySessionId((current) => {
+      let changed = false;
+      const next: Record<string, TerminalState> = {};
+      for (const [terminalSessionId, terminalState] of Object.entries(current)) {
+        if (knownSessionIds.has(terminalSessionId)) {
+          next[terminalSessionId] = terminalState;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [sessionIds]);
 
-  const applyCompletionEvents = useCallback(
+  const applyTerminalEvents = useCallback(
     (
-      events: TerminalCompletionEvent[],
+      events: TerminalEventEnvelope[],
       delivery: "catchup" | "live",
     ): void => {
       const latestEvent = events[events.length - 1];
       if (latestEvent) {
-        completionEventCursorRef.current = latestEvent.id;
+        terminalEventCursorRef.current = latestEvent.id;
+      }
+
+      const stateEvents = events.filter(
+        (event) => event.kind === "terminal_state_changed",
+      );
+      if (stateEvents.length > 0) {
+        setTerminalStateBySessionId((current) => {
+          let changed = false;
+          const next = { ...current };
+          for (const event of stateEvents) {
+            if (event.kind !== "terminal_state_changed") {
+              continue;
+            }
+            const terminalState = event.payload.next;
+            const currentState = next[event.terminalSessionId];
+            if (
+              currentState?.state === terminalState.state &&
+              currentState.agent === terminalState.agent
+            ) {
+              continue;
+            }
+            next[event.terminalSessionId] = terminalState;
+            changed = true;
+          }
+          return changed ? next : current;
+        });
       }
 
       const knownSessionIds = new Set(
         sessionsRef.current.map((session) => session.terminalSessionId),
       );
       const markerSessionIds = events
+        .filter((event) => event.kind === "completion")
         .map((event) => event.terminalSessionId)
         .filter(
           (terminalSessionId) =>
@@ -329,11 +382,11 @@ export function TerminalWorkspace({
   );
 
   const getCompletionEventCursor = useCallback(
-    () => completionEventCursorRef.current,
+    () => terminalEventCursorRef.current,
     [],
   );
   const setCompletionEventCursor = useCallback((cursor: string) => {
-    completionEventCursorRef.current = cursor;
+    terminalEventCursorRef.current = cursor;
   }, []);
   useTerminalEventsConnection({
     apiBase,
@@ -341,7 +394,7 @@ export function TerminalWorkspace({
     getCursor: getCompletionEventCursor,
     setCursor: setCompletionEventCursor,
     onAuthExpired,
-    onCompletionEvents: applyCompletionEvents,
+    onTerminalEvents: applyTerminalEvents,
   });
   const createSession = useCallback(async (): Promise<void> => {
     setLoading(true);

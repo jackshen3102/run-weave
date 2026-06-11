@@ -2,8 +2,7 @@ import http from "node:http";
 import { WebSocket } from "ws";
 import { describe, expect, it } from "vitest";
 import { AuthService } from "../auth/service";
-import { TerminalCompletionEventService } from "../terminal/completion-event-service";
-import { TerminalCompletionEventStore } from "../terminal/completion-events";
+import { TerminalEventService } from "../terminal/terminal-event-service";
 import { attachTerminalEventsWebSocketServer } from "./terminal-events-server";
 
 async function startServer(server: http.Server): Promise<number> {
@@ -83,9 +82,7 @@ describe("terminal events websocket server", () => {
     const authService = createAuthService();
     const login = await authService.login("admin", "secret");
     expect(login).not.toBeNull();
-    const completionEventService = new TerminalCompletionEventService(
-      new TerminalCompletionEventStore(),
-    );
+    const terminalEventService = new TerminalEventService();
     const session = {
       id: "terminal-1",
       projectId: "project-1",
@@ -99,22 +96,24 @@ describe("terminal events websocket server", () => {
       lastActivityAt: new Date("2026-06-07T00:00:00.000Z"),
       runtimeKind: "tmux" as const,
     };
-    completionEventService.record(
-      {
-        terminalSessionId: session.id,
+    terminalEventService.record({
+      kind: "completion",
+      terminalSessionId: session.id,
+      projectId: session.projectId,
+      payload: {
         source: "codex",
         completionReason: "hook_stop",
         commandName: "codex",
         rawHookEvent: "Stop",
+        hookEvent: "Stop",
         cwd: session.cwd,
       },
-      session,
-    );
+    });
     const server = http.createServer();
     attachTerminalEventsWebSocketServer(
       server,
       authService,
-      completionEventService,
+      terminalEventService,
     );
 
     try {
@@ -139,28 +138,33 @@ describe("terminal events websocket server", () => {
         acceptedAfter: null,
       });
       expect(messages[1]).toMatchObject({
-        type: "completion-events",
+        type: "terminal-events",
         delivery: "catchup",
-        events: [{ id: "1", terminalSessionId: session.id }],
+        events: [
+          { id: "1", kind: "completion", terminalSessionId: session.id },
+        ],
       });
 
       const liveStartIndex = messages.length;
-      completionEventService.record(
-        {
-          terminalSessionId: session.id,
-          source: "codex",
-          completionReason: "hook_stop",
-          commandName: "codex",
-          rawHookEvent: "Stop",
-          cwd: session.cwd,
+      terminalEventService.record({
+        kind: "terminal_state_changed",
+        terminalSessionId: "terminal-2",
+        projectId: "project-1",
+        payload: {
+          previous: { state: "agent_idle", agent: "codex" },
+          next: { state: "agent_running", agent: "codex" },
+          reason: "agent_hook",
         },
-        session,
-      );
+      });
       await expect.poll(() => messages.length).toBeGreaterThan(liveStartIndex);
       expect(messages[liveStartIndex]).toMatchObject({
-        type: "completion-event",
+        type: "terminal-event",
         delivery: "live",
-        event: { id: "2", terminalSessionId: session.id },
+        event: {
+          id: "2",
+          kind: "terminal_state_changed",
+          terminalSessionId: "terminal-2",
+        },
       });
 
       socket.close();
@@ -177,7 +181,7 @@ describe("terminal events websocket server", () => {
     attachTerminalEventsWebSocketServer(
       server,
       authService,
-      new TerminalCompletionEventService(new TerminalCompletionEventStore()),
+      new TerminalEventService(),
     );
 
     try {

@@ -8,7 +8,7 @@ import {
   rejectUnauthorizedTunnelUpgrade,
   type TunnelAuthConfig,
 } from "../server/tunnel-auth";
-import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
+import type { TerminalEventService } from "../terminal/terminal-event-service";
 import { validateTerminalEventsWebSocketHandshake } from "./terminal-events-handshake";
 
 const terminalEventsWsLogger = logger.child({
@@ -29,7 +29,7 @@ function sendTerminalEvent(
 export function attachTerminalEventsWebSocketServer(
   server: HttpServer,
   authService: AuthService,
-  completionEventService: TerminalCompletionEventService,
+  terminalEventService: TerminalEventService,
   options?: {
     tunnelAuthConfig?: TunnelAuthConfig | null;
   },
@@ -79,18 +79,18 @@ export function attachTerminalEventsWebSocketServer(
       acceptedAfter: handshake.after,
     });
 
-    const unsubscribe = completionEventService.subscribe((event) => {
+    const unsubscribe = terminalEventService.subscribe((event) => {
       sendTerminalEvent(socket, {
-        type: "completion-event",
+        type: "terminal-event",
         delivery: "live",
         event,
       });
     });
 
     sendTerminalEvent(socket, {
-      type: "completion-events",
+      type: "terminal-events",
       delivery: "catchup",
-      events: completionEventService.listAfter(handshake.after),
+      events: terminalEventService.listAfter(handshake.after),
     });
 
     socket.on("close", () => {

@@ -810,14 +810,16 @@ function attachTerminalBrowserDeviceDebugger(entry: TerminalBrowserEntry): void 
   if (entry.devtoolsOpen || webContents.isDevToolsOpened()) {
     throw new Error("Cannot enable mobile mode while DevTools is open");
   }
-  try {
-    webContents.debugger.attach("1.3");
-  } catch (error) {
-    throw new Error(
-      `Cannot enable mobile mode because the debugger is unavailable: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+  if (!entry.cdpProxyAttached) {
+    try {
+      webContents.debugger.attach("1.3");
+    } catch (error) {
+      throw new Error(
+        `Cannot enable mobile mode because the debugger is unavailable: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   entry.deviceDebuggerAttached = true;
@@ -841,10 +843,12 @@ function detachTerminalBrowserDeviceDebugger(entry: TerminalBrowserEntry): void 
     webContents.debugger.off("detach", entry.onDeviceDebuggerDetach);
     entry.onDeviceDebuggerDetach = null;
   }
-  try {
-    webContents.debugger.detach();
-  } catch {
-    // Already detached.
+  if (!entry.cdpProxyAttached) {
+    try {
+      webContents.debugger.detach();
+    } catch {
+      // Already detached.
+    }
   }
   entry.deviceDebuggerAttached = false;
 }
@@ -860,7 +864,7 @@ async function applyTerminalBrowserDeviceEmulation(
   }
 
   if (!preset.mobile) {
-    if (entry.deviceDebuggerAttached) {
+    if (entry.deviceState.mobile) {
       await webContents.debugger.sendCommand("Emulation.clearDeviceMetricsOverride");
       await webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
         enabled: false,
@@ -868,6 +872,8 @@ async function applyTerminalBrowserDeviceEmulation(
       await webContents.debugger.sendCommand("Network.setUserAgentOverride", {
         userAgent: entry.defaultUserAgent,
       });
+    }
+    if (entry.deviceDebuggerAttached) {
       detachTerminalBrowserDeviceDebugger(entry);
     }
     webContents.setUserAgent(entry.defaultUserAgent);
@@ -877,9 +883,6 @@ async function applyTerminalBrowserDeviceEmulation(
     return state;
   }
 
-  if (entry.cdpProxyAttached) {
-    throw new Error("Cannot enable mobile mode while CDP proxy is attached");
-  }
   if (entry.devtoolsOpen || webContents.isDevToolsOpened()) {
     throw new Error("Cannot enable mobile mode while DevTools is open");
   }

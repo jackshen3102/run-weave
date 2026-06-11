@@ -2,7 +2,7 @@ import http from "node:http";
 import express from "express";
 import { describe, expect, it, vi } from "vitest";
 import { TerminalCompletionEventService } from "../terminal/completion-event-service";
-import { TerminalCompletionEventStore } from "../terminal/completion-events";
+import { TerminalEventService } from "../terminal/terminal-event-service";
 import { createInternalTerminalCompletionRouter } from "./terminal-completion";
 import { createTerminalRouter } from "./terminal";
 
@@ -30,7 +30,7 @@ async function stopServer(server: http.Server): Promise<void> {
 }
 
 function createCompletionEventService(): TerminalCompletionEventService {
-  return new TerminalCompletionEventService(new TerminalCompletionEventStore());
+  return new TerminalCompletionEventService(new TerminalEventService());
 }
 
 describe("terminal completion routes", () => {
@@ -99,11 +99,14 @@ describe("terminal completion routes", () => {
         events: [
           {
             id: "1",
+            kind: "completion",
             terminalSessionId: "terminal-1",
             projectId: "project-default",
-            source: "codex",
-            hookEvent: "Stop",
-            cwd: "/tmp/demo",
+            payload: {
+              source: "codex",
+              hookEvent: "Stop",
+              cwd: "/tmp/demo",
+            },
           },
         ],
       });
@@ -176,9 +179,12 @@ describe("terminal completion routes", () => {
         events: [
           {
             id: "1",
+            kind: "completion",
             terminalSessionId: "terminal-1",
-            source: "codex",
-            hookEvent: "Stop",
+            payload: {
+              source: "codex",
+              hookEvent: "Stop",
+            },
           },
         ],
       });
@@ -360,9 +366,12 @@ describe("terminal completion routes", () => {
       await expect(listResponse.json()).resolves.toMatchObject({
         events: [
           {
+            kind: "completion",
             terminalSessionId: "terminal-1",
-            source: "codex",
-            rawHookEvent: "Stop",
+            payload: {
+              source: "codex",
+              rawHookEvent: "Stop",
+            },
           },
         ],
       });
@@ -583,8 +592,11 @@ describe("terminal completion routes", () => {
         await expect(listResponse.json()).resolves.toMatchObject({
           events: [
             {
+              kind: "completion",
               terminalSessionId: "terminal-1",
-              source: "trae",
+              payload: {
+                source: "trae",
+              },
             },
           ],
         });
