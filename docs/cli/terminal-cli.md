@@ -62,7 +62,7 @@ rw terminal snapshot "$TERMINAL_ID" --tail 120 --plain
 rw terminal handoff "$TERMINAL_ID" --tail 120 --json
 ```
 
-`handoff` 会聚合 `cwd`、`sessionStatus`、`foregroundCommand`、`inferredAgent`、`inferredWorkloadState`、`stateConfidence`、`stateReasons`、tail 和建议命令。`inferredAgent` / `inferredWorkloadState` 是弱推断，只能用于展示或辅助判断，不能作为权限或调度依据。仅有 `activeCommand=codex` 这类前台进程信号时，CLI 会返回低置信度 `unknown`，不会直接断言 agent 正在执行。
+`handoff` 会聚合 `cwd`、`sessionStatus`、`foregroundCommand`、后端 `TerminalState`、tail 和建议命令。`terminalState` 是 App/CLI 共享的权威产品状态；`inferredAgent` / `inferredWorkloadState` 只保留为短确认和诊断辅助，不能作为权限或调度依据。仅有 `activeCommand=codex` 这类前台进程信号时，CLI 不直接断言 agent 正在执行，是否 running 以 `/api/terminal/session/:id/state` 返回的 `TerminalState` 为准。
 
 ## Completion Event 边界
 

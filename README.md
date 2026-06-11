@@ -141,6 +141,8 @@ pnpm dist:electron:mac
 | Topic                             | Link                                                                                       |
 | --------------------------------- | ------------------------------------------------------------------------------------------ |
 | CLI                               | [docs/cli/terminal-cli.md](docs/cli/terminal-cli.md)                                       |
+| App mobile boundary               | [docs/architecture/app-mobile.md](docs/architecture/app-mobile.md)                         |
+| Terminal state model              | [docs/architecture/terminal-state.md](docs/architecture/terminal-state.md)                 |
 | Deployment                        | [docs/deployment/overview.md](docs/deployment/overview.md)                                 |
 | Terminal recovery                 | [docs/architecture/terminal-tmux-recovery.md](docs/architecture/terminal-tmux-recovery.md) |
 | Architecture and network topology | [docs/architecture/network-topology.md](docs/architecture/network-topology.md)             |
