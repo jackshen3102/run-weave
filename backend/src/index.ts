@@ -33,6 +33,10 @@ import { createTerminalRouter } from "./routes/terminal";
 import { createTestRouter } from "./routes/test";
 import { createCorsMiddleware } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
+import {
+  isLocalDirectRequest,
+  isValidLocalCdpEndpoint,
+} from "./server/local-cdp-endpoint";
 import { buildHealthPayload } from "./server/health";
 import {
   createTunnelAuthMiddleware,
@@ -61,18 +65,13 @@ import {
   acquireBackendProfileLock,
   type BackendProfileLock,
 } from "./server/profile-lock";
+import { parsePort, resolveRuntimeConfig } from "./server/runtime-config";
 import { resolveStoragePaths } from "./utils/path";
 import { attachDevtoolsProxyServer } from "./ws/devtools-proxy";
 import { WebSocketSessionController } from "./ws/session-control";
 import { attachTerminalEventsWebSocketServer } from "./ws/terminal-events-server";
 import { attachTerminalWebSocketServer } from "./ws/terminal-server";
 import { attachWebSocketServer } from "./ws/server";
-
-interface RuntimeConfig {
-  preferredPort: number;
-  strictPort: boolean;
-  host: string | undefined;
-}
 
 interface RuntimeServices {
   authStore: AuthStore;
@@ -91,17 +90,6 @@ interface RuntimeServices {
   tmuxService: TmuxService;
   tmuxOutputWatcher: TmuxOutputWatcher;
 }
-
-const LOCAL_ONLY_FORWARDED_HEADER_NAMES = [
-  "cf-connecting-ip",
-  "cf-ray",
-  "forwarded",
-  "via",
-  "x-forwarded-for",
-  "x-forwarded-host",
-  "x-forwarded-proto",
-  "x-real-ip",
-] as const;
 
 type BackendStartStage =
   | "runtime-config"
@@ -123,102 +111,11 @@ class BackendStartError extends Error {
   }
 }
 
-function readCliOption(optionName: string): string | undefined {
-  const longOption = `--${optionName}`;
-
-  for (let index = 2; index < process.argv.length; index += 1) {
-    const current = process.argv[index];
-    if (current == null) {
-      continue;
-    }
-
-    if (current === longOption) {
-      return process.argv[index + 1];
-    }
-
-    if (current.startsWith(`${longOption}=`)) {
-      return current.slice(longOption.length + 1);
-    }
-  }
-
-  return undefined;
-}
-
-function parsePort(rawValue: string | undefined, fallbackPort: number): number {
-  if (!rawValue) {
-    return fallbackPort;
-  }
-
-  const port = Number(rawValue.trim());
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`Invalid PORT value: ${JSON.stringify(rawValue)}`);
-  }
-
-  return port;
-}
-
-function resolveRuntimeConfig(): RuntimeConfig {
-  const rawCliPort = readCliOption("port");
-  const rawHost = readCliOption("host") ?? process.env.HOST;
-
-  return {
-    preferredPort: parsePort(rawCliPort ?? process.env.PORT, 5000),
-    strictPort:
-      rawCliPort != null ||
-      process.env.PORT_STRICT?.trim().toLowerCase() === "true",
-    host: rawHost?.trim() || undefined,
-  };
-}
-
 function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
   return (rawOrigins ?? "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
-}
-
-function hasForwardedHeaders(req: express.Request): boolean {
-  return LOCAL_ONLY_FORWARDED_HEADER_NAMES.some(
-    (headerName) => req.headers[headerName] !== undefined,
-  );
-}
-
-function isLoopbackAddress(address: string | undefined): boolean {
-  return (
-    address === "127.0.0.1" ||
-    address === "::1" ||
-    address === "::ffff:127.0.0.1"
-  );
-}
-
-function isLocalDirectRequest(req: express.Request): boolean {
-  return (
-    isLoopbackAddress(req.socket.remoteAddress) && !hasForwardedHeaders(req)
-  );
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  return (
-    hostname === "127.0.0.1" || hostname === "::1" || hostname === "localhost"
-  );
-}
-
-function isValidLocalCdpEndpoint(endpoint: string): boolean {
-  try {
-    const parsed = new URL(endpoint);
-    return (
-      parsed.protocol === "http:" &&
-      isLoopbackHostname(parsed.hostname) &&
-      parsed.port !== "" &&
-      parsed.pathname === "/" &&
-      parsed.search === "" &&
-      parsed.hash === "" &&
-      parsed.username === "" &&
-      parsed.password === ""
-    );
-  } catch {
-    return false;
-  }
 }
 
 function resolveSessionRestoreEnabled(env: NodeJS.ProcessEnv): boolean {
