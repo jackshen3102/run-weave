@@ -19,7 +19,7 @@ import type {
   TerminalStateResponse,
 } from "@browser-viewer/shared";
 
-import { requestBlob, requestJson } from "./http";
+import { requestBlob, requestJson, requestVoid } from "./http";
 
 export async function getAppHomeOverview(
   apiBase: string,
@@ -67,6 +67,23 @@ export async function createTerminalSession(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function deleteTerminalSession(
+  apiBase: string,
+  accessToken: string,
+  terminalSessionId: string,
+): Promise<void> {
+  return requestVoid(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
   );
 }

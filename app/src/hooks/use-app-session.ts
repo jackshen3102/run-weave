@@ -6,6 +6,7 @@ import type {
 } from "@browser-viewer/shared";
 import { useCallback, useEffect, useState } from "react";
 
+import { recordSupportLog } from "../features/support-logs";
 import {
   login,
   logout,
@@ -101,11 +102,16 @@ export function useAppSession(): AppSessionController {
     if (!refreshToken) {
       return null;
     }
+    recordSupportLog("auth.refresh.started");
     try {
       const refreshed = await refreshSession(apiBase, refreshToken);
       persistSession(refreshed);
+      recordSupportLog("auth.refresh.completed");
       return refreshed.accessToken;
-    } catch {
+    } catch (error) {
+      recordSupportLog("auth.refresh.failed", {
+        error: error instanceof Error ? error.message : String(error),
+      }, "warn");
       resetSession();
       return null;
     }
@@ -120,6 +126,7 @@ export function useAppSession(): AppSessionController {
       setError(null);
       try {
         setOverview(await getAppHomeOverview(targetApiBase, token));
+        recordSupportLog("app.home.overview.loaded");
       } catch (nextError) {
         if (nextError instanceof ApiError && nextError.status === 401) {
           const refreshedToken = await refreshStoredSession();
@@ -130,8 +137,12 @@ export function useAppSession(): AppSessionController {
           setOverview(
             await getAppHomeOverview(targetApiBase, refreshedToken),
           );
+          recordSupportLog("app.home.overview.loaded_after_refresh");
           return;
         }
+        recordSupportLog("app.home.overview.failed", {
+          error: nextError instanceof Error ? nextError.message : String(nextError),
+        }, "warn");
         setError(nextError instanceof Error ? nextError.message : "加载失败");
       } finally {
         setLoading(false);
@@ -151,12 +162,17 @@ export function useAppSession(): AppSessionController {
       }
 
       try {
+        recordSupportLog("auth.verify.started");
         await verifySession(apiBase, accessToken);
         if (!cancelled) {
+          recordSupportLog("auth.verify.completed");
           setStartupState("ready");
           await loadOverview(accessToken);
         }
-      } catch {
+      } catch (error) {
+        recordSupportLog("auth.verify.failed", {
+          error: error instanceof Error ? error.message : String(error),
+        }, "warn");
         const refreshedToken = await refreshStoredSession();
         if (!cancelled) {
           setStartupState("ready");
@@ -175,21 +191,34 @@ export function useAppSession(): AppSessionController {
 
   const loginWithCredentials = useCallback(
     async (params: AppLoginParams) => {
-      const session = await login(apiBase, {
-        username: params.username,
-        password: params.password,
+      recordSupportLog("auth.login.started", {
+        usernameLength: params.username.length,
       });
-      persistSession(session);
-      await loadOverview(session.accessToken, apiBase);
+      try {
+        const session = await login(apiBase, {
+          username: params.username,
+          password: params.password,
+        });
+        persistSession(session);
+        recordSupportLog("auth.login.completed");
+        await loadOverview(session.accessToken, apiBase);
+      } catch (error) {
+        recordSupportLog("auth.login.failed", {
+          error: error instanceof Error ? error.message : String(error),
+        }, "warn");
+        throw error;
+      }
     },
     [apiBase, loadOverview, persistSession],
   );
 
   const logoutAndReset = useCallback(() => {
+    recordSupportLog("auth.logout.started");
     if (accessToken) {
       void logout(apiBase, accessToken).catch(() => undefined);
     }
     resetSession();
+    recordSupportLog("auth.logout.completed");
   }, [accessToken, apiBase, resetSession]);
 
   const handleTerminalEvents = useCallback((events: TerminalEventEnvelope[]) => {
