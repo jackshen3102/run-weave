@@ -16,7 +16,7 @@
     "app:dev": "node ./app-dev.mjs",
     "app:dev:ios": "APP_DEV_IOS=true node ./app-dev.mjs",
     "app:build": "pnpm --filter @runweave/app build",
-    "app:ios": "pnpm --filter @runweave/app ios:open",
+    "app:ios:device": "pnpm --filter @runweave/app ios:open",
     "app:ios:local": "node ./scripts/app-ios-local.mjs",
     "runtime:build": "node ./scripts/build-runtime-package.mjs",
     "runtime:install": "node ./scripts/install-runtime-package.mjs",

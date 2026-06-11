@@ -86,6 +86,28 @@ Runweave mobile workflows are handled by the dedicated App client:
 The old Web mobile page has been removed. App home data is served by the
 App-only `/api/app/home/overview` endpoint.
 
+### iOS App Commands
+
+Use different commands for local simulator debugging and device builds:
+
+```bash
+# Local simulator debugging with live reload.
+# Starts the local backend and App Vite dev server.
+pnpm app:dev:ios
+
+# Local backend with static iOS build/sync/open.
+# Does not support live reload.
+pnpm app:ios:local
+
+# Device build with a fixed backend from app/.env.local.
+# Does not start a backend and does not support live reload.
+pnpm app:ios:device
+```
+
+For device builds, copy `app/.env.example` to `app/.env.local` and set
+`VITE_RUNWEAVE_API_BASE` to the backend URL. `app/.env.local` is ignored by git
+so machine-specific domains or LAN addresses are not committed.
+
 ## Quick Start
 
 ```bash

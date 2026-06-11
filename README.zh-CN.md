@@ -77,6 +77,28 @@ Runweave 的移动端工作流由专门的 App 客户端承载：
 旧的 Web 移动端页面已删除。App 首页数据由仅服务 App 的 `/api/app/home/overview`
 接口提供。
 
+### iOS App 命令
+
+本地模拟器调试和真机构建使用不同命令：
+
+```bash
+# 本地模拟器调试，支持 live reload。
+# 会启动本地 backend 和 App Vite dev server。
+pnpm app:dev:ios
+
+# 本地后端 + 静态 iOS build/sync/open。
+# 不支持 live reload。
+pnpm app:ios:local
+
+# 真机/固定后端构建，后端地址来自 app/.env.local。
+# 不启动 backend，也不支持 live reload。
+pnpm app:ios:device
+```
+
+真机构建前，复制 `app/.env.example` 为 `app/.env.local`，并把
+`VITE_RUNWEAVE_API_BASE` 设置为后端地址。`app/.env.local` 已被 git 忽略，本机域名
+或局域网地址不会提交到仓库。
+
 ## 快速开始
 
 ```bash

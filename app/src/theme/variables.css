@@ -28,6 +28,12 @@
   --rw-app-text: hsl(var(--foreground));
   --rw-app-muted: hsl(var(--muted-foreground));
   --rw-app-subtle: hsl(215 12% 52%);
+  --rw-app-safe-area-top: env(safe-area-inset-top, 0px);
+  --rw-app-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+:root.runweave-native {
+  --rw-app-safe-area-top: max(env(safe-area-inset-top, 0px), 44px);
 }
 
 :root.ion-palette-dark,

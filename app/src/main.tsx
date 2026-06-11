@@ -1,5 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { Capacitor } from "@capacitor/core";
 import { setupIonicReact } from "@ionic/react";
 
 import App from "./App";
@@ -16,6 +17,10 @@ import "./main.css";
 import "./store/use-theme-store";
 
 setupIonicReact();
+
+if (Capacitor.isNativePlatform()) {
+  document.documentElement.classList.add("runweave-native");
+}
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
