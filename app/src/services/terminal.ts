@@ -5,11 +5,17 @@ import type {
   CreateTerminalWsTicketResponse,
   SendTerminalInterruptResponse,
   SendTerminalInputResponse,
+  TerminalPreviewChangeKind,
+  TerminalPreviewDirectoryResponse,
+  TerminalPreviewFileDiffResponse,
+  TerminalPreviewFileResponse,
+  TerminalPreviewFileSearchResponse,
+  TerminalPreviewGitChangesResponse,
   TerminalSessionStatusResponse,
   TerminalStateResponse,
 } from "@browser-viewer/shared";
 
-import { requestJson } from "./http";
+import { requestBlob, requestJson } from "./http";
 
 export async function getAppHomeOverview(
   apiBase: string,
@@ -130,6 +136,126 @@ export async function createTerminalSessionClipboardImage(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function getTerminalProjectPreviewGitChanges(
+  apiBase: string,
+  accessToken: string,
+  projectId: string,
+): Promise<TerminalPreviewGitChangesResponse> {
+  return requestJson<TerminalPreviewGitChangesResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/git-changes`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalProjectPreviewFileDiff(
+  apiBase: string,
+  accessToken: string,
+  projectId: string,
+  params: { path: string; kind: TerminalPreviewChangeKind },
+): Promise<TerminalPreviewFileDiffResponse> {
+  const query = new URLSearchParams({
+    path: params.path,
+    kind: params.kind,
+  });
+  return requestJson<TerminalPreviewFileDiffResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file-diff?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+}
+
+export async function listTerminalProjectPreviewDirectory(
+  apiBase: string,
+  accessToken: string,
+  projectId: string,
+  params: { path?: string; limit?: number },
+): Promise<TerminalPreviewDirectoryResponse> {
+  const query = new URLSearchParams();
+  if (params.path) {
+    query.set("path", params.path);
+  }
+  if (params.limit !== undefined) {
+    query.set("limit", String(params.limit));
+  }
+
+  return requestJson<TerminalPreviewDirectoryResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/directory?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+}
+
+export async function searchTerminalProjectPreviewFiles(
+  apiBase: string,
+  accessToken: string,
+  projectId: string,
+  params: { query: string; limit?: number },
+): Promise<TerminalPreviewFileSearchResponse> {
+  const query = new URLSearchParams({ q: params.query });
+  if (params.limit !== undefined) {
+    query.set("limit", String(params.limit));
+  }
+
+  return requestJson<TerminalPreviewFileSearchResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/files/search?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalProjectPreviewFile(
+  apiBase: string,
+  accessToken: string,
+  projectId: string,
+  filePath: string,
+): Promise<TerminalPreviewFileResponse> {
+  const query = new URLSearchParams({ path: filePath });
+  return requestJson<TerminalPreviewFileResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalProjectPreviewAsset(
+  apiBase: string,
+  accessToken: string,
+  projectId: string,
+  filePath: string,
+): Promise<Blob> {
+  const query = new URLSearchParams({ path: filePath });
+  return requestBlob(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/asset?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
   );
 }

@@ -7,6 +7,7 @@ import type {
   TerminalPreviewGitChangesResponse,
   TerminalProjectListItem,
 } from "@browser-viewer/shared";
+import { createTerminalPreviewRequestSequencer } from "@browser-viewer/shared";
 import {
   useTerminalPreviewStore,
   DEFAULT_MARKDOWN_VIEW_MODE,
@@ -102,9 +103,18 @@ export function useTerminalPreviewPanelData({
     useState<TerminalPreviewFileDiffResponse | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
-  const fileRequestIdRef = useRef(0);
-  const changesRequestIdRef = useRef(0);
-  const diffRequestIdRef = useRef(0);
+  const fileRequestSequencer = useMemo(
+    () => createTerminalPreviewRequestSequencer(),
+    [],
+  );
+  const changesRequestSequencer = useMemo(
+    () => createTerminalPreviewRequestSequencer(),
+    [],
+  );
+  const diffRequestSequencer = useMemo(
+    () => createTerminalPreviewRequestSequencer(),
+    [],
+  );
   const selectedChangePathRef = useRef(selectedChangePath);
   const selectedChangeKindRef = useRef(selectedChangeKind);
   const [assetRefreshKey, setAssetRefreshKey] = useState(0);
@@ -161,8 +171,7 @@ export function useTerminalPreviewPanelData({
       if (!projectId) {
         return;
       }
-      const requestId = fileRequestIdRef.current + 1;
-      fileRequestIdRef.current = requestId;
+      const requestId = fileRequestSequencer.next();
       setFileLoading(true);
       setFileError(null);
       setFilePreview(null);
@@ -173,7 +182,7 @@ export function useTerminalPreviewPanelData({
           projectId,
           filePath,
         );
-        if (fileRequestIdRef.current !== requestId) {
+        if (!fileRequestSequencer.isCurrent(requestId)) {
           return;
         }
         setFilePreview(payload);
@@ -184,18 +193,18 @@ export function useTerminalPreviewPanelData({
         setSaveConflict(false);
         setLastSavedAt(null);
       } catch (error) {
-        if (fileRequestIdRef.current !== requestId) {
+        if (!fileRequestSequencer.isCurrent(requestId)) {
           return;
         }
         setFilePreview(null);
         setFileError(handleRequestError(error));
       } finally {
-        if (fileRequestIdRef.current === requestId) {
+        if (fileRequestSequencer.isCurrent(requestId)) {
           setFileLoading(false);
         }
       }
     },
-    [apiBase, handleRequestError, projectId, token],
+    [apiBase, fileRequestSequencer, handleRequestError, projectId, token],
   );
 
   const loadDiff = useCallback(
@@ -206,8 +215,7 @@ export function useTerminalPreviewPanelData({
       if (!projectId) {
         return;
       }
-      const requestId = diffRequestIdRef.current + 1;
-      diffRequestIdRef.current = requestId;
+      const requestId = diffRequestSequencer.next();
       setDiffLoading(true);
       setDiffError(null);
       try {
@@ -217,23 +225,23 @@ export function useTerminalPreviewPanelData({
           projectId,
           { path: filePath, kind },
         );
-        if (diffRequestIdRef.current !== requestId) {
+        if (!diffRequestSequencer.isCurrent(requestId)) {
           return;
         }
         setFileDiff(payload);
       } catch (error) {
-        if (diffRequestIdRef.current !== requestId) {
+        if (!diffRequestSequencer.isCurrent(requestId)) {
           return;
         }
         setFileDiff(null);
         setDiffError(handleRequestError(error));
       } finally {
-        if (diffRequestIdRef.current === requestId) {
+        if (diffRequestSequencer.isCurrent(requestId)) {
           setDiffLoading(false);
         }
       }
     },
-    [apiBase, handleRequestError, projectId, token],
+    [apiBase, diffRequestSequencer, handleRequestError, projectId, token],
   );
 
   const loadChanges = useCallback(
@@ -246,8 +254,7 @@ export function useTerminalPreviewPanelData({
       }
       const reloadDiff = options?.reloadDiff ?? true;
       const preserveMode = options?.preserveMode ?? false;
-      const requestId = changesRequestIdRef.current + 1;
-      changesRequestIdRef.current = requestId;
+      const requestId = changesRequestSequencer.next();
       setChangesLoading(true);
       setChangesError(null);
       try {
@@ -256,7 +263,7 @@ export function useTerminalPreviewPanelData({
           token,
           projectId,
         );
-        if (changesRequestIdRef.current !== requestId) {
+        if (!changesRequestSequencer.isCurrent(requestId)) {
           return;
         }
         setChanges(payload);
@@ -266,7 +273,7 @@ export function useTerminalPreviewPanelData({
           selectedChangeKind: selectedChangeKindRef.current,
         });
         if (!selected) {
-          diffRequestIdRef.current += 1;
+          diffRequestSequencer.invalidate();
           setFileDiff(null);
           setDiffError(null);
           setDiffLoading(false);
@@ -297,18 +304,20 @@ export function useTerminalPreviewPanelData({
           void loadDiff(selected.path, selected.kind);
         }
       } catch (error) {
-        if (changesRequestIdRef.current !== requestId) {
+        if (!changesRequestSequencer.isCurrent(requestId)) {
           return;
         }
         setChangesError(handleRequestError(error));
       } finally {
-        if (changesRequestIdRef.current === requestId) {
+        if (changesRequestSequencer.isCurrent(requestId)) {
           setChangesLoading(false);
         }
       }
     },
     [
       apiBase,
+      changesRequestSequencer,
+      diffRequestSequencer,
       handleRequestError,
       loadDiff,
       projectId,
@@ -318,9 +327,9 @@ export function useTerminalPreviewPanelData({
   );
 
   useEffect(() => {
-    fileRequestIdRef.current += 1;
-    changesRequestIdRef.current += 1;
-    diffRequestIdRef.current += 1;
+    fileRequestSequencer.invalidate();
+    changesRequestSequencer.invalidate();
+    diffRequestSequencer.invalidate();
     setSearchItems([]);
     setSearchError(null);
     setFilePreview(null);
@@ -336,7 +345,12 @@ export function useTerminalPreviewPanelData({
     setChangesError(null);
     setFileDiff(null);
     setDiffError(null);
-  }, [projectId]);
+  }, [
+    changesRequestSequencer,
+    diffRequestSequencer,
+    fileRequestSequencer,
+    projectId,
+  ]);
 
   useEffect(() => {
     selectedChangePathRef.current = selectedChangePath;
@@ -355,14 +369,14 @@ export function useTerminalPreviewPanelData({
       return;
     }
     if (isSupportedTerminalImagePreviewPath(selectedFilePath)) {
-      fileRequestIdRef.current += 1;
+      fileRequestSequencer.invalidate();
       setFilePreview(null);
       setFileError(null);
       setFileLoading(false);
       return;
     }
     void loadFile(selectedFilePath);
-  }, [loadFile, mode, selectedFilePath]);
+  }, [fileRequestSequencer, loadFile, mode, selectedFilePath]);
 
   useEffect(() => {
     if (mode !== "changes" || !hasProjectPath || !projectId) {
@@ -553,7 +567,7 @@ export function useTerminalPreviewPanelData({
     setSaveError, saveConflict, setSaveConflict, lastSavedAt, setLastSavedAt,
     fileLoading, setFileLoading, fileError, setFileError, changes, changesLoading,
     changesError, fileDiff, setFileDiff, diffLoading, setDiffLoading, diffError,
-    setDiffError, fileRequestIdRef, diffRequestIdRef, selectedChangePathRef,
+    setDiffError, fileRequestSequencer, diffRequestSequencer, selectedChangePathRef,
     selectedChangeKindRef, assetRefreshKey, setAssetRefreshKey, markdownScrollRatio,
     setMarkdownScrollRatio, pathCopied, setPathCopied, pathCopiedTimeoutRef,
     deleteTarget, setDeleteTarget, renameTarget, setRenameTarget, renamePath,

@@ -50,6 +50,23 @@ export async function requestJson<T>(
   return (await response.json()) as T;
 }
 
+export async function requestBlob(
+  apiBase: string,
+  path: string,
+  init?: RequestInit,
+): Promise<Blob> {
+  const response = await fetch(joinUrl(apiBase, path), init);
+  if (!response.ok) {
+    const payload = await readErrorPayload(response);
+    throw new ApiError(
+      resolveErrorMessage(payload, `Request failed with ${response.status}`),
+      response.status,
+      payload,
+    );
+  }
+  return response.blob();
+}
+
 export async function requestVoid(
   apiBase: string,
   path: string,

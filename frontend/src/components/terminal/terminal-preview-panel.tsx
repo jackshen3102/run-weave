@@ -90,8 +90,8 @@ export function TerminalPreviewPanel({
     setDiffLoading,
     diffError,
     setDiffError,
-    fileRequestIdRef,
-    diffRequestIdRef,
+    fileRequestSequencer,
+    diffRequestSequencer,
     selectedChangePathRef,
     selectedChangeKindRef,
     assetRefreshKey,
@@ -268,8 +268,8 @@ export function TerminalPreviewPanel({
           expectedMtimeMs: renameTarget.expectedMtimeMs,
         },
       );
-      fileRequestIdRef.current += 1;
-      diffRequestIdRef.current += 1;
+      fileRequestSequencer.invalidate();
+      diffRequestSequencer.invalidate();
       selectedChangePathRef.current = undefined;
       selectedChangeKindRef.current = undefined;
       setFilePreview(payload);
@@ -303,8 +303,8 @@ export function TerminalPreviewPanel({
     }
   }, [
     apiBase,
-    diffRequestIdRef,
-    fileRequestIdRef,
+    diffRequestSequencer,
+    fileRequestSequencer,
     handleRequestError,
     invalidateFileTreeParents,
     loadChanges,
@@ -351,7 +351,7 @@ export function TerminalPreviewPanel({
         filePreview?.path === deleteTarget.path;
       const deletedSelectedChange = selectedChangePath === deleteTarget.path;
       if (deletedSelectedFile) {
-        fileRequestIdRef.current += 1;
+        fileRequestSequencer.invalidate();
         setFilePreview(null);
         setEditorContent("");
         setLoadedContent("");
@@ -363,7 +363,7 @@ export function TerminalPreviewPanel({
         setFileLoading(false);
       }
       if (deletedSelectedChange) {
-        diffRequestIdRef.current += 1;
+        diffRequestSequencer.invalidate();
         selectedChangePathRef.current = undefined;
         selectedChangeKindRef.current = undefined;
         setFileDiff(null);
@@ -396,9 +396,9 @@ export function TerminalPreviewPanel({
   }, [
     apiBase,
     deleteTarget,
-    diffRequestIdRef,
+    diffRequestSequencer,
     filePreview?.path,
-    fileRequestIdRef,
+    fileRequestSequencer,
     handleRequestError,
     invalidateFileTreeParents,
     loadChanges,

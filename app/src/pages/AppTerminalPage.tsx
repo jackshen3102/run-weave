@@ -16,7 +16,16 @@ import {
 } from "@ionic/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  type AppTerminalDetailTab,
+  TerminalDetailTabBar,
+} from "../components/TerminalDetailTabBar";
+import {
+  type SelectedTerminalChange,
+  TerminalChangesTab,
+} from "../components/TerminalChangesTab";
 import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
+import { TerminalFilesTab } from "../components/TerminalFilesTab";
 import { fileToBase64, shellQuote } from "../lib/terminal-input-assets";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
@@ -200,6 +209,10 @@ export function AppTerminalPage({
   onBack,
 }: AppTerminalPageProps) {
   const rendererRef = useRef<TerminalRendererHandle | null>(null);
+  const [activeTab, setActiveTab] = useState<AppTerminalDetailTab>("chat");
+  const [changesCount, setChangesCount] = useState(0);
+  const [requestedChange, setRequestedChange] =
+    useState<SelectedTerminalChange | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [terminalState, setTerminalState] = useState<TerminalState>({
@@ -234,6 +247,7 @@ export function AppTerminalPage({
   const subtitle = metadata?.cwd
     ? shortPath(metadata.cwd)
     : (initialSession?.subtitle ?? "");
+  const activeProjectId = metadata?.projectId ?? initialSession?.projectId ?? null;
   const lastActivityAt =
     metadata?.lastActivityAt ?? initialSession?.lastActivityAt;
   const statusLabel =
@@ -283,6 +297,13 @@ export function AppTerminalPage({
   }, [accessToken, apiBase, notFound, onAuthExpired, terminalSessionId]);
 
   const isCommandActive = terminalState.state === "agent_running";
+
+  useEffect(() => {
+    if (activeTab === "chat") {
+      rendererRef.current?.refresh();
+    }
+  }, [activeTab]);
+
   const handleStop = useCallback(() => {
     setImageError(null);
     void interruptTerminalSession(
@@ -350,6 +371,11 @@ export function AppTerminalPage({
     [accessToken, apiBase, onAuthExpired, sendInput, terminalSessionId],
   );
 
+  const handleShowChanges = useCallback((change: SelectedTerminalChange) => {
+    setRequestedChange(change);
+    setActiveTab("changes");
+  }, []);
+
   return (
     <IonPage>
       <IonContent
@@ -402,39 +428,86 @@ export function AppTerminalPage({
               </div>
             ) : (
               <>
-                {connectionStatus === "connecting" && !metadata ? (
-                  <div className="terminal-page-loading">
-                    <IonSpinner name="crescent" />
-                  </div>
-                ) : null}
-                {error ? (
-                  <p className="terminal-page-error text-sm">{error}</p>
-                ) : null}
-                <TerminalRenderer
-                  active
-                  className="terminal-page-renderer"
-                  focusOnInteraction={false}
-                  fontSize={12}
-                  onInput={sendInput}
-                  onResize={sendResize}
-                  onTerminalReady={installTerminalTouchBehavior}
-                  ref={rendererRef}
-                  renderer="dom"
-                  scrollbackLines={5000}
-                />
+                <div
+                  aria-hidden={activeTab !== "chat"}
+                  className={`terminal-tab-panel ${
+                    activeTab === "chat" ? "is-active" : ""
+                  }`}
+                >
+                  {connectionStatus === "connecting" && !metadata ? (
+                    <div className="terminal-page-loading">
+                      <IonSpinner name="crescent" />
+                    </div>
+                  ) : null}
+                  {error ? (
+                    <p className="terminal-page-error text-sm">{error}</p>
+                  ) : null}
+                  <TerminalRenderer
+                    active={activeTab === "chat"}
+                    className="terminal-page-renderer"
+                    focusOnInteraction={false}
+                    fontSize={12}
+                    onInput={sendInput}
+                    onResize={sendResize}
+                    onTerminalReady={installTerminalTouchBehavior}
+                    ref={rendererRef}
+                    renderer="dom"
+                    scrollbackLines={5000}
+                  />
+                </div>
+                <div
+                  aria-hidden={activeTab !== "changes"}
+                  className={`terminal-tab-panel ${
+                    activeTab === "changes" ? "is-active" : ""
+                  }`}
+                >
+                  <TerminalChangesTab
+                    accessToken={accessToken}
+                    active={activeTab === "changes"}
+                    apiBase={apiBase}
+                    projectId={activeProjectId}
+                    requestedChange={requestedChange}
+                    onAuthExpired={onAuthExpired}
+                    onChangesCount={setChangesCount}
+                  />
+                </div>
+                <div
+                  aria-hidden={activeTab !== "files"}
+                  className={`terminal-tab-panel ${
+                    activeTab === "files" ? "is-active" : ""
+                  }`}
+                >
+                  <TerminalFilesTab
+                    accessToken={accessToken}
+                    active={activeTab === "files"}
+                    apiBase={apiBase}
+                    projectId={activeProjectId}
+                    onAuthExpired={onAuthExpired}
+                    onShowChanges={handleShowChanges}
+                  />
+                </div>
               </>
             )}
           </section>
-          {imageError ? (
-            <p className="terminal-composer-error">{imageError}</p>
+          {activeTab === "chat" ? (
+            <div className="terminal-composer-slot">
+              {imageError ? (
+                <p className="terminal-composer-error">{imageError}</p>
+              ) : null}
+              <TerminalCommandComposer
+                disabled={notFound}
+                isPickingImage={isPickingImage}
+                isStopping={isCommandActive}
+                onPickImage={handlePickImage}
+                onSendInput={handleSendCommand}
+                onStop={handleStop}
+              />
+            </div>
           ) : null}
-          <TerminalCommandComposer
-            disabled={notFound}
-            isPickingImage={isPickingImage}
-            isStopping={isCommandActive}
-            onPickImage={handlePickImage}
-            onSendInput={handleSendCommand}
-            onStop={handleStop}
+          <TerminalDetailTabBar
+            activeTab={activeTab}
+            changesCount={changesCount}
+            onTabChange={setActiveTab}
           />
         </main>
       </IonContent>

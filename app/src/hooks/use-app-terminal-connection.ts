@@ -20,6 +20,7 @@ interface TerminalMetadata {
   cwd: string;
   command: string;
   activeCommand: string | null;
+  projectId: string | null;
   lastActivityAt: string;
   status: "running" | "exited";
 }
@@ -74,6 +75,7 @@ function toTerminalMetadata(
     cwd: session.cwd,
     command: session.command,
     activeCommand: session.activeCommand,
+    projectId: session.projectId,
     lastActivityAt: session.lastActivityAt,
     status: session.status,
   };
@@ -237,11 +239,13 @@ export function useAppTerminalConnection({
                     ...current,
                     cwd: message.cwd,
                     activeCommand: message.activeCommand,
+                    projectId: current.projectId,
                   }
                 : {
                     cwd: message.cwd,
                     command: "",
                     activeCommand: message.activeCommand,
+                    projectId: null,
                     lastActivityAt: new Date().toISOString(),
                     status: "running",
                   },
