@@ -16,7 +16,7 @@ export function TerminalCommandComposer({
   disabled: boolean;
   isPickingImage: boolean;
   isStopping: boolean;
-  onPickImage: (file: File) => void;
+  onPickImage: (file: File) => Promise<string>;
   onSendInput: (data: string) => Promise<void>;
   onStop: () => void;
 }) {
@@ -47,7 +47,21 @@ export function TerminalCommandComposer({
     if (!file) {
       return;
     }
-    onPickImage(file);
+    void (async () => {
+      try {
+        const imageInput = await onPickImage(file);
+        setValue((current) => {
+          if (!current) {
+            return imageInput;
+          }
+          return /\s$/.test(current)
+            ? `${current}${imageInput}`
+            : `${current} ${imageInput}`;
+        });
+      } catch {
+        // Keep the user's input so failed uploads can be retried.
+      }
+    })();
   };
 
   const hasText = value.trimEnd().length > 0;
