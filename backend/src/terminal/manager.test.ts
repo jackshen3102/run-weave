@@ -51,6 +51,7 @@ function createStoreMock() {
     updateSessionLaunch: vi.fn(async () => undefined),
     appendSessionScrollback: vi.fn(async () => undefined),
     updateSessionScrollback: vi.fn(async () => undefined),
+    updateSessionStatus: vi.fn(async () => undefined),
     updateSessionExit: vi.fn(async () => undefined),
     reorderProjects: vi.fn(async () => undefined),
     reorderSessions: vi.fn(async () => undefined),

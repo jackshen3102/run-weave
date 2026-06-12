@@ -294,7 +294,12 @@ export function createTerminalRouter(
   router.get("/session", (_req, res) => {
     const payload = terminalSessionManager
       .listSessions()
-      .map((session) => toSessionListItem(session));
+      .map((session) =>
+        toSessionListItem(
+          session,
+          options?.terminalStateService?.getCurrent(session.id, session),
+        ),
+      );
 
     res.json(payload);
   });

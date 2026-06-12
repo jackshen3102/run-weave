@@ -1,11 +1,16 @@
-import { lazy, Suspense } from "react";
-import type { TerminalProjectListItem, TerminalSessionListItem } from "@browser-viewer/shared";
+import { lazy, Suspense, type CSSProperties } from "react";
+import type {
+  TerminalProjectListItem,
+  TerminalSessionListItem,
+  TerminalState,
+} from "@browser-viewer/shared";
 import { History, Home, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { ConnectionConfig } from "../../features/connection/types";
 import { DEFAULT_TERMINAL_SIDECAR_WIDTH } from "../../features/terminal/preview-store";
 import type { ClientMode } from "../../features/client-mode";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import { Button } from "../ui/button";
+import { ShimmerText } from "../ui/shimmer-text";
 import {
   SortableTabs,
   type SortableTabRenderProps,
@@ -40,9 +45,100 @@ const TerminalPreviewPanel = lazy(() =>
   })),
 );
 
-function buildSessionLabel(session: TerminalSessionListItem): string {
-  const renderedArgs = session.args.join(" ");
-  return renderedArgs ? `${session.command} ${renderedArgs}` : session.command;
+function TerminalSessionTab({
+  session,
+  isActive,
+  isDragging,
+  isMobileMonitor,
+  hasBell,
+  hasCompletion,
+  terminalState,
+  onSelectSession,
+  onRequestCloseSession,
+}: {
+  session: TerminalSessionListItem;
+  isActive: boolean;
+  isDragging: boolean;
+  isMobileMonitor: boolean;
+  hasBell: boolean;
+  hasCompletion: boolean;
+  terminalState?: TerminalState;
+  onSelectSession: (terminalSessionId: string) => void;
+  onRequestCloseSession: (terminalSessionId: string) => void;
+}) {
+  const displayName = formatTerminalSessionName({
+    cwd: session.cwd,
+    activeCommand: session.activeCommand,
+  });
+  const isWorking = terminalState?.state === "agent_running";
+
+  return (
+    <div
+      className={[
+        "relative flex h-full shrink-0 items-center gap-2 border-r border-slate-800 pl-2 pr-3",
+        isDragging
+          ? "bg-sky-500/20 text-slate-50 opacity-90"
+          : isActive
+            ? "overflow-hidden bg-slate-900/35 text-slate-50 before:absolute before:inset-x-0 before:bottom-0 before:h-0.5 before:bg-sky-500"
+        : "text-slate-300 hover:bg-slate-900/45 hover:text-slate-100",
+      ].join(" ")}
+    >
+      <button
+        type="button"
+        aria-label={displayName}
+        data-terminal-session-id={session.terminalSessionId}
+        className={[
+          "inline-flex h-full min-w-0 max-w-[220px] items-center gap-1.5 py-0 text-xs",
+          isActive ? "text-slate-50" : "text-slate-200",
+        ].join(" ")}
+        onClick={() => {
+          onSelectSession(session.terminalSessionId);
+        }}
+      >
+        {isWorking ? (
+          <ShimmerText
+            className="truncate shimmer-invert"
+            style={{
+              "--shimmer-duration": "4000",
+              "--shimmer-repeat-delay": "300",
+            } as CSSProperties}
+          >
+            {displayName}
+          </ShimmerText>
+        ) : (
+          <span className="truncate">{displayName}</span>
+        )}
+        <span
+          aria-hidden="true"
+          className={[
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            hasBell
+              ? "bg-amber-400"
+              : hasCompletion
+                ? "bg-emerald-400"
+                : "bg-transparent",
+          ].join(" ")}
+        />
+      </button>
+      {!isMobileMonitor ? (
+        <button
+          type="button"
+          className={[
+            "flex h-4 w-4 items-center justify-center rounded-sm transition-colors",
+            isActive
+              ? "text-slate-400 hover:text-slate-100"
+              : "text-slate-500 hover:text-slate-200",
+          ].join(" ")}
+          aria-label={`Close terminal ${displayName}`}
+          onClick={() => {
+            onRequestCloseSession(session.terminalSessionId);
+          }}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 interface TerminalWorkspaceShellProps {
@@ -79,6 +175,7 @@ interface TerminalWorkspaceShellProps {
   projectPendingDeletion: TerminalProjectListItem | null;
   completionMarkers: Record<string, boolean>;
   bellMarkers: Record<string, boolean>;
+  terminalStateBySessionId: Record<string, TerminalState>;
   terminalLayoutVersion: string;
   onSelectProject: (projectId: string) => void;
   onSelectSession: (terminalSessionId: string) => void;
@@ -136,6 +233,7 @@ export function TerminalWorkspaceShell({
   projectPendingDeletion,
   completionMarkers,
   bellMarkers,
+  terminalStateBySessionId,
   terminalLayoutVersion,
   onSelectProject,
   onSelectSession,
@@ -328,68 +426,23 @@ export function TerminalWorkspaceShell({
             className="flex min-w-0 items-stretch"
             renderTab={(session: TerminalSessionListItem, sortProps: SortableTabRenderProps) => {
               const isActive = session.terminalSessionId === activeSession?.terminalSessionId;
-              const hasBell = !isActive && bellMarkers[session.terminalSessionId];
+              const hasBell =
+                !isActive && Boolean(bellMarkers[session.terminalSessionId]);
               const hasCompletion =
-                !isActive && completionMarkers[session.terminalSessionId];
-              const displayName = formatTerminalSessionName({
-                cwd: session.cwd,
-                activeCommand: session.activeCommand,
-              });
+                !isActive &&
+                Boolean(completionMarkers[session.terminalSessionId]);
               return (
-                <div
-                  className={[
-                    "relative flex h-full shrink-0 items-center gap-2 border-r border-slate-800 pl-2 pr-3",
-                    sortProps.isDragging
-                      ? "bg-sky-500/20 text-slate-50 opacity-90"
-                      : isActive
-                        ? "overflow-hidden bg-slate-900/35 text-slate-50 before:absolute before:inset-x-0 before:bottom-0 before:h-0.5 before:bg-sky-500"
-                        : "text-slate-300 hover:bg-slate-900/45 hover:text-slate-100",
-                  ].join(" ")}
-                >
-                  <button
-                    type="button"
-                    aria-label={displayName}
-                    data-terminal-session-id={session.terminalSessionId}
-                    className={[
-                      "inline-flex h-full min-w-0 max-w-[220px] items-center gap-1.5 py-0 text-xs",
-                      isActive ? "text-slate-50" : "text-slate-200",
-                    ].join(" ")}
-                    onClick={() => {
-                      onSelectSession(session.terminalSessionId);
-                    }}
-                    title={buildSessionLabel(session)}
-                  >
-                    <span className="truncate">{displayName}</span>
-                    <span
-                      aria-hidden="true"
-                      className={[
-                        "h-1.5 w-1.5 shrink-0 rounded-full",
-                        hasBell
-                          ? "bg-amber-400"
-                          : hasCompletion
-                            ? "bg-emerald-400"
-                            : "bg-transparent",
-                      ].join(" ")}
-                    />
-                  </button>
-                  {!isMobileMonitor ? (
-                    <button
-                      type="button"
-                      className={[
-                        "flex h-4 w-4 items-center justify-center rounded-sm transition-colors",
-                        isActive
-                          ? "text-slate-400 hover:text-slate-100"
-                          : "text-slate-500 hover:text-slate-200",
-                      ].join(" ")}
-                      aria-label={`Close terminal ${displayName}`}
-                      onClick={() => {
-                        onRequestCloseSession(session.terminalSessionId);
-                      }}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  ) : null}
-                </div>
+                <TerminalSessionTab
+                  session={session}
+                  isActive={isActive}
+                  isDragging={sortProps.isDragging}
+                  isMobileMonitor={isMobileMonitor}
+                  hasBell={hasBell}
+                  hasCompletion={hasCompletion}
+                  terminalState={terminalStateBySessionId[session.terminalSessionId]}
+                  onSelectSession={onSelectSession}
+                  onRequestCloseSession={onRequestCloseSession}
+                />
               );
             }}
           />

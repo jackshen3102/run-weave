@@ -325,6 +325,23 @@ export class TerminalSessionManager {
     });
   }
 
+  markRunning(terminalSessionId: string): void {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return;
+    }
+
+    session.status = "running";
+    session.exitCode = undefined;
+    const lastActivityAt = this.touchSessionActivity(session, "immediate");
+    void this.sessionStore.updateSessionStatus({
+      terminalSessionId,
+      status: "running",
+      lastActivityAt: lastActivityAt.toISOString(),
+      exitCode: undefined,
+    });
+  }
+
   async updateSessionMetadata(
     terminalSessionId: string,
     metadata: {

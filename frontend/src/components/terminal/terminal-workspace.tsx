@@ -142,6 +142,35 @@ export function TerminalWorkspace({
       }
       setProjects(nextProjects);
       setSessions(nextSessions);
+      setTerminalStateBySessionId((current) => {
+        const knownSessionIds = new Set(
+          nextSessions.map((session) => session.terminalSessionId),
+        );
+        let changed = false;
+        const next: Record<string, TerminalState> = {};
+        for (const session of nextSessions) {
+          const terminalSessionId = session.terminalSessionId;
+          const terminalState = session.terminalState;
+          if (terminalState) {
+            const currentState = current[terminalSessionId];
+            next[terminalSessionId] = terminalState;
+            if (
+              currentState?.state !== terminalState.state ||
+              currentState.agent !== terminalState.agent
+            ) {
+              changed = true;
+            }
+            continue;
+          }
+          if (current[terminalSessionId]) {
+            next[terminalSessionId] = current[terminalSessionId];
+          }
+        }
+        if (Object.keys(current).some((id) => !knownSessionIds.has(id))) {
+          changed = true;
+        }
+        return changed ? next : current;
+      });
       setActiveProjectId((currentProjectId) => {
         if (
           currentProjectId &&
@@ -681,6 +710,7 @@ export function TerminalWorkspace({
       projectPendingDeletion={projectPendingDeletion}
       completionMarkers={completionMarkers}
       bellMarkers={bellMarkers}
+      terminalStateBySessionId={terminalStateBySessionId}
       terminalLayoutVersion={terminalLayoutVersion}
       onSelectProject={setActiveProjectId}
       onSelectSession={setActiveSessionId}

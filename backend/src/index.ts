@@ -55,6 +55,7 @@ import { TerminalStateStore } from "./terminal/terminal-state-store";
 import { loadOrCreateHookToken } from "./terminal/hook-token";
 import { PtyService } from "./terminal/pty-service";
 import { TerminalRuntimeRegistry } from "./terminal/runtime-registry";
+import { TmuxLifecycleCoordinator } from "./terminal/tmux-lifecycle-coordinator";
 import { TmuxOutputWatcher } from "./terminal/tmux-output-watcher";
 import { TmuxService } from "./terminal/tmux-service";
 import { sanitizeCurrentTerminalProcessEnv } from "./terminal/env";
@@ -87,6 +88,7 @@ interface RuntimeServices {
   terminalEventService: TerminalEventService;
   terminalCompletionEventService: TerminalCompletionEventService;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
+  tmuxLifecycleCoordinator: TmuxLifecycleCoordinator;
   ptyService: PtyService;
   tmuxService: TmuxService;
   tmuxOutputWatcher: TmuxOutputWatcher;
@@ -203,6 +205,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalEventService,
   );
   const terminalRuntimeRegistry = new TerminalRuntimeRegistry();
+  const tmuxLifecycleCoordinator = new TmuxLifecycleCoordinator();
   process.env.RUNWEAVE_HOOK_TOKEN = resolveTerminalHookToken(
     process.env,
     path.join(storagePaths.browserProfileDir, "runweave-hook-token"),
@@ -230,6 +233,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     ),
     terminalSessionManager,
     tmuxService,
+    tmuxLifecycleCoordinator,
   });
   await sessionManager.initialize();
   await terminalSessionManager.initialize();
@@ -252,6 +256,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalEventService,
     terminalCompletionEventService,
     terminalRuntimeRegistry,
+    tmuxLifecycleCoordinator,
     ptyService,
     tmuxService,
     tmuxOutputWatcher,
@@ -524,6 +529,7 @@ async function startRuntime(): Promise<void> {
       {
         tunnelAuthConfig,
         tmuxOutputWatcher: services.tmuxOutputWatcher,
+        tmuxLifecycleCoordinator: services.tmuxLifecycleCoordinator,
         terminalStateService: services.terminalStateService,
       },
     );

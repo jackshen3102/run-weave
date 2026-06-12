@@ -49,6 +49,13 @@ export interface UpdateTerminalSessionExitParams {
   exitCode?: number;
 }
 
+export interface UpdateTerminalSessionStatusParams {
+  terminalSessionId: string;
+  status: "running" | "exited";
+  lastActivityAt?: string;
+  exitCode?: number;
+}
+
 export interface UpdateTerminalSessionScrollbackParams {
   terminalSessionId: string;
   scrollback: string;
@@ -120,6 +127,7 @@ export interface TerminalSessionStore {
   appendSessionScrollback(
     params: AppendTerminalSessionScrollbackParams,
   ): Promise<void>;
+  updateSessionStatus(params: UpdateTerminalSessionStatusParams): Promise<void>;
   updateSessionExit(params: UpdateTerminalSessionExitParams): Promise<void>;
   reorderProjects(orderedIds: string[]): Promise<void>;
   reorderSessions(projectId: string, orderedIds: string[]): Promise<void>;
