@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  isShiftEnterLineFeed,
+  isTerminalAutoResponse,
+} from "@browser-viewer/common/terminal";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
@@ -30,46 +34,6 @@ interface TerminalPageProps {
 
 function renderCommand(command: string, args: string[]): string {
   return [command, ...args].join(" ");
-}
-
-const ESCAPE = "\\u001b";
-const BELL = "\\u0007";
-const OSC_COLOR_RESPONSE_PATTERN = new RegExp(
-  `${ESCAPE}\\]1[01];rgb:[0-9a-f/]+(?:${BELL}|${ESCAPE}\\\\)`,
-  "i",
-);
-const DECRPM_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[\\?[0-9;]+\\$y`);
-const DCS_RESPONSE_PATTERN = new RegExp(`${ESCAPE}P[01]\\$r.*${ESCAPE}\\\\`);
-const CURSOR_POSITION_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[[0-9;]+R`);
-const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
-  `${ESCAPE}\\[(?:\\?|>)[0-9;]+c`,
-);
-const FOCUS_REPORTING_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[(?:I|O)$`);
-
-function isTerminalAutoResponse(data: string): boolean {
-  if (!data.startsWith("\u001b")) {
-    return false;
-  }
-
-  return (
-    OSC_COLOR_RESPONSE_PATTERN.test(data) ||
-    DECRPM_RESPONSE_PATTERN.test(data) ||
-    DCS_RESPONSE_PATTERN.test(data) ||
-    CURSOR_POSITION_RESPONSE_PATTERN.test(data) ||
-    DEVICE_ATTRIBUTES_RESPONSE_PATTERN.test(data) ||
-    FOCUS_REPORTING_RESPONSE_PATTERN.test(data)
-  );
-}
-
-function isShiftEnterLineFeed(event: KeyboardEvent): boolean {
-  return (
-    event.type === "keydown" &&
-    event.key === "Enter" &&
-    event.shiftKey &&
-    !event.altKey &&
-    !event.ctrlKey &&
-    !event.metaKey
-  );
 }
 
 export function TerminalPage({

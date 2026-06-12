@@ -4,20 +4,6 @@ export const DEFERRED_OUTPUT_REPLAY_MAX_CHARS = 128 * 1024;
 export const IME_COMMIT_DUPLICATE_WINDOW_MS = 50;
 export const IME_COMMIT_WINDOW_MS = 250;
 
-const ESCAPE = "\\u001b";
-const BELL = "\\u0007";
-const OSC_COLOR_RESPONSE_PATTERN = new RegExp(
-  `${ESCAPE}\\]1[01];rgb:[0-9a-f/]+(?:${BELL}|${ESCAPE}\\\\)`,
-  "i",
-);
-const DECRPM_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[\\?[0-9;]+\\$y`);
-const DCS_RESPONSE_PATTERN = new RegExp(`${ESCAPE}P[01]\\$r.*${ESCAPE}\\\\`);
-const CURSOR_POSITION_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[[0-9;]+R`);
-const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
-  `${ESCAPE}\\[(?:\\?|>)[0-9;]+c`,
-);
-const FOCUS_REPORTING_RESPONSE_PATTERN = new RegExp(`${ESCAPE}\\[(?:I|O)$`);
-
 export interface PastedImageReference {
   id: string;
   label: string;
@@ -66,63 +52,6 @@ export function recordTerminalPerfProbeEvent(
       probeText,
     },
   });
-}
-
-export function isTerminalAutoResponse(data: string): boolean {
-  if (!data.startsWith("\u001b")) {
-    return false;
-  }
-
-  return (
-    OSC_COLOR_RESPONSE_PATTERN.test(data) ||
-    DECRPM_RESPONSE_PATTERN.test(data) ||
-    DCS_RESPONSE_PATTERN.test(data) ||
-    CURSOR_POSITION_RESPONSE_PATTERN.test(data) ||
-    DEVICE_ATTRIBUTES_RESPONSE_PATTERN.test(data) ||
-    FOCUS_REPORTING_RESPONSE_PATTERN.test(data)
-  );
-}
-
-export function isShiftEnterLineFeed(event: KeyboardEvent): boolean {
-  return (
-    event.type === "keydown" &&
-    event.key === "Enter" &&
-    event.shiftKey &&
-    !event.altKey &&
-    !event.ctrlKey &&
-    !event.metaKey
-  );
-}
-
-export async function fileToBase64(file: File): Promise<string> {
-  if (typeof file.arrayBuffer === "function") {
-    const buffer = await file.arrayBuffer();
-    return btoa(
-      Array.from(new Uint8Array(buffer), (byte) =>
-        String.fromCharCode(byte),
-      ).join(""),
-    );
-  }
-
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => {
-      reject(reader.error ?? new Error("Failed to read clipboard image"));
-    };
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string") {
-        reject(new Error("Failed to read clipboard image"));
-        return;
-      }
-      resolve(result.split(",", 2)[1] ?? "");
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-export function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\"'\"'")}'`;
 }
 
 export function resolveMobileBeforeInputData(

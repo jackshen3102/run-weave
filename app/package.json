@@ -13,6 +13,7 @@
     "ios:open": "pnpm ios:sync && capacitor open ios"
   },
   "dependencies": {
+    "@browser-viewer/common": "workspace:*",
     "@browser-viewer/shared": "workspace:*",
     "@browser-viewer/terminal-renderer": "workspace:*",
     "@capacitor/core": "^8.4.0",

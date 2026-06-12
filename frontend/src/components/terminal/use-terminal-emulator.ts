@@ -1,4 +1,10 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
+import {
+  fileToBase64,
+  isShiftEnterLineFeed,
+  isTerminalAutoResponse,
+  shellQuote,
+} from "@browser-viewer/common/terminal";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -24,11 +30,7 @@ import { createTerminalSessionClipboardImage } from "../../services/terminal";
 import {
   IME_COMMIT_WINDOW_MS,
   TERMINAL_RESIZE_DEBOUNCE_MS,
-  fileToBase64,
-  isShiftEnterLineFeed,
-  isTerminalAutoResponse,
   resolveMobileBeforeInputData,
-  shellQuote,
   type PastedImageReference,
   type TerminalSearchResults,
 } from "./terminal-surface-utils";
