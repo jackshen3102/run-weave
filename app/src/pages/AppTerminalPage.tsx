@@ -624,7 +624,7 @@ export function AppTerminalPage({
     [accessToken, apiBase, onAuthExpired, terminalSessionId],
   );
   const handlePickImage = useCallback(
-    (file: File) => {
+    async (file: File): Promise<string> => {
       setImageError(null);
       setIsPickingImage(true);
       recordSupportLog("terminal.clipboard_image.upload.started", {
@@ -632,46 +632,43 @@ export function AppTerminalPage({
         mimeType: file.type,
         size: file.size,
       });
-      void fileToBase64(file)
-        .then((dataBase64) =>
-          createTerminalSessionClipboardImage(
-            apiBase,
-            accessToken,
-            terminalSessionId,
-            {
-              mimeType: file.type,
-              dataBase64,
-            },
-          ),
-        )
-        .then((payload) => {
-          recordSupportLog("terminal.clipboard_image.upload.completed", {
-            terminalSessionId,
-            filePathLength: payload.filePath.length,
-          });
-          sendInput(shellQuote(payload.filePath));
-        })
-        .catch((nextError: unknown) => {
-          if (nextError instanceof ApiError && nextError.status === 401) {
-            recordSupportLog("terminal.clipboard_image.upload.unauthorized", {
-              terminalSessionId,
-            }, "warn");
-            onAuthExpired();
-            return;
-          }
-          recordSupportLog("terminal.clipboard_image.upload.failed", {
-            terminalSessionId,
-            error: nextError instanceof Error ? nextError.message : String(nextError),
-          }, "warn");
-          setImageError(
-            nextError instanceof Error ? nextError.message : "图片选择失败",
-          );
-        })
-        .finally(() => {
-          setIsPickingImage(false);
+      try {
+        const dataBase64 = await fileToBase64(file);
+        const payload = await createTerminalSessionClipboardImage(
+          apiBase,
+          accessToken,
+          terminalSessionId,
+          {
+            mimeType: file.type,
+            dataBase64,
+          },
+        );
+        recordSupportLog("terminal.clipboard_image.upload.completed", {
+          terminalSessionId,
+          filePathLength: payload.filePath.length,
         });
+        return shellQuote(payload.filePath);
+      } catch (nextError: unknown) {
+        if (nextError instanceof ApiError && nextError.status === 401) {
+          recordSupportLog("terminal.clipboard_image.upload.unauthorized", {
+            terminalSessionId,
+          }, "warn");
+          onAuthExpired();
+          throw nextError;
+        }
+        recordSupportLog("terminal.clipboard_image.upload.failed", {
+          terminalSessionId,
+          error: nextError instanceof Error ? nextError.message : String(nextError),
+        }, "warn");
+        setImageError(
+          nextError instanceof Error ? nextError.message : "图片上传失败",
+        );
+        throw nextError;
+      } finally {
+        setIsPickingImage(false);
+      }
     },
-    [accessToken, apiBase, onAuthExpired, sendInput, terminalSessionId],
+    [accessToken, apiBase, onAuthExpired, terminalSessionId],
   );
 
   const handleShowChanges = useCallback(
