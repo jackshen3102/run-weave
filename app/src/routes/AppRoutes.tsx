@@ -15,6 +15,7 @@ import type {
   AppLoginParams,
 } from "../hooks/use-app-session";
 import {
+  createTerminalProject,
   createTerminalSession,
   deleteTerminalSession,
 } from "../services/terminal";
@@ -75,6 +76,18 @@ function HomeRoute({ session }: { session: AppSessionController }) {
     },
     [openTerminal, session],
   );
+  const createProject = useCallback(
+    async (payload: { name: string; path?: string | null }) => {
+      const project = await createTerminalProject(
+        session.apiBase,
+        session.accessToken,
+        payload,
+      );
+      await session.refreshOverview();
+      return project;
+    },
+    [session],
+  );
 
   return (
     <HomePage
@@ -82,6 +95,7 @@ function HomeRoute({ session }: { session: AppSessionController }) {
       error={session.error}
       loading={session.loading}
       onLogout={session.logout}
+      onCreateProject={createProject}
       onCreateTerminal={createTerminal}
       onOpenTerminal={openTerminal}
       onRefresh={session.refreshOverview}

@@ -1,5 +1,7 @@
 import type {
   AppHomeOverviewResponse,
+  CreateTerminalProjectRequest,
+  TerminalProjectListItem,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
   CreateTerminalClipboardImageRequest,
@@ -34,6 +36,21 @@ export async function getAppHomeOverview(
       },
     },
   );
+}
+
+export async function createTerminalProject(
+  apiBase: string,
+  accessToken: string,
+  payload: CreateTerminalProjectRequest,
+): Promise<TerminalProjectListItem> {
+  return requestJson<TerminalProjectListItem>(apiBase, "/api/terminal/project", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function getTerminalSession(
