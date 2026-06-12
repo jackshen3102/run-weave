@@ -11,3 +11,4 @@ export * from "./terminal-browser-cdp-proxy";
 export * from "./terminal-browser-device";
 export * from "./terminal-browser-headers";
 export * from "./terminal-browser-proxy";
+export * from "./voice";

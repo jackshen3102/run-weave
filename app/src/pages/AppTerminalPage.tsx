@@ -40,6 +40,7 @@ import {
   interruptTerminalSession,
   sendTerminalInput,
 } from "../services/terminal";
+import { transcribeVoice } from "../services/voice";
 
 interface AppTerminalPageProps {
   accessToken: string;
@@ -671,6 +672,52 @@ export function AppTerminalPage({
     [accessToken, apiBase, onAuthExpired, terminalSessionId],
   );
 
+  const handleTranscribeVoice = useCallback(
+    async (payload: Parameters<typeof transcribeVoice>[2]): Promise<string> => {
+      setImageError(null);
+      recordSupportLog("terminal.voice.transcribe.started", {
+        terminalSessionId,
+        durationMs: payload.durationMs,
+      });
+      try {
+        const response = await transcribeVoice(apiBase, accessToken, payload);
+        recordSupportLog("terminal.voice.transcribe.completed", {
+          terminalSessionId,
+          textLength: response.text.length,
+        });
+        return response.text;
+      } catch (nextError: unknown) {
+        if (nextError instanceof ApiError && nextError.status === 401) {
+          recordSupportLog(
+            "terminal.voice.transcribe.unauthorized",
+            {
+              terminalSessionId,
+            },
+            "warn",
+          );
+          onAuthExpired();
+          throw nextError;
+        }
+        recordSupportLog(
+          "terminal.voice.transcribe.failed",
+          {
+            terminalSessionId,
+            error:
+              nextError instanceof Error
+                ? nextError.message
+                : String(nextError),
+          },
+          "warn",
+        );
+        setImageError(
+          nextError instanceof Error ? nextError.message : "语音转文字失败",
+        );
+        throw nextError;
+      }
+    },
+    [accessToken, apiBase, onAuthExpired, terminalSessionId],
+  );
+
   const handleShowChanges = useCallback(
     (change: SelectedTerminalChange) => {
       setRequestedChange(change);
@@ -864,6 +911,7 @@ export function AppTerminalPage({
                 onPickImage={handlePickImage}
                 onSendInput={handleSendCommand}
                 onStop={handleStop}
+                onTranscribeVoice={handleTranscribeVoice}
               />
             </div>
           ) : null}

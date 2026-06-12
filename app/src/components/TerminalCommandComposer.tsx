@@ -1,9 +1,17 @@
+import type { TranscribeVoiceRequest } from "@browser-viewer/shared";
 import { IonButton, IonIcon, IonTextarea } from "@ionic/react";
-import { arrowUp, imageOutline, stop } from "ionicons/icons";
+import {
+  arrowUp,
+  imageOutline,
+  micOutline,
+  stop,
+  stopCircleOutline,
+} from "ionicons/icons";
 import type { ChangeEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { recordSupportLog } from "../features/support-logs";
+import { startVoiceRecording } from "../lib/voice-recorder";
 
 export function TerminalCommandComposer({
   disabled,
@@ -12,6 +20,7 @@ export function TerminalCommandComposer({
   onPickImage,
   onSendInput,
   onStop,
+  onTranscribeVoice,
 }: {
   disabled: boolean;
   isPickingImage: boolean;
@@ -19,9 +28,18 @@ export function TerminalCommandComposer({
   onPickImage: (file: File) => Promise<string>;
   onSendInput: (data: string) => Promise<void>;
   onStop: () => void;
+  onTranscribeVoice: (payload: TranscribeVoiceRequest) => Promise<string>;
 }) {
   const [value, setValue] = useState("");
+  const [voiceState, setVoiceState] = useState<
+    "idle" | "starting" | "recording" | "transcribing"
+  >("idle");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const voiceRecordingRef = useRef<Awaited<
+    ReturnType<typeof startVoiceRecording>
+  > | null>(null);
+  const voiceStartInFlightRef = useRef(false);
+  const isMountedRef = useRef(true);
   const lastActionModeRef = useRef<string | null>(null);
 
   const handleSubmit = async () => {
@@ -64,9 +82,124 @@ export function TerminalCommandComposer({
     })();
   };
 
+  const appendVoiceText = (text: string) => {
+    setValue((current) => {
+      const nextText = text.trim();
+      if (!nextText) {
+        return current;
+      }
+      if (!current) {
+        return nextText;
+      }
+      return /\s$/.test(current)
+        ? `${current}${nextText}`
+        : `${current} ${nextText}`;
+    });
+  };
+
+  const handleVoiceClick = () => {
+    if (
+      disabled ||
+      voiceState === "starting" ||
+      voiceState === "transcribing" ||
+      voiceStartInFlightRef.current
+    ) {
+      return;
+    }
+
+    void (async () => {
+      if (voiceState === "recording") {
+        const recording = voiceRecordingRef.current;
+        voiceRecordingRef.current = null;
+        if (isMountedRef.current) {
+          setVoiceState("transcribing");
+        }
+        try {
+          const clip = await recording?.stop();
+          if (!clip) {
+            return;
+          }
+          const transcript = await onTranscribeVoice(clip);
+          if (isMountedRef.current) {
+            appendVoiceText(transcript);
+          }
+        } catch (error) {
+          recordSupportLog(
+            "terminal.voice.transcribe.failed",
+            {
+              error: error instanceof Error ? error.message : String(error),
+            },
+            "warn",
+          );
+        } finally {
+          if (isMountedRef.current) {
+            setVoiceState("idle");
+          }
+        }
+        return;
+      }
+
+      try {
+        voiceStartInFlightRef.current = true;
+        setVoiceState("starting");
+        const recording = await startVoiceRecording();
+        voiceStartInFlightRef.current = false;
+        if (!isMountedRef.current) {
+          await recording.cancel();
+          return;
+        }
+        voiceRecordingRef.current = recording;
+        setVoiceState("recording");
+        recordSupportLog("terminal.voice.recording.started");
+      } catch (error) {
+        recordSupportLog(
+          "terminal.voice.recording.failed",
+          {
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "warn",
+        );
+        voiceStartInFlightRef.current = false;
+        if (isMountedRef.current) {
+          setVoiceState("idle");
+        }
+      }
+    })();
+  };
+
   const hasText = value.trimEnd().length > 0;
   const showStop = isStopping && !hasText;
   const actionDisabled = disabled || (!showStop && !hasText);
+  const voiceDisabled =
+    disabled || voiceState === "starting" || voiceState === "transcribing";
+  const voiceLabel =
+    voiceState === "recording"
+      ? "Stop voice recording"
+      : voiceState === "starting"
+        ? "Starting voice recording"
+      : voiceState === "transcribing"
+        ? "Transcribing voice"
+        : "Record voice";
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      voiceStartInFlightRef.current = false;
+      const recording = voiceRecordingRef.current;
+      voiceRecordingRef.current = null;
+      if (recording) {
+        void recording.cancel().catch((error: unknown) => {
+          recordSupportLog(
+            "terminal.voice.recording.cancel_failed",
+            {
+              error: error instanceof Error ? error.message : String(error),
+            },
+            "warn",
+          );
+        });
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const actionMode = `${showStop ? "stop" : "send"}:${actionDisabled}`;
@@ -84,14 +217,7 @@ export function TerminalCommandComposer({
       actionDisabled,
       actionLabel: showStop ? "Stop terminal command" : "Send command",
     });
-  }, [
-    actionDisabled,
-    disabled,
-    isPickingImage,
-    isStopping,
-    showStop,
-    value,
-  ]);
+  }, [actionDisabled, disabled, isPickingImage, isStopping, showStop, value]);
 
   return (
     <footer className="terminal-composer">
@@ -115,6 +241,20 @@ export function TerminalCommandComposer({
         >
           <IonIcon aria-hidden="true" icon={imageOutline} />
         </IonButton>
+        <button
+          aria-label={voiceLabel}
+          className={`terminal-composer__voice-button ${
+            voiceState === "recording" ? "is-recording" : ""
+          }`}
+          disabled={voiceDisabled}
+          onClick={handleVoiceClick}
+          type="button"
+        >
+          <IonIcon
+            aria-hidden="true"
+            icon={voiceState === "recording" ? stopCircleOutline : micOutline}
+          />
+        </button>
         <IonTextarea
           autoGrow
           className="terminal-composer__input"
