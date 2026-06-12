@@ -40,6 +40,9 @@ importers:
 
   app:
     dependencies:
+      "@browser-viewer/common":
+        specifier: workspace:*
+        version: link:../packages/common
       "@browser-viewer/shared":
         specifier: workspace:*
         version: link:../packages/shared
@@ -220,6 +223,9 @@ importers:
 
   frontend:
     dependencies:
+      "@browser-viewer/common":
+        specifier: workspace:*
+        version: link:../packages/common
       "@browser-viewer/shared":
         specifier: workspace:*
         version: link:../packages/shared
@@ -384,6 +390,12 @@ importers:
         specifier: ^3.0.9
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.2)
 
+  packages/common:
+    devDependencies:
+      typescript:
+        specifier: ^5.8.2
+        version: 5.9.3
+
   packages/shared:
     devDependencies:
       vitest:
@@ -392,6 +404,9 @@ importers:
 
   packages/terminal-renderer:
     dependencies:
+      "@browser-viewer/common":
+        specifier: workspace:*
+        version: link:../common
       "@xterm/addon-canvas":
         specifier: ^0.7.0
         version: 0.7.0(@xterm/xterm@6.0.0)

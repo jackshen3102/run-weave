@@ -3,6 +3,7 @@ import type {
   TerminalInputMode,
   TerminalState,
 } from "@browser-viewer/shared";
+import { fileToBase64, shellQuote } from "@browser-viewer/common/terminal";
 import {
   TerminalRenderer,
   type TerminalRendererHandle,
@@ -30,7 +31,6 @@ import {
 import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
 import { TerminalFilesTab } from "../components/TerminalFilesTab";
 import { recordSupportLog, useSupportLogs } from "../features/support-logs";
-import { fileToBase64, shellQuote } from "../lib/terminal-input-assets";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
 import { ApiError } from "../services/http";
