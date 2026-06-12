@@ -179,6 +179,69 @@ ion-content::part(background) {
   font-size: 14px;
 }
 
+.home-project-modal {
+  --border-radius: 16px 16px 0 0;
+  --height: auto;
+}
+
+.home-project-form {
+  display: grid;
+  gap: 18px;
+  padding: 18px 18px calc(var(--rw-app-safe-area-bottom) + 18px);
+  background: var(--rw-app-bg);
+  color: var(--rw-app-text);
+}
+
+.home-project-form__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.home-project-form__header h2 {
+  margin: 0;
+  color: var(--rw-app-text);
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.home-project-form__header button {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  color: var(--rw-app-muted);
+  font-size: 13px;
+  font-weight: 700;
+  touch-action: manipulation;
+}
+
+.home-project-form__header button:active {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.home-project-form__body {
+  display: grid;
+  gap: 14px;
+}
+
+.home-project-form__error {
+  margin: 0;
+  font-size: 13px;
+}
+
+.home-project-form__submit {
+  --border-radius: 8px;
+  min-height: 46px;
+  margin: 4px 0 0;
+  font-weight: 700;
+}
+
 .support-log-sheet {
   --border-radius: 16px 16px 0 0;
 }
