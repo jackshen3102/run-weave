@@ -21,6 +21,7 @@ App 终端详情页的核心能力是：
 - 打开指定 terminal session，持续查看实时输出。
 - 通过底部 composer 发送命令、问题、图片或换行输入。
 - 根据后端 `TerminalState` 决定是否展示 Stop。
+- 通过底部 `Chat / Changes / Files` tabs 在移动端查看终端输出、项目变更和项目文件。
 - 在手机触摸场景下避免误弹软键盘，同时保留明确的输入入口。
 
 Stop 只是向终端/Codex CLI 发送控制输入，不直接把状态改成 idle。Stop 按钮是否消失，取决于后端状态接口后续返回的 `TerminalState`。
@@ -31,9 +32,10 @@ App 不直接复用桌面 Terminal Workspace 的布局、Preview sidecar、Monac
 
 当前稳定边界：
 
-- App 首页使用 `/api/app/home/overview`。
-- App 终端详情使用 `/api/terminal/session/:id/state`、terminal websocket、input、interrupt 和 clipboard image API。
-- 代码预览、Changes/Files tabs、行级审阅或文件编辑属于后续 App 交互扩展；落地前不要在 README 或入口文档中表述为已完成能力。
+- App 首页使用 `/api/app/home/overview` 读取项目和终端摘要，并通过全局 `/ws/terminal-events` 接收 terminal state 变化。
+- App 终端详情使用 terminal websocket、input、interrupt、clipboard image API 和 `/api/terminal/session/:id/state` 兜底查询。
+- `Changes` 和 `Files` tabs 复用 project-scoped Preview API，提供移动端只读审阅入口；它们不把桌面 Preview sidecar、Monaco、拖拽排序或 Browser 工具搬到 App。
+- 行级编辑、文件写入、桌面级 Browser 工具和完整 IDE 交互不属于当前 App 稳定能力；落地前不要在 README 或入口文档中表述为已完成。
 
 ## 配置与安全
 

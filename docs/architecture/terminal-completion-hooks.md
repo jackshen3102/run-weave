@@ -14,8 +14,8 @@ Codex / Coco / Trae task finishes
     -> launcher reads Runweave terminal identity from tmux pane env
       -> launcher POSTs completion event to backend internal endpoint
         -> backend validates hook token + terminal/source gate
-        -> TerminalCompletionEventService records and broadcasts event
-          -> /ws/terminal-events pushes live event to online frontend
+        -> CompletionEventService records a completion envelope in TerminalEventService
+          -> /ws/terminal-events pushes the global event to online Web/App clients
             -> inactive matching terminal tab shows green dot
 ```
 
@@ -25,7 +25,7 @@ Codex / Coco / Trae task finishes
 - tmux 环境注入：`backend/src/terminal/runtime-launcher.ts`、`backend/src/terminal/tmux-service.ts`
 - 内部写入接口：`backend/src/routes/terminal-completion.ts`
 - source / active command 门禁：`backend/src/terminal/completion-source-gate.ts`、`backend/src/terminal/manager.ts`
-- 事件服务与短队列：`backend/src/terminal/completion-event-service.ts`、`backend/src/terminal/completion-events.ts`
+- 全局事件服务与 completion 兼容层：`backend/src/terminal/terminal-event-service.ts`、`backend/src/terminal/completion-event-service.ts`、`backend/src/terminal/completion-events.ts`
 - workspace 事件 WebSocket：`backend/src/ws/terminal-events-server.ts`、`backend/src/ws/terminal-events-handshake.ts`
 - 前端连接与点亮：`frontend/src/features/terminal/use-terminal-events-connection.ts`、`frontend/src/components/terminal/terminal-workspace.tsx`
 - 协议类型：`packages/shared/src/terminal-protocol.ts`
@@ -105,7 +105,7 @@ Content-Type: application/json
 
 写入层不是 source-only 信任模型。除 hook token 和 terminal id 外，还要求 `source` 与当前 AI active command 匹配；如果 Stop hook 晚到，当前 `activeCommand` 已清空，则接受 30 秒 grace window 内最近一次匹配的 AI active command。若用户已经切到其他命令、最近 AI command 超时或 source 不匹配，事件会被忽略，避免旧进程或误继承环境的进程伪造完成提醒。
 
-成功写入后，`TerminalCompletionEventService` 把事件写入内存短队列并广播给在线 `/ws/terminal-events` 订阅者。短队列保留最近 200 条事件，用于重连 catch-up 和兼容 HTTP 读取。
+成功写入后，`CompletionEventService` 会把 completion payload 包装成 `kind="completion"` 的全局 `TerminalEventEnvelope`，写入 `TerminalEventService` 的内存短队列，并广播给在线 `/ws/terminal-events` 订阅者。短队列保留最近 200 条全局 terminal events，用于重连 catch-up 和兼容 HTTP 读取。
 
 ## 前端实时消费
 
@@ -116,7 +116,7 @@ POST /api/terminal/completion-events/ws-ticket
 Authorization: Bearer <token>
 ```
 
-响应包含临时 `terminal-events-ws` ticket 和 `baselineEventId`。前端随后连接：
+响应包含临时 `terminal-events-ws` ticket 和 `baselineEventId`。`baselineEventId` 来自全局 `TerminalEventService.getLatestId()`，不是 completion-only cursor。前端随后连接：
 
 ```text
 /ws/terminal-events?token=<ticket>&after=<baselineEventId-or-last-event-id>
@@ -124,12 +124,15 @@ Authorization: Bearer <token>
 
 语义：
 
+- `/ws/terminal-events` 是全局 terminal event bus，不只推当前 terminal。
 - 首连用 ticket API 返回的 `baselineEventId` 作为 `after`，避免建立连接前后的竞态。
 - 重连用本地已处理的最新 event id 作为 `after`，补齐断线窗口内的短期事件。
 - 服务端建连后先注册 listener，再发送 catch-up，因此边界事件可能重复投递；前端按 event id 去重。
-- catch-up 只恢复 marker，不播放完成音；live event 可以触发完成音。
+- 服务端消息统一为 `terminal-events` catch-up 和 `terminal-event` live envelope；新消费者不再使用旧的 `completion-events` / `completion-event` message。
+- completion catch-up 只恢复 marker，不播放完成音；live completion 可以触发完成音。
 - 当前 active terminal 收到 completion event 不点亮，因为用户已经在看它。
 - 非当前 terminal 设置 completion marker；用户切到对应 terminal 后清除 marker。
+- `terminal_state_changed` 事件用于 Web/App 共享状态同步，App 不再依赖 2 秒 HTTP 轮询作为主路径。
 - session 删除或列表刷新后，由 marker cleanup 清理不存在 session 的 marker。
 
 `GET /api/terminal/completion-events?after=<last-event-id>` 仍保留给 CLI、调试和兼容读取，但 Terminal Workspace 不再定时调用它。
@@ -145,6 +148,32 @@ Authorization: Bearer <token>
 ```text
 这个非当前 terminal 有任何新输出
 ```
+
+## 全局 Terminal Event Envelope
+
+`/ws/terminal-events` 对外统一投递 `TerminalEventEnvelope`：
+
+```ts
+export type TerminalEventKind =
+  | "completion"
+  | "terminal_state_changed"
+  | "terminal_notification";
+
+export interface TerminalEventEnvelopeBase {
+  id: string;
+  terminalSessionId: string;
+  projectId: string | null;
+  createdAt: string;
+}
+```
+
+三类 payload 的边界：
+
+- `completion`：AI CLI 完成提醒，用于非当前终端的小绿点和完成音。
+- `terminal_state_changed`：Codex `TerminalState` 变化，用于 App/Web 同步 Stop、handoff 和列表状态。
+- `terminal_notification`：后续系统级终端通知的预留 envelope，不改变 `/ws/terminal` 的单 terminal I/O 职责。
+
+`TerminalEventService` 给所有 kind 使用同一个递增 cursor 空间。`listAfter(after)` 和 WebSocket catch-up 都按这个全局 cursor 返回事件，避免 completion 与 state 使用不同 baseline 导致 reconnect 漏事件。
 
 ## CLI 消费边界
 
