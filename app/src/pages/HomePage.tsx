@@ -1,6 +1,5 @@
 import type { AppHomeOverviewResponse } from "@browser-viewer/shared";
 import {
-  IonButton,
   IonContent,
   IonPage,
   IonRefresher,
@@ -12,6 +11,8 @@ import {
 } from "@ionic/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { AppMoreMenu } from "../components/AppMoreMenu";
+import { useSupportLogs } from "../features/support-logs";
 import {
   buildTerminalHomeGroups,
   type TerminalHomeProjectGroup,
@@ -53,6 +54,7 @@ export function HomePage({
   onOpenTerminal,
   onCreateTerminal,
 }: HomePageProps) {
+  const { openSupportLogs } = useSupportLogs();
   const [query, setQuery] = useState("");
   const [creatingProjectId, setCreatingProjectId] = useState<string | null>(
     null,
@@ -68,6 +70,20 @@ export function HomePage({
   );
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(
     () => buildInitialExpanded(groups),
+  );
+  const moreMenuItems = useMemo(
+    () => [
+      {
+        label: "日志上报",
+        onClick: () => openSupportLogs({ source: "home", route: "/home" }),
+      },
+      {
+        label: "Logout",
+        onClick: onLogout,
+        tone: "danger" as const,
+      },
+    ],
+    [onLogout, openSupportLogs],
   );
 
   useEffect(() => {
@@ -132,12 +148,7 @@ export function HomePage({
               </span>
             </div>
             <nav aria-label="Home actions">
-              <IonButton fill="clear" onClick={() => void onRefresh()}>
-                Refresh
-              </IonButton>
-              <IonButton fill="clear" onClick={onLogout}>
-                Logout
-              </IonButton>
+              <AppMoreMenu items={moreMenuItems} />
             </nav>
           </header>
           <IonSearchbar

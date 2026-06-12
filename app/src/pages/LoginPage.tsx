@@ -8,6 +8,7 @@ import {
 } from "@ionic/react";
 import { FormEvent, useState } from "react";
 
+import { useSupportLogs } from "../features/support-logs";
 import { ApiError } from "../services/http";
 
 interface LoginPageProps {
@@ -25,6 +26,7 @@ function resolveLoginError(error: unknown): string {
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
+  const { openSupportLogs } = useSupportLogs();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +94,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               {submitting ? <IonSpinner name="crescent" /> : "Login"}
             </IonButton>
           </form>
+          <IonButton
+            className="login-support-log"
+            fill="clear"
+            onClick={() => openSupportLogs({ source: "login" })}
+            type="button"
+          >
+            日志上报
+          </IonButton>
         </main>
       </IonContent>
     </IonPage>

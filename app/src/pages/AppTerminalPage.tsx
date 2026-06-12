@@ -9,6 +9,7 @@ import {
   type TerminalRendererExtensionContext,
 } from "@browser-viewer/terminal-renderer";
 import {
+  IonAlert,
   IonButton,
   IonContent,
   IonPage,
@@ -21,13 +22,14 @@ import {
   type AppTerminalDetailTab,
   TerminalDetailTabBar,
 } from "../components/TerminalDetailTabBar";
+import { AppMoreMenu } from "../components/AppMoreMenu";
 import {
   type SelectedTerminalChange,
   TerminalChangesTab,
 } from "../components/TerminalChangesTab";
 import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
 import { TerminalFilesTab } from "../components/TerminalFilesTab";
-import { aiDiagnosticLog } from "../lib/app-diagnostics";
+import { recordSupportLog, useSupportLogs } from "../features/support-logs";
 import { fileToBase64, shellQuote } from "../lib/terminal-input-assets";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
@@ -46,6 +48,7 @@ interface AppTerminalPageProps {
   terminalSessionId: string;
   onAuthExpired: () => void;
   onBack: () => void;
+  onDeleteTerminal: () => Promise<void>;
 }
 
 function basename(value: string): string {
@@ -304,10 +307,15 @@ export function AppTerminalPage({
   terminalSessionId,
   onAuthExpired,
   onBack,
+  onDeleteTerminal,
 }: AppTerminalPageProps) {
+  const { openSupportLogs } = useSupportLogs();
   const rendererRef = useRef<TerminalRendererHandle | null>(null);
   const [activeTab, setActiveTab] = useState<AppTerminalDetailTab>("chat");
   const [changesCount, setChangesCount] = useState(0);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeletingTerminal, setIsDeletingTerminal] = useState(false);
   const [requestedChange, setRequestedChange] =
     useState<SelectedTerminalChange | null>(null);
   const terminalStateRef = useRef<TerminalState>({
@@ -357,8 +365,29 @@ export function AppTerminalPage({
         ? "Exited"
         : "Connected"
       : "Connecting";
+  const supportLogScope = useMemo(
+    () => ({
+      source: "terminal" as const,
+      route: `/terminal/${terminalSessionId}`,
+      terminalSessionId,
+      projectId: activeProjectId,
+      connectionStatus,
+      runtimeStatus,
+      activeTab,
+    }),
+    [
+      activeProjectId,
+      activeTab,
+      connectionStatus,
+      runtimeStatus,
+      terminalSessionId,
+    ],
+  );
   useEffect(() => {
     const initialState = initialSession?.terminalState ?? SHELL_IDLE_STATE;
+    setConfirmDeleteOpen(false);
+    setDeleteError(null);
+    setIsDeletingTerminal(false);
     setTerminalState(initialState);
   }, [initialSession?.terminalState, terminalSessionId]);
 
@@ -367,21 +396,22 @@ export function AppTerminalPage({
       return;
     }
     let cancelled = false;
+    let timer: number | null = null;
 
-    aiDiagnosticLog("app terminal page mounted", {
+    recordSupportLog("terminal.page.mounted", {
       terminalSessionId,
       initialState: terminalStateRef.current.state,
       initialAgent: terminalStateRef.current.agent,
     });
 
-    if (!initialSession?.terminalState) {
-      aiDiagnosticLog("app terminal initial state request started", {
+    const refreshTerminalState = () => {
+      recordSupportLog("terminal.state.poll.started", {
         terminalSessionId,
       });
       void getCurrentTerminalState(apiBase, accessToken, terminalSessionId)
         .then((payload) => {
           if (!cancelled) {
-            aiDiagnosticLog("app terminal initial state request completed", {
+            recordSupportLog("terminal.state.poll.completed", {
               terminalSessionId,
               previousState: terminalStateRef.current.state,
               previousAgent: terminalStateRef.current.agent,
@@ -400,38 +430,109 @@ export function AppTerminalPage({
             return;
           }
           if (nextError instanceof ApiError && nextError.status === 404) {
-            aiDiagnosticLog("app terminal initial state request not found", {
+            recordSupportLog("terminal.state.poll.not_found", {
               terminalSessionId,
               previousState: terminalStateRef.current.state,
-            });
+            }, "warn");
             setTerminalState({ state: "shell_idle", agent: null });
             return;
           }
-          aiDiagnosticLog("app terminal initial state request failed", {
+          recordSupportLog("terminal.state.poll.failed", {
             terminalSessionId,
             error: nextError instanceof Error ? nextError.message : String(nextError),
-          });
+          }, "warn");
         });
-    }
+    };
+
+    refreshTerminalState();
+    timer = window.setInterval(refreshTerminalState, 2000);
 
     return () => {
       cancelled = true;
-      aiDiagnosticLog("app terminal page unmounted", {
+      recordSupportLog("terminal.page.unmounted", {
         terminalSessionId,
         lastState: terminalStateRef.current.state,
         lastAgent: terminalStateRef.current.agent,
       });
+      if (timer !== null) {
+        window.clearInterval(timer);
+      }
     };
   }, [
     accessToken,
     apiBase,
-    initialSession?.terminalState,
     notFound,
     onAuthExpired,
     terminalSessionId,
   ]);
 
   const isCommandActive = terminalState.state === "agent_running";
+
+  const handleRequestDeleteTerminal = useCallback(() => {
+    setDeleteError(null);
+    setConfirmDeleteOpen(true);
+  }, []);
+
+  const handleDeleteTerminal = useCallback(async (): Promise<void> => {
+    if (isDeletingTerminal) {
+      return;
+    }
+    setIsDeletingTerminal(true);
+    setDeleteError(null);
+    recordSupportLog("terminal.delete.started", {
+      terminalSessionId,
+      stateAtClick: terminalStateRef.current.state,
+      agentAtClick: terminalStateRef.current.agent,
+    });
+    try {
+      await onDeleteTerminal();
+      recordSupportLog("terminal.delete.completed", {
+        terminalSessionId,
+      });
+    } catch (nextError: unknown) {
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        recordSupportLog("terminal.delete.unauthorized", {
+          terminalSessionId,
+        }, "warn");
+        onAuthExpired();
+        return;
+      }
+      recordSupportLog("terminal.delete.failed", {
+        terminalSessionId,
+        error: nextError instanceof Error ? nextError.message : String(nextError),
+      }, "warn");
+      setIsDeletingTerminal(false);
+      setDeleteError(
+        nextError instanceof Error ? nextError.message : "删除终端失败",
+      );
+      setConfirmDeleteOpen(false);
+    }
+  }, [
+    isDeletingTerminal,
+    onAuthExpired,
+    onDeleteTerminal,
+    terminalSessionId,
+  ]);
+
+  const moreMenuItems = useMemo(
+    () => [
+      {
+        label: "日志上报",
+        onClick: () => openSupportLogs(supportLogScope),
+      },
+      {
+        label: isDeletingTerminal ? "删除中..." : "删除终端",
+        onClick: handleRequestDeleteTerminal,
+        tone: "danger" as const,
+      },
+    ],
+    [
+      handleRequestDeleteTerminal,
+      isDeletingTerminal,
+      openSupportLogs,
+      supportLogScope,
+    ],
+  );
 
   useEffect(() => {
     if (activeTab === "chat") {
@@ -441,7 +542,7 @@ export function AppTerminalPage({
 
   const handleStop = useCallback(() => {
     setImageError(null);
-    aiDiagnosticLog("app terminal stop clicked", {
+    recordSupportLog("terminal.stop.clicked", {
       terminalSessionId,
       stateAtClick: terminalStateRef.current.state,
       agentAtClick: terminalStateRef.current.agent,
@@ -452,25 +553,25 @@ export function AppTerminalPage({
       terminalSessionId,
     )
       .then(() => {
-        aiDiagnosticLog("app terminal stop request succeeded", {
+        recordSupportLog("terminal.stop.completed", {
           terminalSessionId,
           stateAfterSuccess: terminalStateRef.current.state,
           agentAfterSuccess: terminalStateRef.current.agent,
         });
       })
-      .catch((nextError: unknown) => {
+    .catch((nextError: unknown) => {
       if (nextError instanceof ApiError && nextError.status === 401) {
-        aiDiagnosticLog("app terminal stop request unauthorized", {
+        recordSupportLog("terminal.stop.unauthorized", {
           terminalSessionId,
-        });
+        }, "warn");
         onAuthExpired();
         return;
       }
-      aiDiagnosticLog("app terminal stop request failed", {
+      recordSupportLog("terminal.stop.failed", {
         terminalSessionId,
         stateAfterFailure: terminalStateRef.current.state,
         error: nextError instanceof Error ? nextError.message : String(nextError),
-      });
+      }, "warn");
       setImageError(
         nextError instanceof Error ? nextError.message : "中断命令失败",
       );
@@ -478,19 +579,42 @@ export function AppTerminalPage({
   }, [accessToken, apiBase, onAuthExpired, terminalSessionId]);
   const handleSendCommand = useCallback(
     async (data: string): Promise<void> => {
+      const mode = resolveComposerInputMode(terminalStateRef.current, data);
+      recordSupportLog("terminal.input.send.started", {
+        terminalSessionId,
+        hasNewline: data.includes("\n"),
+        length: data.length,
+        mode,
+      });
       try {
         await sendTerminalInput(
           apiBase,
           accessToken,
           terminalSessionId,
           data,
-          resolveComposerInputMode(terminalStateRef.current, data),
+          mode,
         );
+        recordSupportLog("terminal.input.send.completed", {
+          terminalSessionId,
+          length: data.length,
+          mode,
+        });
       } catch (nextError: unknown) {
         if (nextError instanceof ApiError && nextError.status === 401) {
+          recordSupportLog("terminal.input.send.unauthorized", {
+            terminalSessionId,
+            length: data.length,
+            mode,
+          }, "warn");
           onAuthExpired();
           return;
         }
+        recordSupportLog("terminal.input.send.failed", {
+          terminalSessionId,
+          error: nextError instanceof Error ? nextError.message : String(nextError),
+          length: data.length,
+          mode,
+        }, "warn");
         setImageError(
           nextError instanceof Error ? nextError.message : "命令发送失败",
         );
@@ -503,6 +627,11 @@ export function AppTerminalPage({
     (file: File) => {
       setImageError(null);
       setIsPickingImage(true);
+      recordSupportLog("terminal.clipboard_image.upload.started", {
+        terminalSessionId,
+        mimeType: file.type,
+        size: file.size,
+      });
       void fileToBase64(file)
         .then((dataBase64) =>
           createTerminalSessionClipboardImage(
@@ -516,13 +645,24 @@ export function AppTerminalPage({
           ),
         )
         .then((payload) => {
+          recordSupportLog("terminal.clipboard_image.upload.completed", {
+            terminalSessionId,
+            filePathLength: payload.filePath.length,
+          });
           sendInput(shellQuote(payload.filePath));
         })
         .catch((nextError: unknown) => {
           if (nextError instanceof ApiError && nextError.status === 401) {
+            recordSupportLog("terminal.clipboard_image.upload.unauthorized", {
+              terminalSessionId,
+            }, "warn");
             onAuthExpired();
             return;
           }
+          recordSupportLog("terminal.clipboard_image.upload.failed", {
+            terminalSessionId,
+            error: nextError instanceof Error ? nextError.message : String(nextError),
+          }, "warn");
           setImageError(
             nextError instanceof Error ? nextError.message : "图片选择失败",
           );
@@ -534,10 +674,30 @@ export function AppTerminalPage({
     [accessToken, apiBase, onAuthExpired, sendInput, terminalSessionId],
   );
 
-  const handleShowChanges = useCallback((change: SelectedTerminalChange) => {
-    setRequestedChange(change);
-    setActiveTab("changes");
-  }, []);
+  const handleShowChanges = useCallback(
+    (change: SelectedTerminalChange) => {
+      setRequestedChange(change);
+      recordSupportLog("terminal.tab.changed", {
+        terminalSessionId,
+        previousTab: activeTab,
+        nextTab: "changes",
+      });
+      setActiveTab("changes");
+    },
+    [activeTab, terminalSessionId],
+  );
+
+  const handleTabChange = useCallback(
+    (nextTab: AppTerminalDetailTab) => {
+      recordSupportLog("terminal.tab.changed", {
+        terminalSessionId,
+        previousTab: activeTab,
+        nextTab,
+      });
+      setActiveTab(nextTab);
+    },
+    [activeTab, terminalSessionId],
+  );
 
   return (
     <IonPage>
@@ -588,7 +748,44 @@ export function AppTerminalPage({
                 ↻
               </span>
             </button>
+            <AppMoreMenu
+              ariaLabel="Terminal more actions"
+              className="terminal-page-header__more"
+              items={moreMenuItems}
+            />
           </header>
+          <IonAlert
+            buttons={[
+              {
+                role: "cancel",
+                text: "取消",
+              },
+              {
+                cssClass: "terminal-delete-alert__confirm",
+                handler: () => {
+                  void handleDeleteTerminal();
+                  return false;
+                },
+                role: "destructive",
+                text: isDeletingTerminal ? "删除中..." : "删除",
+              },
+            ]}
+            header="删除终端"
+            isOpen={confirmDeleteOpen}
+            message="删除后会关闭这个终端会话，并清除对应历史。"
+            onDidDismiss={() => {
+              if (!isDeletingTerminal) {
+                setConfirmDeleteOpen(false);
+              }
+            }}
+          />
+          <IonAlert
+            buttons={["确定"]}
+            header="删除失败"
+            isOpen={deleteError !== null}
+            message={deleteError ?? ""}
+            onDidDismiss={() => setDeleteError(null)}
+          />
           <section className="terminal-page-body bg-background">
             {notFound ? (
               <div className="terminal-page-state">
@@ -676,7 +873,7 @@ export function AppTerminalPage({
           <TerminalDetailTabBar
             activeTab={activeTab}
             changesCount={changesCount}
-            onTabChange={setActiveTab}
+            onTabChange={handleTabChange}
           />
         </main>
       </IonContent>

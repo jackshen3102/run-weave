@@ -1,7 +1,9 @@
 import { IonButton, IonIcon, IonTextarea } from "@ionic/react";
 import { arrowUp, imageOutline, stop } from "ionicons/icons";
 import type { ChangeEvent } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { recordSupportLog } from "../features/support-logs";
 
 export function TerminalCommandComposer({
   disabled,
@@ -20,6 +22,7 @@ export function TerminalCommandComposer({
 }) {
   const [value, setValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const lastActionModeRef = useRef<string | null>(null);
 
   const handleSubmit = async () => {
     const text = value.trimEnd();
@@ -50,6 +53,31 @@ export function TerminalCommandComposer({
   const hasText = value.trimEnd().length > 0;
   const showStop = isStopping && !hasText;
   const actionDisabled = disabled || (!showStop && !hasText);
+
+  useEffect(() => {
+    const actionMode = `${showStop ? "stop" : "send"}:${actionDisabled}`;
+    if (lastActionModeRef.current === actionMode) {
+      return;
+    }
+    lastActionModeRef.current = actionMode;
+    recordSupportLog("terminal.composer.action_mode.changed", {
+      disabled,
+      isPickingImage,
+      isStopping,
+      valueLength: value.length,
+      trimmedEndLength: value.trimEnd().length,
+      showStop,
+      actionDisabled,
+      actionLabel: showStop ? "Stop terminal command" : "Send command",
+    });
+  }, [
+    actionDisabled,
+    disabled,
+    isPickingImage,
+    isStopping,
+    showStop,
+    value,
+  ]);
 
   return (
     <footer className="terminal-composer">

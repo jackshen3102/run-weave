@@ -14,7 +14,10 @@ import type {
   AppSessionController,
   AppLoginParams,
 } from "../hooks/use-app-session";
-import { createTerminalSession } from "../services/terminal";
+import {
+  createTerminalSession,
+  deleteTerminalSession,
+} from "../services/terminal";
 
 const LOGIN_ROUTE = "/login";
 const HOME_ROUTE = "/home";
@@ -101,6 +104,24 @@ function TerminalRoute({ session }: { session: AppSessionController }) {
     void session.refreshOverview();
     history.replace(HOME_ROUTE);
   }, [history, session.refreshOverview]);
+  const deleteTerminal = useCallback(async () => {
+    if (!terminalSessionId) {
+      return;
+    }
+    await deleteTerminalSession(
+      session.apiBase,
+      session.accessToken,
+      terminalSessionId,
+    );
+    await session.refreshOverview();
+    history.replace(HOME_ROUTE);
+  }, [
+    history,
+    session.accessToken,
+    session.apiBase,
+    session.refreshOverview,
+    terminalSessionId,
+  ]);
 
   if (!terminalSessionId) {
     return <Redirect to={HOME_ROUTE} />;
@@ -114,6 +135,7 @@ function TerminalRoute({ session }: { session: AppSessionController }) {
       terminalSessionId={terminalSessionId}
       onAuthExpired={session.onAuthExpired}
       onBack={goBack}
+      onDeleteTerminal={deleteTerminal}
     />
   );
 }
