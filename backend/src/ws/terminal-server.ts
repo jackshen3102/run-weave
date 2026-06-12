@@ -22,6 +22,7 @@ import {
 } from "../terminal/runtime-launcher";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
 import { createShellPromptTracker } from "../terminal/shell-integration";
+import type { TmuxLifecycleCoordinator } from "../terminal/tmux-lifecycle-coordinator";
 import type { TerminalStateService } from "../terminal/terminal-state-service";
 import type { TmuxService } from "../terminal/tmux-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
@@ -42,6 +43,7 @@ import {
 } from "./terminal-server-connection-helpers";
 
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
+const TMUX_ACTIVE_COMMAND_RESYNC_DELAY_MS = 1_000;
 
 export function attachTerminalWebSocketServer(
   server: HttpServer,
@@ -53,6 +55,7 @@ export function attachTerminalWebSocketServer(
   options?: {
     tunnelAuthConfig?: TunnelAuthConfig | null;
     tmuxOutputWatcher?: TmuxOutputWatcher;
+    tmuxLifecycleCoordinator?: TmuxLifecycleCoordinator;
     terminalStateService?: TerminalStateService;
   },
 ): WebSocketServer {
@@ -218,6 +221,10 @@ export function attachTerminalWebSocketServer(
     let tmuxMetadataSyncTimer: NodeJS.Timeout | null = null;
     let tmuxMetadataSyncInFlight = false;
     let shellPromptCommandActive = false;
+    let lastSentMetadata: {
+      cwd: string;
+      activeCommand: string | null;
+    } | null = null;
 
     const publishMetadata = async (
       metadata: {
@@ -230,7 +237,15 @@ export function attachTerminalWebSocketServer(
       const metadataChanged =
         current?.cwd !== metadata.cwd ||
         current.activeCommand !== metadata.activeCommand;
-      if (!metadataChanged && !publishOptions?.forceSend) {
+      const clientMetadataChanged =
+        !lastSentMetadata ||
+        lastSentMetadata.cwd !== metadata.cwd ||
+        lastSentMetadata.activeCommand !== metadata.activeCommand;
+      if (
+        !metadataChanged &&
+        !clientMetadataChanged &&
+        !publishOptions?.forceSend
+      ) {
         return;
       }
 
@@ -260,6 +275,10 @@ export function attachTerminalWebSocketServer(
         cwd: metadata.cwd,
         activeCommand: metadata.activeCommand,
       });
+      lastSentMetadata = {
+        cwd: metadata.cwd,
+        activeCommand: metadata.activeCommand,
+      };
     };
 
     const syncTmuxPaneMetadata = async (): Promise<void> => {
@@ -282,6 +301,9 @@ export function attachTerminalWebSocketServer(
         );
         if (metadata) {
           await publishMetadata(metadata);
+          if (metadata.activeCommand !== null) {
+            scheduleTmuxPaneMetadataSync(TMUX_ACTIVE_COMMAND_RESYNC_DELAY_MS);
+          }
         }
       } catch (error) {
         terminalWsLogger.error("terminal.tmux.metadata-sync.failed", {
@@ -326,6 +348,12 @@ export function attachTerminalWebSocketServer(
       runtimeKind: session && isTmuxBackedSession(session) ? "tmux" : "pty",
       sessionStatus: session?.status ?? null,
     });
+    const releaseTmuxLifecycleClient =
+      session && isTmuxBackedSession(session)
+        ? options?.tmuxLifecycleCoordinator?.registerAttachedClient(
+            terminalSessionId,
+          )
+        : undefined;
     runtimeRegistry.attachClient(terminalSessionId, clientId);
     const unsubscribe = runtimeRegistry.subscribe(terminalSessionId, {
       onData(data) {
@@ -391,8 +419,8 @@ export function attachTerminalWebSocketServer(
           tmuxService
         ) {
           void (async () => {
-            await runtimeRegistry.disposeRuntime(terminalSessionId);
-            try {
+            const recover = async (): Promise<void> => {
+              await runtimeRegistry.disposeRuntime(terminalSessionId);
               const ensured = await ensureTerminalRuntime({
                 session,
                 terminalSessionManager,
@@ -409,6 +437,16 @@ export function attachTerminalWebSocketServer(
               }
               sendStatusEvent(socket, "running");
               socket.close(1012, "Terminal tmux attach reattached");
+            };
+            try {
+              if (options?.tmuxLifecycleCoordinator) {
+                await options.tmuxLifecycleCoordinator.runRecovery(
+                  terminalSessionId,
+                  recover,
+                );
+              } else {
+                await recover();
+              }
             } catch (error) {
               terminalWsLogger.error("terminal.runtime.recreate.failed", {
                 message: "Failed to recover tmux terminal runtime",
@@ -562,6 +600,7 @@ export function attachTerminalWebSocketServer(
       heartbeat.stop();
       unsubscribe();
       outputBatcher.dispose();
+      releaseTmuxLifecycleClient?.();
       if (tmuxMetadataSyncTimer) {
         clearTimeout(tmuxMetadataSyncTimer);
         tmuxMetadataSyncTimer = null;

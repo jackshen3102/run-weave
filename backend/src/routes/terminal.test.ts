@@ -247,6 +247,7 @@ function createTestServer(
       ptyService: options?.ptyService as never,
       runtimeRegistry: (options?.runtimeRegistry ?? runtimeRegistry) as never,
       tmuxService: options?.tmuxService as never,
+      terminalStateService,
     }),
   );
   const server = http.createServer(app);
@@ -1038,19 +1039,61 @@ describe("terminal routes", () => {
 
   it("lists terminal sessions through the API", async () => {
     const state = {
-      current: {
-        id: "terminal-1",
-        projectId: "project-default",
-        name: "bash",
-        command: "bash",
-        args: ["-l"],
-        cwd: "/tmp/demo",
-        scrollback: "bash$ ",
-        status: "running" as const,
-        createdAt: new Date("2026-03-29T00:00:00.000Z"),
-      },
+      current: null as MockTerminalSession | null,
+      sessions: [
+        {
+          id: "terminal-idle",
+          projectId: "project-default",
+          command: "bash",
+          args: ["-l"],
+          cwd: "/tmp/demo",
+          activeCommand: null,
+          scrollback: "bash$ ",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        },
+        {
+          id: "terminal-running",
+          projectId: "project-default",
+          command: "zsh",
+          args: ["-l"],
+          cwd: "/tmp/browser-viewer",
+          activeCommand: "codex",
+          scrollback: "codex running",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:01:00.000Z"),
+        },
+        {
+          id: "terminal-codex-idle",
+          projectId: "project-default",
+          command: "codex",
+          args: [],
+          cwd: "/tmp/browser-viewer",
+          activeCommand: "node",
+          scrollback: "codex idle",
+          status: "running" as const,
+          createdAt: new Date("2026-03-29T00:02:00.000Z"),
+        },
+        {
+          id: "terminal-exited",
+          projectId: "project-default",
+          command: "bash",
+          args: [],
+          cwd: "/tmp/old",
+          activeCommand: "codex",
+          scrollback: "done",
+          status: "exited" as const,
+          createdAt: new Date("2026-03-29T00:03:00.000Z"),
+          exitCode: 0,
+        },
+      ],
     };
-    const { server } = createTestServer(state);
+    const { server, terminalStateService } = createTestServer(state);
+    terminalStateService.handleAgentHook(
+      "terminal-running",
+      "codex",
+      "UserPromptSubmit",
+    );
     servers.push(server);
     const port = await startServer(server);
 
@@ -1061,15 +1104,53 @@ describe("terminal routes", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual([
       {
-        terminalSessionId: "terminal-1",
+        terminalSessionId: "terminal-idle",
         projectId: "project-default",
         command: "bash",
         args: ["-l"],
         cwd: "/tmp/demo",
         activeCommand: null,
+        terminalState: { state: "shell_idle", agent: null },
         status: "running",
         createdAt: "2026-03-29T00:00:00.000Z",
         lastActivityAt: "2026-03-29T00:00:00.000Z",
+      },
+      {
+        terminalSessionId: "terminal-running",
+        projectId: "project-default",
+        command: "zsh",
+        args: ["-l"],
+        cwd: "/tmp/browser-viewer",
+        activeCommand: "codex",
+        terminalState: { state: "agent_running", agent: "codex" },
+        status: "running",
+        createdAt: "2026-03-29T00:01:00.000Z",
+        lastActivityAt: "2026-03-29T00:01:00.000Z",
+      },
+      {
+        terminalSessionId: "terminal-codex-idle",
+        projectId: "project-default",
+        command: "codex",
+        args: [],
+        cwd: "/tmp/browser-viewer",
+        activeCommand: "node",
+        terminalState: { state: "agent_idle", agent: "codex" },
+        status: "running",
+        createdAt: "2026-03-29T00:02:00.000Z",
+        lastActivityAt: "2026-03-29T00:02:00.000Z",
+      },
+      {
+        terminalSessionId: "terminal-exited",
+        projectId: "project-default",
+        command: "bash",
+        args: [],
+        cwd: "/tmp/old",
+        activeCommand: "codex",
+        terminalState: { state: "shell_idle", agent: null },
+        status: "exited",
+        createdAt: "2026-03-29T00:03:00.000Z",
+        lastActivityAt: "2026-03-29T00:03:00.000Z",
+        exitCode: 0,
       },
     ]);
   });

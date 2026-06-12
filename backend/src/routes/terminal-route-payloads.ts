@@ -3,6 +3,7 @@ import type {
   TerminalSessionHistoryResponse,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
+  TerminalState,
 } from "@browser-viewer/shared";
 import type { TerminalSessionManager } from "../terminal/manager";
 
@@ -49,6 +50,7 @@ export function toStatusPayload(
 
 export function toSessionListItem(
   session: TerminalSession,
+  terminalState?: TerminalState,
 ): TerminalSessionListItem {
   return {
     terminalSessionId: session.id,
@@ -57,6 +59,7 @@ export function toSessionListItem(
     args: session.args,
     cwd: session.cwd,
     activeCommand: session.activeCommand,
+    ...(terminalState ? { terminalState } : {}),
     tmuxSessionName: session.tmuxSessionName,
     tmuxSocketPath: session.tmuxSocketPath,
     status: session.status,

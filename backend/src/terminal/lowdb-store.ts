@@ -23,6 +23,7 @@ import type {
   TerminalSessionStore,
   UpdateTerminalProjectParams,
   UpdateTerminalSessionExitParams,
+  UpdateTerminalSessionStatusParams,
   UpdateTerminalSessionActivityParams,
   UpdateTerminalSessionLaunchParams,
   UpdateTerminalSessionMetadataParams,
@@ -368,8 +369,8 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
     });
   }
 
-  async updateSessionExit(
-    params: UpdateTerminalSessionExitParams,
+  async updateSessionStatus(
+    params: UpdateTerminalSessionStatusParams,
   ): Promise<void> {
     await this.enqueueWrite(async () => {
       const database = this.getDatabase();
@@ -387,6 +388,12 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       }
       await database.write();
     });
+  }
+
+  async updateSessionExit(
+    params: UpdateTerminalSessionExitParams,
+  ): Promise<void> {
+    await this.updateSessionStatus(params);
   }
 
   async reorderProjects(orderedIds: string[]): Promise<void> {

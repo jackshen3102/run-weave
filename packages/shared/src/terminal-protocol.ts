@@ -230,6 +230,7 @@ export interface TerminalSessionListItem {
   args: string[];
   cwd: string;
   activeCommand: string | null;
+  terminalState?: TerminalState;
   tmuxSessionName?: string;
   tmuxSocketPath?: string;
   status: "running" | "exited";

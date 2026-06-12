@@ -102,6 +102,7 @@ export async function ensureTerminalRuntime(
                 activeCommand: null,
               },
             )) ?? currentSession;
+          options.terminalSessionManager.markRunning(currentSession.id);
           warning = "Command exited; returned to a shell.";
         }
 

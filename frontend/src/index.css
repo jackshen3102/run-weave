@@ -127,6 +127,171 @@ canvas {
   animation: panel-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Adapted from assistant-ui tw-shimmer (MIT).
+   Source: https://github.com/assistant-ui/assistant-ui/blob/main/packages/tw-shimmer/src/index.css */
+@property --shimmer-track-height {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 200px;
+}
+
+@property --shimmer-angle {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 15deg;
+}
+
+@keyframes tw-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+}
+
+.shimmer {
+  --_gradient-width: calc(
+    var(--_spread) + var(--shimmer-track-height) * tan(var(--shimmer-angle))
+  );
+  --_active-distance: calc(
+    var(--shimmer-track-width, 200px) + var(--_gradient-width)
+  );
+  --_duration: var(
+    --shimmer-duration,
+    calc(var(--_active-distance) / var(--_speed) / 1px * 1000)
+  );
+  --_repeat-delay: var(--shimmer-repeat-delay, calc(20000 / var(--_speed)));
+  --_repeat-delay-px: calc(
+    var(--_repeat-delay) * var(--_active-distance) / var(--_duration)
+  );
+  --_xy-offset-px: calc(
+    (var(--shimmer-x, 0) + var(--shimmer-y, 0) * tan(var(--shimmer-angle))) *
+      1px
+  );
+  --_bg-width: calc(
+    100% + var(--shimmer-track-width, 100%) + var(--_gradient-width) +
+      var(--_repeat-delay-px)
+  );
+  --_position: calc(
+    var(
+        --shimmer-track-width,
+        (100% - var(--_gradient-width) - var(--_repeat-delay-px)) / 2
+      ) +
+      var(--_gradient-width) / 2 + var(--_repeat-delay-px) -
+      var(--_xy-offset-px)
+  );
+  --_mix-96: color-mix(in oklch, var(--_fg), var(--_bg) 96%);
+  --_mix-83: color-mix(in oklch, var(--_fg), var(--_bg) 83%);
+  --_mix-67: color-mix(in oklch, var(--_fg), var(--_bg) 67%);
+  --_mix-50: color-mix(in oklch, var(--_fg), var(--_bg) 50%);
+  --_mix-33: color-mix(in oklch, var(--_fg), var(--_bg) 33%);
+  --_mix-17: color-mix(in oklch, var(--_fg), var(--_bg) 17%);
+  --_mix-4: color-mix(in oklch, var(--_fg), var(--_bg) 4%);
+  background: linear-gradient(
+      calc(90deg + var(--shimmer-angle)),
+      var(--_bg) calc(var(--_position) - var(--_spread) * 0.5),
+      var(--_mix-96) calc(var(--_position) - var(--_spread) * 0.44),
+      var(--_mix-83) calc(var(--_position) - var(--_spread) * 0.37),
+      var(--_mix-67) calc(var(--_position) - var(--_spread) * 0.31),
+      var(--_mix-50) calc(var(--_position) - var(--_spread) * 0.25),
+      var(--_mix-33) calc(var(--_position) - var(--_spread) * 0.19),
+      var(--_mix-17) calc(var(--_position) - var(--_spread) * 0.12),
+      var(--_mix-4) calc(var(--_position) - var(--_spread) * 0.06),
+      var(--_fg) var(--_position),
+      var(--_mix-4) calc(var(--_position) + var(--_spread) * 0.06),
+      var(--_mix-17) calc(var(--_position) + var(--_spread) * 0.12),
+      var(--_mix-33) calc(var(--_position) + var(--_spread) * 0.19),
+      var(--_mix-50) calc(var(--_position) + var(--_spread) * 0.25),
+      var(--_mix-67) calc(var(--_position) + var(--_spread) * 0.31),
+      var(--_mix-83) calc(var(--_position) + var(--_spread) * 0.37),
+      var(--_mix-96) calc(var(--_position) + var(--_spread) * 0.44),
+      var(--_bg) calc(var(--_position) + var(--_spread) * 0.5)
+    )
+    0 0 / var(--_bg-width) 100% no-repeat;
+  animation: tw-shimmer 1s linear 0s infinite backwards;
+  animation-duration: calc((var(--_duration) + var(--_repeat-delay)) * 1ms);
+}
+
+.shimmer:not(.shimmer-bg) {
+  --_speed: var(--shimmer-speed, 200);
+  --_spread: var(--shimmer-spread, calc(4ch + 80px));
+  --_bg: currentColor;
+  --_fg: var(--shimmer-color, rgb(255 255 255 / 0.28));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.dark .shimmer:not(.shimmer-bg) {
+  --_fg: var(--shimmer-color, rgb(255 255 255 / 0.68));
+}
+
+.shimmer-bg {
+  --_speed: var(--shimmer-speed, 1000);
+  --_spread: var(--shimmer-spread, 480px);
+  --_bg: transparent;
+  --_fg: var(--shimmer-color, rgb(0 0 0 / 0.06));
+}
+
+.dark .shimmer-bg {
+  --_fg: var(--shimmer-color, rgb(0 0 0 / 0.3));
+}
+
+.shimmer-invert:not(.shimmer-bg) {
+  --shimmer-color: rgb(255 255 255 / 0.72);
+}
+
+.dark .shimmer-invert:not(.shimmer-bg) {
+  --shimmer-color: rgb(255 255 255 / 0.22);
+}
+
+@supports (color: oklch(from currentColor l c h)) {
+  .shimmer:not(.shimmer-bg) {
+    --_fg: var(
+      --shimmer-color,
+      oklch(from currentColor l c h / calc(alpha * 0.2))
+    );
+  }
+
+  .dark .shimmer:not(.shimmer-bg) {
+    --_fg: var(
+      --shimmer-color,
+      oklch(from currentColor max(0.8, calc(l + 0.4)) c h / calc(alpha + 0.4))
+    );
+  }
+
+  .shimmer-bg {
+    --_fg: var(--shimmer-color, oklch(from currentColor 0 c h / 0.06));
+  }
+
+  .dark .shimmer-bg {
+    --_fg: var(--shimmer-color, oklch(from currentColor 0 c h / 0.3));
+  }
+
+  .shimmer-invert:not(.shimmer-bg) {
+    --shimmer-color: oklch(
+      from currentColor min(calc(l - 0.4), 0.2) c h / calc(alpha + 0.4)
+    );
+  }
+
+  .dark .shimmer-invert:not(.shimmer-bg) {
+    --shimmer-color: oklch(from currentColor l c h / calc(alpha * 0.2));
+  }
+}
+
+.shimmer-container {
+  container-type: inline-size;
+}
+
+.shimmer-container .shimmer {
+  --shimmer-track-width: 100cqw;
+  --shimmer-track-height: max(100cqh, 50cqw, 200px);
+}
+
+@-moz-document url-prefix() {
+  .shimmer {
+    --_duration: var(--shimmer-duration, calc(375000 / var(--_speed)));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-rise {
     animation: none;
@@ -135,5 +300,14 @@ canvas {
   .animate-scale-fade,
   .animate-panel-in {
     animation: none;
+  }
+
+  .shimmer {
+    animation: none;
+  }
+
+  .shimmer:not(.shimmer-bg) {
+    background: none;
+    -webkit-text-fill-color: currentColor;
   }
 }

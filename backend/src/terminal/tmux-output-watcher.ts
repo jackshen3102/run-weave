@@ -6,11 +6,13 @@ import { logger } from "../logging";
 import { createTerminalRuntimeRecorder } from "./runtime-recorder";
 import type { TerminalSessionManager, TerminalSessionRecord } from "./manager";
 import type { TmuxService, TmuxTarget } from "./tmux-service";
+import type { TmuxLifecycleCoordinator } from "./tmux-lifecycle-coordinator";
 
 interface TmuxOutputWatcherOptions {
   outputDir: string;
   terminalSessionManager: TerminalSessionManager;
   tmuxService: TmuxService;
+  tmuxLifecycleCoordinator?: TmuxLifecycleCoordinator;
   pollIntervalMs?: number;
   maxTransportBytes?: number;
 }
@@ -35,6 +37,7 @@ export class TmuxOutputWatcher {
   private readonly maxTransportBytes: number;
   private readonly terminalSessionManager: TerminalSessionManager;
   private readonly tmuxService: TmuxService;
+  private readonly tmuxLifecycleCoordinator?: TmuxLifecycleCoordinator;
   private readonly watchedSessions = new Map<string, WatchedTmuxSession>();
   private pollTimer: NodeJS.Timeout | null = null;
   private disposed = false;
@@ -47,6 +50,7 @@ export class TmuxOutputWatcher {
       options.maxTransportBytes ?? DEFAULT_TMUX_OUTPUT_MAX_TRANSPORT_BYTES;
     this.terminalSessionManager = options.terminalSessionManager;
     this.tmuxService = options.tmuxService;
+    this.tmuxLifecycleCoordinator = options.tmuxLifecycleCoordinator;
   }
 
   async watchExistingSessions(): Promise<void> {
@@ -170,6 +174,9 @@ export class TmuxOutputWatcher {
 
     watched.polling = true;
     try {
+      if (await this.reconcileNonInteractiveSessionExit(session, watched)) {
+        return;
+      }
       const fileStat = await stat(watched.filePath);
       if (fileStat.size < watched.offset) {
         watched.offset = 0;
@@ -220,6 +227,53 @@ export class TmuxOutputWatcher {
     } finally {
       watched.polling = false;
     }
+  }
+
+  private async reconcileNonInteractiveSessionExit(
+    session: TerminalSessionRecord,
+    watched: WatchedTmuxSession,
+  ): Promise<boolean> {
+    if (
+      !session.activeCommand ||
+      isInteractiveShellLaunch(session.command, session.args)
+    ) {
+      return false;
+    }
+
+    let metadata: Awaited<ReturnType<TmuxService["readPaneMetadata"]>>;
+    try {
+      metadata = await this.tmuxService.readPaneMetadata(
+        watched.target,
+        session.command,
+      );
+    } catch {
+      const hasSession = await this.tmuxService
+        .hasSession(watched.target)
+        .catch(() => true);
+      if (hasSession) {
+        return false;
+      }
+      metadata = null;
+    }
+    if (metadata?.activeCommand) {
+      return false;
+    }
+
+    await this.terminalSessionManager.updateSessionMetadata(session.id, {
+      cwd: session.cwd,
+      activeCommand: null,
+    });
+    const shouldFinalizeExit =
+      this.tmuxLifecycleCoordinator?.shouldFinalizeNonInteractiveExit(
+        session.id,
+      ) ?? true;
+    if (!shouldFinalizeExit) {
+      await this.unwatchSession(session.id);
+      return true;
+    }
+    this.terminalSessionManager.markExited(session.id);
+    await this.unwatchSession(session.id);
+    return true;
   }
 
   private async truncateTransportIfDrained(
@@ -286,6 +340,14 @@ function shouldWatchSession(
   session: Pick<TerminalSessionRecord, "runtimeKind" | "status">,
 ): boolean {
   return session.runtimeKind === "tmux" && session.status === "running";
+}
+
+function isInteractiveShellLaunch(command: string, args: string[]): boolean {
+  const commandName = command.split(/[\\/]/).at(-1) ?? command;
+  if (!["bash", "zsh", "sh", "fish"].includes(commandName)) {
+    return false;
+  }
+  return !args.some((arg) => arg === "-c" || arg === "-lc");
 }
 
 function resolveTmuxTarget(
