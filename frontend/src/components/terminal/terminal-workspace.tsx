@@ -7,15 +7,33 @@ import type {
 } from "@browser-viewer/shared";
 import type { ConnectionConfig } from "../../features/connection/types";
 import { createTerminalBellPlayer } from "../../features/terminal/bell";
-import { DEFAULT_TERMINAL_SIDECAR_WIDTH, useTerminalPreviewStore } from "../../features/terminal/preview-store";
+import {
+  DEFAULT_TERMINAL_SIDECAR_WIDTH,
+  useTerminalPreviewStore,
+} from "../../features/terminal/preview-store";
 import { resolveCachedTerminalSurfaceIds } from "../../features/terminal/surface-cache";
 import { resolveNewTerminalRuntimePreference } from "../../features/terminal/runtime-preference";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import { useTerminalEventsConnection } from "../../features/terminal/use-terminal-events-connection";
 import type { ClientMode } from "../../features/client-mode";
 import { HttpError } from "../../services/http";
-import { createTerminalProject, createTerminalSession, deleteTerminalProject, deleteTerminalSession, listTerminalProjects, listTerminalSessions, reorderTerminalProjects, reorderTerminalSessions, updateTerminalProject } from "../../services/terminal";
-import { resolvePreferredSessionId, usePersistRecentSelection, useSessionMarkerCleanup, useSessionSelectionShortcuts } from "./terminal-workspace-effects";
+import {
+  createTerminalProject,
+  createTerminalSession,
+  deleteTerminalProject,
+  deleteTerminalSession,
+  listTerminalProjects,
+  listTerminalSessions,
+  reorderTerminalProjects,
+  reorderTerminalSessions,
+  updateTerminalProject,
+} from "../../services/terminal";
+import {
+  resolvePreferredSessionId,
+  usePersistRecentSelection,
+  useSessionMarkerCleanup,
+  useSessionSelectionShortcuts,
+} from "./terminal-workspace-effects";
 import { TerminalWorkspaceShell } from "./terminal-workspace-shell";
 interface TerminalWorkspaceProps {
   apiBase: string;
@@ -53,18 +71,33 @@ export function TerminalWorkspace({
   const [projects, setProjects] = useState<TerminalProjectListItem[]>([]);
   const [sessions, setSessions] = useState<TerminalSessionListItem[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(initialTerminalSessionId ?? null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(
+    initialTerminalSessionId ?? null,
+  );
   const [hasLoadedSessions, setHasLoadedSessions] = useState(false);
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
-  const [terminalStateBySessionId, setTerminalStateBySessionId] = useState<Record<string, TerminalState>>({});
-  const [completionMarkers, setCompletionMarkers] = useState<Record<string, boolean>>({});
+  const [terminalStateBySessionId, setTerminalStateBySessionId] = useState<
+    Record<string, TerminalState>
+  >({});
+  const [completionMarkers, setCompletionMarkers] = useState<
+    Record<string, boolean>
+  >({});
   const [bellMarkers, setBellMarkers] = useState<Record<string, boolean>>({});
-  const [cachedSurfaceSessionIds, setCachedSurfaceSessionIds] = useState<string[]>([]);
-  const [projectDialogMode, setProjectDialogMode] = useState<"create" | "edit" | null>(null);
-  const [projectDialogError, setProjectDialogError] = useState<string | null>(null);
-  const [projectPendingDeletion, setProjectPendingDeletion] = useState<TerminalProjectListItem | null>(null);
-  const [historyTerminalSessionId, setHistoryTerminalSessionId] = useState<string | null>(null);
+  const [cachedSurfaceSessionIds, setCachedSurfaceSessionIds] = useState<
+    string[]
+  >([]);
+  const [projectDialogMode, setProjectDialogMode] = useState<
+    "create" | "edit" | null
+  >(null);
+  const [projectDialogError, setProjectDialogError] = useState<string | null>(
+    null,
+  );
+  const [projectPendingDeletion, setProjectPendingDeletion] =
+    useState<TerminalProjectListItem | null>(null);
+  const [historyTerminalSessionId, setHistoryTerminalSessionId] = useState<
+    string | null
+  >(null);
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const loadSessionsRequestIdRef = useRef(0);
   const currentApiBaseRef = useRef(apiBase);
@@ -72,7 +105,9 @@ export function TerminalWorkspace({
   const sessionsRef = useRef<TerminalSessionListItem[]>([]);
   const terminalStateBySessionIdRef = useRef(terminalStateBySessionId);
   const terminalEventCursorRef = useRef<string | null>(null);
-  const completionBellPlayerRef = useRef<ReturnType<typeof createTerminalBellPlayer> | null>(null);
+  const completionBellPlayerRef = useRef<ReturnType<
+    typeof createTerminalBellPlayer
+  > | null>(null);
   const isMobileMonitor = clientMode === "mobile";
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
   const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
@@ -86,7 +121,9 @@ export function TerminalWorkspace({
   const terminalLayoutVersion = isMobileMonitor
     ? "mobile"
     : `desktop:${previewOpen ? previewReservedWidth : "full"}`;
-  const removeProjectPreview = useTerminalPreviewStore((state) => state.removeProjectPreview);
+  const removeProjectPreview = useTerminalPreviewStore(
+    (state) => state.removeProjectPreview,
+  );
   useEffect(() => {
     loadSessionsRequestIdRef.current += 1;
     currentApiBaseRef.current = apiBase;
@@ -103,6 +140,33 @@ export function TerminalWorkspace({
     terminalEventCursorRef.current = null;
   }, [apiBase]);
 
+  const selectActiveSession = useCallback(
+    (terminalSessionId: string | null) => {
+      activeSessionIdRef.current = terminalSessionId;
+      setActiveSessionId(terminalSessionId);
+    },
+    [],
+  );
+  const selectActiveProject = useCallback(
+    (projectId: string) => {
+      setActiveProjectId(projectId);
+      const currentSessionId = activeSessionIdRef.current;
+      if (
+        currentSessionId &&
+        sessionsRef.current.some(
+          (session) =>
+            session.terminalSessionId === currentSessionId &&
+            session.projectId === projectId,
+        )
+      ) {
+        return;
+      }
+      selectActiveSession(
+        resolvePreferredSessionId(apiBase, projectId, sessionsRef.current),
+      );
+    },
+    [apiBase, selectActiveSession],
+  );
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
@@ -120,10 +184,23 @@ export function TerminalWorkspace({
       activeProjectId ? session.projectId === activeProjectId : true,
     );
   }, [activeProjectId, sessions]);
-  const sessionIds = useMemo(() => sessions.map((session) => session.terminalSessionId), [sessions]);
-  const cachedSurfaceSessionIdSet = useMemo(() => new Set(cachedSurfaceSessionIds), [cachedSurfaceSessionIds]);
-  const activeProject = visibleProjects.find((project) => project.projectId === activeProjectId) ?? null;
-  const activeSession = visibleSessions.find((session) => session.terminalSessionId === activeSessionId) ?? visibleSessions[0] ?? null;
+  const sessionIds = useMemo(
+    () => sessions.map((session) => session.terminalSessionId),
+    [sessions],
+  );
+  const cachedSurfaceSessionIdSet = useMemo(
+    () => new Set(cachedSurfaceSessionIds),
+    [cachedSurfaceSessionIds],
+  );
+  const activeProject =
+    visibleProjects.find((project) => project.projectId === activeProjectId) ??
+    null;
+  const activeSession =
+    visibleSessions.find(
+      (session) => session.terminalSessionId === activeSessionId,
+    ) ??
+    visibleSessions[0] ??
+    null;
   const loadSessions = useCallback(async (): Promise<void> => {
     const requestId = loadSessionsRequestIdRef.current + 1;
     loadSessionsRequestIdRef.current = requestId;
@@ -249,7 +326,13 @@ export function TerminalWorkspace({
         visibleSessions,
       ),
     );
-  }, [activeProjectId, activeSessionId, apiBase, hasLoadedSessions, visibleSessions]);
+  }, [
+    activeProjectId,
+    activeSessionId,
+    apiBase,
+    hasLoadedSessions,
+    visibleSessions,
+  ]);
   useEffect(() => {
     if (!hasLoadedSessions || requestError) {
       return;
@@ -257,7 +340,12 @@ export function TerminalWorkspace({
     if (activeSession?.terminalSessionId) {
       onActiveSessionChange?.(activeSession.terminalSessionId);
     }
-  }, [activeSession?.terminalSessionId, hasLoadedSessions, onActiveSessionChange, requestError]);
+  }, [
+    activeSession?.terminalSessionId,
+    hasLoadedSessions,
+    onActiveSessionChange,
+    requestError,
+  ]);
   useEffect(() => {
     setCachedSurfaceSessionIds((current) =>
       resolveCachedTerminalSurfaceIds({
@@ -280,8 +368,8 @@ export function TerminalWorkspace({
     activeSessionId: activeSession?.terminalSessionId ?? null,
     visibleProjects,
     visibleSessions,
-    onSelectProject: setActiveProjectId,
-    onSelectSession: setActiveSessionId,
+    onSelectProject: selectActiveProject,
+    onSelectSession: selectActiveSession,
   });
   useEffect(() => {
     if (!hasLoadedSessions || requestError || sessions.length > 0) {
@@ -328,7 +416,9 @@ export function TerminalWorkspace({
     setTerminalStateBySessionId((current) => {
       let changed = false;
       const next: Record<string, TerminalState> = {};
-      for (const [terminalSessionId, terminalState] of Object.entries(current)) {
+      for (const [terminalSessionId, terminalState] of Object.entries(
+        current,
+      )) {
         if (knownSessionIds.has(terminalSessionId)) {
           next[terminalSessionId] = terminalState;
         } else {
@@ -340,10 +430,7 @@ export function TerminalWorkspace({
   }, [sessionIds]);
 
   const applyTerminalEvents = useCallback(
-    (
-      events: TerminalEventEnvelope[],
-      delivery: "catchup" | "live",
-    ): void => {
+    (events: TerminalEventEnvelope[], delivery: "catchup" | "live"): void => {
       const latestEvent = events[events.length - 1];
       if (latestEvent) {
         terminalEventCursorRef.current = latestEvent.id;
@@ -454,22 +541,25 @@ export function TerminalWorkspace({
     onAuthExpired,
     token,
   ]);
-  const closeSession = useCallback(async (terminalSessionId: string): Promise<void> => {
-    setLoading(true);
-    try {
-      await deleteTerminalSession(apiBase, token, terminalSessionId);
-      setRequestError(null);
-      await loadSessions();
-    } catch (error) {
-      if (error instanceof HttpError && error.status === 401) {
-        onAuthExpired?.();
-        return;
+  const closeSession = useCallback(
+    async (terminalSessionId: string): Promise<void> => {
+      setLoading(true);
+      try {
+        await deleteTerminalSession(apiBase, token, terminalSessionId);
+        setRequestError(null);
+        await loadSessions();
+      } catch (error) {
+        if (error instanceof HttpError && error.status === 401) {
+          onAuthExpired?.();
+          return;
+        }
+        setRequestError(String(error));
+      } finally {
+        setLoading(false);
       }
-      setRequestError(String(error));
-    } finally {
-      setLoading(false);
-    }
-  }, [apiBase, loadSessions, onAuthExpired, token]);
+    },
+    [apiBase, loadSessions, onAuthExpired, token],
+  );
   const closeProjectDialog = useCallback(() => {
     if (loading) {
       return;
@@ -497,7 +587,9 @@ export function TerminalWorkspace({
           );
           setProjects((currentProjects) =>
             currentProjects.map((project) =>
-              project.projectId === updatedProject.projectId ? updatedProject : project,
+              project.projectId === updatedProject.projectId
+                ? updatedProject
+                : project,
             ),
           );
         } else {
@@ -509,9 +601,12 @@ export function TerminalWorkspace({
             projectId: createdProject.projectId,
             runtimePreference: resolveNewTerminalRuntimePreference(clientMode),
           });
-          setProjects((currentProjects) => [...currentProjects, createdProject]);
+          setProjects((currentProjects) => [
+            ...currentProjects,
+            createdProject,
+          ]);
           setActiveProjectId(createdProject.projectId);
-          setActiveSessionId(createdSession.terminalSessionId);
+          selectActiveSession(createdSession.terminalSessionId);
           const createdAt = new Date().toISOString();
           setSessions((currentSessions) => [
             ...currentSessions,
@@ -574,27 +669,44 @@ export function TerminalWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [activeProject, apiBase, loadSessions, onAuthExpired, projectPendingDeletion, removeProjectPreview, token]);
-  const handleSessionMetadata = useCallback((terminalSessionId: string, metadata: { cwd: string; activeCommand: string | null }) => {
-    setSessions((currentSessions) => {
-      let changed = false;
-      const nextSessions = currentSessions.map((session) => {
-        if (session.terminalSessionId !== terminalSessionId) {
-          return session;
-        }
-        if (session.cwd === metadata.cwd && session.activeCommand === metadata.activeCommand) {
-          return session;
-        }
-        changed = true;
-        return {
-          ...session,
-          cwd: metadata.cwd,
-          activeCommand: metadata.activeCommand,
-        };
+  }, [
+    activeProject,
+    apiBase,
+    loadSessions,
+    onAuthExpired,
+    projectPendingDeletion,
+    removeProjectPreview,
+    token,
+  ]);
+  const handleSessionMetadata = useCallback(
+    (
+      terminalSessionId: string,
+      metadata: { cwd: string; activeCommand: string | null },
+    ) => {
+      setSessions((currentSessions) => {
+        let changed = false;
+        const nextSessions = currentSessions.map((session) => {
+          if (session.terminalSessionId !== terminalSessionId) {
+            return session;
+          }
+          if (
+            session.cwd === metadata.cwd &&
+            session.activeCommand === metadata.activeCommand
+          ) {
+            return session;
+          }
+          changed = true;
+          return {
+            ...session,
+            cwd: metadata.cwd,
+            activeCommand: metadata.activeCommand,
+          };
+        });
+        return changed ? nextSessions : currentSessions;
       });
-      return changed ? nextSessions : currentSessions;
-    });
-  }, []);
+    },
+    [],
+  );
   const handleSessionBell = useCallback((terminalSessionId: string) => {
     setBellMarkers((current) => ({
       ...current,
@@ -712,8 +824,8 @@ export function TerminalWorkspace({
       bellMarkers={bellMarkers}
       terminalStateBySessionId={terminalStateBySessionId}
       terminalLayoutVersion={terminalLayoutVersion}
-      onSelectProject={setActiveProjectId}
-      onSelectSession={setActiveSessionId}
+      onSelectProject={selectActiveProject}
+      onSelectSession={selectActiveSession}
       onRequestCreateProject={() => {
         setPreviewActiveTool("preview");
         setProjectDialogError(null);
