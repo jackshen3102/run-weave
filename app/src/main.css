@@ -759,7 +759,7 @@ ion-content::part(background) {
 
 .terminal-composer__input-row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  grid-template-columns: 44px 44px minmax(0, 1fr) 44px;
   align-items: end;
   gap: 10px;
 }
@@ -773,6 +773,7 @@ ion-content::part(background) {
 }
 
 .terminal-composer__icon-button,
+.terminal-composer__voice-button,
 .terminal-composer__action {
   --border-radius: 999px;
   --padding-bottom: 0;
@@ -792,7 +793,29 @@ ion-content::part(background) {
   --color: #eef3f8;
 }
 
+.terminal-composer__voice-button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: rgba(148, 163, 184, 0.14);
+  color: #eef3f8;
+}
+
+.terminal-composer__voice-button:disabled {
+  opacity: 0.42;
+}
+
+.terminal-composer__voice-button.is-recording {
+  background: rgba(255, 154, 168, 0.14);
+  color: #ff8fa3;
+}
+
 .terminal-composer__icon-button ion-icon {
+  width: 21px;
+  height: 21px;
+}
+
+.terminal-composer__voice-button ion-icon {
   width: 21px;
   height: 21px;
 }

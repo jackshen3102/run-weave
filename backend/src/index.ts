@@ -31,6 +31,7 @@ import {
 import { createInternalTerminalCompletionRouter } from "./routes/terminal-completion";
 import { createTerminalRouter } from "./routes/terminal";
 import { createTestRouter } from "./routes/test";
+import { createVoiceRouter } from "./routes/voice";
 import { createCorsMiddleware } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
 import {
@@ -73,6 +74,7 @@ import { WebSocketSessionController } from "./ws/session-control";
 import { attachTerminalEventsWebSocketServer } from "./ws/terminal-events-server";
 import { attachTerminalWebSocketServer } from "./ws/terminal-server";
 import { attachWebSocketServer } from "./ws/server";
+import { codexAppServerClient } from "./voice/codex-app-server-client";
 
 interface RuntimeServices {
   authStore: AuthStore;
@@ -388,6 +390,7 @@ function createHttpApp(
       terminalStateService: services.terminalStateService,
     }),
   );
+  app.use("/api/voice", requireAuth, createVoiceRouter());
 
   if (devtoolsEnabled) {
     app.use(
@@ -444,6 +447,7 @@ function attachLifecycleHandlers(
       await services.terminalRuntimeRegistry.disposeAll();
       await services.terminalSessionManager.dispose();
       await services.sessionManager.dispose();
+      codexAppServerClient.shutdown();
       await services.authStore.dispose();
       await profileLock.release();
       logger.info("backend.shutdown.completed", {

@@ -342,6 +342,8 @@ let packagedBackendState: PackagedBackendConnectionState = {
 let packagedBackendRestartPromise: Promise<PackagedBackendConnectionState> | null =
   null;
 const expectedPackagedBackendExits = new WeakSet<object>();
+let packagedBackendsStoppedForQuit = false;
+let stoppingPackagedBackendsForQuit = false;
 
 function getPackagedRuntimeRoot(): string | null {
   if (isDev) {
@@ -707,10 +709,27 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   setIsQuitting(true);
-  void cdpProxyRuntime?.stop();
-  void packagedBackendRuntime?.stop();
+
+  if (packagedBackendsStoppedForQuit) {
+    return;
+  }
+
+  event.preventDefault();
+  if (stoppingPackagedBackendsForQuit) {
+    return;
+  }
+
+  stoppingPackagedBackendsForQuit = true;
+  void (async () => {
+    await Promise.allSettled([
+      cdpProxyRuntime?.stop() ?? Promise.resolve(),
+      packagedBackendRuntime?.stop() ?? Promise.resolve(),
+    ]);
+    packagedBackendsStoppedForQuit = true;
+    app.quit();
+  })();
 });
 
 app.on("window-all-closed", () => {
