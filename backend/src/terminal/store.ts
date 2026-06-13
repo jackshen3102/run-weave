@@ -1,3 +1,5 @@
+import type { TerminalState } from "@browser-viewer/shared";
+
 export interface PersistedTerminalProjectRecord {
   id: string;
   name: string;
@@ -24,6 +26,7 @@ export interface PersistedTerminalSessionRecord {
   tmuxSocketPath?: string;
   tmuxUnavailableReason?: string;
   recoverable?: boolean;
+  terminalState?: TerminalState;
   order?: number;
 }
 
@@ -88,6 +91,11 @@ export interface UpdateTerminalSessionRuntimeMetadataParams extends TerminalRunt
   terminalSessionId: string;
 }
 
+export interface UpdateTerminalSessionTerminalStateParams {
+  terminalSessionId: string;
+  terminalState: TerminalState;
+}
+
 export interface UpdateTerminalProjectParams {
   projectId: string;
   name?: string;
@@ -120,6 +128,9 @@ export interface TerminalSessionStore {
   updateSessionLaunch(params: UpdateTerminalSessionLaunchParams): Promise<void>;
   updateSessionRuntimeMetadata(
     params: UpdateTerminalSessionRuntimeMetadataParams,
+  ): Promise<void>;
+  updateSessionTerminalState(
+    params: UpdateTerminalSessionTerminalStateParams,
   ): Promise<void>;
   updateSessionScrollback(
     params: UpdateTerminalSessionScrollbackParams,

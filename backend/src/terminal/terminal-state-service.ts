@@ -10,7 +10,7 @@ import type { TerminalStateStore } from "./terminal-state-store";
 
 type TerminalStateSessionSnapshot = Pick<
   TerminalSessionRecord,
-  "activeCommand" | "command" | "status"
+  "activeCommand" | "command" | "status" | "terminalState"
 >;
 
 const SHELL_IDLE: TerminalState = { state: "shell_idle", agent: null };
@@ -28,6 +28,10 @@ export class TerminalStateService {
   constructor(
     private readonly store: TerminalStateStore,
     private readonly eventService?: TerminalEventService,
+    private readonly onStateChange?: (
+      terminalSessionId: string,
+      state: TerminalState,
+    ) => void,
   ) {}
 
   setShellActiveCommand(
@@ -41,11 +45,12 @@ export class TerminalStateService {
     }
 
     const stored = this.store.get(terminalSessionId);
+    const persisted = sessionSnapshot.terminalState;
     return this.setAndPublish(
       terminalSessionId,
-      stored?.agent === agent && stored.state !== "shell_idle"
-        ? stored
-        : createAgentState(agent, "agent_idle"),
+      resolveStoredAgentState(stored, agent) ??
+        resolveStoredAgentState(persisted, agent) ??
+        createAgentState(agent, "agent_idle"),
       context,
     );
   }
@@ -92,8 +97,11 @@ export class TerminalStateService {
     }
 
     const stored = this.store.get(terminalSessionId);
-    if (stored?.agent === agent && stored.state !== "shell_idle") {
-      return stored;
+    const agentState =
+      resolveStoredAgentState(stored, agent) ??
+      resolveStoredAgentState(sessionSnapshot.terminalState, agent);
+    if (agentState) {
+      return agentState;
     }
 
     return createAgentState(agent, "agent_idle");
@@ -106,6 +114,9 @@ export class TerminalStateService {
   ): TerminalState {
     const previous = this.store.get(terminalSessionId) ?? SHELL_IDLE;
     const saved = this.store.set(terminalSessionId, next);
+    if (previous.state !== next.state || previous.agent !== next.agent) {
+      this.onStateChange?.(terminalSessionId, next);
+    }
     if (
       context &&
       (previous.state !== next.state || previous.agent !== next.agent)
@@ -123,6 +134,15 @@ export class TerminalStateService {
     }
     return saved;
   }
+}
+
+function resolveStoredAgentState(
+  state: TerminalState | null | undefined,
+  agent: TerminalAgentKind,
+): TerminalState | null {
+  return state?.agent === agent && state.state !== "shell_idle"
+    ? state
+    : null;
 }
 
 export function isCodexSession(

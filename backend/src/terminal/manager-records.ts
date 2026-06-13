@@ -1,3 +1,4 @@
+import type { TerminalState } from "@browser-viewer/shared";
 import type {
   PersistedTerminalProjectRecord,
   PersistedTerminalSessionMetadataRecord,
@@ -37,6 +38,7 @@ export interface TerminalSessionRecord {
   tmuxSocketPath?: string;
   tmuxUnavailableReason?: string;
   recoverable?: boolean;
+  terminalState?: TerminalState;
 }
 
 export interface RuntimeTerminalSessionRecord extends Omit<
@@ -101,6 +103,9 @@ export function buildSessionRecord(
     tmuxSocketPath: persisted.tmuxSocketPath,
     tmuxUnavailableReason: persisted.tmuxUnavailableReason,
     recoverable: persisted.recoverable,
+    ...(persisted.terminalState !== undefined
+      ? { terminalState: persisted.terminalState }
+      : {}),
   };
 }
 
@@ -159,5 +164,8 @@ export function toPersistedSession(
     tmuxSocketPath: session.tmuxSocketPath,
     tmuxUnavailableReason: session.tmuxUnavailableReason,
     recoverable: session.recoverable,
+    ...(session.terminalState !== undefined
+      ? { terminalState: session.terminalState }
+      : {}),
   };
 }

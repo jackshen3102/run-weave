@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
   TERMINAL_LIVE_SCROLLBACK_BYTES,
+  type TerminalState,
 } from "@browser-viewer/shared";
 import type {
   TerminalSessionStore,
@@ -436,6 +437,30 @@ export class TerminalSessionManager {
       tmuxSocketPath: metadata.tmuxSocketPath,
       tmuxUnavailableReason: metadata.tmuxUnavailableReason,
       recoverable: metadata.recoverable,
+    });
+    return session;
+  }
+
+  async updateSessionTerminalState(
+    terminalSessionId: string,
+    terminalState: TerminalState,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    if (
+      session.terminalState?.state === terminalState.state &&
+      session.terminalState.agent === terminalState.agent
+    ) {
+      return session;
+    }
+
+    session.terminalState = terminalState;
+    await this.sessionStore.updateSessionTerminalState({
+      terminalSessionId,
+      terminalState,
     });
     return session;
   }

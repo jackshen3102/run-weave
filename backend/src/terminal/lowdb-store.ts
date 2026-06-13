@@ -29,6 +29,7 @@ import type {
   UpdateTerminalSessionMetadataParams,
   UpdateTerminalSessionRuntimeMetadataParams,
   UpdateTerminalSessionScrollbackParams,
+  UpdateTerminalSessionTerminalStateParams,
 } from "./store";
 import { getLiveTerminalScrollback } from "./live-scrollback";
 import {
@@ -326,6 +327,23 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       session.tmuxSocketPath = params.tmuxSocketPath;
       session.tmuxUnavailableReason = params.tmuxUnavailableReason;
       session.recoverable = params.recoverable;
+      await database.write();
+    });
+  }
+
+  async updateSessionTerminalState(
+    params: UpdateTerminalSessionTerminalStateParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const session = database.data.sessions.find(
+        (candidate) => candidate.id === params.terminalSessionId,
+      );
+      if (!session) {
+        return;
+      }
+
+      session.terminalState = params.terminalState;
       await database.write();
     });
   }
@@ -642,6 +660,9 @@ function toMetadataRecord(
       : {}),
     ...(session.recoverable !== undefined
       ? { recoverable: session.recoverable }
+      : {}),
+    ...(session.terminalState !== undefined
+      ? { terminalState: session.terminalState }
       : {}),
   };
 }
