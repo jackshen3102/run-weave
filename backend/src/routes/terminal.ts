@@ -29,7 +29,7 @@ import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
 import type { TerminalEventService } from "../terminal/terminal-event-service";
 import {
-  isCodexSession,
+  getTerminalSessionAgent,
   type TerminalStateService,
 } from "../terminal/terminal-state-service";
 import {
@@ -677,24 +677,25 @@ export function createTerminalRouter(
         interruptAccepted: true,
         interruptSequence: "escape",
       };
-      if (options.terminalStateService && isCodexSession(session)) {
+      const agent = getTerminalSessionAgent(session);
+      if (options.terminalStateService && agent) {
         const terminalState = options.terminalStateService.handleAgentHook(
           session.id,
-          "codex",
+          agent,
           "Stop",
           {
             projectId: session.projectId,
             reason: "interrupt",
           },
         );
-        aiDiagnosticLog("terminal interrupt updated codex state", {
+        aiDiagnosticLog("terminal interrupt updated agent state", {
           terminalSessionId: session.id,
           operationId: parsed.data.operationId ?? null,
           state: terminalState.state,
           agent: terminalState.agent,
         });
         terminalLogger.info("terminal.interrupt.agent-state-updated", {
-          message: "Terminal interrupt updated Codex state",
+          message: "Terminal interrupt updated agent state",
           terminalSessionId: session.id,
           state: terminalState.state,
           agent: terminalState.agent,

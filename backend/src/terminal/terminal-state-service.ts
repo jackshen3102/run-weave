@@ -14,10 +14,9 @@ type TerminalStateSessionSnapshot = Pick<
 >;
 
 const SHELL_IDLE: TerminalState = { state: "shell_idle", agent: null };
-const CODEX_IDLE: TerminalState = { state: "agent_idle", agent: "codex" };
-const CODEX_RUNNING: TerminalState = {
-  state: "agent_running",
-  agent: "codex",
+const AGENT_COMMANDS: Record<TerminalAgentKind, ReadonlySet<string>> = {
+  codex: new Set(["codex"]),
+  trae: new Set(["trae", "traex", "traecli"]),
 };
 
 interface TerminalStatePublishContext {
@@ -36,16 +35,17 @@ export class TerminalStateService {
     sessionSnapshot: TerminalStateSessionSnapshot,
     context?: TerminalStatePublishContext,
   ): TerminalState {
-    if (sessionSnapshot.status === "exited" || !isCodexSession(sessionSnapshot)) {
+    const agent = getTerminalSessionAgent(sessionSnapshot);
+    if (sessionSnapshot.status === "exited" || !agent) {
       return this.setAndPublish(terminalSessionId, SHELL_IDLE, context);
     }
 
     const stored = this.store.get(terminalSessionId);
     return this.setAndPublish(
       terminalSessionId,
-      stored?.agent === "codex" && stored.state !== "shell_idle"
+      stored?.agent === agent && stored.state !== "shell_idle"
         ? stored
-        : CODEX_IDLE,
+        : createAgentState(agent, "agent_idle"),
       context,
     );
   }
@@ -63,19 +63,19 @@ export class TerminalStateService {
         }
       : undefined;
 
-    if (agent !== "codex") {
-      return this.setAndPublish(terminalSessionId, SHELL_IDLE, publishContext);
-    }
-
     if (hookEvent === "UserPromptSubmit") {
       return this.setAndPublish(
         terminalSessionId,
-        CODEX_RUNNING,
+        createAgentState(agent, "agent_running"),
         publishContext,
       );
     }
 
-    return this.setAndPublish(terminalSessionId, CODEX_IDLE, publishContext);
+    return this.setAndPublish(
+      terminalSessionId,
+      createAgentState(agent, "agent_idle"),
+      publishContext,
+    );
   }
 
   getCurrent(
@@ -86,16 +86,17 @@ export class TerminalStateService {
       return SHELL_IDLE;
     }
 
-    if (!isCodexSession(sessionSnapshot)) {
+    const agent = getTerminalSessionAgent(sessionSnapshot);
+    if (!agent) {
       return SHELL_IDLE;
     }
 
     const stored = this.store.get(terminalSessionId);
-    if (stored?.agent === "codex" && stored.state !== "shell_idle") {
+    if (stored?.agent === agent && stored.state !== "shell_idle") {
       return stored;
     }
 
-    return CODEX_IDLE;
+    return createAgentState(agent, "agent_idle");
   }
 
   private setAndPublish(
@@ -127,18 +128,43 @@ export class TerminalStateService {
 export function isCodexSession(
   sessionSnapshot: Pick<TerminalSessionRecord, "activeCommand" | "command">,
 ): boolean {
-  return (
-    isCodexActiveCommand(sessionSnapshot.activeCommand) ||
-    (sessionSnapshot.activeCommand !== null &&
-      isCodexActiveCommand(sessionSnapshot.command))
-  );
+  return getTerminalSessionAgent(sessionSnapshot) === "codex";
 }
 
 export function isCodexActiveCommand(activeCommand: string | null): boolean {
+  return getAgentForCommand(activeCommand) === "codex";
+}
+
+export function getTerminalSessionAgent(
+  sessionSnapshot: Pick<TerminalSessionRecord, "activeCommand" | "command">,
+): TerminalAgentKind | null {
+  return (
+    getAgentForCommand(sessionSnapshot.activeCommand) ??
+    (sessionSnapshot.activeCommand !== null
+      ? getAgentForCommand(sessionSnapshot.command)
+      : null)
+  );
+}
+
+export function getAgentForCommand(
+  activeCommand: string | null,
+): TerminalAgentKind | null {
   if (!activeCommand) {
-    return false;
+    return null;
   }
   const normalized = activeCommand.trim().replace(/\\+/g, "/");
   const basename = normalized.split("/").filter(Boolean).at(-1) ?? normalized;
-  return basename === "codex";
+  for (const [agent, commands] of Object.entries(AGENT_COMMANDS)) {
+    if (commands.has(basename)) {
+      return agent as TerminalAgentKind;
+    }
+  }
+  return null;
+}
+
+function createAgentState(
+  agent: TerminalAgentKind,
+  state: "agent_idle" | "agent_running",
+): TerminalState {
+  return { state, agent };
 }

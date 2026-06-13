@@ -8,7 +8,7 @@ import {
   isCompletionSourceAllowedForCommand,
 } from "../terminal/completion-source-gate";
 import type { TerminalSessionManager } from "../terminal/manager";
-import { isCodexSession } from "../terminal/terminal-state-service";
+import { getTerminalSessionAgent } from "../terminal/terminal-state-service";
 
 const completionReasonEnum = z.enum([
   "hook_stop",
@@ -92,7 +92,7 @@ export function createInternalTerminalCompletionRouter(options: {
         parsed.data.source,
         session.activeCommand,
       ) ||
-      (parsed.data.source === "codex" && isCodexSession(session));
+      getTerminalSessionAgent(session) === parsed.data.source;
     const now = Date.now();
     const graceCommandMatches =
       session.activeCommand === null &&

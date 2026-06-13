@@ -286,7 +286,8 @@ test("builds a self-contained launcher script that posts state and completion ho
   assert.match(script, /SessionStart/);
   assert.match(script, /UserPromptSubmit/);
   assert.match(script, /Stop/);
-  assert.match(script, /agent: "codex"/);
+  assert.match(script, /source === "codex" \|\| source === "trae"/);
+  assert.match(script, /agent: source/);
   assert.match(script, /fetch\(endpoint/);
   assert.match(script, /COMPLETION_REASONS/);
   assert.match(script, /completionReason/);

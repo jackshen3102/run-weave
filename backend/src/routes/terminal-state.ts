@@ -11,7 +11,7 @@ import {
 } from "../terminal/completion-source-gate";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
-  isCodexSession,
+  getTerminalSessionAgent,
   type TerminalStateService,
 } from "../terminal/terminal-state-service";
 
@@ -21,7 +21,7 @@ const agentHookStateSchema = z
   .object({
     terminalSessionId: z.string().trim().min(1),
     projectId: z.string().trim().min(1).optional(),
-    agent: z.literal("codex"),
+    agent: z.enum(["codex", "trae"]),
     hookEvent: z.enum(["SessionStart", "UserPromptSubmit", "Stop"]),
   })
   .strict();
@@ -106,13 +106,13 @@ export function createInternalTerminalAgentHookRouter(options: {
     const lastAiActiveCommand =
       options.terminalSessionManager.getLastAiActiveCommand(session.id);
     const currentCommandMatches = isCompletionSourceAllowedForCommand(
-      "codex",
+      parsed.data.agent,
       session.activeCommand,
-    ) || isCodexSession(session);
+    ) || getTerminalSessionAgent(session) === parsed.data.agent;
     const graceCommandMatches =
       session.activeCommand === null &&
       lastAiActiveCommand !== null &&
-      lastAiActiveCommand.source === "codex" &&
+      lastAiActiveCommand.source === parsed.data.agent &&
       lastAiActiveCommand.clearedAt !== null &&
       Date.now() - lastAiActiveCommand.clearedAt <=
         AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS;
@@ -122,11 +122,12 @@ export function createInternalTerminalAgentHookRouter(options: {
       !currentCommandMatches &&
       !graceCommandMatches &&
       options.terminalStateService.getCurrent(session.id, session).agent !==
-        "codex"
+        parsed.data.agent
     ) {
       terminalStateLogger.info("terminal-state.hook.ignored", {
-        message: "Terminal agent hook ignored because codex is not current",
+        message: "Terminal agent hook ignored because agent is not current",
         terminalSessionId: session.id,
+        agent: parsed.data.agent,
         hookEvent: parsed.data.hookEvent,
         activeCommand: session.activeCommand,
       });

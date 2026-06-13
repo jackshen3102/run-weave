@@ -286,7 +286,7 @@ export interface TerminalCompletionEventPayload {
   cwd: string | null;
 }
 
-export type TerminalAgentKind = "codex";
+export type TerminalAgentKind = "codex" | "trae";
 
 export type TerminalStateValue =
   | "shell_idle"
