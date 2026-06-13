@@ -66,6 +66,9 @@ function HomeRoute({ session }: { session: AppSessionController }) {
   );
   const createTerminal = useCallback(
     async (projectId: string) => {
+      if (session.deviceConnection.status === "offline") {
+        throw new Error("本地电脑暂时不可用");
+      }
       const created = await createTerminalSession(
         session.apiBase,
         session.accessToken,
@@ -92,6 +95,7 @@ function HomeRoute({ session }: { session: AppSessionController }) {
   return (
     <HomePage
       apiBase={session.apiBase}
+      deviceConnection={session.deviceConnection}
       error={session.error}
       loading={session.loading}
       onLogout={session.logout}
@@ -122,6 +126,9 @@ function TerminalRoute({ session }: { session: AppSessionController }) {
     if (!terminalSessionId) {
       return;
     }
+    if (session.deviceConnection.status === "offline") {
+      throw new Error("本地电脑暂时不可用");
+    }
     await deleteTerminalSession(
       session.apiBase,
       session.accessToken,
@@ -146,10 +153,12 @@ function TerminalRoute({ session }: { session: AppSessionController }) {
       accessToken={session.accessToken}
       apiBase={session.apiBase}
       initialSession={initialSession}
+      deviceConnection={session.deviceConnection}
       terminalSessionId={terminalSessionId}
       onAuthExpired={session.onAuthExpired}
       onBack={goBack}
       onDeleteTerminal={deleteTerminal}
+      onRefreshDeviceConnection={session.refreshDeviceConnection}
     />
   );
 }

@@ -8,7 +8,7 @@ import type {
 import type { TerminalRendererHandle } from "@browser-viewer/terminal-renderer";
 
 import { recordSupportLog } from "../features/support-logs";
-import { ApiError } from "../services/http";
+import { classifyApiFailure } from "../services/api-failure";
 import {
   createTerminalWsTicket,
   getTerminalSession,
@@ -29,6 +29,10 @@ interface TerminalMetadata {
 const MAX_PENDING_INPUT_CHARS = 8 * 1024;
 
 type TerminalMessageCounts = Partial<Record<TerminalServerMessage["type"], number>>;
+export interface SendInputResult {
+  accepted: boolean;
+  reason?: "disabled" | "queue-full";
+}
 
 function toWebSocketBase(apiBase: string): string {
   const base =
@@ -71,6 +75,24 @@ function sendMessage(
   socket.send(JSON.stringify(payload));
 }
 
+function closeWebSocket(socket: WebSocket | null, code: number, reason: string) {
+  if (!socket) {
+    return;
+  }
+  if (socket.readyState === WebSocket.CONNECTING) {
+    socket.addEventListener("open", () => socket.close(code, reason), {
+      once: true,
+    });
+    return;
+  }
+  if (
+    socket.readyState === WebSocket.OPEN ||
+    socket.readyState === WebSocket.CLOSING
+  ) {
+    socket.close(code, reason);
+  }
+}
+
 function toTerminalMetadata(
   session: TerminalSessionStatusResponse,
 ): TerminalMetadata {
@@ -89,13 +111,19 @@ export function useAppTerminalConnection({
   accessToken,
   terminalSessionId,
   rendererRef,
+  enabled = true,
+  canQueueInput = true,
   onAuthExpired,
+  onConnectionFailure,
 }: {
   apiBase: string;
   accessToken: string;
   terminalSessionId: string;
   rendererRef: React.RefObject<TerminalRendererHandle | null>;
+  enabled?: boolean;
+  canQueueInput?: boolean;
   onAuthExpired: () => void;
+  onConnectionFailure?: () => void;
 }) {
   const socketRef = useRef<WebSocket | null>(null);
   const pendingInputRef = useRef<string[]>([]);
@@ -122,6 +150,11 @@ export function useAppTerminalConnection({
 
   useEffect(() => {
     let cancelled = false;
+    if (!enabled) {
+      return () => {
+        cancelled = true;
+      };
+    }
 
     void getTerminalSession(apiBase, accessToken, terminalSessionId)
       .then((session) => {
@@ -138,15 +171,17 @@ export function useAppTerminalConnection({
         if (cancelled) {
           return;
         }
-        if (nextError instanceof ApiError && nextError.status === 401) {
+        const failure = classifyApiFailure(nextError);
+        if (failure.kind === "auth-expired") {
           onAuthExpired();
           return;
         }
-        if (nextError instanceof ApiError && nextError.status === 404) {
+        if (failure.kind === "not-found") {
           setNotFound(true);
           setError("终端不存在或已被删除");
           return;
         }
+        onConnectionFailure?.();
         setError(nextError instanceof Error ? nextError.message : "加载失败");
       });
 
@@ -156,6 +191,8 @@ export function useAppTerminalConnection({
   }, [
     accessToken,
     apiBase,
+    enabled,
+    onConnectionFailure,
     onAuthExpired,
     rendererRef,
     setNextRuntimeStatus,
@@ -171,6 +208,18 @@ export function useAppTerminalConnection({
         reconnectTimerRef.current = null;
       }
     };
+
+    if (!enabled) {
+      setConnectionStatus("closed");
+      pendingInputRef.current = [];
+      clearReconnectTimer();
+      closeWebSocket(socketRef.current, 1000, "AppTerminalPage disabled");
+      socketRef.current = null;
+      return () => {
+        cancelled = true;
+        clearReconnectTimer();
+      };
+    }
 
     const incrementMessageCount = (type: TerminalServerMessage["type"]) => {
       messageCountsRef.current = {
@@ -330,6 +379,7 @@ export function useAppTerminalConnection({
             return;
           }
           setConnectionStatus("closed");
+          onConnectionFailure?.();
           if (!cancelled && runtimeStatusRef.current !== "exited") {
             scheduleReconnect();
           }
@@ -342,17 +392,19 @@ export function useAppTerminalConnection({
               pendingInputCount: pendingInputRef.current.length,
             }, "warn");
             setError("终端连接失败");
+            onConnectionFailure?.();
           }
         });
       } catch (nextError) {
-        if (nextError instanceof ApiError && nextError.status === 401) {
+        const failure = classifyApiFailure(nextError);
+        if (failure.kind === "auth-expired") {
           recordSupportLog("terminal.ws.ticket.unauthorized", {
             terminalSessionId,
           }, "warn");
           onAuthExpired();
           return;
         }
-        if (nextError instanceof ApiError && nextError.status === 404) {
+        if (failure.kind === "not-found") {
           recordSupportLog("terminal.ws.ticket.not_found", {
             terminalSessionId,
           }, "warn");
@@ -366,6 +418,7 @@ export function useAppTerminalConnection({
         }, "warn");
         setConnectionStatus("closed");
         setError(nextError instanceof Error ? nextError.message : "连接失败");
+        onConnectionFailure?.();
         if (!cancelled) {
           scheduleReconnect();
         }
@@ -376,20 +429,31 @@ export function useAppTerminalConnection({
     return () => {
       cancelled = true;
       clearReconnectTimer();
-      socketRef.current?.close(1000, "AppTerminalPage unmounted");
+      closeWebSocket(socketRef.current, 1000, "AppTerminalPage unmounted");
       socketRef.current = null;
     };
   }, [
     apiBase,
+    enabled,
+    onConnectionFailure,
     onAuthExpired,
     rendererRef,
     setNextRuntimeStatus,
     terminalSessionId,
   ]);
 
-  const sendInput = useCallback((data: string) => {
+  const sendInput = useCallback((data: string): SendInputResult => {
     if (!data) {
-      return;
+      return { accepted: false, reason: "disabled" };
+    }
+    if (!enabled || !canQueueInput) {
+      pendingInputRef.current = [];
+      recordSupportLog("terminal.ws.input.rejected", {
+        terminalSessionId,
+        length: data.length,
+        reason: "disabled",
+      }, "warn");
+      return { accepted: false, reason: "disabled" };
     }
     const socket = socketRef.current;
     if (socket?.readyState === WebSocket.OPEN) {
@@ -398,7 +462,7 @@ export function useAppTerminalConnection({
         terminalSessionId,
         length: data.length,
       });
-      return;
+      return { accepted: true };
     }
 
     const currentLength = pendingInputRef.current.reduce(
@@ -413,14 +477,16 @@ export function useAppTerminalConnection({
         pendingInputCount: pendingInputRef.current.length,
         pendingInputLength: currentLength + data.length,
       });
+      return { accepted: true };
     } else {
       recordSupportLog("terminal.ws.input.dropped", {
         terminalSessionId,
         length: data.length,
         pendingInputLength: currentLength,
       }, "warn");
+      return { accepted: false, reason: "queue-full" };
     }
-  }, [terminalSessionId]);
+  }, [canQueueInput, enabled, terminalSessionId]);
 
   const sendResize = useCallback((cols: number, rows: number) => {
     pendingResizeRef.current = { cols, rows };

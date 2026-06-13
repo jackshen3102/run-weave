@@ -11,6 +11,7 @@ interface ProjectGroupProps {
   onOpenTerminal: (terminalSessionId: string) => void;
   onCreateTerminal: (projectId: string) => void;
   creatingTerminal: boolean;
+  createDisabled?: boolean;
 }
 
 export function ProjectGroup({
@@ -20,6 +21,7 @@ export function ProjectGroup({
   onOpenTerminal,
   onCreateTerminal,
   creatingTerminal,
+  createDisabled = false,
 }: ProjectGroupProps) {
   return (
     <section className="project-group border-border">
@@ -48,7 +50,7 @@ export function ProjectGroup({
         <IonButton
           aria-label={`Create terminal in ${group.project.name}`}
           className="project-group__create"
-          disabled={creatingTerminal}
+          disabled={creatingTerminal || createDisabled}
           fill="clear"
           onClick={() => onCreateTerminal(group.project.projectId)}
         >

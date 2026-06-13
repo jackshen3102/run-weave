@@ -9,6 +9,7 @@ import {
   type TunnelAuthConfig,
 } from "../server/tunnel-auth";
 import type { TerminalEventService } from "../terminal/terminal-event-service";
+import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalEventsWebSocketHandshake } from "./terminal-events-handshake";
 
 const terminalEventsWsLogger = logger.child({
@@ -73,6 +74,13 @@ export function attachTerminalEventsWebSocketServer(
       message: "Terminal events websocket connected",
       acceptedAfter: handshake.after,
     });
+    const heartbeatState = {
+      heartbeatTimer: null as NodeJS.Timeout | null,
+      isAlive: true,
+    };
+    const heartbeat = createHeartbeatController(socket, heartbeatState);
+    socket.on("pong", () => heartbeat.markAlive());
+    heartbeat.start();
 
     sendTerminalEvent(socket, {
       type: "connected",
@@ -94,6 +102,7 @@ export function attachTerminalEventsWebSocketServer(
     });
 
     socket.on("close", () => {
+      heartbeat.stop();
       unsubscribe();
       terminalEventsWsLogger.info("terminal-events-ws.disconnected", {
         message: "Terminal events websocket disconnected",

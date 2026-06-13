@@ -22,6 +22,11 @@ export interface RuntimeStatsSnapshot {
   };
 }
 
+export interface BackendHealthPayload {
+  status: "ok";
+  runtimeReleaseId?: string;
+}
+
 export interface PackagedBackendConnectionState {
   kind: "packaged-local";
   available: boolean;

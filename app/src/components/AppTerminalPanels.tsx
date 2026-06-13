@@ -21,6 +21,7 @@ interface AppTerminalPanelsProps {
   connectionStatus: string;
   error: string | null;
   hasMetadata: boolean;
+  isDeviceOffline: boolean;
   notFound: boolean;
   requestedChange: SelectedTerminalChange | null;
   rendererRef: RefObject<TerminalRendererHandle | null>;
@@ -29,6 +30,7 @@ interface AppTerminalPanelsProps {
   onAuthExpired: () => void;
   onBack: () => void;
   onChangesCount: (count: number) => void;
+  onRefreshDeviceConnection: () => Promise<unknown>;
   onShowChanges: (change: SelectedTerminalChange) => void;
 }
 
@@ -40,10 +42,12 @@ export function AppTerminalPanels({
   connectionStatus,
   error,
   hasMetadata,
+  isDeviceOffline,
   notFound,
   onAuthExpired,
   onBack,
   onChangesCount,
+  onRefreshDeviceConnection,
   onShowChanges,
   requestedChange,
   rendererRef,
@@ -70,6 +74,19 @@ export function AppTerminalPanels({
             ) : null}
             {error ? (
               <p className="terminal-page-error text-sm">{error}</p>
+            ) : null}
+            {isDeviceOffline ? (
+              <div className="terminal-page-offline">
+                <span>本地电脑暂时不可用，恢复后会自动重连。</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void onRefreshDeviceConnection();
+                  }}
+                >
+                  重试
+                </button>
+              </div>
             ) : null}
             <TerminalRenderer
               active={activeTab === "chat"}
