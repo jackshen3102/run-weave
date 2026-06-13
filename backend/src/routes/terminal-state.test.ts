@@ -31,7 +31,10 @@ async function stopServer(server: http.Server): Promise<void> {
   });
 }
 
-function createTestServer() {
+function createTestServer(sessionOverrides: Partial<{
+  command: string;
+  activeCommand: string | null;
+}> = {}) {
   const session = {
     id: "terminal-1",
     projectId: "project-default",
@@ -43,6 +46,7 @@ function createTestServer() {
     status: "running" as const,
     createdAt: new Date("2026-03-29T00:00:00.000Z"),
     lastActivityAt: new Date("2026-03-29T00:00:00.000Z"),
+    ...sessionOverrides,
   };
   const terminalSessionManager = {
     getSession: (id: string) => (id === session.id ? session : undefined),
@@ -128,6 +132,62 @@ describe("terminal state routes", () => {
       });
     } finally {
       await stopServer(server);
+    }
+  });
+
+  it("records trae agent hooks for traex and traecli sessions", async () => {
+    for (const activeCommand of ["traex", "traecli"]) {
+      const { server } = createTestServer({ activeCommand });
+      try {
+        const port = await startServer(server);
+
+        const runningResponse = await fetch(
+          `http://127.0.0.1:${port}/internal/terminal/agent-hook`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Runweave-Hook-Token": "hook-token",
+            },
+            body: JSON.stringify({
+              terminalSessionId: "terminal-1",
+              agent: "trae",
+              hookEvent: "UserPromptSubmit",
+            }),
+          },
+        );
+        expect(runningResponse.status).toBe(202);
+        await expect(runningResponse.json()).resolves.toEqual({
+          terminalState: { state: "agent_running", agent: "trae" },
+        });
+
+        const stopResponse = await fetch(
+          `http://127.0.0.1:${port}/internal/terminal/agent-hook`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Runweave-Hook-Token": "hook-token",
+            },
+            body: JSON.stringify({
+              terminalSessionId: "terminal-1",
+              agent: "trae",
+              hookEvent: "Stop",
+            }),
+          },
+        );
+        expect(stopResponse.status).toBe(202);
+
+        await expect(
+          fetch(
+            `http://127.0.0.1:${port}/api/terminal/session/terminal-1/state`,
+          ).then((response) => response.json()),
+        ).resolves.toEqual({
+          terminalState: { state: "agent_idle", agent: "trae" },
+        });
+      } finally {
+        await stopServer(server);
+      }
     }
   });
 

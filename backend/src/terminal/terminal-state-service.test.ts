@@ -7,7 +7,7 @@ function createService(): TerminalStateService {
 }
 
 describe("TerminalStateService", () => {
-  it("maps codex active command to agent idle", () => {
+  it("maps AI CLI active command to agent idle", () => {
     const service = createService();
 
     expect(
@@ -17,9 +17,18 @@ describe("TerminalStateService", () => {
         activeCommand: "codex",
       }),
     ).toEqual({ state: "agent_idle", agent: "codex" });
+    for (const command of ["trae", "traex", "traecli"]) {
+      expect(
+        service.setShellActiveCommand(`terminal-${command}`, {
+          status: "running",
+          command: "zsh",
+          activeCommand: command,
+        }),
+      ).toEqual({ state: "agent_idle", agent: "trae" });
+    }
   });
 
-  it("maps non-codex or cleared active command to shell idle", () => {
+  it("maps non-AI or cleared active command to shell idle", () => {
     const service = createService();
 
     expect(
@@ -70,7 +79,7 @@ describe("TerminalStateService", () => {
     ).toEqual({ state: "shell_idle", agent: null });
   });
 
-  it("maps codex hooks to agent running and idle", () => {
+  it("maps agent hooks to running and idle", () => {
     const service = createService();
 
     expect(
@@ -82,6 +91,13 @@ describe("TerminalStateService", () => {
     expect(service.handleAgentHook("terminal-1", "codex", "Stop")).toEqual({
       state: "agent_idle",
       agent: "codex",
+    });
+    expect(
+      service.handleAgentHook("terminal-2", "trae", "UserPromptSubmit"),
+    ).toEqual({ state: "agent_running", agent: "trae" });
+    expect(service.handleAgentHook("terminal-2", "trae", "Stop")).toEqual({
+      state: "agent_idle",
+      agent: "trae",
     });
   });
 
@@ -111,7 +127,7 @@ describe("TerminalStateService", () => {
     ).toEqual({ state: "shell_idle", agent: null });
   });
 
-  it("keeps codex session state when tmux reports the node launcher as active", () => {
+  it("keeps AI CLI session state when tmux reports the node launcher as active", () => {
     const service = createService();
 
     expect(
@@ -130,5 +146,21 @@ describe("TerminalStateService", () => {
         activeCommand: "node",
       }),
     ).toEqual({ state: "agent_running", agent: "codex" });
+    expect(
+      service.setShellActiveCommand("terminal-2", {
+        status: "running",
+        command: "traecli",
+        activeCommand: "node",
+      }),
+    ).toEqual({ state: "agent_idle", agent: "trae" });
+
+    service.handleAgentHook("terminal-2", "trae", "UserPromptSubmit");
+    expect(
+      service.setShellActiveCommand("terminal-2", {
+        status: "running",
+        command: "traecli",
+        activeCommand: "node",
+      }),
+    ).toEqual({ state: "agent_running", agent: "trae" });
   });
 });

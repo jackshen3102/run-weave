@@ -7,7 +7,7 @@ import path from "node:path";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
-  isCodexSession,
+  getTerminalSessionAgent,
   type TerminalStateService,
 } from "../terminal/terminal-state-service";
 import { toProjectPayload, toSessionListItem } from "./terminal-route-payloads";
@@ -22,9 +22,9 @@ function basename(value: string): string {
 function buildSessionTitle(
   session: ReturnType<TerminalSessionManager["listSessions"]>[number],
 ): string {
-  const commandLabel = isCodexSession(session)
-    ? "codex"
-    : session.activeCommand?.trim() || basename(session.command);
+  const agent = getTerminalSessionAgent(session);
+  const commandLabel =
+    agent ?? session.activeCommand?.trim() ?? basename(session.command);
   const directoryLabel = basename(session.cwd);
   return directoryLabel ? `${commandLabel} · ${directoryLabel}` : commandLabel;
 }
