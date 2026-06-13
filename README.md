@@ -13,9 +13,9 @@ Runweave is useful when your real work is happening inside terminals: an AI CLI
 is editing code, a dev server is running, a command is waiting for input, or a
 teammate/agent needs a stable way to continue from the current terminal context.
 
-> Note: some package names, storage keys, and internal identifiers still use
-> `browser-viewer`. Treat those as technical identifiers until a separate
-> code-level rename is completed.
+> Note: workspace-level storage keys, persisted data, and some internal identifiers may still use
+> `browser-viewer`. Published package names now use the `@runweave/*` scope; treat remaining
+> `browser-viewer` strings as technical identifiers until a dedicated storage migration is completed.
 
 ## What Runweave Does
 

@@ -4,13 +4,15 @@ Runweave 的移动端能力由专门的 App 客户端承载，不再维护旧的
 
 ## App 首页
 
-App 首页读取 App-only 聚合接口：
+App 首页展示当前电脑连接状态（Online / Checking / Offline）并读取 App-only 聚合接口：
 
 ```http
 GET /api/app/home/overview
 ```
 
 这个接口面向手机列表展示，返回项目、终端摘要、最近活动和基于后端 `TerminalState` 折叠出的展示状态。它不承担桌面 Preview、文件树或完整 scrollback 读取职责。
+
+设备在线状态表达的是 App 当前配置的本地电脑后端是否可达、进程是否响应、以及 App 是否可以继续使用该电脑上的项目和终端能力。它不是某个 terminal session 的 `running/exited`，也不是 `TerminalState` 的 `agent_running/agent_idle`。App 通过轻量 `/health` probe、terminal-events 服务端 `connected` 消息和业务 API 成功结果标记 online；电脑不可达时保留已加载的首页数据和登录态，只显示离线提示。
 
 旧的 `/api/terminal/mobile/overview` 和旧 Web mobile 页面已经移除。移动端列表状态不应再由前端根据 tail 文本、命令名或输出变化自行推断；需要状态时以 App overview 和终端详情页的 `/state` 接口为准。
 
@@ -24,7 +26,11 @@ App 终端详情页的核心能力是：
 - 通过底部 `Chat / Changes / Files` tabs 在移动端查看终端输出、项目变更和项目文件。
 - 在手机触摸场景下避免误弹软键盘，同时保留明确的输入入口。
 
-Stop 只是向终端/Codex CLI 发送控制输入，不直接把状态改成 idle。Stop 按钮是否消失，取决于后端状态接口后续返回的 `TerminalState`。
+Stop 只是向终端/Codex/Trae CLI 发送控制输入，不直接把状态改成 idle。Stop 按钮是否消失，取决于后端状态接口后续返回的 `TerminalState`。
+
+图片按钮复用现有 terminal clipboard image 上传接口，把图片保存到后端临时目录后，将 shell-quoted 文件路径插入 composer。选择图片不会立即写入终端；用户仍需要检查并点击发送。App 不在输入框上方维护预览 chip、缩略图或附件列表。
+
+当设备 offline 时，详情页优先显示 `Computer Offline`，暂停 terminal websocket、terminal-events websocket 和 `/state` 轮询，并阻止发送输入、Stop、上传图片、删除终端和新建终端等写入操作。恢复 online 后再重连并刷新状态；离线期间的输入不能进入待发送队列并在恢复后自动 flush。
 
 ## App 终端语音输入
 
@@ -67,7 +73,7 @@ App 不直接复用桌面 Terminal Workspace 的布局、Preview sidecar、Monac
 
 当前稳定边界：
 
-- App 首页使用 `/api/app/home/overview` 读取项目和终端摘要，并通过全局 `/ws/terminal-events` 接收 terminal state 变化。
+- App 首页使用 `/api/app/home/overview` 读取项目和终端摘要，并通过全局 `/ws/terminal-events` 接收 terminal state 变化；设备 online/offline 另由 App 侧设备连接状态管理，不混入 terminal display status。
 - App 终端详情使用 terminal websocket、input、interrupt、clipboard image API、voice transcription API 和 `/api/terminal/session/:id/state` 兜底查询。
 - `Changes` 和 `Files` tabs 复用 project-scoped Preview API，提供移动端只读审阅入口；它们不把桌面 Preview sidecar、Monaco、拖拽排序或 Browser 工具搬到 App。
 - 行级编辑、文件写入、桌面级 Browser 工具和完整 IDE 交互不属于当前 App 稳定能力；落地前不要在 README 或入口文档中表述为已完成。
