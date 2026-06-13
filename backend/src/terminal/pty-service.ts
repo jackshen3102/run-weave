@@ -2,7 +2,7 @@ import { chmodSync, statSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import type { IPty } from "node-pty";
-import type { TerminalSignal } from "@browser-viewer/shared";
+import type { TerminalSignal } from "@runweave/shared";
 import { logger } from "../logging";
 import type { TerminalLaunchConfig } from "./default-shell";
 import { resolveNodePtyDirectory } from "./node-pty-path";

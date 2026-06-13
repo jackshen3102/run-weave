@@ -4,7 +4,7 @@ import {
   type TerminalBrowserDevicePresetId,
   type TerminalBrowserDeviceState,
   type TerminalBrowserHeaderRule,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { aiDiagnosticLog } from "../../features/diagnostic-logs/recorder";
 import { TerminalBrowserDevicePanel } from "./terminal-browser-device-panel";
 import { TerminalBrowserHeadersPanel } from "./terminal-browser-headers-panel";

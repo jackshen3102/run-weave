@@ -17,7 +17,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@browser-viewer/shared": "workspace:*",
+    "@runweave/shared": "workspace:*",
     "@types/node": "^22.13.10",
     "vitest": "^3.0.9"
   }

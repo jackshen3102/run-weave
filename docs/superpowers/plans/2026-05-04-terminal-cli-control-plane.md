@@ -88,7 +88,7 @@ packages/runweave-cli/src/client/completion-event-client.ts
 packages/runweave-cli/src/output/format.ts
 ```
 
-`terminal-http-client.ts` 复用 `@browser-viewer/shared` 类型，不从前端 `services/terminal.ts` 反向依赖，避免 CLI 包依赖浏览器侧代码。
+`terminal-http-client.ts` 复用 `@runweave/shared` 类型，不从前端 `services/terminal.ts` 反向依赖，避免 CLI 包依赖浏览器侧代码。
 
 ### 配置存储
 

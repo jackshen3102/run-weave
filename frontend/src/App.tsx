@@ -9,7 +9,7 @@ import type {
   TerminalBrowserDeviceState,
   TerminalBrowserHeaderState,
   TerminalBrowserProxyState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
 import { useScopedAuth } from "./features/auth/use-scoped-auth";

@@ -12,7 +12,7 @@
 
 ## 当前代码事实
 
-- `app/` 当前是独立 Ionic React + Capacitor 应用，`app/package.json` 已依赖 `@browser-viewer/shared`，但还没有 xterm 和共享终端 core 依赖。
+- `app/` 当前是独立 Ionic React + Capacitor 应用，`app/package.json` 已依赖 `@runweave/shared`，但还没有 xterm 和共享终端 core 依赖。
 - `app/src/App.tsx` 已经不是 Hello 占位页：它有登录/刷新 token/校验 session/加载首页 overview 的状态机，登录后渲染 `HomePage`，未登录渲染 `LoginPage`。
 - `app/src/services/terminal.ts` 已经通过 `GET /api/terminal/mobile/overview?includeTail=false` 读取 `TerminalMobileOverviewResponse`，首页不再需要新增 overview 接线。
 - `app/src/pages/HomePage.tsx` 已基于 `TerminalMobileOverviewResponse` 渲染项目与终端列表，组件链路是 `HomePage -> ProjectGroup -> TerminalRow`；当前缺口是终端 row 还没有打开详情页的 navigation 回调。
@@ -44,11 +44,11 @@
 
 明确分层：
 
-| 层          | 文件/模块                                                  | 允许依赖                                                                                     | 禁止依赖                                                                                                                                           |
-| ----------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 纯渲染层    | `packages/terminal-renderer`                               | React、`@xterm/xterm`、`@xterm/addon-fit`、`@xterm/addon-unicode11`、可选 Canvas/WebGL addon | WebSocket、HTTP、`@browser-viewer/shared` 协议、`frontend/src/features/*`、`frontend/src/services/*`、Preview store、Electron API、Tailwind、Ionic |
-| Web adapter | `frontend/src/components/terminal/terminal-surface.tsx` 等 | 现有 Web service、`useTerminalConnection`、Preview store、search/link/paste 相关能力         | 被 App 直接 import                                                                                                                                 |
-| App adapter | `app/src/pages/AppTerminalPage.tsx` 和 App 内 hook/service | App auth token、`@browser-viewer/shared` 协议类型、后端 terminal ws ticket/API               | `frontend/src/*`、Web Preview、Web link provider、clipboard image API                                                                              |
+| 层          | 文件/模块                                                  | 允许依赖                                                                                     | 禁止依赖                                                                                                                                     |
+| ----------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 纯渲染层    | `packages/terminal-renderer`                               | React、`@xterm/xterm`、`@xterm/addon-fit`、`@xterm/addon-unicode11`、可选 Canvas/WebGL addon | WebSocket、HTTP、`@runweave/shared` 协议、`frontend/src/features/*`、`frontend/src/services/*`、Preview store、Electron API、Tailwind、Ionic |
+| Web adapter | `frontend/src/components/terminal/terminal-surface.tsx` 等 | 现有 Web service、`useTerminalConnection`、Preview store、search/link/paste 相关能力         | 被 App 直接 import                                                                                                                           |
+| App adapter | `app/src/pages/AppTerminalPage.tsx` 和 App 内 hook/service | App auth token、`@runweave/shared` 协议类型、后端 terminal ws ticket/API                     | `frontend/src/*`、Web Preview、Web link provider、clipboard image API                                                                        |
 
 样式边界：
 
@@ -69,7 +69,7 @@
 
 - 不建议 `app/` 直接从 `frontend/src/...` import。原因是 `app/tsconfig.json` 只 include `app/src` 与 `capacitor.config.ts`，`frontend/src` 又依赖 Tailwind、shadcn/Radix、next-themes、Electron bridge、Preview store 等 Web 上下文，直接跨包 import 会把不必要依赖和样式体系拖进 App。
 - 不建议复制整份 `TerminalWorkspace`。它会把桌面 tab、Preview、History、连接切换等一期不需要的复杂状态带进 App，后续维护成本高。
-- 不建议在 App 里重写 xterm renderer。App 需要的 WebSocket 逻辑只做薄 adapter：复用后端协议和 `@browser-viewer/shared` 消息类型，把 snapshot/output 转发给 renderer。
+- 不建议在 App 里重写 xterm renderer。App 需要的 WebSocket 逻辑只做薄 adapter：复用后端协议和 `@runweave/shared` 消息类型，把 snapshot/output 转发给 renderer。
 
 ## 一期用户可见行为
 
@@ -100,7 +100,7 @@ docs/plans/assets/2026-06-08-ios-app-terminal-open-image2.png
 
 预计新增：
 
-- `packages/terminal-renderer/package.json`：新共享终端 renderer package，依赖 React、xterm 与必要 addon；不依赖 `@browser-viewer/shared`、WebSocket、HTTP、Tailwind、Ionic、shadcn、Radix 或 next-themes。
+- `packages/terminal-renderer/package.json`：新共享终端 renderer package，依赖 React、xterm 与必要 addon；不依赖 `@runweave/shared`、WebSocket、HTTP、Tailwind、Ionic、shadcn、Radix 或 next-themes。
 - `packages/terminal-renderer/src/index.ts`：导出 renderer 组件、handle、props 和 theme 类型。
 - `packages/terminal-renderer/src/TerminalRenderer.tsx`：封装 xterm 初始化、snapshot/output 渲染、resize、基础键盘输入、`TerminalRendererHandle` 和 `onTerminalReady()` extension hook；不依赖 Web Preview store，不写 Tailwind class。
 - `packages/terminal-renderer/src/terminal-renderer.css`：唯一承载 `@xterm/xterm/css/xterm.css` import 和必要的低层容器规则，避免定义 App/Web 页面级布局。
@@ -113,16 +113,16 @@ docs/plans/assets/2026-06-08-ios-app-terminal-open-image2.png
 预计修改：
 
 - `frontend/src/components/terminal/terminal-surface.tsx`、`frontend/src/components/terminal/use-terminal-emulator.ts`：把纯 xterm 初始化/写入/resize 逻辑迁移到 `packages/terminal-renderer` 后，Web 侧通过 `onTerminalReady()` 注册 search、link、paste image、tmux wheel scroll、preview/browser adapter 等 Web 专属行为，并删除当前 `import "@xterm/xterm/css/xterm.css";`。
-- `frontend/src/index.css`：全局 import `@browser-viewer/terminal-renderer/terminal-renderer.css`，作为 Web 端唯一 xterm CSS 入口。
+- `frontend/src/index.css`：全局 import `@runweave/terminal-renderer/terminal-renderer.css`，作为 Web 端唯一 xterm CSS 入口。
 - `frontend/src/features/terminal/use-terminal-connection.ts`：本计划不移动到 renderer package；继续作为 Web adapter 的连接层，避免 renderer 依赖 WebSocket。
 - `frontend/src/services/terminal.ts`：本计划不移动到 renderer package；保留 Web 专属 API 与连接 API。
-- `app/package.json`：保留现有 `@browser-viewer/shared: workspace:*`，添加 `@browser-viewer/terminal-renderer: workspace:*`，以及 xterm 相关依赖如果 package peer dependency 需要。
+- `app/package.json`：保留现有 `@runweave/shared: workspace:*`，添加 `@runweave/terminal-renderer: workspace:*`，以及 xterm 相关依赖如果 package peer dependency 需要。
 - `app/src/services/terminal.ts`：在现有 `getTerminalMobileOverview()` 基础上新增 App 详情页需要的 `getTerminalSession()`、`createTerminalWsTicket()`；不要从 `frontend/src/services/terminal.ts` import。
 - `app/src/App.tsx`：在现有登录/首页/overview 状态机基础上增加 `selectedTerminalSessionId` 或等价 navigation 状态，已登录且选中终端时渲染 `AppTerminalPage`，返回时恢复 `HomePage`。
 - `app/src/pages/HomePage.tsx`：新增 `onOpenTerminal(terminalSessionId: string)` prop，并传给 `ProjectGroup`。
 - `app/src/components/ProjectGroup.tsx`：新增 `onOpenTerminal` prop，并传给每个 `TerminalRow`。
 - `app/src/components/TerminalRow.tsx`：把 row 改为可点击控件或按钮语义元素，点击时调用 `onOpenTerminal(session.terminalSessionId)`。
-- `app/src/main.css`：全局 import `@browser-viewer/terminal-renderer/terminal-renderer.css`，作为 App 端唯一 xterm CSS 入口；同时添加终端详情页三段式布局、黑底终端区、底部安全区 composer 样式。
+- `app/src/main.css`：全局 import `@runweave/terminal-renderer/terminal-renderer.css`，作为 App 端唯一 xterm CSS 入口；同时添加终端详情页三段式布局、黑底终端区、底部安全区 composer 样式。
 
 ## 后端范围
 
@@ -159,8 +159,8 @@ docs/plans/assets/2026-06-08-ios-app-terminal-open-image2.png
 
 **要求：**
 
-- package 名称使用 `@browser-viewer/terminal-renderer`。
-- package 不依赖 `@browser-viewer/shared`，因为 renderer 不理解 terminal protocol，只理解字符串输入输出和尺寸。
+- package 名称使用 `@runweave/terminal-renderer`。
+- package 不依赖 `@runweave/shared`，因为 renderer 不理解 terminal protocol，只理解字符串输入输出和尺寸。
 - package 不包含 `services/http.ts`、`services/terminal.ts`、`useTerminalConnection.ts` 或任何 WebSocket/ticket 代码。
 - `terminal-renderer-types.ts` 定义以下纯 UI 合同：
 
@@ -221,7 +221,7 @@ export interface TerminalRendererProps {
 
 **验证：**
 
-- `pnpm --filter @browser-viewer/terminal-renderer typecheck`
+- `pnpm --filter @runweave/terminal-renderer typecheck`
 - `pnpm --filter @runweave/app typecheck`
 
 预期：renderer package 单独 typecheck 通过；App 能解析 renderer package 类型。
@@ -267,8 +267,8 @@ import ... from "../../../frontend/";
 
 - `rg -n 'features/|services/|useTerminalConnection|WebSocket|createTerminalWsTicket|createTerminalSessionClipboardImage|WebLinksAddon|SearchAddon' packages/terminal-renderer/src` 无命中，除非命中的是文档注释中的禁止清单。
 - 按“Web 终端扩展回归清单”逐项验证，确认迁移到 `onTerminalReady()` 后没有回退。
-- `pnpm --filter @browser-viewer/terminal-renderer typecheck`
-- `pnpm --filter @browser-viewer/frontend typecheck`
+- `pnpm --filter @runweave/terminal-renderer typecheck`
+- `pnpm --filter @runweave/frontend typecheck`
 - `pnpm --filter @runweave/app build`
 
 ### 任务 3：实现 App 终端详情页三段式壳
@@ -335,7 +335,7 @@ import ... from "../../../frontend/";
 **验证：**
 
 - `pnpm --filter ./backend typecheck`
-- `pnpm --filter @browser-viewer/frontend typecheck`
+- `pnpm --filter @runweave/frontend typecheck`
 - `pnpm --filter @runweave/app build`
 - Web 端手工回归：先输入 `echo runweave-terminal-reuse` 确认基础输出正常，再按“Web 终端扩展回归清单”覆盖搜索、URL link、图片粘贴、tmux wheel scroll、mobile keybar。
 - App 端手工回归：连接同一个 backend，打开已有终端，输入 `echo app-terminal-open`，确认输出正常。
@@ -345,7 +345,7 @@ import ... from "../../../frontend/";
 - App 能从首页打开一个真实已有终端。
 - App 终端详情页符合三段式布局：头部信息、中间实时终端、底部固定输入框。
 - 共享 renderer 是纯渲染能力：不依赖 WebSocket、HTTP、后端协议、Web service、Preview、Search、Link 或 Clipboard Image。
-- App adapter 与 Web adapter 使用同一套后端 `/ws/terminal` 协议和 `@browser-viewer/shared` 消息类型，但 renderer 不感知协议。
+- App adapter 与 Web adapter 使用同一套后端 `/ws/terminal` 协议和 `@runweave/shared` 消息类型，但 renderer 不感知协议。
 - App 输入框发送的内容能进入同一个终端 runtime；换行提交命令。
 - Web 现有终端能力不回退：snapshot、output、resize、输入、搜索、URL link、图片粘贴、tmux wheel scroll、mobile keybar、重连仍可用。
 - 没有在 `packages/terminal-renderer` 中复制或引入任何 WebSocket terminal 协议实现。

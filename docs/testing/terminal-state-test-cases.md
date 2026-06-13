@@ -212,7 +212,7 @@ Codex TUI 输出里的 `Working (... esc to interrupt ...)` 只能作为用户�
 ```sh
 pnpm --filter ./backend test -- terminal-state-service terminal-state terminal-server terminal
 pnpm --filter ./backend typecheck
-pnpm --filter @browser-viewer/shared typecheck
+pnpm --filter @runweave/shared typecheck
 pnpm --filter @runweave/cli test -- terminal
 pnpm --filter @runweave/cli typecheck
 pnpm --filter @runweave/app typecheck

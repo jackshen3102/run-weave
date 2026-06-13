@@ -2,9 +2,9 @@ import type {
   AppHomeOverviewSession,
   TerminalInputMode,
   TerminalState,
-} from "@browser-viewer/shared";
-import { fileToBase64, shellQuote } from "@browser-viewer/common/terminal";
-import { type TerminalRendererHandle } from "@browser-viewer/terminal-renderer";
+} from "@runweave/shared";
+import { fileToBase64, shellQuote } from "@runweave/common/terminal";
+import { type TerminalRendererHandle } from "@runweave/terminal-renderer";
 import { IonContent, IonPage } from "@ionic/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 

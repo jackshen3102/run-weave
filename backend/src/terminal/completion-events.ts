@@ -1,4 +1,4 @@
-import type { TerminalCompletionEvent, TerminalCompletionReason } from "@browser-viewer/shared";
+import type { TerminalCompletionEvent, TerminalCompletionReason } from "@runweave/shared";
 import type { TerminalSessionRecord } from "./manager";
 
 const MAX_COMPLETION_EVENTS = 200;

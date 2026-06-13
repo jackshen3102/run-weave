@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
-import type { TerminalSessionHistoryResponse } from "@browser-viewer/shared";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared";
+import type { TerminalSessionHistoryResponse } from "@runweave/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { Unicode11Addon } from "@xterm/addon-unicode11";

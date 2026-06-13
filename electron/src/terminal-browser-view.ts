@@ -20,7 +20,7 @@ import {
   type TerminalBrowserHeaderRule,
   type TerminalBrowserHeaderState,
   type TerminalBrowserProxyState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import {
   normalizeTerminalBrowserPersistedState,
   normalizeTerminalBrowserUrlForStorage,

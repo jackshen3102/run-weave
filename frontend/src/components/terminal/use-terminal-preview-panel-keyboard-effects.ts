@@ -2,7 +2,7 @@ import { useEffect, type MutableRefObject } from "react";
 import type {
   TerminalPreviewChangeKind,
   TerminalPreviewGitChangesResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 export function resolveSelectedPreviewChange(params: {
   changes: TerminalPreviewGitChangesResponse;

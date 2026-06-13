@@ -1,7 +1,7 @@
 import type {
   TranscribeVoiceRequest,
   TranscribeVoiceResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { codexAppServerClient } from "./codex-app-server-client";
 
 const CHATGPT_TRANSCRIPTIONS_URL = "https://chatgpt.com/backend-api/transcribe";

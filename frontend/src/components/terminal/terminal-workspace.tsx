@@ -4,7 +4,7 @@ import type {
   TerminalProjectListItem,
   TerminalSessionListItem,
   TerminalState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type { ConnectionConfig } from "../../features/connection/types";
 import { createTerminalBellPlayer } from "../../features/terminal/bell";
 import {

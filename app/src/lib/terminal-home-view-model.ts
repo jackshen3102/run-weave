@@ -2,7 +2,7 @@ import type {
   AppHomeOverviewResponse,
   AppHomeOverviewSession,
   TerminalProjectListItem,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 export interface TerminalHomeProjectGroup {
   project: TerminalProjectListItem;

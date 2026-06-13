@@ -78,7 +78,7 @@ export interface BackendHealthPayload {
 
 修改 `backend/src/server/health.ts`：
 
-- 从 `@browser-viewer/shared` 引入 `BackendHealthPayload`。
+- 从 `@runweave/shared` 引入 `BackendHealthPayload`。
 - `buildHealthPayload()` 返回 `BackendHealthPayload`。
 
 App 本地状态只放在 App 侧，不进 shared：
@@ -124,7 +124,7 @@ export interface AppDeviceConnectionSnapshot {
 验证：
 
 ```bash
-pnpm --filter @browser-viewer/backend test -- src/server/health.test.ts
+pnpm --filter @runweave/backend test -- src/server/health.test.ts
 ```
 
 预期：健康检查单测通过。
@@ -367,7 +367,7 @@ onTransportOpen?: () => void;
 验证：
 
 ```bash
-pnpm --filter @browser-viewer/backend test -- src/ws/terminal-events-server.test.ts src/ws/heartbeat.test.ts
+pnpm --filter @runweave/backend test -- src/ws/terminal-events-server.test.ts src/ws/heartbeat.test.ts
 ```
 
 预期：
@@ -463,8 +463,8 @@ UI 要求：
 ### 静态验证
 
 ```bash
-pnpm --filter @browser-viewer/shared test
-pnpm --filter @browser-viewer/backend test -- src/server/health.test.ts src/ws/terminal-events-server.test.ts src/ws/heartbeat.test.ts
+pnpm --filter @runweave/shared test
+pnpm --filter @runweave/backend test -- src/server/health.test.ts src/ws/terminal-events-server.test.ts src/ws/heartbeat.test.ts
 pnpm --filter @runweave/app typecheck
 pnpm --filter @runweave/app build
 ```

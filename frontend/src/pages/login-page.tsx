@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import type { ConnectionConfig } from "../features/connection/types";
 import { LoginPage as LoginScreen } from "../components/login-page";
-import type { LoginResponse } from "@browser-viewer/shared";
+import type { LoginResponse } from "@runweave/shared";
 
 interface LoginPageProps {
   apiBase: string;

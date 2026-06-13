@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import type {
   TerminalClientMessage,
   TerminalServerMessage,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type { WebSocket } from "ws";
 import { logger } from "../logging";
 import { getLiveTerminalScrollback } from "../terminal/live-scrollback";

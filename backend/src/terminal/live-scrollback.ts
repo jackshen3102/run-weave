@@ -1,7 +1,7 @@
 import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
   TERMINAL_LIVE_SCROLLBACK_BYTES,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import {
   createScrollbackBuffer,
   readScrollbackBuffer,

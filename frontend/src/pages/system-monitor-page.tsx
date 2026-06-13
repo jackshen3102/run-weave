@@ -17,7 +17,7 @@ import type {
   SystemMonitorAppGroup,
   SystemMonitorProcess,
   SystemMonitorSnapshot,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { Button } from "../components/ui/button";
 import {
   DropdownMenu,

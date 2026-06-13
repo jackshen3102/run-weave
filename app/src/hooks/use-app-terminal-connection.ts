@@ -4,8 +4,8 @@ import type {
   TerminalServerMessage,
   TerminalSignal,
   TerminalSessionStatusResponse,
-} from "@browser-viewer/shared";
-import type { TerminalRendererHandle } from "@browser-viewer/terminal-renderer";
+} from "@runweave/shared";
+import type { TerminalRendererHandle } from "@runweave/terminal-renderer";
 
 import { recordSupportLog } from "../features/support-logs";
 import { classifyApiFailure } from "../services/api-failure";

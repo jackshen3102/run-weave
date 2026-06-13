@@ -1,4 +1,4 @@
-import type { LoginRequest } from "@browser-viewer/shared";
+import type { LoginRequest } from "@runweave/shared";
 import { calculateExpiresAt, type RunweaveProfile } from "../config/profile-store.js";
 import { requestJson } from "./http.js";
 

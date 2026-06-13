@@ -21,7 +21,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
 }
 },
 {
@@ -35,7 +35,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
 }
 },
 {
@@ -49,7 +49,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
 "error": "Unauthorized"
 }
 },
@@ -64,7 +64,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
 }
 },
 {
@@ -78,7 +78,7 @@
 "route": "/login",
 "apiBaseHost": "",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
 "durationMs": 33,
 "errorMessage": "Unauthorized",
 "errorName": "ApiError",
@@ -98,7 +98,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
 }
 },
 {
@@ -112,7 +112,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
 "error": "Unauthorized"
 }
 },
@@ -127,7 +127,7 @@
 "route": "/login",
 "apiBaseHost": "",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
 "durationMs": 33,
 "errorMessage": "Unauthorized",
 "errorName": "ApiError",
@@ -147,7 +147,7 @@
 "route": "/login",
 "apiBaseHost": "",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
 "durationMs": 5,
 "errorMessage": "Unauthorized",
 "errorName": "ApiError",
@@ -167,7 +167,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
 "error": "Unauthorized"
 }
 },
@@ -182,7 +182,7 @@
 "route": "/login",
 "apiBaseHost": "",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
 "durationMs": 23,
 "method": "POST",
 "path": "/api/auth/refresh",
@@ -200,7 +200,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
 }
 },
 {
@@ -214,7 +214,7 @@
 "route": "/home",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
 }
 },
 {
@@ -228,7 +228,7 @@
 "route": "/home",
 "apiBaseHost": "",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
 "durationMs": 16,
 "method": "GET",
 "path": "/api/auth/verify",
@@ -246,7 +246,7 @@
 "route": "/home",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
 }
 },
 {
@@ -260,7 +260,7 @@
 "route": "/home",
 "apiBaseHost": "",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
 "durationMs": 6,
 "method": "GET",
 "path": "/api/app/home/overview",
@@ -278,7 +278,7 @@
 "route": "/home",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
 }
 },
 {
@@ -292,7 +292,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
 }
 },
 {
@@ -306,7 +306,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36"
 }
 },
 {
@@ -320,7 +320,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
 "scope": {
 "source": "login"
 }
@@ -337,7 +337,7 @@
 "route": "/login",
 "apiBaseHost": "127.0.0.1:5174",
 "online": true,
-"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @browser-viewer/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @runweave/electron/0.99.0 Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
 "method": "download",
 "scope": {
 "source": "login"

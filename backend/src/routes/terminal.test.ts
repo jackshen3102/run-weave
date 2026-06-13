@@ -20,7 +20,7 @@ import {
   TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
   TERMINAL_CLIPBOARD_IMAGE_MAX_MIB,
 } from "../terminal/clipboard-image";
-import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared";
 import { createAppHomeOverviewRouter } from "./app-home-overview";
 import { createTerminalRouter } from "./terminal";
 import { createTerminalStateRouter } from "./terminal-state";

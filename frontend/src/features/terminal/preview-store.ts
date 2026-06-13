@@ -4,7 +4,7 @@ import {
   createTerminalBrowserDeviceState,
   type TerminalBrowserDeviceState,
   type TerminalPreviewChangeKind,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 export type TerminalPreviewMode = "file" | "changes" | "explorer";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";

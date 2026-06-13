@@ -1,4 +1,4 @@
-import type { TerminalEventEnvelope } from "@browser-viewer/shared";
+import type { TerminalEventEnvelope } from "@runweave/shared";
 import { logger } from "../logging";
 
 const MAX_TERMINAL_EVENTS = 500;

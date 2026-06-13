@@ -10,7 +10,7 @@ import type {
   TerminalPreviewFileSearchItem,
   TerminalPreviewGitChangesResponse,
   TerminalProjectListItem,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type {
   TerminalChangesViewMode,
   TerminalMarkdownViewMode,

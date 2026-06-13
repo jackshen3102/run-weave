@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { TerminalSessionListItem } from "@browser-viewer/shared";
+import type { TerminalSessionListItem } from "@runweave/shared";
 import {
   loadRecentTerminalSelection,
   saveRecentTerminalSelection,

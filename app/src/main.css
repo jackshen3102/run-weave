@@ -1,4 +1,4 @@
-@import "@browser-viewer/terminal-renderer/terminal-renderer.css";
+@import "@runweave/terminal-renderer/terminal-renderer.css";
 
 @tailwind base;
 @tailwind components;

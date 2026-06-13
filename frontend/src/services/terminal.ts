@@ -25,7 +25,7 @@ import type {
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
   UpdateTerminalProjectRequest,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { requestBlob, requestJson, requestVoid } from "./http";
 
 export async function createTerminalProject(

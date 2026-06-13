@@ -5,11 +5,11 @@ import type {
   TerminalPreviewChangeKind,
   TerminalPreviewFileResponse,
   TerminalPreviewGitStatus,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import {
   createTerminalPreviewRequestSequencer,
   resolveMarkdownPreviewHref,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 import {
   basenameOf,

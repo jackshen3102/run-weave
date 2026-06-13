@@ -12,7 +12,7 @@ import type {
   TerminalPreviewChangeFile,
   TerminalPreviewChangeKind,
   TerminalPreviewGitChangesResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { Button } from "../ui/button";
 import {
   ContextMenu,

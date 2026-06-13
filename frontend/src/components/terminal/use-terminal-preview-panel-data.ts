@@ -6,8 +6,8 @@ import type {
   TerminalPreviewFileSearchItem,
   TerminalPreviewGitChangesResponse,
   TerminalProjectListItem,
-} from "@browser-viewer/shared";
-import { createTerminalPreviewRequestSequencer } from "@browser-viewer/shared";
+} from "@runweave/shared";
+import { createTerminalPreviewRequestSequencer } from "@runweave/shared";
 import {
   useTerminalPreviewStore,
   DEFAULT_MARKDOWN_VIEW_MODE,

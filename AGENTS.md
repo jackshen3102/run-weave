@@ -12,12 +12,12 @@
 
 ## 公共包边界
 
-- `packages/common`（包名 `@browser-viewer/common`）只服务 Web 和 App 的公共前端代码。这里的“公共”必须是 Web 与 App 都实际复用的浏览器端 helper、前端组件或共享样式资产。
+- `packages/common`（包名 `@runweave/common`）只服务 Web 和 App 的公共前端代码。这里的“公共”必须是 Web 与 App 都实际复用的浏览器端 helper、前端组件或共享样式资产。
 - 用户或计划中写成 `packages/commom` 时，按拼写错误处理；实际目录始终使用 `packages/common`。
-- `packages/shared`（包名 `@browser-viewer/shared`）负责前后端代码复用，主要是类型、协议、DTO、跨 backend / frontend / app / electron / CLI 的纯 TS 合约。
+- `packages/shared`（包名 `@runweave/shared`）负责前后端代码复用，主要是类型、协议、DTO、跨 backend / frontend / app / electron / CLI 的纯 TS 合约。
 - 不要把 backend、Electron、CLI、协议、DTO、存储模型或跨运行时合约放进 `packages/common`；这类代码应进入 `packages/shared`。
 - 不要因为“未来可能复用”把 App-only 或 Web-only 代码迁入 `packages/common`。新增 common 导出前，必须能指出 Web 与 App 两边的真实调用方，或同一个变更中补齐两边调用方。
-- `@browser-viewer/common` 只允许显式子路径导入，例如 `@browser-viewer/common/terminal`；不要添加根导出，也不要从 `@browser-viewer/common` 根路径导入。
+- `@runweave/common` 只允许显式子路径导入，例如 `@runweave/common/terminal`；不要添加根导出，也不要从 `@runweave/common` 根路径导入。
 
 ## 最小命令
 

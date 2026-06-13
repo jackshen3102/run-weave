@@ -6,7 +6,7 @@ import {
   type TerminalBrowserHeaderRule,
   type TerminalBrowserHeaderRuleField,
   validateTerminalBrowserHeaderRule,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { Button } from "../ui/button";
 
 type HeaderRuleErrors = Partial<Record<TerminalBrowserHeaderRuleField, string>>;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from "react";
-import type { TerminalProjectListItem } from "@browser-viewer/shared";
+import type { TerminalProjectListItem } from "@runweave/shared";
 import {
   getTerminalPreviewFileKind,
   isSupportedTerminalImagePreviewPath,

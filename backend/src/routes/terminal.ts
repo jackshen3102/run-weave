@@ -11,7 +11,7 @@ import type {
   SendTerminalInputResponse,
   TerminalInputMode,
   TerminalCompletionEventListResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type { AuthService } from "../auth/service";
 import { readBearerToken } from "../auth/middleware";
 import { logger } from "../logging";

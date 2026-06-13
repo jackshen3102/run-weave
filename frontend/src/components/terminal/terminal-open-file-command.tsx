@@ -1,6 +1,6 @@
 import { Command } from "cmdk";
 import { Pencil, Trash2 } from "lucide-react";
-import type { TerminalPreviewFileSearchItem } from "@browser-viewer/shared";
+import type { TerminalPreviewFileSearchItem } from "@runweave/shared";
 import {
   ContextMenu,
   ContextMenuContent,

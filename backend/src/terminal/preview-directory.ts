@@ -4,7 +4,7 @@ import type {
   TerminalPreviewDirectoryResponse,
   TerminalPreviewTreeEntry,
   TerminalPreviewTreeEntryKind,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import {
   EXCLUDED_DIRECTORIES,
   EXCLUDED_FILE_BASENAMES,

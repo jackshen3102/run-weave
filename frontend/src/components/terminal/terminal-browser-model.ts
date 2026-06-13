@@ -1,4 +1,4 @@
-import type { TerminalBrowserDeviceState } from "@browser-viewer/shared";
+import type { TerminalBrowserDeviceState } from "@runweave/shared";
 import { browserTabLabel } from "./terminal-browser-tabs";
 
 export interface ElectronBrowserSnapshot {

@@ -16,7 +16,7 @@ import type {
   RuntimeStatsSnapshot,
   SystemMonitorSnapshot,
   TerminalBrowserCdpProxyInfo,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { resolveProtocolFilePath } from "./protocol-path.js";
 import {
   startCdpProxy,

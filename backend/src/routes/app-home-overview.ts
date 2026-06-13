@@ -1,7 +1,7 @@
 import type {
   AppHomeOverviewResponse,
   AppHomeOverviewSession,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { Router } from "express";
 import path from "node:path";
 import { logger } from "../logging";

@@ -3,7 +3,7 @@ import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
   TERMINAL_LIVE_SCROLLBACK_BYTES,
   type TerminalState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type {
   TerminalSessionStore,
   TerminalRuntimeMetadata,

@@ -7,7 +7,7 @@ import type {
   TerminalBrowserDeviceState,
   TerminalBrowserHeaderState,
   TerminalBrowserProxyState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,

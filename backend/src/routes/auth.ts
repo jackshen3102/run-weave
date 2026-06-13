@@ -4,7 +4,7 @@ import type {
   AuthClientType,
   ChangePasswordRequest,
   LoginRequest,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import {
   LoginAttemptGuard,
   type LoginAttemptDecision,

@@ -19,7 +19,7 @@ import type {
   TerminalPreviewGitChangesResponse,
   TerminalSessionStatusResponse,
   TerminalStateResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 import { requestBlob, requestJson, requestVoid } from "./http";
 

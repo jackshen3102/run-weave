@@ -1,6 +1,6 @@
 import { Cable, Check, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
-import type { TerminalBrowserCdpProxyInfo } from "@browser-viewer/shared";
+import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";

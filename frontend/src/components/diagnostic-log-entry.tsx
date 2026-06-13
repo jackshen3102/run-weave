@@ -4,7 +4,7 @@ import type React from "react";
 import type {
   DiagnosticLogResult,
   DiagnosticLogStatus,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import {
   aiDiagnosticLog,
   frontendDiagnosticLogRecorder,

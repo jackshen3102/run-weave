@@ -2,7 +2,7 @@ import type {
   DiagnosticLogRecord,
   DiagnosticLogResult,
   DiagnosticLogStatus,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { requestBlob, requestJson } from "./http";
 
 function authHeaders(token: string): { Authorization: string } {

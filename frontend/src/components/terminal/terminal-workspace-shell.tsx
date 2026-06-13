@@ -3,7 +3,7 @@ import type {
   TerminalProjectListItem,
   TerminalSessionListItem,
   TerminalState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { History, Home, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { ConnectionConfig } from "../../features/connection/types";
 import { DEFAULT_TERMINAL_SIDECAR_WIDTH } from "../../features/terminal/preview-store";

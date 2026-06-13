@@ -3,7 +3,7 @@ import type {
   TerminalAgentKind,
   TerminalState,
   TerminalStateChangeReason,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type { TerminalSessionRecord } from "./manager";
 import type { TerminalEventService } from "./terminal-event-service";
 import type { TerminalStateStore } from "./terminal-state-store";
