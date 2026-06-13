@@ -136,6 +136,41 @@ async function loginAndSeedToken(
 
 }
 
+test("logs in through the real form", async ({ page }) => {
+  await page.route("**/api/auth/login", async (route) => {
+    await route.fulfill({
+      status: 200,
+      json: {
+        accessToken: "form-login-token",
+        expiresIn: 900,
+        sessionId: "form-login-session",
+      },
+    });
+  });
+  await page.route("**/api/auth/verify", async (route) => {
+    await route.fulfill({
+      status: 200,
+      json: { valid: true },
+    });
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByLabel("Username")).toBeVisible();
+  await page.getByLabel("Username").fill("e2e-admin");
+  await page.getByLabel("Password").fill("e2e-secret");
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        return window.localStorage.getItem("viewer.auth.token");
+      }),
+    )
+    .toContain("form-login-token");
+});
+
 test("control panel page loads", async ({ page, request }) => {
   await loginAndSeedToken(request, page);
   await page.goto("/");

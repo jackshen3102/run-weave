@@ -14,7 +14,8 @@
 - `frontend/tests/terminal-vim.spec.ts`
 - `frontend/tests/terminal-preview.spec.ts`
 - `frontend/tests/terminal-snapshot-race.spec.ts`
-- `frontend/tests/terminal-performance.spec.ts`
+
+这些 E2E 只覆盖核心链路：真实登录、首页冒烟、Electron 连接 token 隔离、terminal 创建与输入输出、terminal events 同步、agent running/completion 状态、后台输出恢复、tmux/vim 真实终端兼容、Preview 文件打开/保存/Git changes/路径边界。
 
 ## 删除
 

@@ -4,7 +4,7 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -249,52 +249,6 @@ async function createTerminalProject(
 
   expect(response.ok()).toBe(true);
   return (await response.json()) as { projectId: string };
-}
-
-async function clearTerminalState(
-  request: APIRequestContext,
-  token: string,
-): Promise<void> {
-  const authHeaders = {
-    Authorization: `Bearer ${token}`,
-  };
-  const sessionsResponse = await request.get(
-    `${E2E_API_BASE}/api/terminal/session`,
-    {
-      headers: authHeaders,
-    },
-  );
-  expect(sessionsResponse.ok()).toBe(true);
-  const sessions = (await sessionsResponse.json()) as Array<{
-    terminalSessionId: string;
-  }>;
-  for (const session of sessions) {
-    await request.delete(
-      `${E2E_API_BASE}/api/terminal/session/${encodeURIComponent(
-        session.terminalSessionId,
-      )}`,
-      { headers: authHeaders },
-    );
-  }
-
-  const projectsResponse = await request.get(
-    `${E2E_API_BASE}/api/terminal/project`,
-    {
-      headers: authHeaders,
-    },
-  );
-  expect(projectsResponse.ok()).toBe(true);
-  const projects = (await projectsResponse.json()) as Array<{
-    projectId: string;
-  }>;
-  for (const project of projects) {
-    await request.delete(
-      `${E2E_API_BASE}/api/terminal/project/${encodeURIComponent(
-        project.projectId,
-      )}`,
-      { headers: authHeaders },
-    );
-  }
 }
 
 async function getTerminalScrollback(
@@ -563,53 +517,6 @@ test("does not duplicate committed IME text", async ({ page, request }) => {
   expect(inputMessages).toEqual(["中文"]);
 });
 
-test("fits the terminal pane to the available viewport", async ({
-  page,
-  request,
-}) => {
-  await page.setViewportSize({ width: 1780, height: 900 });
-  const token = await loginAndSeedToken(request, page);
-  const session = await createTerminalSession(request, token);
-  await page.addInitScript((preferencesKey) => {
-    window.localStorage.setItem(
-      preferencesKey,
-      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
-    );
-  }, TERMINAL_PREFERENCES_KEY);
-
-  await page.goto(session.terminalUrl);
-  await page.getByLabel("Terminal emulator").click({ force: true });
-  await page.keyboard.type("printf '__SIZE__ '; stty size; printf '__END__\\n'");
-  await page.keyboard.press("Enter");
-
-  await expect
-    .poll(async () => {
-      const text = await getLiveTerminalText(page);
-      const match = text.match(/__SIZE__\s+(\d+)\s+(\d+)/);
-      if (!match) {
-        return null;
-      }
-      return {
-        rows: Number(match[1]),
-        cols: Number(match[2]),
-      };
-    })
-    .toEqual(
-      expect.objectContaining({
-        rows: expect.any(Number),
-        cols: expect.any(Number),
-      }),
-    );
-
-  const text = await getLiveTerminalText(page);
-  const match = text.match(/__SIZE__\s+(\d+)\s+(\d+)/);
-  expect(match).not.toBeNull();
-  const rows = Number(match?.[1]);
-  const cols = Number(match?.[2]);
-  expect(rows).toBeGreaterThan(30);
-  expect(cols).toBeGreaterThan(80);
-});
-
 test("keeps the selected terminal tab across refresh and falls back by URL", async ({
   page,
   request,
@@ -664,67 +571,6 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
 
   await rm(firstCwd, { force: true, recursive: true });
   await rm(secondCwd, { force: true, recursive: true });
-});
-
-test("adds externally created projects and terminal tabs from terminal events", async ({
-  page,
-  request,
-}) => {
-  const token = await loginAndSeedToken(request, page);
-  const suffix = `${Date.now()}`;
-  const initialProject = await createTerminalProject(
-    request,
-    token,
-    `Initial External Event ${suffix}`,
-  );
-  const initialCwd = await mkdtemp(
-    path.join(os.tmpdir(), `external-event-initial-${suffix}-`),
-  );
-  const externalCwd = await mkdtemp(
-    path.join(os.tmpdir(), `external-event-new-${suffix}-`),
-  );
-  const externalProjectName = `External Event ${suffix}`;
-  const externalLabel = path.basename(externalCwd);
-
-  try {
-    const initialSession = await createTerminalSession(request, token, {
-      projectId: initialProject.projectId,
-      cwd: initialCwd,
-      runtimePreference: "pty",
-    });
-
-    const eventsTicketResponse = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/terminal/events/ws-ticket") &&
-        response.status() === 200,
-    );
-    await page.goto(initialSession.terminalUrl);
-    await eventsTicketResponse;
-
-    const externalProject = await createTerminalProject(
-      request,
-      token,
-      externalProjectName,
-    );
-    await createTerminalSession(request, token, {
-      projectId: externalProject.projectId,
-      cwd: externalCwd,
-      runtimePreference: "pty",
-    });
-
-    await expect(
-      page.getByRole("button", { name: externalProjectName, exact: true }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: externalProjectName, exact: true })
-      .click();
-    await expect(
-      page.getByRole("button", { name: escapedPrefixPattern(externalLabel) }),
-    ).toBeVisible();
-  } finally {
-    await rm(initialCwd, { force: true, recursive: true });
-    await rm(externalCwd, { force: true, recursive: true });
-  }
 });
 
 test("merges terminal event catchup without duplicate projects or tabs", async ({
@@ -850,47 +696,6 @@ test("does not switch the active terminal for live external terminal events", as
   } finally {
     await rm(activeCwd, { force: true, recursive: true });
     await rm(externalCwd, { force: true, recursive: true });
-  }
-});
-
-test("selects an externally created terminal when the workspace is empty", async ({
-  page,
-  request,
-}) => {
-  const token = await loginAndSeedToken(request, page);
-  await clearTerminalState(request, token);
-  const suffix = `${Date.now()}`;
-  const cwd = await mkdtemp(path.join(os.tmpdir(), `empty-live-${suffix}-`));
-  const projectName = `Empty Live ${suffix}`;
-
-  try {
-    const eventsTicketResponse = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/terminal/events/ws-ticket") &&
-        response.status() === 200,
-    );
-    await page.goto("/terminal");
-    await eventsTicketResponse;
-    await expect(page.getByText("No terminal tab yet.")).toBeVisible();
-
-    const project = await createTerminalProject(request, token, projectName);
-    const session = await createTerminalSession(request, token, {
-      projectId: project.projectId,
-      cwd,
-      runtimePreference: "pty",
-    });
-
-    await expect(
-      page.getByRole("button", { name: projectName, exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.locator(`[data-terminal-session-id="${session.terminalSessionId}"]`),
-    ).toBeVisible();
-    await expect(page).toHaveURL(
-      new RegExp(`/terminal/${session.terminalSessionId}$`),
-    );
-  } finally {
-    await rm(cwd, { force: true, recursive: true });
   }
 });
 
@@ -1225,48 +1030,6 @@ test("switches Electron terminal connections and ignores stale session loads", a
   await expect.poll(() => page.url()).toContain("/terminal/terminal-c");
 });
 
-test("keeps terminal context when switched Electron connection has no sessions", async ({
-  page,
-}) => {
-  const connectionA = {
-    id: "connection-a",
-    name: "Connection A",
-    url: "http://empty-a.test",
-  };
-  const connectionB = {
-    id: "connection-b",
-    name: "Connection B",
-    url: "http://empty-b.test",
-  };
-
-  await seedElectronConnections(page, {
-    activeId: connectionA.id,
-    connections: [connectionA, connectionB],
-  });
-  await mockTerminalConnectionApi(page, {
-    url: connectionA.url,
-    projectId: "project-a",
-    projectName: "Project A",
-    terminalSessionId: "terminal-a",
-  });
-  await mockTerminalConnectionApi(page, {
-    url: connectionB.url,
-    projectId: "project-b",
-    projectName: "Project B",
-  });
-
-  await page.goto("/terminal/terminal-a");
-  await expect(page.getByRole("button", { name: "Project A" }).first()).toBeVisible();
-
-  await page.getByRole("button", { name: /Connection A/ }).click();
-  await page.getByRole("menuitem", { name: /Connection B/ }).click();
-
-  await expect(page.getByText("No terminal tab yet. Create one to start.")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Connection B/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "New Terminal" })).toBeVisible();
-  await expect.poll(() => page.url()).toMatch(/\/terminal$/);
-});
-
 test("restores deferred background terminal output when selected", async ({
   page,
   request,
@@ -1309,100 +1072,6 @@ test("restores deferred background terminal output when selected", async ({
     .toContain(`/terminal/${backgroundSession.terminalSessionId}`);
 
   await expect.poll(() => getLiveTerminalText(page)).toContain(backgroundMarker);
-
-  await rm(activeCwd, { force: true, recursive: true });
-  await rm(backgroundCwd, { force: true, recursive: true });
-});
-
-test("keeps cached background terminal state without snapshot restore", async ({
-  page,
-  request,
-}) => {
-  const token = await loginAndSeedToken(request, page);
-  const suffix = `${Date.now()}`;
-  await page.addInitScript((preferencesKey) => {
-    window.localStorage.setItem(
-      preferencesKey,
-      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
-    );
-  }, TERMINAL_PREFERENCES_KEY);
-  const activeCwd = await mkdtemp(path.join(os.tmpdir(), `cached-active-${suffix}-`));
-  const backgroundCwd = await mkdtemp(path.join(os.tmpdir(), `cached-bg-${suffix}-`));
-  const backgroundTriggerPath = path.join(backgroundCwd, "go");
-  const backgroundDonePath = path.join(backgroundCwd, "done");
-  const activeLabel = path.basename(activeCwd);
-  const backgroundLabel = path.basename(backgroundCwd);
-  const activeSession = await createTerminalSession(request, token, {
-    cwd: activeCwd,
-  });
-  const backgroundSession = await createTerminalSession(request, token, {
-    command: "python3",
-    args: [
-      "-c",
-      [
-        "import os, sys, time",
-        "sys.stdout.write('\\x1b[?1049h\\x1b[2J')",
-        "sys.stdout.write('\\x1b[Hcached background tui ready\\n')",
-        "sys.stdout.write('left column 000000')",
-        "sys.stdout.flush()",
-        `trigger_path = ${JSON.stringify(backgroundTriggerPath)}`,
-        `done_path = ${JSON.stringify(backgroundDonePath)}`,
-        "while not os.path.exists(trigger_path):",
-        "    time.sleep(0.05)",
-        "for index in range(3500):",
-        "    sys.stdout.write('\\x1b[Hcached background tui frame %06d\\n' % index)",
-        "    sys.stdout.write('left column %06d' % index)",
-        "    sys.stdout.write('\\x1b[10;60Hright column %06d' % index)",
-        "    sys.stdout.write('\\x1b[20;10Hbottom marker %06d' % index)",
-        "    if index % 20 == 0:",
-        "        sys.stdout.flush()",
-        "with open(done_path, 'w') as done_file:",
-        "    done_file.write('done')",
-        "sys.stdout.write('\\x1b[Hcached background tui frame final\\n')",
-        "sys.stdout.write('left column final')",
-        "sys.stdout.write('\\x1b[10;60Hright column final')",
-        "sys.stdout.write('\\x1b[20;10Hbottom marker final')",
-        "sys.stdout.flush()",
-        "time.sleep(10)",
-      ].join("\n"),
-    ],
-    cwd: backgroundCwd,
-  });
-
-  await page.goto(backgroundSession.terminalUrl);
-  await expect(page.getByLabel("Terminal emulator").first()).toBeVisible();
-  await expect.poll(() => getLiveTerminalText(page)).toContain(
-    "cached background tui ready",
-  );
-
-  await page.getByRole("button", { name: escapedPrefixPattern(activeLabel) }).click();
-  await expect
-    .poll(() => page.url())
-    .toContain(`/terminal/${activeSession.terminalSessionId}`);
-  await page.waitForTimeout(300);
-  await writeFile(backgroundTriggerPath, "go");
-  await expect
-    .poll(async () => {
-      try {
-        await access(backgroundDonePath);
-        return true;
-      } catch {
-        return false;
-      }
-    })
-    .toBe(true);
-  await page
-    .getByRole("button", { name: escapedPrefixPattern(backgroundLabel) })
-    .click();
-  await expect
-    .poll(() => page.url())
-    .toContain(`/terminal/${backgroundSession.terminalSessionId}`);
-  await expect.poll(() => getLiveTerminalText(page)).toMatch(
-    /cached background tui (ready|frame)|bottom marker (final|\d{6})|right column (final|\d{6})/,
-  );
-  const visibleText = await getLiveTerminalText(page);
-  expect(visibleText).not.toMatch(/left column \d{6}left column \d{6}/);
-  expect(visibleText).not.toMatch(/right column \d{6}right column \d{6}/);
 
   await rm(activeCwd, { force: true, recursive: true });
   await rm(backgroundCwd, { force: true, recursive: true });
