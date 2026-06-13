@@ -16,6 +16,10 @@ import {
 } from "../terminal/terminal-state-service";
 
 const terminalStateLogger = logger.child({ component: "terminal-state" });
+const AGENT_ACTIVE_COMMANDS = {
+  codex: "codex",
+  trae: "trae",
+} as const;
 
 const agentHookStateSchema = z
   .object({
@@ -25,6 +29,14 @@ const agentHookStateSchema = z
     hookEvent: z.enum(["SessionStart", "UserPromptSubmit", "Stop"]),
   })
   .strict();
+
+function commandBasename(command: string | null): string | null {
+  const normalized = command?.trim().replace(/\\+/g, "/");
+  if (!normalized) {
+    return null;
+  }
+  return normalized.split("/").filter(Boolean).at(-1) ?? normalized;
+}
 
 export function createTerminalStateRouter(options: {
   terminalSessionManager: TerminalSessionManager;
@@ -60,7 +72,7 @@ export function createInternalTerminalAgentHookRouter(options: {
 }): Router {
   const router = Router();
 
-  router.post("/", (req, res) => {
+  router.post("/", async (req, res) => {
     const expectedToken = options.hookToken?.trim();
     const providedToken = String(req.headers["x-runweave-hook-token"] ?? "");
     if (!expectedToken || providedToken !== expectedToken) {
@@ -86,7 +98,7 @@ export function createInternalTerminalAgentHookRouter(options: {
       return;
     }
 
-    const session = options.terminalSessionManager.getSession(
+    let session = options.terminalSessionManager.getSession(
       parsed.data.terminalSessionId,
     );
     if (!session) {
@@ -101,6 +113,17 @@ export function createInternalTerminalAgentHookRouter(options: {
         ),
       });
       return;
+    }
+
+    if (commandBasename(session.activeCommand) === "node") {
+      session =
+        (await options.terminalSessionManager.updateSessionMetadata(
+          session.id,
+          {
+            cwd: session.cwd,
+            activeCommand: AGENT_ACTIVE_COMMANDS[parsed.data.agent],
+          },
+        )) ?? session;
     }
 
     const lastAiActiveCommand =
