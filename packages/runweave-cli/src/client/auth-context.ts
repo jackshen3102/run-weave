@@ -1,13 +1,14 @@
 import { type ResolvedProfile, ProfileStore } from "../config/profile-store.js";
 import { HttpError } from "../errors.js";
 import { createAuthClient, isExpired } from "./auth-client.js";
-import { requestJson } from "./http.js";
+import { requestJson, requestVoid } from "./http.js";
 
 export interface AuthContext {
   profileName: string;
   baseUrl: string;
   accessToken: string;
   requestJson<T>(apiPath: string, init?: RequestInit): Promise<T>;
+  requestVoid(apiPath: string, init?: RequestInit): Promise<void>;
 }
 
 export async function resolveAuthContext(params: {
@@ -42,6 +43,17 @@ export async function resolveAuthContext(params: {
         store,
         apiPath,
         init,
+        parse: "json",
+      });
+    },
+    async requestVoid(apiPath: string, init?: RequestInit) {
+      await requestWithAuth<void>({
+        resolved,
+        current,
+        store,
+        apiPath,
+        init,
+        parse: "void",
       });
     },
   };
@@ -53,6 +65,7 @@ async function requestWithAuth<T>(params: {
   store: ProfileStore;
   apiPath: string;
   init?: RequestInit;
+  parse: "json" | "void";
 }): Promise<T> {
   const makeInit = (accessToken: string): RequestInit => ({
     ...params.init,
@@ -63,10 +76,11 @@ async function requestWithAuth<T>(params: {
   });
 
   try {
-    return await requestJson<T>(
+    return await requestWithParser<T>(
       params.current.baseUrl,
       params.apiPath,
       makeInit(params.current.accessToken ?? ""),
+      params.parse,
     );
   } catch (error) {
     if (
@@ -81,9 +95,23 @@ async function requestWithAuth<T>(params: {
 
   const refreshed = await createAuthClient().refresh(params.current);
   await params.store.saveProfile(params.resolved.name, refreshed);
-  return requestJson<T>(
+  return requestWithParser<T>(
     refreshed.baseUrl,
     params.apiPath,
     makeInit(refreshed.accessToken ?? ""),
+    params.parse,
   );
+}
+
+async function requestWithParser<T>(
+  baseUrl: string,
+  apiPath: string,
+  init: RequestInit,
+  parse: "json" | "void",
+): Promise<T> {
+  if (parse === "void") {
+    await requestVoid(baseUrl, apiPath, init);
+    return undefined as T;
+  }
+  return requestJson<T>(baseUrl, apiPath, init);
 }

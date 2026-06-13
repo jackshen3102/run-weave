@@ -36,6 +36,16 @@ export const sendTerminalInterruptSchema = z
 
 export const TERMINAL_INTERRUPT_ESCAPE_INPUT = "\x1b";
 
+export class TerminalCreateDefaultsError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode: number,
+  ) {
+    super(message);
+    this.name = "TerminalCreateDefaultsError";
+  }
+}
+
 export function buildTerminalInputOperationId(): string {
   return `op_${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}_${randomBytes(4).toString("hex")}`;
 }
@@ -50,12 +60,18 @@ export function resolveTerminalCreateDefaults(
   cwd: string;
 } {
   const command = payload.command?.trim() || resolveDefaultTerminalCommand();
-  const inheritedCwd = payload.inheritFromTerminalSessionId
+  const inheritedSession = payload.inheritFromTerminalSessionId
     ? terminalSessionManager.getSession(payload.inheritFromTerminalSessionId)
-        ?.cwd
     : undefined;
+  if (payload.inheritFromTerminalSessionId && !inheritedSession) {
+    throw new TerminalCreateDefaultsError(
+      "Inherited terminal session not found",
+      404,
+    );
+  }
   const projectId =
     payload.projectId ??
+    inheritedSession?.projectId ??
     terminalSessionManager.listProjects().find((project) => project.isDefault)
       ?.id;
   const projectPath = projectId
@@ -63,12 +79,14 @@ export function resolveTerminalCreateDefaults(
     : undefined;
   const cwd =
     payload.cwd?.trim() ||
-    (isExistingDirectory(inheritedCwd) ? inheritedCwd : undefined) ||
+    (isExistingDirectory(inheritedSession?.cwd)
+      ? inheritedSession?.cwd
+      : undefined) ||
     projectPath ||
     os.homedir();
 
   return {
-    projectId: payload.projectId,
+    projectId,
     command,
     args: payload.args ?? resolveDefaultTerminalArgs(command),
     cwd,

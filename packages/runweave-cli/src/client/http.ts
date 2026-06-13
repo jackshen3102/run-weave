@@ -16,6 +16,17 @@ export async function requestJson<T>(
   return (await response.json()) as T;
 }
 
+export async function requestVoid(
+  baseUrl: string,
+  apiPath: string,
+  init?: RequestInit,
+): Promise<void> {
+  const response = await fetch(`${baseUrl}${apiPath}`, init);
+  if (!response.ok) {
+    throw await buildHttpError(response, apiPath, init);
+  }
+}
+
 async function buildHttpError(
   response: Response,
   apiPath: string,

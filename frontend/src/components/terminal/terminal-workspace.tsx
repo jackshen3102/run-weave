@@ -52,6 +52,28 @@ interface TerminalWorkspaceProps {
   className?: string;
 }
 const BELL_MARKER_DURATION_MS = 2_000;
+
+function isTerminalListInvalidationEvent(event: TerminalEventEnvelope): boolean {
+  return (
+    event.kind === "project_created" ||
+    event.kind === "project_deleted" ||
+    event.kind === "terminal_session_created" ||
+    event.kind === "terminal_session_deleted"
+  );
+}
+
+function getLatestCreatedSessionEvent(
+  events: TerminalEventEnvelope[],
+): Extract<TerminalEventEnvelope, { kind: "terminal_session_created" }> | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.kind === "terminal_session_created") {
+      return event;
+    }
+  }
+  return null;
+}
+
 export function TerminalWorkspace({
   apiBase,
   token,
@@ -308,7 +330,7 @@ export function TerminalWorkspace({
       if (!hasLoadedSessions) {
         return;
       }
-      setActiveSessionId(null);
+      selectActiveSession(null);
       return;
     }
     if (
@@ -319,7 +341,7 @@ export function TerminalWorkspace({
     ) {
       return;
     }
-    setActiveSessionId(
+    selectActiveSession(
       resolvePreferredSessionId(
         apiBase,
         activeProjectId ?? visibleSessions[0]!.projectId,
@@ -331,6 +353,7 @@ export function TerminalWorkspace({
     activeSessionId,
     apiBase,
     hasLoadedSessions,
+    selectActiveSession,
     visibleSessions,
   ]);
   useEffect(() => {
@@ -462,6 +485,17 @@ export function TerminalWorkspace({
         });
       }
 
+      if (events.some(isTerminalListInvalidationEvent)) {
+        const latestCreatedSession = getLatestCreatedSessionEvent(events);
+        void loadSessions().then(() => {
+          if (!latestCreatedSession || activeSessionIdRef.current) {
+            return;
+          }
+          setActiveProjectId(latestCreatedSession.projectId);
+          selectActiveSession(latestCreatedSession.terminalSessionId);
+        });
+      }
+
       const knownSessionIds = new Set(
         sessionsRef.current.map((session) => session.terminalSessionId),
       );
@@ -494,7 +528,7 @@ export function TerminalWorkspace({
         void completionBellPlayerRef.current.play();
       }
     },
-    [],
+    [loadSessions, selectActiveSession],
   );
 
   const getCompletionEventCursor = useCallback(
@@ -642,6 +676,7 @@ export function TerminalWorkspace({
       loadSessions,
       onAuthExpired,
       projectDialogMode,
+      selectActiveSession,
       token,
     ],
   );

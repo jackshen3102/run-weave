@@ -75,6 +75,15 @@ function resolveSessionDisplayStatus(
   };
 }
 
+function isOverviewInvalidationEvent(event: TerminalEventEnvelope): boolean {
+  return (
+    event.kind === "project_created" ||
+    event.kind === "project_deleted" ||
+    event.kind === "terminal_session_created" ||
+    event.kind === "terminal_session_deleted"
+  );
+}
+
 export function useAppSession(): AppSessionController {
   const {
     apiBase,
@@ -291,6 +300,9 @@ export function useAppSession(): AppSessionController {
     const stateEvents = events.filter(
       (event) => event.kind === "terminal_state_changed",
     );
+    if (events.some(isOverviewInvalidationEvent)) {
+      void loadOverview();
+    }
     if (stateEvents.length === 0) {
       return;
     }
@@ -340,7 +352,7 @@ export function useAppSession(): AppSessionController {
           }
         : currentOverview;
     });
-  }, []);
+  }, [loadOverview]);
 
   const handleTerminalEventsTransportFailure = useCallback(async () => {
     const snapshot = await refreshDeviceConnection();

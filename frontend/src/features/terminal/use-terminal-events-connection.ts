@@ -58,6 +58,7 @@ export function useTerminalEventsConnection(params: {
   const reconnectCountRef = useRef(0);
   const seenEventIdsRef = useRef<Set<string>>(new Set());
   const closeReasonRef = useRef<string | null>(null);
+  const lastConnectionCursorRef = useRef<string | null>(null);
   const getCursorRef = useRef(getCursor);
   const setCursorRef = useRef(setCursor);
   const onTerminalEventsRef = useRef(onTerminalEvents);
@@ -97,6 +98,7 @@ export function useTerminalEventsConnection(params: {
       onTerminalEventsRef.current(unseenEvents, delivery);
       const maxId = getMaxEventId(unseenEvents);
       if (maxId) {
+        lastConnectionCursorRef.current = maxId;
         setCursorRef.current(maxId);
       }
     },
@@ -107,6 +109,7 @@ export function useTerminalEventsConnection(params: {
     setConnectionStatus("connecting");
     setError(null);
     seenEventIdsRef.current = new Set();
+    lastConnectionCursorRef.current = null;
     let cancelled = false;
 
     const clearReconnectTimer = (): void => {
@@ -135,7 +138,11 @@ export function useTerminalEventsConnection(params: {
           return;
         }
 
-        const after = getCursorRef.current() ?? ticketPayload.baselineEventId;
+        const after =
+          getCursorRef.current() ??
+          lastConnectionCursorRef.current ??
+          ticketPayload.baselineEventId;
+        lastConnectionCursorRef.current = after;
         const socket = new WebSocket(
           buildTerminalEventsWsUrl(apiBase, ticketPayload.ticket, after),
         );

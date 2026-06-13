@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { stdin, stdout, stderr } from "node:process";
+import { runAppCommand } from "./commands/app.js";
 import { runAuthCommand } from "./commands/auth.js";
+import { runHealthCommand } from "./commands/health.js";
 import { runProjectCommand } from "./commands/project.js";
 import { runTerminalCommand } from "./commands/terminal.js";
 import { toCliError } from "./errors.js";
@@ -34,6 +36,17 @@ export async function runCli(
       await runAuthCommand(subcommand, args, io);
       return 0;
     }
+    if (group === "health") {
+      await runHealthCommand(
+        [subcommand, ...args].filter((arg): arg is string => Boolean(arg)),
+        io,
+      );
+      return 0;
+    }
+    if (group === "app") {
+      await runAppCommand(subcommand, args, io);
+      return 0;
+    }
     if (group === "project") {
       await runProjectCommand(subcommand, args, io);
       return 0;
@@ -43,7 +56,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw <auth|project|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw <app|auth|project|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

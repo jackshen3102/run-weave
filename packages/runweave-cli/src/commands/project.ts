@@ -19,9 +19,9 @@ export async function runProjectCommand(
     env: NodeJS.ProcessEnv;
   },
 ): Promise<void> {
-  if (subcommand !== "ensure") {
+  if (subcommand !== "ensure" && subcommand !== "list") {
     throw new CliError(
-      "Usage: rw project ensure --name <name> --path <path>",
+      "Usage: rw project <list|ensure> [options]",
       2,
     );
   }
@@ -33,6 +33,12 @@ export async function runProjectCommand(
     env: io.env,
   });
   const client = new TerminalHttpClient(auth);
+
+  if (subcommand === "list") {
+    writeOutput(io.stdout, mode, await client.listProjects());
+    return;
+  }
+
   const name = requireStringOption(parsed.options, "name");
   const normalizedPath = await realpath(
     path.resolve(requireStringOption(parsed.options, "path")),

@@ -97,6 +97,7 @@ export function useAppTerminalEventsConnection({
   const reconnectTimerRef = useRef<number | null>(null);
   const accessTokenRef = useRef(accessToken);
   const cursorRef = useRef<string | null>(null);
+  const lastConnectionCursorRef = useRef<string | null>(null);
   const seenEventIdsRef = useRef<Set<string>>(new Set());
   const onTerminalEventsRef = useRef(onTerminalEvents);
 
@@ -126,6 +127,7 @@ export function useAppTerminalEventsConnection({
       onTerminalEventsRef.current(unseenEvents, delivery);
       const maxId = getMaxEventId(unseenEvents);
       if (maxId) {
+        lastConnectionCursorRef.current = maxId;
         cursorRef.current = maxId;
       }
     },
@@ -134,6 +136,7 @@ export function useAppTerminalEventsConnection({
 
   useEffect(() => {
     seenEventIdsRef.current = new Set();
+    lastConnectionCursorRef.current = null;
     let cancelled = false;
 
     if (!enabled || !accessTokenRef.current) {
@@ -181,7 +184,11 @@ export function useAppTerminalEventsConnection({
           return;
         }
 
-        const after = cursorRef.current ?? ticketPayload.baselineEventId;
+        const after =
+          cursorRef.current ??
+          lastConnectionCursorRef.current ??
+          ticketPayload.baselineEventId;
+        lastConnectionCursorRef.current = after;
         const socket = new WebSocket(
           buildTerminalEventsWsUrl(apiBase, ticketPayload.ticket, after),
         );

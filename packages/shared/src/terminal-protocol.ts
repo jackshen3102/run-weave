@@ -322,14 +322,36 @@ export interface TerminalNotificationEventPayload {
   };
 }
 
+export interface TerminalProjectCreatedEventPayload {
+  project: TerminalProjectListItem;
+}
+
+export interface TerminalSessionCreatedEventPayload {
+  session: TerminalSessionListItem;
+}
+
+export interface TerminalProjectDeletedEventPayload {
+  projectId: string;
+  terminalSessionIds: string[];
+}
+
+export interface TerminalSessionDeletedEventPayload {
+  terminalSessionId: string;
+  projectId: string | null;
+}
+
 export type TerminalEventKind =
   | "completion"
+  | "project_created"
+  | "project_deleted"
+  | "terminal_session_created"
+  | "terminal_session_deleted"
   | "terminal_state_changed"
   | "terminal_notification";
 
 interface TerminalEventEnvelopeBase {
   id: string;
-  terminalSessionId: string;
+  terminalSessionId: string | null;
   projectId: string | null;
   createdAt: string;
 }
@@ -337,15 +359,42 @@ interface TerminalEventEnvelopeBase {
 export type TerminalEventEnvelope =
   | (TerminalEventEnvelopeBase & {
       kind: "completion";
+      terminalSessionId: string;
       payload: TerminalCompletionEventPayload;
     })
   | (TerminalEventEnvelopeBase & {
       kind: "terminal_state_changed";
+      terminalSessionId: string;
       payload: TerminalStateChangedEventPayload;
     })
   | (TerminalEventEnvelopeBase & {
       kind: "terminal_notification";
+      terminalSessionId: string;
       payload: TerminalNotificationEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "project_created";
+      terminalSessionId: null;
+      projectId: string;
+      payload: TerminalProjectCreatedEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "project_deleted";
+      terminalSessionId: null;
+      projectId: string;
+      payload: TerminalProjectDeletedEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_session_created";
+      terminalSessionId: string;
+      projectId: string;
+      payload: TerminalSessionCreatedEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_session_deleted";
+      terminalSessionId: string;
+      projectId: string | null;
+      payload: TerminalSessionDeletedEventPayload;
     });
 
 export interface TerminalCompletionEventListResponse {
