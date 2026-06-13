@@ -26,6 +26,7 @@ import { createTerminalRouter } from "./terminal";
 import { createTerminalStateRouter } from "./terminal-state";
 import { TerminalStateService } from "../terminal/terminal-state-service";
 import { TerminalStateStore } from "../terminal/terminal-state-store";
+import { TerminalEventService } from "../terminal/terminal-event-service";
 
 interface MockTerminalSession {
   id: string;
@@ -193,6 +194,14 @@ function createTestServer(
       sessionState.current = null;
       return true;
     }),
+    markExited: vi.fn((id: string, exitCode?: number) => {
+      const session = resolveRawSession(id);
+      if (!session) {
+        return;
+      }
+      session.status = "exited";
+      session.exitCode = exitCode;
+    }),
     updateRuntimeMetadata: vi.fn(
       async (id: string, metadata: Partial<MockTerminalSession>) => {
         const session = resolveRawSession(id);
@@ -222,8 +231,10 @@ function createTestServer(
     ensureRecorder: vi.fn(),
     disposeRuntime: vi.fn(async () => undefined),
   };
+  const terminalEventService = new TerminalEventService();
   const terminalStateService = new TerminalStateService(
     new TerminalStateStore(),
+    terminalEventService,
   );
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
   app.use(
@@ -247,6 +258,7 @@ function createTestServer(
       ptyService: options?.ptyService as never,
       runtimeRegistry: (options?.runtimeRegistry ?? runtimeRegistry) as never,
       tmuxService: options?.tmuxService as never,
+      terminalEventService,
       terminalStateService,
     }),
   );
@@ -255,6 +267,7 @@ function createTestServer(
   return {
     server,
     terminalSessionManager,
+    terminalEventService,
     terminalStateService,
     authService,
     runtimeRegistry,
@@ -319,7 +332,7 @@ describe("terminal routes", () => {
 
   it("creates terminal sessions through the API", async () => {
     const state = { current: null as MockTerminalSession | null };
-    const { server } = createTestServer(state);
+    const { server, terminalEventService } = createTestServer(state);
     servers.push(server);
     const port = await startServer(server);
 
@@ -342,6 +355,48 @@ describe("terminal routes", () => {
       terminalSessionId: "terminal-1",
       terminalUrl: "/terminal/terminal-1",
     });
+    expect(terminalEventService.listAfter(null)).toEqual([
+      expect.objectContaining({
+        kind: "terminal_session_created",
+        terminalSessionId: "terminal-1",
+        projectId: "project-default",
+        payload: {
+          session: expect.objectContaining({
+            terminalSessionId: "terminal-1",
+            projectId: "project-default",
+            command: "bash",
+            args: ["-l"],
+            cwd: "/tmp/demo",
+            status: "running",
+          }),
+        },
+      }),
+    ]);
+  });
+
+  it("rejects terminal session creation for unknown projects", async () => {
+    const state = { current: null as MockTerminalSession | null };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "missing-project",
+          cwd: "/tmp/demo",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      message: "Terminal project not found",
+    });
+    expect(terminalSessionManager.createSession).not.toHaveBeenCalled();
   });
 
   it("returns terminal state from current session metadata", async () => {
@@ -901,7 +956,7 @@ describe("terminal routes", () => {
     );
   });
 
-  it("inherits cwd from a referenced terminal session when cwd is omitted", async () => {
+  it("inherits project and cwd from a referenced terminal session when omitted", async () => {
     const inheritedCwd = await mkdtemp(
       path.join(os.tmpdir(), "terminal-inherit-"),
     );
@@ -909,7 +964,7 @@ describe("terminal routes", () => {
     const state = {
       current: {
         id: "terminal-1",
-        projectId: "project-default",
+        projectId: "project-2",
         name: "feat",
         command: "bash",
         args: ["-l"],
@@ -918,6 +973,22 @@ describe("terminal routes", () => {
         status: "running" as const,
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
       },
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: null,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+        {
+          id: "project-2",
+          name: "Feature Project",
+          path: null,
+          createdAt: new Date("2026-03-29T01:00:00.000Z"),
+          isDefault: false,
+        },
+      ],
     };
     const { server, terminalSessionManager } = createTestServer(state);
     servers.push(server);
@@ -937,9 +1008,34 @@ describe("terminal routes", () => {
     expect(response.status).toBe(201);
     expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
+        projectId: "project-2",
         cwd: inheritedCwd,
       }),
     );
+  });
+
+  it("returns 404 when inheriting from a missing terminal session", async () => {
+    const state = { current: null as MockTerminalSession | null };
+    const { server, terminalSessionManager } = createTestServer(state);
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inheritFromTerminalSessionId: "terminal-missing",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      message: "Inherited terminal session not found",
+    });
+    expect(terminalSessionManager.createSession).not.toHaveBeenCalled();
   });
 
   it("falls back to the project path when inherited cwd no longer exists", async () => {
@@ -1003,7 +1099,7 @@ describe("terminal routes", () => {
     const state = {
       current: {
         id: "terminal-1",
-        projectId: "project-default",
+        projectId: "project-2",
         name: "feat",
         command: "bash",
         args: ["-l"],
@@ -1012,6 +1108,22 @@ describe("terminal routes", () => {
         status: "running" as const,
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
       },
+      projects: [
+        {
+          id: "project-default",
+          name: "Default Project",
+          path: null,
+          createdAt: new Date("2026-03-29T00:00:00.000Z"),
+          isDefault: true,
+        },
+        {
+          id: "project-2",
+          name: "Feature Project",
+          path: null,
+          createdAt: new Date("2026-03-29T01:00:00.000Z"),
+          isDefault: false,
+        },
+      ],
     };
     const { server, terminalSessionManager } = createTestServer(state);
     servers.push(server);
@@ -1023,6 +1135,7 @@ describe("terminal routes", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          projectId: "project-default",
           cwd: "/tmp/override",
           inheritFromTerminalSessionId: "terminal-1",
         }),
@@ -1032,6 +1145,7 @@ describe("terminal routes", () => {
     expect(response.status).toBe(201);
     expect(terminalSessionManager.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
+        projectId: "project-default",
         cwd: "/tmp/override",
       }),
     );
@@ -1598,7 +1712,7 @@ describe("terminal routes", () => {
     const state = {
       current: null as MockTerminalSession | null,
     };
-    const { server } = createTestServer(state);
+    const { server, terminalEventService } = createTestServer(state);
     servers.push(server);
     const port = await startServer(server);
 
@@ -1634,6 +1748,22 @@ describe("terminal routes", () => {
       createdAt: "2026-03-29T01:00:00.000Z",
       isDefault: false,
     });
+    expect(terminalEventService.listAfter(null)).toEqual([
+      expect.objectContaining({
+        kind: "project_created",
+        terminalSessionId: null,
+        projectId: "project-2",
+        payload: {
+          project: {
+            projectId: "project-2",
+            name: "browser-viewer",
+            path: null,
+            createdAt: "2026-03-29T01:00:00.000Z",
+            isDefault: false,
+          },
+        },
+      }),
+    ]);
   });
 
   it("stores a validated project path and uses it as the default terminal cwd", async () => {
@@ -2273,7 +2403,7 @@ describe("terminal routes", () => {
         },
       ],
     };
-    const { server } = createTestServer(state);
+    const { server, terminalEventService } = createTestServer(state);
     servers.push(server);
     const port = await startServer(server);
 
@@ -2286,6 +2416,17 @@ describe("terminal routes", () => {
 
     expect(response.status).toBe(204);
     expect(state.current).toBeNull();
+    expect(terminalEventService.listAfter(null)).toEqual([
+      expect.objectContaining({
+        kind: "project_deleted",
+        terminalSessionId: null,
+        projectId: "project-2",
+        payload: {
+          projectId: "project-2",
+          terminalSessionIds: ["terminal-1"],
+        },
+      }),
+    ]);
   });
 
   it("deletes terminal sessions through the API", async () => {
@@ -2301,7 +2442,7 @@ describe("terminal routes", () => {
         createdAt: new Date("2026-03-29T00:00:00.000Z"),
       },
     };
-    const { server } = createTestServer(state);
+    const { server, terminalEventService } = createTestServer(state);
     servers.push(server);
     const port = await startServer(server);
 
@@ -2313,6 +2454,17 @@ describe("terminal routes", () => {
     );
 
     expect(response.status).toBe(204);
+    expect(terminalEventService.listAfter(null)).toEqual([
+      expect.objectContaining({
+        kind: "terminal_session_deleted",
+        terminalSessionId: "terminal-1",
+        projectId: null,
+        payload: {
+          terminalSessionId: "terminal-1",
+          projectId: null,
+        },
+      }),
+    ]);
   });
 
   it("kills tmux sessions when deleting tmux-backed terminal sessions", async () => {
@@ -2594,6 +2746,74 @@ describe("terminal routes", () => {
       "codex prompt\r",
     );
     expect(runtime.write).not.toHaveBeenCalled();
+  });
+
+  it("reports tmux missing panes as terminal sessions that are not running", async () => {
+    const runtime = {
+      pid: 123,
+      write: vi.fn(),
+      resize: vi.fn(),
+      signal: vi.fn(),
+      dispose: vi.fn(),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+    };
+    const state = {
+      current: {
+        id: "terminal-1",
+        name: "bash",
+        command: "bash",
+        args: ["-lc", "exit 0"],
+        cwd: "/tmp/demo",
+        scrollback: "",
+        status: "running" as const,
+        createdAt: new Date("2026-03-29T00:00:00.000Z"),
+        runtimeKind: "tmux" as const,
+        tmuxSessionName: "runweave-terminal-1",
+        tmuxSocketPath: "/tmp/runweave/tmux.sock",
+      },
+    };
+    const runtimeRegistry = {
+      getRuntime: vi.fn(() => runtime),
+      createRuntime: vi.fn(),
+      ensureRecorder: vi.fn(),
+      disposeRuntime: vi.fn(async () => undefined),
+    };
+    const tmuxService = {
+      sendInput: vi.fn(async () => {
+        throw new Error("can't find pane: runweave-terminal-1");
+      }),
+      buildSessionName: vi.fn(() => "runweave-terminal-1"),
+      socketPath: "/tmp/runweave/tmux.sock",
+    };
+    const { server } = createTestServer(state, {
+      ptyService: { spawnSession: vi.fn() },
+      runtimeRegistry,
+      tmuxService,
+    });
+    servers.push(server);
+    const port = await startServer(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/terminal/session/terminal-1/input`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer access-token-1",
+        },
+        body: JSON.stringify({
+          operationId: "op-test-1",
+          data: "pwd",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      message: "Terminal session is not running",
+    });
+    expect(state.current.status).toBe("exited");
   });
 
   it("interrupts tmux-backed panes through the HTTP API with escape input", async () => {

@@ -251,6 +251,52 @@ async function createTerminalProject(
   return (await response.json()) as { projectId: string };
 }
 
+async function clearTerminalState(
+  request: APIRequestContext,
+  token: string,
+): Promise<void> {
+  const authHeaders = {
+    Authorization: `Bearer ${token}`,
+  };
+  const sessionsResponse = await request.get(
+    `${E2E_API_BASE}/api/terminal/session`,
+    {
+      headers: authHeaders,
+    },
+  );
+  expect(sessionsResponse.ok()).toBe(true);
+  const sessions = (await sessionsResponse.json()) as Array<{
+    terminalSessionId: string;
+  }>;
+  for (const session of sessions) {
+    await request.delete(
+      `${E2E_API_BASE}/api/terminal/session/${encodeURIComponent(
+        session.terminalSessionId,
+      )}`,
+      { headers: authHeaders },
+    );
+  }
+
+  const projectsResponse = await request.get(
+    `${E2E_API_BASE}/api/terminal/project`,
+    {
+      headers: authHeaders,
+    },
+  );
+  expect(projectsResponse.ok()).toBe(true);
+  const projects = (await projectsResponse.json()) as Array<{
+    projectId: string;
+  }>;
+  for (const project of projects) {
+    await request.delete(
+      `${E2E_API_BASE}/api/terminal/project/${encodeURIComponent(
+        project.projectId,
+      )}`,
+      { headers: authHeaders },
+    );
+  }
+}
+
 async function getTerminalScrollback(
   request: APIRequestContext,
   token: string,
@@ -284,6 +330,56 @@ async function getLiveTerminalText(page: Page): Promise<string> {
   }
 
   return (await page.getByLabel("Terminal output").textContent()) ?? "";
+}
+
+async function installTerminalEventsSocketTracker(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    type TrackedWindow = Window & {
+      __runweaveTerminalEventSockets?: WebSocket[];
+      __runweaveTerminalEventSocketTrackingInstalled?: boolean;
+    };
+    const trackedWindow = window as TrackedWindow;
+    if (trackedWindow.__runweaveTerminalEventSocketTrackingInstalled) {
+      return;
+    }
+
+    const NativeWebSocket = window.WebSocket;
+    trackedWindow.__runweaveTerminalEventSockets = [];
+    trackedWindow.__runweaveTerminalEventSocketTrackingInstalled = true;
+
+    function TrackingWebSocket(
+      this: WebSocket,
+      url: string | URL,
+      protocols?: string | string[],
+    ): WebSocket {
+      const socket =
+        protocols === undefined
+          ? new NativeWebSocket(url)
+          : new NativeWebSocket(url, protocols);
+      if (String(url).includes("/ws/terminal-events")) {
+        trackedWindow.__runweaveTerminalEventSockets?.push(socket);
+      }
+      return socket;
+    }
+
+    TrackingWebSocket.prototype = NativeWebSocket.prototype;
+    Object.setPrototypeOf(TrackingWebSocket, NativeWebSocket);
+    window.WebSocket = TrackingWebSocket as typeof WebSocket;
+  });
+}
+
+async function closeLatestTerminalEventsSocket(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const trackedWindow = window as Window & {
+      __runweaveTerminalEventSockets?: WebSocket[];
+    };
+    const sockets = trackedWindow.__runweaveTerminalEventSockets ?? [];
+    const socket = sockets[sockets.length - 1];
+    if (!socket) {
+      throw new Error("No terminal-events WebSocket was opened");
+    }
+    socket.close();
+  });
 }
 
 function escapedPrefixPattern(value: string): RegExp {
@@ -568,6 +664,361 @@ test("keeps the selected terminal tab across refresh and falls back by URL", asy
 
   await rm(firstCwd, { force: true, recursive: true });
   await rm(secondCwd, { force: true, recursive: true });
+});
+
+test("adds externally created projects and terminal tabs from terminal events", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  const suffix = `${Date.now()}`;
+  const initialProject = await createTerminalProject(
+    request,
+    token,
+    `Initial External Event ${suffix}`,
+  );
+  const initialCwd = await mkdtemp(
+    path.join(os.tmpdir(), `external-event-initial-${suffix}-`),
+  );
+  const externalCwd = await mkdtemp(
+    path.join(os.tmpdir(), `external-event-new-${suffix}-`),
+  );
+  const externalProjectName = `External Event ${suffix}`;
+  const externalLabel = path.basename(externalCwd);
+
+  try {
+    const initialSession = await createTerminalSession(request, token, {
+      projectId: initialProject.projectId,
+      cwd: initialCwd,
+      runtimePreference: "pty",
+    });
+
+    const eventsTicketResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/terminal/events/ws-ticket") &&
+        response.status() === 200,
+    );
+    await page.goto(initialSession.terminalUrl);
+    await eventsTicketResponse;
+
+    const externalProject = await createTerminalProject(
+      request,
+      token,
+      externalProjectName,
+    );
+    await createTerminalSession(request, token, {
+      projectId: externalProject.projectId,
+      cwd: externalCwd,
+      runtimePreference: "pty",
+    });
+
+    await expect(
+      page.getByRole("button", { name: externalProjectName, exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: externalProjectName, exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: escapedPrefixPattern(externalLabel) }),
+    ).toBeVisible();
+  } finally {
+    await rm(initialCwd, { force: true, recursive: true });
+    await rm(externalCwd, { force: true, recursive: true });
+  }
+});
+
+test("merges terminal event catchup without duplicate projects or tabs", async ({
+  page,
+  request,
+}) => {
+  await installTerminalEventsSocketTracker(page);
+  const token = await loginAndSeedToken(request, page);
+  const suffix = `${Date.now()}`;
+  const initialProject = await createTerminalProject(
+    request,
+    token,
+    `Catchup Initial ${suffix}`,
+  );
+  const initialCwd = await mkdtemp(
+    path.join(os.tmpdir(), `catchup-initial-${suffix}-`),
+  );
+  const externalCwd = await mkdtemp(
+    path.join(os.tmpdir(), `catchup-external-${suffix}-`),
+  );
+  const externalProjectName = `Catchup External ${suffix}`;
+  const externalLabel = path.basename(externalCwd);
+
+  try {
+    const initialSession = await createTerminalSession(request, token, {
+      projectId: initialProject.projectId,
+      cwd: initialCwd,
+      runtimePreference: "pty",
+    });
+    const eventsTicketResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/terminal/events/ws-ticket") &&
+        response.status() === 200,
+    );
+    await page.goto(initialSession.terminalUrl);
+    await eventsTicketResponse;
+    await closeLatestTerminalEventsSocket(page);
+
+    const externalProject = await createTerminalProject(
+      request,
+      token,
+      externalProjectName,
+    );
+    const externalSession = await createTerminalSession(request, token, {
+      projectId: externalProject.projectId,
+      cwd: externalCwd,
+      runtimePreference: "pty",
+    });
+
+    await expect(
+      page.getByRole("button", { name: externalProjectName, exact: true }),
+    ).toHaveCount(1);
+    await page
+      .getByRole("button", { name: externalProjectName, exact: true })
+      .click();
+    await expect(
+      page.locator(
+        `[data-terminal-session-id="${externalSession.terminalSessionId}"]`,
+      ),
+    ).toHaveCount(1);
+    await expect(
+      page.getByRole("button", { name: escapedPrefixPattern(externalLabel) }),
+    ).toHaveCount(1);
+  } finally {
+    await rm(initialCwd, { force: true, recursive: true });
+    await rm(externalCwd, { force: true, recursive: true });
+  }
+});
+
+test("does not switch the active terminal for live external terminal events", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  const suffix = `${Date.now()}`;
+  const activeProject = await createTerminalProject(
+    request,
+    token,
+    `Live Active ${suffix}`,
+  );
+  const externalProject = await createTerminalProject(
+    request,
+    token,
+    `Live External ${suffix}`,
+  );
+  const activeCwd = await mkdtemp(
+    path.join(os.tmpdir(), `live-active-${suffix}-`),
+  );
+  const externalCwd = await mkdtemp(
+    path.join(os.tmpdir(), `live-external-${suffix}-`),
+  );
+
+  try {
+    const activeSession = await createTerminalSession(request, token, {
+      projectId: activeProject.projectId,
+      cwd: activeCwd,
+      runtimePreference: "pty",
+    });
+    const eventsTicketResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/terminal/events/ws-ticket") &&
+        response.status() === 200,
+    );
+    await page.goto(activeSession.terminalUrl);
+    await eventsTicketResponse;
+
+    const externalSession = await createTerminalSession(request, token, {
+      projectId: externalProject.projectId,
+      cwd: externalCwd,
+      runtimePreference: "pty",
+    });
+
+    await expect(
+      page.getByRole("button", {
+        name: `Live External ${suffix}`,
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(externalSession.terminalSessionId).toBeTruthy();
+    await expect(page).toHaveURL(
+      new RegExp(`/terminal/${activeSession.terminalSessionId}$`),
+    );
+  } finally {
+    await rm(activeCwd, { force: true, recursive: true });
+    await rm(externalCwd, { force: true, recursive: true });
+  }
+});
+
+test("selects an externally created terminal when the workspace is empty", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  await clearTerminalState(request, token);
+  const suffix = `${Date.now()}`;
+  const cwd = await mkdtemp(path.join(os.tmpdir(), `empty-live-${suffix}-`));
+  const projectName = `Empty Live ${suffix}`;
+
+  try {
+    const eventsTicketResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/terminal/events/ws-ticket") &&
+        response.status() === 200,
+    );
+    await page.goto("/terminal");
+    await eventsTicketResponse;
+    await expect(page.getByText("No terminal tab yet.")).toBeVisible();
+
+    const project = await createTerminalProject(request, token, projectName);
+    const session = await createTerminalSession(request, token, {
+      projectId: project.projectId,
+      cwd,
+      runtimePreference: "pty",
+    });
+
+    await expect(
+      page.getByRole("button", { name: projectName, exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator(`[data-terminal-session-id="${session.terminalSessionId}"]`),
+    ).toBeVisible();
+    await expect(page).toHaveURL(
+      new RegExp(`/terminal/${session.terminalSessionId}$`),
+    );
+  } finally {
+    await rm(cwd, { force: true, recursive: true });
+  }
+});
+
+test("merges terminal state events without losing existing projects or tabs", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  const suffix = `${Date.now()}`;
+  const projectName = `State Event ${suffix}`;
+  const project = await createTerminalProject(request, token, projectName);
+  const cwd = await mkdtemp(path.join(os.tmpdir(), `state-event-${suffix}-`));
+
+  try {
+    const fakeCodexPath = path.join(cwd, "codex");
+    await writeFile(fakeCodexPath, "#!/usr/bin/env bash\nsleep 30\n", {
+      mode: 0o755,
+    });
+    const session = await createTerminalSession(request, token, {
+      projectId: project.projectId,
+      command: fakeCodexPath,
+      cwd,
+      runtimePreference: "pty",
+    });
+
+    const eventsTicketResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/terminal/events/ws-ticket") &&
+        response.status() === 200,
+    );
+    await page.goto(session.terminalUrl);
+    await eventsTicketResponse;
+
+    const projectButton = page.getByRole("button", {
+      name: projectName,
+      exact: true,
+    });
+    const sessionTab = page.locator(
+      `[data-terminal-session-id="${session.terminalSessionId}"]`,
+    );
+    await expect(projectButton).toHaveCount(1);
+    await expect(sessionTab).toHaveCount(1);
+    await expect(projectButton.locator(".shimmer-invert")).toHaveCount(0);
+
+    const hookResponse = await request.post(
+      `${E2E_API_BASE}/internal/terminal/agent-hook`,
+      {
+        headers: {
+          "X-Runweave-Hook-Token": E2E_HOOK_TOKEN,
+        },
+        data: {
+          terminalSessionId: session.terminalSessionId,
+          projectId: project.projectId,
+          agent: "codex",
+          hookEvent: "UserPromptSubmit",
+        },
+      },
+    );
+    expect(hookResponse.status()).toBe(202);
+
+    await expect(projectButton.locator(".shimmer-invert")).toBeVisible();
+    await expect(sessionTab.locator(".shimmer-invert")).toBeVisible();
+    await expect(projectButton).toHaveCount(1);
+    await expect(sessionTab).toHaveCount(1);
+  } finally {
+    await rm(cwd, { force: true, recursive: true });
+  }
+});
+
+test("removes externally deleted terminal tabs from terminal events", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  const suffix = `${Date.now()}`;
+  const project = await createTerminalProject(
+    request,
+    token,
+    `External Delete ${suffix}`,
+  );
+  const firstCwd = await mkdtemp(
+    path.join(os.tmpdir(), `external-delete-a-${suffix}-`),
+  );
+  const secondCwd = await mkdtemp(
+    path.join(os.tmpdir(), `external-delete-b-${suffix}-`),
+  );
+  const secondLabel = path.basename(secondCwd);
+
+  try {
+    const firstSession = await createTerminalSession(request, token, {
+      projectId: project.projectId,
+      cwd: firstCwd,
+      runtimePreference: "pty",
+    });
+    const secondSession = await createTerminalSession(request, token, {
+      projectId: project.projectId,
+      cwd: secondCwd,
+      runtimePreference: "pty",
+    });
+
+    const eventsTicketResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/terminal/events/ws-ticket") &&
+        response.status() === 200,
+    );
+    await page.goto(firstSession.terminalUrl);
+    await eventsTicketResponse;
+
+    const secondTab = page.getByRole("button", {
+      name: escapedPrefixPattern(secondLabel),
+    });
+    await expect(secondTab).toBeVisible();
+
+    const deleteResponse = await request.delete(
+      `${E2E_API_BASE}/api/terminal/session/${encodeURIComponent(secondSession.terminalSessionId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    expect(deleteResponse.status()).toBe(204);
+
+    await expect(secondTab).not.toBeVisible();
+  } finally {
+    await rm(firstCwd, { force: true, recursive: true });
+    await rm(secondCwd, { force: true, recursive: true });
+  }
 });
 
 test("marks a background project from an explicit codex completion event", async ({

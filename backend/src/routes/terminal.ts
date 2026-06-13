@@ -54,6 +54,7 @@ import {
   sanitizeTerminalError,
   sendTerminalInputSchema,
   sendTerminalInterruptSchema,
+  TerminalCreateDefaultsError,
   TERMINAL_INTERRUPT_ESCAPE_INPUT,
 } from "./terminal-session-route-helpers";
 
@@ -126,6 +127,11 @@ function buildTerminalLineSequence(data: string): TmuxKeySequenceItem[] {
     },
     { type: "key", key: "C-m" },
   ];
+}
+
+function isMissingTerminalRuntimeError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /can't find (pane|session)|no server running/i.test(message);
 }
 
 export function createTerminalRouter(
@@ -252,6 +258,7 @@ export function createTerminalRouter(
     runtimeRegistry: options?.runtimeRegistry,
     tmuxService: options?.tmuxService,
     tmuxOutputWatcher: options?.tmuxOutputWatcher,
+    terminalEventService: options?.terminalEventService,
   });
 
   registerTerminalPreviewRoutes(router, terminalSessionManager);
@@ -368,6 +375,13 @@ export function createTerminalRouter(
         cwdProvided: Boolean(parsed.data.cwd),
         commandProvided: Boolean(parsed.data.command),
       });
+      if (
+        parsed.data.projectId &&
+        !terminalSessionManager.getProject(parsed.data.projectId)
+      ) {
+        res.status(404).json({ message: "Terminal project not found" });
+        return;
+      }
       const session = await terminalSessionManager.createSession(
         resolveTerminalCreateDefaults(parsed.data, terminalSessionManager),
       );
@@ -473,8 +487,28 @@ export function createTerminalRouter(
         terminalSessionId: session.id,
         terminalUrl: `/terminal/${session.id}`,
       };
+      const createdSession =
+        terminalSessionManager.getSession(session.id) ?? session;
+      options?.terminalEventService?.record({
+        kind: "terminal_session_created",
+        terminalSessionId: session.id,
+        projectId: createdSession.projectId,
+        payload: {
+          session: toSessionListItem(
+            createdSession,
+            options.terminalStateService?.getCurrent(
+              createdSession.id,
+              createdSession,
+            ),
+          ),
+        },
+      });
       res.status(201).json(payload);
     } catch (error) {
+      if (error instanceof TerminalCreateDefaultsError) {
+        res.status(error.statusCode).json({ message: error.message });
+        return;
+      }
       const sanitizedError = sanitizeTerminalError(error);
       terminalLogger.error("terminal.session.create.failed", {
         message: "Create terminal session failed",
@@ -614,6 +648,14 @@ export function createTerminalRouter(
       );
       res.status(200).json(payload);
     } catch (error) {
+      if (isMissingTerminalRuntimeError(error)) {
+        terminalSessionManager.markExited(session.id, session.exitCode);
+        res.status(409).json({
+          message: "Terminal session is not running",
+          error: String(error),
+        });
+        return;
+      }
       terminalLogger.error("terminal.input.failed", {
         message: "Terminal input failed",
         terminalSessionId: session.id,
@@ -765,6 +807,15 @@ export function createTerminalRouter(
       return;
     }
 
+    options?.terminalEventService?.record({
+      kind: "terminal_session_deleted",
+      terminalSessionId: req.params.id,
+      projectId: session?.projectId ?? null,
+      payload: {
+        terminalSessionId: req.params.id,
+        projectId: session?.projectId ?? null,
+      },
+    });
     res.status(204).send();
   });
 

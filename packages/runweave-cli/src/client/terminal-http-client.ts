@@ -7,6 +7,7 @@ import type {
   SendTerminalInputRequest,
   SendTerminalInputResponse,
   TerminalProjectListItem,
+  TerminalSessionHistoryResponse,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
   TerminalStateResponse,
@@ -62,6 +63,14 @@ export class TerminalHttpClient {
     );
   }
 
+  getSessionHistory(
+    terminalSessionId: string,
+  ): Promise<TerminalSessionHistoryResponse> {
+    return this.auth.requestJson<TerminalSessionHistoryResponse>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/history`,
+    );
+  }
+
   getCurrentTerminalState(
     terminalSessionId: string,
   ): Promise<TerminalStateResponse> {
@@ -94,6 +103,15 @@ export class TerminalHttpClient {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  async deleteSession(terminalSessionId: string): Promise<void> {
+    await this.auth.requestVoid(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}`,
+      {
+        method: "DELETE",
       },
     );
   }

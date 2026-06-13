@@ -15,6 +15,7 @@ import { killTmuxSessionForTerminal } from "../terminal/runtime-launcher";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TmuxService } from "../terminal/tmux-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
+import type { TerminalEventService } from "../terminal/terminal-event-service";
 import { toProjectPayload } from "./terminal-route-payloads";
 
 const terminalProjectLogger = logger.child({ component: "terminal" });
@@ -83,6 +84,7 @@ export function registerTerminalProjectRoutes(
     runtimeRegistry?: TerminalRuntimeRegistry;
     tmuxService?: TmuxService;
     tmuxOutputWatcher?: TmuxOutputWatcher;
+    terminalEventService?: TerminalEventService;
   },
 ): void {
   router.get("/project", (_req, res) => {
@@ -111,7 +113,16 @@ export function registerTerminalProjectRoutes(
         parsed.data.name,
         projectPath ?? null,
       );
-      res.status(201).json(toProjectPayload(project));
+      const payload = toProjectPayload(project);
+      options?.terminalEventService?.record({
+        kind: "project_created",
+        terminalSessionId: null,
+        projectId: payload.projectId,
+        payload: {
+          project: payload,
+        },
+      });
+      res.status(201).json(payload);
     } catch (error) {
       handleProjectError(res, error);
     }
@@ -199,6 +210,15 @@ export function registerTerminalProjectRoutes(
     }
 
     clearPreviewFileSearchCache(req.params.id);
+    options?.terminalEventService?.record({
+      kind: "project_deleted",
+      terminalSessionId: null,
+      projectId: req.params.id,
+      payload: {
+        projectId: req.params.id,
+        terminalSessionIds: childSessions.map((session) => session.id),
+      },
+    });
     res.status(204).send();
   });
 }

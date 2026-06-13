@@ -11,6 +11,7 @@ import { CliError } from "../errors.js";
 import { tailLines, writeOutput } from "../output/format.js";
 import type {
   TerminalProjectListItem,
+  TerminalInputMode,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
   TerminalState,
@@ -48,12 +49,19 @@ export async function runTerminalCommand(
 ): Promise<void> {
   if (!subcommand) {
     throw new CliError(
-      "Usage: rw terminal <create|list|show|snapshot|handoff|send|interrupt>",
+      "Usage: rw terminal <create|list|show|snapshot|handoff|send|interrupt|state|history|delete>",
       2,
     );
   }
 
-  const parsed = parseArgs(args, new Set(["json", "plain", "enter", "stdin"]));
+  const createArgScan =
+    subcommand === "create"
+      ? extractRepeatedOption(args, "arg")
+      : { args, values: [] };
+  const parsed = parseArgs(
+    createArgScan.args,
+    new Set(["json", "plain", "enter", "stdin"]),
+  );
   const mode = resolveOutputMode(parsed.options);
   const auth = await resolveAuthContext({
     profileName: getStringOption(parsed.options, "profile"),
@@ -62,9 +70,22 @@ export async function runTerminalCommand(
   const client = new TerminalHttpClient(auth);
 
   if (subcommand === "create") {
+    const inheritFromTerminalSessionId = getStringOption(
+      parsed.options,
+      "inherit-from",
+    );
+    const projectId = inheritFromTerminalSessionId
+      ? getStringOption(parsed.options, "project-id")
+      : requireStringOption(parsed.options, "project-id");
+    const cwd = inheritFromTerminalSessionId
+      ? getStringOption(parsed.options, "cwd")
+      : requireStringOption(parsed.options, "cwd");
     const payload = await client.createSession({
-      projectId: requireStringOption(parsed.options, "project-id"),
-      cwd: requireStringOption(parsed.options, "cwd"),
+      projectId,
+      cwd,
+      command: getStringOption(parsed.options, "command"),
+      args: createArgScan.values.length > 0 ? createArgScan.values : undefined,
+      inheritFromTerminalSessionId,
       runtimePreference:
         (getStringOption(parsed.options, "runtime") as
           | "auto"
@@ -117,6 +138,28 @@ export async function runTerminalCommand(
     return;
   }
 
+  if (subcommand === "state") {
+    const terminalSessionId = requireTerminalId(parsed.positionals);
+    const statePayload = await client.getCurrentTerminalState(terminalSessionId);
+    writeOutput(
+      io.stdout,
+      mode,
+      {
+        terminalSessionId,
+        terminalState: statePayload.terminalState,
+      },
+    );
+    return;
+  }
+
+  if (subcommand === "history") {
+    const terminalSessionId = requireTerminalId(parsed.positionals);
+    const session = await client.getSessionHistory(terminalSessionId);
+    const tail = tailLines(session.scrollback, resolveTail(parsed.options));
+    writeOutput(io.stdout, mode, mode === "json" ? { ...session, tail } : tail);
+    return;
+  }
+
   if (subcommand === "send") {
     const terminalSessionId = requireTerminalId(parsed.positionals);
     const result = await sendWithConfirmation({
@@ -124,6 +167,8 @@ export async function runTerminalCommand(
       terminalSessionId,
       text: await resolveInputText(parsed.options, io.stdin),
       enter: getBooleanOption(parsed.options, "enter"),
+      inputMode: resolveInputMode(getStringOption(parsed.options, "mode")),
+      inputModeProvided: getStringOption(parsed.options, "mode") != null,
       confirmMode: getStringOption(parsed.options, "confirm") ?? "none",
       confirmTimeoutMs: Number(
         getStringOption(parsed.options, "confirm-timeout-ms") ??
@@ -131,6 +176,16 @@ export async function runTerminalCommand(
       ),
     });
     writeOutput(io.stdout, mode, result);
+    return;
+  }
+
+  if (subcommand === "delete") {
+    const terminalSessionId = requireTerminalId(parsed.positionals);
+    await client.deleteSession(terminalSessionId);
+    writeOutput(io.stdout, mode, {
+      terminalSessionId,
+      deleted: true,
+    });
     return;
   }
 
@@ -167,6 +222,49 @@ function resolveTail(options: Record<string, string | boolean>): number {
     throw new CliError("--tail must be a non-negative integer", 2);
   }
   return tail;
+}
+
+function resolveInputMode(value: string | undefined): TerminalInputMode {
+  if (!value) {
+    return "raw";
+  }
+  if (value === "raw" || value === "line" || value === "codex_slash_command") {
+    return value;
+  }
+  throw new CliError("--mode must be one of: raw, line, codex_slash_command", 2);
+}
+
+function extractRepeatedOption(
+  args: string[],
+  optionName: string,
+): { args: string[]; values: string[] } {
+  const filteredArgs: string[] = [];
+  const values: string[] = [];
+  const option = `--${optionName}`;
+  const optionPrefix = `${option}=`;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg == null) {
+      continue;
+    }
+    if (arg === option) {
+      const value = args[index + 1];
+      if (value == null) {
+        throw new CliError(`Missing value for --${optionName}`, 2);
+      }
+      values.push(value);
+      index += 1;
+      continue;
+    }
+    if (arg?.startsWith(optionPrefix)) {
+      values.push(arg.slice(optionPrefix.length));
+      continue;
+    }
+    filteredArgs.push(arg);
+  }
+
+  return { args: filteredArgs, values };
 }
 
 async function resolveInputText(
@@ -340,6 +438,8 @@ async function sendWithConfirmation(params: {
   terminalSessionId: string;
   text: string;
   enter: boolean;
+  inputMode: TerminalInputMode;
+  inputModeProvided: boolean;
   confirmMode: string;
   confirmTimeoutMs: number;
 }): Promise<Record<string, unknown>> {
@@ -361,12 +461,20 @@ async function sendWithConfirmation(params: {
     DEFAULT_TAIL_LINES,
   );
   const sendStartedAt = new Date().toISOString();
-  const data = `${params.text}${params.enter ? "\r" : ""}`;
+  const data =
+    params.inputMode === "line" ? params.text : `${params.text}${params.enter ? "\r" : ""}`;
   const operationId = buildOperationId();
-  const inputResult = await params.client.sendInput(params.terminalSessionId, {
+  const inputPayload = {
     operationId,
     data,
-  });
+    ...(params.inputModeProvided || params.inputMode !== "raw"
+      ? { mode: params.inputMode }
+      : {}),
+  };
+  const inputResult = await params.client.sendInput(
+    params.terminalSessionId,
+    inputPayload,
+  );
   if (params.confirmMode === "short" && params.confirmTimeoutMs > 0) {
     await wait(params.confirmTimeoutMs);
   }
@@ -394,7 +502,10 @@ async function sendWithConfirmation(params: {
     inputEnqueued: inputResult.inputEnqueued,
     runtimeKind: inputResult.runtimeKind,
     acceptedAt: inputResult.acceptedAt,
-    submitted: params.enter || /[\r\n]$/.test(params.text),
+    submitted:
+      params.inputMode === "line" ||
+      params.enter ||
+      /[\r\n]$/.test(params.text),
     confirmMode: params.confirmMode,
     confirmTimeoutMs:
       params.confirmMode === "short" ? params.confirmTimeoutMs : 0,
