@@ -4,10 +4,11 @@ import type {
   TerminalEventServerMessage,
 } from "@browser-viewer/shared";
 
-import { ApiError } from "../services/http";
+import { classifyApiFailure } from "../services/api-failure";
 import { createTerminalEventsWsTicket } from "../services/terminal";
 
 type TerminalEventDelivery = "catchup" | "live";
+type ReconnectDecision = boolean | void | Promise<boolean | void>;
 
 function toWebSocketBase(apiBase: string): string {
   const base =
@@ -50,17 +51,43 @@ function getMaxEventId(events: TerminalEventEnvelope[]): string | null {
   return maxId;
 }
 
+function closeWebSocket(socket: WebSocket | null, code: number, reason: string) {
+  if (!socket) {
+    return;
+  }
+  if (socket.readyState === WebSocket.CONNECTING) {
+    socket.addEventListener("open", () => socket.close(code, reason), {
+      once: true,
+    });
+    return;
+  }
+  if (
+    socket.readyState === WebSocket.OPEN ||
+    socket.readyState === WebSocket.CLOSING
+  ) {
+    socket.close(code, reason);
+  }
+}
+
 export function useAppTerminalEventsConnection({
   apiBase,
   accessToken,
   enabled = true,
   onAuthExpired,
+  onConnectionClose,
+  onConnectionError,
+  onServerConnected,
+  onTransportOpen,
   onTerminalEvents,
 }: {
   apiBase: string;
   accessToken: string;
   enabled?: boolean;
   onAuthExpired: () => void;
+  onConnectionClose?: (event: CloseEvent) => ReconnectDecision;
+  onConnectionError?: () => ReconnectDecision;
+  onServerConnected?: () => void;
+  onTransportOpen?: () => void;
   onTerminalEvents: (
     events: TerminalEventEnvelope[],
     delivery: TerminalEventDelivery,
@@ -130,6 +157,17 @@ export function useAppTerminalEventsConnection({
       }, 1200);
     };
 
+    const scheduleReconnectAfterDecision = (
+      resolveDecision: () => ReconnectDecision,
+    ) => {
+      void (async () => {
+        const decision = await resolveDecision();
+        if (!cancelled && decision !== false) {
+          scheduleReconnect();
+        }
+      })();
+    };
+
     const connect = async () => {
       if (cancelled) {
         return;
@@ -149,6 +187,12 @@ export function useAppTerminalEventsConnection({
         );
         socketRef.current = socket;
 
+        socket.addEventListener("open", () => {
+          if (socketRef.current === socket) {
+            onTransportOpen?.();
+          }
+        });
+
         socket.addEventListener("message", (event) => {
           if (socketRef.current !== socket || typeof event.data !== "string") {
             return;
@@ -160,6 +204,10 @@ export function useAppTerminalEventsConnection({
           }
           if (message.type === "terminal-event") {
             handleEvents([message.event], message.delivery);
+            return;
+          }
+          if (message.type === "connected") {
+            onServerConnected?.();
             return;
           }
           if (message.type === "error" && message.message === "Unauthorized") {
@@ -176,24 +224,19 @@ export function useAppTerminalEventsConnection({
             onAuthExpired();
             return;
           }
-          if (!cancelled) {
-            scheduleReconnect();
-          }
+          scheduleReconnectAfterDecision(() => onConnectionClose?.(event));
         });
 
         socket.addEventListener("error", () => {
-          if (!cancelled) {
-            scheduleReconnect();
-          }
+          scheduleReconnectAfterDecision(() => onConnectionError?.());
         });
       } catch (nextError) {
-        if (nextError instanceof ApiError && nextError.status === 401) {
+        const failure = classifyApiFailure(nextError);
+        if (failure.kind === "auth-expired") {
           onAuthExpired();
           return;
         }
-        if (!cancelled) {
-          scheduleReconnect();
-        }
+        scheduleReconnectAfterDecision(() => onConnectionError?.());
       }
     };
 
@@ -201,8 +244,17 @@ export function useAppTerminalEventsConnection({
     return () => {
       cancelled = true;
       clearReconnectTimer();
-      socketRef.current?.close(1000, "AppTerminalEvents unmounted");
+      closeWebSocket(socketRef.current, 1000, "AppTerminalEvents unmounted");
       socketRef.current = null;
     };
-  }, [apiBase, enabled, handleEvents, onAuthExpired]);
+  }, [
+    apiBase,
+    enabled,
+    handleEvents,
+    onAuthExpired,
+    onConnectionClose,
+    onConnectionError,
+    onServerConnected,
+    onTransportOpen,
+  ]);
 }

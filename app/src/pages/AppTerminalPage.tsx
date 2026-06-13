@@ -21,7 +21,8 @@ import { recordSupportLog, useSupportLogs } from "../features/support-logs";
 import { basename, shortPath } from "../lib/app-terminal-path-labels";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
-import { ApiError } from "../services/http";
+import type { AppDeviceConnectionSnapshot } from "../hooks/use-app-device-connection";
+import { classifyApiFailure } from "../services/api-failure";
 import {
   createTerminalSessionClipboardImage,
   getCurrentTerminalState,
@@ -33,11 +34,13 @@ import { transcribeVoice } from "../services/voice";
 interface AppTerminalPageProps {
   accessToken: string;
   apiBase: string;
+  deviceConnection: AppDeviceConnectionSnapshot;
   initialSession?: AppHomeOverviewSession;
   terminalSessionId: string;
   onAuthExpired: () => void;
   onBack: () => void;
   onDeleteTerminal: () => Promise<void>;
+  onRefreshDeviceConnection: () => Promise<AppDeviceConnectionSnapshot>;
 }
 
 const SHELL_IDLE_STATE: TerminalState = {
@@ -58,11 +61,13 @@ function resolveComposerInputMode(
 export function AppTerminalPage({
   accessToken,
   apiBase,
+  deviceConnection,
   initialSession,
   terminalSessionId,
   onAuthExpired,
   onBack,
   onDeleteTerminal,
+  onRefreshDeviceConnection,
 }: AppTerminalPageProps) {
   const { openSupportLogs } = useSupportLogs();
   const rendererRef = useRef<TerminalRendererHandle | null>(null);
@@ -83,6 +88,10 @@ export function AppTerminalPage({
     () => initialSession?.terminalState ?? SHELL_IDLE_STATE,
   );
   terminalStateRef.current = terminalState;
+  const isDeviceOffline = deviceConnection.status === "offline";
+  const refreshDeviceAfterFailure = useCallback(() => {
+    void onRefreshDeviceConnection();
+  }, [onRefreshDeviceConnection]);
   const {
     connectionStatus,
     error,
@@ -96,7 +105,10 @@ export function AppTerminalPage({
     accessToken,
     terminalSessionId,
     rendererRef,
+    enabled: !isDeviceOffline,
+    canQueueInput: !isDeviceOffline,
     onAuthExpired,
+    onConnectionFailure: refreshDeviceAfterFailure,
   });
 
   const title = useMemo(() => {
@@ -116,11 +128,21 @@ export function AppTerminalPage({
   const lastActivityAt =
     metadata?.lastActivityAt ?? initialSession?.lastActivityAt;
   const statusLabel =
-    connectionStatus === "connected"
-      ? runtimeStatus === "exited"
+    isDeviceOffline
+      ? "Computer Offline"
+      : runtimeStatus === "exited"
         ? "Exited"
-        : "Connected"
-      : "Connecting";
+        : connectionStatus === "connected"
+          ? "Connected"
+          : "Connecting";
+  const statusClass =
+    isDeviceOffline
+      ? "offline"
+      : connectionStatus === "connected"
+        ? "connected"
+        : connectionStatus === "closed"
+          ? "closed"
+          : "connecting";
   const supportLogScope = useMemo(
     () => ({
       source: "terminal" as const,
@@ -128,6 +150,7 @@ export function AppTerminalPage({
       terminalSessionId,
       projectId: activeProjectId,
       connectionStatus,
+      deviceStatus: deviceConnection.status,
       runtimeStatus,
       activeTab,
     }),
@@ -135,6 +158,7 @@ export function AppTerminalPage({
       activeProjectId,
       activeTab,
       connectionStatus,
+      deviceConnection.status,
       runtimeStatus,
       terminalSessionId,
     ],
@@ -148,7 +172,7 @@ export function AppTerminalPage({
   }, [initialSession?.terminalState, terminalSessionId]);
 
   useEffect(() => {
-    if (notFound) {
+    if (notFound || isDeviceOffline) {
       return;
     }
     let cancelled = false;
@@ -181,33 +205,24 @@ export function AppTerminalPage({
           if (cancelled) {
             return;
           }
-          if (nextError instanceof ApiError && nextError.status === 401) {
+          const failure = classifyApiFailure(nextError);
+          if (failure.kind === "auth-expired") {
             onAuthExpired();
             return;
           }
-          if (nextError instanceof ApiError && nextError.status === 404) {
-            recordSupportLog(
-              "terminal.state.poll.not_found",
-              {
-                terminalSessionId,
-                previousState: terminalStateRef.current.state,
-              },
-              "warn",
-            );
+          if (failure.kind === "not-found") {
+            recordSupportLog("terminal.state.poll.not_found", {
+              terminalSessionId,
+              previousState: terminalStateRef.current.state,
+            }, "warn");
             setTerminalState({ state: "shell_idle", agent: null });
             return;
           }
-          recordSupportLog(
-            "terminal.state.poll.failed",
-            {
-              terminalSessionId,
-              error:
-                nextError instanceof Error
-                  ? nextError.message
-                  : String(nextError),
-            },
-            "warn",
-          );
+          refreshDeviceAfterFailure();
+          recordSupportLog("terminal.state.poll.failed", {
+            terminalSessionId,
+            error: nextError instanceof Error ? nextError.message : String(nextError),
+          }, "warn");
         });
     };
 
@@ -225,17 +240,34 @@ export function AppTerminalPage({
         window.clearInterval(timer);
       }
     };
-  }, [accessToken, apiBase, notFound, onAuthExpired, terminalSessionId]);
+  }, [
+    accessToken,
+    apiBase,
+    isDeviceOffline,
+    notFound,
+    onAuthExpired,
+    refreshDeviceAfterFailure,
+    terminalSessionId,
+  ]);
 
   const isCommandActive = terminalState.state === "agent_running";
 
   const handleRequestDeleteTerminal = useCallback(() => {
     setDeleteError(null);
+    if (isDeviceOffline) {
+      setDeleteError("本地电脑暂时不可用");
+      return;
+    }
     setConfirmDeleteOpen(true);
-  }, []);
+  }, [isDeviceOffline]);
 
   const handleDeleteTerminal = useCallback(async (): Promise<void> => {
     if (isDeletingTerminal) {
+      return;
+    }
+    if (isDeviceOffline) {
+      setDeleteError("本地电脑暂时不可用");
+      setConfirmDeleteOpen(false);
       return;
     }
     setIsDeletingTerminal(true);
@@ -251,33 +283,33 @@ export function AppTerminalPage({
         terminalSessionId,
       });
     } catch (nextError: unknown) {
-      if (nextError instanceof ApiError && nextError.status === 401) {
-        recordSupportLog(
-          "terminal.delete.unauthorized",
-          {
-            terminalSessionId,
-          },
-          "warn",
-        );
+      const failure = classifyApiFailure(nextError);
+      if (failure.kind === "auth-expired") {
+        recordSupportLog("terminal.delete.unauthorized", {
+          terminalSessionId,
+        }, "warn");
         onAuthExpired();
         return;
       }
-      recordSupportLog(
-        "terminal.delete.failed",
-        {
-          terminalSessionId,
-          error:
-            nextError instanceof Error ? nextError.message : String(nextError),
-        },
-        "warn",
-      );
+      refreshDeviceAfterFailure();
+      recordSupportLog("terminal.delete.failed", {
+        terminalSessionId,
+        error: nextError instanceof Error ? nextError.message : String(nextError),
+      }, "warn");
       setIsDeletingTerminal(false);
       setDeleteError(
         nextError instanceof Error ? nextError.message : "删除终端失败",
       );
       setConfirmDeleteOpen(false);
     }
-  }, [isDeletingTerminal, onAuthExpired, onDeleteTerminal, terminalSessionId]);
+  }, [
+    isDeletingTerminal,
+    isDeviceOffline,
+    onAuthExpired,
+    onDeleteTerminal,
+    refreshDeviceAfterFailure,
+    terminalSessionId,
+  ]);
 
   const moreMenuItems = useMemo(
     () => [
@@ -307,6 +339,10 @@ export function AppTerminalPage({
 
   const handleStop = useCallback(() => {
     setImageError(null);
+    if (isDeviceOffline) {
+      setImageError("本地电脑暂时不可用");
+      return;
+    }
     recordSupportLog("terminal.stop.clicked", {
       terminalSessionId,
       stateAtClick: terminalStateRef.current.state,
@@ -320,37 +356,39 @@ export function AppTerminalPage({
           agentAfterSuccess: terminalStateRef.current.agent,
         });
       })
-      .catch((nextError: unknown) => {
-        if (nextError instanceof ApiError && nextError.status === 401) {
-          recordSupportLog(
-            "terminal.stop.unauthorized",
-            {
-              terminalSessionId,
-            },
-            "warn",
-          );
-          onAuthExpired();
-          return;
-        }
-        recordSupportLog(
-          "terminal.stop.failed",
-          {
-            terminalSessionId,
-            stateAfterFailure: terminalStateRef.current.state,
-            error:
-              nextError instanceof Error
-                ? nextError.message
-                : String(nextError),
-          },
-          "warn",
-        );
-        setImageError(
-          nextError instanceof Error ? nextError.message : "中断命令失败",
-        );
-      });
-  }, [accessToken, apiBase, onAuthExpired, terminalSessionId]);
+    .catch((nextError: unknown) => {
+      const failure = classifyApiFailure(nextError);
+      if (failure.kind === "auth-expired") {
+        recordSupportLog("terminal.stop.unauthorized", {
+          terminalSessionId,
+        }, "warn");
+        onAuthExpired();
+        return;
+      }
+      refreshDeviceAfterFailure();
+      recordSupportLog("terminal.stop.failed", {
+        terminalSessionId,
+        stateAfterFailure: terminalStateRef.current.state,
+        error: nextError instanceof Error ? nextError.message : String(nextError),
+      }, "warn");
+      setImageError(
+        nextError instanceof Error ? nextError.message : "中断命令失败",
+      );
+    });
+  }, [
+    accessToken,
+    apiBase,
+    isDeviceOffline,
+    onAuthExpired,
+    refreshDeviceAfterFailure,
+    terminalSessionId,
+  ]);
   const handleSendCommand = useCallback(
     async (data: string): Promise<void> => {
+      if (isDeviceOffline) {
+        setImageError("本地电脑暂时不可用");
+        throw new Error("本地电脑暂时不可用");
+      }
       const mode = resolveComposerInputMode(terminalStateRef.current, data);
       recordSupportLog("terminal.input.send.started", {
         terminalSessionId,
@@ -372,43 +410,45 @@ export function AppTerminalPage({
           mode,
         });
       } catch (nextError: unknown) {
-        if (nextError instanceof ApiError && nextError.status === 401) {
-          recordSupportLog(
-            "terminal.input.send.unauthorized",
-            {
-              terminalSessionId,
-              length: data.length,
-              mode,
-            },
-            "warn",
-          );
+        const failure = classifyApiFailure(nextError);
+        if (failure.kind === "auth-expired") {
+          recordSupportLog("terminal.input.send.unauthorized", {
+            terminalSessionId,
+            length: data.length,
+            mode,
+          }, "warn");
           onAuthExpired();
           return;
         }
-        recordSupportLog(
-          "terminal.input.send.failed",
-          {
-            terminalSessionId,
-            error:
-              nextError instanceof Error
-                ? nextError.message
-                : String(nextError),
-            length: data.length,
-            mode,
-          },
-          "warn",
-        );
+        refreshDeviceAfterFailure();
+        recordSupportLog("terminal.input.send.failed", {
+          terminalSessionId,
+          error: nextError instanceof Error ? nextError.message : String(nextError),
+          length: data.length,
+          mode,
+        }, "warn");
         setImageError(
           nextError instanceof Error ? nextError.message : "命令发送失败",
         );
         throw nextError;
       }
     },
-    [accessToken, apiBase, onAuthExpired, terminalSessionId],
+    [
+      accessToken,
+      apiBase,
+      isDeviceOffline,
+      onAuthExpired,
+      refreshDeviceAfterFailure,
+      terminalSessionId,
+    ],
   );
   const handlePickImage = useCallback(
     async (file: File): Promise<string> => {
       setImageError(null);
+      if (isDeviceOffline) {
+        setImageError("本地电脑暂时不可用");
+        throw new Error("本地电脑暂时不可用");
+      }
       setIsPickingImage(true);
       recordSupportLog("terminal.clipboard_image.upload.started", {
         terminalSessionId,
@@ -432,28 +472,19 @@ export function AppTerminalPage({
         });
         return shellQuote(payload.filePath);
       } catch (nextError: unknown) {
-        if (nextError instanceof ApiError && nextError.status === 401) {
-          recordSupportLog(
-            "terminal.clipboard_image.upload.unauthorized",
-            {
-              terminalSessionId,
-            },
-            "warn",
-          );
+        const failure = classifyApiFailure(nextError);
+        if (failure.kind === "auth-expired") {
+          recordSupportLog("terminal.clipboard_image.upload.unauthorized", {
+            terminalSessionId,
+          }, "warn");
           onAuthExpired();
           throw nextError;
         }
-        recordSupportLog(
-          "terminal.clipboard_image.upload.failed",
-          {
-            terminalSessionId,
-            error:
-              nextError instanceof Error
-                ? nextError.message
-                : String(nextError),
-          },
-          "warn",
-        );
+        refreshDeviceAfterFailure();
+        recordSupportLog("terminal.clipboard_image.upload.failed", {
+          terminalSessionId,
+          error: nextError instanceof Error ? nextError.message : String(nextError),
+        }, "warn");
         setImageError(
           nextError instanceof Error ? nextError.message : "图片上传失败",
         );
@@ -462,12 +493,23 @@ export function AppTerminalPage({
         setIsPickingImage(false);
       }
     },
-    [accessToken, apiBase, onAuthExpired, terminalSessionId],
+    [
+      accessToken,
+      apiBase,
+      isDeviceOffline,
+      onAuthExpired,
+      refreshDeviceAfterFailure,
+      terminalSessionId,
+    ],
   );
 
   const handleTranscribeVoice = useCallback(
     async (payload: Parameters<typeof transcribeVoice>[2]): Promise<string> => {
       setImageError(null);
+      if (isDeviceOffline) {
+        setImageError("本地电脑暂时不可用");
+        throw new Error("本地电脑暂时不可用");
+      }
       recordSupportLog("terminal.voice.transcribe.started", {
         terminalSessionId,
         durationMs: payload.durationMs,
@@ -480,7 +522,8 @@ export function AppTerminalPage({
         });
         return response.text;
       } catch (nextError: unknown) {
-        if (nextError instanceof ApiError && nextError.status === 401) {
+        const failure = classifyApiFailure(nextError);
+        if (failure.kind === "auth-expired") {
           recordSupportLog(
             "terminal.voice.transcribe.unauthorized",
             {
@@ -491,6 +534,7 @@ export function AppTerminalPage({
           onAuthExpired();
           throw nextError;
         }
+        refreshDeviceAfterFailure();
         recordSupportLog(
           "terminal.voice.transcribe.failed",
           {
@@ -508,7 +552,14 @@ export function AppTerminalPage({
         throw nextError;
       }
     },
-    [accessToken, apiBase, onAuthExpired, terminalSessionId],
+    [
+      accessToken,
+      apiBase,
+      isDeviceOffline,
+      onAuthExpired,
+      refreshDeviceAfterFailure,
+      terminalSessionId,
+    ],
   );
 
   const handleShowChanges = useCallback(
@@ -545,12 +596,18 @@ export function AppTerminalPage({
       >
         <main className="terminal-page-shell min-h-dvh bg-background">
           <AppTerminalHeader
-            connectionStatus={connectionStatus}
+            connectionStatus={statusClass}
             formatRelativeTime={formatRelativeTime}
             lastActivityAt={lastActivityAt}
             moreMenuItems={moreMenuItems}
             onBack={onBack}
-            onRefresh={() => rendererRef.current?.refresh()}
+            onRefresh={() => {
+              if (isDeviceOffline) {
+                void onRefreshDeviceConnection();
+                return;
+              }
+              rendererRef.current?.refresh();
+            }}
             statusLabel={statusLabel}
             subtitle={subtitle}
             terminalSessionId={terminalSessionId}
@@ -576,7 +633,9 @@ export function AppTerminalPage({
             connectionStatus={connectionStatus}
             error={error}
             hasMetadata={Boolean(metadata)}
+            isDeviceOffline={isDeviceOffline}
             notFound={notFound}
+            onRefreshDeviceConnection={onRefreshDeviceConnection}
             requestedChange={requestedChange}
             rendererRef={rendererRef}
             sendInput={sendInput}
@@ -592,7 +651,7 @@ export function AppTerminalPage({
                 <p className="terminal-composer-error">{imageError}</p>
               ) : null}
               <TerminalCommandComposer
-                disabled={notFound}
+                disabled={notFound || isDeviceOffline}
                 isPickingImage={isPickingImage}
                 isStopping={isCommandActive}
                 onPickImage={handlePickImage}

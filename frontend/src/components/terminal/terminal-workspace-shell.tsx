@@ -307,6 +307,12 @@ export function TerminalWorkspaceShell({
                   s.projectId === project.projectId &&
                   completionMarkers[s.terminalSessionId],
               );
+              const isWorking = sessions.some(
+                (s) =>
+                  s.projectId === project.projectId &&
+                  terminalStateBySessionId[s.terminalSessionId]?.state ===
+                    "agent_running",
+              );
               return (
                 <ContextMenu>
                   <ContextMenuTrigger asChild>
@@ -326,7 +332,21 @@ export function TerminalWorkspaceShell({
                       }}
                       title={project.name}
                     >
-                      <span className="max-w-[160px] truncate">{project.name}</span>
+                      {isWorking ? (
+                        <ShimmerText
+                          className="max-w-[160px] truncate shimmer-invert"
+                          style={{
+                            "--shimmer-duration": "4000",
+                            "--shimmer-repeat-delay": "300",
+                          } as CSSProperties}
+                        >
+                          {project.name}
+                        </ShimmerText>
+                      ) : (
+                        <span className="max-w-[160px] truncate">
+                          {project.name}
+                        </span>
+                      )}
                       <span
                         aria-hidden="true"
                         className={[

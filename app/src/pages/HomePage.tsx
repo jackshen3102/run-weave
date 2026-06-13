@@ -19,7 +19,9 @@ import {
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { AppMoreMenu } from "../components/AppMoreMenu";
+import { AppDeviceStatusBadge } from "../components/AppDeviceStatusBadge";
 import { useSupportLogs } from "../features/support-logs";
+import type { AppDeviceConnectionSnapshot } from "../hooks/use-app-device-connection";
 import {
   buildTerminalHomeGroups,
   type TerminalHomeProjectGroup,
@@ -31,6 +33,7 @@ interface HomePageProps {
   overview: AppHomeOverviewResponse | null;
   loading: boolean;
   error: string | null;
+  deviceConnection: AppDeviceConnectionSnapshot;
   onRefresh: () => Promise<void>;
   onLogout: () => void;
   onOpenTerminal: (terminalSessionId: string) => void;
@@ -59,6 +62,7 @@ export function HomePage({
   overview,
   loading,
   error,
+  deviceConnection,
   onRefresh,
   onLogout,
   onOpenTerminal,
@@ -146,6 +150,10 @@ export function HomePage({
     if (creatingProjectId) {
       return;
     }
+    if (deviceConnection.status === "offline") {
+      setCreateError("本地电脑暂时不可用");
+      return;
+    }
 
     setCreatingProjectId(projectId);
     setCreateError(null);
@@ -206,8 +214,15 @@ export function HomePage({
         </IonRefresher>
         <main className="home-shell min-h-full">
           <header className="home-header">
-            <div>
-              <p className="text-muted-foreground">Runweave</p>
+            <div className="home-header__identity">
+              <div className="home-header__title-row">
+                <p className="text-muted-foreground">Runweave</p>
+                <AppDeviceStatusBadge
+                  status={deviceConnection.status}
+                  message={deviceConnection.message}
+                  lastSeenAt={deviceConnection.lastSeenAt}
+                />
+              </div>
               <span className="text-muted-foreground">
                 {formatApiBaseLabel(apiBase)}
               </span>
@@ -216,6 +231,11 @@ export function HomePage({
               <AppMoreMenu items={moreMenuItems} />
             </nav>
           </header>
+          {deviceConnection.status === "offline" ? (
+            <p className="home-offline-banner">
+              本地电脑暂时不可用，列表会保留最近一次加载的数据。
+            </p>
+          ) : null}
           <IonSearchbar
             className="home-search"
             debounce={120}
@@ -228,18 +248,23 @@ export function HomePage({
               <IonSpinner name="crescent" />
             </div>
           ) : null}
-          {error ? (
+          {error && deviceConnection.status !== "offline" ? (
             <IonText color="danger">
               <p className="home-error">{error}</p>
             </IonText>
           ) : null}
-          {createError ? (
+          {createError && deviceConnection.status !== "offline" ? (
             <IonText color="danger">
               <p className="home-error">{createError}</p>
             </IonText>
           ) : null}
           {!loading && overview && overview.projects.length === 0 ? (
             <p className="home-empty text-muted-foreground">暂无项目</p>
+          ) : null}
+          {!loading && !overview && deviceConnection.status === "offline" ? (
+            <p className="home-empty text-muted-foreground">
+              本地电脑离线。下拉刷新可重新检测。
+            </p>
           ) : null}
           <div className="project-list grid">
             {groups.map((group) => (
@@ -251,6 +276,7 @@ export function HomePage({
                 onCreateTerminal={(projectId) => {
                   void handleCreateTerminal(projectId);
                 }}
+                createDisabled={deviceConnection.status === "offline"}
                 onOpenTerminal={onOpenTerminal}
                 onToggle={() => toggleProject(group.project.projectId)}
               />

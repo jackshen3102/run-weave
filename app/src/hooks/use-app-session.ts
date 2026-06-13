@@ -14,9 +14,11 @@ import {
   verifySession,
   type AppAuthSession,
 } from "../services/auth";
-import { ApiError } from "../services/http";
+import { classifyApiFailure } from "../services/api-failure";
 import { getAppHomeOverview } from "../services/terminal";
 import { useAuthStore } from "../store/use-auth-store";
+import { useAppDeviceConnection } from "./use-app-device-connection";
+import type { AppDeviceConnectionSnapshot } from "./use-app-device-connection";
 import { useAppTerminalEventsConnection } from "./use-app-terminal-events-connection";
 
 export type StartupState = "checking" | "ready";
@@ -29,6 +31,7 @@ export interface AppLoginParams {
 export interface AppSessionController {
   accessToken: string;
   apiBase: string;
+  deviceConnection: AppDeviceConnectionSnapshot;
   error: string | null;
   isAuthenticated: boolean;
   loading: boolean;
@@ -36,6 +39,7 @@ export interface AppSessionController {
   logout: () => void;
   onAuthExpired: () => void;
   overview: AppHomeOverviewResponse | null;
+  refreshDeviceConnection: () => Promise<AppDeviceConnectionSnapshot>;
   refreshOverview: () => Promise<void>;
   startupState: StartupState;
 }
@@ -85,6 +89,15 @@ export function useAppSession(): AppSessionController {
     useState<AppHomeOverviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const {
+    deviceConnection,
+    markDeviceOnline,
+    markDeviceOffline,
+    refreshDeviceConnection,
+  } = useAppDeviceConnection({
+    apiBase,
+    enabled: isAuthenticated && Boolean(accessToken),
+  });
 
   const persistSession = useCallback(
     (session: AppAuthSession) => {
@@ -109,13 +122,25 @@ export function useAppSession(): AppSessionController {
       recordSupportLog("auth.refresh.completed");
       return refreshed.accessToken;
     } catch (error) {
+      const failure = classifyApiFailure(error);
       recordSupportLog("auth.refresh.failed", {
+        failureKind: failure.kind,
         error: error instanceof Error ? error.message : String(error),
       }, "warn");
-      resetSession();
+      if (failure.kind === "auth-expired") {
+        resetSession();
+      } else {
+        markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
+      }
       return null;
     }
-  }, [apiBase, persistSession, refreshToken, resetSession]);
+  }, [
+    apiBase,
+    markDeviceOffline,
+    persistSession,
+    refreshToken,
+    resetSession,
+  ]);
 
   const loadOverview = useCallback(
     async (token = accessToken, targetApiBase = apiBase) => {
@@ -126,29 +151,50 @@ export function useAppSession(): AppSessionController {
       setError(null);
       try {
         setOverview(await getAppHomeOverview(targetApiBase, token));
+        markDeviceOnline("health-ok");
         recordSupportLog("app.home.overview.loaded");
       } catch (nextError) {
-        if (nextError instanceof ApiError && nextError.status === 401) {
+        const failure = classifyApiFailure(nextError);
+        if (failure.kind === "auth-expired") {
           const refreshedToken = await refreshStoredSession();
           if (!refreshedToken) {
-            resetSession();
             return;
           }
-          setOverview(
-            await getAppHomeOverview(targetApiBase, refreshedToken),
-          );
-          recordSupportLog("app.home.overview.loaded_after_refresh");
+          try {
+            setOverview(
+              await getAppHomeOverview(targetApiBase, refreshedToken),
+            );
+            markDeviceOnline("health-ok");
+            recordSupportLog("app.home.overview.loaded_after_refresh");
+          } catch (refreshError) {
+            const refreshFailure = classifyApiFailure(refreshError);
+            if (refreshFailure.kind === "auth-expired") {
+              resetSession();
+              return;
+            }
+            markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
+            setError("本地电脑暂时不可用");
+          }
           return;
         }
         recordSupportLog("app.home.overview.failed", {
+          failureKind: failure.kind,
           error: nextError instanceof Error ? nextError.message : String(nextError),
         }, "warn");
-        setError(nextError instanceof Error ? nextError.message : "加载失败");
+        markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
+        setError("本地电脑暂时不可用");
       } finally {
         setLoading(false);
       }
     },
-    [accessToken, apiBase, refreshStoredSession, resetSession],
+    [
+      accessToken,
+      apiBase,
+      markDeviceOffline,
+      markDeviceOnline,
+      refreshStoredSession,
+      resetSession,
+    ],
   );
 
   useEffect(() => {
@@ -170,15 +216,24 @@ export function useAppSession(): AppSessionController {
           await loadOverview(accessToken);
         }
       } catch (error) {
+        const failure = classifyApiFailure(error);
         recordSupportLog("auth.verify.failed", {
+          failureKind: failure.kind,
           error: error instanceof Error ? error.message : String(error),
         }, "warn");
-        const refreshedToken = await refreshStoredSession();
+        if (failure.kind === "auth-expired") {
+          const refreshedToken = await refreshStoredSession();
+          if (!cancelled) {
+            setStartupState("ready");
+            if (refreshedToken) {
+              await loadOverview(refreshedToken);
+            }
+          }
+          return;
+        }
+        markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
         if (!cancelled) {
           setStartupState("ready");
-          if (refreshedToken) {
-            await loadOverview(refreshedToken);
-          }
         }
       }
     };
@@ -188,6 +243,17 @@ export function useAppSession(): AppSessionController {
       cancelled = true;
     };
   }, [accessToken, apiBase, loadOverview, refreshStoredSession]);
+
+  const refreshOverview = useCallback(async () => {
+    if (deviceConnection.status === "offline") {
+      const snapshot = await refreshDeviceConnection();
+      if (snapshot.status === "offline") {
+        setError("本地电脑暂时不可用");
+        return;
+      }
+    }
+    await loadOverview();
+  }, [deviceConnection.status, loadOverview, refreshDeviceConnection]);
 
   const loginWithCredentials = useCallback(
     async (params: AppLoginParams) => {
@@ -276,17 +342,29 @@ export function useAppSession(): AppSessionController {
     });
   }, []);
 
+  const handleTerminalEventsTransportFailure = useCallback(async () => {
+    const snapshot = await refreshDeviceConnection();
+    return snapshot.status !== "offline";
+  }, [refreshDeviceConnection]);
+
   useAppTerminalEventsConnection({
     apiBase,
     accessToken,
-    enabled: isAuthenticated && Boolean(accessToken),
+    enabled:
+      isAuthenticated &&
+      Boolean(accessToken) &&
+      deviceConnection.status === "online",
     onAuthExpired: resetSession,
+    onConnectionClose: handleTerminalEventsTransportFailure,
+    onConnectionError: handleTerminalEventsTransportFailure,
+    onServerConnected: () => markDeviceOnline("terminal-events-connected"),
     onTerminalEvents: handleTerminalEvents,
   });
 
   return {
     accessToken,
     apiBase,
+    deviceConnection,
     error,
     isAuthenticated,
     loading,
@@ -294,7 +372,8 @@ export function useAppSession(): AppSessionController {
     logout: logoutAndReset,
     onAuthExpired: resetSession,
     overview,
-    refreshOverview: loadOverview,
+    refreshDeviceConnection,
+    refreshOverview,
     startupState,
   };
 }
