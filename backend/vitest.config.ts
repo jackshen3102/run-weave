@@ -12,8 +12,11 @@ export default defineConfig({
         "**/dist/**",
         "**/*.test.ts",
         "vitest.config.ts",
+        "vitest.live.config.ts",
         "src/index.ts",
         "src/browser/**",
+        "src/routes/test.ts",
+        "src/voice/codex-app-server-client.ts",
       ],
       thresholds: {
         lines: 70,

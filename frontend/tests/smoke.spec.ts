@@ -59,7 +59,7 @@ async function mockHomeConnectionApi(
   options: {
     url: string;
     expectedToken: string;
-    onSessionList?: () => void;
+    onVerify?: () => void;
   },
 ): Promise<void> {
   const escapedUrl = options.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -90,29 +90,11 @@ async function mockHomeConnectionApi(
     }
 
     if (requestUrl.pathname === "/api/auth/verify") {
+      options.onVerify?.();
       await route.fulfill({
         status: 200,
         headers,
         json: { valid: true },
-      });
-      return;
-    }
-
-    if (requestUrl.pathname === "/api/session") {
-      options.onSessionList?.();
-      await route.fulfill({
-        status: 200,
-        headers,
-        json: [],
-      });
-      return;
-    }
-
-    if (requestUrl.pathname === "/api/session/cdp-endpoint-default") {
-      await route.fulfill({
-        status: 200,
-        headers,
-        json: { endpoint: null },
       });
       return;
     }
@@ -128,7 +110,7 @@ async function mockHomeConnectionApi(
 async function loginAndSeedToken(
   request: APIRequestContext,
   page: Page,
-): Promise<string> {
+): Promise<void> {
   const response = await request.post(`${E2E_API_BASE}/api/auth/login`, {
     data: {
       username: "e2e-admin",
@@ -152,74 +134,16 @@ async function loginAndSeedToken(
     window.localStorage.setItem("viewer.auth.token", JSON.stringify(session));
   }, payload);
 
-  return payload.accessToken;
 }
 
 test("control panel page loads", async ({ page, request }) => {
-  const token = await loginAndSeedToken(request, page);
+  await loginAndSeedToken(request, page);
   await page.goto("/");
   await expect(page.getByText("Browser Viewer")).toBeVisible();
-  await expect(page.getByText("Sessions", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "New Browser" })).toBeVisible();
-
-  const createSessionResponse = await request.post(
-    `${E2E_API_BASE}/api/session`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      data: {
-        url: `http://127.0.0.1:${E2E_BACKEND_PORT}/test/child`,
-        source: {
-          type: "launch",
-          proxyEnabled: false,
-        },
-      },
-    },
-  );
-  expect(createSessionResponse.ok()).toBe(true);
-  const createSessionPayload = (await createSessionResponse.json()) as {
-    sessionId: string;
-  };
-
-  const qualityResponse = await request.get(
-    `${E2E_API_BASE}/api/quality/session/${createSessionPayload.sessionId}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  );
-  expect(qualityResponse.status()).toBe(200);
-  await expect(qualityResponse.json()).resolves.toMatchObject({
-    snapshot: {
-      sessionId: createSessionPayload.sessionId,
-      journeyStatus: "running",
-      viewerConnected: false,
-      tabCount: 0,
-      milestones: {
-        viewerConnected: false,
-        firstFrame: false,
-        inputAckWorking: false,
-        navigationWorking: false,
-      },
-    },
-    timeline: [
-      {
-        type: "session.created",
-      },
-    ],
-  });
-
-  const deleteSessionResponse = await request.delete(
-    `${E2E_API_BASE}/api/session/${createSessionPayload.sessionId}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  );
-  expect(deleteSessionResponse.status()).toBe(204);
+  await expect(
+    page.locator("header").getByRole("button", { name: "Open Terminal" }),
+  ).toBeVisible();
+  await expect(page.getByText("Workspace", { exact: true })).toBeVisible();
 });
 
 test("switches Electron connections on home without reusing the previous token", async ({
@@ -235,7 +159,7 @@ test("switches Electron connections on home without reusing the previous token",
     name: "Connection B",
     url: "http://home-b.test",
   };
-  let listedConnectionB = false;
+  let verifiedConnectionB = false;
 
   await seedElectronConnections(page, {
     activeId: connectionA.id,
@@ -248,8 +172,8 @@ test("switches Electron connections on home without reusing the previous token",
   await mockHomeConnectionApi(page, {
     url: connectionB.url,
     expectedToken: `token-${connectionB.id}`,
-    onSessionList: () => {
-      listedConnectionB = true;
+    onVerify: () => {
+      verifiedConnectionB = true;
     },
   });
 
@@ -262,5 +186,5 @@ test("switches Electron connections on home without reusing the previous token",
 
   await expect(page.getByRole("button", { name: /Connection B/ })).toBeVisible();
   await expect(page).not.toHaveURL(/\/login/);
-  await expect.poll(() => listedConnectionB).toBe(true);
+  await expect.poll(() => verifiedConnectionB).toBe(true);
 });

@@ -4,12 +4,10 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import express from "express";
 import { LowDbAuthStore } from "./auth/lowdb-store";
-import { BrowserService } from "./browser/service";
 import { loadAuthConfig } from "./auth/config";
 import { createRequireAuth } from "./auth/middleware";
 import { AuthService } from "./auth/service";
 import type { AuthStore } from "./auth/store";
-import { resolveDevtoolsEnabled } from "./config/devtools";
 import { diagnosticLogRecorder } from "./diagnostic-logs/recorder";
 import {
   createRequestContextMiddleware,
@@ -20,10 +18,6 @@ import {
 import { createAuthRouter } from "./routes/auth";
 import { createAppHomeOverviewRouter } from "./routes/app-home-overview";
 import { createDiagnosticLogsRouter } from "./routes/diagnostic-logs";
-import { createDevtoolsRouter } from "./routes/devtools";
-import { QualityProbeStore } from "./quality/probe-store";
-import { createQualityRouter } from "./routes/quality";
-import { createSessionRouter } from "./routes/session";
 import {
   createInternalTerminalAgentHookRouter,
   createTerminalStateRouter,
@@ -45,9 +39,7 @@ import {
   loadTunnelAuthConfig,
   type TunnelAuthConfig,
 } from "./server/tunnel-auth";
-import { SessionManager } from "./session/manager";
 import { TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT } from "./terminal/clipboard-image";
-import { LowDbSessionStore } from "./session/lowdb-store";
 import { TerminalSessionManager } from "./terminal/manager";
 import { TerminalCompletionEventService } from "./terminal/completion-event-service";
 import { TerminalEventService } from "./terminal/terminal-event-service";
@@ -67,13 +59,10 @@ import {
   acquireBackendProfileLock,
   type BackendProfileLock,
 } from "./server/profile-lock";
-import { parsePort, resolveRuntimeConfig } from "./server/runtime-config";
+import { resolveRuntimeConfig } from "./server/runtime-config";
 import { resolveStoragePaths } from "./utils/path";
-import { attachDevtoolsProxyServer } from "./ws/devtools-proxy";
-import { WebSocketSessionController } from "./ws/session-control";
 import { attachTerminalEventsWebSocketServer } from "./ws/terminal-events-server";
 import { attachTerminalWebSocketServer } from "./ws/terminal-server";
-import { attachWebSocketServer } from "./ws/server";
 import { codexAppServerClient } from "./voice/codex-app-server-client";
 
 interface RuntimeServices {
@@ -81,10 +70,6 @@ interface RuntimeServices {
   authService: AuthService;
   authCookieName: string;
   authSecureCookies: boolean;
-  sessionManager: SessionManager;
-  browserService: BrowserService;
-  qualityProbeStore: QualityProbeStore;
-  wsSessionController: WebSocketSessionController;
   terminalSessionManager: TerminalSessionManager;
   terminalStateService: TerminalStateService;
   terminalEventService: TerminalEventService;
@@ -123,10 +108,6 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
     .filter(Boolean);
 }
 
-function resolveSessionRestoreEnabled(env: NodeJS.ProcessEnv): boolean {
-  return env.SESSION_RESTORE_ENABLED?.trim().toLowerCase() === "true";
-}
-
 function resolveTerminalHookToken(
   env: NodeJS.ProcessEnv,
   tokenFilePath: string,
@@ -155,18 +136,6 @@ function resolveTerminalTmuxScanOrphansOnStartEnabled(
 async function createRuntimeServices(): Promise<RuntimeServices> {
   const storagePaths = resolveStoragePaths(process.env);
   const authConfig = loadAuthConfig();
-  const devtoolsEnabled = resolveDevtoolsEnabled(process.env);
-  const rawRemoteDebuggingPort = process.env.BROWSER_REMOTE_DEBUGGING_PORT;
-  const browserService = new BrowserService({
-    headless: process.env.BROWSER_HEADLESS?.trim().toLowerCase() !== "false",
-    profileDir: storagePaths.browserProfileDir,
-    autoOpenDevtoolsForTabs:
-      process.env.BROWSER_AUTO_OPEN_DEVTOOLS?.trim().toLowerCase() === "true",
-    devtoolsEnabled,
-    remoteDebuggingPort: devtoolsEnabled
-      ? parsePort(rawRemoteDebuggingPort, 9222)
-      : undefined,
-  });
   const authStore = new LowDbAuthStore(storagePaths.authStoreFile);
   const persistedAuth = await authStore.initialize({
     username: authConfig.username,
@@ -185,16 +154,9 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     },
     authStore,
   );
-  const sessionStore = new LowDbSessionStore(storagePaths.sessionStoreFile);
   const terminalSessionStore = new LowDbTerminalSessionStore(
     storagePaths.terminalSessionStoreFile,
   );
-  const qualityProbeStore = new QualityProbeStore();
-  const wsSessionController = new WebSocketSessionController();
-  const sessionManager = new SessionManager(browserService, sessionStore, {
-    restorePersistedSessions: resolveSessionRestoreEnabled(process.env),
-    qualityProbeStore,
-  });
   const terminalSessionManager = new TerminalSessionManager(
     terminalSessionStore,
   );
@@ -237,7 +199,6 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxService,
     tmuxLifecycleCoordinator,
   });
-  await sessionManager.initialize();
   await terminalSessionManager.initialize();
   if (resolveTerminalTmuxScanOrphansOnStartEnabled(process.env)) {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
@@ -249,10 +210,6 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     authService,
     authCookieName: authConfig.refreshCookieName,
     authSecureCookies: authConfig.secureCookies,
-    sessionManager,
-    browserService,
-    qualityProbeStore,
-    wsSessionController,
     terminalSessionManager,
     terminalStateService,
     terminalEventService,
@@ -272,7 +229,6 @@ function createHttpApp(
   const app = express();
   const requireAuth = createRequireAuth(services.authService);
   const requireTunnelAuth = createTunnelAuthMiddleware(tunnelAuthConfig);
-  const devtoolsEnabled = services.sessionManager.isDevtoolsEnabled();
 
   app.use(createRequestContextMiddleware());
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
@@ -343,19 +299,6 @@ function createHttpApp(
     }),
   );
   app.use(
-    "/api",
-    requireAuth,
-    createSessionRouter(services.sessionManager, services.authService),
-  );
-  app.use(
-    "/api",
-    requireAuth,
-    createQualityRouter(
-      services.qualityProbeStore,
-      services.wsSessionController,
-    ),
-  );
-  app.use(
     "/api/diagnostic-logs",
     requireAuth,
     createDiagnosticLogsRouter(diagnosticLogRecorder),
@@ -392,17 +335,6 @@ function createHttpApp(
   );
   app.use("/api/voice", requireAuth, createVoiceRouter());
 
-  if (devtoolsEnabled) {
-    app.use(
-      "/devtools",
-      requireTunnelAuth,
-      createDevtoolsRouter({
-        authService: services.authService,
-        sessionManager: services.sessionManager,
-      }),
-    );
-  }
-
   const frontendDistDir = resolveFrontendDistDir();
   if (existsSync(frontendDistDir)) {
     app.use(express.static(frontendDistDir));
@@ -410,8 +342,7 @@ function createHttpApp(
     app.get("*", (req, res, next) => {
       if (
         req.path.startsWith("/api") ||
-        req.path.startsWith("/ws") ||
-        req.path.startsWith("/devtools")
+        req.path.startsWith("/ws")
       ) {
         next();
         return;
@@ -446,7 +377,6 @@ function attachLifecycleHandlers(
       await services.tmuxOutputWatcher.dispose();
       await services.terminalRuntimeRegistry.disposeAll();
       await services.terminalSessionManager.dispose();
-      await services.sessionManager.dispose();
       codexAppServerClient.shutdown();
       await services.authStore.dispose();
       await profileLock.release();
@@ -509,20 +439,7 @@ async function startRuntime(): Promise<void> {
     const app = createHttpApp(services, tunnelAuthConfig);
     const server = http.createServer(app);
 
-    const devtoolsEnabled = services.sessionManager.isDevtoolsEnabled();
-
     stage = "websocket-servers";
-    attachWebSocketServer(
-      server,
-      services.sessionManager,
-      services.authService,
-      {
-        devtoolsEnabled,
-        qualityProbeStore: services.qualityProbeStore,
-        wsSessionController: services.wsSessionController,
-        tunnelAuthConfig,
-      },
-    );
     attachTerminalWebSocketServer(
       server,
       services.terminalSessionManager,
@@ -542,15 +459,6 @@ async function startRuntime(): Promise<void> {
       services.authService,
       services.terminalEventService,
       { tunnelAuthConfig },
-    );
-    attachDevtoolsProxyServer(
-      server,
-      services.sessionManager,
-      services.authService,
-      {
-        enabled: devtoolsEnabled,
-        tunnelAuthConfig,
-      },
     );
     stage = "listen";
     const port = await listenWithFallback(server, runtimeConfig.preferredPort, {

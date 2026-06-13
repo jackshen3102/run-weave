@@ -58,20 +58,20 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 
 Terminal Browser 工具当前边界：
 
-- Browser 工具挂在 Preview 面板外壳内，是 Terminal Workspace 的本地 sidecar，不是后端 viewer session。
+- Browser 工具挂在 Preview 面板外壳内，是 Terminal Workspace 的本地 sidecar。
 - Electron 桌面端用 `WebContentsView` 承载 Browser tab，tab 生命周期和可见区域由主进程管理，前端只同步 tab 状态、地址栏、工具栏和面板布局。
 - Web/PWA 模式不提供本地 Electron Browser，也不展示 CDP endpoint。
 - Browser tab 只允许 `http:`、`https:` 和 `about:blank` 导航；页面发起的新窗口会被收口成 Browser 工具内的新 tab 或被拒绝。
 - CDP Proxy 只监听 `127.0.0.1`，默认从 `9224` 开始找可用端口，并通过 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 传给 Runweave terminal 里的子进程。
 - 如果显式设置 `BROWSER_VIEWER_TERMINAL_BROWSER_CDP_PROXY_PORT`，端口必须是合法端口且不自动漂移；非法值会让 Electron 启动失败并给出明确错误。
-- CDP Proxy 暴露的是自研 browser-level endpoint，不开启 Electron 全局 `remote-debugging-port`，也不暴露 Runweave 主窗口 renderer、DevTools target 或后端 viewer session。
+- CDP Proxy 暴露的是自研 browser-level endpoint，不开启 Electron 全局 `remote-debugging-port`，也不暴露 Runweave 主窗口 renderer 或 DevTools target。
 - Playwright MCP / Playwright CLI 通过 `chromium.connectOverCDP(...)` 连接 Proxy 后，只能发现和操作 Terminal Browser tab。`Target.createTarget` 创建的是 Browser 工具内 AI tab，当前上限为 10；CDP 连接上限为 8。
 - Proxy 负责 target/session 仿真、frame id 重写、导航参数校验、危险命令拦截和 DevTools 状态隔离。`Browser.close`、`Browser.crash`、清 cookie/cache/origin storage、忽略 HTTPS 错误等命令不能影响用户主窗口或真实 profile。
 - Browser 工具的 CDP 能力是桌面端本机自动化边界，不是远端协作协议；不要把 endpoint 持久化到项目数据或对公网暴露。
 - Browser tab 状态会持久化到 Electron `userData` 下的 `terminal-browser-tabs.json`。重启客户端时会恢复合法的 `http:`、`https:`、`about:blank` tab，并丢弃不合法或空 URL。
 - Browser tab 支持在右侧工具内部拖拽排序；排序只改变当前 Browser 工具的 tab 顺序和 active tab 组织方式，不影响网页会话、CDP target 身份或项目 / terminal session 顺序。
 - 工具栏提供本地代理开关与 `Headers` 面板。代理开关使用同一个 `persist:runweave-terminal-browser` session 的 `setProxy`，当前固定走 `127.0.0.1:8899`，绕过 `<local>`。
-- `Headers` 面板只影响右侧 Terminal Browser 的网页请求，不影响首页 `New Browser` 创建的后端 Playwright session、Runweave 主窗口、登录/API 请求、Electron 更新请求或后端 viewer session。
+- `Headers` 面板只影响右侧 Terminal Browser 的网页请求，不影响 Runweave 主窗口、登录/API 请求或 Electron 更新请求。
 - Header 规则保存在前端 `localStorage` 的 `terminal.browser.headerRules`，Terminal Browser Tool 挂载时会同步到 Electron 主进程；保存失败会回滚本地存储并展示错误。
 - Header 规则通过 `terminal-browser:get-header-rules` / `terminal-browser:set-header-rules` IPC 进入主进程。主进程做最终校验，最多 20 条，字段为 `enabled`、固定操作 `set`、`name`、`value`，URL 模式固定为 `*://*/*`，当前前端不暴露单条规则的 URL pattern 编辑。
 - Header 名必须符合 HTTP token 形态，禁止控制字符、冒号以及 `host`、`content-length`、`connection`、`upgrade`、`proxy-authorization`、`set-cookie`。Header 值不能为空且不能包含控制字符。

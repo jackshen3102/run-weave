@@ -68,12 +68,14 @@ describe("tunnel auth", () => {
   });
 
   it("does not require tunnel auth for direct loopback requests by default", () => {
-    const request = createRequest("/api/session") as unknown as IncomingMessage;
+    const request = createRequest(
+      "/api/terminal/session",
+    ) as unknown as IncomingMessage;
     expect(shouldRequireTunnelAuth(request, config)).toBe(false);
   });
 
   it("requires tunnel auth for forwarded requests", () => {
-    const request = createRequest("/api/session", {
+    const request = createRequest("/api/terminal/session", {
       headers: { "x-forwarded-for": "203.0.113.10" },
     }) as unknown as IncomingMessage;
     expect(shouldRequireTunnelAuth(request, config)).toBe(true);
@@ -81,7 +83,7 @@ describe("tunnel auth", () => {
 
   it("rejects forwarded HTTP requests without a tunnel token", () => {
     const middleware = createTunnelAuthMiddleware(config);
-    const request = createRequest("/api/session", {
+    const request = createRequest("/api/terminal/session", {
       headers: { "cf-connecting-ip": "203.0.113.10" },
     });
     const response = createResponse();
@@ -98,7 +100,7 @@ describe("tunnel auth", () => {
 
   it("accepts forwarded HTTP requests with a valid cookie token", () => {
     const middleware = createTunnelAuthMiddleware(config);
-    const request = createRequest("/api/session", {
+    const request = createRequest("/api/terminal/session", {
       headers: {
         "cf-connecting-ip": "203.0.113.10",
         cookie: "runweave_tunnel=secret-token",

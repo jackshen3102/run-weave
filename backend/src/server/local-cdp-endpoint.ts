@@ -33,7 +33,10 @@ export function isLocalDirectRequest(req: express.Request): boolean {
 
 function isLoopbackHostname(hostname: string): boolean {
   return (
-    hostname === "127.0.0.1" || hostname === "::1" || hostname === "localhost"
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname === "[::1]" ||
+    hostname === "localhost"
   );
 }
 

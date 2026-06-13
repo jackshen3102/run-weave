@@ -232,7 +232,7 @@ artifacts/verification-runs/2026-04-30T12-30-00/
       "status": "passed"
     },
     {
-      "command": "pnpm run test:e2e -- tests/interaction.spec.ts",
+      "command": "pnpm run test:e2e -- tests/smoke.spec.ts",
       "status": "passed"
     }
   ],
@@ -319,7 +319,7 @@ artifacts/verification-runs/2026-04-30T12-30-00/
 
 常规验证：
 - pnpm run typecheck: passed
-- pnpm run test:e2e -- tests/interaction.spec.ts: passed
+- pnpm run test:e2e -- tests/smoke.spec.ts: passed
 
 浏览器 MCP 页面录屏验证：
 - 录制对象：当前浏览器 MCP 页面 viewport

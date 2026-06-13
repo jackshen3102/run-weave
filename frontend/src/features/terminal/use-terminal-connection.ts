@@ -11,7 +11,7 @@ import {
   shouldAutoReconnectTerminalClose,
 } from "./reconnect-policy";
 import { logTerminalPerf, summarizeTerminalChunk } from "./perf-logging";
-import { toWebSocketBase } from "../viewer/url";
+import { toWebSocketBase } from "./url";
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type TerminalRuntimeStatus = "running" | "exited" | null;

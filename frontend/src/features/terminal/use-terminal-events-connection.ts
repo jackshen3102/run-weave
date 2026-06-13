@@ -5,8 +5,8 @@ import type {
 } from "@browser-viewer/shared";
 import { HttpError } from "../../services/http";
 import { createTerminalEventsWsTicket } from "../../services/terminal";
-import { toWebSocketBase } from "../viewer/url";
 import { getTerminalReconnectDelay } from "./reconnect-policy";
+import { toWebSocketBase } from "./url";
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type TerminalEventDelivery = "catchup" | "live";

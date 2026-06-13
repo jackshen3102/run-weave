@@ -30,12 +30,6 @@ describe("path helpers", () => {
         projectHash,
         "auth-store.json",
       ),
-      sessionStoreFile: path.join(
-        "/Users/tester",
-        ".browser-profile",
-        projectHash,
-        "session-store.json",
-      ),
       terminalSessionStoreFile: path.join(
         "/Users/tester",
         ".browser-profile",
@@ -48,7 +42,7 @@ describe("path helpers", () => {
   it("derives the default store path from an overridden profile directory", () => {
     expect(
       resolveStoragePaths(
-        { BROWSER_PROFILE_DIR: "~/custom-profile", SESSION_STORE_FILE: "   " },
+        { BROWSER_PROFILE_DIR: "~/custom-profile" },
         "/Users/tester",
       ),
     ).toEqual({
@@ -57,11 +51,6 @@ describe("path helpers", () => {
         "/Users/tester",
         "custom-profile",
         "auth-store.json",
-      ),
-      sessionStoreFile: path.join(
-        "/Users/tester",
-        "custom-profile",
-        "session-store.json",
       ),
       terminalSessionStoreFile: path.join(
         "/Users/tester",
@@ -77,7 +66,6 @@ describe("path helpers", () => {
         {
           BROWSER_PROFILE_DIR: "~/custom-profile",
           AUTH_STORE_FILE: "~/db/auth.json",
-          SESSION_STORE_FILE: "~/db/session.json",
           TERMINAL_SESSION_STORE_FILE: "~/db/terminal-session.json",
         },
         "/Users/tester",
@@ -85,7 +73,6 @@ describe("path helpers", () => {
     ).toEqual({
       browserProfileDir: path.join("/Users/tester", "custom-profile"),
       authStoreFile: path.join("/Users/tester", "db", "auth.json"),
-      sessionStoreFile: path.join("/Users/tester", "db", "session.json"),
       terminalSessionStoreFile: path.join(
         "/Users/tester",
         "db",
@@ -101,11 +88,6 @@ describe("path helpers", () => {
         "/Users/tester",
         ".browser-profile",
         "auth-store.json",
-      ),
-      sessionStoreFile: path.join(
-        "/Users/tester",
-        ".browser-profile",
-        "session-store.json",
       ),
       terminalSessionStoreFile: path.join(
         "/Users/tester",
