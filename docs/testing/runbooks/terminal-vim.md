@@ -2,12 +2,12 @@
 
 ## 测试门槛
 
-- 后端单测：`pnpm --filter ./backend test -- src/terminal/pty-service.test.ts src/ws/heartbeat.test.ts src/ws/terminal-server.test.ts`
 - E2E：`pnpm --filter ./frontend e2e -- tests/terminal.spec.ts tests/terminal-vim.spec.ts`
+- 静态检查：涉及后端或终端协议时补 `pnpm --filter ./backend typecheck && pnpm --filter ./backend lint`
 
 ## 发布规则
 
-- 两个门槛在同一提交范围内都通过，才视为终端兼容可发布。
+- E2E 与相关静态检查在同一提交范围内通过，才视为终端兼容可发布。
 
 ## 手动验证
 

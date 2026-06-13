@@ -46,12 +46,12 @@
 - 使用命令：`pnpm dist:electron:mac`
 - 不要默认打包 Windows 客户端，也不要为了兼容性额外生成 Windows 安装包，除非用户明确提出。
 
-## 前端测试约束
+## 测试约束
 
-- 前端项目禁止使用 TDD，不使用 `test-driven-development` skill 为前端代码补单测。
-- 前端 `src/` 下的 `*.ts`、`*.tsx` 与面向 UI 的 React hooks 均不新增单测，不新增 `*.test.ts`、`*.test.tsx`、`*.spec.tsx`、`*.ui.test.tsx`。
-- 前端变更只保留 E2E 作为正式自动化验证手段；必要时可补充手工回归，但不再为前端逻辑维护 Vitest 覆盖。
-- 如需调整前端测试配置，保持前端测试入口指向 Playwright E2E，不为前端设置 Vitest coverage 阈值。
+- 本仓库不维护单元测试、Vitest 测试、Node test 测试或 coverage 门槛，不新增 `*.test.*`、`*.spec.*`、`*.ui.test.*` 等非 E2E 测试文件。
+- 自动化测试只保留 Playwright E2E：`frontend/tests/*.spec.ts`。需要浏览器操作验证时，必须使用 `$playwright-cli`。
+- 非浏览器层变更优先使用 `typecheck`、`lint`、构建命令或手工/脚本化冒烟验证；不要为了补充信心新增单测。
+- 如用户明确要求恢复或迁移测试体系，先给出保留/删除范围与脚本影响，再执行。
 
 ## 文档路由（按需读取）
 

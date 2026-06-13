@@ -65,12 +65,12 @@ pnpm app:dev
 
 ## 自动化/静态验证
 
-| ID            | 范围                      | 命令                                                                                                     | 预期                                                      |
-| ------------- | ------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| DO-STATIC-001 | shared/backend health     | `pnpm --filter @runweave/backend test -- src/server/health.test.ts`                                      | `/health` payload 测试通过                                |
-| DO-STATIC-002 | terminal-events heartbeat | `pnpm --filter @runweave/backend test -- src/ws/terminal-events-server.test.ts src/ws/heartbeat.test.ts` | terminal-events 既有消息和 heartbeat 测试通过             |
-| DO-STATIC-003 | App 类型检查              | `pnpm --filter @runweave/app typecheck`                                                                  | 无 TS error                                               |
-| DO-STATIC-004 | App 构建                  | `pnpm --filter @runweave/app build`                                                                      | 无 TypeScript / Rollup error；允许现有 Vite chunk warning |
+| ID            | 范围             | 命令                                        | 预期                                                      |
+| ------------- | ---------------- | ------------------------------------------- | --------------------------------------------------------- |
+| DO-STATIC-001 | backend 类型检查 | `pnpm --filter @runweave/backend typecheck` | 无 TS error                                               |
+| DO-STATIC-002 | backend lint     | `pnpm --filter @runweave/backend lint`      | 无 lint error                                             |
+| DO-STATIC-003 | App 类型检查     | `pnpm --filter @runweave/app typecheck`     | 无 TS error                                               |
+| DO-STATIC-004 | App 构建         | `pnpm --filter @runweave/app build`         | 无 TypeScript / Rollup error；允许现有 Vite chunk warning |
 
 ## API 失败分类测试
 

@@ -63,17 +63,16 @@ $RW_BIN auth login \
 
 ## 自动化静态验证
 
-| ID            | 范围               | 命令                                                                                                      | 预期                                 |
-| ------------- | ------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------ | -------------------- | ----------------------------------- |
-| RW-STATIC-001 | CLI 单测           | `pnpm --filter @runweave/cli test`                                                                        | health/app/project/terminal 测试通过 |
-| RW-STATIC-002 | CLI 类型           | `pnpm --filter @runweave/cli typecheck`                                                                   | 无 TS error                          |
-| RW-STATIC-003 | CLI 构建           | `pnpm --filter @runweave/cli build`                                                                       | 生成 `packages/runweave-cli/dist`    |
-| RW-STATIC-004 | shared 类型        | `pnpm --filter @runweave/shared typecheck`                                                                | terminal event 协议无 TS error       |
-| RW-STATIC-005 | backend route 测试 | `pnpm --filter @runweave/backend test -- src/routes/terminal.test.ts`                                     | project/session 创建事件测试通过     |
-| RW-STATIC-006 | backend lint/type  | `pnpm --filter @runweave/backend lint && pnpm --filter @runweave/backend typecheck`                       | 无 lint/TS error                     |
-| RW-STATIC-007 | Web lint/type      | `pnpm --filter @runweave/frontend lint && pnpm --filter @runweave/frontend typecheck`                     | 无 lint/TS error                     |
-| RW-STATIC-008 | Web E2E 事件同步   | `pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep 'externally (created | deleted)                             | workspace is empty'` | 外部创建/删除后 UI 通过事件刷新列表 |
-| RW-STATIC-009 | App 类型           | `pnpm --filter @runweave/app typecheck`                                                                   | 无 TS error                          |
+| ID            | 范围              | 命令                                                                                                     | 预期                              |
+| ------------- | ----------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------- | ----------------------------------- |
+| RW-STATIC-001 | CLI 类型          | `pnpm --filter @runweave/cli typecheck`                                                                  | 无 TS error                       |
+| RW-STATIC-002 | CLI lint          | `pnpm --filter @runweave/cli lint`                                                                       | 无 lint error                     |
+| RW-STATIC-003 | CLI 构建          | `pnpm --filter @runweave/cli build`                                                                      | 生成 `packages/runweave-cli/dist` |
+| RW-STATIC-004 | shared 类型       | `pnpm --filter @runweave/shared typecheck`                                                               | terminal event 协议无 TS error    |
+| RW-STATIC-005 | backend lint/type | `pnpm --filter @runweave/backend lint && pnpm --filter @runweave/backend typecheck`                      | 无 lint/TS error                  |
+| RW-STATIC-006 | Web lint/type     | `pnpm --filter @runweave/frontend lint && pnpm --filter @runweave/frontend typecheck`                    | 无 lint/TS error                  |
+| RW-STATIC-007 | Web E2E 事件同步  | `pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "externally created | externally deleted"`              | 外部创建/删除后 UI 通过事件刷新列表 |
+| RW-STATIC-008 | App 类型          | `pnpm --filter @runweave/app typecheck`                                                                  | 无 TS error                       |
 
 ## Health 测试
 
