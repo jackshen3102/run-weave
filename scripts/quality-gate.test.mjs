@@ -5,7 +5,7 @@ import {
 } from "./quality-gate.mjs";
 
 assert.deepEqual(
-  selectLayersForChangedFiles(["frontend/src/components/viewer-page.tsx"]),
+  selectLayersForChangedFiles(["frontend/src/pages/home/index.tsx"]),
   ["default", "e2e"],
 );
 
@@ -22,13 +22,13 @@ assert.deepEqual(selectLayersForChangedFiles(["backend/vitest.live.config.ts"]),
 assert.deepEqual(
   selectLayersForChangedFiles([
     "backend/src/live/provider-client.ts",
-    "backend/src/routes/session.ts",
+    "backend/src/routes/terminal.ts",
   ]),
   ["default", "live"],
 );
 
 assert.deepEqual(
-  selectLayersForChangedFiles(["backend/src/routes/session.ts"]),
+  selectLayersForChangedFiles(["backend/src/routes/terminal.ts"]),
   ["default"],
 );
 

@@ -5,7 +5,6 @@ import path from "node:path";
 export interface StoragePaths {
   browserProfileDir: string;
   authStoreFile: string;
-  sessionStoreFile: string;
   terminalSessionStoreFile: string;
   backendLogDir: string;
 }
@@ -13,7 +12,6 @@ export interface StoragePaths {
 interface StorageEnv {
   BROWSER_PROFILE_DIR?: string;
   AUTH_STORE_FILE?: string;
-  SESSION_STORE_FILE?: string;
   TERMINAL_SESSION_STORE_FILE?: string;
   RUNWEAVE_BACKEND_LOG_DIR?: string;
 }
@@ -62,10 +60,6 @@ export function resolveStoragePaths(
     expandHomePath(env.AUTH_STORE_FILE, homeDir) ??
       path.join(browserProfileDir, "auth-store.json"),
   );
-  const sessionStoreFile = path.resolve(
-    expandHomePath(env.SESSION_STORE_FILE, homeDir) ??
-      path.join(browserProfileDir, "session-store.json"),
-  );
   const terminalSessionStoreFile = path.resolve(
     expandHomePath(env.TERMINAL_SESSION_STORE_FILE, homeDir) ??
       path.join(browserProfileDir, "terminal-session-store.json"),
@@ -78,7 +72,6 @@ export function resolveStoragePaths(
   const storagePaths = {
     browserProfileDir,
     authStoreFile,
-    sessionStoreFile,
     terminalSessionStoreFile,
   } as StoragePaths;
 

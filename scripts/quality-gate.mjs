@@ -10,7 +10,7 @@ const REPORT_PATH = path.join(ARTIFACT_DIR, "quality-report.json");
 const LAYER_ORDER = ["default", "e2e", "live"];
 const LAYER_STEP_IDS = {
   default: ["default-tests", "quality-gate-self-test"],
-  e2e: ["e2e-smoke", "e2e-interaction"],
+  e2e: ["e2e-smoke"],
   live: ["live-smoke"],
 };
 
@@ -26,20 +26,6 @@ const ALL_STEPS = [
     command: ["pnpm", "--filter", "./frontend", "e2e", "--", "tests/smoke.spec.ts"],
     layers: ["e2e"],
     critical: true,
-  },
-  {
-    id: "e2e-interaction",
-    command: [
-      "pnpm",
-      "--filter",
-      "./frontend",
-      "e2e",
-      "--",
-      "tests/interaction.spec.ts",
-    ],
-    layers: ["e2e"],
-    critical: true,
-    maxAttempts: 2,
   },
   {
     id: "live-smoke",
@@ -85,16 +71,9 @@ function isCriticalJourneyFile(filePath) {
   return [
     "backend/src/ws/",
     "backend/src/routes/test.ts",
-    "backend/src/routes/quality.ts",
-    "backend/src/quality/",
-    "backend/src/session/",
     "frontend/src/pages/home/",
     "frontend/src/App.tsx",
     "frontend/tests/smoke.spec.ts",
-    "frontend/src/features/viewer/",
-    "frontend/src/components/viewer",
-    "frontend/src/components/viewer-page.tsx",
-    "frontend/tests/interaction.spec.ts",
     "frontend/playwright.config.ts",
     "packages/shared/src/",
   ].some((prefix) => filePath.startsWith(prefix));

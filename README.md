@@ -119,9 +119,6 @@ pnpm dev
 Useful development variants:
 
 ```bash
-# Run with a visible browser for debugging
-BROWSER_HEADLESS=false pnpm dev
-
 # Start backend, frontend, and Electron
 pnpm dev:electron
 ```
@@ -148,9 +145,8 @@ Important environment variables:
   service.
 - `AUTH_JWT_SECRET`: signing secret for auth tokens.
 - `FRONTEND_ORIGIN`: allowed frontend origins for CORS.
-- `BROWSER_PROFILE_DIR`: persistent browser/session data directory.
+- `BROWSER_PROFILE_DIR`: persistent backend data directory.
 - `TERMINAL_SESSION_STORE_FILE`: persisted terminal session store path.
-- `BROWSER_HEADLESS`: browser headless mode switch.
 
 Electron mac packaging:
 

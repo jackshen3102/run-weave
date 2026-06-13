@@ -1,11 +1,10 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { Activity } from "lucide-react";
+import { RuntimeMonitorBadge } from "../../components/runtime-monitor-badge";
 import { Button } from "../../components/ui/button";
-import { HomeHeader } from "./components/home-header";
 import { ChangePasswordDialog } from "./components/change-password-dialog";
-import { HomeSidebar } from "./components/home-sidebar";
-import { SessionList } from "./components/session-list";
-import { useHomeSessions } from "./hooks/use-home-sessions";
+import { HomeHeader } from "./components/home-header";
 import { useHomeTerminalPassword } from "./hooks/use-home-terminal-password";
 import type { ClientMode } from "../../features/client-mode";
 
@@ -47,45 +46,6 @@ export function HomePage({
   }, [clearToken, navigate]);
 
   const {
-    sessionSourceType,
-    setSessionSourceType,
-    sessionName,
-    setSessionName,
-    proxyEnabled,
-    setProxyEnabled,
-    cdpEndpoint,
-    defaultCdpEndpoint,
-    setCdpEndpoint,
-    requestHeadersInput,
-    setRequestHeadersInput,
-    browserLocaleInput,
-    setBrowserLocaleInput,
-    browserTimezoneInput,
-    setBrowserTimezoneInput,
-    browserUserAgentInput,
-    setBrowserUserAgentInput,
-    browserViewportWidthInput,
-    setBrowserViewportWidthInput,
-    browserViewportHeightInput,
-    setBrowserViewportHeightInput,
-    loading,
-    error,
-    sortedSessions,
-    loadingSessions,
-    deletingSessionId,
-    createSession,
-    removeSession,
-    renameSession,
-  } = useHomeSessions({
-    apiBase,
-    token,
-    onAuthExpired: handleAuthExpired,
-    onEnterSession: (sessionId) => {
-      navigate(`/viewer/${encodeURIComponent(sessionId)}`);
-    },
-  });
-
-  const {
     terminalLoading,
     terminalError,
     createTerminal,
@@ -105,6 +65,16 @@ export function HomePage({
     },
   });
 
+  const openTerminal = () => {
+    void createTerminal();
+  };
+  const canOpenSystemMonitor = window.electronAPI?.isElectron === true;
+  const openSystemMonitor = canOpenSystemMonitor
+    ? () => {
+        navigate("/system-monitor");
+      }
+    : undefined;
+
   if (clientMode === "mobile") {
     return (
       <main className="relative min-h-dvh overflow-hidden px-4 py-5">
@@ -122,12 +92,21 @@ export function HomePage({
               ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {openSystemMonitor ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="rounded-full px-3"
+                  onClick={openSystemMonitor}
+                >
+                  <Activity className="h-4 w-4" />
+                  <span className="sr-only">System Monitor</span>
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 className="rounded-full px-4"
-                onClick={() => {
-                  void createTerminal();
-                }}
+                onClick={openTerminal}
                 disabled={terminalLoading}
               >
                 {terminalLoading ? "Opening..." : "Terminal"}
@@ -142,6 +121,7 @@ export function HomePage({
               </Button>
             </div>
           </header>
+          <RuntimeMonitorBadge />
 
           {terminalError ? (
             <p className="text-sm text-red-500" role="alert">
@@ -149,42 +129,21 @@ export function HomePage({
             </p>
           ) : null}
 
-          <section className="flex min-h-0 flex-1 flex-col rounded-[1.5rem] border border-border/60 bg-card/82 p-4 shadow-[0_26px_100px_-72px_rgba(17,24,39,0.7)] backdrop-blur-xl">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/70">
-                  Sessions
-                </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {loadingSessions
-                    ? "Refreshing..."
-                    : `${sortedSessions.length} total`}
-                </p>
-              </div>
-            </div>
-
-            {error ? (
-              <p className="mt-3 text-sm text-red-500" role="alert">
-                {error}
+          <section className="flex flex-1 flex-col justify-center rounded-[1.5rem] border border-border/60 bg-card/82 p-5 shadow-[0_26px_100px_-72px_rgba(17,24,39,0.7)] backdrop-blur-xl">
+            <div className="space-y-4">
+              <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground/70">
+                Workspace
               </p>
-            ) : null}
-
-            <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-              <SessionList
-                sessions={sortedSessions}
-                loadingSessions={loadingSessions}
-                deletingSessionId={deletingSessionId}
-                actions="open-only"
-                onRenameSession={(sessionId) => {
-                  void renameSession(sessionId);
-                }}
-                onRemoveSession={(sessionId) => {
-                  void removeSession(sessionId);
-                }}
-                onResumeSession={(sessionId) => {
-                  navigate(`/viewer/${encodeURIComponent(sessionId)}`);
-                }}
-              />
+              <p className="max-w-sm text-2xl font-semibold text-foreground">
+                Open a terminal session to continue.
+              </p>
+              <Button
+                className="h-11 rounded-full px-6"
+                onClick={openTerminal}
+                disabled={terminalLoading}
+              >
+                {terminalLoading ? "Opening..." : "Open Terminal"}
+              </Button>
             </div>
           </section>
         </div>
@@ -203,16 +162,8 @@ export function HomePage({
           connectionName={connectionName}
           onSelectConnection={onSelectConnection}
           onOpenConnectionManager={onOpenConnectionManager}
-          onOpenTerminal={() => {
-            void createTerminal();
-          }}
-          onOpenSystemMonitor={
-            window.electronAPI?.isElectron === true
-              ? () => {
-                  navigate("/system-monitor");
-                }
-              : undefined
-          }
+          onOpenTerminal={openTerminal}
+          onOpenSystemMonitor={openSystemMonitor}
           onOpenChangePassword={openPasswordDialog}
           onLogout={handleAuthExpired}
         />
@@ -230,67 +181,36 @@ export function HomePage({
           </p>
         ) : null}
 
-        <section className="grid flex-1 gap-5 md:grid-cols-[360px_minmax(0,1fr)] xl:gap-6">
-          <HomeSidebar
-            sessionSourceType={sessionSourceType}
-            onSessionSourceTypeChange={setSessionSourceType}
-            sessionName={sessionName}
-            onSessionNameChange={setSessionName}
-            cdpEndpoint={cdpEndpoint}
-            cdpEndpointPlaceholder={defaultCdpEndpoint}
-            onCdpEndpointChange={setCdpEndpoint}
-            proxyEnabled={proxyEnabled}
-            onProxyEnabledChange={setProxyEnabled}
-            requestHeadersInput={requestHeadersInput}
-            onRequestHeadersInputChange={setRequestHeadersInput}
-            browserLocaleInput={browserLocaleInput}
-            onBrowserLocaleInputChange={setBrowserLocaleInput}
-            browserTimezoneInput={browserTimezoneInput}
-            onBrowserTimezoneInputChange={setBrowserTimezoneInput}
-            browserUserAgentInput={browserUserAgentInput}
-            onBrowserUserAgentInputChange={setBrowserUserAgentInput}
-            browserViewportWidthInput={browserViewportWidthInput}
-            onBrowserViewportWidthInputChange={setBrowserViewportWidthInput}
-            browserViewportHeightInput={browserViewportHeightInput}
-            onBrowserViewportHeightInputChange={setBrowserViewportHeightInput}
-            loading={loading}
-            onSubmitSession={() => {
-              void createSession();
-            }}
-            error={error}
-          />
-
-          <section className="flex min-h-[200px] flex-col rounded-[2rem] border border-border/60 bg-card/75 p-6 shadow-[0_30px_120px_-70px_rgba(17,24,39,0.65)] backdrop-blur-xl sm:p-8">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.28em] text-muted-foreground/70">
-                  Sessions
-                </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {loadingSessions
-                    ? "Refreshing quietly..."
-                    : `${sortedSessions.length} total`}
-                </p>
-              </div>
+        <section className="flex flex-1 items-center rounded-[2rem] border border-border/60 bg-card/75 p-8 shadow-[0_30px_120px_-70px_rgba(17,24,39,0.65)] backdrop-blur-xl">
+          <div className="max-w-2xl space-y-6">
+            <p className="text-xs font-medium uppercase tracking-[0.28em] text-muted-foreground/70">
+              Workspace
+            </p>
+            <div className="space-y-3">
+              <h1 className="text-4xl font-semibold text-foreground">
+                Open a terminal session to continue.
+              </h1>
             </div>
-
-            <div className="mt-6 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-              <SessionList
-                sessions={sortedSessions}
-                loadingSessions={loadingSessions}
-                deletingSessionId={deletingSessionId}
-                onRenameSession={(sessionId) => {
-                  void renameSession(sessionId);
-                }}
-                onRemoveSession={(sessionId) => {
-                  void removeSession(sessionId);
-                }}
-                onResumeSession={(sessionId) => {
-                  navigate(`/viewer/${encodeURIComponent(sessionId)}`);
-                }}
-              />
+            <div className="flex flex-wrap gap-3">
+              <Button
+                className="h-11 rounded-full px-6"
+                onClick={openTerminal}
+                disabled={terminalLoading}
+              >
+                {terminalLoading ? "Opening..." : "Open Terminal"}
+              </Button>
+              {openSystemMonitor ? (
+                <Button
+                  variant="secondary"
+                  className="h-11 rounded-full px-6"
+                  onClick={openSystemMonitor}
+                >
+                  <Activity className="mr-2 h-4 w-4" />
+                  System Monitor
+                </Button>
+              ) : null}
             </div>
-          </section>
+          </div>
         </section>
       </div>
     </main>

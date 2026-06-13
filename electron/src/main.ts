@@ -295,7 +295,6 @@ function isBackendRequest(url: string): boolean {
       p.startsWith("/api/") ||
       p.startsWith("/ws/") ||
       p.startsWith("/ws?") ||
-      p.startsWith("/devtools/") ||
       p === "/health"
     );
   } catch {

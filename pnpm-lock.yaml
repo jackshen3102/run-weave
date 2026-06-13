@@ -137,15 +137,6 @@ importers:
       node-pty:
         specifier: ^1.1.0
         version: 1.1.0
-      playwright:
-        specifier: ^1.52.0
-        version: 1.58.2
-      playwright-extra:
-        specifier: ^4.3.6
-        version: 4.3.6(playwright-core@1.58.2)(playwright@1.58.2)
-      puppeteer-extra-plugin-stealth:
-        specifier: ^2.11.2
-        version: 2.11.2(playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2))
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
@@ -378,6 +369,12 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0(vite@6.4.1(@types/node@22.19.15)(jiti@1.21.7)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.2))(workbox-build@7.4.0(@types/babel__core@7.20.5))(workbox-window@7.4.0)
 
+  packages/common:
+    devDependencies:
+      typescript:
+        specifier: ^5.8.2
+        version: 5.9.3
+
   packages/runweave-cli:
     devDependencies:
       "@browser-viewer/shared":
@@ -389,12 +386,6 @@ importers:
       vitest:
         specifier: ^3.0.9
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.2)
-
-  packages/common:
-    devDependencies:
-      typescript:
-        specifier: ^5.8.2
-        version: 5.9.3
 
   packages/shared:
     devDependencies:
@@ -1293,14 +1284,6 @@ packages:
     peerDependencies:
       "@capacitor/core": ">=8.0.0"
 
-  "@capacitor/keyboard@8.0.3":
-    resolution:
-      {
-        integrity: sha512-27Bv5/2w1Ss2njguBgTS98O0Bb8DRJhAARyzXYib0JlT/n6BrJw/EZ0CokM4C8GFUjFDjJnEKF1Ie01buTMEXQ==,
-      }
-    peerDependencies:
-      "@capacitor/core": ">=8.0.0"
-
   "@capacitor/ios@8.4.0":
     resolution:
       {
@@ -1308,6 +1291,14 @@ packages:
       }
     peerDependencies:
       "@capacitor/core": ^8.4.0
+
+  "@capacitor/keyboard@8.0.3":
+    resolution:
+      {
+        integrity: sha512-27Bv5/2w1Ss2njguBgTS98O0Bb8DRJhAARyzXYib0JlT/n6BrJw/EZ0CokM4C8GFUjFDjJnEKF1Ie01buTMEXQ==,
+      }
+    peerDependencies:
+      "@capacitor/core": ">=8.0.0"
 
   "@capacitor/share@8.0.1":
     resolution:
@@ -4021,13 +4012,6 @@ packages:
       }
     engines: { node: ">=10" }
 
-  arr-union@3.1.0:
-    resolution:
-      {
-        integrity: sha512-sKpyeERZ02v1FeCZT8lrfJq5u6goHCtpTAzPwJYe7c8SPFOboNjNg1vz2L4VTn9T4PQxEx13TbXLmYUcS6Ug7Q==,
-      }
-    engines: { node: ">=0.10.0" }
-
   array-buffer-byte-length@1.0.2:
     resolution:
       {
@@ -4508,13 +4492,6 @@ packages:
         integrity: sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ==,
       }
     engines: { node: ">=12" }
-
-  clone-deep@0.2.4:
-    resolution:
-      {
-        integrity: sha512-we+NuQo2DHhSl+DP6jlUiAhyAjBQrYnpOk15rN6c6JSPScjiCLh8IbSU+VTcph6YS3o7mASE8a0+gbZ7ChLpgg==,
-      }
-    engines: { node: ">=0.10.0" }
 
   clone-response@1.0.3:
     resolution:
@@ -5867,27 +5844,6 @@ packages:
       }
     engines: { node: ">= 0.4" }
 
-  for-in@0.1.8:
-    resolution:
-      {
-        integrity: sha512-F0to7vbBSHP8E3l6dCjxNOLuSFAACIxFy3UehTUlG7svlXi37HHsDkyVcHo0Pq8QwrE+pXvWSVX3ZT1T9wAZ9g==,
-      }
-    engines: { node: ">=0.10.0" }
-
-  for-in@1.0.2:
-    resolution:
-      {
-        integrity: sha512-7EwmXrOjyL+ChxMhmG5lnW9MPt1aIeZEwKhQzoBUdTV0N3zuwWDZYVJatDvZ2OyzPUvdIAZDsCetk3coyMfcnQ==,
-      }
-    engines: { node: ">=0.10.0" }
-
-  for-own@0.1.5:
-    resolution:
-      {
-        integrity: sha512-SKmowqGTJoPzLO1T0BBJpkfp3EMacCMOuH40hOUbrbzElVktk4DioXVM99QkLCyKoiuOmyjgcWMpVz2xjE7LZw==,
-      }
-    engines: { node: ">=0.10.0" }
-
   foreground-child@3.3.1:
     resolution:
       {
@@ -6525,12 +6481,6 @@ packages:
       }
     engines: { node: ">= 0.4" }
 
-  is-buffer@1.1.6:
-    resolution:
-      {
-        integrity: sha512-NcdALwpXkTm5Zvvbk7owOUSvVvBKDgKP5/ewfXEznmQFfs4ZRmanOeKBTjRVjka3QFoN6XJ+9F3USqfHqTaU5w==,
-      }
-
   is-callable@1.2.7:
     resolution:
       {
@@ -6573,13 +6523,6 @@ packages:
       }
     engines: { node: ">=8" }
     hasBin: true
-
-  is-extendable@0.1.1:
-    resolution:
-      {
-        integrity: sha512-5BMULNob1vgFX6EjQw5izWDxrecWK9AM72rugNr0TFldMOi0fj6Jk+zeKIt0xGj4cEfQIJth4w3OKWOJ4f+AFw==,
-      }
-    engines: { node: ">=0.10.0" }
 
   is-extglob@2.1.1:
     resolution:
@@ -6681,13 +6624,6 @@ packages:
     resolution:
       {
         integrity: sha512-l4RyHgRqGN4Y3+9JHVrNqO+tN0rV5My76uW5/nuO4K1b6vw5G8d/cmFjP9tRfEsdhZNt0IFdZuK/c2Vr4Nb+Qg==,
-      }
-    engines: { node: ">=0.10.0" }
-
-  is-plain-object@2.0.4:
-    resolution:
-      {
-        integrity: sha512-h5PpgXkWitc38BBMYawTYMWJHFZJVnBquFE57xFpjB8pJFiF6gZ+bU+WyI/yqXiFR5mdLsgYNaPe8uao6Uv9Og==,
       }
     engines: { node: ">=0.10.0" }
 
@@ -6832,13 +6768,6 @@ packages:
       {
         integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==,
       }
-
-  isobject@3.0.1:
-    resolution:
-      {
-        integrity: sha512-WhB9zCku7EGTj/HQQRz5aUQEUeoQZH2bWcltRErOpymJ4boYE6wL9Tbr23krRPSZ+C5zqNSrSw+Cc7sZZ4b7vg==,
-      }
-    engines: { node: ">=0.10.0" }
 
   istanbul-lib-coverage@3.2.2:
     resolution:
@@ -7017,20 +6946,6 @@ packages:
         integrity: sha512-Ls993zuzfayK269Svk9hzpeGUKob/sIgZzyHYdjQoAdQetRKpOLj+k/QQQ/6Qi0Yz65mlROrfd+Ev+1+7dz9Kw==,
       }
 
-  kind-of@2.0.1:
-    resolution:
-      {
-        integrity: sha512-0u8i1NZ/mg0b+W3MGGw5I7+6Eib2nx72S/QvXa0hYjEkjTknYmEYQJwGu3mLC0BrhtJjtQafTkyRUQ75Kx0LVg==,
-      }
-    engines: { node: ">=0.10.0" }
-
-  kind-of@3.2.2:
-    resolution:
-      {
-        integrity: sha512-NOW9QQXMoZGg/oqnVNoNTTIFEIid1627WCffUBJEdMxYApq7mNE7CpzucIPc+ZQg25Phej7IJSmX3hO+oblOtQ==,
-      }
-    engines: { node: ">=0.10.0" }
-
   kleur@3.0.3:
     resolution:
       {
@@ -7069,20 +6984,6 @@ packages:
       {
         integrity: sha512-dp3s92+uNI1hWIpPGH3jK2kxE2lMjdXdr+DH8ynZHpd6PUlH6x6cbuXnoMmiNumznqaNO31xu9e79F0uuZ0JFg==,
       }
-
-  lazy-cache@0.2.7:
-    resolution:
-      {
-        integrity: sha512-gkX52wvU/R8DVMMt78ATVPFMJqfW8FPz1GZ1sVHBVQHmu/WvhIWE4cE1GBzhJNFicDeYhnwp6Rl35BcAIM3YOQ==,
-      }
-    engines: { node: ">=0.10.0" }
-
-  lazy-cache@1.0.4:
-    resolution:
-      {
-        integrity: sha512-RE2g0b5VGZsOCFOCgP7omTRYFqydmZkBwl5oNnQ1lDYC57uyO9KqNnNVxT7COSHTxrRCWVcAVOcbjk+tvh/rgQ==,
-      }
-    engines: { node: ">=0.10.0" }
 
   lazy-val@1.0.5:
     resolution:
@@ -7527,13 +7428,6 @@ packages:
       }
     engines: { node: ">= 0.6" }
 
-  merge-deep@3.0.3:
-    resolution:
-      {
-        integrity: sha512-qtmzAS6t6grwEkNrunqTBdn0qKwFgNWvlxUbAV8es9M7Ot1EbyApytCnvE0jALPa46ZpKDUo527kKiaWplmlFA==,
-      }
-    engines: { node: ">=0.10.0" }
-
   merge-descriptors@1.0.3:
     resolution:
       {
@@ -7740,13 +7634,6 @@ packages:
         integrity: sha512-KZxYo1BUkWD2TVFLr0MQoM8vUUigWD3LlD83a/75BqC+4qE0Hb1Vo5v1FgcfaNXvfXzr+5EhQ6ing/CaBijTlw==,
       }
     engines: { node: ">= 18" }
-
-  mixin-object@2.0.1:
-    resolution:
-      {
-        integrity: sha512-ALGF1Jt9ouehcaXaHhn6t1yGWRqGaHkPFndtFVHfZXOvkIZ/yoGaSi0AHVTafb3ZBGg4dr/bDwnaEKqCXzchMA==,
-      }
-    engines: { node: ">=0.10.0" }
 
   mkdirp@1.0.4:
     resolution:
@@ -8243,21 +8130,6 @@ packages:
     engines: { node: ">=18" }
     hasBin: true
 
-  playwright-extra@4.3.6:
-    resolution:
-      {
-        integrity: sha512-q2rVtcE8V8K3vPVF1zny4pvwZveHLH8KBuVU2MoE3Jw4OKVoBWsHI9CH9zPydovHHOCDxjGN2Vg+2m644q3ijA==,
-      }
-    engines: { node: ">=12" }
-    peerDependencies:
-      playwright: "*"
-      playwright-core: "*"
-    peerDependenciesMeta:
-      playwright:
-        optional: true
-      playwright-core:
-        optional: true
-
   playwright@1.58.2:
     resolution:
       {
@@ -8459,66 +8331,6 @@ packages:
         integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==,
       }
     engines: { node: ">=6" }
-
-  puppeteer-extra-plugin-stealth@2.11.2:
-    resolution:
-      {
-        integrity: sha512-bUemM5XmTj9i2ZerBzsk2AN5is0wHMNE6K0hXBzBXOzP5m5G3Wl0RHhiqKeHToe/uIH8AoZiGhc1tCkLZQPKTQ==,
-      }
-    engines: { node: ">=8" }
-    peerDependencies:
-      playwright-extra: "*"
-      puppeteer-extra: "*"
-    peerDependenciesMeta:
-      playwright-extra:
-        optional: true
-      puppeteer-extra:
-        optional: true
-
-  puppeteer-extra-plugin-user-data-dir@2.4.1:
-    resolution:
-      {
-        integrity: sha512-kH1GnCcqEDoBXO7epAse4TBPJh9tEpVEK/vkedKfjOVOhZAvLkHGc9swMs5ChrJbRnf8Hdpug6TJlEuimXNQ+g==,
-      }
-    engines: { node: ">=8" }
-    peerDependencies:
-      playwright-extra: "*"
-      puppeteer-extra: "*"
-    peerDependenciesMeta:
-      playwright-extra:
-        optional: true
-      puppeteer-extra:
-        optional: true
-
-  puppeteer-extra-plugin-user-preferences@2.4.1:
-    resolution:
-      {
-        integrity: sha512-i1oAZxRbc1bk8MZufKCruCEC3CCafO9RKMkkodZltI4OqibLFXF3tj6HZ4LZ9C5vCXZjYcDWazgtY69mnmrQ9A==,
-      }
-    engines: { node: ">=8" }
-    peerDependencies:
-      playwright-extra: "*"
-      puppeteer-extra: "*"
-    peerDependenciesMeta:
-      playwright-extra:
-        optional: true
-      puppeteer-extra:
-        optional: true
-
-  puppeteer-extra-plugin@3.2.3:
-    resolution:
-      {
-        integrity: sha512-6RNy0e6pH8vaS3akPIKGg28xcryKscczt4wIl0ePciZENGE2yoaQJNd17UiEbdmh5/6WW6dPcfRWT9lxBwCi2Q==,
-      }
-    engines: { node: ">=9.11.2" }
-    peerDependencies:
-      playwright-extra: "*"
-      puppeteer-extra: "*"
-    peerDependenciesMeta:
-      playwright-extra:
-        optional: true
-      puppeteer-extra:
-        optional: true
 
   qs@6.14.2:
     resolution:
@@ -9087,13 +8899,6 @@ packages:
       {
         integrity: sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==,
       }
-
-  shallow-clone@0.1.2:
-    resolution:
-      {
-        integrity: sha512-J1zdXCky5GmNnuauESROVu31MQSnLoYvlyEn6j2Ztk6Q5EHFIhxkMhYcv6vuDzl2XEzoRr856QwzMgWM/TmZgw==,
-      }
-    engines: { node: ">=0.10.0" }
 
   shebang-command@2.0.0:
     resolution:
@@ -11302,11 +11107,11 @@ snapshots:
       "@capacitor/core": 8.4.0
       "@capacitor/synapse": 1.0.4
 
-  "@capacitor/keyboard@8.0.3(@capacitor/core@8.4.0)":
+  "@capacitor/ios@8.4.0(@capacitor/core@8.4.0)":
     dependencies:
       "@capacitor/core": 8.4.0
 
-  "@capacitor/ios@8.4.0(@capacitor/core@8.4.0)":
+  "@capacitor/keyboard@8.0.3(@capacitor/core@8.4.0)":
     dependencies:
       "@capacitor/core": 8.4.0
 
@@ -13040,8 +12845,6 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  arr-union@3.1.0: {}
-
   array-buffer-byte-length@1.0.2:
     dependencies:
       call-bound: 1.0.4
@@ -13380,14 +13183,6 @@ snapshots:
       string-width: 4.2.3
       strip-ansi: 6.0.1
       wrap-ansi: 7.0.0
-
-  clone-deep@0.2.4:
-    dependencies:
-      for-own: 0.1.5
-      is-plain-object: 2.0.4
-      kind-of: 3.2.2
-      lazy-cache: 1.0.4
-      shallow-clone: 0.1.2
 
   clone-response@1.0.3:
     dependencies:
@@ -14344,14 +14139,6 @@ snapshots:
     dependencies:
       is-callable: 1.2.7
 
-  for-in@0.1.8: {}
-
-  for-in@1.0.2: {}
-
-  for-own@0.1.5:
-    dependencies:
-      for-in: 1.0.2
-
   foreground-child@3.3.1:
     dependencies:
       cross-spawn: 7.0.6
@@ -14755,8 +14542,6 @@ snapshots:
       call-bound: 1.0.4
       has-tostringtag: 1.0.2
 
-  is-buffer@1.1.6: {}
-
   is-callable@1.2.7: {}
 
   is-ci@3.0.1:
@@ -14779,8 +14564,6 @@ snapshots:
       has-tostringtag: 1.0.2
 
   is-docker@2.2.1: {}
-
-  is-extendable@0.1.1: {}
 
   is-extglob@2.1.1: {}
 
@@ -14826,10 +14609,6 @@ snapshots:
   is-number@7.0.0: {}
 
   is-obj@1.0.1: {}
-
-  is-plain-object@2.0.4:
-    dependencies:
-      isobject: 3.0.1
 
   is-potential-custom-element-name@1.0.1:
     optional: true
@@ -14896,8 +14675,6 @@ snapshots:
   isbinaryfile@5.0.7: {}
 
   isexe@2.0.0: {}
-
-  isobject@3.0.1: {}
 
   istanbul-lib-coverage@3.2.2: {}
 
@@ -15013,14 +14790,6 @@ snapshots:
 
   khroma@2.1.0: {}
 
-  kind-of@2.0.1:
-    dependencies:
-      is-buffer: 1.1.6
-
-  kind-of@3.2.2:
-    dependencies:
-      is-buffer: 1.1.6
-
   kleur@3.0.3: {}
 
   kleur@4.1.5: {}
@@ -15039,10 +14808,6 @@ snapshots:
   layout-base@1.0.2: {}
 
   layout-base@2.0.1: {}
-
-  lazy-cache@0.2.7: {}
-
-  lazy-cache@1.0.4: {}
 
   lazy-val@1.0.5: {}
 
@@ -15292,12 +15057,6 @@ snapshots:
 
   media-typer@0.3.0: {}
 
-  merge-deep@3.0.3:
-    dependencies:
-      arr-union: 3.1.0
-      clone-deep: 0.2.4
-      kind-of: 3.2.2
-
   merge-descriptors@1.0.3: {}
 
   merge-stream@2.0.0: {}
@@ -15413,11 +15172,6 @@ snapshots:
   minizlib@3.1.0:
     dependencies:
       minipass: 7.1.3
-
-  mixin-object@2.0.1:
-    dependencies:
-      for-in: 0.1.8
-      is-extendable: 0.1.1
 
   mkdirp@1.0.4: {}
 
@@ -15695,15 +15449,6 @@ snapshots:
 
   playwright-core@1.58.2: {}
 
-  playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2):
-    dependencies:
-      debug: 4.4.3
-    optionalDependencies:
-      playwright: 1.58.2
-      playwright-core: 1.58.2
-    transitivePeerDependencies:
-      - supports-color
-
   playwright@1.58.2:
     dependencies:
       playwright-core: 1.58.2
@@ -15807,48 +15552,6 @@ snapshots:
   punycode.js@2.3.1: {}
 
   punycode@2.3.1: {}
-
-  puppeteer-extra-plugin-stealth@2.11.2(playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2)):
-    dependencies:
-      debug: 4.4.3
-      puppeteer-extra-plugin: 3.2.3(playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2))
-      puppeteer-extra-plugin-user-preferences: 2.4.1(playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2))
-    optionalDependencies:
-      playwright-extra: 4.3.6(playwright-core@1.58.2)(playwright@1.58.2)
-    transitivePeerDependencies:
-      - supports-color
-
-  puppeteer-extra-plugin-user-data-dir@2.4.1(playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2)):
-    dependencies:
-      debug: 4.4.3
-      fs-extra: 10.1.0
-      puppeteer-extra-plugin: 3.2.3(playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2))
-      rimraf: 3.0.2
-    optionalDependencies:
-      playwright-extra: 4.3.6(playwright-core@1.58.2)(playwright@1.58.2)
-    transitivePeerDependencies:
-      - supports-color
-
-  puppeteer-extra-plugin-user-preferences@2.4.1(playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2)):
-    dependencies:
-      debug: 4.4.3
-      deepmerge: 4.3.1
-      puppeteer-extra-plugin: 3.2.3(playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2))
-      puppeteer-extra-plugin-user-data-dir: 2.4.1(playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2))
-    optionalDependencies:
-      playwright-extra: 4.3.6(playwright-core@1.58.2)(playwright@1.58.2)
-    transitivePeerDependencies:
-      - supports-color
-
-  puppeteer-extra-plugin@3.2.3(playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2)):
-    dependencies:
-      "@types/debug": 4.1.12
-      debug: 4.4.3
-      merge-deep: 3.0.3
-    optionalDependencies:
-      playwright-extra: 4.3.6(playwright-core@1.58.2)(playwright@1.58.2)
-    transitivePeerDependencies:
-      - supports-color
 
   qs@6.14.2:
     dependencies:
@@ -16252,13 +15955,6 @@ snapshots:
       es-object-atoms: 1.1.1
 
   setprototypeof@1.2.0: {}
-
-  shallow-clone@0.1.2:
-    dependencies:
-      is-extendable: 0.1.1
-      kind-of: 2.0.1
-      lazy-cache: 0.2.7
-      mixin-object: 2.0.1
 
   shebang-command@2.0.0:
     dependencies:

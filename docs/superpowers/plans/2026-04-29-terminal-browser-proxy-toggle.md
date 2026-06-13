@@ -40,12 +40,7 @@
 - Electron 本地浏览器 surface：`electron/src/terminal-browser-view.ts`
 - CDP/MCP 控制入口：`electron/src/terminal-browser-cdp-proxy.ts`
 
-已有首页 `proxyEnabled` 能力只作用于后端创建的 Playwright browser session：
-
-- 协议字段：`packages/shared/src/protocol.ts`
-- 后端创建逻辑：`backend/src/browser/service.ts`
-
-这条链路和右侧 Electron Browser 不是同一个浏览器实例，所以不能直接复用首页的 `proxyEnabled` 作为右侧 Browser 的代理开关。
+旧首页后端 Playwright browser session 链路已移除。右侧 Electron Browser 是独立浏览器实例，代理开关必须在 Electron Browser 自己的 session 层实现。
 
 ## 需求理解
 
@@ -138,14 +133,9 @@ proxyBypassRules: "<local>"
 
 网络代理应放在 Electron session 层，由 Electron/Chromium 处理真实请求转发。
 
-### 不影响后端 Playwright session
+### 不影响其它请求
 
-首页的 session 创建代理仍由 `backend/src/browser/service.ts` 管理。这次方案不改变后端 session 的 `proxyEnabled` 语义。
-
-右侧 Browser 和后端 Playwright browser session 是两条独立链路：
-
-- 首页创建的浏览器 session：后端 Playwright 管。
-- 右侧 Browser：Electron 主进程管。
+右侧 Browser 的代理由 Electron 主进程管理，只作用于 Terminal Browser 网页请求，不影响 Runweave 主窗口、登录/API 请求或 Electron 更新请求。
 
 ## 实施阶段
 

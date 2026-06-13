@@ -80,7 +80,6 @@ test("builds packaged backend env with runtime paths and assigned port", () => {
       AUTH_USERNAME: "admin",
       AUTH_PASSWORD: "secret",
       AUTH_JWT_SECRET: "jwt-secret",
-      SESSION_RESTORE_ENABLED: "true",
     },
     backendPort: 5007,
     backendPaths: resolved,
@@ -95,7 +94,6 @@ test("builds packaged backend env with runtime paths and assigned port", () => {
   assert.equal(env.AUTH_USERNAME, "admin");
   assert.equal(env.AUTH_PASSWORD, "secret");
   assert.equal(env.AUTH_JWT_SECRET, "jwt-secret");
-  assert.equal(env.SESSION_RESTORE_ENABLED, "true");
 });
 
 test("adds common macOS CLI paths for packaged backend commands", () => {
