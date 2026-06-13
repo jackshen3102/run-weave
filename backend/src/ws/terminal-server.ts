@@ -44,6 +44,34 @@ import {
 
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
 const TMUX_ACTIVE_COMMAND_RESYNC_DELAY_MS = 1_000;
+const NODE_WRAPPED_ACTIVE_COMMANDS = new Set([
+  "codex",
+  "npm",
+  "npx",
+  "pnpm",
+  "trae",
+  "traecli",
+  "traex",
+  "yarn",
+]);
+
+function commandBasename(command: string | null): string | null {
+  const normalized = command?.trim().replace(/\\+/g, "/");
+  if (!normalized) {
+    return null;
+  }
+  return normalized.split("/").filter(Boolean).at(-1) ?? normalized;
+}
+
+function shouldKeepExistingActiveCommand(
+  existingActiveCommand: string | null,
+  nextActiveCommand: string | null,
+): boolean {
+  return (
+    commandBasename(nextActiveCommand) === "node" &&
+    NODE_WRAPPED_ACTIVE_COMMANDS.has(commandBasename(existingActiveCommand) ?? "")
+  );
+}
 
 export function attachTerminalWebSocketServer(
   server: HttpServer,
@@ -300,8 +328,19 @@ export function attachTerminalWebSocketServer(
           session.command,
         );
         if (metadata) {
-          await publishMetadata(metadata);
-          if (metadata.activeCommand !== null) {
+          const currentSession =
+            terminalSessionManager.getSession(terminalSessionId);
+          const publishableMetadata = shouldKeepExistingActiveCommand(
+            currentSession?.activeCommand ?? null,
+            metadata.activeCommand,
+          )
+            ? {
+                ...metadata,
+                activeCommand: currentSession?.activeCommand ?? null,
+              }
+            : metadata;
+          await publishMetadata(publishableMetadata);
+          if (publishableMetadata.activeCommand !== null) {
             scheduleTmuxPaneMetadataSync(TMUX_ACTIVE_COMMAND_RESYNC_DELAY_MS);
           }
         }
