@@ -48,6 +48,7 @@ function createStoreMock() {
     updateSessionMetadata: vi.fn(async () => undefined),
     updateSessionActivity: vi.fn(async () => undefined),
     updateSessionRuntimeMetadata: vi.fn(async () => undefined),
+    updateSessionTerminalState: vi.fn(async () => undefined),
     updateSessionLaunch: vi.fn(async () => undefined),
     appendSessionScrollback: vi.fn(async () => undefined),
     updateSessionScrollback: vi.fn(async () => undefined),

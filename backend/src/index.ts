@@ -161,10 +161,6 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalSessionStore,
   );
   const terminalEventService = new TerminalEventService();
-  const terminalStateService = new TerminalStateService(
-    new TerminalStateStore(),
-    terminalEventService,
-  );
   const terminalCompletionEventService = new TerminalCompletionEventService(
     terminalEventService,
   );
@@ -200,6 +196,24 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxLifecycleCoordinator,
   });
   await terminalSessionManager.initialize();
+  const terminalStateService = new TerminalStateService(
+    new TerminalStateStore(
+      terminalSessionManager
+        .listSessions()
+        .flatMap((session) =>
+          session.terminalState
+            ? [[session.id, session.terminalState] as const]
+            : [],
+        ),
+    ),
+    terminalEventService,
+    (terminalSessionId, terminalState) => {
+      void terminalSessionManager.updateSessionTerminalState(
+        terminalSessionId,
+        terminalState,
+      );
+    },
+  );
   if (resolveTerminalTmuxScanOrphansOnStartEnabled(process.env)) {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
   }
