@@ -1,7 +1,7 @@
 import type {
   TranscribeVoiceRequest,
   TranscribeVoiceResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 import { requestJson } from "./http";
 

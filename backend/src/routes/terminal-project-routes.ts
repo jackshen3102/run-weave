@@ -3,7 +3,7 @@ import { z } from "zod";
 import type {
   CreateTerminalProjectRequest,
   UpdateTerminalProjectRequest,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {

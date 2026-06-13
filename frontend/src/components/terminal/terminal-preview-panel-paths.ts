@@ -2,7 +2,7 @@ import type {
   TerminalPreviewFileDiffResponse,
   TerminalPreviewFileResponse,
   TerminalProjectListItem,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type { TerminalPreviewMode } from "../../features/terminal/preview-store";
 
 interface SelectedPreviewPathArgs {

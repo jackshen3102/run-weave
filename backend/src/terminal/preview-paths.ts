@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
 import path from "node:path";
-import type { TerminalPreviewBase } from "@browser-viewer/shared";
+import type { TerminalPreviewBase } from "@runweave/shared";
 
 export class TerminalPreviewError extends Error {
   constructor(

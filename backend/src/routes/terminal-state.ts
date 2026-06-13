@@ -3,7 +3,7 @@ import { z } from "zod";
 import type {
   AgentHookStateRequest,
   TerminalStateResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { logger } from "../logging";
 import {
   isCompletionSourceAllowedForCommand,

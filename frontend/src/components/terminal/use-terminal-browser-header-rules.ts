@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   normalizeTerminalBrowserHeaderRules,
   type TerminalBrowserHeaderRule,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 const HEADER_RULES_STORAGE_KEY = "terminal.browser.headerRules";
 

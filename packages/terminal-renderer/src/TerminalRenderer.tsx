@@ -8,7 +8,7 @@ import {
 import {
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
-} from "@browser-viewer/common/terminal";
+} from "@runweave/common/terminal";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { FitAddon } from "@xterm/addon-fit";
 import { Unicode11Addon } from "@xterm/addon-unicode11";

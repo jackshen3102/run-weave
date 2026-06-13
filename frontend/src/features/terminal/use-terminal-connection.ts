@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   TerminalClientMessage,
   TerminalServerMessage,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { HttpError } from "../../services/http";
 import { createTerminalWsTicket } from "../../services/terminal";
 import {

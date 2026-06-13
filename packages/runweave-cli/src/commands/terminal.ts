@@ -14,7 +14,7 @@ import type {
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
   TerminalState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 const DEFAULT_TAIL_LINES = 120;
 const DEFAULT_CONFIRM_TIMEOUT_MS = 3000;

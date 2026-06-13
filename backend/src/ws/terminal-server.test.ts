@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
-import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared";
 import { TmuxLifecycleCoordinator } from "../terminal/tmux-lifecycle-coordinator";
 import { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import { attachTerminalWebSocketServer } from "./terminal-server";

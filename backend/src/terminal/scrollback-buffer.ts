@@ -1,4 +1,4 @@
-import { TERMINAL_PERSISTED_SCROLLBACK_BYTES } from "@browser-viewer/shared";
+import { TERMINAL_PERSISTED_SCROLLBACK_BYTES } from "@runweave/shared";
 
 interface ScrollbackChunk {
   text: string;

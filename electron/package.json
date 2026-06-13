@@ -1,5 +1,5 @@
 {
-  "name": "@browser-viewer/electron",
+  "name": "@runweave/electron",
   "version": "0.100.0",
   "private": true,
   "license": "MIT",
@@ -15,7 +15,7 @@
     "dist": "electron-builder"
   },
   "dependencies": {
-    "@browser-viewer/shared": "workspace:*",
+    "@runweave/shared": "workspace:*",
     "electron-updater": "^6.6.2",
     "pidusage": "^4.0.1",
     "ws": "^8.18.1"

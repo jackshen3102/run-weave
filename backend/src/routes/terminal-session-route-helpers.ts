@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import os from "node:os";
 import { z } from "zod";
-import type { CreateTerminalSessionRequest } from "@browser-viewer/shared";
+import type { CreateTerminalSessionRequest } from "@runweave/shared";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
   resolveDefaultTerminalArgs,

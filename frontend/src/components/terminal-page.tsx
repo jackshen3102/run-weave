@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
-} from "@browser-viewer/common/terminal";
-import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
+} from "@runweave/common/terminal";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import type { TerminalSessionStatusResponse } from "@browser-viewer/shared";
+import type { TerminalSessionStatusResponse } from "@runweave/shared";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { RuntimeMonitorBadge } from "./runtime-monitor-badge";

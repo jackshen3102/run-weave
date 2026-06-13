@@ -3,7 +3,7 @@ import type {
   AppHomeOverviewSession,
   TerminalEventEnvelope,
   TerminalState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { useCallback, useEffect, useState } from "react";
 
 import { recordSupportLog } from "../features/support-logs";

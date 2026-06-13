@@ -1,4 +1,4 @@
-import type { BackendHealthPayload } from "@browser-viewer/shared";
+import type { BackendHealthPayload } from "@runweave/shared";
 
 import { classifyApiFailure, type AppApiFailure } from "./api-failure";
 import { requestJson } from "./http";

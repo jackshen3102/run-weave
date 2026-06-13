@@ -7,7 +7,7 @@ import type {
   DiagnosticLogRedactionReport,
   DiagnosticLogResult,
   DiagnosticLogStatus,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 interface DiagnosticLogRecorderOptions {
   tempRoot?: string;

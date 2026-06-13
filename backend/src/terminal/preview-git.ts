@@ -8,7 +8,7 @@ import type {
   TerminalPreviewFileDiffResponse,
   TerminalPreviewGitChangesResponse,
   TerminalPreviewGitStatus,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import {
   TerminalPreviewError,
   ensureProjectPath,

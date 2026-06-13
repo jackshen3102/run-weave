@@ -1,4 +1,4 @@
-import type { TranscribeVoiceRequest } from "@browser-viewer/shared";
+import type { TranscribeVoiceRequest } from "@runweave/shared";
 import { IonButton, IonIcon, IonTextarea } from "@ionic/react";
 import {
   arrowUp,

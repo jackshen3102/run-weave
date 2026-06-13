@@ -2,7 +2,7 @@ import type {
   AppHomeOverviewResponse,
   CreateTerminalProjectRequest,
   TerminalProjectListItem,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import {
   IonButton,
   IonContent,

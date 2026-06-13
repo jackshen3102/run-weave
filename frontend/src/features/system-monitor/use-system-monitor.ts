@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { SystemMonitorSnapshot } from "@browser-viewer/shared";
+import type { SystemMonitorSnapshot } from "@runweave/shared";
 
 const MAX_FRAME_COUNT = 12;
 

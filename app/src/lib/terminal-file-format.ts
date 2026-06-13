@@ -6,9 +6,9 @@ import {
   terminalPreviewFormatBytes,
   terminalPreviewLanguageBadgeFor,
   terminalPreviewParentPath,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
-export { type TerminalPreviewFileKind } from "@browser-viewer/shared";
+export { type TerminalPreviewFileKind } from "@runweave/shared";
 
 export const extensionOf = terminalPreviewExtensionOf;
 export const basenameOf = terminalPreviewBasename;

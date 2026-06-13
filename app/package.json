@@ -13,9 +13,9 @@
     "ios:open": "pnpm ios:sync && capacitor open ios"
   },
   "dependencies": {
-    "@browser-viewer/common": "workspace:*",
-    "@browser-viewer/shared": "workspace:*",
-    "@browser-viewer/terminal-renderer": "workspace:*",
+    "@runweave/common": "workspace:*",
+    "@runweave/shared": "workspace:*",
+    "@runweave/terminal-renderer": "workspace:*",
     "@capacitor/core": "^8.4.0",
     "@capacitor/filesystem": "^8.0.1",
     "@capacitor/keyboard": "^8.0.3",

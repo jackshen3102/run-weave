@@ -11,7 +11,7 @@ import {
   TERMINAL_COMPACTED_SCROLLBACK_BYTES,
   TERMINAL_LIVE_SCROLLBACK_BYTES,
   TERMINAL_PERSISTED_SCROLLBACK_BYTES,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import path from "node:path";
 import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";

@@ -1,4 +1,4 @@
-import type { TerminalCompletionEvent } from "@browser-viewer/shared";
+import type { TerminalCompletionEvent } from "@runweave/shared";
 
 export const AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS = 30_000;
 

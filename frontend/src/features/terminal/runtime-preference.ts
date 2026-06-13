@@ -1,4 +1,4 @@
-import type { TerminalRuntimePreference } from "@browser-viewer/shared";
+import type { TerminalRuntimePreference } from "@runweave/shared";
 import type { ClientMode } from "../client-mode";
 
 export function resolveNewTerminalRuntimePreference(

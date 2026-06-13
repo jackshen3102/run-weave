@@ -268,7 +268,7 @@ describe("preview file search", () => {
 Run:
 
 ```bash
-pnpm --filter @browser-viewer/backend exec vitest run src/terminal/preview-file-search.test.ts
+pnpm --filter @runweave/backend exec vitest run src/terminal/preview-file-search.test.ts
 ```
 
 Expected:
@@ -495,7 +495,7 @@ const rankedItems = await collectSearchCandidateFiles(rootPath);
 Run:
 
 ```bash
-pnpm --filter @browser-viewer/backend exec vitest run src/terminal/preview-file-search.test.ts
+pnpm --filter @runweave/backend exec vitest run src/terminal/preview-file-search.test.ts
 ```
 
 Expected:
@@ -509,7 +509,7 @@ Expected:
 Run:
 
 ```bash
-pnpm --filter @browser-viewer/backend exec vitest run src/routes/terminal.test.ts
+pnpm --filter @runweave/backend exec vitest run src/routes/terminal.test.ts
 ```
 
 Expected:
@@ -680,8 +680,8 @@ it("does not expose legacy session-scoped preview routes", async () => {
 Run:
 
 ```bash
-pnpm --filter @browser-viewer/backend exec vitest run src/routes/terminal.test.ts
-pnpm --filter @browser-viewer/frontend exec vitest run src/services/terminal.test.ts
+pnpm --filter @runweave/backend exec vitest run src/routes/terminal.test.ts
+pnpm --filter @runweave/frontend exec vitest run src/services/terminal.test.ts
 ```
 
 Expected:
@@ -791,7 +791,7 @@ function rankFile(
 Run:
 
 ```bash
-pnpm --filter @browser-viewer/backend exec vitest run src/terminal/preview-file-search.test.ts
+pnpm --filter @runweave/backend exec vitest run src/terminal/preview-file-search.test.ts
 ```
 
 Expected:
@@ -855,7 +855,7 @@ it("requires all space-separated query pieces to match", async () => {
 Run:
 
 ```bash
-pnpm --filter @browser-viewer/backend exec vitest run src/terminal/preview-file-search.test.ts
+pnpm --filter @runweave/backend exec vitest run src/terminal/preview-file-search.test.ts
 ```
 
 Expected:
@@ -1081,7 +1081,7 @@ This prevents a burst of Preview requests from spawning multiple `rg --files` pr
 Run:
 
 ```bash
-pnpm --filter @browser-viewer/backend exec vitest run src/terminal/preview-file-search.test.ts src/routes/terminal.test.ts
+pnpm --filter @runweave/backend exec vitest run src/terminal/preview-file-search.test.ts src/routes/terminal.test.ts
 ```
 
 Expected:
@@ -1153,7 +1153,7 @@ it("searches project preview files without returning gitignored files", async ()
 Run:
 
 ```bash
-pnpm --filter @browser-viewer/backend exec vitest run src/routes/terminal.test.ts
+pnpm --filter @runweave/backend exec vitest run src/routes/terminal.test.ts
 ```
 
 Expected:
@@ -1195,7 +1195,7 @@ await page.getByText("terminal-code-preview.md").click();
 Run:
 
 ```bash
-pnpm --filter @browser-viewer/frontend exec playwright test tests/terminal-preview.spec.ts
+pnpm --filter @runweave/frontend exec playwright test tests/terminal-preview.spec.ts
 ```
 
 Expected:
@@ -1213,7 +1213,7 @@ Expected:
 Run:
 
 ```bash
-pnpm --filter @browser-viewer/backend exec vitest run src/terminal/preview-file-search.test.ts src/routes/terminal.test.ts
+pnpm --filter @runweave/backend exec vitest run src/terminal/preview-file-search.test.ts src/routes/terminal.test.ts
 ```
 
 Expected:
@@ -1225,7 +1225,7 @@ Expected:
 Run:
 
 ```bash
-pnpm --filter @browser-viewer/frontend exec playwright test tests/terminal-preview.spec.ts
+pnpm --filter @runweave/frontend exec playwright test tests/terminal-preview.spec.ts
 ```
 
 Expected:

@@ -136,7 +136,7 @@ pnpm --filter @runweave/app build
 如本次没有改后端，只运行现有相关用例即可：
 
 ```bash
-pnpm --filter @browser-viewer/backend test -- terminal.test.ts
+pnpm --filter @runweave/backend test -- terminal.test.ts
 ```
 
 预期：
@@ -183,5 +183,5 @@ pnpm app:dev
 - [ ] 确认错误处理和 support log 不记录完整本地路径。
 - [ ] 运行 `pnpm --filter @runweave/app typecheck`。
 - [ ] 运行 `pnpm --filter @runweave/app build`。
-- [ ] 如触碰后端接口，运行 `pnpm --filter @browser-viewer/backend test -- terminal.test.ts`。
+- [ ] 如触碰后端接口，运行 `pnpm --filter @runweave/backend test -- terminal.test.ts`。
 - [ ] 使用 `$playwright-cli` 做 App 图片选择回归。

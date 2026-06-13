@@ -1,4 +1,4 @@
-import type { TerminalRendererExtensionContext } from "@browser-viewer/terminal-renderer";
+import type { TerminalRendererExtensionContext } from "@runweave/terminal-renderer";
 
 const APP_TERMINAL_TOUCH_SCROLL_MULTIPLIER = 3;
 const APP_TERMINAL_EDGE_SWIPE_ZONE = 24;

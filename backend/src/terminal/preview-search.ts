@@ -3,7 +3,7 @@ import type {
   TerminalPreviewChangeFile,
   TerminalPreviewFileSearchItem,
   TerminalPreviewFileSearchResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { ensureProjectPath } from "./preview-paths";
 import { getPreviewGitChanges } from "./preview-git";
 import { collectCachedSearchCandidateFiles } from "./preview-search-candidates";

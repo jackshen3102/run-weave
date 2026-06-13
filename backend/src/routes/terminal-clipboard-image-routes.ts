@@ -7,7 +7,7 @@ import { z } from "zod";
 import type {
   CreateTerminalClipboardImageRequest,
   CreateTerminalClipboardImageResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {

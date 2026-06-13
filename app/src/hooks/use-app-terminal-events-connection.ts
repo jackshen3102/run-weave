@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type {
   TerminalEventEnvelope,
   TerminalEventServerMessage,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 import { classifyApiFailure } from "../services/api-failure";
 import { createTerminalEventsWsTicket } from "../services/terminal";

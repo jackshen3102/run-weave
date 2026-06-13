@@ -1,4 +1,4 @@
-import type { RuntimeStatsSnapshot } from "@browser-viewer/shared";
+import type { RuntimeStatsSnapshot } from "@runweave/shared";
 
 export interface ElectronProcessMetric {
   pid: number;

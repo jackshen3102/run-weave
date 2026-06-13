@@ -7,8 +7,8 @@ import type {
   TerminalPreviewFileDiffResponse,
   TerminalPreviewGitChangesResponse,
   TerminalPreviewGitStatus,
-} from "@browser-viewer/shared";
-import { createTerminalPreviewRequestSequencer } from "@browser-viewer/shared";
+} from "@runweave/shared";
+import { createTerminalPreviewRequestSequencer } from "@runweave/shared";
 
 import { MobileDiffView } from "./MobileDiffView";
 import { useCopyFeedback } from "../hooks/use-copy-feedback";

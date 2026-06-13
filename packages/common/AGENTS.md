@@ -14,8 +14,8 @@ If a task or plan says `packages/commom`, treat it as a typo. The real directory
 
 ## Exports
 
-- Add explicit subpath exports only, such as `@browser-viewer/common/terminal`.
-- Do not add a root `@browser-viewer/common` export.
+- Add explicit subpath exports only, such as `@runweave/common/terminal`.
+- Do not add a root `@runweave/common` export.
 - Do not import from the package root.
 
 Before adding or moving an export, write down the Web caller and the App caller in the change description. If either caller does not exist, keep the code in its current owner.

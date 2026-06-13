@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { TerminalProjectListItem, TerminalSessionListItem } from "@browser-viewer/shared";
+import type { TerminalProjectListItem, TerminalSessionListItem } from "@runweave/shared";
 import { Check, Clipboard, GitBranch, Send } from "lucide-react";
 import { sendTerminalInput } from "../../services/terminal";
 import { Button } from "../ui/button";

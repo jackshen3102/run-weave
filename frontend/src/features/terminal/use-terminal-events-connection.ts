@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   TerminalEventEnvelope,
   TerminalEventServerMessage,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { HttpError } from "../../services/http";
 import { createTerminalEventsWsTicket } from "../../services/terminal";
 import { getTerminalReconnectDelay } from "./reconnect-policy";

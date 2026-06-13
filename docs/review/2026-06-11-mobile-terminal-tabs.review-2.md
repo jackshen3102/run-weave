@@ -67,11 +67,11 @@
 
 - `git diff --check -- . ':(exclude)docs/review'`：通过。
 - `pnpm --filter @runweave/app typecheck`：通过。
-- `pnpm --filter @browser-viewer/shared typecheck`：通过。
-- `pnpm --filter @browser-viewer/frontend typecheck`：通过。
-- `pnpm --filter @browser-viewer/frontend lint`：通过。
+- `pnpm --filter @runweave/shared typecheck`：通过。
+- `pnpm --filter @runweave/frontend typecheck`：通过。
+- `pnpm --filter @runweave/frontend lint`：通过。
 - `pnpm --filter @runweave/app build`：通过，Vite 报告大 chunk 警告。
-- `pnpm --filter @runweave/frontend typecheck`：未执行到有效检查，包名不存在；实际前端包名是 `@browser-viewer/frontend`，已用正确包名补跑。
+- `pnpm --filter @runweave/frontend typecheck`：未执行到有效检查，包名不存在；实际前端包名是 `@runweave/frontend`，已用正确包名补跑。
 
 ## 剩余风险 / 测试缺口
 

@@ -1,4 +1,4 @@
-import type { AuthClientType } from "@browser-viewer/shared";
+import type { AuthClientType } from "@runweave/shared";
 
 export interface PersistedRefreshSessionRecord {
   id: string;

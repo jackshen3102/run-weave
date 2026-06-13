@@ -1,7 +1,7 @@
 import {
   TerminalRenderer,
   type TerminalRendererHandle,
-} from "@browser-viewer/terminal-renderer";
+} from "@runweave/terminal-renderer";
 import { IonButton, IonSpinner, IonText } from "@ionic/react";
 import type { RefObject } from "react";
 

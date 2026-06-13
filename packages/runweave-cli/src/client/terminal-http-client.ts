@@ -10,7 +10,7 @@ import type {
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
   TerminalStateResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type { AuthContext } from "./auth-context.js";
 
 export class TerminalHttpClient {

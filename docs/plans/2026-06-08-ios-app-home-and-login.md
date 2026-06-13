@@ -205,7 +205,7 @@ interface TerminalMobileOverviewSession extends TerminalSessionListItem {
 
 预计修改：
 
-- `app/package.json`：添加 `@browser-viewer/shared: workspace:*`，App 必须使用共享协议类型，避免 `AuthClientType`、`TerminalMobileOverviewResponse` 等字段漂移。
+- `app/package.json`：添加 `@runweave/shared: workspace:*`，App 必须使用共享协议类型，避免 `AuthClientType`、`TerminalMobileOverviewResponse` 等字段漂移。
 - `app/tsconfig.json`：如果引入 workspace 类型后构建需要 project reference 或路径调整，再做最小修改。
 - `app/src/App.tsx`：替换占位页为登录态与首页状态机。
 - `app/src/main.css`：移除 Hello World 样式，新增登录页与首页样式。
@@ -359,7 +359,7 @@ interface TerminalMobileOverviewSession extends TerminalSessionListItem {
 
 ## 风险与处理
 
-- `@runweave/app` 当前未依赖 `@browser-viewer/shared`：实现时必须添加 workspace 依赖并修通 TypeScript/Vite 解析，不能在 App 内复制协议类型。
+- `@runweave/app` 当前未依赖 `@runweave/shared`：实现时必须添加 workspace 依赖并修通 TypeScript/Vite 解析，不能在 App 内复制协议类型。
 - App 登录 token 存储与 Web cookie 模式不同：不要照搬 Web cookie 逻辑，必须通过 `X-Auth-Client: app` 走 body refresh token 分支；如果后端还只识别 `electron`，先扩展认证协议再实现 App 登录。
 - `lastActivityAt` 是新增字段，需要迁移历史 session：读取旧记录时用 `createdAt` 作为默认值，避免老数据缺字段；活动时间持久化允许秒级到十几秒误差，换取低写放大。
 - 最近输出不是本期 App item 字段；如果后续确认要展示，继续扩展 `TerminalMobileOverviewSession`，不要新增第二套 overview endpoint。

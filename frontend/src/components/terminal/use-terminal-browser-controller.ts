@@ -10,7 +10,7 @@ import {
 import {
   type TerminalBrowserDevicePresetId,
   type TerminalBrowserProxyState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { aiDiagnosticLog } from "../../features/diagnostic-logs/recorder";
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";

@@ -4,8 +4,8 @@ import {
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
   shellQuote,
-} from "@browser-viewer/common/terminal";
-import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@browser-viewer/shared";
+} from "@runweave/common/terminal";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { CanvasAddon } from "@xterm/addon-canvas";

@@ -4,7 +4,7 @@ import type {
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
   TerminalState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type { TerminalSessionManager } from "../terminal/manager";
 
 type TerminalProject = NonNullable<

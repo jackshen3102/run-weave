@@ -8,7 +8,7 @@ import type {
   TerminalPreviewFileResponse,
   TerminalPreviewFileSearchItem,
   TerminalProjectListItem,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type {
   TerminalMarkdownViewMode,
   TerminalSvgViewMode,

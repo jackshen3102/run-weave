@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import {
   TERMINAL_COMPACTED_SCROLLBACK_BYTES,
   TERMINAL_PERSISTED_SCROLLBACK_BYTES,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";

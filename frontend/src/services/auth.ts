@@ -4,7 +4,7 @@ import type {
   LoginResponse,
   RefreshSessionRequest,
   RefreshSessionResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { requestJson, requestVoid } from "./http";
 
 export async function login(

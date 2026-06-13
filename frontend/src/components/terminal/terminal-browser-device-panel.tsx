@@ -3,7 +3,7 @@ import {
   TERMINAL_BROWSER_DEVICE_PRESETS,
   type TerminalBrowserDevicePresetId,
   type TerminalBrowserDeviceState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import { Button } from "../ui/button";
 
 interface TerminalBrowserDeviceButtonProps {

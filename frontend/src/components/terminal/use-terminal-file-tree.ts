@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import type {
   TerminalPreviewDirectoryResponse,
   TerminalPreviewTreeEntry,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type { TreeItem, TreeItemIndex } from "react-complex-tree";
 import { listTerminalProjectPreviewDirectory } from "../../services/terminal";
 

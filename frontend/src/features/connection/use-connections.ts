@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PackagedBackendConnectionState } from "@browser-viewer/shared";
+import type { PackagedBackendConnectionState } from "@runweave/shared";
 import type { ConnectionConfig, ConnectionStore } from "./types";
 import {
   buildLocalDevelopmentConnection,

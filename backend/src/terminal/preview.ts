@@ -5,7 +5,7 @@ import type {
   TerminalPreviewBase,
   TerminalPreviewDeleteFileResponse,
   TerminalPreviewSaveFileResponse,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import {
   TerminalPreviewError,
   detectLanguage,

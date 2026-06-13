@@ -3,7 +3,7 @@ import { Router } from "express";
 import type {
   DiagnosticLogRecord,
   DiagnosticLogStopRequest,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import {
   DiagnosticLogRecorder,
   createAiDiagnosticLog,

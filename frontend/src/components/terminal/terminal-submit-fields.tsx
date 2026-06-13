@@ -1,4 +1,4 @@
-import type { TerminalProjectListItem, TerminalSessionListItem } from "@browser-viewer/shared";
+import type { TerminalProjectListItem, TerminalSessionListItem } from "@runweave/shared";
 import { SUBMIT_MODES, type SubmitMode } from "./terminal-submit-prompt";
 
 interface TerminalSubmitModeTabsProps {

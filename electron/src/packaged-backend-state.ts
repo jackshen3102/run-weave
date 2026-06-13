@@ -1,4 +1,4 @@
-import type { PackagedBackendConnectionState } from "@browser-viewer/shared";
+import type { PackagedBackendConnectionState } from "@runweave/shared";
 
 function normalizeBackendUrl(backendUrl: string): string {
   return backendUrl.trim().replace(/\/+$/, "");

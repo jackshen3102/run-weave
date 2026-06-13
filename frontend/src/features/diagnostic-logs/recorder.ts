@@ -2,7 +2,7 @@ import type {
   DiagnosticLogRecord,
   DiagnosticLogResult,
   DiagnosticLogStatus,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 interface CreateAiDiagnosticLogOptions {
   recorder: FrontendDiagnosticLogRecorder;

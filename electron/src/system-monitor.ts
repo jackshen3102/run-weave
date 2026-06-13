@@ -6,7 +6,7 @@ import type {
   SystemMonitorAppGroup,
   SystemMonitorMemoryPressure,
   SystemMonitorSnapshot,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 
 interface CpuTimesSnapshot {
   busy: number;

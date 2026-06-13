@@ -14,7 +14,7 @@ import { useCallback, useState, type FormEvent } from "react";
 import {
   type TerminalBrowserHeaderRule,
   type TerminalBrowserProxyState,
-} from "@browser-viewer/shared";
+} from "@runweave/shared";
 import type { TerminalBrowserTabState } from "../../features/terminal/preview-store";
 import { TerminalBrowserDeviceButton } from "./terminal-browser-device-panel";
 import { TerminalBrowserHeadersButton } from "./terminal-browser-headers-panel";

@@ -1,4 +1,4 @@
-import type { AppHomeOverviewSession } from "@browser-viewer/shared";
+import type { AppHomeOverviewSession } from "@runweave/shared";
 
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 

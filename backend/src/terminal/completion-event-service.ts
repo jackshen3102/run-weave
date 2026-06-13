@@ -1,4 +1,4 @@
-import type { TerminalEventEnvelope } from "@browser-viewer/shared";
+import type { TerminalEventEnvelope } from "@runweave/shared";
 import type { RecordTerminalCompletionEventInput } from "./completion-events";
 import type { TerminalEventService } from "./terminal-event-service";
 import type { TerminalSessionRecord } from "./manager";
