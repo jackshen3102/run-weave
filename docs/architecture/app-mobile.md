@@ -19,12 +19,47 @@ GET /api/app/home/overview
 App 终端详情页的核心能力是：
 
 - 打开指定 terminal session，持续查看实时输出。
-- 通过底部 composer 发送命令、问题、图片或换行输入。
+- 通过底部 composer 发送命令、问题、图片、语音转写结果或换行输入。
 - 根据后端 `TerminalState` 决定是否展示 Stop。
 - 通过底部 `Chat / Changes / Files` tabs 在移动端查看终端输出、项目变更和项目文件。
 - 在手机触摸场景下避免误弹软键盘，同时保留明确的输入入口。
 
 Stop 只是向终端/Codex CLI 发送控制输入，不直接把状态改成 idle。Stop 按钮是否消失，取决于后端状态接口后续返回的 `TerminalState`。
+
+## App 终端语音输入
+
+App 终端 composer 支持录音转文字：用户点击麦克风后在本机录制 WAV，再调用后端转写接口，成功后把转写文本追加到 composer，仍由用户确认后发送到 terminal。语音转写只是输入辅助，不会自动执行命令。
+
+稳定接口：
+
+```http
+POST /api/voice/transcribe
+Content-Type: application/json
+```
+
+请求体由 shared voice 协议约束，目前只接受 24 kHz WAV：
+
+```json
+{
+  "mimeType": "audio/wav",
+  "audioBase64": "<base64 wav>",
+  "sampleRateHz": 24000,
+  "durationMs": 1234
+}
+```
+
+返回：
+
+```json
+{ "text": "转写后的文本" }
+```
+
+当前能力边界：
+
+- 前端有 `starting / recording / transcribing` 状态，录音启动或权限弹窗期间会禁用麦克风按钮，避免重复创建录音流。
+- 转写失败只记录 support log 并回到可输入状态，不清空 composer 中已有文本。
+- 后端路由挂在正常登录态后面，但当前接口仍是全局 voice service，没有绑定 terminal session。需要审计、频控或按 session 授权时，应优先收敛到 terminal-scoped API。
+- 当前后端 provider 依赖本机 Codex app-server/ChatGPT 转写能力，属于实现细节和风险边界；生产化前应替换为显式配置的转写 provider 或平台本地转写能力。
 
 ## 与桌面 Web 的边界
 
@@ -33,7 +68,7 @@ App 不直接复用桌面 Terminal Workspace 的布局、Preview sidecar、Monac
 当前稳定边界：
 
 - App 首页使用 `/api/app/home/overview` 读取项目和终端摘要，并通过全局 `/ws/terminal-events` 接收 terminal state 变化。
-- App 终端详情使用 terminal websocket、input、interrupt、clipboard image API 和 `/api/terminal/session/:id/state` 兜底查询。
+- App 终端详情使用 terminal websocket、input、interrupt、clipboard image API、voice transcription API 和 `/api/terminal/session/:id/state` 兜底查询。
 - `Changes` 和 `Files` tabs 复用 project-scoped Preview API，提供移动端只读审阅入口；它们不把桌面 Preview sidecar、Monaco、拖拽排序或 Browser 工具搬到 App。
 - 行级编辑、文件写入、桌面级 Browser 工具和完整 IDE 交互不属于当前 App 稳定能力；落地前不要在 README 或入口文档中表述为已完成。
 
