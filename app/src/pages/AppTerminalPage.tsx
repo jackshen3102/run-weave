@@ -4,33 +4,21 @@ import type {
   TerminalState,
 } from "@browser-viewer/shared";
 import { fileToBase64, shellQuote } from "@browser-viewer/common/terminal";
-import {
-  TerminalRenderer,
-  type TerminalRendererHandle,
-  type TerminalRendererExtensionContext,
-} from "@browser-viewer/terminal-renderer";
-import {
-  IonAlert,
-  IonButton,
-  IonContent,
-  IonPage,
-  IonSpinner,
-  IonText,
-} from "@ionic/react";
+import { type TerminalRendererHandle } from "@browser-viewer/terminal-renderer";
+import { IonContent, IonPage } from "@ionic/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type AppTerminalDetailTab,
   TerminalDetailTabBar,
 } from "../components/TerminalDetailTabBar";
-import { AppMoreMenu } from "../components/AppMoreMenu";
-import {
-  type SelectedTerminalChange,
-  TerminalChangesTab,
-} from "../components/TerminalChangesTab";
+import { AppTerminalDeleteAlerts } from "../components/AppTerminalDeleteAlerts";
+import { AppTerminalHeader } from "../components/AppTerminalHeader";
+import { AppTerminalPanels } from "../components/AppTerminalPanels";
+import { type SelectedTerminalChange } from "../components/TerminalChangesTab";
 import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
-import { TerminalFilesTab } from "../components/TerminalFilesTab";
 import { recordSupportLog, useSupportLogs } from "../features/support-logs";
+import { basename, shortPath } from "../lib/app-terminal-path-labels";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
 import { ApiError } from "../services/http";
@@ -51,24 +39,6 @@ interface AppTerminalPageProps {
   onDeleteTerminal: () => Promise<void>;
 }
 
-function basename(value: string): string {
-  const normalized = value.replace(/\/+$/, "");
-  return normalized.split("/").filter(Boolean).pop() ?? normalized;
-}
-
-function shortPath(value: string): string {
-  if (!value) {
-    return "";
-  }
-  const parts = value.split("/").filter(Boolean);
-  if (parts.length <= 2) {
-    return value;
-  }
-  return `.../${parts.slice(-2).join("/")}`;
-}
-
-const APP_TERMINAL_TOUCH_SCROLL_MULTIPLIER = 3;
-const APP_TERMINAL_EDGE_SWIPE_ZONE = 24;
 const SHELL_IDLE_STATE: TerminalState = {
   state: "shell_idle",
   agent: null,
@@ -82,222 +52,6 @@ function resolveComposerInputMode(
     return "codex_slash_command";
   }
   return "line";
-}
-
-function installTerminalTouchBehavior({
-  terminal,
-  container,
-}: TerminalRendererExtensionContext): { dispose(): void } {
-  let lastTouchY: number | null = null;
-  let accumulatedDelta = 0;
-  let edgeSwipeActive = false;
-  let activePointerId: number | null = null;
-
-  const resolveLineHeight = () => {
-    const firstRow = container.querySelector<HTMLElement>(
-      ".xterm-rows > div",
-    );
-    const measuredLineHeight = firstRow?.getBoundingClientRect().height ?? 0;
-    if (measuredLineHeight > 0) {
-      return measuredLineHeight;
-    }
-    return container.clientHeight / Math.max(terminal.rows, 1);
-  };
-
-  const suppressTerminalFocus = (event: Event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    terminal.blur();
-  };
-
-  const suppressPointerFocus = (event: PointerEvent) => {
-    if (event.pointerType === "touch") {
-      return;
-    }
-    suppressTerminalFocus(event);
-  };
-
-  const resetScrollGesture = () => {
-    lastTouchY = null;
-    accumulatedDelta = 0;
-    edgeSwipeActive = false;
-    activePointerId = null;
-  };
-
-  const applyScrollDelta = (currentY: number, event: Event) => {
-    if (lastTouchY === null) {
-      lastTouchY = currentY;
-      return;
-    }
-
-    accumulatedDelta +=
-      (currentY - lastTouchY) * APP_TERMINAL_TOUCH_SCROLL_MULTIPLIER;
-    lastTouchY = currentY;
-
-    const lineHeight = resolveLineHeight();
-    if (lineHeight <= 0) {
-      return;
-    }
-
-    const lines = Math.trunc(accumulatedDelta / lineHeight);
-    if (lines === 0) {
-      return;
-    }
-
-    event.preventDefault();
-    terminal.scrollLines(-lines);
-    accumulatedDelta -= lines * lineHeight;
-  };
-
-  const handlePointerDown = (event: PointerEvent) => {
-    if (event.pointerType !== "touch") {
-      suppressPointerFocus(event);
-      return;
-    }
-
-    edgeSwipeActive = event.clientX <= APP_TERMINAL_EDGE_SWIPE_ZONE;
-    if (edgeSwipeActive) {
-      activePointerId = null;
-      lastTouchY = null;
-      accumulatedDelta = 0;
-      return;
-    }
-
-    event.stopPropagation();
-    activePointerId = event.pointerId;
-    lastTouchY = event.clientY;
-    accumulatedDelta = 0;
-    container.setPointerCapture?.(event.pointerId);
-  };
-
-  const handlePointerMove = (event: PointerEvent) => {
-    if (
-      event.pointerType !== "touch" ||
-      edgeSwipeActive ||
-      activePointerId !== event.pointerId
-    ) {
-      return;
-    }
-
-    event.stopPropagation();
-    applyScrollDelta(event.clientY, event);
-  };
-
-  const handlePointerEnd = (event: PointerEvent) => {
-    if (activePointerId === event.pointerId) {
-      container.releasePointerCapture?.(event.pointerId);
-    }
-    resetScrollGesture();
-  };
-
-  const handleTouchStart = (event: TouchEvent) => {
-    const startX = event.touches[0]?.clientX ?? null;
-    edgeSwipeActive =
-      event.touches.length === 1 &&
-      startX !== null &&
-      startX <= APP_TERMINAL_EDGE_SWIPE_ZONE;
-    if (edgeSwipeActive) {
-      lastTouchY = null;
-      accumulatedDelta = 0;
-      return;
-    }
-    event.stopPropagation();
-    if (event.touches.length !== 1) {
-      lastTouchY = null;
-      accumulatedDelta = 0;
-      return;
-    }
-    lastTouchY = event.touches[0]?.clientY ?? null;
-    accumulatedDelta = 0;
-  };
-
-  const handleTouchMove = (event: TouchEvent) => {
-    if (edgeSwipeActive) {
-      return;
-    }
-    event.stopPropagation();
-    const currentY = event.touches[0]?.clientY;
-    if (lastTouchY === null || currentY === undefined) {
-      return;
-    }
-
-    applyScrollDelta(currentY, event);
-  };
-
-  const handleTouchEnd = () => {
-    resetScrollGesture();
-  };
-
-  const usePointerTouch = typeof window.PointerEvent !== "undefined";
-  container.addEventListener("pointerdown", handlePointerDown, { capture: true });
-  if (usePointerTouch) {
-    container.addEventListener("pointermove", handlePointerMove, {
-      capture: true,
-    });
-    container.addEventListener("pointerup", handlePointerEnd, {
-      capture: true,
-    });
-    container.addEventListener("pointercancel", handlePointerEnd, {
-      capture: true,
-    });
-  }
-  container.addEventListener("mousedown", suppressTerminalFocus, {
-    capture: true,
-  });
-  container.addEventListener("click", suppressTerminalFocus, {
-    capture: true,
-  });
-  if (!usePointerTouch) {
-    container.addEventListener("touchstart", handleTouchStart, {
-      capture: true,
-      passive: true,
-    });
-    container.addEventListener("touchmove", handleTouchMove, {
-      capture: true,
-      passive: false,
-    });
-    container.addEventListener("touchend", handleTouchEnd, { capture: true });
-    container.addEventListener("touchcancel", handleTouchEnd, { capture: true });
-  }
-
-  return {
-    dispose() {
-      container.removeEventListener("pointerdown", handlePointerDown, {
-        capture: true,
-      });
-      if (usePointerTouch) {
-        container.removeEventListener("pointermove", handlePointerMove, {
-          capture: true,
-        });
-        container.removeEventListener("pointerup", handlePointerEnd, {
-          capture: true,
-        });
-        container.removeEventListener("pointercancel", handlePointerEnd, {
-          capture: true,
-        });
-      }
-      container.removeEventListener("mousedown", suppressTerminalFocus, {
-        capture: true,
-      });
-      container.removeEventListener("click", suppressTerminalFocus, {
-        capture: true,
-      });
-      if (!usePointerTouch) {
-        container.removeEventListener("touchstart", handleTouchStart, {
-          capture: true,
-        });
-        container.removeEventListener("touchmove", handleTouchMove, {
-          capture: true,
-        });
-        container.removeEventListener("touchend", handleTouchEnd, {
-          capture: true,
-        });
-        container.removeEventListener("touchcancel", handleTouchEnd, {
-          capture: true,
-        });
-      }
-    },
-  };
 }
 
 export function AppTerminalPage({
@@ -356,7 +110,8 @@ export function AppTerminalPage({
   const subtitle = metadata?.cwd
     ? shortPath(metadata.cwd)
     : (initialSession?.subtitle ?? "");
-  const activeProjectId = metadata?.projectId ?? initialSession?.projectId ?? null;
+  const activeProjectId =
+    metadata?.projectId ?? initialSession?.projectId ?? null;
   const lastActivityAt =
     metadata?.lastActivityAt ?? initialSession?.lastActivityAt;
   const statusLabel =
@@ -430,17 +185,28 @@ export function AppTerminalPage({
             return;
           }
           if (nextError instanceof ApiError && nextError.status === 404) {
-            recordSupportLog("terminal.state.poll.not_found", {
-              terminalSessionId,
-              previousState: terminalStateRef.current.state,
-            }, "warn");
+            recordSupportLog(
+              "terminal.state.poll.not_found",
+              {
+                terminalSessionId,
+                previousState: terminalStateRef.current.state,
+              },
+              "warn",
+            );
             setTerminalState({ state: "shell_idle", agent: null });
             return;
           }
-          recordSupportLog("terminal.state.poll.failed", {
-            terminalSessionId,
-            error: nextError instanceof Error ? nextError.message : String(nextError),
-          }, "warn");
+          recordSupportLog(
+            "terminal.state.poll.failed",
+            {
+              terminalSessionId,
+              error:
+                nextError instanceof Error
+                  ? nextError.message
+                  : String(nextError),
+            },
+            "warn",
+          );
         });
     };
 
@@ -458,13 +224,7 @@ export function AppTerminalPage({
         window.clearInterval(timer);
       }
     };
-  }, [
-    accessToken,
-    apiBase,
-    notFound,
-    onAuthExpired,
-    terminalSessionId,
-  ]);
+  }, [accessToken, apiBase, notFound, onAuthExpired, terminalSessionId]);
 
   const isCommandActive = terminalState.state === "agent_running";
 
@@ -491,28 +251,32 @@ export function AppTerminalPage({
       });
     } catch (nextError: unknown) {
       if (nextError instanceof ApiError && nextError.status === 401) {
-        recordSupportLog("terminal.delete.unauthorized", {
-          terminalSessionId,
-        }, "warn");
+        recordSupportLog(
+          "terminal.delete.unauthorized",
+          {
+            terminalSessionId,
+          },
+          "warn",
+        );
         onAuthExpired();
         return;
       }
-      recordSupportLog("terminal.delete.failed", {
-        terminalSessionId,
-        error: nextError instanceof Error ? nextError.message : String(nextError),
-      }, "warn");
+      recordSupportLog(
+        "terminal.delete.failed",
+        {
+          terminalSessionId,
+          error:
+            nextError instanceof Error ? nextError.message : String(nextError),
+        },
+        "warn",
+      );
       setIsDeletingTerminal(false);
       setDeleteError(
         nextError instanceof Error ? nextError.message : "删除终端失败",
       );
       setConfirmDeleteOpen(false);
     }
-  }, [
-    isDeletingTerminal,
-    onAuthExpired,
-    onDeleteTerminal,
-    terminalSessionId,
-  ]);
+  }, [isDeletingTerminal, onAuthExpired, onDeleteTerminal, terminalSessionId]);
 
   const moreMenuItems = useMemo(
     () => [
@@ -547,11 +311,7 @@ export function AppTerminalPage({
       stateAtClick: terminalStateRef.current.state,
       agentAtClick: terminalStateRef.current.agent,
     });
-    void interruptTerminalSession(
-      apiBase,
-      accessToken,
-      terminalSessionId,
-    )
+    void interruptTerminalSession(apiBase, accessToken, terminalSessionId)
       .then(() => {
         recordSupportLog("terminal.stop.completed", {
           terminalSessionId,
@@ -559,23 +319,34 @@ export function AppTerminalPage({
           agentAfterSuccess: terminalStateRef.current.agent,
         });
       })
-    .catch((nextError: unknown) => {
-      if (nextError instanceof ApiError && nextError.status === 401) {
-        recordSupportLog("terminal.stop.unauthorized", {
-          terminalSessionId,
-        }, "warn");
-        onAuthExpired();
-        return;
-      }
-      recordSupportLog("terminal.stop.failed", {
-        terminalSessionId,
-        stateAfterFailure: terminalStateRef.current.state,
-        error: nextError instanceof Error ? nextError.message : String(nextError),
-      }, "warn");
-      setImageError(
-        nextError instanceof Error ? nextError.message : "中断命令失败",
-      );
-    });
+      .catch((nextError: unknown) => {
+        if (nextError instanceof ApiError && nextError.status === 401) {
+          recordSupportLog(
+            "terminal.stop.unauthorized",
+            {
+              terminalSessionId,
+            },
+            "warn",
+          );
+          onAuthExpired();
+          return;
+        }
+        recordSupportLog(
+          "terminal.stop.failed",
+          {
+            terminalSessionId,
+            stateAfterFailure: terminalStateRef.current.state,
+            error:
+              nextError instanceof Error
+                ? nextError.message
+                : String(nextError),
+          },
+          "warn",
+        );
+        setImageError(
+          nextError instanceof Error ? nextError.message : "中断命令失败",
+        );
+      });
   }, [accessToken, apiBase, onAuthExpired, terminalSessionId]);
   const handleSendCommand = useCallback(
     async (data: string): Promise<void> => {
@@ -601,20 +372,31 @@ export function AppTerminalPage({
         });
       } catch (nextError: unknown) {
         if (nextError instanceof ApiError && nextError.status === 401) {
-          recordSupportLog("terminal.input.send.unauthorized", {
-            terminalSessionId,
-            length: data.length,
-            mode,
-          }, "warn");
+          recordSupportLog(
+            "terminal.input.send.unauthorized",
+            {
+              terminalSessionId,
+              length: data.length,
+              mode,
+            },
+            "warn",
+          );
           onAuthExpired();
           return;
         }
-        recordSupportLog("terminal.input.send.failed", {
-          terminalSessionId,
-          error: nextError instanceof Error ? nextError.message : String(nextError),
-          length: data.length,
-          mode,
-        }, "warn");
+        recordSupportLog(
+          "terminal.input.send.failed",
+          {
+            terminalSessionId,
+            error:
+              nextError instanceof Error
+                ? nextError.message
+                : String(nextError),
+            length: data.length,
+            mode,
+          },
+          "warn",
+        );
         setImageError(
           nextError instanceof Error ? nextError.message : "命令发送失败",
         );
@@ -650,16 +432,27 @@ export function AppTerminalPage({
         return shellQuote(payload.filePath);
       } catch (nextError: unknown) {
         if (nextError instanceof ApiError && nextError.status === 401) {
-          recordSupportLog("terminal.clipboard_image.upload.unauthorized", {
-            terminalSessionId,
-          }, "warn");
+          recordSupportLog(
+            "terminal.clipboard_image.upload.unauthorized",
+            {
+              terminalSessionId,
+            },
+            "warn",
+          );
           onAuthExpired();
           throw nextError;
         }
-        recordSupportLog("terminal.clipboard_image.upload.failed", {
-          terminalSessionId,
-          error: nextError instanceof Error ? nextError.message : String(nextError),
-        }, "warn");
+        recordSupportLog(
+          "terminal.clipboard_image.upload.failed",
+          {
+            terminalSessionId,
+            error:
+              nextError instanceof Error
+                ? nextError.message
+                : String(nextError),
+          },
+          "warn",
+        );
         setImageError(
           nextError instanceof Error ? nextError.message : "图片上传失败",
         );
@@ -704,154 +497,48 @@ export function AppTerminalPage({
         className="terminal-page bg-background text-foreground"
       >
         <main className="terminal-page-shell min-h-dvh bg-background">
-          <header className="terminal-page-header border-border bg-card">
-            <button
-              aria-label="Back"
-              className="terminal-page-header__button terminal-page-header__back"
-              type="button"
-              onClick={onBack}
-            >
-              <span aria-hidden="true" className="terminal-page-header__icon">
-                ‹
-              </span>
-            </button>
-            <div className="terminal-page-header__identity min-w-0">
-              <div className="terminal-page-header__title-row">
-                <h1 className="text-foreground">{title}</h1>
-                <div className="terminal-page-header__meta text-muted-foreground">
-                  <span
-                    className={`terminal-page-header__status is-${connectionStatus}`}
-                  >
-                    {statusLabel}
-                  </span>
-                  {lastActivityAt ? (
-                    <time dateTime={lastActivityAt}>
-                      {formatRelativeTime(lastActivityAt)}
-                    </time>
-                  ) : null}
-                </div>
-              </div>
-              <p className="text-muted-foreground">
-                {subtitle || terminalSessionId}
-              </p>
-            </div>
-            <button
-              aria-label="Refresh terminal"
-              className="terminal-page-header__button terminal-page-header__action"
-              type="button"
-              onClick={() => rendererRef.current?.refresh()}
-            >
-              <span aria-hidden="true" className="terminal-page-header__icon">
-                ↻
-              </span>
-            </button>
-            <AppMoreMenu
-              ariaLabel="Terminal more actions"
-              className="terminal-page-header__more"
-              items={moreMenuItems}
-            />
-          </header>
-          <IonAlert
-            buttons={[
-              {
-                role: "cancel",
-                text: "取消",
-              },
-              {
-                cssClass: "terminal-delete-alert__confirm",
-                handler: () => {
-                  void handleDeleteTerminal();
-                  return false;
-                },
-                role: "destructive",
-                text: isDeletingTerminal ? "删除中..." : "删除",
-              },
-            ]}
-            header="删除终端"
-            isOpen={confirmDeleteOpen}
-            message="删除后会关闭这个终端会话，并清除对应历史。"
-            onDidDismiss={() => {
+          <AppTerminalHeader
+            connectionStatus={connectionStatus}
+            formatRelativeTime={formatRelativeTime}
+            lastActivityAt={lastActivityAt}
+            moreMenuItems={moreMenuItems}
+            onBack={onBack}
+            onRefresh={() => rendererRef.current?.refresh()}
+            statusLabel={statusLabel}
+            subtitle={subtitle}
+            terminalSessionId={terminalSessionId}
+            title={title}
+          />
+          <AppTerminalDeleteAlerts
+            confirmDeleteOpen={confirmDeleteOpen}
+            deleteError={deleteError}
+            isDeletingTerminal={isDeletingTerminal}
+            onConfirmDelete={() => void handleDeleteTerminal()}
+            onDismissConfirm={() => {
               if (!isDeletingTerminal) {
                 setConfirmDeleteOpen(false);
               }
             }}
+            onDismissError={() => setDeleteError(null)}
           />
-          <IonAlert
-            buttons={["确定"]}
-            header="删除失败"
-            isOpen={deleteError !== null}
-            message={deleteError ?? ""}
-            onDidDismiss={() => setDeleteError(null)}
+          <AppTerminalPanels
+            accessToken={accessToken}
+            activeProjectId={activeProjectId}
+            activeTab={activeTab}
+            apiBase={apiBase}
+            connectionStatus={connectionStatus}
+            error={error}
+            hasMetadata={Boolean(metadata)}
+            notFound={notFound}
+            requestedChange={requestedChange}
+            rendererRef={rendererRef}
+            sendInput={sendInput}
+            sendResize={sendResize}
+            onAuthExpired={onAuthExpired}
+            onBack={onBack}
+            onChangesCount={setChangesCount}
+            onShowChanges={handleShowChanges}
           />
-          <section className="terminal-page-body bg-background">
-            {notFound ? (
-              <div className="terminal-page-state">
-                <IonText color="danger">{error}</IonText>
-                <IonButton onClick={onBack}>返回首页</IonButton>
-              </div>
-            ) : (
-              <>
-                <div
-                  aria-hidden={activeTab !== "chat"}
-                  className={`terminal-tab-panel ${
-                    activeTab === "chat" ? "is-active" : ""
-                  }`}
-                >
-                  {connectionStatus === "connecting" && !metadata ? (
-                    <div className="terminal-page-loading">
-                      <IonSpinner name="crescent" />
-                    </div>
-                  ) : null}
-                  {error ? (
-                    <p className="terminal-page-error text-sm">{error}</p>
-                  ) : null}
-                  <TerminalRenderer
-                    active={activeTab === "chat"}
-                    className="terminal-page-renderer"
-                    focusOnInteraction={false}
-                    fontSize={12}
-                    onInput={sendInput}
-                    onResize={sendResize}
-                    onTerminalReady={installTerminalTouchBehavior}
-                    ref={rendererRef}
-                    renderer="dom"
-                    scrollbackLines={5000}
-                  />
-                </div>
-                <div
-                  aria-hidden={activeTab !== "changes"}
-                  className={`terminal-tab-panel ${
-                    activeTab === "changes" ? "is-active" : ""
-                  }`}
-                >
-                  <TerminalChangesTab
-                    accessToken={accessToken}
-                    active={activeTab === "changes"}
-                    apiBase={apiBase}
-                    projectId={activeProjectId}
-                    requestedChange={requestedChange}
-                    onAuthExpired={onAuthExpired}
-                    onChangesCount={setChangesCount}
-                  />
-                </div>
-                <div
-                  aria-hidden={activeTab !== "files"}
-                  className={`terminal-tab-panel ${
-                    activeTab === "files" ? "is-active" : ""
-                  }`}
-                >
-                  <TerminalFilesTab
-                    accessToken={accessToken}
-                    active={activeTab === "files"}
-                    apiBase={apiBase}
-                    projectId={activeProjectId}
-                    onAuthExpired={onAuthExpired}
-                    onShowChanges={handleShowChanges}
-                  />
-                </div>
-              </>
-            )}
-          </section>
           {activeTab === "chat" ? (
             <div className="terminal-composer-slot">
               {imageError ? (

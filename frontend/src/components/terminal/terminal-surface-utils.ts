@@ -1,7 +1,7 @@
 export const BELL_CHARACTER = "\u0007";
 export const TERMINAL_RESIZE_DEBOUNCE_MS = 120;
 export const DEFERRED_OUTPUT_REPLAY_MAX_CHARS = 128 * 1024;
-export const IME_COMMIT_DUPLICATE_WINDOW_MS = 50;
+export const IME_COMMIT_DUPLICATE_WINDOW_MS = 250;
 export const IME_COMMIT_WINDOW_MS = 250;
 
 export interface PastedImageReference {
