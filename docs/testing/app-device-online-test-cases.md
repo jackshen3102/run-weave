@@ -16,7 +16,7 @@
 
 ## 相关文件
 
-- 计划：`docs/plans/2026-06-13-app-device-online.md`
+- 权威边界：`docs/architecture/app-mobile.md`
 - App session：`app/src/hooks/use-app-session.ts`
 - App 设备连接：`app/src/hooks/use-app-device-connection.ts`
 - App 失败分类：`app/src/services/api-failure.ts`
