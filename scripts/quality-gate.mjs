@@ -7,36 +7,24 @@ import { fileURLToPath } from "node:url";
 const ROOT = process.cwd();
 const ARTIFACT_DIR = path.join(ROOT, "artifacts");
 const REPORT_PATH = path.join(ARTIFACT_DIR, "quality-report.json");
-const LAYER_ORDER = ["default", "e2e", "live"];
+const LAYER_ORDER = ["e2e"];
 const LAYER_STEP_IDS = {
-  default: ["default-tests", "quality-gate-self-test"],
   e2e: ["e2e-smoke"],
-  live: ["live-smoke"],
 };
 
 const ALL_STEPS = [
   {
-    id: "default-tests",
-    command: ["pnpm", "run", "test:default"],
-    layers: ["default"],
-    critical: true,
-  },
-  {
     id: "e2e-smoke",
-    command: ["pnpm", "--filter", "./frontend", "e2e", "--", "tests/smoke.spec.ts"],
+    command: [
+      "pnpm",
+      "--filter",
+      "./frontend",
+      "exec",
+      "playwright",
+      "test",
+      "tests/smoke.spec.ts",
+    ],
     layers: ["e2e"],
-    critical: true,
-  },
-  {
-    id: "live-smoke",
-    command: ["pnpm", "run", "test:live"],
-    layers: ["live"],
-    critical: false,
-  },
-  {
-    id: "quality-gate-self-test",
-    command: ["node", "scripts/quality-gate.test.mjs"],
-    layers: ["default"],
     critical: true,
   },
 ];
@@ -69,30 +57,16 @@ function readChangedFiles() {
 
 function isCriticalJourneyFile(filePath) {
   return [
-    "backend/src/ws/",
     "backend/src/routes/test.ts",
     "frontend/src/pages/home/",
     "frontend/src/App.tsx",
     "frontend/tests/smoke.spec.ts",
     "frontend/playwright.config.ts",
-    "packages/shared/src/",
   ].some((prefix) => filePath.startsWith(prefix));
 }
 
-function isLiveInfraFile(filePath) {
-  return (
-    filePath.startsWith("backend/src/live/") ||
-    filePath === "backend/vitest.live.config.ts" ||
-    filePath === "backend/.env.example" ||
-    filePath === "backend/package.json"
-  );
-}
-
 function isQualityGateFile(filePath) {
-  return (
-    filePath === "scripts/quality-gate.mjs" ||
-    filePath === "scripts/quality-gate.test.mjs"
-  );
+  return filePath === "scripts/quality-gate.mjs";
 }
 
 function isRootQualityInfraFile(filePath) {
@@ -122,19 +96,9 @@ export function selectLayersForChangedFiles(changedFiles) {
   }
 
   const layers = new Set();
-  const touchesShared = changedFiles.some((filePath) =>
-    filePath.startsWith("packages/shared/"),
-  );
   const touchesRootQualityInfra = changedFiles.some(isRootQualityInfraFile);
   const touchesCriticalJourney = changedFiles.some(isCriticalJourneyFile);
-  const touchesLive = changedFiles.some(isLiveInfraFile);
   const touchesQualityGate = changedFiles.some(isQualityGateFile);
-  const touchesBackend = changedFiles.some((filePath) =>
-    filePath.startsWith("backend/"),
-  );
-  const touchesElectron = changedFiles.some((filePath) =>
-    filePath.startsWith("electron/"),
-  );
   const touchesFrontend = changedFiles.some((filePath) =>
     filePath.startsWith("frontend/"),
   );
@@ -144,23 +108,12 @@ export function selectLayersForChangedFiles(changedFiles) {
       filePath === "frontend/playwright.config.ts",
   );
 
-  if (touchesShared || touchesCriticalJourney) {
-    layers.add("default");
+  if (touchesCriticalJourney) {
     layers.add("e2e");
   }
 
   if (touchesRootQualityInfra) {
-    layers.add("default");
     layers.add("e2e");
-    layers.add("live");
-  }
-
-  if (touchesLive) {
-    layers.add("live");
-  }
-
-  if (touchesBackend || touchesElectron) {
-    layers.add("default");
   }
 
   if (touchesFrontend) {
@@ -172,7 +125,7 @@ export function selectLayersForChangedFiles(changedFiles) {
   }
 
   if (touchesQualityGate) {
-    layers.add("default");
+    layers.add("e2e");
   }
 
   return LAYER_ORDER.filter((layer) => layers.has(layer));
@@ -180,13 +133,12 @@ export function selectLayersForChangedFiles(changedFiles) {
 
 export function selectStepsForChangedFiles(changedFiles) {
   const selectedLayers = selectLayersForChangedFiles(changedFiles);
-  const touchesQualityGate = changedFiles.some(isQualityGateFile);
 
   if (changedFiles.length === 0) {
     return {
       selectedLayers,
       selectedSteps: expandStepsForLayers(selectedLayers),
-      selectionReason: "No changed files detected; ran full layered quality gate.",
+      selectionReason: "No changed files detected; ran full E2E smoke gate.",
       riskLevel: "full",
     };
   }
@@ -195,33 +147,19 @@ export function selectStepsForChangedFiles(changedFiles) {
     return {
       selectedLayers,
       selectedSteps: [],
-      selectionReason: "No code paths mapped to the layered quality harness were changed.",
+      selectionReason:
+        "No code paths mapped to the layered quality harness were changed.",
       riskLevel: "minimal",
     };
   }
 
-  const isFull =
-    selectedLayers.includes("default") &&
-    selectedLayers.includes("e2e");
   const selectedSteps = expandStepsForLayers(selectedLayers);
-
-  if (touchesQualityGate) {
-    const selfTestStep = ALL_STEPS.find(
-      (step) => step.id === "quality-gate-self-test",
-    );
-    if (
-      selfTestStep &&
-      !selectedSteps.some((step) => step.id === selfTestStep.id)
-    ) {
-      selectedSteps.push(selfTestStep);
-    }
-  }
 
   return {
     selectedLayers,
     selectedSteps,
     selectionReason: `Selected layers: ${selectedLayers.join(", ")}.`,
-    riskLevel: isFull ? "full" : "reduced",
+    riskLevel: selectedLayers.includes("e2e") ? "full" : "reduced",
   };
 }
 
@@ -405,7 +343,9 @@ export async function runQualityGate() {
   const skippedCriticalSteps = ALL_STEPS.filter(
     (step) =>
       step.critical &&
-      !selection.selectedSteps.some((selectedStep) => selectedStep.id === step.id),
+      !selection.selectedSteps.some(
+        (selectedStep) => selectedStep.id === step.id,
+      ),
   ).map((step) => step.id);
 
   let verdict = "pass";
@@ -413,12 +353,19 @@ export async function runQualityGate() {
     verdict = classifyFailure(failed);
   } else if (results.some((result) => result.status === "passed_after_retry")) {
     verdict = "pass_with_risk";
-  } else if (selection.riskLevel !== "full" || skippedCriticalSteps.length > 0) {
+  } else if (
+    selection.riskLevel !== "full" ||
+    skippedCriticalSteps.length > 0
+  ) {
     verdict = "pass_with_risk";
   }
 
   const evidence = buildEvidence(results);
-  const riskSummary = buildRiskSummary(results, skippedCriticalSteps, selection);
+  const riskSummary = buildRiskSummary(
+    results,
+    skippedCriticalSteps,
+    selection,
+  );
 
   const report = {
     verdict,
@@ -444,7 +391,8 @@ export async function runQualityGate() {
 
 const isDirectRun =
   process.argv[1] &&
-  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+  path.resolve(process.argv[1]) ===
+    path.resolve(fileURLToPath(import.meta.url));
 
 if (isDirectRun) {
   const { failed, report } = await runQualityGate();

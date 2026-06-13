@@ -84,16 +84,11 @@ launcher 由 `electron/src/hooks/hook-installer.ts` 的 `buildLauncherScript()` 
 - launcher 生成 + 脚本拷贝 + codex 清理：`electron/src/hooks/hook-installer.ts`（`buildLauncherScript` / `installNotifyAssets` / `pruneSupersededCodexHooks`）
 - 飞书脚本源文件：`electron/resources/hooks/feishu_stop_notify.sh`
 - 安装入口注入 resourcesDir：`electron/src/main.ts`（`installHooksIfNeeded({ resourcesDir })`）
-- 测试：`electron/src/hooks/hook-installer.test.ts`
 - 前端绿点收到完成事件时的提示音：`frontend/src/components/terminal/terminal-workspace.tsx`、`frontend/src/features/terminal/bell.ts`
 
 ## 验证
 
-单元层：
-
-```bash
-pnpm --filter ./electron test
-```
+静态检查：`pnpm --filter ./electron typecheck && pnpm --filter ./electron lint`
 
 端到端（macOS，需 `~/.browser-viewer/feishu_notify.env` 配好 webhook）：
 

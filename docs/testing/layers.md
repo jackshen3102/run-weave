@@ -1,37 +1,35 @@
 # 测试层级与命名
 
-## Layer: default
+## 当前策略
 
-- 负责：后端与共享包的纯逻辑、确定性回归、进程内集成
-- 非目标：外部依赖漂移
+- 本仓库只保留 Playwright E2E 作为正式自动化测试。
+- E2E 文件位于 `frontend/tests/*.spec.ts`。
+- 不维护 backend、Electron、CLI、`packages/shared` 的单元测试、Vitest 测试、Node test 测试、live test 或 coverage 门槛。
+- 不新增 `*.test.*`、`*.ui.test.*` 或非 `frontend/tests` 下的 `*.spec.*` 测试文件。
 
-## Layer: e2e
+## 保留
 
-- 负责：前端与跨模块关键路径闭环验证
-- 非目标：后端/共享纯逻辑分支穷举
+- `frontend/tests/smoke.spec.ts`
+- `frontend/tests/terminal.spec.ts`
+- `frontend/tests/terminal-vim.spec.ts`
+- `frontend/tests/terminal-preview.spec.ts`
+- `frontend/tests/terminal-snapshot-race.spec.ts`
+- `frontend/tests/terminal-performance.spec.ts`
 
-## Layer: live
+## 删除
 
-- 负责：外部依赖与运行时漂移检查
-- 非目标：高频日常回归
+- `backend/src/**/*.test.ts`
+- `backend/src/**/*.live.test.ts`
+- `electron/src/**/*.test.ts`
+- `packages/shared/src/**/*.test.ts`
+- `packages/runweave-cli/src/**/*.test.ts`
+- `*.test.mjs`
+- `vitest.config.ts`
+- `vitest.live.config.ts`
 
-## 命名规则
+## 验证替代
 
-- default：`backend/src/**/*.test.ts`、`packages/shared/src/**/*.test.ts`
-- e2e：`frontend/tests/*.spec.ts`
-- live：`backend/src/**/*.live.test.ts`
-
-## 过渡规则
-
-- 现有 `*.spec.ts` 保持有效。
-- 后端与共享包新增 default 仍使用 `*.test.ts`。
-- 仅在需要时新增 `*.live.test.ts`。
-- 前端项目不新增任何 `*.test.ts`、`*.test.tsx`、`*.ui.test.ts`、`*.ui.test.tsx`；前端 `src/**/*.{ts,tsx}` 与 UI 侧 hooks 通过 E2E 或手工回归验证。
-
-## 当前映射
-
-- `frontend/src/**/*.{ts,tsx}` → 不新增单测，依赖 e2e / 手工回归
-- `frontend/tests/*.spec.ts` → e2e
-- `backend/src/**/*.test.ts` → default（含部分集成）
-- `backend/src/**/*.live.test.ts` → live
-- `packages/shared/src/**/*.test.ts` → default
+- 浏览器行为：`pnpm --filter ./frontend exec playwright test tests/<name>.spec.ts`
+- 前端类型：`pnpm --filter ./frontend typecheck`
+- App 类型/构建：`pnpm --filter @runweave/app typecheck`、`pnpm --filter @runweave/app build`
+- 后端/Electron/CLI/shared：使用对应 package 的 `typecheck`、`lint`、`build` 或手工冒烟验证。

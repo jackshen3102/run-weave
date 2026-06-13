@@ -148,21 +148,16 @@ export BROWSER_PROFILE_DIR="$(mktemp -d)"
 
 这些用例不应改变 Codex/Traex/Completion gate 对 `activeCommand` 的机器匹配语义。若新增完整命令行字段，建议单独验证 `activeCommandLine`，不要用它替代 `activeCommand`。
 
-## 自动化测试落点
+## 验证落点
 
-| 层级              | 建议文件                                              | 覆盖重点                                                                                                                            |
-| ----------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| backend default   | `backend/src/terminal/shell-integration.test.ts`      | OSC command marker 解析、zsh/bash hook 输出、`null` 清空、路径 basename 规则                                                        |
-| backend default   | `backend/src/terminal/tmux-service.test.ts`           | `@runweave_command` 优先于 `pane_current_command`，空值 fallback，interactive shell 过滤                                            |
-| backend websocket | `backend/src/ws/terminal-server.test.ts`              | runtime output 中 metadata 变化会更新 session、发送 WS metadata、写状态服务；未变化不重复写                                         |
-| backend manager   | `backend/src/terminal/manager.test.ts`                | metadata 持久化、lastActivityAt 更新、session exit 后 activeCommand 目标契约                                                        |
-| backend routes    | `backend/src/routes/terminal.test.ts`                 | detail/list/history/App Home overview payload 中 activeCommand 和 TerminalState 不分裂                                              |
-| backend state     | `backend/src/terminal/terminal-state-service.test.ts` | `activeCommand=codex`、`activeCommand=null`、非 Codex command 对 `terminal_state_changed` 的影响                                    |
-| Web E2E           | `frontend/tests/terminal.spec.ts`                     | UI tab、workspace list、history drawer 与 API activeCommand 一致；输入命令、刷新、结束、Ctrl-C；必须通过 `$playwright-cli` 验收路径 |
-| App 验收          | App dev/simulator + `$playwright-cli` 或手工回归      | App Home / terminal detail 不被 stale activeCommand 或 stale terminal_state_changed 误导                                            |
-| live/system       | `backend/src/terminal/active-command.live.test.ts`    | 真实 pty/tmux/zsh/bash 下执行命令矩阵，验证 API/WS/UI 之外的运行时漂移                                                              |
+| 层级             | 入口                                                                | 覆盖重点                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Web E2E          | `frontend/tests/terminal.spec.ts`                                   | UI tab、workspace list、history drawer 与 API activeCommand 一致；输入命令、刷新、结束、Ctrl-C；必须通过 `$playwright-cli` 验收路径 |
+| App 验收         | App dev/simulator + `$playwright-cli` 或手工回归                    | App Home / terminal detail 不被 stale activeCommand 或 stale terminal_state_changed 误导                                            |
+| backend 静态检查 | `pnpm --filter ./backend typecheck && pnpm --filter ./backend lint` | activeCommand / terminal state 相关代码无 TS 或 lint 错误                                                                           |
+| shared 静态检查  | `pnpm --filter ./packages/shared typecheck`                         | 协议类型变更可被跨端消费                                                                                                            |
 
-前端 `src/` 下不新增 Vitest 单测；UI 行为只通过 E2E 或手工回归覆盖。
+本仓库不新增或维护 backend/shared/Electron/CLI 单测；UI 行为通过 E2E 或手工回归覆盖。
 
 ## 建议命令矩阵
 

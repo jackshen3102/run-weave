@@ -1,32 +1,25 @@
 # 测试命令选择
 
-| 变更场景                                | 推荐命令                                                                                                                                           |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 前端文案/样式/TSX 组件                  | `pnpm run test:e2e -- tests/smoke.spec.ts`                                                                                                         |
-| 前端逻辑 / 状态 / URL                   | `pnpm run test:e2e -- tests/smoke.spec.ts`                                                                                                         |
-| 终端链路 / Vim / 预览                   | `pnpm run test:e2e -- tests/terminal.spec.ts tests/terminal-vim.spec.ts tests/terminal-preview.spec.ts`                                            |
-| 终端 Git Submit UI                      | `pnpm --filter ./frontend typecheck`，再手工确认弹层向当前 terminal 发送 AI submit prompt                                                          |
-| 终端 session 生命周期 / ID 生成         | `pnpm --filter ./backend test -- src/terminal/manager.test.ts`                                                                                     |
-| 终端 project / session 排序持久化       | `pnpm --filter ./backend test -- src/terminal/manager.test.ts`，必要时补 `pnpm run test:e2e -- tests/terminal.spec.ts` 做拖拽交互回归              |
-| 后端路由/服务逻辑                       | `pnpm --filter ./backend test -- src/...`                                                                                                          |
-| CLI / 外部控制面                        | `pnpm --filter ./packages/runweave-cli test && pnpm --filter ./packages/runweave-cli typecheck`                                                    |
-| 共享协议类型变更                        | `pnpm --filter ./packages/shared test && pnpm --filter ./backend test && pnpm run test:e2e`                                                        |
-| Electron Terminal Browser CDP Proxy     | `pnpm --filter ./electron test -- terminal-browser-cdp-proxy.test.ts`，再按 `docs/testing/terminal-browser-cdp-mcp-test-cases.md` 做桌面端手工验收 |
-| Electron Terminal Browser tab 恢复      | `pnpm --filter ./electron test -- terminal-browser-tabs-state.test.ts`                                                                             |
-| Terminal Browser Header 规则类型 / 校验 | `pnpm --filter ./packages/shared test -- terminal-browser-headers.test.ts`                                                                         |
-| 关键用户路径                            | `pnpm run test:e2e -- tests/smoke.spec.ts`                                                                                                         |
-| 外部依赖风险                            | `pnpm run test:live`                                                                                                                               |
-| 预合并全量信心                          | `pnpm run test:default && pnpm run test:e2e`                                                                                                       |
-| Electron 客户端开发                     | `pnpm dev:electron`                                                                                                                                |
-| 纯文档整理 / 文档保鲜                   | `git diff --check`，再用 `git diff --name-only` 确认只改允许的文档范围；删除文档或资产后补 `rg` 检查残留引用                                       |
+| 变更场景               | 推荐命令                                                                                                                         |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 前端文案/样式/TSX 组件 | `pnpm --filter ./frontend exec playwright test tests/smoke.spec.ts`                                                              |
+| 前端逻辑 / 状态 / URL  | `pnpm --filter ./frontend exec playwright test tests/smoke.spec.ts`                                                              |
+| 终端链路 / Vim / 预览  | `pnpm --filter ./frontend exec playwright test tests/terminal.spec.ts tests/terminal-vim.spec.ts tests/terminal-preview.spec.ts` |
+| 终端 Git Submit UI     | `pnpm --filter ./frontend typecheck`，再手工确认弹层向当前 terminal 发送 AI submit prompt                                        |
+| 后端路由/服务逻辑      | `pnpm --filter ./backend typecheck && pnpm --filter ./backend lint`，必要时执行真实 API 或端到端冒烟                             |
+| CLI / 外部控制面       | `pnpm --filter ./packages/runweave-cli typecheck && pnpm --filter ./packages/runweave-cli lint`，再手工跑 CLI                    |
+| 共享协议类型变更       | `pnpm --filter ./packages/shared typecheck && pnpm --filter ./frontend exec playwright test tests/smoke.spec.ts`                 |
+| Electron 客户端开发    | `pnpm --filter ./electron typecheck && pnpm dev:electron`                                                                        |
+| 关键用户路径           | `pnpm --filter ./frontend exec playwright test tests/smoke.spec.ts`                                                              |
+| 预合并自动化信心       | `pnpm run test:e2e`                                                                                                              |
+| 纯文档整理 / 文档保鲜  | `git diff --check`，再用 `git diff --name-only` 确认只改允许的文档范围                                                           |
 
 ## 反模式
 
-- 不要为前端 `src/` 代码新增 Vitest / TDD 用例。
-- 后端或共享包的纯逻辑变更不要只跑 E2E。
-- 不要把 live 当作日常回归默认。
-- 协议变更不要跳过 shared / backend / frontend 联动测试。
-- 不要为前端 `*.tsx` 组件、页面、hooks 或 `*.ts` 状态逻辑新增单测。
+- 新增或恢复单元测试、Vitest、Node test、live test、coverage 门槛。
+- 为非浏览器逻辑补 `*.test.*` 或非 `frontend/tests` 下的 `*.spec.*` 文件。
+- 后端、Electron、CLI、shared 变更只跑 E2E；这类变更至少需要对应 package 的 typecheck/lint/build 或手工冒烟。
+- 协议变更只改一端，不做 shared / backend / frontend 联动验证。
 
 ## Terminal Git Submit 边界
 
