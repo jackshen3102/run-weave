@@ -13,11 +13,14 @@ export interface AuthContext {
 
 export async function resolveAuthContext(params: {
   profileName?: string;
+  backendPort?: string;
   store?: ProfileStore;
   env?: NodeJS.ProcessEnv;
 }): Promise<AuthContext> {
   const store = params.store ?? new ProfileStore();
-  const resolved = await store.resolve(params.profileName, params.env);
+  const resolved = await store.resolve(params.profileName, params.env, {
+    backendPort: params.backendPort,
+  });
   const authClient = createAuthClient();
   let current = resolved.profile;
 

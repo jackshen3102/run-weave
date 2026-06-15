@@ -35,7 +35,8 @@
 
 ```bash
 export RUNWEAVE_CONFIG_FILE="$(mktemp -d)/runweave-config.json"
-export RUNWEAVE_BASE_URL="http://127.0.0.1:5001"
+export RUNWEAVE_BACKEND_PORT="${RUNWEAVE_BACKEND_PORT:-5001}"
+export RUNWEAVE_BASE_URL="${RUNWEAVE_BASE_URL:-http://127.0.0.1:${RUNWEAVE_BACKEND_PORT}}"
 export RW_BIN="node packages/runweave-cli/dist/index.js"
 ```
 
@@ -76,16 +77,18 @@ $RW_BIN auth login \
 
 ## Health 测试
 
-| ID            | 场景                          | 步骤                                                                               | 预期                                                                                   |
-| ------------- | ----------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| RW-HEALTH-001 | 默认 baseUrl 未登录           | 清空 `RUNWEAVE_CONFIG_FILE`；不设置 token；执行 `$RW_BIN health --json`            | 请求默认 `http://127.0.0.1:5001/health`；不报 profile 未登录错误                       |
-| RW-HEALTH-002 | backend 可达但无 token        | backend 在线；无 access token；执行 `$RW_BIN health --json`                        | exit code `0`；`reachable=true`；`authenticated=false`                                 |
-| RW-HEALTH-003 | backend 可达且 token 有效     | 登录后执行 `$RW_BIN health --json`                                                 | exit code `0`；`reachable=true`；`authenticated=true`；含 `health.status`              |
-| RW-HEALTH-004 | token 过期或 verify 401       | 使用无效 `RUNWEAVE_ACCESS_TOKEN`；执行 `$RW_BIN health --json`                     | exit code `0`；`reachable=true`；`authenticated=false`                                 |
-| RW-HEALTH-005 | `/health` 被 tunnel auth 阻断 | 使用需要 tunnel auth 但未带 tunnel auth 的 baseUrl；执行 `$RW_BIN health --json`   | exit code `3`；`reachable=false`；`blockedByTunnelAuth=true`；message 指向 tunnel auth |
-| RW-HEALTH-006 | backend 网络不可达            | 停止 backend 或设置不存在端口；执行 `$RW_BIN health --json`                        | exit code `3`；`reachable=false`；stderr 有可读网络错误                                |
-| RW-HEALTH-007 | profile baseUrl 未登录        | 配置 profile 只有 `baseUrl` 无 token；执行 `$RW_BIN health --profile local --json` | 仍请求该 profile 的 baseUrl；不抛 `Runweave profile "local" is not logged in`          |
-| RW-HEALTH-008 | env baseUrl 优先级            | profile 指向 A，`RUNWEAVE_BASE_URL` 指向 B；执行 `$RW_BIN health --json`           | 输出 `baseUrl` 为 B                                                                    |
+| ID            | 场景                          | 步骤                                                                                         | 预期                                                                                   |
+| ------------- | ----------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| RW-HEALTH-001 | 默认 baseUrl 未登录           | 清空 `RUNWEAVE_CONFIG_FILE`；不设置 token；执行 `$RW_BIN health --json`                      | 请求默认 `http://127.0.0.1:5001/health`；不报 profile 未登录错误                       |
+| RW-HEALTH-002 | backend 可达但无 token        | backend 在线；无 access token；执行 `$RW_BIN health --json`                                  | exit code `0`；`reachable=true`；`authenticated=false`                                 |
+| RW-HEALTH-003 | backend 可达且 token 有效     | 登录后执行 `$RW_BIN health --json`                                                           | exit code `0`；`reachable=true`；`authenticated=true`；含 `health.status`              |
+| RW-HEALTH-004 | token 过期或 verify 401       | 使用无效 `RUNWEAVE_ACCESS_TOKEN`；执行 `$RW_BIN health --json`                               | exit code `0`；`reachable=true`；`authenticated=false`                                 |
+| RW-HEALTH-005 | `/health` 被 tunnel auth 阻断 | 使用需要 tunnel auth 但未带 tunnel auth 的 baseUrl；执行 `$RW_BIN health --json`             | exit code `3`；`reachable=false`；`blockedByTunnelAuth=true`；message 指向 tunnel auth |
+| RW-HEALTH-006 | backend 网络不可达            | 停止 backend 或设置不存在端口；执行 `$RW_BIN health --json`                                  | exit code `3`；`reachable=false`；stderr 有可读网络错误                                |
+| RW-HEALTH-007 | profile baseUrl 未登录        | 配置 profile 只有 `baseUrl` 无 token；执行 `$RW_BIN health --profile local --json`           | 仍请求该 profile 的 baseUrl；不抛 `Runweave profile "local" is not logged in`          |
+| RW-HEALTH-008 | env baseUrl 优先级            | profile 指向 A，`RUNWEAVE_BASE_URL` 指向 B；执行 `$RW_BIN health --json`                     | 输出 `baseUrl` 为 B                                                                    |
+| RW-HEALTH-009 | env backend port              | 不设置 `RUNWEAVE_BASE_URL`，设置 `RUNWEAVE_BACKEND_PORT=5111` 后执行 `$RW_BIN health --json` | 请求默认本地 host 的 `http://127.0.0.1:5111/health`                                    |
+| RW-HEALTH-010 | backend-port 参数优先级       | 设置 `RUNWEAVE_BASE_URL` 指向 A，同时执行 `$RW_BIN health --backend-port 5111 --json`        | 请求默认本地 host 的 `http://127.0.0.1:5111/health`                                    |
 
 ## App Overview 与发现能力测试
 
@@ -112,20 +115,44 @@ $RW_BIN auth login \
 
 ## Terminal 创建测试
 
-| ID            | 场景                          | 步骤                                                                                                                          | 预期                                                         |
-| ------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| RW-CREATE-001 | 默认 shell 创建               | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --json`                                                      | 返回 `terminalSessionId` 和 `terminalUrl`                    |
-| RW-CREATE-002 | 指定 runtime pty              | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --runtime pty --json`                                        | 创建成功；后续 `show` 可读                                   |
-| RW-CREATE-003 | 指定 command                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --json`                                       | 创建成功；后端 session `command` 为 `bash`                   |
-| RW-CREATE-004 | 多个 `--arg`                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg -lc --arg "echo rw-ok; sleep 5" --json` | 多个 arg 不被覆盖；session 创建成功                          |
-| RW-CREATE-005 | value 以 `--` 开头的 arg      | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command codex --arg "--model" --arg "gpt-5" --json`        | `--model` 不被通用 parser 当成 option；请求能发出            |
-| RW-CREATE-006 | `--arg=value` 形式            | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg=-l --json`                              | arg 被序列化为 `["-l"]`                                      |
-| RW-CREATE-007 | `--arg` 缺值                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg`                                        | exit code `2`；stderr 包含 `Missing value for --arg`         |
-| RW-CREATE-008 | 继承已有终端上下文            | `$RW_BIN terminal create --inherit-from "$TERMINAL_ID" --json`                                                                | 创建成功；未提供 project/cwd 时继承父 session 的 project/cwd |
-| RW-CREATE-009 | inherit + 显式 cwd 优先       | `$RW_BIN terminal create --inherit-from "$TERMINAL_ID" --cwd "$PWD" --json`                                                   | 创建成功；使用显式 cwd，project 默认仍来自父 session         |
-| RW-CREATE-010 | inherit 父 session 不存在     | `$RW_BIN terminal create --inherit-from missing-terminal --json`                                                              | 非 0 exit code；不静默落到默认 project 或 home               |
-| RW-CREATE-011 | 缺少 project/cwd 且无 inherit | `$RW_BIN terminal create --json`                                                                                              | exit code `2`；stderr 提示缺少 `--project-id` 或 `--cwd`     |
-| RW-CREATE-012 | 不存在 project id             | `$RW_BIN terminal create --project-id missing --cwd "$PWD" --json`                                                            | 非 0 exit code；stderr 保留后端错误                          |
+| ID            | 场景                          | 步骤                                                                                                                                  | 预期                                                         |
+| ------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| RW-CREATE-001 | 默认 shell 创建               | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --json`                                                              | 返回 `terminalSessionId` 和 `terminalUrl`                    |
+| RW-CREATE-002 | 指定 runtime pty              | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --runtime pty --json`                                                | 创建成功；后续 `show` 可读                                   |
+| RW-CREATE-003 | 指定 command                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --json`                                               | 创建成功；后端 session `command` 为 `bash`                   |
+| RW-CREATE-004 | 多个 `--arg`                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg -lc --arg "echo RW_COMMAND_OK; sleep 5" --json` | 多个 arg 不被覆盖；创建后轮询 history 能读到 `RW_COMMAND_OK` |
+| RW-CREATE-005 | value 以 `--` 开头的 arg      | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command codex --arg "--model" --arg "gpt-5" --json`                | `--model` 不被通用 parser 当成 option；请求能发出            |
+| RW-CREATE-006 | `--arg=value` 形式            | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg=-l --json`                                      | arg 被序列化为 `["-l"]`                                      |
+| RW-CREATE-007 | `--arg` 缺值                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg`                                                | exit code `2`；stderr 包含 `Missing value for --arg`         |
+| RW-CREATE-008 | 继承已有终端上下文            | `$RW_BIN terminal create --inherit-from "$TERMINAL_ID" --json`                                                                        | 创建成功；未提供 project/cwd 时继承父 session 的 project/cwd |
+| RW-CREATE-009 | inherit + 显式 cwd 优先       | `$RW_BIN terminal create --inherit-from "$TERMINAL_ID" --cwd "$PWD" --json`                                                           | 创建成功；使用显式 cwd，project 默认仍来自父 session         |
+| RW-CREATE-010 | inherit 父 session 不存在     | `$RW_BIN terminal create --inherit-from missing-terminal --json`                                                                      | 非 0 exit code；不静默落到默认 project 或 home               |
+| RW-CREATE-011 | 缺少 project/cwd 且无 inherit | `$RW_BIN terminal create --json`                                                                                                      | exit code `2`；stderr 提示缺少 `--project-id` 或 `--cwd`     |
+| RW-CREATE-012 | 不存在 project id             | `$RW_BIN terminal create --project-id missing --cwd "$PWD" --json`                                                                    | 非 0 exit code；stderr 保留后端错误                          |
+
+`terminal create` 返回只代表 backend 已创建 session，并不保证 command 输出已经进入
+scrollback。验证 command session 输出时应轮询 `history --json` 的 `tail` 字段，例如：
+
+```bash
+COMMAND_TERMINAL_ID="$(
+  $RW_BIN terminal create \
+    --project-id "$PROJECT_ID" \
+    --cwd "$PWD" \
+    --command bash --arg -lc --arg "echo RW_COMMAND_OK; sleep 5" \
+    --json | jq -r '.terminalSessionId'
+)"
+
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  if $RW_BIN terminal history "$COMMAND_TERMINAL_ID" --tail 80 --json \
+    | jq -e '(.tail | contains("RW_COMMAND_OK"))' >/dev/null; then
+    break
+  fi
+  sleep 0.5
+done
+
+$RW_BIN terminal show "$COMMAND_TERMINAL_ID" --json \
+  | jq -e '.command == "bash" and .args == ["-lc", "echo RW_COMMAND_OK; sleep 5"]'
+```
 
 ## Terminal 输入投递测试
 
@@ -226,7 +253,8 @@ $RW_BIN terminal snapshot "$TERMINAL_ID" --tail 20 --plain
 set -euo pipefail
 
 export RUNWEAVE_CONFIG_FILE="${RUNWEAVE_CONFIG_FILE:-$(mktemp -d)/runweave-config.json}"
-export RUNWEAVE_BASE_URL="${RUNWEAVE_BASE_URL:-http://127.0.0.1:5001}"
+export RUNWEAVE_BACKEND_PORT="${RUNWEAVE_BACKEND_PORT:-5001}"
+export RUNWEAVE_BASE_URL="${RUNWEAVE_BASE_URL:-http://127.0.0.1:${RUNWEAVE_BACKEND_PORT}}"
 export RW_BIN="${RW_BIN:-node packages/runweave-cli/dist/index.js}"
 
 $RW_BIN health --json | jq -e '.reachable == true'

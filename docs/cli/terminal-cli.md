@@ -23,9 +23,16 @@ rw auth login --base-url http://127.0.0.1:5001 --username admin
 登录信息保存在 `~/.runweave/config.json`，文件权限为 `0600`。也可以用环境变量覆盖：
 
 ```bash
+RUNWEAVE_BACKEND_PORT=5001
 RUNWEAVE_BASE_URL=http://127.0.0.1:5001
 RUNWEAVE_ACCESS_TOKEN=<access-token>
 ```
+
+本地后端端口默认是 `5001`。仅需要切换端口时使用
+`RUNWEAVE_BACKEND_PORT=5111`，单次调用可以使用 `--backend-port 5111`；
+需要自定义 scheme、host 或路径时使用 `RUNWEAVE_BASE_URL`。优先级是：
+命令行 `--base-url`（仅 `auth login`）> 命令行 `--backend-port` >
+`RUNWEAVE_BASE_URL` > `RUNWEAVE_BACKEND_PORT` > profile baseUrl > 默认端口。
 
 ## Agent 投递闭环
 

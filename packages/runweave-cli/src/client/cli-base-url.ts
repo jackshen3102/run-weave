@@ -1,6 +1,6 @@
 import {
   ProfileStore,
-  normalizeBaseUrl,
+  resolveRunweaveBaseUrl,
   resolveConfigPath,
   type RunweaveProfile,
 } from "../config/profile-store.js";
@@ -17,6 +17,7 @@ export interface CliBaseUrlContext {
 
 export async function resolveCliBaseUrl(params: {
   profileName?: string;
+  backendPort?: string;
   env?: NodeJS.ProcessEnv;
   store?: ProfileStore;
 }): Promise<CliBaseUrlContext> {
@@ -26,7 +27,11 @@ export async function resolveCliBaseUrl(params: {
   const profileName =
     params.profileName ?? config?.activeProfile ?? DEFAULT_PROFILE;
   const profile = config?.profiles[profileName];
-  const baseUrl = normalizeBaseUrl(env.RUNWEAVE_BASE_URL || profile?.baseUrl);
+  const baseUrl = resolveRunweaveBaseUrl({
+    env,
+    explicitBackendPort: params.backendPort,
+    configuredBaseUrl: profile?.baseUrl,
+  });
   const envAccessToken = env.RUNWEAVE_ACCESS_TOKEN?.trim();
 
   if (envAccessToken) {

@@ -2,7 +2,10 @@ import { stdin as defaultStdin, stdout as defaultStdout } from "node:process";
 import { getStringOption, parseArgs, resolveOutputMode } from "../args.js";
 import { createAuthClient } from "../client/auth-client.js";
 import { resolveAuthContext } from "../client/auth-context.js";
-import { ProfileStore, normalizeBaseUrl } from "../config/profile-store.js";
+import {
+  ProfileStore,
+  resolveRunweaveBaseUrl,
+} from "../config/profile-store.js";
 import { CliError, toCliError } from "../errors.js";
 import { writeOutput } from "../output/format.js";
 
@@ -37,7 +40,11 @@ async function login(
   const parsed = parseArgs(args, new Set(["json", "plain"]));
   const mode = resolveOutputMode(parsed.options);
   const profileName = getStringOption(parsed.options, "profile") ?? "local";
-  const baseUrl = normalizeBaseUrl(getStringOption(parsed.options, "base-url"));
+  const baseUrl = resolveRunweaveBaseUrl({
+    env: io.env,
+    explicitBaseUrl: getStringOption(parsed.options, "base-url"),
+    explicitBackendPort: getStringOption(parsed.options, "backend-port"),
+  });
   const username = getStringOption(parsed.options, "username") ?? "admin";
   const password =
     getStringOption(parsed.options, "password") ??
@@ -71,6 +78,7 @@ async function status(
   try {
     const auth = await resolveAuthContext({
       profileName,
+      backendPort: getStringOption(parsed.options, "backend-port"),
       store,
       env: io.env,
     });
