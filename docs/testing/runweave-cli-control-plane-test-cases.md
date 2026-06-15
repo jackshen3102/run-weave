@@ -63,16 +63,16 @@ $RW_BIN auth login \
 
 ## 自动化静态验证
 
-| ID            | 范围              | 命令                                                                                                     | 预期                              |
-| ------------- | ----------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------- | ----------------------------------- |
-| RW-STATIC-001 | CLI 类型          | `pnpm --filter @runweave/cli typecheck`                                                                  | 无 TS error                       |
-| RW-STATIC-002 | CLI lint          | `pnpm --filter @runweave/cli lint`                                                                       | 无 lint error                     |
-| RW-STATIC-003 | CLI 构建          | `pnpm --filter @runweave/cli build`                                                                      | 生成 `packages/runweave-cli/dist` |
-| RW-STATIC-004 | shared 类型       | `pnpm --filter @runweave/shared typecheck`                                                               | terminal event 协议无 TS error    |
-| RW-STATIC-005 | backend lint/type | `pnpm --filter @runweave/backend lint && pnpm --filter @runweave/backend typecheck`                      | 无 lint/TS error                  |
-| RW-STATIC-006 | Web lint/type     | `pnpm --filter @runweave/frontend lint && pnpm --filter @runweave/frontend typecheck`                    | 无 lint/TS error                  |
-| RW-STATIC-007 | Web E2E 事件同步  | `pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "externally created | externally deleted"`              | 外部创建/删除后 UI 通过事件刷新列表 |
-| RW-STATIC-008 | App 类型          | `pnpm --filter @runweave/app typecheck`                                                                  | 无 TS error                       |
+| ID            | 范围              | 命令                                                                                                                                                                                                                   | 预期                                |
+| ------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| RW-STATIC-001 | CLI 类型          | `pnpm --filter @runweave/cli typecheck`                                                                                                                                                                                | 无 TS error                         |
+| RW-STATIC-002 | CLI lint          | `pnpm --filter @runweave/cli lint`                                                                                                                                                                                     | 无 lint error                       |
+| RW-STATIC-003 | CLI 构建          | `pnpm --filter @runweave/cli build`                                                                                                                                                                                    | 生成 `packages/runweave-cli/dist`   |
+| RW-STATIC-004 | shared 类型       | `pnpm --filter @runweave/shared typecheck`                                                                                                                                                                             | terminal event 协议无 TS error      |
+| RW-STATIC-005 | backend lint/type | `pnpm --filter @runweave/backend lint && pnpm --filter @runweave/backend typecheck`                                                                                                                                    | 无 lint/TS error                    |
+| RW-STATIC-006 | Web lint/type     | `pnpm --filter @runweave/frontend lint && pnpm --filter @runweave/frontend typecheck`                                                                                                                                  | 无 lint/TS error                    |
+| RW-STATIC-007 | Web E2E 事件同步  | `pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "externally created" && pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "externally deleted"` | 外部创建/删除后 UI 通过事件刷新列表 |
+| RW-STATIC-008 | App 类型          | `pnpm --filter @runweave/app typecheck`                                                                                                                                                                                | 无 TS error                         |
 
 ## Health 测试
 
@@ -89,14 +89,15 @@ $RW_BIN auth login \
 
 ## App Overview 与发现能力测试
 
-| ID          | 场景                | 步骤                                                     | 预期                                                 |
-| ----------- | ------------------- | -------------------------------------------------------- | ---------------------------------------------------- |
-| RW-DISC-001 | app overview JSON   | `$RW_BIN app overview --json`                            | 输出包含 `projects` 和 `sessions` 的 JSON            |
-| RW-DISC-002 | app overview 未认证 | 清 token 后执行 `$RW_BIN app overview --json`            | 非 0 exit code；stderr 保留 401/Unauthorized 信息    |
-| RW-DISC-003 | project list JSON   | `$RW_BIN project list --json`                            | 输出后端项目数组                                     |
-| RW-DISC-004 | terminal list JSON  | `$RW_BIN terminal list --json`                           | 输出后端终端数组                                     |
-| RW-DISC-005 | terminal show JSON  | 创建终端后 `$RW_BIN terminal show "$TERMINAL_ID" --json` | 输出对应 terminal status，含 `cwd/status/scrollback` |
-| RW-DISC-006 | 404 不伪装成功      | `$RW_BIN terminal show missing-terminal --json`          | exit code `4`；stderr 为 terminal not found          |
+| ID          | 场景                 | 步骤                                                     | 预期                                                 |
+| ----------- | -------------------- | -------------------------------------------------------- | ---------------------------------------------------- |
+| RW-DISC-001 | app overview JSON    | `$RW_BIN app overview --json`                            | 输出包含 `projects` 和 `sessions` 的 JSON            |
+| RW-DISC-002 | app overview 未认证  | 清 token 后执行 `$RW_BIN app overview --json`            | 非 0 exit code；stderr 保留 401/Unauthorized 信息    |
+| RW-DISC-003 | app overview refresh | profile access token 过期但 refresh token 有效时执行     | 自动 refresh 后成功返回 overview JSON                |
+| RW-DISC-004 | project list JSON    | `$RW_BIN project list --json`                            | 输出后端项目数组                                     |
+| RW-DISC-005 | terminal list JSON   | `$RW_BIN terminal list --json`                           | 输出后端终端数组                                     |
+| RW-DISC-006 | terminal show JSON   | 创建终端后 `$RW_BIN terminal show "$TERMINAL_ID" --json` | 输出对应 terminal status，含 `cwd/status/scrollback` |
+| RW-DISC-007 | 404 不伪装成功       | `$RW_BIN terminal show missing-terminal --json`          | exit code `4`；stderr 为 terminal not found          |
 
 ## Project 创建与复用测试
 
@@ -111,19 +112,20 @@ $RW_BIN auth login \
 
 ## Terminal 创建测试
 
-| ID            | 场景                          | 步骤                                                                                                                          | 预期                                                     |
-| ------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| RW-CREATE-001 | 默认 shell 创建               | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --json`                                                      | 返回 `terminalSessionId` 和 `terminalUrl`                |
-| RW-CREATE-002 | 指定 runtime pty              | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --runtime pty --json`                                        | 创建成功；后续 `show` 可读                               |
-| RW-CREATE-003 | 指定 command                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --json`                                       | 创建成功；后端 session `command` 为 `bash`               |
-| RW-CREATE-004 | 多个 `--arg`                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg -lc --arg "echo rw-ok; sleep 5" --json` | 多个 arg 不被覆盖；session 创建成功                      |
-| RW-CREATE-005 | value 以 `--` 开头的 arg      | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command codex --arg "--model" --arg "gpt-5" --json`        | `--model` 不被通用 parser 当成 option；请求能发出        |
-| RW-CREATE-006 | `--arg=value` 形式            | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg=-l --json`                              | arg 被序列化为 `["-l"]`                                  |
-| RW-CREATE-007 | `--arg` 缺值                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg`                                        | exit code `2`；stderr 包含 `Missing value for --arg`     |
-| RW-CREATE-008 | 继承已有终端上下文            | `$RW_BIN terminal create --inherit-from "$TERMINAL_ID" --json`                                                                | 创建成功；未提供 project/cwd 时由后端 defaults 处理      |
-| RW-CREATE-009 | inherit + 显式 cwd 优先       | `$RW_BIN terminal create --inherit-from "$TERMINAL_ID" --cwd "$PWD" --json`                                                   | 创建成功；使用显式 cwd                                   |
-| RW-CREATE-010 | 缺少 project/cwd 且无 inherit | `$RW_BIN terminal create --json`                                                                                              | exit code `2`；stderr 提示缺少 `--project-id` 或 `--cwd` |
-| RW-CREATE-011 | 不存在 project id             | `$RW_BIN terminal create --project-id missing --cwd "$PWD" --json`                                                            | 非 0 exit code；stderr 保留后端错误                      |
+| ID            | 场景                          | 步骤                                                                                                                          | 预期                                                         |
+| ------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| RW-CREATE-001 | 默认 shell 创建               | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --json`                                                      | 返回 `terminalSessionId` 和 `terminalUrl`                    |
+| RW-CREATE-002 | 指定 runtime pty              | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --runtime pty --json`                                        | 创建成功；后续 `show` 可读                                   |
+| RW-CREATE-003 | 指定 command                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --json`                                       | 创建成功；后端 session `command` 为 `bash`                   |
+| RW-CREATE-004 | 多个 `--arg`                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg -lc --arg "echo rw-ok; sleep 5" --json` | 多个 arg 不被覆盖；session 创建成功                          |
+| RW-CREATE-005 | value 以 `--` 开头的 arg      | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command codex --arg "--model" --arg "gpt-5" --json`        | `--model` 不被通用 parser 当成 option；请求能发出            |
+| RW-CREATE-006 | `--arg=value` 形式            | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg=-l --json`                              | arg 被序列化为 `["-l"]`                                      |
+| RW-CREATE-007 | `--arg` 缺值                  | `$RW_BIN terminal create --project-id "$PROJECT_ID" --cwd "$PWD" --command bash --arg`                                        | exit code `2`；stderr 包含 `Missing value for --arg`         |
+| RW-CREATE-008 | 继承已有终端上下文            | `$RW_BIN terminal create --inherit-from "$TERMINAL_ID" --json`                                                                | 创建成功；未提供 project/cwd 时继承父 session 的 project/cwd |
+| RW-CREATE-009 | inherit + 显式 cwd 优先       | `$RW_BIN terminal create --inherit-from "$TERMINAL_ID" --cwd "$PWD" --json`                                                   | 创建成功；使用显式 cwd，project 默认仍来自父 session         |
+| RW-CREATE-010 | inherit 父 session 不存在     | `$RW_BIN terminal create --inherit-from missing-terminal --json`                                                              | 非 0 exit code；不静默落到默认 project 或 home               |
+| RW-CREATE-011 | 缺少 project/cwd 且无 inherit | `$RW_BIN terminal create --json`                                                                                              | exit code `2`；stderr 提示缺少 `--project-id` 或 `--cwd`     |
+| RW-CREATE-012 | 不存在 project id             | `$RW_BIN terminal create --project-id missing --cwd "$PWD" --json`                                                            | 非 0 exit code；stderr 保留后端错误                          |
 
 ## Terminal 输入投递测试
 
@@ -180,10 +182,11 @@ $RW_BIN auth login \
 | RW-WS-005 | Web 实时刷新新增 project/tab  | 运行 `pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "adds externally created"`    | 页面无需刷新，刷新权威列表后出现外部创建的 project 和 terminal tab   |
 | RW-WS-006 | Web 实时刷新删除 terminal tab | 运行 `pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "removes externally deleted"` | 外部删除 terminal 后 tab 从页面消失                                  |
 | RW-WS-007 | Catchup 不重复                | Web 断开 terminal-events WS 后创建/删除 project/session，再重连                                                         | catchup 触发权威列表刷新，不出现重复或幽灵 project/tab               |
-| RW-WS-008 | Live 不抢当前 active terminal | Web 当前正在另一个终端；外部创建新 terminal                                                                             | 新 tab 出现，但当前 URL/active terminal 不被强制切换                 |
-| RW-WS-009 | 空状态自动选中新 session      | Web 初始没有 active project/session；外部创建 project/session                                                           | 刷新权威列表后 UI 有可见 project/tab，并进入可用终端                 |
-| RW-WS-010 | App Home 实时刷新             | App 已登录并连接 terminal-events；外部创建或删除 project/session                                                        | 首页 overview 通过 `/api/app/home/overview` 刷新收敛；不需要下拉刷新 |
-| RW-WS-011 | State 事件仍正常合并          | 创建终端后触发 `terminal_state_changed`                                                                                 | 状态 badge 更新；结构变化仍由列表刷新负责                            |
+| RW-WS-008 | Catchup gap 收敛              | Web/App 的 terminal-events cursor 早于服务端保留窗口或进程重启后重连                                                    | 客户端发现不可恢复 gap 后全量刷新项目/终端列表，不静默漏变更         |
+| RW-WS-009 | Live 不抢当前 active terminal | Web 当前正在另一个终端；外部创建新 terminal                                                                             | 新 tab 出现，但当前 URL/active terminal 不被强制切换                 |
+| RW-WS-010 | 空状态自动选中新 session      | Web 初始没有 active project/session；外部创建 project/session                                                           | 刷新权威列表后 UI 有可见 project/tab，并进入可用终端                 |
+| RW-WS-011 | App Home 实时刷新             | App 已登录并连接 terminal-events；外部创建或删除 project/session                                                        | 首页 overview 通过 `/api/app/home/overview` 刷新收敛；不需要下拉刷新 |
+| RW-WS-012 | State 事件仍正常合并          | 创建终端后触发 `terminal_state_changed`                                                                                 | 状态 badge 更新；结构变化仍由列表刷新负责                            |
 
 ## Profile 与配置优先级测试
 

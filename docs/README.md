@@ -17,6 +17,7 @@
 | 终端任务完成通知（桌面/飞书）            | architecture/terminal-completion-notifications.md     |
 | 本机系统资源监控                         | architecture/system-monitor.md                        |
 | Terminal CLI                             | cli/terminal-cli.md                                   |
+| Runweave Agent CLI 控制面测试            | testing/runweave-cli-control-plane-test-cases.md      |
 | 质量体系概览                             | quality/quality-harness.md                            |
 | AI 诊断日志                              | quality/ai-diagnostic-logging.md                      |
 | 后端滚动日志                             | quality/backend-rolling-logs.md                       |
