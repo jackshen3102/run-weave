@@ -73,7 +73,10 @@ rw terminal handoff "$TERMINAL_ID" --tail 120 --json
 ```
 
 `send --confirm short` confirms that input was delivered or briefly observed; it
-does not mean the AI task has finished.
+does not mean the AI task has finished. Local backends use port `5001` by
+default; set `RUNWEAVE_BACKEND_PORT` or pass `--backend-port` for a one-off
+local port override. See [docs/cli/terminal-cli.md](docs/cli/terminal-cli.md)
+for CLI environment and precedence details.
 
 ### Mobile App
 
