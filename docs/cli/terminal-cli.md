@@ -76,6 +76,30 @@ rw terminal send "$TERMINAL_ID" --text "raw bytes" --mode raw --json
 
 旧调用仍可使用 `--enter`。当使用 `--mode line` 时，CLI 不会再额外追加回车。
 
+需要把输入投递给某个 AI CLI 时，可以指定 agent：
+
+```bash
+rw terminal send "$TERMINAL_ID" --agent codex --text "继续" --json
+rw terminal send "$TERMINAL_ID" --agent traex --agent-overwrite --text "继续" --json
+```
+
+`--agent` 使用调用方传入的原始名字，不做归一化；例如 `trae`、`traecli`
+和 `traex` 是三个不同 agent。带 `--agent` 但未显式传 `--mode` 时，CLI
+默认使用 `line` 模式。
+
+投递前，CLI 会先检查目标 terminal 是否已经处于该 agent 的
+`agent_idle` 或 `agent_running` 状态。若目标 terminal 当前没有 agent，
+CLI 会发送 agent 名本身作为启动命令，也可以通过 `--agent-start-command`
+覆盖启动命令，并在 `--agent-start-timeout-ms`（默认 15000）内等待 agent
+状态就绪。
+
+若目标 terminal 已经是同一个 agent，默认直接复用；传 `--agent-overwrite`
+时会先发送 `--agent-clear-command`（默认 `/clear`）新开一个 CLI 上下文，再
+投递输入。若目标 terminal 是另一个 agent，默认失败；传
+`--agent-overwrite` 时会先发送 `--agent-exit-command` 退出旧 agent，再启动
+指定 agent 并投递输入。未显式设置 `--agent-exit-command` 时，`codex`、
+`traex`、`traecli` 默认使用 `/quit`，其它 agent 默认使用 `/exit`。
+
 ## 读取上下文
 
 ```bash

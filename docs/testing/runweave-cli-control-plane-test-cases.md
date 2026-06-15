@@ -11,6 +11,8 @@
 - `rw project ensure` 能复用同路径项目；`rw terminal create` 能创建普通 shell、指定命令、携带多个 `--arg`、继承已有终端上下文。
 - `rw terminal send` 的成功只代表 backend 已接受输入，不代表命令执行完成。
 - `rw terminal send --mode line` 不重复追加回车；默认 raw + `--enter` 兼容旧行为；`codex_slash_command` 错误不被 CLI 吞掉。
+- `rw terminal send --agent <name>` 不归一化 agent 名；若未显式传 `--mode`，默认按 `line` 投递。
+- `rw terminal send --agent <name>` 会先确保 terminal 处于该 agent 的 `agent_idle` 或 `agent_running` 状态；若已有其它 agent，必须传 `--agent-overwrite` 才会先退出旧 agent 再启动目标 agent。
 - `rw terminal delete` 只删除显式传入的 terminal id，不做批量推断。
 - 通过 `rw project ensure` / `rw terminal create` 创建的项目和终端，会经 `/ws/terminal-events` 推送到 Web/App，界面无需刷新即可新增 project/card/tab。
 - 所有错误路径使用非 0 exit code，并保留可读错误 message。
@@ -156,21 +158,27 @@ $RW_BIN terminal show "$COMMAND_TERMINAL_ID" --json \
 
 ## Terminal 输入投递测试
 
-| ID          | 场景                   | 步骤                                                                                                        | 预期                                                            |
-| ----------- | ---------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| RW-SEND-001 | 默认 raw 不提交        | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --json`                                                  | `submitted=false`；请求成功仅代表输入已接受                     |
-| RW-SEND-002 | raw + enter 兼容旧行为 | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --enter --json`                                          | 请求 data 等价 `pwd\r`；`submitted=true`                        |
-| RW-SEND-003 | line mode              | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --mode line --json`                                      | 不要求 `--enter`；`submitted=true`；不发送 `pwd\r` 双回车       |
-| RW-SEND-004 | line + enter 不双回车  | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --mode line --enter --json`                              | 后端只收到 line mode；不重复提交回车                            |
-| RW-SEND-005 | stdin raw              | `printf 'echo stdin-ok\\n' \| $RW_BIN terminal send "$TERMINAL_ID" --stdin --mode raw --json`               | stdin 被发送；超过 256 KiB 时应被拒绝                           |
-| RW-SEND-006 | stdin line             | `printf 'pwd' \| $RW_BIN terminal send "$TERMINAL_ID" --stdin --mode line --json`                           | line mode 提交一行；不额外追加 raw 回车                         |
-| RW-SEND-007 | codex slash command    | `$RW_BIN terminal send "$CODEX_TERMINAL_ID" --text "/compact" --mode codex_slash_command --json`            | CLI 不自动追加换行；由后端 slash command 逻辑处理               |
-| RW-SEND-008 | 非法 slash command     | `$RW_BIN terminal send "$TERMINAL_ID" --text "compact" --mode codex_slash_command --json`                   | 非 0 exit code；stderr 保留 `Invalid Codex slash command input` |
-| RW-SEND-009 | 非法 mode              | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --mode bad --json`                                       | exit code `2`；stderr 包含合法 mode 列表                        |
-| RW-SEND-010 | confirm short          | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --enter --confirm short --confirm-timeout-ms 100 --json` | 输出含 `tailBefore/tailAfter/confirmConfidence`                 |
-| RW-SEND-011 | confirm 非法值         | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --confirm long --json`                                   | exit code `2`；stderr 提示 `--confirm` 合法值                   |
-| RW-SEND-012 | 已删除终端发送         | 删除终端后发送 `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --json`                                   | exit code `4`；stderr terminal not found                        |
-| RW-SEND-013 | exited 终端发送        | 对 exited session 发送输入                                                                                  | 非 0 exit code；stderr 包含 session not running                 |
+| ID          | 场景                    | 步骤                                                                                                              | 预期                                                                              |
+| ----------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| RW-SEND-001 | 默认 raw 不提交         | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --json`                                                        | `submitted=false`；请求成功仅代表输入已接受                                       |
+| RW-SEND-002 | raw + enter 兼容旧行为  | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --enter --json`                                                | 请求 data 等价 `pwd\r`；`submitted=true`                                          |
+| RW-SEND-003 | line mode               | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --mode line --json`                                            | 不要求 `--enter`；`submitted=true`；不发送 `pwd\r` 双回车                         |
+| RW-SEND-004 | line + enter 不双回车   | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --mode line --enter --json`                                    | 后端只收到 line mode；不重复提交回车                                              |
+| RW-SEND-005 | stdin raw               | `printf 'echo stdin-ok\\n' \| $RW_BIN terminal send "$TERMINAL_ID" --stdin --mode raw --json`                     | stdin 被发送；超过 256 KiB 时应被拒绝                                             |
+| RW-SEND-006 | stdin line              | `printf 'pwd' \| $RW_BIN terminal send "$TERMINAL_ID" --stdin --mode line --json`                                 | line mode 提交一行；不额外追加 raw 回车                                           |
+| RW-SEND-007 | codex slash command     | `$RW_BIN terminal send "$CODEX_TERMINAL_ID" --text "/compact" --mode codex_slash_command --json`                  | CLI 不自动追加换行；由后端 slash command 逻辑处理                                 |
+| RW-SEND-008 | 非法 slash command      | `$RW_BIN terminal send "$TERMINAL_ID" --text "compact" --mode codex_slash_command --json`                         | 非 0 exit code；stderr 保留 `Invalid Codex slash command input`                   |
+| RW-SEND-009 | 非法 mode               | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --mode bad --json`                                             | exit code `2`；stderr 包含合法 mode 列表                                          |
+| RW-SEND-010 | confirm short           | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --enter --confirm short --confirm-timeout-ms 100 --json`       | 输出含 `tailBefore/tailAfter/confirmConfidence`                                   |
+| RW-SEND-011 | confirm 非法值          | `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --confirm long --json`                                         | exit code `2`；stderr 提示 `--confirm` 合法值                                     |
+| RW-SEND-012 | 已删除终端发送          | 删除终端后发送 `$RW_BIN terminal send "$TERMINAL_ID" --text "pwd" --json`                                         | exit code `4`；stderr terminal not found                                          |
+| RW-SEND-013 | exited 终端发送         | 对 exited session 发送输入                                                                                        | 非 0 exit code；stderr 包含 session not running                                   |
+| RW-SEND-014 | agent 自动启动          | `$RW_BIN terminal send "$TERMINAL_ID" --agent codex --text "继续" --json`                                         | 若当前无 agent，先发送 `codex` 启动并等待 agent 状态，再以 line 模式投递输入      |
+| RW-SEND-015 | agent 名不归一          | `$RW_BIN terminal send "$TERMINAL_ID" --agent traex --text "继续" --json`                                         | 等待并断言 `traex` 状态；不会把 `traex` 归一成 `trae`                             |
+| RW-SEND-016 | 同 agent 覆盖           | `$RW_BIN terminal send "$TERMINAL_ID" --agent codex --agent-overwrite --text "继续" --json`                       | 已是 `codex` 时先发送默认 `/clear`，等待仍为 `codex` 后再投递                     |
+| RW-SEND-017 | 不同 agent 禁止隐式切换 | 当前为 `codex` 时执行 `$RW_BIN terminal send "$TERMINAL_ID" --agent traex --text "继续" --json`                   | exit code `2`；提示传 `--agent-overwrite` 才能替换                                |
+| RW-SEND-018 | 不同 agent 覆盖切换     | 当前为 `codex` 时执行 `$RW_BIN terminal send "$TERMINAL_ID" --agent traex --agent-overwrite --text "继续" --json` | 先发送 `codex` 默认退出命令 `/quit`，等待旧 agent 退出，再启动 `traex` 并投递输入 |
+| RW-SEND-019 | overwrite 缺 agent      | `$RW_BIN terminal send "$TERMINAL_ID" --agent-overwrite --text "pwd" --json`                                      | exit code `2`；stderr 包含 `--agent-overwrite requires --agent`                   |
 
 ## 上下文读取测试
 
@@ -296,6 +304,9 @@ $RW_BIN terminal delete "$TERMINAL_ID" --json | jq -e '.deleted == true'
 - `/health` 401/403 被误报为用户 access token 失效，而不是 `blockedByTunnelAuth=true`。
 - `rw terminal create --arg "--model"` 被 parser 当成 option，导致参数丢失或 usage error。
 - `rw terminal send --mode line --enter` 导致双回车或重复提交。
+- `rw terminal send --agent traex` 把状态或 hook 归一为 `trae`。
+- 目标 terminal 已有其它 agent 时，未传 `--agent-overwrite` 仍直接投递输入。
+- 目标 terminal 已有其它 agent 且传 `--agent-overwrite` 时，没有先退出旧 agent 再启动目标 agent。
 - `send` 成功文案或 JSON 暗示命令已经执行完成。
 - `codex_slash_command` 的后端错误被 CLI 吞掉或改成成功。
 - `terminal history` 没有请求 `/api/terminal/session/:id/history`。

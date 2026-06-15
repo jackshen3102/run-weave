@@ -16,7 +16,9 @@ type TerminalStateSessionSnapshot = Pick<
 const SHELL_IDLE: TerminalState = { state: "shell_idle", agent: null };
 const AGENT_COMMANDS: Record<TerminalAgentKind, ReadonlySet<string>> = {
   codex: new Set(["codex"]),
-  trae: new Set(["trae", "traex", "traecli"]),
+  trae: new Set(["trae"]),
+  traecli: new Set(["traecli"]),
+  traex: new Set(["traex"]),
 };
 
 interface TerminalStatePublishContext {

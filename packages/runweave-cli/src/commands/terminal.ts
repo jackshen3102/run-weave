@@ -19,8 +19,10 @@ import type {
 
 const DEFAULT_TAIL_LINES = 120;
 const DEFAULT_CONFIRM_TIMEOUT_MS = 3000;
+const DEFAULT_AGENT_START_TIMEOUT_MS = 15000;
 const MAX_STDIN_BYTES = 256 * 1024;
-const AGENT_COMMAND_PATTERN = /(?:^|\/)(codex|claude|opencode|coco)(?:$|\s|-)/i;
+const AGENT_COMMAND_PATTERN =
+  /(?:^|\/)(codex|claude|opencode|coco|trae|traecli|traex)(?:$|\s|-)/i;
 const SHELL_COMMAND_PATTERN = /(?:^|\/)(zsh|bash|fish|sh)$/i;
 const AGENT_PROMPT_PATTERN = /(^|\n)\s*[›>]\s+|\bgpt-[\w.-]+.*[~/]/i;
 const SHELL_PROMPT_PATTERN = /(?:^|\n).*(?:[%$#]\s*)$/;
@@ -37,6 +39,20 @@ type HandoffWorkloadState =
   | "unknown";
 
 type StateConfidence = "strong" | "high" | "medium" | "weak" | "low";
+type AgentPreparationStatus =
+  | "not_requested"
+  | "already_ready"
+  | "cleared_existing"
+  | "started"
+  | "restarted";
+
+interface AgentPreparationResult {
+  status: AgentPreparationStatus;
+  requestedAgent: string | null;
+  previousAgent: string | null;
+  terminalState: TerminalState | null;
+  actions: string[];
+}
 
 export async function runTerminalCommand(
   subcommand: string | undefined,
@@ -60,7 +76,7 @@ export async function runTerminalCommand(
       : { args, values: [] };
   const parsed = parseArgs(
     createArgScan.args,
-    new Set(["json", "plain", "enter", "stdin"]),
+    new Set(["json", "plain", "enter", "stdin", "agent-overwrite"]),
   );
   const mode = resolveOutputMode(parsed.options);
   const auth = await resolveAuthContext({
@@ -163,17 +179,31 @@ export async function runTerminalCommand(
 
   if (subcommand === "send") {
     const terminalSessionId = requireTerminalId(parsed.positionals);
+    const requestedAgent = getStringOption(parsed.options, "agent");
+    const inputModeValue = getStringOption(parsed.options, "mode");
     const result = await sendWithConfirmation({
       client,
       terminalSessionId,
       text: await resolveInputText(parsed.options, io.stdin),
       enter: getBooleanOption(parsed.options, "enter"),
-      inputMode: resolveInputMode(getStringOption(parsed.options, "mode")),
-      inputModeProvided: getStringOption(parsed.options, "mode") != null,
+      inputMode: resolveInputMode(
+        inputModeValue ?? (requestedAgent ? "line" : undefined),
+      ),
+      inputModeProvided: inputModeValue != null || requestedAgent != null,
       confirmMode: getStringOption(parsed.options, "confirm") ?? "none",
       confirmTimeoutMs: Number(
         getStringOption(parsed.options, "confirm-timeout-ms") ??
           DEFAULT_CONFIRM_TIMEOUT_MS,
+      ),
+      agent: requestedAgent,
+      agentOverwrite: getBooleanOption(parsed.options, "agent-overwrite"),
+      agentStartCommand: getStringOption(parsed.options, "agent-start-command"),
+      agentClearCommand:
+        getStringOption(parsed.options, "agent-clear-command") ?? "/clear",
+      agentExitCommand: getStringOption(parsed.options, "agent-exit-command"),
+      agentStartTimeoutMs: Number(
+        getStringOption(parsed.options, "agent-start-timeout-ms") ??
+          DEFAULT_AGENT_START_TIMEOUT_MS,
       ),
     });
     writeOutput(io.stdout, mode, result);
@@ -443,6 +473,12 @@ async function sendWithConfirmation(params: {
   inputModeProvided: boolean;
   confirmMode: string;
   confirmTimeoutMs: number;
+  agent: string | undefined;
+  agentOverwrite: boolean;
+  agentStartCommand: string | undefined;
+  agentClearCommand: string;
+  agentExitCommand: string | undefined;
+  agentStartTimeoutMs: number;
 }): Promise<Record<string, unknown>> {
   if (
     !Number.isFinite(params.confirmTimeoutMs) ||
@@ -453,6 +489,7 @@ async function sendWithConfirmation(params: {
   if (params.confirmMode !== "none" && params.confirmMode !== "short") {
     throw new CliError("--confirm must be one of: none, short", 2);
   }
+  const agentPreparation = await prepareAgentSession(params);
 
   const tailBeforeSession = await params.client.getSession(
     params.terminalSessionId,
@@ -522,8 +559,222 @@ async function sendWithConfirmation(params: {
       expectedSource: inferAgent(tailAfterSession.activeCommand, tailAfter),
       notificationOwner: "existing-ai-cli-hooks",
     },
+    agentPreparation,
     note: "Completion will be delivered by configured AI CLI hook if available.",
   };
+}
+
+async function prepareAgentSession(params: {
+  client: TerminalHttpClient;
+  terminalSessionId: string;
+  agent: string | undefined;
+  agentOverwrite: boolean;
+  agentStartCommand: string | undefined;
+  agentClearCommand: string;
+  agentExitCommand: string | undefined;
+  agentStartTimeoutMs: number;
+}): Promise<AgentPreparationResult> {
+  if (!params.agent) {
+    if (params.agentOverwrite) {
+      throw new CliError("--agent-overwrite requires --agent", 2);
+    }
+    return {
+      status: "not_requested",
+      requestedAgent: null,
+      previousAgent: null,
+      terminalState: null,
+      actions: [],
+    };
+  }
+  if (!isValidAgentName(params.agent)) {
+    throw new CliError("--agent must contain only letters, numbers, '.', '_' or '-'", 2);
+  }
+  if (
+    !Number.isFinite(params.agentStartTimeoutMs) ||
+    params.agentStartTimeoutMs < 0
+  ) {
+    throw new CliError("--agent-start-timeout-ms must be a non-negative number", 2);
+  }
+
+  const actions: string[] = [];
+  const initial = await getAgentSessionSnapshot(params);
+  if (initial.session.status !== "running") {
+    throw new CliError("Terminal session is not running", 4);
+  }
+
+  const initialAgent = resolveCurrentAgent(initial);
+  if (isRequestedAgentReady(initial, params.agent)) {
+    if (!params.agentOverwrite) {
+      return {
+        status: "already_ready",
+        requestedAgent: params.agent,
+        previousAgent: initialAgent,
+        terminalState: initial.terminalState,
+        actions,
+      };
+    }
+    await sendAgentControlLine(params, params.agentClearCommand);
+    actions.push("clear");
+    const terminalState = await waitForRequestedAgent(params, params.agent);
+    return {
+      status: "cleared_existing",
+      requestedAgent: params.agent,
+      previousAgent: initialAgent,
+      terminalState,
+      actions,
+    };
+  }
+
+  if (initialAgent && !params.agentOverwrite) {
+    throw new CliError(
+      `Terminal is already using agent "${initialAgent}". Pass --agent-overwrite to replace it with "${params.agent}".`,
+      2,
+    );
+  }
+
+  if (initialAgent) {
+    await sendAgentControlLine(
+      params,
+      params.agentExitCommand ?? getDefaultAgentExitCommand(initialAgent),
+    );
+    actions.push("exit_existing");
+    await waitForNoAgent(params);
+  }
+
+  await sendAgentControlLine(params, params.agentStartCommand ?? params.agent);
+  actions.push("start");
+  const terminalState = await waitForRequestedAgent(params, params.agent);
+  return {
+    status: initialAgent ? "restarted" : "started",
+    requestedAgent: params.agent,
+    previousAgent: initialAgent,
+    terminalState,
+    actions,
+  };
+}
+
+async function getAgentSessionSnapshot(params: {
+  client: TerminalHttpClient;
+  terminalSessionId: string;
+}): Promise<{
+  session: TerminalSessionStatusResponse;
+  terminalState: TerminalState;
+}> {
+  const [session, statePayload] = await Promise.all([
+    params.client.getSession(params.terminalSessionId),
+    params.client.getCurrentTerminalState(params.terminalSessionId),
+  ]);
+  return {
+    session,
+    terminalState: statePayload.terminalState,
+  };
+}
+
+function resolveCurrentAgent(snapshot: {
+  session: Pick<TerminalSessionStatusResponse, "activeCommand">;
+  terminalState: TerminalState;
+}): string | null {
+  return (
+    (snapshot.terminalState.state !== "shell_idle"
+      ? snapshot.terminalState.agent
+      : null) ?? commandNameOrNull(snapshot.session.activeCommand)
+  );
+}
+
+function isRequestedAgentReady(
+  snapshot: {
+    session: Pick<TerminalSessionStatusResponse, "activeCommand">;
+    terminalState: TerminalState;
+  },
+  agent: string,
+): boolean {
+  return (
+    snapshot.terminalState.state !== "shell_idle" &&
+    resolveCurrentAgent(snapshot) === agent
+  );
+}
+
+async function sendAgentControlLine(
+  params: {
+    client: TerminalHttpClient;
+    terminalSessionId: string;
+  },
+  command: string,
+): Promise<void> {
+  await params.client.sendInput(params.terminalSessionId, {
+    operationId: buildOperationId(),
+    data: command,
+    mode: "line",
+  });
+}
+
+async function waitForRequestedAgent(
+  params: {
+    client: TerminalHttpClient;
+    terminalSessionId: string;
+    agentStartTimeoutMs: number;
+  },
+  agent: string,
+): Promise<TerminalState> {
+  const snapshot = await waitForAgentCondition(params, (next) =>
+    isRequestedAgentReady(next, agent),
+  );
+  return snapshot.terminalState;
+}
+
+async function waitForNoAgent(params: {
+  client: TerminalHttpClient;
+  terminalSessionId: string;
+  agentStartTimeoutMs: number;
+}): Promise<void> {
+  await waitForAgentCondition(params, (next) => resolveCurrentAgent(next) === null);
+}
+
+async function waitForAgentCondition(
+  params: {
+    client: TerminalHttpClient;
+    terminalSessionId: string;
+    agentStartTimeoutMs: number;
+  },
+  predicate: (snapshot: {
+    session: TerminalSessionStatusResponse;
+    terminalState: TerminalState;
+  }) => boolean,
+): Promise<{
+  session: TerminalSessionStatusResponse;
+  terminalState: TerminalState;
+}> {
+  const startedAt = Date.now();
+  let lastSnapshot = await getAgentSessionSnapshot(params);
+  while (Date.now() - startedAt <= params.agentStartTimeoutMs) {
+    if (predicate(lastSnapshot)) {
+      return lastSnapshot;
+    }
+    await wait(500);
+    lastSnapshot = await getAgentSessionSnapshot(params);
+  }
+  throw new CliError(
+    `Timed out waiting for terminal agent state. Last state=${lastSnapshot.terminalState.state}, agent=${lastSnapshot.terminalState.agent ?? "none"}, activeCommand=${lastSnapshot.session.activeCommand ?? "none"}`,
+    3,
+  );
+}
+
+function isValidAgentName(value: string): boolean {
+  return /^[A-Za-z0-9._-]+$/.test(value);
+}
+
+function getDefaultAgentExitCommand(agent: string): string {
+  if (agent === "codex" || agent === "traex" || agent === "traecli") {
+    return "/quit";
+  }
+  return "/exit";
+}
+
+function commandNameOrNull(command: string | null): string | null {
+  if (!command) {
+    return null;
+  }
+  return commandName(command);
 }
 
 function containsInputEcho(tail: string, text: string): boolean {
@@ -535,18 +786,28 @@ function containsInputEcho(tail: string, text: string): boolean {
 }
 
 function inferAgent(activeCommand: string | null, tail: string): string {
-  const source = `${activeCommand ?? ""}\n${tail}`.toLowerCase();
-  if (source.includes("codex")) {
-    return "codex";
+  const command = commandNameOrNull(activeCommand);
+  if (command) {
+    return command;
   }
+  const source = tail.toLowerCase();
   if (source.includes("claude")) {
     return "claude";
   }
-  if (source.includes("trae")) {
-    return "trae";
+  if (source.includes("traecli")) {
+    return "traecli";
+  }
+  if (source.includes("traex")) {
+    return "traex";
   }
   if (source.includes("coco")) {
     return "coco";
+  }
+  if (source.includes("codex")) {
+    return "codex";
+  }
+  if (source.includes("trae")) {
+    return "trae";
   }
   return "unknown";
 }

@@ -91,12 +91,23 @@ done
 "${RW_BIN[@]}" terminal send "$TERMINAL_ID" --text "pwd" --mode line --json
 "${RW_BIN[@]}" terminal send "$TERMINAL_ID" --text "raw bytes" --mode raw --json
 "${RW_BIN[@]}" terminal send "$TERMINAL_ID" --text "/compact" --mode codex_slash_command --json
+"${RW_BIN[@]}" terminal send "$TERMINAL_ID" --agent codex --text "继续" --json
+"${RW_BIN[@]}" terminal send "$TERMINAL_ID" --agent traex --agent-overwrite --text "继续" --json
 printf 'pwd' | "${RW_BIN[@]}" terminal send "$TERMINAL_ID" --stdin --mode line --json
 printf '%s' 'printf "%s\n" RW_STDIN_OK' \
   | "${RW_BIN[@]}" terminal send "$TERMINAL_ID" --stdin --mode line --json
 ```
 
 `terminal send` success means the backend accepted the input. It does not mean the shell command or AI task finished.
+When `--agent <name>` is set, rw first ensures the terminal is in that exact
+agent's `agent_idle` or `agent_running` state. Agent names are not normalized:
+`trae`, `traecli`, and `traex` are distinct. If another agent is already active,
+pass `--agent-overwrite`; rw sends `--agent-exit-command`, starts the requested
+agent, waits for it, then sends the input. If `--agent-exit-command` is omitted,
+rw defaults to `/quit` for `codex`, `traex`, and `traecli`, and `/exit` for
+other agents. If the same agent is already active and `--agent-overwrite` is set, rw sends
+`--agent-clear-command` (default `/clear`) before sending the input. With
+`--agent`, omitted `--mode` defaults to `line`.
 When building stdin payloads that contain escapes, prefer `printf '%s' '...'`
 so the local shell does not turn `\n` into a real newline before Runweave sends
 the command.
