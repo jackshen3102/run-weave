@@ -20,6 +20,7 @@ export async function runAppCommand(
   const mode = resolveOutputMode(parsed.options);
   const context = await resolveCliBaseUrl({
     profileName: getStringOption(parsed.options, "profile"),
+    backendPort: getStringOption(parsed.options, "backend-port"),
     env: io.env,
   });
   const client = new AppHttpClient(context.baseUrl, context.accessToken);

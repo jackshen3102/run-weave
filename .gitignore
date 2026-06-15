@@ -22,3 +22,4 @@ deploy/nginx/nginx.local.conf
 deploy/nginx/openssl-san.local.cnf
 .playwright-mcp
 .runtime-artifacts/
+.runweave

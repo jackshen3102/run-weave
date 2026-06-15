@@ -30,6 +30,7 @@ export async function runProjectCommand(
   const mode = resolveOutputMode(parsed.options);
   const auth = await resolveAuthContext({
     profileName: getStringOption(parsed.options, "profile"),
+    backendPort: getStringOption(parsed.options, "backend-port"),
     env: io.env,
   });
   const client = new TerminalHttpClient(auth);

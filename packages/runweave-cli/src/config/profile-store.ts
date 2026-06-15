@@ -23,6 +23,7 @@ export interface ResolvedProfile {
 }
 
 const DEFAULT_PROFILE = "local";
+const DEFAULT_BACKEND_PORT = "5001";
 
 export function resolveConfigPath(env: NodeJS.ProcessEnv = process.env): string {
   return (
@@ -75,11 +76,16 @@ export class ProfileStore {
   async resolve(
     profileName?: string,
     env: NodeJS.ProcessEnv = process.env,
+    options?: { backendPort?: string },
   ): Promise<ResolvedProfile> {
     const config = await this.load();
     const name = profileName || config?.activeProfile || DEFAULT_PROFILE;
     const saved = config?.profiles[name];
-    const baseUrl = normalizeBaseUrl(env.RUNWEAVE_BASE_URL || saved?.baseUrl);
+    const baseUrl = resolveRunweaveBaseUrl({
+      env,
+      explicitBackendPort: options?.backendPort,
+      configuredBaseUrl: saved?.baseUrl,
+    });
     const envAccessToken = env.RUNWEAVE_ACCESS_TOKEN?.trim();
 
     if (envAccessToken) {
@@ -118,8 +124,49 @@ export async function assertOwnerOnlyReadable(filePath: string): Promise<void> {
 }
 
 export function normalizeBaseUrl(value: string | undefined): string {
-  const baseUrl = value?.trim() || "http://127.0.0.1:5001";
+  const baseUrl = value?.trim() || `http://127.0.0.1:${DEFAULT_BACKEND_PORT}`;
   return baseUrl.replace(/\/+$/, "");
+}
+
+export function resolveRunweaveBaseUrl(params: {
+  env?: NodeJS.ProcessEnv;
+  explicitBaseUrl?: string;
+  explicitBackendPort?: string;
+  configuredBaseUrl?: string;
+}): string {
+  const env = params.env ?? process.env;
+  const explicitBaseUrl = params.explicitBaseUrl?.trim();
+  if (explicitBaseUrl) {
+    return normalizeBaseUrl(explicitBaseUrl);
+  }
+
+  const explicitBackendPort = params.explicitBackendPort?.trim();
+  if (explicitBackendPort) {
+    return `http://127.0.0.1:${normalizeBackendPort(explicitBackendPort)}`;
+  }
+
+  const envBaseUrl = env.RUNWEAVE_BASE_URL?.trim();
+  if (envBaseUrl) {
+    return normalizeBaseUrl(envBaseUrl);
+  }
+
+  const backendPort = env.RUNWEAVE_BACKEND_PORT?.trim();
+  if (backendPort) {
+    return `http://127.0.0.1:${normalizeBackendPort(backendPort)}`;
+  }
+
+  return normalizeBaseUrl(params.configuredBaseUrl);
+}
+
+function normalizeBackendPort(value: string): string {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new CliError(
+      "RUNWEAVE_BACKEND_PORT must be an integer from 1 to 65535",
+      2,
+    );
+  }
+  return String(port);
 }
 
 export function calculateExpiresAt(expiresInSeconds: number): string {
