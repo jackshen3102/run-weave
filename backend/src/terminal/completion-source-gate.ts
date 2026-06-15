@@ -6,7 +6,15 @@ const allowedActiveCommandsBySource: Partial<
   Record<TerminalCompletionEvent["source"], ReadonlySet<string>>
 > = {
   codex: new Set(["codex"]),
-  trae: new Set(["trae", "traex", "traecli"]),
+  trae: new Set(["trae"]),
+  traecli: new Set(["traecli"]),
+  traex: new Set(["traex"]),
+};
+
+const legacyAllowedActiveCommandsBySource: Partial<
+  Record<TerminalCompletionEvent["source"], ReadonlySet<string>>
+> = {
+  trae: new Set(["traex", "traecli"]),
 };
 
 export interface LastAiActiveCommandRecord {
@@ -47,5 +55,9 @@ export function isCompletionSourceAllowedForCommand(
   if (!normalized) {
     return false;
   }
-  return allowedActiveCommandsBySource[source]?.has(normalized) ?? false;
+  return (
+    allowedActiveCommandsBySource[source]?.has(normalized) ||
+    legacyAllowedActiveCommandsBySource[source]?.has(normalized) ||
+    false
+  );
 }

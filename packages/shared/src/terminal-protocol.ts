@@ -267,7 +267,7 @@ export interface TerminalCompletionEvent {
   id: string;
   terminalSessionId: string;
   projectId: string;
-  source: "claude" | "codex" | "trae" | "unknown";
+  source: "claude" | TerminalAgentKind | "unknown";
   completionReason: TerminalCompletionReason;
   commandName: string | null;
   rawHookEvent: string | null;
@@ -286,7 +286,7 @@ export interface TerminalCompletionEventPayload {
   cwd: string | null;
 }
 
-export type TerminalAgentKind = "codex" | "trae";
+export type TerminalAgentKind = "codex" | "trae" | "traex" | "traecli";
 
 export type TerminalStateValue =
   | "shell_idle"

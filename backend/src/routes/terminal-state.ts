@@ -19,13 +19,16 @@ const terminalStateLogger = logger.child({ component: "terminal-state" });
 const AGENT_ACTIVE_COMMANDS = {
   codex: "codex",
   trae: "trae",
+  traecli: "traecli",
+  traex: "traex",
 } as const;
+const AGENT_HOOKS = ["codex", "trae", "traecli", "traex"] as const;
 
 const agentHookStateSchema = z
   .object({
     terminalSessionId: z.string().trim().min(1),
     projectId: z.string().trim().min(1).optional(),
-    agent: z.enum(["codex", "trae"]),
+    agent: z.enum(AGENT_HOOKS),
     hookEvent: z.enum(["SessionStart", "UserPromptSubmit", "Stop"]),
   })
   .strict();
@@ -126,12 +129,18 @@ export function createInternalTerminalAgentHookRouter(options: {
         )) ?? session;
     }
 
+    const sessionAgent = getTerminalSessionAgent(session);
+    const effectiveAgent =
+      sessionAgent &&
+      isCompletionSourceAllowedForCommand(parsed.data.agent, session.activeCommand)
+        ? sessionAgent
+        : parsed.data.agent;
     const lastAiActiveCommand =
       options.terminalSessionManager.getLastAiActiveCommand(session.id);
     const currentCommandMatches = isCompletionSourceAllowedForCommand(
       parsed.data.agent,
       session.activeCommand,
-    ) || getTerminalSessionAgent(session) === parsed.data.agent;
+    ) || sessionAgent === effectiveAgent;
     const graceCommandMatches =
       session.activeCommand === null &&
       lastAiActiveCommand !== null &&
@@ -145,12 +154,12 @@ export function createInternalTerminalAgentHookRouter(options: {
       !currentCommandMatches &&
       !graceCommandMatches &&
       options.terminalStateService.getCurrent(session.id, session).agent !==
-        parsed.data.agent
+        effectiveAgent
     ) {
       terminalStateLogger.info("terminal-state.hook.ignored", {
         message: "Terminal agent hook ignored because agent is not current",
         terminalSessionId: session.id,
-        agent: parsed.data.agent,
+        agent: effectiveAgent,
         hookEvent: parsed.data.hookEvent,
         activeCommand: session.activeCommand,
       });
@@ -165,7 +174,7 @@ export function createInternalTerminalAgentHookRouter(options: {
 
     const terminalState = options.terminalStateService.handleAgentHook(
       session.id,
-      parsed.data.agent,
+      effectiveAgent,
       parsed.data.hookEvent,
       {
         projectId: session.projectId,
@@ -175,7 +184,7 @@ export function createInternalTerminalAgentHookRouter(options: {
     terminalStateLogger.info("terminal-state.hook.recorded", {
       message: "Terminal agent hook recorded",
       terminalSessionId: session.id,
-      agent: parsed.data.agent,
+      agent: effectiveAgent,
       hookEvent: parsed.data.hookEvent,
       state: terminalState.state,
     });

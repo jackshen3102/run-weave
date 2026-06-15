@@ -23,7 +23,9 @@ const terminalCompletionLogger = logger.child({
 const completionEventSchema = z
   .object({
     terminalSessionId: z.string().trim().min(1),
-    source: z.enum(["claude", "codex", "trae", "unknown"]).default("unknown"),
+    source: z
+      .enum(["claude", "codex", "trae", "traecli", "traex", "unknown"])
+      .default("unknown"),
     completionReason: completionReasonEnum.optional(),
     commandName: z.string().trim().min(1).nullable().optional(),
     rawHookEvent: z.string().trim().min(1).nullable().optional(),
