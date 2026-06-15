@@ -1,25 +1,18 @@
-import { Router, type Request, type Response } from "express";
+import { Router } from "express";
 import { z } from "zod";
 import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
-  CreateTerminalEventsWsTicketResponse,
-  CreateTerminalWsTicketResponse,
   SendTerminalInterruptRequest,
   SendTerminalInterruptResponse,
   SendTerminalInputRequest,
-  SendTerminalInputResponse,
   TerminalInputMode,
   TerminalCompletionEventListResponse,
 } from "@runweave/shared";
 import type { AuthService } from "../auth/service";
-import { readBearerToken } from "../auth/middleware";
 import { logger } from "../logging";
 import { aiDiagnosticLog } from "../diagnostic-logs/recorder";
-import type {
-  TerminalSessionManager,
-  TerminalSessionRecord,
-} from "../terminal/manager";
+import type { TerminalSessionManager } from "../terminal/manager";
 import { registerTerminalPreviewRoutes } from "./terminal-preview-routes";
 import { registerTerminalProjectRoutes } from "./terminal-project-routes";
 import { registerTerminalClipboardImageRoutes } from "./terminal-clipboard-image-routes";
@@ -38,9 +31,8 @@ import {
   killTmuxSessionForTerminal,
   readTerminalScrollback,
   readTerminalScrollbackCapture,
-  resolveTmuxTarget,
 } from "../terminal/runtime-launcher";
-import type { TmuxKeySequenceItem, TmuxService } from "../terminal/tmux-service";
+import type { TmuxService } from "../terminal/tmux-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import {
   toHistoryPayload,
@@ -48,7 +40,6 @@ import {
   toStatusPayload,
 } from "./terminal-route-payloads";
 import {
-  buildTerminalInputOperationId,
   createTerminalSessionSchema,
   resolveTerminalCreateDefaults,
   sanitizeTerminalError,
@@ -57,82 +48,14 @@ import {
   TerminalCreateDefaultsError,
   TERMINAL_INTERRUPT_ESCAPE_INPUT,
 } from "./terminal-session-route-helpers";
+import {
+  isMissingTerminalRuntimeError,
+  normalizeCodexSlashCommand,
+  sendInputToSession,
+} from "./terminal-input-dispatcher";
+import { registerTerminalTicketRoutes } from "./terminal-ticket-routes";
 
 const terminalLogger = logger.child({ component: "terminal" });
-
-const CODEX_COMPOSER_SUBMIT_DELAY_MS = 200;
-
-function describeTerminalInput(data: string): Record<string, unknown> {
-  return {
-    byteLength: Buffer.byteLength(data, "utf8"),
-    charLength: data.length,
-    hasNewline: data.includes("\n") || data.includes("\r"),
-    isEscapeOnly: data === TERMINAL_INTERRUPT_ESCAPE_INPUT,
-    firstCodePoints: Array.from(data.slice(0, 8)).map((char) =>
-      char.codePointAt(0),
-    ),
-  };
-}
-
-function normalizeCodexSlashCommand(data: string): string | null {
-  const command = data.trim();
-  if (
-    !command.startsWith("/") ||
-    command.includes("\n") ||
-    command.includes("\r")
-  ) {
-    return null;
-  }
-  return command;
-}
-
-function resolveTerminalInputData(
-  data: string,
-  mode: TerminalInputMode | undefined,
-): string {
-  if (mode === "line") {
-    return `${data}\r`;
-  }
-  return data;
-}
-
-function buildCodexSlashCommandSequence(
-  command: string,
-  submitKey: "C-m" | "Tab",
-): TmuxKeySequenceItem[] {
-  return [
-    { type: "key", key: "C-u" },
-    {
-      type: "literal",
-      value: command,
-      delayAfterMs: CODEX_COMPOSER_SUBMIT_DELAY_MS,
-    },
-    { type: "key", key: submitKey },
-  ];
-}
-
-function buildCodexSlashCommandPtyInput(
-  command: string,
-  submitKey: "C-m" | "Tab",
-): string {
-  return `\x15${command}${submitKey === "Tab" ? "\t" : "\r"}`;
-}
-
-function buildTerminalLineSequence(data: string): TmuxKeySequenceItem[] {
-  return [
-    {
-      type: "literal",
-      value: data,
-      delayAfterMs: CODEX_COMPOSER_SUBMIT_DELAY_MS,
-    },
-    { type: "key", key: "C-m" },
-  ];
-}
-
-function isMissingTerminalRuntimeError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /can't find (pane|session)|no server running/i.test(message);
-}
 
 export function createTerminalRouter(
   terminalSessionManager: TerminalSessionManager,
@@ -148,111 +71,6 @@ export function createTerminalRouter(
   },
 ): Router {
   const router = Router();
-
-  const resolveAuthenticatedSessionId = (
-    authorizationHeader: string | undefined,
-  ) => {
-    if (!options?.authService) {
-      return null;
-    }
-    const token = readBearerToken({
-      headers: { authorization: authorizationHeader },
-    } as never);
-    if (!token) {
-      return null;
-    }
-    return options.authService.verifyAccessToken(token)?.sessionId ?? null;
-  };
-
-  const sendInputToSession = async (
-    session: TerminalSessionRecord,
-    data: string,
-    mode?: TerminalInputMode,
-    operationId?: string,
-  ): Promise<SendTerminalInputResponse> => {
-    if (!options?.runtimeRegistry || !options.ptyService) {
-      throw new Error("Terminal runtime service unavailable");
-    }
-    if (isTmuxBackedSession(session) && !options.tmuxService) {
-      throw new Error("Terminal tmux service unavailable");
-    }
-
-    const ensured = await ensureTerminalRuntime({
-      session,
-      terminalSessionManager,
-      runtimeRegistry: options.runtimeRegistry,
-      ptyService: options.ptyService,
-      tmuxService: options.tmuxService,
-      tmuxOutputWatcher: options.tmuxOutputWatcher,
-    });
-    const currentTerminalState = options.terminalStateService?.getCurrent(
-      session.id,
-      session,
-    );
-    const codexSlashCommand =
-      mode === "codex_slash_command" ? normalizeCodexSlashCommand(data) : null;
-    const codexSlashSubmitKey =
-      currentTerminalState?.state === "agent_running" ? "Tab" : "C-m";
-    const dispatchData =
-      codexSlashCommand === null ? resolveTerminalInputData(data, mode) : null;
-    aiDiagnosticLog("terminal input dispatch requested", {
-      terminalSessionId: session.id,
-      runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
-      operationId: operationId ?? null,
-      inputMode: mode ?? "raw",
-      input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
-      codexSlashSubmitKey: codexSlashCommand ? codexSlashSubmitKey : null,
-    });
-    if (isTmuxBackedSession(session) && options.tmuxService) {
-      const target = resolveTmuxTarget(session, options.tmuxService);
-      aiDiagnosticLog("terminal tmux input dispatch selected", {
-        terminalSessionId: session.id,
-        operationId: operationId ?? null,
-        tmuxSessionName: target.sessionName,
-        socketPath: target.socketPath,
-        inputMode: mode ?? "raw",
-        input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
-        codexSlashSubmitKey: codexSlashCommand ? codexSlashSubmitKey : null,
-      });
-      if (codexSlashCommand) {
-        await options.tmuxService.sendKeySequence(
-          target,
-          buildCodexSlashCommandSequence(
-            codexSlashCommand,
-            codexSlashSubmitKey,
-          ),
-        );
-      } else if (mode === "line") {
-        await options.tmuxService.sendKeySequence(
-          target,
-          buildTerminalLineSequence(data),
-        );
-      } else {
-        await options.tmuxService.sendInput(
-          target,
-          dispatchData ?? "",
-        );
-      }
-    } else {
-      ensured.runtime.write(
-        codexSlashCommand
-          ? buildCodexSlashCommandPtyInput(
-              codexSlashCommand,
-              codexSlashSubmitKey,
-            )
-          : (dispatchData ?? ""),
-      );
-    }
-
-    return {
-      operationId: operationId ?? buildTerminalInputOperationId(),
-      terminalSessionId: session.id,
-      inputAccepted: true,
-      inputEnqueued: true,
-      runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
-      acceptedAt: new Date().toISOString(),
-    };
-  };
 
   registerTerminalProjectRoutes(router, terminalSessionManager, {
     runtimeRegistry: options?.runtimeRegistry,
@@ -322,38 +140,10 @@ export function createTerminalRouter(
     res.json(payload);
   });
 
-  const handleTerminalEventsWsTicket = (
-    req: Request,
-    res: Response,
-  ): void => {
-    if (!options?.authService) {
-      res.status(503).json({ message: "Terminal ticket service unavailable" });
-      return;
-    }
-    const authSessionId = resolveAuthenticatedSessionId(
-      req.headers.authorization,
-    );
-    if (!authSessionId) {
-      res.status(401).json({ message: "Unauthorized" });
-      return;
-    }
-
-    const issued = options.authService.issueTemporaryToken({
-      sessionId: authSessionId,
-      tokenType: "terminal-events-ws",
-      resource: {},
-      ttlMs: 60_000,
-    });
-    const payload: CreateTerminalEventsWsTicketResponse = {
-      ticket: issued.token,
-      expiresIn: issued.expiresIn,
-      baselineEventId: options.terminalEventService?.getLatestId() ?? null,
-    };
-    res.status(200).json(payload);
-  };
-
-  router.post("/events/ws-ticket", handleTerminalEventsWsTicket);
-  router.post("/completion-events/ws-ticket", handleTerminalEventsWsTicket);
+  registerTerminalTicketRoutes(router, terminalSessionManager, {
+    authService: options?.authService,
+    terminalEventService: options?.terminalEventService,
+  });
 
   router.post("/session", async (req, res) => {
     const parsed = createTerminalSessionSchema.safeParse(
@@ -570,37 +360,6 @@ export function createTerminalRouter(
     );
   });
 
-  router.post("/session/:id/ws-ticket", (req, res) => {
-    const session = terminalSessionManager.getSession(req.params.id);
-    if (!session) {
-      res.status(404).json({ message: "Terminal session not found" });
-      return;
-    }
-    if (!options?.authService) {
-      res.status(503).json({ message: "Terminal ticket service unavailable" });
-      return;
-    }
-    const authSessionId = resolveAuthenticatedSessionId(
-      req.headers.authorization,
-    );
-    if (!authSessionId) {
-      res.status(401).json({ message: "Unauthorized" });
-      return;
-    }
-
-    const issued = options.authService.issueTemporaryToken({
-      sessionId: authSessionId,
-      tokenType: "terminal-ws",
-      resource: { terminalSessionId: session.id },
-      ttlMs: 60_000,
-    });
-    const payload: CreateTerminalWsTicketResponse = {
-      ticket: issued.token,
-      expiresIn: issued.expiresIn,
-    };
-    res.status(200).json(payload);
-  });
-
   router.post("/session/:id/input", async (req, res) => {
     const parsed = sendTerminalInputSchema.safeParse(
       req.body as SendTerminalInputRequest,
@@ -641,6 +400,8 @@ export function createTerminalRouter(
     try {
       const inputMode = parsed.data.mode as TerminalInputMode | undefined;
       const payload = await sendInputToSession(
+        terminalSessionManager,
+        options,
         session,
         parsed.data.data,
         inputMode,
@@ -709,6 +470,8 @@ export function createTerminalRouter(
         interruptSequence: "escape",
       });
       const inputPayload = await sendInputToSession(
+        terminalSessionManager,
+        options,
         session,
         TERMINAL_INTERRUPT_ESCAPE_INPUT,
         undefined,
