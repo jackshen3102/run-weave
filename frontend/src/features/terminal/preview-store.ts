@@ -10,7 +10,7 @@ export type TerminalPreviewMode = "file" | "changes" | "explorer";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
 export type TerminalSvgViewMode = "preview" | "source";
 export type TerminalChangesViewMode = "diff" | "preview";
-export type TerminalSidecarTool = "preview" | "browser";
+export type TerminalSidecarTool = "preview" | "browser" | "orchestrator";
 
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
 
@@ -59,6 +59,7 @@ interface TerminalPreviewStore {
   };
   openPreview: (projectId: string, mode?: TerminalPreviewMode) => void;
   openBrowser: () => void;
+  openOrchestrator: () => void;
   closePreview: () => void;
   setActiveTool: (tool: TerminalSidecarTool) => void;
   setWidth: (widthPx: number) => void;
@@ -158,6 +159,11 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
   openBrowser: () => {
     set((state: TerminalPreviewStore) => ({
       ui: { ...state.ui, open: true, activeTool: "browser" },
+    }));
+  },
+  openOrchestrator: () => {
+    set((state: TerminalPreviewStore) => ({
+      ui: { ...state.ui, open: true, activeTool: "orchestrator" },
     }));
   },
   closePreview: () => {

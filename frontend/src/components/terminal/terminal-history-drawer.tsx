@@ -103,6 +103,7 @@ export function TerminalHistoryDrawer({
     terminalName ??
     (history
       ? formatTerminalSessionName({
+          alias: history.alias,
           cwd: history.cwd,
           activeCommand: history.activeCommand,
         })

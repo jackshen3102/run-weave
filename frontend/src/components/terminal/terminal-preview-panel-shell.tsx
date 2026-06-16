@@ -16,10 +16,12 @@ interface ActiveProjectLike {
   path?: string | null;
 }
 
+type TerminalSidecarPanelTool = "preview" | "browser" | "orchestrator";
+
 interface TerminalPreviewPanelShellProps {
   panelWidth: string;
   expanded: boolean;
-  activeTool: "preview" | "browser";
+  activeTool: TerminalSidecarPanelTool;
   mode: string | null;
   fileKind: string;
   fileLoading: boolean;
@@ -42,8 +44,9 @@ interface TerminalPreviewPanelShellProps {
   selectedChangePath?: string;
   activeProject: ActiveProjectLike | null;
   body: ReactNode;
+  orchestratorBody?: ReactNode;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onSetActiveTool: (tool: "preview" | "browser") => void;
+  onSetActiveTool: (tool: TerminalSidecarPanelTool) => void;
   onSetPreviewMode: (mode: "changes" | "file" | "explorer") => void;
   onToggleExpanded: () => void;
   onRefresh: () => void;
@@ -88,6 +91,7 @@ export function TerminalPreviewPanelShell({
   selectedChangePath,
   activeProject,
   body,
+  orchestratorBody,
   onStartResize,
   onSetActiveTool,
   onSetPreviewMode,
@@ -139,7 +143,7 @@ export function TerminalPreviewPanelShell({
                 role="tablist"
                 aria-label="Sidecar tools"
               >
-                {(["preview", "browser"] as const).map((tool) => (
+                {(["preview", "browser", "orchestrator"] as const).map((tool) => (
                   <button
                     type="button"
                     role="tab"
@@ -153,7 +157,11 @@ export function TerminalPreviewPanelShell({
                     ].join(" ")}
                     onClick={() => onSetActiveTool(tool)}
                   >
-                    {tool === "preview" ? "Preview" : "Browser"}
+                    {tool === "preview"
+                      ? "Preview"
+                      : tool === "browser"
+                        ? "Browser"
+                        : "Orchestrator"}
                   </button>
                 ))}
               </div>
@@ -367,6 +375,14 @@ export function TerminalPreviewPanelShell({
             ].join(" ")}
           >
             <TerminalBrowserTool active={activeTool === "browser"} />
+          </div>
+          <div
+            className={[
+              "absolute inset-0 min-h-0",
+              activeTool === "orchestrator" ? "" : "pointer-events-none hidden",
+            ].join(" ")}
+          >
+            {activeTool === "orchestrator" ? orchestratorBody : null}
           </div>
         </div>
       </div>

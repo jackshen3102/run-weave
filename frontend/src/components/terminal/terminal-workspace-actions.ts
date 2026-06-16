@@ -14,6 +14,7 @@ import {
   deleteTerminalSession,
   reorderTerminalProjects,
   reorderTerminalSessions,
+  updateTerminalSession,
   updateTerminalProject,
 } from "../../services/terminal";
 
@@ -127,6 +128,44 @@ export function useTerminalWorkspaceActions({
       }
     },
     [apiBase, loadSessions, onAuthExpired, setLoading, setRequestError, token],
+  );
+
+  const updateSessionAlias = useCallback(
+    async (terminalSessionId: string, alias: string): Promise<void> => {
+      setLoading(true);
+      try {
+        const updatedSession = await updateTerminalSession(
+          apiBase,
+          token,
+          terminalSessionId,
+          { alias: alias.trim() || null },
+        );
+        setSessions((currentSessions) =>
+          currentSessions.map((session) =>
+            session.terminalSessionId === updatedSession.terminalSessionId
+              ? updatedSession
+              : session,
+          ),
+        );
+        setRequestError(null);
+      } catch (error) {
+        if (error instanceof HttpError && error.status === 401) {
+          onAuthExpired?.();
+          return;
+        }
+        setRequestError(String(error));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      apiBase,
+      onAuthExpired,
+      setLoading,
+      setRequestError,
+      setSessions,
+      token,
+    ],
   );
 
   const closeProjectDialog = useCallback(() => {
@@ -374,6 +413,7 @@ export function useTerminalWorkspaceActions({
   return {
     createSession,
     closeSession,
+    updateSessionAlias,
     closeProjectDialog,
     submitProjectDialog,
     removeProject,

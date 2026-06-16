@@ -22,6 +22,11 @@ function basename(value: string): string {
 function buildSessionTitle(
   session: ReturnType<TerminalSessionManager["listSessions"]>[number],
 ): string {
+  const alias = session.alias?.trim();
+  if (alias) {
+    return alias;
+  }
+
   const agent = getTerminalSessionAgent(session);
   const commandLabel =
     agent ?? session.activeCommand?.trim() ?? basename(session.command);

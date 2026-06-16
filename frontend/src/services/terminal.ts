@@ -1,4 +1,5 @@
 import type {
+  CreateOrchestratorRunRequest,
   CreateTerminalProjectRequest,
   CreateTerminalClipboardImageRequest,
   CreateTerminalClipboardImageResponse,
@@ -6,6 +7,13 @@ import type {
   CreateTerminalSessionResponse,
   CreateTerminalEventsWsTicketResponse,
   CreateTerminalWsTicketResponse,
+  InjectOrchestratorPromptRequest,
+  OrchestratorRoleDefinition,
+  OrchestratorRolesResponse,
+  OrchestratorRunPackage,
+  OrchestratorRunsResponse,
+  OrchestratorRunStatus,
+  PreviewOrchestratorRunPromptResponse,
   SendTerminalInputRequest,
   SendTerminalInputResponse,
   TerminalCompletionEventListResponse,
@@ -25,6 +33,7 @@ import type {
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
   UpdateTerminalProjectRequest,
+  UpdateTerminalSessionRequest,
 } from "@runweave/shared";
 import { requestBlob, requestJson, requestVoid } from "./http";
 
@@ -92,6 +101,148 @@ export async function listTerminalSessions(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+  );
+}
+
+export async function updateTerminalSession(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  payload: UpdateTerminalSessionRequest,
+): Promise<TerminalSessionListItem> {
+  return requestJson<TerminalSessionListItem>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function listOrchestratorRoles(
+  apiBase: string,
+  token: string,
+): Promise<OrchestratorRolesResponse> {
+  return requestJson<OrchestratorRolesResponse>(
+    apiBase,
+    "/api/orchestrator/roles",
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+}
+
+export async function saveOrchestratorRoles(
+  apiBase: string,
+  token: string,
+  roles: OrchestratorRoleDefinition[],
+): Promise<OrchestratorRolesResponse> {
+  return requestJson<OrchestratorRolesResponse>(
+    apiBase,
+    "/api/orchestrator/roles",
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ roles }),
+    },
+  );
+}
+
+export async function listOrchestratorRuns(
+  apiBase: string,
+  token: string,
+  projectId: string,
+): Promise<OrchestratorRunsResponse> {
+  return requestJson<OrchestratorRunsResponse>(
+    apiBase,
+    `/api/orchestrator/runs?projectId=${encodeURIComponent(projectId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+}
+
+export async function createOrchestratorRun(
+  apiBase: string,
+  token: string,
+  payload: CreateOrchestratorRunRequest,
+): Promise<OrchestratorRunPackage> {
+  return requestJson<OrchestratorRunPackage>(
+    apiBase,
+    "/api/orchestrator/runs",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function previewOrchestratorRunPrompt(
+  apiBase: string,
+  token: string,
+  payload: CreateOrchestratorRunRequest,
+): Promise<PreviewOrchestratorRunPromptResponse> {
+  return requestJson<PreviewOrchestratorRunPromptResponse>(
+    apiBase,
+    "/api/orchestrator/runs/preview",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function injectOrchestratorPrompt(
+  apiBase: string,
+  token: string,
+  runId: string,
+  payload: InjectOrchestratorPromptRequest,
+): Promise<OrchestratorRunPackage> {
+  return requestJson<OrchestratorRunPackage>(
+    apiBase,
+    `/api/orchestrator/runs/${encodeURIComponent(runId)}/inject`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function setOrchestratorRunStatus(
+  apiBase: string,
+  token: string,
+  runId: string,
+  status: OrchestratorRunStatus,
+): Promise<OrchestratorRunPackage> {
+  return requestJson<OrchestratorRunPackage>(
+    apiBase,
+    `/api/orchestrator/runs/${encodeURIComponent(runId)}/status`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ status }),
     },
   );
 }

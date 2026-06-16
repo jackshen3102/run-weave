@@ -1,4 +1,5 @@
 interface TerminalSessionNameContext {
+  alias?: string | null;
   cwd?: string;
   activeCommand?: string | null;
 }
@@ -17,11 +18,11 @@ function basename(value: string | undefined): string | null {
 export function formatTerminalSessionName(
   context: TerminalSessionNameContext,
 ): string {
-  const directoryLabel = basename(context.cwd) ?? "Terminal";
+  const baseLabel = context.alias?.trim() || basename(context.cwd) || "Terminal";
   const activeCommand = basename(context.activeCommand ?? undefined);
   if (!activeCommand || INTERACTIVE_SHELL_COMMANDS.has(activeCommand)) {
-    return directoryLabel;
+    return baseLabel;
   }
 
-  return `${directoryLabel}(${activeCommand})`;
+  return `${baseLabel}(${activeCommand})`;
 }

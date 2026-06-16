@@ -8,6 +8,7 @@ import type {
   SendTerminalInputRequest,
   TerminalInputMode,
   TerminalCompletionEventListResponse,
+  UpdateTerminalSessionRequest,
 } from "@runweave/shared";
 import type { AuthService } from "../auth/service";
 import { logger } from "../logging";
@@ -144,6 +145,12 @@ export function createTerminalRouter(
     authService: options?.authService,
     terminalEventService: options?.terminalEventService,
   });
+
+  const updateTerminalSessionSchema = z
+    .object({
+      alias: z.string().trim().max(80).nullable().optional(),
+    })
+    .strict();
 
   router.post("/session", async (req, res) => {
     const parsed = createTerminalSessionSchema.safeParse(
@@ -360,6 +367,53 @@ export function createTerminalRouter(
     );
   });
 
+  router.patch("/session/:id", async (req, res) => {
+    const parsed = updateTerminalSessionSchema.safeParse(
+      req.body as UpdateTerminalSessionRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const session = terminalSessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Terminal session not found" });
+      return;
+    }
+
+    try {
+      const updatedSession =
+        parsed.data.alias !== undefined
+          ? await terminalSessionManager.updateSessionAlias(
+              session.id,
+              parsed.data.alias,
+            )
+          : session;
+      res.json(
+        toSessionListItem(
+          updatedSession ?? session,
+          options?.terminalStateService?.getCurrent(
+            session.id,
+            updatedSession ?? session,
+          ),
+        ),
+      );
+    } catch (error) {
+      terminalLogger.error("terminal.session.update.failed", {
+        message: "Terminal session update failed",
+        terminalSessionId: session.id,
+        error,
+      });
+      res.status(500).json({
+        message: "Terminal session update failed",
+        error: String(error),
+      });
+    }
+  });
   router.post("/session/:id/input", async (req, res) => {
     const parsed = sendTerminalInputSchema.safeParse(
       req.body as SendTerminalInputRequest,

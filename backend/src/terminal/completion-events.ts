@@ -10,6 +10,8 @@ export interface RecordTerminalCompletionEventInput {
   commandName: string | null;
   rawHookEvent: string | null;
   cwd: string | null;
+  outboxPath?: string | null;
+  summary?: string | null;
 }
 
 export class TerminalCompletionEventStore {
@@ -30,6 +32,8 @@ export class TerminalCompletionEventStore {
       rawHookEvent: input.rawHookEvent,
       hookEvent: input.rawHookEvent ?? input.completionReason,
       cwd: input.cwd,
+      outboxPath: input.outboxPath ?? null,
+      summary: input.summary ?? null,
       createdAt: new Date().toISOString(),
     };
     this.nextId += 1;

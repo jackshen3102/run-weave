@@ -1,6 +1,7 @@
 export * from "./diagnostic-logs";
 export * from "./protocol";
 export * from "./runtime-monitor";
+export * from "./orchestrator";
 export * from "./system-monitor";
 export * from "./terminal-protocol";
 export * from "./terminal-preview-core";

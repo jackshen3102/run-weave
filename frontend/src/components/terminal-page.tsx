@@ -105,6 +105,7 @@ export function TerminalPage({
   const renderedTitle = useMemo(() => {
     return session
       ? formatTerminalSessionName({
+          alias: session.alias,
           cwd: session.cwd,
           activeCommand: session.activeCommand,
         })

@@ -1,12 +1,21 @@
-import { lazy, Suspense, type CSSProperties } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useState,
+  type CSSProperties,
+} from "react";
 import type {
   TerminalProjectListItem,
   TerminalSessionListItem,
   TerminalState,
 } from "@runweave/shared";
-import { History, Home, Pencil, Plus, Trash2, X } from "lucide-react";
+import { History, Home, Pencil, Plus, Trash2, Workflow, X } from "lucide-react";
 import type { ConnectionConfig } from "../../features/connection/types";
-import { DEFAULT_TERMINAL_SIDECAR_WIDTH } from "../../features/terminal/preview-store";
+import {
+  DEFAULT_TERMINAL_SIDECAR_WIDTH,
+  useTerminalPreviewStore,
+} from "../../features/terminal/preview-store";
 import type { ClientMode } from "../../features/client-mode";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import { Button } from "../ui/button";
@@ -32,6 +41,16 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "../ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
 import { TerminalHistoryDrawer } from "./terminal-history-drawer";
 import { TerminalPreviewMenu } from "./terminal-preview-menu";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
@@ -55,6 +74,7 @@ function TerminalSessionTab({
   terminalState,
   onSelectSession,
   onRequestCloseSession,
+  onRequestEditAlias,
 }: {
   session: TerminalSessionListItem;
   isActive: boolean;
@@ -65,14 +85,16 @@ function TerminalSessionTab({
   terminalState?: TerminalState;
   onSelectSession: (terminalSessionId: string) => void;
   onRequestCloseSession: (terminalSessionId: string) => void;
+  onRequestEditAlias: (session: TerminalSessionListItem) => void;
 }) {
   const displayName = formatTerminalSessionName({
+    alias: session.alias,
     cwd: session.cwd,
     activeCommand: session.activeCommand,
   });
   const isWorking = terminalState?.state === "agent_running";
 
-  return (
+  const tab = (
     <div
       className={[
         "relative flex h-full shrink-0 items-center gap-2 border-r border-slate-800 pl-2 pr-3",
@@ -139,6 +161,112 @@ function TerminalSessionTab({
       ) : null}
     </div>
   );
+
+  if (isMobileMonitor) {
+    return tab;
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{tab}</ContextMenuTrigger>
+      <ContextMenuContent className="w-44">
+        <ContextMenuItem
+          onSelect={() => {
+            onRequestEditAlias(session);
+          }}
+        >
+          <Pencil className="h-4 w-4" />
+          Rename Alias
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+function TerminalSessionAliasDialog({
+  open,
+  loading,
+  session,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  loading: boolean;
+  session: TerminalSessionListItem | null;
+  onClose: () => void;
+  onSubmit: (alias: string) => Promise<void>;
+}) {
+  const [alias, setAlias] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setAlias(session?.alias ?? "");
+  }, [open, session?.alias]);
+
+  if (!open || !session) {
+    return null;
+  }
+
+  const fallbackName = formatTerminalSessionName({
+    cwd: session.cwd,
+    activeCommand: session.activeCommand,
+  });
+  const submit = async (): Promise<void> => {
+    await onSubmit(alias);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !loading) {
+          onClose();
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Rename Terminal</DialogTitle>
+          <DialogDescription className="truncate">
+            {fallbackName}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="terminal-alias">Alias</Label>
+          <Input
+            id="terminal-alias"
+            value={alias}
+            maxLength={80}
+            autoFocus
+            placeholder="coder"
+            onChange={(event) => setAlias(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            Leave empty to use the default terminal name.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            disabled={loading}
+            onClick={() => {
+              void submit();
+            }}
+          >
+            {loading ? "Saving..." : "Save Alias"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 interface TerminalWorkspaceShellProps {
@@ -184,6 +312,10 @@ interface TerminalWorkspaceShellProps {
   onRequestDeleteProject: (project: TerminalProjectListItem) => void;
   onRequestCreateSession: () => void;
   onRequestCloseSession: (terminalSessionId: string) => void;
+  onSubmitSessionAlias: (
+    terminalSessionId: string,
+    alias: string,
+  ) => Promise<void>;
   onOpenHistoryDrawer: (terminalSessionId: string) => void;
   onCloseProjectDialog: () => void;
   onSubmitProjectDialog: (name: string, projectPath: string) => Promise<void>;
@@ -242,6 +374,7 @@ export function TerminalWorkspaceShell({
   onRequestDeleteProject,
   onRequestCreateSession,
   onRequestCloseSession,
+  onSubmitSessionAlias,
   onOpenHistoryDrawer,
   onCloseProjectDialog,
   onSubmitProjectDialog,
@@ -253,10 +386,14 @@ export function TerminalWorkspaceShell({
   onSessionBell,
   onSessionMetadata,
 }: TerminalWorkspaceShellProps) {
+  const [aliasTarget, setAliasTarget] =
+    useState<TerminalSessionListItem | null>(null);
+
   return (
     <section
       className={[
         "flex h-full min-h-0 flex-col overflow-hidden bg-slate-950 text-slate-100",
+        "dark",
         className,
       ]
         .filter(Boolean)
@@ -423,6 +560,22 @@ export function TerminalWorkspaceShell({
             type="button"
             variant="ghost"
             size="sm"
+            disabled={loading || !activeProjectId}
+            aria-label="Open Orchestrator"
+            title="Open Orchestrator"
+            className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40"
+            onClick={() => {
+              useTerminalPreviewStore.getState().openOrchestrator();
+            }}
+          >
+            <Workflow className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
+        {!isMobileMonitor ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             disabled={!activeSession?.terminalSessionId}
             aria-label="Open terminal history"
             title="Open terminal history"
@@ -462,6 +615,7 @@ export function TerminalWorkspaceShell({
                   terminalState={terminalStateBySessionId[session.terminalSessionId]}
                   onSelectSession={onSelectSession}
                   onRequestCloseSession={onRequestCloseSession}
+                  onRequestEditAlias={setAliasTarget}
                 />
               );
             }}
@@ -563,6 +717,8 @@ export function TerminalWorkspaceShell({
                 activeProject={activeProject}
                 widthPx={previewWidthPx}
                 onAuthExpired={onAuthExpired}
+                sessions={sessions}
+                onSelectSession={onSelectSession}
                 onEditProject={() => {
                   onRequestEditProject();
                 }}
@@ -590,6 +746,8 @@ export function TerminalWorkspaceShell({
                     activeProject={activeProject}
                     widthPx={previewWidthPx}
                     onAuthExpired={onAuthExpired}
+                    sessions={sessions}
+                    onSelectSession={onSelectSession}
                     onEditProject={() => {
                       onRequestEditProject();
                     }}
@@ -618,6 +776,23 @@ export function TerminalWorkspaceShell({
         terminalName={historyTerminalName}
         onOpenChange={onHistoryDrawerOpenChange}
         onAuthExpired={onAuthExpired}
+      />
+      <TerminalSessionAliasDialog
+        open={aliasTarget !== null}
+        loading={loading}
+        session={aliasTarget}
+        onClose={() => {
+          if (!loading) {
+            setAliasTarget(null);
+          }
+        }}
+        onSubmit={async (alias) => {
+          if (!aliasTarget) {
+            return;
+          }
+          await onSubmitSessionAlias(aliasTarget.terminalSessionId, alias);
+          setAliasTarget(null);
+        }}
       />
       <AlertDialog
         open={projectPendingDeletion !== null}
