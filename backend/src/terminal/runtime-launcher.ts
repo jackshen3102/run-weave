@@ -162,6 +162,8 @@ export async function ensureTerminalRuntime(
                 process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT,
               RUNWEAVE_HOOK_DEBUG_LOG: process.env.RUNWEAVE_HOOK_DEBUG_LOG,
               RUNWEAVE_HOOK_TOKEN: process.env.RUNWEAVE_HOOK_TOKEN,
+              RUNWEAVE_BASE_URL: process.env.RUNWEAVE_BASE_URL,
+              RUNWEAVE_BACKEND_PORT: process.env.RUNWEAVE_BACKEND_PORT,
             },
           },
         );

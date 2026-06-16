@@ -207,6 +207,7 @@ export interface CreateTerminalClipboardImageResponse {
 export interface TerminalSessionStatusResponse {
   terminalSessionId: string;
   projectId: string;
+  alias?: string | null;
   command: string;
   args: string[];
   cwd: string;
@@ -226,6 +227,7 @@ export type TerminalSessionHistoryResponse = TerminalSessionStatusResponse;
 export interface TerminalSessionListItem {
   terminalSessionId: string;
   projectId: string;
+  alias?: string | null;
   command: string;
   args: string[];
   cwd: string;
@@ -257,6 +259,10 @@ export interface AppHomeOverviewResponse {
   sessions: AppHomeOverviewSession[];
 }
 
+export interface UpdateTerminalSessionRequest {
+  alias?: string | null;
+}
+
 export type TerminalCompletionReason =
   | "hook_stop"
   | "notify"
@@ -274,6 +280,8 @@ export interface TerminalCompletionEvent {
   /** @deprecated Use rawHookEvent instead. Kept for short-term backward compatibility. */
   hookEvent: string;
   cwd: string | null;
+  outboxPath?: string | null;
+  summary?: string | null;
   createdAt: string;
 }
 
@@ -284,6 +292,8 @@ export interface TerminalCompletionEventPayload {
   rawHookEvent: string | null;
   hookEvent: string;
   cwd: string | null;
+  outboxPath?: string | null;
+  summary?: string | null;
 }
 
 export type TerminalAgentKind = "codex" | "trae" | "traex" | "traecli";

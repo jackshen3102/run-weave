@@ -1,0 +1,30 @@
+sequenceDiagram
+  autonumber
+  actor U as 用户
+  participant Cfg as ② 配置态 (Side Card Tab)
+  participant Pkg as ① 任务包 JSON
+  participant Main as ③ 主 Agent (常驻终端)
+  participant Rt as ⑥ 结果路由器 (薄)
+  participant Wk as ④ Worker 终端
+
+  U->>Cfg: 定义角色/选终端/选主Agent/写提示语 → 开始 Run
+  Cfg->>Pkg: 生成任务包 JSON
+  Pkg->>Main: 按配置启动主 Agent + 注入启动提示语
+  Main->>Main: 拆目标, 决定派谁
+  Main->>Wk: rw run --role X --query … (亲自下发)
+  Note over Main: 这一回合结束 → 主 Agent 空闲, 等输入
+  Wk->>Wk: 执行业务
+  Wk->>Rt: 完成: 写 outbox + 触发 hook (completion)
+  Rt->>Rt: 读 outbox → 拼成人类可读 query
+  Rt->>Main: rw send 直发结果 (不判断忙闲, 立即发, 终端自排队)
+  Main->>Pkg: 更新 goal 状态
+  Main->>Main: 回合边界消费结果, 基于上下文决策下一步
+
+  alt 全部完成
+    Main->>Pkg: status = done
+    Main-->>U: ✅ Run 完成
+  else 需人工
+    Main->>Pkg: status = need_human, 暂停
+    Main-->>U: 飞书/桌面/UI 横幅
+    U->>Main: rw send 注入继续提示 → 续跑
+  end

@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { fileURLToPath, URL } from "node:url";
 
 const frontendPort = Number(process.env.VITE_DEV_PORT ?? 5173);
 const frontendHost = process.env.VITE_DEV_HOST?.trim() || "0.0.0.0";
@@ -29,6 +30,11 @@ export default defineConfig({
       },
     }),
   ],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   server: {
     host: frontendHost,
     port: frontendPort,

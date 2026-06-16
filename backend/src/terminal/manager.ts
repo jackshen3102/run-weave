@@ -205,6 +205,7 @@ export class TerminalSessionManager {
         this.sessions.has(candidate),
       ),
       projectId,
+      alias: null,
       command: options.command,
       args: options.args ?? [],
       cwd: options.cwd,
@@ -412,6 +413,28 @@ export class TerminalSessionManager {
       terminalSessionId,
       command: launch.command,
       args: nextArgs,
+    });
+    return session;
+  }
+
+  async updateSessionAlias(
+    terminalSessionId: string,
+    alias: string | null,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const nextAlias = alias?.trim() || null;
+    if (session.alias === nextAlias) {
+      return session;
+    }
+
+    session.alias = nextAlias;
+    await this.sessionStore.updateSessionAlias({
+      terminalSessionId,
+      alias: nextAlias,
     });
     return session;
   }

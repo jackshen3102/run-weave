@@ -23,6 +23,7 @@ export interface TerminalProjectRecord {
 export interface TerminalSessionRecord {
   id: string;
   projectId: string;
+  alias: string | null;
   command: string;
   args: string[];
   cwd: string;
@@ -88,6 +89,7 @@ export function buildSessionRecord(
   return {
     id: persisted.id,
     projectId: persisted.projectId,
+    alias: persisted.alias ?? null,
     command: persisted.command,
     args: persisted.args,
     cwd: persisted.cwd,
@@ -150,6 +152,7 @@ export function toPersistedSession(
   return {
     id: session.id,
     projectId: session.projectId,
+    alias: session.alias,
     command: session.command,
     args: session.args,
     cwd: session.cwd,

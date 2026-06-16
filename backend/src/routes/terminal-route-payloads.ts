@@ -34,6 +34,7 @@ export function toStatusPayload(
   return {
     terminalSessionId: session.id,
     projectId: session.projectId,
+    alias: session.alias,
     command: session.command,
     args: session.args,
     cwd: session.cwd,
@@ -55,6 +56,7 @@ export function toSessionListItem(
   return {
     terminalSessionId: session.id,
     projectId: session.projectId,
+    alias: session.alias,
     command: session.command,
     args: session.args,
     cwd: session.cwd,

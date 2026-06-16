@@ -25,6 +25,7 @@ import type {
   UpdateTerminalSessionExitParams,
   UpdateTerminalSessionStatusParams,
   UpdateTerminalSessionActivityParams,
+  UpdateTerminalSessionAliasParams,
   UpdateTerminalSessionLaunchParams,
   UpdateTerminalSessionMetadataParams,
   UpdateTerminalSessionRuntimeMetadataParams,
@@ -50,6 +51,7 @@ type LegacyTerminalSessionRecord = Partial<PersistedTerminalSessionRecord> & {
   createdAt: string;
   status: "running" | "exited";
   name?: string;
+  alias?: string | null;
   projectId?: string;
   scrollback?: string;
   activeCommand?: string | null;
@@ -112,6 +114,7 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       }
       normalizedSessions.push({
         ...metadata,
+        alias: metadata.alias?.trim() || null,
         projectId: session.projectId ?? defaultProjectId ?? "",
         activeCommand: normalizeActiveCommand({
           activeCommand: session.activeCommand,
@@ -306,6 +309,23 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
 
       session.command = params.command;
       session.args = [...params.args];
+      await database.write();
+    });
+  }
+
+  async updateSessionAlias(
+    params: UpdateTerminalSessionAliasParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const session = database.data.sessions.find(
+        (candidate) => candidate.id === params.terminalSessionId,
+      );
+      if (!session) {
+        return;
+      }
+
+      session.alias = params.alias;
       await database.write();
     });
   }
@@ -635,6 +655,7 @@ function toMetadataRecord(
   return {
     id: session.id,
     projectId: session.projectId,
+    alias: session.alias ?? null,
     command: session.command,
     args: [...session.args],
     cwd: session.cwd,

@@ -21,6 +21,8 @@ export class TerminalCompletionEventService {
         rawHookEvent: input.rawHookEvent,
         hookEvent: input.rawHookEvent ?? input.completionReason,
         cwd: input.cwd,
+        outboxPath: input.outboxPath ?? null,
+        summary: input.summary ?? null,
       },
     });
   }

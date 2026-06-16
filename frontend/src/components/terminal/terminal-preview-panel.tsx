@@ -1,5 +1,8 @@
 import { useCallback, useEffect } from "react";
-import type { TerminalProjectListItem } from "@runweave/shared";
+import type {
+  TerminalProjectListItem,
+  TerminalSessionListItem,
+} from "@runweave/shared";
 import {
   getTerminalPreviewFileKind,
   isSupportedTerminalImagePreviewPath,
@@ -13,15 +16,18 @@ import { useTerminalPreviewPanelActions } from "./terminal-preview-panel-actions
 import { useTerminalPreviewPanelData } from "./use-terminal-preview-panel-data";
 import { TerminalPreviewPanelMutationDialogs } from "./terminal-preview-panel-mutation-dialogs";
 import { TerminalPreviewPanelShell } from "./terminal-preview-panel-shell";
+import { TerminalOrchestratorPanel } from "./terminal-orchestrator-panel";
 import { useTerminalFileTree } from "./use-terminal-file-tree";
 
 interface TerminalPreviewPanelProps {
   apiBase: string;
   token: string;
   activeProject: TerminalProjectListItem | null;
+  sessions: TerminalSessionListItem[];
   widthPx?: number;
   onAuthExpired?: () => void;
   onEditProject: () => void;
+  onSelectSession?: (terminalSessionId: string) => void;
 }
 
 interface PreviewFileMutationTarget {
@@ -39,9 +45,11 @@ export function TerminalPreviewPanel({
   apiBase,
   token,
   activeProject,
+  sessions,
   widthPx,
   onAuthExpired,
   onEditProject,
+  onSelectSession,
 }: TerminalPreviewPanelProps) {
   const {
     closePreview,
@@ -430,7 +438,7 @@ export function TerminalPreviewPanel({
     updateProjectPreview,
   ]);
 
-  const body = (
+  const previewBody = (
     <TerminalPreviewPanelContent
       activeProject={activeProject}
       apiBase={apiBase}
@@ -518,6 +526,16 @@ export function TerminalPreviewPanel({
       }}
     />
   );
+  const orchestratorBody = (
+    <TerminalOrchestratorPanel
+      apiBase={apiBase}
+      token={token}
+      activeProject={activeProject}
+      sessions={sessions}
+      onAuthExpired={onAuthExpired}
+      onSelectSession={onSelectSession}
+    />
+  );
 
   return (
     <>
@@ -556,7 +574,8 @@ export function TerminalPreviewPanel({
         changesViewMode={changesViewMode}
         selectedChangePath={selectedChangePath}
         activeProject={activeProject}
-        body={body}
+        body={previewBody}
+        orchestratorBody={orchestratorBody}
         onStartResize={startResize}
         onSetActiveTool={setActiveTool}
         onSetPreviewMode={(nextMode) => {

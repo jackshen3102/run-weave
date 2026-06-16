@@ -12,6 +12,7 @@ export interface PersistedTerminalProjectRecord {
 export interface PersistedTerminalSessionRecord {
   id: string;
   projectId: string;
+  alias?: string | null;
   command: string;
   args: string[];
   cwd: string;
@@ -87,6 +88,11 @@ export interface UpdateTerminalSessionLaunchParams {
   args: string[];
 }
 
+export interface UpdateTerminalSessionAliasParams {
+  terminalSessionId: string;
+  alias: string | null;
+}
+
 export interface UpdateTerminalSessionRuntimeMetadataParams extends TerminalRuntimeMetadata {
   terminalSessionId: string;
 }
@@ -126,6 +132,7 @@ export interface TerminalSessionStore {
     params: UpdateTerminalSessionActivityParams,
   ): Promise<void>;
   updateSessionLaunch(params: UpdateTerminalSessionLaunchParams): Promise<void>;
+  updateSessionAlias(params: UpdateTerminalSessionAliasParams): Promise<void>;
   updateSessionRuntimeMetadata(
     params: UpdateTerminalSessionRuntimeMetadataParams,
   ): Promise<void>;

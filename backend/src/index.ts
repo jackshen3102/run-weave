@@ -18,6 +18,8 @@ import {
 import { createAuthRouter } from "./routes/auth";
 import { createAppHomeOverviewRouter } from "./routes/app-home-overview";
 import { createDiagnosticLogsRouter } from "./routes/diagnostic-logs";
+import { OrchestratorService } from "./orchestrator/service";
+import { createOrchestratorRouter } from "./routes/orchestrator";
 import {
   createInternalTerminalAgentHookRouter,
   createTerminalStateRouter,
@@ -72,6 +74,7 @@ interface RuntimeServices {
   authSecureCookies: boolean;
   terminalSessionManager: TerminalSessionManager;
   terminalStateService: TerminalStateService;
+  orchestratorService: OrchestratorService;
   terminalEventService: TerminalEventService;
   terminalCompletionEventService: TerminalCompletionEventService;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
@@ -218,6 +221,16 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
   }
   await tmuxOutputWatcher.watchExistingSessions();
+  const orchestratorService = new OrchestratorService({
+    terminalSessionManager,
+    terminalEventService,
+    ptyService,
+    runtimeRegistry: terminalRuntimeRegistry,
+    terminalStateService,
+    tmuxService,
+    tmuxOutputWatcher,
+  });
+  await orchestratorService.initialize();
 
   return {
     authStore,
@@ -226,6 +239,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     authSecureCookies: authConfig.secureCookies,
     terminalSessionManager,
     terminalStateService,
+    orchestratorService,
     terminalEventService,
     terminalCompletionEventService,
     terminalRuntimeRegistry,
@@ -324,6 +338,11 @@ function createHttpApp(
       terminalSessionManager: services.terminalSessionManager,
       terminalStateService: services.terminalStateService,
     }),
+  );
+  app.use(
+    "/api/orchestrator",
+    requireAuth,
+    createOrchestratorRouter(services.orchestratorService),
   );
   app.use(
     "/api/terminal",
@@ -480,6 +499,13 @@ async function startRuntime(): Promise<void> {
       maxAttempts: runtimeConfig.strictPort ? 1 : undefined,
     });
     await profileLock.update({ port, host: runtimeConfig.host ?? null });
+    const controlPlaneBaseUrl = `http://127.0.0.1:${port}`;
+    // Pin rw CLI control-plane env to THIS backend. Parent shells may carry a
+    // stale default such as 5001 while this process is running on a fallback
+    // test port.
+    process.env.RUNWEAVE_BASE_URL = controlPlaneBaseUrl;
+    process.env.RUNWEAVE_BACKEND_PORT = String(port);
+    services.orchestratorService.setControlPlaneBaseUrl(controlPlaneBaseUrl);
     // Always pin the hook endpoint to THIS backend's listening port. Inheriting
     // it from a parent shell spawned by another Runweave backend would deliver
     // codex hook events to the wrong process.

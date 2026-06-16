@@ -431,6 +431,7 @@ export function TerminalWorkspace({
   const {
     createSession,
     closeSession,
+    updateSessionAlias,
     closeProjectDialog,
     submitProjectDialog,
     removeProject,
@@ -472,6 +473,7 @@ export function TerminalWorkspace({
     ) ?? null;
   const historyTerminalName = historySession
     ? formatTerminalSessionName({
+        alias: historySession.alias,
         cwd: historySession.cwd,
         activeCommand: historySession.activeCommand,
       })
@@ -538,6 +540,7 @@ export function TerminalWorkspace({
       onRequestCloseSession={(terminalSessionId) => {
         void closeSession(terminalSessionId);
       }}
+      onSubmitSessionAlias={updateSessionAlias}
       onOpenHistoryDrawer={openHistoryDrawer}
       onCloseProjectDialog={closeProjectDialog}
       onSubmitProjectDialog={submitProjectDialog}
