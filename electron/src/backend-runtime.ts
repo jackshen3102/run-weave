@@ -2,6 +2,17 @@ import { spawn, type ChildProcess } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import {
+  formatBackendProfileLockConflict,
+  getBrowserProfileLockFile,
+  isProcessLive,
+  killProcessIfLive,
+  readBackendProfileLockOwner,
+  readParentPid,
+  readProcessCommand,
+  resolveBrowserProfileDir,
+  waitForProcessExit,
+} from "@runweave/shared/src/browser-profile-node";
+import {
   recordLastKnownGoodRuntimeRelease,
   resolveActiveRuntimeRelease,
   resolveBundledRuntimeRelease,
@@ -13,6 +24,7 @@ import {
 const DEFAULT_BACKEND_PORT = 5001;
 const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 30_000;
 const HEALTHCHECK_INTERVAL_MS = 200;
+const ORPHANED_BACKEND_EXIT_TIMEOUT_MS = 2_000;
 const LAN_BIND_HOST = "0.0.0.0";
 const LOCALHOST_V6 = "::1";
 const DEFAULT_PACKAGED_AUTH = {
@@ -43,6 +55,7 @@ export interface PackagedBackendRuntime {
   backendUrl: string;
   stop(): Promise<void>;
   child: ChildProcess;
+  getOutputTail(): string[];
   runtimeRelease: RuntimeRelease;
   startupWarning: string | null;
 }
@@ -52,6 +65,12 @@ export interface PackagedBackendRuntimeCandidatePlan {
   candidates: RuntimeRelease[];
   currentReleaseId: string | null;
   currentReleaseInvalid: boolean;
+}
+
+export interface PackagedBackendRuntimeIncidentEvent {
+  event: string;
+  level?: "info" | "warn" | "error";
+  details?: Record<string, unknown>;
 }
 
 export function resolvePackagedBackendPaths(
@@ -117,6 +136,77 @@ function buildPackagedBackendPath(basePath: string | undefined): string {
     .filter(Boolean);
 
   return Array.from(new Set(entries)).join(path.delimiter);
+}
+
+async function recoverOrphanedPackagedBackendLock(
+  env: NodeJS.ProcessEnv,
+  onIncidentEvent?: (event: PackagedBackendRuntimeIncidentEvent) => void,
+): Promise<void> {
+  const profileDir = resolveBrowserProfileDir(env);
+  const lockFile = getBrowserProfileLockFile(profileDir);
+  const owner = await readBackendProfileLockOwner(lockFile);
+  if (!owner || !isProcessLive(owner.pid)) {
+    return;
+  }
+
+  const parentPid = await readParentPid(owner.pid);
+  const command = await readProcessCommand(owner.pid);
+  const isOrphanedPackagedBackend =
+    parentPid === 1 &&
+    owner.runtimeReleaseId !== null &&
+    command?.includes("backend/index.cjs") === true;
+
+  if (!isOrphanedPackagedBackend) {
+    onIncidentEvent?.({
+      event: "packagedBackend.profileLock.liveOwner",
+      level: "warn",
+      details: {
+        profileDir,
+        owner,
+        parentPid,
+        command,
+      },
+    });
+    throw new Error(
+      formatBackendProfileLockConflict(profileDir, lockFile, owner, {
+        "parent pid": parentPid,
+        command,
+      }),
+    );
+  }
+
+  console.warn("[electron] stopping orphaned packaged backend", {
+    pid: owner.pid,
+    port: owner.port,
+    runtimeReleaseId: owner.runtimeReleaseId,
+    profileDir,
+  });
+  onIncidentEvent?.({
+    event: "packagedBackend.orphan.stop",
+    level: "warn",
+    details: {
+      profileDir,
+      owner,
+      parentPid,
+      command,
+    },
+  });
+
+  killProcessIfLive(owner.pid, "SIGTERM");
+  await waitForProcessExit(owner.pid, ORPHANED_BACKEND_EXIT_TIMEOUT_MS);
+  if (isProcessLive(owner.pid)) {
+    killProcessIfLive(owner.pid, "SIGKILL");
+    await waitForProcessExit(owner.pid, ORPHANED_BACKEND_EXIT_TIMEOUT_MS);
+  }
+  onIncidentEvent?.({
+    event: "packagedBackend.orphan.stopped",
+    level: "warn",
+    details: {
+      profileDir,
+      pid: owner.pid,
+      stillLive: isProcessLive(owner.pid),
+    },
+  });
 }
 
 export function buildPackagedBackendEnv(options: {
@@ -263,6 +353,7 @@ async function stopChildProcess(child: ChildProcess): Promise<void> {
 export async function startPackagedBackend(
   options: {
     baseEnv?: NodeJS.ProcessEnv;
+    onIncidentEvent?: (event: PackagedBackendRuntimeIncidentEvent) => void;
     resourcesPath?: string;
     runtimeRoot?: string | null;
     shellVersion?: string;
@@ -289,6 +380,7 @@ export async function startPackagedBackend(
     try {
       const runtime = await startPackagedBackendForRelease({
         baseEnv: mergedEnv,
+        onIncidentEvent: options.onIncidentEvent,
         release,
       });
       runtime.startupWarning =
@@ -309,6 +401,7 @@ export async function startPackagedBackend(
 
 async function startPackagedBackendForRelease(options: {
   baseEnv: NodeJS.ProcessEnv;
+  onIncidentEvent?: (event: PackagedBackendRuntimeIncidentEvent) => void;
   release: RuntimeRelease;
 }): Promise<PackagedBackendRuntime> {
   const release = options.release;
@@ -319,6 +412,18 @@ async function startPackagedBackendForRelease(options: {
     releaseId: release.releaseId,
     source: release.source,
   };
+  options.onIncidentEvent?.({
+    event: "packagedBackend.candidate.start",
+    details: {
+      releaseId: release.releaseId,
+      source: release.source,
+      backendEntry: release.backendEntry,
+    },
+  });
+  await recoverOrphanedPackagedBackendLock(
+    options.baseEnv,
+    options.onIncidentEvent,
+  );
   const backendPort = await findAvailablePort(DEFAULT_BACKEND_PORT);
   const backendUrl = `http://127.0.0.1:${backendPort}`;
   const backendEnv = buildPackagedBackendEnv({
@@ -331,17 +436,46 @@ async function startPackagedBackendForRelease(options: {
     env: backendEnv,
     stdio: "pipe",
   });
+  const outputTail: string[] = [];
+  const appendOutputTail = (
+    stream: "stdout" | "stderr",
+    chunk: unknown,
+  ): void => {
+    const text = String(chunk);
+    for (const line of text.split(/\r?\n/)) {
+      if (!line) {
+        continue;
+      }
+      outputTail.push(`[${stream}] ${line}`);
+      if (outputTail.length > 80) {
+        outputTail.shift();
+      }
+    }
+  };
 
   child.stdout?.on("data", (chunk) => {
+    appendOutputTail("stdout", chunk);
     process.stdout.write(String(chunk));
   });
   child.stderr?.on("data", (chunk) => {
+    appendOutputTail("stderr", chunk);
     process.stderr.write(String(chunk));
   });
 
   try {
     await waitForBackendReady(child, backendUrl);
   } catch (error) {
+    options.onIncidentEvent?.({
+      event: "packagedBackend.candidate.failed",
+      level: "error",
+      details: {
+        releaseId: release.releaseId,
+        backendUrl,
+        pid: child.pid ?? null,
+        error: error instanceof Error ? error.message : String(error),
+        outputTail,
+      },
+    });
     await stopChildProcess(child);
     throw error;
   }
@@ -351,6 +485,7 @@ async function startPackagedBackendForRelease(options: {
   return {
     backendUrl,
     child,
+    getOutputTail: () => [...outputTail],
     runtimeRelease: release,
     startupWarning: null,
     stop: async () => {
