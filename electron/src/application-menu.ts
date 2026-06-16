@@ -3,6 +3,7 @@ import type { MenuItemConstructorOptions } from "electron";
 export function buildApplicationMenuTemplate(params: {
   platform: NodeJS.Platform;
   onNewWindow: () => void;
+  onExportDesktopDiagnostics?: () => void;
   onOpenSystemMonitor?: () => void;
   onReloadLocalRuntime?: () => void;
 }): MenuItemConstructorOptions[] {
@@ -29,6 +30,17 @@ export function buildApplicationMenuTemplate(params: {
               label: "Reload Local Runtime",
               click: () => {
                 void params.onReloadLocalRuntime?.();
+              },
+            },
+          ]
+        : []),
+      ...(params.onExportDesktopDiagnostics
+        ? [
+            { type: "separator" as const },
+            {
+              label: "Export Desktop Diagnostics",
+              click: () => {
+                params.onExportDesktopDiagnostics?.();
               },
             },
           ]

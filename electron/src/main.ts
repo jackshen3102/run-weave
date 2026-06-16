@@ -9,6 +9,8 @@ import {
   net,
   nativeImage,
 } from "electron";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import os from "node:os";
 import pidusage from "pidusage";
 import path from "node:path";
 import type {
@@ -17,6 +19,11 @@ import type {
   SystemMonitorSnapshot,
   TerminalBrowserCdpProxyInfo,
 } from "@runweave/shared";
+import {
+  BROWSER_PROFILE_LOCK_FILE_NAME,
+  getBrowserProfileLockFile,
+  resolveBrowserProfileDir,
+} from "@runweave/shared/src/browser-profile-node";
 import { resolveProtocolFilePath } from "./protocol-path.js";
 import {
   startCdpProxy,
@@ -29,8 +36,10 @@ import {
 } from "./terminal-browser-cdp-proxy-port.js";
 import {
   startPackagedBackend,
+  type PackagedBackendRuntimeIncidentEvent,
   type PackagedBackendRuntime,
 } from "./backend-runtime.js";
+import { DesktopIncidentLogger } from "./desktop-incident-logger.js";
 import {
   resolveActiveRuntimeRelease,
   resolveRuntimeRoot,
@@ -343,6 +352,128 @@ let packagedBackendRestartPromise: Promise<PackagedBackendConnectionState> | nul
 const expectedPackagedBackendExits = new WeakSet<object>();
 let packagedBackendsStoppedForQuit = false;
 let stoppingPackagedBackendsForQuit = false;
+let desktopIncidentLogger: DesktopIncidentLogger | null = null;
+
+function logDesktopIncident(event: PackagedBackendRuntimeIncidentEvent): void {
+  if (!desktopIncidentLogger) {
+    return;
+  }
+
+  const level = event.level ?? "info";
+  if (level === "error") {
+    desktopIncidentLogger.error(event.event, event.details);
+  } else if (level === "warn") {
+    desktopIncidentLogger.warn(event.event, event.details);
+  } else {
+    desktopIncidentLogger.info(event.event, event.details);
+  }
+}
+
+function readJsonFile(filePath: string): unknown {
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8")) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function collectBackendLockSnapshots(): Array<Record<string, unknown>> {
+  const profileRoot = path.join(os.homedir(), ".browser-profile");
+  if (!existsSync(profileRoot)) {
+    return [];
+  }
+
+  const snapshots: Array<Record<string, unknown>> = [];
+  for (const entry of readdirSync(profileRoot).slice(0, 50)) {
+    const profileDir = path.join(profileRoot, entry);
+    const lockFile = getBrowserProfileLockFile(profileDir);
+    if (!existsSync(lockFile)) {
+      continue;
+    }
+    snapshots.push({
+      profileDir,
+      lockFile,
+      owner: readJsonFile(lockFile),
+    });
+  }
+  return snapshots;
+}
+
+function buildDesktopDiagnosticSnapshot(): Record<string, unknown> {
+  const runtimeRoot = getPackagedRuntimeRoot();
+  return {
+    appVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
+    isDev,
+    pid: process.pid,
+    cwd: process.cwd(),
+    userDataPath: app.getPath("userData"),
+    logsPath: app.getPath("logs"),
+    resourcesPath: process.resourcesPath,
+    backendState: packagedBackendState,
+    packagedBackendPid: packagedBackendRuntime?.child.pid ?? null,
+    packagedBackendExitCode: packagedBackendRuntime?.child.exitCode ?? null,
+    packagedBackendSignalCode: packagedBackendRuntime?.child.signalCode ?? null,
+    cdpProxyEndpoint: cdpProxyRuntime?.endpoint ?? null,
+    runtimeRoot,
+    currentRuntime: runtimeRoot
+      ? readJsonFile(path.join(runtimeRoot, "current.json"))
+      : null,
+    lastKnownGoodRuntime: runtimeRoot
+      ? readJsonFile(path.join(runtimeRoot, "last-known-good.json"))
+      : null,
+    defaultBackendProfileDir: resolveBrowserProfileDir(process.env),
+    backendProfileLockFileName: BROWSER_PROFILE_LOCK_FILE_NAME,
+    backendLocks: collectBackendLockSnapshots(),
+  };
+}
+
+function initializeDesktopIncidentLogger(): void {
+  try {
+    desktopIncidentLogger = new DesktopIncidentLogger({
+      appName: app.getName(),
+      appVersion: app.getVersion(),
+      isPackaged: app.isPackaged,
+      logsPath: app.getPath("logs"),
+      userDataPath: app.getPath("userData"),
+      resourcesPath: process.resourcesPath,
+    });
+    desktopIncidentLogger.recordLaunch();
+    desktopIncidentLogger.recordNewCrashReports();
+  } catch (error) {
+    desktopIncidentLogger = null;
+    console.warn(
+      "[electron] failed to initialize desktop incident logger",
+      error,
+    );
+  }
+}
+
+function exportDesktopDiagnostics(): void {
+  if (!desktopIncidentLogger) {
+    dialog.showErrorBox(
+      "Export Desktop Diagnostics Failed",
+      "Desktop incident logger is not available.",
+    );
+    return;
+  }
+
+  try {
+    const result = desktopIncidentLogger.exportDiagnosticPackage({
+      snapshot: buildDesktopDiagnosticSnapshot(),
+    });
+    shell.showItemInFolder(result.summaryFile);
+    void dialog.showMessageBox({
+      type: "info",
+      title: "Desktop Diagnostics Exported",
+      message: "Desktop diagnostics package exported.",
+      detail: result.directory,
+    });
+  } catch (error) {
+    desktopIncidentLogger.error("desktop.diagnostics.exportFailed", { error });
+    dialog.showErrorBox("Export Desktop Diagnostics Failed", String(error));
+  }
+}
 
 function getPackagedRuntimeRoot(): string | null {
   if (isDev) {
@@ -409,6 +540,15 @@ function attachPackagedBackendExitHandler(
       code,
       signal,
     });
+    desktopIncidentLogger?.error("packagedBackend.exit.unexpected", {
+      code,
+      signal,
+      backendUrl: runtime.backendUrl,
+      pid: runtime.child.pid ?? null,
+      outputTail: runtime.getOutputTail(),
+      runtimeRelease: runtime.runtimeRelease,
+      snapshot: buildDesktopDiagnosticSnapshot(),
+    });
     setPackagedBackendState(
       createUnavailablePackagedBackendStateFromExit(runtime.backendUrl, {
         code,
@@ -436,8 +576,14 @@ async function stopPackagedBackendRuntimeForRestart(): Promise<void> {
 
 async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionState> {
   try {
+    desktopIncidentLogger?.info("packagedBackend.start.requested", {
+      runtimeRoot: getPackagedRuntimeRoot(),
+      resourcesPath: process.resourcesPath,
+      shellVersion: app.getVersion(),
+    });
     const runtime = await startPackagedBackend({
       baseEnv: process.env,
+      onIncidentEvent: logDesktopIncident,
       runtimeRoot: getPackagedRuntimeRoot(),
       resourcesPath: process.resourcesPath,
       shellVersion: app.getVersion(),
@@ -446,6 +592,12 @@ async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionS
     packagedBackendRuntime = runtime;
     activeRuntimeRelease = runtime.runtimeRelease;
     attachPackagedBackendExitHandler(runtime);
+    desktopIncidentLogger?.info("packagedBackend.start.succeeded", {
+      backendUrl: runtime.backendUrl,
+      pid: runtime.child.pid ?? null,
+      runtimeRelease: runtime.runtimeRelease,
+      startupWarning: runtime.startupWarning,
+    });
     return setPackagedBackendState(
       createAvailablePackagedBackendState(runtime.backendUrl, {
         runtimeSource: runtime.runtimeRelease.source,
@@ -455,6 +607,10 @@ async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionS
     );
   } catch (error) {
     console.error("[electron] packaged backend unavailable", error);
+    desktopIncidentLogger?.error("packagedBackend.start.failed", {
+      error,
+      snapshot: buildDesktopDiagnosticSnapshot(),
+    });
     return setPackagedBackendState(
       createUnavailablePackagedBackendStateFromError(
         packagedBackendState.backendUrl,
@@ -584,8 +740,36 @@ function registerCdpProxyHandlers(): void {
   );
 }
 
+process.on("uncaughtExceptionMonitor", (error) => {
+  desktopIncidentLogger?.error("desktop.process.uncaughtException", { error });
+  console.error("[electron] uncaught exception", error);
+});
+
+process.on("unhandledRejection", (reason) => {
+  desktopIncidentLogger?.error("desktop.process.unhandledRejection", {
+    reason:
+      reason instanceof Error
+        ? { name: reason.name, message: reason.message, stack: reason.stack }
+        : String(reason),
+  });
+  console.error("[electron] unhandled rejection", reason);
+});
+
+app.on("render-process-gone", (_event, webContents, details) => {
+  desktopIncidentLogger?.error("desktop.renderProcess.gone", {
+    webContentsId: webContents.id,
+    reason: details.reason,
+    exitCode: details.exitCode,
+  });
+});
+
+app.on("child-process-gone", (_event, details) => {
+  desktopIncidentLogger?.error("desktop.childProcess.gone", details);
+});
+
 app.whenReady().then(async () => {
   try {
+    initializeDesktopIncidentLogger();
     setApplicationIcon();
     registerOpenExternalHandler();
     registerPackagedBackendHandlers();
@@ -665,6 +849,7 @@ app.whenReady().then(async () => {
       Menu.buildFromTemplate(
         buildApplicationMenuTemplate({
           platform: process.platform,
+          onExportDesktopDiagnostics: exportDesktopDiagnostics,
           onNewWindow: openNewWindow,
           onOpenSystemMonitor: openSystemMonitor,
           onReloadLocalRuntime: reloadLocalRuntime,

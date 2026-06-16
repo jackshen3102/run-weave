@@ -378,7 +378,11 @@ importers:
         specifier: ^22.13.10
         version: 22.19.15
 
-  packages/shared: {}
+  packages/shared:
+    devDependencies:
+      "@types/node":
+        specifier: ^22.13.10
+        version: 22.19.15
 
   packages/terminal-renderer:
     dependencies:

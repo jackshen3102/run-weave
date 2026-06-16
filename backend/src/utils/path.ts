@@ -1,6 +1,12 @@
-import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+import {
+  expandHomePath,
+  resolveBrowserProfileDir,
+  type BrowserProfileStorageEnv,
+} from "@runweave/shared/src/browser-profile-node";
+
+export { expandHomePath };
 
 export interface StoragePaths {
   browserProfileDir: string;
@@ -9,31 +15,10 @@ export interface StoragePaths {
   backendLogDir: string;
 }
 
-interface StorageEnv {
-  BROWSER_PROFILE_DIR?: string;
+interface StorageEnv extends BrowserProfileStorageEnv {
   AUTH_STORE_FILE?: string;
   TERMINAL_SESSION_STORE_FILE?: string;
   RUNWEAVE_BACKEND_LOG_DIR?: string;
-}
-
-export function expandHomePath(
-  inputPath: string | undefined,
-  homeDir: string = os.homedir(),
-): string | undefined {
-  const trimmedPath = inputPath?.trim();
-  if (!trimmedPath) {
-    return undefined;
-  }
-
-  if (trimmedPath === "~") {
-    return homeDir;
-  }
-
-  if (trimmedPath.startsWith("~/")) {
-    return path.join(homeDir, trimmedPath.slice(2));
-  }
-
-  return trimmedPath;
 }
 
 export function resolveStoragePaths(
@@ -41,21 +26,7 @@ export function resolveStoragePaths(
   homeDir: string = os.homedir(),
   projectPath: string = process.cwd(),
 ): StoragePaths {
-  const trimmedProjectPath = projectPath.trim();
-  const defaultProfileRootDir = path.join(homeDir, ".browser-profile");
-  const defaultProfileDir =
-    trimmedProjectPath.length > 0
-      ? path.join(
-          defaultProfileRootDir,
-          createHash("sha256")
-            .update(trimmedProjectPath)
-            .digest("hex")
-            .slice(0, 8),
-        )
-      : defaultProfileRootDir;
-  const browserProfileDir = path.resolve(
-    expandHomePath(env.BROWSER_PROFILE_DIR, homeDir) ?? defaultProfileDir,
-  );
+  const browserProfileDir = resolveBrowserProfileDir(env, homeDir, projectPath);
   const authStoreFile = path.resolve(
     expandHomePath(env.AUTH_STORE_FILE, homeDir) ??
       path.join(browserProfileDir, "auth-store.json"),
