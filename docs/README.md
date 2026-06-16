@@ -11,6 +11,7 @@
 | App 移动端边界                           | architecture/app-mobile.md                            |
 | App 终端语音输入                         | architecture/app-mobile.md#app-终端语音输入           |
 | 终端状态模型                             | architecture/terminal-state.md                        |
+| 多终端 Agent Orchestrator                | architecture/multi-agent-orchestrator.md              |
 | 终端代码预览 / Terminal Browser          | architecture/terminal-code-preview.md                 |
 | 终端 tmux 恢复                           | architecture/terminal-tmux-recovery.md                |
 | 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md             |
