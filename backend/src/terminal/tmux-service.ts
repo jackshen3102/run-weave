@@ -1,4 +1,4 @@
-import { constants } from "node:fs";
+import { accessSync, constants } from "node:fs";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -108,6 +108,37 @@ const SHELL_INTEGRATION_ENV_KEYS = [
 ];
 const tmuxLogger = logger.child({ component: "terminal" });
 
+function isExecutablePath(filePath: string): boolean {
+  try {
+    accessSync(filePath, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveExecutableFromPath(
+  command: string,
+  env: NodeJS.ProcessEnv,
+): string {
+  if (command.includes(path.sep)) {
+    return command;
+  }
+
+  for (const entry of (env.PATH ?? "").split(path.delimiter)) {
+    const directory = entry.trim();
+    if (!directory) {
+      continue;
+    }
+    const candidate = path.join(directory, command);
+    if (isExecutablePath(candidate)) {
+      return candidate;
+    }
+  }
+
+  return command;
+}
+
 function describeTmuxInputChunk(chunk: ReturnType<typeof splitInputForSendKeys>[number]) {
   if (chunk.type === "enter") {
     return { type: "enter" };
@@ -168,7 +199,10 @@ export class TmuxService {
   }
 
   get binary(): string {
-    return this.env.TMUX_BINARY?.trim() || "tmux";
+    return resolveExecutableFromPath(
+      this.env.TMUX_BINARY?.trim() || "tmux",
+      this.env,
+    );
   }
 
   async isAvailable(): Promise<boolean> {
