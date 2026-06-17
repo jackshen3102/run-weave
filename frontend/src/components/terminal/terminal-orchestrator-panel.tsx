@@ -7,6 +7,9 @@ import {
 } from "react";
 import type {
   CreateOrchestratorRunRequest,
+  HumanGatePhase,
+  HumanGateVerdictValue,
+  OrchestratorRoundConfirmationVerdictValue,
   OrchestratorRoleDefinition,
   OrchestratorRunPackage,
   OrchestratorRunRole,
@@ -15,12 +18,14 @@ import type {
   TerminalSessionListItem,
 } from "@runweave/shared";
 import {
+  CheckCircle,
   MessageSquare,
   Pause,
   Play,
   RefreshCw,
   RotateCcw,
   Workflow,
+  XCircle,
 } from "lucide-react";
 import {
   createOrchestratorRun,
@@ -30,6 +35,8 @@ import {
   previewOrchestratorRunPrompt,
   saveOrchestratorRoles,
   setOrchestratorRunStatus,
+  submitOrchestratorHumanGate,
+  submitOrchestratorRoundConfirmation,
 } from "../../services/terminal";
 import { HttpError } from "../../services/http";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
@@ -44,7 +51,7 @@ import {
 } from "../ui/dialog";
 
 const DEFAULT_STARTUP_PROMPT =
-  "你是 Runweave 主控 Agent。你负责拆解任务、按 using-rw skill 使用现有 rw 终端命令派发 worker、读取结果并决定下一步。";
+  "你是 Runweave 主控 Agent。你负责 Do-A-IDEM 基础流程：plan -> plan_review -> human_plan_approval -> code -> code_review -> human_verify -> finalize -> done。按 using-rw skill 使用现有 rw 终端命令派发 worker，读取 summary 后决定下一步，不要跳过人工门禁。";
 const LEGACY_STARTUP_PROMPT =
   "你是 Runweave 主控 Agent。你负责拆解任务、用 rw run 派发 worker、接收结果后决定下一步，并在完成或需要人工时更新 run 状态。";
 const RUN_AUTO_REFRESH_INTERVAL_MS = 3000;
@@ -90,6 +97,10 @@ export function TerminalOrchestratorPanel({
   const [orchestratorCommand, setOrchestratorCommand] =
     useState<AgentCliCommand>("codex");
   const [orchestratorSessionId, setOrchestratorSessionId] = useState("");
+  const [
+    requireHumanConfirmationEachRound,
+    setRequireHumanConfirmationEachRound,
+  ] = useState(false);
   const [roleDrafts, setRoleDrafts] = useState<Record<string, RoleDraft>>({});
   const [roleLibraryOpen, setRoleLibraryOpen] = useState(false);
   const [restartMode, setRestartMode] = useState(false);
@@ -99,6 +110,7 @@ export function TerminalOrchestratorPanel({
     payload: CreateOrchestratorRunRequest;
   } | null>(null);
   const [injectText, setInjectText] = useState("");
+  const [gateReason, setGateReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const runRefreshInFlightRef = useRef(false);
@@ -261,6 +273,9 @@ export function TerminalOrchestratorPanel({
           },
         },
         roles: selectedRoles,
+        options: {
+          requireHumanConfirmationEachRound,
+        },
       };
     },
     [
@@ -268,6 +283,7 @@ export function TerminalOrchestratorPanel({
       orchestratorCommand,
       orchestratorMode,
       orchestratorSessionId,
+      requireHumanConfirmationEachRound,
       roleDrafts,
       roles,
       startupPrompt,
@@ -393,6 +409,73 @@ export function TerminalOrchestratorPanel({
     }
   }, [activeRun, apiBase, handleRequestError, injectText, token]);
 
+  const submitGate = useCallback(
+    async (phase: HumanGatePhase, verdict: HumanGateVerdictValue) => {
+      if (!activeRun) {
+        return;
+      }
+      const reason = gateReason.trim();
+      setLoading(true);
+      try {
+        const run = await submitOrchestratorHumanGate(
+          apiBase,
+          token,
+          activeRun.runId,
+          {
+            phase,
+            verdict,
+            reason: reason || null,
+          },
+        );
+        setRuns((current) =>
+          current.map((item) => (item.runId === run.runId ? run : item)),
+        );
+        setGateReason("");
+        setError(null);
+      } catch (caught) {
+        setError(handleRequestError(caught));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [activeRun, apiBase, gateReason, handleRequestError, token],
+  );
+
+  const submitRoundConfirmation = useCallback(
+    async (
+      confirmationId: string,
+      verdict: OrchestratorRoundConfirmationVerdictValue,
+    ) => {
+      if (!activeRun) {
+        return;
+      }
+      const reason = gateReason.trim();
+      setLoading(true);
+      try {
+        const run = await submitOrchestratorRoundConfirmation(
+          apiBase,
+          token,
+          activeRun.runId,
+          {
+            confirmationId,
+            verdict,
+            reason: reason || null,
+          },
+        );
+        setRuns((current) =>
+          current.map((item) => (item.runId === run.runId ? run : item)),
+        );
+        setGateReason("");
+        setError(null);
+      } catch (caught) {
+        setError(handleRequestError(caught));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [activeRun, apiBase, gateReason, handleRequestError, token],
+  );
+
   const restartFromRun = useCallback((run: OrchestratorRunPackage) => {
     setTask(run.task);
     setStartupPrompt(normalizeStartupPrompt(run.orchestrator.startupPrompt));
@@ -401,6 +484,9 @@ export function TerminalOrchestratorPanel({
       run.orchestrator.terminal.command,
     ));
     setOrchestratorSessionId(run.orchestrator.sessionId ?? "");
+    setRequireHumanConfirmationEachRound(
+      Boolean(run.options?.requireHumanConfirmationEachRound),
+    );
     setRoleDrafts(
       Object.fromEntries(
         run.roles.map((role) => [
@@ -460,8 +546,14 @@ export function TerminalOrchestratorPanel({
             run={activeRun}
             loading={loading}
             injectText={injectText}
+            gateReason={gateReason}
             onInjectTextChange={setInjectText}
+            onGateReasonChange={setGateReason}
             onInject={() => void inject()}
+            onHumanGate={(phase, verdict) => void submitGate(phase, verdict)}
+            onRoundConfirmation={(confirmationId, verdict) =>
+              void submitRoundConfirmation(confirmationId, verdict)
+            }
             onPause={() => void setStatus("paused")}
             onResume={() => void setStatus("running")}
             onRestart={() => restartFromRun(activeRun)}
@@ -474,6 +566,9 @@ export function TerminalOrchestratorPanel({
             orchestratorCommand={orchestratorCommand}
             orchestratorMode={orchestratorMode}
             orchestratorSessionId={orchestratorSessionId}
+            requireHumanConfirmationEachRound={
+              requireHumanConfirmationEachRound
+            }
             projectSessions={projectSessions}
             roles={roles}
             roleDrafts={roleDrafts}
@@ -485,6 +580,9 @@ export function TerminalOrchestratorPanel({
             onOrchestratorCommandChange={setOrchestratorCommand}
             onOrchestratorModeChange={setOrchestratorMode}
             onOrchestratorSessionChange={setOrchestratorSessionId}
+            onRequireHumanConfirmationEachRoundChange={
+              setRequireHumanConfirmationEachRound
+            }
             onRoleDraftChange={(roleId, patch) => {
               setRoleDrafts((current) => ({
                 ...current,
@@ -605,6 +703,7 @@ function RunConfig(props: {
   orchestratorCommand: AgentCliCommand;
   orchestratorMode: "new" | "reuse";
   orchestratorSessionId: string;
+  requireHumanConfirmationEachRound: boolean;
   projectSessions: TerminalSessionListItem[];
   roles: OrchestratorRoleDefinition[];
   roleDrafts: Record<string, RoleDraft>;
@@ -616,6 +715,7 @@ function RunConfig(props: {
   onOrchestratorCommandChange: (value: AgentCliCommand) => void;
   onOrchestratorModeChange: (value: "new" | "reuse") => void;
   onOrchestratorSessionChange: (value: string) => void;
+  onRequireHumanConfirmationEachRoundChange: (value: boolean) => void;
   onRoleDraftChange: (roleId: string, patch: Partial<RoleDraft>) => void;
   onToggleRoleLibrary: () => void;
   onRoleChange: (
@@ -666,6 +766,18 @@ function RunConfig(props: {
           onChange={(event) => props.onStartupPromptChange(event.target.value)}
           className="min-h-20 w-full resize-y rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-100 outline-none focus:border-sky-600"
         />
+        <label className="flex items-center gap-2 rounded-md border border-slate-800 px-3 py-2 text-xs text-slate-200">
+          <input
+            type="checkbox"
+            checked={props.requireHumanConfirmationEachRound}
+            onChange={(event) =>
+              props.onRequireHumanConfirmationEachRoundChange(
+                event.target.checked,
+              )
+            }
+          />
+          <span className="min-w-0 flex-1">每一轮都需要人工确认</span>
+        </label>
       </section>
       <section className="space-y-2">
         <div className="flex items-center gap-2">
@@ -828,18 +940,34 @@ function RunMonitor(props: {
   run: OrchestratorRunPackage;
   loading: boolean;
   injectText: string;
+  gateReason: string;
   onInjectTextChange: (value: string) => void;
+  onGateReasonChange: (value: string) => void;
   onInject: () => void;
+  onHumanGate: (phase: HumanGatePhase, verdict: HumanGateVerdictValue) => void;
+  onRoundConfirmation: (
+    confirmationId: string,
+    verdict: OrchestratorRoundConfirmationVerdictValue,
+  ) => void;
   onPause: () => void;
   onResume: () => void;
   onRestart: () => void;
   onSelectSession?: (terminalSessionId: string) => void;
 }) {
+  const currentGatePhase =
+    props.run.currentPhase === "human_plan_approval" ||
+    props.run.currentPhase === "human_verify"
+      ? props.run.currentPhase
+      : null;
+  const summaries = props.run.goals.filter((goal) => goal.result?.summary);
   return (
     <div className="space-y-4">
       {props.run.status === "need_human" ? (
         <div className="rounded-md border border-amber-700/70 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
-          需要人工介入
+          需要人工介入：
+          {props.run.pendingRoundConfirmation
+            ? "轮次确认"
+            : phaseLabel(props.run.currentPhase)}
         </div>
       ) : null}
       <div className="flex items-center gap-2">
@@ -849,6 +977,37 @@ function RunMonitor(props: {
         </div>
         <StatusBadge status={props.run.status} />
       </div>
+      <section className="space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1 text-xs font-medium text-slate-300">
+            当前阶段
+          </div>
+          <span className="shrink-0 rounded border border-slate-700 px-2 py-1 text-[10px] uppercase text-slate-300">
+            {props.run.currentPhase ?? "unknown"}
+          </span>
+        </div>
+        <PhaseRail currentPhase={props.run.currentPhase} />
+      </section>
+      {currentGatePhase ? (
+        <HumanGateCard
+          phase={currentGatePhase}
+          loading={props.loading}
+          reason={props.gateReason}
+          onReasonChange={props.onGateReasonChange}
+          onSubmit={props.onHumanGate}
+          injectText={props.injectText}
+          onInject={props.onInject}
+        />
+      ) : null}
+      {props.run.pendingRoundConfirmation ? (
+        <RoundConfirmationCard
+          pending={props.run.pendingRoundConfirmation}
+          loading={props.loading}
+          reason={props.gateReason}
+          onReasonChange={props.onGateReasonChange}
+          onSubmit={props.onRoundConfirmation}
+        />
+      ) : null}
       <section className="space-y-2">
         <div className="text-xs font-medium text-slate-300">目标进度</div>
         {props.run.goals.length ? (
@@ -872,6 +1031,68 @@ function RunMonitor(props: {
           <p className="text-xs text-slate-500">等待主 Agent 派发目标。</p>
         )}
       </section>
+      <section className="space-y-2">
+        <div className="text-xs font-medium text-slate-300">Summary</div>
+        {summaries.length ? (
+          summaries.map((goal) => (
+            <div key={goal.id} className="border-t border-slate-800 py-2 text-xs">
+              <div className="flex items-center gap-2 text-slate-300">
+                <span className="min-w-0 flex-1 truncate">{goal.id}</span>
+                <span className="shrink-0 text-slate-500">
+                  {goal.assignedRole}
+                </span>
+              </div>
+              <p className="mt-1 line-clamp-4 whitespace-pre-wrap text-slate-500">
+                {goal.result?.summary}
+              </p>
+            </div>
+          ))
+        ) : (
+          <p className="text-xs text-slate-500">等待 worker summary。</p>
+        )}
+      </section>
+      {props.run.humanGateVerdicts?.length ? (
+        <section className="space-y-2">
+          <div className="text-xs font-medium text-slate-300">人工门禁记录</div>
+          {props.run.humanGateVerdicts.map((verdict) => (
+            <div key={verdict.id} className="border-t border-slate-800 py-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">{formatTime(verdict.at)}</span>
+                <span className="min-w-0 flex-1 truncate text-slate-200">
+                  {phaseLabel(verdict.phase)} {verdict.verdict}
+                </span>
+              </div>
+              {verdict.reason ? (
+                <p className="mt-1 line-clamp-3 text-slate-500">
+                  {verdict.reason}
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </section>
+      ) : null}
+      {props.run.roundConfirmations?.length ? (
+        <section className="space-y-2">
+          <div className="text-xs font-medium text-slate-300">轮次确认记录</div>
+          {props.run.roundConfirmations.map((confirmation) => (
+            <div key={confirmation.id} className="border-t border-slate-800 py-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">
+                  {formatTime(confirmation.at)}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-slate-200">
+                  {phaseLabel(confirmation.fromPhase)} {"->"} {phaseLabel(confirmation.nextPhase)} {confirmation.verdict}
+                </span>
+              </div>
+              {confirmation.reason ? (
+                <p className="mt-1 line-clamp-3 text-slate-500">
+                  {confirmation.reason}
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </section>
+      ) : null}
       <section className="space-y-2">
         <div className="text-xs font-medium text-slate-300">人工介入</div>
         <textarea
@@ -941,12 +1162,201 @@ function RunMonitor(props: {
   );
 }
 
+const DO_A_IDEM_PHASES = [
+  "discuss",
+  "plan",
+  "plan_review",
+  "human_plan_approval",
+  "code",
+  "code_review",
+  "human_verify",
+  "finalize",
+  "done",
+] as const;
+
+function PhaseRail(props: {
+  currentPhase: OrchestratorRunPackage["currentPhase"];
+}) {
+  const currentIndex = props.currentPhase
+    ? DO_A_IDEM_PHASES.indexOf(props.currentPhase)
+    : -1;
+  return (
+    <div className="grid grid-cols-1 gap-1 text-[11px] sm:grid-cols-3">
+      {DO_A_IDEM_PHASES.map((phase, index) => {
+        const active = phase === props.currentPhase;
+        const complete = currentIndex >= 0 && index < currentIndex;
+        return (
+          <div
+            key={phase}
+            className={[
+              "min-w-0 rounded border px-2 py-1",
+              active
+                ? "border-sky-500 bg-sky-950/40 text-sky-100"
+                : complete
+                  ? "border-emerald-800/70 text-emerald-200"
+                  : "border-slate-800 text-slate-500",
+            ].join(" ")}
+          >
+            <span className="block truncate">{phaseLabel(phase)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function HumanGateCard(props: {
+  phase: HumanGatePhase;
+  loading: boolean;
+  reason: string;
+  injectText: string;
+  onReasonChange: (value: string) => void;
+  onSubmit: (phase: HumanGatePhase, verdict: HumanGateVerdictValue) => void;
+  onInject: () => void;
+}) {
+  const isVerify = props.phase === "human_verify";
+  const rejectDisabled = props.loading || !props.reason.trim();
+  return (
+    <section className="space-y-2 rounded-md border border-amber-800/70 bg-amber-950/20 px-3 py-3">
+      <div className="text-xs font-medium text-amber-100">
+        {isVerify ? "人工验收" : "计划审批"}
+      </div>
+      <textarea
+        value={props.reason}
+        onChange={(event) => props.onReasonChange(event.target.value)}
+        placeholder={isVerify ? "不通过原因" : "拒绝原因"}
+        className="min-h-16 w-full resize-y rounded-md border border-amber-900/70 bg-slate-950 px-3 py-2 text-xs text-slate-100 outline-none focus:border-amber-500"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={props.loading}
+          onClick={() => props.onSubmit(props.phase, "approved")}
+        >
+          <CheckCircle />
+          {isVerify ? "通过，进入提交" : "通过"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={rejectDisabled}
+          onClick={() => props.onSubmit(props.phase, "rejected")}
+        >
+          <XCircle />
+          {isVerify ? "不通过，返回修改" : "拒绝并要求修订"}
+        </Button>
+        {isVerify ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={props.loading || !props.injectText.trim()}
+            onClick={props.onInject}
+          >
+            <MessageSquare />
+            补充验证/提问
+          </Button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function RoundConfirmationCard(props: {
+  pending: NonNullable<OrchestratorRunPackage["pendingRoundConfirmation"]>;
+  loading: boolean;
+  reason: string;
+  onReasonChange: (value: string) => void;
+  onSubmit: (
+    confirmationId: string,
+    verdict: OrchestratorRoundConfirmationVerdictValue,
+  ) => void;
+}) {
+  const rejectDisabled = props.loading || !props.reason.trim();
+  return (
+    <section className="space-y-2 rounded-md border border-amber-800/70 bg-amber-950/20 px-3 py-3">
+      <div className="text-xs font-medium text-amber-100">轮次确认</div>
+      <div className="space-y-1 text-xs text-slate-300">
+        <div>
+          {phaseLabel(props.pending.fromPhase)} {"->"} {phaseLabel(props.pending.nextPhase)}
+        </div>
+        <div className="text-slate-500">
+          {props.pending.goalId ?? props.pending.roleId ?? props.pending.id}
+        </div>
+        <p className="line-clamp-4 whitespace-pre-wrap text-slate-400">
+          {props.pending.summary}
+        </p>
+      </div>
+      <textarea
+        value={props.reason}
+        onChange={(event) => props.onReasonChange(event.target.value)}
+        placeholder="不通过原因"
+        className="min-h-16 w-full resize-y rounded-md border border-amber-900/70 bg-slate-950 px-3 py-2 text-xs text-slate-100 outline-none focus:border-amber-500"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={props.loading}
+          onClick={() => props.onSubmit(props.pending.id, "approved")}
+        >
+          <CheckCircle />
+          通过，进入下一阶段
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={rejectDisabled}
+          onClick={() => props.onSubmit(props.pending.id, "rejected")}
+        >
+          <XCircle />
+          不通过，返回修改
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 function StatusBadge({ status }: { status: OrchestratorRunStatus }) {
   return (
     <span className="rounded border border-slate-700 px-2 py-1 text-[10px] uppercase text-slate-300">
       {status}
     </span>
   );
+}
+
+function phaseLabel(phase: OrchestratorRunPackage["currentPhase"]): string {
+  if (phase === "discuss") {
+    return "需求讨论";
+  }
+  if (phase === "plan") {
+    return "计划";
+  }
+  if (phase === "plan_review") {
+    return "计划审查";
+  }
+  if (phase === "human_plan_approval") {
+    return "计划审批";
+  }
+  if (phase === "code") {
+    return "代码执行";
+  }
+  if (phase === "code_review") {
+    return "代码审查";
+  }
+  if (phase === "human_verify") {
+    return "人工验收";
+  }
+  if (phase === "finalize") {
+    return "收尾提交";
+  }
+  if (phase === "done") {
+    return "完成";
+  }
+  return "未记录";
 }
 
 function goalIcon(status: string): string {

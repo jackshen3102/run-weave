@@ -2,10 +2,14 @@ import { randomBytes } from "node:crypto";
 import os from "node:os";
 import type {
   OrchestratorDispatchSidecar,
+  HumanGateVerdict,
+  SubmitOrchestratorHumanGateRequest,
+  OrchestratorRoundConfirmation,
   OrchestratorRunPackage,
   OrchestratorRunStatus,
   OrchestratorRoleDefinition,
   OrchestratorTimelineItem,
+  SubmitOrchestratorRoundConfirmationRequest,
   TerminalEventEnvelope,
 } from "@runweave/shared";
 import type {
@@ -45,6 +49,14 @@ import { OrchestratorPromptSender } from "./terminal/prompt-sender";
 import { OrchestratorAgentReadinessService } from "./terminal/agent-readiness";
 import { OrchestratorOutboxResolver } from "./completion/outbox-resolver";
 import { normalizeTerminalRequest } from "./terminal-request";
+import {
+  advancePhaseForDispatch,
+  advancePhaseForWorkerResult,
+  canMarkDone,
+  createPendingRoundConfirmation,
+  resolveHumanGateTransition,
+  shouldRequireRoundConfirmation,
+} from "./workflow/do-a-idem";
 
 export { OrchestratorError } from "./errors";
 
@@ -123,6 +135,7 @@ export class OrchestratorService {
   }
 
   async initialize(): Promise<void> {
+    await this.roleStore.migrateLegacyDefaultRoles();
     const roles = await this.listRoles();
     if (roles.length === 0) {
       await this.saveRoles(DEFAULT_ROLES);
@@ -288,8 +301,10 @@ export class OrchestratorService {
         query: input.query,
       }),
     );
+    const nextPhase = advancePhaseForDispatch(role.id);
     return this.updateRun(run, {
       goals: run.goals,
+      ...(nextPhase ? { currentPhase: nextPhase } : {}),
       timeline: [
         this.timelineItem({
           type: "dispatch",
@@ -298,6 +313,106 @@ export class OrchestratorService {
           goalId: input.goalId,
           roleId: role.id,
           terminalSessionId: session.id,
+        }),
+      ],
+    });
+  }
+
+  async submitHumanGate(
+    runId: string,
+    input: SubmitOrchestratorHumanGateRequest,
+  ): Promise<OrchestratorRunPackage> {
+    const run = await this.requireRun(runId);
+    if (run.currentPhase !== input.phase) {
+      throw new OrchestratorError(409, "Human gate phase does not match current phase");
+    }
+    const reason = input.reason?.trim() || null;
+    if (input.verdict === "rejected" && !reason) {
+      throw new OrchestratorError(400, "Rejected human gate requires a reason");
+    }
+    const transition = resolveHumanGateTransition({
+      phase: input.phase,
+      verdict: input.verdict,
+    });
+    const verdict: HumanGateVerdict = {
+      id: `gate_${Date.now()}_${randomBytes(2).toString("hex")}`,
+      phase: input.phase,
+      verdict: input.verdict,
+      reason,
+      at: new Date().toISOString(),
+    };
+    const orchestratorSession = run.orchestrator.sessionId
+      ? this.terminalSessionManager.getSession(run.orchestrator.sessionId)
+      : null;
+    if (orchestratorSession) {
+      await this.promptSender.sendPromptToAgent(
+        orchestratorSession,
+        buildHumanPrompt(formatHumanGatePrompt(verdict, transition.currentPhase)),
+      );
+    }
+    return this.updateRun(run, {
+      status: transition.status,
+      currentPhase: transition.currentPhase,
+      humanGateVerdicts: [...(run.humanGateVerdicts ?? []), verdict],
+      timeline: [
+        this.timelineItem({
+          type: "human",
+          title: `Human gate ${input.verdict}: ${input.phase}`,
+          detail: reason ?? undefined,
+          terminalSessionId: run.orchestrator.sessionId ?? null,
+        }),
+      ],
+    });
+  }
+
+  async submitRoundConfirmation(
+    runId: string,
+    input: SubmitOrchestratorRoundConfirmationRequest,
+  ): Promise<OrchestratorRunPackage> {
+    const run = await this.requireRun(runId);
+    const pending = run.pendingRoundConfirmation;
+    if (!pending || pending.id !== input.confirmationId) {
+      throw new OrchestratorError(409, "Round confirmation does not match current pending confirmation");
+    }
+    const reason = input.reason?.trim() || null;
+    if (input.verdict === "rejected" && !reason) {
+      throw new OrchestratorError(400, "Rejected round confirmation requires a reason");
+    }
+    const nextPhase =
+      input.verdict === "approved" ? pending.nextPhase : pending.fromPhase;
+    const record: OrchestratorRoundConfirmation = {
+      id: `round_${Date.now()}_${randomBytes(2).toString("hex")}`,
+      pendingId: pending.id,
+      at: new Date().toISOString(),
+      fromPhase: pending.fromPhase,
+      nextPhase: pending.nextPhase,
+      roleId: pending.roleId,
+      goalId: pending.goalId,
+      verdict: input.verdict,
+      reason,
+    };
+    const orchestratorSession = run.orchestrator.sessionId
+      ? this.terminalSessionManager.getSession(run.orchestrator.sessionId)
+      : null;
+    if (orchestratorSession) {
+      await this.promptSender.sendPromptToAgent(
+        orchestratorSession,
+        buildHumanPrompt(formatRoundConfirmationPrompt(record, nextPhase)),
+      );
+    }
+    return this.updateRun(run, {
+      status: "running",
+      currentPhase: nextPhase,
+      pendingRoundConfirmation: null,
+      roundConfirmations: [...(run.roundConfirmations ?? []), record],
+      timeline: [
+        this.timelineItem({
+          type: "human",
+          title: `Round confirmation ${input.verdict}: ${pending.goalId ?? pending.roleId ?? pending.id}`,
+          detail: reason ?? undefined,
+          goalId: pending.goalId,
+          roleId: pending.roleId,
+          terminalSessionId: run.orchestrator.sessionId ?? null,
         }),
       ],
     });
@@ -338,8 +453,12 @@ export class OrchestratorService {
     status: OrchestratorRunStatus,
   ): Promise<OrchestratorRunPackage> {
     const run = await this.requireRun(runId);
+    if (status === "done" && !canMarkDone(run)) {
+      throw new OrchestratorError(409, "Run can only be marked done from finalize phase");
+    }
     return this.updateRun(run, {
       status,
+      ...(status === "done" ? { currentPhase: "done" as const } : {}),
       timeline: [
         this.timelineItem({
           type: "human",
@@ -396,9 +515,17 @@ export class OrchestratorService {
         terminalSessionId: outbox.sessionId,
       }),
     ];
+    const phasePatch = advancePhaseForWorkerResult(outbox);
+    const transitionPatch = phasePatch
+      ? this.buildWorkerResultTransitionPatch(run, outbox, phasePatch)
+      : null;
 
     if (run.status === "paused") {
-      await this.updateRun(run, { goals: run.goals, timeline: nextTimeline });
+      await this.updateRun(run, {
+        goals: run.goals,
+        ...(transitionPatch ?? {}),
+        timeline: nextTimeline,
+      });
       return;
     }
 
@@ -406,7 +533,11 @@ export class OrchestratorService {
       ? this.terminalSessionManager.getSession(run.orchestrator.sessionId)
       : null;
     if (!orchestratorSession) {
-      await this.updateRun(run, { goals: run.goals, timeline: nextTimeline });
+      await this.updateRun(run, {
+        goals: run.goals,
+        ...(transitionPatch ?? {}),
+        timeline: nextTimeline,
+      });
       return;
     }
     await this.promptSender.sendPromptToAgent(
@@ -422,7 +553,60 @@ export class OrchestratorService {
         terminalSessionId: orchestratorSession.id,
       }),
     );
-    await this.updateRun(run, { goals: run.goals, timeline: nextTimeline });
+    await this.updateRun(run, {
+      goals: run.goals,
+      ...(transitionPatch ?? {}),
+      timeline: nextTimeline,
+    });
+  }
+
+  private buildWorkerResultTransitionPatch(
+    run: OrchestratorRunPackage,
+    outbox: {
+      role?: string | null;
+      goalId?: string | null;
+      summary: string;
+    },
+    phasePatch: {
+      currentPhase: NonNullable<OrchestratorRunPackage["currentPhase"]>;
+      status?: OrchestratorRunStatus;
+    },
+  ): Partial<
+    Pick<
+      OrchestratorRunPackage,
+      "status" | "currentPhase" | "pendingRoundConfirmation"
+    >
+  > {
+    if (
+      shouldRequireRoundConfirmation({
+        run,
+        nextPhase: phasePatch.currentPhase,
+        nextStatus: phasePatch.status,
+      })
+    ) {
+      return {
+        status: "need_human",
+        pendingRoundConfirmation: createPendingRoundConfirmation({
+          id: `confirm_${Date.now()}_${randomBytes(2).toString("hex")}`,
+          at: new Date().toISOString(),
+          run,
+          nextPhase: phasePatch.currentPhase,
+          outbox: {
+            sessionId: "",
+            status: "completed",
+            artifacts: [],
+            error: null,
+            finishedAt: new Date().toISOString(),
+            ...outbox,
+          },
+        }),
+      };
+    }
+    return {
+      currentPhase: phasePatch.currentPhase,
+      ...(phasePatch.status ? { status: phasePatch.status } : {}),
+      pendingRoundConfirmation: null,
+    };
   }
 
   private resolveControlPlaneBaseUrl(): string | null {
@@ -460,7 +644,18 @@ export class OrchestratorService {
 
   private async updateRun(
     run: OrchestratorRunPackage,
-    patch: Partial<Pick<OrchestratorRunPackage, "status" | "goals" | "humanInbox">> & {
+    patch: Partial<
+      Pick<
+        OrchestratorRunPackage,
+        | "status"
+        | "currentPhase"
+        | "goals"
+        | "humanInbox"
+        | "humanGateVerdicts"
+        | "pendingRoundConfirmation"
+        | "roundConfirmations"
+      >
+    > & {
       timeline?: OrchestratorTimelineItem[];
     },
   ): Promise<OrchestratorRunPackage> {
@@ -479,4 +674,36 @@ export class OrchestratorService {
   ): OrchestratorTimelineItem {
     return createTimelineItem(input);
   }
+}
+
+function formatHumanGatePrompt(
+  verdict: HumanGateVerdict,
+  nextPhase: string,
+): string {
+  const result =
+    verdict.verdict === "approved" ? "人工门禁已通过" : "人工门禁未通过";
+  return [
+    `${result}: ${verdict.phase}`,
+    `Next phase: ${nextPhase}`,
+    verdict.reason ? `Reason: ${verdict.reason}` : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
+function formatRoundConfirmationPrompt(
+  confirmation: OrchestratorRoundConfirmation,
+  nextPhase: string,
+): string {
+  const result =
+    confirmation.verdict === "approved"
+      ? "人工轮次确认已通过"
+      : "人工轮次确认未通过";
+  return [
+    `${result}: ${confirmation.goalId ?? confirmation.roleId ?? confirmation.pendingId}`,
+    `Next phase: ${nextPhase}`,
+    confirmation.reason ? `Reason: ${confirmation.reason}` : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
 }
