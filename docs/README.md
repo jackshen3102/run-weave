@@ -13,6 +13,7 @@
 | 终端状态模型                             | architecture/terminal-state.md                        |
 | 终端代码预览 / Terminal Browser          | architecture/terminal-code-preview.md                 |
 | 终端 tmux 恢复                           | architecture/terminal-tmux-recovery.md                |
+| 多 Agent 编排控制面                      | architecture/multi-agent-orchestrator.md              |
 | 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md             |
 | 终端任务完成通知（桌面/飞书）            | architecture/terminal-completion-notifications.md     |
 | 本机系统资源监控                         | architecture/system-monitor.md                        |
