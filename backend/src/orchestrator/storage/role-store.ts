@@ -7,17 +7,13 @@ export class OrchestratorRoleStore {
   constructor(private readonly paths: OrchestratorPaths) {}
 
   async listRoles(): Promise<OrchestratorRoleDefinition[]> {
-    const value = await readJsonFile<{ roles?: OrchestratorRoleDefinition[] }>(
-      this.paths.rolesFilePath(),
-    );
-    return Array.isArray(value?.roles) ? value.roles : DEFAULT_ROLES;
+    const roles = await this.readStoredRoles();
+    return roles ?? DEFAULT_ROLES;
   }
 
-  async migrateLegacyDefaultRoles(): Promise<void> {
-    const value = await readJsonFile<{ roles?: OrchestratorRoleDefinition[] }>(
-      this.paths.rolesFilePath(),
-    );
-    if (Array.isArray(value?.roles) && isLegacyDefaultRoleSet(value.roles)) {
+  async ensureInitializedRoles(): Promise<void> {
+    const roles = await this.readStoredRoles();
+    if (!roles || roles.length === 0 || isLegacyDefaultRoleSet(roles)) {
       await writeJsonFile(this.paths.rolesFilePath(), { roles: DEFAULT_ROLES });
     }
   }
@@ -27,5 +23,15 @@ export class OrchestratorRoleStore {
   ): Promise<OrchestratorRoleDefinition[]> {
     await writeJsonFile(this.paths.rolesFilePath(), { roles });
     return roles;
+  }
+
+  private async readStoredRoles(): Promise<OrchestratorRoleDefinition[] | null> {
+    const value = await readJsonFile<
+      OrchestratorRoleDefinition[] | { roles?: OrchestratorRoleDefinition[] }
+    >(this.paths.rolesFilePath());
+    if (Array.isArray(value)) {
+      return value;
+    }
+    return Array.isArray(value?.roles) ? value.roles : null;
   }
 }

@@ -37,6 +37,7 @@ export function buildStartupPrompt(
     "调度方式：",
     "- 把 worker 当成异步任务。派发任务后不要长时间轮询 worker 终端，也不要写 while/for sleep 循环等待半小时或更久。",
     "- 使用 using-rw skill 和现有 `rw terminal` 命令创建或复用 worker 终端，并用 `rw terminal send --agent <codex|traex>` 发送简洁的 worker prompt。",
+    `- 每个 worker prompt 开头必须包含三行路由信息：\`Run: ${run.runId}\`、\`Role: <roleId>\`、\`Goal: <goalId>\`。Role 必须是 plan_reviewer、code_agent 或 code_reviewer；Goal 由你为本次派发生成并保持唯一。`,
     "- 不要手动向 shell 发送 `codex` 或 `traex` 来启动 worker；`rw terminal send --agent` 会在终端没有 agent 时自动启动目标 agent。",
     "- 如果目标终端已经运行了不同 agent，默认不要覆盖；只有明确需要替换时，才使用 `--agent-overwrite`。",
     "- 发送成功只代表 backend 接收了输入；最多做一次短确认，确认消息已进入目标终端即可。",

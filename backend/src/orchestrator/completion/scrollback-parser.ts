@@ -12,11 +12,11 @@ export interface WorkerPromptContext {
 
 export function extractWorkerPromptContext(scrollback: string): WorkerPromptContext {
   const clean = stripTerminalControlSequences(scrollback);
-  const runMatch = findLastLineMatch(clean, /^Run:\s*(\S+)\s*$/gm);
+  const runMatch = findLastLineMatch(clean, /^\s*(?:[›>]\s*)?Run:\s*(\S+)\s*$/gm);
   return {
     runId: runMatch?.value ?? null,
-    role: findLastLineMatch(clean, /^Role:\s*(\S+)\s*$/gm)?.value ?? null,
-    goalId: findLastLineMatch(clean, /^Goal:\s*(.+?)\s*$/gm)?.value ?? null,
+    role: findLastLineMatch(clean, /^\s*(?:[›>]\s*)?Role:\s*(\S+)\s*$/gm)?.value ?? null,
+    goalId: findLastLineMatch(clean, /^\s*(?:[›>]\s*)?Goal:\s*(.+?)\s*$/gm)?.value ?? null,
     markerIndex: runMatch?.index ?? -1,
   };
 }

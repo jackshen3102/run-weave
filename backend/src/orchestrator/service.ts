@@ -3,6 +3,7 @@ import os from "node:os";
 import type {
   OrchestratorDispatchSidecar,
   HumanGateVerdict,
+  OrchestratorWorkerOutbox,
   SubmitOrchestratorHumanGateRequest,
   OrchestratorRoundConfirmation,
   OrchestratorRunPackage,
@@ -22,8 +23,8 @@ import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TmuxService } from "../terminal/tmux-service";
 import type { TerminalEventService } from "../terminal/terminal-event-service";
 import type { TerminalStateService } from "../terminal/terminal-state-service";
+import { logger } from "../logging";
 import { OrchestratorError } from "./errors";
-import { DEFAULT_ROLES } from "./default-roles";
 import type { CreateRunInput, DispatchInput } from "./types";
 import {
   buildRunPackage,
@@ -60,6 +61,13 @@ import {
 
 export { OrchestratorError } from "./errors";
 
+type TerminalCompletionEvent = Extract<TerminalEventEnvelope, { kind: "completion" }>;
+type WorkerOutboxWithRunId = OrchestratorWorkerOutbox & { runId: string };
+
+const orchestratorServiceLogger = logger.child({
+  component: "orchestrator-service",
+});
+
 interface OrchestratorServiceOptions {
   terminalSessionManager: TerminalSessionManager;
   terminalEventService: TerminalEventService;
@@ -90,6 +98,7 @@ export class OrchestratorService {
   private readonly outboxResolver: OrchestratorOutboxResolver;
   private controlPlaneBaseUrl: string | null = null;
   private readonly routeTable = new Map<string, string>();
+  private readonly terminalEventQueues = new Map<string, Promise<void>>();
 
   constructor(options: OrchestratorServiceOptions) {
     this.terminalSessionManager = options.terminalSessionManager;
@@ -135,14 +144,18 @@ export class OrchestratorService {
   }
 
   async initialize(): Promise<void> {
-    await this.roleStore.migrateLegacyDefaultRoles();
-    const roles = await this.listRoles();
-    if (roles.length === 0) {
-      await this.saveRoles(DEFAULT_ROLES);
-    }
+    await this.roleStore.ensureInitializedRoles();
     await this.rebuildRouteTable();
     this.terminalEventService.subscribe((event) => {
-      void this.handleTerminalEvent(event);
+      void this.handleTerminalEvent(event).catch((error) => {
+        orchestratorServiceLogger.error("orchestrator.terminal_event.failed", {
+          message: "Failed to handle terminal event",
+          eventId: event.id,
+          terminalSessionId: event.terminalSessionId,
+          kind: event.kind,
+          error,
+        });
+      });
     });
   }
 
@@ -241,11 +254,13 @@ export class OrchestratorService {
   }
 
   private describeRoleTerminalMappings(run: OrchestratorRunPackage): string[] {
+    const project = this.terminalSessionManager.getProject(run.projectId);
     return run.roles.map((role) => {
       const roleName = `${role.name}(${role.id})`;
       const command = resolveAgentCliCommand(role.terminal.command);
       if (role.binding.mode !== "reuse") {
-        return `${roleName}: 按角色配置新建 worker 终端；创建后使用 \`rw terminal send <新终端ID> --agent ${command} --stdin --json\` 发送 worker prompt。`;
+        const cwd = role.terminal.cwd?.trim() || project?.path || "<项目路径>";
+        return `${roleName}: 新建 worker 终端时先运行 \`rw terminal create --project-id ${run.projectId} --cwd ${shellQuote(cwd)} --json\`，从 JSON 读取 terminalSessionId；随后使用 \`rw terminal send <terminalSessionId> --agent ${command} --stdin --json\` 发送 worker prompt。`;
       }
       const sessionId = role.binding.sessionId;
       const session = sessionId
@@ -477,8 +492,40 @@ export class OrchestratorService {
     if (!outbox?.runId) {
       return;
     }
+    const outboxWithRunId: WorkerOutboxWithRunId = {
+      ...outbox,
+      runId: outbox.runId,
+    };
+    await this.enqueueTerminalEvent(outboxWithRunId.runId, () =>
+      this.handleWorkerCompletionEvent(event, outboxWithRunId),
+    );
+  }
+
+  private async enqueueTerminalEvent(
+    runId: string,
+    task: () => Promise<void>,
+  ): Promise<void> {
+    const previous = this.terminalEventQueues.get(runId) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(task);
+    this.terminalEventQueues.set(runId, next);
+    try {
+      await next;
+    } finally {
+      if (this.terminalEventQueues.get(runId) === next) {
+        this.terminalEventQueues.delete(runId);
+      }
+    }
+  }
+
+  private async handleWorkerCompletionEvent(
+    event: TerminalCompletionEvent,
+    outbox: WorkerOutboxWithRunId,
+  ): Promise<void> {
     const run = await this.getRun(outbox.runId);
     if (!run) {
+      return;
+    }
+    if (run.status === "done" || run.status === "failed") {
       return;
     }
     if (event.terminalSessionId === run.orchestrator.sessionId) {
@@ -706,4 +753,8 @@ function formatRoundConfirmationPrompt(
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
