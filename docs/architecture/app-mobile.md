@@ -14,6 +14,8 @@ GET /api/app/home/overview
 
 设备在线状态表达的是 App 当前配置的本地电脑后端是否可达、进程是否响应、以及 App 是否可以继续使用该电脑上的项目和终端能力。它不是某个 terminal session 的 `running/exited`，也不是 `TerminalState` 的 `agent_running/agent_idle`。App 通过轻量 `/health` probe、terminal-events 服务端 `connected` 消息和业务 API 成功结果标记 online；电脑不可达时保留已加载的首页数据和登录态，只显示离线提示。
 
+App 支持在客户端本地管理多个 Runweave 后端连接。连接列表、当前 active connection 和连接可用性只属于 App 本地 UI 状态，不新增后端连接管理 API。首页和登录页会显示当前连接名称与 host；用户切换连接后，后续 `/health`、认证、App overview、terminal-events ticket、terminal websocket ticket 和业务 API 都应指向新的 active connection。
+
 旧的 `/api/terminal/mobile/overview` 和旧 Web mobile 页面已经移除。移动端列表状态不应再由前端根据 tail 文本、命令名或输出变化自行推断；需要状态时以 App overview 和终端详情页的 `/state` 接口为准。
 
 ## App 终端详情
@@ -81,5 +83,16 @@ App 不直接复用桌面 Terminal Workspace 的布局、Preview sidecar、Monac
 ## 配置与安全
 
 移动 App 需要访问后端时，仍应走正常认证 token 和明确的后端地址配置。CORS / WebView origin 应由部署或开发脚本显式配置，不应把通用移动 WebView origin 当成 App 身份边界。
+
+连接管理的稳定边界：
+
+- 默认连接来自 `VITE_RUNWEAVE_API_BASE`，没有显式 API base 时可回退到当前 App origin。
+- 用户新增连接时，URL 必须是 `http://` 或 `https://`，并会去掉 query、hash 和末尾斜杠。
+- 每个连接的认证 session 按 connectionId 隔离。切换连接不会等同于全局 logout；删除连接只清理该连接的 session。
+- 目标后端网络不可达、`/health` 超时或普通 HTTP 错误只影响该连接的 online/offline 展示，不清理 token。
+- 明确的 401 只清理当前连接的认证 session，不影响其他连接。
+- 在 Terminal 页切换连接时，不复用旧 URL 里的 `terminalSessionId`，应回到目标连接的 Home 或 Login。
+
+Native 平台的 refresh token 必须经 `RunweaveSecureCredentials` 原生安全存储插件保存；localStorage fallback 只用于浏览器开发环境。localStorage 里可以保存连接列表和非敏感认证索引，不应保存多个 native 后端的 refresh token 明文集合。
 
 App 相关 native 工程设置（例如 iOS deployment target、签名 team）应保持可移植，避免把个人本机 Xcode 状态提交为项目级默认。
