@@ -148,7 +148,7 @@ Important environment variables:
   service.
 - `AUTH_JWT_SECRET`: signing secret for auth tokens.
 - `FRONTEND_ORIGIN`: allowed frontend origins for CORS.
-- `BROWSER_PROFILE_DIR`: persistent backend data directory.
+- `BROWSER_PROFILE_DIR`: override the persistent backend data directory. By default Runweave stores backend profiles under `~/.runweave/browser-profile`.
 - `TERMINAL_SESSION_STORE_FILE`: persisted terminal session store path.
 
 Electron mac packaging:

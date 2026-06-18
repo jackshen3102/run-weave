@@ -6,6 +6,7 @@ export type AppDeviceConnectionStatus = "checking" | "online" | "offline";
 
 export interface AppDeviceConnectionSnapshot {
   status: AppDeviceConnectionStatus;
+  connectionId: string | null;
   apiBaseHost: string;
   checkedAt: number | null;
   lastSeenAt: number | null;
@@ -31,9 +32,13 @@ function resolveApiBaseHost(apiBase: string): string {
   }
 }
 
-function buildInitialSnapshot(apiBase: string): AppDeviceConnectionSnapshot {
+function buildInitialSnapshot(
+  apiBase: string,
+  connectionId: string | null,
+): AppDeviceConnectionSnapshot {
   return {
     status: "checking",
+    connectionId,
     apiBaseHost: resolveApiBaseHost(apiBase),
     checkedAt: null,
     lastSeenAt: null,
@@ -59,18 +64,24 @@ function isPageActive(): boolean {
 
 export function useAppDeviceConnection({
   apiBase,
+  connectionId,
   enabled,
 }: {
   apiBase: string;
+  connectionId: string | null;
   enabled: boolean;
 }) {
   const [deviceConnection, setDeviceConnection] =
-    useState<AppDeviceConnectionSnapshot>(() => buildInitialSnapshot(apiBase));
+    useState<AppDeviceConnectionSnapshot>(() =>
+      buildInitialSnapshot(apiBase, connectionId),
+    );
   const snapshotRef = useRef(deviceConnection);
+  const activeProbeKeyRef = useRef("");
   const retryTimerRef = useRef<number | null>(null);
   const offlineAttemptRef = useRef(0);
   const [pageActive, setPageActive] = useState(() => isPageActive());
   const pageActiveRef = useRef(pageActive);
+  const currentProbeKey = `${connectionId ?? ""}\u0000${apiBase}`;
 
   useEffect(() => {
     snapshotRef.current = deviceConnection;
@@ -81,9 +92,15 @@ export function useAppDeviceConnection({
   }, [pageActive]);
 
   useEffect(() => {
+    activeProbeKeyRef.current = currentProbeKey;
     offlineAttemptRef.current = 0;
-    setDeviceConnection(buildInitialSnapshot(apiBase));
-  }, [apiBase]);
+    setDeviceConnection(buildInitialSnapshot(apiBase, connectionId));
+  }, [apiBase, connectionId, currentProbeKey]);
+
+  const isCurrentProbe = useCallback(
+    (probeKey: string) => activeProbeKeyRef.current === probeKey,
+    [],
+  );
 
   const clearRetryTimer = useCallback(() => {
     if (retryTimerRef.current !== null) {
@@ -100,6 +117,7 @@ export function useAppDeviceConnection({
       setDeviceConnection((current) => ({
         ...current,
         status: "online",
+        connectionId,
         apiBaseHost: resolveApiBaseHost(apiBase),
         checkedAt: now,
         lastSeenAt: now,
@@ -108,7 +126,7 @@ export function useAppDeviceConnection({
         message: "Computer online",
       }));
     },
-    [apiBase, clearRetryTimer],
+    [apiBase, clearRetryTimer, connectionId],
   );
 
   const markDeviceOffline = useCallback(
@@ -117,6 +135,7 @@ export function useAppDeviceConnection({
       setDeviceConnection((current) => ({
         ...current,
         status: "offline",
+        connectionId,
         apiBaseHost: resolveApiBaseHost(apiBase),
         checkedAt: now,
         latencyMs: null,
@@ -124,29 +143,37 @@ export function useAppDeviceConnection({
         message,
       }));
     },
-    [apiBase],
+    [apiBase, connectionId],
   );
 
   const probeDeviceConnection = useCallback(async () => {
+    const probeApiBase = apiBase;
+    const probeConnectionId = connectionId;
+    const probeKey = currentProbeKey;
     clearRetryTimer();
     const wasOffline = snapshotRef.current.status === "offline";
     if (!wasOffline) {
       setDeviceConnection((current) => ({
         ...current,
         status: "checking",
-        apiBaseHost: resolveApiBaseHost(apiBase),
+        connectionId: probeConnectionId,
+        apiBaseHost: resolveApiBaseHost(probeApiBase),
         reason: "initial",
         message: "Checking computer",
       }));
     }
 
-    const result = await getBackendHealth(apiBase);
+    const result = await getBackendHealth(probeApiBase);
+    if (!isCurrentProbe(probeKey)) {
+      return snapshotRef.current;
+    }
     const now = Date.now();
     if (result.ok) {
       offlineAttemptRef.current = 0;
       const nextSnapshot: AppDeviceConnectionSnapshot = {
         status: "online",
-        apiBaseHost: resolveApiBaseHost(apiBase),
+        connectionId: probeConnectionId,
+        apiBaseHost: resolveApiBaseHost(probeApiBase),
         checkedAt: now,
         lastSeenAt: now,
         latencyMs: result.latencyMs,
@@ -167,7 +194,8 @@ export function useAppDeviceConnection({
     const nextSnapshot: AppDeviceConnectionSnapshot = {
       ...snapshotRef.current,
       status: "offline",
-      apiBaseHost: resolveApiBaseHost(apiBase),
+      connectionId: probeConnectionId,
+      apiBaseHost: resolveApiBaseHost(probeApiBase),
       checkedAt: now,
       latencyMs: result.latencyMs,
       reason,
@@ -178,7 +206,7 @@ export function useAppDeviceConnection({
     };
     setDeviceConnection(nextSnapshot);
     return nextSnapshot;
-  }, [apiBase, clearRetryTimer]);
+  }, [apiBase, clearRetryTimer, connectionId, currentProbeKey, isCurrentProbe]);
 
   const refreshDeviceConnection = useCallback(async () => {
     offlineAttemptRef.current = 0;

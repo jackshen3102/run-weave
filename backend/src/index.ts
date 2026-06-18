@@ -3,6 +3,7 @@ import http from "node:http";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import express from "express";
+import { migrateLegacyBrowserProfileRootIfNeeded } from "@runweave/shared/src/browser-profile-node";
 import { LowDbAuthStore } from "./auth/lowdb-store";
 import { loadAuthConfig } from "./auth/config";
 import { createRequireAuth } from "./auth/middleware";
@@ -86,6 +87,7 @@ interface RuntimeServices {
 
 type BackendStartStage =
   | "runtime-config"
+  | "storage-migration"
   | "profile-lock"
   | "tunnel-auth-config"
   | "runtime-services"
@@ -456,6 +458,16 @@ async function startRuntime(): Promise<void> {
   let profileLock: BackendProfileLock | null = null;
   try {
     const runtimeConfig = resolveRuntimeConfig();
+    stage = "storage-migration";
+    const migration = await migrateLegacyBrowserProfileRootIfNeeded();
+    if (migration.migrated.length > 0) {
+      logger.info("backend.browserProfile.migrated", {
+        component: "backend",
+        legacyRoot: migration.legacyRoot,
+        targetRoot: migration.targetRoot,
+        profileIds: migration.migrated,
+      });
+    }
     const storagePaths = resolveStoragePaths(process.env);
     stage = "profile-lock";
     profileLock = await acquireBackendProfileLock({

@@ -22,7 +22,10 @@ import type {
 import {
   BROWSER_PROFILE_LOCK_FILE_NAME,
   getBrowserProfileLockFile,
+  resolveDefaultBrowserProfileDir,
+  resolveBrowserProfileRootDir,
   resolveBrowserProfileDir,
+  resolveLegacyBrowserProfileRootDir,
 } from "@runweave/shared/src/browser-profile-node";
 import { resolveProtocolFilePath } from "./protocol-path.js";
 import {
@@ -354,6 +357,17 @@ let packagedBackendsStoppedForQuit = false;
 let stoppingPackagedBackendsForQuit = false;
 let desktopIncidentLogger: DesktopIncidentLogger | null = null;
 
+function resolvePackagedBackendProfileDir(): string {
+  return resolveBrowserProfileDir(process.env, os.homedir(), "/");
+}
+
+function buildPackagedBackendBaseEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    BROWSER_PROFILE_DIR: resolvePackagedBackendProfileDir(),
+  };
+}
+
 function logDesktopIncident(event: PackagedBackendRuntimeIncidentEvent): void {
   if (!desktopIncidentLogger) {
     return;
@@ -378,23 +392,28 @@ function readJsonFile(filePath: string): unknown {
 }
 
 function collectBackendLockSnapshots(): Array<Record<string, unknown>> {
-  const profileRoot = path.join(os.homedir(), ".browser-profile");
-  if (!existsSync(profileRoot)) {
-    return [];
-  }
-
   const snapshots: Array<Record<string, unknown>> = [];
-  for (const entry of readdirSync(profileRoot).slice(0, 50)) {
-    const profileDir = path.join(profileRoot, entry);
-    const lockFile = getBrowserProfileLockFile(profileDir);
-    if (!existsSync(lockFile)) {
+  const profileRoots = [
+    resolveBrowserProfileRootDir(os.homedir()),
+    resolveLegacyBrowserProfileRootDir(os.homedir()),
+  ];
+  for (const profileRoot of profileRoots) {
+    if (!existsSync(profileRoot)) {
       continue;
     }
-    snapshots.push({
-      profileDir,
-      lockFile,
-      owner: readJsonFile(lockFile),
-    });
+    for (const entry of readdirSync(profileRoot).slice(0, 50)) {
+      const profileDir = path.join(profileRoot, entry);
+      const lockFile = getBrowserProfileLockFile(profileDir);
+      if (!existsSync(lockFile)) {
+        continue;
+      }
+      snapshots.push({
+        profileRoot,
+        profileDir,
+        lockFile,
+        owner: readJsonFile(lockFile),
+      });
+    }
   }
   return snapshots;
 }
@@ -422,7 +441,11 @@ function buildDesktopDiagnosticSnapshot(): Record<string, unknown> {
     lastKnownGoodRuntime: runtimeRoot
       ? readJsonFile(path.join(runtimeRoot, "last-known-good.json"))
       : null,
-    defaultBackendProfileDir: resolveBrowserProfileDir(process.env),
+    defaultBackendProfileDir: resolveDefaultBrowserProfileDir(
+      process.cwd(),
+      os.homedir(),
+    ),
+    packagedBackendProfileDir: resolvePackagedBackendProfileDir(),
     backendProfileLockFileName: BROWSER_PROFILE_LOCK_FILE_NAME,
     backendLocks: collectBackendLockSnapshots(),
   };
@@ -580,9 +603,10 @@ async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionS
       runtimeRoot: getPackagedRuntimeRoot(),
       resourcesPath: process.resourcesPath,
       shellVersion: app.getVersion(),
+      profileDir: resolvePackagedBackendProfileDir(),
     });
     const runtime = await startPackagedBackend({
-      baseEnv: process.env,
+      baseEnv: buildPackagedBackendBaseEnv(),
       onIncidentEvent: logDesktopIncident,
       runtimeRoot: getPackagedRuntimeRoot(),
       resourcesPath: process.resourcesPath,

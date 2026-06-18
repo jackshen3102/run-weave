@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import os from "node:os";
+import path from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -12,6 +15,16 @@ import {
 const DEFAULT_BACKEND_PORT = 5001;
 const BACKEND_HOST = process.env.DEV_HOST?.trim() || "127.0.0.1";
 const CAPACITOR_ORIGIN = "capacitor://localhost";
+const EXISTING_BACKEND_HEALTHCHECK_TIMEOUT_MS = 1_000;
+
+function resolveDesktopProfileDir() {
+  return path.join(
+    os.homedir(),
+    ".runweave",
+    "browser-profile",
+    createHash("sha256").update("/").digest("hex").slice(0, 8),
+  );
+}
 
 function appendConfiguredOrigin(rawOrigins, origin) {
   const origins = new Set(
@@ -46,10 +59,37 @@ function runIosOpen(env) {
   });
 }
 
+async function readBackendHealth(backendUrl) {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    EXISTING_BACKEND_HEALTHCHECK_TIMEOUT_MS,
+  );
+
+  try {
+    const response = await fetch(`${backendUrl}/health`, {
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return await response.json().catch(() => ({}));
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function run() {
-  const backendPort = await resolvePort(DEFAULT_BACKEND_PORT, {
-    host: BACKEND_HOST,
-  });
+  const defaultBackendUrl = `http://127.0.0.1:${DEFAULT_BACKEND_PORT}`;
+  const existingBackendHealth = await readBackendHealth(defaultBackendUrl);
+  const shouldReuseExistingBackend = existingBackendHealth !== null;
+  const backendPort = shouldReuseExistingBackend
+    ? DEFAULT_BACKEND_PORT
+    : await resolvePort(DEFAULT_BACKEND_PORT, {
+        host: BACKEND_HOST,
+      });
   const backendUrl = `http://127.0.0.1:${backendPort}`;
   const env = {
     ...process.env,
@@ -57,16 +97,34 @@ async function run() {
       process.env.FRONTEND_ORIGIN,
       CAPACITOR_ORIGIN,
     ),
+    RUNWEAVE_DEV_BROWSER_PROFILE_DIR:
+      process.env.RUNWEAVE_DEV_BROWSER_PROFILE_DIR?.trim() ||
+      process.env.BROWSER_PROFILE_DIR?.trim() ||
+      resolveDesktopProfileDir(),
   };
 
   console.log(`[app-ios-local] backend url: ${backendUrl}`);
   console.log(`[app-ios-local] allowed origin: ${CAPACITOR_ORIGIN}`);
+  console.log(
+    `[app-ios-local] backend profile: ${env.RUNWEAVE_DEV_BROWSER_PROFILE_DIR}`,
+  );
 
-  const backend = startBackend({
-    host: BACKEND_HOST,
-    backendPort,
-    env,
-  });
+  if (shouldReuseExistingBackend) {
+    console.log(
+      `[app-ios-local] reusing existing backend on ${backendUrl}: ${JSON.stringify(existingBackendHealth)}`,
+    );
+    console.log("[app-ios-local] syncing iOS app...");
+    await runIosOpen({
+      ...process.env,
+      VITE_RUNWEAVE_API_BASE: backendUrl,
+    });
+    console.log(
+      "[app-ios-local] Xcode opened. Run the app in an iOS simulator; keep the existing backend running.",
+    );
+    return;
+  }
+
+  const backend = startBackend({ host: BACKEND_HOST, backendPort, env });
 
   try {
     await waitForBackendReady(backend, backendUrl);

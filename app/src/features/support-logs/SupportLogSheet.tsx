@@ -117,7 +117,7 @@ export function SupportLogSheet() {
   const exportBundle = async (method: "share" | "download") => {
     setBusyAction(method);
     setMessage(null);
-    recordSupportLogToStore(store, "support.export.started", {
+    await recordSupportLogToStore(store, "support.export.started", {
       method,
       scope: currentScope,
     });

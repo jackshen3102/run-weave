@@ -82,26 +82,62 @@ function writeLegacyConsole(fields: LegacyConsoleFields | undefined): void {
 function buildTransports(env: NodeJS.ProcessEnv): winston.transport[] {
   const storagePaths = resolveStoragePaths(env);
   const transports: winston.transport[] = [
-    new winston.transports.Console({
-      level: "error",
-    }),
+    makeResilientTransport(
+      new winston.transports.Console({
+        level: "error",
+      }),
+      "console",
+    ),
   ];
 
   if (resolveLogToFile(env)) {
     transports.push(
-      new DailyRotateFile({
-        dirname: storagePaths.backendLogDir,
-        filename: "backend-%DATE%.jsonl",
-        datePattern: "YYYY-MM-DD",
-        maxFiles: "3d",
-        maxSize: "50m",
-        zippedArchive: false,
-        level: resolveLogLevel(env),
-      }),
+      makeResilientTransport(
+        new DailyRotateFile({
+          dirname: storagePaths.backendLogDir,
+          filename: "backend-%DATE%.jsonl",
+          datePattern: "YYYY-MM-DD",
+          maxFiles: "3d",
+          maxSize: "50m",
+          zippedArchive: false,
+          level: resolveLogLevel(env),
+        }),
+        "file",
+      ),
     );
   }
 
   return transports;
+}
+
+function makeResilientTransport<T extends winston.transport>(
+  transport: T,
+  name: string,
+): T {
+  let reportedFailure = false;
+  transport.on("error", (error: unknown) => {
+    (transport as T & { silent?: boolean }).silent = true;
+    if (reportedFailure) {
+      return;
+    }
+    reportedFailure = true;
+    const serializedError = serializeError(error);
+    try {
+      process.stderr.write(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: "error",
+          event: "backend.logger.transport.disabled",
+          transport: name,
+          error: serializedError,
+          message: "Backend logger transport disabled after write failure",
+        }) + "\n",
+      );
+    } catch {
+      // Ignore secondary logging failures; the logger must not crash the backend.
+    }
+  });
+  return transport;
 }
 
 class WinstonBackendLogger implements BackendLogger {

@@ -8,10 +8,15 @@ import {
 } from "@ionic/react";
 import { FormEvent, useState } from "react";
 
+import { AppConnectionChip } from "../components/AppConnectionChip";
+import { AppConnectionManager } from "../components/AppConnectionManager";
+import type { AppConnectionConfig } from "../features/connections/types";
 import { useSupportLogs } from "../features/support-logs";
 import { ApiError } from "../services/http";
 
 interface LoginPageProps {
+  activeConnection: AppConnectionConfig | null;
+  hasActiveConnection: boolean;
   onLogin: (params: { username: string; password: string }) => Promise<void>;
 }
 
@@ -25,12 +30,19 @@ function resolveLoginError(error: unknown): string {
   return "无法连接服务";
 }
 
-export function LoginPage({ onLogin }: LoginPageProps) {
+export function LoginPage({
+  activeConnection,
+  hasActiveConnection,
+  onLogin,
+}: LoginPageProps) {
   const { openSupportLogs } = useSupportLogs();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [connectionManagerOpen, setConnectionManagerOpen] = useState(
+    !hasActiveConnection,
+  );
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -56,6 +68,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <p className="text-muted-foreground">Runweave</p>
             <h1 className="text-foreground">Sign in</h1>
           </section>
+          <AppConnectionChip
+            connection={activeConnection}
+            disabled={submitting}
+            onClick={() => setConnectionManagerOpen(true)}
+          />
           <form className="login-form grid" onSubmit={handleSubmit}>
             <IonInput
               className="app-input"
@@ -87,7 +104,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             ) : null}
             <IonButton
               className="login-submit"
-              disabled={submitting || !username.trim() || !password}
+              disabled={
+                submitting || !hasActiveConnection || !username.trim() || !password
+              }
               expand="block"
               type="submit"
             >
@@ -104,6 +123,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           </IonButton>
         </main>
       </IonContent>
+      <AppConnectionManager
+        isOpen={connectionManagerOpen}
+        onDidDismiss={() => setConnectionManagerOpen(false)}
+      />
     </IonPage>
   );
 }

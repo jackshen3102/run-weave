@@ -51,7 +51,13 @@ function LoginRoute({ session }: { session: AppSessionController }) {
     [history, session],
   );
 
-  return <LoginPage onLogin={handleLogin} />;
+  return (
+    <LoginPage
+      activeConnection={session.activeConnection}
+      hasActiveConnection={session.hasActiveConnection}
+      onLogin={handleLogin}
+    />
+  );
 }
 
 function HomeRoute({ session }: { session: AppSessionController }) {
@@ -94,7 +100,7 @@ function HomeRoute({ session }: { session: AppSessionController }) {
 
   return (
     <HomePage
-      apiBase={session.apiBase}
+      activeConnection={session.activeConnection}
       deviceConnection={session.deviceConnection}
       error={session.error}
       loading={session.loading}
@@ -151,6 +157,7 @@ function TerminalRoute({ session }: { session: AppSessionController }) {
   return (
     <AppTerminalPage
       accessToken={session.accessToken}
+      activeConnection={session.activeConnection}
       apiBase={session.apiBase}
       initialSession={initialSession}
       deviceConnection={session.deviceConnection}
@@ -167,7 +174,7 @@ export function AppRoutes({ session }: { session: AppSessionController }) {
   return (
     <IonRouterOutlet>
       <Route exact path={LOGIN_ROUTE}>
-        {session.isAuthenticated ? (
+        {session.hasActiveConnection && session.isAuthenticated ? (
           <Redirect to={HOME_ROUTE} />
         ) : (
           <LoginRoute session={session} />

@@ -4,8 +4,9 @@ import type {
   TerminalEventEnvelope,
   TerminalState,
 } from "@runweave/shared";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { AppConnectionConfig } from "../features/connections/types";
 import { recordSupportLog } from "../features/support-logs";
 import {
   login,
@@ -16,6 +17,7 @@ import {
 } from "../services/auth";
 import { classifyApiFailure } from "../services/api-failure";
 import { getAppHomeOverview } from "../services/terminal";
+import { useAppConnectionStore } from "../store/use-app-connection-store";
 import { useAuthStore } from "../store/use-auth-store";
 import { useAppDeviceConnection } from "./use-app-device-connection";
 import type { AppDeviceConnectionSnapshot } from "./use-app-device-connection";
@@ -30,9 +32,11 @@ export interface AppLoginParams {
 
 export interface AppSessionController {
   accessToken: string;
+  activeConnection: AppConnectionConfig | null;
   apiBase: string;
   deviceConnection: AppDeviceConnectionSnapshot;
   error: string | null;
+  hasActiveConnection: boolean;
   isAuthenticated: boolean;
   loading: boolean;
   login: (params: AppLoginParams) => Promise<void>;
@@ -84,15 +88,37 @@ function isOverviewInvalidationEvent(event: TerminalEventEnvelope): boolean {
   );
 }
 
+function supportConnectionFields(connection: AppConnectionConfig | null) {
+  return {
+    connectionId: connection?.id ?? null,
+    connectionName: connection?.name ?? null,
+  };
+}
+
 export function useAppSession(): AppSessionController {
+  const activeConnection = useAppConnectionStore(
+    (state) => state.activeConnection,
+  );
+  const activeConnectionId = activeConnection?.id ?? null;
+  const apiBase = activeConnection?.url ?? "";
+  const activeConnectionIdRef = useRef<string | null>(activeConnectionId);
   const {
-    apiBase,
     accessToken,
     refreshToken,
+    activeConnectionId: authConnectionId,
     isAuthenticated,
+    isSessionLoading,
+    sessionError,
+    loadSessionForConnection,
     setAuthenticated,
     clearSession,
   } = useAuthStore();
+  const scopedAccessToken =
+    authConnectionId === activeConnectionId ? accessToken : "";
+  const scopedRefreshToken =
+    authConnectionId === activeConnectionId ? refreshToken : "";
+  const scopedIsAuthenticated =
+    authConnectionId === activeConnectionId && isAuthenticated;
   const [startupState, setStartupState] = useState<StartupState>("checking");
   const [overview, setOverview] =
     useState<AppHomeOverviewResponse | null>(null);
@@ -105,64 +131,119 @@ export function useAppSession(): AppSessionController {
     refreshDeviceConnection,
   } = useAppDeviceConnection({
     apiBase,
-    enabled: isAuthenticated && Boolean(accessToken),
+    connectionId: activeConnectionId,
+    enabled:
+      Boolean(activeConnectionId) &&
+      scopedIsAuthenticated &&
+      Boolean(scopedAccessToken),
   });
 
+  useEffect(() => {
+    activeConnectionIdRef.current = activeConnectionId;
+  }, [activeConnectionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setStartupState("checking");
+    setOverview(null);
+    setError(null);
+    setLoading(false);
+    void loadSessionForConnection(activeConnectionId).finally(() => {
+      if (!cancelled) {
+        setStartupState("ready");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConnectionId, loadSessionForConnection]);
+
+  useEffect(() => {
+    if (sessionError) {
+      setError(sessionError);
+    }
+  }, [sessionError]);
+
   const persistSession = useCallback(
-    (session: AppAuthSession) => {
-      setAuthenticated(session);
+    async (connectionId: string, session: AppAuthSession) => {
+      await setAuthenticated(connectionId, session);
     },
     [setAuthenticated],
   );
 
-  const resetSession = useCallback(() => {
-    clearSession();
+  const resetSession = useCallback(async () => {
+    const connectionId = activeConnectionIdRef.current;
+    await clearSession(connectionId);
     setOverview(null);
   }, [clearSession]);
 
   const refreshStoredSession = useCallback(async (): Promise<string | null> => {
-    if (!refreshToken) {
+    const connectionId = activeConnectionIdRef.current;
+    if (!connectionId || !scopedRefreshToken) {
       return null;
     }
-    recordSupportLog("auth.refresh.started");
+    recordSupportLog("auth.refresh.started", supportConnectionFields(activeConnection));
     try {
-      const refreshed = await refreshSession(apiBase, refreshToken);
-      persistSession(refreshed);
-      recordSupportLog("auth.refresh.completed");
+      const refreshed = await refreshSession(apiBase, scopedRefreshToken);
+      await persistSession(connectionId, refreshed);
+      recordSupportLog(
+        "auth.refresh.completed",
+        supportConnectionFields(activeConnection),
+      );
       return refreshed.accessToken;
     } catch (error) {
       const failure = classifyApiFailure(error);
-      recordSupportLog("auth.refresh.failed", {
-        failureKind: failure.kind,
-        error: error instanceof Error ? error.message : String(error),
-      }, "warn");
+      recordSupportLog(
+        "auth.refresh.failed",
+        {
+          ...supportConnectionFields(activeConnection),
+          failureKind: failure.kind,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "warn",
+      );
       if (failure.kind === "auth-expired") {
-        resetSession();
+        await resetSession();
       } else {
         markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
       }
       return null;
     }
   }, [
+    activeConnection,
     apiBase,
     markDeviceOffline,
     persistSession,
-    refreshToken,
+    scopedRefreshToken,
     resetSession,
   ]);
 
   const loadOverview = useCallback(
-    async (token = accessToken, targetApiBase = apiBase) => {
-      if (!token) {
+    async (
+      token = scopedAccessToken,
+      targetApiBase = apiBase,
+      targetConnectionId = activeConnectionId,
+    ) => {
+      if (!token || !targetConnectionId) {
         return;
       }
       setLoading(true);
       setError(null);
       try {
-        setOverview(await getAppHomeOverview(targetApiBase, token));
+        const nextOverview = await getAppHomeOverview(targetApiBase, token);
+        if (activeConnectionIdRef.current !== targetConnectionId) {
+          return;
+        }
+        setOverview(nextOverview);
         markDeviceOnline("health-ok");
-        recordSupportLog("app.home.overview.loaded");
+        recordSupportLog(
+          "app.home.overview.loaded",
+          supportConnectionFields(activeConnection),
+        );
       } catch (nextError) {
+        if (activeConnectionIdRef.current !== targetConnectionId) {
+          return;
+        }
         const failure = classifyApiFailure(nextError);
         if (failure.kind === "auth-expired") {
           const refreshedToken = await refreshStoredSession();
@@ -170,15 +251,26 @@ export function useAppSession(): AppSessionController {
             return;
           }
           try {
-            setOverview(
-              await getAppHomeOverview(targetApiBase, refreshedToken),
+            const nextOverview = await getAppHomeOverview(
+              targetApiBase,
+              refreshedToken,
             );
+            if (activeConnectionIdRef.current !== targetConnectionId) {
+              return;
+            }
+            setOverview(nextOverview);
             markDeviceOnline("health-ok");
-            recordSupportLog("app.home.overview.loaded_after_refresh");
+            recordSupportLog(
+              "app.home.overview.loaded_after_refresh",
+              supportConnectionFields(activeConnection),
+            );
           } catch (refreshError) {
+            if (activeConnectionIdRef.current !== targetConnectionId) {
+              return;
+            }
             const refreshFailure = classifyApiFailure(refreshError);
             if (refreshFailure.kind === "auth-expired") {
-              resetSession();
+              await resetSession();
               return;
             }
             markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
@@ -186,64 +278,81 @@ export function useAppSession(): AppSessionController {
           }
           return;
         }
-        recordSupportLog("app.home.overview.failed", {
-          failureKind: failure.kind,
-          error: nextError instanceof Error ? nextError.message : String(nextError),
-        }, "warn");
+        recordSupportLog(
+          "app.home.overview.failed",
+          {
+            ...supportConnectionFields(activeConnection),
+            failureKind: failure.kind,
+            error:
+              nextError instanceof Error ? nextError.message : String(nextError),
+          },
+          "warn",
+        );
         markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
         setError("本地电脑暂时不可用");
       } finally {
-        setLoading(false);
+        if (activeConnectionIdRef.current === targetConnectionId) {
+          setLoading(false);
+        }
       }
     },
     [
-      accessToken,
+      activeConnection,
+      activeConnectionId,
       apiBase,
       markDeviceOffline,
       markDeviceOnline,
       refreshStoredSession,
       resetSession,
+      scopedAccessToken,
     ],
   );
 
   useEffect(() => {
     let cancelled = false;
     const checkSession = async () => {
-      if (!accessToken) {
-        if (!cancelled) {
-          setStartupState("ready");
-        }
+      if (!activeConnectionId || isSessionLoading) {
+        return;
+      }
+      if (!scopedAccessToken) {
         return;
       }
 
       try {
-        recordSupportLog("auth.verify.started");
-        await verifySession(apiBase, accessToken);
-        if (!cancelled) {
-          recordSupportLog("auth.verify.completed");
-          setStartupState("ready");
-          await loadOverview(accessToken);
+        recordSupportLog(
+          "auth.verify.started",
+          supportConnectionFields(activeConnection),
+        );
+        await verifySession(apiBase, scopedAccessToken);
+        if (!cancelled && activeConnectionIdRef.current === activeConnectionId) {
+          recordSupportLog(
+            "auth.verify.completed",
+            supportConnectionFields(activeConnection),
+          );
+          await loadOverview(scopedAccessToken, apiBase, activeConnectionId);
         }
       } catch (error) {
+        if (cancelled || activeConnectionIdRef.current !== activeConnectionId) {
+          return;
+        }
         const failure = classifyApiFailure(error);
-        recordSupportLog("auth.verify.failed", {
-          failureKind: failure.kind,
-          error: error instanceof Error ? error.message : String(error),
-        }, "warn");
+        recordSupportLog(
+          "auth.verify.failed",
+          {
+            ...supportConnectionFields(activeConnection),
+            failureKind: failure.kind,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "warn",
+        );
         if (failure.kind === "auth-expired") {
           const refreshedToken = await refreshStoredSession();
-          if (!cancelled) {
-            setStartupState("ready");
-            if (refreshedToken) {
-              await loadOverview(refreshedToken);
-            }
+          if (!cancelled && refreshedToken) {
+            await loadOverview(refreshedToken, apiBase, activeConnectionId);
           }
           return;
         }
         markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
-        if (!cancelled) {
-          setStartupState("ready");
-        }
       }
     };
 
@@ -251,7 +360,16 @@ export function useAppSession(): AppSessionController {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, apiBase, loadOverview, refreshStoredSession]);
+  }, [
+    activeConnection,
+    activeConnectionId,
+    apiBase,
+    isSessionLoading,
+    loadOverview,
+    markDeviceOffline,
+    refreshStoredSession,
+    scopedAccessToken,
+  ]);
 
   const refreshOverview = useCallback(async () => {
     if (deviceConnection.status === "offline") {
@@ -266,7 +384,11 @@ export function useAppSession(): AppSessionController {
 
   const loginWithCredentials = useCallback(
     async (params: AppLoginParams) => {
+      if (!activeConnectionId) {
+        throw new Error("请先添加并选择一个后端连接");
+      }
       recordSupportLog("auth.login.started", {
+        ...supportConnectionFields(activeConnection),
         usernameLength: params.username.length,
       });
       try {
@@ -274,27 +396,47 @@ export function useAppSession(): AppSessionController {
           username: params.username,
           password: params.password,
         });
-        persistSession(session);
-        recordSupportLog("auth.login.completed");
-        await loadOverview(session.accessToken, apiBase);
+        await persistSession(activeConnectionId, session);
+        recordSupportLog(
+          "auth.login.completed",
+          supportConnectionFields(activeConnection),
+        );
+        await loadOverview(session.accessToken, apiBase, activeConnectionId);
       } catch (error) {
-        recordSupportLog("auth.login.failed", {
-          error: error instanceof Error ? error.message : String(error),
-        }, "warn");
+        recordSupportLog(
+          "auth.login.failed",
+          {
+            ...supportConnectionFields(activeConnection),
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "warn",
+        );
         throw error;
       }
     },
-    [apiBase, loadOverview, persistSession],
+    [
+      activeConnection,
+      activeConnectionId,
+      apiBase,
+      loadOverview,
+      persistSession,
+    ],
   );
 
   const logoutAndReset = useCallback(() => {
-    recordSupportLog("auth.logout.started");
-    if (accessToken) {
-      void logout(apiBase, accessToken).catch(() => undefined);
+    const connectionId = activeConnectionIdRef.current;
+    recordSupportLog("auth.logout.started", supportConnectionFields(activeConnection));
+    if (scopedAccessToken) {
+      void logout(apiBase, scopedAccessToken).catch(() => undefined);
     }
-    resetSession();
-    recordSupportLog("auth.logout.completed");
-  }, [accessToken, apiBase, resetSession]);
+    void clearSession(connectionId);
+    setOverview(null);
+    recordSupportLog("auth.logout.completed", supportConnectionFields(activeConnection));
+  }, [activeConnection, apiBase, clearSession, scopedAccessToken]);
+
+  const handleAuthExpired = useCallback(() => {
+    void resetSession();
+  }, [resetSession]);
 
   const handleTerminalEvents = useCallback((events: TerminalEventEnvelope[]) => {
     const stateEvents = events.filter(
@@ -361,12 +503,13 @@ export function useAppSession(): AppSessionController {
 
   useAppTerminalEventsConnection({
     apiBase,
-    accessToken,
+    accessToken: scopedAccessToken,
     enabled:
-      isAuthenticated &&
-      Boolean(accessToken) &&
+      Boolean(activeConnectionId) &&
+      scopedIsAuthenticated &&
+      Boolean(scopedAccessToken) &&
       deviceConnection.status === "online",
-    onAuthExpired: resetSession,
+    onAuthExpired: () => void resetSession(),
     onConnectionClose: handleTerminalEventsTransportFailure,
     onConnectionError: handleTerminalEventsTransportFailure,
     onServerConnected: () => markDeviceOnline("terminal-events-connected"),
@@ -374,15 +517,17 @@ export function useAppSession(): AppSessionController {
   });
 
   return {
-    accessToken,
+    accessToken: scopedAccessToken,
+    activeConnection,
     apiBase,
     deviceConnection,
     error,
-    isAuthenticated,
+    hasActiveConnection: Boolean(activeConnectionId),
+    isAuthenticated: scopedIsAuthenticated,
     loading,
     login: loginWithCredentials,
     logout: logoutAndReset,
-    onAuthExpired: resetSession,
+    onAuthExpired: handleAuthExpired,
     overview,
     refreshDeviceConnection,
     refreshOverview,

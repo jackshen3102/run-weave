@@ -468,8 +468,10 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       database.data.sessions = database.data.sessions.filter(
         (session) => session.id !== terminalSessionId,
       );
-      await this.deleteScrollbackFile(terminalSessionId);
       await database.write();
+    });
+    await this.enqueueScrollbackWrite(async () => {
+      await this.deleteScrollbackFile(terminalSessionId);
     });
   }
 

@@ -1,9 +1,10 @@
 import {
   TerminalRenderer,
+  type TerminalRendererExtensionContext,
   type TerminalRendererHandle,
 } from "@runweave/terminal-renderer";
 import { IonButton, IonSpinner, IonText } from "@ionic/react";
-import type { RefObject } from "react";
+import { useCallback, type RefObject } from "react";
 
 import { installTerminalTouchBehavior } from "../lib/app-terminal-touch-behavior";
 import type { AppTerminalDetailTab } from "./TerminalDetailTabBar";
@@ -30,6 +31,7 @@ interface AppTerminalPanelsProps {
   onAuthExpired: () => void;
   onBack: () => void;
   onChangesCount: (count: number) => void;
+  onTerminalReady: () => void;
   onRefreshDeviceConnection: () => Promise<unknown>;
   onShowChanges: (change: SelectedTerminalChange) => void;
 }
@@ -47,6 +49,7 @@ export function AppTerminalPanels({
   onAuthExpired,
   onBack,
   onChangesCount,
+  onTerminalReady,
   onRefreshDeviceConnection,
   onShowChanges,
   requestedChange,
@@ -54,6 +57,15 @@ export function AppTerminalPanels({
   sendInput,
   sendResize,
 }: AppTerminalPanelsProps) {
+  const handleTerminalReady = useCallback(
+    (context: TerminalRendererExtensionContext) => {
+      const disposable = installTerminalTouchBehavior(context);
+      onTerminalReady();
+      return disposable;
+    },
+    [onTerminalReady],
+  );
+
   return (
     <section className="terminal-page-body bg-background">
       {notFound ? (
@@ -95,7 +107,7 @@ export function AppTerminalPanels({
               fontSize={12}
               onInput={sendInput}
               onResize={sendResize}
-              onTerminalReady={installTerminalTouchBehavior}
+              onTerminalReady={handleTerminalReady}
               ref={rendererRef}
               renderer="dom"
               scrollbackLines={5000}
