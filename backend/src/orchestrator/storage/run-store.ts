@@ -30,7 +30,10 @@ export class OrchestratorRunStore {
         ),
     );
     return runs
-      .filter((run): run is OrchestratorRunPackage => Boolean(run?.runId))
+      .filter(
+        (run): run is OrchestratorRunPackage =>
+          Boolean(run?.runId) && run?.projectId === projectId,
+      )
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
@@ -43,7 +46,10 @@ export class OrchestratorRunStore {
       if (!existsSync(candidate)) {
         continue;
       }
-      return readJsonFile<OrchestratorRunPackage>(candidate);
+      const run = await readJsonFile<OrchestratorRunPackage>(candidate);
+      if (run?.projectId === project.id) {
+        return run;
+      }
     }
     return null;
   }

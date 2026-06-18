@@ -2,10 +2,15 @@ import { randomBytes } from "node:crypto";
 import os from "node:os";
 import type {
   OrchestratorDispatchSidecar,
+  HumanGateVerdict,
+  OrchestratorWorkerOutbox,
+  SubmitOrchestratorHumanGateRequest,
+  OrchestratorRoundConfirmation,
   OrchestratorRunPackage,
   OrchestratorRunStatus,
   OrchestratorRoleDefinition,
   OrchestratorTimelineItem,
+  SubmitOrchestratorRoundConfirmationRequest,
   TerminalEventEnvelope,
 } from "@runweave/shared";
 import type {
@@ -18,8 +23,8 @@ import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TmuxService } from "../terminal/tmux-service";
 import type { TerminalEventService } from "../terminal/terminal-event-service";
 import type { TerminalStateService } from "../terminal/terminal-state-service";
+import { logger } from "../logging";
 import { OrchestratorError } from "./errors";
-import { DEFAULT_ROLES } from "./default-roles";
 import type { CreateRunInput, DispatchInput } from "./types";
 import {
   buildRunPackage,
@@ -45,8 +50,23 @@ import { OrchestratorPromptSender } from "./terminal/prompt-sender";
 import { OrchestratorAgentReadinessService } from "./terminal/agent-readiness";
 import { OrchestratorOutboxResolver } from "./completion/outbox-resolver";
 import { normalizeTerminalRequest } from "./terminal-request";
+import {
+  advancePhaseForDispatch,
+  advancePhaseForWorkerResult,
+  canMarkDone,
+  createPendingRoundConfirmation,
+  resolveHumanGateTransition,
+  shouldRequireRoundConfirmation,
+} from "./workflow/do-a-idem";
 
 export { OrchestratorError } from "./errors";
+
+type TerminalCompletionEvent = Extract<TerminalEventEnvelope, { kind: "completion" }>;
+type WorkerOutboxWithRunId = OrchestratorWorkerOutbox & { runId: string };
+
+const orchestratorServiceLogger = logger.child({
+  component: "orchestrator-service",
+});
 
 interface OrchestratorServiceOptions {
   terminalSessionManager: TerminalSessionManager;
@@ -78,6 +98,7 @@ export class OrchestratorService {
   private readonly outboxResolver: OrchestratorOutboxResolver;
   private controlPlaneBaseUrl: string | null = null;
   private readonly routeTable = new Map<string, string>();
+  private readonly terminalEventQueues = new Map<string, Promise<void>>();
 
   constructor(options: OrchestratorServiceOptions) {
     this.terminalSessionManager = options.terminalSessionManager;
@@ -123,13 +144,18 @@ export class OrchestratorService {
   }
 
   async initialize(): Promise<void> {
-    const roles = await this.listRoles();
-    if (roles.length === 0) {
-      await this.saveRoles(DEFAULT_ROLES);
-    }
+    await this.roleStore.ensureInitializedRoles();
     await this.rebuildRouteTable();
     this.terminalEventService.subscribe((event) => {
-      void this.handleTerminalEvent(event);
+      void this.handleTerminalEvent(event).catch((error) => {
+        orchestratorServiceLogger.error("orchestrator.terminal_event.failed", {
+          message: "Failed to handle terminal event",
+          eventId: event.id,
+          terminalSessionId: event.terminalSessionId,
+          kind: event.kind,
+          error,
+        });
+      });
     });
   }
 
@@ -228,11 +254,13 @@ export class OrchestratorService {
   }
 
   private describeRoleTerminalMappings(run: OrchestratorRunPackage): string[] {
+    const project = this.terminalSessionManager.getProject(run.projectId);
     return run.roles.map((role) => {
       const roleName = `${role.name}(${role.id})`;
       const command = resolveAgentCliCommand(role.terminal.command);
       if (role.binding.mode !== "reuse") {
-        return `${roleName}: 按角色配置新建 worker 终端；创建后使用 \`rw terminal send <新终端ID> --agent ${command} --stdin --json\` 发送 worker prompt。`;
+        const cwd = role.terminal.cwd?.trim() || project?.path || "<项目路径>";
+        return `${roleName}: 新建 worker 终端时先运行 \`rw terminal create --project-id ${run.projectId} --cwd ${shellQuote(cwd)} --json\`，从 JSON 读取 terminalSessionId；随后使用 \`rw terminal send <terminalSessionId> --agent ${command} --stdin --json\` 发送 worker prompt。`;
       }
       const sessionId = role.binding.sessionId;
       const session = sessionId
@@ -288,8 +316,10 @@ export class OrchestratorService {
         query: input.query,
       }),
     );
+    const nextPhase = advancePhaseForDispatch(role.id);
     return this.updateRun(run, {
       goals: run.goals,
+      ...(nextPhase ? { currentPhase: nextPhase } : {}),
       timeline: [
         this.timelineItem({
           type: "dispatch",
@@ -298,6 +328,106 @@ export class OrchestratorService {
           goalId: input.goalId,
           roleId: role.id,
           terminalSessionId: session.id,
+        }),
+      ],
+    });
+  }
+
+  async submitHumanGate(
+    runId: string,
+    input: SubmitOrchestratorHumanGateRequest,
+  ): Promise<OrchestratorRunPackage> {
+    const run = await this.requireRun(runId);
+    if (run.currentPhase !== input.phase) {
+      throw new OrchestratorError(409, "Human gate phase does not match current phase");
+    }
+    const reason = input.reason?.trim() || null;
+    if (input.verdict === "rejected" && !reason) {
+      throw new OrchestratorError(400, "Rejected human gate requires a reason");
+    }
+    const transition = resolveHumanGateTransition({
+      phase: input.phase,
+      verdict: input.verdict,
+    });
+    const verdict: HumanGateVerdict = {
+      id: `gate_${Date.now()}_${randomBytes(2).toString("hex")}`,
+      phase: input.phase,
+      verdict: input.verdict,
+      reason,
+      at: new Date().toISOString(),
+    };
+    const orchestratorSession = run.orchestrator.sessionId
+      ? this.terminalSessionManager.getSession(run.orchestrator.sessionId)
+      : null;
+    if (orchestratorSession) {
+      await this.promptSender.sendPromptToAgent(
+        orchestratorSession,
+        buildHumanPrompt(formatHumanGatePrompt(verdict, transition.currentPhase)),
+      );
+    }
+    return this.updateRun(run, {
+      status: transition.status,
+      currentPhase: transition.currentPhase,
+      humanGateVerdicts: [...(run.humanGateVerdicts ?? []), verdict],
+      timeline: [
+        this.timelineItem({
+          type: "human",
+          title: `Human gate ${input.verdict}: ${input.phase}`,
+          detail: reason ?? undefined,
+          terminalSessionId: run.orchestrator.sessionId ?? null,
+        }),
+      ],
+    });
+  }
+
+  async submitRoundConfirmation(
+    runId: string,
+    input: SubmitOrchestratorRoundConfirmationRequest,
+  ): Promise<OrchestratorRunPackage> {
+    const run = await this.requireRun(runId);
+    const pending = run.pendingRoundConfirmation;
+    if (!pending || pending.id !== input.confirmationId) {
+      throw new OrchestratorError(409, "Round confirmation does not match current pending confirmation");
+    }
+    const reason = input.reason?.trim() || null;
+    if (input.verdict === "rejected" && !reason) {
+      throw new OrchestratorError(400, "Rejected round confirmation requires a reason");
+    }
+    const nextPhase =
+      input.verdict === "approved" ? pending.nextPhase : pending.fromPhase;
+    const record: OrchestratorRoundConfirmation = {
+      id: `round_${Date.now()}_${randomBytes(2).toString("hex")}`,
+      pendingId: pending.id,
+      at: new Date().toISOString(),
+      fromPhase: pending.fromPhase,
+      nextPhase: pending.nextPhase,
+      roleId: pending.roleId,
+      goalId: pending.goalId,
+      verdict: input.verdict,
+      reason,
+    };
+    const orchestratorSession = run.orchestrator.sessionId
+      ? this.terminalSessionManager.getSession(run.orchestrator.sessionId)
+      : null;
+    if (orchestratorSession) {
+      await this.promptSender.sendPromptToAgent(
+        orchestratorSession,
+        buildHumanPrompt(formatRoundConfirmationPrompt(record, nextPhase)),
+      );
+    }
+    return this.updateRun(run, {
+      status: "running",
+      currentPhase: nextPhase,
+      pendingRoundConfirmation: null,
+      roundConfirmations: [...(run.roundConfirmations ?? []), record],
+      timeline: [
+        this.timelineItem({
+          type: "human",
+          title: `Round confirmation ${input.verdict}: ${pending.goalId ?? pending.roleId ?? pending.id}`,
+          detail: reason ?? undefined,
+          goalId: pending.goalId,
+          roleId: pending.roleId,
+          terminalSessionId: run.orchestrator.sessionId ?? null,
         }),
       ],
     });
@@ -338,8 +468,12 @@ export class OrchestratorService {
     status: OrchestratorRunStatus,
   ): Promise<OrchestratorRunPackage> {
     const run = await this.requireRun(runId);
+    if (status === "done" && !canMarkDone(run)) {
+      throw new OrchestratorError(409, "Run can only be marked done from finalize phase");
+    }
     return this.updateRun(run, {
       status,
+      ...(status === "done" ? { currentPhase: "done" as const } : {}),
       timeline: [
         this.timelineItem({
           type: "human",
@@ -358,8 +492,40 @@ export class OrchestratorService {
     if (!outbox?.runId) {
       return;
     }
+    const outboxWithRunId: WorkerOutboxWithRunId = {
+      ...outbox,
+      runId: outbox.runId,
+    };
+    await this.enqueueTerminalEvent(outboxWithRunId.runId, () =>
+      this.handleWorkerCompletionEvent(event, outboxWithRunId),
+    );
+  }
+
+  private async enqueueTerminalEvent(
+    runId: string,
+    task: () => Promise<void>,
+  ): Promise<void> {
+    const previous = this.terminalEventQueues.get(runId) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(task);
+    this.terminalEventQueues.set(runId, next);
+    try {
+      await next;
+    } finally {
+      if (this.terminalEventQueues.get(runId) === next) {
+        this.terminalEventQueues.delete(runId);
+      }
+    }
+  }
+
+  private async handleWorkerCompletionEvent(
+    event: TerminalCompletionEvent,
+    outbox: WorkerOutboxWithRunId,
+  ): Promise<void> {
     const run = await this.getRun(outbox.runId);
     if (!run) {
+      return;
+    }
+    if (run.status === "done" || run.status === "failed") {
       return;
     }
     if (event.terminalSessionId === run.orchestrator.sessionId) {
@@ -396,9 +562,17 @@ export class OrchestratorService {
         terminalSessionId: outbox.sessionId,
       }),
     ];
+    const phasePatch = advancePhaseForWorkerResult(outbox);
+    const transitionPatch = phasePatch
+      ? this.buildWorkerResultTransitionPatch(run, outbox, phasePatch)
+      : null;
 
     if (run.status === "paused") {
-      await this.updateRun(run, { goals: run.goals, timeline: nextTimeline });
+      await this.updateRun(run, {
+        goals: run.goals,
+        ...(transitionPatch ?? {}),
+        timeline: nextTimeline,
+      });
       return;
     }
 
@@ -406,7 +580,11 @@ export class OrchestratorService {
       ? this.terminalSessionManager.getSession(run.orchestrator.sessionId)
       : null;
     if (!orchestratorSession) {
-      await this.updateRun(run, { goals: run.goals, timeline: nextTimeline });
+      await this.updateRun(run, {
+        goals: run.goals,
+        ...(transitionPatch ?? {}),
+        timeline: nextTimeline,
+      });
       return;
     }
     await this.promptSender.sendPromptToAgent(
@@ -422,7 +600,60 @@ export class OrchestratorService {
         terminalSessionId: orchestratorSession.id,
       }),
     );
-    await this.updateRun(run, { goals: run.goals, timeline: nextTimeline });
+    await this.updateRun(run, {
+      goals: run.goals,
+      ...(transitionPatch ?? {}),
+      timeline: nextTimeline,
+    });
+  }
+
+  private buildWorkerResultTransitionPatch(
+    run: OrchestratorRunPackage,
+    outbox: {
+      role?: string | null;
+      goalId?: string | null;
+      summary: string;
+    },
+    phasePatch: {
+      currentPhase: NonNullable<OrchestratorRunPackage["currentPhase"]>;
+      status?: OrchestratorRunStatus;
+    },
+  ): Partial<
+    Pick<
+      OrchestratorRunPackage,
+      "status" | "currentPhase" | "pendingRoundConfirmation"
+    >
+  > {
+    if (
+      shouldRequireRoundConfirmation({
+        run,
+        nextPhase: phasePatch.currentPhase,
+        nextStatus: phasePatch.status,
+      })
+    ) {
+      return {
+        status: "need_human",
+        pendingRoundConfirmation: createPendingRoundConfirmation({
+          id: `confirm_${Date.now()}_${randomBytes(2).toString("hex")}`,
+          at: new Date().toISOString(),
+          run,
+          nextPhase: phasePatch.currentPhase,
+          outbox: {
+            sessionId: "",
+            status: "completed",
+            artifacts: [],
+            error: null,
+            finishedAt: new Date().toISOString(),
+            ...outbox,
+          },
+        }),
+      };
+    }
+    return {
+      currentPhase: phasePatch.currentPhase,
+      ...(phasePatch.status ? { status: phasePatch.status } : {}),
+      pendingRoundConfirmation: null,
+    };
   }
 
   private resolveControlPlaneBaseUrl(): string | null {
@@ -460,7 +691,18 @@ export class OrchestratorService {
 
   private async updateRun(
     run: OrchestratorRunPackage,
-    patch: Partial<Pick<OrchestratorRunPackage, "status" | "goals" | "humanInbox">> & {
+    patch: Partial<
+      Pick<
+        OrchestratorRunPackage,
+        | "status"
+        | "currentPhase"
+        | "goals"
+        | "humanInbox"
+        | "humanGateVerdicts"
+        | "pendingRoundConfirmation"
+        | "roundConfirmations"
+      >
+    > & {
       timeline?: OrchestratorTimelineItem[];
     },
   ): Promise<OrchestratorRunPackage> {
@@ -479,4 +721,40 @@ export class OrchestratorService {
   ): OrchestratorTimelineItem {
     return createTimelineItem(input);
   }
+}
+
+function formatHumanGatePrompt(
+  verdict: HumanGateVerdict,
+  nextPhase: string,
+): string {
+  const result =
+    verdict.verdict === "approved" ? "人工门禁已通过" : "人工门禁未通过";
+  return [
+    `${result}: ${verdict.phase}`,
+    `Next phase: ${nextPhase}`,
+    verdict.reason ? `Reason: ${verdict.reason}` : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
+function formatRoundConfirmationPrompt(
+  confirmation: OrchestratorRoundConfirmation,
+  nextPhase: string,
+): string {
+  const result =
+    confirmation.verdict === "approved"
+      ? "人工轮次确认已通过"
+      : "人工轮次确认未通过";
+  return [
+    `${result}: ${confirmation.goalId ?? confirmation.roleId ?? confirmation.pendingId}`,
+    `Next phase: ${nextPhase}`,
+    confirmation.reason ? `Reason: ${confirmation.reason}` : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }

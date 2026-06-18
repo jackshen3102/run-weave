@@ -24,16 +24,29 @@ export function buildStartupPrompt(
     "角色和终端映射：",
     ...roleTerminalMappings.map((item) => `- ${item}`),
     "",
+    "Do-A-IDEM 基础流程：",
+    "- 固定阶段：discuss -> plan -> plan_review -> human_plan_approval -> code -> code_review -> human_verify -> finalize -> done。",
+    "- Plan 阶段由你负责形成计划；需要审查时派发 plan_reviewer。",
+    "- plan_reviewer、code_agent、code_reviewer 都是黑盒 worker，只消费它们回传的 summary。",
+    "- human_plan_approval 和 human_verify 是人工门禁；不要跳过人工验收进入 finalize。",
+    "- human_verify 通过后才进入 finalize；finalize 里完成提交、提交结果记录和 done 收尾。",
+    run.options?.requireHumanConfirmationEachRound
+      ? "- 当前 run 已开启“每一轮都需要人工确认”；worker result 回来后，如果下一阶段不是既有人工门禁，backend 会先暂停等待人工确认。"
+      : null,
+    "",
     "调度方式：",
     "- 把 worker 当成异步任务。派发任务后不要长时间轮询 worker 终端，也不要写 while/for sleep 循环等待半小时或更久。",
     "- 使用 using-rw skill 和现有 `rw terminal` 命令创建或复用 worker 终端，并用 `rw terminal send --agent <codex|traex>` 发送简洁的 worker prompt。",
+    `- 每个 worker prompt 开头必须包含三行路由信息：\`Run: ${run.runId}\`、\`Role: <roleId>\`、\`Goal: <goalId>\`。Role 必须是 plan_reviewer、code_agent 或 code_reviewer；Goal 由你为本次派发生成并保持唯一。`,
     "- 不要手动向 shell 发送 `codex` 或 `traex` 来启动 worker；`rw terminal send --agent` 会在终端没有 agent 时自动启动目标 agent。",
     "- 如果目标终端已经运行了不同 agent，默认不要覆盖；只有明确需要替换时，才使用 `--agent-overwrite`。",
     "- 发送成功只代表 backend 接收了输入；最多做一次短确认，确认消息已进入目标终端即可。",
     "- worker 完成后会通过已有 completion hook / outbox 回传结果，Runweave backend 会把结果重新注入给你。",
-    "- 收到 worker result 注入后，再决定下一步：继续派发、报告 done、报告 failed，或请求人工帮助。",
-    "- 不要依赖专用 orchestrator CLI 命令；run 状态保存在你的推理和 Runweave timeline 中。",
-  ].join("\n");
+    "- 收到 worker result 注入后，再决定下一步：继续派发、报告 failed，或等待人工门禁。",
+    "- 不要依赖专用 orchestrator CLI 命令；Runweave backend 会根据固定 Do-A-IDEM 事件推进 currentPhase。",
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
 }
 
 export function buildWorkerPrompt(params: {

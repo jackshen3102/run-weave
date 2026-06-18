@@ -14,6 +14,8 @@ import type {
   OrchestratorRunsResponse,
   OrchestratorRunStatus,
   PreviewOrchestratorRunPromptResponse,
+  SubmitOrchestratorRoundConfirmationRequest,
+  SubmitOrchestratorHumanGateRequest,
   SendTerminalInputRequest,
   SendTerminalInputResponse,
   TerminalCompletionEventListResponse,
@@ -216,6 +218,46 @@ export async function injectOrchestratorPrompt(
   return requestJson<OrchestratorRunPackage>(
     apiBase,
     `/api/orchestrator/runs/${encodeURIComponent(runId)}/inject`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function submitOrchestratorHumanGate(
+  apiBase: string,
+  token: string,
+  runId: string,
+  payload: SubmitOrchestratorHumanGateRequest,
+): Promise<OrchestratorRunPackage> {
+  return requestJson<OrchestratorRunPackage>(
+    apiBase,
+    `/api/orchestrator/runs/${encodeURIComponent(runId)}/human-gate`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function submitOrchestratorRoundConfirmation(
+  apiBase: string,
+  token: string,
+  runId: string,
+  payload: SubmitOrchestratorRoundConfirmationRequest,
+): Promise<OrchestratorRunPackage> {
+  return requestJson<OrchestratorRunPackage>(
+    apiBase,
+    `/api/orchestrator/runs/${encodeURIComponent(runId)}/round-confirmation`,
     {
       method: "POST",
       headers: {

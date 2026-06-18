@@ -6,6 +6,7 @@ import type {
 } from "@runweave/shared";
 import type { CreateRunInput } from "../types";
 import { assertSafeOrchestratorRunId } from "../run-id";
+import { INITIAL_DO_A_IDEM_PHASE } from "../workflow/do-a-idem";
 
 export function createRunId(now = new Date().toISOString()): string {
   return `run_${now.replace(/\D/g, "").slice(0, 14)}_${randomBytes(3).toString("hex")}`;
@@ -62,6 +63,13 @@ export function buildRunPackage(params: {
     projectId: params.input.projectId,
     task: params.input.task,
     status: "running",
+    currentPhase: INITIAL_DO_A_IDEM_PHASE,
+    options: {
+      requireHumanConfirmationEachRound: Boolean(
+        params.input.options?.requireHumanConfirmationEachRound,
+      ),
+    },
+    pendingRoundConfirmation: null,
     orchestrator: {
       role: "orchestrator",
       binding: params.input.orchestrator.binding,
@@ -72,6 +80,8 @@ export function buildRunPackage(params: {
     roles: params.input.roles,
     goals: [],
     humanInbox: [],
+    humanGateVerdicts: [],
+    roundConfirmations: [],
     timeline: [
       timelineItem({
         type: "run_created",

@@ -15,6 +15,9 @@ export interface CreateRunInput {
     terminal: OrchestratorRoleDefinition["terminal"];
   };
   roles: OrchestratorRunRole[];
+  options?: {
+    requireHumanConfirmationEachRound?: boolean;
+  };
 }
 
 export interface DispatchInput {

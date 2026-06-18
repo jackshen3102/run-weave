@@ -428,7 +428,7 @@ export class TmuxService {
           chunk: describeTmuxInputChunk(chunk),
         });
         await this.runTmux(
-          ["send-keys", "-t", target.sessionName, "-l", chunk.value],
+          ["send-keys", "-t", target.sessionName, "-l", "--", chunk.value],
           target,
         );
       }
@@ -468,7 +468,7 @@ export class TmuxService {
           }),
         });
         await this.runTmux(
-          ["send-keys", "-t", target.sessionName, "-l", item.value],
+          ["send-keys", "-t", target.sessionName, "-l", "--", item.value],
           target,
         );
       }

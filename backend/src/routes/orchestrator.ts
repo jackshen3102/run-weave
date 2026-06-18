@@ -5,6 +5,8 @@ import type {
   DispatchOrchestratorGoalRequest,
   InjectOrchestratorPromptRequest,
   OrchestratorRunStatus,
+  SubmitOrchestratorHumanGateRequest,
+  SubmitOrchestratorRoundConfirmationRequest,
 } from "@runweave/shared";
 import {
   OrchestratorError,
@@ -64,6 +66,12 @@ const createRunSchema = z
       })
       .strict(),
     roles: z.array(roleSchema).min(1),
+    options: z
+      .object({
+        requireHumanConfirmationEachRound: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -101,6 +109,22 @@ const injectSchema = z
 const statusSchema = z
   .object({
     status: z.enum(["running", "paused", "need_human", "done", "failed"]),
+  })
+  .strict();
+
+const humanGateSchema = z
+  .object({
+    phase: z.enum(["human_plan_approval", "human_verify"]),
+    verdict: z.enum(["approved", "rejected"]),
+    reason: z.string().trim().min(1).nullable().optional(),
+  })
+  .strict();
+
+const roundConfirmationSchema = z
+  .object({
+    confirmationId: z.string().trim().min(1),
+    verdict: z.enum(["approved", "rejected"]),
+    reason: z.string().trim().min(1).nullable().optional(),
   })
   .strict();
 
@@ -188,6 +212,45 @@ export function createOrchestratorRouter(
     }
     await handleServiceCall(res, () =>
       orchestratorService.injectPrompt(params.data.runId, parsed.data.text),
+    );
+  });
+
+  router.post("/runs/:runId/human-gate", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params", errors: params.error.flatten() });
+      return;
+    }
+    const parsed = humanGateSchema.safeParse(
+      req.body as SubmitOrchestratorHumanGateRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({ message: "Invalid request body", errors: parsed.error.flatten() });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      orchestratorService.submitHumanGate(params.data.runId, parsed.data),
+    );
+  });
+
+  router.post("/runs/:runId/round-confirmation", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params", errors: params.error.flatten() });
+      return;
+    }
+    const parsed = roundConfirmationSchema.safeParse(
+      req.body as SubmitOrchestratorRoundConfirmationRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({ message: "Invalid request body", errors: parsed.error.flatten() });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      orchestratorService.submitRoundConfirmation(
+        params.data.runId,
+        parsed.data,
+      ),
     );
   });
 

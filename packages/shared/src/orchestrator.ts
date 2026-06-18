@@ -16,6 +16,59 @@ export type OrchestratorGoalStatus =
 
 export type OrchestratorOutboxStatus = "completed" | "failed";
 
+export type DoAIdemPhase =
+  | "discuss"
+  | "plan"
+  | "plan_review"
+  | "human_plan_approval"
+  | "code"
+  | "code_review"
+  | "human_verify"
+  | "finalize"
+  | "done";
+
+export type HumanGatePhase = "human_plan_approval" | "human_verify";
+
+export type HumanGateVerdictValue = "approved" | "rejected";
+
+export interface HumanGateVerdict {
+  id: string;
+  phase: HumanGatePhase;
+  verdict: HumanGateVerdictValue;
+  reason: string | null;
+  at: string;
+}
+
+export interface OrchestratorRunOptions {
+  requireHumanConfirmationEachRound?: boolean;
+}
+
+export type OrchestratorRoundConfirmationVerdictValue =
+  | "approved"
+  | "rejected";
+
+export interface OrchestratorPendingRoundConfirmation {
+  id: string;
+  at: string;
+  fromPhase: DoAIdemPhase;
+  nextPhase: DoAIdemPhase;
+  roleId: string | null;
+  goalId: string | null;
+  summary: string;
+}
+
+export interface OrchestratorRoundConfirmation {
+  id: string;
+  pendingId: string;
+  at: string;
+  fromPhase: DoAIdemPhase;
+  nextPhase: DoAIdemPhase;
+  roleId: string | null;
+  goalId: string | null;
+  verdict: OrchestratorRoundConfirmationVerdictValue;
+  reason: string | null;
+}
+
 export interface OrchestratorRoleDefinition {
   id: string;
   name: string;
@@ -90,10 +143,15 @@ export interface OrchestratorRunPackage {
   projectId: string;
   task: string;
   status: OrchestratorRunStatus;
+  currentPhase?: DoAIdemPhase | null;
+  options?: OrchestratorRunOptions;
+  pendingRoundConfirmation?: OrchestratorPendingRoundConfirmation | null;
   orchestrator: OrchestratorRunAgent;
   roles: OrchestratorRunRole[];
   goals: OrchestratorGoal[];
   humanInbox: Array<{ id: string; at: string; text: string }>;
+  humanGateVerdicts?: HumanGateVerdict[];
+  roundConfirmations?: OrchestratorRoundConfirmation[];
   timeline: OrchestratorTimelineItem[];
   createdAt: string;
   updatedAt: string;
@@ -115,6 +173,7 @@ export interface CreateOrchestratorRunRequest {
     role?: "orchestrator";
   };
   roles: OrchestratorRunRole[];
+  options?: OrchestratorRunOptions;
 }
 
 export interface PreviewOrchestratorRunPromptResponse {
@@ -134,6 +193,18 @@ export interface DispatchOrchestratorGoalRequest {
 
 export interface InjectOrchestratorPromptRequest {
   text: string;
+}
+
+export interface SubmitOrchestratorHumanGateRequest {
+  phase: HumanGatePhase;
+  verdict: HumanGateVerdictValue;
+  reason?: string | null;
+}
+
+export interface SubmitOrchestratorRoundConfirmationRequest {
+  confirmationId: string;
+  verdict: OrchestratorRoundConfirmationVerdictValue;
+  reason?: string | null;
 }
 
 export interface OrchestratorRolesResponse {

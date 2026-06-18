@@ -20,6 +20,13 @@ import type { AgentSnapshot } from "../types";
 
 const ORCHESTRATOR_AGENT_START_TIMEOUT_MS = 15000;
 const ORCHESTRATOR_AGENT_START_POLL_INTERVAL_MS = 250;
+const CODEX_TRUST_PROMPT_PATTERN =
+  /Do you trust the contents of this directory\?|Press enter to continue/;
+const CODEX_READY_PATTERN = /OpenAI Codex/;
+const ANSI_ESCAPE_SEQUENCE_PATTERN = new RegExp(
+  `${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`,
+  "g",
+);
 
 export class OrchestratorAgentReadinessService {
   constructor(
@@ -43,7 +50,10 @@ export class OrchestratorAgentReadinessService {
     }
 
     const initial = this.getAgentSnapshot(session.id, session);
-    if (isRequestedAgentReady(initial, agent)) {
+    if (
+      isRequestedAgentReady(initial, agent) &&
+      (await this.isAgentUiReady(session.id, agent))
+    ) {
       return;
     }
     if (initial.currentAgent && initial.currentAgent !== agent) {
@@ -79,7 +89,11 @@ export class OrchestratorAgentReadinessService {
     let latest = this.getAgentSnapshot(terminalSessionId);
     while (Date.now() <= deadline) {
       latest = this.getAgentSnapshot(terminalSessionId);
-      if (isRequestedAgentReady(latest, agent)) {
+      await this.acceptCodexTrustPromptIfNeeded(terminalSessionId, agent);
+      if (
+        isRequestedAgentReady(latest, agent) &&
+        (await this.isAgentUiReady(terminalSessionId, agent))
+      ) {
         return;
       }
       await wait(ORCHESTRATOR_AGENT_START_POLL_INTERVAL_MS);
@@ -122,6 +136,55 @@ export class OrchestratorAgentReadinessService {
     }
     return session;
   }
+
+  private async acceptCodexTrustPromptIfNeeded(
+    terminalSessionId: string,
+    agent: TerminalAgentKind,
+  ): Promise<void> {
+    if (agent !== "codex") {
+      return;
+    }
+    const scrollback = await this.readCleanLiveScrollback(terminalSessionId);
+    if (!hasPendingCodexTrustPrompt(scrollback)) {
+      return;
+    }
+    const session = this.requireSession(terminalSessionId);
+    await sendInputToSession(
+      this.options.terminalSessionManager,
+      {
+        runtimeRegistry: this.options.runtimeRegistry,
+        ptyService: this.options.ptyService,
+        tmuxService: this.options.tmuxService,
+        tmuxOutputWatcher: this.options.tmuxOutputWatcher,
+        terminalStateService: this.options.terminalStateService,
+      },
+      session,
+      "",
+      "line",
+      `orchestrator_agent_trust_${Date.now()}`,
+    );
+  }
+
+  private async isAgentUiReady(
+    terminalSessionId: string,
+    agent: TerminalAgentKind,
+  ): Promise<boolean> {
+    if (agent !== "codex") {
+      return true;
+    }
+    const scrollback = await this.readCleanLiveScrollback(terminalSessionId);
+    return hasStartedCodexUi(scrollback);
+  }
+
+  private async readCleanLiveScrollback(
+    terminalSessionId: string,
+  ): Promise<string> {
+    const scrollback =
+      await this.options.terminalSessionManager.readLiveScrollback(
+        terminalSessionId,
+      );
+    return stripTerminalControlSequences(scrollback);
+  }
 }
 
 function resolveOrchestratorAgent(
@@ -141,4 +204,37 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function hasPendingCodexTrustPrompt(scrollback: string): boolean {
+  const trustPromptIndex = findLastIndex(scrollback, CODEX_TRUST_PROMPT_PATTERN);
+  if (trustPromptIndex < 0) {
+    return false;
+  }
+  const readyIndex = findLastIndex(scrollback, CODEX_READY_PATTERN);
+  return readyIndex < trustPromptIndex;
+}
+
+function hasStartedCodexUi(scrollback: string): boolean {
+  const readyIndex = findLastIndex(scrollback, CODEX_READY_PATTERN);
+  if (readyIndex < 0) {
+    return false;
+  }
+  const trustPromptIndex = findLastIndex(scrollback, CODEX_TRUST_PROMPT_PATTERN);
+  return readyIndex > trustPromptIndex;
+}
+
+function findLastIndex(value: string, pattern: RegExp): number {
+  let latest = -1;
+  const globalPattern = new RegExp(pattern.source, `${pattern.flags}g`);
+  for (const match of value.matchAll(globalPattern)) {
+    latest = match.index ?? latest;
+  }
+  return latest;
+}
+
+function stripTerminalControlSequences(value: string): string {
+  return value
+    .replace(ANSI_ESCAPE_SEQUENCE_PATTERN, "")
+    .replace(/\r/g, "");
 }
