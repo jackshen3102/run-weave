@@ -47,6 +47,26 @@ function toSupportLogRecord(record: StoredSupportLogRecord): SupportLogRecord {
   };
 }
 
+function recordDedupeKey(record: SupportLogRecord): string {
+  return JSON.stringify(record);
+}
+
+function mergeRecords(
+  indexedDbRecords: StoredSupportLogRecord[],
+  memoryRecords: SupportLogRecord[],
+): SupportLogRecord[] {
+  const records = indexedDbRecords.map(toSupportLogRecord);
+  const seen = new Set(records.map(recordDedupeKey));
+  for (const record of memoryRecords) {
+    const key = recordDedupeKey(record);
+    if (!seen.has(key)) {
+      seen.add(key);
+      records.push(record);
+    }
+  }
+  return records.sort((a, b) => a.at.localeCompare(b.at));
+}
+
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.addEventListener("success", () => resolve(request.result));
@@ -119,13 +139,17 @@ export function createSupportLogStore(): SupportLogStore {
     return db;
   };
 
-  const appendMemory = (record: SupportLogRecord) => {
-    storageKind = "memory";
+  const rememberMemoryRecord = (record: SupportLogRecord) => {
     memoryRecords = trimByCapacity(
       [...memoryRecords, record],
       MAX_MEMORY_RECORDS,
       MAX_MEMORY_BYTES,
     );
+  };
+
+  const appendMemory = (record: SupportLogRecord) => {
+    storageKind = "memory";
+    rememberMemoryRecord(record);
   };
 
   const trimIndexedDb = async (db: IDBDatabase) => {
@@ -142,10 +166,10 @@ export function createSupportLogStore(): SupportLogStore {
 
   return {
     async append(record) {
+      rememberMemoryRecord(record);
       try {
         const db = await getDatabase();
         if (!db) {
-          appendMemory(record);
           return;
         }
 
@@ -177,14 +201,11 @@ export function createSupportLogStore(): SupportLogStore {
       try {
         const db = await getDatabase();
         const records = db
-          ? await readAllRecords(db)
-          : memoryRecords.map((record) => ({
-              ...record,
-              id: createRecordId(record),
-            }));
-        const filtered = records
-          .filter((record) => !since || new Date(record.at) >= since)
-          .map(toSupportLogRecord);
+          ? mergeRecords(await readAllRecords(db), memoryRecords)
+          : memoryRecords;
+        const filtered = records.filter(
+          (record) => !since || new Date(record.at) >= since,
+        );
         return typeof limit === "number" ? filtered.slice(-limit) : filtered;
       } catch {
         storageDegraded = true;

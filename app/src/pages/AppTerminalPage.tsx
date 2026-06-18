@@ -17,6 +17,7 @@ import { AppTerminalHeader } from "../components/AppTerminalHeader";
 import { AppTerminalPanels } from "../components/AppTerminalPanels";
 import { type SelectedTerminalChange } from "../components/TerminalChangesTab";
 import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
+import type { AppConnectionConfig } from "../features/connections/types";
 import { recordSupportLog, useSupportLogs } from "../features/support-logs";
 import { basename, shortPath } from "../lib/app-terminal-path-labels";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
@@ -33,6 +34,7 @@ import { transcribeVoice } from "../services/voice";
 
 interface AppTerminalPageProps {
   accessToken: string;
+  activeConnection: AppConnectionConfig | null;
   apiBase: string;
   deviceConnection: AppDeviceConnectionSnapshot;
   initialSession?: AppHomeOverviewSession;
@@ -60,6 +62,7 @@ function resolveComposerInputMode(
 
 export function AppTerminalPage({
   accessToken,
+  activeConnection,
   apiBase,
   deviceConnection,
   initialSession,
@@ -97,6 +100,7 @@ export function AppTerminalPage({
     error,
     metadata,
     notFound,
+    onRendererReady,
     runtimeStatus,
     sendInput,
     sendResize,
@@ -149,6 +153,8 @@ export function AppTerminalPage({
       route: `/terminal/${terminalSessionId}`,
       terminalSessionId,
       projectId: activeProjectId,
+      connectionId: activeConnection?.id ?? null,
+      connectionName: activeConnection?.name ?? null,
       connectionStatus,
       deviceStatus: deviceConnection.status,
       runtimeStatus,
@@ -157,6 +163,8 @@ export function AppTerminalPage({
     [
       activeProjectId,
       activeTab,
+      activeConnection?.id,
+      activeConnection?.name,
       connectionStatus,
       deviceConnection.status,
       runtimeStatus,
@@ -643,6 +651,7 @@ export function AppTerminalPage({
             onAuthExpired={onAuthExpired}
             onBack={onBack}
             onChangesCount={setChangesCount}
+            onTerminalReady={onRendererReady}
             onShowChanges={handleShowChanges}
           />
           {activeTab === "chat" ? (

@@ -43,7 +43,7 @@ export function recordSupportLog(
     return;
   }
 
-  recordSupportLogToStore(store, event, fields, level);
+  void recordSupportLogToStore(store, event, fields, level);
 }
 
 export function recordSupportLogToStore(
@@ -52,19 +52,19 @@ export function recordSupportLogToStore(
   fields?: Record<string, unknown>,
   level: SupportLogLevel = "info",
   context: Partial<SupportLogDefaultContext> = getDefaultContext?.() ?? {},
-): void {
-  trackWrite(
-    store.append({
-      at: new Date().toISOString(),
-      level,
-      source: "app",
-      event,
-      fields: {
-        ...context,
-        ...(fields ?? {}),
-      },
-    }),
-  );
+): Promise<void> {
+  const write = store.append({
+    at: new Date().toISOString(),
+    level,
+    source: "app",
+    event,
+    fields: {
+      ...context,
+      ...(fields ?? {}),
+    },
+  });
+  trackWrite(write);
+  return write;
 }
 
 export async function flushSupportLogs(): Promise<void> {

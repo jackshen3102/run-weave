@@ -1,79 +1,109 @@
 import { create } from "zustand";
 
-import { resolveDefaultApiBase } from "../config/api-base";
 import type { AppAuthSession } from "../services/auth";
-
-const STORAGE_KEY = "runweave-app-auth-session";
+import { getAppAuthCredentialStore } from "./app-auth-credential-store";
 
 type AuthState = AppAuthSession & {
-  apiBase: string;
+  activeConnectionId: string | null;
   isAuthenticated: boolean;
-  setAuthenticated: (session: AppAuthSession) => void;
-  clearSession: () => void;
+  isSessionLoading: boolean;
+  sessionError: string | null;
+  loadSessionForConnection: (connectionId: string | null) => Promise<void>;
+  setAuthenticated: (
+    connectionId: string,
+    session: AppAuthSession,
+  ) => Promise<void>;
+  clearSession: (connectionId?: string | null) => Promise<void>;
 };
 
-function readStoredSession(): AppAuthSession | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(STORAGE_KEY) ?? "null",
-    );
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      typeof parsed.accessToken === "string" &&
-      typeof parsed.refreshToken === "string" &&
-      typeof parsed.sessionId === "string"
-    ) {
-      return parsed as AppAuthSession;
+function emptySessionState() {
+  return {
+    accessToken: "",
+    refreshToken: "",
+    expiresIn: 0,
+    expiresAt: 0,
+    sessionId: "",
+    isAuthenticated: false,
+  };
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
+  ...emptySessionState(),
+  activeConnectionId: null,
+  isSessionLoading: false,
+  sessionError: null,
+
+  loadSessionForConnection: async (connectionId) => {
+    if (!connectionId) {
+      set({
+        ...emptySessionState(),
+        activeConnectionId: null,
+        isSessionLoading: false,
+        sessionError: null,
+      });
+      return;
     }
-  } catch {
-    window.localStorage.removeItem(STORAGE_KEY);
-  }
-  return null;
-}
 
-function persistSession(session: AppAuthSession): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-}
-
-function clearStoredSession(): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.removeItem(STORAGE_KEY);
-}
-
-const storedSession = readStoredSession();
-const defaultApiBase = resolveDefaultApiBase();
-
-export const useAuthStore = create<AuthState>((set) => ({
-  apiBase: defaultApiBase,
-  accessToken: storedSession?.accessToken ?? "",
-  refreshToken: storedSession?.refreshToken ?? "",
-  expiresIn: storedSession?.expiresIn ?? 0,
-  expiresAt: storedSession?.expiresAt ?? 0,
-  sessionId: storedSession?.sessionId ?? "",
-  isAuthenticated: Boolean(storedSession?.accessToken),
-  setAuthenticated: (session) => {
-    persistSession(session);
-    set({ ...session, isAuthenticated: true });
-  },
-  clearSession: () => {
-    clearStoredSession();
     set({
-      apiBase: resolveDefaultApiBase(),
-      accessToken: "",
-      refreshToken: "",
-      expiresIn: 0,
-      expiresAt: 0,
-      sessionId: "",
-      isAuthenticated: false,
+      ...emptySessionState(),
+      activeConnectionId: connectionId,
+      isSessionLoading: true,
+      sessionError: null,
+    });
+
+    try {
+      const session =
+        await getAppAuthCredentialStore().loadSession(connectionId);
+      if (get().activeConnectionId !== connectionId) {
+        return;
+      }
+      set({
+        ...(session ?? emptySessionState()),
+        activeConnectionId: connectionId,
+        isAuthenticated: Boolean(session?.accessToken),
+        isSessionLoading: false,
+        sessionError: null,
+      });
+    } catch (error) {
+      if (get().activeConnectionId !== connectionId) {
+        return;
+      }
+      set({
+        ...emptySessionState(),
+        activeConnectionId: connectionId,
+        isSessionLoading: false,
+        sessionError: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+
+  setAuthenticated: async (connectionId, session) => {
+    await getAppAuthCredentialStore().saveSession(connectionId, session);
+    if (get().activeConnectionId !== connectionId) {
+      return;
+    }
+    set({
+      ...session,
+      activeConnectionId: connectionId,
+      isAuthenticated: true,
+      isSessionLoading: false,
+      sessionError: null,
+    });
+  },
+
+  clearSession: async (connectionId) => {
+    const targetConnectionId = connectionId ?? get().activeConnectionId;
+    if (targetConnectionId) {
+      await getAppAuthCredentialStore().clearSession(targetConnectionId);
+    }
+    if (targetConnectionId && get().activeConnectionId !== targetConnectionId) {
+      return;
+    }
+    set({
+      ...emptySessionState(),
+      activeConnectionId: targetConnectionId ?? null,
+      isSessionLoading: false,
+      sessionError: null,
     });
   },
 }));

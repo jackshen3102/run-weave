@@ -19,7 +19,7 @@ export function buildLocalDevelopmentConnection(
 
   return {
     id: LOCAL_DEV_CONNECTION_ID,
-    name: "本地开发",
+    name: "内置本地后端",
     url: state.backendUrl.trim().replace(/\/+$/, ""),
     createdAt: 0,
     available: state.available,

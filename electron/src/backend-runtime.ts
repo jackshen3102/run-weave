@@ -26,6 +26,7 @@ const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 30_000;
 const HEALTHCHECK_INTERVAL_MS = 200;
 const ORPHANED_BACKEND_EXIT_TIMEOUT_MS = 2_000;
 const LAN_BIND_HOST = "0.0.0.0";
+const LOCALHOST_V4 = "127.0.0.1";
 const LOCALHOST_V6 = "::1";
 const DEFAULT_PACKAGED_AUTH = {
   AUTH_USERNAME: "admin",
@@ -262,12 +263,13 @@ async function isPortAvailable(port: number, host: string): Promise<boolean> {
 }
 
 async function isBackendPortAvailable(port: number): Promise<boolean> {
-  const [lanAvailable, ipv6Available] = await Promise.all([
+  const [lanAvailable, ipv4Available, ipv6Available] = await Promise.all([
     isPortAvailable(port, LAN_BIND_HOST),
+    isPortAvailable(port, LOCALHOST_V4),
     isPortAvailable(port, LOCALHOST_V6),
   ]);
 
-  return lanAvailable && ipv6Available;
+  return lanAvailable && ipv4Available && ipv6Available;
 }
 
 export async function findAvailablePort(

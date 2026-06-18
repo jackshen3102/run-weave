@@ -1,10 +1,19 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 
 export const BROWSER_PROFILE_LOCK_FILE_NAME = "backend.lock.json";
+export const RUNWEAVE_HOME_DIR_NAME = ".runweave";
+export const BROWSER_PROFILE_ROOT_DIR_NAME = "browser-profile";
+export const LEGACY_BROWSER_PROFILE_ROOT_DIR_NAME = ".browser-profile";
+
+const BROWSER_PROFILE_DATA_FILE_NAMES = [
+  "auth-store.json",
+  "session-store.json",
+  "terminal-session-store.json",
+] as const;
 
 export interface BrowserProfileStorageEnv {
   BROWSER_PROFILE_DIR?: string;
@@ -47,20 +56,52 @@ export function expandHomePath(
   return trimmedPath;
 }
 
+export function resolveRunweaveHomeDir(
+  homeDir: string = os.homedir(),
+): string {
+  return path.join(homeDir, RUNWEAVE_HOME_DIR_NAME);
+}
+
+export function resolveBrowserProfileRootDir(
+  homeDir: string = os.homedir(),
+): string {
+  return path.join(resolveRunweaveHomeDir(homeDir), BROWSER_PROFILE_ROOT_DIR_NAME);
+}
+
+export function resolveLegacyBrowserProfileRootDir(
+  homeDir: string = os.homedir(),
+): string {
+  return path.join(homeDir, LEGACY_BROWSER_PROFILE_ROOT_DIR_NAME);
+}
+
+function resolveProfileId(projectPath: string): string {
+  return createHash("sha256").update(projectPath).digest("hex").slice(0, 8);
+}
+
 export function resolveDefaultBrowserProfileDir(
   projectPath: string = process.cwd(),
   homeDir: string = os.homedir(),
 ): string {
   const trimmedProjectPath = projectPath.trim();
-  const defaultProfileRootDir = path.join(homeDir, ".browser-profile");
+  const defaultProfileRootDir = resolveBrowserProfileRootDir(homeDir);
   if (!trimmedProjectPath) {
     return defaultProfileRootDir;
   }
 
-  return path.join(
-    defaultProfileRootDir,
-    createHash("sha256").update(trimmedProjectPath).digest("hex").slice(0, 8),
-  );
+  return path.join(defaultProfileRootDir, resolveProfileId(trimmedProjectPath));
+}
+
+export function resolveLegacyDefaultBrowserProfileDir(
+  projectPath: string = process.cwd(),
+  homeDir: string = os.homedir(),
+): string {
+  const trimmedProjectPath = projectPath.trim();
+  const legacyProfileRootDir = resolveLegacyBrowserProfileRootDir(homeDir);
+  if (!trimmedProjectPath) {
+    return legacyProfileRootDir;
+  }
+
+  return path.join(legacyProfileRootDir, resolveProfileId(trimmedProjectPath));
 }
 
 export function resolveBrowserProfileDir(
@@ -76,6 +117,66 @@ export function resolveBrowserProfileDir(
 
 export function getBrowserProfileLockFile(profileDir: string): string {
   return path.join(profileDir, BROWSER_PROFILE_LOCK_FILE_NAME);
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await readFile(targetPath);
+    return true;
+  } catch {
+    try {
+      await readdir(targetPath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+async function hasBrowserProfileData(profileDir: string): Promise<boolean> {
+  for (const fileName of BROWSER_PROFILE_DATA_FILE_NAMES) {
+    if (await pathExists(path.join(profileDir, fileName))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export async function migrateLegacyBrowserProfileRootIfNeeded(
+  homeDir: string = os.homedir(),
+): Promise<{ migrated: string[]; targetRoot: string; legacyRoot: string }> {
+  const legacyRoot = resolveLegacyBrowserProfileRootDir(homeDir);
+  const targetRoot = resolveBrowserProfileRootDir(homeDir);
+  const migrated: string[] = [];
+
+  if (!(await pathExists(legacyRoot))) {
+    return { migrated, targetRoot, legacyRoot };
+  }
+
+  await mkdir(targetRoot, { recursive: true });
+
+  const entries = await readdir(legacyRoot, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const sourcePath = path.join(legacyRoot, entry.name);
+    const targetPath = path.join(targetRoot, entry.name);
+    if (await hasBrowserProfileData(targetPath)) {
+      continue;
+    }
+
+    await cp(sourcePath, targetPath, {
+      recursive: true,
+      force: false,
+      filter: (source) =>
+        path.basename(source) !== BROWSER_PROFILE_LOCK_FILE_NAME,
+    });
+    migrated.push(entry.name);
+  }
+
+  return { migrated, targetRoot, legacyRoot };
 }
 
 export function createBackendProfileLockOwner(

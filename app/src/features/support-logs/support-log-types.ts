@@ -13,6 +13,8 @@ export interface SupportLogScope {
   route?: string;
   terminalSessionId?: string;
   projectId?: string | null;
+  connectionId?: string | null;
+  connectionName?: string | null;
   connectionStatus?: string;
   runtimeStatus?: string | null;
   activeTab?: string;

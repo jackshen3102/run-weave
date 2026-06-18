@@ -750,6 +750,14 @@ export class TmuxService {
    */
   private buildExtraEnvArgs(): string[] {
     const args: string[] = [];
+    const currentPath = this.env.PATH;
+    if (currentPath) {
+      args.push("-e", `PATH=${currentPath}`);
+    }
+    const nvmDir = this.env.NVM_DIR;
+    if (nvmDir) {
+      args.push("-e", `NVM_DIR=${nvmDir}`);
+    }
     const cdpEndpoint = this.env.PLAYWRIGHT_MCP_CDP_ENDPOINT;
     if (cdpEndpoint) {
       args.push("-e", `PLAYWRIGHT_MCP_CDP_ENDPOINT=${cdpEndpoint}`);

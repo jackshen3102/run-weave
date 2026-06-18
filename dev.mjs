@@ -31,7 +31,12 @@ function resolveDevBrowserProfileDir(baseEnv) {
     .update(process.cwd())
     .digest("hex")
     .slice(0, 8);
-  return path.join(os.homedir(), ".browser-profile", devDefaultProfileId);
+  return path.join(
+    os.homedir(),
+    ".runweave",
+    "browser-profile",
+    devDefaultProfileId,
+  );
 }
 
 export function createBackendEnv({ baseEnv, backendPort }) {
@@ -118,7 +123,7 @@ async function isPortAvailable(port, host) {
 function normalizeProbeHosts(host) {
   return Array.from(
     new Set(
-      [host, "127.0.0.1", "::1"].filter(
+      [host, "0.0.0.0", "127.0.0.1", "::1"].filter(
         (candidate) => typeof candidate === "string" && candidate.trim().length > 0,
       ),
     ),

@@ -18,8 +18,10 @@ import {
 } from "@ionic/react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
+import { AppConnectionChip } from "../components/AppConnectionChip";
+import { AppConnectionManager } from "../components/AppConnectionManager";
 import { AppMoreMenu } from "../components/AppMoreMenu";
-import { AppDeviceStatusBadge } from "../components/AppDeviceStatusBadge";
+import type { AppConnectionConfig } from "../features/connections/types";
 import { useSupportLogs } from "../features/support-logs";
 import type { AppDeviceConnectionSnapshot } from "../hooks/use-app-device-connection";
 import {
@@ -29,7 +31,7 @@ import {
 import { ProjectGroup } from "../components/ProjectGroup";
 
 interface HomePageProps {
-  apiBase: string;
+  activeConnection: AppConnectionConfig | null;
   overview: AppHomeOverviewResponse | null;
   loading: boolean;
   error: string | null;
@@ -47,18 +49,8 @@ function buildInitialExpanded(groups: TerminalHomeProjectGroup[]): Set<string> {
   return new Set(groups.slice(0, 4).map((group) => group.project.projectId));
 }
 
-function formatApiBaseLabel(apiBase: string): string {
-  if (apiBase) {
-    return apiBase.replace(/^https?:\/\//, "");
-  }
-  if (typeof window !== "undefined") {
-    return window.location.host;
-  }
-  return "local";
-}
-
 export function HomePage({
-  apiBase,
+  activeConnection,
   overview,
   loading,
   error,
@@ -82,6 +74,7 @@ export function HomePage({
     null,
   );
   const [creatingProject, setCreatingProject] = useState(false);
+  const [connectionManagerOpen, setConnectionManagerOpen] = useState(false);
   const groups = useMemo(
     () =>
       buildTerminalHomeGroups(
@@ -103,6 +96,10 @@ export function HomePage({
           setProjectCreateError(null);
           setProjectModalOpen(true);
         },
+      },
+      {
+        label: "连接管理",
+        onClick: () => setConnectionManagerOpen(true),
       },
       {
         label: "日志上报",
@@ -217,15 +214,12 @@ export function HomePage({
             <div className="home-header__identity">
               <div className="home-header__title-row">
                 <p className="text-muted-foreground">Runweave</p>
-                <AppDeviceStatusBadge
+                <AppConnectionChip
+                  connection={activeConnection}
+                  onClick={() => setConnectionManagerOpen(true)}
                   status={deviceConnection.status}
-                  message={deviceConnection.message}
-                  lastSeenAt={deviceConnection.lastSeenAt}
                 />
               </div>
-              <span className="text-muted-foreground">
-                {formatApiBaseLabel(apiBase)}
-              </span>
             </div>
             <nav aria-label="Home actions">
               <AppMoreMenu items={moreMenuItems} />
@@ -344,6 +338,10 @@ export function HomePage({
           </div>
         </form>
       </IonModal>
+      <AppConnectionManager
+        isOpen={connectionManagerOpen}
+        onDidDismiss={() => setConnectionManagerOpen(false)}
+      />
     </IonPage>
   );
 }
