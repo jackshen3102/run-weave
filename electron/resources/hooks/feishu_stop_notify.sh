@@ -2,8 +2,8 @@
 
 set -uo pipefail
 
-CONFIG_FILE="${FEISHU_NOTIFY_ENV:-${HOME}/.browser-viewer/feishu_notify.env}"
-LOG_FILE="${FEISHU_NOTIFY_LOG:-${HOME}/.browser-viewer/feishu_notify.log}"
+CONFIG_FILE="${FEISHU_NOTIFY_ENV:-${HOME}/.runweave/feishu_notify.env}"
+LOG_FILE="${FEISHU_NOTIFY_LOG:-${HOME}/.runweave/feishu_notify.log}"
 OPENSSL_BIN="${OPENSSL_BIN:-/opt/homebrew/bin/openssl}"
 
 log() {
@@ -233,7 +233,7 @@ main() {
   text="$(build_message_text "$agent_name" "$cwd" "$content" "$session_id" "$terminal_context" "$timestamp")"
 
   if [[ "${FEISHU_NOTIFY_DEBUG_PAYLOAD:-0}" == "1" ]]; then
-    printf '%s\n' "$PAYLOAD" >>"${HOME}/.browser-viewer/feishu_notify_payload.log" 2>/dev/null || true
+    printf '%s\n' "$PAYLOAD" >>"${HOME}/.runweave/feishu_notify_payload.log" 2>/dev/null || true
   fi
 
   send_webhook_message "$text"

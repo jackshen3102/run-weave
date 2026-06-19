@@ -14,6 +14,7 @@ import {
   getTerminalSessionAgent,
   type TerminalStateService,
 } from "../terminal/terminal-state-service";
+import { readCodexThreadSnapshot } from "../terminal/codex-thread-snapshot";
 
 const terminalStateLogger = logger.child({ component: "terminal-state" });
 const AGENT_ACTIVE_COMMANDS = {
@@ -28,6 +29,7 @@ const agentHookStateSchema = z
   .object({
     terminalSessionId: z.string().trim().min(1),
     projectId: z.string().trim().min(1).optional(),
+    threadId: z.string().trim().min(1).optional(),
     agent: z.enum(AGENT_HOOKS),
     hookEvent: z.enum(["SessionStart", "UserPromptSubmit", "Stop"]),
   })
@@ -39,6 +41,28 @@ function commandBasename(command: string | null): string | null {
     return null;
   }
   return normalized.split("/").filter(Boolean).at(-1) ?? normalized;
+}
+
+function updateCodexThreadPreviewInBackground(
+  terminalSessionManager: TerminalSessionManager,
+  terminalSessionId: string,
+  threadId: string,
+): void {
+  void readCodexThreadSnapshot(threadId)
+    .then(async ({ preview }) => {
+      await terminalSessionManager.updateSessionPreview(
+        terminalSessionId,
+        preview,
+      );
+    })
+    .catch((error) => {
+      terminalStateLogger.warn("terminal-state.codex-thread-preview.failed", {
+        message: "Failed to load Codex thread preview",
+        terminalSessionId,
+        threadId,
+        error,
+      });
+    });
 }
 
 export function createTerminalStateRouter(options: {
@@ -127,6 +151,31 @@ export function createInternalTerminalAgentHookRouter(options: {
             activeCommand: AGENT_ACTIVE_COMMANDS[parsed.data.agent],
           },
         )) ?? session;
+    }
+
+    if (parsed.data.agent === "codex" && parsed.data.threadId) {
+      const previousThreadId = session.threadId;
+      session =
+        (await options.terminalSessionManager.updateSessionThreadId(
+          session.id,
+          parsed.data.threadId,
+        )) ?? session;
+      if (
+        parsed.data.hookEvent === "SessionStart" &&
+        previousThreadId !== parsed.data.threadId
+      ) {
+        await options.terminalSessionManager.updateSessionPreview(
+          session.id,
+          null,
+        );
+      }
+      if (parsed.data.hookEvent === "SessionStart") {
+        updateCodexThreadPreviewInBackground(
+          options.terminalSessionManager,
+          session.id,
+          parsed.data.threadId,
+        );
+      }
     }
 
     const sessionAgent = getTerminalSessionAgent(session);

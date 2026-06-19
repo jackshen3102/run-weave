@@ -10,7 +10,7 @@
 
 ```text
 Codex / Coco / Trae task finishes
-  -> CLI hook or notify command runs browser-viewer-hook-bridge
+  -> CLI hook or notify command runs runweave-hook-bridge
     -> launcher reads Runweave terminal identity from tmux pane env
       -> launcher POSTs completion event to backend internal endpoint
         -> backend validates hook token + terminal/source gate
@@ -32,7 +32,7 @@ Codex / Coco / Trae task finishes
 
 ## Launcher 与身份注入
 
-`~/.browser-viewer/bin/browser-viewer-hook-bridge` 是稳定 launcher。它是自包含 Node 脚本，不写死 Electron app、repo 或资源路径，只读取当前进程环境里的 `RUNWEAVE_*` 变量。
+`~/.runweave/bin/runweave-hook-bridge` 是稳定 launcher。它是自包含 Node 脚本，不写死 Electron app、repo 或资源路径，只读取当前进程环境里的 `RUNWEAVE_*` 变量。
 
 Runweave 创建 tmux-backed terminal 时注入：
 
@@ -57,7 +57,7 @@ Electron 启动时会调用 `installHooksIfNeeded()`，在用户已有相关 CLI
 - Codex：`~/.codex/hooks.json`
 - Trae/Coco：`~/.trae/traecli.yaml`
 
-安装必须保留已有第三方 hook、去重 Runweave launcher hook，并在首次写入前创建 `.browser-viewer-hook-backup` 备份。配置无法安全解析时跳过，避免破坏用户配置。
+安装必须保留已有第三方 hook、去重 Runweave launcher hook，并在首次写入前创建 `.runweave-hook-backup` 备份。配置无法安全解析时跳过，避免破坏用户配置。
 
 launcher 行为很窄：
 
@@ -220,7 +220,7 @@ export interface TerminalEventEnvelopeBase {
 
 ### 3. 确认 hook 是否安装
 
-检查对应 CLI 配置是否包含 `browser-viewer-hook-bridge --source ...`。如果用户看到系统通知但没有 Runweave marker，还需要检查 Codex `notify` 脚本是否最终调用了 launcher。
+检查对应 CLI 配置是否包含 `runweave-hook-bridge --source ...`。如果用户看到系统通知但没有 Runweave marker，还需要检查 Codex `notify` 脚本是否最终调用了 launcher。
 
 ### 4. 确认 tmux pane 是否有 Runweave 环境变量
 

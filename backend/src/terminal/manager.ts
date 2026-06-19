@@ -43,6 +43,7 @@ import {
   getCompletionSourceForCommand,
   type LastAiActiveCommandRecord,
 } from "./completion-source-gate";
+import { getAgentForCommand, getTerminalSessionAgent } from "./terminal-state-service";
 
 const SCROLLBACK_FLUSH_DELAY_MS = 250;
 const ACTIVITY_FLUSH_DELAY_MS = 10_000;
@@ -370,6 +371,12 @@ export class TerminalSessionManager {
     this.observeActiveCommand(terminalSessionId, metadata.activeCommand);
     session.cwd = metadata.cwd;
     session.activeCommand = metadata.activeCommand;
+    const shouldClearCodexThreadMetadata =
+      Boolean(session.threadId || session.preview) &&
+      getTerminalSessionAgent(session) !== "codex";
+    if (shouldClearCodexThreadMetadata) {
+      this.clearCodexThreadMetadata(session);
+    }
     const lastActivityAt = this.touchSessionActivity(session, "immediate");
     await this.sessionStore.updateSessionMetadata({
       terminalSessionId,
@@ -377,6 +384,9 @@ export class TerminalSessionManager {
       activeCommand: metadata.activeCommand,
       lastActivityAt: lastActivityAt.toISOString(),
     });
+    if (shouldClearCodexThreadMetadata) {
+      await this.persistClearedCodexThreadMetadata(terminalSessionId);
+    }
     return session;
   }
 
@@ -409,12 +419,39 @@ export class TerminalSessionManager {
 
     session.command = launch.command;
     session.args = nextArgs;
+    const shouldClearCodexThreadMetadata =
+      Boolean(session.threadId || session.preview) &&
+      getAgentForCommand(launch.command) !== "codex";
+    if (shouldClearCodexThreadMetadata) {
+      this.clearCodexThreadMetadata(session);
+    }
     await this.sessionStore.updateSessionLaunch({
       terminalSessionId,
       command: launch.command,
       args: nextArgs,
     });
+    if (shouldClearCodexThreadMetadata) {
+      await this.persistClearedCodexThreadMetadata(terminalSessionId);
+    }
     return session;
+  }
+
+  private clearCodexThreadMetadata(session: RuntimeTerminalSessionRecord): void {
+    delete session.threadId;
+    delete session.preview;
+  }
+
+  private async persistClearedCodexThreadMetadata(
+    terminalSessionId: string,
+  ): Promise<void> {
+    await this.sessionStore.updateSessionThreadId({
+      terminalSessionId,
+      threadId: null,
+    });
+    await this.sessionStore.updateSessionPreview({
+      terminalSessionId,
+      preview: null,
+    });
   }
 
   async updateSessionAlias(
@@ -435,6 +472,58 @@ export class TerminalSessionManager {
     await this.sessionStore.updateSessionAlias({
       terminalSessionId,
       alias: nextAlias,
+    });
+    return session;
+  }
+
+  async updateSessionThreadId(
+    terminalSessionId: string,
+    threadId: string | null,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const nextThreadId = threadId?.trim() || undefined;
+    if (session.threadId === nextThreadId) {
+      return session;
+    }
+
+    if (nextThreadId) {
+      session.threadId = nextThreadId;
+    } else {
+      delete session.threadId;
+    }
+    await this.sessionStore.updateSessionThreadId({
+      terminalSessionId,
+      threadId: nextThreadId ?? null,
+    });
+    return session;
+  }
+
+  async updateSessionPreview(
+    terminalSessionId: string,
+    preview: string | null,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const nextPreview = preview?.trim() || undefined;
+    if (session.preview === nextPreview) {
+      return session;
+    }
+
+    if (nextPreview) {
+      session.preview = nextPreview;
+    } else {
+      delete session.preview;
+    }
+    await this.sessionStore.updateSessionPreview({
+      terminalSessionId,
+      preview: nextPreview ?? null,
     });
     return session;
   }

@@ -24,6 +24,8 @@ export interface TerminalSessionRecord {
   id: string;
   projectId: string;
   alias: string | null;
+  threadId?: string;
+  preview?: string;
   command: string;
   args: string[];
   cwd: string;
@@ -90,6 +92,8 @@ export function buildSessionRecord(
     id: persisted.id,
     projectId: persisted.projectId,
     alias: persisted.alias ?? null,
+    threadId: persisted.threadId,
+    preview: persisted.preview,
     command: persisted.command,
     args: persisted.args,
     cwd: persisted.cwd,
@@ -153,6 +157,8 @@ export function toPersistedSession(
     id: session.id,
     projectId: session.projectId,
     alias: session.alias,
+    threadId: session.threadId,
+    preview: session.preview,
     command: session.command,
     args: session.args,
     cwd: session.cwd,
