@@ -4,7 +4,7 @@ import {
   type TerminalRendererHandle,
 } from "@runweave/terminal-renderer";
 import { IonButton, IonSpinner, IonText } from "@ionic/react";
-import { useCallback, type RefObject } from "react";
+import { useCallback, useEffect, useRef, type RefObject } from "react";
 
 import { installTerminalTouchBehavior } from "../lib/app-terminal-touch-behavior";
 import type { AppTerminalDetailTab } from "./TerminalDetailTabBar";
@@ -26,6 +26,7 @@ interface AppTerminalPanelsProps {
   notFound: boolean;
   requestedChange: SelectedTerminalChange | null;
   rendererRef: RefObject<TerminalRendererHandle | null>;
+  runtimeKind: "tmux" | "pty" | null;
   sendInput: (data: string) => void;
   sendResize: (cols: number, rows: number) => void;
   onAuthExpired: () => void;
@@ -54,12 +55,27 @@ export function AppTerminalPanels({
   onShowChanges,
   requestedChange,
   rendererRef,
+  runtimeKind,
   sendInput,
   sendResize,
 }: AppTerminalPanelsProps) {
+  // The touch behavior is installed once on terminal ready; refs let it read
+  // the latest runtimeKind and input sender without reinstalling.
+  const runtimeKindRef = useRef(runtimeKind);
+  const sendInputRef = useRef(sendInput);
+  useEffect(() => {
+    runtimeKindRef.current = runtimeKind;
+  }, [runtimeKind]);
+  useEffect(() => {
+    sendInputRef.current = sendInput;
+  }, [sendInput]);
+
   const handleTerminalReady = useCallback(
     (context: TerminalRendererExtensionContext) => {
-      const disposable = installTerminalTouchBehavior(context);
+      const disposable = installTerminalTouchBehavior(context, {
+        getRuntimeKind: () => runtimeKindRef.current,
+        sendInput: (data) => sendInputRef.current(data),
+      });
       onTerminalReady();
       return disposable;
     },

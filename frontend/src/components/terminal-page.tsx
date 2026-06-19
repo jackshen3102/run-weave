@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  buildTmuxScrollInput,
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
+  shouldThrottleTmuxScroll,
 } from "@runweave/common/terminal";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared";
 import { FitAddon } from "@xterm/addon-fit";
@@ -15,10 +17,6 @@ import "@xterm/xterm/css/xterm.css";
 import { RuntimeMonitorBadge } from "./runtime-monitor-badge";
 import { filterBrowserHandledTerminalOutput } from "../features/terminal/output-filter";
 import { formatTerminalSessionName } from "../features/terminal/session-name";
-import {
-  buildTmuxScrollInput,
-  shouldThrottleTmuxScroll,
-} from "../features/terminal/tmux-scroll";
 import { useTerminalConnection } from "../features/terminal/use-terminal-connection";
 import { createTerminalWrappedWebLinkProvider } from "../features/terminal/web-link-provider";
 import { shouldSuppressWheelInput } from "../features/terminal/wheel-input";

@@ -1,9 +1,11 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import {
+  buildTmuxScrollInput,
   fileToBase64,
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
   shellQuote,
+  shouldThrottleTmuxScroll,
 } from "@runweave/common/terminal";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared";
 import { FitAddon } from "@xterm/addon-fit";
@@ -19,10 +21,6 @@ import {
   type TerminalRendererPreference,
 } from "../../features/terminal/preferences";
 import { createResizeScheduler } from "../../features/terminal/resize-scheduler";
-import {
-  buildTmuxScrollInput,
-  shouldThrottleTmuxScroll,
-} from "../../features/terminal/tmux-scroll";
 import { createTerminalWrappedWebLinkProvider } from "../../features/terminal/web-link-provider";
 import { shouldSuppressWheelInput } from "../../features/terminal/wheel-input";
 import { HttpError } from "../../services/http";

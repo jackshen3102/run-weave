@@ -3,7 +3,7 @@ const WHEEL_DELTA_PER_LINE = 80;
 
 /**
  * Minimum interval (ms) between tmux scroll inputs.
- * Trackpads fire high-frequency wheel events; throttling prevents
+ * Trackpads and touch drags fire high-frequency events; throttling prevents
  * multiple screens from flying past on a single swipe.
  */
 const TMUX_SCROLL_THROTTLE_MS = 60;

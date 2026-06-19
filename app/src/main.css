@@ -89,15 +89,6 @@ ion-content::part(background) {
   font-weight: 700;
 }
 
-.login-support-log {
-  --color: var(--rw-app-muted);
-  align-self: center;
-  min-height: 36px;
-  margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .home-shell {
   min-height: 100%;
   padding: calc(var(--rw-app-safe-area-top) + 14px) 14px
@@ -654,6 +645,15 @@ ion-content::part(background) {
 
 .support-log-sheet__message {
   padding: 2px 18px 0;
+}
+
+.support-log-sheet__server-dir {
+  margin: 4px 0 0;
+  color: var(--rw-app-text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
 }
 
 .support-log-sheet__actions {

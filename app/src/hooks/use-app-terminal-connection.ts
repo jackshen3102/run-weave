@@ -15,6 +15,7 @@ import {
 
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type RuntimeStatus = "running" | "exited" | null;
+type RuntimeKind = "tmux" | "pty" | null;
 
 interface TerminalMetadata {
   cwd: string;
@@ -135,6 +136,7 @@ export function useAppTerminalConnection({
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("connecting");
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>(null);
+  const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>(null);
   const [metadata, setMetadata] = useState<TerminalMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -326,6 +328,10 @@ export function useAppTerminalConnection({
             return;
           }
           const message = JSON.parse(event.data) as TerminalServerMessage;
+          if (message.type === "connected") {
+            setRuntimeKind(message.runtimeKind ?? null);
+            return;
+          }
           if (message.type === "snapshot") {
             writeScrollback(message.data);
             return;
@@ -475,6 +481,7 @@ export function useAppTerminalConnection({
     metadata,
     notFound,
     runtimeStatus,
+    runtimeKind,
     onRendererReady: handleRendererReady,
     sendInput,
     sendResize,

@@ -30,23 +30,36 @@ export function createDiagnosticLogsRouter(
   });
 
   router.get("/status", (_req, res) => {
-    res.json({ status: recorder.getStatus() });
+    res.json({
+      status: recorder.getStatus(),
+      startedAt: recorder.getStartedAt(),
+    });
   });
 
   router.post("/start", (_req, res) => {
     recorder.start();
     aiDiagnosticLog("diagnostic recording started", { trigger: "http" });
-    res.json({ status: recorder.getStatus() });
+    res.json({
+      status: recorder.getStatus(),
+      startedAt: recorder.getStartedAt(),
+    });
   });
 
-  router.post("/stop", (req, res) => {
+  router.post("/stop", async (req, res, next) => {
     const frontendLogs = parseFrontendLogs(req.body);
     aiDiagnosticLog("diagnostic recording stopping", {
       frontendLogCount: frontendLogs.length,
       trigger: "http",
     });
-    const result = recorder.stop(frontendLogs);
-    res.json(result);
+    recorder.stop(frontendLogs);
+    try {
+      // Persist on stop so both client and server logs land in a stable,
+      // discoverable server-side directory for analysis.
+      await recorder.persistLatestResult();
+      res.json(recorder.getResult());
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.get("/result", (_req, res) => {
@@ -55,9 +68,10 @@ export function createDiagnosticLogsRouter(
 
   router.post("/download", async (_req, res, next) => {
     try {
-      await recorder.exportLatestResult();
-      const result = recorder.getResult();
-      const logsJsonl = result?.files?.logsJsonl;
+      const existing = recorder.getResult();
+      const logsJsonl =
+        existing?.files?.logsJsonl ??
+        (await recorder.persistLatestResult()).logsJsonl;
       if (!logsJsonl) {
         res.status(404).json({ message: "Diagnostic log result not found" });
         return;

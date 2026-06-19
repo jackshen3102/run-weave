@@ -13,6 +13,7 @@ import type {
   SupportLogScope,
 } from "./support-log-types";
 import { SupportLogContext } from "./use-support-logs";
+import type { SupportLogUploadTarget } from "./use-support-logs";
 
 const APP_VERSION = "0.1.0";
 const DEFAULT_SCOPE: SupportLogScope = { source: "unknown" };
@@ -65,6 +66,10 @@ export function SupportLogProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [currentScope, setCurrentScope] =
     useState<SupportLogScope>(DEFAULT_SCOPE);
+  // Upload credentials are kept in state only; never written into log scope or
+  // fields so the access token is never persisted or uploaded as log content.
+  const [uploadTarget, setUploadTarget] =
+    useState<SupportLogUploadTarget | null>(null);
 
   useEffect(() => {
     const uninstall = installSupportLogRecorder({
@@ -130,6 +135,8 @@ export function SupportLogProvider({ children }: { children: ReactNode }) {
       currentScope,
       isOpen,
       openSupportLogs,
+      setUploadTarget,
+      uploadTarget,
       store: storeRef.current,
     }),
     [
@@ -138,6 +145,7 @@ export function SupportLogProvider({ children }: { children: ReactNode }) {
       currentScope,
       isOpen,
       openSupportLogs,
+      uploadTarget,
     ],
   );
 

@@ -13,34 +13,43 @@ import {
   IonToolbar,
 } from "@ionic/react";
 import { useCallback, useEffect, useState } from "react";
+import type { DiagnosticLogStatus } from "@runweave/shared";
 
 import {
-  buildSupportLogBundle,
-  downloadSupportLogBundle,
-  shareSupportLogBundle,
-} from "./support-log-export";
+  getDiagnosticLogStatus,
+  startDiagnosticLogs,
+  stopDiagnosticLogs,
+  toDiagnosticLogRecord,
+} from "../../services/diagnostic-logs";
+import { useCopyFeedback } from "../../hooks/use-copy-feedback";
 import {
   flushSupportLogs,
   recordSupportLogToStore,
 } from "./support-log-recorder";
 import { useSupportLogsInternal } from "./use-support-logs";
 
-interface SupportLogSummary {
-  eventCount: number | null;
-  networkLabel: string;
-  routeLabel: string;
-  storageLabel: string;
-  terminalLabel: string;
+function statusLabel(status: DiagnosticLogStatus): string {
+  switch (status) {
+    case "recording":
+      return "记录中";
+    case "ended":
+      return "已结束";
+    case "ready":
+    default:
+      return "可记录";
+  }
 }
 
-function resolveRouteLabel(route?: string): string {
-  if (route) {
-    return route;
+function formatActionError(action: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    message.includes("Failed to fetch") ||
+    message.includes("NetworkError") ||
+    message.includes("Load failed")
+  ) {
+    return `${action}失败：后端不可用`;
   }
-  if (typeof window !== "undefined") {
-    return window.location.pathname;
-  }
-  return "-";
+  return message ? `${action}失败：${message}` : `${action}失败`;
 }
 
 export function SupportLogSheet() {
@@ -50,126 +59,163 @@ export function SupportLogSheet() {
     currentScope,
     isOpen,
     store,
+    uploadTarget,
   } = useSupportLogsInternal();
-  const [summary, setSummary] = useState<SupportLogSummary>({
-    eventCount: null,
-    networkLabel: "-",
-    routeLabel: "-",
-    storageLabel: "-",
-    terminalLabel: "-",
-  });
-  const [busyAction, setBusyAction] = useState<"share" | "download" | "clear" | null>(
+  const [status, setStatus] = useState<DiagnosticLogStatus>("ready");
+  const [recordingStartedAt, setRecordingStartedAt] = useState<Date | null>(
+    null,
+  );
+  const [serverDir, setServerDir] = useState<string | null>(null);
+  const [serverLogFile, setServerLogFile] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<"start" | "stop" | "clear" | null>(
     null,
   );
   const [message, setMessage] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const { copied, copyText } = useCopyFeedback();
 
-  const refreshSummary = useCallback(async () => {
-    await flushSupportLogs();
-    const records = await store.listRecent();
-    const status = store.getStatus();
-    const terminalEvents = records.filter((record) =>
-      record.event.startsWith("terminal."),
-    ).length;
-    setSummary({
-      eventCount: records.length,
-      networkLabel:
-        typeof navigator === "undefined"
-          ? "-"
-          : navigator.onLine
-            ? "Online"
-            : "Offline",
-      routeLabel: resolveRouteLabel(currentScope.route),
-      storageLabel:
-        status.storageKind === "memory"
-          ? "Memory only"
-          : status.storageDegraded
-            ? "Limited"
-            : "IndexedDB",
-      terminalLabel:
-        currentScope.source === "terminal"
-          ? `${currentScope.connectionStatus ?? "-"} / ${
-              currentScope.runtimeStatus ?? "-"
-            }`
-          : `${terminalEvents} events`,
-    });
-  }, [currentScope, store]);
+  const refreshStatus = useCallback(async () => {
+    if (!uploadTarget) {
+      setStatus("ready");
+      return;
+    }
+    try {
+      const response = await getDiagnosticLogStatus(
+        uploadTarget.apiBase,
+        uploadTarget.accessToken,
+      );
+      setStatus(response.status);
+      // Restore the recording window from the backend (source of truth) so a
+      // page/WebView reload mid-recording does not lose the start boundary and
+      // accidentally upload the entire retained log history.
+      if (response.status === "recording" && response.startedAt) {
+        setRecordingStartedAt(new Date(response.startedAt));
+      } else if (response.status !== "recording") {
+        setRecordingStartedAt(null);
+      }
+    } catch {
+      // Status is best-effort; surface failures on the actual action instead.
+    }
+  }, [uploadTarget]);
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
     setMessage(null);
-    setSummary((current) => ({
-      ...current,
-      eventCount: null,
-      routeLabel: resolveRouteLabel(currentScope.route),
-      terminalLabel:
-        currentScope.source === "terminal"
-          ? `${currentScope.connectionStatus ?? "-"} / ${
-              currentScope.runtimeStatus ?? "-"
-            }`
-          : "-",
-    }));
-    void refreshSummary();
-  }, [isOpen, refreshSummary]);
+    void refreshStatus();
+  }, [isOpen, refreshStatus]);
 
-  const exportBundle = async (method: "share" | "download") => {
-    setBusyAction(method);
+  const handleStart = useCallback(async () => {
+    if (!uploadTarget) {
+      return;
+    }
+    setBusyAction("start");
     setMessage(null);
-    await recordSupportLogToStore(store, "support.export.started", {
-      method,
-      scope: currentScope,
-    });
     try {
-      await flushSupportLogs();
-      const bundle = await buildSupportLogBundle({
-        store,
+      const response = await startDiagnosticLogs(
+        uploadTarget.apiBase,
+        uploadTarget.accessToken,
+      );
+      // Prefer the backend's authoritative start time so the upload window
+      // matches the server's recording boundary exactly.
+      setRecordingStartedAt(
+        response.startedAt ? new Date(response.startedAt) : new Date(),
+      );
+      setServerDir(null);
+      setServerLogFile(null);
+      setStatus("recording");
+      void recordSupportLogToStore(store, "diagnostic.recording.started", {
         scope: currentScope,
       });
-      const result =
-        method === "share"
-          ? await shareSupportLogBundle(bundle)
-          : downloadSupportLogBundle(bundle);
-      recordSupportLogToStore(store, "support.export.completed", {
-        eventCount: bundle.manifest.eventCount,
-        filename: result.filename,
-        method: result.method,
-      });
-      setMessage(result.warning ?? `已生成 ${result.filename}`);
-      await refreshSummary();
+      setMessage("已开始记录，请复现问题后点击结束并上报。");
     } catch (error) {
-      recordSupportLogToStore(
-        store,
-        "support.export.failed",
-        {
-          errorName: error instanceof Error ? error.name : typeof error,
-          errorMessage:
-            error instanceof Error
-              ? error.message
-              : "Unable to create diagnostics file",
-          method,
-        },
-        "error",
-      );
-      setMessage("Unable to create diagnostics file");
+      setMessage(formatActionError("开始记录", error));
     } finally {
       setBusyAction(null);
     }
-  };
+  }, [currentScope, store, uploadTarget]);
 
-  const handleClear = async () => {
+  const handleStopAndUpload = useCallback(async () => {
+    if (!uploadTarget) {
+      return;
+    }
+    setBusyAction("stop");
+    setMessage(null);
+    try {
+      // Without a known recording start the only safe scope would be the entire
+      // retained history. Try to recover the window from the backend first; if
+      // still unknown, refuse rather than over-collect, and ask for a restart.
+      let since = recordingStartedAt;
+      if (!since) {
+        const response = await getDiagnosticLogStatus(
+          uploadTarget.apiBase,
+          uploadTarget.accessToken,
+        );
+        if (response.status === "recording" && response.startedAt) {
+          since = new Date(response.startedAt);
+          setRecordingStartedAt(since);
+        } else if (response.status === "recording") {
+          setBusyAction(null);
+          setMessage(
+            "无法确定本轮记录的开始时间（可能页面已重载），请重新开始记录后再上报，避免上传无关历史日志。",
+          );
+          return;
+        }
+      }
+      void recordSupportLogToStore(store, "diagnostic.recording.stopping", {
+        scope: currentScope,
+      });
+      await flushSupportLogs();
+      const records = await store.listRecent(since ? { since } : undefined);
+      const frontendLogs = records.map(toDiagnosticLogRecord);
+      const result = await stopDiagnosticLogs(
+        uploadTarget.apiBase,
+        uploadTarget.accessToken,
+        frontendLogs,
+      );
+      setStatus("ended");
+      setRecordingStartedAt(null);
+      setServerDir(result.files?.dir ?? null);
+      setServerLogFile(result.files?.logsJsonl ?? null);
+      setMessage(
+        `已上报 ${result.logs.length} 条日志到服务端，可在服务端读取分析。`,
+      );
+    } catch (error) {
+      // Persistence/transport may have failed after the backend already ended
+      // recording. Refresh the real status so the UI reflects it, and tell the
+      // user they can safely retry — stop is idempotent and won't lose logs.
+      await refreshStatus();
+      setMessage(
+        `${formatActionError("结束并上报", error)}（可再次点击重试，不会丢失日志）`,
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }, [currentScope, recordingStartedAt, refreshStatus, store, uploadTarget]);
+
+  const handleClear = useCallback(async () => {
     setBusyAction("clear");
     setMessage(null);
     try {
       await clearSupportLogs();
       setMessage("本地日志已清除");
-      await refreshSummary();
     } finally {
       setBusyAction(null);
       setConfirmClear(false);
     }
-  };
+  }, [clearSupportLogs]);
+
+  const handleCopyLogFile = useCallback(async () => {
+    const path = serverLogFile ?? serverDir;
+    if (!path) {
+      return;
+    }
+    const ok = await copyText(path);
+    setMessage(ok ? "已复制日志文件路径" : "复制失败，请手动选择路径");
+  }, [copyText, serverDir, serverLogFile]);
+
+  const isRecording = status === "recording";
 
   return (
     <>
@@ -190,49 +236,64 @@ export function SupportLogSheet() {
         </IonHeader>
         <IonContent className="support-log-sheet__content">
           <section className="support-log-sheet__intro">
-            <p>导出脱敏后的 App 诊断信息，用于定位登录、网络和终端连接问题。</p>
+            <p>
+              开始记录后复现问题，结束时会把客户端与服务端日志统一上报到服务端本地目录，便于直接读取分析。
+            </p>
           </section>
           <IonList inset>
             <IonItem>
+              <IonLabel>状态</IonLabel>
+              <IonNote slot="end">{statusLabel(status)}</IonNote>
+            </IonItem>
+            <IonItem>
               <IonLabel>Route</IonLabel>
-              <IonNote slot="end">{summary.routeLabel}</IonNote>
+              <IonNote slot="end">{currentScope.route ?? "-"}</IonNote>
             </IonItem>
-            <IonItem>
-              <IonLabel>Network</IonLabel>
-              <IonNote slot="end">{summary.networkLabel}</IonNote>
-            </IonItem>
-            <IonItem>
-              <IonLabel>Events</IonLabel>
-              <IonNote slot="end">{summary.eventCount ?? "-"}</IonNote>
-            </IonItem>
-            <IonItem>
-              <IonLabel>Terminal</IonLabel>
-              <IonNote slot="end">{summary.terminalLabel}</IonNote>
-            </IonItem>
-            <IonItem>
-              <IonLabel>Storage</IonLabel>
-              <IonNote slot="end">{summary.storageLabel}</IonNote>
-            </IonItem>
+            {serverLogFile || serverDir ? (
+              <IonItem>
+                <IonLabel position="stacked">服务端日志文件</IonLabel>
+                <p className="support-log-sheet__server-dir">
+                  {serverLogFile ?? serverDir}
+                </p>
+              </IonItem>
+            ) : null}
           </IonList>
           {message ? (
             <p className="support-log-sheet__message">{message}</p>
           ) : null}
+          {!uploadTarget ? (
+            <p className="support-log-sheet__message">
+              请先登录并连接本地电脑后再上报日志。
+            </p>
+          ) : null}
           <div className="support-log-sheet__actions">
-            <IonButton
-              disabled={busyAction !== null}
-              expand="block"
-              onClick={() => void exportBundle("share")}
-            >
-              {busyAction === "share" ? "处理中..." : "分享日志"}
-            </IonButton>
-            <IonButton
-              disabled={busyAction !== null}
-              expand="block"
-              fill="outline"
-              onClick={() => void exportBundle("download")}
-            >
-              {busyAction === "download" ? "处理中..." : "下载日志"}
-            </IonButton>
+            {isRecording ? (
+              <IonButton
+                disabled={busyAction !== null}
+                expand="block"
+                onClick={() => void handleStopAndUpload()}
+              >
+                {busyAction === "stop" ? "上报中..." : "结束并上报"}
+              </IonButton>
+            ) : (
+              <IonButton
+                disabled={busyAction !== null || !uploadTarget}
+                expand="block"
+                onClick={() => void handleStart()}
+              >
+                {busyAction === "start" ? "处理中..." : "开始记录"}
+              </IonButton>
+            )}
+            {!isRecording && (serverLogFile || serverDir) ? (
+              <IonButton
+                disabled={busyAction !== null}
+                expand="block"
+                fill="outline"
+                onClick={() => void handleCopyLogFile()}
+              >
+                {copied ? "已复制路径" : "复制日志文件名"}
+              </IonButton>
+            ) : null}
             <IonButton
               color="danger"
               disabled={busyAction !== null}

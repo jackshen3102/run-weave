@@ -11,7 +11,6 @@ import { FormEvent, useState } from "react";
 import { AppConnectionChip } from "../components/AppConnectionChip";
 import { AppConnectionManager } from "../components/AppConnectionManager";
 import type { AppConnectionConfig } from "../features/connections/types";
-import { useSupportLogs } from "../features/support-logs";
 import { ApiError } from "../services/http";
 
 interface LoginPageProps {
@@ -35,7 +34,6 @@ export function LoginPage({
   hasActiveConnection,
   onLogin,
 }: LoginPageProps) {
-  const { openSupportLogs } = useSupportLogs();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -113,14 +111,6 @@ export function LoginPage({
               {submitting ? <IonSpinner name="crescent" /> : "Login"}
             </IonButton>
           </form>
-          <IonButton
-            className="login-support-log"
-            fill="clear"
-            onClick={() => openSupportLogs({ source: "login" })}
-            type="button"
-          >
-            日志上报
-          </IonButton>
         </main>
       </IonContent>
       <AppConnectionManager

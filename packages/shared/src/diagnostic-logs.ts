@@ -13,6 +13,7 @@ export interface DiagnosticLogResult {
   logs: DiagnosticLogRecord[];
   redactionReport?: DiagnosticLogRedactionReport;
   files?: {
+    dir?: string;
     logsJsonl?: string;
     redactionReportJson?: string;
   };
