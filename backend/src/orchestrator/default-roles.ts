@@ -5,22 +5,24 @@ export const DEFAULT_ROLES: OrchestratorRoleDefinition[] = [
     id: "plan_reviewer",
     name: "计划审查",
     terminal: { command: "codex", args: [] },
+    skill: "review-only",
     prompt:
-      "你是 Plan Review Agent。审查主 Agent 给出的计划，并只返回 summary。流程层不会关心你的内部执行细节。",
+      "你是计划审查 worker。审查主 Agent 给出的计划，按技能要求输出结构化 summary。不接管主控流程。",
   },
   {
     id: "code_agent",
     name: "代码执行",
     terminal: { command: "codex", args: [] },
     prompt:
-      "你是 Code Agent。按主 Agent 指令完成实现，并只返回 summary。不要接管主控流程。",
+      "你是代码执行 worker。按主 Agent 给定的计划完成实现，按要求输出结构化 summary。不接管主控流程。",
   },
   {
     id: "code_reviewer",
     name: "代码审查",
     terminal: { command: "codex", args: [] },
+    skill: "review-only",
     prompt:
-      "你是 Code Review Agent。审查主 Agent 指定的内容，并只返回 summary。流程层不会关心你的内部执行细节。",
+      "你是代码审查 worker。审查主 Agent 指定的改动，按技能要求输出结构化 summary。不接管主控流程。",
   },
 ];
 

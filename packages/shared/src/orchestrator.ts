@@ -79,6 +79,7 @@ export interface OrchestratorRoleDefinition {
     runtimePreference?: TerminalRuntimePreference;
   };
   prompt: string;
+  skill?: string;
 }
 
 export interface OrchestratorTerminalBinding {
@@ -92,6 +93,7 @@ export interface OrchestratorRunRole {
   binding: OrchestratorTerminalBinding;
   terminal: OrchestratorRoleDefinition["terminal"];
   prompt: string;
+  skill?: string;
 }
 
 export interface OrchestratorRunAgent {

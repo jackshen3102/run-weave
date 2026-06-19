@@ -132,6 +132,14 @@ export function RunConfig(props: {
                   }
                   className="min-h-16 w-full resize-y rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-100 outline-none focus:border-sky-600"
                 />
+                <input
+                  value={role.skill ?? ""}
+                  placeholder="驱动技能（可选，如 review-only）"
+                  onChange={(event) =>
+                    props.onRoleChange(role.id, { skill: event.target.value })
+                  }
+                  className="h-8 w-full rounded-md border border-slate-800 bg-slate-950 px-2 text-xs outline-none focus:border-sky-600"
+                />
               </div>
             ))}
             <Button
@@ -181,6 +189,16 @@ export function RunConfig(props: {
                   })
                 }
                 className="min-h-16 w-full resize-y rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-100 outline-none focus:border-sky-600"
+              />
+              <input
+                value={draft?.skill ?? role.skill ?? ""}
+                placeholder="驱动技能（可选，如 review-only）"
+                onChange={(event) =>
+                  props.onRoleDraftChange(role.id, {
+                    skill: event.target.value,
+                  })
+                }
+                className="h-8 w-full rounded-md border border-slate-800 bg-slate-950 px-2 text-xs outline-none focus:border-sky-600"
               />
             </div>
           );
