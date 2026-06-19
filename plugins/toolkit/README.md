@@ -12,14 +12,23 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 
 ## 已包含的 Skills
 
+- `brainstorming`
+- `code-grounded-requirements`
 - `daily-doc-maintenance`
 - `daily-refactor`
+- `debugging-strategies`
 - `diagnostic-log-debugging`
+- `doc-coauthoring`
+- `git-advanced-workflows`
+- `karpathy-guidelines`
+- `playwright-cli`
+- `react-best-practices`
 - `recorded-browser-mcp-verification`
 - `review-only`
 - `shadcn`
 - `sync-branch-hard-reset`
 - `using-rw`
+- `write-plan`
 
 ## 验证
 
