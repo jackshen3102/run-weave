@@ -20,27 +20,6 @@ export interface SupportLogScope {
   activeTab?: string;
 }
 
-export interface SupportLogRedactionReport {
-  tokens: number;
-  cookies: number;
-  authorizationHeaders: number;
-  sensitiveUrls: number;
-}
-
-export interface SupportLogBundle {
-  manifest: {
-    bundleVersion: 1;
-    createdAt: string;
-    appVersion: string;
-    platform: string;
-    route?: string;
-    scope: SupportLogScope;
-    eventCount: number;
-  };
-  logs: SupportLogRecord[];
-  redactionReport: SupportLogRedactionReport;
-}
-
 export interface SupportLogStoreStatus {
   storageDegraded: boolean;
   storageKind: "indexeddb" | "memory";

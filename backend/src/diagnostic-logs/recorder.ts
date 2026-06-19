@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -11,6 +11,8 @@ import type {
 
 interface DiagnosticLogRecorderOptions {
   tempRoot?: string;
+  persistRoot?: string;
+  maxPersistedRuns?: number;
 }
 
 interface CreateAiDiagnosticLogOptions {
@@ -169,13 +171,33 @@ function toJsonl(logs: DiagnosticLogRecord[]): string {
 
 export class DiagnosticLogRecorder {
   private readonly tempRoot: string;
+  private persistRoot: string | null;
+  private maxPersistedRuns: number;
   private readonly logs: DiagnosticLogRecord[] = [];
   private latestResult: DiagnosticLogResult | null = null;
   private startedAt: string | null = null;
-  private exportDir: string | null = null;
 
   constructor(options: DiagnosticLogRecorderOptions = {}) {
     this.tempRoot = options.tempRoot ?? os.tmpdir();
+    this.persistRoot = options.persistRoot ?? null;
+    this.maxPersistedRuns = Math.max(1, options.maxPersistedRuns ?? 20);
+  }
+
+  /**
+   * Configure where stopped runs are persisted. Used at startup so the module
+   * singleton (bound to the backend aiDiagnosticLog) writes into a stable,
+   * discoverable directory instead of only the OS temp root.
+   */
+  configurePersistence(options: {
+    persistRoot?: string;
+    maxPersistedRuns?: number;
+  }): void {
+    if (options.persistRoot !== undefined) {
+      this.persistRoot = options.persistRoot;
+    }
+    if (options.maxPersistedRuns !== undefined) {
+      this.maxPersistedRuns = Math.max(1, options.maxPersistedRuns);
+    }
   }
 
   getStatus(): DiagnosticLogStatus {
@@ -190,8 +212,12 @@ export class DiagnosticLogRecorder {
     return Boolean(this.startedAt);
   }
 
+  /** ISO timestamp of the in-progress recording, or null when not recording. */
+  getStartedAt(): string | null {
+    return this.startedAt;
+  }
+
   start(): void {
-    this.removeExportDir();
     this.logs.length = 0;
     this.latestResult = null;
     this.startedAt = new Date().toISOString();
@@ -206,6 +232,16 @@ export class DiagnosticLogRecorder {
   }
 
   stop(frontendLogs: DiagnosticLogRecord[] = []): DiagnosticLogResult {
+    // Idempotent stop: once a recording has ended, a repeated stop (e.g. the
+    // client retrying after a persistence failure) must NOT rebuild an empty
+    // result — that would clobber the real captured logs. Return the existing
+    // result so the caller can safely retry persistence on the same data.
+    if (!this.isRecording()) {
+      if (this.latestResult) {
+        return this.getResult() as DiagnosticLogResult;
+      }
+    }
+
     const startedAt = this.startedAt ?? new Date().toISOString();
     this.startedAt = null;
     const stoppedAt = new Date().toISOString();
@@ -241,18 +277,24 @@ export class DiagnosticLogRecorder {
     };
   }
 
-  async exportLatestResult(): Promise<NonNullable<DiagnosticLogResult["files"]>> {
+  /**
+   * Persist the latest result to a stable, discoverable directory so the logs
+   * can be read and analyzed server-side without client-side file export.
+   * Falls back to the temp root when no persist root is configured.
+   */
+  async persistLatestResult(): Promise<NonNullable<DiagnosticLogResult["files"]>> {
     if (!this.latestResult) {
       throw new Error("No diagnostic log result available");
     }
 
-    this.removeExportDir();
-    const dirName = `diagnostic-logs-${this.latestResult.stoppedAt.replace(/[:.]/g, "-")}`;
-    const exportDir = path.join(this.tempRoot, dirName);
-    mkdirSync(exportDir, { recursive: true });
+    const root = this.persistRoot ?? this.tempRoot;
+    const baseDir = path.join(root, "diagnostic-logs");
+    const dirName = `run-${this.latestResult.stoppedAt.replace(/[:.]/g, "-")}`;
+    const runDir = path.join(baseDir, dirName);
+    mkdirSync(runDir, { recursive: true });
 
-    const logsJsonl = path.join(exportDir, "logs.jsonl");
-    const redactionReportJson = path.join(exportDir, "redaction-report.json");
+    const logsJsonl = path.join(runDir, "logs.jsonl");
+    const redactionReportJson = path.join(runDir, "redaction-report.json");
     await Promise.all([
       writeFile(logsJsonl, toJsonl(this.latestResult.logs), "utf8"),
       writeFile(
@@ -262,25 +304,52 @@ export class DiagnosticLogRecorder {
       ),
     ]);
 
-    this.exportDir = exportDir;
-    this.latestResult = {
-      ...this.latestResult,
-      files: {
-        logsJsonl,
-        redactionReportJson,
-      },
-    };
+    this.prunePersistedRuns(baseDir);
 
-    return { logsJsonl, redactionReportJson };
+    const files = { dir: runDir, logsJsonl, redactionReportJson };
+    this.latestResult = { ...this.latestResult, files };
+    return files;
   }
 
-  private removeExportDir(): void {
-    if (!this.exportDir) {
+  /**
+   * @deprecated Persistence now happens on stop via persistLatestResult. Kept
+   * so the download route can lazily materialize files if they are missing.
+   */
+  async exportLatestResult(): Promise<NonNullable<DiagnosticLogResult["files"]>> {
+    return this.persistLatestResult();
+  }
+
+  private prunePersistedRuns(baseDir: string): void {
+    let entries: string[];
+    try {
+      entries = readdirSync(baseDir).filter((name) => name.startsWith("run-"));
+    } catch {
       return;
     }
 
-    rmSync(this.exportDir, { recursive: true, force: true });
-    this.exportDir = null;
+    if (entries.length <= this.maxPersistedRuns) {
+      return;
+    }
+
+    const sorted = entries
+      .map((name) => {
+        const fullPath = path.join(baseDir, name);
+        let mtimeMs = 0;
+        try {
+          mtimeMs = statSync(fullPath).mtimeMs;
+        } catch {
+          mtimeMs = 0;
+        }
+        return { fullPath, mtimeMs };
+      })
+      .sort((left, right) => left.mtimeMs - right.mtimeMs);
+
+    for (const { fullPath } of sorted.slice(
+      0,
+      sorted.length - this.maxPersistedRuns,
+    )) {
+      rmSync(fullPath, { recursive: true, force: true });
+    }
   }
 }
 

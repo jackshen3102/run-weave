@@ -328,6 +328,9 @@ function createHttpApp(
       trustProxyHeaders: tunnelAuthConfig !== null,
     }),
   );
+  diagnosticLogRecorder.configurePersistence({
+    persistRoot: resolveStoragePaths(process.env).backendLogDir,
+  });
   app.use(
     "/api/diagnostic-logs",
     requireAuth,

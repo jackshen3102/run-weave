@@ -102,6 +102,7 @@ export function AppTerminalPage({
     notFound,
     onRendererReady,
     runtimeStatus,
+    runtimeKind,
     sendInput,
     sendResize,
   } = useAppTerminalConnection({
@@ -646,6 +647,7 @@ export function AppTerminalPage({
             onRefreshDeviceConnection={onRefreshDeviceConnection}
             requestedChange={requestedChange}
             rendererRef={rendererRef}
+            runtimeKind={runtimeKind}
             sendInput={sendInput}
             sendResize={sendResize}
             onAuthExpired={onAuthExpired}

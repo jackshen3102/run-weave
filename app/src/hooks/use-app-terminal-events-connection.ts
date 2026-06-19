@@ -100,6 +100,15 @@ export function useAppTerminalEventsConnection({
   const lastConnectionCursorRef = useRef<string | null>(null);
   const seenEventIdsRef = useRef<Set<string>>(new Set());
   const onTerminalEventsRef = useRef(onTerminalEvents);
+  // Keep callback identities out of the connection effect's dependency array.
+  // Otherwise an inline/non-memoized callback (e.g. onConnectionClose) would
+  // re-run the effect on every render, tearing down and re-opening the socket
+  // and producing a ws-ticket reconnect storm.
+  const onAuthExpiredRef = useRef(onAuthExpired);
+  const onConnectionCloseRef = useRef(onConnectionClose);
+  const onConnectionErrorRef = useRef(onConnectionError);
+  const onServerConnectedRef = useRef(onServerConnected);
+  const onTransportOpenRef = useRef(onTransportOpen);
 
   useEffect(() => {
     accessTokenRef.current = accessToken;
@@ -108,6 +117,20 @@ export function useAppTerminalEventsConnection({
   useEffect(() => {
     onTerminalEventsRef.current = onTerminalEvents;
   }, [onTerminalEvents]);
+
+  useEffect(() => {
+    onAuthExpiredRef.current = onAuthExpired;
+    onConnectionCloseRef.current = onConnectionClose;
+    onConnectionErrorRef.current = onConnectionError;
+    onServerConnectedRef.current = onServerConnected;
+    onTransportOpenRef.current = onTransportOpen;
+  }, [
+    onAuthExpired,
+    onConnectionClose,
+    onConnectionError,
+    onServerConnected,
+    onTransportOpen,
+  ]);
 
   const handleEvents = useCallback(
     (
@@ -196,7 +219,7 @@ export function useAppTerminalEventsConnection({
 
         socket.addEventListener("open", () => {
           if (socketRef.current === socket) {
-            onTransportOpen?.();
+            onTransportOpenRef.current?.();
           }
         });
 
@@ -214,11 +237,11 @@ export function useAppTerminalEventsConnection({
             return;
           }
           if (message.type === "connected") {
-            onServerConnected?.();
+            onServerConnectedRef.current?.();
             return;
           }
           if (message.type === "error" && message.message === "Unauthorized") {
-            onAuthExpired();
+            onAuthExpiredRef.current();
           }
         });
 
@@ -228,22 +251,22 @@ export function useAppTerminalEventsConnection({
           }
           socketRef.current = null;
           if (event.code === 1008 && event.reason === "Unauthorized") {
-            onAuthExpired();
+            onAuthExpiredRef.current();
             return;
           }
-          scheduleReconnectAfterDecision(() => onConnectionClose?.(event));
+          scheduleReconnectAfterDecision(() => onConnectionCloseRef.current?.(event));
         });
 
         socket.addEventListener("error", () => {
-          scheduleReconnectAfterDecision(() => onConnectionError?.());
+          scheduleReconnectAfterDecision(() => onConnectionErrorRef.current?.());
         });
       } catch (nextError) {
         const failure = classifyApiFailure(nextError);
         if (failure.kind === "auth-expired") {
-          onAuthExpired();
+          onAuthExpiredRef.current();
           return;
         }
-        scheduleReconnectAfterDecision(() => onConnectionError?.());
+        scheduleReconnectAfterDecision(() => onConnectionErrorRef.current?.());
       }
     };
 
@@ -254,14 +277,5 @@ export function useAppTerminalEventsConnection({
       closeWebSocket(socketRef.current, 1000, "AppTerminalEvents unmounted");
       socketRef.current = null;
     };
-  }, [
-    apiBase,
-    enabled,
-    handleEvents,
-    onAuthExpired,
-    onConnectionClose,
-    onConnectionError,
-    onServerConnected,
-    onTransportOpen,
-  ]);
+  }, [apiBase, enabled, handleEvents]);
 }

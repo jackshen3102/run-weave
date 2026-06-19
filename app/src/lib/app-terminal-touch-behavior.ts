@@ -1,12 +1,22 @@
 import type { TerminalRendererExtensionContext } from "@runweave/terminal-renderer";
+import { buildTmuxScrollInput } from "@runweave/common/terminal";
 
 const APP_TERMINAL_TOUCH_SCROLL_MULTIPLIER = 3;
 const APP_TERMINAL_EDGE_SWIPE_ZONE = 24;
 
-export function installTerminalTouchBehavior({
-  terminal,
-  container,
-}: TerminalRendererExtensionContext): { dispose(): void } {
+export interface TerminalTouchBehaviorOptions {
+  // Latest runtime kind; tmux-backed sessions can be scrolled while a
+  // full-screen TUI owns the alternate screen by forwarding mouse sequences.
+  getRuntimeKind?: () => "tmux" | "pty" | null;
+  // Sends raw input to the terminal session (same channel as keystrokes).
+  sendInput?: (data: string) => void;
+}
+
+export function installTerminalTouchBehavior(
+  { terminal, container }: TerminalRendererExtensionContext,
+  options: TerminalTouchBehaviorOptions = {},
+): { dispose(): void } {
+  const { getRuntimeKind, sendInput } = options;
   let lastTouchY: number | null = null;
   let accumulatedDelta = 0;
   let edgeSwipeActive = false;
@@ -62,8 +72,26 @@ export function installTerminalTouchBehavior({
     }
 
     event.preventDefault();
-    terminal.scrollLines(-lines);
     accumulatedDelta -= lines * lineHeight;
+
+    const buffer = terminal.buffer?.active;
+    const isAlternateScreen = buffer?.type === "alternate";
+
+    // On the alternate screen (full-screen TUI like codex/vim) xterm has no
+    // scrollback, so scrollLines does nothing. Match the Web behavior: forward
+    // SGR mouse-wheel sequences so tmux (mouse on) scrolls the TUI itself.
+    if (isAlternateScreen && getRuntimeKind?.() === "tmux" && sendInput) {
+      // lines>0 = dragging down = reveal older content = wheel up. buildTmuxScrollInput
+      // treats deltaY<0 as wheel up, so negate to map the sign correctly. It emits
+      // one wheel notch per call, so repeat it to match the gesture magnitude.
+      const notch = buildTmuxScrollInput(-Math.sign(lines), terminal.cols, terminal.rows);
+      if (notch) {
+        sendInput(notch.repeat(Math.abs(lines)));
+      }
+      return;
+    }
+
+    terminal.scrollLines(-lines);
   };
 
   const handlePointerDown = (event: PointerEvent) => {

@@ -2,12 +2,19 @@ import { createContext, useContext } from "react";
 
 import type { SupportLogScope, SupportLogStore } from "./support-log-types";
 
+export interface SupportLogUploadTarget {
+  apiBase: string;
+  accessToken: string;
+}
+
 export interface SupportLogContextValue {
   clearSupportLogs(): Promise<void>;
   closeSupportLogs(): void;
   currentScope: SupportLogScope;
   isOpen: boolean;
   openSupportLogs(scope: SupportLogScope): void;
+  setUploadTarget(target: SupportLogUploadTarget | null): void;
+  uploadTarget: SupportLogUploadTarget | null;
   store: SupportLogStore;
 }
 
@@ -16,7 +23,7 @@ export const SupportLogContext =
 
 export function useSupportLogs(): Pick<
   SupportLogContextValue,
-  "openSupportLogs"
+  "openSupportLogs" | "setUploadTarget"
 > {
   const context = useContext(SupportLogContext);
   if (!context) {
@@ -24,6 +31,7 @@ export function useSupportLogs(): Pick<
   }
   return {
     openSupportLogs: context.openSupportLogs,
+    setUploadTarget: context.setUploadTarget,
   };
 }
 
