@@ -27,12 +27,14 @@ const currentSharedProtocolVersion = JSON.parse(
     "utf8",
   ),
 ).version;
+const defaultInstalledAppPath = "/Applications/Browser Viewer.app";
 
 function parseArgs(argv) {
   const result = {
     input: null,
     latest: false,
     runtimeHome: null,
+    shellVersion: null,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -48,6 +50,15 @@ function parseArgs(argv) {
     }
     if (arg.startsWith("--runtime-home=")) {
       result.runtimeHome = arg.slice("--runtime-home=".length);
+      continue;
+    }
+    if (arg === "--shell-version") {
+      result.shellVersion = argv[index + 1] ?? null;
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--shell-version=")) {
+      result.shellVersion = arg.slice("--shell-version=".length);
       continue;
     }
     if (!arg.startsWith("--") && !result.input) {
@@ -129,6 +140,38 @@ function isVersionGreaterThan(left, right) {
   return false;
 }
 
+function isSameVersion(left, right) {
+  return !isVersionGreaterThan(left, right) && !isVersionGreaterThan(right, left);
+}
+
+function readInstalledMacAppVersion(appPath = defaultInstalledAppPath) {
+  if (process.platform !== "darwin" || !existsSync(appPath)) {
+    return null;
+  }
+
+  const result = spawnSync(
+    "plutil",
+    [
+      "-extract",
+      "CFBundleShortVersionString",
+      "raw",
+      "-o",
+      "-",
+      path.join(appPath, "Contents", "Info.plist"),
+    ],
+    {
+      stdio: "pipe",
+      encoding: "utf8",
+    },
+  );
+
+  if (result.status !== 0) {
+    return null;
+  }
+
+  return result.stdout.trim() || null;
+}
+
 function findLatestPackage() {
   if (!existsSync(artifactsRoot)) {
     throw new Error(".runtime-artifacts does not exist");
@@ -207,7 +250,7 @@ function readManifest(packageRoot) {
   return JSON.parse(readFileSync(manifestPath, "utf8"));
 }
 
-function validateManifest(packageRoot, manifest) {
+function validateManifest(packageRoot, manifest, targetShellVersion) {
   if (manifest.schemaVersion !== 1) {
     throw new Error("Unsupported runtime manifest schemaVersion");
   }
@@ -216,10 +259,14 @@ function validateManifest(packageRoot, manifest) {
   }
   if (
     typeof manifest.minimumShellVersion !== "string" ||
-    !manifest.minimumShellVersion.trim() ||
-    isVersionGreaterThan(manifest.minimumShellVersion, currentShellVersion)
+    !manifest.minimumShellVersion.trim()
   ) {
-    throw new Error("Runtime package requires a newer shell version");
+    throw new Error("Runtime package is missing a shell version requirement");
+  }
+  if (!isSameVersion(manifest.minimumShellVersion, targetShellVersion)) {
+    throw new Error(
+      `Runtime package targets shell version ${manifest.minimumShellVersion}, but the installed shell version is ${targetShellVersion}. Install the matching Browser Viewer app before installing this runtime package.`,
+    );
   }
   if (manifest.sharedProtocolVersion !== currentSharedProtocolVersion) {
     throw new Error("Runtime package shared protocol version is incompatible");
@@ -307,7 +354,7 @@ const args = parseArgs(process.argv.slice(2));
 const input = args.latest ? findLatestPackage() : args.input;
 if (!input) {
   throw new Error(
-    "Usage: node scripts/install-runtime-package.mjs <zip|dir> [--runtime-home <path>] [--latest]",
+    "Usage: node scripts/install-runtime-package.mjs <zip|dir> [--runtime-home <path>] [--shell-version <version>] [--latest]",
   );
 }
 
@@ -315,10 +362,15 @@ const runtimeHome =
   args.runtimeHome ??
   process.env.RUNWEAVE_RUNTIME_HOME ??
   resolveDefaultRuntimeHome();
+const targetShellVersion =
+  args.shellVersion ??
+  process.env.RUNWEAVE_SHELL_VERSION ??
+  readInstalledMacAppVersion() ??
+  currentShellVersion;
 const resolvedPackage = resolvePackageRoot(path.resolve(input));
 try {
   const manifest = readManifest(resolvedPackage.packageRoot);
-  validateManifest(resolvedPackage.packageRoot, manifest);
+  validateManifest(resolvedPackage.packageRoot, manifest, targetShellVersion);
   installPackage(
     resolvedPackage.packageRoot,
     path.resolve(runtimeHome),
