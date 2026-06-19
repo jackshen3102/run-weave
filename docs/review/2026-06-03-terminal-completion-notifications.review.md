@@ -21,7 +21,7 @@
 
 ### P2 - 文档里的端到端验证命令会被新身份门禁静默拦截
 
-当前决策：launcher 的所有副作用都被 `RUNWEAVE_*` 身份门禁保护，缺少 endpoint/token/terminalSessionId 时直接返回；但通知文档仍提供一个直接 pipe 到 `~/.browser-viewer/bin/browser-viewer-hook-bridge --source codex` 的模拟命令，并预期会产生系统通知、声音和飞书消息。
+当前决策：launcher 的所有副作用都被 `RUNWEAVE_*` 身份门禁保护，缺少 endpoint/token/terminalSessionId 时直接返回；但通知文档仍提供一个直接 pipe 到 `~/.runweave/bin/runweave-hook-bridge --source codex` 的模拟命令，并预期会产生系统通知、声音和飞书消息。
 
 为什么系统层面可能是错的：当前手工验收步骤验证不到真实系统行为。它会在缺少 `RUNWEAVE_*` 的普通 shell 中静默退出，用户按文档执行会以为通知链路坏了；更糟的是，这个验收步骤无法覆盖刚修复的身份门禁边界，后续回归时可能重新放宽门禁而文档测试仍看不出来。
 

@@ -27,8 +27,9 @@ type JsonReadResult =
   | { status: "invalid" }
   | { status: "valid"; value: JsonRecord };
 
-const BRIDGE_BASENAME = "browser-viewer-hook-bridge";
-const BACKUP_SUFFIX = ".browser-viewer-hook-backup";
+const BRIDGE_BASENAME = "runweave-hook-bridge";
+const LEGACY_BRIDGE_BASENAME = "browser-viewer-hook-bridge";
+const BACKUP_SUFFIX = ".runweave-hook-backup";
 const FEISHU_SCRIPT_BASENAME = "feishu_stop_notify.sh";
 const RUNWEAVE_HOOK_MARKER = "_runweaveManaged";
 
@@ -52,8 +53,12 @@ const TRAE_TOML_EVENTS = [
   "UserPromptSubmit",
 ] as const;
 const RUNWEAVE_TRAE_TOML_FENCE_BEGIN =
-  "# >>> runweave-hooks (managed by Browser Viewer) >>>";
+  "# >>> runweave-hooks (managed by Runweave) >>>";
 const RUNWEAVE_TRAE_TOML_FENCE_END =
+  "# <<< runweave-hooks (managed by Runweave) <<<";
+const LEGACY_RUNWEAVE_TRAE_TOML_FENCE_BEGIN =
+  "# >>> runweave-hooks (managed by Browser Viewer) >>>";
+const LEGACY_RUNWEAVE_TRAE_TOML_FENCE_END =
   "# <<< runweave-hooks (managed by Browser Viewer) <<<";
 
 export function mergeJsonHookEntry(args: {
@@ -61,18 +66,18 @@ export function mergeJsonHookEntry(args: {
   command: string;
   timeout: number;
 }): Array<unknown> {
-  const nextHook = createBrowserViewerHook(args.command, args.timeout);
+  const nextHook = createRunweaveHook(args.command, args.timeout);
 
   const merged: Array<unknown> = [];
   let inserted = false;
 
   for (const entry of args.existing) {
-    if (isRecord(entry) && isBrowserViewerHookEntry(entry)) {
+    if (isRecord(entry) && isRunweaveHookEntry(entry)) {
       if (!inserted) {
-        merged.push(rewriteBrowserViewerHooks(entry, nextHook));
+        merged.push(rewriteRunweaveHooks(entry, nextHook));
         inserted = true;
       } else {
-        const prunedEntry = removeBrowserViewerHooks(entry);
+        const prunedEntry = removeRunweaveHooks(entry);
         if (prunedEntry) {
           merged.push(prunedEntry);
         }
@@ -236,7 +241,7 @@ export function buildLauncherScript(): string {
     "}",
     "",
     "function notifyFeishu(payload, source, terminalSessionId) {",
-    "  const script = `${os.homedir()}/.browser-viewer/hooks/feishu_stop_notify.sh`;",
+    "  const script = `${os.homedir()}/.runweave/hooks/feishu_stop_notify.sh`;",
     "  try {",
     "    if (!fs.existsSync(script)) {",
     "      return;",
@@ -360,6 +365,11 @@ export function buildLauncherScript(): string {
     "  );",
     "}",
     "",
+    "function readThreadId(payload) {",
+    "  const raw = payload.threadId ?? payload.thread_id ?? payload.sessionId ?? payload.session_id;",
+    '  return typeof raw === "string" && raw.trim() ? raw.trim() : null;',
+    "}",
+    "",
     "function normalizeEventName(raw) {",
     '  return String(raw || "Unknown")',
     "    .trim()",
@@ -407,7 +417,7 @@ export function buildLauncherScript(): string {
     "  return null;",
     "}",
     "",
-    "async function postAgentHook({ endpoint, token, terminalSessionId, agent, hookEvent }) {",
+    "async function postAgentHook({ endpoint, token, terminalSessionId, agent, hookEvent, threadId }) {",
     "  try {",
     "    const response = await fetch(endpoint, {",
     '      method: "POST",',
@@ -418,6 +428,7 @@ export function buildLauncherScript(): string {
     "      body: JSON.stringify({",
     "        terminalSessionId,",
     "        projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,",
+    "        ...(threadId ? { threadId } : {}),",
     "        agent,",
     "        hookEvent,",
     "      }),",
@@ -469,6 +480,7 @@ export function buildLauncherScript(): string {
     "  const normalizedEvent = normalizeEventName(rawEvent);",
     "  const source = normalizeSource(args.source);",
     "  const completionReason = normalizeReason(args.reason);",
+    '  const threadId = source === "codex" ? readThreadId(payload) : null;',
     "  const stateHookEvent = (source === \"codex\" || source === \"trae\") ? toAgentHookStateEvent(normalizedEvent) : null;",
     '  const shouldRecordCompletion = completionReason !== "hook_stop" || STOP_EVENTS.has(normalizedEvent);',
     "",
@@ -488,6 +500,7 @@ export function buildLauncherScript(): string {
     "    endpoint: redactEndpoint(endpoint),",
     "    stateEndpoint: redactEndpoint(stateEndpoint),",
     "    completionEndpoint: redactEndpoint(completionEndpoint),",
+    "    threadId,",
     "    stateHookEvent,",
     "    shouldRecordCompletion,",
     "  });",
@@ -507,7 +520,7 @@ export function buildLauncherScript(): string {
     "  }",
     "",
     "  if (stateHookEvent && stateEndpoint) {",
-    "    const result = await postAgentHook({ endpoint: stateEndpoint, token, terminalSessionId, agent: source, hookEvent: stateHookEvent });",
+    "    const result = await postAgentHook({ endpoint: stateEndpoint, token, terminalSessionId, agent: source, hookEvent: stateHookEvent, threadId });",
     '    appendDebugLog("hook bridge posted agent hook", {',
     "      terminalSessionId,",
     "      hookEvent: stateHookEvent,",
@@ -799,12 +812,7 @@ export function upsertTraeTomlHookBlock(
   content: string,
   block: string,
 ): string {
-  const fenceRegex = new RegExp(
-    `${escapeRegex(RUNWEAVE_TRAE_TOML_FENCE_BEGIN)}[\\s\\S]*?${escapeRegex(
-      RUNWEAVE_TRAE_TOML_FENCE_END,
-    )}`,
-    "g",
-  );
+  const fenceRegex = createRunweaveTraeFenceRegex();
 
   const fenceMatch = fenceRegex.exec(content);
   if (fenceMatch) {
@@ -824,6 +832,25 @@ export function upsertTraeTomlHookBlock(
   return collapseBlankLines(`${stripped.trimEnd()}\n\n${block}`);
 }
 
+function createRunweaveTraeFenceRegex(): RegExp {
+  const fences: Array<[string, string]> = [
+    [RUNWEAVE_TRAE_TOML_FENCE_BEGIN, RUNWEAVE_TRAE_TOML_FENCE_END],
+    [
+      LEGACY_RUNWEAVE_TRAE_TOML_FENCE_BEGIN,
+      LEGACY_RUNWEAVE_TRAE_TOML_FENCE_END,
+    ],
+  ];
+  return new RegExp(
+    fences
+      .map(
+        ([begin, end]) =>
+          `${escapeRegex(begin)}[\\s\\S]*?${escapeRegex(end)}`,
+      )
+      .join("|"),
+    "g",
+  );
+}
+
 // Strip any pre-existing un-fenced [[hooks.<Event>]] paragraphs that point at
 // the Runweave bridge so we can replace them with the fenced canonical block.
 // Earlier installer revisions wrote individual entries without fence markers,
@@ -833,7 +860,7 @@ function stripLegacyTraeBridgeEntries(content: string): string {
   // [[hooks.<Event>.hooks]] sub-table whose command references the bridge.
   // The body runs up to the next TOML section header (line starting with `[`).
   const legacyRegex =
-    /\[\[hooks\.[A-Za-z][A-Za-z0-9_]*\]\][^[]*\[\[hooks\.[A-Za-z][A-Za-z0-9_]*\.hooks\]\][^[]*?browser-viewer-hook-bridge[^[]*/g;
+    /\[\[hooks\.[A-Za-z][A-Za-z0-9_]*\]\][^[]*\[\[hooks\.[A-Za-z][A-Za-z0-9_]*\.hooks\]\][^[]*?(?:browser-viewer-hook-bridge|runweave-hook-bridge)[^[]*/g;
   return content.replace(legacyRegex, "");
 }
 
@@ -961,7 +988,7 @@ function getDefaultResourcesDir(): string {
 }
 
 function getNotifyHooksDir(homeDir: string): string {
-  return path.join(homeDir, ".browser-viewer", "hooks");
+  return path.join(homeDir, ".runweave", "hooks");
 }
 
 function getFeishuScriptPath(homeDir: string): string {
@@ -969,7 +996,7 @@ function getFeishuScriptPath(homeDir: string): string {
 }
 
 function getLauncherDir(homeDir: string): string {
-  return path.join(homeDir, ".browser-viewer", "bin");
+  return path.join(homeDir, ".runweave", "bin");
 }
 
 function getLauncherPath(homeDir: string): string {
@@ -1031,7 +1058,7 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isBrowserViewerHookEntry(entry: Record<string, unknown>): boolean {
+function isRunweaveHookEntry(entry: Record<string, unknown>): boolean {
   const hooks = entry.hooks;
   if (!Array.isArray(hooks)) {
     return false;
@@ -1042,12 +1069,11 @@ function isBrowserViewerHookEntry(entry: Record<string, unknown>): boolean {
       return false;
     }
 
-    const command = hook.command;
-    return typeof command === "string" && command.includes(BRIDGE_BASENAME);
+    return isRunweaveHookObject(hook);
   });
 }
 
-function createBrowserViewerHook(command: string, timeout: number): JsonRecord {
+function createRunweaveHook(command: string, timeout: number): JsonRecord {
   return {
     type: "command",
     command,
@@ -1058,13 +1084,13 @@ function createBrowserViewerHook(command: string, timeout: number): JsonRecord {
   };
 }
 
-function rewriteBrowserViewerHooks(
+function rewriteRunweaveHooks(
   entry: Record<string, unknown>,
   nextHook: Record<string, unknown>,
 ): Record<string, unknown> {
   const hooks = Array.isArray(entry.hooks) ? entry.hooks : [];
   const rewrittenHooks = hooks.map((hook) =>
-    isRecord(hook) && isBrowserViewerHookObject(hook) ? { ...nextHook } : hook,
+    isRecord(hook) && isRunweaveHookObject(hook) ? { ...nextHook } : hook,
   );
 
   return {
@@ -1073,12 +1099,12 @@ function rewriteBrowserViewerHooks(
   };
 }
 
-function removeBrowserViewerHooks(
+function removeRunweaveHooks(
   entry: Record<string, unknown>,
 ): Record<string, unknown> | null {
   const hooks = Array.isArray(entry.hooks) ? entry.hooks : [];
   const remainingHooks = hooks.filter(
-    (hook) => !(isRecord(hook) && isBrowserViewerHookObject(hook)),
+    (hook) => !(isRecord(hook) && isRunweaveHookObject(hook)),
   );
   if (remainingHooks.length === 0) {
     return null;
@@ -1090,9 +1116,17 @@ function removeBrowserViewerHooks(
   };
 }
 
-function isBrowserViewerHookObject(hook: Record<string, unknown>): boolean {
+function isRunweaveHookObject(hook: Record<string, unknown>): boolean {
+  if (hook[RUNWEAVE_HOOK_MARKER] === true) {
+    return true;
+  }
+
   const command = hook.command;
-  return typeof command === "string" && command.includes(BRIDGE_BASENAME);
+  return (
+    typeof command === "string" &&
+    (command.includes(BRIDGE_BASENAME) ||
+      command.includes(LEGACY_BRIDGE_BASENAME))
+  );
 }
 
 function ensureTrailingNewline(content: string): string {

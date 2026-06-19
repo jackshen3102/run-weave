@@ -28,9 +28,11 @@ import type {
   UpdateTerminalSessionAliasParams,
   UpdateTerminalSessionLaunchParams,
   UpdateTerminalSessionMetadataParams,
+  UpdateTerminalSessionPreviewParams,
   UpdateTerminalSessionRuntimeMetadataParams,
   UpdateTerminalSessionScrollbackParams,
   UpdateTerminalSessionTerminalStateParams,
+  UpdateTerminalSessionThreadIdParams,
 } from "./store";
 import { getLiveTerminalScrollback } from "./live-scrollback";
 import {
@@ -326,6 +328,48 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       }
 
       session.alias = params.alias;
+      await database.write();
+    });
+  }
+
+  async updateSessionThreadId(
+    params: UpdateTerminalSessionThreadIdParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const session = database.data.sessions.find(
+        (candidate) => candidate.id === params.terminalSessionId,
+      );
+      if (!session) {
+        return;
+      }
+
+      if (params.threadId) {
+        session.threadId = params.threadId;
+      } else {
+        delete session.threadId;
+      }
+      await database.write();
+    });
+  }
+
+  async updateSessionPreview(
+    params: UpdateTerminalSessionPreviewParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const session = database.data.sessions.find(
+        (candidate) => candidate.id === params.terminalSessionId,
+      );
+      if (!session) {
+        return;
+      }
+
+      if (params.preview) {
+        session.preview = params.preview;
+      } else {
+        delete session.preview;
+      }
       await database.write();
     });
   }

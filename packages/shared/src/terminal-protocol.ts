@@ -208,6 +208,8 @@ export interface TerminalSessionStatusResponse {
   terminalSessionId: string;
   projectId: string;
   alias?: string | null;
+  threadId?: string;
+  preview?: string;
   command: string;
   args: string[];
   cwd: string;
@@ -228,6 +230,8 @@ export interface TerminalSessionListItem {
   terminalSessionId: string;
   projectId: string;
   alias?: string | null;
+  threadId?: string;
+  preview?: string;
   command: string;
   args: string[];
   cwd: string;
@@ -423,6 +427,7 @@ export type AgentHookStateEvent =
 export interface AgentHookStateRequest {
   terminalSessionId: string;
   projectId?: string;
+  threadId?: string;
   agent: TerminalAgentKind;
   hookEvent: AgentHookStateEvent;
 }

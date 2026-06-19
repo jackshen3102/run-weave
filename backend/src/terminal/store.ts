@@ -13,6 +13,8 @@ export interface PersistedTerminalSessionRecord {
   id: string;
   projectId: string;
   alias?: string | null;
+  threadId?: string;
+  preview?: string;
   command: string;
   args: string[];
   cwd: string;
@@ -93,6 +95,16 @@ export interface UpdateTerminalSessionAliasParams {
   alias: string | null;
 }
 
+export interface UpdateTerminalSessionThreadIdParams {
+  terminalSessionId: string;
+  threadId: string | null;
+}
+
+export interface UpdateTerminalSessionPreviewParams {
+  terminalSessionId: string;
+  preview: string | null;
+}
+
 export interface UpdateTerminalSessionRuntimeMetadataParams extends TerminalRuntimeMetadata {
   terminalSessionId: string;
 }
@@ -133,6 +145,12 @@ export interface TerminalSessionStore {
   ): Promise<void>;
   updateSessionLaunch(params: UpdateTerminalSessionLaunchParams): Promise<void>;
   updateSessionAlias(params: UpdateTerminalSessionAliasParams): Promise<void>;
+  updateSessionThreadId(
+    params: UpdateTerminalSessionThreadIdParams,
+  ): Promise<void>;
+  updateSessionPreview(
+    params: UpdateTerminalSessionPreviewParams,
+  ): Promise<void>;
   updateSessionRuntimeMetadata(
     params: UpdateTerminalSessionRuntimeMetadataParams,
   ): Promise<void>;
