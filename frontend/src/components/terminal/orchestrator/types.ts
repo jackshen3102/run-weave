@@ -5,5 +5,5 @@ export interface RoleDraft {
   bindingMode: "new" | "reuse";
   sessionId: string;
   prompt: string;
-  skill: string;
+  skill?: string;
 }
