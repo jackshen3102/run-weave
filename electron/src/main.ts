@@ -791,131 +791,153 @@ app.on("child-process-gone", (_event, details) => {
   desktopIncidentLogger?.error("desktop.childProcess.gone", details);
 });
 
-app.whenReady().then(async () => {
-  try {
-    initializeDesktopIncidentLogger();
-    setApplicationIcon();
-    registerOpenExternalHandler();
-    registerPackagedBackendHandlers();
-    registerRuntimeStatsHandler(() => packagedBackendRuntime);
-    registerSystemMonitorHandler(() => packagedBackendRuntime);
-    registerTerminalBrowserHandlers();
-    registerCdpProxyHandlers();
-    await installHooksIfNeeded({
-      resourcesDir: path.join(__dirname, "..", "resources"),
-    });
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
-    const portConfig = resolveCdpProxyPort(process.env);
-    const cdpProxyPort = portConfig.strict
-      ? portConfig.port
-      : await findAvailableCdpProxyPort(portConfig.port);
-    cdpProxyRuntime = await startCdpProxy({
-      host: CDP_PROXY_HOST,
-      port: cdpProxyPort,
-    });
-    process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT = cdpProxyRuntime.endpoint;
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+  });
+}
 
-    if (isDev) {
-      // In dev mode, backend is an independent process started before Electron.
-      // Notify it of the CDP proxy endpoint so PTY terminals inherit the env var.
-      const backendUrl = process.env.BROWSER_VIEWER_BACKEND_URL;
-      if (backendUrl) {
-        try {
-          const resp = await net.fetch(`${backendUrl}/internal/cdp-endpoint`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ endpoint: cdpProxyRuntime.endpoint }),
-          });
-          if (!resp.ok) {
+if (hasSingleInstanceLock) {
+  app.whenReady().then(async () => {
+    try {
+      initializeDesktopIncidentLogger();
+      setApplicationIcon();
+      registerOpenExternalHandler();
+      registerPackagedBackendHandlers();
+      registerRuntimeStatsHandler(() => packagedBackendRuntime);
+      registerSystemMonitorHandler(() => packagedBackendRuntime);
+      registerTerminalBrowserHandlers();
+      registerCdpProxyHandlers();
+      await installHooksIfNeeded({
+        resourcesDir: path.join(__dirname, "..", "resources"),
+      });
+
+      const portConfig = resolveCdpProxyPort(process.env);
+      const cdpProxyPort = portConfig.strict
+        ? portConfig.port
+        : await findAvailableCdpProxyPort(portConfig.port);
+      cdpProxyRuntime = await startCdpProxy({
+        host: CDP_PROXY_HOST,
+        port: cdpProxyPort,
+      });
+      process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT = cdpProxyRuntime.endpoint;
+
+      if (isDev) {
+        // In dev mode, backend is an independent process started before Electron.
+        // Notify it of the CDP proxy endpoint so PTY terminals inherit the env var.
+        const backendUrl = process.env.BROWSER_VIEWER_BACKEND_URL;
+        if (backendUrl) {
+          try {
+            const resp = await net.fetch(
+              `${backendUrl}/internal/cdp-endpoint`,
+              {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ endpoint: cdpProxyRuntime.endpoint }),
+              },
+            );
+            if (!resp.ok) {
+              console.warn(
+                "[electron] failed to propagate CDP endpoint to backend",
+                {
+                  status: resp.status,
+                },
+              );
+            }
+          } catch (error) {
             console.warn(
               "[electron] failed to propagate CDP endpoint to backend",
               {
-                status: resp.status,
+                error: error instanceof Error ? error.message : String(error),
               },
             );
           }
-        } catch (error) {
-          console.warn(
-            "[electron] failed to propagate CDP endpoint to backend",
-            {
-              error: error instanceof Error ? error.message : String(error),
-            },
-          );
         }
       }
-    }
 
-    if (!isDev) {
-      refreshActiveRuntimeRelease();
-      registerCustomProtocol(getActiveFrontendDistDir);
-      await startPackagedBackendRuntime();
-    }
-
-    const openNewWindow = (): BrowserWindow => {
-      return createWindow();
-    };
-
-    const openSystemMonitor = (): void => {
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        mainWindow = createWindow({
-          hideOnClose: true,
-          initialPath: "/system-monitor",
-        });
-        return;
+      if (!isDev) {
+        refreshActiveRuntimeRelease();
+        registerCustomProtocol(getActiveFrontendDistDir);
+        await startPackagedBackendRuntime();
       }
 
-      mainWindow.show();
-      mainWindow.focus();
-      navigateWindowToPath(mainWindow, "/system-monitor");
-    };
+      const openNewWindow = (): BrowserWindow => {
+        return createWindow();
+      };
 
-    Menu.setApplicationMenu(
-      Menu.buildFromTemplate(
-        buildApplicationMenuTemplate({
+      const openSystemMonitor = (): void => {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+          mainWindow = createWindow({
+            hideOnClose: true,
+            initialPath: "/system-monitor",
+          });
+          return;
+        }
+
+        mainWindow.show();
+        mainWindow.focus();
+        navigateWindowToPath(mainWindow, "/system-monitor");
+      };
+
+      Menu.setApplicationMenu(
+        Menu.buildFromTemplate(
+          buildApplicationMenuTemplate({
+            platform: process.platform,
+            onExportDesktopDiagnostics: exportDesktopDiagnostics,
+            onNewWindow: openNewWindow,
+            onOpenSystemMonitor: openSystemMonitor,
+            onReloadLocalRuntime: reloadLocalRuntime,
+          }),
+        ),
+      );
+
+      mainWindow = createWindow({ hideOnClose: true });
+
+      createTray(mainWindow, {
+        onOpenSystemMonitor: openSystemMonitor,
+        onReloadLocalRuntime: reloadLocalRuntime,
+      });
+
+      if (
+        shouldEnableAutoUpdates({
+          isPackaged: app.isPackaged,
           platform: process.platform,
-          onExportDesktopDiagnostics: exportDesktopDiagnostics,
-          onNewWindow: openNewWindow,
-          onOpenSystemMonitor: openSystemMonitor,
-          onReloadLocalRuntime: reloadLocalRuntime,
-        }),
-      ),
-    );
-
-    mainWindow = createWindow({ hideOnClose: true });
-
-    createTray(mainWindow, {
-      onOpenSystemMonitor: openSystemMonitor,
-      onReloadLocalRuntime: reloadLocalRuntime,
-    });
-
-    if (
-      shouldEnableAutoUpdates({
-        isPackaged: app.isPackaged,
-        platform: process.platform,
-      })
-    ) {
-      initAutoUpdater(mainWindow);
-      setTimeout(() => checkForUpdates(), 3_000);
-    }
-
-    app.on("activate", () => {
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        mainWindow = createWindow({ hideOnClose: true });
-        createTray(mainWindow, {
-          onOpenSystemMonitor: openSystemMonitor,
-          onReloadLocalRuntime: reloadLocalRuntime,
-        });
-        return;
+        })
+      ) {
+        initAutoUpdater(mainWindow);
+        setTimeout(() => checkForUpdates(), 3_000);
       }
-      mainWindow.show();
-      mainWindow.focus();
-    });
-  } catch (error) {
-    console.error("[electron] failed to initialize application", error);
-    dialog.showErrorBox("Application Failed to Start", String(error));
-    app.quit();
-  }
-});
+
+      app.on("activate", () => {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+          mainWindow = createWindow({ hideOnClose: true });
+          createTray(mainWindow, {
+            onOpenSystemMonitor: openSystemMonitor,
+            onReloadLocalRuntime: reloadLocalRuntime,
+          });
+          return;
+        }
+        mainWindow.show();
+        mainWindow.focus();
+      });
+    } catch (error) {
+      console.error("[electron] failed to initialize application", error);
+      dialog.showErrorBox("Application Failed to Start", String(error));
+      app.quit();
+    }
+  });
+}
 
 app.on("before-quit", (event) => {
   setIsQuitting(true);
