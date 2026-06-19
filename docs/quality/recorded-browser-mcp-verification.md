@@ -308,7 +308,7 @@ artifacts/verification-runs/2026-04-30T12-30-00/
 - `docs/quality/quality-harness.md` 继续定义质量体系边界。
 - `docs/quality/ai-diagnostic-logging.md` 可以作为后续扩展方向，把诊断日志和录屏证据包关联起来。
 - `docs/testing/terminal-browser-cdp-mcp-test-cases.md` 可以作为 Terminal Browser / MCP 场景下的 target 绑定和安全验收来源。
-- `.agents/skills/recorded-browser-mcp-verification/SKILL.md` 固化了当前已验证的录屏流程。该 skill 只在用户明确要求录屏验证、录屏验收、保存浏览器 MCP 验证录屏或视频证据时使用；仅要求普通浏览器 MCP 验证时不要使用。
+- `plugins/toolkit/skills/recorded-browser-mcp-verification/SKILL.md` 固化了当前已验证的录屏流程。该 skill 只在用户明确要求录屏验证、录屏验收、保存浏览器 MCP 验证录屏或视频证据时使用；仅要求普通浏览器 MCP 验证时不要使用。
 
 ## 最终回复格式
 

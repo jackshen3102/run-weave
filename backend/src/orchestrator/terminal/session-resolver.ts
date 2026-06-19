@@ -9,6 +9,8 @@ import type { TmuxOutputWatcher } from "../../terminal/tmux-output-watcher";
 import type { TmuxService } from "../../terminal/tmux-service";
 import type { TerminalEventService } from "../../terminal/terminal-event-service";
 import { ensureTerminalRuntime } from "../../terminal/runtime-launcher";
+import { resolveDefaultTerminalLaunchConfig } from "../../terminal/default-shell";
+import { getAgentForCommand } from "../../terminal/terminal-state-service";
 import { resolveTerminalCreateDefaults } from "../../routes/terminal-session-route-helpers";
 import { toSessionListItem } from "../../routes/terminal-route-payloads";
 import { OrchestratorError } from "../errors";
@@ -42,9 +44,12 @@ export class OrchestratorTerminalSessionResolver {
       }
       return session;
     }
+    const terminal = getAgentForCommand(params.terminal.command ?? null)
+      ? resolveAgentHostTerminal(params.terminal)
+      : params.terminal;
     return this.createSession({
       projectId: params.projectId,
-      ...params.terminal,
+      ...terminal,
     });
   }
 
@@ -98,4 +103,15 @@ export class OrchestratorTerminalSessionResolver {
     });
     return created;
   }
+}
+
+function resolveAgentHostTerminal(
+  terminal: Omit<CreateTerminalSessionRequest, "projectId">,
+): Omit<CreateTerminalSessionRequest, "projectId"> {
+  const shellLaunch = resolveDefaultTerminalLaunchConfig();
+  return {
+    ...terminal,
+    command: shellLaunch.command,
+    args: shellLaunch.args,
+  };
 }

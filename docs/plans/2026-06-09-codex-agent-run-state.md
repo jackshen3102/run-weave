@@ -393,7 +393,7 @@ codex exec --json ...
 
 工作：
 
-- 添加 Runweave Codex lifecycle hook script
+- 添加 Runweave Toolkit lifecycle hook script
 - hook 从环境变量读取：
   - `RUNWEAVE_TERMINAL_SESSION_ID`
   - `RUNWEAVE_PROJECT_ID`
@@ -547,7 +547,7 @@ currentAgentRun?.source === "codex" &&
 
 交付：
 
-- Runweave Codex lifecycle hook
+- Runweave Toolkit lifecycle hook
 - hook installer/runtime env 对齐
 
 验收：

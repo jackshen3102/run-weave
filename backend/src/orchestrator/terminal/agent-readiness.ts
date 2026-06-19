@@ -74,7 +74,7 @@ export class OrchestratorAgentReadinessService {
         terminalStateService: this.options.terminalStateService,
       },
       latest,
-      terminal.command?.trim() || agent,
+      buildAgentStartCommand(terminal, agent),
       "line",
       `orchestrator_agent_start_${Date.now()}`,
     );
@@ -191,6 +191,22 @@ function resolveOrchestratorAgent(
   command: string | undefined,
 ): TerminalAgentKind | null {
   return getAgentForCommand(command ?? null);
+}
+
+function buildAgentStartCommand(
+  terminal: OrchestratorRoleDefinition["terminal"],
+  agent: TerminalAgentKind,
+): string {
+  const command = terminal.command?.trim() || agent;
+  const args = terminal.args ?? [];
+  if (args.length === 0) {
+    return command;
+  }
+  return [command, ...args.map(shellQuote)].join(" ");
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 function isRequestedAgentReady(

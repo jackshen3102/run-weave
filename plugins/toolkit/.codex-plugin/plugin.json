@@ -1,0 +1,23 @@
+{
+  "name": "toolkit",
+  "version": "0.1.0+codex.20260619011543",
+  "description": "Runweave Toolkit plugin for project-specific skills and automation extensions.",
+  "author": {
+    "name": "Runweave"
+  },
+  "keywords": ["runweave", "codex", "skills"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Runweave Toolkit",
+    "shortDescription": "Runweave-specific toolkit skills and automations.",
+    "longDescription": "A repo-maintained toolkit plugin that packages Runweave-specific skills and related automation surfaces.",
+    "developerName": "Runweave",
+    "category": "Productivity",
+    "capabilities": ["Write", "Interactive"],
+    "defaultPrompt": [
+      "Use Runweave toolkit skills in this repo.",
+      "Review Runweave repo instructions before coding.",
+      "Run Runweave validation commands for this change."
+    ]
+  }
+}

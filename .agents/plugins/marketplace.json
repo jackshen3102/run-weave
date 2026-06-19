@@ -1,0 +1,20 @@
+{
+  "name": "runweave",
+  "interface": {
+    "displayName": "Runweave"
+  },
+  "plugins": [
+    {
+      "name": "toolkit",
+      "source": {
+        "source": "local",
+        "path": "./plugins/toolkit"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
