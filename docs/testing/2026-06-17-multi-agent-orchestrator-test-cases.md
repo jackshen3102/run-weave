@@ -2,10 +2,8 @@
 
 - 日期: 2026-06-17
 - 范围: Multi-Agent Orchestrator（常驻主 Agent 终端 + 薄结果路由器 + worker 终端 + Do-A-IDEM 人工门禁）
-- 设计依据:
-  - `docs/plans/2026-06-13-multi-agent-orchestrator.md`（整体形态、直发回灌、零轮询闭环）
-  - `docs/plans/2026-06-17-do-a-idem-workflow-template.md`（Do-A-IDEM 基础流程与人工门禁）
-- 已并入: `docs/testing/do-a-idem-round-confirmation-test-cases.md`（每轮确认子集，本文档作为其超集，不重复但兼容）
+- 设计依据: `docs/architecture/multi-agent-orchestrator.md`（整体形态、直发回灌、零轮询闭环、Do-A-IDEM 阶段与人工门禁）
+- 已并入: 每轮确认子集（本文档作为其超集，不再维护单独的 round confirmation 测试文档）
 
 > 执行规则：执行开始后不修改本文档。某个 case 若前提不成立或被判定无效，停止该 case 并记录原因，不要临时改写步骤来“凑通过”。
 
@@ -631,7 +629,7 @@ worker 完成回流入口（hook）：`POST /internal/terminal-completion`
 
 ## L7 · 每轮确认（requireHumanConfirmationEachRound）🔴
 
-> 兼容并扩展 `do-a-idem-round-confirmation-test-cases.md`。开启该选项后，非人工门禁的阶段跳变也要先停下等人确认。
+> 开启该选项后，非人工门禁的阶段跳变也要先停下等人确认。
 
 ### MAO-L7-001 开关默认关闭且可见
 
