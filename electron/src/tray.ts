@@ -31,7 +31,7 @@ export function createTray(
 ): Tray {
   const icon = resolveIcon();
   tray = new Tray(icon);
-  tray.setToolTip("Browser Viewer");
+  tray.setToolTip("Runweave");
 
   const contextMenu = Menu.buildFromTemplate([
     {

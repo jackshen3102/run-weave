@@ -34,7 +34,7 @@ export function HomeHeader({
     <header className="flex items-center justify-between gap-4">
       <div className="flex items-center gap-3">
         <p className="text-[0.65rem] font-semibold uppercase tracking-[0.38em] text-muted-foreground/70">
-          Browser Viewer
+          Runweave
         </p>
         {connectionName && onSelectConnection && onOpenConnectionManager && (
           <ConnectionSwitcher

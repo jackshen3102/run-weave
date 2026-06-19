@@ -27,7 +27,7 @@ const currentSharedProtocolVersion = JSON.parse(
     "utf8",
   ),
 ).version;
-const defaultInstalledAppPath = "/Applications/Browser Viewer.app";
+const defaultInstalledAppPath = "/Applications/Runweave.app";
 
 function parseArgs(argv) {
   const result = {
@@ -265,7 +265,7 @@ function validateManifest(packageRoot, manifest, targetShellVersion) {
   }
   if (!isSameVersion(manifest.minimumShellVersion, targetShellVersion)) {
     throw new Error(
-      `Runtime package targets shell version ${manifest.minimumShellVersion}, but the installed shell version is ${targetShellVersion}. Install the matching Browser Viewer app before installing this runtime package.`,
+      `Runtime package targets shell version ${manifest.minimumShellVersion}, but the installed shell version is ${targetShellVersion}. Install the matching Runweave app before installing this runtime package.`,
     );
   }
   if (manifest.sharedProtocolVersion !== currentSharedProtocolVersion) {

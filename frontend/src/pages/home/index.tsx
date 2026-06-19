@@ -83,7 +83,7 @@ export function HomePage({
           <header className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[0.65rem] font-semibold uppercase tracking-[0.34em] text-muted-foreground/70">
-                Browser Viewer
+                Runweave
               </p>
               {connectionName ? (
                 <p className="mt-2 truncate text-sm text-muted-foreground">
