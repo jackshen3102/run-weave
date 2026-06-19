@@ -26,8 +26,9 @@ export function buildStartupPrompt(
     "",
     "Do-A-IDEM 基础流程：",
     "- 固定阶段：discuss -> plan -> plan_review -> human_plan_approval -> code -> code_review -> human_verify -> finalize -> done。",
-    "- Plan 阶段由你负责形成计划；需要审查时派发 plan_reviewer。",
-    "- plan_reviewer、code_agent、code_reviewer 都是黑盒 worker，只消费它们回传的 summary。",
+    "- 你只负责编排：决定下一步派谁、给什么 goal，不亲自写代码或做审查。",
+    "- plan 阶段由你负责形成计划；用 write-plan 技能产出计划文件，再派发 plan_reviewer 审查。",
+    "- plan_reviewer、code_agent、code_reviewer 都是黑盒 worker，只消费它们回传的结构化 summary。",
     "- human_plan_approval 和 human_verify 是人工门禁；不要跳过人工验收进入 finalize。",
     "- human_verify 通过后才进入 finalize；finalize 里完成提交、提交结果记录和 done 收尾。",
     run.options?.requireHumanConfirmationEachRound
@@ -35,13 +36,11 @@ export function buildStartupPrompt(
       : null,
     "",
     "调度方式：",
-    "- 把 worker 当成异步任务。派发任务后不要长时间轮询 worker 终端，也不要写 while/for sleep 循环等待半小时或更久。",
-    "- 使用 using-rw skill 和现有 `rw terminal` 命令创建或复用 worker 终端，并用 `rw terminal send --agent <codex|traex>` 发送简洁的 worker prompt。",
+    "- 把 worker 当成异步任务。派发任务后不要长时间轮询 worker 终端，也不要写 while/for sleep 循环等待。",
+    "- 使用 using-rw 技能按上面的角色和终端映射派发 worker，发送简洁的 worker prompt。",
+    "- worker 是无共享记忆的独立进程；它需要的背景全部由你在 worker prompt 里写清楚（要做什么、相关文件或 plan 路径等），backend 不会替你转述任务上下文。",
     `- 每个 worker prompt 开头必须包含三行路由信息：\`Run: ${run.runId}\`、\`Role: <roleId>\`、\`Goal: <goalId>\`。Role 必须是 plan_reviewer、code_agent 或 code_reviewer；Goal 由你为本次派发生成并保持唯一。`,
-    "- 不要手动向 shell 发送 `codex` 或 `traex` 来启动 worker；`rw terminal send --agent` 会在终端没有 agent 时自动启动目标 agent。",
-    "- 如果目标终端已经运行了不同 agent，默认不要覆盖；只有明确需要替换时，才使用 `--agent-overwrite`。",
-    "- 发送成功只代表 backend 接收了输入；最多做一次短确认，确认消息已进入目标终端即可。",
-    "- worker 完成后会通过已有 completion hook / outbox 回传结果，Runweave backend 会把结果重新注入给你。",
+    "- worker 完成后会通过 completion hook / outbox 回传 summary，Runweave backend 会把结果重新注入给你。",
     "- 收到 worker result 注入后，再决定下一步：继续派发、报告 failed，或等待人工门禁。",
     "- 不要依赖专用 orchestrator CLI 命令；Runweave backend 会根据固定 Do-A-IDEM 事件推进 currentPhase。",
   ]
@@ -55,18 +54,24 @@ export function buildWorkerPrompt(params: {
   goalId: string;
   query: string;
 }): string {
+  const skill = params.role.skill?.trim();
   return [
     params.role.prompt.trim(),
+    ...(skill ? ["", `使用 ${skill} 技能完成本次任务。`] : []),
     "",
     `Run: ${params.run.runId}`,
     `Role: ${params.role.id}`,
-    `Task: ${params.run.task}`,
     `Goal: ${params.goalId}`,
     "",
     "完成要求：",
     "- 只处理这个 goal，不要接管主控调度。",
-    "- 完成后直接给出结果摘要、状态和必要产物路径；completion hook 会把你的最终回复回传给主控 Agent。",
-    "- 如果无法完成，说明失败原因和仍需人工确认的信息。",
+    "- 如果无法完成，状态用 failed 或 need_human，并说明原因和仍需人工确认的信息。",
+    "- completion hook 会把你的最终回复回传给主控 Agent，所以最终回复必须以下面的结构化 summary 收尾：",
+    "  状态: passed / changes_requested / failed / need_human",
+    "  结论: <一句话总体结论>",
+    "  关键发现: <审查类列 P0/P1 条目；执行类列改动清单>",
+    "  产物: <相关文件或 plan 路径，没有则写 none>",
+    "  建议下一步: <给主控 Agent 的下一步提示>",
     "",
     params.query.trim(),
   ].join("\n");
