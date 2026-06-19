@@ -1,9 +1,4 @@
-import type {
-  AppHomeOverviewSession,
-  TerminalInputMode,
-  TerminalState,
-} from "@runweave/shared";
-import { fileToBase64, shellQuote } from "@runweave/common/terminal";
+import type { AppHomeOverviewSession, TerminalState } from "@runweave/shared";
 import { type TerminalRendererHandle } from "@runweave/terminal-renderer";
 import { IonContent, IonPage } from "@ionic/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,16 +16,11 @@ import type { AppConnectionConfig } from "../features/connections/types";
 import { recordSupportLog, useSupportLogs } from "../features/support-logs";
 import { basename, shortPath } from "../lib/app-terminal-path-labels";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
+import { useAppTerminalActions } from "../hooks/use-app-terminal-actions";
 import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
 import type { AppDeviceConnectionSnapshot } from "../hooks/use-app-device-connection";
 import { classifyApiFailure } from "../services/api-failure";
-import {
-  createTerminalSessionClipboardImage,
-  getCurrentTerminalState,
-  interruptTerminalSession,
-  sendTerminalInput,
-} from "../services/terminal";
-import { transcribeVoice } from "../services/voice";
+import { getCurrentTerminalState } from "../services/terminal";
 
 interface AppTerminalPageProps {
   accessToken: string;
@@ -49,16 +39,6 @@ const SHELL_IDLE_STATE: TerminalState = {
   state: "shell_idle",
   agent: null,
 };
-
-function resolveComposerInputMode(
-  terminalState: TerminalState,
-  data: string,
-): TerminalInputMode {
-  if (terminalState.agent === "codex" && data.trimStart().startsWith("/")) {
-    return "codex_slash_command";
-  }
-  return "line";
-}
 
 export function AppTerminalPage({
   accessToken,
@@ -85,8 +65,6 @@ export function AppTerminalPage({
     state: "shell_idle",
     agent: null,
   });
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [isPickingImage, setIsPickingImage] = useState(false);
   const [terminalState, setTerminalState] = useState<TerminalState>(
     () => initialSession?.terminalState ?? SHELL_IDLE_STATE,
   );
@@ -259,7 +237,24 @@ export function AppTerminalPage({
     terminalSessionId,
   ]);
 
-  const isCommandActive = terminalState.state === "agent_running";
+  const {
+    handlePickImage,
+    handleSendCommand,
+    handleStop,
+    handleTranscribeVoice,
+    imageError,
+    isCommandActive,
+    isPickingImage,
+  } = useAppTerminalActions({
+    accessToken,
+    apiBase,
+    isDeviceOffline,
+    onAuthExpired,
+    refreshDeviceAfterFailure,
+    terminalSessionId,
+    terminalState,
+    terminalStateRef,
+  });
 
   const handleRequestDeleteTerminal = useCallback(() => {
     setDeleteError(null);
@@ -345,231 +340,6 @@ export function AppTerminalPage({
       rendererRef.current?.refresh();
     }
   }, [activeTab]);
-
-  const handleStop = useCallback(() => {
-    setImageError(null);
-    if (isDeviceOffline) {
-      setImageError("本地电脑暂时不可用");
-      return;
-    }
-    recordSupportLog("terminal.stop.clicked", {
-      terminalSessionId,
-      stateAtClick: terminalStateRef.current.state,
-      agentAtClick: terminalStateRef.current.agent,
-    });
-    void interruptTerminalSession(apiBase, accessToken, terminalSessionId)
-      .then(() => {
-        recordSupportLog("terminal.stop.completed", {
-          terminalSessionId,
-          stateAfterSuccess: terminalStateRef.current.state,
-          agentAfterSuccess: terminalStateRef.current.agent,
-        });
-      })
-    .catch((nextError: unknown) => {
-      const failure = classifyApiFailure(nextError);
-      if (failure.kind === "auth-expired") {
-        recordSupportLog("terminal.stop.unauthorized", {
-          terminalSessionId,
-        }, "warn");
-        onAuthExpired();
-        return;
-      }
-      refreshDeviceAfterFailure();
-      recordSupportLog("terminal.stop.failed", {
-        terminalSessionId,
-        stateAfterFailure: terminalStateRef.current.state,
-        error: nextError instanceof Error ? nextError.message : String(nextError),
-      }, "warn");
-      setImageError(
-        nextError instanceof Error ? nextError.message : "中断命令失败",
-      );
-    });
-  }, [
-    accessToken,
-    apiBase,
-    isDeviceOffline,
-    onAuthExpired,
-    refreshDeviceAfterFailure,
-    terminalSessionId,
-  ]);
-  const handleSendCommand = useCallback(
-    async (data: string): Promise<void> => {
-      if (isDeviceOffline) {
-        setImageError("本地电脑暂时不可用");
-        throw new Error("本地电脑暂时不可用");
-      }
-      const mode = resolveComposerInputMode(terminalStateRef.current, data);
-      recordSupportLog("terminal.input.send.started", {
-        terminalSessionId,
-        hasNewline: data.includes("\n"),
-        length: data.length,
-        mode,
-      });
-      try {
-        await sendTerminalInput(
-          apiBase,
-          accessToken,
-          terminalSessionId,
-          data,
-          mode,
-        );
-        recordSupportLog("terminal.input.send.completed", {
-          terminalSessionId,
-          length: data.length,
-          mode,
-        });
-      } catch (nextError: unknown) {
-        const failure = classifyApiFailure(nextError);
-        if (failure.kind === "auth-expired") {
-          recordSupportLog("terminal.input.send.unauthorized", {
-            terminalSessionId,
-            length: data.length,
-            mode,
-          }, "warn");
-          onAuthExpired();
-          return;
-        }
-        refreshDeviceAfterFailure();
-        recordSupportLog("terminal.input.send.failed", {
-          terminalSessionId,
-          error: nextError instanceof Error ? nextError.message : String(nextError),
-          length: data.length,
-          mode,
-        }, "warn");
-        setImageError(
-          nextError instanceof Error ? nextError.message : "命令发送失败",
-        );
-        throw nextError;
-      }
-    },
-    [
-      accessToken,
-      apiBase,
-      isDeviceOffline,
-      onAuthExpired,
-      refreshDeviceAfterFailure,
-      terminalSessionId,
-    ],
-  );
-  const handlePickImage = useCallback(
-    async (file: File): Promise<string> => {
-      setImageError(null);
-      if (isDeviceOffline) {
-        setImageError("本地电脑暂时不可用");
-        throw new Error("本地电脑暂时不可用");
-      }
-      setIsPickingImage(true);
-      recordSupportLog("terminal.clipboard_image.upload.started", {
-        terminalSessionId,
-        mimeType: file.type,
-        size: file.size,
-      });
-      try {
-        const dataBase64 = await fileToBase64(file);
-        const payload = await createTerminalSessionClipboardImage(
-          apiBase,
-          accessToken,
-          terminalSessionId,
-          {
-            mimeType: file.type,
-            dataBase64,
-          },
-        );
-        recordSupportLog("terminal.clipboard_image.upload.completed", {
-          terminalSessionId,
-          filePathLength: payload.filePath.length,
-        });
-        return shellQuote(payload.filePath);
-      } catch (nextError: unknown) {
-        const failure = classifyApiFailure(nextError);
-        if (failure.kind === "auth-expired") {
-          recordSupportLog("terminal.clipboard_image.upload.unauthorized", {
-            terminalSessionId,
-          }, "warn");
-          onAuthExpired();
-          throw nextError;
-        }
-        refreshDeviceAfterFailure();
-        recordSupportLog("terminal.clipboard_image.upload.failed", {
-          terminalSessionId,
-          error: nextError instanceof Error ? nextError.message : String(nextError),
-        }, "warn");
-        setImageError(
-          nextError instanceof Error ? nextError.message : "图片上传失败",
-        );
-        throw nextError;
-      } finally {
-        setIsPickingImage(false);
-      }
-    },
-    [
-      accessToken,
-      apiBase,
-      isDeviceOffline,
-      onAuthExpired,
-      refreshDeviceAfterFailure,
-      terminalSessionId,
-    ],
-  );
-
-  const handleTranscribeVoice = useCallback(
-    async (payload: Parameters<typeof transcribeVoice>[2]): Promise<string> => {
-      setImageError(null);
-      if (isDeviceOffline) {
-        setImageError("本地电脑暂时不可用");
-        throw new Error("本地电脑暂时不可用");
-      }
-      recordSupportLog("terminal.voice.transcribe.started", {
-        terminalSessionId,
-        durationMs: payload.durationMs,
-      });
-      try {
-        const response = await transcribeVoice(apiBase, accessToken, payload);
-        recordSupportLog("terminal.voice.transcribe.completed", {
-          terminalSessionId,
-          textLength: response.text.length,
-        });
-        return response.text;
-      } catch (nextError: unknown) {
-        const failure = classifyApiFailure(nextError);
-        if (failure.kind === "auth-expired") {
-          recordSupportLog(
-            "terminal.voice.transcribe.unauthorized",
-            {
-              terminalSessionId,
-            },
-            "warn",
-          );
-          onAuthExpired();
-          throw nextError;
-        }
-        refreshDeviceAfterFailure();
-        recordSupportLog(
-          "terminal.voice.transcribe.failed",
-          {
-            terminalSessionId,
-            error:
-              nextError instanceof Error
-                ? nextError.message
-                : String(nextError),
-          },
-          "warn",
-        );
-        setImageError(
-          nextError instanceof Error ? nextError.message : "语音转文字失败",
-        );
-        throw nextError;
-      }
-    },
-    [
-      accessToken,
-      apiBase,
-      isDeviceOffline,
-      onAuthExpired,
-      refreshDeviceAfterFailure,
-      terminalSessionId,
-    ],
-  );
 
   const handleShowChanges = useCallback(
     (change: SelectedTerminalChange) => {
