@@ -9,7 +9,7 @@ distinguished_name = dn
 C = US
 ST = Remote
 L = Remote
-O = Browser Viewer
+O = Runweave
 OU = Local Dev
 CN = 127.0.0.1
 

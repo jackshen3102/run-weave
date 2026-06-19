@@ -174,7 +174,7 @@ test("logs in through the real form", async ({ page }) => {
 test("control panel page loads", async ({ page, request }) => {
   await loginAndSeedToken(request, page);
   await page.goto("/");
-  await expect(page.getByText("Browser Viewer")).toBeVisible();
+  await expect(page.getByText("Runweave")).toBeVisible();
   await expect(
     page.locator("header").getByRole("button", { name: "Open Terminal" }),
   ).toBeVisible();
@@ -213,7 +213,7 @@ test("switches Electron connections on home without reusing the previous token",
   });
 
   await page.goto("/");
-  await expect(page.getByText("Browser Viewer")).toBeVisible();
+  await expect(page.getByText("Runweave")).toBeVisible();
   await expect(page.getByRole("button", { name: /Connection A/ })).toBeVisible();
 
   await page.getByRole("button", { name: /Connection A/ }).click();

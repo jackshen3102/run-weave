@@ -65,7 +65,7 @@ export function LoginPage({
       <section className="animate-fade-rise relative w-full max-w-md rounded-[2rem] border border-border/60 bg-card/82 p-7 shadow-[0_34px_120px_-72px_rgba(17,24,39,0.82)] backdrop-blur-xl sm:p-9">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[0.68rem] font-semibold uppercase tracking-[0.38em] text-muted-foreground/70">
-            Browser Viewer
+            Runweave
           </p>
           {isElectron && connectionName && onSwitchConnection && onOpenConnectionManager ? (
             <ConnectionSwitcher

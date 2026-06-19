@@ -57,11 +57,19 @@ function normalizeDirectoryPath(directoryPath: string): string {
 
 function entryToTreeItem(
   entry: TerminalPreviewTreeEntry,
+  existingItem?: TreeItem<FileTreeData>,
 ): TreeItem<FileTreeData> {
+  const children =
+    entry.kind === "directory"
+      ? existingItem?.isFolder
+        ? existingItem.children
+        : []
+      : undefined;
+
   return {
     index: entry.path,
     isFolder: entry.kind === "directory",
-    children: entry.kind === "directory" ? [] : undefined,
+    children,
     data: {
       basename: entry.basename,
       relativePath: entry.path,
@@ -79,7 +87,7 @@ function mergeDirectoryResponse(
   const childKeys: TreeItemIndex[] = [];
 
   for (const entry of response.entries) {
-    next[entry.path] = entryToTreeItem(entry);
+    next[entry.path] = entryToTreeItem(entry, next[entry.path]);
     childKeys.push(entry.path);
   }
 
