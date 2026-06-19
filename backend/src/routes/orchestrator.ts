@@ -49,6 +49,7 @@ const roleSchema = z
     binding: bindingSchema,
     terminal: terminalSchema,
     prompt: z.string(),
+    skill: z.string().trim().min(1).optional(),
   })
   .strict();
 
@@ -96,6 +97,7 @@ const saveRolesSchema = z
           name: z.string().trim().min(1),
           terminal: terminalSchema,
           prompt: z.string(),
+          skill: z.string().trim().min(1).optional(),
         })
         .strict(),
     ),

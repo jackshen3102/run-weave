@@ -70,20 +70,6 @@ function buildDisplayStatus(
   return { displayStatus: "idle", displayStatusLabel: "Idle", terminalState };
 }
 
-function sortSessionsForAppHome(
-  sessions: ReturnType<TerminalSessionManager["listSessions"]>,
-): ReturnType<TerminalSessionManager["listSessions"]> {
-  return sessions
-    .map((session, index) => ({ session, index }))
-    .sort((left, right) => {
-      const activityDelta =
-        right.session.lastActivityAt.getTime() -
-        left.session.lastActivityAt.getTime();
-      return activityDelta || left.index - right.index;
-    })
-    .map((entry) => entry.session);
-}
-
 export function buildAppHomeOverviewPayload(
   terminalSessionManager: TerminalSessionManager,
   terminalStateService: TerminalStateService,
@@ -92,14 +78,12 @@ export function buildAppHomeOverviewPayload(
     projects: terminalSessionManager
       .listProjects()
       .map((project) => toProjectPayload(project)),
-    sessions: sortSessionsForAppHome(terminalSessionManager.listSessions()).map(
-      (session) => ({
-        ...toSessionListItem(session),
-        title: buildSessionTitle(session),
-        subtitle: session.cwd,
-        ...buildDisplayStatus(session, terminalStateService),
-      }),
-    ),
+    sessions: terminalSessionManager.listSessions().map((session) => ({
+      ...toSessionListItem(session),
+      title: buildSessionTitle(session),
+      subtitle: session.cwd,
+      ...buildDisplayStatus(session, terminalStateService),
+    })),
   };
 }
 

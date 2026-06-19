@@ -136,6 +136,7 @@ export function TerminalOrchestratorPanel({
             bindingMode: "new",
             sessionId: "",
             prompt: role.prompt,
+            skill: role.skill ?? "",
           };
         }
         return next;
@@ -220,6 +221,9 @@ export function TerminalOrchestratorPanel({
               args: [],
             },
             prompt: draft?.prompt ?? role.prompt,
+            ...((draft?.skill ?? role.skill)?.trim()
+              ? { skill: (draft?.skill ?? role.skill)?.trim() }
+              : {}),
           };
         });
 
@@ -464,6 +468,7 @@ export function TerminalOrchestratorPanel({
             bindingMode: role.binding.mode,
             sessionId: role.binding.sessionId ?? "",
             prompt: role.prompt,
+            skill: role.skill ?? "",
           },
         ]),
       ),
@@ -560,6 +565,7 @@ export function TerminalOrchestratorPanel({
                     bindingMode: "new",
                     sessionId: "",
                     prompt: "",
+                    skill: "",
                   }),
                   ...patch,
                 },
