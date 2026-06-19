@@ -1,4 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  rmSync,
+} from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import {
@@ -137,6 +146,87 @@ function buildPackagedBackendPath(basePath: string | undefined): string {
     .filter(Boolean);
 
   return Array.from(new Set(entries)).join(path.delimiter);
+}
+
+function getNodePtySpawnHelperPath(nodePtyDir: string): string {
+  return path.join(
+    nodePtyDir,
+    "prebuilds",
+    `darwin-${process.arch}`,
+    "spawn-helper",
+  );
+}
+
+function isExecutableFile(filePath: string): boolean {
+  try {
+    accessSync(filePath, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function preparePackagedNodePtyDir(options: {
+  nodePtyDir: string;
+  onIncidentEvent?: (event: PackagedBackendRuntimeIncidentEvent) => void;
+  release: RuntimeRelease;
+  runtimeRoot: string | null;
+}): string {
+  if (process.platform !== "darwin") {
+    return options.nodePtyDir;
+  }
+
+  const sourceHelper = getNodePtySpawnHelperPath(options.nodePtyDir);
+  if (isExecutableFile(sourceHelper)) {
+    return options.nodePtyDir;
+  }
+
+  if (!options.runtimeRoot) {
+    return options.nodePtyDir;
+  }
+
+  const targetNodePtyDir = path.join(
+    options.runtimeRoot,
+    "node-pty",
+    `${options.release.source}-${options.release.releaseId}-${process.arch}`,
+  );
+  const targetHelper = getNodePtySpawnHelperPath(targetNodePtyDir);
+
+  try {
+    rmSync(targetNodePtyDir, { recursive: true, force: true });
+    mkdirSync(path.dirname(targetNodePtyDir), { recursive: true });
+    cpSync(options.nodePtyDir, targetNodePtyDir, { recursive: true });
+    chmodSync(targetHelper, 0o755);
+    options.onIncidentEvent?.({
+      event: "packagedBackend.nodePty.migrated",
+      level: "warn",
+      details: {
+        releaseId: options.release.releaseId,
+        source: options.nodePtyDir,
+        target: targetNodePtyDir,
+      },
+    });
+    return targetNodePtyDir;
+  } catch (error) {
+    options.onIncidentEvent?.({
+      event: "packagedBackend.nodePty.migrationFailed",
+      level: "error",
+      details: {
+        releaseId: options.release.releaseId,
+        source: options.nodePtyDir,
+        target: targetNodePtyDir,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    if (existsSync(sourceHelper)) {
+      try {
+        chmodSync(sourceHelper, 0o755);
+      } catch {
+        // Keep the original path so backend startup reports the real spawn error.
+      }
+    }
+    return options.nodePtyDir;
+  }
 }
 
 async function recoverOrphanedPackagedBackendLock(
@@ -384,6 +474,7 @@ export async function startPackagedBackend(
         baseEnv: mergedEnv,
         onIncidentEvent: options.onIncidentEvent,
         release,
+        runtimeRoot: options.runtimeRoot ?? null,
       });
       runtime.startupWarning =
         failures.length > 0
@@ -405,12 +496,19 @@ async function startPackagedBackendForRelease(options: {
   baseEnv: NodeJS.ProcessEnv;
   onIncidentEvent?: (event: PackagedBackendRuntimeIncidentEvent) => void;
   release: RuntimeRelease;
+  runtimeRoot: string | null;
 }): Promise<PackagedBackendRuntime> {
   const release = options.release;
+  const nodePtyDir = preparePackagedNodePtyDir({
+    nodePtyDir: release.nodePtyDir,
+    onIncidentEvent: options.onIncidentEvent,
+    release,
+    runtimeRoot: options.runtimeRoot,
+  });
   const backendPaths: PackagedBackendPaths = {
     backendEntry: release.backendEntry,
     frontendDistDir: release.frontendDistDir,
-    nodePtyDir: release.nodePtyDir,
+    nodePtyDir,
     releaseId: release.releaseId,
     source: release.source,
   };
