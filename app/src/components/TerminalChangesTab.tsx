@@ -20,6 +20,7 @@ import {
   getTerminalProjectPreviewFileDiff,
   getTerminalProjectPreviewGitChanges,
 } from "../services/terminal";
+import { TerminalZoomableImage } from "./TerminalZoomableImage";
 
 type ChangeFilter = "all" | "staged" | "working";
 type ChangeViewMode = "diff" | "preview";
@@ -442,7 +443,11 @@ export function TerminalChangesTab({
         ) : viewMode === "preview" ? (
           <div className="terminal-preview-file">
             {selectedFileKind === "image" && assetUrl ? (
-              <img alt={basenameOf(selectedChange.path)} src={assetUrl} />
+              <TerminalZoomableImage
+                alt={basenameOf(selectedChange.path)}
+                src={assetUrl}
+                title={selectedChange.path}
+              />
             ) : diff && selectedFileKind === "markdown" ? (
               <pre>{diff.newContent}</pre>
             ) : diff && selectedFileKind === "svg" ? (

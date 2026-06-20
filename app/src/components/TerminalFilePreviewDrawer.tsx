@@ -21,6 +21,7 @@ import {
   getTerminalProjectPreviewFile,
 } from "../services/terminal";
 import type { SelectedTerminalChange } from "./TerminalChangesTab";
+import { TerminalZoomableImage } from "./TerminalZoomableImage";
 import { useCopyFeedback } from "../hooks/use-copy-feedback";
 
 export interface FileChangeInfo {
@@ -376,7 +377,11 @@ export function TerminalFilePreviewDrawer({
         ) : error ? (
           <p className="terminal-preview-empty">{error}</p>
         ) : fileKind === "image" && assetUrl ? (
-          <img alt={basenameOf(filePath)} src={assetUrl} />
+          <TerminalZoomableImage
+            alt={basenameOf(filePath)}
+            src={assetUrl}
+            title={filePath}
+          />
         ) : file && (fileKind === "markdown" || fileKind === "svg") ? (
           fileKind === "markdown" ? (
             <MarkdownPreview content={file.content} path={file.path} />
