@@ -4,10 +4,12 @@ import {
   type TerminalRendererExtensionContext,
   type TerminalRendererHandle,
 } from "@runweave/terminal-renderer";
-import { IonButton, IonSpinner, IonText } from "@ionic/react";
-import { useEffect, useRef, type RefObject } from "react";
+import { IonButton, IonIcon, IonSpinner, IonText } from "@ionic/react";
+import { arrowDownOutline } from "ionicons/icons";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { installTerminalTouchBehavior } from "../lib/app-terminal-touch-behavior";
+import { sendTerminalInput as sendTerminalInputRequest } from "../services/terminal";
 import type { AppTerminalDetailTab } from "./TerminalDetailTabBar";
 import {
   type SelectedTerminalChange,
@@ -15,11 +17,14 @@ import {
 } from "./TerminalChangesTab";
 import { TerminalFilesTab } from "./TerminalFilesTab";
 
+const TMUX_SCROLL_BUTTON_REVEAL_THRESHOLD_ROWS = 4;
+
 interface AppTerminalPanelsProps {
   accessToken: string;
   activeProjectId: string | null;
   activeTab: AppTerminalDetailTab;
   apiBase: string;
+  terminalSessionId: string;
   connectionStatus: string;
   error: string | null;
   hasMetadata: boolean;
@@ -43,6 +48,7 @@ export function AppTerminalPanels({
   activeProjectId,
   activeTab,
   apiBase,
+  terminalSessionId,
   connectionStatus,
   error,
   hasMetadata,
@@ -64,6 +70,9 @@ export function AppTerminalPanels({
   // the latest runtimeKind and input sender without reinstalling.
   const runtimeKindRef = useRef(runtimeKind);
   const sendInputRef = useRef(sendInput);
+  const tmuxScrollbackDistanceRowsRef = useRef(0);
+  const [terminalAtBottom, setTerminalAtBottom] = useState(true);
+  const [tmuxScrollbackActive, setTmuxScrollbackActive] = useState(false);
   useEffect(() => {
     runtimeKindRef.current = runtimeKind;
   }, [runtimeKind]);
@@ -71,16 +80,65 @@ export function AppTerminalPanels({
     sendInputRef.current = sendInput;
   }, [sendInput]);
 
+  const resetTmuxScrollbackDistance = useMemoizedFn(() => {
+    tmuxScrollbackDistanceRowsRef.current = 0;
+    setTmuxScrollbackActive(false);
+  });
+
+  const handleTmuxScrollbackDistanceChange = useMemoizedFn((deltaRows: number) => {
+    const nextDistanceRows = Math.max(
+      0,
+      tmuxScrollbackDistanceRowsRef.current + deltaRows,
+    );
+    tmuxScrollbackDistanceRowsRef.current = nextDistanceRows;
+    setTmuxScrollbackActive(
+      nextDistanceRows >= TMUX_SCROLL_BUTTON_REVEAL_THRESHOLD_ROWS,
+    );
+  });
+
   const handleTerminalReady = useMemoizedFn(
     (context: TerminalRendererExtensionContext) => {
       const disposable = installTerminalTouchBehavior(context, {
         getRuntimeKind: () => runtimeKindRef.current,
+        onTmuxScrollbackDistanceChange: handleTmuxScrollbackDistanceChange,
         sendInput: (data) => sendInputRef.current(data),
       });
       onTerminalReady();
       return disposable;
     },
   );
+
+  const handleTerminalBottomStateChange = useMemoizedFn((isAtBottom: boolean) => {
+    setTerminalAtBottom(isAtBottom);
+    if (isAtBottom) {
+      resetTmuxScrollbackDistance();
+    }
+  });
+
+  const requestTmuxExitCopyMode = useMemoizedFn(() => {
+    const sendExitRequest = () => {
+      void sendTerminalInputRequest(
+        apiBase,
+        accessToken,
+        terminalSessionId,
+        "",
+        "tmux_exit_copy_mode",
+      );
+    };
+
+    sendExitRequest();
+    window.setTimeout(sendExitRequest, 250);
+    window.setTimeout(sendExitRequest, 800);
+  });
+
+  const handleScrollToBottom = useMemoizedFn(() => {
+    if (tmuxScrollbackActive) {
+      requestTmuxExitCopyMode();
+    }
+    resetTmuxScrollbackDistance();
+    setTerminalAtBottom(true);
+    rendererRef.current?.scrollToBottom();
+  });
 
   return (
     <section className="terminal-page-body bg-background">
@@ -122,12 +180,27 @@ export function AppTerminalPanels({
               focusOnInteraction={false}
               fontSize={12}
               onInput={sendInput}
+              onBottomStateChange={handleTerminalBottomStateChange}
               onResize={sendResize}
               onTerminalReady={handleTerminalReady}
               ref={rendererRef}
               renderer="dom"
               scrollbackLines={5000}
             />
+            {!terminalAtBottom || tmuxScrollbackActive ? (
+              <button
+                type="button"
+                aria-label="Scroll terminal to bottom"
+                title="Scroll to bottom"
+                className="terminal-scroll-bottom-button"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                }}
+                onClick={handleScrollToBottom}
+              >
+                <IonIcon aria-hidden="true" icon={arrowDownOutline} />
+              </button>
+            ) : null}
           </div>
           <div
             aria-hidden={activeTab !== "changes"}

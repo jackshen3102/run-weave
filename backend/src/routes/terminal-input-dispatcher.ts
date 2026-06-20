@@ -163,6 +163,7 @@ export async function sendInputToSession(
     currentTerminalState?.state === "agent_running" ? "Tab" : "C-m";
   const dispatchData =
     codexSlashCommand === null ? resolveTerminalInputData(data, mode) : null;
+  const exitTmuxCopyMode = mode === "tmux_exit_copy_mode";
   aiDiagnosticLog("terminal input dispatch requested", {
     terminalSessionId: session.id,
     runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
@@ -171,6 +172,7 @@ export async function sendInputToSession(
     input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
     codexSlashSubmitKey: codexSlashCommand ? composerSubmitKey : null,
     promptPasteSubmitKey: mode === "prompt_paste" ? composerSubmitKey : null,
+    exitTmuxCopyMode,
   });
   if (isTmuxBackedSession(session) && options.tmuxService) {
     const target = resolveTmuxTarget(session, options.tmuxService);
@@ -183,8 +185,11 @@ export async function sendInputToSession(
       input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
       codexSlashSubmitKey: codexSlashCommand ? composerSubmitKey : null,
       promptPasteSubmitKey: mode === "prompt_paste" ? composerSubmitKey : null,
+      exitTmuxCopyMode,
     });
-    if (codexSlashCommand) {
+    if (exitTmuxCopyMode) {
+      await options.tmuxService.cancelCopyMode(target);
+    } else if (codexSlashCommand) {
       await options.tmuxService.sendKeySequence(
         target,
         buildCodexSlashCommandSequence(codexSlashCommand, composerSubmitKey),
@@ -203,13 +208,15 @@ export async function sendInputToSession(
       await options.tmuxService.sendInput(target, dispatchData ?? "");
     }
   } else {
-    ensured.runtime.write(
-      codexSlashCommand
-        ? buildCodexSlashCommandPtyInput(codexSlashCommand, composerSubmitKey)
-        : mode === "prompt_paste"
-          ? buildPromptPastePtyInput(data, composerSubmitKey)
-        : (dispatchData ?? ""),
-    );
+    if (!exitTmuxCopyMode) {
+      ensured.runtime.write(
+        codexSlashCommand
+          ? buildCodexSlashCommandPtyInput(codexSlashCommand, composerSubmitKey)
+          : mode === "prompt_paste"
+            ? buildPromptPastePtyInput(data, composerSubmitKey)
+          : (dispatchData ?? ""),
+      );
+    }
   }
 
   return {

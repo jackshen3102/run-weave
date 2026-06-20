@@ -2,6 +2,7 @@ import { useEffect, type Dispatch, type SetStateAction } from "react";
 import {
   buildTmuxScrollInput,
   fileToBase64,
+  isTerminalAtBottom,
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
   shellQuote,
@@ -45,6 +46,8 @@ interface UseTerminalEmulatorArgs {
   lastSentResizeRef: MutableRef<{ cols: number; rows: number } | null>;
   onAuthExpired?: () => void;
   onBellRef: MutableRef<(() => void) | undefined>;
+  onBottomStateChange: (isAtBottom: boolean) => void;
+  onTmuxScrollbackActiveChange: (active: boolean) => void;
   openTerminalLinkRef: MutableRef<(uri: string) => void>;
   refreshTerminalViewportRef: MutableRef<(() => void) | null>;
   runtimeKindRef: MutableRef<"tmux" | "pty" | null>;
@@ -71,6 +74,8 @@ export function useTerminalEmulator({
   lastSentResizeRef,
   onAuthExpired,
   onBellRef,
+  onBottomStateChange,
+  onTmuxScrollbackActiveChange,
   openTerminalLinkRef,
   refreshTerminalViewportRef,
   runtimeKindRef,
@@ -115,6 +120,22 @@ export function useTerminalEmulator({
 
     terminalRef.current = terminal;
     searchAddonRef.current = searchAddon;
+    let lastBottomState: boolean | null = null;
+    const emitBottomState = () => {
+      const isAtBottom = isTerminalAtBottom(terminal);
+      if (lastBottomState === isAtBottom) {
+        return;
+      }
+      lastBottomState = isAtBottom;
+      onBottomStateChange(isAtBottom);
+    };
+    const markAwayFromBottom = () => {
+      if (lastBottomState === false) {
+        return;
+      }
+      lastBottomState = false;
+      onBottomStateChange(false);
+    };
 
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);
@@ -154,6 +175,10 @@ export function useTerminalEmulator({
           );
           if (input) {
             sendTerminalInput(input);
+            if (event.deltaY < 0) {
+              markAwayFromBottom();
+              onTmuxScrollbackActiveChange(true);
+            }
           }
         }
       }
@@ -277,6 +302,9 @@ export function useTerminalEmulator({
         onBellRef.current?.();
       }
     });
+    const scrollDisposable = terminal.onScroll(() => {
+      emitBottomState();
+    });
 
     syncSize();
 
@@ -284,6 +312,7 @@ export function useTerminalEmulator({
     mountFitFrameId = requestAnimationFrame(() => {
       mountFitFrameId = null;
       syncSize();
+      emitBottomState();
     });
     const searchResultsDisposable = searchAddon.onDidChangeResults(
       (results) => {
@@ -478,6 +507,7 @@ export function useTerminalEmulator({
       searchResultsDisposable.dispose();
       dataDisposable.dispose();
       bellDisposable.dispose();
+      scrollDisposable.dispose();
       selectionDisposable.dispose();
       linkProviderDisposable.dispose();
       resizeScheduler.dispose();
@@ -497,6 +527,8 @@ export function useTerminalEmulator({
     lastSentResizeRef,
     onAuthExpired,
     onBellRef,
+    onBottomStateChange,
+    onTmuxScrollbackActiveChange,
     openTerminalLinkRef,
     refreshTerminalViewportRef,
     runtimeKindRef,

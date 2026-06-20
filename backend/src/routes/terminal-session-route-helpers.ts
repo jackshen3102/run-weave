@@ -23,7 +23,15 @@ export const createTerminalSessionSchema = z
 export const sendTerminalInputSchema = z
   .object({
     data: z.string(),
-    mode: z.enum(["raw", "line", "codex_slash_command", "prompt_paste"]).optional(),
+    mode: z
+      .enum([
+        "raw",
+        "line",
+        "codex_slash_command",
+        "prompt_paste",
+        "tmux_exit_copy_mode",
+      ])
+      .optional(),
     operationId: z.string().trim().min(1).optional(),
   })
   .strict();

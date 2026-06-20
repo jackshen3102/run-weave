@@ -6,8 +6,10 @@ import {
   type FocusEvent,
 } from "react";
 import {
+  isTerminalAtBottom,
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
+  scrollTerminalToBottom,
 } from "@runweave/common/terminal";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { FitAddon } from "@xterm/addon-fit";
@@ -105,6 +107,7 @@ export const TerminalRenderer = forwardRef<
     scrollbackLines = 5000,
     theme = DEFAULT_THEME,
     onBell,
+    onBottomStateChange,
     onInput,
     onResize,
     onTerminalReady,
@@ -116,10 +119,12 @@ export const TerminalRenderer = forwardRef<
   const fitAddonRef = useRef<FitAddon | null>(null);
   const activeRef = useRef(active);
   const onBellRef = useRef(onBell);
+  const onBottomStateChangeRef = useRef(onBottomStateChange);
   const onInputRef = useRef(onInput);
   const onResizeRef = useRef(onResize);
   const resizeTimerRef = useRef<number | null>(null);
   const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  const lastBottomStateRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     activeRef.current = active;
@@ -127,6 +132,9 @@ export const TerminalRenderer = forwardRef<
   useEffect(() => {
     onBellRef.current = onBell;
   }, [onBell]);
+  useEffect(() => {
+    onBottomStateChangeRef.current = onBottomStateChange;
+  }, [onBottomStateChange]);
   useEffect(() => {
     onInputRef.current = onInput;
   }, [onInput]);
@@ -164,6 +172,19 @@ export const TerminalRenderer = forwardRef<
     terminal.refresh(0, Math.max(terminal.rows - 1, 0));
   };
 
+  const emitBottomState = () => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+    const isAtBottom = isTerminalAtBottom(terminal);
+    if (lastBottomStateRef.current === isAtBottom) {
+      return;
+    }
+    lastBottomStateRef.current = isAtBottom;
+    onBottomStateChangeRef.current?.(isAtBottom);
+  };
+
   useImperativeHandle(
     ref,
     () => ({
@@ -179,19 +200,34 @@ export const TerminalRenderer = forwardRef<
         }
         terminal.reset();
         if (!data) {
+          emitBottomState();
           refresh();
           return;
         }
         terminal.write(data, () => {
-          terminal.scrollToBottom();
+          scrollTerminalToBottom(terminal);
+          emitBottomState();
           refresh();
         });
       },
       write(data: string) {
-        terminalRef.current?.write(data);
+        terminalRef.current?.write(data, emitBottomState);
       },
       clear() {
         terminalRef.current?.clear();
+        emitBottomState();
+      },
+      scrollToBottom() {
+        const terminal = terminalRef.current;
+        if (!terminal) {
+          return;
+        }
+        scrollTerminalToBottom(terminal);
+        emitBottomState();
+      },
+      isAtBottom() {
+        const terminal = terminalRef.current;
+        return terminal ? isTerminalAtBottom(terminal) : true;
       },
       getTerminal() {
         return terminalRef.current;
@@ -245,6 +281,9 @@ export const TerminalRenderer = forwardRef<
     const bellDisposable = terminal.onBell(() => {
       onBellRef.current?.();
     });
+    const scrollDisposable = terminal.onScroll(() => {
+      emitBottomState();
+    });
 
     const scheduleFit = () => {
       if (resizeTimerRef.current !== null) {
@@ -259,6 +298,7 @@ export const TerminalRenderer = forwardRef<
     let mountFitFrameId: number | null = requestAnimationFrame(() => {
       mountFitFrameId = null;
       fit();
+      emitBottomState();
     });
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
@@ -304,11 +344,13 @@ export const TerminalRenderer = forwardRef<
       terminal.attachCustomKeyEventHandler(() => true);
       dataDisposable.dispose();
       bellDisposable.dispose();
+      scrollDisposable.dispose();
       rendererAddon?.dispose();
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
       lastSizeRef.current = null;
+      lastBottomStateRef.current = null;
     };
   }, [
     fontFamily,

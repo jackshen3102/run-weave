@@ -16,6 +16,8 @@ export interface TerminalRendererHandle {
   resetAndWrite(data: string): void;
   write(data: string): void;
   clear(): void;
+  scrollToBottom(): void;
+  isAtBottom(): boolean;
   getTerminal(): Terminal | null;
 }
 
@@ -39,6 +41,7 @@ export interface TerminalRendererProps {
   scrollbackLines?: number;
   theme?: TerminalRendererTheme;
   onBell?: () => void;
+  onBottomStateChange?: (isAtBottom: boolean) => void;
   onInput?: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
   onTerminalReady?: (

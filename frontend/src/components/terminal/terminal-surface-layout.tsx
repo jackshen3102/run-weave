@@ -1,5 +1,6 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { Terminal } from "@xterm/xterm";
+import { ArrowDownToLine } from "lucide-react";
 import { TerminalMobileKeybar } from "./terminal-mobile-keybar";
 import { TerminalSearchToolbar } from "./terminal-search-toolbar";
 import type {
@@ -21,7 +22,9 @@ interface TerminalSurfaceLayoutProps {
   searchOptions: TerminalSearchOptions;
   searchQuery: string;
   searchResults: TerminalSearchResults | null;
+  hasNewOutputBelow: boolean;
   showMobileKeybarToggle: boolean;
+  showScrollToBottomButton: boolean;
   showTerminalToolbar: boolean;
   terminalContainerRef: RefObject<HTMLDivElement | null>;
   terminalRef: RefObject<Terminal | null>;
@@ -31,6 +34,7 @@ interface TerminalSurfaceLayoutProps {
   onSearchQueryChange: Dispatch<SetStateAction<string>>;
   onSendInput: (data: string) => void;
   onMobileKeybarOpenChange: Dispatch<SetStateAction<boolean>>;
+  onScrollToBottom: () => void;
 }
 
 export function TerminalSurfaceLayout({
@@ -45,7 +49,9 @@ export function TerminalSurfaceLayout({
   searchOptions,
   searchQuery,
   searchResults,
+  hasNewOutputBelow,
   showMobileKeybarToggle,
+  showScrollToBottomButton,
   showTerminalToolbar,
   terminalContainerRef,
   terminalRef,
@@ -55,6 +61,7 @@ export function TerminalSurfaceLayout({
   onSearchQueryChange,
   onSendInput,
   onMobileKeybarOpenChange,
+  onScrollToBottom,
 }: TerminalSurfaceLayoutProps) {
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -129,6 +136,27 @@ export function TerminalSurfaceLayout({
           }}
           ref={terminalContainerRef}
         />
+        {showScrollToBottomButton ? (
+          <div className="pointer-events-none absolute right-4 bottom-4 z-30">
+            <button
+              type="button"
+              aria-label="Scroll terminal to bottom"
+              title="Scroll to bottom"
+              className={[
+                "pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-slate-600 bg-slate-950/95 text-slate-100 shadow-lg shadow-slate-950/40 backdrop-blur transition hover:border-slate-500 hover:bg-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 active:bg-slate-800",
+                hasNewOutputBelow ? "ring-1 ring-sky-400/70" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onPointerDown={(event) => {
+                event.preventDefault();
+              }}
+              onClick={onScrollToBottom}
+            >
+              <ArrowDownToLine aria-hidden="true" className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
         <TerminalMobileKeybar
           visible={active && clientMode === "mobile" && mobileKeybarOpen}
           onSendInput={onSendInput}
