@@ -118,11 +118,7 @@ export function useTerminalWorkspaceEvents({
       const markerSessionIds = events
         .filter((event) => event.kind === "completion")
         .map((event) => event.terminalSessionId)
-        .filter(
-          (terminalSessionId) =>
-            terminalSessionId !== activeSessionIdRef.current &&
-            knownSessionIds.has(terminalSessionId),
-        );
+        .filter((terminalSessionId) => knownSessionIds.has(terminalSessionId));
       if (markerSessionIds.length === 0) {
         return;
       }
