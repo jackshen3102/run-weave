@@ -1,1 +1,2 @@
+pnpm toolkit:sync:staged
 pnpm lint-staged

@@ -30,6 +30,8 @@
     "cli:build": "pnpm --filter ./packages/runweave-cli build",
     "cli:version:bump": "node ./scripts/bump-runweave-cli-version.mjs",
     "cli:publish:local": "pnpm cli:version:bump && pnpm cli:build && node ./scripts/publish-runweave-cli-local.mjs",
+    "toolkit:sync": "node ./scripts/sync-toolkit-plugin.mjs",
+    "toolkit:sync:staged": "node ./scripts/sync-toolkit-plugin.mjs --if-staged",
     "perf:terminal": "node ./scripts/terminal-perf-ralph.mjs",
     "e2e": "pnpm --filter ./frontend exec playwright test",
     "quality:gate": "node ./scripts/quality-gate.mjs",
