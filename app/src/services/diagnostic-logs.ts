@@ -1,7 +1,7 @@
 import type {
   DiagnosticLogRecord,
   DiagnosticLogResult,
-  DiagnosticLogStatus,
+  DiagnosticLogStatusResponse,
 } from "@runweave/shared";
 
 import { requestJson } from "./http";
@@ -26,11 +26,6 @@ export function toDiagnosticLogRecord(
     message: record.event,
     details: record.fields,
   };
-}
-
-export interface DiagnosticLogStatusResponse {
-  status: DiagnosticLogStatus;
-  startedAt?: string | null;
 }
 
 export async function getDiagnosticLogStatus(

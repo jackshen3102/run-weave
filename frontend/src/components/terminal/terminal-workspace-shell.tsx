@@ -13,7 +13,16 @@ import type {
   TerminalSessionListItem,
   TerminalState,
 } from "@runweave/shared";
-import { History, Home, Pencil, Plus, Trash2, Workflow, X } from "lucide-react";
+import {
+  History,
+  Home,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+  Workflow,
+  X,
+} from "lucide-react";
 import type { ConnectionConfig } from "../../features/connection/types";
 import {
   DEFAULT_TERMINAL_SIDECAR_WIDTH,
@@ -45,6 +54,12 @@ import {
   ContextMenuTrigger,
 } from "../ui/context-menu";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -54,6 +69,7 @@ import {
 } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { DiagnosticLogEntry } from "../diagnostic-log-entry";
 import { TerminalHistoryDrawer } from "./terminal-history-drawer";
 import { TerminalPreviewMenu } from "./terminal-preview-menu";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
@@ -608,6 +624,7 @@ export function TerminalWorkspaceShell({
 }: TerminalWorkspaceShellProps) {
   const [aliasTarget, setAliasTarget] =
     useState<TerminalSessionListItem | null>(null);
+  const [diagnosticLogOpen, setDiagnosticLogOpen] = useState(false);
 
   return (
     <section
@@ -808,6 +825,31 @@ export function TerminalWorkspaceShell({
           >
             <History className="h-3.5 w-3.5" />
           </Button>
+        ) : null}
+        {!isMobileMonitor ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label="More actions"
+                title="More actions"
+                className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-40">
+              <DropdownMenuItem
+                onSelect={() => {
+                  setDiagnosticLogOpen(true);
+                }}
+              >
+                日志上报
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : null}
       </div>
       <div className="flex h-[26px] items-stretch border-b border-slate-800">
@@ -1014,6 +1056,15 @@ export function TerminalWorkspaceShell({
           setAliasTarget(null);
         }}
       />
+      {!isMobileMonitor ? (
+        <DiagnosticLogEntry
+          apiBase={apiBase}
+          token={token}
+          variant="dialog"
+          open={diagnosticLogOpen}
+          onOpenChange={setDiagnosticLogOpen}
+        />
+      ) : null}
       <AlertDialog
         open={projectPendingDeletion !== null}
         onOpenChange={onProjectDeletionOpenChange}
