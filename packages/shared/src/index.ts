@@ -6,6 +6,7 @@ export * from "./system-monitor";
 export * from "./terminal-protocol";
 export * from "./terminal-preview-core";
 export * from "./terminal-limits";
+export * from "./terminal-browser-annotation";
 export * from "./terminal-browser-cdp-proxy";
 export * from "./terminal-browser-device";
 export * from "./terminal-browser-headers";

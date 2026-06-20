@@ -167,7 +167,11 @@ export interface CreateTerminalEventsWsTicketResponse {
   baselineEventId: string | null;
 }
 
-export type TerminalInputMode = "raw" | "line" | "codex_slash_command";
+export type TerminalInputMode =
+  | "raw"
+  | "line"
+  | "codex_slash_command"
+  | "prompt_paste";
 
 export interface SendTerminalInputRequest {
   data: string;

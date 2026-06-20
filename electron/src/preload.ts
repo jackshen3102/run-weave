@@ -3,6 +3,8 @@ import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
   SystemMonitorSnapshot,
+  TerminalBrowserAnnotationState,
+  TerminalBrowserAnnotationSubmission,
   TerminalBrowserCdpProxyInfo,
   TerminalBrowserDeviceState,
   TerminalBrowserHeaderState,
@@ -127,6 +129,32 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ) as Promise<TerminalBrowserHeaderState>,
   terminalBrowserCloseTab: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:close-tab", tabId),
+  terminalBrowserAnnotationStart: (tabId: string) =>
+    ipcRenderer.invoke(
+      "terminal-browser:annotation-start",
+      tabId,
+    ) as Promise<TerminalBrowserAnnotationState>,
+  terminalBrowserAnnotationStop: (tabId: string) =>
+    ipcRenderer.invoke(
+      "terminal-browser:annotation-stop",
+      tabId,
+    ) as Promise<TerminalBrowserAnnotationState>,
+  terminalBrowserAnnotationList: (tabId: string) =>
+    ipcRenderer.invoke(
+      "terminal-browser:annotation-list",
+      tabId,
+    ) as Promise<TerminalBrowserAnnotationState>,
+  terminalBrowserAnnotationDelete: (tabId: string, annotationId: string) =>
+    ipcRenderer.invoke(
+      "terminal-browser:annotation-delete",
+      tabId,
+      annotationId,
+    ) as Promise<TerminalBrowserAnnotationState>,
+  terminalBrowserAnnotationSubmit: (tabId: string) =>
+    ipcRenderer.invoke(
+      "terminal-browser:annotation-submit",
+      tabId,
+    ) as Promise<TerminalBrowserAnnotationSubmission>,
   onTerminalBrowserTabCreatedFromProxy: (
     listener: (data: { tabId: string; url: string; title: string }) => void,
   ) => {
@@ -219,6 +247,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("terminal-browser:tab-closed", wrapped);
     return () => {
       ipcRenderer.off("terminal-browser:tab-closed", wrapped);
+    };
+  },
+  onTerminalBrowserAnnotationUpdated: (
+    listener: (data: {
+      tabId: string;
+      state: TerminalBrowserAnnotationState;
+    }) => void,
+  ) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      data: { tabId: string; state: TerminalBrowserAnnotationState },
+    ) => {
+      listener(data);
+    };
+    ipcRenderer.on("terminal-browser:annotation-updated", wrapped);
+    return () => {
+      ipcRenderer.off("terminal-browser:annotation-updated", wrapped);
     };
   },
   beep: () => shell.beep(),

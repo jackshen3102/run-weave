@@ -24,6 +24,7 @@ interface TerminalPreviewPanelProps {
   apiBase: string;
   token: string;
   activeProject: TerminalProjectListItem | null;
+  activeSession: TerminalSessionListItem | null;
   sessions: TerminalSessionListItem[];
   widthPx?: number;
   onAuthExpired?: () => void;
@@ -46,6 +47,7 @@ export function TerminalPreviewPanel({
   apiBase,
   token,
   activeProject,
+  activeSession,
   sessions,
   widthPx,
   onAuthExpired,
@@ -485,6 +487,9 @@ export function TerminalPreviewPanel({
         changesViewMode={changesViewMode}
         selectedChangePath={selectedChangePath}
         activeProject={activeProject}
+        apiBase={apiBase}
+        token={token}
+        activeTerminalSessionId={activeSession?.terminalSessionId ?? null}
         body={previewBody}
         orchestratorBody={orchestratorBody}
         onStartResize={startResize}

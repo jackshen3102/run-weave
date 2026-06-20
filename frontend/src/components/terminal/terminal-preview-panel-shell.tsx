@@ -43,6 +43,9 @@ interface TerminalPreviewPanelShellProps {
   changesViewMode: "diff" | "preview";
   selectedChangePath?: string;
   activeProject: ActiveProjectLike | null;
+  apiBase: string;
+  token: string;
+  activeTerminalSessionId: string | null;
   body: ReactNode;
   orchestratorBody?: ReactNode;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -90,6 +93,9 @@ export function TerminalPreviewPanelShell({
   changesViewMode,
   selectedChangePath,
   activeProject,
+  apiBase,
+  token,
+  activeTerminalSessionId,
   body,
   orchestratorBody,
   onStartResize,
@@ -374,7 +380,12 @@ export function TerminalPreviewPanelShell({
               activeTool === "browser" ? "" : "pointer-events-none hidden",
             ].join(" ")}
           >
-            <TerminalBrowserTool active={activeTool === "browser"} />
+            <TerminalBrowserTool
+              active={activeTool === "browser"}
+              apiBase={apiBase}
+              token={token}
+              terminalSessionId={activeTerminalSessionId}
+            />
           </div>
           <div
             className={[
