@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useRef, useState } from "react";
 import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal } from "@xterm/xterm";
 import type { ClientMode } from "../../features/client-mode";
@@ -100,46 +101,43 @@ export function TerminalSurface({
     regex: false,
   });
 
-  const renderTerminalSnapshot = useCallback(
-    (data: string) => {
-      const nextChunk = filterBrowserHandledTerminalOutput(data);
-      const terminal = terminalRef.current;
-      if (!terminal) {
-        return;
-      }
+  const renderTerminalSnapshot = useMemoizedFn((data: string) => {
+    const nextChunk = filterBrowserHandledTerminalOutput(data);
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
 
-      logTerminalPerf("terminal.snapshot.received", {
+    logTerminalPerf("terminal.snapshot.received", {
+      terminalSessionId,
+      ...summarizeTerminalChunk(nextChunk),
+    });
+
+    hasRenderedSnapshotRef.current = true;
+    hasDeferredOutputRef.current = false;
+    deferredOutputRef.current = "";
+    requiresSnapshotRestoreRef.current = false;
+    terminal.reset();
+    if (!nextChunk) {
+      refreshTerminalViewportRef.current?.();
+      return;
+    }
+
+    const renderStartedAt = performance.now();
+    terminal.write(nextChunk, () => {
+      logTerminalPerf("terminal.snapshot.rendered", {
         terminalSessionId,
+        renderDurationMs: Number(
+          (performance.now() - renderStartedAt).toFixed(2),
+        ),
         ...summarizeTerminalChunk(nextChunk),
       });
+      terminal.scrollToBottom();
+      refreshTerminalViewportRef.current?.();
+    });
+  });
 
-      hasRenderedSnapshotRef.current = true;
-      hasDeferredOutputRef.current = false;
-      deferredOutputRef.current = "";
-      requiresSnapshotRestoreRef.current = false;
-      terminal.reset();
-      if (!nextChunk) {
-        refreshTerminalViewportRef.current?.();
-        return;
-      }
-
-      const renderStartedAt = performance.now();
-      terminal.write(nextChunk, () => {
-        logTerminalPerf("terminal.snapshot.rendered", {
-          terminalSessionId,
-          renderDurationMs: Number(
-            (performance.now() - renderStartedAt).toFixed(2),
-          ),
-          ...summarizeTerminalChunk(nextChunk),
-        });
-        terminal.scrollToBottom();
-        refreshTerminalViewportRef.current?.();
-      });
-    },
-    [terminalSessionId],
-  );
-
-  const markDeferredOutput = useCallback((data: string) => {
+  const markDeferredOutput = useMemoizedFn((data: string) => {
     hasDeferredOutputRef.current = true;
 
     if (requiresSnapshotRestoreRef.current) {
@@ -156,9 +154,9 @@ export function TerminalSurface({
     }
 
     deferredOutputRef.current += data;
-  }, []);
+  });
 
-  const replayDeferredOutput = useCallback(() => {
+  const replayDeferredOutput = useMemoizedFn(() => {
     const terminal = terminalRef.current;
     const deferredOutput = deferredOutputRef.current;
     if (!terminal || !deferredOutput) {
@@ -181,137 +179,131 @@ export function TerminalSurface({
     });
 
     return true;
-  }, [terminalSessionId]);
+  });
 
   // onOutput is stable so it never triggers a reconnect inside
   // useTerminalConnection.
-  const onSnapshot = useCallback(
-    (data: string) => {
-      websocketContentVersionRef.current += 1;
-      if (!activeRef.current) {
-        if (terminalRef.current) {
-          renderTerminalSnapshot(data);
-          return;
-        }
-        if (data.length > 0) {
-          hasDeferredOutputRef.current = true;
-          deferredOutputRef.current = "";
-          requiresSnapshotRestoreRef.current = true;
-        }
+  const onSnapshot = useMemoizedFn((data: string) => {
+    websocketContentVersionRef.current += 1;
+    if (!activeRef.current) {
+      if (terminalRef.current) {
+        renderTerminalSnapshot(data);
         return;
       }
-
-      renderTerminalSnapshot(data);
-    },
-    [renderTerminalSnapshot],
-  );
-
-  const onOutput = useCallback(
-    (data: string) => {
-      const nextChunk = filterBrowserHandledTerminalOutput(data);
-      if (!nextChunk) {
-        return;
+      if (data.length > 0) {
+        hasDeferredOutputRef.current = true;
+        deferredOutputRef.current = "";
+        requiresSnapshotRestoreRef.current = true;
       }
-      websocketContentVersionRef.current += 1;
+      return;
+    }
 
-      const now = Date.now();
-      if (!activeRef.current && nextChunk.includes(BELL_CHARACTER)) {
-        onBellRef.current?.();
-      }
+    renderTerminalSnapshot(data);
+  });
 
-      outputSequenceRef.current += 1;
-      const outputSequence = outputSequenceRef.current;
-      logTerminalPerf("terminal.output.received", {
-        terminalSessionId,
-        seq: outputSequence,
-        sinceLastInputMs:
-          lastInputSentAtRef.current === null
-            ? null
-            : now - lastInputSentAtRef.current,
-        ...summarizeTerminalChunk(nextChunk),
-      });
-      recordTerminalPerfProbeEvent("terminal.output.received", nextChunk, {
-        terminalSessionId,
-        seq: outputSequence,
-        sinceLastInputMs:
-          lastInputSentAtRef.current === null
-            ? null
-            : now - lastInputSentAtRef.current,
-        ...summarizeTerminalChunk(nextChunk),
-      });
+  const onOutput = useMemoizedFn((data: string) => {
+    const nextChunk = filterBrowserHandledTerminalOutput(data);
+    if (!nextChunk) {
+      return;
+    }
+    websocketContentVersionRef.current += 1;
 
-      const terminal = terminalRef.current;
-      if (!activeRef.current) {
-        if (
-          terminal &&
-          hasRenderedSnapshotRef.current &&
-          !hasDeferredOutputRef.current &&
-          !requiresSnapshotRestoreRef.current
-        ) {
-          const renderStartedAt = performance.now();
-          terminal.write(nextChunk, () => {
-            logTerminalPerf("terminal.background-output.rendered", {
-              terminalSessionId,
-              seq: outputSequence,
-              renderDurationMs: Number(
-                (performance.now() - renderStartedAt).toFixed(2),
-              ),
-              ...summarizeTerminalChunk(nextChunk),
-            });
+    const now = Date.now();
+    if (!activeRef.current && nextChunk.includes(BELL_CHARACTER)) {
+      onBellRef.current?.();
+    }
+
+    outputSequenceRef.current += 1;
+    const outputSequence = outputSequenceRef.current;
+    logTerminalPerf("terminal.output.received", {
+      terminalSessionId,
+      seq: outputSequence,
+      sinceLastInputMs:
+        lastInputSentAtRef.current === null
+          ? null
+          : now - lastInputSentAtRef.current,
+      ...summarizeTerminalChunk(nextChunk),
+    });
+    recordTerminalPerfProbeEvent("terminal.output.received", nextChunk, {
+      terminalSessionId,
+      seq: outputSequence,
+      sinceLastInputMs:
+        lastInputSentAtRef.current === null
+          ? null
+          : now - lastInputSentAtRef.current,
+      ...summarizeTerminalChunk(nextChunk),
+    });
+
+    const terminal = terminalRef.current;
+    if (!activeRef.current) {
+      if (
+        terminal &&
+        hasRenderedSnapshotRef.current &&
+        !hasDeferredOutputRef.current &&
+        !requiresSnapshotRestoreRef.current
+      ) {
+        const renderStartedAt = performance.now();
+        terminal.write(nextChunk, () => {
+          logTerminalPerf("terminal.background-output.rendered", {
+            terminalSessionId,
+            seq: outputSequence,
+            renderDurationMs: Number(
+              (performance.now() - renderStartedAt).toFixed(2),
+            ),
+            ...summarizeTerminalChunk(nextChunk),
           });
-          return;
-        }
-        markDeferredOutput(nextChunk);
+        });
         return;
       }
+      markDeferredOutput(nextChunk);
+      return;
+    }
 
-      if (!terminal) {
-        return;
-      }
+    if (!terminal) {
+      return;
+    }
 
-      const renderStartedAt = performance.now();
-      terminal.write(nextChunk, () => {
-        const renderedAt = performance.now();
-        const sinceLastInputMs =
-          lastInputSentAtRef.current === null
-            ? null
-            : Date.now() - lastInputSentAtRef.current;
-        logTerminalPerf("terminal.output.rendered", {
-          terminalSessionId,
-          seq: outputSequence,
-          sinceLastInputMs,
-          renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
-          ...summarizeTerminalChunk(nextChunk),
-        });
-        recordTerminalPerfProbeEvent("terminal.output.rendered", nextChunk, {
-          terminalSessionId,
-          seq: outputSequence,
-          sinceLastInputMs,
-          renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
-          ...summarizeTerminalChunk(nextChunk),
-        });
+    const renderStartedAt = performance.now();
+    terminal.write(nextChunk, () => {
+      const renderedAt = performance.now();
+      const sinceLastInputMs =
+        lastInputSentAtRef.current === null
+          ? null
+          : Date.now() - lastInputSentAtRef.current;
+      logTerminalPerf("terminal.output.rendered", {
+        terminalSessionId,
+        seq: outputSequence,
+        sinceLastInputMs,
+        renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
+        ...summarizeTerminalChunk(nextChunk),
+      });
+      recordTerminalPerfProbeEvent("terminal.output.rendered", nextChunk, {
+        terminalSessionId,
+        seq: outputSequence,
+        sinceLastInputMs,
+        renderDurationMs: Number((renderedAt - renderStartedAt).toFixed(2)),
+        ...summarizeTerminalChunk(nextChunk),
+      });
+      requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            const paintDelayMs = Number(
-              (performance.now() - renderedAt).toFixed(2),
-            );
-            const paintedSinceLastInputMs =
-              lastInputSentAtRef.current === null
-                ? null
-                : Date.now() - lastInputSentAtRef.current;
-            recordTerminalPerfProbeEvent("terminal.output.painted", nextChunk, {
-              terminalSessionId,
-              seq: outputSequence,
-              sinceLastInputMs: paintedSinceLastInputMs,
-              paintDelayMs,
-              ...summarizeTerminalChunk(nextChunk),
-            });
+          const paintDelayMs = Number(
+            (performance.now() - renderedAt).toFixed(2),
+          );
+          const paintedSinceLastInputMs =
+            lastInputSentAtRef.current === null
+              ? null
+              : Date.now() - lastInputSentAtRef.current;
+          recordTerminalPerfProbeEvent("terminal.output.painted", nextChunk, {
+            terminalSessionId,
+            seq: outputSequence,
+            sinceLastInputMs: paintedSinceLastInputMs,
+            paintDelayMs,
+            ...summarizeTerminalChunk(nextChunk),
           });
         });
       });
-    },
-    [markDeferredOutput, terminalSessionId],
-  );
+    });
+  });
 
   const { error, sendInput, sendResize, runtimeKind } = useTerminalConnection({
     apiBase,
@@ -323,43 +315,40 @@ export function TerminalSurface({
     onMetadata,
   });
 
-  const sendTerminalInput = useCallback(
-    (data: string): void => {
-      const now = performance.now();
-      const lastInput = lastInputDataRef.current;
-      const imeCommit = imeCommitRef.current;
-      if (
-        lastInput &&
-        imeCommit &&
-        hasNonAsciiInput(data) &&
-        data === lastInput.data &&
-        data === imeCommit.data &&
-        now - lastInput.at <= IME_COMMIT_DUPLICATE_WINDOW_MS &&
-        now - imeCommit.at <= IME_COMMIT_WINDOW_MS
-      ) {
-        return;
-      }
+  const sendTerminalInput = useMemoizedFn((data: string): void => {
+    const now = performance.now();
+    const lastInput = lastInputDataRef.current;
+    const imeCommit = imeCommitRef.current;
+    if (
+      lastInput &&
+      imeCommit &&
+      hasNonAsciiInput(data) &&
+      data === lastInput.data &&
+      data === imeCommit.data &&
+      now - lastInput.at <= IME_COMMIT_DUPLICATE_WINDOW_MS &&
+      now - imeCommit.at <= IME_COMMIT_WINDOW_MS
+    ) {
+      return;
+    }
 
-      lastInputDataRef.current = { data, at: now };
-      inputSequenceRef.current += 1;
-      lastInputSentAtRef.current = Date.now();
-      logTerminalPerf("terminal.input.captured", {
-        terminalSessionId,
-        seq: inputSequenceRef.current,
-        ...summarizeTerminalChunk(data),
-      });
-      sendInput(data);
-    },
-    [sendInput, terminalSessionId],
-  );
+    lastInputDataRef.current = { data, at: now };
+    inputSequenceRef.current += 1;
+    lastInputSentAtRef.current = Date.now();
+    logTerminalPerf("terminal.input.captured", {
+      terminalSessionId,
+      seq: inputSequenceRef.current,
+      ...summarizeTerminalChunk(data),
+    });
+    sendInput(data);
+  });
 
-  const clearSearch = useCallback(() => {
+  const clearSearch = useMemoizedFn(() => {
     setSearchResults(null);
     searchAddonRef.current?.clearDecorations();
     searchAddonRef.current?.clearActiveDecoration();
-  }, []);
+  });
 
-  const runSearch = useCallback(
+  const runSearch = useMemoizedFn(
     (direction: SearchDirection, query = searchQuery) => {
       if (!query) {
         clearSearch();
@@ -378,7 +367,6 @@ export function TerminalSurface({
 
       searchAddon.findNext(query, searchOptions);
     },
-    [clearSearch, searchOptions, searchQuery],
   );
 
   useEffect(() => {

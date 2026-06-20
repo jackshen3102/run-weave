@@ -1,4 +1,5 @@
-import { useCallback, useRef } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useRef } from "react";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import type {
   TerminalEventEnvelope,
@@ -23,7 +24,9 @@ interface UseTerminalWorkspaceEventsArgs {
   selectActiveSession: (terminalSessionId: string | null) => void;
 }
 
-function isTerminalListInvalidationEvent(event: TerminalEventEnvelope): boolean {
+function isTerminalListInvalidationEvent(
+  event: TerminalEventEnvelope,
+): boolean {
   return (
     event.kind === "project_created" ||
     event.kind === "project_deleted" ||
@@ -61,11 +64,11 @@ export function useTerminalWorkspaceEvents({
     typeof createTerminalBellPlayer
   > | null>(null);
 
-  const resetTerminalEventCursor = useCallback(() => {
+  const resetTerminalEventCursor = useMemoizedFn(() => {
     terminalEventCursorRef.current = null;
-  }, []);
+  });
 
-  const applyTerminalEvents = useCallback(
+  const applyTerminalEvents = useMemoizedFn(
     (events: TerminalEventEnvelope[], delivery: "catchup" | "live"): void => {
       const latestEvent = events[events.length - 1];
       if (latestEvent) {
@@ -141,24 +144,14 @@ export function useTerminalWorkspaceEvents({
         void completionBellPlayerRef.current.play();
       }
     },
-    [
-      activeSessionIdRef,
-      loadSessions,
-      sessionsRef,
-      selectActiveSession,
-      setCompletionMarkers,
-      setActiveProjectId,
-      setTerminalStateBySessionId,
-    ],
   );
 
-  const getCompletionEventCursor = useCallback(
+  const getCompletionEventCursor = useMemoizedFn(
     () => terminalEventCursorRef.current,
-    [],
   );
-  const setCompletionEventCursor = useCallback((cursor: string) => {
+  const setCompletionEventCursor = useMemoizedFn((cursor: string) => {
     terminalEventCursorRef.current = cursor;
-  }, []);
+  });
 
   useTerminalEventsConnection({
     apiBase,

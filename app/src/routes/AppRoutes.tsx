@@ -1,11 +1,7 @@
+import { useMemoizedFn } from "ahooks";
 import { IonRouterOutlet } from "@ionic/react";
-import {
-  Redirect,
-  Route,
-  useHistory,
-  useParams,
-} from "react-router-dom";
-import { useCallback, useMemo, type ReactElement } from "react";
+import { Redirect, Route, useHistory, useParams } from "react-router-dom";
+import { useMemo, type ReactElement } from "react";
 
 import { HomePage } from "../pages/HomePage";
 import { LoginPage } from "../pages/LoginPage";
@@ -43,13 +39,10 @@ function RequireAuth({
 
 function LoginRoute({ session }: { session: AppSessionController }) {
   const history = useHistory();
-  const handleLogin = useCallback(
-    async (params: AppLoginParams) => {
-      await session.login(params);
-      history.replace(HOME_ROUTE);
-    },
-    [history, session],
-  );
+  const handleLogin = useMemoizedFn(async (params: AppLoginParams) => {
+    await session.login(params);
+    history.replace(HOME_ROUTE);
+  });
 
   return (
     <LoginPage
@@ -62,30 +55,24 @@ function LoginRoute({ session }: { session: AppSessionController }) {
 
 function HomeRoute({ session }: { session: AppSessionController }) {
   const history = useHistory();
-  const openTerminal = useCallback(
-    (terminalSessionId: string) => {
-      history.push(`/terminal/${encodeURIComponent(terminalSessionId)}`, {
-        fromHome: true,
-      });
-    },
-    [history],
-  );
-  const createTerminal = useCallback(
-    async (projectId: string) => {
-      if (session.deviceConnection.status === "offline") {
-        throw new Error("本地电脑暂时不可用");
-      }
-      const created = await createTerminalSession(
-        session.apiBase,
-        session.accessToken,
-        { projectId },
-      );
-      await session.refreshOverview();
-      openTerminal(created.terminalSessionId);
-    },
-    [openTerminal, session],
-  );
-  const createProject = useCallback(
+  const openTerminal = useMemoizedFn((terminalSessionId: string) => {
+    history.push(`/terminal/${encodeURIComponent(terminalSessionId)}`, {
+      fromHome: true,
+    });
+  });
+  const createTerminal = useMemoizedFn(async (projectId: string) => {
+    if (session.deviceConnection.status === "offline") {
+      throw new Error("本地电脑暂时不可用");
+    }
+    const created = await createTerminalSession(
+      session.apiBase,
+      session.accessToken,
+      { projectId },
+    );
+    await session.refreshOverview();
+    openTerminal(created.terminalSessionId);
+  });
+  const createProject = useMemoizedFn(
     async (payload: { name: string; path?: string | null }) => {
       const project = await createTerminalProject(
         session.apiBase,
@@ -95,7 +82,6 @@ function HomeRoute({ session }: { session: AppSessionController }) {
       await session.refreshOverview();
       return project;
     },
-    [session],
   );
 
   return (
@@ -124,11 +110,11 @@ function TerminalRoute({ session }: { session: AppSessionController }) {
       ),
     [session.overview?.sessions, terminalSessionId],
   );
-  const goBack = useCallback(() => {
+  const goBack = useMemoizedFn(() => {
     void session.refreshOverview();
     history.replace(HOME_ROUTE);
-  }, [history, session.refreshOverview]);
-  const deleteTerminal = useCallback(async () => {
+  });
+  const deleteTerminal = useMemoizedFn(async () => {
     if (!terminalSessionId) {
       return;
     }
@@ -142,13 +128,7 @@ function TerminalRoute({ session }: { session: AppSessionController }) {
     );
     await session.refreshOverview();
     history.replace(HOME_ROUTE);
-  }, [
-    history,
-    session.accessToken,
-    session.apiBase,
-    session.refreshOverview,
-    terminalSessionId,
-  ]);
+  });
 
   if (!terminalSessionId) {
     return <Redirect to={HOME_ROUTE} />;

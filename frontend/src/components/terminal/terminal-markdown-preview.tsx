@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import anchor from "markdown-it-anchor";
@@ -60,7 +61,8 @@ function getMarkdownRenderer(): MarkdownIt {
       permalink: anchor.permalink.linkInsideHeader({
         symbol: "#",
         placement: "after",
-        class: "ml-2 text-slate-500 no-underline opacity-0 group-hover:opacity-100",
+        class:
+          "ml-2 text-slate-500 no-underline opacity-0 group-hover:opacity-100",
       }),
     })
     .use(taskLists, { enabled: false })
@@ -131,7 +133,10 @@ function initializeMermaid(): void {
   mermaidInitialized = true;
 }
 
-function renderMarkdown(content: string, currentPath: string): MarkdownRenderResult {
+function renderMarkdown(
+  content: string,
+  currentPath: string,
+): MarkdownRenderResult {
   const env: { currentPath: string; mermaidBlocks: string[] } = {
     currentPath,
     mermaidBlocks: [],
@@ -224,12 +229,20 @@ export function TerminalMarkdownPreview({
 }: TerminalMarkdownPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
-  const [zoomedImage, setZoomedImage] = useState<ZoomedMarkdownImage | null>(null);
-  const rendered = useMemo(() => renderMarkdown(content, path), [content, path]);
-  const renderedHtml = useMemo(() => ({ __html: rendered.html }), [rendered.html]);
-  const closeZoomedImage = useCallback(() => {
+  const [zoomedImage, setZoomedImage] = useState<ZoomedMarkdownImage | null>(
+    null,
+  );
+  const rendered = useMemo(
+    () => renderMarkdown(content, path),
+    [content, path],
+  );
+  const renderedHtml = useMemo(
+    () => ({ __html: rendered.html }),
+    [rendered.html],
+  );
+  const closeZoomedImage = useMemoizedFn(() => {
     setZoomedImage(null);
-  }, []);
+  });
 
   useEffect(() => {
     setZoomedImage(null);
@@ -243,7 +256,10 @@ export function TerminalMarkdownPreview({
     if (!container) {
       return;
     }
-    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    const maxScrollTop = Math.max(
+      0,
+      container.scrollHeight - container.clientHeight,
+    );
     container.scrollTop = maxScrollTop * Math.min(Math.max(scrollRatio, 0), 1);
   }, [scrollRatio]);
 
@@ -297,7 +313,9 @@ export function TerminalMarkdownPreview({
         return;
       }
       const placeholders = Array.from(
-        container.querySelectorAll<HTMLElement>(".terminal-markdown-local-image"),
+        container.querySelectorAll<HTMLElement>(
+          ".terminal-markdown-local-image",
+        ),
       );
       await Promise.all(
         placeholders.map(async (placeholder) => {
@@ -333,7 +351,9 @@ export function TerminalMarkdownPreview({
               Object.assign(document.createElement("span"), {
                 className: "text-rose-300",
                 textContent:
-                  error instanceof Error ? error.message : "Image cannot be previewed",
+                  error instanceof Error
+                    ? error.message
+                    : "Image cannot be previewed",
               }),
             );
           }
@@ -358,8 +378,13 @@ export function TerminalMarkdownPreview({
           return;
         }
         const element = event.currentTarget;
-        const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-        onScrollRatioChange(maxScrollTop > 0 ? element.scrollTop / maxScrollTop : 0);
+        const maxScrollTop = Math.max(
+          0,
+          element.scrollHeight - element.clientHeight,
+        );
+        onScrollRatioChange(
+          maxScrollTop > 0 ? element.scrollTop / maxScrollTop : 0,
+        );
       }}
       onClick={(event) => {
         if (!(event.target instanceof Element)) {
@@ -376,7 +401,9 @@ export function TerminalMarkdownPreview({
             onOpenFile(resolved.path, resolved.hash);
           } else if (resolved.kind === "same-document-hash") {
             event.preventDefault();
-            document.getElementById(resolved.hash)?.scrollIntoView({ block: "start" });
+            document
+              .getElementById(resolved.hash)
+              ?.scrollIntoView({ block: "start" });
           } else if (resolved.kind === "external") {
             event.preventDefault();
             window.open(resolved.href, "_blank", "noreferrer");

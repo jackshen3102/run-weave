@@ -1,3 +1,4 @@
+import { useMemoizedFn } from "ahooks";
 import {
   IonAlert,
   IonButton,
@@ -12,7 +13,7 @@ import {
   IonTitle,
   IonToolbar,
 } from "@ionic/react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { DiagnosticLogStatus } from "@runweave/shared";
 
 import {
@@ -67,14 +68,14 @@ export function SupportLogSheet() {
   );
   const [serverDir, setServerDir] = useState<string | null>(null);
   const [serverLogFile, setServerLogFile] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<"start" | "stop" | "clear" | null>(
-    null,
-  );
+  const [busyAction, setBusyAction] = useState<
+    "start" | "stop" | "clear" | null
+  >(null);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const { copied, copyText } = useCopyFeedback();
 
-  const refreshStatus = useCallback(async () => {
+  const refreshStatus = useMemoizedFn(async () => {
     if (!uploadTarget) {
       setStatus("ready");
       return;
@@ -96,7 +97,7 @@ export function SupportLogSheet() {
     } catch {
       // Status is best-effort; surface failures on the actual action instead.
     }
-  }, [uploadTarget]);
+  });
 
   useEffect(() => {
     if (!isOpen) {
@@ -106,7 +107,7 @@ export function SupportLogSheet() {
     void refreshStatus();
   }, [isOpen, refreshStatus]);
 
-  const handleStart = useCallback(async () => {
+  const handleStart = useMemoizedFn(async () => {
     if (!uploadTarget) {
       return;
     }
@@ -134,9 +135,9 @@ export function SupportLogSheet() {
     } finally {
       setBusyAction(null);
     }
-  }, [currentScope, store, uploadTarget]);
+  });
 
-  const handleStopAndUpload = useCallback(async () => {
+  const handleStopAndUpload = useMemoizedFn(async () => {
     if (!uploadTarget) {
       return;
     }
@@ -192,9 +193,9 @@ export function SupportLogSheet() {
     } finally {
       setBusyAction(null);
     }
-  }, [currentScope, recordingStartedAt, refreshStatus, store, uploadTarget]);
+  });
 
-  const handleClear = useCallback(async () => {
+  const handleClear = useMemoizedFn(async () => {
     setBusyAction("clear");
     setMessage(null);
     try {
@@ -204,16 +205,16 @@ export function SupportLogSheet() {
       setBusyAction(null);
       setConfirmClear(false);
     }
-  }, [clearSupportLogs]);
+  });
 
-  const handleCopyLogFile = useCallback(async () => {
+  const handleCopyLogFile = useMemoizedFn(async () => {
     const path = serverLogFile ?? serverDir;
     if (!path) {
       return;
     }
     const ok = await copyText(path);
     setMessage(ok ? "已复制日志文件路径" : "复制失败，请手动选择路径");
-  }, [copyText, serverDir, serverLogFile]);
+  });
 
   const isRecording = status === "recording";
 

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useRef, useState } from "react";
 import "./monaco-workers";
 import Editor, {
   DiffEditor,
@@ -81,7 +82,7 @@ export function TerminalMonacoViewer({
     resetLineReferenceCopied,
   } = useLineReferenceCopy(lineReferencePathRef, lineReferenceRangeRef);
 
-  const updateLineReferenceRange = useCallback((): void => {
+  const updateLineReferenceRange = useMemoizedFn((): void => {
     const editor = editorRef.current;
     const nextRange = editor
       ? getSelectedLineReferenceRange(editor, lineReferencePathRef.current)
@@ -95,9 +96,9 @@ export function TerminalMonacoViewer({
     lineReferenceRangeRef.current = nextRange;
     setLineReferenceRange(nextRange);
     resetLineReferenceCopied();
-  }, [resetLineReferenceCopied]);
+  });
 
-  const bindLineReferenceEditor = useCallback(
+  const bindLineReferenceEditor = useMemoizedFn(
     (editor: MonacoEditor, monaco: MonacoApi): void => {
       editorRef.current = editor;
       scrollDisposableRef.current?.dispose();
@@ -125,22 +126,15 @@ export function TerminalMonacoViewer({
       });
       updateLineReferenceRange();
     },
-    [copyLineReference, diff, onScrollRatioChange, updateLineReferenceRange],
   );
 
-  const handleEditorMount = useCallback<OnMount>(
-    (editor, monaco) => {
-      bindLineReferenceEditor(editor, monaco);
-    },
-    [bindLineReferenceEditor],
-  );
+  const handleEditorMount = useMemoizedFn<OnMount>((editor, monaco) => {
+    bindLineReferenceEditor(editor, monaco);
+  });
 
-  const handleDiffEditorMount = useCallback<DiffOnMount>(
-    (editor, monaco) => {
-      bindLineReferenceEditor(editor.getModifiedEditor(), monaco);
-    },
-    [bindLineReferenceEditor],
-  );
+  const handleDiffEditorMount = useMemoizedFn<DiffOnMount>((editor, monaco) => {
+    bindLineReferenceEditor(editor.getModifiedEditor(), monaco);
+  });
 
   useEffect(() => {
     lineReferencePathRef.current = lineReferencePath;

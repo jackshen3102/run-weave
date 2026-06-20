@@ -1,10 +1,11 @@
+import { useMemoizedFn } from "ahooks";
 import type {
   AppHomeOverviewResponse,
   AppHomeOverviewSession,
   TerminalEventEnvelope,
   TerminalState,
 } from "@runweave/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { AppConnectionConfig } from "../features/connections/types";
 import { recordSupportLog } from "../features/support-logs";
@@ -120,8 +121,9 @@ export function useAppSession(): AppSessionController {
   const scopedIsAuthenticated =
     authConnectionId === activeConnectionId && isAuthenticated;
   const [startupState, setStartupState] = useState<StartupState>("checking");
-  const [overview, setOverview] =
-    useState<AppHomeOverviewResponse | null>(null);
+  const [overview, setOverview] = useState<AppHomeOverviewResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const {
@@ -164,61 +166,58 @@ export function useAppSession(): AppSessionController {
     }
   }, [sessionError]);
 
-  const persistSession = useCallback(
+  const persistSession = useMemoizedFn(
     async (connectionId: string, session: AppAuthSession) => {
       await setAuthenticated(connectionId, session);
     },
-    [setAuthenticated],
   );
 
-  const resetSession = useCallback(async () => {
+  const resetSession = useMemoizedFn(async () => {
     const connectionId = activeConnectionIdRef.current;
     await clearSession(connectionId);
     setOverview(null);
-  }, [clearSession]);
+  });
 
-  const refreshStoredSession = useCallback(async (): Promise<string | null> => {
-    const connectionId = activeConnectionIdRef.current;
-    if (!connectionId || !scopedRefreshToken) {
-      return null;
-    }
-    recordSupportLog("auth.refresh.started", supportConnectionFields(activeConnection));
-    try {
-      const refreshed = await refreshSession(apiBase, scopedRefreshToken);
-      await persistSession(connectionId, refreshed);
+  const refreshStoredSession = useMemoizedFn(
+    async (): Promise<string | null> => {
+      const connectionId = activeConnectionIdRef.current;
+      if (!connectionId || !scopedRefreshToken) {
+        return null;
+      }
       recordSupportLog(
-        "auth.refresh.completed",
+        "auth.refresh.started",
         supportConnectionFields(activeConnection),
       );
-      return refreshed.accessToken;
-    } catch (error) {
-      const failure = classifyApiFailure(error);
-      recordSupportLog(
-        "auth.refresh.failed",
-        {
-          ...supportConnectionFields(activeConnection),
-          failureKind: failure.kind,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "warn",
-      );
-      if (failure.kind === "auth-expired") {
-        await resetSession();
-      } else {
-        markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
+      try {
+        const refreshed = await refreshSession(apiBase, scopedRefreshToken);
+        await persistSession(connectionId, refreshed);
+        recordSupportLog(
+          "auth.refresh.completed",
+          supportConnectionFields(activeConnection),
+        );
+        return refreshed.accessToken;
+      } catch (error) {
+        const failure = classifyApiFailure(error);
+        recordSupportLog(
+          "auth.refresh.failed",
+          {
+            ...supportConnectionFields(activeConnection),
+            failureKind: failure.kind,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "warn",
+        );
+        if (failure.kind === "auth-expired") {
+          await resetSession();
+        } else {
+          markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
+        }
+        return null;
       }
-      return null;
-    }
-  }, [
-    activeConnection,
-    apiBase,
-    markDeviceOffline,
-    persistSession,
-    scopedRefreshToken,
-    resetSession,
-  ]);
+    },
+  );
 
-  const loadOverview = useCallback(
+  const loadOverview = useMemoizedFn(
     async (
       token = scopedAccessToken,
       targetApiBase = apiBase,
@@ -284,7 +283,9 @@ export function useAppSession(): AppSessionController {
             ...supportConnectionFields(activeConnection),
             failureKind: failure.kind,
             error:
-              nextError instanceof Error ? nextError.message : String(nextError),
+              nextError instanceof Error
+                ? nextError.message
+                : String(nextError),
           },
           "warn",
         );
@@ -296,16 +297,6 @@ export function useAppSession(): AppSessionController {
         }
       }
     },
-    [
-      activeConnection,
-      activeConnectionId,
-      apiBase,
-      markDeviceOffline,
-      markDeviceOnline,
-      refreshStoredSession,
-      resetSession,
-      scopedAccessToken,
-    ],
   );
 
   useEffect(() => {
@@ -324,7 +315,10 @@ export function useAppSession(): AppSessionController {
           supportConnectionFields(activeConnection),
         );
         await verifySession(apiBase, scopedAccessToken);
-        if (!cancelled && activeConnectionIdRef.current === activeConnectionId) {
+        if (
+          !cancelled &&
+          activeConnectionIdRef.current === activeConnectionId
+        ) {
           recordSupportLog(
             "auth.verify.completed",
             supportConnectionFields(activeConnection),
@@ -371,7 +365,7 @@ export function useAppSession(): AppSessionController {
     scopedAccessToken,
   ]);
 
-  const refreshOverview = useCallback(async () => {
+  const refreshOverview = useMemoizedFn(async () => {
     if (deviceConnection.status === "offline") {
       const snapshot = await refreshDeviceConnection();
       if (snapshot.status === "offline") {
@@ -380,126 +374,128 @@ export function useAppSession(): AppSessionController {
       }
     }
     await loadOverview();
-  }, [deviceConnection.status, loadOverview, refreshDeviceConnection]);
+  });
 
-  const loginWithCredentials = useCallback(
-    async (params: AppLoginParams) => {
-      if (!activeConnectionId) {
-        throw new Error("请先添加并选择一个后端连接");
-      }
-      recordSupportLog("auth.login.started", {
-        ...supportConnectionFields(activeConnection),
-        usernameLength: params.username.length,
+  const loginWithCredentials = useMemoizedFn(async (params: AppLoginParams) => {
+    if (!activeConnectionId) {
+      throw new Error("请先添加并选择一个后端连接");
+    }
+    recordSupportLog("auth.login.started", {
+      ...supportConnectionFields(activeConnection),
+      usernameLength: params.username.length,
+    });
+    try {
+      const session = await login(apiBase, {
+        username: params.username,
+        password: params.password,
       });
-      try {
-        const session = await login(apiBase, {
-          username: params.username,
-          password: params.password,
-        });
-        await persistSession(activeConnectionId, session);
-        recordSupportLog(
-          "auth.login.completed",
-          supportConnectionFields(activeConnection),
-        );
-        await loadOverview(session.accessToken, apiBase, activeConnectionId);
-      } catch (error) {
-        recordSupportLog(
-          "auth.login.failed",
-          {
-            ...supportConnectionFields(activeConnection),
-            error: error instanceof Error ? error.message : String(error),
-          },
-          "warn",
-        );
-        throw error;
-      }
-    },
-    [
-      activeConnection,
-      activeConnectionId,
-      apiBase,
-      loadOverview,
-      persistSession,
-    ],
-  );
+      await persistSession(activeConnectionId, session);
+      recordSupportLog(
+        "auth.login.completed",
+        supportConnectionFields(activeConnection),
+      );
+      await loadOverview(session.accessToken, apiBase, activeConnectionId);
+    } catch (error) {
+      recordSupportLog(
+        "auth.login.failed",
+        {
+          ...supportConnectionFields(activeConnection),
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "warn",
+      );
+      throw error;
+    }
+  });
 
-  const logoutAndReset = useCallback(() => {
+  const logoutAndReset = useMemoizedFn(() => {
     const connectionId = activeConnectionIdRef.current;
-    recordSupportLog("auth.logout.started", supportConnectionFields(activeConnection));
+    recordSupportLog(
+      "auth.logout.started",
+      supportConnectionFields(activeConnection),
+    );
     if (scopedAccessToken) {
       void logout(apiBase, scopedAccessToken).catch(() => undefined);
     }
     void clearSession(connectionId);
     setOverview(null);
-    recordSupportLog("auth.logout.completed", supportConnectionFields(activeConnection));
-  }, [activeConnection, apiBase, clearSession, scopedAccessToken]);
-
-  const handleAuthExpired = useCallback(() => {
-    void resetSession();
-  }, [resetSession]);
-
-  const handleTerminalEvents = useCallback((events: TerminalEventEnvelope[]) => {
-    const stateEvents = events.filter(
-      (event) => event.kind === "terminal_state_changed",
+    recordSupportLog(
+      "auth.logout.completed",
+      supportConnectionFields(activeConnection),
     );
-    if (events.some(isOverviewInvalidationEvent)) {
-      void loadOverview();
-    }
-    if (stateEvents.length === 0) {
-      return;
-    }
+  });
 
-    setOverview((currentOverview) => {
-      if (!currentOverview) {
-        return currentOverview;
+  const handleAuthExpired = useMemoizedFn(() => {
+    void resetSession();
+  });
+
+  const handleTerminalEvents = useMemoizedFn(
+    (events: TerminalEventEnvelope[]) => {
+      const stateEvents = events.filter(
+        (event) => event.kind === "terminal_state_changed",
+      );
+      if (events.some(isOverviewInvalidationEvent)) {
+        void loadOverview();
+      }
+      if (stateEvents.length === 0) {
+        return;
       }
 
-      let changed = false;
-      const nextStateBySessionId = new Map(
-        stateEvents.map((event) => [event.terminalSessionId, event.payload.next]),
-      );
-      const nextSessions = currentOverview.sessions.map((session) => {
-        const terminalState = nextStateBySessionId.get(
-          session.terminalSessionId,
-        );
-        if (!terminalState) {
-          return session;
+      setOverview((currentOverview) => {
+        if (!currentOverview) {
+          return currentOverview;
         }
 
-        const displayStatus = resolveSessionDisplayStatus(
-          session,
-          terminalState,
+        let changed = false;
+        const nextStateBySessionId = new Map(
+          stateEvents.map((event) => [
+            event.terminalSessionId,
+            event.payload.next,
+          ]),
         );
-        if (
-          session.terminalState.state === terminalState.state &&
-          session.terminalState.agent === terminalState.agent &&
-          session.displayStatus === displayStatus.displayStatus &&
-          session.displayStatusLabel === displayStatus.displayStatusLabel
-        ) {
-          return session;
-        }
-
-        changed = true;
-        return {
-          ...session,
-          ...displayStatus,
-          terminalState,
-        };
-      });
-
-      return changed
-        ? {
-            ...currentOverview,
-            sessions: nextSessions,
+        const nextSessions = currentOverview.sessions.map((session) => {
+          const terminalState = nextStateBySessionId.get(
+            session.terminalSessionId,
+          );
+          if (!terminalState) {
+            return session;
           }
-        : currentOverview;
-    });
-  }, [loadOverview]);
 
-  const handleTerminalEventsTransportFailure = useCallback(async () => {
+          const displayStatus = resolveSessionDisplayStatus(
+            session,
+            terminalState,
+          );
+          if (
+            session.terminalState.state === terminalState.state &&
+            session.terminalState.agent === terminalState.agent &&
+            session.displayStatus === displayStatus.displayStatus &&
+            session.displayStatusLabel === displayStatus.displayStatusLabel
+          ) {
+            return session;
+          }
+
+          changed = true;
+          return {
+            ...session,
+            ...displayStatus,
+            terminalState,
+          };
+        });
+
+        return changed
+          ? {
+              ...currentOverview,
+              sessions: nextSessions,
+            }
+          : currentOverview;
+      });
+    },
+  );
+
+  const handleTerminalEventsTransportFailure = useMemoizedFn(async () => {
     const snapshot = await refreshDeviceConnection();
     return snapshot.status !== "offline";
-  }, [refreshDeviceConnection]);
+  });
 
   useAppTerminalEventsConnection({
     apiBase,

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useMemo, useState } from "react";
 import type {
   TerminalPreviewDirectoryResponse,
   TerminalPreviewFileSearchItem,
@@ -74,7 +75,9 @@ function buildChangeMap(
   return map;
 }
 
-function sortEntries(entries: TerminalPreviewTreeEntry[]): TerminalPreviewTreeEntry[] {
+function sortEntries(
+  entries: TerminalPreviewTreeEntry[],
+): TerminalPreviewTreeEntry[] {
   return [...entries].sort((left, right) => {
     if (left.kind !== right.kind) {
       return left.kind === "directory" ? -1 : 1;
@@ -100,13 +103,19 @@ function Breadcrumb({
   ];
 
   return (
-    <nav aria-label="Directory breadcrumb" className="terminal-files-breadcrumb">
+    <nav
+      aria-label="Directory breadcrumb"
+      className="terminal-files-breadcrumb"
+    >
       {crumbs.map((crumb, index) => {
         const isCurrent = index === crumbs.length - 1;
         return (
           <span className="terminal-files-breadcrumb__item" key={crumb.path}>
             {index > 0 ? (
-              <span aria-hidden="true" className="terminal-files-breadcrumb__separator">
+              <span
+                aria-hidden="true"
+                className="terminal-files-breadcrumb__separator"
+              >
                 /
               </span>
             ) : null}
@@ -156,9 +165,9 @@ export function TerminalFilesTab({
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [directory, setDirectory] =
     useState<TerminalPreviewDirectoryResponse | null>(null);
-  const [searchItems, setSearchItems] = useState<TerminalPreviewFileSearchItem[]>(
-    [],
-  );
+  const [searchItems, setSearchItems] = useState<
+    TerminalPreviewFileSearchItem[]
+  >([]);
   const [changes, setChanges] =
     useState<TerminalPreviewGitChangesResponse | null>(null);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
@@ -198,7 +207,7 @@ export function TerminalFilesTab({
     setSearchError(null);
   }, [changesRequests, directoryRequests, projectId, searchRequests]);
 
-  const loadChanges = useCallback(() => {
+  const loadChanges = useMemoizedFn(() => {
     if (!projectId) {
       changesRequests.invalidate();
       setChanges(null);
@@ -219,9 +228,9 @@ export function TerminalFilesTab({
           onAuthExpired();
         }
       });
-  }, [accessToken, apiBase, changesRequests, onAuthExpired, projectId]);
+  });
 
-  const loadDirectory = useCallback(() => {
+  const loadDirectory = useMemoizedFn(() => {
     if (!projectId) {
       directoryRequests.invalidate();
       setDirectory(null);
@@ -252,21 +261,16 @@ export function TerminalFilesTab({
           setError(previewMessage(nextError.status));
           return;
         }
-        setError(nextError instanceof Error ? nextError.message : "Load failed");
+        setError(
+          nextError instanceof Error ? nextError.message : "Load failed",
+        );
       })
       .finally(() => {
         if (directoryRequests.isCurrent(requestId)) {
           setLoading(false);
         }
       });
-  }, [
-    accessToken,
-    apiBase,
-    directoryRequests,
-    onAuthExpired,
-    path,
-    projectId,
-  ]);
+  });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -465,11 +469,17 @@ export function TerminalFilesTab({
                 type="button"
               >
                 <span className="terminal-file-row__badge">
-                  {entry.kind === "directory" ? "DIR" : languageBadgeFor(entry.path)}
+                  {entry.kind === "directory"
+                    ? "DIR"
+                    : languageBadgeFor(entry.path)}
                 </span>
                 <span className="terminal-file-row__name">
                   <strong>{basenameOf(entry.path)}</strong>
-                  <small>{entry.kind === "directory" ? entry.path : dirnameOf(entry.path)}</small>
+                  <small>
+                    {entry.kind === "directory"
+                      ? entry.path
+                      : dirnameOf(entry.path)}
+                  </small>
                 </span>
                 <ChangeBadge info={info} />
               </button>

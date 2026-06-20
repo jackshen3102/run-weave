@@ -1,4 +1,5 @@
-import { useRef, useCallback, useEffect, useMemo, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useRef, useEffect, useMemo, useState } from "react";
 import type {
   TerminalPreviewChangeKind,
   TerminalPreviewFileDiffResponse,
@@ -149,65 +150,59 @@ export function useTerminalPreviewPanelData({
     fileKind !== "image";
   const isDirty = isFileEditable && editorContent !== loadedContent;
 
-  const confirmDiscardDraft = useCallback((): boolean => {
+  const confirmDiscardDraft = useMemoizedFn((): boolean => {
     if (!isDirty) {
       return true;
     }
     return window.confirm("Discard unsaved Preview changes?");
-  }, [isDirty]);
+  });
 
-  const handleRequestError = useCallback(
-    (error: unknown): string => {
-      if (error instanceof HttpError && error.status === 401) {
-        onAuthExpired?.();
-      }
-      return error instanceof Error ? error.message : String(error);
-    },
-    [onAuthExpired],
-  );
+  const handleRequestError = useMemoizedFn((error: unknown): string => {
+    if (error instanceof HttpError && error.status === 401) {
+      onAuthExpired?.();
+    }
+    return error instanceof Error ? error.message : String(error);
+  });
 
-  const loadFile = useCallback(
-    async (filePath: string): Promise<void> => {
-      if (!projectId) {
+  const loadFile = useMemoizedFn(async (filePath: string): Promise<void> => {
+    if (!projectId) {
+      return;
+    }
+    const requestId = fileRequestSequencer.next();
+    setFileLoading(true);
+    setFileError(null);
+    setFilePreview(null);
+    try {
+      const payload = await getTerminalProjectPreviewFile(
+        apiBase,
+        token,
+        projectId,
+        filePath,
+      );
+      if (!fileRequestSequencer.isCurrent(requestId)) {
         return;
       }
-      const requestId = fileRequestSequencer.next();
-      setFileLoading(true);
-      setFileError(null);
-      setFilePreview(null);
-      try {
-        const payload = await getTerminalProjectPreviewFile(
-          apiBase,
-          token,
-          projectId,
-          filePath,
-        );
-        if (!fileRequestSequencer.isCurrent(requestId)) {
-          return;
-        }
-        setFilePreview(payload);
-        setEditorContent(payload.content);
-        setLoadedContent(payload.content);
-        setLoadedMtimeMs(payload.mtimeMs);
-        setSaveError(null);
-        setSaveConflict(false);
-        setLastSavedAt(null);
-      } catch (error) {
-        if (!fileRequestSequencer.isCurrent(requestId)) {
-          return;
-        }
-        setFilePreview(null);
-        setFileError(handleRequestError(error));
-      } finally {
-        if (fileRequestSequencer.isCurrent(requestId)) {
-          setFileLoading(false);
-        }
+      setFilePreview(payload);
+      setEditorContent(payload.content);
+      setLoadedContent(payload.content);
+      setLoadedMtimeMs(payload.mtimeMs);
+      setSaveError(null);
+      setSaveConflict(false);
+      setLastSavedAt(null);
+    } catch (error) {
+      if (!fileRequestSequencer.isCurrent(requestId)) {
+        return;
       }
-    },
-    [apiBase, fileRequestSequencer, handleRequestError, projectId, token],
-  );
+      setFilePreview(null);
+      setFileError(handleRequestError(error));
+    } finally {
+      if (fileRequestSequencer.isCurrent(requestId)) {
+        setFileLoading(false);
+      }
+    }
+  });
 
-  const loadDiff = useCallback(
+  const loadDiff = useMemoizedFn(
     async (
       filePath: string,
       kind: TerminalPreviewChangeKind,
@@ -241,10 +236,9 @@ export function useTerminalPreviewPanelData({
         }
       }
     },
-    [apiBase, diffRequestSequencer, handleRequestError, projectId, token],
   );
 
-  const loadChanges = useCallback(
+  const loadChanges = useMemoizedFn(
     async (options?: {
       reloadDiff?: boolean;
       preserveMode?: boolean;
@@ -314,16 +308,6 @@ export function useTerminalPreviewPanelData({
         }
       }
     },
-    [
-      apiBase,
-      changesRequestSequencer,
-      diffRequestSequencer,
-      handleRequestError,
-      loadDiff,
-      projectId,
-      token,
-      updateProjectPreview,
-    ],
   );
 
   useEffect(() => {
@@ -441,7 +425,7 @@ export function useTerminalPreviewPanelData({
     token,
   ]);
 
-  const saveFile = useCallback(
+  const saveFile = useMemoizedFn(
     async (options?: { overwrite?: boolean }): Promise<void> => {
       if (
         !projectId ||
@@ -481,17 +465,6 @@ export function useTerminalPreviewPanelData({
         setSaveLoading(false);
       }
     },
-    [
-      apiBase,
-      editorContent,
-      filePreview,
-      handleRequestError,
-      isFileEditable,
-      loadedMtimeMs,
-      projectId,
-      saveLoading,
-      token,
-    ],
   );
 
   useTerminalPreviewPanelKeyboardEffects({
@@ -531,7 +504,7 @@ export function useTerminalPreviewPanelData({
     setPathCopied(false);
   }, [copyPath]);
 
-  const refreshFileSearch = useCallback(async (): Promise<void> => {
+  const refreshFileSearch = useMemoizedFn(async (): Promise<void> => {
     if (!projectId || absoluteInput) {
       return;
     }
@@ -553,27 +526,93 @@ export function useTerminalPreviewPanelData({
     } finally {
       setSearchLoading(false);
     }
-  }, [absoluteInput, apiBase, handleRequestError, projectId, query, token]);
-
-
+  });
 
   return {
-    closePreview, setWidth, expanded, activeTool, setActiveTool, setExpanded,
-    updateProjectPreview, mode, query, selectedFilePath, selectedChangePath,
-    selectedChangeKind, markdownViewMode, markdownSplitSourceWidthPct, svgViewMode,
-    changesViewMode, searchItems, searchLoading, searchError, filePreview,
-    setFilePreview, editorContent, setEditorContent, loadedContent, setLoadedContent,
-    loadedMtimeMs, setLoadedMtimeMs, saveLoading, setSaveLoading, saveError,
-    setSaveError, saveConflict, setSaveConflict, lastSavedAt, setLastSavedAt,
-    fileLoading, setFileLoading, fileError, setFileError, changes, changesLoading,
-    changesError, fileDiff, setFileDiff, diffLoading, setDiffLoading, diffError,
-    setDiffError, fileRequestSequencer, diffRequestSequencer, selectedChangePathRef,
-    selectedChangeKindRef, assetRefreshKey, setAssetRefreshKey, markdownScrollRatio,
-    setMarkdownScrollRatio, pathCopied, setPathCopied, pathCopiedTimeoutRef,
-    deleteTarget, setDeleteTarget, renameTarget, setRenameTarget, renamePath,
-    setRenamePath, mutationPending, setMutationPending, mutationError, setMutationError,
-    projectId, hasProjectPath, absoluteInput, panelWidth, fileKind, isFileEditable,
-    isDirty, confirmDiscardDraft, handleRequestError, loadFile, loadDiff, loadChanges,
-    saveFile, selectedPath, copyPath, refreshFileSearch,
+    closePreview,
+    setWidth,
+    expanded,
+    activeTool,
+    setActiveTool,
+    setExpanded,
+    updateProjectPreview,
+    mode,
+    query,
+    selectedFilePath,
+    selectedChangePath,
+    selectedChangeKind,
+    markdownViewMode,
+    markdownSplitSourceWidthPct,
+    svgViewMode,
+    changesViewMode,
+    searchItems,
+    searchLoading,
+    searchError,
+    filePreview,
+    setFilePreview,
+    editorContent,
+    setEditorContent,
+    loadedContent,
+    setLoadedContent,
+    loadedMtimeMs,
+    setLoadedMtimeMs,
+    saveLoading,
+    setSaveLoading,
+    saveError,
+    setSaveError,
+    saveConflict,
+    setSaveConflict,
+    lastSavedAt,
+    setLastSavedAt,
+    fileLoading,
+    setFileLoading,
+    fileError,
+    setFileError,
+    changes,
+    changesLoading,
+    changesError,
+    fileDiff,
+    setFileDiff,
+    diffLoading,
+    setDiffLoading,
+    diffError,
+    setDiffError,
+    fileRequestSequencer,
+    diffRequestSequencer,
+    selectedChangePathRef,
+    selectedChangeKindRef,
+    assetRefreshKey,
+    setAssetRefreshKey,
+    markdownScrollRatio,
+    setMarkdownScrollRatio,
+    pathCopied,
+    setPathCopied,
+    pathCopiedTimeoutRef,
+    deleteTarget,
+    setDeleteTarget,
+    renameTarget,
+    setRenameTarget,
+    renamePath,
+    setRenamePath,
+    mutationPending,
+    setMutationPending,
+    mutationError,
+    setMutationError,
+    projectId,
+    hasProjectPath,
+    absoluteInput,
+    panelWidth,
+    fileKind,
+    isFileEditable,
+    isDirty,
+    confirmDiscardDraft,
+    handleRequestError,
+    loadFile,
+    loadDiff,
+    loadChanges,
+    saveFile,
+    selectedPath,
+    copyPath,
+    refreshFileSearch,
   };
 }

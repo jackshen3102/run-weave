@@ -1,6 +1,7 @@
+import { useMemoizedFn } from "ahooks";
 import type { TerminalInputMode, TerminalState } from "@runweave/shared";
 import { fileToBase64, shellQuote } from "@runweave/common/terminal";
-import { useCallback, useState, type RefObject } from "react";
+import { useState, type RefObject } from "react";
 
 import { recordSupportLog } from "../features/support-logs";
 import { classifyApiFailure } from "../services/api-failure";
@@ -62,7 +63,7 @@ export function useAppTerminalActions({
   const [isPickingImage, setIsPickingImage] = useState(false);
   const isCommandActive = terminalState.state === "agent_running";
 
-  const handleStop = useCallback(() => {
+  const handleStop = useMemoizedFn(() => {
     setImageError(null);
     if (isDeviceOffline) {
       setImageError("本地电脑暂时不可用");
@@ -106,17 +107,9 @@ export function useAppTerminalActions({
         );
         setImageError(getErrorMessage(nextError, "中断命令失败"));
       });
-  }, [
-    accessToken,
-    apiBase,
-    isDeviceOffline,
-    onAuthExpired,
-    refreshDeviceAfterFailure,
-    terminalSessionId,
-    terminalStateRef,
-  ]);
+  });
 
-  const handleSendCommand = useCallback(
+  const handleSendCommand = useMemoizedFn(
     async (data: string): Promise<void> => {
       if (isDeviceOffline) {
         setImageError("本地电脑暂时不可用");
@@ -172,86 +165,67 @@ export function useAppTerminalActions({
         throw nextError;
       }
     },
-    [
-      accessToken,
-      apiBase,
-      isDeviceOffline,
-      onAuthExpired,
-      refreshDeviceAfterFailure,
-      terminalSessionId,
-      terminalStateRef,
-    ],
   );
 
-  const handlePickImage = useCallback(
-    async (file: File): Promise<string> => {
-      setImageError(null);
-      if (isDeviceOffline) {
-        setImageError("本地电脑暂时不可用");
-        throw new Error("本地电脑暂时不可用");
-      }
+  const handlePickImage = useMemoizedFn(async (file: File): Promise<string> => {
+    setImageError(null);
+    if (isDeviceOffline) {
+      setImageError("本地电脑暂时不可用");
+      throw new Error("本地电脑暂时不可用");
+    }
 
-      setIsPickingImage(true);
-      recordSupportLog("terminal.clipboard_image.upload.started", {
+    setIsPickingImage(true);
+    recordSupportLog("terminal.clipboard_image.upload.started", {
+      terminalSessionId,
+      mimeType: file.type,
+      size: file.size,
+    });
+    try {
+      const dataBase64 = await fileToBase64(file);
+      const payload = await createTerminalSessionClipboardImage(
+        apiBase,
+        accessToken,
         terminalSessionId,
-        mimeType: file.type,
-        size: file.size,
+        {
+          mimeType: file.type,
+          dataBase64,
+        },
+      );
+      recordSupportLog("terminal.clipboard_image.upload.completed", {
+        terminalSessionId,
+        filePathLength: payload.filePath.length,
       });
-      try {
-        const dataBase64 = await fileToBase64(file);
-        const payload = await createTerminalSessionClipboardImage(
-          apiBase,
-          accessToken,
-          terminalSessionId,
-          {
-            mimeType: file.type,
-            dataBase64,
-          },
-        );
-        recordSupportLog("terminal.clipboard_image.upload.completed", {
-          terminalSessionId,
-          filePathLength: payload.filePath.length,
-        });
-        return shellQuote(payload.filePath);
-      } catch (nextError: unknown) {
-        const failure = classifyApiFailure(nextError);
-        if (failure.kind === "auth-expired") {
-          recordSupportLog(
-            "terminal.clipboard_image.upload.unauthorized",
-            {
-              terminalSessionId,
-            },
-            "warn",
-          );
-          onAuthExpired();
-          throw nextError;
-        }
-        refreshDeviceAfterFailure();
+      return shellQuote(payload.filePath);
+    } catch (nextError: unknown) {
+      const failure = classifyApiFailure(nextError);
+      if (failure.kind === "auth-expired") {
         recordSupportLog(
-          "terminal.clipboard_image.upload.failed",
+          "terminal.clipboard_image.upload.unauthorized",
           {
             terminalSessionId,
-            error: getErrorMessage(nextError, String(nextError)),
           },
           "warn",
         );
-        setImageError(getErrorMessage(nextError, "图片上传失败"));
+        onAuthExpired();
         throw nextError;
-      } finally {
-        setIsPickingImage(false);
       }
-    },
-    [
-      accessToken,
-      apiBase,
-      isDeviceOffline,
-      onAuthExpired,
-      refreshDeviceAfterFailure,
-      terminalSessionId,
-    ],
-  );
+      refreshDeviceAfterFailure();
+      recordSupportLog(
+        "terminal.clipboard_image.upload.failed",
+        {
+          terminalSessionId,
+          error: getErrorMessage(nextError, String(nextError)),
+        },
+        "warn",
+      );
+      setImageError(getErrorMessage(nextError, "图片上传失败"));
+      throw nextError;
+    } finally {
+      setIsPickingImage(false);
+    }
+  });
 
-  const handleTranscribeVoice = useCallback(
+  const handleTranscribeVoice = useMemoizedFn(
     async (payload: Parameters<typeof transcribeVoice>[2]): Promise<string> => {
       setImageError(null);
       if (isDeviceOffline) {
@@ -295,14 +269,6 @@ export function useAppTerminalActions({
         throw nextError;
       }
     },
-    [
-      accessToken,
-      apiBase,
-      isDeviceOffline,
-      onAuthExpired,
-      refreshDeviceAfterFailure,
-      terminalSessionId,
-    ],
   );
 
   return {

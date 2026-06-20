@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useRef } from "react";
 import type {
   TerminalEventEnvelope,
   TerminalEventServerMessage,
@@ -51,7 +52,11 @@ function getMaxEventId(events: TerminalEventEnvelope[]): string | null {
   return maxId;
 }
 
-function closeWebSocket(socket: WebSocket | null, code: number, reason: string) {
+function closeWebSocket(
+  socket: WebSocket | null,
+  code: number,
+  reason: string,
+) {
   if (!socket) {
     return;
   }
@@ -132,7 +137,7 @@ export function useAppTerminalEventsConnection({
     onTransportOpen,
   ]);
 
-  const handleEvents = useCallback(
+  const handleEvents = useMemoizedFn(
     (
       events: TerminalEventEnvelope[],
       delivery: TerminalEventDelivery,
@@ -154,7 +159,6 @@ export function useAppTerminalEventsConnection({
         cursorRef.current = maxId;
       }
     },
-    [],
   );
 
   useEffect(() => {
@@ -254,11 +258,15 @@ export function useAppTerminalEventsConnection({
             onAuthExpiredRef.current();
             return;
           }
-          scheduleReconnectAfterDecision(() => onConnectionCloseRef.current?.(event));
+          scheduleReconnectAfterDecision(() =>
+            onConnectionCloseRef.current?.(event),
+          );
         });
 
         socket.addEventListener("error", () => {
-          scheduleReconnectAfterDecision(() => onConnectionErrorRef.current?.());
+          scheduleReconnectAfterDecision(() =>
+            onConnectionErrorRef.current?.(),
+          );
         });
       } catch (nextError) {
         const failure = classifyApiFailure(nextError);

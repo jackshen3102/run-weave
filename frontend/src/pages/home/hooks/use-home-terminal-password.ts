@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useState } from "react";
 import type { ClientMode } from "../../../features/client-mode";
 import { resolveNewTerminalRuntimePreference } from "../../../features/terminal/runtime-preference";
 import { HttpError } from "../../../services/http";
@@ -32,7 +33,7 @@ export function useHomeTerminalPassword({
     null,
   );
 
-  const createTerminal = useCallback(async (): Promise<void> => {
+  const createTerminal = useMemoizedFn(async (): Promise<void> => {
     if (terminalLoading) {
       return;
     }
@@ -41,7 +42,10 @@ export function useHomeTerminalPassword({
     setTerminalError(null);
 
     try {
-      const existingTerminalSessions = await listTerminalSessions(apiBase, token);
+      const existingTerminalSessions = await listTerminalSessions(
+        apiBase,
+        token,
+      );
       const reusableSession = resolveReusableTerminalSession(
         existingTerminalSessions,
         apiBase,
@@ -65,31 +69,27 @@ export function useHomeTerminalPassword({
     } finally {
       setTerminalLoading(false);
     }
-  }, [
-    apiBase,
-    clientMode,
-    onAuthExpired,
-    onOpenTerminalSession,
-    terminalLoading,
-    token,
-  ]);
+  });
 
-  const openPasswordDialog = useCallback((): void => {
+  const openPasswordDialog = useMemoizedFn((): void => {
     setPasswordChangeError(null);
     setPasswordDialogOpen(true);
-  }, []);
+  });
 
-  const closePasswordDialog = useCallback((): void => {
+  const closePasswordDialog = useMemoizedFn((): void => {
     if (passwordChangeLoading) {
       return;
     }
 
     setPasswordChangeError(null);
     setPasswordDialogOpen(false);
-  }, [passwordChangeLoading]);
+  });
 
-  const changePassword = useCallback(
-    async (payload: { oldPassword: string; newPassword: string }): Promise<void> => {
+  const changePassword = useMemoizedFn(
+    async (payload: {
+      oldPassword: string;
+      newPassword: string;
+    }): Promise<void> => {
       setPasswordChangeLoading(true);
       setPasswordChangeError(null);
 
@@ -112,7 +112,6 @@ export function useHomeTerminalPassword({
         setPasswordChangeLoading(false);
       }
     },
-    [apiBase, onAuthExpired, token],
   );
 
   return {

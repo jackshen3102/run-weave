@@ -1,7 +1,7 @@
+import { useMemoizedFn } from "ahooks";
 import {
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -79,8 +79,8 @@ export function useTerminalBrowserController({
   );
   const activeTabUrl = activeTab?.url;
   const mobileDisabledReason = activeTab?.devtoolsOpen
-      ? "Mobile mode unavailable while DevTools is open"
-      : null;
+    ? "Mobile mode unavailable while DevTools is open"
+    : null;
   const {
     cancelPendingBoundsSync,
     clearTabBounds,
@@ -97,20 +97,18 @@ export function useTerminalBrowserController({
     tabs,
     updateBrowserTab,
   });
-  const applyElectronSnapshot = useCallback(
+  const applyElectronSnapshot = useMemoizedFn(
     (tabId: string, snapshot: ElectronBrowserSnapshot) => {
       updateBrowserTab(tabId, buildTabUpdateFromElectronSnapshot(snapshot));
     },
-    [updateBrowserTab],
   );
-  const applyElectronUpdate = useCallback(
+  const applyElectronUpdate = useMemoizedFn(
     (tabId: string, update: ElectronBrowserUpdate) => {
       updateBrowserTab(tabId, buildTabUpdateFromElectronUpdate(update));
     },
-    [updateBrowserTab],
   );
 
-  const syncElectronTabs = useCallback(async (): Promise<void> => {
+  const syncElectronTabs = useMemoizedFn(async (): Promise<void> => {
     try {
       const snapshots = await window.electronAPI?.terminalBrowserListTabs?.();
       if (!snapshots) {
@@ -135,9 +133,9 @@ export function useTerminalBrowserController({
     } finally {
       setElectronTabsSynced(true);
     }
-  }, [replaceBrowserTabs, syncActiveTabBounds]);
+  });
 
-  const navigateTab = useCallback(
+  const navigateTab = useMemoizedFn(
     async (tabId: string, rawInput: string): Promise<void> => {
       if (!tabId) {
         return;
@@ -198,7 +196,6 @@ export function useTerminalBrowserController({
         syncActiveTabBounds(tabId);
       }
     },
-    [applyElectronSnapshot, isElectron, syncActiveTabBounds, updateBrowserTab],
   );
 
   useEffect(() => {

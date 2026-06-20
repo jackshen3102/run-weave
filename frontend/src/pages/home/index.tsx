@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useMemoizedFn } from "ahooks";
 import { useNavigate } from "react-router-dom";
 import { Activity } from "lucide-react";
 import { RuntimeMonitorBadge } from "../../components/runtime-monitor-badge";
@@ -40,10 +40,10 @@ export function HomePage({
   onOpenConnectionManager,
 }: HomePageProps) {
   const navigate = useNavigate();
-  const handleAuthExpired = useCallback(() => {
+  const handleAuthExpired = useMemoizedFn(() => {
     clearToken();
     navigate("/login", { replace: true });
-  }, [clearToken, navigate]);
+  });
 
   const {
     terminalLoading,

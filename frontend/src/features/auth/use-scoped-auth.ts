@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HttpError } from "../../services/http";
 import { refreshSession, verifyAuthToken } from "../../services/auth";
 import {
@@ -179,13 +180,13 @@ export function useScopedAuth({
     statusRef.current = effectiveStatus;
   }, [effectiveStatus]);
 
-  const loadStoredSession = useCallback((): AuthSessionState | null => {
+  const loadStoredSession = useMemoizedFn((): AuthSessionState | null => {
     return isElectron
       ? loadElectronSession(connectionId)
       : loadWebSession(webStorageKey);
-  }, [connectionId, isElectron, webStorageKey]);
+  });
 
-  const clearSession = useCallback(() => {
+  const clearSession = useMemoizedFn(() => {
     if (isElectron) {
       if (connectionId) {
         clearConnectionAuth(connectionId);
@@ -199,9 +200,9 @@ export function useScopedAuth({
     setStatus("unauthenticated");
     statusRef.current = "unauthenticated";
     setValidationNonce((value) => value + 1);
-  }, [authScopeKey, connectionId, isElectron, webStorageKey]);
+  });
 
-  const setSession = useCallback(
+  const setSession = useMemoizedFn(
     (nextSession: {
       accessToken: string;
       expiresIn: number;
@@ -223,20 +224,16 @@ export function useScopedAuth({
       statusRef.current = "authenticated";
       setValidationNonce((value) => value + 1);
     },
-    [authScopeKey, connectionId, isElectron, webStorageKey],
   );
 
-  const setToken = useCallback(
-    (nextToken: string) => {
-      setSession({
-        accessToken: nextToken,
-        expiresIn: LEGACY_ACCESS_TOKEN_TTL_SECONDS,
-        sessionId: effectiveSession?.sessionId ?? "legacy-session",
-        refreshToken: effectiveSession?.refreshToken,
-      });
-    },
-    [effectiveSession?.refreshToken, effectiveSession?.sessionId, setSession],
-  );
+  const setToken = useMemoizedFn((nextToken: string) => {
+    setSession({
+      accessToken: nextToken,
+      expiresIn: LEGACY_ACCESS_TOKEN_TTL_SECONDS,
+      sessionId: effectiveSession?.sessionId ?? "legacy-session",
+      refreshToken: effectiveSession?.refreshToken,
+    });
+  });
 
   useEffect(() => {
     let cancelled = false;

@@ -1,10 +1,11 @@
+import { useMemoizedFn } from "ahooks";
 import {
   TerminalRenderer,
   type TerminalRendererExtensionContext,
   type TerminalRendererHandle,
 } from "@runweave/terminal-renderer";
 import { IonButton, IonSpinner, IonText } from "@ionic/react";
-import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 import { installTerminalTouchBehavior } from "../lib/app-terminal-touch-behavior";
 import type { AppTerminalDetailTab } from "./TerminalDetailTabBar";
@@ -70,7 +71,7 @@ export function AppTerminalPanels({
     sendInputRef.current = sendInput;
   }, [sendInput]);
 
-  const handleTerminalReady = useCallback(
+  const handleTerminalReady = useMemoizedFn(
     (context: TerminalRendererExtensionContext) => {
       const disposable = installTerminalTouchBehavior(context, {
         getRuntimeKind: () => runtimeKindRef.current,
@@ -79,7 +80,6 @@ export function AppTerminalPanels({
       onTerminalReady();
       return disposable;
     },
-    [onTerminalReady],
   );
 
   return (
