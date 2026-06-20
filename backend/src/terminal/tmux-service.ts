@@ -98,6 +98,21 @@ const TMUX_SANITIZE_NPM_PREFIX_ENV_ARGS = [
   "-u",
   "NPM_CONFIG_PREFIX",
   ";",
+  "set-environment",
+  "-g",
+  "-u",
+  "NO_COLOR",
+  ";",
+  "set-environment",
+  "-g",
+  "-u",
+  "FORCE_COLOR",
+  ";",
+  "set-environment",
+  "-g",
+  "-u",
+  "CLICOLOR",
+  ";",
 ];
 const TMUX_METADATA_FIELD_SEPARATOR = "__RUNWEAVE_METADATA_FIELD__";
 const SHELL_INTEGRATION_ENV_KEYS = [
@@ -762,6 +777,7 @@ export class TmuxService {
     if (cdpEndpoint) {
       args.push("-e", `PLAYWRIGHT_MCP_CDP_ENDPOINT=${cdpEndpoint}`);
     }
+    args.push("-e", `COLORTERM=${this.env.COLORTERM?.trim() || "truecolor"}`);
     return args;
   }
 

@@ -224,7 +224,9 @@ async function createTerminalSession(
     },
   });
 
-  expect(response.ok()).toBe(true);
+  if (!response.ok()) {
+    expect(response.ok(), await response.text()).toBe(true);
+  }
   return (await response.json()) as {
     terminalSessionId: string;
     terminalUrl: string;
@@ -284,6 +286,19 @@ async function getLiveTerminalText(page: Page): Promise<string> {
   }
 
   return (await page.getByLabel("Terminal output").textContent()) ?? "";
+}
+
+async function getRenderedTerminalSpanColor(
+  page: Page,
+  text: string,
+): Promise<string | null> {
+  return page.locator(".xterm-rows span").evaluateAll((spans, targetText) => {
+    const matchingSpans = spans.filter((candidate) =>
+      candidate.textContent?.includes(targetText),
+    );
+    const span = matchingSpans[matchingSpans.length - 1];
+    return span ? getComputedStyle(span).color : null;
+  }, text);
 }
 
 async function installTerminalEventsSocketTracker(page: Page): Promise<void> {
@@ -375,6 +390,56 @@ test("creates a terminal session and streams command output", async ({
       return await getLiveTerminalText(page);
     })
     .toContain("terminal-e2e-ok");
+});
+
+test("terminal sessions drop backend color suppression env and render ANSI color", async ({
+  page,
+  request,
+}) => {
+  const token = await loginAndSeedToken(request, page);
+  const session = await createTerminalSession(request, token, {
+    runtimePreference: "tmux",
+  });
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
+
+  await page.goto(session.terminalUrl);
+  await expect(page).toHaveURL(/\/terminal\//);
+  await expect(page.getByLabel("Terminal emulator")).toBeVisible();
+  await page.getByLabel("Terminal emulator").click({ force: true });
+
+  await page.keyboard.type(
+    `printf 'no_color=%s force_color=%s clicolor=%s colorterm=%s\\n' "\${NO_COLOR-unset}" "\${FORCE_COLOR-unset}" "\${CLICOLOR-unset}" "\${COLORTERM-unset}"`,
+  );
+  await page.keyboard.press("Enter");
+
+  await expect
+    .poll(async () => {
+      return await getLiveTerminalText(page);
+    })
+    .toContain(
+      "no_color=unset force_color=unset clicolor=unset colorterm=truecolor",
+    );
+
+  const marker = "terminal-color-e2e-red";
+  await page.keyboard.type(`printf '\\033[31m${marker}\\033[0m\\n'`);
+  await page.keyboard.press("Enter");
+
+  await expect
+    .poll(async () => {
+      return await getLiveTerminalText(page);
+    })
+    .toContain(marker);
+  await expect
+    .poll(async () => (await getRenderedTerminalSpanColor(page, marker)) ?? "")
+    .not.toBe("");
+
+  const renderedColor = await getRenderedTerminalSpanColor(page, marker);
+  expect(renderedColor).not.toBe("rgb(226, 232, 240)");
 });
 
 test("does not duplicate committed IME text", async ({ page, request }) => {
