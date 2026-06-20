@@ -32,6 +32,7 @@
 | Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md     |
 | 终端回归                                 | testing/runbooks/terminal-vim.md                          |
 | 部署/环境概览                            | deployment/overview.md                                    |
+| Electron 本地自动更新                    | deployment/electron-local-updates.md                      |
 
 ## 维护边界
 
