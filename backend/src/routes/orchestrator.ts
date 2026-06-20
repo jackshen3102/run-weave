@@ -70,6 +70,8 @@ const createRunSchema = z
     options: z
       .object({
         requireHumanConfirmationEachRound: z.boolean().optional(),
+        autoApprovePlanGate: z.boolean().optional(),
+        autoApproveVerifyGate: z.boolean().optional(),
       })
       .strict()
       .optional(),

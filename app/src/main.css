@@ -1135,6 +1135,8 @@ ion-content::part(background) {
 .terminal-composer {
   position: relative;
   z-index: 3;
+  display: grid;
+  gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid rgba(148, 163, 184, 0.14);
   background: rgba(12, 17, 24, 0.94);
@@ -1152,27 +1154,57 @@ ion-content::part(background) {
 }
 
 .terminal-shortcut-bar {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: flex;
   gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
-.terminal-shortcut-bar ion-button {
-  --border-radius: 8px;
-  --color: #dce5ee;
-  --background: rgba(148, 163, 184, 0.12);
-  --padding-end: 0;
-  --padding-start: 0;
-  min-height: 32px;
+.terminal-shortcut-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-shortcut-bar__button {
+  flex: 0 0 auto;
+  min-width: 56px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #dce5ee;
   margin: 0;
+  font: inherit;
   font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.terminal-shortcut-bar__button:active {
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.terminal-shortcut-bar__button:disabled {
+  opacity: 0.42;
 }
 
 .terminal-composer__input-row {
   display: grid;
-  grid-template-columns: 44px 44px minmax(0, 1fr) 44px;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.terminal-composer__shortcut-row {
+  min-width: 0;
+}
+
+.terminal-composer__actions-row {
+  display: grid;
+  grid-template-columns: 44px 44px minmax(86px, 1fr) 44px;
+  align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .terminal-composer__file-input {
@@ -1185,6 +1217,7 @@ ion-content::part(background) {
 
 .terminal-composer__icon-button,
 .terminal-composer__voice-button,
+.terminal-composer__shortcut-toggle,
 .terminal-composer__action {
   --border-radius: 999px;
   --padding-bottom: 0;
@@ -1212,7 +1245,30 @@ ion-content::part(background) {
   color: #eef3f8;
 }
 
+.terminal-composer__shortcut-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.14);
+  color: #eef3f8;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.terminal-composer__shortcut-toggle[aria-expanded="true"] {
+  border-color: rgba(66, 217, 134, 0.38);
+  background: rgba(66, 217, 134, 0.14);
+  color: #a7f3d0;
+}
+
 .terminal-composer__voice-button:disabled {
+  opacity: 0.42;
+}
+
+.terminal-composer__shortcut-toggle:disabled {
   opacity: 0.42;
 }
 

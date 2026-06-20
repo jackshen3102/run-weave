@@ -266,6 +266,10 @@ export function AppTerminalPage({
     terminalStateRef,
   });
 
+  const handleSendShortcutInput = useMemoizedFn((data: string) => {
+    void sendInput(data);
+  });
+
   const handleRequestDeleteTerminal = useMemoizedFn(() => {
     setDeleteError(null);
     if (isDeviceOffline) {
@@ -443,6 +447,7 @@ export function AppTerminalPage({
                 isStopping={isCommandActive}
                 onPickImage={handlePickImage}
                 onSendInput={handleSendCommand}
+                onSendShortcutInput={handleSendShortcutInput}
                 onStop={handleStop}
                 onTranscribeVoice={handleTranscribeVoice}
               />

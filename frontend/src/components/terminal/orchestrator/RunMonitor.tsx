@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Pause,
   Play,
+  Plus,
   RotateCcw,
   XCircle,
 } from "lucide-react";
@@ -31,6 +32,7 @@ export function RunMonitor(props: {
   onPause: () => void;
   onResume: () => void;
   onRestart: () => void;
+  onNewBlankRun: () => void;
   onSelectSession?: (terminalSessionId: string) => void;
 }) {
   const currentGatePhase =
@@ -218,6 +220,16 @@ export function RunMonitor(props: {
           >
             <RotateCcw />
             重新开始
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={props.loading}
+            onClick={props.onNewBlankRun}
+          >
+            <Plus />
+            新建空白 Run
           </Button>
         </div>
       </section>

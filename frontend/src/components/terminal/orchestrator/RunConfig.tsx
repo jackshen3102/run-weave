@@ -12,37 +12,45 @@ export function RunConfig(props: {
   orchestratorMode: "new" | "reuse";
   orchestratorSessionId: string;
   requireHumanConfirmationEachRound: boolean;
+  autoApprovePlanGate: boolean;
+  autoApproveVerifyGate: boolean;
   projectSessions: TerminalSessionListItem[];
   roles: OrchestratorRoleDefinition[];
   roleDrafts: Record<string, RoleDraft>;
   roleLibraryOpen: boolean;
   loading: boolean;
-  restartMode: boolean;
+  draftMode: "restart" | "blank" | null;
   onTaskChange: (value: string) => void;
   onStartupPromptChange: (value: string) => void;
   onOrchestratorCommandChange: (value: AgentCliCommand) => void;
   onOrchestratorModeChange: (value: "new" | "reuse") => void;
   onOrchestratorSessionChange: (value: string) => void;
   onRequireHumanConfirmationEachRoundChange: (value: boolean) => void;
+  onAutoApprovePlanGateChange: (value: boolean) => void;
+  onAutoApproveVerifyGateChange: (value: boolean) => void;
   onRoleDraftChange: (roleId: string, patch: Partial<RoleDraft>) => void;
   onToggleRoleLibrary: () => void;
   onRoleChange: (
     roleId: string,
     patch: Partial<OrchestratorRoleDefinition>,
   ) => void;
-  onCancelRestart: () => void;
+  onCancelDraft: () => void;
   onSaveRoleLibrary: () => void;
   onStart: () => void;
 }) {
   return (
     <div className="space-y-4">
-      {props.restartMode ? (
+      {props.draftMode ? (
         <div className="flex items-center gap-2 rounded-md border border-sky-700/70 bg-sky-950/30 px-3 py-2 text-xs text-sky-100">
-          <span className="min-w-0 flex-1">已带入上一次流程配置，可直接开始新的 Run。</span>
+          <span className="min-w-0 flex-1">
+            {props.draftMode === "restart"
+              ? "已带入上一次流程配置，可直接开始新的 Run。"
+              : "已切换到全新 Run，不会带入上一次任务信息。"}
+          </span>
           <button
             type="button"
             className="shrink-0 text-sky-300 hover:text-sky-100"
-            onClick={props.onCancelRestart}
+            onClick={props.onCancelDraft}
           >
             取消
           </button>
@@ -85,6 +93,26 @@ export function RunConfig(props: {
             }
           />
           <span className="min-w-0 flex-1">每一轮都需要人工确认</span>
+        </label>
+        <label className="flex items-center gap-2 rounded-md border border-slate-800 px-3 py-2 text-xs text-slate-200">
+          <input
+            type="checkbox"
+            checked={props.autoApprovePlanGate}
+            onChange={(event) =>
+              props.onAutoApprovePlanGateChange(event.target.checked)
+            }
+          />
+          <span className="min-w-0 flex-1">自动通过计划审批</span>
+        </label>
+        <label className="flex items-center gap-2 rounded-md border border-slate-800 px-3 py-2 text-xs text-slate-200">
+          <input
+            type="checkbox"
+            checked={props.autoApproveVerifyGate}
+            onChange={(event) =>
+              props.onAutoApproveVerifyGateChange(event.target.checked)
+            }
+          />
+          <span className="min-w-0 flex-1">自动通过人工验收，进入提交</span>
         </label>
       </section>
       <section className="space-y-2">

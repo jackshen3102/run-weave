@@ -68,6 +68,8 @@ export function buildRunPackage(params: {
       requireHumanConfirmationEachRound: Boolean(
         params.input.options?.requireHumanConfirmationEachRound,
       ),
+      autoApprovePlanGate: Boolean(params.input.options?.autoApprovePlanGate),
+      autoApproveVerifyGate: Boolean(params.input.options?.autoApproveVerifyGate),
     },
     pendingRoundConfirmation: null,
     orchestrator: {

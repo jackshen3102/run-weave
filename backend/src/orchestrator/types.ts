@@ -17,6 +17,8 @@ export interface CreateRunInput {
   roles: OrchestratorRunRole[];
   options?: {
     requireHumanConfirmationEachRound?: boolean;
+    autoApprovePlanGate?: boolean;
+    autoApproveVerifyGate?: boolean;
   };
 }
 
