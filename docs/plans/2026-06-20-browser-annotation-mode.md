@@ -27,7 +27,9 @@
   - `onTerminalBrowserAnnotationUpdated`
 - 已在 Browser 工具栏增加注释按钮。
 - 已按方案 2 调整为 Codex 风格：不再打开右侧 React 注释面板，不再裁剪 BrowserView；评论输入浮窗和 marker 都在 BrowserView 页面内，提交按钮放在 Browser 工具栏。
-- 已在 BrowserView 内实现 hover 高亮、点击目标、评论输入、编号 marker、Escape 关闭编辑器。
+- 已在 BrowserView 内实现 hover 高亮、点击目标、单行评论输入、编号 marker、Escape 关闭编辑器。
+- 已补齐 Codex 风格页面内评论交互：输入框默认单行，Enter/发送按钮立即发送，`Cmd/Ctrl+Enter` 或菜单“添加”保存为草稿，后续可统一提交。
+- 已补齐已保存 marker 交互：hover marker 显示评论内容，点击 marker 打开编辑浮窗，支持删除、取消、保存修改；多条注释保持 1、2、3 编号。
 - 已在提交时 capture 带 marker 的 BrowserView 截图。
 - 已接入现有 terminal clipboard image route：提交前把截图保存成文件，并在 Browser comments prompt 中写入返回的 `filePath`。
 - 已参考真实 Codex 百度标注消息，把 prompt 尾部补齐为 `## My request for Codex` 证据说明；由于 Runweave 当前不发送 Base64 图片附件，证据说明中直接引用同一个临时截图 `filePath`。

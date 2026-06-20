@@ -8,10 +8,10 @@ APP 端已经有显式的日志上报入口和完整流程：
 - `app/src/pages/AppTerminalPage.tsx` 的终端页更多菜单也包含「日志上报」。
 - `app/src/features/support-logs/SupportLogSheet.tsx` 支持开始记录、结束并上报、展示服务端日志文件路径、复制路径、清除本地日志。
 
-Web 端已有诊断日志能力，但入口和体验不满足这次目标：
+Web 端原有诊断日志能力，但旧入口和体验不满足这次目标：
 
-- `frontend/src/App.tsx` 只有在 `window.runweaveDiagnosticLogs.enable()` 或 localStorage 开启后才渲染 `DiagnosticLogEntry`。
-- `frontend/src/components/diagnostic-log-entry.tsx` 是固定浮窗，偏调试入口；结束后可查看/复制日志正文、下载日志，但没有以「服务端路径」为核心的上报结果展示。
+- 旧版 `frontend/src/App.tsx` 通过 `window.runweaveDiagnosticLogs.enable()` 或 localStorage 渲染 `DiagnosticLogEntry` 浮窗；该入口已删除。
+- 旧版 `frontend/src/components/diagnostic-log-entry.tsx` 是固定浮窗，偏调试入口；结束后可查看/复制日志正文、下载日志，但没有以「服务端路径」为核心的上报结果展示。当前组件只保留右上角菜单使用的受控 dialog 形态。
 - `backend/src/routes/diagnostic-logs.ts` 的 `/api/diagnostic-logs/stop` 已经调用 `recorder.persistLatestResult()`，因此后端已具备“保存到服务端目录”的能力，不需要新增后端接口。
 - 截图对应的 Web 端右上角工具栏在 `frontend/src/components/terminal/terminal-workspace-shell.tsx`，现有按钮包含 `TerminalSubmitPopover`、`TerminalPreviewMenu`、Orchestrator、History 等。
 
@@ -31,7 +31,7 @@ Web 端已有诊断日志能力，但入口和体验不满足这次目标：
 - 不改 APP 的 `SupportLogSheet` 行为和视觉。
 - 不扩大诊断日志采集范围；仍然只收集 `aiDiagnosticLog(...)` / Web 前端 recorder 明确写入的诊断日志，不包装 `console.*`、stdout、stderr 或本地文件内容。
 - 不新增单元测试、Vitest、Node test 或 coverage 门槛；本仓库该类验证只走 Playwright E2E、typecheck、lint。
-- 不删除现有 `window.runweaveDiagnosticLogs` 控制器，保留它作为调试兼容能力；但新入口不依赖控制台开关。
+- 删除旧的 `window.runweaveDiagnosticLogs` 控制器和全局浮窗入口；Web 端只保留右上角「日志上报」入口。
 
 ## 推荐方案
 
@@ -63,22 +63,18 @@ export interface DiagnosticLogStatusResponse {
 
 - `frontend/src/components/diagnostic-log-entry.tsx`
   - 复用现有组件，不新增平行的日志上报组件。
-  - 保留当前默认浮窗行为，兼容 `frontend/src/App.tsx` 里的 `window.runweaveDiagnosticLogs.enable()` 调试入口。
-  - 在现有组件内增加受控打开能力，供右上角「日志上报」菜单直接打开。Props 建议：
+  - 删除旧的固定浮窗、拖拽位置、本地入口开关逻辑。
+  - 保留受控打开能力，供右上角「日志上报」菜单直接打开。Props：
 
 ```ts
 interface DiagnosticLogEntryProps {
   apiBase: string;
   token: string;
-  variant?: "floating" | "dialog";
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 ```
 
-- `variant` 语义：
-  - 默认 `floating`：保持现有固定浮窗、拖拽位置、开始记录、结束记录、查看结果、下载日志能力。
-  - `dialog`：不渲染固定浮窗，只渲染一个受控对话框；右上角菜单设置 `open=true` 后展示日志上报流程。
 - 不要把现有 `DiagnosticLogEntry` 的 recorder/service 逻辑复制到新文件；只在这个组件里抽出少量内部 render helper，降低重复。
 - UI 状态：
   - `status: DiagnosticLogStatus`
@@ -95,7 +91,7 @@ interface DiagnosticLogEntryProps {
   - 结束后设置 `serverPath = result.files?.logsJsonl ?? result.files?.dir ?? null`。
   - 如果没有 `serverPath`，仍显示日志条数和失败提示，避免误导用户认为已经有可复制路径。
   - 点击「复制日志路径」使用 `navigator.clipboard.writeText(serverPath)`。
-  - 保留现有「查看结果」「下载日志」能力，但右上角入口的主路径是“结束并上报后复制服务端路径”。
+  - 保留现有「下载日志」能力，但右上角入口的主路径是“结束并上报后复制服务端路径”。
 - 文案建议：
   - 标题：「日志上报」
   - 说明：「开始记录后复现问题，结束时会把本轮 Web 与服务端诊断日志保存到服务端目录。」
@@ -113,13 +109,12 @@ interface DiagnosticLogEntryProps {
 <DiagnosticLogEntry
   apiBase={apiBase}
   token={token}
-  variant="dialog"
   open={diagnosticLogOpen}
   onOpenChange={setDiagnosticLogOpen}
 />
 ```
 
-- 避免依赖 `window.runweaveDiagnosticLogs.enable()`；该控制器仅保留给旧的浮窗调试入口。
+- 避免依赖 `window.runweaveDiagnosticLogs.enable()`；该控制器和旧浮窗入口已删除。
 - 按钮样式对齐现有图标按钮：
 
 ```tsx
