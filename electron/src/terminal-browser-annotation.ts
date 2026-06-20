@@ -653,7 +653,7 @@ function buildAnnotationRuntimeScript(): string {
       toggleMenu();
     });
     sendButton.addEventListener("click", () => {
-      save(false);
+      save(true);
     });
     menuSendButton.addEventListener("click", () => {
       save(true);
@@ -688,7 +688,7 @@ function buildAnnotationRuntimeScript(): string {
         if (editingAnnotationId) {
           saveEdit();
         } else {
-          save(false);
+          save(true);
         }
       }
     });
