@@ -8,6 +8,30 @@ import { pathToFileURL } from "node:url";
 const FORCE_SHUTDOWN_TIMEOUT_MS = 5_000;
 const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 30_000;
 const HEALTHCHECK_INTERVAL_MS = 200;
+const DEV_CHILD_ENV_KEYS_TO_REMOVE = [
+  "BROWSER_VIEWER_BACKEND_URL",
+  "BROWSER_VIEWER_MANAGES_PACKAGED_BACKEND",
+  "BROWSER_VIEWER_NODE_PTY_DIR",
+  "ELECTRON_RUN_AS_NODE",
+  "RUNWEAVE_BACKEND_PORT",
+  "RUNWEAVE_BASE_URL",
+  "RUNWEAVE_COMPLETION_HOOK_ENDPOINT",
+  "RUNWEAVE_HOOK_DEBUG_LOG",
+  "RUNWEAVE_HOOK_ENDPOINT",
+  "RUNWEAVE_HOOK_TOKEN",
+  "RUNWEAVE_PROJECT_ID",
+  "RUNWEAVE_RUNTIME_RELEASE_ID",
+  "RUNWEAVE_TERMINAL_SESSION_ID",
+  "RUNWEAVE_TMUX_SESSION_NAME",
+];
+
+function createDevChildBaseEnv(baseEnv) {
+  const env = { ...baseEnv };
+  for (const key of DEV_CHILD_ENV_KEYS_TO_REMOVE) {
+    delete env[key];
+  }
+  return env;
+}
 
 function resolveDevBrowserProfileDir(baseEnv) {
   const devProfileDir = baseEnv.RUNWEAVE_DEV_BROWSER_PROFILE_DIR?.trim();
@@ -40,8 +64,9 @@ function resolveDevBrowserProfileDir(baseEnv) {
 }
 
 export function createBackendEnv({ baseEnv, backendPort }) {
+  const env = createDevChildBaseEnv(baseEnv);
   return {
-    ...baseEnv,
+    ...env,
     BROWSER_PROFILE_DIR: resolveDevBrowserProfileDir(baseEnv),
     BROWSER_DEVTOOLS_ENABLED: baseEnv.BROWSER_DEVTOOLS_ENABLED ?? "true",
     PORT: String(backendPort),
@@ -72,8 +97,9 @@ export function createFrontendEnv({
   frontendHost,
   frontendPort,
 }) {
+  const env = createDevChildBaseEnv(baseEnv);
   return {
-    ...baseEnv,
+    ...env,
     VITE_PROXY_TARGET: `http://localhost:${backendPort}`,
     VITE_STRICT_PORT: "true",
     ...(frontendHost ? { VITE_DEV_HOST: frontendHost } : {}),
