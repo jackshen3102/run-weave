@@ -11,6 +11,7 @@
     "dist:electron:mac:local-updates": "node ./scripts/electron-dist-retry.mjs --config electron-builder.local-updates.yml --mac --arm64",
     "publish:electron:local-updates": "pnpm dist:electron:mac:local-updates && node ./scripts/publish-local-updates.mjs",
     "serve:electron:local-updates": "node ./scripts/serve-local-updates.mjs",
+    "electron:local-update": "node ./scripts/electron-local-update.mjs",
     "app:dev": "node ./app-dev.mjs",
     "app:dev:ios": "APP_DEV_IOS=true node ./app-dev.mjs",
     "app:build": "pnpm --filter @runweave/app build",

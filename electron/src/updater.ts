@@ -1,7 +1,11 @@
 import pkg from "electron-updater";
 import type { UpdateInfo } from "electron-updater";
 import { BrowserWindow, dialog } from "electron";
-import { getCustomUpdateBaseUrl } from "./updater-config.js";
+import {
+  getCustomUpdateBaseUrl,
+  getPackagedUpdateBaseUrl,
+  shouldAutoInstallLocalUpdates,
+} from "./updater-config.js";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -14,6 +18,12 @@ export function initAutoUpdater(win: BrowserWindow): void {
   const updateBaseUrl = getCustomUpdateBaseUrl(
     process.env.BROWSER_VIEWER_LOCAL_UPDATES_URL,
   );
+  const packagedUpdateBaseUrl = getPackagedUpdateBaseUrl(process.resourcesPath);
+  const activeUpdateBaseUrl = updateBaseUrl ?? packagedUpdateBaseUrl;
+  const autoInstallLocalUpdates = shouldAutoInstallLocalUpdates({
+    explicitValue: process.env.BROWSER_VIEWER_AUTO_INSTALL_LOCAL_UPDATES,
+    updateBaseUrl: activeUpdateBaseUrl,
+  });
 
   const autoUpdater = getAutoUpdater();
 
@@ -29,6 +39,14 @@ export function initAutoUpdater(win: BrowserWindow): void {
   }
 
   autoUpdater.on("update-available", (info: UpdateInfo) => {
+    if (autoInstallLocalUpdates) {
+      console.log(
+        `[auto-updater] local update v${info.version} available; downloading`,
+      );
+      autoUpdater.downloadUpdate();
+      return;
+    }
+
     if (!mainWindow) return;
 
     dialog
@@ -52,6 +70,12 @@ export function initAutoUpdater(win: BrowserWindow): void {
   });
 
   autoUpdater.on("update-downloaded", () => {
+    if (autoInstallLocalUpdates) {
+      console.log("[auto-updater] local update downloaded; restarting");
+      autoUpdater.quitAndInstall(false, true);
+      return;
+    }
+
     if (!mainWindow) return;
 
     dialog
