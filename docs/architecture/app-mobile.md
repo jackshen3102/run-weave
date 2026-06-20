@@ -24,6 +24,7 @@ App 终端详情页的核心能力是：
 
 - 打开指定 terminal session，持续查看实时输出。
 - 通过底部 composer 发送命令、问题、图片、语音转写结果或换行输入。
+- 通过可展开快捷键条向终端发送原始控制输入，包括 `Ctrl-C`、`Tab`、`Esc`、方向键上/下和 `Enter`。快捷键走 terminal raw input 通道，不能复用文本命令提交路径。
 - 根据后端 `TerminalState` 决定是否展示 Stop。
 - 通过底部 `Chat / Changes / Files` tabs 在移动端查看终端输出、项目变更和项目文件。
 - 在手机触摸场景下避免误弹软键盘，同时保留明确的输入入口。
@@ -31,6 +32,12 @@ App 终端详情页的核心能力是：
 Stop 只是向终端/Codex/Trae CLI 发送控制输入，不直接把状态改成 idle。Stop 按钮是否消失，取决于后端状态接口后续返回的 `TerminalState`。
 
 图片按钮复用现有 terminal clipboard image 上传接口，把图片保存到后端临时目录后，将 shell-quoted 文件路径插入 composer。选择图片不会立即写入终端；用户仍需要检查并点击发送。App 不在输入框上方维护预览 chip、缩略图或附件列表。
+
+底部 composer 使用两行布局：输入框独占一行，图片、语音、快捷键开关、发送/停止放在第二行操作区。快捷键条展开时显示在输入框上方，操作区仍保留在输入框下方。
+
+Chat 输出支持滚动到底部按钮。用户离开底部或进入 tmux scrollback/copy-mode 后，按钮浮在终端区域内；点击会滚动 renderer 到底部，并通过 `tmux_exit_copy_mode` 输入模式请求后端退出 tmux copy-mode。
+
+Changes 和 Files 中的图片预览复用 `@runweave/common/terminal` 的 zoomable image 组件，支持适配、实际尺寸、自定义缩放、拖拽平移和重置。App 只通过 `@runweave/common/terminal` 显式子路径消费共享前端组件。
 
 当设备 offline 时，详情页优先显示 `Computer Offline`，暂停 terminal websocket、terminal-events websocket 和 `/state` 轮询，并阻止发送输入、Stop、上传图片、删除终端和新建终端等写入操作。恢复 online 后再重连并刷新状态；离线期间的输入不能进入待发送队列并在恢复后自动 flush。
 

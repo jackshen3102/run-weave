@@ -12,7 +12,7 @@
 | App 后端连接管理                         | architecture/app-mobile.md#配置与安全                     |
 | App 终端语音输入                         | architecture/app-mobile.md#app-终端语音输入               |
 | 终端状态模型                             | architecture/terminal-state.md                            |
-| 终端代码预览 / Terminal Browser          | architecture/terminal-code-preview.md                     |
+| 终端代码预览 / Terminal Browser / Browser comments | architecture/terminal-code-preview.md                     |
 | 终端 tmux 恢复                           | architecture/terminal-tmux-recovery.md                    |
 | 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md                 |
 | 终端任务完成通知（桌面/飞书）            | architecture/terminal-completion-notifications.md         |

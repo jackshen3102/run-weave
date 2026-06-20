@@ -84,6 +84,11 @@ Terminal Browser 工具当前边界：
 - 移动设备画布使用显式缩放模型：前端计算设备逻辑 viewport、面板内展示 bounds 和 `emulationScale`，Electron `setBounds()` 使用展示 bounds，CDP emulation 使用逻辑 viewport 与 scale。不能用 CSS transform 代替 native view 缩放。
 - 设备模式可与 CDP Proxy 共存：如果当前 tab 已附着 CDP Proxy，设备切换复用同一个 `webContents.debugger` 发送 emulation 命令；如果先进入移动设备再被 CDP attach，CDP Proxy 复用设备模式已有的 debugger attach。detached DevTools 仍与设备模式和 CDP Proxy 互斥。
 - 设备状态切换失败必须从 IPC 返回错误，前端不能显示假成功。设备按钮禁用只作为用户体验提示，主进程校验才是安全边界。
+- Browser 工具在 Electron 桌面端提供 Browser comments 注释模式。前端工具栏只负责开关、计数、提交和错误展示；真实 hover 高亮、目标锁定、评论输入、marker 渲染和截图采集运行在 Electron `WebContentsView` 注入的 annotation runtime 中。
+- Web/PWA 模式没有 Electron BrowserView，因此 Browser comments 按钮保持禁用，不尝试调用 Electron-only IPC。
+- Browser comments 的共享协议在 `packages/shared/src/terminal-browser-annotation.ts`，目标证据包含页面 URL、frame label、目标文本、selector、DOM path、视口坐标、元素 rect 与 device pixel ratio。提交结果包含多条 annotation draft，以及一张可选 PNG marker screenshot。
+- 提交 Browser comments 时，前端会把 marker screenshot 走现有 terminal clipboard image route 保存为本地文件路径，再构造 Codex 风格 `# Browser comments:` prompt。prompt 明确把页面内容标记为 untrusted page evidence，并通过 `prompt_paste` 输入模式一次性发送到当前 active terminal，避免多行 prompt 被拆成多条终端输入。
+- 注释状态按 Browser tab 隔离。停止注释、提交、导航、关闭 tab 或关闭窗口时都应清理页面内 annotation runtime 和前端计数；没有 active terminal 时不能提交，只保留可恢复错误提示。
 
 设计结论：
 
@@ -94,6 +99,7 @@ Terminal Browser 工具当前边界：
 - Markdown 渲染只在打开 Markdown 文件时出现，作为 `file` 模式内的 `Source` / `Split` / `Preview` 视图切换。
 - 独立 `.svg` 文件也复用当前 `file` 模式和当前 project-scoped file API。它默认展示 SVG 预览，并可切到源码；这不等同于 Markdown 文档中嵌入的 SVG。
 - 独立图片文件预览也复用当前 `file` 模式，但不复用文本 file content 响应。图片预览通过 project-scoped asset endpoint 获取受限图片字节，默认展示图片预览；这不等同于 Markdown 文档中嵌入的图片。
+- 图片预览使用 `@runweave/common/terminal` 的 `ZoomableImage`，Web Preview 和 App Changes/Files 双边复用同一套 fit、actual size、自定义缩放、拖拽平移和重置行为。`packages/common` 只通过显式子路径导出，不新增根导出。
 
 ## 目标
 
