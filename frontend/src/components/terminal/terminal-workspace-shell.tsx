@@ -329,7 +329,6 @@ function TerminalSessionTab({
           onSelectSession(session.terminalSessionId);
         }}
       >
-        <TerminalTabStateDot session={session} terminalState={terminalState} />
         {isWorking ? (
           <ShimmerText
             className="truncate shimmer-invert"
@@ -863,9 +862,9 @@ export function TerminalWorkspaceShell({
               const isActive = session.terminalSessionId === activeSession?.terminalSessionId;
               const hasBell =
                 !isActive && Boolean(bellMarkers[session.terminalSessionId]);
-              const hasCompletion =
-                !isActive &&
-                Boolean(completionMarkers[session.terminalSessionId]);
+              const hasCompletion = Boolean(
+                completionMarkers[session.terminalSessionId],
+              );
               return (
                 <TerminalSessionTab
                   session={session}

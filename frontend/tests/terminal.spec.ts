@@ -1001,6 +1001,10 @@ test("marks a background project from an explicit codex completion event", async
       .poll(async () => (await projectADot.getAttribute("class")) ?? "")
       .not.toContain("bg-emerald-400");
 
+    const sessionATab = page.locator(
+      `[data-terminal-session-id="${sessionA.terminalSessionId}"]`,
+    );
+    const sessionADot = sessionATab.locator("span").last();
     const activeRecordResponse = await request.post(
       `${E2E_API_BASE}/internal/terminal-completion`,
       {
@@ -1022,6 +1026,19 @@ test("marks a background project from an explicit codex completion event", async
       .poll(async () => (await projectADot.getAttribute("class")) ?? "", {
         timeout: 1_000,
       })
+      .toContain("bg-emerald-400");
+    await expect
+      .poll(async () => (await sessionADot.getAttribute("class")) ?? "", {
+        timeout: 1_000,
+      })
+      .toContain("bg-emerald-400");
+
+    await sessionATab.click();
+    await expect
+      .poll(async () => (await projectADot.getAttribute("class")) ?? "")
+      .not.toContain("bg-emerald-400");
+    await expect
+      .poll(async () => (await sessionADot.getAttribute("class")) ?? "")
       .not.toContain("bg-emerald-400");
   } finally {
     await rm(cwdA, { force: true, recursive: true });

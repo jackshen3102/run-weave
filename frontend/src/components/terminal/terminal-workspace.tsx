@@ -367,6 +367,17 @@ export function TerminalWorkspace({
     onSelectProject: selectActiveProject,
     onSelectSession: selectActiveSession,
   });
+  const handleSelectSessionTab = useMemoizedFn((terminalSessionId: string) => {
+    setCompletionMarkers((current) => {
+      if (!current[terminalSessionId]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[terminalSessionId];
+      return next;
+    });
+    selectActiveSession(terminalSessionId);
+  });
   useEffect(() => {
     if (!hasLoadedSessions || requestError || sessions.length > 0) {
       return;
@@ -513,7 +524,7 @@ export function TerminalWorkspace({
       terminalStateBySessionId={terminalStateBySessionId}
       terminalLayoutVersion={terminalLayoutVersion}
       onSelectProject={selectActiveProject}
-      onSelectSession={selectActiveSession}
+      onSelectSession={handleSelectSessionTab}
       onRequestCreateProject={() => {
         setPreviewActiveTool("preview");
         setProjectDialogError(null);
