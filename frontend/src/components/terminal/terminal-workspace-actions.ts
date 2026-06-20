@@ -1,9 +1,4 @@
 import { useMemoizedFn } from "ahooks";
-import type { Dispatch, SetStateAction } from "react";
-import type {
-  TerminalProjectListItem,
-  TerminalSessionListItem,
-} from "@runweave/shared";
 import { resolveNewTerminalRuntimePreference } from "../../features/terminal/runtime-preference";
 import type { ClientMode } from "../../features/client-mode";
 import { HttpError } from "../../services/http";
@@ -17,6 +12,7 @@ import {
   updateTerminalSession,
   updateTerminalProject,
 } from "../../services/terminal";
+import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 
 const BELL_MARKER_DURATION_MS = 2_000;
 
@@ -24,26 +20,6 @@ interface UseTerminalWorkspaceActionsArgs {
   apiBase: string;
   token: string;
   clientMode: ClientMode;
-  loading: boolean;
-  activeProjectId: string | null;
-  activeProject: TerminalProjectListItem | null;
-  activeSession: TerminalSessionListItem | null;
-  projectDialogMode: "create" | "edit" | null;
-  projectPendingDeletion: TerminalProjectListItem | null;
-  setProjects: Dispatch<SetStateAction<TerminalProjectListItem[]>>;
-  setSessions: Dispatch<SetStateAction<TerminalSessionListItem[]>>;
-  setLoading: Dispatch<SetStateAction<boolean>>;
-  setRequestError: Dispatch<SetStateAction<string | null>>;
-  setProjectDialogMode: Dispatch<SetStateAction<"create" | "edit" | null>>;
-  setProjectDialogError: Dispatch<SetStateAction<string | null>>;
-  setProjectPendingDeletion: Dispatch<
-    SetStateAction<TerminalProjectListItem | null>
-  >;
-  setHistoryDrawerOpen: Dispatch<SetStateAction<boolean>>;
-  setHistoryTerminalSessionId: Dispatch<SetStateAction<string | null>>;
-  setBellMarkers: Dispatch<SetStateAction<Record<string, boolean>>>;
-  setActiveProjectId: Dispatch<SetStateAction<string | null>>;
-  setActiveSessionId: Dispatch<SetStateAction<string | null>>;
   selectActiveSession: (terminalSessionId: string | null) => void;
   removeProjectPreview: (projectId: string) => void;
   loadSessions: () => Promise<void>;
@@ -54,29 +30,67 @@ export function useTerminalWorkspaceActions({
   apiBase,
   token,
   clientMode,
-  loading,
-  activeProjectId,
-  activeProject,
-  activeSession,
-  projectDialogMode,
-  projectPendingDeletion,
-  setProjects,
-  setSessions,
-  setLoading,
-  setRequestError,
-  setProjectDialogMode,
-  setProjectDialogError,
-  setProjectPendingDeletion,
-  setHistoryDrawerOpen,
-  setHistoryTerminalSessionId,
-  setBellMarkers,
-  setActiveProjectId,
-  setActiveSessionId,
   selectActiveSession,
   removeProjectPreview,
   loadSessions,
   onAuthExpired,
 }: UseTerminalWorkspaceActionsArgs) {
+  const loading = useTerminalWorkspaceStore((state) => state.loading);
+  const activeProjectId = useTerminalWorkspaceStore(
+    (state) => state.activeProjectId,
+  );
+  const activeProject = useTerminalWorkspaceStore((state) =>
+    state.projects.find((project) => project.projectId === state.activeProjectId) ??
+    null,
+  );
+  const activeSession = useTerminalWorkspaceStore((state) => {
+    const visibleSessions = state.sessions.filter((session) =>
+      state.activeProjectId ? session.projectId === state.activeProjectId : true,
+    );
+    return (
+      visibleSessions.find(
+        (session) => session.terminalSessionId === state.activeSessionId,
+      ) ??
+      visibleSessions[0] ??
+      null
+    );
+  });
+  const projectDialogMode = useTerminalWorkspaceStore(
+    (state) => state.projectDialogMode,
+  );
+  const projectPendingDeletion = useTerminalWorkspaceStore(
+    (state) => state.projectPendingDeletion,
+  );
+  const setProjects = useTerminalWorkspaceStore((state) => state.setProjects);
+  const setSessions = useTerminalWorkspaceStore((state) => state.setSessions);
+  const setLoading = useTerminalWorkspaceStore((state) => state.setLoading);
+  const setRequestError = useTerminalWorkspaceStore(
+    (state) => state.setRequestError,
+  );
+  const setProjectDialogMode = useTerminalWorkspaceStore(
+    (state) => state.setProjectDialogMode,
+  );
+  const setProjectDialogError = useTerminalWorkspaceStore(
+    (state) => state.setProjectDialogError,
+  );
+  const setProjectPendingDeletion = useTerminalWorkspaceStore(
+    (state) => state.setProjectPendingDeletion,
+  );
+  const setHistoryDrawerOpen = useTerminalWorkspaceStore(
+    (state) => state.setHistoryDrawerOpen,
+  );
+  const setHistoryTerminalSessionId = useTerminalWorkspaceStore(
+    (state) => state.setHistoryTerminalSessionId,
+  );
+  const setBellMarkers = useTerminalWorkspaceStore(
+    (state) => state.setBellMarkers,
+  );
+  const setActiveProjectId = useTerminalWorkspaceStore(
+    (state) => state.setActiveProjectId,
+  );
+  const setActiveSessionId = useTerminalWorkspaceStore(
+    (state) => state.setActiveSessionId,
+  );
   const createSession = useMemoizedFn(async (): Promise<void> => {
     setLoading(true);
     try {

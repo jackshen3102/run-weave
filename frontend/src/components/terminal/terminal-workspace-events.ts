@@ -1,26 +1,15 @@
 import { useMemoizedFn } from "ahooks";
 import { useRef } from "react";
-import type { Dispatch, RefObject, SetStateAction } from "react";
-import type {
-  TerminalEventEnvelope,
-  TerminalSessionListItem,
-  TerminalState,
-} from "@runweave/shared";
+import type { TerminalEventEnvelope } from "@runweave/shared";
 import { createTerminalBellPlayer } from "../../features/terminal/bell";
+import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import { useTerminalEventsConnection } from "../../features/terminal/use-terminal-events-connection";
 
 interface UseTerminalWorkspaceEventsArgs {
   apiBase: string;
   token: string;
-  sessionsRef: RefObject<TerminalSessionListItem[]>;
-  activeSessionIdRef: RefObject<string | null>;
   onAuthExpired?: () => void;
-  setTerminalStateBySessionId: Dispatch<
-    SetStateAction<Record<string, TerminalState>>
-  >;
-  setCompletionMarkers: Dispatch<SetStateAction<Record<string, boolean>>>;
   loadSessions: () => Promise<void>;
-  setActiveProjectId: Dispatch<SetStateAction<string | null>>;
   selectActiveSession: (terminalSessionId: string | null) => void;
 }
 
@@ -50,15 +39,19 @@ function getLatestCreatedSessionEvent(
 export function useTerminalWorkspaceEvents({
   apiBase,
   token,
-  sessionsRef,
-  activeSessionIdRef,
   onAuthExpired,
-  setTerminalStateBySessionId,
-  setCompletionMarkers,
   loadSessions,
-  setActiveProjectId,
   selectActiveSession,
 }: UseTerminalWorkspaceEventsArgs) {
+  const setTerminalStateBySessionId = useTerminalWorkspaceStore(
+    (state) => state.setTerminalStateBySessionId,
+  );
+  const setCompletionMarkers = useTerminalWorkspaceStore(
+    (state) => state.setCompletionMarkers,
+  );
+  const setActiveProjectId = useTerminalWorkspaceStore(
+    (state) => state.setActiveProjectId,
+  );
   const terminalEventCursorRef = useRef<string | null>(null);
   const completionBellPlayerRef = useRef<ReturnType<
     typeof createTerminalBellPlayer
@@ -104,7 +97,10 @@ export function useTerminalWorkspaceEvents({
       if (events.some(isTerminalListInvalidationEvent)) {
         const latestCreatedSession = getLatestCreatedSessionEvent(events);
         void loadSessions().then(() => {
-          if (!latestCreatedSession || activeSessionIdRef.current) {
+          if (
+            !latestCreatedSession ||
+            useTerminalWorkspaceStore.getState().activeSessionId
+          ) {
             return;
           }
           setActiveProjectId(latestCreatedSession.projectId);
@@ -113,7 +109,9 @@ export function useTerminalWorkspaceEvents({
       }
 
       const knownSessionIds = new Set(
-        sessionsRef.current.map((session) => session.terminalSessionId),
+        useTerminalWorkspaceStore
+          .getState()
+          .sessions.map((session) => session.terminalSessionId),
       );
       const markerSessionIds = events
         .filter((event) => event.kind === "completion")

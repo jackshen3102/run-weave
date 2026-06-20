@@ -2,12 +2,9 @@ import { type PointerEvent as ReactPointerEvent } from "react";
 import type {
   TerminalChangesViewMode,
   TerminalMarkdownViewMode,
+  TerminalPreviewMode,
   TerminalSvgViewMode,
 } from "../../features/terminal/preview-store";
-
-interface UpdateProjectPreview {
-  (projectId: string, patch: Record<string, string | number | undefined>): void;
-}
 
 interface TerminalPreviewPanelActionsArgs {
   expanded: boolean;
@@ -19,7 +16,25 @@ interface TerminalPreviewPanelActionsArgs {
   loadFile: (filePath: string) => Promise<void>;
   loadChanges: () => Promise<void>;
   setWidth: (width: number) => void;
-  updateProjectPreview: UpdateProjectPreview;
+  setOpenFileQuery: (projectId: string, query: string) => void;
+  openFile: (
+    projectId: string,
+    filePath: string,
+    mode?: Extract<TerminalPreviewMode, "file" | "explorer">,
+  ) => void;
+  setMarkdownViewModeInStore: (
+    projectId: string,
+    mode: TerminalMarkdownViewMode,
+  ) => void;
+  setMarkdownSplitSourceWidthPct: (
+    projectId: string,
+    widthPct: number,
+  ) => void;
+  setSvgViewModeInStore: (projectId: string, mode: TerminalSvgViewMode) => void;
+  setChangesViewModeInStore: (
+    projectId: string,
+    mode: TerminalChangesViewMode,
+  ) => void;
   setFilePreview: (value: null) => void;
   setFileError: (value: string | null) => void;
   setMarkdownScrollRatio: (value: number) => void;
@@ -36,7 +51,12 @@ export function useTerminalPreviewPanelActions({
   loadFile,
   loadChanges,
   setWidth,
-  updateProjectPreview,
+  setOpenFileQuery,
+  openFile,
+  setMarkdownViewModeInStore,
+  setMarkdownSplitSourceWidthPct,
+  setSvgViewModeInStore,
+  setChangesViewModeInStore,
   setFilePreview,
   setFileError,
   setMarkdownScrollRatio,
@@ -50,7 +70,7 @@ export function useTerminalPreviewPanelActions({
       if (selectedFilePath) {
         void loadFile(selectedFilePath);
       } else if (projectId) {
-        updateProjectPreview(projectId, { openFileQuery: query });
+        setOpenFileQuery(projectId, query);
       }
       return;
     }
@@ -101,11 +121,7 @@ export function useTerminalPreviewPanelActions({
       return;
     }
     const targetMode = mode === "explorer" ? "explorer" : "file";
-    updateProjectPreview(projectId, {
-      mode: targetMode,
-      selectedFilePath: filePath,
-      path: filePath,
-    });
+    openFile(projectId, filePath, targetMode);
     setFilePreview(null);
     setFileError(null);
     setMarkdownScrollRatio(0);
@@ -113,19 +129,19 @@ export function useTerminalPreviewPanelActions({
 
   const setMarkdownViewMode = (nextMode: TerminalMarkdownViewMode): void => {
     if (projectId) {
-      updateProjectPreview(projectId, { markdownViewMode: nextMode });
+      setMarkdownViewModeInStore(projectId, nextMode);
     }
   };
 
   const setSvgViewMode = (nextMode: TerminalSvgViewMode): void => {
     if (projectId) {
-      updateProjectPreview(projectId, { svgViewMode: nextMode });
+      setSvgViewModeInStore(projectId, nextMode);
     }
   };
 
   const setChangesViewMode = (nextMode: TerminalChangesViewMode): void => {
     if (projectId) {
-      updateProjectPreview(projectId, { changesViewMode: nextMode });
+      setChangesViewModeInStore(projectId, nextMode);
     }
   };
 
@@ -146,9 +162,7 @@ export function useTerminalPreviewPanelActions({
         70,
         Math.max(30, ((moveEvent.clientX - rect.left) / rect.width) * 100),
       );
-      updateProjectPreview(projectId, {
-        markdownSplitSourceWidthPct: Math.round(nextPct),
-      });
+      setMarkdownSplitSourceWidthPct(projectId, Math.round(nextPct));
     };
     const stop = (): void => {
       window.removeEventListener("pointermove", handlePointerMove);

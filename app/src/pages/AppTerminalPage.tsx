@@ -11,7 +11,6 @@ import {
 import { AppTerminalDeleteAlerts } from "../components/AppTerminalDeleteAlerts";
 import { AppTerminalHeader } from "../components/AppTerminalHeader";
 import { AppTerminalPanels } from "../components/AppTerminalPanels";
-import { type SelectedTerminalChange } from "../components/TerminalChangesTab";
 import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
 import type { AppConnectionConfig } from "../features/connections/types";
 import { recordSupportLog, useSupportLogs } from "../features/support-logs";
@@ -22,6 +21,7 @@ import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
 import type { AppDeviceConnectionSnapshot } from "../hooks/use-app-device-connection";
 import { classifyApiFailure } from "../services/api-failure";
 import { getCurrentTerminalState } from "../services/terminal";
+import { useAppTerminalUiStore } from "../store/use-app-terminal-ui-store";
 
 interface AppTerminalPageProps {
   accessToken: string;
@@ -55,13 +55,26 @@ export function AppTerminalPage({
 }: AppTerminalPageProps) {
   const { openSupportLogs } = useSupportLogs();
   const rendererRef = useRef<TerminalRendererHandle | null>(null);
-  const [activeTab, setActiveTab] = useState<AppTerminalDetailTab>("chat");
-  const [changesCount, setChangesCount] = useState(0);
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [isDeletingTerminal, setIsDeletingTerminal] = useState(false);
-  const [requestedChange, setRequestedChange] =
-    useState<SelectedTerminalChange | null>(null);
+  const activeTab = useAppTerminalUiStore((state) => state.activeTab);
+  const changesCount = useAppTerminalUiStore((state) => state.changesCount);
+  const confirmDeleteOpen = useAppTerminalUiStore(
+    (state) => state.confirmDeleteOpen,
+  );
+  const deleteError = useAppTerminalUiStore((state) => state.deleteError);
+  const isDeletingTerminal = useAppTerminalUiStore(
+    (state) => state.isDeletingTerminal,
+  );
+  const setActiveTab = useAppTerminalUiStore((state) => state.setActiveTab);
+  const setConfirmDeleteOpen = useAppTerminalUiStore(
+    (state) => state.setConfirmDeleteOpen,
+  );
+  const setDeleteError = useAppTerminalUiStore((state) => state.setDeleteError);
+  const setIsDeletingTerminal = useAppTerminalUiStore(
+    (state) => state.setIsDeletingTerminal,
+  );
+  const resetTerminalUi = useAppTerminalUiStore(
+    (state) => state.resetForTerminal,
+  );
   const terminalStateRef = useRef<TerminalState>({
     state: "shell_idle",
     agent: null,
@@ -151,11 +164,9 @@ export function AppTerminalPage({
   );
   useEffect(() => {
     const initialState = initialSession?.terminalState ?? SHELL_IDLE_STATE;
-    setConfirmDeleteOpen(false);
-    setDeleteError(null);
-    setIsDeletingTerminal(false);
+    resetTerminalUi();
     setTerminalState(initialState);
-  }, [initialSession?.terminalState, terminalSessionId]);
+  }, [initialSession?.terminalState, resetTerminalUi, terminalSessionId]);
 
   useEffect(() => {
     if (notFound || isDeviceOffline) {
@@ -357,16 +368,6 @@ export function AppTerminalPage({
     }
   }, [activeTab]);
 
-  const handleShowChanges = useMemoizedFn((change: SelectedTerminalChange) => {
-    setRequestedChange(change);
-    recordSupportLog("terminal.tab.changed", {
-      terminalSessionId,
-      previousTab: activeTab,
-      nextTab: "changes",
-    });
-    setActiveTab("changes");
-  });
-
   const handleTabChange = useMemoizedFn((nextTab: AppTerminalDetailTab) => {
     recordSupportLog("terminal.tab.changed", {
       terminalSessionId,
@@ -417,7 +418,6 @@ export function AppTerminalPage({
           <AppTerminalPanels
             accessToken={accessToken}
             activeProjectId={activeProjectId}
-            activeTab={activeTab}
             apiBase={apiBase}
             connectionStatus={connectionStatus}
             error={error}
@@ -425,7 +425,6 @@ export function AppTerminalPage({
             isDeviceOffline={isDeviceOffline}
             notFound={notFound}
             onRefreshDeviceConnection={onRefreshDeviceConnection}
-            requestedChange={requestedChange}
             rendererRef={rendererRef}
             runtimeKind={runtimeKind}
             sendInput={sendInput}
@@ -433,9 +432,7 @@ export function AppTerminalPage({
             terminalSessionId={terminalSessionId}
             onAuthExpired={onAuthExpired}
             onBack={onBack}
-            onChangesCount={setChangesCount}
             onTerminalReady={onRendererReady}
-            onShowChanges={handleShowChanges}
           />
           {activeTab === "chat" ? (
             <div className="terminal-composer-slot">

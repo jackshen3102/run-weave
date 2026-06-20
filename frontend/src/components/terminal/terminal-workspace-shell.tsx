@@ -2,6 +2,7 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -28,6 +29,7 @@ import {
   DEFAULT_TERMINAL_SIDECAR_WIDTH,
   useTerminalPreviewStore,
 } from "../../features/terminal/preview-store";
+import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import type { ClientMode } from "../../features/client-mode";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import { Button } from "../ui/button";
@@ -516,47 +518,17 @@ interface TerminalWorkspaceShellProps {
   onOpenConnectionManager?: () => void;
   onNavigateHome?: () => void;
   onAuthExpired?: () => void;
-  loading: boolean;
-  requestError: string | null;
-  isMobileMonitor: boolean;
-  visibleProjects: TerminalProjectListItem[];
-  visibleSessions: TerminalSessionListItem[];
-  sessions: TerminalSessionListItem[];
-  activeProjectId: string | null;
-  activeProject: TerminalProjectListItem | null;
-  activeSession: TerminalSessionListItem | null;
-  previewOpen: boolean;
-  previewExpanded: boolean;
-  previewWidthPx?: number;
-  previewReservedWidth: string;
-  cachedSurfaceSessionIdSet: Set<string>;
-  historyDrawerOpen: boolean;
-  historyTerminalSessionId: string | null;
-  historyTerminalName?: string;
-  projectDialogMode: "create" | "edit" | null;
-  projectDialogError: string | null;
-  projectPendingDeletion: TerminalProjectListItem | null;
-  completionMarkers: Record<string, boolean>;
-  bellMarkers: Record<string, boolean>;
-  terminalStateBySessionId: Record<string, TerminalState>;
-  terminalLayoutVersion: string;
   onSelectProject: (projectId: string) => void;
   onSelectSession: (terminalSessionId: string) => void;
-  onRequestCreateProject: () => void;
-  onRequestEditProject: (projectId?: string) => void;
-  onRequestDeleteProject: (project: TerminalProjectListItem) => void;
   onRequestCreateSession: () => void;
   onRequestCloseSession: (terminalSessionId: string) => void;
   onSubmitSessionAlias: (
     terminalSessionId: string,
     alias: string,
   ) => Promise<void>;
-  onOpenHistoryDrawer: (terminalSessionId: string) => void;
   onCloseProjectDialog: () => void;
   onSubmitProjectDialog: (name: string, projectPath: string) => Promise<void>;
   onConfirmDeleteProject: () => void;
-  onProjectDeletionOpenChange: (open: boolean) => void;
-  onHistoryDrawerOpenChange: (open: boolean) => void;
   onReorderProjects: (fromIndex: number, toIndex: number) => void;
   onReorderSessions: (fromIndex: number, toIndex: number) => void;
   onSessionBell: (terminalSessionId: string) => void;
@@ -578,44 +550,14 @@ export function TerminalWorkspaceShell({
   onOpenConnectionManager,
   onNavigateHome,
   onAuthExpired,
-  loading,
-  requestError,
-  isMobileMonitor,
-  visibleProjects,
-  visibleSessions,
-  sessions,
-  activeProjectId,
-  activeProject,
-  activeSession,
-  previewOpen,
-  previewExpanded,
-  previewWidthPx,
-  previewReservedWidth,
-  cachedSurfaceSessionIdSet,
-  historyDrawerOpen,
-  historyTerminalSessionId,
-  historyTerminalName,
-  projectDialogMode,
-  projectDialogError,
-  projectPendingDeletion,
-  completionMarkers,
-  bellMarkers,
-  terminalStateBySessionId,
-  terminalLayoutVersion,
   onSelectProject,
   onSelectSession,
-  onRequestCreateProject,
-  onRequestEditProject,
-  onRequestDeleteProject,
   onRequestCreateSession,
   onRequestCloseSession,
   onSubmitSessionAlias,
-  onOpenHistoryDrawer,
   onCloseProjectDialog,
   onSubmitProjectDialog,
   onConfirmDeleteProject,
-  onProjectDeletionOpenChange,
-  onHistoryDrawerOpenChange,
   onReorderProjects,
   onReorderSessions,
   onSessionBell,
@@ -624,6 +566,123 @@ export function TerminalWorkspaceShell({
   const [aliasTarget, setAliasTarget] =
     useState<TerminalSessionListItem | null>(null);
   const [diagnosticLogOpen, setDiagnosticLogOpen] = useState(false);
+  const isMobileMonitor = clientMode === "mobile";
+  const projects = useTerminalWorkspaceStore((state) => state.projects);
+  const sessions = useTerminalWorkspaceStore((state) => state.sessions);
+  const activeProjectId = useTerminalWorkspaceStore(
+    (state) => state.activeProjectId,
+  );
+  const activeSessionId = useTerminalWorkspaceStore(
+    (state) => state.activeSessionId,
+  );
+  const loading = useTerminalWorkspaceStore((state) => state.loading);
+  const requestError = useTerminalWorkspaceStore((state) => state.requestError);
+  const cachedSurfaceSessionIds = useTerminalWorkspaceStore(
+    (state) => state.cachedSurfaceSessionIds,
+  );
+  const historyDrawerOpen = useTerminalWorkspaceStore(
+    (state) => state.historyDrawerOpen,
+  );
+  const historyTerminalSessionId = useTerminalWorkspaceStore(
+    (state) => state.historyTerminalSessionId,
+  );
+  const projectDialogMode = useTerminalWorkspaceStore(
+    (state) => state.projectDialogMode,
+  );
+  const projectDialogError = useTerminalWorkspaceStore(
+    (state) => state.projectDialogError,
+  );
+  const projectPendingDeletion = useTerminalWorkspaceStore(
+    (state) => state.projectPendingDeletion,
+  );
+  const completionMarkers = useTerminalWorkspaceStore(
+    (state) => state.completionMarkers,
+  );
+  const bellMarkers = useTerminalWorkspaceStore((state) => state.bellMarkers);
+  const terminalStateBySessionId = useTerminalWorkspaceStore(
+    (state) => state.terminalStateBySessionId,
+  );
+  const setActiveProjectId = useTerminalWorkspaceStore(
+    (state) => state.setActiveProjectId,
+  );
+  const setProjectDialogMode = useTerminalWorkspaceStore(
+    (state) => state.setProjectDialogMode,
+  );
+  const setProjectDialogError = useTerminalWorkspaceStore(
+    (state) => state.setProjectDialogError,
+  );
+  const setProjectPendingDeletion = useTerminalWorkspaceStore(
+    (state) => state.setProjectPendingDeletion,
+  );
+  const setHistoryDrawerOpen = useTerminalWorkspaceStore(
+    (state) => state.setHistoryDrawerOpen,
+  );
+  const setHistoryTerminalSessionId = useTerminalWorkspaceStore(
+    (state) => state.setHistoryTerminalSessionId,
+  );
+  const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
+  const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
+  const previewExpanded = useTerminalPreviewStore((state) => state.ui.expanded);
+  const setPreviewActiveTool = useTerminalPreviewStore(
+    (state) => state.setActiveTool,
+  );
+  const previewReservedWidth = previewWidthPx
+    ? `${previewWidthPx}px`
+    : DEFAULT_TERMINAL_SIDECAR_WIDTH;
+  const terminalLayoutVersion = isMobileMonitor
+    ? "mobile"
+    : `desktop:${previewOpen ? previewReservedWidth : "full"}`;
+  const visibleProjects = projects;
+  const visibleSessions = useMemo(() => {
+    return sessions.filter((session) =>
+      activeProjectId ? session.projectId === activeProjectId : true,
+    );
+  }, [activeProjectId, sessions]);
+  const activeProject =
+    visibleProjects.find((project) => project.projectId === activeProjectId) ??
+    null;
+  const activeSession =
+    visibleSessions.find(
+      (session) => session.terminalSessionId === activeSessionId,
+    ) ??
+    visibleSessions[0] ??
+    null;
+  const cachedSurfaceSessionIdSet = useMemo(
+    () => new Set(cachedSurfaceSessionIds),
+    [cachedSurfaceSessionIds],
+  );
+  const historySession =
+    sessions.find(
+      (session) => session.terminalSessionId === historyTerminalSessionId,
+    ) ?? null;
+  const historyTerminalName = historySession
+    ? formatTerminalSessionName({
+        alias: historySession.alias,
+        cwd: historySession.cwd,
+        activeCommand: historySession.activeCommand,
+      })
+    : undefined;
+  const requestCreateProject = () => {
+    setPreviewActiveTool("preview");
+    setProjectDialogError(null);
+    setProjectDialogMode("create");
+  };
+  const requestEditProject = (projectId?: string) => {
+    setPreviewActiveTool("preview");
+    if (projectId) {
+      setActiveProjectId(projectId);
+    }
+    setProjectDialogError(null);
+    setProjectDialogMode("edit");
+  };
+  const requestDeleteProject = (project: TerminalProjectListItem) => {
+    setPreviewActiveTool("preview");
+    setProjectPendingDeletion(project);
+  };
+  const openHistoryDrawer = (terminalSessionId: string) => {
+    setHistoryTerminalSessionId(terminalSessionId);
+    setHistoryDrawerOpen(true);
+  };
 
   return (
     <section
@@ -738,7 +797,7 @@ export function TerminalWorkspaceShell({
                       <ContextMenuItem
                         onSelect={() => {
                           onSelectProject(project.projectId);
-                          onRequestEditProject(project.projectId);
+                          requestEditProject(project.projectId);
                         }}
                       >
                         <Pencil className="h-4 w-4" />
@@ -747,7 +806,7 @@ export function TerminalWorkspaceShell({
                       <ContextMenuItem
                         onSelect={() => {
                           onSelectProject(project.projectId);
-                          onRequestDeleteProject(project);
+                          requestDeleteProject(project);
                         }}
                         className="text-rose-400 focus:text-rose-400"
                       >
@@ -769,7 +828,7 @@ export function TerminalWorkspaceShell({
               aria-label="New Project"
               title="New Project"
               className="h-6 w-8 shrink-0 rounded-md border border-slate-800 bg-slate-900/90 px-0 text-slate-300 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-100"
-              onClick={onRequestCreateProject}
+              onClick={requestCreateProject}
             >
               <Plus className="h-3.5 w-3.5" />
             </Button>
@@ -818,7 +877,7 @@ export function TerminalWorkspaceShell({
             className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40"
             onClick={() => {
               if (activeSession?.terminalSessionId) {
-                onOpenHistoryDrawer(activeSession.terminalSessionId);
+                openHistoryDrawer(activeSession.terminalSessionId);
               }
             }}
           >
@@ -982,7 +1041,7 @@ export function TerminalWorkspaceShell({
                 sessions={sessions}
                 onSelectSession={onSelectSession}
                 onEditProject={() => {
-                  onRequestEditProject();
+                  requestEditProject();
                 }}
               />
             </Suspense>
@@ -1012,7 +1071,7 @@ export function TerminalWorkspaceShell({
                     sessions={sessions}
                     onSelectSession={onSelectSession}
                     onEditProject={() => {
-                      onRequestEditProject();
+                      requestEditProject();
                     }}
                   />
                 </Suspense>
@@ -1037,7 +1096,12 @@ export function TerminalWorkspaceShell({
         token={token}
         terminalSessionId={historyTerminalSessionId}
         terminalName={historyTerminalName}
-        onOpenChange={onHistoryDrawerOpenChange}
+        onOpenChange={(open) => {
+          setHistoryDrawerOpen(open);
+          if (!open) {
+            setHistoryTerminalSessionId(null);
+          }
+        }}
         onAuthExpired={onAuthExpired}
       />
       <TerminalSessionAliasDialog
@@ -1067,7 +1131,11 @@ export function TerminalWorkspaceShell({
       ) : null}
       <AlertDialog
         open={projectPendingDeletion !== null}
-        onOpenChange={onProjectDeletionOpenChange}
+        onOpenChange={(open) => {
+          if (!open && !loading) {
+            setProjectPendingDeletion(null);
+          }
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>

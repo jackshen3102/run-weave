@@ -68,6 +68,29 @@ interface TerminalPreviewStore {
     projectId: string,
     updates: Partial<TerminalPreviewProjectState>,
   ) => void;
+  setProjectPreviewMode: (
+    projectId: string,
+    mode: TerminalPreviewMode,
+  ) => void;
+  setOpenFileQuery: (projectId: string, query: string) => void;
+  openFile: (
+    projectId: string,
+    filePath: string,
+    mode?: Extract<TerminalPreviewMode, "file" | "explorer">,
+  ) => void;
+  selectChange: (
+    projectId: string,
+    filePath: string,
+    kind: TerminalPreviewChangeKind,
+  ) => void;
+  clearSelectedChange: (projectId: string) => void;
+  setMarkdownViewMode: (
+    projectId: string,
+    mode: TerminalMarkdownViewMode,
+  ) => void;
+  setMarkdownSplitSourceWidthPct: (projectId: string, widthPct: number) => void;
+  setSvgViewMode: (projectId: string, mode: TerminalSvgViewMode) => void;
+  setChangesViewMode: (projectId: string, mode: TerminalChangesViewMode) => void;
   removeProjectPreview: (projectId: string) => void;
   createBrowserTab: (url?: string) => void;
   addProxyBrowserTab: (tabId: string, url: string, title: string) => void;
@@ -196,6 +219,126 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
         [projectId]: {
           ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
           ...updates,
+        },
+      },
+    }));
+  },
+  setProjectPreviewMode: (projectId: string, mode: TerminalPreviewMode) => {
+    set((state: TerminalPreviewStore) => ({
+      projects: {
+        ...state.projects,
+        [projectId]: {
+          ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
+          mode,
+        },
+      },
+    }));
+  },
+  setOpenFileQuery: (projectId: string, query: string) => {
+    set((state: TerminalPreviewStore) => ({
+      projects: {
+        ...state.projects,
+        [projectId]: {
+          ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
+          mode: "file",
+          openFileQuery: query,
+          selectedFilePath: undefined,
+        },
+      },
+    }));
+  },
+  openFile: (
+    projectId: string,
+    filePath: string,
+    mode: Extract<TerminalPreviewMode, "file" | "explorer"> = "file",
+  ) => {
+    set((state: TerminalPreviewStore) => ({
+      projects: {
+        ...state.projects,
+        [projectId]: {
+          ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
+          mode,
+          selectedFilePath: filePath,
+          path: filePath,
+        },
+      },
+    }));
+  },
+  selectChange: (
+    projectId: string,
+    filePath: string,
+    kind: TerminalPreviewChangeKind,
+  ) => {
+    set((state: TerminalPreviewStore) => ({
+      projects: {
+        ...state.projects,
+        [projectId]: {
+          ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
+          mode: "changes",
+          selectedChangePath: filePath,
+          selectedChangeKind: kind,
+        },
+      },
+    }));
+  },
+  clearSelectedChange: (projectId: string) => {
+    set((state: TerminalPreviewStore) => ({
+      projects: {
+        ...state.projects,
+        [projectId]: {
+          ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
+          selectedChangePath: undefined,
+          selectedChangeKind: undefined,
+        },
+      },
+    }));
+  },
+  setMarkdownViewMode: (
+    projectId: string,
+    markdownViewMode: TerminalMarkdownViewMode,
+  ) => {
+    set((state: TerminalPreviewStore) => ({
+      projects: {
+        ...state.projects,
+        [projectId]: {
+          ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
+          markdownViewMode,
+        },
+      },
+    }));
+  },
+  setMarkdownSplitSourceWidthPct: (projectId: string, widthPct: number) => {
+    set((state: TerminalPreviewStore) => ({
+      projects: {
+        ...state.projects,
+        [projectId]: {
+          ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
+          markdownSplitSourceWidthPct: widthPct,
+        },
+      },
+    }));
+  },
+  setSvgViewMode: (projectId: string, svgViewMode: TerminalSvgViewMode) => {
+    set((state: TerminalPreviewStore) => ({
+      projects: {
+        ...state.projects,
+        [projectId]: {
+          ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
+          svgViewMode,
+        },
+      },
+    }));
+  },
+  setChangesViewMode: (
+    projectId: string,
+    changesViewMode: TerminalChangesViewMode,
+  ) => {
+    set((state: TerminalPreviewStore) => ({
+      projects: {
+        ...state.projects,
+        [projectId]: {
+          ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
+          changesViewMode,
         },
       },
     }));
