@@ -62,6 +62,14 @@ export function TerminalPreviewPanel({
     setActiveTool,
     setExpanded,
     updateProjectPreview,
+    setProjectPreviewMode,
+    setOpenFileQuery,
+    openFileInStore,
+    selectChange,
+    setMarkdownViewModeInStore,
+    setMarkdownSplitSourceWidthPct,
+    setSvgViewModeInStore,
+    setChangesViewModeInStore,
     mode,
     query,
     selectedFilePath,
@@ -201,7 +209,12 @@ export function TerminalPreviewPanel({
     },
     loadChanges,
     setWidth,
-    updateProjectPreview,
+    setOpenFileQuery,
+    openFile: openFileInStore,
+    setMarkdownViewModeInStore,
+    setMarkdownSplitSourceWidthPct,
+    setSvgViewModeInStore,
+    setChangesViewModeInStore,
     setFilePreview: () => setFilePreview(null),
     setFileError,
     setMarkdownScrollRatio,
@@ -402,11 +415,7 @@ export function TerminalPreviewPanel({
       onEditProject={onEditProject}
       onQueryChange={(nextQuery) => {
         if (projectId) {
-          updateProjectPreview(projectId, {
-            mode: "file",
-            openFileQuery: nextQuery,
-            selectedFilePath: undefined,
-          });
+          setOpenFileQuery(projectId, nextQuery);
         }
       }}
       onOpenFilePath={openFilePath}
@@ -416,11 +425,7 @@ export function TerminalPreviewPanel({
         if (!projectId) {
           return;
         }
-        updateProjectPreview(projectId, {
-          mode: "changes",
-          selectedChangePath: filePath,
-          selectedChangeKind: kind,
-        });
+        selectChange(projectId, filePath, kind);
       }}
       onReloadDiff={(filePath, kind) => {
         void loadDiff(filePath, kind);
@@ -429,12 +434,12 @@ export function TerminalPreviewPanel({
       onStartMarkdownResize={startMarkdownResize}
       onOpenModeFile={() => {
         if (projectId) {
-          updateProjectPreview(projectId, { mode: "file" });
+          setProjectPreviewMode(projectId, "file");
         }
       }}
       onOpenModeChanges={() => {
         if (projectId && confirmDiscardDraft()) {
-          updateProjectPreview(projectId, { mode: "changes" });
+          setProjectPreviewMode(projectId, "changes");
         }
       }}
     />
@@ -496,7 +501,7 @@ export function TerminalPreviewPanel({
         onSetActiveTool={setActiveTool}
         onSetPreviewMode={(nextMode) => {
           if (projectId && confirmDiscardDraft()) {
-            updateProjectPreview(projectId, { mode: nextMode });
+            setProjectPreviewMode(projectId, nextMode);
           }
         }}
         onToggleExpanded={() => setExpanded(!expanded)}

@@ -10,45 +10,40 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { installTerminalTouchBehavior } from "../lib/app-terminal-touch-behavior";
 import { sendTerminalInput as sendTerminalInputRequest } from "../services/terminal";
-import type { AppTerminalDetailTab } from "./TerminalDetailTabBar";
 import {
   type SelectedTerminalChange,
   TerminalChangesTab,
 } from "./TerminalChangesTab";
 import { TerminalFilesTab } from "./TerminalFilesTab";
+import { useAppTerminalUiStore } from "../store/use-app-terminal-ui-store";
+import { recordSupportLog } from "../features/support-logs";
 
 const TMUX_SCROLL_BUTTON_REVEAL_THRESHOLD_ROWS = 4;
 
 interface AppTerminalPanelsProps {
   accessToken: string;
   activeProjectId: string | null;
-  activeTab: AppTerminalDetailTab;
   apiBase: string;
-  terminalSessionId: string;
   connectionStatus: string;
   error: string | null;
   hasMetadata: boolean;
   isDeviceOffline: boolean;
   notFound: boolean;
-  requestedChange: SelectedTerminalChange | null;
   rendererRef: RefObject<TerminalRendererHandle | null>;
   runtimeKind: "tmux" | "pty" | null;
   sendInput: (data: string) => void;
   sendResize: (cols: number, rows: number) => void;
+  terminalSessionId: string;
   onAuthExpired: () => void;
   onBack: () => void;
-  onChangesCount: (count: number) => void;
   onTerminalReady: () => void;
   onRefreshDeviceConnection: () => Promise<unknown>;
-  onShowChanges: (change: SelectedTerminalChange) => void;
 }
 
 export function AppTerminalPanels({
   accessToken,
   activeProjectId,
-  activeTab,
   apiBase,
-  terminalSessionId,
   connectionStatus,
   error,
   hasMetadata,
@@ -56,16 +51,30 @@ export function AppTerminalPanels({
   notFound,
   onAuthExpired,
   onBack,
-  onChangesCount,
   onTerminalReady,
   onRefreshDeviceConnection,
-  onShowChanges,
-  requestedChange,
   rendererRef,
   runtimeKind,
   sendInput,
   sendResize,
+  terminalSessionId,
 }: AppTerminalPanelsProps) {
+  const activeTab = useAppTerminalUiStore((state) => state.activeTab);
+  const requestedChange = useAppTerminalUiStore(
+    (state) => state.requestedChange,
+  );
+  const setChangesCount = useAppTerminalUiStore(
+    (state) => state.setChangesCount,
+  );
+  const showChanges = useAppTerminalUiStore((state) => state.showChanges);
+  const handleShowChanges = useMemoizedFn((change: SelectedTerminalChange) => {
+    recordSupportLog("terminal.tab.changed", {
+      terminalSessionId,
+      previousTab: activeTab,
+      nextTab: "changes",
+    });
+    showChanges(change);
+  });
   // The touch behavior is installed once on terminal ready; refs let it read
   // the latest runtimeKind and input sender without reinstalling.
   const runtimeKindRef = useRef(runtimeKind);
@@ -213,7 +222,7 @@ export function AppTerminalPanels({
               projectId={activeProjectId}
               requestedChange={requestedChange}
               onAuthExpired={onAuthExpired}
-              onChangesCount={onChangesCount}
+              onChangesCount={setChangesCount}
             />
           </div>
           <div
@@ -226,7 +235,7 @@ export function AppTerminalPanels({
               apiBase={apiBase}
               projectId={activeProjectId}
               onAuthExpired={onAuthExpired}
-              onShowChanges={onShowChanges}
+              onShowChanges={handleShowChanges}
             />
           </div>
         </>

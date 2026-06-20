@@ -64,6 +64,29 @@ export function useTerminalPreviewPanelData({
   const updateProjectPreview = useTerminalPreviewStore(
     (state) => state.updateProjectPreview,
   );
+  const setProjectPreviewMode = useTerminalPreviewStore(
+    (state) => state.setProjectPreviewMode,
+  );
+  const setOpenFileQuery = useTerminalPreviewStore(
+    (state) => state.setOpenFileQuery,
+  );
+  const openFileInStore = useTerminalPreviewStore((state) => state.openFile);
+  const selectChange = useTerminalPreviewStore((state) => state.selectChange);
+  const clearSelectedChange = useTerminalPreviewStore(
+    (state) => state.clearSelectedChange,
+  );
+  const setMarkdownViewModeInStore = useTerminalPreviewStore(
+    (state) => state.setMarkdownViewMode,
+  );
+  const setMarkdownSplitSourceWidthPct = useTerminalPreviewStore(
+    (state) => state.setMarkdownSplitSourceWidthPct,
+  );
+  const setSvgViewModeInStore = useTerminalPreviewStore(
+    (state) => state.setSvgViewMode,
+  );
+  const setChangesViewModeInStore = useTerminalPreviewStore(
+    (state) => state.setChangesViewMode,
+  );
   const projectState = useTerminalPreviewStore((state) =>
     activeProject ? state.projects[activeProject.projectId] : undefined,
   );
@@ -272,11 +295,8 @@ export function useTerminalPreviewPanelData({
           setDiffError(null);
           setDiffLoading(false);
           if (!preserveMode) {
-            updateProjectPreview(projectId, {
-              mode: "changes",
-              selectedChangePath: undefined,
-              selectedChangeKind: undefined,
-            });
+            setProjectPreviewMode(projectId, "changes");
+            clearSelectedChange(projectId);
           }
           return;
         }
@@ -286,11 +306,7 @@ export function useTerminalPreviewPanelData({
           selected.kind !== selectedChangeKindRef.current;
         if (selectedChanged) {
           if (!preserveMode) {
-            updateProjectPreview(projectId, {
-              mode: "changes",
-              selectedChangePath: selected.path,
-              selectedChangeKind: selected.kind,
-            });
+            selectChange(projectId, selected.path, selected.kind);
           }
           return;
         }
@@ -345,8 +361,8 @@ export function useTerminalPreviewPanelData({
     if (!projectId || !hasProjectPath || mode) {
       return;
     }
-    updateProjectPreview(projectId, { mode: "changes" });
-  }, [hasProjectPath, mode, projectId, updateProjectPreview]);
+    setProjectPreviewMode(projectId, "changes");
+  }, [hasProjectPath, mode, projectId, setProjectPreviewMode]);
 
   useEffect(() => {
     if ((mode !== "file" && mode !== "explorer") || !selectedFilePath) {
@@ -536,6 +552,15 @@ export function useTerminalPreviewPanelData({
     setActiveTool,
     setExpanded,
     updateProjectPreview,
+    setProjectPreviewMode,
+    setOpenFileQuery,
+    openFileInStore,
+    selectChange,
+    clearSelectedChange,
+    setMarkdownViewModeInStore,
+    setMarkdownSplitSourceWidthPct,
+    setSvgViewModeInStore,
+    setChangesViewModeInStore,
     mode,
     query,
     selectedFilePath,
