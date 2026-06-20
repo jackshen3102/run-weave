@@ -19,6 +19,10 @@ import {
 const execFileAsync = promisify(execFile);
 const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
+const E2E_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8Dwn4EIwDiqkL4KAd8qAhGqF3tEAAAAAElFTkSuQmCC";
+const E2E_PNG_ALT_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFElEQVR42mNgYPj/n4EIwDiqkL4KAeJVAhFZP+6NAAAAAElFTkSuQmCC";
 
 interface AuthPayload {
   accessToken: string;
@@ -179,6 +183,7 @@ test.afterEach(async ({ request }) => {
 async function createPreviewRepo(): Promise<string> {
   const repo = await mkdtemp(path.join(os.tmpdir(), "terminal-preview-e2e-"));
   await mkdir(path.join(repo, "docs/architecture"), { recursive: true });
+  await mkdir(path.join(repo, "assets"), { recursive: true });
   await mkdir(path.join(repo, "generated"), { recursive: true });
   await writeFile(path.join(repo, ".gitignore"), "generated/\n");
   await writeFile(
@@ -188,6 +193,10 @@ async function createPreviewRepo(): Promise<string> {
   await writeFile(
     path.join(repo, "generated/terminal-code-preview.js"),
     "ignored\n",
+  );
+  await writeFile(
+    path.join(repo, "assets/preview-sample.png"),
+    Buffer.from(E2E_PNG_BASE64, "base64"),
   );
   await writeFile(path.join(repo, "README.md"), "old readme\n");
   await writeFile(path.join(repo, "staged.txt"), "old staged\n");
@@ -200,10 +209,22 @@ async function createPreviewRepo(): Promise<string> {
   });
   await execFileAsync("git", ["add", "."], { cwd: repo });
   await execFileAsync("git", ["commit", "-m", "initial"], { cwd: repo });
+  await writeFile(
+    path.join(repo, "assets/preview-sample.png"),
+    Buffer.from(E2E_PNG_ALT_BASE64, "base64"),
+  );
   await writeFile(path.join(repo, "staged.txt"), "new staged\n");
   await execFileAsync("git", ["add", "staged.txt"], { cwd: repo });
   await writeFile(path.join(repo, "README.md"), "new readme\n");
   return repo;
+}
+
+async function readPreviewImageTransform(page: Page): Promise<string> {
+  await expect(page.locator(".rw-zoomable-image__image").first()).toBeVisible();
+  return await page
+    .locator(".rw-zoomable-image__image")
+    .first()
+    .evaluate((image) => getComputedStyle(image).transform);
 }
 
 test("terminal preview opens project files and git changes", async ({
@@ -334,6 +355,82 @@ test("terminal preview saves files and protects unsaved drafts", async ({
     const savedContent = await readFile(path.join(repo, "README.md"), "utf8");
     expect(savedContent).toContain("updated from preview");
     expect(savedContent).not.toContain("unsaved from preview");
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test("terminal preview zooms image files and image changes", async ({
+  page,
+  request,
+}) => {
+  const repo = await createPreviewRepo();
+  try {
+    const token = await loginAndSeedToken(request, page);
+    const session = await createProjectAndSession(request, token, {
+      name: "Preview Image Project",
+      path: repo,
+    });
+
+    await page.goto(
+      `/terminal/${encodeURIComponent(session.terminalSessionId)}`,
+    );
+    await page.getByRole("tab", { name: "Open", exact: true }).click();
+    await page
+      .getByPlaceholder("Search file or paste absolute path...")
+      .fill("preview sample");
+    await page.getByText("preview-sample.png").click();
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeVisible();
+
+    const initialTransform = await readPreviewImageTransform(page);
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await expect
+      .poll(() => readPreviewImageTransform(page))
+      .not.toBe(initialTransform);
+    const zoomedTransform = await readPreviewImageTransform(page);
+    const viewportBox = await page
+      .locator(".rw-zoomable-image__viewport")
+      .first()
+      .boundingBox();
+    expect(viewportBox).not.toBeNull();
+    if (!viewportBox) {
+      throw new Error("Preview image viewport is not measurable");
+    }
+    await page.mouse.move(
+      viewportBox.x + viewportBox.width / 2,
+      viewportBox.y + viewportBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      viewportBox.x + viewportBox.width / 2 + 40,
+      viewportBox.y + viewportBox.height / 2 + 30,
+    );
+    await page.mouse.up();
+    await expect
+      .poll(() => readPreviewImageTransform(page))
+      .not.toBe(zoomedTransform);
+    await page.getByRole("button", { name: "Reset view" }).click();
+    await page.getByRole("button", { name: "Actual size" }).click();
+    await expect(page.getByText("100%")).toBeVisible();
+    await page.getByRole("button", { name: "Open fullscreen" }).click();
+    const fullscreenDialog = page.getByRole("dialog");
+    await expect(fullscreenDialog).toBeVisible();
+    await expect(
+      fullscreenDialog.getByRole("button", { name: "Close", exact: true }),
+    ).toBeVisible();
+    await fullscreenDialog
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+    await expect(fullscreenDialog).not.toBeVisible();
+
+    await page.getByRole("tab", { name: "Changes", exact: true }).click();
+    await page.getByRole("button", { name: /preview-sample\.png/ }).click();
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeVisible();
+    const changeInitialTransform = await readPreviewImageTransform(page);
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await expect
+      .poll(() => readPreviewImageTransform(page))
+      .not.toBe(changeInitialTransform);
   } finally {
     await rm(repo, { recursive: true, force: true });
   }

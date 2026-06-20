@@ -5,13 +5,19 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    "./terminal": "./src/terminal/index.ts"
+    "./terminal": "./src/terminal/index.ts",
+    "./terminal/zoomable-image.css": "./src/terminal/zoomable-image.css"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@types/react": "^19.0.12",
+    "react": "^19.0.0",
     "typescript": "^5.8.2"
   }
 }

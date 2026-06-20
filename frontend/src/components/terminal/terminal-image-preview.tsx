@@ -1,3 +1,5 @@
+import { ZoomableImage } from "@runweave/common/terminal";
+import "@runweave/common/terminal/zoomable-image.css";
 import { useEffect, useState } from "react";
 import { HttpError } from "../../services/http";
 import { getTerminalProjectPreviewAsset } from "../../services/terminal";
@@ -20,6 +22,7 @@ export function TerminalImagePreview({
   onAuthExpired,
 }: TerminalImagePreviewProps) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,6 +76,10 @@ export function TerminalImagePreview({
     };
   }, [apiBase, onAuthExpired, path, projectId, refreshKey, token]);
 
+  useEffect(() => {
+    setFullscreenOpen(false);
+  }, [path]);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-slate-400">
@@ -96,12 +103,28 @@ export function TerminalImagePreview({
   }
 
   return (
-    <div className="flex h-full min-h-0 items-center justify-center bg-slate-950 p-4">
-      <img
+    <div className="relative h-full min-h-0 bg-slate-950">
+      <ZoomableImage
         src={objectUrl}
         alt={path}
-        className="max-h-full max-w-full object-contain"
+        title={path}
+        onRequestFullscreen={() => setFullscreenOpen(true)}
       />
+      {fullscreenOpen ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-[100] bg-slate-950"
+          role="dialog"
+        >
+          <ZoomableImage
+            src={objectUrl}
+            alt={path}
+            title={path}
+            fullscreen
+            onCloseFullscreen={() => setFullscreenOpen(false)}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

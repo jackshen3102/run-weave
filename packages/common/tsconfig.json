@@ -4,7 +4,8 @@
     "outDir": "dist",
     "declaration": true,
     "declarationMap": true,
+    "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ES2022"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }
