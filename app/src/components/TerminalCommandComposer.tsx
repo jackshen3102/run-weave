@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { recordSupportLog } from "../features/support-logs";
 import { startVoiceRecording } from "../lib/voice-recorder";
+import { TerminalShortcutBar } from "./TerminalShortcutBar";
 
 export function TerminalCommandComposer({
   disabled,
@@ -19,6 +20,7 @@ export function TerminalCommandComposer({
   isStopping,
   onPickImage,
   onSendInput,
+  onSendShortcutInput,
   onStop,
   onTranscribeVoice,
 }: {
@@ -27,10 +29,12 @@ export function TerminalCommandComposer({
   isStopping: boolean;
   onPickImage: (file: File) => Promise<string>;
   onSendInput: (data: string) => Promise<void>;
+  onSendShortcutInput: (data: string) => void;
   onStop: () => void;
   onTranscribeVoice: (payload: TranscribeVoiceRequest) => Promise<string>;
 }) {
   const [value, setValue] = useState("");
+  const [shortcutOpen, setShortcutOpen] = useState(false);
   const [voiceState, setVoiceState] = useState<
     "idle" | "starting" | "recording" | "transcribing"
   >("idle");
@@ -230,7 +234,26 @@ export function TerminalCommandComposer({
         ref={fileInputRef}
         type="file"
       />
+      {shortcutOpen ? (
+        <div className="terminal-composer__shortcut-row" id="terminal-shortcuts">
+          <TerminalShortcutBar
+            disabled={disabled}
+            onSendInput={onSendShortcutInput}
+          />
+        </div>
+      ) : null}
       <div className="terminal-composer__input-row">
+        <IonTextarea
+          autoGrow
+          className="terminal-composer__input"
+          disabled={disabled}
+          onIonInput={(event) => setValue(String(event.detail.value ?? ""))}
+          placeholder="Type a command..."
+          rows={1}
+          value={value}
+        />
+      </div>
+      <div className="terminal-composer__actions-row">
         <IonButton
           aria-label="Choose image"
           className="terminal-composer__icon-button"
@@ -255,15 +278,21 @@ export function TerminalCommandComposer({
             icon={voiceState === "recording" ? stopCircleOutline : micOutline}
           />
         </button>
-        <IonTextarea
-          autoGrow
-          className="terminal-composer__input"
+        <button
+          aria-controls="terminal-shortcuts"
+          aria-expanded={shortcutOpen}
+          aria-label={
+            shortcutOpen
+              ? "Hide terminal shortcuts"
+              : "Show terminal shortcuts"
+          }
+          className="terminal-composer__shortcut-toggle"
           disabled={disabled}
-          onIonInput={(event) => setValue(String(event.detail.value ?? ""))}
-          placeholder="Type a command..."
-          rows={1}
-          value={value}
-        />
+          onClick={() => setShortcutOpen((current) => !current)}
+          type="button"
+        >
+          <span aria-hidden="true">Keys</span>
+        </button>
         <IonButton
           aria-label={showStop ? "Stop terminal command" : "Send command"}
           className={`terminal-composer__action ${showStop ? "is-stop" : "is-send"}`}

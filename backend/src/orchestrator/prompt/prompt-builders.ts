@@ -29,8 +29,14 @@ export function buildStartupPrompt(
     "- 你只负责编排：决定下一步派谁、给什么 goal，不亲自写代码或做审查。",
     "- plan 阶段由你负责形成计划；用 write-plan 技能产出计划文件，再派发 plan_reviewer 审查。",
     "- plan_reviewer、code_agent、code_reviewer 都是黑盒 worker，只消费它们回传的结构化 summary。",
-    "- human_plan_approval 和 human_verify 是人工门禁；不要跳过人工验收进入 finalize。",
+    "- human_plan_approval 和 human_verify 默认是人工门禁；如果本 run 开启对应自动通过选项，backend 会记录通过并推进下一阶段。",
     "- human_verify 通过后才进入 finalize；finalize 里完成提交、提交结果记录和 done 收尾。",
+    run.options?.autoApprovePlanGate
+      ? "- 当前 run 已开启“自动通过计划审批”；plan_reviewer 通过后 backend 会自动进入 code。"
+      : null,
+    run.options?.autoApproveVerifyGate
+      ? "- 当前 run 已开启“自动通过人工验收”；code_reviewer 通过后 backend 会自动进入 finalize。"
+      : null,
     run.options?.requireHumanConfirmationEachRound
       ? "- 当前 run 已开启“每一轮都需要人工确认”；worker result 回来后，如果下一阶段不是既有人工门禁，backend 会先暂停等待人工确认。"
       : null,

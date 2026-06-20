@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="820" viewBox="0 0 1180 820" role="img" aria-labelledby="title desc">
+  <title id="title">App terminal two-row composer shortcut sketch</title>
+  <desc id="desc">A two-state wireframe sketch for a two-row mobile terminal composer with a collapsible shortcut bar.</desc>
+  <defs>
+    <style>
+      .bg { fill: #080d14; }
+      .phone { fill: #101722; stroke: #334155; stroke-width: 2; }
+      .screen { fill: #05080d; }
+      .header { fill: #101722; stroke: #263244; stroke-width: 1.4; }
+      .terminal { fill: #05080d; stroke: #1e293b; stroke-width: 1.4; }
+      .composer { fill: #0b1017; stroke: #253245; stroke-width: 1.4; }
+      .input { fill: #202020; stroke: #333333; stroke-width: 1.4; }
+      .action { fill: #202733; stroke: #435166; stroke-width: 1.2; }
+      .action-ghost { fill: transparent; stroke: transparent; }
+      .primary { fill: #f3f7fb; stroke: #f3f7fb; stroke-width: 1.2; }
+      .shortcut { fill: #182233; stroke: #526176; stroke-width: 1.2; }
+      .dash { stroke: #526176; stroke-width: 1.5; stroke-dasharray: 6 6; }
+      .arrow { stroke: #7dd3fc; stroke-width: 2.5; fill: none; marker-end: url(#arrowhead); }
+      .annotation { fill: #d7e1ea; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 18px; }
+      .caption { fill: #95a7ba; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; }
+      .small { fill: #cbd5e1; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12px; }
+      .label { fill: #dbe5ef; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 15px; }
+      .input-text { fill: #b8c3cf; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 19px; }
+      .mono { fill: #9ae6b4; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+      .dark { fill: #05070b; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 17px; font-weight: 700; }
+      .tab { fill: #172232; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#7dd3fc" />
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1180" height="820" />
+  <text class="annotation" x="60" y="58">方案二更新草图：两行传统输入框 + 可展开快捷键条</text>
+  <text class="caption" x="60" y="86">第一行只放输入框；第二行放图片、语音、快捷键、发送/停止等操作。快捷键仍复用原始 sendInput。</text>
+
+  <!-- Collapsed state -->
+  <g transform="translate(70,120)">
+    <text class="annotation" x="0" y="-24">默认态：输入框一整行，操作在下一行</text>
+    <rect class="phone" x="0" y="0" width="470" height="640" rx="38" />
+    <rect class="screen" x="18" y="22" width="434" height="596" rx="28" />
+
+    <rect class="header" x="18" y="22" width="434" height="70" rx="28" />
+    <text class="small" x="42" y="56">codex</text>
+    <text class="caption" x="42" y="78">~/Code/browser-hub/feature</text>
+    <circle cx="414" cy="55" r="7" fill="#42d986" />
+
+    <rect class="terminal" x="28" y="104" width="414" height="342" rx="10" />
+    <text class="mono" x="48" y="136">$ pnpm dev</text>
+    <text class="mono" x="48" y="164">Need your approval to continue</text>
+    <text class="mono" x="48" y="192">  Allow command?</text>
+    <text class="mono" x="48" y="220">&gt; Yes</text>
+    <text class="mono" x="48" y="248">  No</text>
+    <text class="caption" x="48" y="292">手机确认场景需要更容易触达 ↑ ↓ Enter</text>
+
+    <rect class="composer" x="18" y="456" width="434" height="112" rx="0" />
+    <rect class="input" x="36" y="474" width="398" height="48" rx="24" />
+    <text class="input-text" x="58" y="505">Type a command...</text>
+
+    <circle class="action" cx="58" cy="546" r="20" />
+    <text class="small" x="52" y="551">图</text>
+    <circle class="action" cx="112" cy="546" r="20" />
+    <text class="small" x="106" y="551">麦</text>
+    <rect class="action" x="154" y="526" width="112" height="40" rx="20" />
+    <text class="label" x="179" y="552">快捷键</text>
+    <text class="label" x="238" y="552">⌄</text>
+    <circle class="primary" cx="414" cy="546" r="20" />
+    <text class="dark" x="407" y="552">↑</text>
+
+    <rect class="tab" x="18" y="568" width="434" height="50" rx="0" />
+    <text class="small" x="82" y="598">Chat</text>
+    <text class="small" x="205" y="598">Changes</text>
+    <text class="small" x="350" y="598">Files</text>
+
+    <path class="arrow" d="M210 524 C234 490, 300 476, 340 446" />
+    <text class="caption" x="260" y="432">点击“快捷键”展开</text>
+  </g>
+
+  <!-- Expanded state -->
+  <g transform="translate(640,120)">
+    <text class="annotation" x="0" y="-24">展开态：快捷键条放在输入框上方</text>
+    <rect class="phone" x="0" y="0" width="470" height="640" rx="38" />
+    <rect class="screen" x="18" y="22" width="434" height="596" rx="28" />
+
+    <rect class="header" x="18" y="22" width="434" height="70" rx="28" />
+    <text class="small" x="42" y="56">codex</text>
+    <text class="caption" x="42" y="78">~/Code/browser-hub/feature</text>
+    <circle cx="414" cy="55" r="7" fill="#42d986" />
+
+    <rect class="terminal" x="28" y="104" width="414" height="292" rx="10" />
+    <text class="mono" x="48" y="136">$ pnpm dev</text>
+    <text class="mono" x="48" y="164">Need your approval to continue</text>
+    <text class="mono" x="48" y="192">  Allow command?</text>
+    <text class="mono" x="48" y="220">&gt; Yes</text>
+    <text class="mono" x="48" y="248">  No</text>
+
+    <rect class="composer" x="18" y="406" width="434" height="162" rx="0" />
+    <rect class="shortcut" x="36" y="424" width="56" height="34" rx="9" />
+    <text class="small" x="47" y="446">Ctrl-C</text>
+    <rect class="shortcut" x="100" y="424" width="52" height="34" rx="9" />
+    <text class="small" x="115" y="446">Tab</text>
+    <rect class="shortcut" x="160" y="424" width="52" height="34" rx="9" />
+    <text class="small" x="177" y="446">Esc</text>
+    <rect class="shortcut" x="220" y="424" width="48" height="34" rx="9" />
+    <text class="small" x="239" y="446">↑</text>
+    <rect class="shortcut" x="276" y="424" width="48" height="34" rx="9" />
+    <text class="small" x="295" y="446">↓</text>
+    <rect class="shortcut" x="332" y="424" width="102" height="34" rx="9" />
+    <text class="small" x="365" y="446">Enter</text>
+
+    <line class="dash" x1="36" y1="468" x2="434" y2="468" />
+    <rect class="input" x="36" y="478" width="398" height="48" rx="24" />
+    <text class="input-text" x="58" y="509">Type a command...</text>
+
+    <circle class="action" cx="58" cy="550" r="20" />
+    <text class="small" x="52" y="555">图</text>
+    <circle class="action" cx="112" cy="550" r="20" />
+    <text class="small" x="106" y="555">麦</text>
+    <rect class="primary" x="154" y="530" width="112" height="40" rx="20" />
+    <text class="dark" x="179" y="556">快捷键</text>
+    <text class="dark" x="238" y="556">⌃</text>
+    <circle class="primary" cx="414" cy="550" r="20" />
+    <text class="dark" x="407" y="556">↑</text>
+
+    <rect class="tab" x="18" y="568" width="434" height="50" rx="0" />
+    <text class="small" x="82" y="598">Chat</text>
+    <text class="small" x="205" y="598">Changes</text>
+    <text class="small" x="350" y="598">Files</text>
+
+    <text class="caption" x="34" y="704">交互边界：快捷键按钮发送控制序列；输入框只负责文本编辑</text>
+    <text class="caption" x="34" y="728">实现映射：TerminalCommandComposer 两行布局 + TerminalShortcutBar 展开态</text>
+  </g>
+</svg>

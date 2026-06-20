@@ -41,6 +41,8 @@ export interface HumanGateVerdict {
 
 export interface OrchestratorRunOptions {
   requireHumanConfirmationEachRound?: boolean;
+  autoApprovePlanGate?: boolean;
+  autoApproveVerifyGate?: boolean;
 }
 
 export type OrchestratorRoundConfirmationVerdictValue =

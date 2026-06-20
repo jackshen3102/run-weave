@@ -70,9 +70,11 @@ export function TerminalOrchestratorPanel({
     requireHumanConfirmationEachRound,
     setRequireHumanConfirmationEachRound,
   ] = useState(false);
+  const [autoApprovePlanGate, setAutoApprovePlanGate] = useState(false);
+  const [autoApproveVerifyGate, setAutoApproveVerifyGate] = useState(false);
   const [roleDrafts, setRoleDrafts] = useState<Record<string, RoleDraft>>({});
   const [roleLibraryOpen, setRoleLibraryOpen] = useState(false);
-  const [restartMode, setRestartMode] = useState(false);
+  const [draftMode, setDraftMode] = useState<"restart" | "blank" | null>(null);
   const [promptPreview, setPromptPreview] = useState<{
     runId: string;
     prompt: string;
@@ -94,7 +96,7 @@ export function TerminalOrchestratorPanel({
     [activeProject, sessions],
   );
   const activeRun = useMemo(() => {
-    if (restartMode) {
+    if (draftMode) {
       return null;
     }
     return (
@@ -104,7 +106,7 @@ export function TerminalOrchestratorPanel({
       runs[0] ??
       null
     );
-  }, [restartMode, runs]);
+  }, [draftMode, runs]);
 
   const handleRequestError = useMemoizedFn((caught: unknown) => {
     if (caught instanceof HttpError && caught.status === 401) {
@@ -241,6 +243,8 @@ export function TerminalOrchestratorPanel({
         roles: selectedRoles,
         options: {
           requireHumanConfirmationEachRound,
+          autoApprovePlanGate,
+          autoApproveVerifyGate,
         },
       };
     },
@@ -289,7 +293,7 @@ export function TerminalOrchestratorPanel({
         ...current.filter((item) => item.runId !== run.runId),
       ]);
       setTask("");
-      setRestartMode(false);
+      setDraftMode(null);
       setPromptPreview(null);
       setError(null);
     } catch (caught) {
@@ -436,6 +440,8 @@ export function TerminalOrchestratorPanel({
     setRequireHumanConfirmationEachRound(
       Boolean(run.options?.requireHumanConfirmationEachRound),
     );
+    setAutoApprovePlanGate(Boolean(run.options?.autoApprovePlanGate));
+    setAutoApproveVerifyGate(Boolean(run.options?.autoApproveVerifyGate));
     setRoleDrafts(
       Object.fromEntries(
         run.roles.map((role) => [
@@ -450,7 +456,38 @@ export function TerminalOrchestratorPanel({
         ]),
       ),
     );
-    setRestartMode(true);
+    setDraftMode("restart");
+  });
+
+  const startBlankRunDraft = useMemoizedFn(() => {
+    setTask("");
+    setStartupPrompt(DEFAULT_STARTUP_PROMPT);
+    setOrchestratorMode("new");
+    setOrchestratorCommand("codex");
+    setOrchestratorSessionId("");
+    setRequireHumanConfirmationEachRound(false);
+    setAutoApprovePlanGate(false);
+    setAutoApproveVerifyGate(false);
+    setRoleDrafts(
+      Object.fromEntries(
+        roles.map((role) => [
+          role.id,
+          {
+            selected: true,
+            bindingMode: "new",
+            sessionId: "",
+            prompt: role.prompt,
+            skill: role.skill,
+          },
+        ]),
+      ),
+    );
+    setRoleLibraryOpen(false);
+    setPromptPreview(null);
+    setInjectText("");
+    setGateReason("");
+    setError(null);
+    setDraftMode("blank");
   });
 
   if (!activeProject) {
@@ -507,6 +544,7 @@ export function TerminalOrchestratorPanel({
             onPause={() => void setStatus("paused")}
             onResume={() => void setStatus("running")}
             onRestart={() => restartFromRun(activeRun)}
+            onNewBlankRun={() => startBlankRunDraft()}
             onSelectSession={onSelectSession}
           />
         ) : (
@@ -519,12 +557,14 @@ export function TerminalOrchestratorPanel({
             requireHumanConfirmationEachRound={
               requireHumanConfirmationEachRound
             }
+            autoApprovePlanGate={autoApprovePlanGate}
+            autoApproveVerifyGate={autoApproveVerifyGate}
             projectSessions={projectSessions}
             roles={roles}
             roleDrafts={roleDrafts}
             roleLibraryOpen={roleLibraryOpen}
             loading={loading}
-            restartMode={restartMode}
+            draftMode={draftMode}
             onTaskChange={setTask}
             onStartupPromptChange={setStartupPrompt}
             onOrchestratorCommandChange={setOrchestratorCommand}
@@ -533,6 +573,8 @@ export function TerminalOrchestratorPanel({
             onRequireHumanConfirmationEachRoundChange={
               setRequireHumanConfirmationEachRound
             }
+            onAutoApprovePlanGateChange={setAutoApprovePlanGate}
+            onAutoApproveVerifyGateChange={setAutoApproveVerifyGate}
             onRoleDraftChange={(roleId, patch) => {
               setRoleDrafts((current) => ({
                 ...current,
@@ -555,7 +597,7 @@ export function TerminalOrchestratorPanel({
                 ),
               );
             }}
-            onCancelRestart={() => setRestartMode(false)}
+            onCancelDraft={() => setDraftMode(null)}
             onSaveRoleLibrary={() => void saveRoleLibrary()}
             onStart={() => void requestStartRun()}
           />

@@ -3,6 +3,7 @@ import os from "node:os";
 import type {
   OrchestratorDispatchSidecar,
   HumanGateVerdict,
+  HumanGatePhase,
   OrchestratorWorkerOutbox,
   SubmitOrchestratorHumanGateRequest,
   OrchestratorRoundConfirmation,
@@ -63,6 +64,19 @@ export { OrchestratorError } from "./errors";
 
 type TerminalCompletionEvent = Extract<TerminalEventEnvelope, { kind: "completion" }>;
 type WorkerOutboxWithRunId = OrchestratorWorkerOutbox & { runId: string };
+type WorkerResultTransition = {
+  patch: Partial<
+    Pick<
+      OrchestratorRunPackage,
+      | "status"
+      | "currentPhase"
+      | "pendingRoundConfirmation"
+      | "humanGateVerdicts"
+    >
+  >;
+  autoGatePrompt?: string;
+  timelineItems?: OrchestratorTimelineItem[];
+};
 
 const orchestratorServiceLogger = logger.child({
   component: "orchestrator-service",
@@ -563,14 +577,17 @@ export class OrchestratorService {
       }),
     ];
     const phasePatch = advancePhaseForWorkerResult(outbox);
-    const transitionPatch = phasePatch
-      ? this.buildWorkerResultTransitionPatch(run, outbox, phasePatch)
+    const transition = phasePatch
+      ? this.buildWorkerResultTransition(run, outbox, phasePatch)
       : null;
+    if (transition?.timelineItems?.length) {
+      nextTimeline.push(...transition.timelineItems);
+    }
 
     if (run.status === "paused") {
       await this.updateRun(run, {
         goals: run.goals,
-        ...(transitionPatch ?? {}),
+        ...(transition?.patch ?? {}),
         timeline: nextTimeline,
       });
       return;
@@ -582,14 +599,16 @@ export class OrchestratorService {
     if (!orchestratorSession) {
       await this.updateRun(run, {
         goals: run.goals,
-        ...(transitionPatch ?? {}),
+        ...(transition?.patch ?? {}),
         timeline: nextTimeline,
       });
       return;
     }
     await this.promptSender.sendPromptToAgent(
       orchestratorSession,
-      buildResultPrompt(outbox),
+      [buildResultPrompt(outbox), transition?.autoGatePrompt]
+        .filter((item): item is string => Boolean(item))
+        .join("\n\n"),
     );
     nextTimeline.push(
       this.timelineItem({
@@ -602,12 +621,12 @@ export class OrchestratorService {
     );
     await this.updateRun(run, {
       goals: run.goals,
-      ...(transitionPatch ?? {}),
+      ...(transition?.patch ?? {}),
       timeline: nextTimeline,
     });
   }
 
-  private buildWorkerResultTransitionPatch(
+  private buildWorkerResultTransition(
     run: OrchestratorRunPackage,
     outbox: {
       role?: string | null;
@@ -618,12 +637,38 @@ export class OrchestratorService {
       currentPhase: NonNullable<OrchestratorRunPackage["currentPhase"]>;
       status?: OrchestratorRunStatus;
     },
-  ): Partial<
-    Pick<
-      OrchestratorRunPackage,
-      "status" | "currentPhase" | "pendingRoundConfirmation"
-    >
-  > {
+  ): WorkerResultTransition {
+    const autoGatePhase = getAutoApprovedGatePhase(run, phasePatch.currentPhase);
+    if (autoGatePhase) {
+      const transition = resolveHumanGateTransition({
+        phase: autoGatePhase,
+        verdict: "approved",
+      });
+      const verdict: HumanGateVerdict = {
+        id: `gate_${Date.now()}_${randomBytes(2).toString("hex")}`,
+        phase: autoGatePhase,
+        verdict: "approved",
+        reason: "Auto-approved by run option",
+        at: new Date().toISOString(),
+      };
+      return {
+        patch: {
+          status: transition.status,
+          currentPhase: transition.currentPhase,
+          pendingRoundConfirmation: null,
+          humanGateVerdicts: [...(run.humanGateVerdicts ?? []), verdict],
+        },
+        autoGatePrompt: formatHumanGatePrompt(verdict, transition.currentPhase),
+        timelineItems: [
+          this.timelineItem({
+            type: "human",
+            title: `Human gate auto-approved: ${autoGatePhase}`,
+            detail: verdict.reason ?? undefined,
+            terminalSessionId: run.orchestrator.sessionId ?? null,
+          }),
+        ],
+      };
+    }
     if (
       shouldRequireRoundConfirmation({
         run,
@@ -632,27 +677,31 @@ export class OrchestratorService {
       })
     ) {
       return {
-        status: "need_human",
-        pendingRoundConfirmation: createPendingRoundConfirmation({
-          id: `confirm_${Date.now()}_${randomBytes(2).toString("hex")}`,
-          at: new Date().toISOString(),
-          run,
-          nextPhase: phasePatch.currentPhase,
-          outbox: {
-            sessionId: "",
-            status: "completed",
-            artifacts: [],
-            error: null,
-            finishedAt: new Date().toISOString(),
-            ...outbox,
-          },
-        }),
+        patch: {
+          status: "need_human",
+          pendingRoundConfirmation: createPendingRoundConfirmation({
+            id: `confirm_${Date.now()}_${randomBytes(2).toString("hex")}`,
+            at: new Date().toISOString(),
+            run,
+            nextPhase: phasePatch.currentPhase,
+            outbox: {
+              sessionId: "",
+              status: "completed",
+              artifacts: [],
+              error: null,
+              finishedAt: new Date().toISOString(),
+              ...outbox,
+            },
+          }),
+        },
       };
     }
     return {
-      currentPhase: phasePatch.currentPhase,
-      ...(phasePatch.status ? { status: phasePatch.status } : {}),
-      pendingRoundConfirmation: null,
+      patch: {
+        currentPhase: phasePatch.currentPhase,
+        ...(phasePatch.status ? { status: phasePatch.status } : {}),
+        pendingRoundConfirmation: null,
+      },
     };
   }
 
@@ -736,6 +785,19 @@ function formatHumanGatePrompt(
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+function getAutoApprovedGatePhase(
+  run: OrchestratorRunPackage,
+  phase: OrchestratorRunPackage["currentPhase"],
+): HumanGatePhase | null {
+  if (phase === "human_plan_approval" && run.options?.autoApprovePlanGate) {
+    return phase;
+  }
+  if (phase === "human_verify" && run.options?.autoApproveVerifyGate) {
+    return phase;
+  }
+  return null;
 }
 
 function formatRoundConfirmationPrompt(
