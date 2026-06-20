@@ -20,6 +20,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `diagnostic-log-debugging`
 - `doc-coauthoring`
 - `git-advanced-workflows`
+- `github-pr`
 - `karpathy-guidelines`
 - `playwright-cli`
 - `react-best-practices`
@@ -91,3 +92,23 @@ codex plugin add "toolkit@$MARKETPLACE_NAME"
 ```
 
 Hooks、scripts、MCP servers 和 app manifests 只有在对应文件存在，且插件验证器接受相关 manifest 字段时，才应添加。
+
+## 自动更新
+
+提交时如果 staged diff 包含 `plugins/toolkit` 或 `.agents/plugins/marketplace.json`，pre-commit 会先执行：
+
+```bash
+pnpm toolkit:sync:staged
+```
+
+该命令会验证插件和 skills，更新 cachebuster，重新安装 Codex 的 `toolkit@runweave` 与 Trae CLI 的 `toolkit@local`，并把 cachebuster 写回本次提交。需要跳过本机插件安装时，可设置：
+
+```bash
+RUNWEAVE_SKIP_TOOLKIT_PLUGIN_SYNC=1 git commit
+```
+
+也可以手动执行完整同步：
+
+```bash
+pnpm toolkit:sync
+```
