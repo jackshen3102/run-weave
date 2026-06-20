@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   TerminalProjectListItem,
   TerminalSessionListItem,
@@ -111,33 +112,29 @@ export function TerminalWorkspace({
     (state) => state.removeProjectPreview,
   );
 
-  const selectActiveSession = useCallback(
+  const selectActiveSession = useMemoizedFn(
     (terminalSessionId: string | null) => {
       activeSessionIdRef.current = terminalSessionId;
       setActiveSessionId(terminalSessionId);
     },
-    [],
   );
-  const selectActiveProject = useCallback(
-    (projectId: string) => {
-      setActiveProjectId(projectId);
-      const currentSessionId = activeSessionIdRef.current;
-      if (
-        currentSessionId &&
-        sessionsRef.current.some(
-          (session) =>
-            session.terminalSessionId === currentSessionId &&
-            session.projectId === projectId,
-        )
-      ) {
-        return;
-      }
-      selectActiveSession(
-        resolvePreferredSessionId(apiBase, projectId, sessionsRef.current),
-      );
-    },
-    [apiBase, selectActiveSession],
-  );
+  const selectActiveProject = useMemoizedFn((projectId: string) => {
+    setActiveProjectId(projectId);
+    const currentSessionId = activeSessionIdRef.current;
+    if (
+      currentSessionId &&
+      sessionsRef.current.some(
+        (session) =>
+          session.terminalSessionId === currentSessionId &&
+          session.projectId === projectId,
+      )
+    ) {
+      return;
+    }
+    selectActiveSession(
+      resolvePreferredSessionId(apiBase, projectId, sessionsRef.current),
+    );
+  });
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
@@ -172,7 +169,7 @@ export function TerminalWorkspace({
     ) ??
     visibleSessions[0] ??
     null;
-  const loadSessions = useCallback(async (): Promise<void> => {
+  const loadSessions = useMemoizedFn(async (): Promise<void> => {
     const requestId = loadSessionsRequestIdRef.current + 1;
     loadSessionsRequestIdRef.current = requestId;
     const requestApiBase = apiBase;
@@ -247,7 +244,7 @@ export function TerminalWorkspace({
         setLoading(false);
       }
     }
-  }, [apiBase, initialTerminalSessionId, onAuthExpired, token]);
+  });
   const { resetTerminalEventCursor } = useTerminalWorkspaceEvents({
     apiBase,
     token,
@@ -277,7 +274,7 @@ export function TerminalWorkspace({
   }, [apiBase, resetTerminalEventCursor]);
   useEffect(() => {
     void loadSessions();
-  }, [loadSessions]);
+  }, [apiBase, initialTerminalSessionId, loadSessions, token]);
   useEffect(() => {
     if (!initialTerminalSessionId) {
       return;

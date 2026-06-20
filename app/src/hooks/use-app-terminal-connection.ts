@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useRef, useState } from "react";
 import type {
   TerminalClientMessage,
   TerminalServerMessage,
@@ -75,7 +76,11 @@ function sendMessage(
   socket.send(JSON.stringify(payload));
 }
 
-function closeWebSocket(socket: WebSocket | null, code: number, reason: string) {
+function closeWebSocket(
+  socket: WebSocket | null,
+  code: number,
+  reason: string,
+) {
   if (!socket) {
     return;
   }
@@ -145,12 +150,12 @@ export function useAppTerminalConnection({
     tokenRef.current = accessToken;
   }, [accessToken]);
 
-  const setNextRuntimeStatus = useCallback((status: RuntimeStatus) => {
+  const setNextRuntimeStatus = useMemoizedFn((status: RuntimeStatus) => {
     runtimeStatusRef.current = status;
     setRuntimeStatus(status);
-  }, []);
+  });
 
-  const flushPendingRendererWrites = useCallback(() => {
+  const flushPendingRendererWrites = useMemoizedFn(() => {
     const renderer = rendererRef.current;
     if (!renderer) {
       return false;
@@ -166,9 +171,9 @@ export function useAppTerminalConnection({
       renderer.write(pendingOutput);
     }
     return pendingScrollback !== null || Boolean(pendingOutput);
-  }, [rendererRef]);
+  });
 
-  const writeScrollback = useCallback((data: string) => {
+  const writeScrollback = useMemoizedFn((data: string) => {
     const renderer = rendererRef.current;
     if (!renderer) {
       pendingScrollbackRef.current = data;
@@ -177,9 +182,9 @@ export function useAppTerminalConnection({
     }
     pendingScrollbackRef.current = null;
     renderer.resetAndWrite(data);
-  }, [rendererRef]);
+  });
 
-  const writeOutput = useCallback((data: string) => {
+  const writeOutput = useMemoizedFn((data: string) => {
     const renderer = rendererRef.current;
     if (!renderer) {
       pendingOutputRef.current = `${pendingOutputRef.current}${data}`.slice(
@@ -189,11 +194,11 @@ export function useAppTerminalConnection({
     }
     flushPendingRendererWrites();
     renderer.write(data);
-  }, [flushPendingRendererWrites, rendererRef]);
+  });
 
-  const handleRendererReady = useCallback(() => {
+  const handleRendererReady = useMemoizedFn(() => {
     flushPendingRendererWrites();
-  }, [flushPendingRendererWrites]);
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -440,7 +445,7 @@ export function useAppTerminalConnection({
     writeScrollback,
   ]);
 
-  const sendInput = useCallback((data: string): SendInputResult => {
+  const sendInput = useMemoizedFn((data: string): SendInputResult => {
     if (!data) {
       return { accepted: false, reason: "disabled" };
     }
@@ -464,16 +469,16 @@ export function useAppTerminalConnection({
     } else {
       return { accepted: false, reason: "queue-full" };
     }
-  }, [canQueueInput, enabled]);
+  });
 
-  const sendResize = useCallback((cols: number, rows: number) => {
+  const sendResize = useMemoizedFn((cols: number, rows: number) => {
     pendingResizeRef.current = { cols, rows };
     sendMessage(socketRef.current, { type: "resize", cols, rows });
-  }, []);
+  });
 
-  const sendSignal = useCallback((signal: TerminalSignal) => {
+  const sendSignal = useMemoizedFn((signal: TerminalSignal) => {
     sendMessage(socketRef.current, { type: "signal", signal });
-  }, []);
+  });
 
   return {
     connectionStatus,

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useRef, useState } from "react";
 import type {
   TerminalEventEnvelope,
   TerminalEventServerMessage,
@@ -79,7 +80,7 @@ export function useTerminalEventsConnection(params: {
     onTerminalEventsRef.current = onTerminalEvents;
   }, [onTerminalEvents]);
 
-  const handleEvents = useCallback(
+  const handleEvents = useMemoizedFn(
     (
       events: TerminalEventEnvelope[],
       delivery: TerminalEventDelivery,
@@ -102,7 +103,6 @@ export function useTerminalEventsConnection(params: {
         setCursorRef.current(maxId);
       }
     },
-    [],
   );
 
   useEffect(() => {

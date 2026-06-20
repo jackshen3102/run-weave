@@ -33,6 +33,12 @@
 
 - 打开页面复现或修复问题时，使用 `$playwright-cli`。
 
+## React Hooks 约束
+
+- 前端与 App 代码禁止使用 React `useCallback`。需要稳定函数引用时，使用 `ahooks` 的 `useMemoizedFn`。
+- 不要从 `react` 导入 `useCallback`，也不要写 `React.useCallback`。依赖数组式 callback memoization 不再作为本仓库默认模式。
+- 若确实遇到 `useMemoizedFn` 不能覆盖的特殊场景，先在实现前说明原因与替代方案，不要静默引入 `useCallback`。
+
 ## App 架构与 UI 约束
 
 - `app/` 是 Ionic React + Capacitor App，必须保留 `setupIonicReact()` 与 Ionic core/structure/typography CSS 作为 App 基础运行时。

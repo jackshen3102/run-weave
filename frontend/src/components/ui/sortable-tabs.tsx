@@ -1,10 +1,5 @@
-import {
-  type CSSProperties,
-  type ReactNode,
-  useCallback,
-  useMemo,
-  useState,
-} from "react";
+import { useMemoizedFn } from "ahooks";
+import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -41,12 +36,7 @@ interface SortableTabItemProps {
 }
 
 function SortableTabItem({ id, children }: SortableTabItemProps) {
-  const {
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({ id });
+  const { listeners, setNodeRef, transform, transition } = useSortable({ id });
 
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -70,7 +60,10 @@ export function SortableTabs<T>({
   className,
 }: SortableTabsProps<T>) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const ids = useMemo(() => items.map((item) => getItemId(item)), [items, getItemId]);
+  const ids = useMemo(
+    () => items.map((item) => getItemId(item)),
+    [items, getItemId],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -82,34 +75,28 @@ export function SortableTabs<T>({
     }),
   );
 
-  const handleDragStart = useCallback(
-    (event: DragStartEvent) => {
-      const index = ids.indexOf(String(event.active.id));
-      if (index >= 0) {
-        setActiveIndex(index);
-      }
-    },
-    [ids],
-  );
+  const handleDragStart = useMemoizedFn((event: DragStartEvent) => {
+    const index = ids.indexOf(String(event.active.id));
+    if (index >= 0) {
+      setActiveIndex(index);
+    }
+  });
 
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      setActiveIndex(null);
-      const { active, over } = event;
-      if (!over || active.id === over.id) {
-        return;
-      }
+  const handleDragEnd = useMemoizedFn((event: DragEndEvent) => {
+    setActiveIndex(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
 
-      const fromIndex = ids.indexOf(String(active.id));
-      const toIndex = ids.indexOf(String(over.id));
-      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
-        return;
-      }
+    const fromIndex = ids.indexOf(String(active.id));
+    const toIndex = ids.indexOf(String(over.id));
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+      return;
+    }
 
-      onReorder(fromIndex, toIndex);
-    },
-    [ids, onReorder],
-  );
+    onReorder(fromIndex, toIndex);
+  });
 
   const activeItem =
     activeIndex !== null && activeIndex >= 0 && activeIndex < items.length
@@ -134,9 +121,7 @@ export function SortableTabs<T>({
         </div>
       </SortableContext>
       <DragOverlay dropAnimation={null}>
-        {activeItem
-          ? renderTab(activeItem, { isDragging: true })
-          : null}
+        {activeItem ? renderTab(activeItem, { isDragging: true }) : null}
       </DragOverlay>
     </DndContext>
   );

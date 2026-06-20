@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useRef, useState } from "react";
 import type {
   TerminalPreviewDirectoryResponse,
   TerminalPreviewTreeEntry,
@@ -121,7 +122,7 @@ export function useTerminalFileTree({
   >(new Map());
   const directoryVersionsRef = useRef<Map<string, number>>(new Map());
 
-  const loadDirectory = useCallback(
+  const loadDirectory = useMemoizedFn(
     async (
       relativePath: string,
     ): Promise<TerminalPreviewDirectoryResponse | null> => {
@@ -167,131 +168,115 @@ export function useTerminalFileTree({
         }
       }
     },
-    [apiBase, token, projectId, hasProjectPath],
   );
 
-  const loadRootDirectory = useCallback(() => {
+  const loadRootDirectory = useMemoizedFn(() => {
     if (!projectId || !hasProjectPath) return;
     setLoading(true);
     loadDirectory(".").finally(() => setLoading(false));
-  }, [projectId, hasProjectPath, loadDirectory]);
+  });
 
-  const handleExpandItem = useCallback(
-    (item: TreeItem<FileTreeData>) => {
+  const handleExpandItem = useMemoizedFn((item: TreeItem<FileTreeData>) => {
+    setExpandedItems((prev) =>
+      prev.includes(item.index) ? prev : [...prev, item.index],
+    );
+    const path = item.data.relativePath || ".";
+    if (!loadedDirsRef.current.has(path)) {
+      loadDirectory(path);
+    }
+  });
+
+  const handleCollapseItem = useMemoizedFn((item: TreeItem<FileTreeData>) => {
+    setExpandedItems((prev) => prev.filter((id) => id !== item.index));
+  });
+
+  const handleFocusItem = useMemoizedFn((item: TreeItem<FileTreeData>) => {
+    setFocusedItem(item.index);
+  });
+
+  const handleSelectItems = useMemoizedFn((items: TreeItemIndex[]) => {
+    setSelectedItems(items);
+  });
+
+  const handlePrimaryAction = useMemoizedFn((item: TreeItem<FileTreeData>) => {
+    if (item.data.kind === "file") {
+      onOpenFilePath(item.data.relativePath);
+    } else {
       setExpandedItems((prev) =>
-        prev.includes(item.index) ? prev : [...prev, item.index],
+        prev.includes(item.index)
+          ? prev.filter((id) => id !== item.index)
+          : [...prev, item.index],
       );
       const path = item.data.relativePath || ".";
       if (!loadedDirsRef.current.has(path)) {
         loadDirectory(path);
       }
-    },
-    [loadDirectory],
-  );
+    }
+  });
 
-  const handleCollapseItem = useCallback((item: TreeItem<FileTreeData>) => {
-    setExpandedItems((prev) => prev.filter((id) => id !== item.index));
-  }, []);
-
-  const handleFocusItem = useCallback((item: TreeItem<FileTreeData>) => {
-    setFocusedItem(item.index);
-  }, []);
-
-  const handleSelectItems = useCallback((items: TreeItemIndex[]) => {
-    setSelectedItems(items);
-  }, []);
-
-  const handlePrimaryAction = useCallback(
-    (item: TreeItem<FileTreeData>) => {
-      if (item.data.kind === "file") {
-        onOpenFilePath(item.data.relativePath);
-      } else {
-        setExpandedItems((prev) =>
-          prev.includes(item.index)
-            ? prev.filter((id) => id !== item.index)
-            : [...prev, item.index],
-        );
-        const path = item.data.relativePath || ".";
-        if (!loadedDirsRef.current.has(path)) {
-          loadDirectory(path);
-        }
+  const handleMissingItems = useMemoizedFn((itemIds: TreeItemIndex[]) => {
+    const dirs = new Set<string>();
+    for (const id of itemIds) {
+      const item = items[id];
+      if (item?.isFolder) {
+        dirs.add(item.data.relativePath || ".");
       }
-    },
-    [onOpenFilePath, loadDirectory],
-  );
-
-  const handleMissingItems = useCallback(
-    (itemIds: TreeItemIndex[]) => {
-      const dirs = new Set<string>();
-      for (const id of itemIds) {
-        const item = items[id];
-        if (item?.isFolder) {
-          dirs.add(item.data.relativePath || ".");
-        }
+    }
+    for (const dir of dirs) {
+      if (!loadedDirsRef.current.has(dir)) {
+        loadDirectory(dir);
       }
-      for (const dir of dirs) {
-        if (!loadedDirsRef.current.has(dir)) {
-          loadDirectory(dir);
-        }
+    }
+  });
+
+  const revealFile = useMemoizedFn(async (relativePath: string) => {
+    if (!relativePath) return;
+
+    if (!loadedDirsRef.current.has(".")) {
+      await loadDirectory(".");
+    }
+
+    const segments = relativePath.split("/");
+    const pathsToExpand: string[] = [];
+    for (let i = 1; i < segments.length; i++) {
+      pathsToExpand.push(segments.slice(0, i).join("/"));
+    }
+
+    for (const dirPath of pathsToExpand) {
+      if (!loadedDirsRef.current.has(dirPath)) {
+        await loadDirectory(dirPath);
       }
-    },
-    [items, loadDirectory],
-  );
+    }
 
-  const revealFile = useCallback(
-    async (relativePath: string) => {
-      if (!relativePath) return;
-
-      if (!loadedDirsRef.current.has(".")) {
-        await loadDirectory(".");
+    setExpandedItems((prev) => {
+      const next = [...prev];
+      for (const p of pathsToExpand) {
+        if (!next.includes(p)) next.push(p);
       }
+      return next;
+    });
 
-      const segments = relativePath.split("/");
-      const pathsToExpand: string[] = [];
-      for (let i = 1; i < segments.length; i++) {
-        pathsToExpand.push(segments.slice(0, i).join("/"));
-      }
+    setSelectedItems([relativePath]);
+    setFocusedItem(relativePath);
+  });
 
-      for (const dirPath of pathsToExpand) {
-        if (!loadedDirsRef.current.has(dirPath)) {
-          await loadDirectory(dirPath);
-        }
-      }
+  const invalidateDirectory = useMemoizedFn((directoryPath: string) => {
+    const normalized = normalizeDirectoryPath(directoryPath);
+    const shouldReload =
+      loadedDirsRef.current.has(normalized) ||
+      inflightRef.current.has(normalized);
+    loadedDirsRef.current.delete(normalized);
+    inflightRef.current.delete(normalized);
+    directoryVersionsRef.current.set(
+      normalized,
+      (directoryVersionsRef.current.get(normalized) ?? 0) + 1,
+    );
+    if (shouldReload) {
+      void loadDirectory(normalized);
+    }
+  });
 
-      setExpandedItems((prev) => {
-        const next = [...prev];
-        for (const p of pathsToExpand) {
-          if (!next.includes(p)) next.push(p);
-        }
-        return next;
-      });
-
-      setSelectedItems([relativePath]);
-      setFocusedItem(relativePath);
-    },
-    [loadDirectory],
-  );
-
-  const invalidateDirectory = useCallback(
-    (directoryPath: string) => {
-      const normalized = normalizeDirectoryPath(directoryPath);
-      const shouldReload =
-        loadedDirsRef.current.has(normalized) ||
-        inflightRef.current.has(normalized);
-      loadedDirsRef.current.delete(normalized);
-      inflightRef.current.delete(normalized);
-      directoryVersionsRef.current.set(
-        normalized,
-        (directoryVersionsRef.current.get(normalized) ?? 0) + 1,
-      );
-      if (shouldReload) {
-        void loadDirectory(normalized);
-      }
-    },
-    [loadDirectory],
-  );
-
-  const resetTree = useCallback(() => {
+  const resetTree = useMemoizedFn(() => {
     setItems({ root: createRootItem() });
     setExpandedItems([]);
     setFocusedItem(undefined);
@@ -300,7 +285,7 @@ export function useTerminalFileTree({
     loadedDirsRef.current.clear();
     inflightRef.current.clear();
     directoryVersionsRef.current.clear();
-  }, []);
+  });
 
   return {
     items,

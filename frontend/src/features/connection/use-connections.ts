@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PackagedBackendConnectionState } from "@runweave/shared";
 import type { ConnectionConfig, ConnectionStore } from "./types";
 import {
@@ -12,10 +13,13 @@ const DEFAULT_STORE: ConnectionStore = { connections: [], activeId: null };
 const isElectron = window.electronAPI?.isElectron === true;
 const managesPackagedBackend =
   window.electronAPI?.managesPackagedBackend === true;
-const electronBackendUrl = window.electronAPI?.backendUrl?.trim().replace(/\/+$/, "") ?? "";
+const electronBackendUrl =
+  window.electronAPI?.backendUrl?.trim().replace(/\/+$/, "") ?? "";
 
 function getInitialPackagedBackendState(): PackagedBackendConnectionState | null {
-  if (!shouldExposeLocalDevelopmentConnection(isElectron, managesPackagedBackend)) {
+  if (
+    !shouldExposeLocalDevelopmentConnection(isElectron, managesPackagedBackend)
+  ) {
     return null;
   }
 
@@ -57,7 +61,10 @@ export interface UseConnectionsResult {
   activeConnection: ConnectionConfig | null;
   addConnection: (name: string, url: string) => ConnectionConfig;
   removeConnection: (id: string) => void;
-  updateConnection: (id: string, patch: { name?: string; url?: string }) => void;
+  updateConnection: (
+    id: string,
+    patch: { name?: string; url?: string },
+  ) => void;
   setActive: (id: string) => void;
   clearActive: () => void;
   reconnectSystemConnection: (id: string) => Promise<boolean>;
@@ -92,7 +99,12 @@ export function useConnections(storageKey: string): UseConnectionsResult {
   storeRef.current = store;
 
   useEffect(() => {
-    if (!shouldExposeLocalDevelopmentConnection(isElectron, managesPackagedBackend)) {
+    if (
+      !shouldExposeLocalDevelopmentConnection(
+        isElectron,
+        managesPackagedBackend,
+      )
+    ) {
       return;
     }
 
@@ -114,15 +126,12 @@ export function useConnections(storageKey: string): UseConnectionsResult {
     };
   }, []);
 
-  const persist = useCallback(
-    (updater: StoreUpdater) => {
-      const next = updater(storeRef.current);
-      storeRef.current = next;
-      setStoreState(next);
-      saveStore(storageKey, next);
-    },
-    [storageKey],
-  );
+  const persist = useMemoizedFn((updater: StoreUpdater) => {
+    const next = updater(storeRef.current);
+    storeRef.current = next;
+    setStoreState(next);
+    saveStore(storageKey, next);
+  });
 
   const activeConnection = useMemo(() => {
     if (store.activeId === LOCAL_DEV_CONNECTION_ID) {
@@ -148,7 +157,7 @@ export function useConnections(storageKey: string): UseConnectionsResult {
       : userConnections;
   }, [localDevelopmentConnection, store.connections]);
 
-  const addConnection = useCallback(
+  const addConnection = useMemoizedFn(
     (name: string, url: string): ConnectionConfig => {
       const conn: ConnectionConfig = {
         id: crypto.randomUUID(),
@@ -162,24 +171,20 @@ export function useConnections(storageKey: string): UseConnectionsResult {
       }));
       return conn;
     },
-    [persist],
   );
 
-  const removeConnection = useCallback(
-    (id: string) => {
-      if (id === LOCAL_DEV_CONNECTION_ID) {
-        return;
-      }
+  const removeConnection = useMemoizedFn((id: string) => {
+    if (id === LOCAL_DEV_CONNECTION_ID) {
+      return;
+    }
 
-      persist((prev) => ({
-        connections: prev.connections.filter((c) => c.id !== id),
-        activeId: prev.activeId === id ? null : prev.activeId,
-      }));
-    },
-    [persist],
-  );
+    persist((prev) => ({
+      connections: prev.connections.filter((c) => c.id !== id),
+      activeId: prev.activeId === id ? null : prev.activeId,
+    }));
+  });
 
-  const updateConnection = useCallback(
+  const updateConnection = useMemoizedFn(
     (id: string, patch: { name?: string; url?: string }) => {
       if (id === LOCAL_DEV_CONNECTION_ID) {
         return;
@@ -199,23 +204,22 @@ export function useConnections(storageKey: string): UseConnectionsResult {
         }),
       }));
     },
-    [persist],
   );
 
-  const setActive = useCallback(
-    (id: string) => {
-      persist((prev) => ({ ...prev, activeId: id }));
-    },
-    [persist],
-  );
+  const setActive = useMemoizedFn((id: string) => {
+    persist((prev) => ({ ...prev, activeId: id }));
+  });
 
-  const clearActive = useCallback(() => {
+  const clearActive = useMemoizedFn(() => {
     persist((prev) => ({ ...prev, activeId: null }));
-  }, [persist]);
+  });
 
-  const reconnectSystemConnection = useCallback(async (id: string) => {
+  const reconnectSystemConnection = useMemoizedFn(async (id: string) => {
     if (
-      !shouldExposeLocalDevelopmentConnection(isElectron, managesPackagedBackend) ||
+      !shouldExposeLocalDevelopmentConnection(
+        isElectron,
+        managesPackagedBackend,
+      ) ||
       id !== LOCAL_DEV_CONNECTION_ID
     ) {
       return false;
@@ -228,7 +232,7 @@ export function useConnections(storageKey: string): UseConnectionsResult {
 
     setPackagedBackendState(nextState);
     return nextState.available;
-  }, []);
+  });
 
   return isElectron
     ? {

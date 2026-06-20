@@ -1,4 +1,5 @@
-import { useCallback, useEffect } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect } from "react";
 import type { TreeItem } from "react-complex-tree";
 import { Loader2 } from "lucide-react";
 import type {
@@ -45,23 +46,17 @@ export function TerminalFileExplorer({
     }
   }, [selectedFilePath, revealFile]);
 
-  const handleFileClick = useCallback(
-    (relativePath: string) => {
-      onOpenFilePath(relativePath);
-    },
-    [onOpenFilePath],
-  );
+  const handleFileClick = useMemoizedFn((relativePath: string) => {
+    onOpenFilePath(relativePath);
+  });
 
-  const handleDirectoryClick = useCallback(
-    (item: TreeItem<FileTreeData>) => {
-      if (expandedItems.includes(item.index)) {
-        handleCollapseItem(item);
-      } else {
-        handleExpandItem(item);
-      }
-    },
-    [expandedItems, handleCollapseItem, handleExpandItem],
-  );
+  const handleDirectoryClick = useMemoizedFn((item: TreeItem<FileTreeData>) => {
+    if (expandedItems.includes(item.index)) {
+      handleCollapseItem(item);
+    } else {
+      handleExpandItem(item);
+    }
+  });
 
   if (loading && Object.keys(items).length <= 1) {
     return (

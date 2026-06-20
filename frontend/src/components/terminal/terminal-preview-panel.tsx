@@ -1,4 +1,5 @@
-import { useCallback, useEffect } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect } from "react";
 import type {
   TerminalProjectListItem,
   TerminalSessionListItem,
@@ -143,7 +144,7 @@ export function TerminalPreviewPanel({
     onAuthExpired,
   });
 
-  const getMutationTarget = useCallback(
+  const getMutationTarget = useMemoizedFn(
     (filePath: string): PreviewFileMutationTarget => ({
       path: filePath,
       expectedMtimeMs:
@@ -153,45 +154,25 @@ export function TerminalPreviewPanel({
           ? loadedMtimeMs
           : undefined,
     }),
-    [filePreview, loadedMtimeMs],
   );
 
-  const requestRenameFile = useCallback(
-    (filePath: string): void => {
-      if (!projectId || !confirmDiscardDraft()) {
-        return;
-      }
-      const target = getMutationTarget(filePath);
-      setMutationError(null);
-      setRenameTarget(target);
-      setRenamePath(target.path);
-    },
-    [
-      confirmDiscardDraft,
-      getMutationTarget,
-      projectId,
-      setMutationError,
-      setRenamePath,
-      setRenameTarget,
-    ],
-  );
+  const requestRenameFile = useMemoizedFn((filePath: string): void => {
+    if (!projectId || !confirmDiscardDraft()) {
+      return;
+    }
+    const target = getMutationTarget(filePath);
+    setMutationError(null);
+    setRenameTarget(target);
+    setRenamePath(target.path);
+  });
 
-  const requestDeleteFile = useCallback(
-    (filePath: string): void => {
-      if (!projectId || !confirmDiscardDraft()) {
-        return;
-      }
-      setMutationError(null);
-      setDeleteTarget(getMutationTarget(filePath));
-    },
-    [
-      confirmDiscardDraft,
-      getMutationTarget,
-      projectId,
-      setDeleteTarget,
-      setMutationError,
-    ],
-  );
+  const requestDeleteFile = useMemoizedFn((filePath: string): void => {
+    if (!projectId || !confirmDiscardDraft()) {
+      return;
+    }
+    setMutationError(null);
+    setDeleteTarget(getMutationTarget(filePath));
+  });
 
   const {
     copyPath: copySelectedPath,
@@ -244,17 +225,14 @@ export function TerminalPreviewPanel({
     }
   }, [loadRootDirectory, mode]);
 
-  const invalidateFileTreeParents = useCallback(
-    (paths: string[]): void => {
-      const directories = new Set(paths.map(getPreviewParentDirectory));
-      for (const directoryPath of directories) {
-        invalidateDirectory(directoryPath);
-      }
-    },
-    [invalidateDirectory],
-  );
+  const invalidateFileTreeParents = useMemoizedFn((paths: string[]): void => {
+    const directories = new Set(paths.map(getPreviewParentDirectory));
+    for (const directoryPath of directories) {
+      invalidateDirectory(directoryPath);
+    }
+  });
 
-  const submitRenameFile = useCallback(async (): Promise<void> => {
+  const submitRenameFile = useMemoizedFn(async (): Promise<void> => {
     if (!projectId || !renameTarget || mutationPending) {
       return;
     }
@@ -309,41 +287,9 @@ export function TerminalPreviewPanel({
     } finally {
       setMutationPending(null);
     }
-  }, [
-    apiBase,
-    diffRequestSequencer,
-    fileRequestSequencer,
-    handleRequestError,
-    invalidateFileTreeParents,
-    loadChanges,
-    mutationPending,
-    projectId,
-    refreshFileSearch,
-    renamePath,
-    renameTarget,
-    selectedChangeKindRef,
-    selectedChangePathRef,
-    setDiffError,
-    setDiffLoading,
-    setEditorContent,
-    setFileDiff,
-    setFileError,
-    setFileLoading,
-    setFilePreview,
-    setLastSavedAt,
-    setLoadedContent,
-    setLoadedMtimeMs,
-    setMutationError,
-    setMutationPending,
-    setRenamePath,
-    setRenameTarget,
-    setSaveConflict,
-    setSaveError,
-    token,
-    updateProjectPreview,
-  ]);
+  });
 
-  const submitDeleteFile = useCallback(async (): Promise<void> => {
+  const submitDeleteFile = useMemoizedFn(async (): Promise<void> => {
     if (!projectId || !deleteTarget || mutationPending) {
       return;
     }
@@ -401,42 +347,7 @@ export function TerminalPreviewPanel({
     } finally {
       setMutationPending(null);
     }
-  }, [
-    apiBase,
-    deleteTarget,
-    diffRequestSequencer,
-    filePreview?.path,
-    fileRequestSequencer,
-    handleRequestError,
-    invalidateFileTreeParents,
-    loadChanges,
-    mode,
-    mutationPending,
-    projectId,
-    refreshFileSearch,
-    selectedChangeKind,
-    selectedChangeKindRef,
-    selectedChangePath,
-    selectedChangePathRef,
-    selectedFilePath,
-    setDeleteTarget,
-    setDiffError,
-    setDiffLoading,
-    setEditorContent,
-    setFileDiff,
-    setFileError,
-    setFileLoading,
-    setFilePreview,
-    setLastSavedAt,
-    setLoadedContent,
-    setLoadedMtimeMs,
-    setMutationError,
-    setMutationPending,
-    setSaveConflict,
-    setSaveError,
-    token,
-    updateProjectPreview,
-  ]);
+  });
 
   const previewBody = (
     <TerminalPreviewPanelContent

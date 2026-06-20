@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState, type RefObject } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useRef, useState, type RefObject } from "react";
 import { Check, Copy } from "lucide-react";
 import type { OnMount } from "@monaco-editor/react";
 
@@ -59,19 +60,19 @@ export function useLineReferenceCopy(
   const copiedTimeoutRef = useRef<number | null>(null);
   const [lineReferenceCopied, setLineReferenceCopied] = useState(false);
 
-  const clearLineReferenceCopiedTimer = useCallback((): void => {
+  const clearLineReferenceCopiedTimer = useMemoizedFn((): void => {
     if (copiedTimeoutRef.current === null) {
       return;
     }
     window.clearTimeout(copiedTimeoutRef.current);
     copiedTimeoutRef.current = null;
-  }, []);
+  });
 
-  const resetLineReferenceCopied = useCallback((): void => {
+  const resetLineReferenceCopied = useMemoizedFn((): void => {
     setLineReferenceCopied(false);
-  }, []);
+  });
 
-  const formatLineReference = useCallback(
+  const formatLineReference = useMemoizedFn(
     (range: LineReferenceRange): string | null => {
       const path = lineReferencePathRef.current;
       if (!path) {
@@ -81,10 +82,9 @@ export function useLineReferenceCopy(
         ? `${path}:${range.startLine}`
         : `${path}:${range.startLine}-${range.endLine}`;
     },
-    [lineReferencePathRef],
   );
 
-  const copyLineReference = useCallback(async (): Promise<boolean> => {
+  const copyLineReference = useMemoizedFn(async (): Promise<boolean> => {
     const range = lineReferenceRangeRef.current;
     const reference = range ? formatLineReference(range) : null;
     if (!reference || !navigator.clipboard?.writeText) {
@@ -98,7 +98,7 @@ export function useLineReferenceCopy(
       copiedTimeoutRef.current = null;
     }, LINE_REFERENCE_COPY_RESET_MS);
     return true;
-  }, [clearLineReferenceCopiedTimer, formatLineReference, lineReferenceRangeRef]);
+  });
 
   return {
     lineReferenceCopied,

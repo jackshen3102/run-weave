@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useMemoizedFn } from "ahooks";
 import type { Dispatch, SetStateAction } from "react";
 import type {
   TerminalProjectListItem,
@@ -77,7 +77,7 @@ export function useTerminalWorkspaceActions({
   loadSessions,
   onAuthExpired,
 }: UseTerminalWorkspaceActionsArgs) {
-  const createSession = useCallback(async (): Promise<void> => {
+  const createSession = useMemoizedFn(async (): Promise<void> => {
     setLoading(true);
     try {
       const created = await createTerminalSession(apiBase, token, {
@@ -97,20 +97,9 @@ export function useTerminalWorkspaceActions({
     } finally {
       setLoading(false);
     }
-  }, [
-    activeProjectId,
-    activeSession?.terminalSessionId,
-    apiBase,
-    clientMode,
-    loadSessions,
-    onAuthExpired,
-    setActiveSessionId,
-    setLoading,
-    setRequestError,
-    token,
-  ]);
+  });
 
-  const closeSession = useCallback(
+  const closeSession = useMemoizedFn(
     async (terminalSessionId: string): Promise<void> => {
       setLoading(true);
       try {
@@ -127,10 +116,9 @@ export function useTerminalWorkspaceActions({
         setLoading(false);
       }
     },
-    [apiBase, loadSessions, onAuthExpired, setLoading, setRequestError, token],
   );
 
-  const updateSessionAlias = useCallback(
+  const updateSessionAlias = useMemoizedFn(
     async (terminalSessionId: string, alias: string): Promise<void> => {
       setLoading(true);
       try {
@@ -158,25 +146,17 @@ export function useTerminalWorkspaceActions({
         setLoading(false);
       }
     },
-    [
-      apiBase,
-      onAuthExpired,
-      setLoading,
-      setRequestError,
-      setSessions,
-      token,
-    ],
   );
 
-  const closeProjectDialog = useCallback(() => {
+  const closeProjectDialog = useMemoizedFn(() => {
     if (loading) {
       return;
     }
     setProjectDialogError(null);
     setProjectDialogMode(null);
-  }, [loading, setProjectDialogError, setProjectDialogMode]);
+  });
 
-  const submitProjectDialog = useCallback(
+  const submitProjectDialog = useMemoizedFn(
     async (name: string, projectPath: string): Promise<void> => {
       const trimmedName = name.trim();
       if (!trimmedName) {
@@ -244,25 +224,9 @@ export function useTerminalWorkspaceActions({
         setLoading(false);
       }
     },
-    [
-      activeProject,
-      apiBase,
-      clientMode,
-      loadSessions,
-      onAuthExpired,
-      projectDialogMode,
-      selectActiveSession,
-      setActiveProjectId,
-      setLoading,
-      setProjectDialogError,
-      setProjectDialogMode,
-      setProjects,
-      setSessions,
-      token,
-    ],
   );
 
-  const removeProject = useCallback(async (): Promise<void> => {
+  const removeProject = useMemoizedFn(async (): Promise<void> => {
     const targetProject = projectPendingDeletion ?? activeProject;
     if (!targetProject) {
       return;
@@ -286,23 +250,9 @@ export function useTerminalWorkspaceActions({
     } finally {
       setLoading(false);
     }
-  }, [
-    activeProject,
-    apiBase,
-    loadSessions,
-    onAuthExpired,
-    projectPendingDeletion,
-    removeProjectPreview,
-    setActiveProjectId,
-    setActiveSessionId,
-    setLoading,
-    setProjectDialogError,
-    setProjectPendingDeletion,
-    setRequestError,
-    token,
-  ]);
+  });
 
-  const handleSessionMetadata = useCallback(
+  const handleSessionMetadata = useMemoizedFn(
     (
       terminalSessionId: string,
       metadata: { cwd: string; activeCommand: string | null },
@@ -329,30 +279,26 @@ export function useTerminalWorkspaceActions({
         return changed ? nextSessions : currentSessions;
       });
     },
-    [setSessions],
   );
 
-  const handleSessionBell = useCallback(
-    (terminalSessionId: string) => {
-      setBellMarkers((current) => ({
-        ...current,
-        [terminalSessionId]: true,
-      }));
-      window.setTimeout(() => {
-        setBellMarkers((current) => {
-          if (!current[terminalSessionId]) {
-            return current;
-          }
-          const next = { ...current };
-          delete next[terminalSessionId];
-          return next;
-        });
-      }, BELL_MARKER_DURATION_MS);
-    },
-    [setBellMarkers],
-  );
+  const handleSessionBell = useMemoizedFn((terminalSessionId: string) => {
+    setBellMarkers((current) => ({
+      ...current,
+      [terminalSessionId]: true,
+    }));
+    window.setTimeout(() => {
+      setBellMarkers((current) => {
+        if (!current[terminalSessionId]) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[terminalSessionId];
+        return next;
+      });
+    }, BELL_MARKER_DURATION_MS);
+  });
 
-  const handleProjectReorder = useCallback(
+  const handleProjectReorder = useMemoizedFn(
     (fromIndex: number, toIndex: number) => {
       setProjects((current) => {
         const reordered = [...current];
@@ -367,10 +313,9 @@ export function useTerminalWorkspaceActions({
         return reordered;
       });
     },
-    [apiBase, loadSessions, setProjects, token],
   );
 
-  const handleSessionReorder = useCallback(
+  const handleSessionReorder = useMemoizedFn(
     (fromIndex: number, toIndex: number) => {
       if (!activeProjectId) {
         return;
@@ -399,16 +344,12 @@ export function useTerminalWorkspaceActions({
         );
       });
     },
-    [activeProjectId, apiBase, loadSessions, setSessions, token],
   );
 
-  const openHistoryDrawer = useCallback(
-    (terminalSessionId: string) => {
-      setHistoryTerminalSessionId(terminalSessionId);
-      setHistoryDrawerOpen(true);
-    },
-    [setHistoryDrawerOpen, setHistoryTerminalSessionId],
-  );
+  const openHistoryDrawer = useMemoizedFn((terminalSessionId: string) => {
+    setHistoryTerminalSessionId(terminalSessionId);
+    setHistoryDrawerOpen(true);
+  });
 
   return {
     createSession,

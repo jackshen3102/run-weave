@@ -1,5 +1,6 @@
+import { useMemoizedFn } from "ahooks";
 import * as Dialog from "@radix-ui/react-dialog";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import type {
   DiagnosticLogResult,
@@ -169,12 +170,12 @@ export function DiagnosticLogEntry({
     };
   }, [apiBase, token]);
 
-  const syncFromRecorder = useCallback(() => {
+  const syncFromRecorder = useMemoizedFn(() => {
     setStatus(frontendDiagnosticLogRecorder.getStatus());
     setResult(frontendDiagnosticLogRecorder.getResult());
-  }, []);
+  });
 
-  const handleStart = useCallback(async () => {
+  const handleStart = useMemoizedFn(async () => {
     setIsBusy(true);
     setError(null);
     try {
@@ -188,9 +189,9 @@ export function DiagnosticLogEntry({
     } finally {
       setIsBusy(false);
     }
-  }, [apiBase, syncFromRecorder, token]);
+  });
 
-  const handleStop = useCallback(async () => {
+  const handleStop = useMemoizedFn(async () => {
     setIsBusy(true);
     setError(null);
     try {
@@ -208,9 +209,9 @@ export function DiagnosticLogEntry({
     } finally {
       setIsBusy(false);
     }
-  }, [apiBase, syncFromRecorder, token]);
+  });
 
-  const handleView = useCallback(async () => {
+  const handleView = useMemoizedFn(async () => {
     setIsBusy(true);
     setError(null);
     try {
@@ -223,9 +224,9 @@ export function DiagnosticLogEntry({
     } finally {
       setIsBusy(false);
     }
-  }, [apiBase, syncFromRecorder, token]);
+  });
 
-  const handleDownload = useCallback(async () => {
+  const handleDownload = useMemoizedFn(async () => {
     setIsBusy(true);
     setError(null);
     try {
@@ -236,9 +237,9 @@ export function DiagnosticLogEntry({
     } finally {
       setIsBusy(false);
     }
-  }, [apiBase, token]);
+  });
 
-  const handleRestart = useCallback(async () => {
+  const handleRestart = useMemoizedFn(async () => {
     setIsBusy(true);
     setError(null);
     try {
@@ -252,11 +253,11 @@ export function DiagnosticLogEntry({
     } finally {
       setIsBusy(false);
     }
-  }, [apiBase, syncFromRecorder, token]);
+  });
 
-  const handleCopy = useCallback(async () => {
+  const handleCopy = useMemoizedFn(async () => {
     await navigator.clipboard?.writeText(resultText);
-  }, [resultText]);
+  });
 
   const handleDragStart = (event: React.PointerEvent<HTMLDivElement>): void => {
     const bounds = event.currentTarget.parentElement?.getBoundingClientRect();

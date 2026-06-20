@@ -1,10 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CreateOrchestratorRunRequest,
   HumanGatePhase,
@@ -31,12 +26,18 @@ import {
 } from "../../services/terminal";
 import { HttpError } from "../../services/http";
 import { Button } from "../ui/button";
-import { DEFAULT_STARTUP_PROMPT, RUN_AUTO_REFRESH_INTERVAL_MS } from "./orchestrator/constants";
+import {
+  DEFAULT_STARTUP_PROMPT,
+  RUN_AUTO_REFRESH_INTERVAL_MS,
+} from "./orchestrator/constants";
 import { RunConfig } from "./orchestrator/RunConfig";
 import { RunMonitor } from "./orchestrator/RunMonitor";
 import { RunPromptPreviewDialog } from "./orchestrator/RunPromptPreviewDialog";
 import type { AgentCliCommand, RoleDraft } from "./orchestrator/types";
-import { normalizeAgentCliCommand, normalizeStartupPrompt } from "./orchestrator/utils";
+import {
+  normalizeAgentCliCommand,
+  normalizeStartupPrompt,
+} from "./orchestrator/utils";
 
 interface TerminalOrchestratorPanelProps {
   apiBase: string;
@@ -105,18 +106,15 @@ export function TerminalOrchestratorPanel({
     );
   }, [restartMode, runs]);
 
-  const handleRequestError = useCallback(
-    (caught: unknown) => {
-      if (caught instanceof HttpError && caught.status === 401) {
-        onAuthExpired?.();
-        return "Unauthorized";
-      }
-      return caught instanceof Error ? caught.message : String(caught);
-    },
-    [onAuthExpired],
-  );
+  const handleRequestError = useMemoizedFn((caught: unknown) => {
+    if (caught instanceof HttpError && caught.status === 401) {
+      onAuthExpired?.();
+      return "Unauthorized";
+    }
+    return caught instanceof Error ? caught.message : String(caught);
+  });
 
-  const refresh = useCallback(async () => {
+  const refresh = useMemoizedFn(async () => {
     if (!activeProject) {
       return;
     }
@@ -146,41 +144,38 @@ export function TerminalOrchestratorPanel({
     } finally {
       setLoading(false);
     }
-  }, [activeProject, apiBase, handleRequestError, token]);
+  });
 
-  const refreshRuns = useCallback(
-    async (options?: { silent?: boolean }) => {
-      if (!activeProject || runRefreshInFlightRef.current) {
-        return;
-      }
-      runRefreshInFlightRef.current = true;
+  const refreshRuns = useMemoizedFn(async (options?: { silent?: boolean }) => {
+    if (!activeProject || runRefreshInFlightRef.current) {
+      return;
+    }
+    runRefreshInFlightRef.current = true;
+    if (!options?.silent) {
+      setLoading(true);
+    }
+    try {
+      const runPayload = await listOrchestratorRuns(
+        apiBase,
+        token,
+        activeProject.projectId,
+      );
+      setRuns(runPayload.runs);
       if (!options?.silent) {
-        setLoading(true);
+        setError(null);
       }
-      try {
-        const runPayload = await listOrchestratorRuns(
-          apiBase,
-          token,
-          activeProject.projectId,
-        );
-        setRuns(runPayload.runs);
-        if (!options?.silent) {
-          setError(null);
-        }
-      } catch (caught) {
-        const message = handleRequestError(caught);
-        if (!options?.silent || message === "Unauthorized") {
-          setError(message);
-        }
-      } finally {
-        runRefreshInFlightRef.current = false;
-        if (!options?.silent) {
-          setLoading(false);
-        }
+    } catch (caught) {
+      const message = handleRequestError(caught);
+      if (!options?.silent || message === "Unauthorized") {
+        setError(message);
       }
-    },
-    [activeProject, apiBase, handleRequestError, token],
-  );
+    } finally {
+      runRefreshInFlightRef.current = false;
+      if (!options?.silent) {
+        setLoading(false);
+      }
+    }
+  });
 
   useEffect(() => {
     void refresh();
@@ -196,7 +191,7 @@ export function TerminalOrchestratorPanel({
     return () => window.clearInterval(intervalId);
   }, [activeProject, refreshRuns]);
 
-  const buildRunPayload = useCallback(
+  const buildRunPayload = useMemoizedFn(
     (runId?: string): CreateOrchestratorRunRequest | null => {
       if (!activeProject || !task.trim()) {
         return null;
@@ -249,27 +244,20 @@ export function TerminalOrchestratorPanel({
         },
       };
     },
-    [
-      activeProject,
-      orchestratorCommand,
-      orchestratorMode,
-      orchestratorSessionId,
-      requireHumanConfirmationEachRound,
-      roleDrafts,
-      roles,
-      startupPrompt,
-      task,
-    ],
   );
 
-  const requestStartRun = useCallback(async () => {
+  const requestStartRun = useMemoizedFn(async () => {
     const payload = buildRunPayload();
     if (!payload) {
       return;
     }
     setLoading(true);
     try {
-      const preview = await previewOrchestratorRunPrompt(apiBase, token, payload);
+      const preview = await previewOrchestratorRunPrompt(
+        apiBase,
+        token,
+        payload,
+      );
       setPromptPreview({
         ...preview,
         payload: {
@@ -283,9 +271,9 @@ export function TerminalOrchestratorPanel({
     } finally {
       setLoading(false);
     }
-  }, [apiBase, buildRunPayload, handleRequestError, token]);
+  });
 
-  const startRun = useCallback(async () => {
+  const startRun = useMemoizedFn(async () => {
     if (!promptPreview) {
       return;
     }
@@ -309,14 +297,9 @@ export function TerminalOrchestratorPanel({
     } finally {
       setLoading(false);
     }
-  }, [
-    apiBase,
-    handleRequestError,
-    promptPreview,
-    token,
-  ]);
+  });
 
-  const saveRoleLibrary = useCallback(async () => {
+  const saveRoleLibrary = useMemoizedFn(async () => {
     setLoading(true);
     try {
       const payload = await saveOrchestratorRoles(apiBase, token, roles);
@@ -328,35 +311,32 @@ export function TerminalOrchestratorPanel({
     } finally {
       setLoading(false);
     }
-  }, [apiBase, handleRequestError, roles, token]);
+  });
 
-  const setStatus = useCallback(
-    async (status: OrchestratorRunStatus) => {
-      if (!activeRun) {
-        return;
-      }
-      setLoading(true);
-      try {
-        const run = await setOrchestratorRunStatus(
-          apiBase,
-          token,
-          activeRun.runId,
-          status,
-        );
-        setRuns((current) =>
-          current.map((item) => (item.runId === run.runId ? run : item)),
-        );
-        setError(null);
-      } catch (caught) {
-        setError(handleRequestError(caught));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [activeRun, apiBase, handleRequestError, token],
-  );
+  const setStatus = useMemoizedFn(async (status: OrchestratorRunStatus) => {
+    if (!activeRun) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const run = await setOrchestratorRunStatus(
+        apiBase,
+        token,
+        activeRun.runId,
+        status,
+      );
+      setRuns((current) =>
+        current.map((item) => (item.runId === run.runId ? run : item)),
+      );
+      setError(null);
+    } catch (caught) {
+      setError(handleRequestError(caught));
+    } finally {
+      setLoading(false);
+    }
+  });
 
-  const inject = useCallback(async () => {
+  const inject = useMemoizedFn(async () => {
     if (!activeRun || !injectText.trim()) {
       return;
     }
@@ -378,9 +358,9 @@ export function TerminalOrchestratorPanel({
     } finally {
       setLoading(false);
     }
-  }, [activeRun, apiBase, handleRequestError, injectText, token]);
+  });
 
-  const submitGate = useCallback(
+  const submitGate = useMemoizedFn(
     async (phase: HumanGatePhase, verdict: HumanGateVerdictValue) => {
       if (!activeRun) {
         return;
@@ -409,10 +389,9 @@ export function TerminalOrchestratorPanel({
         setLoading(false);
       }
     },
-    [activeRun, apiBase, gateReason, handleRequestError, token],
   );
 
-  const submitRoundConfirmation = useCallback(
+  const submitRoundConfirmation = useMemoizedFn(
     async (
       confirmationId: string,
       verdict: OrchestratorRoundConfirmationVerdictValue,
@@ -444,16 +423,15 @@ export function TerminalOrchestratorPanel({
         setLoading(false);
       }
     },
-    [activeRun, apiBase, gateReason, handleRequestError, token],
   );
 
-  const restartFromRun = useCallback((run: OrchestratorRunPackage) => {
+  const restartFromRun = useMemoizedFn((run: OrchestratorRunPackage) => {
     setTask(run.task);
     setStartupPrompt(normalizeStartupPrompt(run.orchestrator.startupPrompt));
     setOrchestratorMode(run.orchestrator.binding.mode);
-    setOrchestratorCommand(normalizeAgentCliCommand(
-      run.orchestrator.terminal.command,
-    ));
+    setOrchestratorCommand(
+      normalizeAgentCliCommand(run.orchestrator.terminal.command),
+    );
     setOrchestratorSessionId(run.orchestrator.sessionId ?? "");
     setRequireHumanConfirmationEachRound(
       Boolean(run.options?.requireHumanConfirmationEachRound),
@@ -473,7 +451,7 @@ export function TerminalOrchestratorPanel({
       ),
     );
     setRestartMode(true);
-  }, []);
+  });
 
   if (!activeProject) {
     return (

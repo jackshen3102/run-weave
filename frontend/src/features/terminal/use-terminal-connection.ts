@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useRef, useState } from "react";
 import type {
   TerminalClientMessage,
   TerminalServerMessage,
@@ -52,7 +53,10 @@ export function useTerminalConnection(params: {
   onAuthExpired?: () => void;
   onSnapshot?: (data: string) => void;
   onOutput?: (data: string) => void;
-  onMetadata?: (metadata: { cwd: string; activeCommand: string | null }) => void;
+  onMetadata?: (metadata: {
+    cwd: string;
+    activeCommand: string | null;
+  }) => void;
   includeSnapshot?: boolean;
 }) {
   const {
@@ -104,19 +108,17 @@ export function useTerminalConnection(params: {
   const [error, setError] = useState<string | null>(null);
   const [manualReconnectNonce, setManualReconnectNonce] = useState(0);
 
-  const setNextConnectionStatus = useCallback(
+  const setNextConnectionStatus = useMemoizedFn(
     (status: ConnectionStatus): void => {
       connectionStatusRef.current = status;
       setConnectionStatus(status);
     },
-    [],
   );
-  const setNextTerminalStatus = useCallback(
+  const setNextTerminalStatus = useMemoizedFn(
     (status: TerminalRuntimeStatus): void => {
       terminalStatusRef.current = status;
       setTerminalStatus(status);
     },
-    [],
   );
 
   useEffect(() => {
@@ -409,7 +411,7 @@ export function useTerminalConnection(params: {
     terminalSessionId,
   ]);
 
-  const queuePendingInput = useCallback(
+  const queuePendingInput = useMemoizedFn(
     (data: string, socketReadyState: number | null): void => {
       pendingInputRef.current.push(data);
       let totalLen = pendingInputRef.current.reduce(
@@ -429,7 +431,6 @@ export function useTerminalConnection(params: {
         }
       }
     },
-    [setNextConnectionStatus],
   );
 
   return {
@@ -438,62 +439,53 @@ export function useTerminalConnection(params: {
     exitCode,
     runtimeKind,
     error,
-    sendInput: useCallback(
-      (data: string) => {
-        outboundSequenceRef.current += 1;
-        const socket = socketRef.current;
-        logTerminalPerf("ws.send.input", {
-          terminalSessionId,
-          seq: outboundSequenceRef.current,
-          socketReadyState: socket?.readyState ?? null,
-          ...summarizeTerminalChunk(data),
-        });
-        if (!socket || socket.readyState !== WebSocket.OPEN) {
-          queuePendingInput(data, socket?.readyState ?? null);
-          return;
-        }
+    sendInput: useMemoizedFn((data: string) => {
+      outboundSequenceRef.current += 1;
+      const socket = socketRef.current;
+      logTerminalPerf("ws.send.input", {
+        terminalSessionId,
+        seq: outboundSequenceRef.current,
+        socketReadyState: socket?.readyState ?? null,
+        ...summarizeTerminalChunk(data),
+      });
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        queuePendingInput(data, socket?.readyState ?? null);
+        return;
+      }
 
-        sendMessage(socket, {
-          type: "input",
-          data,
-        });
-      },
-      [queuePendingInput, terminalSessionId],
-    ),
-    sendResize: useCallback(
-      (cols: number, rows: number) => {
-        pendingResizeRef.current = { cols, rows };
-        outboundSequenceRef.current += 1;
-        logTerminalPerf("ws.send.resize", {
-          terminalSessionId,
-          seq: outboundSequenceRef.current,
-          socketReadyState: socketRef.current?.readyState ?? null,
-          cols,
-          rows,
-        });
-        sendMessage(socketRef.current, {
-          type: "resize",
-          cols,
-          rows,
-        });
-      },
-      [terminalSessionId],
-    ),
-    sendSignal: useCallback(
-      (signal: "SIGINT" | "SIGTERM" | "SIGKILL") => {
-        outboundSequenceRef.current += 1;
-        logTerminalPerf("ws.send.signal", {
-          terminalSessionId,
-          seq: outboundSequenceRef.current,
-          socketReadyState: socketRef.current?.readyState ?? null,
-          signal,
-        });
-        sendMessage(socketRef.current, {
-          type: "signal",
-          signal,
-        });
-      },
-      [terminalSessionId],
-    ),
+      sendMessage(socket, {
+        type: "input",
+        data,
+      });
+    }),
+    sendResize: useMemoizedFn((cols: number, rows: number) => {
+      pendingResizeRef.current = { cols, rows };
+      outboundSequenceRef.current += 1;
+      logTerminalPerf("ws.send.resize", {
+        terminalSessionId,
+        seq: outboundSequenceRef.current,
+        socketReadyState: socketRef.current?.readyState ?? null,
+        cols,
+        rows,
+      });
+      sendMessage(socketRef.current, {
+        type: "resize",
+        cols,
+        rows,
+      });
+    }),
+    sendSignal: useMemoizedFn((signal: "SIGINT" | "SIGTERM" | "SIGKILL") => {
+      outboundSequenceRef.current += 1;
+      logTerminalPerf("ws.send.signal", {
+        terminalSessionId,
+        seq: outboundSequenceRef.current,
+        socketReadyState: socketRef.current?.readyState ?? null,
+        signal,
+      });
+      sendMessage(socketRef.current, {
+        type: "signal",
+        signal,
+      });
+    }),
   };
 }

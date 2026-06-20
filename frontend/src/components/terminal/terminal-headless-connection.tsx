@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useMemoizedFn } from "ahooks";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
 
 interface TerminalHeadlessConnectionProps {
@@ -7,7 +7,10 @@ interface TerminalHeadlessConnectionProps {
   token: string;
   onAuthExpired?: () => void;
   onBell?: () => void;
-  onMetadata?: (metadata: { cwd: string; activeCommand: string | null }) => void;
+  onMetadata?: (metadata: {
+    cwd: string;
+    activeCommand: string | null;
+  }) => void;
 }
 
 export function TerminalHeadlessConnection({
@@ -18,14 +21,11 @@ export function TerminalHeadlessConnection({
   onBell,
   onMetadata,
 }: TerminalHeadlessConnectionProps) {
-  const handleOutput = useCallback(
-    (data: string) => {
-      if (data.includes("\u0007")) {
-        onBell?.();
-      }
-    },
-    [onBell],
-  );
+  const handleOutput = useMemoizedFn((data: string) => {
+    if (data.includes("\u0007")) {
+      onBell?.();
+    }
+  });
 
   useTerminalConnection({
     apiBase,

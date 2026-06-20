@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useMemo, useState } from "react";
 import { ControlledTreeEnvironment, Tree } from "react-complex-tree";
 import type {
   TreeItem,
@@ -54,7 +55,7 @@ export function TerminalFileTree({
     [expandedItems, focusedItem, selectedItems],
   );
 
-  const renderItem = useCallback(
+  const renderItem = useMemoizedFn(
     (props: {
       item: TreeItem<FileTreeData>;
       depth: number;
@@ -75,13 +76,6 @@ export function TerminalFileTree({
         onRequestDeleteFile={onRequestDeleteFile}
       />
     ),
-    [
-      loadingDirs,
-      onFileClick,
-      onDirectoryClick,
-      onRequestRenameFile,
-      onRequestDeleteFile,
-    ],
   );
 
   return (

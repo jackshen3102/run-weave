@@ -1,5 +1,6 @@
+import { useMemoizedFn } from "ahooks";
 import { Cable, Check, Copy } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { Button } from "../ui/button";
@@ -18,7 +19,7 @@ export function TerminalBrowserCdpEndpointPopover({
     (state) => state.updateBrowserTab,
   );
 
-  const fetchInfo = useCallback(async () => {
+  const fetchInfo = useMemoizedFn(async () => {
     const result =
       await window.electronAPI?.terminalBrowserGetCdpProxyInfo?.(tabId);
     if (!result) {
@@ -29,16 +30,16 @@ export function TerminalBrowserCdpEndpointPopover({
       cdpProxyAttached: result.attached,
       devtoolsOpen: result.devtoolsOpen,
     });
-  }, [tabId, updateBrowserTab]);
+  });
 
-  const copyEndpoint = useCallback(async () => {
+  const copyEndpoint = useMemoizedFn(async () => {
     if (!info?.endpoint) {
       return;
     }
     await navigator.clipboard.writeText(info.endpoint);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
-  }, [info?.endpoint]);
+  });
 
   return (
     <Popover
@@ -61,9 +62,7 @@ export function TerminalBrowserCdpEndpointPopover({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 space-y-2 p-3">
-        <p className="text-xs font-medium text-slate-200">
-          CDP Proxy Endpoint
-        </p>
+        <p className="text-xs font-medium text-slate-200">CDP Proxy Endpoint</p>
         {info?.error ? (
           <p className="text-xs text-rose-400">{info.error}</p>
         ) : null}
@@ -98,8 +97,8 @@ export function TerminalBrowserCdpEndpointPopover({
               <p className="text-xs text-emerald-400">CDP proxy connected</p>
             ) : null}
             <p className="text-[10px] leading-tight text-slate-500">
-              This is a Runweave CDP Proxy endpoint, not the Electron native CDP.
-              Use with Playwright CLI / MCP via{" "}
+              This is a Runweave CDP Proxy endpoint, not the Electron native
+              CDP. Use with Playwright CLI / MCP via{" "}
               <code className="text-slate-400">
                 chromium.connectOverCDP(&quot;{info.endpoint}&quot;)
               </code>

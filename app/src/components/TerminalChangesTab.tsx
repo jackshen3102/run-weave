@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useMemo, useState } from "react";
 import { IonIcon } from "@ionic/react";
 import { checkmarkOutline, copyOutline } from "ionicons/icons";
 import type {
@@ -175,7 +176,7 @@ export function TerminalChangesTab({
     onChangesCount(0);
   }, [assetRequests, changesRequests, diffRequests, onChangesCount, projectId]);
 
-  const loadChanges = useCallback(() => {
+  const loadChanges = useMemoizedFn(() => {
     if (!projectId) {
       changesRequests.invalidate();
       setChanges(null);
@@ -207,21 +208,16 @@ export function TerminalChangesTab({
           setError(previewMessage(nextError.status));
           return;
         }
-        setError(nextError instanceof Error ? nextError.message : "Load failed");
+        setError(
+          nextError instanceof Error ? nextError.message : "Load failed",
+        );
       })
       .finally(() => {
         if (changesRequests.isCurrent(requestId)) {
           setLoading(false);
         }
       });
-  }, [
-    accessToken,
-    apiBase,
-    changesRequests,
-    onAuthExpired,
-    onChangesCount,
-    projectId,
-  ]);
+  });
 
   useEffect(() => {
     if (active) {
@@ -355,7 +351,14 @@ export function TerminalChangesTab({
         URL.revokeObjectURL(nextUrl);
       }
     };
-  }, [accessToken, apiBase, assetRequests, projectId, selectedChange, viewMode]);
+  }, [
+    accessToken,
+    apiBase,
+    assetRequests,
+    projectId,
+    selectedChange,
+    viewMode,
+  ]);
 
   if (!projectId) {
     return (
@@ -429,7 +432,10 @@ export function TerminalChangesTab({
         ) : diffError ? (
           <div className="terminal-preview-state">
             <p>{diffError}</p>
-            <button onClick={() => setSelectedChange({ ...selectedChange })} type="button">
+            <button
+              onClick={() => setSelectedChange({ ...selectedChange })}
+              type="button"
+            >
               Retry
             </button>
           </div>

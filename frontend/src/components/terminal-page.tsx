@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildTmuxScrollInput,
   isShiftEnterLineFeed,
@@ -48,7 +49,7 @@ export function TerminalPage({
   const terminalRef = useRef<Terminal | null>(null);
   const runtimeKindRef = useRef<"tmux" | "pty" | null>(null);
 
-  const onSnapshot = useCallback((data: string) => {
+  const onSnapshot = useMemoizedFn((data: string) => {
     const nextChunk = filterBrowserHandledTerminalOutput(data);
     const terminal = terminalRef.current;
     if (!terminal) {
@@ -63,16 +64,16 @@ export function TerminalPage({
     terminal.write(nextChunk, () => {
       terminal.scrollToBottom();
     });
-  }, []);
+  });
 
-  const onOutput = useCallback((data: string) => {
+  const onOutput = useMemoizedFn((data: string) => {
     const nextChunk = filterBrowserHandledTerminalOutput(data);
     if (!nextChunk) {
       return;
     }
 
     terminalRef.current?.write(nextChunk);
-  }, []);
+  });
 
   const {
     connectionStatus,

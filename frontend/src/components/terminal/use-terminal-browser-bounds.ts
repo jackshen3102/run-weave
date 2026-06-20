@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useRef, type RefObject } from "react";
 import { aiDiagnosticLog } from "../../features/diagnostic-logs/recorder";
 
 const TERMINAL_BROWSER_SIDE_PANEL_WIDTH_PX = 320;
@@ -92,159 +93,143 @@ export function useTerminalBrowserBounds({
     );
   }, [tabs]);
 
-  const clearTabBounds = useCallback((tabId: string): void => {
+  const clearTabBounds = useMemoizedFn((tabId: string): void => {
     delete deviceViewportByTabRef.current[tabId];
     delete lastBoundsKeyByTabRef.current[tabId];
-  }, []);
+  });
 
-  const syncBoundsForTab = useCallback(
-    (tabId: string, immediate = false) => {
-      if (!isElectron) {
+  const syncBoundsForTab = useMemoizedFn((tabId: string, immediate = false) => {
+    if (!isElectron) {
+      return;
+    }
+
+    const sendBounds = (): void => {
+      frameRef.current = null;
+      if (!activeRef.current) {
+        void window.electronAPI?.terminalBrowserHide?.(tabId);
+        delete lastBoundsKeyByTabRef.current[tabId];
         return;
       }
-
-      const sendBounds = (): void => {
-        frameRef.current = null;
-        if (!activeRef.current) {
-          void window.electronAPI?.terminalBrowserHide?.(tabId);
-          delete lastBoundsKeyByTabRef.current[tabId];
-          return;
-        }
-        const rect = browserViewRef.current?.getBoundingClientRect();
-        if (!rect || rect.width <= 0 || rect.height <= 0) {
-          return;
-        }
-        const containerRect =
-          surfaceContainerRef.current?.getBoundingClientRect();
-        const sidePanelOpen = headerRulesPanelOpen || devicePanelOpen;
-        const rawBounds = {
-          x: Math.round(rect.left),
-          y: Math.round(rect.top),
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-        };
-        const maxRight =
-          containerRect && sidePanelOpen
-            ? Math.round(
-                containerRect.right - TERMINAL_BROWSER_SIDE_PANEL_WIDTH_PX,
-              )
-            : null;
-        const clippedWidth =
-          maxRight === null
-            ? rawBounds.width
-            : Math.max(
-                0,
-                Math.min(rawBounds.x + rawBounds.width, maxRight) - rawBounds.x,
-              );
-        if (clippedWidth <= 0) {
-          return;
-        }
-        const viewport = deviceViewportByTabRef.current[tabId];
-        const emulationScale =
-          viewport?.mobile && viewport.width > 0
-            ? clippedWidth / viewport.width
-            : 1;
-        void window.electronAPI?.terminalBrowserShow?.(tabId);
-        const nextBounds = {
-          x: rawBounds.x,
-          y: rawBounds.y,
-          width: clippedWidth,
-          height: rawBounds.height,
-          emulationScale,
-        };
-        const boundsKey = [
-          nextBounds.x,
-          nextBounds.y,
-          nextBounds.width,
-          nextBounds.height,
-          nextBounds.emulationScale.toFixed(4),
-        ].join(":");
-        if (lastBoundsKeyByTabRef.current[tabId] === boundsKey) {
-          const deviceInfo = deviceInfoByTabRef.current?.[tabId];
-          aiDiagnosticLog("terminal browser bounds sync skipped", {
-            tabId,
-            boundsKey,
-            presetId: deviceInfo?.presetId ?? null,
-          });
-          return;
-        }
-        lastBoundsKeyByTabRef.current[tabId] = boundsKey;
-        const deviceInfo = deviceInfoByTabRef.current?.[tabId];
-        aiDiagnosticLog("terminal browser bounds syncing", {
-          tabId,
-          presetId: deviceInfo?.presetId ?? null,
-          logicalWidth: deviceInfo?.logicalWidth ?? null,
-          logicalHeight: deviceInfo?.logicalHeight ?? null,
-          x: nextBounds.x,
-          y: nextBounds.y,
-          width: nextBounds.width,
-          height: nextBounds.height,
-          emulationScale,
-          rawWidth: rawBounds.width,
-          clippedBySidePanel: clippedWidth !== rawBounds.width,
-        });
-        const boundsPromise = window.electronAPI?.terminalBrowserSetBounds?.(
-          tabId,
-          nextBounds,
-        );
-        void boundsPromise?.catch((error) => {
-          updateBrowserTab(tabId, {
-            error:
-              error instanceof Error
-                ? error.message
-                : "Failed to sync browser bounds",
-          });
-        });
+      const rect = browserViewRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) {
+        return;
+      }
+      const containerRect =
+        surfaceContainerRef.current?.getBoundingClientRect();
+      const sidePanelOpen = headerRulesPanelOpen || devicePanelOpen;
+      const rawBounds = {
+        x: Math.round(rect.left),
+        y: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
       };
-
-      if (immediate) {
-        if (frameRef.current !== null) {
-          window.cancelAnimationFrame(frameRef.current);
-          frameRef.current = null;
-        }
-        sendBounds();
+      const maxRight =
+        containerRect && sidePanelOpen
+          ? Math.round(
+              containerRect.right - TERMINAL_BROWSER_SIDE_PANEL_WIDTH_PX,
+            )
+          : null;
+      const clippedWidth =
+        maxRight === null
+          ? rawBounds.width
+          : Math.max(
+              0,
+              Math.min(rawBounds.x + rawBounds.width, maxRight) - rawBounds.x,
+            );
+      if (clippedWidth <= 0) {
         return;
       }
-
-      if (frameRef.current === null) {
-        frameRef.current = window.requestAnimationFrame(sendBounds);
-      }
-    },
-    [
-      browserViewRef,
-      devicePanelOpen,
-      headerRulesPanelOpen,
-      isElectron,
-      surfaceContainerRef,
-      updateBrowserTab,
-    ],
-  );
-
-  const syncBounds = useCallback(
-    (immediate = false) => {
-      if (!activeTabId) {
+      const viewport = deviceViewportByTabRef.current[tabId];
+      const emulationScale =
+        viewport?.mobile && viewport.width > 0
+          ? clippedWidth / viewport.width
+          : 1;
+      void window.electronAPI?.terminalBrowserShow?.(tabId);
+      const nextBounds = {
+        x: rawBounds.x,
+        y: rawBounds.y,
+        width: clippedWidth,
+        height: rawBounds.height,
+        emulationScale,
+      };
+      const boundsKey = [
+        nextBounds.x,
+        nextBounds.y,
+        nextBounds.width,
+        nextBounds.height,
+        nextBounds.emulationScale.toFixed(4),
+      ].join(":");
+      if (lastBoundsKeyByTabRef.current[tabId] === boundsKey) {
+        const deviceInfo = deviceInfoByTabRef.current?.[tabId];
+        aiDiagnosticLog("terminal browser bounds sync skipped", {
+          tabId,
+          boundsKey,
+          presetId: deviceInfo?.presetId ?? null,
+        });
         return;
       }
-      syncBoundsForTab(activeTabId, immediate);
-    },
-    [activeTabId, syncBoundsForTab],
-  );
+      lastBoundsKeyByTabRef.current[tabId] = boundsKey;
+      const deviceInfo = deviceInfoByTabRef.current?.[tabId];
+      aiDiagnosticLog("terminal browser bounds syncing", {
+        tabId,
+        presetId: deviceInfo?.presetId ?? null,
+        logicalWidth: deviceInfo?.logicalWidth ?? null,
+        logicalHeight: deviceInfo?.logicalHeight ?? null,
+        x: nextBounds.x,
+        y: nextBounds.y,
+        width: nextBounds.width,
+        height: nextBounds.height,
+        emulationScale,
+        rawWidth: rawBounds.width,
+        clippedBySidePanel: clippedWidth !== rawBounds.width,
+      });
+      const boundsPromise = window.electronAPI?.terminalBrowserSetBounds?.(
+        tabId,
+        nextBounds,
+      );
+      void boundsPromise?.catch((error) => {
+        updateBrowserTab(tabId, {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to sync browser bounds",
+        });
+      });
+    };
 
-  const syncActiveTabBounds = useCallback(
-    (tabId: string) => {
-      if (activeTabIdRef.current === tabId) {
-        syncBoundsForTab(tabId, true);
+    if (immediate) {
+      if (frameRef.current !== null) {
+        window.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
       }
-    },
-    [syncBoundsForTab],
-  );
+      sendBounds();
+      return;
+    }
 
-  const cancelPendingBoundsSync = useCallback((): void => {
+    if (frameRef.current === null) {
+      frameRef.current = window.requestAnimationFrame(sendBounds);
+    }
+  });
+
+  const syncBounds = useMemoizedFn((immediate = false) => {
+    if (!activeTabId) {
+      return;
+    }
+    syncBoundsForTab(activeTabId, immediate);
+  });
+
+  const syncActiveTabBounds = useMemoizedFn((tabId: string) => {
+    if (activeTabIdRef.current === tabId) {
+      syncBoundsForTab(tabId, true);
+    }
+  });
+
+  const cancelPendingBoundsSync = useMemoizedFn((): void => {
     if (frameRef.current !== null) {
       window.cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
     }
-  }, []);
+  });
 
   return {
     cancelPendingBoundsSync,

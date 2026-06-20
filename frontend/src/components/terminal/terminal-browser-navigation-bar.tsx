@@ -1,3 +1,4 @@
+import { useMemoizedFn } from "ahooks";
 import {
   ArrowLeft,
   ArrowRight,
@@ -10,7 +11,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import { useCallback, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   type TerminalBrowserHeaderRule,
   type TerminalBrowserProxyState,
@@ -64,14 +65,14 @@ export function TerminalBrowserNavigationBar({
   const deviceState = activeTab.deviceState;
   const [addressCopied, setAddressCopied] = useState(false);
 
-  const copyAddress = useCallback(async () => {
+  const copyAddress = useMemoizedFn(async () => {
     if (!activeTab.addressInput || !navigator.clipboard?.writeText) {
       return;
     }
     await navigator.clipboard.writeText(activeTab.addressInput);
     setAddressCopied(true);
     setTimeout(() => setAddressCopied(false), 1500);
-  }, [activeTab.addressInput]);
+  });
 
   return (
     <form
@@ -197,14 +198,14 @@ export function TerminalBrowserNavigationBar({
             ? "DevTools unavailable while CDP proxy is active"
             : activeTab.deviceState.mobile
               ? "DevTools unavailable while mobile mode is active"
-            : "Open browser DevTools"
+              : "Open browser DevTools"
         }
         title={
           activeTab.cdpProxyAttached
             ? "DevTools unavailable while CDP proxy is active"
             : activeTab.deviceState.mobile
               ? "DevTools unavailable while mobile mode is active"
-            : "Open browser DevTools"
+              : "Open browser DevTools"
         }
       >
         <Code2 className="h-4 w-4" />

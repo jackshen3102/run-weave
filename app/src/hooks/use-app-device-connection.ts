@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMemoizedFn } from "ahooks";
+import { useEffect, useRef, useState } from "react";
 
 import { getBackendHealth } from "../services/device-health";
 
@@ -49,7 +50,9 @@ function buildInitialSnapshot(
 }
 
 function isDocumentVisible(): boolean {
-  return typeof document === "undefined" || document.visibilityState === "visible";
+  return (
+    typeof document === "undefined" || document.visibilityState === "visible"
+  );
 }
 
 function isPageActive(): boolean {
@@ -97,19 +100,18 @@ export function useAppDeviceConnection({
     setDeviceConnection(buildInitialSnapshot(apiBase, connectionId));
   }, [apiBase, connectionId, currentProbeKey]);
 
-  const isCurrentProbe = useCallback(
+  const isCurrentProbe = useMemoizedFn(
     (probeKey: string) => activeProbeKeyRef.current === probeKey,
-    [],
   );
 
-  const clearRetryTimer = useCallback(() => {
+  const clearRetryTimer = useMemoizedFn(() => {
     if (retryTimerRef.current !== null) {
       window.clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
     }
-  }, []);
+  });
 
-  const markDeviceOnline = useCallback(
+  const markDeviceOnline = useMemoizedFn(
     (reason: AppDeviceConnectionSnapshot["reason"]) => {
       const now = Date.now();
       offlineAttemptRef.current = 0;
@@ -126,10 +128,9 @@ export function useAppDeviceConnection({
         message: "Computer online",
       }));
     },
-    [apiBase, clearRetryTimer, connectionId],
   );
 
-  const markDeviceOffline = useCallback(
+  const markDeviceOffline = useMemoizedFn(
     (reason: AppDeviceConnectionSnapshot["reason"], message: string) => {
       const now = Date.now();
       setDeviceConnection((current) => ({
@@ -143,10 +144,9 @@ export function useAppDeviceConnection({
         message,
       }));
     },
-    [apiBase, connectionId],
   );
 
-  const probeDeviceConnection = useCallback(async () => {
+  const probeDeviceConnection = useMemoizedFn(async () => {
     const probeApiBase = apiBase;
     const probeConnectionId = connectionId;
     const probeKey = currentProbeKey;
@@ -206,12 +206,12 @@ export function useAppDeviceConnection({
     };
     setDeviceConnection(nextSnapshot);
     return nextSnapshot;
-  }, [apiBase, clearRetryTimer, connectionId, currentProbeKey, isCurrentProbe]);
+  });
 
-  const refreshDeviceConnection = useCallback(async () => {
+  const refreshDeviceConnection = useMemoizedFn(async () => {
     offlineAttemptRef.current = 0;
     return probeDeviceConnection();
-  }, [probeDeviceConnection]);
+  });
 
   useEffect(() => {
     if (!enabled) {

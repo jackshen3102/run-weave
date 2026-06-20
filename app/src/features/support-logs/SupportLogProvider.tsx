@@ -1,6 +1,7 @@
+import { useMemoizedFn } from "ahooks";
 import { Capacitor } from "@capacitor/core";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   installSupportLogRecorder,
@@ -111,22 +112,22 @@ export function SupportLogProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const openSupportLogs = useCallback((scope: SupportLogScope) => {
+  const openSupportLogs = useMemoizedFn((scope: SupportLogScope) => {
     setCurrentScope(scope);
     setIsOpen(true);
     recordSupportLogToStore(storeRef.current, "support.sheet.opened", {
       scope,
     });
-  }, []);
+  });
 
-  const closeSupportLogs = useCallback(() => {
+  const closeSupportLogs = useMemoizedFn(() => {
     setIsOpen(false);
-  }, []);
+  });
 
-  const clearSupportLogs = useCallback(async () => {
+  const clearSupportLogs = useMemoizedFn(async () => {
     await storeRef.current.clear();
     recordSupportLogToStore(storeRef.current, "support.logs.cleared");
-  }, []);
+  });
 
   const contextValue = useMemo(
     () => ({

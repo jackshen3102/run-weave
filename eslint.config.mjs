@@ -37,7 +37,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["frontend/src/**/*.{ts,tsx}"],
+    files: ["frontend/src/**/*.{ts,tsx}", "app/src/**/*.{ts,tsx}"],
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -50,6 +50,22 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": "off",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "ImportDeclaration[source.value='react'] ImportSpecifier[imported.name='useCallback']",
+          message: "Use useMemoizedFn from ahooks instead.",
+        },
+        {
+          selector: "CallExpression[callee.name='useCallback']",
+          message: "Use useMemoizedFn from ahooks instead.",
+        },
+        {
+          selector: "CallExpression[callee.property.name='useCallback']",
+          message: "Use useMemoizedFn from ahooks instead.",
+        },
+      ],
     },
   },
 );

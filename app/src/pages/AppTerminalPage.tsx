@@ -1,7 +1,8 @@
+import { useMemoizedFn } from "ahooks";
 import type { AppHomeOverviewSession, TerminalState } from "@runweave/shared";
 import { type TerminalRendererHandle } from "@runweave/terminal-renderer";
 import { IonContent, IonPage } from "@ionic/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type AppTerminalDetailTab,
@@ -70,9 +71,9 @@ export function AppTerminalPage({
   );
   terminalStateRef.current = terminalState;
   const isDeviceOffline = deviceConnection.status === "offline";
-  const refreshDeviceAfterFailure = useCallback(() => {
+  const refreshDeviceAfterFailure = useMemoizedFn(() => {
     void onRefreshDeviceConnection();
-  }, [onRefreshDeviceConnection]);
+  });
   const {
     connectionStatus,
     error,
@@ -110,22 +111,20 @@ export function AppTerminalPage({
     metadata?.projectId ?? initialSession?.projectId ?? null;
   const lastActivityAt =
     metadata?.lastActivityAt ?? initialSession?.lastActivityAt;
-  const statusLabel =
-    isDeviceOffline
-      ? "Computer Offline"
-      : runtimeStatus === "exited"
-        ? "Exited"
-        : connectionStatus === "connected"
-          ? "Connected"
-          : "Connecting";
-  const statusClass =
-    isDeviceOffline
-      ? "offline"
+  const statusLabel = isDeviceOffline
+    ? "Computer Offline"
+    : runtimeStatus === "exited"
+      ? "Exited"
       : connectionStatus === "connected"
-        ? "connected"
-        : connectionStatus === "closed"
-          ? "closed"
-          : "connecting";
+        ? "Connected"
+        : "Connecting";
+  const statusClass = isDeviceOffline
+    ? "offline"
+    : connectionStatus === "connected"
+      ? "connected"
+      : connectionStatus === "closed"
+        ? "closed"
+        : "connecting";
   const supportLogScope = useMemo(
     () => ({
       source: "terminal" as const,
@@ -198,18 +197,29 @@ export function AppTerminalPage({
             return;
           }
           if (failure.kind === "not-found") {
-            recordSupportLog("terminal.state.poll.not_found", {
-              terminalSessionId,
-              previousState: terminalStateRef.current.state,
-            }, "warn");
+            recordSupportLog(
+              "terminal.state.poll.not_found",
+              {
+                terminalSessionId,
+                previousState: terminalStateRef.current.state,
+              },
+              "warn",
+            );
             setTerminalState({ state: "shell_idle", agent: null });
             return;
           }
           refreshDeviceAfterFailure();
-          recordSupportLog("terminal.state.poll.failed", {
-            terminalSessionId,
-            error: nextError instanceof Error ? nextError.message : String(nextError),
-          }, "warn");
+          recordSupportLog(
+            "terminal.state.poll.failed",
+            {
+              terminalSessionId,
+              error:
+                nextError instanceof Error
+                  ? nextError.message
+                  : String(nextError),
+            },
+            "warn",
+          );
         });
     };
 
@@ -256,16 +266,16 @@ export function AppTerminalPage({
     terminalStateRef,
   });
 
-  const handleRequestDeleteTerminal = useCallback(() => {
+  const handleRequestDeleteTerminal = useMemoizedFn(() => {
     setDeleteError(null);
     if (isDeviceOffline) {
       setDeleteError("本地电脑暂时不可用");
       return;
     }
     setConfirmDeleteOpen(true);
-  }, [isDeviceOffline]);
+  });
 
-  const handleDeleteTerminal = useCallback(async (): Promise<void> => {
+  const handleDeleteTerminal = useMemoizedFn(async (): Promise<void> => {
     if (isDeletingTerminal) {
       return;
     }
@@ -289,31 +299,33 @@ export function AppTerminalPage({
     } catch (nextError: unknown) {
       const failure = classifyApiFailure(nextError);
       if (failure.kind === "auth-expired") {
-        recordSupportLog("terminal.delete.unauthorized", {
-          terminalSessionId,
-        }, "warn");
+        recordSupportLog(
+          "terminal.delete.unauthorized",
+          {
+            terminalSessionId,
+          },
+          "warn",
+        );
         onAuthExpired();
         return;
       }
       refreshDeviceAfterFailure();
-      recordSupportLog("terminal.delete.failed", {
-        terminalSessionId,
-        error: nextError instanceof Error ? nextError.message : String(nextError),
-      }, "warn");
+      recordSupportLog(
+        "terminal.delete.failed",
+        {
+          terminalSessionId,
+          error:
+            nextError instanceof Error ? nextError.message : String(nextError),
+        },
+        "warn",
+      );
       setIsDeletingTerminal(false);
       setDeleteError(
         nextError instanceof Error ? nextError.message : "删除终端失败",
       );
       setConfirmDeleteOpen(false);
     }
-  }, [
-    isDeletingTerminal,
-    isDeviceOffline,
-    onAuthExpired,
-    onDeleteTerminal,
-    refreshDeviceAfterFailure,
-    terminalSessionId,
-  ]);
+  });
 
   const moreMenuItems = useMemo(
     () => [
@@ -341,30 +353,24 @@ export function AppTerminalPage({
     }
   }, [activeTab]);
 
-  const handleShowChanges = useCallback(
-    (change: SelectedTerminalChange) => {
-      setRequestedChange(change);
-      recordSupportLog("terminal.tab.changed", {
-        terminalSessionId,
-        previousTab: activeTab,
-        nextTab: "changes",
-      });
-      setActiveTab("changes");
-    },
-    [activeTab, terminalSessionId],
-  );
+  const handleShowChanges = useMemoizedFn((change: SelectedTerminalChange) => {
+    setRequestedChange(change);
+    recordSupportLog("terminal.tab.changed", {
+      terminalSessionId,
+      previousTab: activeTab,
+      nextTab: "changes",
+    });
+    setActiveTab("changes");
+  });
 
-  const handleTabChange = useCallback(
-    (nextTab: AppTerminalDetailTab) => {
-      recordSupportLog("terminal.tab.changed", {
-        terminalSessionId,
-        previousTab: activeTab,
-        nextTab,
-      });
-      setActiveTab(nextTab);
-    },
-    [activeTab, terminalSessionId],
-  );
+  const handleTabChange = useMemoizedFn((nextTab: AppTerminalDetailTab) => {
+    recordSupportLog("terminal.tab.changed", {
+      terminalSessionId,
+      previousTab: activeTab,
+      nextTab,
+    });
+    setActiveTab(nextTab);
+  });
 
   return (
     <IonPage>
