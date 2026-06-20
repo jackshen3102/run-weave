@@ -24,6 +24,7 @@ App 终端详情页的核心能力是：
 
 - 打开指定 terminal session，持续查看实时输出。
 - 通过底部 composer 发送命令、问题、图片、语音转写结果或换行输入。
+- 在 composer 中展开快捷键条，向终端发送 `Ctrl-C`、`Tab`、`Esc`、`↑`、`↓`、`Enter` 等原始控制序列。
 - 根据后端 `TerminalState` 决定是否展示 Stop。
 - 通过底部 `Chat / Changes / Files` tabs 在移动端查看终端输出、项目变更和项目文件。
 - 在手机触摸场景下避免误弹软键盘，同时保留明确的输入入口。
@@ -31,6 +32,8 @@ App 终端详情页的核心能力是：
 Stop 只是向终端/Codex/Trae CLI 发送控制输入，不直接把状态改成 idle。Stop 按钮是否消失，取决于后端状态接口后续返回的 `TerminalState`。
 
 图片按钮复用现有 terminal clipboard image 上传接口，把图片保存到后端临时目录后，将 shell-quoted 文件路径插入 composer。选择图片不会立即写入终端；用户仍需要检查并点击发送。App 不在输入框上方维护预览 chip、缩略图或附件列表。
+
+快捷键条只走 terminal websocket 原始输入通道，不经过普通命令提交路径。普通 composer 文本仍走 terminal input API，并保留 `line` / `codex_slash_command` 的现有语义。
 
 当设备 offline 时，详情页优先显示 `Computer Offline`，暂停 terminal websocket、terminal-events websocket 和 `/state` 轮询，并阻止发送输入、Stop、上传图片、删除终端和新建终端等写入操作。恢复 online 后再重连并刷新状态；离线期间的输入不能进入待发送队列并在恢复后自动 flush。
 
@@ -77,7 +80,8 @@ App 不直接复用桌面 Terminal Workspace 的布局、Preview sidecar、Monac
 
 - App 首页使用 `/api/app/home/overview` 读取项目和终端摘要，并通过全局 `/ws/terminal-events` 接收 terminal state 变化；设备 online/offline 另由 App 侧设备连接状态管理，不混入 terminal display status。
 - App 终端详情使用 terminal websocket、input、interrupt、clipboard image API、voice transcription API 和 `/api/terminal/session/:id/state` 兜底查询。
-- `Changes` 和 `Files` tabs 复用 project-scoped Preview API，提供移动端只读审阅入口；它们不把桌面 Preview sidecar、Monaco、拖拽排序或 Browser 工具搬到 App。
+- `Changes` 和 `Files` tabs 复用 project-scoped Preview API，提供移动端只读审阅入口；图片文件和图片变更可以在 App 内缩放、拖拽、重置和全屏查看。
+- App 的图片缩放能力复用 `@runweave/common/terminal` 的显式子路径导出，只有 Web 与 App 都实际调用的浏览器端预览组件才进入 `packages/common`。
 - 行级编辑、文件写入、桌面级 Browser 工具和完整 IDE 交互不属于当前 App 稳定能力；落地前不要在 README 或入口文档中表述为已完成。
 
 ## 配置与安全

@@ -11,8 +11,10 @@
 | App 移动端边界                           | architecture/app-mobile.md                                |
 | App 后端连接管理                         | architecture/app-mobile.md#配置与安全                     |
 | App 终端语音输入                         | architecture/app-mobile.md#app-终端语音输入               |
+| App 终端输入与快捷键                     | architecture/app-mobile.md#app-终端详情                   |
 | 终端状态模型                             | architecture/terminal-state.md                            |
 | 终端代码预览 / Terminal Browser          | architecture/terminal-code-preview.md                     |
+| Terminal Browser 注释模式                | architecture/terminal-code-preview.md#terminal-browser-注释模式 |
 | 终端 tmux 恢复                           | architecture/terminal-tmux-recovery.md                    |
 | 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md                 |
 | 终端任务完成通知（桌面/飞书）            | architecture/terminal-completion-notifications.md         |
@@ -22,7 +24,7 @@
 | Runweave Agent CLI 控制面测试            | testing/runweave-cli-control-plane-test-cases.md          |
 | Multi-Agent Orchestrator 测试            | testing/2026-06-17-multi-agent-orchestrator-test-cases.md |
 | 质量体系概览                             | quality/quality-harness.md                                |
-| AI 诊断日志                              | quality/ai-diagnostic-logging.md                          |
+| AI 诊断日志 / Web 日志上报               | quality/ai-diagnostic-logging.md                          |
 | 后端滚动日志                             | quality/backend-rolling-logs.md                           |
 | 按需录屏的浏览器 MCP 验证                | quality/recorded-browser-mcp-verification.md              |
 | 终端性能优化                             | quality/terminal-performance-optimization.md              |
