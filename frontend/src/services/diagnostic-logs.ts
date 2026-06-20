@@ -1,7 +1,7 @@
 import type {
   DiagnosticLogRecord,
   DiagnosticLogResult,
-  DiagnosticLogStatus,
+  DiagnosticLogStatusResponse,
 } from "@runweave/shared";
 import { requestBlob, requestJson } from "./http";
 
@@ -14,8 +14,8 @@ function authHeaders(token: string): { Authorization: string } {
 export async function getDiagnosticLogStatus(
   apiBase: string,
   token: string,
-): Promise<{ status: DiagnosticLogStatus }> {
-  return requestJson<{ status: DiagnosticLogStatus }>(
+): Promise<DiagnosticLogStatusResponse> {
+  return requestJson<DiagnosticLogStatusResponse>(
     apiBase,
     "/api/diagnostic-logs/status",
     {
@@ -27,8 +27,8 @@ export async function getDiagnosticLogStatus(
 export async function startDiagnosticLogs(
   apiBase: string,
   token: string,
-): Promise<{ status: DiagnosticLogStatus }> {
-  return requestJson<{ status: DiagnosticLogStatus }>(
+): Promise<DiagnosticLogStatusResponse> {
+  return requestJson<DiagnosticLogStatusResponse>(
     apiBase,
     "/api/diagnostic-logs/start",
     {

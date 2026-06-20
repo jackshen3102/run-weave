@@ -7,6 +7,11 @@ export interface DiagnosticLogRecord {
 
 export type DiagnosticLogStatus = "ready" | "recording" | "ended";
 
+export interface DiagnosticLogStatusResponse {
+  status: DiagnosticLogStatus;
+  startedAt?: string | null;
+}
+
 export interface DiagnosticLogResult {
   startedAt: string;
   stoppedAt: string;
