@@ -171,7 +171,8 @@ export type TerminalInputMode =
   | "raw"
   | "line"
   | "codex_slash_command"
-  | "prompt_paste";
+  | "prompt_paste"
+  | "tmux_exit_copy_mode";
 
 export interface SendTerminalInputRequest {
   data: string;

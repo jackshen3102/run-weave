@@ -491,6 +491,26 @@ export class TmuxService {
     }
   }
 
+  async cancelCopyMode(target: TmuxTarget): Promise<void> {
+    aiDiagnosticLog("terminal tmux cancel-copy-mode requested", {
+      tmuxSessionName: target.sessionName,
+      socketPath: target.socketPath,
+    });
+    try {
+      await this.runTmux(
+        ["send-keys", "-t", target.sessionName, "-X", "cancel"],
+        target,
+      );
+    } catch (error) {
+      tmuxLogger.warn("terminal.tmux.cancel-copy-mode.failed", {
+        message: "Failed to cancel tmux copy mode",
+        sessionName: target.sessionName,
+        socketPath: target.socketPath,
+        error,
+      });
+    }
+  }
+
   async capturePane(
     target: TmuxTarget,
     historyLines = CaptureHistoryLines,

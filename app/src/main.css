@@ -1069,6 +1069,57 @@ ion-content::part(background) {
   touch-action: none;
 }
 
+.terminal-scroll-bottom-button {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 30;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 1px solid rgb(71, 85, 105);
+  border-radius: 999px;
+  margin: 0;
+  appearance: none;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.95);
+  color: rgb(241, 245, 249);
+  box-shadow:
+    0 10px 15px -3px rgba(2, 6, 23, 0.4),
+    0 4px 6px -4px rgba(2, 6, 23, 0.4);
+  cursor: pointer;
+  line-height: 1;
+  touch-action: manipulation;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+  backdrop-filter: blur(8px);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.terminal-scroll-bottom-button:hover {
+  border-color: rgb(100, 116, 139);
+  background: rgb(15, 23, 42);
+}
+
+.terminal-scroll-bottom-button:focus-visible {
+  outline: 2px solid rgb(56, 189, 248);
+  outline-offset: 2px;
+}
+
+.terminal-scroll-bottom-button:active {
+  background: rgb(30, 41, 59);
+}
+
+.terminal-scroll-bottom-button ion-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .terminal-page-error {
   position: absolute;
   top: 8px;

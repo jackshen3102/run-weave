@@ -2,6 +2,7 @@ import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal } from "@xterm/xterm";
+import { isTerminalAtBottom, scrollTerminalToBottom } from "@runweave/common/terminal";
 import type { ClientMode } from "../../features/client-mode";
 import {
   logTerminalPerf,
@@ -13,7 +14,10 @@ import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
 import { scheduleTerminalViewportRefresh } from "../../features/terminal/viewport-refresh";
 import { HttpError } from "../../services/http";
-import { getTerminalSession } from "../../services/terminal";
+import {
+  getTerminalSession,
+  sendTerminalInput as sendTerminalInputRequest,
+} from "../../services/terminal";
 import { TerminalSurfaceLayout } from "./terminal-surface-layout";
 import { useTerminalEmulator } from "./use-terminal-emulator";
 import { useTerminalSnapshotRestore } from "./use-terminal-snapshot-restore";
@@ -95,6 +99,9 @@ export function TerminalSurface({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] =
     useState<TerminalSearchResults | null>(null);
+  const [terminalAtBottom, setTerminalAtBottom] = useState(true);
+  const [hasNewOutputBelow, setHasNewOutputBelow] = useState(false);
+  const [tmuxScrollbackActive, setTmuxScrollbackActive] = useState(false);
   const [searchOptions, setSearchOptions] = useState<TerminalSearchOptions>({
     caseSensitive: false,
     wholeWord: false,
@@ -107,6 +114,9 @@ export function TerminalSurface({
     if (!terminal) {
       return;
     }
+    setTerminalAtBottom(true);
+    setHasNewOutputBelow(false);
+    setTmuxScrollbackActive(false);
 
     logTerminalPerf("terminal.snapshot.received", {
       terminalSessionId,
@@ -133,6 +143,9 @@ export function TerminalSurface({
         ...summarizeTerminalChunk(nextChunk),
       });
       terminal.scrollToBottom();
+      setTerminalAtBottom(true);
+      setHasNewOutputBelow(false);
+      setTmuxScrollbackActive(false);
       refreshTerminalViewportRef.current?.();
     });
   });
@@ -263,6 +276,10 @@ export function TerminalSurface({
       return;
     }
 
+    const wasAtBottom = isTerminalAtBottom(terminal);
+    if (!wasAtBottom) {
+      setHasNewOutputBelow(true);
+    }
     const renderStartedAt = performance.now();
     terminal.write(nextChunk, () => {
       const renderedAt = performance.now();
@@ -340,6 +357,43 @@ export function TerminalSurface({
       ...summarizeTerminalChunk(data),
     });
     sendInput(data);
+  });
+
+  const handleBottomStateChange = useMemoizedFn((isAtBottom: boolean) => {
+    setTerminalAtBottom(isAtBottom);
+    if (isAtBottom) {
+      setHasNewOutputBelow(false);
+    }
+  });
+
+  const requestTmuxExitCopyMode = useMemoizedFn(() => {
+    const sendExitRequest = () => {
+      void sendTerminalInputRequest(
+        apiBase,
+        token,
+        terminalSessionId,
+        { data: "", mode: "tmux_exit_copy_mode" },
+      );
+    };
+
+    sendExitRequest();
+    window.setTimeout(sendExitRequest, 250);
+    window.setTimeout(sendExitRequest, 800);
+  });
+
+  const handleScrollToBottom = useMemoizedFn(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+    if (tmuxScrollbackActive) {
+      requestTmuxExitCopyMode();
+    }
+    scrollTerminalToBottom(terminal);
+    setTerminalAtBottom(true);
+    setHasNewOutputBelow(false);
+    setTmuxScrollbackActive(false);
+    terminal.focus();
   });
 
   const clearSearch = useMemoizedFn(() => {
@@ -432,6 +486,8 @@ export function TerminalSurface({
     terminalSessionId,
     tokenRef,
     xtermUserInputSequenceRef,
+    onBottomStateChange: handleBottomStateChange,
+    onTmuxScrollbackActiveChange: setTmuxScrollbackActive,
   });
 
   useEffect(() => {
@@ -584,15 +640,20 @@ export function TerminalSurface({
       searchQuery={searchQuery}
       searchResults={searchResults}
       showMobileKeybarToggle={showMobileKeybarToggle}
+      showScrollToBottomButton={
+        active && (!terminalAtBottom || hasNewOutputBelow || tmuxScrollbackActive)
+      }
       showTerminalToolbar={showTerminalToolbar}
       terminalContainerRef={terminalContainerRef}
       terminalRef={terminalRef}
+      hasNewOutputBelow={hasNewOutputBelow}
       onRunSearch={runSearch}
       onSearchOpenChange={setSearchOpen}
       onSearchOptionsChange={setSearchOptions}
       onSearchQueryChange={setSearchQuery}
       onSendInput={sendTerminalInput}
       onMobileKeybarOpenChange={setMobileKeybarOpen}
+      onScrollToBottom={handleScrollToBottom}
     />
   );
 }

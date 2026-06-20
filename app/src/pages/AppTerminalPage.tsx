@@ -430,6 +430,7 @@ export function AppTerminalPage({
             runtimeKind={runtimeKind}
             sendInput={sendInput}
             sendResize={sendResize}
+            terminalSessionId={terminalSessionId}
             onAuthExpired={onAuthExpired}
             onBack={onBack}
             onChangesCount={setChangesCount}

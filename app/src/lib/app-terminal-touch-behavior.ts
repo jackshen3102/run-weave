@@ -10,13 +10,14 @@ export interface TerminalTouchBehaviorOptions {
   getRuntimeKind?: () => "tmux" | "pty" | null;
   // Sends raw input to the terminal session (same channel as keystrokes).
   sendInput?: (data: string) => void;
+  onTmuxScrollbackDistanceChange?: (deltaRows: number) => void;
 }
 
 export function installTerminalTouchBehavior(
   { terminal, container }: TerminalRendererExtensionContext,
   options: TerminalTouchBehaviorOptions = {},
 ): { dispose(): void } {
-  const { getRuntimeKind, sendInput } = options;
+  const { getRuntimeKind, onTmuxScrollbackDistanceChange, sendInput } = options;
   let lastTouchY: number | null = null;
   let accumulatedDelta = 0;
   let edgeSwipeActive = false;
@@ -87,6 +88,7 @@ export function installTerminalTouchBehavior(
       const notch = buildTmuxScrollInput(-Math.sign(lines), terminal.cols, terminal.rows);
       if (notch) {
         sendInput(notch.repeat(Math.abs(lines)));
+        onTmuxScrollbackDistanceChange?.(lines);
       }
       return;
     }
@@ -112,7 +114,12 @@ export function installTerminalTouchBehavior(
     activePointerId = event.pointerId;
     lastTouchY = event.clientY;
     accumulatedDelta = 0;
-    container.setPointerCapture?.(event.pointerId);
+    try {
+      container.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Synthetic pointer events used in browser automation may not have an
+      // active pointer capture target.
+    }
   };
 
   const handlePointerMove = (event: PointerEvent) => {
@@ -130,9 +137,27 @@ export function installTerminalTouchBehavior(
 
   const handlePointerEnd = (event: PointerEvent) => {
     if (activePointerId === event.pointerId) {
-      container.releasePointerCapture?.(event.pointerId);
+      try {
+        container.releasePointerCapture?.(event.pointerId);
+      } catch {
+        // See the setPointerCapture guard above.
+      }
     }
     resetScrollGesture();
+  };
+
+  const handleWheel = (event: WheelEvent) => {
+    const buffer = terminal.buffer?.active;
+    if (buffer?.type !== "alternate" || getRuntimeKind?.() !== "tmux") {
+      return;
+    }
+
+    const lineHeight = resolveLineHeight();
+    if (lineHeight <= 0 || event.deltaY === 0) {
+      return;
+    }
+
+    onTmuxScrollbackDistanceChange?.(-event.deltaY / lineHeight);
   };
 
   const handleTouchStart = (event: TouchEvent) => {
@@ -194,6 +219,7 @@ export function installTerminalTouchBehavior(
   container.addEventListener("click", suppressTerminalFocus, {
     capture: true,
   });
+  container.addEventListener("wheel", handleWheel, { capture: true });
   if (!usePointerTouch) {
     container.addEventListener("touchstart", handleTouchStart, {
       capture: true,
@@ -231,6 +257,7 @@ export function installTerminalTouchBehavior(
       container.removeEventListener("click", suppressTerminalFocus, {
         capture: true,
       });
+      container.removeEventListener("wheel", handleWheel, { capture: true });
       if (!usePointerTouch) {
         container.removeEventListener("touchstart", handleTouchStart, {
           capture: true,
