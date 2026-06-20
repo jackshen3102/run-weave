@@ -85,6 +85,8 @@ export function useTerminalBrowserController({
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   const [annotationTabId, setAnnotationTabIdState] = useState<string | null>(null);
   const annotationTabIdRef = useRef<string | null>(null);
+  const handledAnnotationSubmitRequestRef = useRef<string | null>(null);
+  const annotationSubmittingRef = useRef(false);
   const [annotationState, setAnnotationState] =
     useState<TerminalBrowserAnnotationState>({
       active: false,
@@ -133,6 +135,64 @@ export function useTerminalBrowserController({
     annotationTabIdRef.current = tabId;
     setAnnotationTabIdState(tabId);
   };
+
+  const submitAnnotationTab = useMemoizedFn(async (tabId: string): Promise<void> => {
+    setAnnotationSubmitting(true);
+    annotationSubmittingRef.current = true;
+    setAnnotationError(null);
+    try {
+      if (!terminalSessionId) {
+        setAnnotationError("Browser comments are ready, but no active terminal is available.");
+        return;
+      }
+      const submission =
+        await window.electronAPI?.terminalBrowserAnnotationSubmit?.(tabId);
+      if (!submission || submission.annotations.length === 0) {
+        setAnnotationError("No browser comments to submit.");
+        return;
+      }
+      let screenshotPath: string | null = null;
+      let submitWarning: string | null = null;
+      if (submission.screenshot) {
+        try {
+          const savedScreenshot = await createTerminalSessionClipboardImage(
+            apiBase,
+            token,
+            terminalSessionId,
+            submission.screenshot,
+          );
+          screenshotPath = savedScreenshot.filePath;
+        } catch (error) {
+          submitWarning =
+            error instanceof Error
+              ? `Browser comments were submitted, but saving the marker screenshot failed: ${error.message}`
+              : "Browser comments were submitted, but saving the marker screenshot failed.";
+        }
+      }
+      const prompt = buildBrowserAnnotationPrompt(submission, {
+        screenshotPath,
+      });
+      setAnnotationState({ active: false, annotations: [] });
+      setAnnotationTabId(null);
+      await sendTerminalInput(apiBase, token, terminalSessionId, {
+        data: prompt,
+        mode: "prompt_paste",
+      });
+      if (submitWarning) {
+        setAnnotationError(submitWarning);
+      }
+    } catch (error) {
+      setAnnotationError(
+        error instanceof Error
+          ? error.message
+          : "Failed to submit browser comments",
+      );
+    } finally {
+      handledAnnotationSubmitRequestRef.current = null;
+      annotationSubmittingRef.current = false;
+      setAnnotationSubmitting(false);
+    }
+  });
 
   const syncElectronTabs = useMemoizedFn(async (): Promise<void> => {
     try {
@@ -427,6 +487,84 @@ export function useTerminalBrowserController({
     );
   }, [isElectron]);
 
+  useEffect(() => {
+    if (
+      !isElectron ||
+      !annotationState.active ||
+      !annotationTabId ||
+      !activeTabId ||
+      annotationTabId === activeTabId
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void window.electronAPI
+      ?.terminalBrowserAnnotationStop?.(annotationTabId)
+      .then((state) => {
+        if (cancelled) {
+          return;
+        }
+        setAnnotationState(state ?? { active: false, annotations: [] });
+        setAnnotationTabId(null);
+        handledAnnotationSubmitRequestRef.current = null;
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setAnnotationError(
+            error instanceof Error
+              ? error.message
+              : "Failed to stop browser comments",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTabId, annotationState.active, annotationTabId, isElectron]);
+
+  useEffect(() => {
+    if (!isElectron || !annotationState.active || !annotationTabId) {
+      return;
+    }
+    let cancelled = false;
+    const intervalId = window.setInterval(() => {
+      void window.electronAPI
+        ?.terminalBrowserAnnotationList?.(annotationTabId)
+        .then((state) => {
+          if (cancelled) {
+            return;
+          }
+          setAnnotationState(state);
+          if (!state.active) {
+            setAnnotationTabId(null);
+            return;
+          }
+          const requestId = state.pendingSubmitRequestId;
+          if (
+            requestId &&
+            handledAnnotationSubmitRequestRef.current !== requestId &&
+            !annotationSubmittingRef.current
+          ) {
+            handledAnnotationSubmitRequestRef.current = requestId;
+            void submitAnnotationTab(annotationTabId);
+          }
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setAnnotationError(
+              error instanceof Error
+                ? error.message
+                : "Failed to refresh browser comments",
+            );
+          }
+        });
+    }, 500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [annotationState.active, annotationTabId, isElectron, submitAnnotationTab]);
+
   if (!activeTab) {
     return null;
   }
@@ -520,6 +658,7 @@ export function useTerminalBrowserController({
       const state = await window.electronAPI?.terminalBrowserAnnotationStop?.(tabId);
       setAnnotationState(state ?? { active: false, annotations: [] });
       setAnnotationTabId(null);
+      handledAnnotationSubmitRequestRef.current = null;
     } catch (error) {
       setAnnotationError(
         error instanceof Error ? error.message : "Failed to stop browser comments",
@@ -536,6 +675,7 @@ export function useTerminalBrowserController({
       return;
     }
     setAnnotationError(null);
+    handledAnnotationSubmitRequestRef.current = null;
     setHeaderRulesPanelOpen(false);
     setDevicePanelOpen(false);
     try {
@@ -554,58 +694,7 @@ export function useTerminalBrowserController({
 
   const submitAnnotations = async (): Promise<void> => {
     const tabId = annotationTabId ?? activeTab.id;
-    setAnnotationSubmitting(true);
-    setAnnotationError(null);
-    try {
-      if (!terminalSessionId) {
-        setAnnotationError("Browser comments are ready, but no active terminal is available.");
-        return;
-      }
-      const submission =
-        await window.electronAPI?.terminalBrowserAnnotationSubmit?.(tabId);
-      if (!submission || submission.annotations.length === 0) {
-        setAnnotationError("No browser comments to submit.");
-        return;
-      }
-      let screenshotPath: string | null = null;
-      let submitWarning: string | null = null;
-      if (submission.screenshot) {
-        try {
-          const savedScreenshot = await createTerminalSessionClipboardImage(
-            apiBase,
-            token,
-            terminalSessionId,
-            submission.screenshot,
-          );
-          screenshotPath = savedScreenshot.filePath;
-        } catch (error) {
-          submitWarning =
-            error instanceof Error
-              ? `Browser comments were submitted, but saving the marker screenshot failed: ${error.message}`
-              : "Browser comments were submitted, but saving the marker screenshot failed.";
-        }
-      }
-      const prompt = buildBrowserAnnotationPrompt(submission, {
-        screenshotPath,
-      });
-      setAnnotationState({ active: false, annotations: [] });
-      setAnnotationTabId(null);
-      await sendTerminalInput(apiBase, token, terminalSessionId, {
-        data: prompt,
-        mode: "prompt_paste",
-      });
-      if (submitWarning) {
-        setAnnotationError(submitWarning);
-      }
-    } catch (error) {
-      setAnnotationError(
-        error instanceof Error
-          ? error.message
-          : "Failed to submit browser comments",
-      );
-    } finally {
-      setAnnotationSubmitting(false);
-    }
+    await submitAnnotationTab(tabId);
   };
 
   const selectDevicePreset = async (

@@ -1062,7 +1062,6 @@ export function TerminalWorkspaceShell({
         <DiagnosticLogEntry
           apiBase={apiBase}
           token={token}
-          variant="dialog"
           open={diagnosticLogOpen}
           onOpenChange={setDiagnosticLogOpen}
         />

@@ -149,49 +149,181 @@ function buildAnnotationRuntimeScript(): string {
         font-size: 14px;
         font-weight: 700;
         line-height: 1;
-        pointer-events: none;
+        pointer-events: auto;
+        cursor: pointer;
         box-shadow: 0 8px 24px rgba(2, 6, 23, 0.35);
+      }
+      .rw-annotation-preview {
+        position: fixed;
+        max-width: 260px;
+        min-height: 48px;
+        border-radius: 22px;
+        background: #2d2d2d;
+        color: #ffffff;
+        padding: 13px 18px;
+        pointer-events: none;
+        box-shadow: 0 16px 50px rgba(0, 0, 0, 0.34);
+        font: 18px/1.25 ui-sans-serif, system-ui, sans-serif;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
       }
       .rw-annotation-editor {
         position: fixed;
-        width: 280px;
-        border: 1px solid rgba(148, 163, 184, 0.45);
-        border-radius: 8px;
-        background: #020617;
+        width: min(560px, calc(100vw - 24px));
+        min-height: 64px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        background: #2d2d2d;
         color: #e2e8f0;
-        padding: 10px;
+        padding: 10px 10px 10px 16px;
         pointer-events: auto;
-        box-shadow: 0 20px 70px rgba(2, 6, 23, 0.45);
+        box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
+        display: flex;
+        align-items: center;
+        gap: 12px;
       }
-      .rw-annotation-editor textarea {
-        width: 100%;
-        min-height: 84px;
-        resize: vertical;
-        border: 1px solid #334155;
-        border-radius: 6px;
-        background: #0f172a;
+      .rw-annotation-tools {
+        width: 30px;
+        height: 30px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: #b8b8b8;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font: 20px/1 ui-sans-serif, system-ui, sans-serif;
+      }
+      .rw-annotation-tools:hover { background: rgba(255, 255, 255, 0.08); color: #ffffff; }
+      .rw-annotation-input {
+        flex: 1;
+        min-width: 0;
+        height: 40px;
+        border: 0;
+        background: transparent;
         color: #f8fafc;
-        padding: 8px;
-        font: 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+        padding: 0;
+        font: 18px/1.3 ui-sans-serif, system-ui, sans-serif;
         outline: none;
       }
-      .rw-annotation-editor textarea:focus { border-color: #38bdf8; }
-      .rw-annotation-editor-row {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-        margin-top: 8px;
-      }
-      .rw-annotation-editor button {
-        height: 28px;
+      .rw-annotation-input::placeholder { color: rgba(248, 250, 252, 0.48); }
+      .rw-annotation-send {
+        width: 44px;
+        height: 44px;
         border: 0;
-        border-radius: 6px;
-        padding: 0 10px;
-        font: 12px/1 ui-sans-serif, system-ui, sans-serif;
+        border-radius: 999px;
+        background: #e5e7eb;
+        color: #111827;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font: 26px/1 ui-sans-serif, system-ui, sans-serif;
         cursor: pointer;
       }
-      .rw-annotation-editor-cancel { background: #1e293b; color: #cbd5e1; }
-      .rw-annotation-editor-save { background: #0284c7; color: #ffffff; }
+      .rw-annotation-send:disabled { opacity: 0.45; cursor: default; }
+      .rw-annotation-menu {
+        position: fixed;
+        min-width: 130px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        background: #2f2f2f;
+        color: #ffffff;
+        padding: 6px;
+        pointer-events: auto;
+        box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+      }
+      .rw-annotation-menu[hidden] { display: none; }
+      .rw-annotation-menu button {
+        width: 100%;
+        min-height: 36px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 0 10px;
+        font: 15px/1 ui-sans-serif, system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .rw-annotation-menu button:hover { background: rgba(255, 255, 255, 0.08); }
+      .rw-annotation-shortcut {
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.16);
+        color: rgba(255, 255, 255, 0.88);
+        padding: 4px 8px;
+        font-size: 13px;
+      }
+      .rw-annotation-edit-actions {
+        display: none;
+      }
+      .rw-annotation-editor.rw-annotation-editor-editing {
+        min-height: 156px;
+        border-radius: 24px;
+        align-items: flex-start;
+        padding: 22px 22px 18px 22px;
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        grid-template-rows: minmax(44px, 1fr) auto;
+        gap: 12px 16px;
+      }
+      .rw-annotation-editor.rw-annotation-editor-editing .rw-annotation-send,
+      .rw-annotation-editor.rw-annotation-editor-editing .rw-annotation-menu {
+        display: none;
+      }
+      .rw-annotation-editor.rw-annotation-editor-editing .rw-annotation-tools {
+        margin-top: 3px;
+      }
+      .rw-annotation-editor.rw-annotation-editor-editing .rw-annotation-input {
+        height: auto;
+        min-height: 44px;
+        align-self: start;
+      }
+      .rw-annotation-editor.rw-annotation-editor-editing .rw-annotation-edit-actions {
+        grid-column: 1 / 3;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .rw-annotation-editor.rw-annotation-editor-editing .rw-annotation-edit-buttons {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .rw-annotation-edit-delete,
+      .rw-annotation-edit-cancel,
+      .rw-annotation-edit-save {
+        height: 44px;
+        border: 0;
+        border-radius: 999px;
+        padding: 0 18px;
+        font: 18px/1 ui-sans-serif, system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .rw-annotation-edit-delete {
+        width: 44px;
+        padding: 0;
+        background: transparent;
+        color: #ffffff;
+        font-size: 24px;
+      }
+      .rw-annotation-edit-delete:hover,
+      .rw-annotation-edit-cancel:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .rw-annotation-edit-cancel {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        color: #ffffff;
+      }
+      .rw-annotation-edit-save {
+        background: #ffffff;
+        color: #1f2937;
+      }
     \`;
     root.appendChild(style);
 
@@ -203,26 +335,52 @@ function buildAnnotationRuntimeScript(): string {
     const lockLayer = document.createElement("div");
     root.appendChild(lockLayer);
 
+    const preview = document.createElement("div");
+    preview.className = "rw-annotation-preview";
+    preview.style.display = "none";
+    root.appendChild(preview);
+
     const editor = document.createElement("div");
     editor.className = "rw-annotation-editor";
     editor.style.display = "none";
     editor.innerHTML = \`
-      <textarea aria-label="Browser annotation comment" placeholder="Comment"></textarea>
-      <div class="rw-annotation-editor-row">
-        <button type="button" class="rw-annotation-editor-cancel">Cancel</button>
-        <button type="button" class="rw-annotation-editor-save">Save</button>
+      <button type="button" class="rw-annotation-tools" aria-label="Comment options">⌘</button>
+      <input class="rw-annotation-input" aria-label="Browser annotation comment" placeholder="添加评论..." />
+      <button type="button" class="rw-annotation-send" aria-label="发送评论">↑</button>
+      <div class="rw-annotation-edit-actions">
+        <button type="button" class="rw-annotation-edit-delete" aria-label="删除评论">⌫</button>
+        <div class="rw-annotation-edit-buttons">
+          <button type="button" class="rw-annotation-edit-cancel">取消</button>
+          <button type="button" class="rw-annotation-edit-save">保存</button>
+        </div>
       </div>
     \`;
     root.appendChild(editor);
 
+    const menu = document.createElement("div");
+    menu.className = "rw-annotation-menu";
+    menu.hidden = true;
+    menu.innerHTML = \`
+      <button type="button" class="rw-annotation-menu-send"><span>发送</span><span class="rw-annotation-shortcut">↵</span></button>
+      <button type="button" class="rw-annotation-menu-add"><span>添加</span><span class="rw-annotation-shortcut">⌘↵</span></button>
+    \`;
+    root.appendChild(menu);
+
     document.documentElement.appendChild(root);
 
-    const textarea = editor.querySelector("textarea");
-    const cancelButton = editor.querySelector(".rw-annotation-editor-cancel");
-    const saveButton = editor.querySelector(".rw-annotation-editor-save");
+    const input = editor.querySelector(".rw-annotation-input");
+    const toolsButton = editor.querySelector(".rw-annotation-tools");
+    const sendButton = editor.querySelector(".rw-annotation-send");
+    const deleteButton = editor.querySelector(".rw-annotation-edit-delete");
+    const cancelButton = editor.querySelector(".rw-annotation-edit-cancel");
+    const editSaveButton = editor.querySelector(".rw-annotation-edit-save");
+    const menuSendButton = menu.querySelector(".rw-annotation-menu-send");
+    const menuAddButton = menu.querySelector(".rw-annotation-menu-add");
     const annotations = [];
+    let pendingSubmitRequestId = null;
     let selectedElement = null;
     let selectedTarget = null;
+    let editingAnnotationId = null;
 
     const placeBox = (box, rect) => {
       box.style.left = Math.round(rect.left) + "px";
@@ -231,7 +389,18 @@ function buildAnnotationRuntimeScript(): string {
       box.style.height = Math.max(1, Math.round(rect.height)) + "px";
       box.style.display = "block";
     };
-    const isEditorEvent = (event) => editor.contains(event.target);
+    const isEditorEvent = (event) => root.contains(event.target);
+    const targetElementFromEvent = (event) => {
+      const element = currentElementAt(event);
+      if (element) {
+        return element;
+      }
+      const target = event.target;
+      if (target instanceof Element && target !== document.documentElement && target !== document.body) {
+        return target;
+      }
+      return null;
+    };
     const currentElementAt = (event) => {
       root.style.display = "none";
       const element = document.elementFromPoint(event.clientX, event.clientY);
@@ -243,22 +412,98 @@ function buildAnnotationRuntimeScript(): string {
     };
     const hideEditor = () => {
       editor.style.display = "none";
+      editor.classList.remove("rw-annotation-editor-editing");
+      menu.hidden = true;
       selectedElement = null;
       selectedTarget = null;
-      textarea.value = "";
+      editingAnnotationId = null;
+      input.value = "";
+      sendButton.disabled = true;
+    };
+    const hidePreview = () => {
+      preview.style.display = "none";
+      preview.textContent = "";
+    };
+    const placePreview = (annotation) => {
+      preview.textContent = annotation.comment;
+      preview.style.display = "block";
+      const markerLeft = annotation.target.rect.x + annotation.target.rect.width - 16;
+      const markerTop = annotation.target.rect.y - 16;
+      const rect = preview.getBoundingClientRect();
+      const left = Math.min(
+        Math.max(8, markerLeft + 40),
+        Math.max(8, window.innerWidth - rect.width - 8),
+      );
+      const top = Math.min(
+        Math.max(8, markerTop - 8),
+        Math.max(8, window.innerHeight - rect.height - 8),
+      );
+      preview.style.left = Math.round(left) + "px";
+      preview.style.top = Math.round(top) + "px";
+    };
+    const placeMenu = () => {
+      const editorRect = editor.getBoundingClientRect();
+      const menuWidth = 130;
+      const left = Math.min(
+        Math.max(8, editorRect.right - menuWidth - 28),
+        Math.max(8, window.innerWidth - menuWidth - 8),
+      );
+      const top = Math.max(8, editorRect.top - 90);
+      menu.style.left = Math.round(left) + "px";
+      menu.style.top = Math.round(top) + "px";
+    };
+    const toggleMenu = () => {
+      if (menu.hidden) {
+        placeMenu();
+        menu.hidden = false;
+      } else {
+        menu.hidden = true;
+      }
     };
     const showEditor = (element) => {
+      hidePreview();
       selectedElement = element;
       selectedTarget = targetForElement(element);
+      editingAnnotationId = null;
+      editor.classList.remove("rw-annotation-editor-editing");
       const rect = element.getBoundingClientRect();
-      const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - 288));
+      const editorWidth = Math.min(560, Math.max(320, window.innerWidth - 24));
+      const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - editorWidth - 12));
       const below = rect.bottom + 10;
-      const top = below + 150 < window.innerHeight ? below : Math.max(8, rect.top - 152);
+      const top = below + 76 < window.innerHeight ? below : Math.max(12, rect.top - 80);
       editor.style.left = Math.round(left) + "px";
       editor.style.top = Math.round(top) + "px";
-      editor.style.display = "block";
-      textarea.value = "";
-      textarea.focus();
+      editor.style.display = "flex";
+      editor.style.width = Math.round(editorWidth) + "px";
+      input.value = "";
+      sendButton.disabled = true;
+      menu.hidden = true;
+      input.focus();
+    };
+    const showEditEditor = (annotation) => {
+      hidePreview();
+      selectedElement = null;
+      selectedTarget = null;
+      editingAnnotationId = annotation.id;
+      const editorWidth = Math.min(560, Math.max(320, window.innerWidth - 24));
+      const left = Math.min(
+        Math.max(12, annotation.target.rect.x),
+        Math.max(12, window.innerWidth - editorWidth - 12),
+      );
+      const below = annotation.target.rect.y + annotation.target.rect.height + 10;
+      const top = below + 168 < window.innerHeight
+        ? below
+        : Math.max(12, annotation.target.rect.y - 170);
+      editor.style.left = Math.round(left) + "px";
+      editor.style.top = Math.round(top) + "px";
+      editor.style.width = Math.round(editorWidth) + "px";
+      editor.classList.add("rw-annotation-editor-editing");
+      editor.style.display = "grid";
+      menu.hidden = true;
+      input.value = annotation.comment;
+      sendButton.disabled = true;
+      input.focus();
+      input.select();
     };
     const renderAnnotations = () => {
       lockLayer.replaceChildren();
@@ -276,6 +521,13 @@ function buildAnnotationRuntimeScript(): string {
         marker.textContent = String(annotation.index);
         marker.style.left = Math.max(4, annotation.target.rect.x + annotation.target.rect.width - 16) + "px";
         marker.style.top = Math.max(4, annotation.target.rect.y - 16) + "px";
+        marker.addEventListener("mouseenter", () => placePreview(annotation));
+        marker.addEventListener("mouseleave", hidePreview);
+        marker.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          showEditEditor(annotation);
+        });
         lockLayer.appendChild(marker);
       }
     };
@@ -287,6 +539,7 @@ function buildAnnotationRuntimeScript(): string {
         comment: annotation.comment,
         target: annotation.target,
       })),
+      pendingSubmitRequestId,
     });
 
     const onPointerMove = (event) => {
@@ -304,12 +557,12 @@ function buildAnnotationRuntimeScript(): string {
       if (isEditorEvent(event)) {
         return;
       }
-      const element = currentElementAt(event);
+      event.preventDefault();
+      event.stopPropagation();
+      const element = targetElementFromEvent(event);
       if (!element) {
         return;
       }
-      event.preventDefault();
-      event.stopPropagation();
       showEditor(element);
     };
     const onKeyDown = (event) => {
@@ -319,19 +572,33 @@ function buildAnnotationRuntimeScript(): string {
         hideEditor();
       }
     };
-    const save = () => {
-      const comment = trimText(textarea.value, 4000);
+    const save = (submitNow = false) => {
+      const comment = trimText(input.value, 4000);
       if (!comment || !selectedElement || !selectedTarget) {
-        return;
+        if (editingAnnotationId) {
+          const annotation = annotations.find((item) => item.id === editingAnnotationId);
+          if (annotation && comment) {
+            annotation.comment = comment;
+            hideEditor();
+            renderAnnotations();
+            return list();
+          }
+        }
+        return list();
       }
-      annotations.push({
+      const annotation = {
         id: "annotation-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
         index: annotations.length + 1,
         comment,
         target: selectedTarget,
-      });
+      };
+      annotations.push(annotation);
+      if (submitNow) {
+        pendingSubmitRequestId = annotation.id;
+      }
       hideEditor();
       renderAnnotations();
+      return list();
     };
     const remove = (id) => {
       const index = annotations.findIndex((annotation) => annotation.id === id);
@@ -345,6 +612,29 @@ function buildAnnotationRuntimeScript(): string {
       renderAnnotations();
       return list();
     };
+    const saveEdit = () => {
+      const comment = trimText(input.value, 4000);
+      const annotation = annotations.find((item) => item.id === editingAnnotationId);
+      if (!annotation || !comment) {
+        return list();
+      }
+      annotation.comment = comment;
+      hideEditor();
+      renderAnnotations();
+      return list();
+    };
+    const deleteEdit = () => {
+      if (!editingAnnotationId) {
+        return list();
+      }
+      const state = remove(editingAnnotationId);
+      hideEditor();
+      return state;
+    };
+    const consumeSubmitRequest = () => {
+      pendingSubmitRequestId = null;
+      return list();
+    };
     const stop = () => {
       document.removeEventListener("pointermove", onPointerMove, true);
       document.removeEventListener("click", onClick, true);
@@ -354,9 +644,30 @@ function buildAnnotationRuntimeScript(): string {
       return { active: false, annotations: [] };
     };
 
+    toolsButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (editingAnnotationId) {
+        return;
+      }
+      toggleMenu();
+    });
+    sendButton.addEventListener("click", () => {
+      save(false);
+    });
+    menuSendButton.addEventListener("click", () => {
+      save(true);
+    });
+    menuAddButton.addEventListener("click", () => {
+      save(false);
+    });
     cancelButton.addEventListener("click", hideEditor);
-    saveButton.addEventListener("click", save);
-    textarea.addEventListener("keydown", (event) => {
+    editSaveButton.addEventListener("click", saveEdit);
+    deleteButton.addEventListener("click", deleteEdit);
+    input.addEventListener("input", () => {
+      sendButton.disabled = trimText(input.value, 4000).length === 0;
+    });
+    input.addEventListener("keydown", (event) => {
       event.stopPropagation();
       if (event.key === "Escape") {
         event.preventDefault();
@@ -364,7 +675,21 @@ function buildAnnotationRuntimeScript(): string {
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        save();
+        event.preventDefault();
+        if (editingAnnotationId) {
+          saveEdit();
+        } else {
+          save(false);
+        }
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (editingAnnotationId) {
+          saveEdit();
+        } else {
+          save(false);
+        }
       }
     });
     document.addEventListener("pointermove", onPointerMove, true);
@@ -375,6 +700,7 @@ function buildAnnotationRuntimeScript(): string {
       active: true,
       list,
       remove,
+      consumeSubmitRequest,
       stop,
       submit: list,
     };
@@ -467,6 +793,10 @@ function normalizeState(value: unknown): TerminalBrowserAnnotationState {
   return {
     active: record.active === true,
     annotations,
+    pendingSubmitRequestId:
+      typeof record.pendingSubmitRequestId === "string"
+        ? record.pendingSubmitRequestId
+        : null,
   };
 }
 
