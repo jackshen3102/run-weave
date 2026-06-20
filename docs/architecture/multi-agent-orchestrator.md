@@ -61,6 +61,15 @@ plan
 - 用户拒绝时必须提供原因，run 回到 `fromPhase` 并记录拒绝结论。
 - 已经是 `human_plan_approval` 或 `human_verify` 的跳转不会再套一层每轮确认。
 
+## 自动门禁
+
+run 创建时可以配置两类人工门禁自动通过选项：
+
+- `options.autoApprovePlanGate`：进入 `human_plan_approval` 时自动写入通过结论，并继续到 `code`。
+- `options.autoApproveVerifyGate`：进入 `human_verify` 时自动写入通过结论，并继续到 `finalize`。
+
+自动通过仍会写入 `humanGateVerdicts[]`，并向主 Agent 注入门禁通过提示，避免状态跳转只存在于后端任务包里。它只跳过对应人工门禁，不跳过 worker dispatch、worker result 路由或 `finalize -> done` 的阶段约束。
+
 ## API 边界
 
 主要 HTTP 入口位于 `/api/orchestrator`：
