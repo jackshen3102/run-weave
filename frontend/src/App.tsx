@@ -4,6 +4,8 @@ import type {
   PackagedBackendConnectionState,
   RuntimeStatsSnapshot,
   SystemMonitorSnapshot,
+  TerminalBrowserAnnotationState,
+  TerminalBrowserAnnotationSubmission,
   TerminalBrowserCdpProxyInfo,
   TerminalBrowserDevicePresetId,
   TerminalBrowserDeviceState,
@@ -108,6 +110,22 @@ declare global {
         rules: TerminalBrowserHeaderState["rules"],
       ) => Promise<TerminalBrowserHeaderState>;
       terminalBrowserCloseTab?: (tabId: string) => Promise<void>;
+      terminalBrowserAnnotationStart?: (
+        tabId: string,
+      ) => Promise<TerminalBrowserAnnotationState>;
+      terminalBrowserAnnotationStop?: (
+        tabId: string,
+      ) => Promise<TerminalBrowserAnnotationState>;
+      terminalBrowserAnnotationList?: (
+        tabId: string,
+      ) => Promise<TerminalBrowserAnnotationState>;
+      terminalBrowserAnnotationDelete?: (
+        tabId: string,
+        annotationId: string,
+      ) => Promise<TerminalBrowserAnnotationState>;
+      terminalBrowserAnnotationSubmit?: (
+        tabId: string,
+      ) => Promise<TerminalBrowserAnnotationSubmission>;
       onTerminalBrowserTabCreatedFromProxy?: (
         listener: (data: { tabId: string; url: string; title: string }) => void,
       ) => () => void;
@@ -135,6 +153,12 @@ declare global {
       ) => () => void;
       onTerminalBrowserTabClosed?: (
         listener: (data: { tabId: string }) => void,
+      ) => () => void;
+      onTerminalBrowserAnnotationUpdated?: (
+        listener: (data: {
+          tabId: string;
+          state: TerminalBrowserAnnotationState;
+        }) => void,
       ) => () => void;
     };
   }

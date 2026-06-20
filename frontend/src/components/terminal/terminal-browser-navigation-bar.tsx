@@ -6,7 +6,9 @@ import {
   Code2,
   Copy,
   ExternalLink,
+  MessageSquarePlus,
   RotateCw,
+  Send,
   Square,
   Wifi,
   WifiOff,
@@ -30,11 +32,16 @@ interface TerminalBrowserNavigationBarProps {
   headerRules: TerminalBrowserHeaderRule[];
   devicePanelOpen: boolean;
   deviceSwitching: boolean;
+  annotationActive: boolean;
+  annotationCount: number;
+  annotationSubmitting: boolean;
   onSubmitAddress: (event: FormEvent<HTMLFormElement>) => void;
   onAddressInputChange: (value: string) => void;
   onGo: (direction: "back" | "forward") => void;
   onReload: () => void;
   onStop: () => void;
+  onToggleAnnotation: () => void;
+  onSubmitAnnotations: () => void;
   onToggleProxy: () => void;
   onDevicePanelOpenChange: (open: boolean) => void;
   onHeaderRulesPanelOpenChange: (open: boolean) => void;
@@ -51,11 +58,16 @@ export function TerminalBrowserNavigationBar({
   headerRules,
   devicePanelOpen,
   deviceSwitching,
+  annotationActive,
+  annotationCount,
+  annotationSubmitting,
   onSubmitAddress,
   onAddressInputChange,
   onGo,
   onReload,
   onStop,
+  onToggleAnnotation,
+  onSubmitAnnotations,
   onToggleProxy,
   onDevicePanelOpenChange,
   onHeaderRulesPanelOpenChange,
@@ -139,6 +151,51 @@ export function TerminalBrowserNavigationBar({
         ) : (
           <Copy className="h-4 w-4" />
         )}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className={[
+          "relative h-7 w-7 rounded-md px-0",
+          annotationActive
+            ? "bg-sky-500/15 text-sky-300 hover:bg-sky-500/20 hover:text-sky-200"
+            : "",
+        ].join(" ")}
+        disabled={!isElectron}
+        onClick={onToggleAnnotation}
+        aria-label={
+          annotationActive ? "Stop browser comments" : "Add browser comments"
+        }
+        title={annotationActive ? "Stop browser comments" : "Add browser comments"}
+      >
+        <MessageSquarePlus className="h-4 w-4" />
+        {annotationCount > 0 ? (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-sky-500 px-1 text-[10px] font-semibold leading-none text-white">
+            {annotationCount}
+          </span>
+        ) : null}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 w-7 rounded-md px-0"
+        disabled={
+          !isElectron ||
+          !annotationActive ||
+          annotationCount === 0 ||
+          annotationSubmitting
+        }
+        onClick={onSubmitAnnotations}
+        aria-label="Submit browser comments"
+        title={
+          annotationCount > 0
+            ? "Submit browser comments"
+            : "Select an element in the browser to add a comment"
+        }
+      >
+        <Send className="h-4 w-4" />
       </Button>
       <Button
         type="button"

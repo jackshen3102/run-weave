@@ -6,10 +6,23 @@ import { TerminalBrowserTabs } from "./terminal-browser-tabs";
 
 interface TerminalBrowserToolProps {
   active: boolean;
+  apiBase: string;
+  token: string;
+  terminalSessionId: string | null;
 }
 
-export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
-  const controller = useTerminalBrowserController({ active });
+export function TerminalBrowserTool({
+  active,
+  apiBase,
+  token,
+  terminalSessionId,
+}: TerminalBrowserToolProps) {
+  const controller = useTerminalBrowserController({
+    active,
+    apiBase,
+    token,
+    terminalSessionId,
+  });
 
   if (!controller) {
     return null;
@@ -17,6 +30,9 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
 
   const {
     activeTab,
+    annotationError,
+    annotationState,
+    annotationSubmitting,
     browserViewRef,
     closeTab,
     createBrowserTab,
@@ -42,8 +58,10 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
     setHeaderPanelOpen,
     stop,
     submitAddress,
+    submitAnnotations,
     surfaceContainerRef,
     tabs,
+    toggleAnnotation,
     toggleProxy,
     updateBrowserTab,
   } = controller;
@@ -67,6 +85,9 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         headerRules={headerRules}
         devicePanelOpen={devicePanelOpen}
         deviceSwitching={deviceSwitching}
+        annotationActive={annotationState.active}
+        annotationCount={annotationState.annotations.length}
+        annotationSubmitting={annotationSubmitting}
         onSubmitAddress={submitAddress}
         onAddressInputChange={(addressInput) =>
           updateBrowserTab(activeTab.id, { addressInput })
@@ -74,6 +95,8 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         onGo={(direction) => void go(direction)}
         onReload={() => void reload()}
         onStop={stop}
+        onToggleAnnotation={() => void toggleAnnotation()}
+        onSubmitAnnotations={() => void submitAnnotations()}
         onToggleProxy={() => void toggleProxy()}
         onDevicePanelOpenChange={setDevicePanelOpenState}
         onHeaderRulesPanelOpenChange={setHeaderPanelOpen}
@@ -83,7 +106,7 @@ export function TerminalBrowserTool({ active }: TerminalBrowserToolProps) {
         onOpenExternal={() => openUrlExternally(activeTab.url)}
       />
       <TerminalBrowserErrorBanners
-        errors={[proxyError, headerError, activeTab.error]}
+        errors={[proxyError, headerError, annotationError, activeTab.error]}
       />
       <TerminalBrowserSurface
         containerRef={surfaceContainerRef}

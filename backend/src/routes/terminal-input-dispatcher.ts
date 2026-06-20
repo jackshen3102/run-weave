@@ -17,6 +17,9 @@ import {
 } from "./terminal-session-route-helpers";
 
 const CODEX_COMPOSER_SUBMIT_DELAY_MS = 200;
+const BRACKETED_PASTE_START = "\u001b[200~";
+const BRACKETED_PASTE_END = "\u001b[201~";
+const PROMPT_PASTE_CHUNK_SIZE = 3000;
 
 type TerminalInputDispatchOptions = {
   ptyService?: PtyService;
@@ -82,6 +85,35 @@ function buildCodexSlashCommandPtyInput(
   return `\x15${command}${submitKey === "Tab" ? "\t" : "\r"}`;
 }
 
+function buildPromptPasteInput(text: string): string {
+  return `${BRACKETED_PASTE_START}${text}${BRACKETED_PASTE_END}`;
+}
+
+function buildPromptPastePtyInput(text: string, submitKey: "C-m" | "Tab"): string {
+  return `${buildPromptPasteInput(text)}${submitKey === "Tab" ? "\t" : "\r"}`;
+}
+
+function splitPromptPaste(value: string): string[] {
+  const chunks: string[] = [];
+  for (let index = 0; index < value.length; index += PROMPT_PASTE_CHUNK_SIZE) {
+    chunks.push(value.slice(index, index + PROMPT_PASTE_CHUNK_SIZE));
+  }
+  return chunks;
+}
+
+function buildPromptPasteSequence(
+  text: string,
+  submitKey: "C-m" | "Tab",
+): TmuxKeySequenceItem[] {
+  return [
+    ...splitPromptPaste(buildPromptPasteInput(text)).map((value) => ({
+      type: "literal" as const,
+      value,
+    })),
+    { type: "key", key: submitKey },
+  ];
+}
+
 function buildTerminalLineSequence(data: string): TmuxKeySequenceItem[] {
   return [
     {
@@ -127,7 +159,7 @@ export async function sendInputToSession(
   );
   const codexSlashCommand =
     mode === "codex_slash_command" ? normalizeCodexSlashCommand(data) : null;
-  const codexSlashSubmitKey =
+  const composerSubmitKey =
     currentTerminalState?.state === "agent_running" ? "Tab" : "C-m";
   const dispatchData =
     codexSlashCommand === null ? resolveTerminalInputData(data, mode) : null;
@@ -137,7 +169,8 @@ export async function sendInputToSession(
     operationId: operationId ?? null,
     inputMode: mode ?? "raw",
     input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
-    codexSlashSubmitKey: codexSlashCommand ? codexSlashSubmitKey : null,
+    codexSlashSubmitKey: codexSlashCommand ? composerSubmitKey : null,
+    promptPasteSubmitKey: mode === "prompt_paste" ? composerSubmitKey : null,
   });
   if (isTmuxBackedSession(session) && options.tmuxService) {
     const target = resolveTmuxTarget(session, options.tmuxService);
@@ -148,12 +181,18 @@ export async function sendInputToSession(
       socketPath: target.socketPath,
       inputMode: mode ?? "raw",
       input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
-      codexSlashSubmitKey: codexSlashCommand ? codexSlashSubmitKey : null,
+      codexSlashSubmitKey: codexSlashCommand ? composerSubmitKey : null,
+      promptPasteSubmitKey: mode === "prompt_paste" ? composerSubmitKey : null,
     });
     if (codexSlashCommand) {
       await options.tmuxService.sendKeySequence(
         target,
-        buildCodexSlashCommandSequence(codexSlashCommand, codexSlashSubmitKey),
+        buildCodexSlashCommandSequence(codexSlashCommand, composerSubmitKey),
+      );
+    } else if (mode === "prompt_paste") {
+      await options.tmuxService.sendKeySequence(
+        target,
+        buildPromptPasteSequence(data, composerSubmitKey),
       );
     } else if (mode === "line") {
       await options.tmuxService.sendKeySequence(
@@ -166,7 +205,9 @@ export async function sendInputToSession(
   } else {
     ensured.runtime.write(
       codexSlashCommand
-        ? buildCodexSlashCommandPtyInput(codexSlashCommand, codexSlashSubmitKey)
+        ? buildCodexSlashCommandPtyInput(codexSlashCommand, composerSubmitKey)
+        : mode === "prompt_paste"
+          ? buildPromptPastePtyInput(data, composerSubmitKey)
         : (dispatchData ?? ""),
     );
   }

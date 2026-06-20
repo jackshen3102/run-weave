@@ -28,6 +28,15 @@ import {
   type TerminalBrowserPersistedState,
   type TerminalBrowserPersistedTabRecord,
 } from "./terminal-browser-tabs-state.js";
+import {
+  clearTerminalBrowserAnnotation,
+  clearTerminalBrowserAnnotationsForWindow,
+  deleteTerminalBrowserAnnotation,
+  listTerminalBrowserAnnotations,
+  startTerminalBrowserAnnotation,
+  stopTerminalBrowserAnnotation,
+  submitTerminalBrowserAnnotations,
+} from "./terminal-browser-annotation.js";
 import { getIsQuitting } from "./app-state.js";
 
 interface TerminalBrowserBounds {
@@ -586,6 +595,20 @@ function sendTerminalBrowserTabActivatedFromProxy(
   win.webContents.send("terminal-browser:tab-activated-from-proxy", update);
 }
 
+function clearTerminalBrowserAnnotationAndNotify(
+  win: BrowserWindow,
+  tabId: string,
+): void {
+  clearTerminalBrowserAnnotation(getTerminalBrowserKey(win, tabId));
+  if (win.isDestroyed() || win.webContents.isDestroyed()) {
+    return;
+  }
+  win.webContents.send("terminal-browser:annotation-updated", {
+    tabId,
+    state: { active: false, annotations: [] },
+  });
+}
+
 function getExistingTerminalBrowserEntry(
   win: BrowserWindow,
   tabId: string,
@@ -661,9 +684,11 @@ function getOrCreateTerminalBrowserView(
     sendTerminalBrowserTabUpdate(win, tabId, entry, false);
   });
   view.webContents.on("did-navigate", () => {
+    clearTerminalBrowserAnnotationAndNotify(win, tabId);
     sendTerminalBrowserTabUpdate(win, tabId, entry);
   });
   view.webContents.on("did-navigate-in-page", () => {
+    clearTerminalBrowserAnnotationAndNotify(win, tabId);
     sendTerminalBrowserTabUpdate(win, tabId, entry);
   });
   view.webContents.on("page-title-updated", () => {
@@ -750,6 +775,7 @@ function closeTerminalBrowserEntry(
   }
   detachTerminalBrowserDeviceDebugger(entry);
   terminalBrowserEntries.delete(key);
+  clearTerminalBrowserAnnotation(key);
   terminalBrowserEvents.emit("tab-closed", { targetId: entry.targetId });
   if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
     win.webContents.send("terminal-browser:tab-closed", { tabId });
@@ -762,11 +788,13 @@ function closeTerminalBrowserEntry(
 
 export function closeTerminalBrowsersForWindow(windowId: number): void {
   attachedTerminalBrowserByWindowId.delete(windowId);
+  clearTerminalBrowserAnnotationsForWindow(windowId);
   for (const [key, entry] of terminalBrowserEntries) {
     if (entry.windowId !== windowId) {
       continue;
     }
     terminalBrowserEntries.delete(key);
+    clearTerminalBrowserAnnotation(key);
     terminalBrowserEvents.emit("tab-closed", { targetId: entry.targetId });
     detachTerminalBrowserDeviceDebugger(entry);
     entry.view.webContents.close();
@@ -1303,4 +1331,90 @@ export function registerTerminalBrowserHandlers(): void {
     }
     closeTerminalBrowserEntry(win, tabId);
   });
+
+  ipcMain.handle(
+    "terminal-browser:annotation-start",
+    async (event, tabId: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || typeof tabId !== "string") {
+        throw new Error("Invalid browser annotation request");
+      }
+      const entry = getExistingTerminalBrowserEntry(win, tabId, "annotate");
+      const state = await startTerminalBrowserAnnotation(
+        getTerminalBrowserKey(win, tabId),
+        entry.view.webContents,
+      );
+      win.webContents.send("terminal-browser:annotation-updated", {
+        tabId,
+        state,
+      });
+      return state;
+    },
+  );
+
+  ipcMain.handle(
+    "terminal-browser:annotation-stop",
+    async (event, tabId: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || typeof tabId !== "string") {
+        return { active: false, annotations: [] };
+      }
+      const state = await stopTerminalBrowserAnnotation(
+        getTerminalBrowserKey(win, tabId),
+      );
+      win.webContents.send("terminal-browser:annotation-updated", {
+        tabId,
+        state,
+      });
+      return state;
+    },
+  );
+
+  ipcMain.handle(
+    "terminal-browser:annotation-list",
+    async (event, tabId: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || typeof tabId !== "string") {
+        return { active: false, annotations: [] };
+      }
+      return await listTerminalBrowserAnnotations(getTerminalBrowserKey(win, tabId));
+    },
+  );
+
+  ipcMain.handle(
+    "terminal-browser:annotation-delete",
+    async (event, tabId: string, annotationId: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || typeof tabId !== "string" || typeof annotationId !== "string") {
+        throw new Error("Invalid browser annotation delete request");
+      }
+      const state = await deleteTerminalBrowserAnnotation(
+        getTerminalBrowserKey(win, tabId),
+        annotationId,
+      );
+      win.webContents.send("terminal-browser:annotation-updated", {
+        tabId,
+        state,
+      });
+      return state;
+    },
+  );
+
+  ipcMain.handle(
+    "terminal-browser:annotation-submit",
+    async (event, tabId: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || typeof tabId !== "string") {
+        throw new Error("Invalid browser annotation submit request");
+      }
+      const submission = await submitTerminalBrowserAnnotations(
+        getTerminalBrowserKey(win, tabId),
+      );
+      win.webContents.send("terminal-browser:annotation-updated", {
+        tabId,
+        state: { active: false, annotations: [] },
+      });
+      return submission;
+    },
+  );
 }

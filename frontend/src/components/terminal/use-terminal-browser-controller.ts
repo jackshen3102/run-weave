@@ -8,14 +8,20 @@ import {
   useState,
 } from "react";
 import {
+  type TerminalBrowserAnnotationState,
   type TerminalBrowserDevicePresetId,
   type TerminalBrowserProxyState,
 } from "@runweave/shared";
 import { aiDiagnosticLog } from "../../features/diagnostic-logs/recorder";
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
+import {
+  createTerminalSessionClipboardImage,
+  sendTerminalInput,
+} from "../../services/terminal";
 import { useTerminalBrowserBounds } from "./use-terminal-browser-bounds";
 import { useTerminalBrowserHeaderRules } from "./use-terminal-browser-header-rules";
+import { buildBrowserAnnotationPrompt } from "./terminal-browser-annotation-prompt";
 import {
   buildTabStateFromElectronSnapshot,
   buildTabUpdateFromElectronSnapshot,
@@ -28,10 +34,16 @@ import {
 
 interface TerminalBrowserToolProps {
   active: boolean;
+  apiBase: string;
+  token: string;
+  terminalSessionId: string | null;
 }
 
 export function useTerminalBrowserController({
   active,
+  apiBase,
+  token,
+  terminalSessionId,
 }: TerminalBrowserToolProps) {
   const tabs = useTerminalPreviewStore((state) => state.browser.tabs);
   const activeTabId = useTerminalPreviewStore(
@@ -71,6 +83,15 @@ export function useTerminalBrowserController({
   const [deviceSwitching, setDeviceSwitching] = useState(false);
   const [headerRulesPanelOpen, setHeaderRulesPanelOpen] = useState(false);
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
+  const [annotationTabId, setAnnotationTabIdState] = useState<string | null>(null);
+  const annotationTabIdRef = useRef<string | null>(null);
+  const [annotationState, setAnnotationState] =
+    useState<TerminalBrowserAnnotationState>({
+      active: false,
+      annotations: [],
+    });
+  const [annotationSubmitting, setAnnotationSubmitting] = useState(false);
+  const [annotationError, setAnnotationError] = useState<string | null>(null);
   const { headerError, headerRules, headerSaving, saveHeaderRules } =
     useTerminalBrowserHeaderRules(isElectron);
   const activeTab = useMemo(
@@ -107,6 +128,11 @@ export function useTerminalBrowserController({
       updateBrowserTab(tabId, buildTabUpdateFromElectronUpdate(update));
     },
   );
+
+  const setAnnotationTabId = (tabId: string | null): void => {
+    annotationTabIdRef.current = tabId;
+    setAnnotationTabIdState(tabId);
+  };
 
   const syncElectronTabs = useMemoizedFn(async (): Promise<void> => {
     try {
@@ -359,6 +385,10 @@ export function useTerminalBrowserController({
       delete navigationSequenceByTabRef.current[tabId];
       clearTabBounds(tabId);
       closeBrowserTab(tabId);
+      if (annotationTabIdRef.current === tabId) {
+        setAnnotationTabId(null);
+        setAnnotationState({ active: false, annotations: [] });
+      }
     });
   }, [isElectron, closeBrowserTab, clearTabBounds]);
 
@@ -382,6 +412,20 @@ export function useTerminalBrowserController({
     setActiveBrowserTab,
     syncActiveTabBounds,
   ]);
+
+  useEffect(() => {
+    if (!isElectron) {
+      return;
+    }
+    return window.electronAPI?.onTerminalBrowserAnnotationUpdated?.(
+      ({ tabId, state }) => {
+        if (annotationTabIdRef.current === tabId || state.active) {
+          setAnnotationTabId(state.active ? tabId : null);
+          setAnnotationState(state);
+        }
+      },
+    );
+  }, [isElectron]);
 
   if (!activeTab) {
     return null;
@@ -469,6 +513,101 @@ export function useTerminalBrowserController({
     }
   };
 
+  const stopAnnotation = async (): Promise<void> => {
+    const tabId = annotationTabId ?? activeTab.id;
+    setAnnotationError(null);
+    try {
+      const state = await window.electronAPI?.terminalBrowserAnnotationStop?.(tabId);
+      setAnnotationState(state ?? { active: false, annotations: [] });
+      setAnnotationTabId(null);
+    } catch (error) {
+      setAnnotationError(
+        error instanceof Error ? error.message : "Failed to stop browser comments",
+      );
+    }
+  };
+
+  const toggleAnnotation = async (): Promise<void> => {
+    if (!isElectron) {
+      return;
+    }
+    if (annotationState.active) {
+      await stopAnnotation();
+      return;
+    }
+    setAnnotationError(null);
+    setHeaderRulesPanelOpen(false);
+    setDevicePanelOpen(false);
+    try {
+      const state =
+        await window.electronAPI?.terminalBrowserAnnotationStart?.(activeTab.id);
+      setAnnotationTabId(activeTab.id);
+      setAnnotationState(state ?? { active: true, annotations: [] });
+    } catch (error) {
+      setAnnotationError(
+        error instanceof Error
+          ? error.message
+          : "Failed to start browser comments",
+      );
+    }
+  };
+
+  const submitAnnotations = async (): Promise<void> => {
+    const tabId = annotationTabId ?? activeTab.id;
+    setAnnotationSubmitting(true);
+    setAnnotationError(null);
+    try {
+      if (!terminalSessionId) {
+        setAnnotationError("Browser comments are ready, but no active terminal is available.");
+        return;
+      }
+      const submission =
+        await window.electronAPI?.terminalBrowserAnnotationSubmit?.(tabId);
+      if (!submission || submission.annotations.length === 0) {
+        setAnnotationError("No browser comments to submit.");
+        return;
+      }
+      let screenshotPath: string | null = null;
+      let submitWarning: string | null = null;
+      if (submission.screenshot) {
+        try {
+          const savedScreenshot = await createTerminalSessionClipboardImage(
+            apiBase,
+            token,
+            terminalSessionId,
+            submission.screenshot,
+          );
+          screenshotPath = savedScreenshot.filePath;
+        } catch (error) {
+          submitWarning =
+            error instanceof Error
+              ? `Browser comments were submitted, but saving the marker screenshot failed: ${error.message}`
+              : "Browser comments were submitted, but saving the marker screenshot failed.";
+        }
+      }
+      const prompt = buildBrowserAnnotationPrompt(submission, {
+        screenshotPath,
+      });
+      setAnnotationState({ active: false, annotations: [] });
+      setAnnotationTabId(null);
+      await sendTerminalInput(apiBase, token, terminalSessionId, {
+        data: prompt,
+        mode: "prompt_paste",
+      });
+      if (submitWarning) {
+        setAnnotationError(submitWarning);
+      }
+    } catch (error) {
+      setAnnotationError(
+        error instanceof Error
+          ? error.message
+          : "Failed to submit browser comments",
+      );
+    } finally {
+      setAnnotationSubmitting(false);
+    }
+  };
+
   const selectDevicePreset = async (
     presetId: TerminalBrowserDevicePresetId,
   ): Promise<void> => {
@@ -522,6 +661,9 @@ export function useTerminalBrowserController({
 
   return {
     activeTab,
+    annotationError,
+    annotationState,
+    annotationSubmitting,
     browserViewRef,
     closeTab,
     createBrowserTab,
@@ -547,9 +689,11 @@ export function useTerminalBrowserController({
     setHeaderPanelOpen,
     stop,
     submitAddress,
+    submitAnnotations,
     surfaceContainerRef,
     tabs,
     toggleProxy,
+    toggleAnnotation,
     updateBrowserTab,
   };
 }

@@ -977,6 +977,7 @@ export function TerminalWorkspaceShell({
                 apiBase={apiBase}
                 token={token}
                 activeProject={activeProject}
+                activeSession={activeSession}
                 widthPx={previewWidthPx}
                 onAuthExpired={onAuthExpired}
                 sessions={sessions}
@@ -1006,6 +1007,7 @@ export function TerminalWorkspaceShell({
                     apiBase={apiBase}
                     token={token}
                     activeProject={activeProject}
+                    activeSession={activeSession}
                     widthPx={previewWidthPx}
                     onAuthExpired={onAuthExpired}
                     sessions={sessions}
