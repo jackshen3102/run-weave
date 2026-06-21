@@ -1,6 +1,6 @@
 # Runweave Agent CLI 控制面
 
-`rw` 是 Runweave backend 面向外部 agent 的命令行控制面，用于发现应用状态、管理 terminal project/session、发送输入、读取 terminal 上下文并回收明确指定的 session。CLI 不直接操作 tmux，也不接管持续交互式终端。
+`rw` 是 Runweave backend 面向外部 agent 的命令行控制面，用于发现应用状态、管理 terminal project/session、发送输入、读取 terminal 上下文并回收明确指定的 project/session。CLI 不直接操作 tmux，也不接管持续交互式终端。
 
 ## 最小接入
 
@@ -126,6 +126,7 @@ completion event 依赖 Runweave tmux-backed terminal 内启动的 AI CLI 继承
 
 ```bash
 rw terminal delete "$TERMINAL_ID" --json
+rw project delete "$PROJECT_ID" --json
 ```
 
-CLI 不提供批量删除，也不会按 project 或 cwd 推断删除目标。
+CLI 不提供批量删除，也不会按 name、path、project 或 cwd 推断删除目标。删除 project 会级联删除该 project 下的 terminal session。
