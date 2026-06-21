@@ -19,9 +19,13 @@ export async function runProjectCommand(
     env: NodeJS.ProcessEnv;
   },
 ): Promise<void> {
-  if (subcommand !== "ensure" && subcommand !== "list") {
+  if (
+    subcommand !== "ensure" &&
+    subcommand !== "list" &&
+    subcommand !== "delete"
+  ) {
     throw new CliError(
-      "Usage: rw project <list|ensure> [options]",
+      "Usage: rw project <list|ensure|delete> [options]",
       2,
     );
   }
@@ -40,6 +44,16 @@ export async function runProjectCommand(
     return;
   }
 
+  if (subcommand === "delete") {
+    const projectId = requireProjectId(parsed.positionals);
+    await client.deleteProject(projectId);
+    writeOutput(io.stdout, mode, {
+      projectId,
+      deleted: true,
+    });
+    return;
+  }
+
   const name = requireStringOption(parsed.options, "name");
   const normalizedPath = await realpath(
     path.resolve(requireStringOption(parsed.options, "path")),
@@ -51,4 +65,12 @@ export async function runProjectCommand(
     existing ?? (await client.createProject({ name, path: normalizedPath }));
 
   writeOutput(io.stdout, mode, project);
+}
+
+function requireProjectId(positionals: string[]): string {
+  const projectId = positionals[0];
+  if (!projectId) {
+    throw new CliError("Missing project id", 2);
+  }
+  return projectId;
 }
