@@ -103,6 +103,7 @@ export const TerminalRenderer = forwardRef<
     fontFamily = DEFAULT_FONT_FAMILY,
     fontSize = 13,
     lineHeight = 1.2,
+    readOnly = false,
     renderer = "auto",
     scrollbackLines = 5000,
     theme = DEFAULT_THEME,
@@ -122,6 +123,7 @@ export const TerminalRenderer = forwardRef<
   const onBottomStateChangeRef = useRef(onBottomStateChange);
   const onInputRef = useRef(onInput);
   const onResizeRef = useRef(onResize);
+  const readOnlyRef = useRef(readOnly);
   const resizeTimerRef = useRef<number | null>(null);
   const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const lastBottomStateRef = useRef<boolean | null>(null);
@@ -141,6 +143,9 @@ export const TerminalRenderer = forwardRef<
   useEffect(() => {
     onResizeRef.current = onResize;
   }, [onResize]);
+  useEffect(() => {
+    readOnlyRef.current = readOnly;
+  }, [readOnly]);
 
   const fit = () => {
     const terminal = terminalRef.current;
@@ -244,7 +249,8 @@ export const TerminalRenderer = forwardRef<
 
     const terminal = new Terminal({
       allowProposedApi: true,
-      cursorBlink: true,
+      cursorBlink: !readOnly,
+      disableStdin: readOnly,
       fontFamily,
       fontSize,
       lineHeight,
@@ -265,6 +271,9 @@ export const TerminalRenderer = forwardRef<
     terminal.unicode.activeVersion = "11";
 
     terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      if (readOnlyRef.current) {
+        return false;
+      }
       if (isShiftEnterLineFeed(event)) {
         event.preventDefault();
         onInputRef.current?.("\n");
@@ -273,6 +282,9 @@ export const TerminalRenderer = forwardRef<
       return true;
     });
     const dataDisposable = terminal.onData((data) => {
+      if (readOnlyRef.current) {
+        return;
+      }
       if (isTerminalAutoResponse(data)) {
         return;
       }
@@ -357,6 +369,7 @@ export const TerminalRenderer = forwardRef<
     fontSize,
     lineHeight,
     onTerminalReady,
+    readOnly,
     renderer,
     scrollbackLines,
     theme,
