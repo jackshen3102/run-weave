@@ -13,7 +13,7 @@
 - `rw terminal send --mode line` 不重复追加回车；默认 raw + `--enter` 兼容旧行为；`codex_slash_command` 错误不被 CLI 吞掉。
 - `rw terminal send --agent <name>` 不归一化 agent 名；若未显式传 `--mode`，默认按 `line` 投递。
 - `rw terminal send --agent <name>` 会先确保 terminal 处于该 agent 的 `agent_idle` 或 `agent_running` 状态；若已有其它 agent，必须传 `--agent-overwrite` 才会先退出旧 agent 再启动目标 agent。
-- `rw terminal delete` 只删除显式传入的 terminal id，不做批量推断。
+- `rw project delete` / `rw terminal delete` 只删除显式传入的 project / terminal id，不做批量推断。
 - 通过 `rw project ensure` / `rw terminal create` 创建的项目和终端，会经 `/ws/terminal-events` 推送到 Web/App，界面无需刷新即可新增 project/card/tab。
 - 所有错误路径使用非 0 exit code，并保留可读错误 message。
 
@@ -114,6 +114,9 @@ $RW_BIN auth login \
 | RW-PROJ-004 | path 不存在             | `$RW_BIN project ensure --name bad --path /path/does/not/exist --json`                            | 非 0 exit code；stderr 有 realpath/path 错误                |
 | RW-PROJ-005 | 缺少 name               | `$RW_BIN project ensure --path "$PWD" --json`                                                     | exit code `2`；stderr 包含 `Missing required option --name` |
 | RW-PROJ-006 | 缺少 path               | `$RW_BIN project ensure --name rw-test --json`                                                    | exit code `2`；stderr 包含 `Missing required option --path` |
+| RW-PROJ-007 | 删除明确 id             | `$RW_BIN project delete "$PROJECT_ID" --json`                                                     | 输出 `{ "projectId": "...", "deleted": true }`              |
+| RW-PROJ-008 | 删除 missing            | `$RW_BIN project delete missing-project --json`                                                   | exit code `4`；不伪装成功                                   |
+| RW-PROJ-009 | 缺少 project id         | `$RW_BIN project delete --json`                                                                   | exit code `2`；stderr `Missing project id`                  |
 
 ## Terminal 创建测试
 
@@ -213,7 +216,7 @@ $RW_BIN terminal show "$COMMAND_TERMINAL_ID" --json \
 | RW-WS-001 | 后端发布 project 创建事件     | 调用 `POST /api/terminal/project` 或 `$RW_BIN project ensure ...`                                                       | backend route 测试中 `terminalEventService` 记录 `project_created`   |
 | RW-WS-002 | 后端发布 terminal 创建事件    | 调用 `POST /api/terminal/session` 或 `$RW_BIN terminal create ...`                                                      | backend route 测试中记录 `terminal_session_created`                  |
 | RW-WS-003 | 后端发布 terminal 删除事件    | 调用 `DELETE /api/terminal/session/:id` 或 `$RW_BIN terminal delete ...`                                                | backend route 测试中记录 `terminal_session_deleted`                  |
-| RW-WS-004 | 后端发布 project 删除事件     | 调用 `DELETE /api/terminal/project/:id`                                                                                 | backend route 测试中记录 `project_deleted`，含级联 session ids       |
+| RW-WS-004 | 后端发布 project 删除事件     | 调用 `DELETE /api/terminal/project/:id` 或 `$RW_BIN project delete ...`                                                 | backend route 测试中记录 `project_deleted`，含级联 session ids       |
 | RW-WS-005 | Web 实时刷新新增 project/tab  | 运行 `pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "adds externally created"`    | 页面无需刷新，刷新权威列表后出现外部创建的 project 和 terminal tab   |
 | RW-WS-006 | Web 实时刷新删除 terminal tab | 运行 `pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "removes externally deleted"` | 外部删除 terminal 后 tab 从页面消失                                  |
 | RW-WS-007 | Catchup 不重复                | Web 断开 terminal-events WS 后创建/删除 project/session，再重连                                                         | catchup 触发权威列表刷新，不出现重复或幽灵 project/tab               |

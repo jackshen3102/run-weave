@@ -8,6 +8,15 @@ const workspaceRoot = path.resolve(import.meta.dirname, "..");
 const appName = process.env.RUNWEAVE_LOCAL_UPDATE_APP_NAME ?? "Runweave";
 const appPath =
   process.env.RUNWEAVE_LOCAL_UPDATE_APP_PATH ?? `/Applications/${appName}.app`;
+const releaseAppPath =
+  process.env.RUNWEAVE_LOCAL_UPDATE_SOURCE_APP_PATH ??
+  path.join(
+    workspaceRoot,
+    "electron",
+    "release",
+    "mac-arm64",
+    `${appName}.app`,
+  );
 const feedUrl = withTrailingSlash(
   process.env.BROWSER_VIEWER_LOCAL_UPDATES_URL ??
     "http://127.0.0.1:5500/updates/mac/",
@@ -43,6 +52,36 @@ function run(command, args, options = {}) {
   });
 }
 
+function runCapture(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd ?? workspaceRoot,
+      env: options.env ?? process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      resolve({
+        ok: code === 0,
+        code: code ?? 1,
+        signal,
+        stdout,
+        stderr,
+      });
+    });
+  });
+}
+
 async function runChecked(command, args, options = {}) {
   const result = await run(command, args, options);
 
@@ -51,6 +90,61 @@ async function runChecked(command, args, options = {}) {
       `${command} ${args.join(" ")} failed with exit code ${result.code}`,
     );
   }
+}
+
+async function getRunningAppLines() {
+  const result = await runCapture("pgrep", ["-fl", appName]);
+
+  if (!result.ok && result.code !== 1) {
+    throw new Error(`pgrep failed with exit code ${result.code}`);
+  }
+
+  return result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => line.includes(`${appName}.app/Contents/`));
+}
+
+async function waitForAppExit() {
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    if ((await getRunningAppLines()).length === 0) {
+      return;
+    }
+
+    await wait(1_000);
+  }
+
+  const remaining = await getRunningAppLines();
+  if (remaining.length > 0) {
+    console.warn("[local-update] force stopping remaining Runweave processes");
+    await run("pkill", ["-f", `${appName}.app/Contents/`]);
+  }
+
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    if ((await getRunningAppLines()).length === 0) {
+      return;
+    }
+
+    await wait(1_000);
+  }
+
+  throw new Error(`${appName} did not exit cleanly`);
+}
+
+async function waitForInstalledAppStart() {
+  const expectedMarker = `${appPath}/Contents/`;
+
+  for (let attempt = 1; attempt <= 30; attempt += 1) {
+    const runningLines = await getRunningAppLines();
+    if (runningLines.some((line) => line.includes(expectedMarker))) {
+      return;
+    }
+
+    await wait(1_000);
+  }
+
+  throw new Error(`${appName} did not start from ${appPath}`);
 }
 
 function requestFeed(url) {
@@ -93,7 +187,28 @@ async function quitApp() {
   }
 
   await run("osascript", ["-e", `tell application "${appName}" to quit`]);
-  await wait(3_000);
+  await waitForAppExit();
+}
+
+async function installBuiltApp() {
+  if (process.platform !== "darwin") {
+    return;
+  }
+
+  await fs.access(releaseAppPath);
+
+  const appDir = path.dirname(appPath);
+  const tempAppPath = path.join(
+    appDir,
+    `.${appName}.app.updating-${Date.now()}`,
+  );
+
+  console.log(`[local-update] installing ${releaseAppPath} to ${appPath}`);
+  await fs.rm(tempAppPath, { force: true, recursive: true });
+  await runChecked("ditto", [releaseAppPath, tempAppPath]);
+  await run("xattr", ["-dr", "com.apple.quarantine", tempAppPath]);
+  await fs.rm(appPath, { force: true, recursive: true });
+  await fs.rename(tempAppPath, appPath);
 }
 
 async function openApp() {
@@ -101,12 +216,9 @@ async function openApp() {
     return;
   }
 
-  try {
-    await fs.access(appPath);
-    await runChecked("open", [appPath]);
-  } catch {
-    await runChecked("open", ["-a", appName]);
-  }
+  await fs.access(appPath);
+  await runChecked("open", ["-n", appPath]);
+  await waitForInstalledAppStart();
 }
 
 async function main() {
@@ -128,6 +240,7 @@ async function main() {
 
   console.log(`[local-update] restarting ${appName}`);
   await quitApp();
+  await installBuiltApp();
   await openApp();
   console.log(`[local-update] done`);
 }

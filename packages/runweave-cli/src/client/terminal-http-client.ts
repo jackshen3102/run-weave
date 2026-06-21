@@ -36,6 +36,15 @@ export class TerminalHttpClient {
     );
   }
 
+  async deleteProject(projectId: string): Promise<void> {
+    await this.auth.requestVoid(
+      `/api/terminal/project/${encodeURIComponent(projectId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+  }
+
   listSessions(): Promise<TerminalSessionListItem[]> {
     return this.auth.requestJson<TerminalSessionListItem[]>(
       "/api/terminal/session",
