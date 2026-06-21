@@ -1,6 +1,6 @@
 {
   "name": "@runweave/electron",
-  "version": "0.120.0",
+  "version": "0.122.0",
   "private": true,
   "license": "MIT",
   "type": "module",

@@ -1,13 +1,13 @@
 ---
 name: daily-refactor
-description: 仅当用户明确要求使用 daily-refactor skill 时使用；用于每天先确保 main 已更新到最新 origin/main，再按 main 分支上一天 00:00 到当前的业务代码提交范围执行重构、验证、提交、push 并创建 GitHub PR。
+description: 仅当用户明确要求使用 daily-refactor skill 时使用；用于每天先确保 main 已更新到最新 origin/main，再按 main 分支上一天 00:00 到当前的业务代码提交范围执行重构、验证，然后调用 toolkit:github-pr 提交并合并 PR。
 ---
 
 # 每日重构
 
 只有用户明确调用 `daily-refactor` skill 时才执行；未明确调用时不要使用这个 skill。
 
-每天唤起后直接完成一次端到端重构交付：先确保本地 `main` 已更新到最新 `origin/main`，再基于 `main` 分支上一天 00:00 到当前的 commit 范围，分析业务代码变更，做重构前基线验证，重构业务代码，做重构后回归验证，提交、push，并创建 GitHub PR。
+每天唤起后直接完成一次端到端重构交付：先确保本地 `main` 已更新到最新 `origin/main`，再基于 `main` 分支上一天 00:00 到当前的 commit 范围，分析业务代码变更，做重构前基线验证，重构业务代码，做重构后回归验证，然后调用 `toolkit:github-pr` 完成提交、push、PR、门禁跟进和合并。
 
 ## 范围
 
@@ -25,11 +25,8 @@ description: 仅当用户明确要求使用 daily-refactor skill 时使用；用
 4. 重构前先跑基线验证。
 5. 完成代码重构。
 6. 重构后跑同一组回归验证，确认原受影响行为没有被破坏。
-7. 提交代码。
-8. push 到远程。
-9. 创建 GitHub PR。
-10. 等待 PR CI 通过；如果 CI 失败，先修复并重新验证、push，再继续等待 CI 通过。
-11. 回复本次重构内容、验证结果、CI 结果、commit、分支和 PR 链接。
+7. 调用 `toolkit:github-pr`，由该 skill 负责提交、push、创建 PR、等待门禁和合并。
+8. 回复本次重构内容、验证结果、CI 结果、commit、分支、PR 链接和合并状态。
 
 ## 验证回归
 
