@@ -62,7 +62,8 @@ function requestFeed(url) {
       { method: "GET", timeout: 2_000 },
       (response) => {
         response.resume();
-        resolve((response.statusCode ?? 500) < 500);
+        const statusCode = response.statusCode ?? 500;
+        resolve(statusCode >= 200 && statusCode < 400);
       },
     );
 
