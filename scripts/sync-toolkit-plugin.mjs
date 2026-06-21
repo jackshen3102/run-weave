@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -16,6 +16,14 @@ const pluginRelativePath = "plugins/toolkit";
 const marketplaceRelativePath = ".agents/plugins/marketplace.json";
 const pluginDir = path.join(repoRoot, pluginRelativePath);
 const manifestPath = path.join(pluginDir, ".codex-plugin", "plugin.json");
+const hooksConfigPath = path.join(pluginDir, "hooks.json");
+const toolkitHooksDir = path.join(pluginDir, "hooks");
+const electronHooksDir = path.join(repoRoot, "electron", "resources", "hooks");
+const toolkitHookAssets = [
+  "feishu_stop_notify.sh",
+  "runweave-hook-bridge.cjs",
+  "runweave-hook-dispatch.cjs",
+];
 const marketplacePath = path.join(repoRoot, marketplaceRelativePath);
 const codexHome = process.env.CODEX_HOME || path.join(homedir(), ".codex");
 const syncDisabled = process.env.RUNWEAVE_SKIP_TOOLKIT_PLUGIN_SYNC === "1";
@@ -31,19 +39,23 @@ if (ifStaged && !hasStagedToolkitChanges()) {
 }
 
 assertFile(manifestPath);
+assertFile(hooksConfigPath);
 assertFile(marketplacePath);
 
 const marketplace = readJson(marketplacePath);
 const manifest = readJson(manifestPath);
+const hooksConfig = readJson(hooksConfigPath);
 const marketplaceName = marketplace.name;
 const pluginName = manifest.name;
 
 if (!marketplaceName || !pluginName) {
   throw new Error("Toolkit marketplace or plugin manifest is missing name.");
 }
+assertToolkitHooksConfig(hooksConfig);
 
 log(`Syncing ${pluginName}@${marketplaceName} from ${pluginRelativePath}.`);
 
+syncToolkitHookAssets();
 validateCodexPlugin();
 updateCodexCachebuster();
 validateCodexPlugin();
@@ -51,7 +63,14 @@ installForCodex(pluginName, marketplaceName);
 installForTrae(pluginName);
 
 if (shouldStageCachebuster) {
-  run("git", ["add", path.relative(repoRoot, manifestPath)]);
+  run("git", [
+    "add",
+    path.relative(repoRoot, manifestPath),
+    path.relative(repoRoot, hooksConfigPath),
+    ...toolkitHookAssets.map((asset) =>
+      path.relative(repoRoot, path.join(electronHooksDir, asset)),
+    ),
+  ]);
 }
 
 log(
@@ -76,6 +95,60 @@ function hasStagedToolkitChanges() {
     .filter(Boolean);
 
   return output.length > 0;
+}
+
+function syncToolkitHookAssets() {
+  mkdirSync(electronHooksDir, { recursive: true });
+  for (const asset of toolkitHookAssets) {
+    const source = path.join(toolkitHooksDir, asset);
+    if (!existsSync(source)) {
+      continue;
+    }
+
+    copyFileSync(source, path.join(electronHooksDir, asset));
+  }
+}
+
+function assertToolkitHooksConfig(hooksConfig) {
+  const requiredEvents = [
+    "PostToolUse",
+    "SessionStart",
+    "Stop",
+    "SubagentStop",
+    "UserPromptSubmit",
+  ];
+  if (!hooksConfig || typeof hooksConfig !== "object") {
+    throw new Error("Toolkit hooks.json must be an object.");
+  }
+  if (!hooksConfig.hooks || typeof hooksConfig.hooks !== "object") {
+    throw new Error("Toolkit hooks.json is missing hooks.");
+  }
+
+  for (const event of requiredEvents) {
+    const entries = hooksConfig.hooks[event];
+    if (!Array.isArray(entries) || entries.length === 0) {
+      throw new Error(`Toolkit hooks.json is missing ${event}.`);
+    }
+
+    const commands = entries.flatMap((entry) =>
+      Array.isArray(entry?.hooks)
+        ? entry.hooks
+            .map((hook) => hook?.command)
+            .filter((command) => typeof command === "string")
+        : [],
+    );
+    if (
+      !commands.some((command) =>
+        command.includes(
+          "${CLAUDE_PLUGIN_ROOT:-__PLUGIN_DIR__}/hooks/runweave-hook-dispatch.cjs",
+        ),
+      )
+    ) {
+      throw new Error(
+        `Toolkit hooks.json ${event} does not invoke the Runweave dispatcher.`,
+      );
+    }
+  }
 }
 
 function validateCodexPlugin() {
