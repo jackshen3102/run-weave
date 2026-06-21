@@ -21,6 +21,24 @@ function normalizeSourceCols(sourceCols?: number): number | null {
   return Math.floor(sourceCols);
 }
 
+export function countTerminalLines(output: string): number {
+  if (!output) {
+    return 0;
+  }
+
+  let lines = 1;
+  for (let index = 0; index < output.length; index += 1) {
+    if (output.charCodeAt(index) === 10) {
+      lines += 1;
+    }
+  }
+  return lines;
+}
+
+export function normalizeTerminalHistoryOutput(output: string): string {
+  return output.replace(/\r?\n/g, "\r\n");
+}
+
 export function syncTerminalHistorySize({
   terminal,
   fitAddon,
@@ -58,7 +76,7 @@ export function writeTerminalHistoryOutput({
     return;
   }
 
-  const normalizedOutput = output.replace(/\r?\n/g, "\r\n");
+  const normalizedOutput = normalizeTerminalHistoryOutput(output);
   terminal.write(normalizedOutput, () => {
     syncSize();
     terminal.scrollToBottom();

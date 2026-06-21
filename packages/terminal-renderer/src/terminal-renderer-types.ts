@@ -37,6 +37,7 @@ export interface TerminalRendererProps {
   fontFamily?: string;
   fontSize?: number;
   lineHeight?: number;
+  readOnly?: boolean;
   renderer?: TerminalRendererPreference;
   scrollbackLines?: number;
   theme?: TerminalRendererTheme;

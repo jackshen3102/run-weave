@@ -17,6 +17,7 @@ import type {
   TerminalPreviewFileResponse,
   TerminalPreviewFileSearchResponse,
   TerminalPreviewGitChangesResponse,
+  TerminalSessionHistoryResponse,
   TerminalSessionStatusResponse,
   TerminalStateResponse,
 } from "@runweave/shared";
@@ -61,6 +62,22 @@ export async function getTerminalSession(
   return requestJson<TerminalSessionStatusResponse>(
     apiBase,
     `/api/terminal/session/${encodeURIComponent(terminalSessionId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalHistory(
+  apiBase: string,
+  accessToken: string,
+  terminalSessionId: string,
+): Promise<TerminalSessionHistoryResponse> {
+  return requestJson<TerminalSessionHistoryResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/history`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
