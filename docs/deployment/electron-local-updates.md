@@ -11,7 +11,36 @@
 
 ## 项目能力
 
-项目侧保留三个命令：
+项目侧推荐使用一个统一入口：
+
+```bash
+pnpm runweave:update
+```
+
+该命令可以从任意 worktree 执行。默认 `auto` 模式会读取上一次本地更新状态：
+
+- 若只涉及前端、后端 bundle 或共享 runtime 合约，构建并安装 runtime 包，然后重启客户端加载新 runtime。
+- 若涉及 Electron 主进程、preload、菜单/托盘/updater、resources、builder 配置或本地更新脚本，重新打包 `.app`，替换 `/Applications/Runweave.app`，再重新打开。
+- 首次没有本地更新状态时，为避免漏掉 Electron shell 变更，默认选择完整 app 更新。
+
+可选参数：
+
+```bash
+pnpm runweave:update --mode runtime
+pnpm runweave:update --mode app
+pnpm runweave:update --repo /Users/bytedance/Code/browser-hub/feature
+pnpm runweave:update --dry-run
+```
+
+完整 app 更新会优先使用 `RUNWEAVE_CODESIGN_IDENTITY` 环境变量。未显式配置时，会读取 `backend/.env` 中的 `RUNWEAVE_CODESIGN_IDENTITY`；若该配置为空或身份已不可用，会自动选择本机钥匙串里的第一个可用 codesigning identity，并写回 `backend/.env`。找不到可用身份时才回退到 ad-hoc。若要减少 macOS TCC 在 Desktop/Documents 等受保护目录上的重复授权，可以显式固定签名身份：
+
+```bash
+RUNWEAVE_CODESIGN_IDENTITY="Apple Development: ..." pnpm runweave:update --mode app
+```
+
+测试用例见 `docs/testing/runweave-local-client-update-test-cases.md`。
+
+项目侧仍保留三个底层命令：
 
 ```bash
 pnpm publish:electron:local-updates
