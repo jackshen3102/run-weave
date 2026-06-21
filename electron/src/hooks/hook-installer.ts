@@ -28,6 +28,7 @@ type JsonReadResult =
   | { status: "valid"; value: JsonRecord };
 
 const BRIDGE_BASENAME = "runweave-hook-bridge";
+const LAUNCHER_SCRIPT_BASENAME = "runweave-hook-bridge.cjs";
 const LEGACY_BRIDGE_BASENAME = "browser-viewer-hook-bridge";
 const BACKUP_SUFFIX = ".runweave-hook-backup";
 const FEISHU_SCRIPT_BASENAME = "feishu_stop_notify.sh";
@@ -44,14 +45,9 @@ const CLAUDE_EVENTS = [
   "PostToolUse",
 ];
 
-const CODEX_EVENTS = ["SessionStart", "UserPromptSubmit", "Stop"];
-// trae cli reads `~/.trae/traecli.toml` and uses TOML CamelCase event names.
-const TRAE_TOML_EVENTS = [
-  "PostToolUse",
-  "Stop",
-  "SubagentStop",
-  "UserPromptSubmit",
-] as const;
+// Compatibility cleanup for legacy global Trae CLI hooks in
+// `~/.trae/traecli.toml`. New Trae plugin hooks live in
+// `plugins/toolkit/hooks.json`.
 const RUNWEAVE_TRAE_TOML_FENCE_BEGIN =
   "# >>> runweave-hooks (managed by Runweave) >>>";
 const RUNWEAVE_TRAE_TOML_FENCE_END =
@@ -160,27 +156,6 @@ function isLegacyCodexNotifyHook(
   return legacyCommands.has(executable);
 }
 
-export function renderTraeTomlHookBlock(command: string): string {
-  const hookCommand = `${command} --source trae`;
-  // Single-quoted TOML strings are literal — no escaping needed for paths
-  // and arguments without single quotes. The bridge path and `--source trae`
-  // never contain single quotes, so this is safe.
-  const lines: string[] = [RUNWEAVE_TRAE_TOML_FENCE_BEGIN];
-  for (const event of TRAE_TOML_EVENTS) {
-    lines.push(
-      `[[hooks.${event}]]`,
-      "",
-      `[[hooks.${event}.hooks]]`,
-      `command = '${hookCommand}'`,
-      'timeout = "unlimited"',
-      'type = "command"',
-      "",
-    );
-  }
-  lines.push(RUNWEAVE_TRAE_TOML_FENCE_END);
-  return lines.join("\n");
-}
-
 export function buildLauncherScript(): string {
   return [
     "#!/usr/bin/env node",
@@ -227,6 +202,9 @@ export function buildLauncherScript(): string {
     "}",
     "",
     "function notifyDesktop(source) {",
+    '  if (process.env.RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY === "1") {',
+    "    return;",
+    "  }",
     '  if (process.platform !== "darwin") {',
     "    return;",
     "  }",
@@ -481,7 +459,7 @@ export function buildLauncherScript(): string {
     "  const source = normalizeSource(args.source);",
     "  const completionReason = normalizeReason(args.reason);",
     '  const threadId = source === "codex" ? readThreadId(payload) : null;',
-    "  const stateHookEvent = (source === \"codex\" || source === \"trae\") ? toAgentHookStateEvent(normalizedEvent) : null;",
+    '  const stateHookEvent = (source === "codex" || source === "trae") ? toAgentHookStateEvent(normalizedEvent) : null;',
     '  const shouldRecordCompletion = completionReason !== "hook_stop" || STOP_EVENTS.has(normalizedEvent);',
     "",
     "  const endpoint = process.env.RUNWEAVE_HOOK_ENDPOINT;",
@@ -491,7 +469,7 @@ export function buildLauncherScript(): string {
     "  const token = process.env.RUNWEAVE_HOOK_TOKEN;",
     "  const terminalSessionId = process.env.RUNWEAVE_TERMINAL_SESSION_ID;",
     '  appendDebugLog("hook bridge invoked", {',
-    "    rawEvent: String(rawEvent || \"Unknown\"),",
+    '    rawEvent: String(rawEvent || "Unknown"),',
     "    normalizedEvent,",
     "    source,",
     "    terminalSessionId: terminalSessionId || null,",
@@ -505,12 +483,12 @@ export function buildLauncherScript(): string {
     "    shouldRecordCompletion,",
     "  });",
     "  // Only notify / report for completions inside a Runweave terminal. The hook",
-    "  // is installed into the user's global Claude/Codex/Trae config, so without",
+    "  // can be installed through AI CLI hook config or plugins, so without",
     "  // this gate every AI CLI stop in any external terminal would trigger desktop",
     "  // and Feishu notifications.",
     "  if (!token || !terminalSessionId) {",
     '    appendDebugLog("hook bridge skipped missing env", {',
-    "      rawEvent: String(rawEvent || \"Unknown\"),",
+    '      rawEvent: String(rawEvent || "Unknown"),',
     "      hasToken: Boolean(token),",
     "      hasTerminalSessionId: Boolean(terminalSessionId),",
     "      endpoint: redactEndpoint(endpoint),",
@@ -544,7 +522,7 @@ export function buildLauncherScript(): string {
     "    });",
     '    appendDebugLog("hook bridge posted completion hook", {',
     "      terminalSessionId,",
-    "      rawEvent: String(rawEvent || \"Stop\"),",
+    '      rawEvent: String(rawEvent || "Stop"),',
     "      endpoint: redactEndpoint(completionEndpoint),",
     "      ...result,",
     "    });",
@@ -589,11 +567,7 @@ export async function installNotifyAssets(
   options: HookInstallerOptions = {},
 ): Promise<void> {
   const context = resolveHookInstallerContext(options);
-  const source = path.join(
-    context.resourcesDir,
-    "hooks",
-    FEISHU_SCRIPT_BASENAME,
-  );
+  const source = await resolveHookAssetPath(context, FEISHU_SCRIPT_BASENAME);
   if (!(await fileExists(source))) {
     return;
   }
@@ -611,9 +585,10 @@ export async function writeLauncherScript(
   const context = resolveHookInstallerContext(options);
   const launcherDir = getLauncherDir(context.homeDir);
   const launcherPath = getLauncherPath(context.homeDir);
+  const launcherScript = await loadLauncherScript(context);
 
   await mkdir(launcherDir, { recursive: true });
-  await writeFile(launcherPath, buildLauncherScript(), "utf8");
+  await writeFile(launcherPath, launcherScript, "utf8");
   await chmod(launcherPath, 0o755);
 }
 
@@ -666,34 +641,48 @@ export async function installCodexHooks(
 
   const existing =
     existingResult.status === "valid" ? existingResult.value : {};
-  await backupFile(hooksPath);
 
   const hooks = toHookArrayMap(existing.hooks);
-  for (const event of CODEX_EVENTS) {
-    hooks[event] = mergeJsonHookEntry({
-      existing: toUnknownArray(hooks[event]),
-      command: `${launcherCommand(context)} --source codex`,
-      timeout: 5,
-    });
-  }
-
-  // Remove superseded codex notify entries that the launcher now handles,
-  // so desktop notification / sound / Feishu are not sent twice.
+  let changed = false;
   for (const event of Object.keys(hooks)) {
-    hooks[event] = pruneSupersededCodexHooks(
-      toUnknownArray(hooks[event]),
+    const currentEntries = toUnknownArray(hooks[event]);
+    const nextEntries = pruneSupersededCodexHooks(
+      pruneManagedCodexHooks(currentEntries),
       context.homeDir,
     );
+    hooks[event] = nextEntries;
+    if (JSON.stringify(nextEntries) !== JSON.stringify(currentEntries)) {
+      changed = true;
+    }
   }
 
-  existing.hooks = hooks;
-  await writeJsonFile(hooksPath, existing);
+  if (changed) {
+    await backupFile(hooksPath);
+    existing.hooks = hooks;
+    await writeJsonFile(hooksPath, existing);
+  }
 
   // Strip the legacy top-level `notify = [...]` from ~/.codex/config.toml
   // when it points at our own ~/.codex/notify.sh shim. Without this the
   // bridge launcher (osascript + afplay) and notify.sh fire in parallel,
   // producing duplicated desktop notifications + sounds for every codex Stop.
   await pruneCodexConfigNotify(context);
+}
+
+function pruneManagedCodexHooks(entries: Array<unknown>): Array<unknown> {
+  const result: Array<unknown> = [];
+  for (const entry of entries) {
+    if (!isRecord(entry)) {
+      result.push(entry);
+      continue;
+    }
+
+    const prunedEntry = removeRunweaveHooks(entry);
+    if (prunedEntry) {
+      result.push(prunedEntry);
+    }
+  }
+  return result;
 }
 
 export async function pruneCodexConfigNotify(
@@ -799,37 +788,28 @@ export async function installTraeHooks(
   }
 
   const tomlPath = path.join(configDir, "traecli.toml");
-  await backupFile(tomlPath);
-
   const current = await readTextFile(tomlPath);
-  const nextBlock = renderTraeTomlHookBlock(launcherCommand(context));
-  const nextContent = upsertTraeTomlHookBlock(current, nextBlock);
+  const nextContent = cleanupTraeTomlHookBlock(current);
+  if (nextContent === current) {
+    return;
+  }
 
-  await writeFile(tomlPath, ensureTrailingNewline(nextContent), "utf8");
+  await backupFile(tomlPath);
+  await writeFile(
+    tomlPath,
+    nextContent ? ensureTrailingNewline(nextContent) : "",
+    "utf8",
+  );
 }
 
-export function upsertTraeTomlHookBlock(
-  content: string,
-  block: string,
-): string {
+export function cleanupTraeTomlHookBlock(content: string): string {
   const fenceRegex = createRunweaveTraeFenceRegex();
-
-  const fenceMatch = fenceRegex.exec(content);
-  if (fenceMatch) {
-    const before = stripLegacyTraeBridgeEntries(
-      content.slice(0, fenceMatch.index),
-    );
-    const after = stripLegacyTraeBridgeEntries(
-      content.slice(fenceMatch.index + fenceMatch[0].length),
-    );
-    return collapseBlankLines(`${before}${block}${after}`);
-  }
-
-  const stripped = stripLegacyTraeBridgeEntries(content);
-  if (!stripped.trim()) {
-    return block;
-  }
-  return collapseBlankLines(`${stripped.trimEnd()}\n\n${block}`);
+  const withoutManagedFences = stripManagedTraeFenceMarkers(
+    content.replace(fenceRegex, ""),
+  );
+  return collapseBlankLines(
+    stripLegacyTraeBridgeEntries(withoutManagedFences).trimEnd(),
+  );
 }
 
 function createRunweaveTraeFenceRegex(): RegExp {
@@ -843,12 +823,24 @@ function createRunweaveTraeFenceRegex(): RegExp {
   return new RegExp(
     fences
       .map(
-        ([begin, end]) =>
-          `${escapeRegex(begin)}[\\s\\S]*?${escapeRegex(end)}`,
+        ([begin, end]) => `${escapeRegex(begin)}[\\s\\S]*?${escapeRegex(end)}`,
       )
       .join("|"),
     "g",
   );
+}
+
+function stripManagedTraeFenceMarkers(content: string): string {
+  const markers = [
+    RUNWEAVE_TRAE_TOML_FENCE_BEGIN,
+    RUNWEAVE_TRAE_TOML_FENCE_END,
+    LEGACY_RUNWEAVE_TRAE_TOML_FENCE_BEGIN,
+    LEGACY_RUNWEAVE_TRAE_TOML_FENCE_END,
+  ];
+  return content
+    .split("\n")
+    .filter((line) => !markers.includes(line.trim()))
+    .join("\n");
 }
 
 // Strip any pre-existing un-fenced [[hooks.<Event>]] paragraphs that point at
@@ -985,6 +977,46 @@ function getDefaultResourcesDir(): string {
     "..",
     "resources",
   );
+}
+
+function getDefaultToolkitHooksDir(): string {
+  return path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "..",
+    "plugins",
+    "toolkit",
+    "hooks",
+  );
+}
+
+async function resolveHookAssetPath(
+  context: HookInstallerContext,
+  basename: string,
+): Promise<string> {
+  const packagedAsset = path.join(context.resourcesDir, "hooks", basename);
+  if (await fileExists(packagedAsset)) {
+    return packagedAsset;
+  }
+
+  const toolkitAsset = path.join(getDefaultToolkitHooksDir(), basename);
+  if (await fileExists(toolkitAsset)) {
+    return toolkitAsset;
+  }
+
+  return packagedAsset;
+}
+
+async function loadLauncherScript(
+  context: HookInstallerContext,
+): Promise<string> {
+  const source = await resolveHookAssetPath(context, LAUNCHER_SCRIPT_BASENAME);
+  if (await fileExists(source)) {
+    return ensureTrailingNewline(await readFile(source, "utf8"));
+  }
+
+  return `${buildLauncherScript()}\n`;
 }
 
 function getNotifyHooksDir(homeDir: string): string {

@@ -54,8 +54,8 @@ RUNWEAVE_HOOK_TOKEN=<random per-backend token>
 Electron 启动时会调用 `installHooksIfNeeded()`，在用户已有相关 CLI 配置目录时安装 Runweave hook：
 
 - Claude：`~/.claude/settings.json`
-- Codex：`~/.codex/hooks.json`
-- Trae/Coco：`~/.trae/traecli.yaml`
+- Codex：Toolkit 插件根目录 `hooks.json` 是主入口；`~/.codex/hooks.json` 只保留为历史全局配置的兼容/清理层
+- Trae/Coco：Toolkit 插件根目录 `hooks.json` 是主入口；`~/.trae/traecli.toml` 只保留为历史全局配置的兼容/清理层
 
 安装必须保留已有第三方 hook、去重 Runweave launcher hook，并在首次写入前创建 `.runweave-hook-backup` 备份。配置无法安全解析时跳过，避免破坏用户配置。
 
@@ -65,7 +65,7 @@ launcher 行为很窄：
 2. 解析事件名，兼容 `hook_event_name`、`hookEventName`、`eventName`、`event`。
 3. 只接受 `stop`、`subagent_stop`、`subagentstop`。
 4. 读取 `RUNWEAVE_HOOK_ENDPOINT`、`RUNWEAVE_HOOK_TOKEN`、`RUNWEAVE_TERMINAL_SESSION_ID`，缺任一则静默退出。
-5. Codex 的 `SessionStart`、`UserPromptSubmit`、`Stop` 会上报到 agent hook endpoint，用于维护 `TerminalState`。
+5. Codex/Trae 的 `SessionStart`、`UserPromptSubmit`、`Stop` 会上报到 agent hook endpoint，用于维护 `TerminalState`。
 6. Stop / notify 类完成事件会发出桌面/飞书完成通知，并向 backend 上报 completion event。
 7. 所有错误静默失败，不影响原 AI CLI 结束流程。
 

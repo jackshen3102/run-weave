@@ -1,0 +1,448 @@
+#!/usr/bin/env node
+/* global fetch, process, require, URL */
+/* eslint-disable @typescript-eslint/no-require-imports */
+
+const STOP_EVENTS = new Set(["stop", "subagent_stop", "subagentstop"]);
+const COMPLETION_REASONS = new Set([
+  "hook_stop",
+  "notify",
+  "ai_process_exit",
+  "manual",
+]);
+const { spawn } = require("node:child_process");
+const os = require("node:os");
+const fs = require("node:fs");
+const path = require("node:path");
+
+function redactEndpoint(endpoint) {
+  if (!endpoint) {
+    return undefined;
+  }
+  try {
+    const url = new URL(endpoint);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return "[invalid endpoint]";
+  }
+}
+
+function appendDebugLog(message, details) {
+  const logPath = process.env.RUNWEAVE_HOOK_DEBUG_LOG;
+  if (!logPath) {
+    return;
+  }
+  try {
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.appendFileSync(
+      logPath,
+      `${JSON.stringify({
+        at: new Date().toISOString(),
+        source: "hook-bridge",
+        message,
+        details,
+      })}\n`,
+      "utf8",
+    );
+  } catch {
+    // Ignore diagnostic logging failures.
+  }
+}
+
+function notifyDesktop(source) {
+  if (process.env.RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY === "1") {
+    return;
+  }
+  if (process.platform !== "darwin") {
+    return;
+  }
+  const labels = { claude: "Claude", codex: "Codex", trae: "Trae" };
+  const name = labels[source] || "AI";
+  try {
+    spawn(
+      "/usr/bin/osascript",
+      ["-e", `display notification "回来接管终端" with title "${name} 完成了"`],
+      { stdio: "ignore", detached: true },
+    ).unref();
+    spawn("/usr/bin/afplay", ["/System/Library/Sounds/Glass.aiff"], {
+      stdio: "ignore",
+      detached: true,
+    }).unref();
+  } catch {
+    // Ignore desktop notification failures.
+  }
+}
+
+function notifyFeishu(payload, source, terminalSessionId) {
+  const script = `${os.homedir()}/.runweave/hooks/feishu_stop_notify.sh`;
+  try {
+    if (!fs.existsSync(script)) {
+      return;
+    }
+    const child = spawn(script, [], {
+      stdio: ["pipe", "ignore", "ignore"],
+      detached: true,
+    });
+    child.on("error", () => {});
+    child.stdin.end(
+      JSON.stringify({
+        ...payload,
+        source,
+        terminalSessionId,
+        projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
+      }),
+    );
+    child.unref();
+  } catch {
+    // Ignore Feishu notification failures.
+  }
+}
+
+function normalizeSummaryText(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.length > 8000
+    ? `${trimmed.slice(0, 8000)}\n...[truncated]`
+    : trimmed;
+}
+
+function extractCompletionSummary(payload) {
+  const directKeys = [
+    "summary",
+    "message",
+    "last_message",
+    "lastMessage",
+    "lastAssistantMessage",
+    "assistant_message",
+    "assistantMessage",
+    "response",
+    "output",
+    "text",
+    "content",
+  ];
+  for (const key of directKeys) {
+    const normalized = normalizeSummaryText(payload?.[key]);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  const transcript = Array.isArray(payload?.transcript)
+    ? payload.transcript
+    : null;
+  if (transcript) {
+    for (let index = transcript.length - 1; index >= 0; index -= 1) {
+      const item = transcript[index];
+      const role = String(item?.role || item?.type || "").toLowerCase();
+      if (role && !role.includes("assistant") && !role.includes("agent")) {
+        continue;
+      }
+      const normalized =
+        normalizeSummaryText(item?.content) ||
+        normalizeSummaryText(item?.text) ||
+        normalizeSummaryText(item?.message);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+  return null;
+}
+
+function readStdin() {
+  return new Promise((resolve) => {
+    let data = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => {
+      data += chunk;
+    });
+    process.stdin.on("end", () => {
+      resolve(data);
+    });
+    process.stdin.resume();
+  });
+}
+
+function parseArgs(argv) {
+  const args = { source: "unknown", reason: "hook_stop", commandName: null };
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === "--source" && argv[index + 1]) {
+      args.source = argv[index + 1];
+      index += 1;
+    } else if (argv[index] === "--reason" && argv[index + 1]) {
+      args.reason = argv[index + 1];
+      index += 1;
+    } else if (argv[index] === "--command-name" && argv[index + 1]) {
+      args.commandName = argv[index + 1];
+      index += 1;
+    }
+  }
+  return args;
+}
+
+function parsePayload(raw) {
+  if (!raw.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function readHookEvent(payload) {
+  return (
+    payload.hook_event_name ??
+    payload.hookEventName ??
+    payload.eventName ??
+    payload.event ??
+    "Unknown"
+  );
+}
+
+function readThreadId(payload) {
+  const raw =
+    payload.threadId ??
+    payload.thread_id ??
+    payload.sessionId ??
+    payload.session_id;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}
+
+function normalizeEventName(raw) {
+  return String(raw || "Unknown")
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
+}
+
+function normalizeSource(raw) {
+  const source = String(raw || "unknown")
+    .trim()
+    .toLowerCase();
+  if (source === "claude" || source === "codex" || source === "trae") {
+    return source;
+  }
+  return "unknown";
+}
+
+function normalizeReason(raw) {
+  const reason = String(raw || "hook_stop")
+    .trim()
+    .toLowerCase();
+  return COMPLETION_REASONS.has(reason) ? reason : "hook_stop";
+}
+
+function deriveCompletionEndpoint(endpoint) {
+  if (!endpoint) {
+    return undefined;
+  }
+  return endpoint.replace(
+    /\/internal\/terminal\/agent-hook\/?$/,
+    "/internal/terminal-completion",
+  );
+}
+
+function deriveAgentHookEndpoint(endpoint) {
+  if (!endpoint) {
+    return undefined;
+  }
+  return endpoint.replace(
+    /\/internal\/terminal-completion\/?$/,
+    "/internal/terminal/agent-hook",
+  );
+}
+
+function toAgentHookStateEvent(normalizedEvent) {
+  if (
+    normalizedEvent === "sessionstart" ||
+    normalizedEvent === "session_start"
+  ) {
+    return "SessionStart";
+  }
+  if (
+    normalizedEvent === "userpromptsubmit" ||
+    normalizedEvent === "user_prompt_submit"
+  ) {
+    return "UserPromptSubmit";
+  }
+  if (STOP_EVENTS.has(normalizedEvent)) {
+    return "Stop";
+  }
+  return null;
+}
+
+async function postAgentHook({
+  endpoint,
+  token,
+  terminalSessionId,
+  agent,
+  hookEvent,
+  threadId,
+}) {
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Runweave-Hook-Token": token,
+      },
+      body: JSON.stringify({
+        terminalSessionId,
+        projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
+        ...(threadId ? { threadId } : {}),
+        agent,
+        hookEvent,
+      }),
+    });
+    return { ok: response.ok, status: response.status };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function postCompletionHook({
+  endpoint,
+  token,
+  terminalSessionId,
+  payload,
+  source,
+  completionReason,
+  rawEvent,
+  commandName,
+}) {
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Runweave-Hook-Token": token,
+      },
+      body: JSON.stringify({
+        terminalSessionId,
+        source,
+        completionReason,
+        commandName: commandName || null,
+        rawHookEvent: String(rawEvent || "Stop"),
+        hookEvent: String(rawEvent || "Stop"),
+        summary: extractCompletionSummary(payload),
+        cwd:
+          typeof payload.cwd === "string" && payload.cwd.trim()
+            ? payload.cwd
+            : process.env.PWD || null,
+      }),
+    });
+    return { ok: response.ok, status: response.status };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const payload = parsePayload(await readStdin());
+  const rawEvent = readHookEvent(payload);
+  const normalizedEvent = normalizeEventName(rawEvent);
+  const source = normalizeSource(args.source);
+  const completionReason = normalizeReason(args.reason);
+  const threadId = source === "codex" ? readThreadId(payload) : null;
+  const stateHookEvent =
+    source === "codex" || source === "trae"
+      ? toAgentHookStateEvent(normalizedEvent)
+      : null;
+  const shouldRecordCompletion =
+    completionReason !== "hook_stop" || STOP_EVENTS.has(normalizedEvent);
+
+  const endpoint = process.env.RUNWEAVE_HOOK_ENDPOINT;
+  const stateEndpoint = deriveAgentHookEndpoint(endpoint);
+  const completionEndpoint =
+    process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT ||
+    deriveCompletionEndpoint(endpoint);
+  const token = process.env.RUNWEAVE_HOOK_TOKEN;
+  const terminalSessionId = process.env.RUNWEAVE_TERMINAL_SESSION_ID;
+  appendDebugLog("hook bridge invoked", {
+    rawEvent: String(rawEvent || "Unknown"),
+    normalizedEvent,
+    source,
+    terminalSessionId: terminalSessionId || null,
+    projectId: process.env.RUNWEAVE_PROJECT_ID || null,
+    hasToken: Boolean(token),
+    endpoint: redactEndpoint(endpoint),
+    stateEndpoint: redactEndpoint(stateEndpoint),
+    completionEndpoint: redactEndpoint(completionEndpoint),
+    threadId,
+    stateHookEvent,
+    shouldRecordCompletion,
+  });
+  // Only notify / report for completions inside a Runweave terminal. The hook
+  // can be installed through AI CLI hook config or plugins, so without
+  // this gate every AI CLI stop in any external terminal would trigger desktop
+  // and Feishu notifications.
+  if (!token || !terminalSessionId) {
+    appendDebugLog("hook bridge skipped missing env", {
+      rawEvent: String(rawEvent || "Unknown"),
+      hasToken: Boolean(token),
+      hasTerminalSessionId: Boolean(terminalSessionId),
+      endpoint: redactEndpoint(endpoint),
+      completionEndpoint: redactEndpoint(completionEndpoint),
+    });
+    return;
+  }
+
+  if (stateHookEvent && stateEndpoint) {
+    const result = await postAgentHook({
+      endpoint: stateEndpoint,
+      token,
+      terminalSessionId,
+      agent: source,
+      hookEvent: stateHookEvent,
+      threadId,
+    });
+    appendDebugLog("hook bridge posted agent hook", {
+      terminalSessionId,
+      hookEvent: stateHookEvent,
+      endpoint: redactEndpoint(stateEndpoint),
+      ...result,
+    });
+  }
+
+  if (shouldRecordCompletion && completionEndpoint) {
+    notifyDesktop(source);
+    notifyFeishu(payload, source, terminalSessionId);
+    const result = await postCompletionHook({
+      endpoint: completionEndpoint,
+      token,
+      terminalSessionId,
+      payload,
+      source,
+      completionReason,
+      rawEvent,
+      commandName: args.commandName,
+    });
+    appendDebugLog("hook bridge posted completion hook", {
+      terminalSessionId,
+      rawEvent: String(rawEvent || "Stop"),
+      endpoint: redactEndpoint(completionEndpoint),
+      ...result,
+    });
+  }
+}
+
+main().catch((error) => {
+  appendDebugLog("hook bridge failed", {
+    error: error instanceof Error ? error.message : String(error),
+  });
+  process.exitCode = 0;
+});
