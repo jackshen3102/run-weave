@@ -1,9 +1,24 @@
 import type { RequestHandler } from "express";
+import os from "node:os";
 
 const ALWAYS_ALLOWED_APP_ORIGINS = new Set([
+  "browser-viewer://app",
   "capacitor://localhost",
   "ionic://localhost",
 ]);
+const LOCAL_DEV_SERVER_PORTS = new Set(["5173", "5174"]);
+
+function getLocalInterfaceHosts(): Set<string> {
+  const hosts = new Set(["localhost", "127.0.0.1", "::1"]);
+  for (const addresses of Object.values(os.networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      if (address.family === "IPv4" || address.family === "IPv6") {
+        hosts.add(address.address);
+      }
+    }
+  }
+  return hosts;
+}
 
 function isAllowedLocalOrigin(origin: string): boolean {
   if (ALWAYS_ALLOWED_APP_ORIGINS.has(origin)) {
@@ -11,9 +26,15 @@ function isAllowedLocalOrigin(origin: string): boolean {
   }
   try {
     const parsed = new URL(origin);
+    if (parsed.protocol !== "http:") {
+      return false;
+    }
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+      return true;
+    }
     return (
-      parsed.protocol === "http:" &&
-      (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")
+      LOCAL_DEV_SERVER_PORTS.has(parsed.port) &&
+      getLocalInterfaceHosts().has(parsed.hostname)
     );
   } catch {
     return false;
@@ -33,10 +54,7 @@ export function createCorsMiddleware(
 
   return (req, res, next) => {
     const origin = req.headers.origin;
-    if (
-      origin &&
-      (allowedOrigins.has(origin) || isAllowedLocalOrigin(origin))
-    ) {
+    if (origin && (allowedOrigins.has(origin) || isAllowedLocalOrigin(origin))) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Vary", "Origin");
     }

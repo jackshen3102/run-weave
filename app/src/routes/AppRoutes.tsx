@@ -47,6 +47,7 @@ function LoginRoute({ session }: { session: AppSessionController }) {
   return (
     <LoginPage
       activeConnection={session.activeConnection}
+      deviceConnectionStatus={session.deviceConnection.status}
       hasActiveConnection={session.hasActiveConnection}
       onLogin={handleLogin}
     />
