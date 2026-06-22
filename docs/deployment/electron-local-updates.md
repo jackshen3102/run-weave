@@ -62,9 +62,9 @@ http://127.0.0.1:5500/updates/mac/latest-mac.yml
 
 本地 feed server 必须在客户端检查和下载更新时可访问；浏览器页面是否打开不影响服务状态。
 
-## 本机 launchd 任务
+## 可选 launchd 任务
 
-当前本机使用两个用户级 LaunchAgent：
+如需让本机后台自动更新，可安装两个用户级 LaunchAgent：
 
 | Label                               | 作用                                                 |
 | ----------------------------------- | ---------------------------------------------------- |
@@ -88,6 +88,8 @@ plist 位置：
 ```
 
 本机任务固定在仓库目录 `/Users/jackshen/code/run-weave` 下运行。若仓库迁移、Node/pnpm 路径变化，需同步更新 plist 中的 `WorkingDirectory`、`PATH` 和命令路径。
+
+当前如果不需要自动更新，可以不安装这些 plist；`pnpm electron:local-update` 仍可手动执行。
 
 ## 验证
 

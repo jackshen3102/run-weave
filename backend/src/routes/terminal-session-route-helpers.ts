@@ -33,6 +33,14 @@ export const sendTerminalInputSchema = z
       ])
       .optional(),
     operationId: z.string().trim().min(1).optional(),
+    quickInputSource: z
+      .enum([
+        "web_terminal_quick_input",
+        "web_git_submit",
+        "web_browser_annotation",
+        "api_terminal_input",
+      ])
+      .optional(),
   })
   .strict();
 

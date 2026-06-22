@@ -174,10 +174,59 @@ export type TerminalInputMode =
   | "prompt_paste"
   | "tmux_exit_copy_mode";
 
+export type TerminalQuickInputListKind = "recent" | "pinned" | "all";
+
+export type TerminalQuickInputMode =
+  | "line"
+  | "codex_slash_command"
+  | "prompt_paste";
+
+export type TerminalQuickInputSource =
+  | "web_terminal_quick_input"
+  | "web_git_submit"
+  | "web_browser_annotation"
+  | "api_terminal_input";
+
+export interface TerminalQuickInputItem {
+  id: string;
+  title: string;
+  data: string;
+  mode: TerminalQuickInputMode;
+  projectId?: string | null;
+  terminalSessionId?: string | null;
+  cwd?: string | null;
+  source: TerminalQuickInputSource;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastUsedAt?: string;
+  hiddenAt?: string | null;
+  useCount: number;
+}
+
+export interface ListTerminalQuickInputsResponse {
+  items: TerminalQuickInputItem[];
+}
+
+export interface CreateTerminalQuickInputRequest {
+  title: string;
+  data: string;
+  mode: TerminalQuickInputMode;
+  projectId?: string | null;
+  terminalSessionId?: string | null;
+  cwd?: string | null;
+}
+
+export interface UpdateTerminalQuickInputRequest {
+  title?: string;
+  pinned?: boolean;
+}
+
 export interface SendTerminalInputRequest {
   data: string;
   mode?: TerminalInputMode;
   operationId?: string;
+  quickInputSource?: TerminalQuickInputSource;
 }
 
 export interface SendTerminalInputResponse {
