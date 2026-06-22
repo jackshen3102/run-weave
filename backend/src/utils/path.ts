@@ -12,6 +12,7 @@ export interface StoragePaths {
   browserProfileDir: string;
   authStoreFile: string;
   terminalSessionStoreFile: string;
+  terminalQuickInputStoreFile: string;
   backendLogDir: string;
 }
 
@@ -35,6 +36,9 @@ export function resolveStoragePaths(
     expandHomePath(env.TERMINAL_SESSION_STORE_FILE, homeDir) ??
       path.join(browserProfileDir, "terminal-session-store.json"),
   );
+  const terminalQuickInputStoreFile = path.resolve(
+    path.join(path.dirname(terminalSessionStoreFile), "terminal-quick-inputs.json"),
+  );
   const backendLogDir = path.resolve(
     expandHomePath(env.RUNWEAVE_BACKEND_LOG_DIR, homeDir) ??
       path.join(browserProfileDir, "logs", "backend"),
@@ -44,6 +48,7 @@ export function resolveStoragePaths(
     browserProfileDir,
     authStoreFile,
     terminalSessionStoreFile,
+    terminalQuickInputStoreFile,
   } as StoragePaths;
 
   Object.defineProperty(storagePaths, "backendLogDir", {

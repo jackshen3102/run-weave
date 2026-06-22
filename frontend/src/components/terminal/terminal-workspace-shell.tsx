@@ -74,6 +74,7 @@ import { Label } from "../ui/label";
 import { DiagnosticLogEntry } from "../diagnostic-log-entry";
 import { TerminalHistoryDrawer } from "./terminal-history-drawer";
 import { TerminalPreviewMenu } from "./terminal-preview-menu";
+import { TerminalQuickInputPopover } from "./terminal-quick-input-popover";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
 import { TerminalSubmitPopover } from "./terminal-submit-popover";
 import { TerminalHeadlessConnection } from "./terminal-headless-connection";
@@ -839,6 +840,15 @@ export function TerminalWorkspaceShell({
         </div>
         {!isMobileMonitor ? (
           <TerminalSubmitPopover
+            apiBase={apiBase}
+            token={token}
+            activeProject={activeProject}
+            activeSession={activeSession}
+            disabled={loading}
+          />
+        ) : null}
+        {!isMobileMonitor ? (
+          <TerminalQuickInputPopover
             apiBase={apiBase}
             token={token}
             activeProject={activeProject}

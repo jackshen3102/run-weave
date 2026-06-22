@@ -35,6 +35,7 @@ import {
 } from "../terminal/runtime-launcher";
 import type { TmuxService } from "../terminal/tmux-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
+import type { TerminalQuickInputService } from "../terminal/quick-input-service";
 import {
   toHistoryPayload,
   toSessionListItem,
@@ -55,6 +56,7 @@ import {
   sendInputToSession,
 } from "./terminal-input-dispatcher";
 import { registerTerminalTicketRoutes } from "./terminal-ticket-routes";
+import { registerTerminalQuickInputRoutes } from "./terminal-quick-input-routes";
 
 const terminalLogger = logger.child({ component: "terminal" });
 
@@ -69,6 +71,7 @@ export function createTerminalRouter(
     completionEventService?: TerminalCompletionEventService;
     terminalEventService?: TerminalEventService;
     terminalStateService?: TerminalStateService;
+    quickInputService?: TerminalQuickInputService;
   },
 ): Router {
   const router = Router();
@@ -145,6 +148,9 @@ export function createTerminalRouter(
     authService: options?.authService,
     terminalEventService: options?.terminalEventService,
   });
+  if (options?.quickInputService) {
+    registerTerminalQuickInputRoutes(router, options.quickInputService);
+  }
 
   const updateTerminalSessionSchema = z
     .object({
@@ -461,6 +467,27 @@ export function createTerminalRouter(
         inputMode,
         parsed.data.operationId,
       );
+      if (options?.quickInputService && payload.inputAccepted) {
+        try {
+          await options.quickInputService.recordRecentInput({
+            data: parsed.data.data,
+            mode: inputMode,
+            projectId: session.projectId,
+            terminalSessionId: session.id,
+            cwd: session.cwd,
+            source: parsed.data.quickInputSource ?? "api_terminal_input",
+            acceptedAt: payload.acceptedAt,
+          });
+        } catch (error) {
+          terminalLogger.warn("terminal.quick-input.record.failed", {
+            message: "Terminal quick input record failed",
+            terminalSessionId: session.id,
+            projectId: session.projectId,
+            inputMode: inputMode ?? "raw",
+            error,
+          });
+        }
+      }
       res.status(200).json(payload);
     } catch (error) {
       if (isMissingTerminalRuntimeError(error)) {

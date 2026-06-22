@@ -177,6 +177,7 @@ export function useTerminalBrowserController({
       await sendTerminalInput(apiBase, token, terminalSessionId, {
         data: prompt,
         mode: "prompt_paste",
+        quickInputSource: "web_browser_annotation",
       });
       if (submitWarning) {
         setAnnotationError(submitWarning);

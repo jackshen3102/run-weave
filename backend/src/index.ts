@@ -48,6 +48,8 @@ import { TerminalCompletionEventService } from "./terminal/completion-event-serv
 import { TerminalEventService } from "./terminal/terminal-event-service";
 import { TerminalStateService } from "./terminal/terminal-state-service";
 import { TerminalStateStore } from "./terminal/terminal-state-store";
+import { LowDbTerminalQuickInputStore } from "./terminal/quick-input-lowdb-store";
+import { TerminalQuickInputService } from "./terminal/quick-input-service";
 import { loadOrCreateHookToken } from "./terminal/hook-token";
 import { PtyService } from "./terminal/pty-service";
 import { TerminalRuntimeRegistry } from "./terminal/runtime-registry";
@@ -74,6 +76,8 @@ interface RuntimeServices {
   authCookieName: string;
   authSecureCookies: boolean;
   terminalSessionManager: TerminalSessionManager;
+  terminalQuickInputStore: LowDbTerminalQuickInputStore;
+  terminalQuickInputService: TerminalQuickInputService;
   terminalStateService: TerminalStateService;
   orchestratorService: OrchestratorService;
   terminalEventService: TerminalEventService;
@@ -162,6 +166,13 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   const terminalSessionStore = new LowDbTerminalSessionStore(
     storagePaths.terminalSessionStoreFile,
   );
+  const terminalQuickInputStore = new LowDbTerminalQuickInputStore(
+    storagePaths.terminalQuickInputStoreFile,
+  );
+  await terminalQuickInputStore.initialize();
+  const terminalQuickInputService = new TerminalQuickInputService(
+    terminalQuickInputStore,
+  );
   const terminalSessionManager = new TerminalSessionManager(
     terminalSessionStore,
   );
@@ -240,6 +251,8 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     authCookieName: authConfig.refreshCookieName,
     authSecureCookies: authConfig.secureCookies,
     terminalSessionManager,
+    terminalQuickInputStore,
+    terminalQuickInputService,
     terminalStateService,
     orchestratorService,
     terminalEventService,
@@ -369,6 +382,7 @@ function createHttpApp(
       completionEventService: services.terminalCompletionEventService,
       terminalEventService: services.terminalEventService,
       terminalStateService: services.terminalStateService,
+      quickInputService: services.terminalQuickInputService,
     }),
   );
   app.use("/api/voice", requireAuth, createVoiceRouter());
@@ -415,6 +429,7 @@ function attachLifecycleHandlers(
       await services.tmuxOutputWatcher.dispose();
       await services.terminalRuntimeRegistry.disposeAll();
       await services.terminalSessionManager.dispose();
+      await services.terminalQuickInputStore.dispose();
       codexAppServerClient.shutdown();
       await services.authStore.dispose();
       await profileLock.release();
