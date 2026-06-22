@@ -1166,6 +1166,8 @@ ion-content::part(background) {
   padding: 6px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: #0b1220;
+  overscroll-behavior: contain;
+  touch-action: none;
 }
 
 .terminal-scroll-bottom-button {

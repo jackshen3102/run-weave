@@ -9,12 +9,14 @@ import {
 } from "@runweave/shared";
 import {
   TerminalRenderer,
+  type TerminalRendererExtensionContext,
   type TerminalRendererHandle,
 } from "@runweave/terminal-renderer";
 import { IonModal, IonSpinner } from "@ionic/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { recordSupportLog } from "../features/support-logs";
+import { installTerminalTouchBehavior } from "../lib/app-terminal-touch-behavior";
 import { classifyApiFailure } from "../services/api-failure";
 import { getTerminalHistory } from "../services/terminal";
 
@@ -117,6 +119,16 @@ export function TerminalHistoryModal({
     renderer.resetAndWrite(normalizedOutput);
     renderer.refresh();
   });
+
+  const handleTerminalReady = useMemoizedFn(
+    (context: TerminalRendererExtensionContext) => {
+      const disposable = installTerminalTouchBehavior(context, {
+        allowMouseDragScroll: true,
+      });
+      renderOutput();
+      return disposable;
+    },
+  );
 
   useEffect(() => {
     if (!isOpen) {
@@ -245,7 +257,7 @@ export function TerminalHistoryModal({
             className="terminal-history-panel__renderer"
             focusOnInteraction={false}
             fontSize={12}
-            onTerminalReady={renderOutput}
+            onTerminalReady={handleTerminalReady}
             readOnly
             ref={rendererRef}
             renderer="dom"
