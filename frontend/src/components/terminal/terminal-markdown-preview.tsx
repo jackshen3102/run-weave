@@ -1,3 +1,5 @@
+import { RunweaveImageLightbox } from "@runweave/common/terminal";
+import "@runweave/common/terminal/image-lightbox.css";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
@@ -164,55 +166,18 @@ function TerminalMarkdownImageLightbox({
   image: ZoomedMarkdownImage | null;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    if (!image) {
-      return;
-    }
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [image, onClose]);
-
   if (!image) {
     return null;
   }
 
   return (
-    <div
-      role="dialog"
-      aria-label="Image preview"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      onClick={onClose}
-    >
-      <button
-        type="button"
-        className="absolute right-4 top-4 rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-100 hover:border-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-        onClick={onClose}
-      >
-        Close
-      </button>
-      {image.assetPath ? (
-        <div className="absolute bottom-4 left-4 right-4 truncate text-center text-xs text-slate-300">
-          {image.assetPath}
-        </div>
-      ) : null}
-      <img
-        src={image.src}
-        alt={image.alt}
-        className="max-h-[90vh] max-w-[90vw] rounded-md object-contain"
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-      />
-    </div>
+    <RunweaveImageLightbox
+      alt={image.alt}
+      onClose={onClose}
+      open
+      src={image.src}
+      title={image.assetPath ?? image.alt}
+    />
   );
 }
 

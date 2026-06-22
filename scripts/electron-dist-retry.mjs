@@ -22,9 +22,7 @@ function resolveDefaultCacheRoot() {
       "Cache",
     );
   }
-  return path.join(
-    process.env.XDG_CACHE_HOME ?? path.join(homeDir, ".cache"),
-  );
+  return path.join(process.env.XDG_CACHE_HOME ?? path.join(homeDir, ".cache"));
 }
 
 export function isRetriableHdiutilResizeBusyError(output) {
@@ -122,8 +120,16 @@ async function cleanElectronReleaseDir() {
 
 async function main() {
   const builderArgs = process.argv.slice(2);
+  if (process.env.RUNWEAVE_ELECTRON_BUILD_VERSION) {
+    builderArgs.push(
+      `--config.extraMetadata.version=${process.env.RUNWEAVE_ELECTRON_BUILD_VERSION}`,
+      `--config.extraMetadata.buildVersion=${process.env.RUNWEAVE_ELECTRON_BUILD_VERSION}`,
+    );
+  }
   const distArgs =
-    builderArgs.length > 0 ? ["dist", ...builderArgs] : ["dist", "--mac", "--arm64"];
+    builderArgs.length > 0
+      ? ["dist", ...builderArgs]
+      : ["dist", "--mac", "--arm64"];
   const defaultCacheRoot = resolveDefaultCacheRoot();
   const electronEnv = {
     ...process.env,
@@ -136,7 +142,9 @@ async function main() {
       path.join(defaultCacheRoot, "electron-builder"),
   };
 
-  await runCheckedCommand("node", ["./scripts/bump-electron-version.mjs"]);
+  if (process.env.RUNWEAVE_SKIP_ELECTRON_VERSION_BUMP !== "true") {
+    await runCheckedCommand("node", ["./scripts/bump-electron-version.mjs"]);
+  }
   await runCheckedCommand(commandName("pnpm"), ["build"]);
 
   const result = await runWithRetries({

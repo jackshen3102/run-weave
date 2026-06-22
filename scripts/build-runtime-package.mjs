@@ -70,6 +70,9 @@ function sha256(filePath) {
 const releaseId =
   process.argv.find((arg) => arg.startsWith("--release-id="))?.slice(13) ??
   createReleaseId();
+const shellVersion =
+  process.argv.find((arg) => arg.startsWith("--shell-version="))?.slice(16) ??
+  readPackageVersion(path.join(repoRoot, "electron", "package.json"));
 
 run("pnpm", ["--filter", "./frontend", "build"]);
 run("pnpm", ["--filter", "./electron", "build"]);
@@ -110,9 +113,7 @@ const manifest = {
   schemaVersion: 1,
   releaseId,
   runtimeApiVersion,
-  minimumShellVersion: readPackageVersion(
-    path.join(repoRoot, "electron", "package.json"),
-  ),
+  minimumShellVersion: shellVersion,
   sharedProtocolVersion: readPackageVersion(
     path.join(repoRoot, "packages", "shared", "package.json"),
   ),

@@ -11,6 +11,7 @@ import {
 import { AppTerminalDeleteAlerts } from "../components/AppTerminalDeleteAlerts";
 import { AppTerminalHeader } from "../components/AppTerminalHeader";
 import { AppTerminalPanels } from "../components/AppTerminalPanels";
+import { TerminalHistoryModal } from "../components/TerminalHistoryModal";
 import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
 import type { AppConnectionConfig } from "../features/connections/types";
 import { recordSupportLog, useSupportLogs } from "../features/support-logs";
@@ -82,6 +83,7 @@ export function AppTerminalPage({
   const [terminalState, setTerminalState] = useState<TerminalState>(
     () => initialSession?.terminalState ?? SHELL_IDLE_STATE,
   );
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
   terminalStateRef.current = terminalState;
   const isDeviceOffline = deviceConnection.status === "offline";
   const refreshDeviceAfterFailure = useMemoizedFn(() => {
@@ -290,6 +292,10 @@ export function AppTerminalPage({
     setConfirmDeleteOpen(true);
   });
 
+  const handleOpenHistory = useMemoizedFn(() => {
+    setHistoryModalOpen(true);
+  });
+
   const handleDeleteTerminal = useMemoizedFn(async (): Promise<void> => {
     if (isDeletingTerminal) {
       return;
@@ -345,6 +351,10 @@ export function AppTerminalPage({
   const moreMenuItems = useMemo(
     () => [
       {
+        label: "终端历史",
+        onClick: handleOpenHistory,
+      },
+      {
         label: "日志上报",
         onClick: () => openSupportLogs(supportLogScope),
       },
@@ -355,6 +365,7 @@ export function AppTerminalPage({
       },
     ],
     [
+      handleOpenHistory,
       handleRequestDeleteTerminal,
       isDeletingTerminal,
       openSupportLogs,
@@ -414,6 +425,17 @@ export function AppTerminalPage({
               }
             }}
             onDismissError={() => setDeleteError(null)}
+          />
+          <TerminalHistoryModal
+            accessToken={accessToken}
+            apiBase={apiBase}
+            isDeviceOffline={isDeviceOffline}
+            isOpen={historyModalOpen}
+            onAuthExpired={onAuthExpired}
+            onClose={() => setHistoryModalOpen(false)}
+            onConnectionFailure={refreshDeviceAfterFailure}
+            terminalName={title}
+            terminalSessionId={terminalSessionId}
           />
           <AppTerminalPanels
             accessToken={accessToken}

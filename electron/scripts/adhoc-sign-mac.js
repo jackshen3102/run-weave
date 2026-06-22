@@ -36,7 +36,8 @@ export default async function adhocSignMac(context) {
     }
   }
   execFileSync("xattr", ["-cr", appPath], { stdio: "inherit" });
-  execFileSync("codesign", ["--force", "--deep", "--sign", "-", appPath], {
+  const identity = process.env.RUNWEAVE_CODESIGN_IDENTITY?.trim() || "-";
+  execFileSync("codesign", ["--force", "--deep", "--sign", identity, appPath], {
     stdio: "inherit",
   });
 }

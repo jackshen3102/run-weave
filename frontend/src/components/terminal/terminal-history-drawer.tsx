@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  countTerminalLines,
+  syncTerminalHistorySize,
+  writeTerminalHistoryOutput,
+} from "@runweave/common/terminal";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared";
 import type { TerminalSessionHistoryResponse } from "@runweave/shared";
 import { FitAddon } from "@xterm/addon-fit";
@@ -6,10 +11,6 @@ import { CanvasAddon } from "@xterm/addon-canvas";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import {
-  syncTerminalHistorySize,
-  writeTerminalHistoryOutput,
-} from "../../features/terminal/history-output";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import { DEFAULT_TERMINAL_PREFERENCES } from "../../features/terminal/preferences";
 import { HttpError } from "../../services/http";
@@ -30,20 +31,6 @@ interface TerminalHistoryDrawerProps {
   terminalName?: string;
   onOpenChange: (open: boolean) => void;
   onAuthExpired?: () => void;
-}
-
-function countTerminalLines(output: string): number {
-  if (!output) {
-    return 0;
-  }
-
-  let lines = 1;
-  for (let index = 0; index < output.length; index += 1) {
-    if (output.charCodeAt(index) === 10) {
-      lines += 1;
-    }
-  }
-  return lines;
 }
 
 export function TerminalHistoryDrawer({

@@ -13,6 +13,7 @@ import {
   expect,
   test,
   type APIRequestContext,
+  type Locator,
   type Page,
 } from "@playwright/test";
 
@@ -219,12 +220,18 @@ async function createPreviewRepo(): Promise<string> {
   return repo;
 }
 
-async function readPreviewImageTransform(page: Page): Promise<string> {
-  await expect(page.locator(".rw-zoomable-image__image").first()).toBeVisible();
-  return await page
-    .locator(".rw-zoomable-image__image")
+async function expectPreviewImageVisible(page: Page): Promise<void> {
+  await expect(page.locator(".rw-image-preview__image").first()).toBeVisible();
+}
+
+async function openPreviewImageLightbox(page: Page): Promise<Locator> {
+  await page
+    .getByRole("button", { name: /Open image fullscreen:/ })
     .first()
-    .evaluate((image) => getComputedStyle(image).transform);
+    .click();
+  const lightbox = page.locator(".rw-image-lightbox").last();
+  await expect(lightbox).toBeVisible();
+  return lightbox;
 }
 
 test("terminal preview opens project files and git changes", async ({
@@ -380,57 +387,28 @@ test("terminal preview zooms image files and image changes", async ({
       .getByPlaceholder("Search file or paste absolute path...")
       .fill("preview sample");
     await page.getByText("preview-sample.png").click();
-    await expect(page.getByRole("button", { name: "Zoom in" })).toBeVisible();
+    await expectPreviewImageVisible(page);
 
-    const initialTransform = await readPreviewImageTransform(page);
-    await page.getByRole("button", { name: "Zoom in" }).click();
-    await expect
-      .poll(() => readPreviewImageTransform(page))
-      .not.toBe(initialTransform);
-    const zoomedTransform = await readPreviewImageTransform(page);
-    const viewportBox = await page
-      .locator(".rw-zoomable-image__viewport")
-      .first()
-      .boundingBox();
-    expect(viewportBox).not.toBeNull();
-    if (!viewportBox) {
-      throw new Error("Preview image viewport is not measurable");
-    }
-    await page.mouse.move(
-      viewportBox.x + viewportBox.width / 2,
-      viewportBox.y + viewportBox.height / 2,
-    );
-    await page.mouse.down();
-    await page.mouse.move(
-      viewportBox.x + viewportBox.width / 2 + 40,
-      viewportBox.y + viewportBox.height / 2 + 30,
-    );
-    await page.mouse.up();
-    await expect
-      .poll(() => readPreviewImageTransform(page))
-      .not.toBe(zoomedTransform);
-    await page.getByRole("button", { name: "Reset view" }).click();
-    await page.getByRole("button", { name: "Actual size" }).click();
-    await expect(page.getByText("100%")).toBeVisible();
-    await page.getByRole("button", { name: "Open fullscreen" }).click();
-    const fullscreenDialog = page.getByRole("dialog");
-    await expect(fullscreenDialog).toBeVisible();
+    let lightbox = await openPreviewImageLightbox(page);
     await expect(
-      fullscreenDialog.getByRole("button", { name: "Close", exact: true }),
+      lightbox.getByRole("button", { name: "Zoom in" }),
     ).toBeVisible();
-    await fullscreenDialog
-      .getByRole("button", { name: "Close", exact: true })
-      .click();
-    await expect(fullscreenDialog).not.toBeVisible();
+    await lightbox.getByRole("button", { name: "Zoom in" }).click();
+    await expect(
+      lightbox.getByRole("button", { name: "Zoom out" }),
+    ).toBeVisible();
+    await lightbox.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(lightbox).not.toBeVisible();
 
     await page.getByRole("tab", { name: "Changes", exact: true }).click();
     await page.getByRole("button", { name: /preview-sample\.png/ }).click();
-    await expect(page.getByRole("button", { name: "Zoom in" })).toBeVisible();
-    const changeInitialTransform = await readPreviewImageTransform(page);
-    await page.getByRole("button", { name: "Zoom in" }).click();
-    await expect
-      .poll(() => readPreviewImageTransform(page))
-      .not.toBe(changeInitialTransform);
+    await expectPreviewImageVisible(page);
+    lightbox = await openPreviewImageLightbox(page);
+    await expect(
+      lightbox.getByRole("button", { name: "Zoom in" }),
+    ).toBeVisible();
+    await lightbox.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(lightbox).not.toBeVisible();
   } finally {
     await rm(repo, { recursive: true, force: true });
   }
