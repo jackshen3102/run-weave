@@ -1,4 +1,5 @@
 import type { RequestHandler } from "express";
+import net from "node:net";
 import os from "node:os";
 
 const ALWAYS_ALLOWED_APP_ORIGINS = new Set([
@@ -20,6 +21,48 @@ function getLocalInterfaceHosts(): Set<string> {
   return hosts;
 }
 
+function isPrivateIpv4Host(hostname: string): boolean {
+  const parts = hostname.split(".").map((part) => Number(part));
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+  ) {
+    return false;
+  }
+
+  const first = parts[0] ?? -1;
+  const second = parts[1] ?? -1;
+  return (
+    first === 10 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 169 && second === 254)
+  );
+}
+
+function isPrivateIpv6Host(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "::1" ||
+    normalized.startsWith("fc") ||
+    normalized.startsWith("fd") ||
+    normalized.startsWith("fe80:")
+  );
+}
+
+function isAllowedDevServerHost(hostname: string): boolean {
+  if (getLocalInterfaceHosts().has(hostname)) {
+    return true;
+  }
+  if (net.isIP(hostname) === 4) {
+    return isPrivateIpv4Host(hostname);
+  }
+  if (net.isIP(hostname) === 6) {
+    return isPrivateIpv6Host(hostname);
+  }
+  return false;
+}
+
 function isAllowedLocalOrigin(origin: string): boolean {
   if (ALWAYS_ALLOWED_APP_ORIGINS.has(origin)) {
     return true;
@@ -34,7 +77,7 @@ function isAllowedLocalOrigin(origin: string): boolean {
     }
     return (
       LOCAL_DEV_SERVER_PORTS.has(parsed.port) &&
-      getLocalInterfaceHosts().has(parsed.hostname)
+      isAllowedDevServerHost(parsed.hostname)
     );
   } catch {
     return false;
