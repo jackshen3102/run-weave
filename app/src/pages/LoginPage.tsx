@@ -11,10 +11,12 @@ import { FormEvent, useState } from "react";
 import { AppConnectionChip } from "../components/AppConnectionChip";
 import { AppConnectionManager } from "../components/AppConnectionManager";
 import type { AppConnectionConfig } from "../features/connections/types";
+import type { AppDeviceConnectionStatus } from "../hooks/use-app-device-connection";
 import { ApiError } from "../services/http";
 
 interface LoginPageProps {
   activeConnection: AppConnectionConfig | null;
+  deviceConnectionStatus: AppDeviceConnectionStatus;
   hasActiveConnection: boolean;
   onLogin: (params: { username: string; password: string }) => Promise<void>;
 }
@@ -31,6 +33,7 @@ function resolveLoginError(error: unknown): string {
 
 export function LoginPage({
   activeConnection,
+  deviceConnectionStatus,
   hasActiveConnection,
   onLogin,
 }: LoginPageProps) {
@@ -70,6 +73,7 @@ export function LoginPage({
             connection={activeConnection}
             disabled={submitting}
             onClick={() => setConnectionManagerOpen(true)}
+            status={deviceConnectionStatus}
           />
           <form className="login-form grid" onSubmit={handleSubmit}>
             <IonInput

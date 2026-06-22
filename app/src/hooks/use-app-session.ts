@@ -129,15 +129,11 @@ export function useAppSession(): AppSessionController {
   const {
     deviceConnection,
     markDeviceOnline,
-    markDeviceOffline,
     refreshDeviceConnection,
   } = useAppDeviceConnection({
     apiBase,
     connectionId: activeConnectionId,
-    enabled:
-      Boolean(activeConnectionId) &&
-      scopedIsAuthenticated &&
-      Boolean(scopedAccessToken),
+    enabled: Boolean(activeConnectionId),
   });
 
   useEffect(() => {
@@ -210,7 +206,7 @@ export function useAppSession(): AppSessionController {
         if (failure.kind === "auth-expired") {
           await resetSession();
         } else {
-          markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
+          void refreshDeviceConnection();
         }
         return null;
       }
@@ -272,7 +268,7 @@ export function useAppSession(): AppSessionController {
               await resetSession();
               return;
             }
-            markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
+            void refreshDeviceConnection();
             setError("本地电脑暂时不可用");
           }
           return;
@@ -289,7 +285,7 @@ export function useAppSession(): AppSessionController {
           },
           "warn",
         );
-        markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
+        void refreshDeviceConnection();
         setError("本地电脑暂时不可用");
       } finally {
         if (activeConnectionIdRef.current === targetConnectionId) {
@@ -346,7 +342,7 @@ export function useAppSession(): AppSessionController {
           }
           return;
         }
-        markDeviceOffline("network-unreachable", "本地电脑暂时不可用");
+        void refreshDeviceConnection();
       }
     };
 
@@ -360,7 +356,7 @@ export function useAppSession(): AppSessionController {
     apiBase,
     isSessionLoading,
     loadOverview,
-    markDeviceOffline,
+    refreshDeviceConnection,
     refreshStoredSession,
     scopedAccessToken,
   ]);

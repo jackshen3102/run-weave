@@ -28,18 +28,21 @@ export async function getBackendHealth(
       "/health",
       { signal: controller.signal },
     );
+    const latencyMs = Math.round(performance.now() - startedAt);
     return {
       ok: true,
-      latencyMs: Math.round(performance.now() - startedAt),
+      latencyMs,
       payload,
       failure: null,
     };
   } catch (error) {
+    const failure = classifyApiFailure(error);
+    const latencyMs = Math.round(performance.now() - startedAt);
     return {
       ok: false,
-      latencyMs: Math.round(performance.now() - startedAt),
+      latencyMs,
       payload: null,
-      failure: classifyApiFailure(error),
+      failure,
     };
   } finally {
     window.clearTimeout(timeoutId);
