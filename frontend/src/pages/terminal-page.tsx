@@ -56,7 +56,7 @@ export function TerminalRoutePage({
           }
         }}
         onNavigateHome={() => {
-          navigate("/");
+          navigate("/home");
         }}
         onAuthExpired={onAuthExpired}
       />
