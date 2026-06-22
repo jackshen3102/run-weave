@@ -11,13 +11,19 @@ export interface TerminalTouchBehaviorOptions {
   // Sends raw input to the terminal session (same channel as keystrokes).
   sendInput?: (data: string) => void;
   onTmuxScrollbackDistanceChange?: (deltaRows: number) => void;
+  allowMouseDragScroll?: boolean;
 }
 
 export function installTerminalTouchBehavior(
   { terminal, container }: TerminalRendererExtensionContext,
   options: TerminalTouchBehaviorOptions = {},
 ): { dispose(): void } {
-  const { getRuntimeKind, onTmuxScrollbackDistanceChange, sendInput } = options;
+  const {
+    allowMouseDragScroll,
+    getRuntimeKind,
+    onTmuxScrollbackDistanceChange,
+    sendInput,
+  } = options;
   let lastTouchY: number | null = null;
   let accumulatedDelta = 0;
   let edgeSwipeActive = false;
@@ -44,6 +50,10 @@ export function installTerminalTouchBehavior(
     }
     suppressTerminalFocus(event);
   };
+
+  const isScrollablePointer = (event: PointerEvent) =>
+    event.pointerType === "touch" ||
+    (allowMouseDragScroll === true && event.pointerType === "mouse");
 
   const resetScrollGesture = () => {
     lastTouchY = null;
@@ -97,12 +107,14 @@ export function installTerminalTouchBehavior(
   };
 
   const handlePointerDown = (event: PointerEvent) => {
-    if (event.pointerType !== "touch") {
+    if (!isScrollablePointer(event)) {
       suppressPointerFocus(event);
       return;
     }
 
-    edgeSwipeActive = event.clientX <= APP_TERMINAL_EDGE_SWIPE_ZONE;
+    edgeSwipeActive =
+      event.pointerType === "touch" &&
+      event.clientX <= APP_TERMINAL_EDGE_SWIPE_ZONE;
     if (edgeSwipeActive) {
       activePointerId = null;
       lastTouchY = null;
@@ -110,6 +122,9 @@ export function installTerminalTouchBehavior(
       return;
     }
 
+    if (event.pointerType !== "touch") {
+      event.preventDefault();
+    }
     event.stopPropagation();
     activePointerId = event.pointerId;
     lastTouchY = event.clientY;
@@ -124,7 +139,7 @@ export function installTerminalTouchBehavior(
 
   const handlePointerMove = (event: PointerEvent) => {
     if (
-      event.pointerType !== "touch" ||
+      !isScrollablePointer(event) ||
       edgeSwipeActive ||
       activePointerId !== event.pointerId
     ) {
