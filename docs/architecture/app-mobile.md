@@ -80,7 +80,7 @@ App 不直接复用桌面 Terminal Workspace 的布局、Preview sidecar、Monac
 
 - App 首页使用 `/api/app/home/overview` 读取项目和终端摘要，并通过全局 `/ws/terminal-events` 接收 terminal state 变化；设备 online/offline 另由 App 侧设备连接状态管理，不混入 terminal display status。
 - App 终端详情使用 terminal websocket、input、interrupt、clipboard image API、voice transcription API 和 `/api/terminal/session/:id/state` 兜底查询。
-- `Changes` 和 `Files` tabs 复用 project-scoped Preview API，提供移动端只读审阅入口；图片文件和图片变更可以在 App 内缩放、拖拽、重置和全屏查看。
+- `Changes` 和 `Files` tabs 复用 project-scoped Preview API，提供移动端只读审阅入口；图片文件和图片变更可以在 App 内打开全屏 lightbox，并在 lightbox 内缩放、平移和关闭。
 - App 的图片缩放能力复用 `@runweave/common/terminal` 的显式子路径导出，只有 Web 与 App 都实际调用的浏览器端预览组件才进入 `packages/common`。
 - 行级编辑、文件写入、桌面级 Browser 工具和完整 IDE 交互不属于当前 App 稳定能力；落地前不要在 README 或入口文档中表述为已完成。
 
