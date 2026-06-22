@@ -21,7 +21,9 @@ Codex / Coco / Trae task finishes
 
 关键代码路径：
 
-- Hook 安装与自包含 launcher：`electron/src/hooks/hook-installer.ts`
+- Hook 安装入口：`electron/src/hooks/hook-installer.ts`
+- Hook 配置合并与旧配置清理：`electron/src/hooks/hook-installer-config.ts`
+- 自包含 launcher 生成：`electron/src/hooks/hook-launcher-script.ts`
 - tmux 环境注入：`backend/src/terminal/runtime-launcher.ts`、`backend/src/terminal/tmux-service.ts`
 - 内部写入接口：`backend/src/routes/terminal-completion.ts`
 - source / active command 门禁：`backend/src/terminal/completion-source-gate.ts`、`backend/src/terminal/manager.ts`
