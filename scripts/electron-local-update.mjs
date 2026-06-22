@@ -234,8 +234,8 @@ async function main() {
   const feedAvailable = await waitForFeed();
 
   if (!feedAvailable) {
-    console.warn(
-      `[local-update] ${feedCheckUrl} is not reachable; make sure pnpm serve:electron:local-updates is running`,
+    throw new Error(
+      `${feedCheckUrl} is not reachable; make sure pnpm serve:electron:local-updates is running`,
     );
   }
 
