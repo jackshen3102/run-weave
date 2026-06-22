@@ -45,6 +45,8 @@ it does not semantically prove that an AI task is complete.
 - Use the Electron desktop app for a local desktop workflow.
 - In Electron, manage connections to different Runweave backends from one
   client.
+- After login, Web and Electron open the Terminal workspace by default at
+  `/terminal`; the overview/control panel remains available at `/home`.
 
 ### Runweave CLI
 

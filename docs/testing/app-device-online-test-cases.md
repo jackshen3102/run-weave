@@ -7,7 +7,7 @@
 ## 目标契约
 
 - 本地电脑后端不可达时，App 不应清登录态，不应跳回登录页。
-- 设备 offline 时，只允许设备级 `/health` 退避 probe 和用户手动 retry，不允许 terminal-events WS、terminal WS、详情 `/state` 继续高频请求。
+- 设备 offline 时，只允许设备级 `/health` 退避 probe 和用户手动 retry，不允许 terminal-events WS、terminal WS 或详情元数据刷新继续高频请求。
 - 用户可通过首页下拉刷新或详情页重试按钮立即检测设备是否恢复在线。
 - 只有 `/health` 成功、业务 API 成功、或 terminal-events 服务端 `type: "connected"` 才能把设备标为 online；raw WebSocket `open` 不能标记 online。
 - 设备 offline 时，发送输入、Stop、上传图片、删除终端、新建终端等写后端操作必须被阻止。
@@ -56,7 +56,7 @@ pnpm app:dev
   - `/health` 请求次数和间隔。
   - `/ws/terminal-events` 是否停止 1200 ms 重连。
   - `/ws/terminal` 是否停止 1200 ms 重连。
-  - `/api/terminal/session/:id/state` 是否停止 2000 ms 轮询。
+  - `/api/terminal/session/:id` 详情元数据读取是否停止重试。
   - offline 时是否还有 `/api/app/home/overview`、`/input`、`/interrupt`、`/clipboard-image` 等写请求。
 - 状态：
   - 本地 auth store 是否保留。
@@ -117,15 +117,15 @@ DO-HOME-007 判定补充：
 
 | ID            | 场景                     | 步骤                                                   | 预期                                                                                       |
 | ------------- | ------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| DO-DETAIL-001 | 初始在线进入详情         | 在线状态下从首页打开一个 terminal                      | header 显示 `Connected` 或 `Connecting`；terminal 输出正常；`/state` 按现有逻辑刷新        |
+| DO-DETAIL-001 | 初始在线进入详情         | 在线状态下从首页打开一个 terminal                      | header 显示 `Connected` 或 `Connecting`；terminal 输出正常；打开详情时读取一次 session 元数据 |
 | DO-DETAIL-002 | 详情页离线展示           | 停留详情页；停止 backend；等待设备进入 Offline         | header 显示 `Computer Offline`；body 显示离线 overlay；不清空已渲染终端内容                |
 | DO-DETAIL-003 | Offline 暂停 terminal WS | 详情页进入 Offline 后观察 network                      | 不再每 1200 ms 重连 `/ws/terminal`                                                         |
-| DO-DETAIL-004 | Offline 暂停 /state      | 详情页进入 Offline 后观察 network                      | 不再每 2000 ms 请求 `/api/terminal/session/:id/state`                                      |
+| DO-DETAIL-004 | Offline 暂停详情元数据   | 详情页进入 Offline 后观察 network                      | 不继续重试 `/api/terminal/session/:id` 详情元数据读取                                      |
 | DO-DETAIL-005 | Offline 阻止发送         | 详情页 Offline；尝试点击发送或触发发送 handler         | 不发送 `/input`；UI 不显示已发送；support log 记录 disabled/rejected                       |
 | DO-DETAIL-006 | Offline 阻止 Stop        | 详情页 Offline；点击 Stop                              | 不发送 `/interrupt`；不做本地乐观状态修改                                                  |
 | DO-DETAIL-007 | Offline 阻止图片上传     | 详情页 Offline；选择图片                               | 不发送 `/clipboard-image`；保留输入框内容；显示或记录设备离线                              |
 | DO-DETAIL-008 | Offline 阻止删除         | 详情页 Offline；尝试删除终端                           | 不发送 `DELETE /api/terminal/session/:id`；不导航丢失当前页                                |
-| DO-DETAIL-009 | 详情页重试恢复           | 详情页 Offline；恢复 backend；点击 overlay/header 重试 | 立即 `/health` 成功；状态变 Online；重新启用 terminal WS；请求一次 `/state` 刷新 Stop 状态 |
+| DO-DETAIL-009 | 详情页重试恢复           | 详情页 Offline；恢复 backend；点击 overlay/header 重试 | 立即 `/health` 成功；状态变 Online；重新启用 terminal WS，并通过 session 元数据与 terminal-events 收敛展示 |
 
 ## Pending Input 队列测试
 
@@ -157,7 +157,7 @@ DO-HOME-007 判定补充：
 - 本地电脑不可达时 App 清登录态或跳到登录页。
 - Offline 后仍每 1200 ms 连接 `/ws/terminal-events`。
 - Offline 后仍每 1200 ms 连接 `/ws/terminal`。
-- Offline 后仍每 2000 ms 请求 `/api/terminal/session/:id/state`。
+- Offline 后仍持续重试 `/api/terminal/session/:id` 详情元数据读取。
 - Offline 后仍可发送 `/input`、`/interrupt`、`/clipboard-image`、`DELETE /session/:id` 或 `POST /session`。
 - raw WebSocket `open` 直接把设备状态改为 `Online`。
 - `pendingInputRef` 在 Offline 期间增长，或恢复 Online 后 flush 离线期间输入。
