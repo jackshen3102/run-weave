@@ -1468,14 +1468,20 @@ ion-content::part(background) {
   --background: #eef3f8;
   --border-color: rgba(238, 243, 248, 0.86);
   --color: #05070b;
+  display: grid;
+  place-items: center;
   border: 1px solid rgba(238, 243, 248, 0.86);
   border-radius: 999px;
+  background: #eef3f8;
+  color: #05070b;
 }
 
 .terminal-composer__action.is-stop {
   --background: rgba(255, 154, 168, 0.1);
   --border-color: rgba(255, 154, 168, 0.9);
   --color: #ff8fa3;
+  background: rgba(255, 154, 168, 0.1);
+  color: #ff8fa3;
 }
 
 .terminal-composer__action ion-icon {

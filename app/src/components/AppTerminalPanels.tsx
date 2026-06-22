@@ -6,19 +6,38 @@ import {
 } from "@runweave/terminal-renderer";
 import { IonButton, IonIcon, IonSpinner, IonText } from "@ionic/react";
 import { arrowDownOutline } from "ionicons/icons";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 
 import { installTerminalTouchBehavior } from "../lib/app-terminal-touch-behavior";
 import { sendTerminalInput as sendTerminalInputRequest } from "../services/terminal";
-import {
-  type SelectedTerminalChange,
-  TerminalChangesTab,
-} from "./TerminalChangesTab";
-import { TerminalFilesTab } from "./TerminalFilesTab";
+import type { SelectedTerminalChange } from "./TerminalChangesTab";
 import { useAppTerminalUiStore } from "../store/use-app-terminal-ui-store";
 import { recordSupportLog } from "../features/support-logs";
 
 const TMUX_SCROLL_BUTTON_REVEAL_THRESHOLD_ROWS = 4;
+const LazyTerminalChangesTab = lazy(async () => {
+  const module = await import("./TerminalChangesTab");
+  return { default: module.TerminalChangesTab };
+});
+const LazyTerminalFilesTab = lazy(async () => {
+  const module = await import("./TerminalFilesTab");
+  return { default: module.TerminalFilesTab };
+});
+
+function TerminalTabLoading() {
+  return (
+    <div className="terminal-page-state">
+      <IonSpinner name="crescent" />
+    </div>
+  );
+}
 
 interface AppTerminalPanelsProps {
   accessToken: string;
@@ -211,33 +230,35 @@ export function AppTerminalPanels({
               </button>
             ) : null}
           </div>
-          <div
-            aria-hidden={activeTab !== "changes"}
-            className={`terminal-tab-panel ${activeTab === "changes" ? "is-active" : ""}`}
-          >
-            <TerminalChangesTab
-              accessToken={accessToken}
-              active={activeTab === "changes"}
-              apiBase={apiBase}
-              projectId={activeProjectId}
-              requestedChange={requestedChange}
-              onAuthExpired={onAuthExpired}
-              onChangesCount={setChangesCount}
-            />
-          </div>
-          <div
-            aria-hidden={activeTab !== "files"}
-            className={`terminal-tab-panel ${activeTab === "files" ? "is-active" : ""}`}
-          >
-            <TerminalFilesTab
-              accessToken={accessToken}
-              active={activeTab === "files"}
-              apiBase={apiBase}
-              projectId={activeProjectId}
-              onAuthExpired={onAuthExpired}
-              onShowChanges={handleShowChanges}
-            />
-          </div>
+          {activeTab === "changes" ? (
+            <div className="terminal-tab-panel is-active">
+              <Suspense fallback={<TerminalTabLoading />}>
+                <LazyTerminalChangesTab
+                  accessToken={accessToken}
+                  active
+                  apiBase={apiBase}
+                  projectId={activeProjectId}
+                  requestedChange={requestedChange}
+                  onAuthExpired={onAuthExpired}
+                  onChangesCount={setChangesCount}
+                />
+              </Suspense>
+            </div>
+          ) : null}
+          {activeTab === "files" ? (
+            <div className="terminal-tab-panel is-active">
+              <Suspense fallback={<TerminalTabLoading />}>
+                <LazyTerminalFilesTab
+                  accessToken={accessToken}
+                  active
+                  apiBase={apiBase}
+                  projectId={activeProjectId}
+                  onAuthExpired={onAuthExpired}
+                  onShowChanges={handleShowChanges}
+                />
+              </Suspense>
+            </div>
+          ) : null}
         </>
       )}
     </section>

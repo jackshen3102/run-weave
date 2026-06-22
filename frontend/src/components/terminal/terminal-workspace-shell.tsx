@@ -634,8 +634,11 @@ export function TerminalWorkspaceShell({
     : `desktop:${previewOpen ? previewReservedWidth : "full"}`;
   const visibleProjects = projects;
   const visibleSessions = useMemo(() => {
+    if (!activeProjectId) {
+      return [];
+    }
     return sessions.filter((session) =>
-      activeProjectId ? session.projectId === activeProjectId : true,
+      session.projectId === activeProjectId,
     );
   }, [activeProjectId, sessions]);
   const activeProject =
@@ -963,8 +966,8 @@ export function TerminalWorkspaceShell({
         ) : null}
         <div className="relative flex h-full min-h-0">
           <div className="relative min-h-0 flex-1">
-            {sessions.length > 0 ? (
-              sessions.map((session) => {
+            {visibleSessions.length > 0 ? (
+              visibleSessions.map((session) => {
                 const isActive = session.terminalSessionId === activeSession?.terminalSessionId;
                 const shouldRenderSurface =
                   isActive || cachedSurfaceSessionIdSet.has(session.terminalSessionId);

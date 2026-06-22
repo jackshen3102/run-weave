@@ -12,11 +12,7 @@ import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
 import { scheduleTerminalViewportRefresh } from "../../features/terminal/viewport-refresh";
-import { HttpError } from "../../services/http";
-import {
-  getTerminalSession,
-  sendTerminalInput as sendTerminalInputRequest,
-} from "../../services/terminal";
+import { sendTerminalInput as sendTerminalInputRequest } from "../../services/terminal";
 import { TerminalSurfaceLayout } from "./terminal-surface-layout";
 import { useTerminalEmulator } from "./use-terminal-emulator";
 import { useTerminalOutputStream } from "./use-terminal-output-stream";
@@ -295,33 +291,6 @@ export function TerminalSurface({
     onBottomStateChange: handleBottomStateChange,
     onTmuxScrollbackActiveChange: setTmuxScrollbackActive,
   });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void getTerminalSession(apiBase, token, terminalSessionId)
-      .then((session) => {
-        if (cancelled) {
-          return;
-        }
-        onMetadataRef.current?.({
-          cwd: session.cwd,
-          activeCommand: session.activeCommand,
-        });
-      })
-      .catch((error: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        if (error instanceof HttpError && error.status === 401) {
-          onAuthExpiredRef.current?.();
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [apiBase, terminalSessionId, token]);
 
   useEffect(() => {
     if (!active || !terminalRef.current) {
