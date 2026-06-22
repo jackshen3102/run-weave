@@ -21,7 +21,6 @@ import { useAppTerminalActions } from "../hooks/use-app-terminal-actions";
 import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
 import type { AppDeviceConnectionSnapshot } from "../hooks/use-app-device-connection";
 import { classifyApiFailure } from "../services/api-failure";
-import { getCurrentTerminalState } from "../services/terminal";
 import { useAppTerminalUiStore } from "../store/use-app-terminal-ui-store";
 
 interface AppTerminalPageProps {
@@ -169,96 +168,6 @@ export function AppTerminalPage({
     resetTerminalUi();
     setTerminalState(initialState);
   }, [initialSession?.terminalState, resetTerminalUi, terminalSessionId]);
-
-  useEffect(() => {
-    if (notFound || isDeviceOffline) {
-      return;
-    }
-    let cancelled = false;
-    let timer: number | null = null;
-
-    recordSupportLog("terminal.page.mounted", {
-      terminalSessionId,
-      initialState: terminalStateRef.current.state,
-      initialAgent: terminalStateRef.current.agent,
-    });
-
-    const refreshTerminalState = () => {
-      recordSupportLog("terminal.state.poll.started", {
-        terminalSessionId,
-      });
-      void getCurrentTerminalState(apiBase, accessToken, terminalSessionId)
-        .then((payload) => {
-          if (!cancelled) {
-            recordSupportLog("terminal.state.poll.completed", {
-              terminalSessionId,
-              previousState: terminalStateRef.current.state,
-              previousAgent: terminalStateRef.current.agent,
-              nextState: payload.terminalState.state,
-              nextAgent: payload.terminalState.agent,
-            });
-            setTerminalState(payload.terminalState);
-          }
-        })
-        .catch((nextError: unknown) => {
-          if (cancelled) {
-            return;
-          }
-          const failure = classifyApiFailure(nextError);
-          if (failure.kind === "auth-expired") {
-            onAuthExpired();
-            return;
-          }
-          if (failure.kind === "not-found") {
-            recordSupportLog(
-              "terminal.state.poll.not_found",
-              {
-                terminalSessionId,
-                previousState: terminalStateRef.current.state,
-              },
-              "warn",
-            );
-            setTerminalState({ state: "shell_idle", agent: null });
-            return;
-          }
-          refreshDeviceAfterFailure();
-          recordSupportLog(
-            "terminal.state.poll.failed",
-            {
-              terminalSessionId,
-              error:
-                nextError instanceof Error
-                  ? nextError.message
-                  : String(nextError),
-            },
-            "warn",
-          );
-        });
-    };
-
-    refreshTerminalState();
-    timer = window.setInterval(refreshTerminalState, 2000);
-
-    return () => {
-      cancelled = true;
-      recordSupportLog("terminal.page.unmounted", {
-        terminalSessionId,
-        lastState: terminalStateRef.current.state,
-        lastAgent: terminalStateRef.current.agent,
-      });
-      if (timer !== null) {
-        window.clearInterval(timer);
-      }
-    };
-  }, [
-    accessToken,
-    apiBase,
-    isDeviceOffline,
-    notFound,
-    onAuthExpired,
-    refreshDeviceAfterFailure,
-    terminalSessionId,
-  ]);
 
   const {
     handlePickImage,

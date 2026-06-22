@@ -7,7 +7,7 @@ import {
   stop,
   stopCircleOutline,
 } from "ionicons/icons";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, PointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { recordSupportLog } from "../features/support-logs";
@@ -45,15 +45,28 @@ export function TerminalCommandComposer({
   const voiceStartInFlightRef = useRef(false);
   const isMountedRef = useRef(true);
   const lastActionModeRef = useRef<string | null>(null);
+  const inputRef = useRef<HTMLIonTextareaElement | null>(null);
+  const valueRef = useRef("");
+  const actionPointerHandledRef = useRef(false);
+
+  const setComposerValue = (nextValue: string) => {
+    valueRef.current = nextValue;
+    setValue(nextValue);
+  };
+
+  const getCurrentInputValue = () => {
+    const inputValue = inputRef.current?.value;
+    return typeof inputValue === "string" ? inputValue : valueRef.current;
+  };
 
   const handleSubmit = async () => {
-    const text = value.trimEnd();
+    const text = getCurrentInputValue().trimEnd();
     if (!text) {
       return;
     }
     try {
       await onSendInput(text);
-      setValue("");
+      setComposerValue("");
     } catch {
       // Keep the user's input so failed sends can be retried.
     }
@@ -74,11 +87,14 @@ export function TerminalCommandComposer({
         const imageInput = await onPickImage(file);
         setValue((current) => {
           if (!current) {
+            valueRef.current = imageInput;
             return imageInput;
           }
-          return /\s$/.test(current)
+          const nextValue = /\s$/.test(current)
             ? `${current}${imageInput}`
             : `${current} ${imageInput}`;
+          valueRef.current = nextValue;
+          return nextValue;
         });
       } catch {
         // Keep the user's input so failed uploads can be retried.
@@ -93,12 +109,47 @@ export function TerminalCommandComposer({
         return current;
       }
       if (!current) {
+        valueRef.current = nextText;
         return nextText;
       }
-      return /\s$/.test(current)
+      const nextValue = /\s$/.test(current)
         ? `${current}${nextText}`
         : `${current} ${nextText}`;
+      valueRef.current = nextValue;
+      return nextValue;
     });
+  };
+
+  const handleTextInput = (nextValue: string) => {
+    setComposerValue(nextValue);
+  };
+
+  const runAction = () => {
+    if (actionDisabled) {
+      return;
+    }
+    if (showStop) {
+      onStop();
+      return;
+    }
+    void handleSubmit();
+  };
+
+  const handleActionPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (actionDisabled || event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    actionPointerHandledRef.current = true;
+    runAction();
+  };
+
+  const handleActionClick = () => {
+    if (actionPointerHandledRef.current) {
+      actionPointerHandledRef.current = false;
+      return;
+    }
+    runAction();
   };
 
   const handleVoiceClick = () => {
@@ -247,8 +298,10 @@ export function TerminalCommandComposer({
           autoGrow
           className="terminal-composer__input"
           disabled={disabled}
-          onIonInput={(event) => setValue(String(event.detail.value ?? ""))}
+          onIonChange={(event) => handleTextInput(String(event.detail.value ?? ""))}
+          onIonInput={(event) => handleTextInput(String(event.detail.value ?? ""))}
           placeholder="Type a command..."
+          ref={inputRef}
           rows={1}
           value={value}
         />
@@ -293,16 +346,16 @@ export function TerminalCommandComposer({
         >
           <span aria-hidden="true">Keys</span>
         </button>
-        <IonButton
+        <button
           aria-label={showStop ? "Stop terminal command" : "Send command"}
           className={`terminal-composer__action ${showStop ? "is-stop" : "is-send"}`}
           disabled={actionDisabled}
-          fill={showStop ? "outline" : "solid"}
-          onClick={showStop ? onStop : handleSubmit}
+          onClick={handleActionClick}
+          onPointerDown={handleActionPointerDown}
           type="button"
         >
           <IonIcon aria-hidden="true" icon={showStop ? stop : arrowUp} />
-        </IonButton>
+        </button>
       </div>
     </footer>
   );
