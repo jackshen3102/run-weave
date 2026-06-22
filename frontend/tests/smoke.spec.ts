@@ -107,6 +107,70 @@ async function mockHomeConnectionApi(
   });
 }
 
+async function mockTerminalListApi(
+  page: Page,
+  options: {
+    expectedToken: string;
+  },
+): Promise<void> {
+  await page.route("**/api/terminal/**", async (route) => {
+    const request = route.request();
+    const requestUrl = new URL(request.url());
+    const authorization = request.headers().authorization;
+
+    if (authorization !== `Bearer ${options.expectedToken}`) {
+      await route.fulfill({
+        status: 401,
+        json: { message: "Wrong token" },
+      });
+      return;
+    }
+
+    if (
+      request.method() === "GET" &&
+      requestUrl.pathname === "/api/terminal/project"
+    ) {
+      await route.fulfill({
+        status: 200,
+        json: [
+          {
+            projectId: "default-project",
+            name: "Default Project",
+            path: null,
+            createdAt: new Date().toISOString(),
+            isDefault: true,
+          },
+        ],
+      });
+      return;
+    }
+
+    if (
+      request.method() === "GET" &&
+      requestUrl.pathname === "/api/terminal/session"
+    ) {
+      await route.fulfill({ status: 200, json: [] });
+      return;
+    }
+
+    if (
+      request.method() === "POST" &&
+      requestUrl.pathname === "/api/terminal/events/ws-ticket"
+    ) {
+      await route.fulfill({
+        status: 503,
+        json: { message: "Terminal events unavailable in smoke" },
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 404,
+      json: { message: "Not mocked" },
+    });
+  });
+}
+
 async function loginAndSeedToken(
   request: APIRequestContext,
   page: Page,
@@ -147,6 +211,7 @@ test("logs in through the real form", async ({ page }) => {
       },
     });
   });
+  await mockTerminalListApi(page, { expectedToken: "form-login-token" });
   await page.route("**/api/auth/verify", async (route) => {
     await route.fulfill({
       status: 200,
@@ -161,7 +226,8 @@ test("logs in through the real form", async ({ page }) => {
   await page.getByLabel("Password").fill("e2e-secret");
   await page.getByRole("button", { name: "Continue" }).click();
 
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/terminal$/);
+  await expect(page.getByText("No terminal tab yet.")).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -171,17 +237,15 @@ test("logs in through the real form", async ({ page }) => {
     .toContain("form-login-token");
 });
 
-test("control panel page loads", async ({ page, request }) => {
+test("terminal list page loads by default", async ({ page, request }) => {
   await loginAndSeedToken(request, page);
   await page.goto("/");
-  await expect(page.getByText("Runweave")).toBeVisible();
-  await expect(
-    page.locator("header").getByRole("button", { name: "Open Terminal" }),
-  ).toBeVisible();
-  await expect(page.getByText("Workspace", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/terminal$/);
+  await expect(page.getByRole("button", { name: "New Terminal" })).toBeVisible();
+  await expect(page.getByText("No terminal tab yet.")).toBeVisible();
 });
 
-test("switches Electron connections on home without reusing the previous token", async ({
+test("switches Electron connections on explicit home without reusing the previous token", async ({
   page,
 }) => {
   const connectionA = {
@@ -212,7 +276,7 @@ test("switches Electron connections on home without reusing the previous token",
     },
   });
 
-  await page.goto("/");
+  await page.goto("/home");
   await expect(page.getByText("Runweave")).toBeVisible();
   await expect(page.getByRole("button", { name: /Connection A/ })).toBeVisible();
 

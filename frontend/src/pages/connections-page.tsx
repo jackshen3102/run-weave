@@ -29,19 +29,19 @@ export function ConnectionsPage({
       activeId={activeId}
       onAdd={(name, url) => {
         onAdd(name, url);
-        navigate("/", { replace: true });
+        navigate("/terminal", { replace: true });
       }}
       onRemove={onRemove}
       onSelect={(id) => {
         onSelect(id);
-        navigate("/", { replace: true });
+        navigate("/terminal", { replace: true });
       }}
       onEdit={onEdit}
       onReconnect={async (id) => {
         const reconnected = await onReconnect?.(id);
         if (reconnected) {
           onSelect(id);
-          navigate("/", { replace: true });
+          navigate("/terminal", { replace: true });
           return true;
         }
 

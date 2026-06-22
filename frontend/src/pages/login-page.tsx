@@ -37,7 +37,7 @@ export function LoginPage({
       onOpenConnectionManager={onOpenConnectionManager}
       onSuccess={(session) => {
         onSuccess(session);
-        navigate("/", { replace: true });
+        navigate("/terminal", { replace: true });
       }}
     />
   );

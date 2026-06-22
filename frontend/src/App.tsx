@@ -24,6 +24,8 @@ import { TerminalRoutePage } from "./pages/terminal-page";
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
 const CONNECTIONS_STORAGE_KEY = "viewer.connections";
+const HOME_PATH = "/home";
+const TERMINAL_LIST_PATH = "/terminal";
 
 interface TerminalBrowserBounds {
   x: number;
@@ -205,7 +207,7 @@ export default function App() {
         element={
           <SystemMonitorPage
             onNavigateHome={() => {
-              window.location.assign("/");
+              window.location.assign(HOME_PATH);
             }}
           />
         }
@@ -234,7 +236,7 @@ export default function App() {
           ) : isAuthChecking ? (
             authPendingView
           ) : token ? (
-            <Navigate to="/" replace />
+            <Navigate to={TERMINAL_LIST_PATH} replace />
           ) : (
             <LoginPage
               apiBase={apiBase}
@@ -251,6 +253,20 @@ export default function App() {
       />
       <Route
         path="/"
+        element={
+          needsConnection ? (
+            <Navigate to="/connections" replace />
+          ) : isAuthChecking ? (
+            authPendingView
+          ) : token ? (
+            <Navigate to={TERMINAL_LIST_PATH} replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path={HOME_PATH}
         element={
           needsConnection ? (
             <Navigate to="/connections" replace />
@@ -337,7 +353,13 @@ export default function App() {
         path="*"
         element={
           <Navigate
-            to={needsConnection ? "/connections" : token ? "/" : "/login"}
+            to={
+              needsConnection
+                ? "/connections"
+                : token
+                  ? TERMINAL_LIST_PATH
+                  : "/login"
+            }
             replace
           />
         }
