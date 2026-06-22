@@ -1,0 +1,91 @@
+@import "yet-another-react-lightbox/styles.css";
+
+.rw-image-preview {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #020617;
+  color: #e2e8f0;
+}
+
+.rw-image-preview__button {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  place-items: center;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: #020617;
+  color: inherit;
+  cursor: zoom-in;
+}
+
+.rw-image-preview .rw-image-preview__image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
+  margin: 0;
+  border-radius: 6px;
+  object-fit: contain;
+  user-select: none;
+}
+
+.rw-image-preview__open {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  padding: 7px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.84);
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.35);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rw-image-lightbox {
+  --yarl__color_backdrop: rgba(2, 6, 23, 0.96);
+  --yarl__slide_captions_container_background: rgba(15, 23, 42, 0.84);
+}
+
+.rw-image-lightbox__title {
+  position: absolute;
+  right: 14px;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  left: 14px;
+  z-index: 1;
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .rw-image-preview__button {
+    min-height: 320px;
+  }
+
+  .rw-image-preview__open {
+    right: 8px;
+    bottom: 8px;
+  }
+}

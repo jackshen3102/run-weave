@@ -1,5 +1,5 @@
-import { ZoomableImage } from "@runweave/common/terminal";
-import "@runweave/common/terminal/zoomable-image.css";
+import { RunweaveImagePreview } from "@runweave/common/terminal";
+import "@runweave/common/terminal/image-lightbox.css";
 import { useEffect, useState } from "react";
 import { HttpError } from "../../services/http";
 import { getTerminalProjectPreviewAsset } from "../../services/terminal";
@@ -22,7 +22,6 @@ export function TerminalImagePreview({
   onAuthExpired,
 }: TerminalImagePreviewProps) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
-  const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,7 +58,9 @@ export function TerminalImagePreview({
           return null;
         });
         setError(
-          unknownError instanceof Error ? unknownError.message : String(unknownError),
+          unknownError instanceof Error
+            ? unknownError.message
+            : String(unknownError),
         );
       })
       .finally(() => {
@@ -75,10 +76,6 @@ export function TerminalImagePreview({
       }
     };
   }, [apiBase, onAuthExpired, path, projectId, refreshKey, token]);
-
-  useEffect(() => {
-    setFullscreenOpen(false);
-  }, [path]);
 
   if (loading) {
     return (
@@ -104,27 +101,7 @@ export function TerminalImagePreview({
 
   return (
     <div className="relative h-full min-h-0 bg-slate-950">
-      <ZoomableImage
-        src={objectUrl}
-        alt={path}
-        title={path}
-        onRequestFullscreen={() => setFullscreenOpen(true)}
-      />
-      {fullscreenOpen ? (
-        <div
-          aria-modal="true"
-          className="fixed inset-0 z-[100] bg-slate-950"
-          role="dialog"
-        >
-          <ZoomableImage
-            src={objectUrl}
-            alt={path}
-            title={path}
-            fullscreen
-            onCloseFullscreen={() => setFullscreenOpen(false)}
-          />
-        </div>
-      ) : null}
+      <RunweaveImagePreview src={objectUrl} alt={path} title={path} />
     </div>
   );
 }
