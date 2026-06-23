@@ -82,7 +82,7 @@ test("supports vim write/exit and preserves interaction through resize", async (
   page,
   request,
 }) => {
-  const targetPath = "/tmp/viewer-vim-e2e.txt";
+  const targetPath = `/tmp/viewer-vim-e2e-${Date.now()}.txt`;
 
   const token = await loginAndSeedToken(request, page);
   const session = await createTerminalSession(request, token);
@@ -99,8 +99,18 @@ test("supports vim write/exit and preserves interaction through resize", async (
 
   await page.keyboard.type(`vim ${targetPath}`);
   await page.keyboard.press("Enter");
+  await expect
+    .poll(async () => {
+      return await getLiveTerminalText(page);
+    })
+    .toContain("[New");
 
   await page.keyboard.press("i");
+  await expect
+    .poll(async () => {
+      return await getLiveTerminalText(page);
+    })
+    .toContain("INSERT");
   await page.keyboard.type("viewer-vim-e2e");
   await page.setViewportSize({ width: 1180, height: 840 });
   await page.keyboard.type("-after-resize");
