@@ -20,8 +20,7 @@
 
 ## 当前代码事实
 
-- Web terminal 主壳层在 `frontend/src/components/terminal/terminal-workspace-shell.tsx`，顶部 toolbar 已有 `Git Submit`、`Preview`、`Orchestrator`、`History`、`More` 等紧凑按钮。快捷指令入口应放在这一排，不新建页面。
-- Web 端现有 `Git Submit` popover 位于 `frontend/src/components/terminal/terminal-submit-popover.tsx`，它已经能生成 prompt 并通过 `sendTerminalInput(...)` 发给 active terminal。
+- Web terminal 主壳层在 `frontend/src/components/terminal/terminal-workspace-shell.tsx`，顶部 toolbar 外露 `快捷指令` 与 `More` 紧凑按钮；`Preview`、`Orchestrator`、`History` 等低频动作收纳在 `More` 菜单中。快捷指令入口应保持外露，不新建页面。
 - Web 端终端面输入主要从 xterm `onData` 进入 `frontend/src/components/terminal/use-terminal-emulator.ts`，最终走 websocket `sendInput(data)`；这类逐字符输入不适合作为第一版“最近提示语”记录来源。
 - 后端 HTTP 输入入口是 `backend/src/routes/terminal.ts` 的 `POST /api/terminal/session/:id/input`，请求体类型是 `SendTerminalInputRequest`。
 - 输入模式已在 `packages/shared/src/terminal-protocol.ts` 定义为 `raw | line | codex_slash_command | prompt_paste | tmux_exit_copy_mode`。
@@ -35,7 +34,7 @@
 
 “最近输入”指 Runweave 明确通过 HTTP input API 发送的完整输入意图，例如：
 
-- Web Git Submit 生成并发送的 prompt。
+- 用户通过快捷指令保存或发送的提交类 prompt。
 - Browser annotation 以 `prompt_paste` 发送的 prompt。
 - 后续 Web 快捷指令面板发送的命令或 prompt。
 
@@ -45,7 +44,7 @@
 
 ### 入口
 
-在 Web terminal 顶部 toolbar 中，靠近 `Git Submit` / `History` 的位置新增一个图标按钮：
+在 Web terminal 顶部 toolbar 中保留一个外露的快捷指令图标按钮：
 
 - 图标建议使用 lucide `Zap`、`Command` 或 `ListRestart`，以现有 toolbar 图标大小为准。
 - `aria-label` 和 `title` 使用 `快捷指令`。
@@ -55,7 +54,7 @@
 
 点击入口打开 `快捷指令` popover：
 
-- 宽度约 `400px-440px`，沿用 `TerminalSubmitPopover` 的深色 popover 风格。
+- 宽度约 `400px-440px`，沿用终端顶栏的深色 popover 风格。
 - 顶部包含标题 `快捷指令` 和搜索输入，placeholder 为 `搜索最近输入或模板`。
 - 使用 segmented tabs：`固定`、`最近`、`全部`。
 - 列表行保持紧凑，每行展示：
@@ -173,7 +172,7 @@ API 路径建议挂在 terminal router 下：
 
 来源标注：
 
-- `TerminalSubmitPopover` 发送时传递 `source: "web_git_submit"`。如果第一版不扩展 `SendTerminalInputRequest`，后端默认记为 `api_terminal_input`，Web 列表仍可用。
+- 旧版提交入口已记录的 `web_git_submit` 来源继续兼容展示；当前不再保留单独提交 UI。
 - Browser annotation 发送可标为 `web_browser_annotation`。
 - 快捷指令 popover 自己发送标为 `web_terminal_quick_input`。
 
@@ -221,11 +220,7 @@ API 路径建议挂在 terminal router 下：
 - `frontend/src/components/terminal/terminal-workspace-shell.tsx`
   - 在顶部 toolbar 加入口。
   - 向 popover 传入 `apiBase`、`token`、`activeProject`、`activeSession`。
-- `frontend/src/components/terminal/terminal-submit-popover.tsx`
-  - 发送 Git Submit prompt 时，优先改为 `mode: "prompt_paste"`，不要继续把多行 prompt 压成一行。
-  - 如果扩展 `quickInputSource`，这里传 `web_git_submit`。
-
-Web 实现约束：
+    Web 实现约束：
 
 - 不从 `react` 导入 `useCallback`，也不写 `React.useCallback`。
 - 需要稳定函数引用时使用 `ahooks` 的 `useMemoizedFn`，贴合现有 terminal workspace 写法。
@@ -332,20 +327,6 @@ Web 实现约束：
 - 包含 CR/LF 的 `line` 或 `codex_slash_command` 不会被 raw 插入。
 - `prompt_paste` 不会被错误地逐字符塞入 shell。
 
-### 7. Git Submit 发送模式修正
-
-当前 Git Submit 会用 `buildTerminalSubmitInput(prompt)` 把多行 prompt 压成一行再发送。快捷指令体系落地时，应顺手修正为：
-
-- 发送 `data: prompt`
-- 使用 `mode: "prompt_paste"`
-- source 标为 `web_git_submit`，如果协议已支持 source 字段。
-
-验收：
-
-- Git Submit 仍能发送到 active terminal。
-- 发送后的 prompt 出现在最近输入列表中。
-- prompt 保留原始多行结构，列表 preview 正常截断。
-
 ## 非目标
 
 - 不覆盖 App 端 composer 和 `TerminalShortcutBar`。
@@ -401,7 +382,7 @@ pnpm lint
 9. 对 `prompt_paste` 确认插入 disabled，复制可用。
 10. 没有 active terminal 时，确认发送/插入按钮 disabled，但列表可浏览。
 11. 删除一条 recent 后确认列表隐藏；再次发送同内容后确认它重新出现在最近列表。
-12. 用 Git Submit 发送一次，确认最近输入中出现对应 prompt。
+12. 发送一条提交类快捷指令，确认最近输入中出现对应 prompt。
 
 ## 风险与处理
 
@@ -424,7 +405,6 @@ pnpm lint
 - Popover 支持 `固定`、`最近`、`全部`、搜索、固定/取消固定、删除/隐藏、复制、发送。
 - 不含 CR/LF 的 `line` 与 `codex_slash_command` 支持 raw 插入且不自动提交；包含 CR/LF 的 item 与 `prompt_paste` 插入禁用，只支持发送/复制。
 - 快捷指令发送只通过 input 成功路径更新使用统计；插入/复制才调用 `/used`，不存在双重计数。
-- Git Submit 使用 `prompt_paste` 发送，并进入最近输入列表。
 - 长文本、无 active terminal、API error、空列表都有明确 UI 状态。
 - `pnpm typecheck` 通过。
 - Web 浏览器验收已通过 `$playwright-cli` 执行并记录结果。
