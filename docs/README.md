@@ -14,6 +14,7 @@
 | App 终端输入与快捷键                     | architecture/app-mobile.md#app-终端详情                         |
 | 终端状态模型                             | architecture/terminal-state.md                                  |
 | 终端代码预览 / Terminal Browser          | architecture/terminal-code-preview.md                           |
+| Web Terminal 快捷指令                    | architecture/terminal-code-preview.md#快捷指令入口              |
 | Terminal Browser 注释模式                | architecture/terminal-code-preview.md#terminal-browser-注释模式 |
 | 终端 tmux 恢复                           | architecture/terminal-tmux-recovery.md                          |
 | 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md                       |
