@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   ipcMain,
   session as electronSession,
+  shell,
   WebContentsView,
   type WebContents,
 } from "electron";
@@ -465,6 +466,34 @@ function validateTerminalBrowserUrl(url: string): string | null {
   return normalizeTerminalBrowserUrlForStorage(url);
 }
 
+function openTerminalBrowserExternalUrl(url: string): void {
+  try {
+    const parsed = new URL(url);
+    if (!["http:", "https:", "mailto:"].includes(parsed.protocol)) {
+      return;
+    }
+    void shell.openExternal(url);
+  } catch {
+    return;
+  }
+}
+
+function createTerminalBrowserPopupWindowOptions(
+  parentWindow: BrowserWindow,
+): Electron.BrowserWindowConstructorOptions {
+  return {
+    parent: parentWindow,
+    show: false,
+    title: "Runweave Browser",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      partition: TERMINAL_BROWSER_SESSION_PARTITION,
+      sandbox: true,
+    },
+  };
+}
+
 function getTerminalBrowserKey(win: BrowserWindow, tabId: string): string {
   return `${win.id}:${tabId}`;
 }
@@ -646,10 +675,17 @@ function getOrCreateTerminalBrowserView(
       return { action: "deny" };
     }
     const safeUrl = validateTerminalBrowserUrl(url);
-    if (safeUrl) {
-      createTerminalBrowserTabFromPageOpen(win, safeUrl);
+    if (!safeUrl) {
+      openTerminalBrowserExternalUrl(url);
+      return { action: "deny" };
     }
-    return { action: "deny" };
+    return {
+      action: "allow",
+      overrideBrowserWindowOptions: createTerminalBrowserPopupWindowOptions(win),
+    };
+  });
+  view.webContents.on("did-create-window", (popupWindow) => {
+    configureTerminalBrowserPopupWindow(win, popupWindow);
   });
   view.setVisible(false);
 
@@ -699,23 +735,30 @@ function getOrCreateTerminalBrowserView(
   return view;
 }
 
-function createTerminalBrowserTabFromPageOpen(win: BrowserWindow, url: string): void {
-  const tabId = `browser-tab-${randomUUID().slice(0, 8)}`;
-  const view = getOrCreateTerminalBrowserView(win, tabId);
-  const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, tabId));
-  if (!entry) {
-    return;
-  }
-
-  attachTerminalBrowser(win, tabId, view);
-  entry.lastKnownUrl = url;
-  win.webContents.send("terminal-browser:tab-created-from-proxy", {
-    tabId,
-    url,
-    title: "",
+function configureTerminalBrowserPopupWindow(
+  parentWindow: BrowserWindow,
+  popupWindow: BrowserWindow,
+): void {
+  popupWindow.once("ready-to-show", () => {
+    if (!popupWindow.isDestroyed()) {
+      popupWindow.show();
+    }
   });
-  void view.webContents.loadURL(url).catch(() => {
-    sendTerminalBrowserTabUpdate(win, tabId, entry, false);
+
+  popupWindow.webContents.setWindowOpenHandler(({ url }) => {
+    const safeUrl = validateTerminalBrowserUrl(url);
+    if (!safeUrl) {
+      openTerminalBrowserExternalUrl(url);
+      return { action: "deny" };
+    }
+    return {
+      action: "allow",
+      overrideBrowserWindowOptions:
+        createTerminalBrowserPopupWindowOptions(parentWindow),
+    };
+  });
+  popupWindow.webContents.on("did-create-window", (childWindow) => {
+    configureTerminalBrowserPopupWindow(parentWindow, childWindow);
   });
 }
 
