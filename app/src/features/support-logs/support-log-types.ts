@@ -33,6 +33,7 @@ export interface SupportLogStore {
 }
 
 export interface SupportLogDefaultContext {
+  appBuildId: string;
   appVersion: string;
   platform: string;
   route?: string;

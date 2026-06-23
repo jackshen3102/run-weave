@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import type { DiagnosticLogStatus } from "@runweave/shared";
 
+import { APP_BUILD_ID, APP_VERSION } from "../../config/app-build-info";
 import {
   getDiagnosticLogStatus,
   startDiagnosticLogs,
@@ -249,6 +250,14 @@ export function SupportLogSheet() {
             <IonItem>
               <IonLabel>Route</IonLabel>
               <IonNote slot="end">{currentScope.route ?? "-"}</IonNote>
+            </IonItem>
+            <IonItem>
+              <IonLabel>版本</IonLabel>
+              <IonNote slot="end">{APP_VERSION}</IonNote>
+            </IonItem>
+            <IonItem>
+              <IonLabel>Build</IonLabel>
+              <IonNote slot="end">{APP_BUILD_ID}</IonNote>
             </IonItem>
             {serverLogFile || serverDir ? (
               <IonItem>

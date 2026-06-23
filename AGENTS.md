@@ -29,9 +29,13 @@
 - Lint：`pnpm lint`
 - 测试：`pnpm test`
 
-## 本地 URL 复现约束
+## 操作与验证技能约束
 
-- 打开页面复现或修复问题时，使用 `$playwright-cli`。
+- `$computer-use` 和 `$playwright-cli` 都是本项目高价值技能；遇到真实桌面端、浏览器页面、终端页面联动的场景时，优先考虑把两者结合起来使用，而不是只停留在代码阅读或命令行猜测。
+- `$computer-use` 适合操作本机桌面端、系统弹窗、应用启动/重启、菜单、安装器，以及需要进入 Runweave 桌面端具体页面的流程。
+- `$playwright-cli` 适合打开 Web/App 页面、点击、输入、截图、读取 DOM 状态和做浏览器自动化验收。
+- 涉及浏览器页面复现、修复或验收时，必须使用 `$playwright-cli`；不要用 `$computer-use` 或其它方案替代浏览器操作验证。
+- 当任务同时涉及桌面端和浏览器页面时，推荐用 `$computer-use` 把桌面端或运行环境准备到目标状态，再用 `$playwright-cli` 完成页面级验证与证据采集。
 
 ## React Hooks 约束
 
