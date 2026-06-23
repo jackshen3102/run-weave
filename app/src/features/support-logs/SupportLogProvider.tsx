@@ -8,6 +8,7 @@ import {
   recordSupportLog,
   recordSupportLogToStore,
 } from "./support-log-recorder";
+import { APP_BUILD_ID, APP_VERSION } from "../../config/app-build-info";
 import { createSupportLogStore } from "./support-log-store";
 import type {
   SupportLogDefaultContext,
@@ -16,7 +17,6 @@ import type {
 import { SupportLogContext } from "./use-support-logs";
 import type { SupportLogUploadTarget } from "./use-support-logs";
 
-const APP_VERSION = "0.1.0";
 const DEFAULT_SCOPE: SupportLogScope = { source: "unknown" };
 
 function getApiBaseHost(): string | undefined {
@@ -29,12 +29,14 @@ function getApiBaseHost(): string | undefined {
 function createDefaultContext(): SupportLogDefaultContext {
   if (typeof window === "undefined") {
     return {
+      appBuildId: APP_BUILD_ID,
       appVersion: APP_VERSION,
       platform: Capacitor.getPlatform(),
     };
   }
 
   return {
+    appBuildId: APP_BUILD_ID,
     appVersion: APP_VERSION,
     platform: Capacitor.getPlatform(),
     route: window.location.pathname,

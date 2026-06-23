@@ -19,6 +19,7 @@
     "app:build": "pnpm --filter @runweave/app build",
     "app:ios:device": "pnpm --filter @runweave/app ios:open",
     "app:ios:local": "node ./scripts/app-ios-local.mjs",
+    "app:version:bump": "node ./scripts/bump-app-version.mjs",
     "runtime:build": "node ./scripts/build-runtime-package.mjs",
     "runtime:install": "node ./scripts/install-runtime-package.mjs",
     "runtime:pack-and-install": "pnpm runtime:build && node ./scripts/install-runtime-package.mjs --latest",
