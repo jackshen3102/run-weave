@@ -590,7 +590,7 @@ function buildTitle(data: string): string {
 
 function formatSource(item: TerminalQuickInputItem): string {
   if (item.source === "web_git_submit") {
-    return "Git Submit";
+    return "提交提示";
   }
   if (item.source === "web_browser_annotation") {
     return "Browser";

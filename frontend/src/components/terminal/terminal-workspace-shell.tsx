@@ -15,6 +15,8 @@ import type {
   TerminalState,
 } from "@runweave/shared";
 import {
+  ClipboardList,
+  Eye,
   History,
   Home,
   MoreHorizontal,
@@ -73,10 +75,8 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { DiagnosticLogEntry } from "../diagnostic-log-entry";
 import { TerminalHistoryDrawer } from "./terminal-history-drawer";
-import { TerminalPreviewMenu } from "./terminal-preview-menu";
 import { TerminalQuickInputPopover } from "./terminal-quick-input-popover";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
-import { TerminalSubmitPopover } from "./terminal-submit-popover";
 import { TerminalHeadlessConnection } from "./terminal-headless-connection";
 import { TerminalSurface } from "./terminal-surface";
 
@@ -839,15 +839,6 @@ export function TerminalWorkspaceShell({
           ) : null}
         </div>
         {!isMobileMonitor ? (
-          <TerminalSubmitPopover
-            apiBase={apiBase}
-            token={token}
-            activeProject={activeProject}
-            activeSession={activeSession}
-            disabled={loading}
-          />
-        ) : null}
-        {!isMobileMonitor ? (
           <TerminalQuickInputPopover
             apiBase={apiBase}
             token={token}
@@ -855,47 +846,6 @@ export function TerminalWorkspaceShell({
             activeSession={activeSession}
             disabled={loading}
           />
-        ) : null}
-        {!isMobileMonitor ? (
-          <TerminalPreviewMenu
-            projectId={activeProjectId}
-            disabled={loading}
-            buttonClassName="h-6 shrink-0 rounded-md px-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-          />
-        ) : null}
-        {!isMobileMonitor ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={loading || !activeProjectId}
-            aria-label="Open Orchestrator"
-            title="Open Orchestrator"
-            className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40"
-            onClick={() => {
-              useTerminalPreviewStore.getState().openOrchestrator();
-            }}
-          >
-            <Workflow className="h-3.5 w-3.5" />
-          </Button>
-        ) : null}
-        {!isMobileMonitor ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={!activeSession?.terminalSessionId}
-            aria-label="Open terminal history"
-            title="Open terminal history"
-            className="h-6 w-6 shrink-0 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40"
-            onClick={() => {
-              if (activeSession?.terminalSessionId) {
-                openHistoryDrawer(activeSession.terminalSessionId);
-              }
-            }}
-          >
-            <History className="h-3.5 w-3.5" />
-          </Button>
         ) : null}
         {!isMobileMonitor ? (
           <DropdownMenu>
@@ -913,10 +863,44 @@ export function TerminalWorkspaceShell({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-40">
               <DropdownMenuItem
+                disabled={loading || !activeProjectId}
+                onSelect={() => {
+                  if (activeProjectId) {
+                    useTerminalPreviewStore
+                      .getState()
+                      .openPreview(activeProjectId);
+                  }
+                }}
+              >
+                <Eye className="h-4 w-4" />
+                Preview
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={loading || !activeProjectId}
+                onSelect={() => {
+                  useTerminalPreviewStore.getState().openOrchestrator();
+                }}
+              >
+                <Workflow className="h-4 w-4" />
+                Orchestrator
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!activeSession?.terminalSessionId}
+                onSelect={() => {
+                  if (activeSession?.terminalSessionId) {
+                    openHistoryDrawer(activeSession.terminalSessionId);
+                  }
+                }}
+              >
+                <History className="h-4 w-4" />
+                Terminal History
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 onSelect={() => {
                   setDiagnosticLogOpen(true);
                 }}
               >
+                <ClipboardList className="h-4 w-4" />
                 日志上报
               </DropdownMenuItem>
             </DropdownMenuContent>
