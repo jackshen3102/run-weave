@@ -651,9 +651,19 @@ export function TerminalWorkspaceShell({
     ) ??
     visibleSessions[0] ??
     null;
-  const cachedSurfaceSessionIdSet = useMemo(
-    () => new Set(cachedSurfaceSessionIds),
-    [cachedSurfaceSessionIds],
+  const surfaceSessions = useMemo(() => {
+    const surfaceSessionIds = new Set(cachedSurfaceSessionIds);
+    if (activeSession?.terminalSessionId) {
+      surfaceSessionIds.add(activeSession.terminalSessionId);
+    }
+    return sessions.filter((session) =>
+      surfaceSessionIds.has(session.terminalSessionId),
+    );
+  }, [activeSession?.terminalSessionId, cachedSurfaceSessionIds, sessions]);
+  const surfaceSessionIdSet = useMemo(
+    () =>
+      new Set(surfaceSessions.map((session) => session.terminalSessionId)),
+    [surfaceSessions],
   );
   const historySession =
     sessions.find(
@@ -961,12 +971,11 @@ export function TerminalWorkspaceShell({
         <div className="relative flex h-full min-h-0">
           <div className="relative min-h-0 flex-1">
             {visibleSessions.length > 0 ? (
-              visibleSessions.map((session) => {
-                const isActive = session.terminalSessionId === activeSession?.terminalSessionId;
-                const shouldRenderSurface =
-                  isActive || cachedSurfaceSessionIdSet.has(session.terminalSessionId);
-
-                if (!shouldRenderSurface) {
+              <>
+                {visibleSessions.map((session) => {
+                  if (surfaceSessionIdSet.has(session.terminalSessionId)) {
+                    return null;
+                  }
                   return (
                     <TerminalHeadlessConnection
                       apiBase={apiBase}
@@ -982,35 +991,45 @@ export function TerminalWorkspaceShell({
                       }}
                     />
                   );
-                }
+                })}
+                {surfaceSessions.map((session) => {
+                  const isActive =
+                    session.terminalSessionId ===
+                    activeSession?.terminalSessionId;
 
-                return (
-                  <div
-                    aria-hidden={!isActive}
-                    className={[
-                      "absolute top-0 h-full w-full",
-                      isActive ? "left-0" : "-left-[9999em] pointer-events-none",
-                    ].join(" ")}
-                    key={`${apiBase}:${session.terminalSessionId}:surface`}
-                  >
-                    <TerminalSurface
-                      active={isActive}
-                      apiBase={apiBase}
-                      clientMode={clientMode}
-                      layoutVersion={terminalLayoutVersion}
-                      terminalSessionId={session.terminalSessionId}
-                      token={token}
-                      onAuthExpired={onAuthExpired}
-                      onBell={() => {
-                        onSessionBell(session.terminalSessionId);
-                      }}
-                      onMetadata={(metadata) => {
-                        onSessionMetadata(session.terminalSessionId, metadata);
-                      }}
-                    />
-                  </div>
-                );
-              })
+                  return (
+                    <div
+                      aria-hidden={!isActive}
+                      className={[
+                        "absolute top-0 h-full w-full",
+                        isActive
+                          ? "left-0"
+                          : "-left-[9999em] pointer-events-none",
+                      ].join(" ")}
+                      key={`${apiBase}:${session.terminalSessionId}:surface`}
+                    >
+                      <TerminalSurface
+                        active={isActive}
+                        apiBase={apiBase}
+                        clientMode={clientMode}
+                        layoutVersion={terminalLayoutVersion}
+                        terminalSessionId={session.terminalSessionId}
+                        token={token}
+                        onAuthExpired={onAuthExpired}
+                        onBell={() => {
+                          onSessionBell(session.terminalSessionId);
+                        }}
+                        onMetadata={(metadata) => {
+                          onSessionMetadata(
+                            session.terminalSessionId,
+                            metadata,
+                          );
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </>
             ) : (
               <div className="flex h-full items-center justify-center px-6 text-sm text-slate-400">
                 No terminal tab yet. Create one to start.

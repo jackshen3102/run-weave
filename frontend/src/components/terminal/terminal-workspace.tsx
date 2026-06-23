@@ -148,10 +148,6 @@ export function TerminalWorkspace({
       session.projectId === activeProjectId,
     );
   }, [activeProjectId, sessions]);
-  const visibleSessionIds = useMemo(
-    () => visibleSessions.map((session) => session.terminalSessionId),
-    [visibleSessions],
-  );
   const sessionIds = useMemo(
     () => sessions.map((session) => session.terminalSessionId),
     [sessions],
@@ -335,12 +331,12 @@ export function TerminalWorkspace({
       resolveCachedTerminalSurfaceIds({
         activeSessionId: activeSession?.terminalSessionId ?? null,
         cachedSessionIds: current,
-        sessionIds: visibleSessionIds,
+        sessionIds,
       }),
     );
   }, [
     activeSession?.terminalSessionId,
-    visibleSessionIds,
+    sessionIds,
     setCachedSurfaceSessionIds,
   ]);
   usePersistRecentSelection({
