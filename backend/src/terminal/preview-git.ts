@@ -227,10 +227,9 @@ export async function getPreviewFileDiff(params: {
   const { repoRoot, projectRelativeToRepo } =
     await resolveGitContext(projectPath);
   const repoPath = toRepoPath(projectRelativeToRepo, relativePath);
-  const pathspec = projectRelativeToRepo || ".";
   const statusOutput = await runGit(
     repoRoot,
-    ["status", "--porcelain=v1", "--untracked-files=all", "--", pathspec],
+    ["status", "--porcelain=v1", "--untracked-files=all", "--", repoPath],
     { maxBuffer: 1024 * 1024 },
   );
   const changes = parseGitStatus(statusOutput, projectRelativeToRepo);

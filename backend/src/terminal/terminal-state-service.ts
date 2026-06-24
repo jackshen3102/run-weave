@@ -116,13 +116,12 @@ export class TerminalStateService {
   ): TerminalState {
     const previous = this.store.get(terminalSessionId) ?? SHELL_IDLE;
     const saved = this.store.set(terminalSessionId, next);
-    if (previous.state !== next.state || previous.agent !== next.agent) {
+    const changed =
+      previous.state !== next.state || previous.agent !== next.agent;
+    if (changed) {
       this.onStateChange?.(terminalSessionId, next);
     }
-    if (
-      context &&
-      (previous.state !== next.state || previous.agent !== next.agent)
-    ) {
+    if (context && changed) {
       this.eventService?.record({
         kind: "terminal_state_changed",
         terminalSessionId,

@@ -201,80 +201,111 @@ export function TerminalPreviewPanelContent({
   }
 
   if (mode === "changes") {
-    const changeDiffFileKind = selectedChangePath
-      ? getTerminalPreviewFileKind(selectedChangePath, null)
-      : "text";
-    const changeDiffLanguageHint = selectedChangePath
-      ? extensionToLanguageHint(selectedChangePath)
-      : null;
-    const changeDiffMonacoLanguage = getTerminalPreviewMonacoLanguage(
-      changeDiffLanguageHint,
-    );
-    const isChangeImageDeleted =
-      changeDiffFileKind === "image" && fileDiff?.status === "deleted";
+    const fileDiffMatchesSelection =
+      fileDiff !== null &&
+      fileDiff.path === selectedChangePath &&
+      fileDiff.changeKind === selectedChangeKind;
+    const selectedChangePending =
+      Boolean(selectedChangePath && selectedChangeKind) &&
+      !fileDiffMatchesSelection;
+    const showDiffLoading = diffLoading || selectedChangePending;
+    const renderFileDiffContent = (
+      currentFileDiff: TerminalPreviewFileDiffResponse,
+      displayPath: string,
+    ): ReactNode => {
+      const changeDiffFileKind = getTerminalPreviewFileKind(displayPath, null);
+      const changeDiffLanguageHint = extensionToLanguageHint(displayPath);
+      const changeDiffMonacoLanguage = getTerminalPreviewMonacoLanguage(
+        changeDiffLanguageHint,
+      );
+      const isChangeImageDeleted =
+        changeDiffFileKind === "image" && currentFileDiff.status === "deleted";
 
-    let changeContent: ReactNode;
-    if (diffLoading && !fileDiff) {
-      changeContent = renderPreviewEmpty("Loading diff...");
-    } else if (diffError) {
-      changeContent = renderPreviewEmpty(diffError);
-    } else if (!fileDiff) {
-      changeContent = renderPreviewEmpty("Select a changed file");
-    } else if (changeDiffFileKind === "image") {
       if (isChangeImageDeleted) {
-        changeContent = renderPreviewEmpty("Image deleted");
-      } else if (selectedChangePath && projectId) {
-        changeContent = (
+        return renderPreviewEmpty("Image deleted");
+      }
+
+      if (changeDiffFileKind === "image") {
+        if (!projectId) {
+          return renderPreviewEmpty("Binary file");
+        }
+        return (
           <Suspense fallback={renderPreviewEmpty("Loading image preview...")}>
             <TerminalImagePreview
               apiBase={apiBase}
               token={token}
               projectId={projectId}
-              path={selectedChangePath}
+              path={displayPath}
               refreshKey={0}
               onAuthExpired={onAuthExpired}
             />
           </Suspense>
         );
-      } else {
-        changeContent = renderPreviewEmpty("Binary file");
       }
-    } else if (
-      changesViewMode === "preview" &&
-      changeDiffFileKind === "markdown" &&
-      activeProject
-    ) {
-      changeContent = (
-        <Suspense fallback={renderPreviewEmpty("Loading markdown preview...")}>
-          <TerminalMarkdownPreview
-            apiBase={apiBase}
-            token={token}
-            projectId={activeProject.projectId}
-            content={fileDiff.newContent}
-            path={fileDiff.path}
-            onAuthExpired={onAuthExpired}
-            onOpenFile={onOpenFilePath}
-          />
-        </Suspense>
-      );
-    } else if (changesViewMode === "preview" && changeDiffFileKind === "svg") {
-      changeContent = (
-        <Suspense fallback={renderPreviewEmpty("Loading SVG preview...")}>
-          <TerminalSvgPreview content={fileDiff.newContent} />
-        </Suspense>
-      );
-    } else {
-      changeContent = (
+
+      if (
+        changesViewMode === "preview" &&
+        changeDiffFileKind === "markdown" &&
+        activeProject
+      ) {
+        return (
+          <Suspense fallback={renderPreviewEmpty("Loading markdown preview...")}>
+            <TerminalMarkdownPreview
+              apiBase={apiBase}
+              token={token}
+              projectId={activeProject.projectId}
+              content={currentFileDiff.newContent}
+              path={currentFileDiff.path}
+              onAuthExpired={onAuthExpired}
+              onOpenFile={onOpenFilePath}
+            />
+          </Suspense>
+        );
+      }
+
+      if (changesViewMode === "preview" && changeDiffFileKind === "svg") {
+        return (
+          <Suspense fallback={renderPreviewEmpty("Loading SVG preview...")}>
+            <TerminalSvgPreview content={currentFileDiff.newContent} />
+          </Suspense>
+        );
+      }
+
+      return (
         <Suspense fallback={renderPreviewEmpty("Loading editor...")}>
           <TerminalMonacoViewer
             diff
             language={changeDiffMonacoLanguage}
-            oldContent={fileDiff.oldContent}
-            newContent={fileDiff.newContent}
-            lineReferencePath={fileDiff.absolutePath}
+            oldContent={currentFileDiff.oldContent}
+            newContent={currentFileDiff.newContent}
+            lineReferencePath={currentFileDiff.absolutePath}
           />
         </Suspense>
       );
+    };
+
+    let changeContent: ReactNode;
+    if (diffError && !showDiffLoading) {
+      changeContent = renderPreviewEmpty(diffError);
+    } else if (showDiffLoading && fileDiff) {
+      changeContent = (
+        <div className="relative h-full min-h-0 overflow-hidden">
+          <div className="h-full min-h-0 opacity-45 transition-opacity duration-150 ease-out">
+            {renderFileDiffContent(fileDiff, fileDiff.path)}
+          </div>
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/30 backdrop-blur-[1px]">
+            <div className="rounded-md border border-slate-700/70 bg-slate-950/80 px-3 py-1.5 text-xs text-slate-300 shadow-lg shadow-slate-950/30">
+              Loading diff...
+            </div>
+          </div>
+        </div>
+      );
+    } else if (showDiffLoading) {
+      changeContent = renderPreviewEmpty("Loading diff...");
+    } else if (!fileDiff) {
+      changeContent = renderPreviewEmpty("Select a changed file");
+    } else {
+      changeContent = renderFileDiffContent(fileDiff, fileDiff.path);
     }
 
     return (
