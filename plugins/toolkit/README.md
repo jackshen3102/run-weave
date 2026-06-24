@@ -93,10 +93,10 @@ codex plugin add "toolkit@$MARKETPLACE_NAME"
 
 Hooks 运行时代码放在 `plugins/toolkit/hooks/`。
 
-- Codex 与 Trae CLI 的插件级 hook 注册在 `plugins/toolkit/hooks.json`，分别随
-  `toolkit@runweave` 和 `toolkit@local` 安装进入插件缓存。
-- 当前 Codex 插件验证器仍不接受 `plugin.json` 的 `hooks` 字段，所以 hook 配置保留为
-  插件根目录 `hooks.json`，不写入 manifest。
+- Codex hook 配置由 `plugins/toolkit/.codex-plugin/plugin.json` 的 `hooks` 字段显式指向
+  `plugins/toolkit/hooks.json`，随 `toolkit@runweave` 和 `toolkit@local` 安装进入插件缓存。
+- 不要只在插件根目录放置 `hooks.json` 而不更新 manifest；新启动的 Codex 进程不会因为
+  该文件存在就自动执行 hook。
 - Electron 安装器会从同步后的 `electron/resources/hooks/` 运行副本安装 launcher 与
   兼容/清理层，旧的 Codex 全局 hooks 与 Trae 全局 TOML hook 会被去重清理。
 

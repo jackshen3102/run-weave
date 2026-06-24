@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT:-__PLUGIN_DIR__}/hooks/runweave-hook-dispatch.cjs\"",
+            "command": "sh -c 'for root in \"${CLAUDE_PLUGIN_ROOT:-}\" \"${CODEX_PLUGIN_ROOT:-}\" . \"__PLUGIN_DIR__\"; do if [ -n \"$root\" ] && [ -f \"$root/hooks/runweave-hook-dispatch.cjs\" ]; then exec node \"$root/hooks/runweave-hook-dispatch.cjs\"; fi; done; exit 0'",
             "timeout": 5
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT:-__PLUGIN_DIR__}/hooks/runweave-hook-dispatch.cjs\"",
+            "command": "sh -c 'for root in \"${CLAUDE_PLUGIN_ROOT:-}\" \"${CODEX_PLUGIN_ROOT:-}\" . \"__PLUGIN_DIR__\"; do if [ -n \"$root\" ] && [ -f \"$root/hooks/runweave-hook-dispatch.cjs\" ]; then exec node \"$root/hooks/runweave-hook-dispatch.cjs\"; fi; done; exit 0'",
             "timeout": 5
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT:-__PLUGIN_DIR__}/hooks/runweave-hook-dispatch.cjs\"",
+            "command": "sh -c 'for root in \"${CLAUDE_PLUGIN_ROOT:-}\" \"${CODEX_PLUGIN_ROOT:-}\" . \"__PLUGIN_DIR__\"; do if [ -n \"$root\" ] && [ -f \"$root/hooks/runweave-hook-dispatch.cjs\" ]; then exec node \"$root/hooks/runweave-hook-dispatch.cjs\"; fi; done; exit 0'",
             "timeout": 5
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT:-__PLUGIN_DIR__}/hooks/runweave-hook-dispatch.cjs\"",
+            "command": "sh -c 'for root in \"${CLAUDE_PLUGIN_ROOT:-}\" \"${CODEX_PLUGIN_ROOT:-}\" . \"__PLUGIN_DIR__\"; do if [ -n \"$root\" ] && [ -f \"$root/hooks/runweave-hook-dispatch.cjs\" ]; then exec node \"$root/hooks/runweave-hook-dispatch.cjs\"; fi; done; exit 0'",
             "timeout": 5
           }
         ]
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT:-__PLUGIN_DIR__}/hooks/runweave-hook-dispatch.cjs\"",
+            "command": "sh -c 'for root in \"${CLAUDE_PLUGIN_ROOT:-}\" \"${CODEX_PLUGIN_ROOT:-}\" . \"__PLUGIN_DIR__\"; do if [ -n \"$root\" ] && [ -f \"$root/hooks/runweave-hook-dispatch.cjs\" ]; then exec node \"$root/hooks/runweave-hook-dispatch.cjs\"; fi; done; exit 0'",
             "timeout": 5
           }
         ]

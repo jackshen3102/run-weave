@@ -33,7 +33,7 @@ const toolkitHookEvents = [
   "UserPromptSubmit",
 ];
 const toolkitHookCommand =
-  'node "${CLAUDE_PLUGIN_ROOT:-__PLUGIN_DIR__}/hooks/runweave-hook-dispatch.cjs"';
+  'sh -c \'for root in "${CLAUDE_PLUGIN_ROOT:-}" "${CODEX_PLUGIN_ROOT:-}" . "__PLUGIN_DIR__"; do if [ -n "$root" ] && [ -f "$root/hooks/runweave-hook-dispatch.cjs" ]; then exec node "$root/hooks/runweave-hook-dispatch.cjs"; fi; done; exit 0\'';
 
 const toolkitHooksConfig = JSON.parse(
   await readFile(toolkitHooksConfigPath, "utf8"),

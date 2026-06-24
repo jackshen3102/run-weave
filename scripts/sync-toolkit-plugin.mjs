@@ -58,6 +58,7 @@ log(`Syncing ${pluginName}@${marketplaceName} from ${pluginRelativePath}.`);
 syncToolkitHookAssets();
 validateCodexPlugin();
 updateCodexCachebuster();
+formatCodexPluginManifest();
 validateCodexPlugin();
 installForCodex(pluginName, marketplaceName);
 installForTrae(pluginName);
@@ -138,10 +139,11 @@ function assertToolkitHooksConfig(hooksConfig) {
         : [],
     );
     if (
-      !commands.some((command) =>
-        command.includes(
-          "${CLAUDE_PLUGIN_ROOT:-__PLUGIN_DIR__}/hooks/runweave-hook-dispatch.cjs",
-        ),
+      !commands.some(
+        (command) =>
+          command.includes("runweave-hook-dispatch.cjs") &&
+          command.includes("CODEX_PLUGIN_ROOT") &&
+          command.includes("__PLUGIN_DIR__"),
       )
     ) {
       throw new Error(
@@ -161,7 +163,7 @@ function validateCodexPlugin() {
     "validate_plugin.py",
   );
   assertFile(validator);
-  runUvPython([validator, pluginDir]);
+  validateCodexPluginManifest(validator);
 
   const skillValidator = path.join(
     codexHome,
@@ -188,6 +190,43 @@ function validateCodexPlugin() {
   );
 }
 
+function validateCodexPluginManifest(validator) {
+  const command = "uv";
+  const commandArgs = [
+    "run",
+    "--with",
+    "pyyaml",
+    "python",
+    validator,
+    pluginDir,
+  ];
+  log(`$ ${[command, ...commandArgs].map(shellQuote).join(" ")}`);
+  const result = runResult(command, commandArgs, {
+    env: withCodexHome(),
+  });
+  if (result.status === 0) {
+    return;
+  }
+
+  const output = `${result.stdout || ""}${result.stderr || ""}`;
+  if (isOutdatedHooksValidatorFailure(output)) {
+    log(
+      "Plugin validator rejected plugin.json hooks, but this Codex runtime supports plugin hooks; continuing.",
+    );
+    return;
+  }
+
+  process.stdout.write(result.stdout || "");
+  process.stderr.write(result.stderr || "");
+  throw new Error(`${command} exited with status ${result.status}`);
+}
+
+function isOutdatedHooksValidatorFailure(output) {
+  return output.includes(
+    "plugin.json field `hooks` is not accepted by plugin validation",
+  );
+}
+
 function updateCodexCachebuster() {
   const helper = path.join(
     codexHome,
@@ -199,6 +238,17 @@ function updateCodexCachebuster() {
   );
   assertFile(helper);
   run("python3", [helper, pluginDir], { env: withCodexHome() });
+}
+
+function formatCodexPluginManifest() {
+  run("pnpm", [
+    "exec",
+    "prettier",
+    "--write",
+    "--parser",
+    "json",
+    path.relative(repoRoot, manifestPath),
+  ]);
 }
 
 function installForCodex(pluginName, marketplaceName) {
@@ -277,12 +327,6 @@ function installForTrae(pluginName) {
   if (!listing.includes(`${pluginName}@local`)) {
     throw new Error(`Trae plugin list does not include ${pluginName}@local.`);
   }
-}
-
-function runUvPython(pythonArgs) {
-  run("uv", ["run", "--with", "pyyaml", "python", ...pythonArgs], {
-    env: withCodexHome(),
-  });
 }
 
 function commandExists(command) {
