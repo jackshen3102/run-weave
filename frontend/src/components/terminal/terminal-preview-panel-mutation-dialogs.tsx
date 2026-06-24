@@ -9,29 +9,39 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
+import type { TerminalPreviewChangeKind } from "@runweave/shared";
 
 interface PreviewFileMutationTarget {
   path: string;
   expectedMtimeMs?: number;
 }
 
+interface PreviewChangeResetTarget {
+  path: string;
+  kind: TerminalPreviewChangeKind;
+}
+
 interface TerminalPreviewPanelMutationDialogsProps {
   deleteTarget: PreviewFileMutationTarget | null;
   renameTarget: PreviewFileMutationTarget | null;
+  resetTarget: PreviewChangeResetTarget | null;
   renamePath: string;
-  mutationPending: "delete" | "rename" | null;
+  mutationPending: "delete" | "rename" | "reset" | null;
   mutationError: string | null;
   onRenamePathChange: (path: string) => void;
   onClearMutationError: () => void;
   onCloseRename: () => void;
   onCloseDelete: () => void;
+  onCloseReset: () => void;
   onSubmitRename: () => void;
   onSubmitDelete: () => void;
+  onSubmitReset: () => void;
 }
 
 export function TerminalPreviewPanelMutationDialogs({
   deleteTarget,
   renameTarget,
+  resetTarget,
   renamePath,
   mutationPending,
   mutationError,
@@ -39,8 +49,10 @@ export function TerminalPreviewPanelMutationDialogs({
   onClearMutationError,
   onCloseRename,
   onCloseDelete,
+  onCloseReset,
   onSubmitRename,
   onSubmitDelete,
+  onSubmitReset,
 }: TerminalPreviewPanelMutationDialogsProps) {
   return (
     <>
@@ -154,6 +166,51 @@ export function TerminalPreviewPanelMutationDialogs({
               }}
             >
               {mutationPending === "delete" ? "Deleting..." : "Delete File"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={resetTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && mutationPending !== "reset") {
+            onCloseReset();
+          }
+        }}
+      >
+        <AlertDialogContent className="w-[calc(100vw-2rem)] overflow-hidden">
+          <AlertDialogHeader className="min-w-0">
+            <AlertDialogTitle>Reset Changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              {resetTarget?.kind === "staged"
+                ? "This unstages this file and keeps its working copy changes."
+                : "This discards this file's working tree changes. This cannot be undone."}
+            </AlertDialogDescription>
+            {resetTarget ? (
+              <p className="min-w-0 break-all text-sm leading-6 text-slate-300">
+                {resetTarget.path}
+              </p>
+            ) : null}
+          </AlertDialogHeader>
+          {mutationError && resetTarget ? (
+            <p className="text-sm text-rose-400" role="alert">
+              {mutationError}
+            </p>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={mutationPending === "reset"}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={mutationPending === "reset"}
+              className="bg-amber-600 text-white hover:bg-amber-500"
+              onClick={(event) => {
+                event.preventDefault();
+                onSubmitReset();
+              }}
+            >
+              {mutationPending === "reset" ? "Resetting..." : "Reset Changes"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -6,6 +6,7 @@ import {
   Folder,
   PanelLeftOpen,
   Pencil,
+  RotateCcw,
   Trash2,
 } from "lucide-react";
 import type {
@@ -29,6 +30,10 @@ interface TerminalPreviewChangeTreeProps {
   selectedChangeKind?: TerminalPreviewChangeKind;
   onRequestRenameFile: (filePath: string) => void;
   onRequestDeleteFile: (filePath: string) => void;
+  onRequestResetChange: (
+    filePath: string,
+    kind: TerminalPreviewChangeKind,
+  ) => void;
   onSelectChange: (filePath: string, kind: TerminalPreviewChangeKind) => void;
   onReloadDiff: (filePath: string, kind: TerminalPreviewChangeKind) => void;
   onOpenModeFile: () => void;
@@ -177,6 +182,7 @@ export function TerminalPreviewChangeTree({
   selectedChangeKind,
   onRequestRenameFile,
   onRequestDeleteFile,
+  onRequestResetChange,
   onSelectChange,
   onReloadDiff,
   onOpenModeFile,
@@ -277,6 +283,13 @@ export function TerminalPreviewChangeTree({
             >
               <Pencil className="h-4 w-4" />
               Rename
+            </ContextMenuItem>
+            <ContextMenuItem
+              onSelect={() => onRequestResetChange(node.file.path, kind)}
+              className="text-amber-300 focus:text-amber-300"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reset
             </ContextMenuItem>
             <ContextMenuItem
               onSelect={() => onRequestDeleteFile(node.file.path)}

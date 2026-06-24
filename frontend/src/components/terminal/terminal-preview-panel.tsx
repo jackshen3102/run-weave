@@ -1,6 +1,7 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect } from "react";
 import type {
+  TerminalPreviewChangeKind,
   TerminalProjectListItem,
   TerminalSessionListItem,
 } from "@runweave/shared";
@@ -11,6 +12,7 @@ import {
 import {
   deleteTerminalProjectPreviewFile,
   renameTerminalProjectPreviewFile,
+  resetTerminalProjectPreviewChange,
 } from "../../services/terminal";
 import { TerminalPreviewPanelContent } from "./terminal-preview-panel-content";
 import { useTerminalPreviewPanelActions } from "./terminal-preview-panel-actions";
@@ -131,6 +133,8 @@ export function TerminalPreviewPanel({
     setDeleteTarget,
     renameTarget,
     setRenameTarget,
+    resetTarget,
+    setResetTarget,
     renamePath,
     setRenamePath,
     mutationPending,
@@ -183,6 +187,16 @@ export function TerminalPreviewPanel({
     setMutationError(null);
     setDeleteTarget(getMutationTarget(filePath));
   });
+
+  const requestResetChange = useMemoizedFn(
+    (filePath: string, kind: TerminalPreviewChangeKind): void => {
+      if (!projectId || !confirmDiscardDraft()) {
+        return;
+      }
+      setMutationError(null);
+      setResetTarget({ path: filePath, kind });
+    },
+  );
 
   const {
     copyPath: copySelectedPath,
@@ -364,6 +378,68 @@ export function TerminalPreviewPanel({
     }
   });
 
+  const submitResetChange = useMemoizedFn(async (): Promise<void> => {
+    if (!projectId || !resetTarget || mutationPending) {
+      return;
+    }
+    setMutationPending("reset");
+    setMutationError(null);
+    try {
+      await resetTerminalProjectPreviewChange(apiBase, token, projectId, {
+        path: resetTarget.path,
+        kind: resetTarget.kind,
+      });
+      const resetSelectedFile =
+        selectedFilePath === resetTarget.path ||
+        filePreview?.path === resetTarget.path;
+      const resetSelectedChange =
+        selectedChangePath === resetTarget.path &&
+        selectedChangeKind === resetTarget.kind;
+      if (resetSelectedFile) {
+        fileRequestSequencer.invalidate();
+        setFilePreview(null);
+        setEditorContent("");
+        setLoadedContent("");
+        setLoadedMtimeMs(undefined);
+        setSaveError(null);
+        setSaveConflict(false);
+        setLastSavedAt(null);
+        setFileError(null);
+        setFileLoading(false);
+      }
+      if (resetSelectedChange) {
+        diffRequestSequencer.invalidate();
+        selectedChangePathRef.current = undefined;
+        selectedChangeKindRef.current = undefined;
+        setFileDiff(null);
+        setDiffError(null);
+        setDiffLoading(false);
+      }
+      if (resetSelectedFile || resetSelectedChange) {
+        updateProjectPreview(projectId, {
+          selectedFilePath: resetSelectedFile ? undefined : selectedFilePath,
+          selectedChangePath: resetSelectedChange
+            ? undefined
+            : selectedChangePath,
+          selectedChangeKind: resetSelectedChange
+            ? undefined
+            : selectedChangeKind,
+        });
+      }
+      setResetTarget(null);
+      invalidateFileTreeParents([resetTarget.path]);
+      await refreshFileSearch();
+      void loadChanges({
+        reloadDiff: !resetSelectedChange,
+        preserveMode: mode !== "changes",
+      });
+    } catch (error) {
+      setMutationError(handleRequestError(error));
+    } finally {
+      setMutationPending(null);
+    }
+  });
+
   const previewBody = (
     <TerminalPreviewPanelContent
       activeProject={activeProject}
@@ -421,6 +497,7 @@ export function TerminalPreviewPanel({
       onOpenFilePath={openFilePath}
       onRequestRenameFile={requestRenameFile}
       onRequestDeleteFile={requestDeleteFile}
+      onRequestResetChange={requestResetChange}
       onSelectChange={(filePath, kind) => {
         if (!projectId) {
           return;
@@ -535,6 +612,7 @@ export function TerminalPreviewPanel({
       <TerminalPreviewPanelMutationDialogs
         deleteTarget={deleteTarget}
         renameTarget={renameTarget}
+        resetTarget={resetTarget}
         renamePath={renamePath}
         mutationPending={mutationPending}
         mutationError={mutationError}
@@ -549,8 +627,13 @@ export function TerminalPreviewPanel({
           setDeleteTarget(null);
           setMutationError(null);
         }}
+        onCloseReset={() => {
+          setResetTarget(null);
+          setMutationError(null);
+        }}
         onSubmitRename={() => void submitRenameFile()}
         onSubmitDelete={() => void submitDeleteFile()}
+        onSubmitReset={() => void submitResetChange()}
       />
     </>
   );

@@ -123,6 +123,18 @@ export interface TerminalPreviewRenameFileRequest {
   expectedMtimeMs?: number;
 }
 
+export interface TerminalPreviewResetChangeRequest {
+  path: string;
+  kind: TerminalPreviewChangeKind;
+}
+
+export interface TerminalPreviewResetChangeResponse {
+  kind: "git-change-reset";
+  projectId: string;
+  path: string;
+  changeKind: TerminalPreviewChangeKind;
+}
+
 export interface TerminalPreviewChangeFile {
   path: string;
   status: TerminalPreviewGitStatus;

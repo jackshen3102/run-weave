@@ -10,6 +10,7 @@ import {
   readPreviewAsset,
   readPreviewFile,
   renamePreviewFile,
+  resetPreviewGitChange,
   savePreviewFile,
   searchPreviewFiles,
   TerminalPreviewError,
@@ -50,6 +51,11 @@ const previewRenameFileSchema = z.object({
 });
 
 const previewFileDiffSchema = z.object({
+  path: z.string().min(1),
+  kind: z.enum(["staged", "working"]),
+});
+
+const previewResetChangeSchema = z.object({
   path: z.string().min(1),
   kind: z.enum(["staged", "working"]),
 });
@@ -296,6 +302,34 @@ export function registerTerminalPreviewRoutes(
       );
       res.json(
         await getPreviewFileDiff({
+          projectId: project.id,
+          projectPath: project.path,
+          requestedPath: parsed.data.path,
+          changeKind: parsed.data.kind,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.post("/project/:id/preview/git-change/reset", async (req, res) => {
+    const parsed = previewResetChangeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolveProjectPreviewContext(
+        terminalSessionManager,
+        req.params.id,
+      );
+      res.json(
+        await resetPreviewGitChange({
           projectId: project.id,
           projectPath: project.path,
           requestedPath: parsed.data.path,

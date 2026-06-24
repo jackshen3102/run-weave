@@ -77,6 +77,10 @@ interface TerminalPreviewPanelContentProps {
   onOpenFilePath: (filePath: string) => void;
   onRequestRenameFile: (filePath: string) => void;
   onRequestDeleteFile: (filePath: string) => void;
+  onRequestResetChange: (
+    filePath: string,
+    kind: TerminalPreviewChangeKind,
+  ) => void;
   onSelectChange: (filePath: string, kind: TerminalPreviewChangeKind) => void;
   onReloadDiff: (filePath: string, kind: TerminalPreviewChangeKind) => void;
   onMarkdownScrollRatioChange: (ratio: number) => void;
@@ -129,6 +133,7 @@ export function TerminalPreviewPanelContent({
   onOpenFilePath,
   onRequestRenameFile,
   onRequestDeleteFile,
+  onRequestResetChange,
   onSelectChange,
   onReloadDiff,
   onMarkdownScrollRatioChange,
@@ -323,6 +328,7 @@ export function TerminalPreviewPanelContent({
           selectedChangeKind={selectedChangeKind}
           onRequestRenameFile={onRequestRenameFile}
           onRequestDeleteFile={onRequestDeleteFile}
+          onRequestResetChange={onRequestResetChange}
           onSelectChange={onSelectChange}
           onReloadDiff={onReloadDiff}
           onOpenModeFile={onOpenModeFile}

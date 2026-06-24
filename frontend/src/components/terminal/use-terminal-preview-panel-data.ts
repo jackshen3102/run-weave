@@ -40,6 +40,11 @@ interface PreviewFileMutationTarget {
   expectedMtimeMs?: number;
 }
 
+interface PreviewChangeResetTarget {
+  path: string;
+  kind: TerminalPreviewChangeKind;
+}
+
 interface UseTerminalPreviewPanelDataArgs {
   apiBase: string;
   token: string;
@@ -149,9 +154,11 @@ export function useTerminalPreviewPanelData({
     useState<PreviewFileMutationTarget | null>(null);
   const [renameTarget, setRenameTarget] =
     useState<PreviewFileMutationTarget | null>(null);
+  const [resetTarget, setResetTarget] =
+    useState<PreviewChangeResetTarget | null>(null);
   const [renamePath, setRenamePath] = useState("");
   const [mutationPending, setMutationPending] = useState<
-    "delete" | "rename" | null
+    "delete" | "rename" | "reset" | null
   >(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
@@ -617,6 +624,8 @@ export function useTerminalPreviewPanelData({
     setDeleteTarget,
     renameTarget,
     setRenameTarget,
+    resetTarget,
+    setResetTarget,
     renamePath,
     setRenamePath,
     mutationPending,
