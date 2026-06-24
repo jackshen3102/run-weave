@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -55,12 +63,22 @@ assertToolkitHooksConfig(hooksConfig);
 
 log(`Syncing ${pluginName}@${marketplaceName} from ${pluginRelativePath}.`);
 
+const codexCompatibilityVersions = collectCodexCompatibilityVersions(
+  pluginName,
+  marketplaceName,
+);
+
 syncToolkitHookAssets();
 validateCodexPlugin();
 updateCodexCachebuster();
 formatCodexPluginManifest();
 validateCodexPlugin();
 installForCodex(pluginName, marketplaceName);
+preserveCodexCompatibilityCache(
+  pluginName,
+  marketplaceName,
+  codexCompatibilityVersions,
+);
 installForTrae(pluginName);
 
 if (shouldStageCachebuster) {
@@ -266,6 +284,171 @@ function installForCodex(pluginName, marketplaceName) {
     throw new Error(
       `Codex plugin list does not include ${pluginName}@${marketplaceName}.`,
     );
+  }
+}
+
+function collectCodexCompatibilityVersions(pluginName, marketplaceName) {
+  const versions = new Set();
+  addVersion(versions, manifest.version);
+
+  const cacheRoot = getCodexPluginCacheRoot(pluginName, marketplaceName);
+  for (const entry of listDirectoryNames(cacheRoot)) {
+    addVersion(versions, entry);
+  }
+  for (const version of collectSessionReferencedCodexVersions(
+    pluginName,
+    marketplaceName,
+  )) {
+    addVersion(versions, version);
+  }
+
+  const manifestRevisions = runCapture(
+    "git",
+    ["log", "--format=%H", "--", path.relative(repoRoot, manifestPath)],
+    { quiet: true },
+  )
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+  for (const revision of manifestRevisions) {
+    const content = runCapture(
+      "git",
+      ["show", `${revision}:${path.relative(repoRoot, manifestPath)}`],
+      { quiet: true },
+    );
+    addVersion(versions, parseJsonVersion(content));
+  }
+
+  return versions;
+}
+
+function collectSessionReferencedCodexVersions(pluginName, marketplaceName) {
+  if (!commandExists("rg")) {
+    return [];
+  }
+
+  const sessionsDir = path.join(codexHome, "sessions");
+  if (!existsSync(sessionsDir)) {
+    return [];
+  }
+
+  const pattern = [
+    "plugins/cache",
+    marketplaceName,
+    pluginName,
+    "0\\.1\\.0\\+codex\\.[0-9]+",
+  ].join("/");
+  const result = runResult(
+    "rg",
+    [
+      "--only-matching",
+      "--no-filename",
+      "--color",
+      "never",
+      pattern,
+      sessionsDir,
+    ],
+    { quiet: true },
+  );
+  if (result.status !== 0 && result.status !== 1) {
+    return [];
+  }
+
+  const versionPattern = /0\.1\.0\+codex\.[0-9]+/g;
+  return Array.from(
+    new Set(`${result.stdout || ""}`.match(versionPattern) ?? []),
+  );
+}
+
+function preserveCodexCompatibilityCache(
+  pluginName,
+  marketplaceName,
+  compatibilityVersions,
+) {
+  const currentVersion = readJson(manifestPath).version;
+  if (!currentVersion) {
+    throw new Error("Toolkit plugin manifest is missing version.");
+  }
+
+  const cacheRoot = getCodexPluginCacheRoot(pluginName, marketplaceName);
+  const currentCachePath = path.join(cacheRoot, currentVersion);
+  if (!existsSync(currentCachePath)) {
+    log(
+      `Codex plugin cache ${currentCachePath} does not exist; skipping compatibility cache aliases.`,
+    );
+    return;
+  }
+
+  for (const version of compatibilityVersions) {
+    if (version === currentVersion) {
+      continue;
+    }
+    const aliasPath = path.join(cacheRoot, version);
+    const aliasState = getPathState(aliasPath);
+    if (aliasState === "directory") {
+      continue;
+    }
+    if (aliasState === "symlink") {
+      rmSync(aliasPath, { force: true });
+    } else if (aliasState === "other") {
+      log(
+        `Skipping compatibility cache alias over non-directory ${aliasPath}.`,
+      );
+      continue;
+    }
+
+    symlinkSync(currentCachePath, aliasPath, "dir");
+    log(`Preserved Codex compatibility cache ${version} -> ${currentVersion}.`);
+  }
+}
+
+function getCodexPluginCacheRoot(pluginName, marketplaceName) {
+  return path.join(codexHome, "plugins", "cache", marketplaceName, pluginName);
+}
+
+function listDirectoryNames(directoryPath) {
+  if (!existsSync(directoryPath)) {
+    return [];
+  }
+  return runCapture(
+    "find",
+    [directoryPath, "-maxdepth", "1", "-mindepth", "1"],
+    {
+      quiet: true,
+    },
+  )
+    .split("\n")
+    .map((entry) => path.basename(entry.trim()))
+    .filter(Boolean);
+}
+
+function addVersion(versions, version) {
+  if (typeof version === "string" && version.startsWith("0.1.0+codex.")) {
+    versions.add(version);
+  }
+}
+
+function parseJsonVersion(content) {
+  try {
+    return JSON.parse(content).version;
+  } catch {
+    return null;
+  }
+}
+
+function getPathState(targetPath) {
+  try {
+    const stats = lstatSync(targetPath);
+    if (stats.isSymbolicLink()) {
+      return "symlink";
+    }
+    if (stats.isDirectory()) {
+      return "directory";
+    }
+    return "other";
+  } catch {
+    return "missing";
   }
 }
 
