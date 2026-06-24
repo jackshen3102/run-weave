@@ -106,11 +106,14 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 8. 调用 `toolkit:github-pr` 提交并合并 PR。
    - 验证通过后调用 `toolkit:github-pr`，由该 skill 负责提交、push、创建 PR、等待门禁和合并。
 
-9. 输出结果。
-   - 列出更新了哪些权威文档、删除了哪些冗余文档。
-   - 说明哪些代码变化不需要文档更新，以及原因。
-   - 列出 `toolkit:github-pr` 返回的 commit、push 分支、PR 链接和合并状态。
-   - 如果发现代码和文档事实无法对齐，列出待确认问题，不修改代码。
+9. 发送一次飞书总结通知，内容与最终报告保持一致但更短。
+
+10. 输出结果。
+
+- 列出更新了哪些权威文档、删除了哪些冗余文档。
+- 说明哪些代码变化不需要文档更新，以及原因。
+- 列出 `toolkit:github-pr` 返回的 commit、push 分支、PR 链接和合并状态。
+- 如果发现代码和文档事实无法对齐，列出待确认问题，不修改代码。
 
 ## 删除规则
 
@@ -138,3 +141,44 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 - `验证`：实际运行的检查命令和结果。
 - `提交`：`toolkit:github-pr` 的 commit、push 分支、PR 链接和合并状态。
 - `待确认`：需要人工判断的外部事实或产品取舍。
+
+## 飞书总结通知
+
+在最终回复前，必须发送一次飞书总结通知；如果本轮因为权限、文档事实无法确认、验证失败、PR 门禁或人工评审无法完成，也发送一次阻塞摘要。不要调用
+`runweave-hook-bridge.cjs`，因为它是 AI CLI Stop hook + Runweave terminal completion 上报链路，会依赖 `RUNWEAVE_*` 身份并可能产生额外副作用。这里直接复用现有飞书脚本的 webhook 配置、加签、日志和静默失败策略。
+
+通知内容控制在 2500 字以内，至少包含：
+
+- skill：`daily-doc-maintenance`
+- 结果：成功 / 阻塞 / 失败
+- 更新了哪些权威文档
+- 删除了哪些文档或资产
+- 验证命令与结果
+- commit、分支、PR 链接、合并状态（如果已产生）
+- 待人工确认项（如果有）
+
+发送命令使用当前总结替换 `summary` 变量；脚本不存在、`jq` 缺失或飞书 env 未配置时不要阻塞最终回复，但要在最终回复里说明“飞书通知未确认发送”：
+
+```bash
+summary='本次 daily-doc-maintenance 总结...'
+notify_script="${RUNWEAVE_FEISHU_NOTIFY_SCRIPT:-$HOME/.runweave/hooks/feishu_stop_notify.sh}"
+if [ ! -x "$notify_script" ] && [ -x "plugins/toolkit/hooks/feishu_stop_notify.sh" ]; then
+  notify_script="plugins/toolkit/hooks/feishu_stop_notify.sh"
+fi
+if [ -x "$notify_script" ] && command -v jq >/dev/null 2>&1; then
+  jq -nc \
+    --arg source "${RUNWEAVE_HOOK_SOURCE:-codex}" \
+    --arg cwd "$PWD" \
+    --arg session_id "${CODEX_SESSION_ID:-daily-doc-maintenance}" \
+    --arg terminal_id "${RUNWEAVE_TERMINAL_SESSION_ID:-}" \
+    --arg body "$summary" \
+    '{
+      hook_event_name: "Stop",
+      source: $source,
+      cwd: $cwd,
+      session_id: $session_id,
+      terminalSessionId: $terminal_id,
+      last_assistant_message: $body
+    }' | "$notify_script" || true
+fi
+```

@@ -26,7 +26,8 @@ description: 仅当用户明确要求使用 daily-refactor skill 时使用；用
 5. 完成代码重构。
 6. 重构后跑同一组回归验证，确认原受影响行为没有被破坏。
 7. 调用 `toolkit:github-pr`，由该 skill 负责提交、push、创建 PR、等待门禁和合并。
-8. 回复本次重构内容、验证结果、CI 结果、commit、分支、PR 链接和合并状态。
+8. 发送一次飞书总结通知，内容与最终回复保持一致但更短。
+9. 回复本次重构内容、验证结果、CI 结果、commit、分支、PR 链接和合并状态。
 
 ## 验证回归
 
@@ -43,3 +44,43 @@ description: 仅当用户明确要求使用 daily-refactor skill 时使用；用
 - 涉及 UI、交互、布局或 Preview 展示时，保存 after 截图到 `/tmp/runweave-daily-refactor/<date>/after/`，并对比 before/after。
 - 运行 `git diff --check`。
 - 如果验证失败，先修复并重新验证，再提交、push 和创建 PR。
+
+## 飞书总结通知
+
+在最终回复前，必须发送一次飞书总结通知；如果本轮因为权限、冲突、验证失败、PR 门禁或人工评审无法完成，也发送一次阻塞摘要。不要调用
+`runweave-hook-bridge.cjs`，因为它是 AI CLI Stop hook + Runweave terminal completion 上报链路，会依赖 `RUNWEAVE_*` 身份并可能产生额外副作用。这里直接复用现有飞书脚本的 webhook 配置、加签、日志和静默失败策略。
+
+通知内容控制在 2500 字以内，至少包含：
+
+- skill：`daily-refactor`
+- 结果：成功 / 阻塞 / 失败
+- 重构范围与核心改动
+- 验证命令与结果
+- commit、分支、PR 链接、合并状态（如果已产生）
+- 待人工处理项（如果有）
+
+发送命令使用当前总结替换 `summary` 变量；脚本不存在、`jq` 缺失或飞书 env 未配置时不要阻塞最终回复，但要在最终回复里说明“飞书通知未确认发送”：
+
+```bash
+summary='本次 daily-refactor 总结...'
+notify_script="${RUNWEAVE_FEISHU_NOTIFY_SCRIPT:-$HOME/.runweave/hooks/feishu_stop_notify.sh}"
+if [ ! -x "$notify_script" ] && [ -x "plugins/toolkit/hooks/feishu_stop_notify.sh" ]; then
+  notify_script="plugins/toolkit/hooks/feishu_stop_notify.sh"
+fi
+if [ -x "$notify_script" ] && command -v jq >/dev/null 2>&1; then
+  jq -nc \
+    --arg source "${RUNWEAVE_HOOK_SOURCE:-codex}" \
+    --arg cwd "$PWD" \
+    --arg session_id "${CODEX_SESSION_ID:-daily-refactor}" \
+    --arg terminal_id "${RUNWEAVE_TERMINAL_SESSION_ID:-}" \
+    --arg body "$summary" \
+    '{
+      hook_event_name: "Stop",
+      source: $source,
+      cwd: $cwd,
+      session_id: $session_id,
+      terminalSessionId: $terminal_id,
+      last_assistant_message: $body
+    }' | "$notify_script" || true
+fi
+```
