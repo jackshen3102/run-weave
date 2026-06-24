@@ -112,6 +112,10 @@ pnpm toolkit:sync:staged
 cachebuster，重新安装 Codex 的 `toolkit@runweave` 与 Trae CLI 的 `toolkit@local`，
 并把 cachebuster、插件 `hooks.json` 与 hook 运行副本写回本次提交。需要跳过本机插件安装时，可设置：
 
+Codex 线程启动后会保存已加载 skill 的缓存绝对路径。`pnpm toolkit:sync` 会在重新安装
+Codex 插件后，为最近的旧 cachebuster 版本保留兼容缓存路径并指向最新安装目录，避免已经
+打开的线程继续调用旧 skill 时遇到 `SKILL.md` 路径不存在。新线程仍会加载最新版本。
+
 ```bash
 RUNWEAVE_SKIP_TOOLKIT_PLUGIN_SYNC=1 git commit
 ```
