@@ -84,7 +84,9 @@ export class TerminalQuickInputService {
         if (projectId === null) {
           return true;
         }
-        return (item.projectId ?? null) === projectId;
+        return (
+          (item.projectId ?? null) === null || item.projectId === projectId
+        );
       })
       .filter((item) => {
         if (kind === "pinned") {

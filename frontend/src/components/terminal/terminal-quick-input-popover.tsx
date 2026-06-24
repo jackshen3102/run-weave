@@ -55,6 +55,8 @@ const MODE_OPTIONS: Array<{ value: TerminalQuickInputMode; label: string }> = [
   { value: "prompt_paste", label: "prompt_paste" },
 ];
 
+type ManualQuickInputScope = "project" | "global";
+
 export function TerminalQuickInputPopover({
   apiBase,
   token,
@@ -76,10 +78,13 @@ export function TerminalQuickInputPopover({
   const [manualData, setManualData] = useState("");
   const [manualMode, setManualMode] =
     useState<TerminalQuickInputMode>("line");
+  const [manualScope, setManualScope] =
+    useState<ManualQuickInputScope>("project");
   const [savingManual, setSavingManual] = useState(false);
 
   const activeTerminalId = activeSession?.terminalSessionId ?? null;
   const canTargetTerminal = Boolean(activeTerminalId) && !disabled;
+  const manualIsGlobal = manualScope === "global" || !activeProject;
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -227,9 +232,11 @@ export function TerminalQuickInputPopover({
         title: manualTitle.trim() || buildTitle(manualData),
         data: manualData,
         mode: manualMode,
-        projectId: activeProject?.projectId ?? null,
-        terminalSessionId: activeSession?.terminalSessionId ?? null,
-        cwd: activeSession?.cwd ?? null,
+        projectId: manualIsGlobal ? null : (activeProject?.projectId ?? null),
+        terminalSessionId: manualIsGlobal
+          ? null
+          : (activeSession?.terminalSessionId ?? null),
+        cwd: manualIsGlobal ? null : (activeSession?.cwd ?? null),
       });
       setManualTitle("");
       setManualData("");
@@ -377,7 +384,7 @@ export function TerminalQuickInputPopover({
 
             {manualOpen ? (
               <div className="mt-2 space-y-2 rounded-md border border-slate-800 bg-slate-900/70 p-2">
-                <div className="grid grid-cols-[minmax(0,1fr)_150px] gap-2">
+                <div className="grid grid-cols-[minmax(0,1fr)_110px_150px] gap-2">
                   <label className="flex flex-col gap-1 text-[11px] text-slate-400">
                     标题
                     <Input
@@ -388,6 +395,23 @@ export function TerminalQuickInputPopover({
                       placeholder="可选"
                       className="h-8 border-slate-800 bg-slate-950 text-xs text-slate-100 placeholder:text-slate-500"
                     />
+                  </label>
+                  <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                    范围
+                    <select
+                      value={activeProject ? manualScope : "global"}
+                      className="h-8 rounded-md border border-slate-800 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-sky-600"
+                      onChange={(event) => {
+                        setManualScope(
+                          event.target.value as ManualQuickInputScope,
+                        );
+                      }}
+                    >
+                      <option value="project" disabled={!activeProject}>
+                        当前项目
+                      </option>
+                      <option value="global">全局</option>
+                    </select>
                   </label>
                   <label className="flex flex-col gap-1 text-[11px] text-slate-400">
                     Mode
@@ -598,7 +622,7 @@ function formatSource(item: TerminalQuickInputItem): string {
   if (item.projectId) {
     return "current project";
   }
-  return "terminal";
+  return "全局";
 }
 
 function formatRelativeTime(value: string | undefined): string {
