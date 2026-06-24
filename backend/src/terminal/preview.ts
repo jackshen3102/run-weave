@@ -4,8 +4,11 @@ import type {
   TerminalPreviewFileResponse,
   TerminalPreviewBase,
   TerminalPreviewDeleteFileResponse,
+  TerminalPreviewResetChangeResponse,
   TerminalPreviewSaveFileResponse,
+  TerminalPreviewChangeKind,
 } from "@runweave/shared";
+import { resetPreviewGitChange as resetPreviewGitChangeFromGit } from "./preview-git";
 import {
   TerminalPreviewError,
   detectLanguage,
@@ -290,6 +293,17 @@ export async function renamePreviewFile(params: {
     projectPath,
     requestedPath: nextRelativePath,
   });
+}
+
+export async function resetPreviewGitChange(params: {
+  projectId: string;
+  projectPath: string | null | undefined;
+  requestedPath: string;
+  changeKind: TerminalPreviewChangeKind;
+}): Promise<TerminalPreviewResetChangeResponse> {
+  const payload = await resetPreviewGitChangeFromGit(params);
+  clearPreviewFileSearchCache(params.projectId);
+  return payload;
 }
 
 export async function readPreviewAsset(params: {

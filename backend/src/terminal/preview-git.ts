@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, realpath, stat } from "node:fs/promises";
+import { readFile, realpath, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import type {
@@ -8,6 +8,7 @@ import type {
   TerminalPreviewFileDiffResponse,
   TerminalPreviewGitChangesResponse,
   TerminalPreviewGitStatus,
+  TerminalPreviewResetChangeResponse,
 } from "@runweave/shared";
 import {
   TerminalPreviewError,
@@ -211,6 +212,59 @@ function findChangeStatus(
     changes[kind].find((change) => change.path === relativePath)?.status ??
     "unknown"
   );
+}
+
+export async function resetPreviewGitChange(params: {
+  projectId: string;
+  projectPath: string | null | undefined;
+  requestedPath: string;
+  changeKind: TerminalPreviewChangeKind;
+}): Promise<TerminalPreviewResetChangeResponse> {
+  const projectPath = ensureProjectPath(params.projectPath);
+  const { absolutePath, relativePath } = await resolvePreviewPath(
+    projectPath,
+    params.requestedPath,
+  );
+  const { repoRoot, projectRelativeToRepo } =
+    await resolveGitContext(projectPath);
+  const repoPath = toRepoPath(projectRelativeToRepo, relativePath);
+  const statusOutput = await runGit(
+    repoRoot,
+    ["status", "--porcelain=v1", "--untracked-files=all", "--", repoPath],
+    { maxBuffer: 1024 * 1024 },
+  );
+  const changes = parseGitStatus(statusOutput, projectRelativeToRepo);
+  const change = changes[params.changeKind].find(
+    (entry) => entry.path === relativePath,
+  );
+  if (!change) {
+    throw new TerminalPreviewError("No selected change to reset", 409);
+  }
+
+  if (params.changeKind === "staged") {
+    await runGit(repoRoot, ["restore", "--staged", "--", repoPath]);
+  } else if (change.status === "untracked") {
+    const fileStats = await stat(absolutePath).catch(() => null);
+    if (!fileStats) {
+      throw new TerminalPreviewError("File not found", 404);
+    }
+    if (fileStats.isDirectory()) {
+      throw new TerminalPreviewError("Directories are not supported", 400);
+    }
+    if (!fileStats.isFile()) {
+      throw new TerminalPreviewError("Only regular files can be reset", 400);
+    }
+    await unlink(absolutePath);
+  } else {
+    await runGit(repoRoot, ["restore", "--worktree", "--", repoPath]);
+  }
+
+  return {
+    kind: "git-change-reset",
+    projectId: params.projectId,
+    path: relativePath,
+    changeKind: params.changeKind,
+  };
 }
 
 export async function getPreviewFileDiff(params: {

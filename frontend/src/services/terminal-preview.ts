@@ -8,6 +8,8 @@ import type {
   TerminalPreviewFileSearchResponse,
   TerminalPreviewGitChangesResponse,
   TerminalPreviewRenameFileRequest,
+  TerminalPreviewResetChangeRequest,
+  TerminalPreviewResetChangeResponse,
   TerminalPreviewSaveFileRequest,
   TerminalPreviewSaveFileResponse,
 } from "@runweave/shared";
@@ -105,6 +107,26 @@ export async function renameTerminalProjectPreviewFile(
     `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file/path`,
     {
       method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function resetTerminalProjectPreviewChange(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  payload: TerminalPreviewResetChangeRequest,
+): Promise<TerminalPreviewResetChangeResponse> {
+  return requestJson<TerminalPreviewResetChangeResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/git-change/reset`,
+    {
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,

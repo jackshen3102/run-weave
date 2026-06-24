@@ -43,6 +43,7 @@ export {
   getTerminalProjectPreviewGitChanges,
   listTerminalProjectPreviewDirectory,
   renameTerminalProjectPreviewFile,
+  resetTerminalProjectPreviewChange,
   saveTerminalProjectPreviewFile,
   searchTerminalProjectPreviewFiles,
 } from "./terminal-preview";
