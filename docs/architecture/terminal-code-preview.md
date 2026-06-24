@@ -1427,6 +1427,41 @@ Authorization: Bearer <accessToken>
 }
 ```
 
+```http
+POST /api/terminal/project/:id/preview/git-change/reset
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+请求：
+
+```json
+{
+  "path": "docs/README.md",
+  "kind": "working"
+}
+```
+
+语义：
+
+- 只处理 `Review changes` 中用户确认的单个文件项。
+- `path` 必须解析到当前 project path 内的相对路径；不接受目录或 project 外路径。
+- `kind=staged` 执行单文件 unstage，不丢弃 working tree 内容。
+- `kind=working` 对 tracked 文件丢弃 working tree 改动；对 untracked 普通文件删除该文件。
+- 如果选中的 staged / working 变更已经不存在，返回冲突错误，前端应刷新 changes 列表。
+- 该接口不提供批量 reset、checkout、stage 或 commit 能力。
+
+返回：
+
+```json
+{
+  "kind": "git-change-reset",
+  "projectId": "project-1",
+  "path": "docs/README.md",
+  "changeKind": "working"
+}
+```
+
 ## 安全与限制
 
 文件读取限制：
