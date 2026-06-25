@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, realpath, stat, unlink } from "node:fs/promises";
+import { lstat, readFile, realpath, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import type {
@@ -82,6 +82,43 @@ function toRepoPath(
   return projectRelativeToRepo
     ? `${projectRelativeToRepo}/${projectRelativePath}`
     : projectRelativePath;
+}
+
+function isInsidePath(rootPath: string, targetPath: string): boolean {
+  const relativePath = path.relative(rootPath, targetPath);
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
+  );
+}
+
+async function resolvePreviewGitPath(
+  projectPath: string,
+  requestedPath: string,
+): Promise<{
+  absolutePath: string;
+  relativePath: string;
+}> {
+  const trimmedPath = requestedPath.trim();
+  if (!trimmedPath) {
+    throw new TerminalPreviewError("Enter a file path", 400);
+  }
+  if (trimmedPath.startsWith("~")) {
+    throw new TerminalPreviewError("Home paths are not supported", 400);
+  }
+
+  const rootPath = await realpath(projectPath);
+  const candidatePath = path.isAbsolute(trimmedPath)
+    ? path.resolve(trimmedPath)
+    : path.resolve(rootPath, trimmedPath);
+  if (!isInsidePath(rootPath, candidatePath)) {
+    throw new TerminalPreviewError("Path is outside the project path", 403);
+  }
+
+  return {
+    absolutePath: candidatePath,
+    relativePath: toRelativePath(rootPath, candidatePath),
+  };
 }
 
 function mapGitStatus(code: string): TerminalPreviewGitStatus {
@@ -221,7 +258,7 @@ export async function resetPreviewGitChange(params: {
   changeKind: TerminalPreviewChangeKind;
 }): Promise<TerminalPreviewResetChangeResponse> {
   const projectPath = ensureProjectPath(params.projectPath);
-  const { absolutePath, relativePath } = await resolvePreviewPath(
+  const { absolutePath, relativePath } = await resolvePreviewGitPath(
     projectPath,
     params.requestedPath,
   );
@@ -244,14 +281,14 @@ export async function resetPreviewGitChange(params: {
   if (params.changeKind === "staged") {
     await runGit(repoRoot, ["restore", "--staged", "--", repoPath]);
   } else if (change.status === "untracked") {
-    const fileStats = await stat(absolutePath).catch(() => null);
+    const fileStats = await lstat(absolutePath).catch(() => null);
     if (!fileStats) {
       throw new TerminalPreviewError("File not found", 404);
     }
-    if (fileStats.isDirectory()) {
+    if (fileStats.isDirectory() && !fileStats.isSymbolicLink()) {
       throw new TerminalPreviewError("Directories are not supported", 400);
     }
-    if (!fileStats.isFile()) {
+    if (!fileStats.isFile() && !fileStats.isSymbolicLink()) {
       throw new TerminalPreviewError("Only regular files can be reset", 400);
     }
     await unlink(absolutePath);
