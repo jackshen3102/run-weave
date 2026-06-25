@@ -70,6 +70,10 @@ import { attachTerminalEventsWebSocketServer } from "./ws/terminal-events-server
 import { attachTerminalWebSocketServer } from "./ws/terminal-server";
 import { codexAppServerClient } from "./voice/codex-app-server-client";
 
+const HASHED_ASSET_CACHE_CONTROL =
+  "public, max-age=31536000, s-maxage=31536000, immutable";
+const REVALIDATED_STATIC_CACHE_CONTROL = "no-cache";
+
 interface RuntimeServices {
   authStore: AuthStore;
   authService: AuthService;
@@ -389,7 +393,11 @@ function createHttpApp(
 
   const frontendDistDir = resolveFrontendDistDir();
   if (existsSync(frontendDistDir)) {
-    app.use(express.static(frontendDistDir));
+    app.use(
+      express.static(frontendDistDir, {
+        setHeaders: setFrontendStaticHeaders,
+      }),
+    );
 
     app.get("*", (req, res, next) => {
       if (
@@ -400,11 +408,33 @@ function createHttpApp(
         return;
       }
 
+      res.setHeader("Cache-Control", REVALIDATED_STATIC_CACHE_CONTROL);
       res.sendFile(path.join(frontendDistDir, "index.html"));
     });
   }
 
   return app;
+}
+
+function setFrontendStaticHeaders(
+  res: express.Response,
+  filePath: string,
+): void {
+  const relativePath = filePath.split(path.sep).join("/");
+  const fileName = path.basename(filePath);
+
+  if (relativePath.includes("/assets/")) {
+    res.setHeader("Cache-Control", HASHED_ASSET_CACHE_CONTROL);
+    return;
+  }
+
+  if (
+    fileName === "index.html" ||
+    fileName === "manifest.webmanifest" ||
+    fileName === "sw.js"
+  ) {
+    res.setHeader("Cache-Control", REVALIDATED_STATIC_CACHE_CONTROL);
+  }
 }
 
 function attachLifecycleHandlers(
