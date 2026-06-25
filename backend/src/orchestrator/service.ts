@@ -62,7 +62,10 @@ import {
 
 export { OrchestratorError } from "./errors";
 
-type TerminalCompletionEvent = Extract<TerminalEventEnvelope, { kind: "completion" }>;
+type TerminalCompletionEvent = Extract<
+  TerminalEventEnvelope,
+  { kind: "completion" }
+>;
 type WorkerOutboxWithRunId = OrchestratorWorkerOutbox & { runId: string };
 type WorkerResultTransition = {
   patch: Partial<
@@ -353,7 +356,10 @@ export class OrchestratorService {
   ): Promise<OrchestratorRunPackage> {
     const run = await this.requireRun(runId);
     if (run.currentPhase !== input.phase) {
-      throw new OrchestratorError(409, "Human gate phase does not match current phase");
+      throw new OrchestratorError(
+        409,
+        "Human gate phase does not match current phase",
+      );
     }
     const reason = input.reason?.trim() || null;
     if (input.verdict === "rejected" && !reason) {
@@ -376,7 +382,9 @@ export class OrchestratorService {
     if (orchestratorSession) {
       await this.promptSender.sendPromptToAgent(
         orchestratorSession,
-        buildHumanPrompt(formatHumanGatePrompt(verdict, transition.currentPhase)),
+        buildHumanPrompt(
+          formatHumanGatePrompt(verdict, transition.currentPhase),
+        ),
       );
     }
     return this.updateRun(run, {
@@ -401,11 +409,17 @@ export class OrchestratorService {
     const run = await this.requireRun(runId);
     const pending = run.pendingRoundConfirmation;
     if (!pending || pending.id !== input.confirmationId) {
-      throw new OrchestratorError(409, "Round confirmation does not match current pending confirmation");
+      throw new OrchestratorError(
+        409,
+        "Round confirmation does not match current pending confirmation",
+      );
     }
     const reason = input.reason?.trim() || null;
     if (input.verdict === "rejected" && !reason) {
-      throw new OrchestratorError(400, "Rejected round confirmation requires a reason");
+      throw new OrchestratorError(
+        400,
+        "Rejected round confirmation requires a reason",
+      );
     }
     const nextPhase =
       input.verdict === "approved" ? pending.nextPhase : pending.fromPhase;
@@ -447,7 +461,10 @@ export class OrchestratorService {
     });
   }
 
-  async injectPrompt(runId: string, text: string): Promise<OrchestratorRunPackage> {
+  async injectPrompt(
+    runId: string,
+    text: string,
+  ): Promise<OrchestratorRunPackage> {
     const run = await this.requireRun(runId);
     const orchestratorSessionId = run.orchestrator.sessionId;
     if (!orchestratorSessionId) {
@@ -459,12 +476,12 @@ export class OrchestratorService {
       at: new Date().toISOString(),
       text,
     };
-    await this.promptSender.sendPromptToAgent(
-      session,
-      buildHumanPrompt(text),
-    );
+    await this.promptSender.sendPromptToAgent(session, buildHumanPrompt(text));
     return this.updateRun(run, {
-      status: run.status === "paused" || run.status === "need_human" ? "running" : run.status,
+      status:
+        run.status === "paused" || run.status === "need_human"
+          ? "running"
+          : run.status,
       humanInbox: [...run.humanInbox, inboxItem],
       timeline: [
         this.timelineItem({
@@ -483,7 +500,10 @@ export class OrchestratorService {
   ): Promise<OrchestratorRunPackage> {
     const run = await this.requireRun(runId);
     if (status === "done" && !canMarkDone(run)) {
-      throw new OrchestratorError(409, "Run can only be marked done from finalize phase");
+      throw new OrchestratorError(
+        409,
+        "Run can only be marked done from finalize phase",
+      );
     }
     return this.updateRun(run, {
       status,
@@ -498,7 +518,9 @@ export class OrchestratorService {
     });
   }
 
-  private async handleTerminalEvent(event: TerminalEventEnvelope): Promise<void> {
+  private async handleTerminalEvent(
+    event: TerminalEventEnvelope,
+  ): Promise<void> {
     if (event.kind !== "completion") {
       return;
     }
@@ -548,10 +570,11 @@ export class OrchestratorService {
     const existingGoal = outbox.goalId
       ? run.goals.find((item) => item.id === outbox.goalId)
       : null;
+    const displaySummary = cleanTimelineSummary(outbox.summary);
     const goal = outbox.goalId
       ? upsertGoal(run.goals, {
           id: outbox.goalId,
-          desc: outbox.summary,
+          desc: displaySummary || outbox.summary,
           deps: [],
           status: outbox.status === "failed" ? "failed" : "done",
           assignedRole: outbox.role ?? null,
@@ -570,7 +593,7 @@ export class OrchestratorService {
       this.timelineItem({
         type: "worker_result",
         title: `Worker result ${outbox.goalId ?? outbox.sessionId}`,
-        detail: outbox.summary,
+        detail: displaySummary || undefined,
         goalId: outbox.goalId ?? null,
         roleId: outbox.role ?? null,
         terminalSessionId: outbox.sessionId,
@@ -638,7 +661,10 @@ export class OrchestratorService {
       status?: OrchestratorRunStatus;
     },
   ): WorkerResultTransition {
-    const autoGatePhase = getAutoApprovedGatePhase(run, phasePatch.currentPhase);
+    const autoGatePhase = getAutoApprovedGatePhase(
+      run,
+      phasePatch.currentPhase,
+    );
     if (autoGatePhase) {
       const transition = resolveHumanGateTransition({
         phase: autoGatePhase,
@@ -706,7 +732,10 @@ export class OrchestratorService {
   }
 
   private resolveControlPlaneBaseUrl(): string | null {
-    return this.controlPlaneBaseUrl ?? normalizeBaseUrl(process.env.RUNWEAVE_BASE_URL);
+    return (
+      this.controlPlaneBaseUrl ??
+      normalizeBaseUrl(process.env.RUNWEAVE_BASE_URL)
+    );
   }
 
   private async rebuildRouteTable(): Promise<void> {
@@ -785,6 +814,72 @@ function formatHumanGatePrompt(
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+const ESCAPE_CHAR = String.fromCharCode(27);
+const BELL_CHAR = String.fromCharCode(7);
+const OSC_SEQUENCE_PATTERN = new RegExp(
+  `${ESCAPE_CHAR}\\][^${BELL_CHAR}]*(?:${BELL_CHAR}|${ESCAPE_CHAR}\\\\)`,
+  "g",
+);
+const OSC_TITLE_SEQUENCE_PATTERN = new RegExp(
+  `\\]0;[^${BELL_CHAR}\\n]*(?:${BELL_CHAR}|$)`,
+  "g",
+);
+const ANSI_SEQUENCE_PATTERN = new RegExp(
+  `${ESCAPE_CHAR}\\[[0-?]*[ -/]*[@-~]`,
+  "g",
+);
+const REVERSE_INDEX_SEQUENCE_PATTERN = new RegExp(`${ESCAPE_CHAR}M`, "g");
+const TERMINAL_CONTROL_CHARS_PATTERN = new RegExp(
+  `[${BELL_CHAR}${ESCAPE_CHAR}]`,
+  "g",
+);
+
+function cleanTimelineSummary(value?: string | null): string {
+  return cleanTimelineText(value)
+    .split("\n")
+    .map((line) => trimTerminalNoiseSuffix(line.trim()))
+    .filter((line) => line && !isTerminalNoiseLine(line))
+    .slice(0, 8)
+    .join("\n")
+    .trim();
+}
+
+function cleanTimelineText(value?: string | null): string {
+  return (value ?? "")
+    .replace(OSC_SEQUENCE_PATTERN, "")
+    .replace(OSC_TITLE_SEQUENCE_PATTERN, "")
+    .replace(ANSI_SEQUENCE_PATTERN, "")
+    .replace(REVERSE_INDEX_SEQUENCE_PATTERN, "")
+    .replace(TERMINAL_CONTROL_CHARS_PATTERN, "")
+    .replace(/\r/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function trimTerminalNoiseSuffix(value: string): string {
+  const noiseIndex = [
+    value.indexOf("•Working"),
+    value.indexOf("•Explored"),
+    value.indexOf("›"),
+  ]
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)[0];
+  return noiseIndex == null ? value : value.slice(0, noiseIndex).trim();
+}
+
+function isTerminalNoiseLine(value: string): boolean {
+  const spinnerFragments =
+    value.match(/(?:Working|Workin|Worki|Wor|orking|rking|king|ngg)/g)
+      ?.length ?? 0;
+  return (
+    (spinnerFragments >= 3 && !/[\u4e00-\u9fff]/.test(value)) ||
+    (/^[─│└┌┐┘├┤┬┴┼]/.test(value) && !/[\u4e00-\u9fff]/.test(value)) ||
+    /^[•\s]*(?:Working|Workin|Explored|Ran)\b/.test(value) ||
+    /^[─•\s]+$/.test(value) ||
+    /^›/.test(value)
+  );
 }
 
 function getAutoApprovedGatePhase(
