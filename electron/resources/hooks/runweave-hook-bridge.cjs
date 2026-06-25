@@ -9,7 +9,7 @@ const COMPLETION_REASONS = new Set([
   "ai_process_exit",
   "manual",
 ]);
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const os = require("node:os");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -46,6 +46,63 @@ function appendDebugLog(message, details) {
   } catch {
     // Ignore diagnostic logging failures.
   }
+}
+
+function parseTmuxSocketPath(value) {
+  if (!value) {
+    return null;
+  }
+  const socketPath = String(value).split(",")[0]?.trim();
+  return socketPath || null;
+}
+
+function readTmuxSessionEnv() {
+  const sessionName = process.env.RUNWEAVE_TMUX_SESSION_NAME;
+  const socketPath = parseTmuxSocketPath(process.env.TMUX);
+  if (!sessionName || !socketPath) {
+    return { refreshed: false, reason: "missing_tmux_env" };
+  }
+
+  const result = spawnSync(
+    "tmux",
+    ["-S", socketPath, "show-environment", "-t", sessionName],
+    {
+      encoding: "utf8",
+      timeout: 2000,
+      maxBuffer: 256 * 1024,
+    },
+  );
+  if (result.error || result.status !== 0) {
+    return {
+      refreshed: false,
+      reason: "tmux_show_environment_failed",
+      error: result.error instanceof Error ? result.error.message : undefined,
+      status: result.status,
+    };
+  }
+
+  const env = {};
+  for (const line of String(result.stdout || "").split(/\r?\n/)) {
+    if (!line.startsWith("RUNWEAVE_")) {
+      continue;
+    }
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    env[line.slice(0, separatorIndex)] = line.slice(separatorIndex + 1);
+  }
+
+  for (const [key, value] of Object.entries(env)) {
+    process.env[key] = value;
+  }
+
+  return {
+    refreshed: Object.keys(env).length > 0,
+    sessionName,
+    socketPath,
+    keys: Object.keys(env).sort(),
+  };
 }
 
 function notifyDesktop(source) {
@@ -351,6 +408,7 @@ async function postCompletionHook({
 }
 
 async function main() {
+  const tmuxEnvRefresh = readTmuxSessionEnv();
   const args = parseArgs(process.argv.slice(2));
   const payload = parsePayload(await readStdin());
   const rawEvent = readHookEvent(payload);
@@ -385,6 +443,7 @@ async function main() {
     threadId,
     stateHookEvent,
     shouldRecordCompletion,
+    tmuxEnvRefresh,
   });
   // Only notify / report for completions inside a Runweave terminal. The hook
   // can be installed through AI CLI hook config or plugins, so without

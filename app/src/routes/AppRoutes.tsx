@@ -68,7 +68,7 @@ function HomeRoute({ session }: { session: AppSessionController }) {
     const created = await createTerminalSession(
       session.apiBase,
       session.accessToken,
-      { projectId },
+      { projectId, runtimePreference: "pty" },
     );
     await session.refreshOverview();
     openTerminal(created.terminalSessionId);

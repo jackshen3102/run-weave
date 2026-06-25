@@ -265,6 +265,17 @@ export async function ensureTerminalRuntime(
     command: options.session.command,
     args: options.session.args,
     cwd: options.session.cwd,
+    env: {
+      RUNWEAVE_TERMINAL_SESSION_ID: options.session.id,
+      RUNWEAVE_PROJECT_ID: options.session.projectId,
+      RUNWEAVE_HOOK_ENDPOINT: process.env.RUNWEAVE_HOOK_ENDPOINT,
+      RUNWEAVE_COMPLETION_HOOK_ENDPOINT:
+        process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT,
+      RUNWEAVE_HOOK_DEBUG_LOG: process.env.RUNWEAVE_HOOK_DEBUG_LOG,
+      RUNWEAVE_HOOK_TOKEN: process.env.RUNWEAVE_HOOK_TOKEN,
+      RUNWEAVE_BASE_URL: process.env.RUNWEAVE_BASE_URL,
+      RUNWEAVE_BACKEND_PORT: process.env.RUNWEAVE_BACKEND_PORT,
+    },
     fallback: resolveTerminalFallbackLaunchConfig({
       command: options.session.command,
       args: options.session.args,
