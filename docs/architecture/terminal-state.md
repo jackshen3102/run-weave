@@ -23,7 +23,7 @@ export interface TerminalState {
 
 `terminalSessionId`、`projectId`、`cwd`、`activeCommand` 仍属于终端 session / metadata 协议，不重复放进 `TerminalState`。
 
-Codex 终端 session 还可以记录 `threadId` 和短 preview。它们用于 App 首页和终端列表展示，不属于 `TerminalState` 本体，也不能代替 hook / active command 判定。
+Codex 终端 session 还可以记录 `threadId` 和短 preview。它们用于 App 首页和终端列表展示；在 tmux session 丢失且当前 `activeCommand` 仍是 Codex 时，`threadId` 也可作为 `codex resume <threadId>` 的恢复参数。它们不属于 `TerminalState` 本体，也不能代替 hook / active command 判定。
 
 ## 状态来源
 

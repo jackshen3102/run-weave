@@ -34,5 +34,5 @@ Runweave 当前由三条并行链路组成：
 
 - Electron 生产模式下，前端通过 `browser-viewer://` 自定义协议加载，origin 与任何后端地址均不同源。
 - 用户通过连接管理器配置多个后端地址，前端的 `apiBase` 由当前活跃连接决定。
-- 跨域处理：Electron 主进程通过 `webRequest.onHeadersReceived` 拦截后端响应，在 `/api/*`、`/ws/*`、`/health` 路径上注入 `Access-Control-Allow-Origin: *` 等 CORS 头，使渲染进程的 fetch/WebSocket 不受同源策略限制。
+- 跨域处理：Electron 主进程通过 `webRequest.onHeadersReceived` 拦截后端响应，在 `/api/*`、`/ws/*`、`/health` 路径上补齐 `Access-Control-Allow-Origin: *` 等 CORS 头，使渲染进程的 fetch/WebSocket 不受同源策略限制。若后端响应已经带有 CORS 头，Electron 不再重复注入，避免同一响应出现重复 `Access-Control-Allow-Origin`。
 - 此方案完全在客户端侧解决，不依赖后端配置。

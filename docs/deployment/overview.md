@@ -9,7 +9,9 @@
 - DevTools 通过同源代理访问服务端本机调试端口。
 - 生产环境避免暴露远端调试端口。
 - 登录接口默认有内存态限流与失败锁定，代理部署时只在 tunnel auth 开启后信任转发 IP 头。
+- 生产、Electron packaged 和 runtime release 模式下，后端进程必须收到非默认认证配置；缺少 `AUTH_USERNAME`、`AUTH_PASSWORD` 或 `AUTH_JWT_SECRET` 会拒绝启动。
 - `/test/*` 只在 `RUNWEAVE_E2E_TEST_ROUTES=true` 时启用；生产和普通开发环境返回 404。
+- 打包后端服务前端静态资源时，hash asset 使用长期 immutable cache；`index.html`、manifest 和 service worker 使用重新验证缓存，避免 runtime 更新后继续加载旧入口。
 
 ## 对外入口（概览）
 
@@ -28,6 +30,7 @@
 
 - `/api/auth/login` 对同一 IP、同一用户名和 IP+用户名组合做内存态频率限制；超过阈值时返回 `429` 和 `Retry-After`。
 - Web 客户端 refresh token 使用 `HttpOnly`、`SameSite=Lax` cookie；Electron 客户端继续通过 `x-auth-client: electron` 获取 JSON refresh token。
+- Electron packaged 模式不再使用内置 `admin/admin` 默认账号。若启动环境没有完整认证变量，Electron shell 会在 `userData` 下生成 `backend-auth.json`，保存随机用户名、密码和 JWT secret，并以文件权限 `0600` 写入，再把这些值传给内置后端。生产服务端仍应显式配置认证变量。
 - tunnel auth 开启时，`/health`、`/api/*`、`/internal/terminal-completion` 等入口先经过 tunnel auth；这时登录限流才会信任 `CF-Connecting-IP` / `X-Forwarded-For` 等代理头。
 - `/internal/cdp-endpoint` 只接受本机直连请求，用于开发态同步本机 CDP endpoint。
 - `/internal/terminal-completion` 还需要 `X-Runweave-Hook-Token`，用于 tmux pane 内 AI CLI hook 写入完成事件。

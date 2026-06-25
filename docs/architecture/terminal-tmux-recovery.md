@@ -289,6 +289,8 @@ if runtime exists:
 else if session.runtimeKind == "tmux":
   if tmux session exists:
     spawn node-pty -> tmux attach
+  else if activeCommand is codex and threadId exists:
+    recreate tmux shell and send "codex resume <threadId>"
   else:
     log loss, create a fresh tmux session, notify user
 else if session.runtimeKind == "pty":
@@ -312,6 +314,10 @@ else if session.runtimeKind == "pty":
 4. 新 session 继续保持 `runtimeKind: "tmux"`，后续仍具备 tmux-backed 恢复能力。
 
 也就是说，tmux server 异常退出时优先恢复可用性，而不是保留一个不可操作的 terminal tab。用户需要被明确告知这是“重新开了一个会话”，不能假装接回了原来的 `codex` TUI。
+
+Codex 有一个更窄的恢复分支：如果丢失的是交互式 shell launch，当前 session 的 `activeCommand` 仍识别为 `codex`，并且 session metadata 中保存了 `threadId`，后端会在重新创建同名 tmux shell 后向 pane 输入 `codex resume <threadId>`。这个分支只在 `hasSession=false` 时触发；如果 tmux pane 仍存在，即使当前前台不再是 Codex，也不会自动注入 resume，避免覆盖用户正在使用的 shell 上下文。
+
+Codex resume 不会把原 session command 永久改成 `codex resume`，也不会主动写 `TerminalState`。新的 pane 仍是用户原 shell，后续状态由 shell active command 与 Codex hook 自然校正。恢复失败时终端保留在 shell 中，用户可以手动处理。
 
 同时需要防止 tmux 持续 crash 时进入“重建 -> crash -> 重建”的循环。建议为每个 `terminalSessionId` 维护重建退避状态：
 
