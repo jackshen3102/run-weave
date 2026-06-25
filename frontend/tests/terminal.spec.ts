@@ -4,14 +4,25 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 const E2E_BACKEND_PORT = 5501;
 const E2E_API_BASE = `http://127.0.0.1:${E2E_BACKEND_PORT}`;
 const TERMINAL_PREFERENCES_KEY = `viewer.terminal.preferences.${E2E_API_BASE}`;
 const E2E_HOOK_TOKEN = "e2e-hook-token";
+const execFileAsync = promisify(execFile);
+
+interface TerminalSessionStatus {
+  terminalSessionId: string;
+  activeCommand: string | null;
+  threadId?: string;
+  tmuxSessionName?: string;
+  tmuxSocketPath?: string;
+}
 
 interface Deferred {
   promise: Promise<void>;
@@ -270,6 +281,31 @@ async function getTerminalScrollback(
   expect(response.ok()).toBe(true);
   const payload = (await response.json()) as { scrollback: string };
   return payload.scrollback;
+}
+
+async function getTerminalSessionStatus(
+  request: APIRequestContext,
+  token: string,
+  terminalSessionId: string,
+): Promise<TerminalSessionStatus> {
+  const response = await request.get(
+    `${E2E_API_BASE}/api/terminal/session/${encodeURIComponent(terminalSessionId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  expect(response.ok()).toBe(true);
+  return (await response.json()) as TerminalSessionStatus;
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_/:=.,@%+-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 async function getLiveTerminalText(page: Page): Promise<string> {
@@ -1157,6 +1193,156 @@ test("restores deferred background terminal output when selected", async ({
 
   await rm(activeCwd, { force: true, recursive: true });
   await rm(backgroundCwd, { force: true, recursive: true });
+});
+
+test("resumes Codex thread after tmux loss", async ({ page, request }) => {
+  const token = await loginAndSeedToken(request, page);
+  const suffix = `${Date.now()}`;
+  const cwd = await mkdtemp(path.join(os.tmpdir(), `codex-resume-${suffix}-`));
+  const fakeBin = path.join(cwd, "bin");
+  const shellBin = path.join(cwd, "shell");
+  const startedFile = path.join(cwd, "codex-started.txt");
+  const resumeFile = path.join(cwd, "codex-resume.txt");
+  const threadId = `thread-for-recovery-${suffix}`;
+
+  await page.addInitScript((preferencesKey) => {
+    window.localStorage.setItem(
+      preferencesKey,
+      JSON.stringify({ renderer: "dom", screenReaderMode: true }),
+    );
+  }, TERMINAL_PREFERENCES_KEY);
+
+  try {
+    await mkdir(fakeBin, { recursive: true });
+    await mkdir(shellBin, { recursive: true });
+    await writeFile(
+      path.join(fakeBin, "codex"),
+      [
+        "#!/usr/bin/env bash",
+        'if [[ "${1:-}" == "resume" ]]; then',
+        '  printf "%s\\n" "${2:-}" > "$RUNWEAVE_FAKE_CODEX_RESUME_FILE"',
+        '  printf "\\033]633;BrowserViewerCommand=codex\\007"',
+        '  if command -v curl >/dev/null 2>&1; then',
+        "    curl -sS -X POST \"$RUNWEAVE_FAKE_CODEX_HOOK_URL\" \\",
+        "      -H \"Content-Type: application/json\" \\",
+        "      -H \"X-Runweave-Hook-Token: $RUNWEAVE_FAKE_CODEX_HOOK_TOKEN\" \\",
+        "      --data \"{\\\"terminalSessionId\\\":\\\"$RUNWEAVE_TERMINAL_SESSION_ID\\\",\\\"agent\\\":\\\"codex\\\",\\\"hookEvent\\\":\\\"SessionStart\\\",\\\"threadId\\\":\\\"${2:-}\\\"}\" \\",
+        "      >/dev/null 2>&1 || true",
+        "  fi",
+        "else",
+        '  printf "started\\n" > "$RUNWEAVE_FAKE_CODEX_STARTED_FILE"',
+        "fi",
+        "sleep 60",
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    const wrapperBash = path.join(shellBin, "bash");
+    await writeFile(
+      wrapperBash,
+      [
+        "#!/usr/bin/env bash",
+        `export PATH=${shellQuote(fakeBin)}:$PATH`,
+        `export RUNWEAVE_FAKE_CODEX_STARTED_FILE=${shellQuote(startedFile)}`,
+        `export RUNWEAVE_FAKE_CODEX_RESUME_FILE=${shellQuote(resumeFile)}`,
+        `export RUNWEAVE_FAKE_CODEX_HOOK_URL=${shellQuote(`${E2E_API_BASE}/internal/terminal/agent-hook`)}`,
+        `export RUNWEAVE_FAKE_CODEX_HOOK_TOKEN=${shellQuote(E2E_HOOK_TOKEN)}`,
+        'exec /bin/bash --noprofile --norc "$@"',
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+
+    const session = await createTerminalSession(request, token, {
+      command: wrapperBash,
+      cwd,
+      runtimePreference: "tmux",
+    });
+
+    await page.goto(session.terminalUrl);
+    await expect(page.getByLabel("Terminal emulator")).toBeVisible();
+    await page.getByLabel("Terminal emulator").click({ force: true });
+    await page.keyboard.type("codex");
+    await page.keyboard.press("Enter");
+
+    await expect
+      .poll(async () => {
+        return await readFile(startedFile, "utf8").catch(() => "");
+      })
+      .toContain("started");
+    await expect
+      .poll(async () => {
+        const status = await getTerminalSessionStatus(
+          request,
+          token,
+          session.terminalSessionId,
+        );
+        return status.activeCommand;
+      })
+      .toBe("codex");
+
+    const hookResponse = await request.post(
+      `${E2E_API_BASE}/internal/terminal/agent-hook`,
+      {
+        headers: {
+          "X-Runweave-Hook-Token": E2E_HOOK_TOKEN,
+        },
+        data: {
+          terminalSessionId: session.terminalSessionId,
+          agent: "codex",
+          hookEvent: "SessionStart",
+          threadId,
+        },
+      },
+    );
+    expect(hookResponse.status()).toBe(202);
+
+    await expect
+      .poll(async () => {
+        const status = await getTerminalSessionStatus(
+          request,
+          token,
+          session.terminalSessionId,
+        );
+        return status.threadId;
+      })
+      .toBe(threadId);
+    const statusBeforeLoss = await getTerminalSessionStatus(
+      request,
+      token,
+      session.terminalSessionId,
+    );
+    expect(statusBeforeLoss.tmuxSessionName).toBeTruthy();
+    expect(statusBeforeLoss.tmuxSocketPath).toBeTruthy();
+
+    await page.goto("about:blank");
+    await page.waitForTimeout(300);
+    await execFileAsync("tmux", [
+      "-S",
+      statusBeforeLoss.tmuxSocketPath!,
+      "kill-session",
+      "-t",
+      statusBeforeLoss.tmuxSessionName!,
+    ]);
+
+    await page.goto(session.terminalUrl);
+    await expect(page.getByLabel("Terminal emulator")).toBeVisible();
+    await expect
+      .poll(async () => {
+        return await readFile(resumeFile, "utf8").catch(() => "");
+      })
+      .toBe(`${threadId}\n`);
+
+    const statusAfterResume = await getTerminalSessionStatus(
+      request,
+      token,
+      session.terminalSessionId,
+    );
+    expect(statusAfterResume.terminalSessionId).toBe(session.terminalSessionId);
+    expect(statusAfterResume.threadId).toBe(threadId);
+  } finally {
+    await rm(cwd, { force: true, recursive: true });
+  }
 });
 
 test("tmux tab name follows the foreground command like pty", async ({
