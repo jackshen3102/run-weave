@@ -169,22 +169,22 @@ function buildAnnotationRuntimeScript(): string {
       }
       .rw-annotation-editor {
         position: fixed;
-        width: min(560px, calc(100vw - 24px));
-        min-height: 64px;
+        width: min(420px, calc(100vw - 24px));
+        min-height: 52px;
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 999px;
         background: #2d2d2d;
         color: #e2e8f0;
-        padding: 10px 10px 10px 16px;
+        padding: 8px 8px 8px 12px;
         pointer-events: auto;
         box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
       }
       .rw-annotation-tools {
-        width: 30px;
-        height: 30px;
+        width: 28px;
+        height: 28px;
         border: 0;
         border-radius: 999px;
         background: transparent;
@@ -193,24 +193,24 @@ function buildAnnotationRuntimeScript(): string {
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        font: 20px/1 ui-sans-serif, system-ui, sans-serif;
+        font: 18px/1 ui-sans-serif, system-ui, sans-serif;
       }
       .rw-annotation-tools:hover { background: rgba(255, 255, 255, 0.08); color: #ffffff; }
       .rw-annotation-input {
         flex: 1;
         min-width: 0;
-        height: 40px;
+        height: 32px;
         border: 0;
         background: transparent;
         color: #f8fafc;
         padding: 0;
-        font: 18px/1.3 ui-sans-serif, system-ui, sans-serif;
+        font: 16px/1.3 ui-sans-serif, system-ui, sans-serif;
         outline: none;
       }
       .rw-annotation-input::placeholder { color: rgba(248, 250, 252, 0.48); }
       .rw-annotation-send {
-        width: 44px;
-        height: 44px;
+        width: 36px;
+        height: 36px;
         border: 0;
         border-radius: 999px;
         background: #e5e7eb;
@@ -218,7 +218,7 @@ function buildAnnotationRuntimeScript(): string {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font: 26px/1 ui-sans-serif, system-ui, sans-serif;
+        font: 22px/1 ui-sans-serif, system-ui, sans-serif;
         cursor: pointer;
       }
       .rw-annotation-send:disabled { opacity: 0.45; cursor: default; }
@@ -460,21 +460,30 @@ function buildAnnotationRuntimeScript(): string {
         menu.hidden = true;
       }
     };
-    const showEditor = (element) => {
+    const clampEditorLeft = (left, editorWidth) => Math.min(
+      Math.max(12, left),
+      Math.max(12, window.innerWidth - editorWidth - 12),
+    );
+    const placeEditorNearPoint = (point, editorWidth, editorHeight) => {
+      const anchor = point ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+      const left = clampEditorLeft(anchor.x - 36, editorWidth);
+      const below = anchor.y + 12;
+      const top = below + editorHeight < window.innerHeight
+        ? below
+        : Math.max(12, anchor.y - editorHeight - 12);
+      editor.style.left = Math.round(left) + "px";
+      editor.style.top = Math.round(top) + "px";
+    };
+    const showEditor = (element, point) => {
       hidePreview();
       selectedElement = element;
       selectedTarget = targetForElement(element);
       editingAnnotationId = null;
       editor.classList.remove("rw-annotation-editor-editing");
-      const rect = element.getBoundingClientRect();
-      const editorWidth = Math.min(560, Math.max(320, window.innerWidth - 24));
-      const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - editorWidth - 12));
-      const below = rect.bottom + 10;
-      const top = below + 76 < window.innerHeight ? below : Math.max(12, rect.top - 80);
-      editor.style.left = Math.round(left) + "px";
-      editor.style.top = Math.round(top) + "px";
+      const editorWidth = Math.min(420, Math.max(280, window.innerWidth - 24));
       editor.style.display = "flex";
       editor.style.width = Math.round(editorWidth) + "px";
+      placeEditorNearPoint(point, editorWidth, 56);
       input.value = "";
       sendButton.disabled = true;
       menu.hidden = true;
@@ -485,7 +494,7 @@ function buildAnnotationRuntimeScript(): string {
       selectedElement = null;
       selectedTarget = null;
       editingAnnotationId = annotation.id;
-      const editorWidth = Math.min(560, Math.max(320, window.innerWidth - 24));
+      const editorWidth = Math.min(420, Math.max(280, window.innerWidth - 24));
       const left = Math.min(
         Math.max(12, annotation.target.rect.x),
         Math.max(12, window.innerWidth - editorWidth - 12),
@@ -563,7 +572,7 @@ function buildAnnotationRuntimeScript(): string {
       if (!element) {
         return;
       }
-      showEditor(element);
+      showEditor(element, { x: event.clientX, y: event.clientY });
     };
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
