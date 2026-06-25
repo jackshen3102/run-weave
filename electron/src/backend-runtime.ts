@@ -37,11 +37,6 @@ const ORPHANED_BACKEND_EXIT_TIMEOUT_MS = 2_000;
 const LAN_BIND_HOST = "0.0.0.0";
 const LOCALHOST_V4 = "127.0.0.1";
 const LOCALHOST_V6 = "::1";
-const DEFAULT_PACKAGED_AUTH = {
-  AUTH_USERNAME: "admin",
-  AUTH_PASSWORD: "admin",
-  AUTH_JWT_SECRET: "browser-viewer-local-jwt-secret",
-} as const;
 const PACKAGED_BACKEND_CLI_PATHS = [
   "/opt/homebrew/bin",
   "/opt/homebrew/sbin",
@@ -306,7 +301,6 @@ export function buildPackagedBackendEnv(options: {
   backendPaths: PackagedBackendPaths;
 }): NodeJS.ProcessEnv {
   return {
-    ...DEFAULT_PACKAGED_AUTH,
     ...options.baseEnv,
     ELECTRON_RUN_AS_NODE: "1",
     PATH: buildPackagedBackendPath(options.baseEnv.PATH),

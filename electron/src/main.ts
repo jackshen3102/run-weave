@@ -9,7 +9,15 @@ import {
   net,
   nativeImage,
 } from "electron";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
+import { randomBytes } from "node:crypto";
 import os from "node:os";
 import pidusage from "pidusage";
 import path from "node:path";
@@ -357,13 +365,119 @@ let packagedBackendsStoppedForQuit = false;
 let stoppingPackagedBackendsForQuit = false;
 let desktopIncidentLogger: DesktopIncidentLogger | null = null;
 
+interface PackagedBackendAuthConfig {
+  username: string;
+  password: string;
+  jwtSecret: string;
+  createdAt: string;
+}
+
+const PACKAGED_BACKEND_AUTH_FILE_NAME = "backend-auth.json";
+
 function resolvePackagedBackendProfileDir(): string {
   return resolveBrowserProfileDir(process.env, os.homedir(), "/");
+}
+
+function resolvePackagedBackendAuthFile(): string {
+  return path.join(app.getPath("userData"), PACKAGED_BACKEND_AUTH_FILE_NAME);
+}
+
+function createRandomCredential(bytes = 32): string {
+  return randomBytes(bytes).toString("base64url");
+}
+
+function isPackagedBackendAuthConfig(
+  value: unknown,
+): value is PackagedBackendAuthConfig {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.username === "string" &&
+    record.username.trim().length > 0 &&
+    typeof record.password === "string" &&
+    record.password.trim().length > 0 &&
+    typeof record.jwtSecret === "string" &&
+    record.jwtSecret.trim().length > 0 &&
+    typeof record.createdAt === "string" &&
+    record.createdAt.trim().length > 0
+  );
+}
+
+function writePackagedBackendAuthConfig(
+  filePath: string,
+  config: PackagedBackendAuthConfig,
+): void {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, `${JSON.stringify(config, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  try {
+    chmodSync(filePath, 0o600);
+  } catch {
+    // Best-effort permission tightening; non-fatal on filesystems that
+    // do not support POSIX modes.
+  }
+}
+
+function loadOrCreatePackagedBackendAuthConfig(): PackagedBackendAuthConfig {
+  const filePath = resolvePackagedBackendAuthFile();
+  if (existsSync(filePath)) {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as unknown;
+    if (!isPackagedBackendAuthConfig(parsed)) {
+      throw new Error(
+        `[electron] invalid packaged backend auth file: ${filePath}`,
+      );
+    }
+    return parsed;
+  }
+
+  const config: PackagedBackendAuthConfig = {
+    username: `runweave-${createRandomCredential(9)}`,
+    password: createRandomCredential(),
+    jwtSecret: createRandomCredential(),
+    createdAt: new Date().toISOString(),
+  };
+  writePackagedBackendAuthConfig(filePath, config);
+  return config;
+}
+
+function hasCompleteAuthEnv(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(
+    env.AUTH_USERNAME?.trim() &&
+    env.AUTH_PASSWORD?.trim() &&
+    env.AUTH_JWT_SECRET?.trim(),
+  );
+}
+
+function resolvePackagedBackendAuthEnv(
+  env: NodeJS.ProcessEnv,
+): Pick<
+  NodeJS.ProcessEnv,
+  "AUTH_USERNAME" | "AUTH_PASSWORD" | "AUTH_JWT_SECRET"
+> {
+  if (hasCompleteAuthEnv(env)) {
+    return {
+      AUTH_USERNAME: env.AUTH_USERNAME,
+      AUTH_PASSWORD: env.AUTH_PASSWORD,
+      AUTH_JWT_SECRET: env.AUTH_JWT_SECRET,
+    };
+  }
+
+  const config = loadOrCreatePackagedBackendAuthConfig();
+  return {
+    AUTH_USERNAME: config.username,
+    AUTH_PASSWORD: config.password,
+    AUTH_JWT_SECRET: config.jwtSecret,
+  };
 }
 
 function buildPackagedBackendBaseEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    ...(!isDev ? resolvePackagedBackendAuthEnv(process.env) : {}),
     BROWSER_PROFILE_DIR: resolvePackagedBackendProfileDir(),
   };
 }
