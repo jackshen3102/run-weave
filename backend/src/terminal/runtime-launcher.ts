@@ -10,6 +10,7 @@ import { createTerminalRuntimeRecorder } from "./runtime-recorder";
 import type { TmuxService, TmuxTarget } from "./tmux-service";
 import type { TmuxOutputWatcher } from "./tmux-output-watcher";
 import { TmuxRebuildLimitError } from "./tmux-service";
+import { getAgentForCommand } from "./terminal-state-service";
 
 export interface EnsureTerminalRuntimeResult {
   runtime: PtyRuntime;
@@ -76,10 +77,59 @@ export async function ensureTerminalRuntime(
         currentSession.command,
         currentSession.args,
       );
+      const codexThreadIdToResume =
+        !hasSession &&
+        !options.allowMissingTmuxSession &&
+        shouldResumeCodexThreadAfterTmuxLoss(
+          currentSession,
+          wasInteractiveShellLaunch,
+        )
+          ? currentSession.threadId?.trim()
+          : undefined;
       let warning: string | undefined;
 
       if (!hasSession && !options.allowMissingTmuxSession) {
-        if (!wasInteractiveShellLaunch) {
+        if (codexThreadIdToResume) {
+          try {
+            const attempt = options.tmuxService!.recordRebuildAttempt(
+              currentSession.id,
+            );
+            warning = `Original tmux session was lost; resumed Codex thread from saved threadId (${attempt.count}/${attempt.maxAttempts}).`;
+            terminalLogger.warn(
+              "terminal.tmux.session-missing.codex-resume",
+              {
+                message: "Tmux terminal session missing; resuming Codex thread",
+                terminalSessionId: currentSession.id,
+                sessionName: target.sessionName,
+                socketPath: target.socketPath,
+                rebuildCount: attempt.count,
+                rebuildWindowMs: attempt.windowMs,
+              },
+            );
+          } catch (error) {
+            if (error instanceof TmuxRebuildLimitError) {
+              terminalLogger.error("terminal.tmux.rebuild-limit.exceeded", {
+                message: "Tmux rebuild limit exceeded",
+                terminalSessionId: currentSession.id,
+                count: error.count,
+                windowMs: error.windowMs,
+                maxAttempts: error.maxAttempts,
+                error,
+              });
+              await options.terminalSessionManager.updateRuntimeMetadata(
+                currentSession.id,
+                {
+                  runtimeKind: "tmux",
+                  tmuxSessionName: target.sessionName,
+                  tmuxSocketPath: target.socketPath,
+                  recoverable: false,
+                },
+              );
+              options.terminalSessionManager.markExited(currentSession.id, 1);
+            }
+            throw error;
+          }
+        } else if (!wasInteractiveShellLaunch) {
           const shellLaunch = resolveDefaultTerminalLaunchConfig();
           terminalLogger.info("terminal.tmux.session-missing.shell-rebuild", {
             message: "Tmux command session missing; rebuilding as shell",
@@ -106,7 +156,7 @@ export async function ensureTerminalRuntime(
           warning = "Command exited; returned to a shell.";
         }
 
-        if (wasInteractiveShellLaunch) {
+        if (wasInteractiveShellLaunch && !codexThreadIdToResume) {
           try {
             const attempt = options.tmuxService!.recordRebuildAttempt(
               currentSession.id,
@@ -171,6 +221,12 @@ export async function ensureTerminalRuntime(
           isInteractiveShellLaunch(currentSession.command, currentSession.args)
         ) {
           await options.tmuxService!.waitForPaneReady(target);
+        }
+        if (codexThreadIdToResume) {
+          await options.tmuxService!.sendInput(
+            target,
+            `codex resume ${shellQuote(codexThreadIdToResume)}\n`,
+          );
         }
       }
       await options.tmuxOutputWatcher?.watchSession(currentSession);
@@ -243,6 +299,24 @@ function isInteractiveShellLaunch(command: string, args: string[]): boolean {
     return false;
   }
   return !args.some((arg) => arg === "-c" || arg === "-lc");
+}
+
+function shouldResumeCodexThreadAfterTmuxLoss(
+  session: TerminalSessionRecord,
+  wasInteractiveShellLaunch: boolean,
+): boolean {
+  return (
+    wasInteractiveShellLaunch &&
+    getAgentForCommand(session.activeCommand) === "codex" &&
+    Boolean(session.threadId?.trim())
+  );
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_/:=.,@%+-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function createTmuxInputPacedRuntime(runtime: PtyRuntime): PtyRuntime {
