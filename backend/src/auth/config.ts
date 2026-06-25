@@ -27,16 +27,65 @@ function parsePositiveMs(
   return ttlSeconds * 1000;
 }
 
+function isStrictAuthConfigRequired(): boolean {
+  return (
+    process.env.NODE_ENV === "production" ||
+    process.env.ELECTRON_RUN_AS_NODE === "1" ||
+    Boolean(process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim())
+  );
+}
+
+function requireStrictAuthValue(
+  value: string | undefined,
+  envName: string,
+): string {
+  const normalized = value?.trim();
+  if (!normalized) {
+    throw new Error(`[viewer-be] missing required auth env: ${envName}`);
+  }
+  return normalized;
+}
+
+function rejectUnsafeStrictAuthDefaults(
+  username: string,
+  password: string,
+  jwtSecret: string,
+): void {
+  if (username === "admin" && password === "admin") {
+    throw new Error("[viewer-be] refusing default admin/admin credentials");
+  }
+  if (jwtSecret === "browser-viewer-local-jwt-secret") {
+    throw new Error("[viewer-be] refusing default packaged JWT secret");
+  }
+}
+
 export function loadAuthConfig(): AuthConfig {
   const username = process.env.AUTH_USERNAME?.trim();
   const password = process.env.AUTH_PASSWORD?.trim();
+  const jwtSecret = process.env.AUTH_JWT_SECRET?.trim();
+  const strictAuthConfigRequired = isStrictAuthConfigRequired();
+  const resolvedUsername = strictAuthConfigRequired
+    ? requireStrictAuthValue(username, "AUTH_USERNAME")
+    : username || "admin";
+  const resolvedPassword = strictAuthConfigRequired
+    ? requireStrictAuthValue(password, "AUTH_PASSWORD")
+    : password || "admin";
+  const resolvedJwtSecret = strictAuthConfigRequired
+    ? requireStrictAuthValue(jwtSecret, "AUTH_JWT_SECRET")
+    : jwtSecret || crypto.randomBytes(32).toString("base64url");
+
+  if (strictAuthConfigRequired) {
+    rejectUnsafeStrictAuthDefaults(
+      resolvedUsername,
+      resolvedPassword,
+      resolvedJwtSecret,
+    );
+  }
 
   return {
-    username: username || "admin",
-    password: password || "admin",
-    jwtSecret:
-      process.env.AUTH_JWT_SECRET?.trim() ||
-      crypto.randomBytes(32).toString("base64url"),
+    username: resolvedUsername,
+    password: resolvedPassword,
+    jwtSecret: resolvedJwtSecret,
     accessTokenTtlMs: parsePositiveMs(
       process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS ??
         process.env.AUTH_TOKEN_TTL_SECONDS,
