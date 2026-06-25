@@ -322,6 +322,16 @@ function isBackendRequest(url: string): boolean {
   }
 }
 
+function hasResponseHeader(
+  headers: Record<string, string[]>,
+  headerName: string,
+): boolean {
+  const normalizedHeaderName = headerName.toLowerCase();
+  return Object.keys(headers).some(
+    (name) => name.toLowerCase() === normalizedHeaderName,
+  );
+}
+
 function setupSessionIntercept(win: BrowserWindow) {
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const headers: Record<string, string[]> = { ...details.responseHeaders };
@@ -329,7 +339,10 @@ function setupSessionIntercept(win: BrowserWindow) {
     delete headers["content-security-policy"];
     delete headers["Content-Security-Policy"];
 
-    if (isBackendRequest(details.url)) {
+    if (
+      isBackendRequest(details.url) &&
+      !hasResponseHeader(headers, "Access-Control-Allow-Origin")
+    ) {
       headers["Access-Control-Allow-Origin"] = ["*"];
       headers["Access-Control-Allow-Methods"] = [
         "GET, POST, DELETE, PATCH, PUT, OPTIONS",
