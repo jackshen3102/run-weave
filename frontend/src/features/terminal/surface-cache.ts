@@ -1,4 +1,4 @@
-export const MAX_CACHED_TERMINAL_SURFACES = 5;
+export const MAX_CACHED_TERMINAL_SURFACES = 10;
 
 interface ResolveCachedTerminalSurfaceIdsParams {
   activeSessionId: string | null;
