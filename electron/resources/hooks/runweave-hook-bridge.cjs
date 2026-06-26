@@ -287,7 +287,13 @@ function normalizeSource(raw) {
   const source = String(raw || "unknown")
     .trim()
     .toLowerCase();
-  if (source === "claude" || source === "codex" || source === "trae") {
+  if (
+    source === "claude" ||
+    source === "codex" ||
+    source === "trae" ||
+    source === "traecli" ||
+    source === "traex"
+  ) {
     return source;
   }
   return "unknown";
@@ -435,6 +441,7 @@ function buildAppServerBaseEvent({
   payload,
   rawEvent,
   normalizedEvent,
+  stateHookEvent,
   source,
   terminalSessionId,
   threadId,
@@ -463,6 +470,7 @@ function buildAppServerBaseEvent({
       source,
       rawHookEvent: String(rawEvent || "Unknown"),
       normalizedEvent,
+      stateHookEvent,
     },
   };
 }
@@ -533,6 +541,7 @@ async function main() {
         payload,
         rawEvent,
         normalizedEvent,
+        stateHookEvent,
         source,
         terminalSessionId,
         threadId,
@@ -586,6 +595,7 @@ async function main() {
         payload,
         rawEvent,
         normalizedEvent,
+        stateHookEvent,
         source,
         terminalSessionId,
         threadId,

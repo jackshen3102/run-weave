@@ -5,24 +5,11 @@ import type {
   TerminalStateResponse,
 } from "@runweave/shared";
 import { logger } from "../logging";
-import {
-  isCompletionSourceAllowedForCommand,
-  AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS,
-} from "../terminal/completion-source-gate";
 import type { TerminalSessionManager } from "../terminal/manager";
-import {
-  getTerminalSessionAgent,
-  type TerminalStateService,
-} from "../terminal/terminal-state-service";
-import { readCodexThreadSnapshot } from "../terminal/codex-thread-snapshot";
+import type { TerminalStateService } from "../terminal/terminal-state-service";
+import { processTerminalAgentHook } from "../terminal/agent-hook-processor";
 
 const terminalStateLogger = logger.child({ component: "terminal-state" });
-const AGENT_ACTIVE_COMMANDS = {
-  codex: "codex",
-  trae: "trae",
-  traecli: "traecli",
-  traex: "traex",
-} as const;
 const AGENT_HOOKS = ["codex", "trae", "traecli", "traex"] as const;
 
 const agentHookStateSchema = z
@@ -34,36 +21,6 @@ const agentHookStateSchema = z
     hookEvent: z.enum(["SessionStart", "UserPromptSubmit", "Stop"]),
   })
   .strict();
-
-function commandBasename(command: string | null): string | null {
-  const normalized = command?.trim().replace(/\\+/g, "/");
-  if (!normalized) {
-    return null;
-  }
-  return normalized.split("/").filter(Boolean).at(-1) ?? normalized;
-}
-
-function updateCodexThreadPreviewInBackground(
-  terminalSessionManager: TerminalSessionManager,
-  terminalSessionId: string,
-  threadId: string,
-): void {
-  void readCodexThreadSnapshot(threadId)
-    .then(async ({ preview }) => {
-      await terminalSessionManager.updateSessionPreview(
-        terminalSessionId,
-        preview,
-      );
-    })
-    .catch((error) => {
-      terminalStateLogger.warn("terminal-state.codex-thread-preview.failed", {
-        message: "Failed to load Codex thread preview",
-        terminalSessionId,
-        threadId,
-        error,
-      });
-    });
-}
 
 export function createTerminalStateRouter(options: {
   terminalSessionManager: TerminalSessionManager;
@@ -125,119 +82,35 @@ export function createInternalTerminalAgentHookRouter(options: {
       return;
     }
 
-    let session = options.terminalSessionManager.getSession(
-      parsed.data.terminalSessionId,
-    );
-    if (!session) {
+    const result = await processTerminalAgentHook(options, parsed.data);
+    if (result.status === "not_found") {
       res.status(404).json({ message: "Terminal session not found" });
       return;
     }
-    if (session.status === "exited") {
-      res.status(202).json({
-        terminalState: options.terminalStateService.getCurrent(
-          session.id,
-          session,
-        ),
-      });
+    if (result.status === "exited") {
+      res.status(202).json({ terminalState: result.terminalState });
       return;
     }
-
-    if (commandBasename(session.activeCommand) === "node") {
-      session =
-        (await options.terminalSessionManager.updateSessionMetadata(
-          session.id,
-          {
-            cwd: session.cwd,
-            activeCommand: AGENT_ACTIVE_COMMANDS[parsed.data.agent],
-          },
-        )) ?? session;
-    }
-
-    if (parsed.data.agent === "codex" && parsed.data.threadId) {
-      const previousThreadId = session.threadId;
-      session =
-        (await options.terminalSessionManager.updateSessionThreadId(
-          session.id,
-          parsed.data.threadId,
-        )) ?? session;
-      if (
-        parsed.data.hookEvent === "SessionStart" &&
-        previousThreadId !== parsed.data.threadId
-      ) {
-        await options.terminalSessionManager.updateSessionPreview(
-          session.id,
-          null,
-        );
-      }
-      if (parsed.data.hookEvent === "SessionStart") {
-        updateCodexThreadPreviewInBackground(
-          options.terminalSessionManager,
-          session.id,
-          parsed.data.threadId,
-        );
-      }
-    }
-
-    const sessionAgent = getTerminalSessionAgent(session);
-    const effectiveAgent =
-      sessionAgent &&
-      isCompletionSourceAllowedForCommand(parsed.data.agent, session.activeCommand)
-        ? sessionAgent
-        : parsed.data.agent;
-    const lastAiActiveCommand =
-      options.terminalSessionManager.getLastAiActiveCommand(session.id);
-    const currentCommandMatches = isCompletionSourceAllowedForCommand(
-      parsed.data.agent,
-      session.activeCommand,
-    ) || sessionAgent === effectiveAgent;
-    const graceCommandMatches =
-      session.activeCommand === null &&
-      lastAiActiveCommand !== null &&
-      lastAiActiveCommand.source === parsed.data.agent &&
-      lastAiActiveCommand.clearedAt !== null &&
-      Date.now() - lastAiActiveCommand.clearedAt <=
-        AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS;
-
-    if (
-      parsed.data.hookEvent !== "SessionStart" &&
-      !currentCommandMatches &&
-      !graceCommandMatches &&
-      options.terminalStateService.getCurrent(session.id, session).agent !==
-        effectiveAgent
-    ) {
+    if (result.status === "ignored") {
       terminalStateLogger.info("terminal-state.hook.ignored", {
         message: "Terminal agent hook ignored because agent is not current",
-        terminalSessionId: session.id,
-        agent: effectiveAgent,
-        hookEvent: parsed.data.hookEvent,
-        activeCommand: session.activeCommand,
+        terminalSessionId: result.terminalSessionId,
+        agent: result.agent,
+        hookEvent: result.hookEvent,
+        activeCommand: result.activeCommand,
       });
-      res.status(202).json({
-        terminalState: options.terminalStateService.getCurrent(
-          session.id,
-          session,
-        ),
-      });
+      res.status(202).json({ terminalState: result.terminalState });
       return;
     }
 
-    const terminalState = options.terminalStateService.handleAgentHook(
-      session.id,
-      effectiveAgent,
-      parsed.data.hookEvent,
-      {
-        projectId: session.projectId,
-        reason: "agent_hook",
-      },
-    );
     terminalStateLogger.info("terminal-state.hook.recorded", {
       message: "Terminal agent hook recorded",
-      terminalSessionId: session.id,
-      agent: effectiveAgent,
-      hookEvent: parsed.data.hookEvent,
-      state: terminalState.state,
+      terminalSessionId: result.terminalSessionId,
+      agent: result.agent,
+      hookEvent: result.hookEvent,
+      state: result.terminalState.state,
     });
-    res.status(202).json({ terminalState });
+    res.status(202).json({ terminalState: result.terminalState });
   });
 
   return router;

@@ -75,7 +75,7 @@ const eventRequestSchema = z
     if (value.kind === "agent.completion") {
       const payload = value.payload as Record<string, unknown>;
       if (
-        !["claude", "codex", "trae", "unknown"].includes(
+        !["claude", "codex", "trae", "traecli", "traex", "unknown"].includes(
           String(payload.source),
         )
       ) {

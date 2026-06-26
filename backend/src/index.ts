@@ -15,6 +15,7 @@ import { AppServerEventConsumer } from "./app-server/event-consumer";
 import type { AppServerEventConsumerHandle } from "./app-server/event-consumer";
 import { AppServerEventCursorStore } from "./app-server/event-cursor-store";
 import { handleAgentCompletionEvent } from "./app-server/handlers/agent-completion";
+import { handleAgentHookEvent } from "./app-server/handlers/agent-hook";
 import { isEventOwnedByThisBackend } from "./app-server/ownership";
 import { diagnosticLogRecorder } from "./diagnostic-logs/recorder";
 import {
@@ -314,16 +315,28 @@ async function initializeAppServerEventIntegration(
         "app-server-event-cursors.json",
       ),
     );
+    // Keep the existing cursor so upgraded backends do not replay stale hook events.
     const consumerId = `${backendInstanceId}:agent-completion`;
     const consumer = new AppServerEventConsumer({
       client,
       cursorStore,
       consumerId,
-      kinds: ["agent.completion"],
+      kinds: ["agent.hook", "agent.completion"],
       isRelevant: (event) =>
         isEventOwnedByThisBackend(event, services.terminalSessionManager) &&
         event.source.instanceId !== backendInstanceId,
-      handler: handleAgentCompletionEvent,
+      handler: async (event) => {
+        if (event.kind === "agent.hook") {
+          await handleAgentHookEvent(event, {
+            terminalSessionManager: services.terminalSessionManager,
+            terminalStateService: services.terminalStateService,
+          });
+          return;
+        }
+        if (event.kind === "agent.completion") {
+          await handleAgentCompletionEvent(event);
+        }
+      },
     });
     await consumer.start();
     services.appServerEventConsumer = consumer;
