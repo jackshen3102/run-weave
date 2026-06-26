@@ -17,6 +17,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: [
+      "app-server/src/**/*.ts",
       "backend/src/**/*.ts",
       "packages/shared/src/**/*.ts",
       "packages/runweave-cli/src/**/*.ts",

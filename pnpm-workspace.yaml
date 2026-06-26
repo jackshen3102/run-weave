@@ -1,5 +1,6 @@
 packages:
   - app
+  - app-server
   - frontend
   - backend
   - electron

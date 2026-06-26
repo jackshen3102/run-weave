@@ -8,6 +8,7 @@
 | ---------------------------------------- | --------------------------------------------------------------- |
 | 开源项目入口与快速开始                   | ../README.md 或 ../README.zh-CN.md                              |
 | 架构/网络拓扑                            | architecture/network-topology.md                                |
+| app-server Event Center                  | architecture/app-server-event-center.md                         |
 | App 移动端边界                           | architecture/app-mobile.md                                      |
 | App 后端连接管理                         | architecture/app-mobile.md#配置与安全                           |
 | App 终端语音输入                         | architecture/app-mobile.md#app-终端语音输入                     |
