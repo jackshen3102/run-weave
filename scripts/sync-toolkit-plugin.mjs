@@ -32,6 +32,7 @@ const toolkitHookAssets = [
   "feishu_stop_notify.sh",
   "runweave-hook-bridge.cjs",
   "runweave-hook-dispatch.cjs",
+  "runweave-hook-payload.cjs",
 ];
 const marketplacePath = path.join(repoRoot, marketplaceRelativePath);
 const codexHome = process.env.CODEX_HOME || path.join(homedir(), ".codex");

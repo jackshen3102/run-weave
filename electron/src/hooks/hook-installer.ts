@@ -45,6 +45,7 @@ type JsonReadResult =
 const BRIDGE_BASENAME = "runweave-hook-bridge";
 const LAUNCHER_SCRIPT_BASENAME = "runweave-hook-bridge.cjs";
 const APP_SERVER_CLIENT_BASENAME = "app-server-client.cjs";
+const HOOK_PAYLOAD_BASENAME = "runweave-hook-payload.cjs";
 const LEGACY_BRIDGE_BASENAME = "browser-viewer-hook-bridge";
 const BACKUP_SUFFIX = ".runweave-hook-backup";
 const FEISHU_SCRIPT_BASENAME = "feishu_stop_notify.sh";
@@ -112,6 +113,10 @@ export async function writeLauncherScript(
     context,
     APP_SERVER_CLIENT_BASENAME,
   );
+  const hookPayloadSource = await resolveHookAssetPath(
+    context,
+    HOOK_PAYLOAD_BASENAME,
+  );
 
   await mkdir(launcherDir, { recursive: true });
   await writeFile(launcherPath, launcherScript, "utf8");
@@ -120,6 +125,12 @@ export async function writeLauncherScript(
     await copyFile(
       appServerClientSource,
       path.join(launcherDir, APP_SERVER_CLIENT_BASENAME),
+    );
+  }
+  if (await fileExists(hookPayloadSource)) {
+    await copyFile(
+      hookPayloadSource,
+      path.join(launcherDir, HOOK_PAYLOAD_BASENAME),
     );
   }
 }
