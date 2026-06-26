@@ -24,6 +24,7 @@ const hookAssets = [
   "app-server-client.cjs",
   "runweave-hook-bridge.cjs",
   "runweave-hook-dispatch.cjs",
+  "runweave-hook-payload.cjs",
   "feishu_stop_notify.sh",
 ];
 const toolkitHookEvents = [
@@ -166,6 +167,15 @@ try {
     "utf8",
   );
   assert.equal(installedAppServerClient, resourceAppServerClient);
+  const installedHookPayload = await readFile(
+    path.join(homeDir, ".runweave", "bin", "runweave-hook-payload.cjs"),
+    "utf8",
+  );
+  const resourceHookPayload = await readFile(
+    path.join(electronHooksDir, "runweave-hook-payload.cjs"),
+    "utf8",
+  );
+  assert.equal(installedHookPayload, resourceHookPayload);
   await chmod(launcherPath, 0o755);
 
   const codexHooks = JSON.parse(
