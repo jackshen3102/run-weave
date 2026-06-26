@@ -13,6 +13,10 @@ const { spawn, spawnSync } = require("node:child_process");
 const os = require("node:os");
 const fs = require("node:fs");
 const path = require("node:path");
+const {
+  discoverAppServer,
+  postAppServerEvent,
+} = require("./app-server-client.cjs");
 
 function redactEndpoint(endpoint) {
   if (!endpoint) {
@@ -377,6 +381,14 @@ async function postCompletionHook({
   rawEvent,
   commandName,
 }) {
+  const body = buildCompletionHookBody({
+    terminalSessionId,
+    payload,
+    source,
+    completionReason,
+    rawEvent,
+    commandName,
+  });
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -384,19 +396,7 @@ async function postCompletionHook({
         "Content-Type": "application/json",
         "X-Runweave-Hook-Token": token,
       },
-      body: JSON.stringify({
-        terminalSessionId,
-        source,
-        completionReason,
-        commandName: commandName || null,
-        rawHookEvent: String(rawEvent || "Stop"),
-        hookEvent: String(rawEvent || "Stop"),
-        summary: extractCompletionSummary(payload),
-        cwd:
-          typeof payload.cwd === "string" && payload.cwd.trim()
-            ? payload.cwd
-            : process.env.PWD || null,
-      }),
+      body: JSON.stringify(body),
     });
     return { ok: response.ok, status: response.status };
   } catch (error) {
@@ -405,6 +405,66 @@ async function postCompletionHook({
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+function buildCompletionHookBody({
+  terminalSessionId,
+  payload,
+  source,
+  completionReason,
+  rawEvent,
+  commandName,
+}) {
+  return {
+    terminalSessionId,
+    source,
+    completionReason,
+    commandName: commandName || null,
+    rawHookEvent: String(rawEvent || "Stop"),
+    hookEvent: String(rawEvent || "Stop"),
+    summary: extractCompletionSummary(payload),
+    cwd:
+      typeof payload.cwd === "string" && payload.cwd.trim()
+        ? payload.cwd
+        : process.env.PWD || null,
+  };
+}
+
+function buildAppServerBaseEvent({
+  kind,
+  payload,
+  rawEvent,
+  normalizedEvent,
+  source,
+  terminalSessionId,
+  threadId,
+  dedupePrefix,
+}) {
+  return {
+    kind,
+    source: {
+      app: "hook",
+      instanceId: `${source}:${terminalSessionId}`,
+      pid: process.pid,
+    },
+    scope: {
+      projectId: process.env.RUNWEAVE_PROJECT_ID || null,
+      terminalSessionId,
+      cwd:
+        typeof payload.cwd === "string" && payload.cwd.trim()
+          ? payload.cwd
+          : process.env.PWD || null,
+    },
+    dedupeKey: `${dedupePrefix}:${source}:${terminalSessionId}:${String(
+      rawEvent || "Unknown",
+    )}:${threadId || "no-thread"}:${Date.now()}`,
+    correlationId: threadId,
+    payload: {
+      source,
+      rawHookEvent: String(rawEvent || "Unknown"),
+      normalizedEvent,
+    },
+  };
 }
 
 async function main() {
@@ -460,6 +520,38 @@ async function main() {
     return;
   }
 
+  const appServerClient = await discoverAppServer();
+  if (!appServerClient) {
+    appendDebugLog("hook bridge app-server unavailable", {
+      terminalSessionId,
+    });
+  } else {
+    const result = await postAppServerEvent(
+      appServerClient,
+      buildAppServerBaseEvent({
+        kind: "agent.hook",
+        payload,
+        rawEvent,
+        normalizedEvent,
+        source,
+        terminalSessionId,
+        threadId,
+        dedupePrefix: "hook",
+      }),
+    );
+    appendDebugLog("hook bridge posted app-server hook event", {
+      terminalSessionId,
+      ...result,
+    });
+    if (!result.ok) {
+      appendDebugLog("hook bridge app-server post failed", {
+        terminalSessionId,
+        kind: "agent.hook",
+        ...result,
+      });
+    }
+  }
+
   if (stateHookEvent && stateEndpoint) {
     const result = await postAgentHook({
       endpoint: stateEndpoint,
@@ -480,6 +572,47 @@ async function main() {
   if (shouldRecordCompletion && completionEndpoint) {
     notifyDesktop(source);
     notifyFeishu(payload, source, terminalSessionId);
+    if (appServerClient) {
+      const completionBody = buildCompletionHookBody({
+        terminalSessionId,
+        payload,
+        source,
+        completionReason,
+        rawEvent,
+        commandName: args.commandName,
+      });
+      const completionEvent = buildAppServerBaseEvent({
+        kind: "agent.completion",
+        payload,
+        rawEvent,
+        normalizedEvent,
+        source,
+        terminalSessionId,
+        threadId,
+        dedupePrefix: "completion",
+      });
+      completionEvent.payload = {
+        source: completionBody.source,
+        completionReason: completionBody.completionReason,
+        commandName: completionBody.commandName,
+        rawHookEvent: completionBody.rawHookEvent,
+        hookEvent: completionBody.hookEvent,
+        cwd: completionBody.cwd,
+        summary: completionBody.summary,
+      };
+      const result = await postAppServerEvent(appServerClient, completionEvent);
+      appendDebugLog("hook bridge posted app-server completion event", {
+        terminalSessionId,
+        ...result,
+      });
+      if (!result.ok) {
+        appendDebugLog("hook bridge app-server post failed", {
+          terminalSessionId,
+          kind: "agent.completion",
+          ...result,
+        });
+      }
+    }
     const result = await postCompletionHook({
       endpoint: completionEndpoint,
       token,

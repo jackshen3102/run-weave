@@ -44,6 +44,7 @@ type JsonReadResult =
 
 const BRIDGE_BASENAME = "runweave-hook-bridge";
 const LAUNCHER_SCRIPT_BASENAME = "runweave-hook-bridge.cjs";
+const APP_SERVER_CLIENT_BASENAME = "app-server-client.cjs";
 const LEGACY_BRIDGE_BASENAME = "browser-viewer-hook-bridge";
 const BACKUP_SUFFIX = ".runweave-hook-backup";
 const FEISHU_SCRIPT_BASENAME = "feishu_stop_notify.sh";
@@ -107,10 +108,20 @@ export async function writeLauncherScript(
   const launcherDir = getLauncherDir(context.homeDir);
   const launcherPath = getLauncherPath(context.homeDir);
   const launcherScript = await loadLauncherScript(context);
+  const appServerClientSource = await resolveHookAssetPath(
+    context,
+    APP_SERVER_CLIENT_BASENAME,
+  );
 
   await mkdir(launcherDir, { recursive: true });
   await writeFile(launcherPath, launcherScript, "utf8");
   await chmod(launcherPath, 0o755);
+  if (await fileExists(appServerClientSource)) {
+    await copyFile(
+      appServerClientSource,
+      path.join(launcherDir, APP_SERVER_CLIENT_BASENAME),
+    );
+  }
 }
 
 export async function installClaudeHooks(

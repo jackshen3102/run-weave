@@ -21,6 +21,7 @@ const toolkitHooksDir = path.join(repoRoot, "plugins", "toolkit", "hooks");
 const toolkitHooksConfigPath = path.join(toolkitDir, "hooks.json");
 const electronHooksDir = path.join(resourcesDir, "hooks");
 const hookAssets = [
+  "app-server-client.cjs",
   "runweave-hook-bridge.cjs",
   "runweave-hook-dispatch.cjs",
   "feishu_stop_notify.sh",
@@ -156,6 +157,15 @@ try {
     "utf8",
   );
   assert.equal(installedLauncher, resourceLauncher);
+  const installedAppServerClient = await readFile(
+    path.join(homeDir, ".runweave", "bin", "app-server-client.cjs"),
+    "utf8",
+  );
+  const resourceAppServerClient = await readFile(
+    path.join(electronHooksDir, "app-server-client.cjs"),
+    "utf8",
+  );
+  assert.equal(installedAppServerClient, resourceAppServerClient);
   await chmod(launcherPath, 0o755);
 
   const codexHooks = JSON.parse(
@@ -204,6 +214,7 @@ try {
   }
 
   const requests = [];
+  const appServerRequests = [];
   const server = createServer((request, response) => {
     let body = "";
     request.setEncoding("utf8");
@@ -221,13 +232,64 @@ try {
       response.end(JSON.stringify({ ok: true }));
     });
   });
+  const appServer = createServer((request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", () => {
+      if (request.url === "/healthz") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            ok: true,
+            service: "runweave-app-server",
+            protocolVersion: 1,
+            pid: process.pid,
+            version: "0.1.0",
+          }),
+        );
+        return;
+      }
+      if (request.url === "/events") {
+        const authorized =
+          request.headers.authorization === "Bearer app-server-token";
+        if (!authorized) {
+          response.writeHead(401, { "content-type": "application/json" });
+          response.end(JSON.stringify({ message: "Unauthorized" }));
+          return;
+        }
+        const parsed = body ? JSON.parse(body) : null;
+        appServerRequests.push(parsed);
+        response.writeHead(201, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            event: {
+              id: String(appServerRequests.length),
+              version: 1,
+              createdAt: new Date().toISOString(),
+              ...parsed,
+            },
+          }),
+        );
+        return;
+      }
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end(JSON.stringify({ message: "Not found" }));
+    });
+  });
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve) => appServer.listen(0, "127.0.0.1", resolve));
   try {
     const port = server.address().port;
+    const appServerPort = appServer.address().port;
     const endpoint = `http://127.0.0.1:${port}/internal/terminal/agent-hook`;
     await runLauncher(launcherPath, {
       HOME: homeDir,
+      RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
+      RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
       RUNWEAVE_HOOK_ENDPOINT: endpoint,
       RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
       RUNWEAVE_HOOK_TOKEN: "token-1",
@@ -237,6 +299,14 @@ try {
     });
 
     assert.equal(requests.length, 2);
+    assert.equal(appServerRequests.length, 2);
+    assert.equal(appServerRequests[0].kind, "agent.hook");
+    assert.equal(appServerRequests[0].source.app, "hook");
+    assert.equal(appServerRequests[0].scope.terminalSessionId, "terminal-1");
+    assert.equal(appServerRequests[0].payload.source, "codex");
+    assert.equal(appServerRequests[1].kind, "agent.completion");
+    assert.equal(appServerRequests[1].payload.source, "codex");
+    assert.equal(appServerRequests[1].payload.summary, "done");
     assert.equal(requests[0].url, "/internal/terminal/agent-hook");
     assert.equal(requests[0].token, "token-1");
     assert.deepEqual(requests[0].body, {
@@ -259,6 +329,8 @@ try {
       {
         HOME: homeDir,
         CLAUDE_PLUGIN_ROOT: toolkitDir,
+        RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
+        RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
         RUNWEAVE_HOOK_ENDPOINT: endpoint,
         RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
         RUNWEAVE_HOOK_TOKEN: "token-2",
@@ -269,6 +341,11 @@ try {
     );
 
     assert.equal(requests.length, 4);
+    assert.equal(appServerRequests.length, 4);
+    assert.equal(appServerRequests[2].kind, "agent.hook");
+    assert.equal(appServerRequests[2].payload.source, "codex");
+    assert.equal(appServerRequests[3].kind, "agent.completion");
+    assert.equal(appServerRequests[3].payload.source, "codex");
     assert.equal(requests[2].url, "/internal/terminal/agent-hook");
     assert.equal(requests[2].token, "token-2");
     assert.deepEqual(requests[2].body, {
@@ -290,6 +367,8 @@ try {
       "trae",
       {
         HOME: homeDir,
+        RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
+        RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
         RUNWEAVE_HOOK_ENDPOINT: endpoint,
         RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
         RUNWEAVE_HOOK_TOKEN: "token-3",
@@ -300,6 +379,11 @@ try {
     );
 
     assert.equal(requests.length, 6);
+    assert.equal(appServerRequests.length, 6);
+    assert.equal(appServerRequests[4].kind, "agent.hook");
+    assert.equal(appServerRequests[4].payload.source, "trae");
+    assert.equal(appServerRequests[5].kind, "agent.completion");
+    assert.equal(appServerRequests[5].payload.source, "trae");
     assert.equal(requests[4].url, "/internal/terminal/agent-hook");
     assert.equal(requests[4].token, "token-3");
     assert.deepEqual(requests[4].body, {
@@ -317,6 +401,29 @@ try {
 
     await runLauncher(launcherPath, {
       HOME: homeDir,
+      RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
+      RUNWEAVE_APP_SERVER_TOKEN: "wrong-token",
+      RUNWEAVE_HOOK_ENDPOINT: endpoint,
+      RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
+      RUNWEAVE_HOOK_TOKEN: "token-4",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-4",
+      RUNWEAVE_PROJECT_ID: "project-4",
+      RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+    });
+
+    assert.equal(requests.length, 8);
+    assert.equal(
+      appServerRequests.length,
+      6,
+      "app-server 401 must not prevent backend hook fallback",
+    );
+    assert.equal(requests[6].url, "/internal/terminal/agent-hook");
+    assert.equal(requests[7].url, "/internal/terminal-completion");
+
+    await runLauncher(launcherPath, {
+      HOME: homeDir,
+      RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
+      RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
       RUNWEAVE_HOOK_ENDPOINT: endpoint,
       RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
       RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
@@ -324,11 +431,17 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(
       requests.length,
-      6,
+      8,
       "launcher without Runweave identity must not post any request",
+    );
+    assert.equal(
+      appServerRequests.length,
+      6,
+      "launcher without Runweave identity must not post app-server events",
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
+    await new Promise((resolve) => appServer.close(resolve));
   }
 } finally {
   await rm(homeDir, { force: true, recursive: true });

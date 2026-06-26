@@ -9,6 +9,13 @@ import { loadAuthConfig } from "./auth/config";
 import { createRequireAuth } from "./auth/middleware";
 import { AuthService } from "./auth/service";
 import type { AuthStore } from "./auth/store";
+import { AppServerClient } from "./app-server/client";
+import { discoverAppServer } from "./app-server/discovery";
+import { AppServerEventConsumer } from "./app-server/event-consumer";
+import type { AppServerEventConsumerHandle } from "./app-server/event-consumer";
+import { AppServerEventCursorStore } from "./app-server/event-cursor-store";
+import { handleAgentCompletionEvent } from "./app-server/handlers/agent-completion";
+import { isEventOwnedByThisBackend } from "./app-server/ownership";
 import { diagnosticLogRecorder } from "./diagnostic-logs/recorder";
 import {
   createRequestContextMiddleware,
@@ -91,6 +98,7 @@ interface RuntimeServices {
   ptyService: PtyService;
   tmuxService: TmuxService;
   tmuxOutputWatcher: TmuxOutputWatcher;
+  appServerEventConsumer: AppServerEventConsumerHandle | null;
 }
 
 type BackendStartStage =
@@ -266,7 +274,72 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     ptyService,
     tmuxService,
     tmuxOutputWatcher,
+    appServerEventConsumer: null,
   };
+}
+
+async function initializeAppServerEventIntegration(
+  services: RuntimeServices,
+  backendBaseUrl: string,
+): Promise<void> {
+  try {
+    const connection = await discoverAppServer();
+    if (!connection) {
+      logger.info("backend.app-server.unavailable", {
+        component: "app-server",
+        message: "Runweave app-server unavailable; backend will continue without global event center",
+      });
+      return;
+    }
+
+    const client = new AppServerClient(connection);
+    const storagePaths = resolveStoragePaths(process.env);
+    const backendInstanceId = `backend:${process.pid}:${backendBaseUrl}`;
+    await client.postEvent({
+      kind: "backend.started",
+      source: {
+        app: "backend",
+        instanceId: backendInstanceId,
+        pid: process.pid,
+      },
+      dedupeKey: `backend.started:${backendInstanceId}`,
+      payload: {
+        baseUrl: backendBaseUrl,
+      },
+    });
+
+    const cursorStore = new AppServerEventCursorStore(
+      path.join(
+        path.dirname(storagePaths.terminalSessionStoreFile),
+        "app-server-event-cursors.json",
+      ),
+    );
+    const consumerId = `${backendInstanceId}:agent-completion`;
+    const consumer = new AppServerEventConsumer({
+      client,
+      cursorStore,
+      consumerId,
+      kinds: ["agent.completion"],
+      isRelevant: (event) =>
+        isEventOwnedByThisBackend(event, services.terminalSessionManager) &&
+        event.source.instanceId !== backendInstanceId,
+      handler: handleAgentCompletionEvent,
+    });
+    await consumer.start();
+    services.appServerEventConsumer = consumer;
+
+    logger.info("backend.app-server.connected", {
+      component: "app-server",
+      message: "Backend connected to Runweave app-server event center",
+      consumerId,
+    });
+  } catch (error) {
+    logger.warn("backend.app-server.integration.failed", {
+      component: "app-server",
+      message: "Runweave app-server integration failed; backend will continue without global event center",
+      error,
+    });
+  }
 }
 
 function createHttpApp(
@@ -457,6 +530,7 @@ function attachLifecycleHandlers(
     try {
       await closeServer(server);
       await services.tmuxOutputWatcher.dispose();
+      services.appServerEventConsumer?.stop();
       await services.terminalRuntimeRegistry.disposeAll();
       await services.terminalSessionManager.dispose();
       await services.terminalQuickInputStore.dispose();
@@ -571,6 +645,7 @@ async function startRuntime(): Promise<void> {
     // codex hook events to the wrong process.
     process.env.RUNWEAVE_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal/agent-hook`;
     process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT = `http://127.0.0.1:${port}/internal/terminal-completion`;
+    await initializeAppServerEventIntegration(services, controlPlaneBaseUrl);
 
     stage = "lifecycle-handlers";
     attachLifecycleHandlers(server, services, profileLock);

@@ -28,6 +28,7 @@ const hooksConfigPath = path.join(pluginDir, "hooks.json");
 const toolkitHooksDir = path.join(pluginDir, "hooks");
 const electronHooksDir = path.join(repoRoot, "electron", "resources", "hooks");
 const toolkitHookAssets = [
+  "app-server-client.cjs",
   "feishu_stop_notify.sh",
   "runweave-hook-bridge.cjs",
   "runweave-hook-dispatch.cjs",
