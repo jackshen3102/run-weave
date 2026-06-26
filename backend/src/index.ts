@@ -81,6 +81,7 @@ import { codexAppServerClient } from "./voice/codex-app-server-client";
 const HASHED_ASSET_CACHE_CONTROL =
   "public, max-age=31536000, s-maxage=31536000, immutable";
 const REVALIDATED_STATIC_CACHE_CONTROL = "no-cache";
+const APP_SERVER_AGENT_EVENT_CONSUMER_ID = "backend:agent-events";
 
 interface RuntimeServices {
   authStore: AuthStore;
@@ -315,12 +316,10 @@ async function initializeAppServerEventIntegration(
         "app-server-event-cursors.json",
       ),
     );
-    // Keep the existing cursor so upgraded backends do not replay stale hook events.
-    const consumerId = `${backendInstanceId}:agent-completion`;
     const consumer = new AppServerEventConsumer({
       client,
       cursorStore,
-      consumerId,
+      consumerId: APP_SERVER_AGENT_EVENT_CONSUMER_ID,
       kinds: ["agent.hook", "agent.completion"],
       isRelevant: (event) =>
         isEventOwnedByThisBackend(event, services.terminalSessionManager) &&
@@ -344,7 +343,7 @@ async function initializeAppServerEventIntegration(
     logger.info("backend.app-server.connected", {
       component: "app-server",
       message: "Backend connected to Runweave app-server event center",
-      consumerId,
+      consumerId: APP_SERVER_AGENT_EVENT_CONSUMER_ID,
     });
   } catch (error) {
     logger.warn("backend.app-server.integration.failed", {
