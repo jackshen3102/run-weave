@@ -1,6 +1,6 @@
 {
   "name": "@runweave/electron",
-  "version": "0.124.0",
+  "version": "0.125.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -14,6 +14,7 @@
     "dist": "electron-builder"
   },
   "dependencies": {
+    "@runweave/app-server": "workspace:*",
     "@runweave/shared": "workspace:*",
     "electron-updater": "^6.6.2",
     "pidusage": "^4.0.1",
