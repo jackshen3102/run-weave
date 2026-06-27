@@ -24,3 +24,36 @@ export const DEFAULT_TERMINAL_PREFERENCES: TerminalPreferences = {
   renderer: "dom",
   bellMode: "off",
 };
+
+const TERMINAL_PANEL_SPLIT_ENABLED_STORAGE_KEY =
+  "runweave:terminal:panel-split-enabled:v1";
+
+export function readTerminalPanelSplitEnabled(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    return (
+      window.localStorage.getItem(TERMINAL_PANEL_SPLIT_ENABLED_STORAGE_KEY) ===
+      "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function writeTerminalPanelSplitEnabled(enabled: boolean): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      TERMINAL_PANEL_SPLIT_ENABLED_STORAGE_KEY,
+      enabled ? "true" : "false",
+    );
+  } catch {
+    // Ignore storage failures; the in-memory toggle still applies.
+  }
+}

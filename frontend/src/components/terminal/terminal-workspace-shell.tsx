@@ -9,6 +9,7 @@ import {
   type FocusEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { useMemoizedFn } from "ahooks";
 import type {
   TerminalProjectListItem,
   TerminalSessionListItem,
@@ -20,6 +21,7 @@ import {
   History,
   Home,
   MoreHorizontal,
+  PanelsTopLeft,
   Pencil,
   Plus,
   Trash2,
@@ -80,6 +82,10 @@ import { TerminalProjectDialog } from "./terminal-project-dialog";
 import { TerminalHeadlessConnection } from "./terminal-headless-connection";
 import { TerminalSurface } from "./terminal-surface";
 import { TerminalPanelTargetBar } from "./terminal-panel-target-bar";
+import {
+  readTerminalPanelSplitEnabled,
+  writeTerminalPanelSplitEnabled,
+} from "../../features/terminal/preferences";
 import { listTerminalPanels } from "../../services/terminal";
 
 const TerminalPreviewPanel = lazy(() =>
@@ -245,9 +251,12 @@ function TerminalSessionTab({
   hasBell,
   hasCompletion,
   terminalState,
+  panelSplitEnabled,
+  panelCount,
   onSelectSession,
   onRequestCloseSession,
   onRequestEditAlias,
+  onPanelSplitEnabledChange,
 }: {
   session: TerminalSessionListItem;
   isActive: boolean;
@@ -256,9 +265,12 @@ function TerminalSessionTab({
   hasBell: boolean;
   hasCompletion: boolean;
   terminalState?: TerminalState;
+  panelSplitEnabled: boolean;
+  panelCount: number;
   onSelectSession: (terminalSessionId: string) => void;
   onRequestCloseSession: (terminalSessionId: string) => void;
   onRequestEditAlias: (session: TerminalSessionListItem) => void;
+  onPanelSplitEnabledChange: (enabled: boolean) => void;
 }) {
   const tabRef = useRef<HTMLDivElement | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -272,6 +284,7 @@ function TerminalSessionTab({
     activeCommand: session.activeCommand,
   });
   const isWorking = terminalState?.state === "agent_running";
+  const disablePanelSplitToggle = panelSplitEnabled && panelCount > 1;
   const showStateDetails =
     !isMobileMonitor && (Boolean(terminalState) || session.status === "exited");
   const openDetails = (): void => {
@@ -407,14 +420,39 @@ function TerminalSessionTab({
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>{tab}</ContextMenuTrigger>
-        <ContextMenuContent className="w-44">
+        <ContextMenuContent className="w-48">
           <ContextMenuItem
+            className="gap-2"
             onSelect={() => {
               onRequestEditAlias(session);
             }}
           >
             <Pencil className="h-4 w-4" />
             Rename Alias
+          </ContextMenuItem>
+          <ContextMenuItem
+            aria-disabled={disablePanelSplitToggle ? true : undefined}
+            className={[
+              "gap-2",
+              disablePanelSplitToggle
+                ? "text-muted-foreground opacity-50 focus:bg-transparent focus:text-muted-foreground"
+                : "",
+            ].join(" ")}
+            title={
+              disablePanelSplitToggle
+                ? "Close extra panels before disabling panel split."
+                : undefined
+            }
+            onSelect={(event) => {
+              if (disablePanelSplitToggle) {
+                event.preventDefault();
+                return;
+              }
+              onPanelSplitEnabledChange(!panelSplitEnabled);
+            }}
+          >
+            <PanelsTopLeft className="h-4 w-4" />
+            {panelSplitEnabled ? "Disable Panel Split" : "Enable Panel Split"}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -569,6 +607,9 @@ export function TerminalWorkspaceShell({
   const [aliasTarget, setAliasTarget] =
     useState<TerminalSessionListItem | null>(null);
   const [diagnosticLogOpen, setDiagnosticLogOpen] = useState(false);
+  const [panelSplitEnabled, setPanelSplitEnabledState] = useState(
+    readTerminalPanelSplitEnabled,
+  );
   const isMobileMonitor = clientMode === "mobile";
   const projects = useTerminalWorkspaceStore((state) => state.projects);
   const sessions = useTerminalWorkspaceStore((state) => state.sessions);
@@ -643,7 +684,7 @@ export function TerminalWorkspaceShell({
     : DEFAULT_TERMINAL_SIDECAR_WIDTH;
   const terminalLayoutVersion = isMobileMonitor
     ? "mobile"
-    : `desktop:${previewOpen ? previewReservedWidth : "full"}`;
+    : `desktop:${previewOpen ? previewReservedWidth : "full"}:${panelSplitEnabled ? "panel-split" : "single"}`;
   const visibleProjects = projects;
   const visibleSessions = useMemo(() => {
     if (!activeProjectId) {
@@ -708,12 +749,26 @@ export function TerminalWorkspaceShell({
     setHistoryTerminalSessionId(terminalSessionId);
     setHistoryDrawerOpen(true);
   };
+  const setPanelSplitEnabled = useMemoizedFn((enabled: boolean) => {
+    setPanelSplitEnabledState((current) => {
+      if (current === enabled) {
+        return current;
+      }
+      writeTerminalPanelSplitEnabled(enabled);
+      return enabled;
+    });
+  });
   const activePanelWorkspace = activeSession
     ? panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null
     : null;
+  const activePanelCount = activePanelWorkspace?.panels.length ?? 1;
 
   useEffect(() => {
-    if (!activeSession?.terminalSessionId || isMobileMonitor) {
+    if (
+      !activeSession?.terminalSessionId ||
+      isMobileMonitor ||
+      !panelSplitEnabled
+    ) {
       return;
     }
     let cancelled = false;
@@ -739,6 +794,7 @@ export function TerminalWorkspaceShell({
     activeSession?.terminalSessionId,
     apiBase,
     isMobileMonitor,
+    panelSplitEnabled,
     setActivePanelIdBySessionId,
     setPanelWorkspaceBySessionId,
     token,
@@ -986,9 +1042,12 @@ export function TerminalWorkspaceShell({
                   hasBell={hasBell}
                   hasCompletion={hasCompletion}
                   terminalState={terminalStateBySessionId[session.terminalSessionId]}
+                  panelSplitEnabled={panelSplitEnabled}
+                  panelCount={activePanelCount}
                   onSelectSession={onSelectSession}
                   onRequestCloseSession={onRequestCloseSession}
                   onRequestEditAlias={setAliasTarget}
+                  onPanelSplitEnabledChange={setPanelSplitEnabled}
                 />
               );
             }}
@@ -1016,7 +1075,7 @@ export function TerminalWorkspaceShell({
         ) : null}
         <div className="relative flex h-full min-h-0">
           <div className="flex min-h-0 flex-1 flex-col">
-            {activeSession && !isMobileMonitor ? (
+            {activeSession && !isMobileMonitor && panelSplitEnabled ? (
               <TerminalPanelTargetBar
                 apiBase={apiBase}
                 token={token}
