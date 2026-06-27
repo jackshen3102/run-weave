@@ -8,6 +8,11 @@ import {
   isTmuxBackedSession,
   resolveTmuxTarget,
 } from "../../terminal/runtime-launcher";
+import {
+  resolvePanelTarget,
+  TerminalPanelRouteError,
+} from "../../routes/terminal-panel-routes";
+import { OrchestratorError } from "../errors";
 
 const BRACKETED_PASTE_START = "\u001b[200~";
 const BRACKETED_PASTE_END = "\u001b[201~";
@@ -27,6 +32,11 @@ export class OrchestratorPromptSender {
   async sendPromptToAgent(
     session: TerminalSessionRecord,
     text: string,
+    target?: {
+      panelId?: string | null;
+      panelAlias?: string | null;
+      role?: string | null;
+    },
   ): Promise<void> {
     const ensured = await ensureTerminalRuntime({
       session,
@@ -38,8 +48,35 @@ export class OrchestratorPromptSender {
     });
     const pastedPrompt = `${BRACKETED_PASTE_START}${text}${BRACKETED_PASTE_END}`;
     if (isTmuxBackedSession(session) && this.options.tmuxService) {
+      let paneTarget = resolveTmuxTarget(session, this.options.tmuxService);
+      if (target?.panelId || target?.panelAlias || target?.role) {
+        try {
+          paneTarget = (
+            await resolvePanelTarget(
+              this.options.terminalSessionManager,
+              session,
+              { tmuxService: this.options.tmuxService },
+              {
+                panelId: target.panelId ?? undefined,
+                panelAlias: target.panelAlias ?? undefined,
+                role: target.role ?? undefined,
+              },
+              "explicit-or-active",
+            )
+          ).paneTarget;
+        } catch (error) {
+          if (error instanceof TerminalPanelRouteError) {
+            throw new OrchestratorError(
+              error.statusCode,
+              error.message,
+              error.details,
+            );
+          }
+          throw error;
+        }
+      }
       await this.options.tmuxService.sendKeySequence(
-        resolveTmuxTarget(session, this.options.tmuxService),
+        paneTarget,
         [
           ...splitPromptPaste(pastedPrompt).map((value) => ({
             type: "literal" as const,

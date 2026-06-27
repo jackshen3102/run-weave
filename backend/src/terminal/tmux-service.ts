@@ -16,6 +16,10 @@ export interface TmuxTarget {
   socketPath: string;
 }
 
+export interface TmuxPaneTarget extends TmuxTarget {
+  paneId: string;
+}
+
 export interface TmuxCommand {
   command: string;
   args: string[];
@@ -30,6 +34,12 @@ export interface TmuxLaunchCommand {
 export interface TmuxPaneMetadata {
   cwd: string;
   activeCommand: string | null;
+}
+
+export interface TmuxPaneInfo extends TmuxPaneMetadata {
+  paneId: string;
+  paneIndex: number;
+  active: boolean;
 }
 
 export type TmuxKeySequenceItem =
@@ -167,6 +177,10 @@ function describeTmuxInputChunk(chunk: ReturnType<typeof splitInputForSendKeys>[
       char.codePointAt(0),
     ),
   };
+}
+
+function resolveTmuxTargetName(target: TmuxTarget | TmuxPaneTarget): string {
+  return "paneId" in target ? target.paneId : target.sessionName;
 }
 
 export class TmuxRebuildLimitError extends Error {
@@ -412,11 +426,128 @@ export class TmuxService {
     return orphanedSessions;
   }
 
-  async sendInput(target: TmuxTarget, data: string): Promise<void> {
+  async listPanes(target: TmuxTarget): Promise<TmuxPaneInfo[]> {
+    const result = await this.runTmux(
+      [
+        "list-panes",
+        "-t",
+        target.sessionName,
+        "-F",
+        [
+          "#{pane_id}",
+          "#{pane_index}",
+          "#{pane_current_path}",
+          "#{@runweave_command}",
+          "#{pane_current_command}",
+          "#{pane_active}",
+        ].join(TMUX_METADATA_FIELD_SEPARATOR),
+      ],
+      target,
+    );
+    return result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trimEnd())
+      .filter(Boolean)
+      .map((line) => {
+        const [
+          paneId = "",
+          rawPaneIndex = "0",
+          cwd = "",
+          rawRunweaveCommand = "",
+          rawCommand = "",
+          rawActive = "0",
+        ] = line.split(TMUX_METADATA_FIELD_SEPARATOR);
+        return {
+          paneId,
+          paneIndex: parsePositiveInteger(rawPaneIndex),
+          cwd,
+          activeCommand:
+            normalizePaneCommand(rawRunweaveCommand) ??
+            normalizePaneCommand(rawCommand),
+          active: rawActive === "1",
+        };
+      })
+      .filter((pane) => pane.paneId.startsWith("%") && pane.cwd);
+  }
+
+  async splitPane(
+    target: TmuxPaneTarget,
+    params: {
+      direction: "right" | "down";
+      cwd: string;
+      command?: string;
+      args?: string[];
+      env?: Record<string, string | undefined>;
+    },
+  ): Promise<TmuxPaneTarget> {
+    const result = await this.runTmux(
+      [
+        "split-window",
+        params.direction === "right" ? "-h" : "-v",
+        "-P",
+        "-F",
+        "#{pane_id}",
+        "-t",
+        target.paneId,
+        "-c",
+        params.cwd,
+        ...(params.command
+          ? [
+              formatShellCommand({
+                command: params.command,
+                args: params.args ?? [],
+                env: params.env,
+              }),
+            ]
+          : []),
+      ],
+      target,
+    );
+    const paneId = result.stdout.trim();
+    if (!paneId.startsWith("%")) {
+      throw new Error(`tmux split did not return a pane id: ${paneId}`);
+    }
+    return {
+      sessionName: target.sessionName,
+      socketPath: target.socketPath,
+      paneId,
+    };
+  }
+
+  async readSelectedPane(target: TmuxTarget): Promise<string | null> {
+    try {
+      const result = await this.runTmux(
+        [
+          "display-message",
+          "-p",
+          "-t",
+          target.sessionName,
+          "#{pane_id}",
+        ],
+        target,
+      );
+      const paneId = result.stdout.trim();
+      return paneId.startsWith("%") ? paneId : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async selectPane(target: TmuxPaneTarget): Promise<void> {
+    await this.runTmux(["select-pane", "-t", target.paneId], target);
+  }
+
+  async killPane(target: TmuxPaneTarget): Promise<void> {
+    await this.runTmux(["kill-pane", "-t", target.paneId], target);
+  }
+
+  async sendInput(target: TmuxTarget | TmuxPaneTarget, data: string): Promise<void> {
     const chunks = splitInputForSendKeys(data);
+    const tmuxTarget = resolveTmuxTargetName(target);
     aiDiagnosticLog("terminal tmux send-input started", {
       tmuxSessionName: target.sessionName,
       socketPath: target.socketPath,
+      tmuxTarget,
       chunkCount: chunks.length,
       inputByteLength: Buffer.byteLength(data, "utf8"),
       inputCharLength: data.length,
@@ -431,7 +562,7 @@ export class TmuxService {
           chunk: describeTmuxInputChunk(chunk),
         });
         await this.runTmux(
-          ["send-keys", "-t", target.sessionName, "Enter"],
+          ["send-keys", "-t", tmuxTarget, "Enter"],
           target,
         );
         continue;
@@ -443,7 +574,7 @@ export class TmuxService {
           chunk: describeTmuxInputChunk(chunk),
         });
         await this.runTmux(
-          ["send-keys", "-t", target.sessionName, "-l", "--", chunk.value],
+          ["send-keys", "-t", tmuxTarget, "-l", "--", chunk.value],
           target,
         );
       }
@@ -451,12 +582,14 @@ export class TmuxService {
   }
 
   async sendKeySequence(
-    target: TmuxTarget,
+    target: TmuxTarget | TmuxPaneTarget,
     sequence: TmuxKeySequenceItem[],
   ): Promise<void> {
+    const tmuxTarget = resolveTmuxTargetName(target);
     aiDiagnosticLog("terminal tmux send-key-sequence started", {
       tmuxSessionName: target.sessionName,
       socketPath: target.socketPath,
+      tmuxTarget,
       itemCount: sequence.length,
     });
     for (const item of sequence) {
@@ -467,7 +600,7 @@ export class TmuxService {
           key: item.key,
         });
         await this.runTmux(
-          ["send-keys", "-t", target.sessionName, item.key],
+          ["send-keys", "-t", tmuxTarget, item.key],
           target,
         );
         await delayAfterTmuxKey(item.delayAfterMs);
@@ -483,7 +616,7 @@ export class TmuxService {
           }),
         });
         await this.runTmux(
-          ["send-keys", "-t", target.sessionName, "-l", "--", item.value],
+          ["send-keys", "-t", tmuxTarget, "-l", "--", item.value],
           target,
         );
       }
@@ -512,10 +645,11 @@ export class TmuxService {
   }
 
   async capturePane(
-    target: TmuxTarget,
+    target: TmuxTarget | TmuxPaneTarget,
     historyLines = CaptureHistoryLines,
   ): Promise<{ data: string; durationMs: number; sourceCols?: number }> {
     const startedAt = performance.now();
+    const tmuxTarget = resolveTmuxTargetName(target);
     const [result, sourceCols] = await Promise.all([
       this.runTmux(
         [
@@ -525,7 +659,7 @@ export class TmuxService {
           "-S",
           `-${historyLines}`,
           "-t",
-          target.sessionName,
+          tmuxTarget,
         ],
         target,
       ),
@@ -547,15 +681,16 @@ export class TmuxService {
   }
 
   async readPaneMetadata(
-    target: TmuxTarget,
+    target: TmuxTarget | TmuxPaneTarget,
     shellCommand?: string,
   ): Promise<TmuxPaneMetadata | null> {
+    const tmuxTarget = resolveTmuxTargetName(target);
     const result = await this.runTmux(
       [
         "display-message",
         "-p",
         "-t",
-        target.sessionName,
+        tmuxTarget,
         [
           "#{pane_current_path}",
           "#{@runweave_command}",
@@ -595,10 +730,13 @@ export class TmuxService {
     await this.runTmux(["pipe-pane", "-t", target.sessionName], target);
   }
 
-  private async readPaneWidth(target: TmuxTarget): Promise<number | undefined> {
+  private async readPaneWidth(
+    target: TmuxTarget | TmuxPaneTarget,
+  ): Promise<number | undefined> {
     try {
+      const tmuxTarget = resolveTmuxTargetName(target);
       const result = await this.runTmux(
-        ["display-message", "-p", "-t", target.sessionName, "#{pane_width}"],
+        ["display-message", "-p", "-t", tmuxTarget, "#{pane_width}"],
         target,
       );
       const width = Number.parseInt(result.stdout.trim(), 10);
@@ -909,6 +1047,9 @@ async function delay(delayMs: number): Promise<void> {
 }
 
 function formatShellCommand(launchCommand: TmuxLaunchCommand): string {
+  const envParts = Object.entries(launchCommand.env ?? {}).flatMap(
+    ([key, value]) => (value ? [`${key}=${value}`] : []),
+  );
   const commandParts = isInteractiveShellLaunchCommand(launchCommand)
     ? [
         "env",
@@ -916,10 +1057,13 @@ function formatShellCommand(launchCommand: TmuxLaunchCommand): string {
         "npm_config_prefix",
         "-u",
         "NPM_CONFIG_PREFIX",
+        ...envParts,
         launchCommand.command,
         ...launchCommand.args,
       ]
-    : [launchCommand.command, ...launchCommand.args];
+    : envParts.length > 0
+      ? ["env", ...envParts, launchCommand.command, ...launchCommand.args]
+      : [launchCommand.command, ...launchCommand.args];
   return commandParts.map((part) => shellQuote(part)).join(" ");
 }
 

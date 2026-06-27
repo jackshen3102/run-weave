@@ -38,6 +38,7 @@ import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TerminalQuickInputService } from "../terminal/quick-input-service";
 import {
   toHistoryPayload,
+  toPanelWorkspacePayload,
   toSessionListItem,
   toStatusPayload,
 } from "./terminal-route-payloads";
@@ -57,6 +58,12 @@ import {
 } from "./terminal-input-dispatcher";
 import { registerTerminalTicketRoutes } from "./terminal-ticket-routes";
 import { registerTerminalQuickInputRoutes } from "./terminal-quick-input-routes";
+import {
+  ensureTerminalPanelWorkspace,
+  registerTerminalPanelRoutes,
+  resolvePanelTarget,
+  sendTerminalPanelRouteError,
+} from "./terminal-panel-routes";
 
 const terminalLogger = logger.child({ component: "terminal" });
 
@@ -127,6 +134,7 @@ export function createTerminalRouter(
         toSessionListItem(
           session,
           options?.terminalStateService?.getCurrent(session.id, session),
+          toPanelWorkspacePayload(terminalSessionManager, session.id),
         ),
       );
 
@@ -151,6 +159,14 @@ export function createTerminalRouter(
   if (options?.quickInputService) {
     registerTerminalQuickInputRoutes(router, options.quickInputService);
   }
+  registerTerminalPanelRoutes(router, terminalSessionManager, {
+    ptyService: options?.ptyService,
+    runtimeRegistry: options?.runtimeRegistry,
+    tmuxService: options?.tmuxService,
+    tmuxOutputWatcher: options?.tmuxOutputWatcher,
+    terminalEventService: options?.terminalEventService,
+    terminalStateService: options?.terminalStateService,
+  });
 
   const updateTerminalSessionSchema = z
     .object({
@@ -292,6 +308,27 @@ export function createTerminalRouter(
       };
       const createdSession =
         terminalSessionManager.getSession(session.id) ?? session;
+      if (options?.tmuxService && isTmuxBackedSession(createdSession)) {
+        try {
+          await ensureTerminalPanelWorkspace(
+            terminalSessionManager,
+            createdSession,
+            {
+              ptyService: options.ptyService,
+              runtimeRegistry: options.runtimeRegistry,
+              tmuxService: options.tmuxService,
+              tmuxOutputWatcher: options.tmuxOutputWatcher,
+              terminalEventService: options.terminalEventService,
+            },
+          );
+        } catch (error) {
+          terminalLogger.warn("terminal.session.default-panel.failed", {
+            message: "Create terminal default panel failed",
+            terminalSessionId: createdSession.id,
+            error,
+          });
+        }
+      }
       options?.terminalEventService?.record({
         kind: "terminal_session_created",
         terminalSessionId: session.id,
@@ -303,6 +340,7 @@ export function createTerminalRouter(
               createdSession.id,
               createdSession,
             ),
+            toPanelWorkspacePayload(terminalSessionManager, createdSession.id),
           ),
         },
       });
@@ -337,12 +375,31 @@ export function createTerminalRouter(
       return;
     }
 
-    const historyScrollback = await readTerminalScrollbackCapture(
-      session,
-      terminalSessionManager,
-      options?.tmuxService,
-      "history",
-    );
+    const historyScrollback =
+      options?.tmuxService && isTmuxBackedSession(session)
+        ? await (async () => {
+            const { paneTarget } = await resolvePanelTarget(
+              terminalSessionManager,
+              session,
+              {
+                tmuxService: options.tmuxService,
+                terminalEventService: options.terminalEventService,
+              },
+              {},
+              "default-history",
+            );
+            const capture = await options.tmuxService!.capturePane(paneTarget);
+            return {
+              data: capture.data,
+              sourceCols: capture.sourceCols,
+            };
+          })()
+        : await readTerminalScrollbackCapture(
+            session,
+            terminalSessionManager,
+            options?.tmuxService,
+            "history",
+          );
 
     res.json(
       toHistoryPayload(
@@ -406,6 +463,7 @@ export function createTerminalRouter(
             session.id,
             updatedSession ?? session,
           ),
+          toPanelWorkspacePayload(terminalSessionManager, session.id),
         ),
       );
     } catch (error) {
@@ -459,6 +517,25 @@ export function createTerminalRouter(
 
     try {
       const inputMode = parsed.data.mode as TerminalInputMode | undefined;
+      const paneTarget =
+        isTmuxBackedSession(session) && options.tmuxService
+          ? (
+              await resolvePanelTarget(
+                terminalSessionManager,
+                session,
+                {
+                  tmuxService: options.tmuxService,
+                  terminalEventService: options.terminalEventService,
+                },
+                {
+                  panelId: parsed.data.panelId,
+                  panelAlias: parsed.data.panelAlias,
+                  role: parsed.data.role,
+                },
+                "explicit-or-active",
+              )
+            ).paneTarget
+          : undefined;
       const payload = await sendInputToSession(
         terminalSessionManager,
         options,
@@ -466,6 +543,7 @@ export function createTerminalRouter(
         parsed.data.data,
         inputMode,
         parsed.data.operationId,
+        paneTarget,
       );
       if (options?.quickInputService && payload.inputAccepted) {
         try {
@@ -490,6 +568,9 @@ export function createTerminalRouter(
       }
       res.status(200).json(payload);
     } catch (error) {
+      if (sendTerminalPanelRouteError(res, error)) {
+        return;
+      }
       if (isMissingTerminalRuntimeError(error)) {
         terminalSessionManager.markExited(session.id, session.exitCode);
         res.status(409).json({
@@ -550,6 +631,25 @@ export function createTerminalRouter(
         runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
         interruptSequence: "escape",
       });
+      const paneTarget =
+        isTmuxBackedSession(session) && options.tmuxService
+          ? (
+              await resolvePanelTarget(
+                terminalSessionManager,
+                session,
+                {
+                  tmuxService: options.tmuxService,
+                  terminalEventService: options.terminalEventService,
+                },
+                {
+                  panelId: parsed.data.panelId,
+                  panelAlias: parsed.data.panelAlias,
+                  role: parsed.data.role,
+                },
+                "explicit-or-active",
+              )
+            ).paneTarget
+          : undefined;
       const inputPayload = await sendInputToSession(
         terminalSessionManager,
         options,
@@ -557,6 +657,7 @@ export function createTerminalRouter(
         TERMINAL_INTERRUPT_ESCAPE_INPUT,
         undefined,
         parsed.data.operationId,
+        paneTarget,
       );
       const payload: SendTerminalInterruptResponse = {
         ...inputPayload,
@@ -595,6 +696,9 @@ export function createTerminalRouter(
       });
       res.status(200).json(payload);
     } catch (error) {
+      if (sendTerminalPanelRouteError(res, error)) {
+        return;
+      }
       aiDiagnosticLog("terminal interrupt failed", {
         terminalSessionId: session.id,
         operationId: parsed.data.operationId ?? null,

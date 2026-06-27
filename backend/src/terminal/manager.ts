@@ -16,11 +16,17 @@ import {
 } from "./scrollback-buffer";
 import {
   buildProjectRecord,
+  buildPanelRecord,
+  buildPanelWorkspaceRecord,
   buildSessionRecord,
   createRuntimeRecord,
   toPersistedProject,
+  toPersistedPanel,
+  toPersistedPanelWorkspace,
   toPersistedSession,
   type CreateTerminalSessionOptions,
+  type TerminalPanelRecord,
+  type TerminalPanelWorkspaceRecord,
   type RuntimeTerminalSessionRecord,
   type TerminalProjectRecord,
   type TerminalSessionRecord,
@@ -34,6 +40,8 @@ import {
 import { isExistingDirectory } from "./manager-path";
 export type {
   CreateTerminalSessionOptions,
+  TerminalPanelRecord,
+  TerminalPanelWorkspaceRecord,
   TerminalProjectRecord,
   TerminalSessionRecord,
 } from "./manager-records";
@@ -51,6 +59,11 @@ const ACTIVITY_FLUSH_DELAY_MS = 10_000;
 export class TerminalSessionManager {
   private readonly projects = new Map<string, TerminalProjectRecord>();
   private readonly sessions = new Map<string, RuntimeTerminalSessionRecord>();
+  private readonly panels = new Map<string, TerminalPanelRecord>();
+  private readonly panelWorkspaces = new Map<
+    string,
+    TerminalPanelWorkspaceRecord
+  >();
   private readonly lastAiActiveCommands = new Map<
     string,
     LastAiActiveCommandRecord
@@ -66,6 +79,9 @@ export class TerminalSessionManager {
     await this.sessionStore.initialize();
     const persistedProjects = await this.sessionStore.listProjects();
     const persistedSessions = await this.sessionStore.listSessionMetadata();
+    const persistedPanels = await this.sessionStore.listPanels();
+    const persistedPanelWorkspaces =
+      await this.sessionStore.listPanelWorkspaces();
 
     for (const persisted of persistedProjects) {
       this.projects.set(persisted.id, buildProjectRecord(persisted));
@@ -77,6 +93,19 @@ export class TerminalSessionManager {
           scrollbackLoaded: false,
         }),
       );
+    }
+    for (const persisted of persistedPanels) {
+      if (this.sessions.has(persisted.terminalSessionId)) {
+        this.panels.set(persisted.id, buildPanelRecord(persisted));
+      }
+    }
+    for (const persisted of persistedPanelWorkspaces) {
+      if (this.sessions.has(persisted.terminalSessionId)) {
+        this.panelWorkspaces.set(
+          persisted.terminalSessionId,
+          buildPanelWorkspaceRecord(persisted),
+        );
+      }
     }
   }
 
@@ -309,6 +338,116 @@ export class TerminalSessionManager {
 
   listSessions(): TerminalSessionRecord[] {
     return sortTerminalSessions(this.sessions.values());
+  }
+
+  listPanels(terminalSessionId: string): TerminalPanelRecord[] {
+    const workspace = this.panelWorkspaces.get(terminalSessionId);
+    if (!workspace) {
+      return [];
+    }
+    return workspace.panelIds
+      .map((panelId) => this.panels.get(panelId))
+      .filter((panel): panel is TerminalPanelRecord => Boolean(panel));
+  }
+
+  getPanel(panelId: string): TerminalPanelRecord | undefined {
+    return this.panels.get(panelId);
+  }
+
+  getPanelWorkspace(
+    terminalSessionId: string,
+  ): TerminalPanelWorkspaceRecord | undefined {
+    return this.panelWorkspaces.get(terminalSessionId);
+  }
+
+  async upsertPanelWorkspace(
+    workspace: TerminalPanelWorkspaceRecord,
+  ): Promise<TerminalPanelWorkspaceRecord> {
+    this.panelWorkspaces.set(workspace.terminalSessionId, {
+      ...workspace,
+      panelIds: [...workspace.panelIds],
+    });
+    await this.sessionStore.updatePanelWorkspace({
+      workspace: toPersistedPanelWorkspace(workspace),
+    });
+    return workspace;
+  }
+
+  async upsertPanel(panel: TerminalPanelRecord): Promise<TerminalPanelRecord> {
+    this.panels.set(panel.id, panel);
+    await this.sessionStore.upsertPanel({ panel: toPersistedPanel(panel) });
+    return panel;
+  }
+
+  async focusPanel(
+    terminalSessionId: string,
+    panelId: string,
+  ): Promise<TerminalPanelWorkspaceRecord | undefined> {
+    const workspace = this.panelWorkspaces.get(terminalSessionId);
+    if (!workspace || !workspace.panelIds.includes(panelId)) {
+      return undefined;
+    }
+    if (workspace.activePanelId === panelId) {
+      return workspace;
+    }
+    workspace.activePanelId = panelId;
+    await this.sessionStore.updatePanelWorkspace({
+      workspace: toPersistedPanelWorkspace(workspace),
+    });
+    return workspace;
+  }
+
+  async removePanelFromWorkspace(
+    terminalSessionId: string,
+    panelId: string,
+    fallbackPanelId?: string,
+  ): Promise<TerminalPanelWorkspaceRecord | undefined> {
+    const workspace = this.panelWorkspaces.get(terminalSessionId);
+    if (!workspace) {
+      return undefined;
+    }
+    const nextPanelIds = workspace.panelIds.filter((id) => id !== panelId);
+    const activePanelId = nextPanelIds.includes(workspace.activePanelId)
+      ? workspace.activePanelId
+      : fallbackPanelId && nextPanelIds.includes(fallbackPanelId)
+        ? fallbackPanelId
+        : nextPanelIds[0] ?? "";
+    const nextWorkspace = {
+      ...workspace,
+      activePanelId,
+      panelIds: nextPanelIds,
+    };
+    this.panelWorkspaces.set(terminalSessionId, nextWorkspace);
+    await this.sessionStore.updatePanelWorkspace({
+      workspace: toPersistedPanelWorkspace(nextWorkspace),
+    });
+    return nextWorkspace;
+  }
+
+  async markPanelExited(panelId: string, exitCode?: number): Promise<void> {
+    const panel = this.panels.get(panelId);
+    if (!panel) {
+      return;
+    }
+    panel.status = "exited";
+    panel.exitCode = exitCode;
+    panel.lastActivityAt = new Date();
+    await this.sessionStore.updatePanelStatus({
+      panelId,
+      status: "exited",
+      lastActivityAt: panel.lastActivityAt.toISOString(),
+      exitCode,
+    });
+  }
+
+  async clearPanelsForSession(terminalSessionId: string): Promise<void> {
+    for (const panel of this.panels.values()) {
+      if (panel.terminalSessionId === terminalSessionId) {
+        this.panels.delete(panel.id);
+      }
+    }
+    this.panelWorkspaces.delete(terminalSessionId);
+    await this.sessionStore.deletePanelsForSession(terminalSessionId);
   }
 
   markExited(terminalSessionId: string, exitCode?: number): void {
@@ -589,6 +728,13 @@ export class TerminalSessionManager {
     this.pendingActivityUpdates.delete(terminalSessionId);
     this.lastAiActiveCommands.delete(terminalSessionId);
     this.sessions.delete(terminalSessionId);
+    for (const panel of this.panels.values()) {
+      if (panel.terminalSessionId === terminalSessionId) {
+        this.panels.delete(panel.id);
+      }
+    }
+    this.panelWorkspaces.delete(terminalSessionId);
+    await this.sessionStore.deletePanelsForSession(terminalSessionId);
     await this.sessionStore.deleteSession(terminalSessionId);
     return true;
   }

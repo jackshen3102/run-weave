@@ -10,7 +10,13 @@ export interface CreateRunInput {
   projectId: string;
   task: string;
   orchestrator: {
-    binding: { mode: "new" | "reuse"; sessionId?: string | null };
+    binding: {
+      mode: "new" | "reuse";
+      sessionId?: string | null;
+      panelId?: string | null;
+      panelAlias?: string | null;
+      role?: string | null;
+    };
     startupPrompt: string;
     terminal: OrchestratorRoleDefinition["terminal"];
   };

@@ -39,6 +39,9 @@ const bindingSchema = z
   .object({
     mode: z.enum(["new", "reuse"]),
     sessionId: z.string().trim().min(1).nullable().optional(),
+    panelId: z.string().trim().min(1).nullable().optional(),
+    panelAlias: z.string().trim().min(1).nullable().optional(),
+    role: z.string().trim().min(1).nullable().optional(),
   })
   .strict();
 
@@ -288,7 +291,10 @@ async function handleServiceCall(
     res.json(await action());
   } catch (error) {
     if (error instanceof OrchestratorError) {
-      res.status(error.statusCode).json({ message: error.message });
+      res.status(error.statusCode).json({
+        message: error.message,
+        ...(error.details !== undefined ? { details: error.details } : {}),
+      });
       return;
     }
     orchestratorRouteLogger.error("orchestrator.request.failed", {

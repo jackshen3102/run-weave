@@ -15,6 +15,7 @@ export interface AppServerEventSource {
 export interface AppServerEventScope {
   projectId?: string | null;
   terminalSessionId?: string | null;
+  terminalPanelId?: string | null;
   runId?: string | null;
   cwd?: string | null;
 }

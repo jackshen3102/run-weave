@@ -1,6 +1,8 @@
 import type { TerminalState } from "@runweave/shared";
 import type {
   PersistedTerminalProjectRecord,
+  PersistedTerminalPanelRecord,
+  PersistedTerminalPanelWorkspaceRecord,
   PersistedTerminalSessionMetadataRecord,
   PersistedTerminalSessionRecord,
   TerminalRuntimeKind,
@@ -42,6 +44,28 @@ export interface TerminalSessionRecord {
   tmuxUnavailableReason?: string;
   recoverable?: boolean;
   terminalState?: TerminalState;
+}
+
+export interface TerminalPanelRecord {
+  id: string;
+  terminalSessionId: string;
+  alias: string | null;
+  role: string | null;
+  cwd: string;
+  activeCommand: string | null;
+  status: "running" | "exited";
+  createdAt: Date;
+  lastActivityAt: Date;
+  exitCode?: number;
+  runtimeKind: "tmux";
+  tmuxPaneId: string;
+}
+
+export interface TerminalPanelWorkspaceRecord {
+  terminalSessionId: string;
+  activePanelId: string;
+  panelIds: string[];
+  renderMode: "tmux-native";
 }
 
 export interface RuntimeTerminalSessionRecord extends Omit<
@@ -176,5 +200,65 @@ export function toPersistedSession(
     ...(session.terminalState !== undefined
       ? { terminalState: session.terminalState }
       : {}),
+  };
+}
+
+export function buildPanelRecord(
+  persisted: PersistedTerminalPanelRecord,
+): TerminalPanelRecord {
+  return {
+    id: persisted.id,
+    terminalSessionId: persisted.terminalSessionId,
+    alias: persisted.alias ?? null,
+    role: persisted.role ?? null,
+    cwd: persisted.cwd,
+    activeCommand: persisted.activeCommand ?? null,
+    status: persisted.status,
+    createdAt: new Date(persisted.createdAt),
+    lastActivityAt: new Date(persisted.lastActivityAt),
+    exitCode: persisted.exitCode,
+    runtimeKind: persisted.runtimeKind,
+    tmuxPaneId: persisted.tmuxPaneId,
+  };
+}
+
+export function toPersistedPanel(
+  panel: TerminalPanelRecord,
+): PersistedTerminalPanelRecord {
+  return {
+    id: panel.id,
+    terminalSessionId: panel.terminalSessionId,
+    alias: panel.alias,
+    role: panel.role,
+    cwd: panel.cwd,
+    activeCommand: panel.activeCommand,
+    status: panel.status,
+    createdAt: panel.createdAt.toISOString(),
+    lastActivityAt: panel.lastActivityAt.toISOString(),
+    exitCode: panel.exitCode,
+    runtimeKind: panel.runtimeKind,
+    tmuxPaneId: panel.tmuxPaneId,
+  };
+}
+
+export function buildPanelWorkspaceRecord(
+  persisted: PersistedTerminalPanelWorkspaceRecord,
+): TerminalPanelWorkspaceRecord {
+  return {
+    terminalSessionId: persisted.terminalSessionId,
+    activePanelId: persisted.activePanelId,
+    panelIds: [...persisted.panelIds],
+    renderMode: persisted.renderMode,
+  };
+}
+
+export function toPersistedPanelWorkspace(
+  workspace: TerminalPanelWorkspaceRecord,
+): PersistedTerminalPanelWorkspaceRecord {
+  return {
+    terminalSessionId: workspace.terminalSessionId,
+    activePanelId: workspace.activePanelId,
+    panelIds: [...workspace.panelIds],
+    renderMode: workspace.renderMode,
   };
 }

@@ -17,10 +17,14 @@ import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
 import type {
   AppendTerminalSessionScrollbackParams,
+  PersistedTerminalPanelRecord,
+  PersistedTerminalPanelWorkspaceRecord,
   PersistedTerminalProjectRecord,
   PersistedTerminalSessionMetadataRecord,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
+  UpdateTerminalPanelStatusParams,
+  UpdateTerminalPanelWorkspaceParams,
   UpdateTerminalProjectParams,
   UpdateTerminalSessionExitParams,
   UpdateTerminalSessionStatusParams,
@@ -33,6 +37,7 @@ import type {
   UpdateTerminalSessionScrollbackParams,
   UpdateTerminalSessionTerminalStateParams,
   UpdateTerminalSessionThreadIdParams,
+  UpsertTerminalPanelParams,
 } from "./store";
 import { getLiveTerminalScrollback } from "./live-scrollback";
 import {
@@ -43,6 +48,8 @@ import {
 interface TerminalSessionStoreData {
   projects: PersistedTerminalProjectRecord[];
   sessions: PersistedTerminalSessionMetadataRecord[];
+  panels: PersistedTerminalPanelRecord[];
+  panelWorkspaces: PersistedTerminalPanelWorkspaceRecord[];
 }
 
 type LegacyTerminalSessionRecord = Partial<PersistedTerminalSessionRecord> & {
@@ -62,11 +69,15 @@ type LegacyTerminalSessionRecord = Partial<PersistedTerminalSessionRecord> & {
 interface LegacyTerminalSessionStoreData {
   projects?: PersistedTerminalProjectRecord[];
   sessions?: LegacyTerminalSessionRecord[];
+  panels?: PersistedTerminalPanelRecord[];
+  panelWorkspaces?: PersistedTerminalPanelWorkspaceRecord[];
 }
 
 const DEFAULT_DATA: TerminalSessionStoreData = {
   projects: [],
   sessions: [],
+  panels: [],
+  panelWorkspaces: [],
 };
 const LIVE_SCROLLBACK_READ_BYTES = TERMINAL_LIVE_SCROLLBACK_BYTES + 4;
 
@@ -95,6 +106,8 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
     const rawData = database.data ?? { ...DEFAULT_DATA };
     const projects = [...(rawData.projects ?? [])];
     const sessions = [...(rawData.sessions ?? [])];
+    const panels = [...(rawData.panels ?? [])];
+    const panelWorkspaces = [...(rawData.panelWorkspaces ?? [])];
 
     if (projects.length === 0) {
       projects.push({
@@ -131,6 +144,8 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
     database.data = {
       projects,
       sessions: normalizedSessions,
+      panels,
+      panelWorkspaces,
     };
     await database.write();
     this.database = database as unknown as Low<TerminalSessionStoreData>;
@@ -179,6 +194,88 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       ...metadata,
       scrollback: await this.readSessionScrollback(terminalSessionId),
     };
+  }
+
+  async listPanels(): Promise<PersistedTerminalPanelRecord[]> {
+    return this.getPanels();
+  }
+
+  async listPanelWorkspaces(): Promise<
+    PersistedTerminalPanelWorkspaceRecord[]
+  > {
+    return this.getPanelWorkspaces();
+  }
+
+  async upsertPanel(params: UpsertTerminalPanelParams): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = structuredClone(params.panel);
+      const index = database.data.panels.findIndex(
+        (candidate) => candidate.id === panel.id,
+      );
+      if (index >= 0) {
+        database.data.panels[index] = panel;
+      } else {
+        database.data.panels.push(panel);
+      }
+      await database.write();
+    });
+  }
+
+  async updatePanelStatus(
+    params: UpdateTerminalPanelStatusParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = database.data.panels.find(
+        (candidate) => candidate.id === params.panelId,
+      );
+      if (!panel) {
+        return;
+      }
+      panel.status = params.status;
+      if (params.lastActivityAt !== undefined) {
+        panel.lastActivityAt = params.lastActivityAt;
+      }
+      if (params.exitCode !== undefined) {
+        panel.exitCode = params.exitCode;
+      } else {
+        delete panel.exitCode;
+      }
+      await database.write();
+    });
+  }
+
+  async updatePanelWorkspace(
+    params: UpdateTerminalPanelWorkspaceParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const workspace = structuredClone(params.workspace);
+      const index = database.data.panelWorkspaces.findIndex(
+        (candidate) =>
+          candidate.terminalSessionId === workspace.terminalSessionId,
+      );
+      if (index >= 0) {
+        database.data.panelWorkspaces[index] = workspace;
+      } else {
+        database.data.panelWorkspaces.push(workspace);
+      }
+      await database.write();
+    });
+  }
+
+  async deletePanelsForSession(terminalSessionId: string): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      database.data.panels = database.data.panels.filter(
+        (panel) => panel.terminalSessionId !== terminalSessionId,
+      );
+      database.data.panelWorkspaces = database.data.panelWorkspaces.filter(
+        (workspace) => workspace.terminalSessionId !== terminalSessionId,
+      );
+      await database.write();
+    });
   }
 
   async readSessionScrollback(terminalSessionId: string): Promise<string> {
@@ -239,6 +336,13 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       );
       database.data.sessions = database.data.sessions.filter(
         (session) => session.projectId !== projectId,
+      );
+      database.data.panels = database.data.panels.filter(
+        (panel) => !childSessionIds.includes(panel.terminalSessionId),
+      );
+      database.data.panelWorkspaces = database.data.panelWorkspaces.filter(
+        (workspace) =>
+          !childSessionIds.includes(workspace.terminalSessionId),
       );
       await Promise.all(
         childSessionIds.map((terminalSessionId) =>
@@ -512,6 +616,12 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       database.data.sessions = database.data.sessions.filter(
         (session) => session.id !== terminalSessionId,
       );
+      database.data.panels = database.data.panels.filter(
+        (panel) => panel.terminalSessionId !== terminalSessionId,
+      );
+      database.data.panelWorkspaces = database.data.panelWorkspaces.filter(
+        (workspace) => workspace.terminalSessionId !== terminalSessionId,
+      );
       await database.write();
     });
     await this.enqueueScrollbackWrite(async () => {
@@ -550,6 +660,19 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
         ...session,
         scrollback: await this.readSessionScrollback(session.id),
       })),
+    );
+  }
+
+  private getPanels(): PersistedTerminalPanelRecord[] {
+    return (this.getDatabase().data.panels ?? [])
+      .slice()
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .map((panel) => structuredClone(panel));
+  }
+
+  private getPanelWorkspaces(): PersistedTerminalPanelWorkspaceRecord[] {
+    return (this.getDatabase().data.panelWorkspaces ?? []).map((workspace) =>
+      structuredClone(workspace),
     );
   }
 

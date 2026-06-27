@@ -12,7 +12,7 @@ export class HttpError extends CliError {
   readonly status: number;
 
   constructor(status: number, message: string) {
-    super(message, status === 401 ? 3 : status === 404 ? 4 : 1);
+    super(message, status === 401 ? 3 : status === 404 || status === 409 ? 4 : 1);
     this.name = "HttpError";
     this.status = status;
   }

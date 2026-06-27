@@ -146,6 +146,8 @@ export async function sendWithConfirmation(params: {
   enter: boolean;
   inputMode: TerminalInputMode;
   inputModeProvided: boolean;
+  panel: string | undefined;
+  role: string | undefined;
   confirmMode: string;
   confirmTimeoutMs: number;
   agent: string | undefined;
@@ -180,6 +182,8 @@ export async function sendWithConfirmation(params: {
   const inputPayload = {
     operationId,
     data,
+    ...(params.panel ? { panelAlias: params.panel } : {}),
+    ...(params.role ? { role: params.role } : {}),
     ...(params.inputModeProvided || params.inputMode !== "raw"
       ? { mode: params.inputMode }
       : {}),

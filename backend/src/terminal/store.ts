@@ -33,6 +33,28 @@ export interface PersistedTerminalSessionRecord {
   order?: number;
 }
 
+export interface PersistedTerminalPanelRecord {
+  id: string;
+  terminalSessionId: string;
+  alias?: string | null;
+  role?: string | null;
+  cwd: string;
+  activeCommand: string | null;
+  status: "running" | "exited";
+  createdAt: string;
+  lastActivityAt: string;
+  exitCode?: number;
+  runtimeKind: "tmux";
+  tmuxPaneId: string;
+}
+
+export interface PersistedTerminalPanelWorkspaceRecord {
+  terminalSessionId: string;
+  activePanelId: string;
+  panelIds: string[];
+  renderMode: "tmux-native";
+}
+
 export type PersistedTerminalSessionMetadataRecord = Omit<
   PersistedTerminalSessionRecord,
   "scrollback"
@@ -114,6 +136,21 @@ export interface UpdateTerminalSessionTerminalStateParams {
   terminalState: TerminalState;
 }
 
+export interface UpsertTerminalPanelParams {
+  panel: PersistedTerminalPanelRecord;
+}
+
+export interface UpdateTerminalPanelWorkspaceParams {
+  workspace: PersistedTerminalPanelWorkspaceRecord;
+}
+
+export interface UpdateTerminalPanelStatusParams {
+  panelId: string;
+  status: "running" | "exited";
+  lastActivityAt?: string;
+  exitCode?: number;
+}
+
 export interface UpdateTerminalProjectParams {
   projectId: string;
   name?: string;
@@ -134,6 +171,14 @@ export interface TerminalSessionStore {
   getSession(
     terminalSessionId: string,
   ): Promise<PersistedTerminalSessionRecord | null>;
+  listPanels(): Promise<PersistedTerminalPanelRecord[]>;
+  listPanelWorkspaces(): Promise<PersistedTerminalPanelWorkspaceRecord[]>;
+  upsertPanel(params: UpsertTerminalPanelParams): Promise<void>;
+  updatePanelStatus(params: UpdateTerminalPanelStatusParams): Promise<void>;
+  updatePanelWorkspace(
+    params: UpdateTerminalPanelWorkspaceParams,
+  ): Promise<void>;
+  deletePanelsForSession(terminalSessionId: string): Promise<void>;
   readSessionScrollback(terminalSessionId: string): Promise<string>;
   readSessionLiveScrollback(terminalSessionId: string): Promise<string>;
   insertSession(session: PersistedTerminalSessionRecord): Promise<void>;

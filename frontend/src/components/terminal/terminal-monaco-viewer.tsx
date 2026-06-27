@@ -14,7 +14,9 @@ import {
 } from "./terminal-line-reference";
 
 type MonacoEditor = Parameters<OnMount>[0];
+type MonacoDiffEditor = Parameters<DiffOnMount>[0];
 type MonacoApi = Parameters<OnMount>[1];
+type MonacoDiffModel = NonNullable<ReturnType<MonacoDiffEditor["getModel"]>>;
 
 interface TerminalMonacoViewerProps {
   language?: string;
@@ -68,6 +70,7 @@ export function TerminalMonacoViewer({
   lineReferencePath,
 }: TerminalMonacoViewerProps) {
   const editorRef = useRef<MonacoEditor | null>(null);
+  const diffModelRef = useRef<MonacoDiffModel | null>(null);
   const scrollDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const selectionDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const shortcutDisposableRef = useRef<{ dispose: () => void } | null>(null);
@@ -133,6 +136,7 @@ export function TerminalMonacoViewer({
   });
 
   const handleDiffEditorMount = useMemoizedFn<DiffOnMount>((editor, monaco) => {
+    diffModelRef.current = editor.getModel();
     bindLineReferenceEditor(editor.getModifiedEditor(), monaco);
   });
 
@@ -160,6 +164,18 @@ export function TerminalMonacoViewer({
       selectionDisposableRef.current = null;
       shortcutDisposableRef.current?.dispose();
       shortcutDisposableRef.current = null;
+      const diffModel = diffModelRef.current;
+      diffModelRef.current = null;
+      if (diffModel) {
+        window.setTimeout(() => {
+          if (!diffModel.original.isDisposed()) {
+            diffModel.original.dispose();
+          }
+          if (!diffModel.modified.isDisposed()) {
+            diffModel.modified.dispose();
+          }
+        }, 0);
+      }
       clearLineReferenceCopiedTimer();
     };
   }, [clearLineReferenceCopiedTimer]);
@@ -183,6 +199,8 @@ export function TerminalMonacoViewer({
           original={oldContent}
           modified={newContent}
           theme="vs-dark"
+          keepCurrentOriginalModel
+          keepCurrentModifiedModel
           options={{
             ...EDITOR_OPTIONS,
             originalEditable: false,

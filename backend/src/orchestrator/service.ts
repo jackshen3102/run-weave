@@ -258,6 +258,7 @@ export class OrchestratorService {
         this.describeRoleTerminalMappings(run),
         this.resolveControlPlaneBaseUrl(),
       ),
+      input.orchestrator.binding,
     );
     return this.updateRun(run, {
       timeline: [
@@ -280,13 +281,18 @@ export class OrchestratorService {
         return `${roleName}: 新建 worker 终端时先运行 \`rw terminal create --project-id ${run.projectId} --cwd ${shellQuote(cwd)} --json\`，从 JSON 读取 terminalSessionId；随后使用 \`rw terminal send <terminalSessionId> --agent ${command} --stdin --json\` 发送 worker prompt。`;
       }
       const sessionId = role.binding.sessionId;
+      const panelFlag = role.binding.panelAlias
+        ? ` --panel ${shellQuote(role.binding.panelAlias)}`
+        : role.binding.role
+          ? ` --role ${shellQuote(role.binding.role)}`
+          : "";
       const session = sessionId
         ? this.terminalSessionManager.getSession(sessionId)
         : null;
       if (!session) {
-        return `${roleName}: 复用终端 ${sessionId ?? "unknown"}；发送时使用 \`rw terminal send ${sessionId ?? "<终端ID>"} --agent ${command} --stdin --json\`。`;
+        return `${roleName}: 复用终端 ${sessionId ?? "unknown"}；发送时使用 \`rw terminal send ${sessionId ?? "<终端ID>"}${panelFlag} --agent ${command} --stdin --json\`。`;
       }
-      return `${roleName}: 复用终端 ${formatTerminalLabel(session)}，终端 ID 为 ${session.id}；发送时使用 \`rw terminal send ${session.id} --agent ${command} --stdin --json\`。`;
+      return `${roleName}: 复用终端 ${formatTerminalLabel(session)}，终端 ID 为 ${session.id}；发送时使用 \`rw terminal send ${session.id}${panelFlag} --agent ${command} --stdin --json\`。`;
     });
   }
 
@@ -301,6 +307,9 @@ export class OrchestratorService {
       binding: {
         mode: input.newSession ? "new" : role.binding.mode,
         sessionId: input.sessionId ?? role.binding.sessionId,
+        panelId: role.binding.panelId,
+        panelAlias: role.binding.panelAlias,
+        role: role.binding.role,
       },
       terminal: normalizeTerminalRequest(role.terminal),
     });
@@ -332,6 +341,7 @@ export class OrchestratorService {
         goalId: input.goalId,
         query: input.query,
       }),
+      role.binding,
     );
     const nextPhase = advancePhaseForDispatch(role.id);
     return this.updateRun(run, {
@@ -345,6 +355,8 @@ export class OrchestratorService {
           goalId: input.goalId,
           roleId: role.id,
           terminalSessionId: session.id,
+          terminalPanelId: role.binding.panelId ?? null,
+          panelAlias: role.binding.panelAlias ?? role.binding.role ?? null,
         }),
       ],
     });
@@ -385,6 +397,7 @@ export class OrchestratorService {
         buildHumanPrompt(
           formatHumanGatePrompt(verdict, transition.currentPhase),
         ),
+        run.orchestrator.binding,
       );
     }
     return this.updateRun(run, {
@@ -441,6 +454,7 @@ export class OrchestratorService {
       await this.promptSender.sendPromptToAgent(
         orchestratorSession,
         buildHumanPrompt(formatRoundConfirmationPrompt(record, nextPhase)),
+        run.orchestrator.binding,
       );
     }
     return this.updateRun(run, {
@@ -476,7 +490,11 @@ export class OrchestratorService {
       at: new Date().toISOString(),
       text,
     };
-    await this.promptSender.sendPromptToAgent(session, buildHumanPrompt(text));
+    await this.promptSender.sendPromptToAgent(
+      session,
+      buildHumanPrompt(text),
+      run.orchestrator.binding,
+    );
     return this.updateRun(run, {
       status:
         run.status === "paused" || run.status === "need_human"
@@ -632,6 +650,7 @@ export class OrchestratorService {
       [buildResultPrompt(outbox), transition?.autoGatePrompt]
         .filter((item): item is string => Boolean(item))
         .join("\n\n"),
+      run.orchestrator.binding,
     );
     nextTimeline.push(
       this.timelineItem({

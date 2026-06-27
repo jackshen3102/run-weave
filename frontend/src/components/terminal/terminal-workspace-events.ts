@@ -46,6 +46,12 @@ export function useTerminalWorkspaceEvents({
   const setTerminalStateBySessionId = useTerminalWorkspaceStore(
     (state) => state.setTerminalStateBySessionId,
   );
+  const setPanelWorkspaceBySessionId = useTerminalWorkspaceStore(
+    (state) => state.setPanelWorkspaceBySessionId,
+  );
+  const setActivePanelIdBySessionId = useTerminalWorkspaceStore(
+    (state) => state.setActivePanelIdBySessionId,
+  );
   const setCompletionMarkers = useTerminalWorkspaceStore(
     (state) => state.setCompletionMarkers,
   );
@@ -88,6 +94,48 @@ export function useTerminalWorkspaceEvents({
               continue;
             }
             next[event.terminalSessionId] = terminalState;
+            changed = true;
+          }
+          return changed ? next : current;
+        });
+      }
+
+      const panelEvents = events.filter(
+        (event) =>
+          event.kind === "terminal_panel_created" ||
+          event.kind === "terminal_panel_updated" ||
+          event.kind === "terminal_panel_deleted" ||
+          event.kind === "terminal_panel_focused" ||
+          event.kind === "terminal_panel_input_sent",
+      );
+      if (panelEvents.length > 0) {
+        setPanelWorkspaceBySessionId((current) => {
+          let changed = false;
+          const next = { ...current };
+          for (const event of panelEvents) {
+            const workspace = event.payload.workspace;
+            if (
+              next[event.terminalSessionId]?.activePanelId ===
+                workspace.activePanelId &&
+              next[event.terminalSessionId]?.panels.length ===
+                workspace.panels.length
+            ) {
+              continue;
+            }
+            next[event.terminalSessionId] = workspace;
+            changed = true;
+          }
+          return changed ? next : current;
+        });
+        setActivePanelIdBySessionId((current) => {
+          let changed = false;
+          const next = { ...current };
+          for (const event of panelEvents) {
+            const activePanelId = event.payload.workspace.activePanelId;
+            if (next[event.terminalSessionId] === activePanelId) {
+              continue;
+            }
+            next[event.terminalSessionId] = activePanelId;
             changed = true;
           }
           return changed ? next : current;

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   TerminalProjectListItem,
+  TerminalPanelWorkspace,
   TerminalSessionListItem,
   TerminalState,
 } from "@runweave/shared";
@@ -18,6 +19,8 @@ interface TerminalWorkspaceState {
   loading: boolean;
   requestError: string | null;
   terminalStateBySessionId: Record<string, TerminalState>;
+  panelWorkspaceBySessionId: Record<string, TerminalPanelWorkspace>;
+  activePanelIdBySessionId: Record<string, string>;
   completionMarkers: Record<string, boolean>;
   bellMarkers: Record<string, boolean>;
   cachedSurfaceSessionIds: string[];
@@ -38,6 +41,12 @@ interface TerminalWorkspaceActions {
   setRequestError: (next: StateUpdater<string | null>) => void;
   setTerminalStateBySessionId: (
     next: StateUpdater<Record<string, TerminalState>>,
+  ) => void;
+  setPanelWorkspaceBySessionId: (
+    next: StateUpdater<Record<string, TerminalPanelWorkspace>>,
+  ) => void;
+  setActivePanelIdBySessionId: (
+    next: StateUpdater<Record<string, string>>,
   ) => void;
   setCompletionMarkers: (next: StateUpdater<Record<string, boolean>>) => void;
   setBellMarkers: (next: StateUpdater<Record<string, boolean>>) => void;
@@ -73,6 +82,8 @@ const initialState: TerminalWorkspaceState = {
   loading: false,
   requestError: null,
   terminalStateBySessionId: {},
+  panelWorkspaceBySessionId: {},
+  activePanelIdBySessionId: {},
   completionMarkers: {},
   bellMarkers: {},
   cachedSurfaceSessionIds: [],
@@ -113,6 +124,20 @@ export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
         terminalStateBySessionId: resolveNext(
           next,
           state.terminalStateBySessionId,
+        ),
+      })),
+    setPanelWorkspaceBySessionId: (next) =>
+      set((state) => ({
+        panelWorkspaceBySessionId: resolveNext(
+          next,
+          state.panelWorkspaceBySessionId,
+        ),
+      })),
+    setActivePanelIdBySessionId: (next) =>
+      set((state) => ({
+        activePanelIdBySessionId: resolveNext(
+          next,
+          state.activePanelIdBySessionId,
         ),
       })),
     setCompletionMarkers: (next) =>

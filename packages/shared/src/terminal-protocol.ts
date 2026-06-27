@@ -239,6 +239,9 @@ export interface SendTerminalInputRequest {
   mode?: TerminalInputMode;
   operationId?: string;
   quickInputSource?: TerminalQuickInputSource;
+  panelId?: string;
+  panelAlias?: string;
+  role?: TerminalPanelRole;
 }
 
 export interface SendTerminalInputResponse {
@@ -252,6 +255,9 @@ export interface SendTerminalInputResponse {
 
 export interface SendTerminalInterruptRequest {
   operationId?: string;
+  panelId?: string;
+  panelAlias?: string;
+  role?: TerminalPanelRole;
 }
 
 export interface SendTerminalInterruptResponse
@@ -309,6 +315,57 @@ export interface TerminalSessionListItem {
   createdAt: string;
   lastActivityAt: string;
   exitCode?: number;
+  activePanelId?: string;
+  panelCount?: number;
+  panelAliases?: string[];
+}
+
+export type TerminalPanelRole = string;
+
+export const TERMINAL_PANEL_ROLE_SUGGESTIONS = [
+  "main",
+  "server",
+  "tests",
+  "planner",
+  "reviewer",
+  "worker",
+] as const;
+
+export interface TerminalPanelListItem {
+  panelId: string;
+  terminalSessionId: string;
+  alias: string | null;
+  role?: TerminalPanelRole | null;
+  cwd: string;
+  activeCommand: string | null;
+  status: "running" | "exited";
+  createdAt: string;
+  lastActivityAt: string;
+  exitCode?: number;
+  focused: boolean;
+  tmuxPaneId?: string;
+}
+
+export interface TerminalPanelWorkspace {
+  terminalSessionId: string;
+  activePanelId: string;
+  panels: TerminalPanelListItem[];
+  renderMode: "tmux-native";
+}
+
+export interface CreateTerminalPanelRequest {
+  sourcePanelId?: string;
+  direction: "right" | "down";
+  alias?: string | null;
+  role?: TerminalPanelRole | null;
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  focus?: boolean;
+}
+
+export interface UpdateTerminalPanelRequest {
+  focus?: boolean;
 }
 
 export interface AppHomeOverviewSession extends TerminalSessionListItem {
@@ -420,6 +477,40 @@ export interface TerminalSessionDeletedEventPayload {
   projectId: string | null;
 }
 
+export interface TerminalPanelCreatedEventPayload {
+  panel: TerminalPanelListItem;
+  workspace: TerminalPanelWorkspace;
+}
+
+export interface TerminalPanelUpdatedEventPayload {
+  panel: TerminalPanelListItem;
+  workspace: TerminalPanelWorkspace;
+}
+
+export interface TerminalPanelDeletedEventPayload {
+  terminalSessionId: string;
+  panelId: string;
+  workspace: TerminalPanelWorkspace;
+}
+
+export interface TerminalPanelFocusedEventPayload {
+  terminalSessionId: string;
+  panelId: string;
+  alias: string | null;
+  role?: string | null;
+  source: "ui" | "cli" | "api" | "tmux";
+  workspace: TerminalPanelWorkspace;
+}
+
+export interface TerminalPanelInputSentEventPayload {
+  terminalSessionId: string;
+  panelId: string;
+  alias: string | null;
+  role?: string | null;
+  operationId: string;
+  workspace: TerminalPanelWorkspace;
+}
+
 export type TerminalEventKind =
   | "completion"
   | "project_created"
@@ -427,7 +518,12 @@ export type TerminalEventKind =
   | "terminal_session_created"
   | "terminal_session_deleted"
   | "terminal_state_changed"
-  | "terminal_notification";
+  | "terminal_notification"
+  | "terminal_panel_created"
+  | "terminal_panel_updated"
+  | "terminal_panel_deleted"
+  | "terminal_panel_focused"
+  | "terminal_panel_input_sent";
 
 interface TerminalEventEnvelopeBase {
   id: string;
@@ -475,6 +571,31 @@ export type TerminalEventEnvelope =
       terminalSessionId: string;
       projectId: string | null;
       payload: TerminalSessionDeletedEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_panel_created";
+      terminalSessionId: string;
+      payload: TerminalPanelCreatedEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_panel_updated";
+      terminalSessionId: string;
+      payload: TerminalPanelUpdatedEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_panel_deleted";
+      terminalSessionId: string;
+      payload: TerminalPanelDeletedEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_panel_focused";
+      terminalSessionId: string;
+      payload: TerminalPanelFocusedEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_panel_input_sent";
+      terminalSessionId: string;
+      payload: TerminalPanelInputSentEventPayload;
     });
 
 export interface TerminalCompletionEventListResponse {

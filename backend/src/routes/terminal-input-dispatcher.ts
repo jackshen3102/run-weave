@@ -8,7 +8,11 @@ import {
   isTmuxBackedSession,
   resolveTmuxTarget,
 } from "../terminal/runtime-launcher";
-import type { TmuxKeySequenceItem, TmuxService } from "../terminal/tmux-service";
+import type {
+  TmuxKeySequenceItem,
+  TmuxPaneTarget,
+  TmuxService,
+} from "../terminal/tmux-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TerminalStateService } from "../terminal/terminal-state-service";
 import {
@@ -137,6 +141,7 @@ export async function sendInputToSession(
   data: string,
   mode?: TerminalInputMode,
   operationId?: string,
+  paneTarget?: TmuxPaneTarget,
 ): Promise<SendTerminalInputResponse> {
   if (!options?.runtimeRegistry || !options.ptyService) {
     throw new Error("Terminal runtime service unavailable");
@@ -175,7 +180,7 @@ export async function sendInputToSession(
     exitTmuxCopyMode,
   });
   if (isTmuxBackedSession(session) && options.tmuxService) {
-    const target = resolveTmuxTarget(session, options.tmuxService);
+    const target = paneTarget ?? resolveTmuxTarget(session, options.tmuxService);
     aiDiagnosticLog("terminal tmux input dispatch selected", {
       terminalSessionId: session.id,
       operationId: operationId ?? null,

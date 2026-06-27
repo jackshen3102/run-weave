@@ -29,7 +29,13 @@ export class OrchestratorTerminalSessionResolver {
 
   async resolveRunSession(params: {
     projectId: string;
-    binding: { mode: "new" | "reuse"; sessionId?: string | null };
+    binding: {
+      mode: "new" | "reuse";
+      sessionId?: string | null;
+      panelId?: string | null;
+      panelAlias?: string | null;
+      role?: string | null;
+    };
     terminal: Omit<CreateTerminalSessionRequest, "projectId">;
   }): Promise<TerminalSessionRecord> {
     if (params.binding.mode === "reuse") {
