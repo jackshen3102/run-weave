@@ -1,13 +1,7 @@
 import { useMemo, useState } from "react";
 import type { TerminalPanelWorkspace, TerminalSessionListItem } from "@runweave/shared";
-import { Copy, PanelBottom, PanelRight, X } from "lucide-react";
+import { PanelBottom, PanelRight, X } from "lucide-react";
 import { Button } from "../ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
 import {
   closeTerminalPanel,
   createTerminalPanel,
@@ -162,57 +156,30 @@ export function TerminalPanelTargetBar({
       >
         <PanelBottom className="h-3.5 w-3.5" />
       </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={disabled || !activePanel}
-            aria-label="Panel actions"
-            title="Panel actions"
-            className="h-6 w-7 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-44">
-          <DropdownMenuItem
-            disabled={!activePanel}
-            onSelect={() => {
-              if (!activePanel) {
-                return;
-              }
-              void navigator.clipboard?.writeText(
-                activePanel.alias ?? activePanel.panelId,
-              );
-            }}
-          >
-            <Copy className="h-4 w-4" />
-            Copy Target
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!activePanel || (workspace?.panels.length ?? 0) <= 1}
-            className="text-rose-400 focus:text-rose-400"
-            onSelect={() => {
-              if (!activePanel) {
-                return;
-              }
-              void runAction("close", () =>
-                closeTerminalPanel(
-                  apiBase,
-                  token,
-                  activeSession.terminalSessionId,
-                  activePanel.panelId,
-                ),
-              );
-            }}
-          >
-            <X className="h-4 w-4" />
-            Close Panel
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={disabled || !activePanel || (workspace?.panels.length ?? 0) <= 1}
+        aria-label="Close terminal panel"
+        title="Close terminal panel"
+        className="h-6 w-7 rounded-md px-0 text-slate-300 hover:bg-rose-950/50 hover:text-rose-200"
+        onClick={() => {
+          if (!activePanel) {
+            return;
+          }
+          void runAction("close", () =>
+            closeTerminalPanel(
+              apiBase,
+              token,
+              activeSession.terminalSessionId,
+              activePanel.panelId,
+            ),
+          );
+        }}
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }
