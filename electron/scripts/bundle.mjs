@@ -42,6 +42,8 @@ await build({
 });
 
 rmSync("dist/backend", { recursive: true, force: true });
+rmSync("dist/app-server", { recursive: true, force: true });
+rmSync("dist/cli", { recursive: true, force: true });
 
 await build({
   ...shared,
@@ -53,4 +55,22 @@ await build({
   outExtension: { ".js": ".cjs" },
 });
 
-console.log("[bundle] electron main + preload + backend runtime built successfully");
+await build({
+  ...shared,
+  ...importMetaUrlShim,
+  entryPoints: ["../app-server/src/index.ts"],
+  outdir: "dist/app-server",
+  format: "cjs",
+  outExtension: { ".js": ".cjs" },
+});
+
+await build({
+  ...shared,
+  ...importMetaUrlShim,
+  entryPoints: ["../packages/runweave-cli/src/index.ts"],
+  outdir: "dist/cli",
+  format: "cjs",
+  outExtension: { ".js": ".cjs" },
+});
+
+console.log("[bundle] electron main + preload + backend/app-server/cli runtime built successfully");

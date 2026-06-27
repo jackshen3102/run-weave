@@ -298,6 +298,23 @@ try {
     const endpoint = `http://127.0.0.1:${port}/internal/terminal/agent-hook`;
     await runLauncher(launcherPath, {
       HOME: homeDir,
+      RUNWEAVE_HOOK_ENDPOINT: endpoint,
+      RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
+      RUNWEAVE_HOOK_TOKEN: "token-no-app-server",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-no-app-server",
+      RUNWEAVE_PROJECT_ID: "project-no-app-server",
+      RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+    });
+    assert.equal(requests.length, 2);
+    assert.equal(appServerRequests.length, 0);
+    await assertFileMissing(
+      path.join(homeDir, ".runweave", "app-server", "app-server.lock.json"),
+      "hook bridge must not start app-server or create an app-server lock",
+    );
+    requests.length = 0;
+
+    await runLauncher(launcherPath, {
+      HOME: homeDir,
       RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
       RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
       RUNWEAVE_HOOK_ENDPOINT: endpoint,
@@ -518,6 +535,15 @@ function runLauncher(launcherPath, extraEnv) {
     });
     child.stdin.end(payload);
   });
+}
+
+async function assertFileMissing(filePath, message) {
+  try {
+    await readFile(filePath, "utf8");
+  } catch {
+    return;
+  }
+  assert.fail(message);
 }
 
 function runToolkitHookCommand(command, source, extraEnv) {

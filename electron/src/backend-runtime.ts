@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import type { AppServerConnectionInfo } from "@runweave/shared/src/app-server-node";
 import {
   formatBackendProfileLockConflict,
   getBrowserProfileLockFile,
@@ -299,6 +300,7 @@ export function buildPackagedBackendEnv(options: {
   baseEnv: NodeJS.ProcessEnv;
   backendPort: number;
   backendPaths: PackagedBackendPaths;
+  appServerConnection?: AppServerConnectionInfo | null;
 }): NodeJS.ProcessEnv {
   return {
     ...options.baseEnv,
@@ -309,6 +311,12 @@ export function buildPackagedBackendEnv(options: {
     PORT_STRICT: "true",
     FRONTEND_DIST_DIR: options.backendPaths.frontendDistDir,
     RUNWEAVE_RUNTIME_RELEASE_ID: options.backendPaths.releaseId,
+    ...(options.appServerConnection
+      ? {
+          RUNWEAVE_APP_SERVER_URL: options.appServerConnection.baseUrl,
+          RUNWEAVE_APP_SERVER_TOKEN: options.appServerConnection.token,
+        }
+      : {}),
     BROWSER_VIEWER_NODE_PTY_DIR: options.backendPaths.nodePtyDir,
   };
 }
@@ -439,6 +447,10 @@ async function stopChildProcess(child: ChildProcess): Promise<void> {
 export async function startPackagedBackend(
   options: {
     baseEnv?: NodeJS.ProcessEnv;
+    ensureAppServer?: (
+      release: RuntimeRelease,
+      env: NodeJS.ProcessEnv,
+    ) => Promise<AppServerConnectionInfo | null>;
     onIncidentEvent?: (event: PackagedBackendRuntimeIncidentEvent) => void;
     resourcesPath?: string;
     runtimeRoot?: string | null;
@@ -466,6 +478,7 @@ export async function startPackagedBackend(
     try {
       const runtime = await startPackagedBackendForRelease({
         baseEnv: mergedEnv,
+        ensureAppServer: options.ensureAppServer,
         onIncidentEvent: options.onIncidentEvent,
         release,
         runtimeRoot: options.runtimeRoot ?? null,
@@ -488,6 +501,10 @@ export async function startPackagedBackend(
 
 async function startPackagedBackendForRelease(options: {
   baseEnv: NodeJS.ProcessEnv;
+  ensureAppServer?: (
+    release: RuntimeRelease,
+    env: NodeJS.ProcessEnv,
+  ) => Promise<AppServerConnectionInfo | null>;
   onIncidentEvent?: (event: PackagedBackendRuntimeIncidentEvent) => void;
   release: RuntimeRelease;
   runtimeRoot: string | null;
@@ -520,10 +537,13 @@ async function startPackagedBackendForRelease(options: {
   );
   const backendPort = await findAvailablePort(DEFAULT_BACKEND_PORT);
   const backendUrl = `http://127.0.0.1:${backendPort}`;
+  const appServerConnection =
+    (await options.ensureAppServer?.(release, options.baseEnv)) ?? null;
   const backendEnv = buildPackagedBackendEnv({
     baseEnv: options.baseEnv,
     backendPort,
     backendPaths,
+    appServerConnection,
   });
 
   const child = spawn(process.execPath, [backendPaths.backendEntry], {

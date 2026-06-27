@@ -5,7 +5,7 @@ import type {
   AppServerEventStreamMessage,
   CreateAppServerEventRequest,
 } from "@runweave/shared";
-import type { AppServerConnectionInfo } from "./discovery";
+import type { AppServerConnectionInfo } from "@runweave/shared/src/app-server-node";
 
 export class AppServerClient {
   constructor(private readonly connection: AppServerConnectionInfo) {}

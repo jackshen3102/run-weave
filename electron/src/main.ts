@@ -56,6 +56,7 @@ import {
   resolveRuntimeRoot,
   type RuntimeRelease,
 } from "./runtime-release.js";
+import { ensureAppServerViaCli } from "./app-server-cli.js";
 import { createTray } from "./tray.js";
 import { initAutoUpdater, checkForUpdates } from "./updater.js";
 import { getIsQuitting, setIsQuitting } from "./app-state.js";
@@ -734,6 +735,12 @@ async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionS
     });
     const runtime = await startPackagedBackend({
       baseEnv: buildPackagedBackendBaseEnv(),
+      ensureAppServer: async (release, env) =>
+        await ensureAppServerViaCli({
+          env,
+          logger: desktopIncidentLogger ?? undefined,
+          release,
+        }),
       onIncidentEvent: logDesktopIncident,
       runtimeRoot: getPackagedRuntimeRoot(),
       resourcesPath: process.resourcesPath,

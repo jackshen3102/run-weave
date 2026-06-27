@@ -86,6 +86,20 @@ const backendEntry = path.join(
   "backend",
   "index.cjs",
 );
+const cliEntry = path.join(
+  repoRoot,
+  "electron",
+  "dist",
+  "cli",
+  "index.cjs",
+);
+const appServerEntry = path.join(
+  repoRoot,
+  "electron",
+  "dist",
+  "app-server",
+  "index.cjs",
+);
 
 if (!existsSync(path.join(frontendDist, "index.html"))) {
   throw new Error("frontend dist is missing index.html");
@@ -93,14 +107,24 @@ if (!existsSync(path.join(frontendDist, "index.html"))) {
 if (!existsSync(backendEntry)) {
   throw new Error("backend bundle is missing electron/dist/backend/index.cjs");
 }
+if (!existsSync(cliEntry)) {
+  throw new Error("CLI bundle is missing electron/dist/cli/index.cjs");
+}
+if (!existsSync(appServerEntry)) {
+  throw new Error("app-server bundle is missing electron/dist/app-server/index.cjs");
+}
 
 rmSync(releaseDir, { recursive: true, force: true });
 mkdirSync(path.join(releaseDir, "frontend"), { recursive: true });
 mkdirSync(path.join(releaseDir, "backend"), { recursive: true });
+mkdirSync(path.join(releaseDir, "cli"), { recursive: true });
+mkdirSync(path.join(releaseDir, "app-server"), { recursive: true });
 cpSync(frontendDist, path.join(releaseDir, "frontend", "dist"), {
   recursive: true,
 });
 cpSync(backendEntry, path.join(releaseDir, "backend", "index.cjs"));
+cpSync(cliEntry, path.join(releaseDir, "cli", "index.cjs"));
+cpSync(appServerEntry, path.join(releaseDir, "app-server", "index.cjs"));
 
 const files = listFiles(releaseDir)
   .filter((filePath) => filePath !== "manifest.json")
@@ -124,6 +148,12 @@ const manifest = {
   },
   backend: {
     entry: "backend/index.cjs",
+  },
+  cli: {
+    entry: "cli/index.cjs",
+  },
+  appServer: {
+    entry: "app-server/index.cjs",
   },
   files,
 };
