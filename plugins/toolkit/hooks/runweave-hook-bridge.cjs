@@ -271,11 +271,13 @@ async function main() {
     deriveCompletionEndpoint(endpoint);
   const token = process.env.RUNWEAVE_HOOK_TOKEN;
   const terminalSessionId = process.env.RUNWEAVE_TERMINAL_SESSION_ID;
+  const terminalPanelId = process.env.RUNWEAVE_TERMINAL_PANEL_ID || null;
   appendDebugLog("hook bridge invoked", {
     rawEvent: String(rawEvent || "Unknown"),
     normalizedEvent,
     source,
     terminalSessionId: terminalSessionId || null,
+    terminalPanelId,
     projectId: process.env.RUNWEAVE_PROJECT_ID || null,
     hasToken: Boolean(token),
     endpoint: redactEndpoint(endpoint),
