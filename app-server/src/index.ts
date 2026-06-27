@@ -44,6 +44,10 @@ async function main(): Promise<void> {
     port,
     startedAt: new Date().toISOString(),
     version: config.version,
+    source: config.source,
+    releaseId: config.releaseId,
+    entry: config.entry,
+    runtimeRoot: config.runtimeRoot,
   };
   const acquire = await acquireSingletonLock(config.lockPath, lock);
   if (acquire.status === "owned") {

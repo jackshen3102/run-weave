@@ -7,51 +7,103 @@
 当前阶段不由 app-server 管理 terminal、不启动 backend、不分配业务端口，也不替换
 backend 既有 `/ws/terminal-events`。
 
-## 启动、CLI 管理与状态文件
+## Global Singleton、runtime 与状态文件
 
-app-server 的生命周期只由 CLI 或 app-server 可执行入口管理。产品客户端不直接 import
-app-server 源码或 runtime helper 启动服务：
-
-- CLI 提供 `rw app-server status` 与 `rw app-server start`。
-- packaged Electron 通过 runtime release 中的 CLI entry 执行
-  `rw app-server start`，再把发现到的连接信息传给 backend。
-- backend 只发现现有 app-server，不负责启动。
-
-hook bridge 只发现 app-server 并写事件，不负责启动 app-server。app-server 自动启动失败时，
-backend、hook 和 CLI 的既有主流程必须继续 degraded 运行。
-
-启动命令：
-
-```bash
-pnpm app-server:start
-```
-
-开发启动：
-
-```bash
-pnpm app-server:dev
-```
-
-默认状态目录：
+app-server 是一个本机 Global Singleton。默认情况下，整个系统只使用一个
+app-server home：
 
 ```text
 ~/.runweave/app-server/
   app-server.lock.json
   app-server-token
   app-server-events.jsonl
+  app-server.log
+  runtime/
+    current.json
+    releases/<releaseId>/
+      manifest.json
+      app-server/index.cjs
 ```
+
+这里同时保存状态和当前激活的 app-server runtime。代码可以来自任意 repo、分支、
+Electron bundle 或发布包，但默认运行入口必须先安装/激活到这个全局 home，再由 CLI
+启动。
+
+生命周期规则：
+
+- CLI 提供 `rw app-server status` 与 `rw app-server start`。
+- `rw app-server install --entry <path> --release-id <id>` 只安装/激活 runtime。
+- `rw app-server start` 只启动当前 home 的 `runtime/current.json` 指向的 runtime。
+- `rw app-server restart` 只重启当前 owner，不隐式 build、install 或 pull 代码。
+- packaged Electron 先把自己 runtime release 中的 app-server entry 安装到全局
+  app-server home，再通过 runtime release 中的 CLI entry 执行 `rw app-server start`。
+- backend 只发现现有 app-server，不负责启动。
+
+hook bridge 只发现 app-server 并写事件，不负责启动 app-server。app-server 自动启动失败时，
+backend、hook 和 CLI 的既有主流程必须继续 degraded 运行。
+
+本地源码安装到默认全局 home：
+
+```bash
+pnpm app-server:install
+```
+
+启动默认全局 owner：
+
+```bash
+pnpm app-server:start
+```
+
+测试环境必须使用独立 home，不能和正式环境共享 state/runtime：
+
+```bash
+pnpm app-server:install:test
+pnpm app-server:start:test
+```
+
+测试 home 默认是：
+
+```text
+~/.runweave/app-server-test/
+```
+
+正式和测试 app-server 可以并存，因为它们使用不同的 lock/token/event log/runtime。
+它们不能共享同一个 home；同一个 home 内仍然只有一个 owner。
+
+为了让测试阶段命令形态保持全局唯一，可以安装本地 shim：
+
+```bash
+pnpm cli:shim:local
+```
+
+它会写入 `~/.runweave/bin/rw`，让同一个 `rw` 命令指向当前 repo 的 CLI，并设置
+`RUNWEAVE_APP_SERVER_HOME=~/.runweave/app-server-test`。这样用户仍然执行同一个
+全局命令，但背后的 app-server home 是隔离的测试环境。
 
 环境变量：
 
-- `RUNWEAVE_APP_SERVER_STATE_DIR`：覆盖状态目录。
+- `RUNWEAVE_APP_SERVER_HOME`：切换 app-server home，用于正式/测试 channel 隔离。
 - `RUNWEAVE_APP_SERVER_PORT`：指定监听端口；为空或非法时使用动态端口。
+- `RUNWEAVE_APP_SERVER_STATE_DIR`：底层状态目录覆盖，仅用于脚本化验证；常规测试
+  应优先切换 `RUNWEAVE_APP_SERVER_HOME`。
 
 app-server 只监听 `127.0.0.1`。启动时先读取 lock 文件；如果 lock 中 pid 存活，
 且 `GET /healthz` 返回 `service: "runweave-app-server"`、`protocolVersion: 1`
 并匹配 pid，新进程不会抢占 owner，只打印已有地址后退出。
 
-`pnpm app-server:start` 会先构建 CLI，再通过 CLI 启动 app-server。分发产物使用 build
-后的 CLI 和 app-server Node 入口，不依赖源码仓库中的 `pnpm` 或 `tsx`。
+lock 文件必须记录 owner 的来源，便于排查：
+
+```json
+{
+  "pid": 123,
+  "host": "127.0.0.1",
+  "port": 54321,
+  "source": "global",
+  "releaseId": "local-2026-06-27-090000",
+  "entry": "~/.runweave/app-server/runtime/releases/.../app-server/index.cjs",
+  "runtimeRoot": "~/.runweave/app-server/runtime"
+}
+```
 
 ## 发现与鉴权
 
@@ -180,13 +232,14 @@ rw app-server status
 rw app-server start
 ```
 
-`status` 只发现现有 owner，不启动 app-server；`start` 通过 CLI 子进程启动 bundled
-app-server entry。输出包含
-`baseUrl`、`pid`、`hasToken`、lock 路径和 health 信息，但不会打印 token 明文。
+`status` 只发现现有 owner，不启动 app-server；`start` 从当前 home 的
+`runtime/current.json` 启动 app-server。输出包含 `baseUrl`、`pid`、`hasToken`、
+lock 路径、runtime root、current runtime 和 health 信息，但不会打印 token 明文。
 
-packaged Electron 使用 runtime release manifest 中的 CLI entry 运行
-`rw app-server start`，并把 app-server entry 作为 CLI 内部执行目标传入。Electron
-退出时不停止 app-server；app-server 视为本机全局服务，而不是 Electron 或 backend 子进程。
+packaged Electron 使用 runtime release manifest 中的 app-server entry 更新全局
+app-server runtime，然后使用 manifest 中的 CLI entry 运行 `rw app-server start`。
+Electron 退出时不停止 app-server；app-server 视为本机全局服务，而不是 Electron 或
+backend 子进程。
 
 ## 验证入口
 

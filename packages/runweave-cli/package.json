@@ -10,13 +10,8 @@
   "files": [
     "dist"
   ],
-  "dependencies": {
-    "express": "^4.21.2",
-    "ws": "^8.18.1",
-    "zod": "^3.24.2"
-  },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs && node ../../scripts/copy-cli-app-server.mjs",
+    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

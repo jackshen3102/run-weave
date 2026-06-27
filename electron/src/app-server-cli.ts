@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import {
   discoverAppServer,
+  installAppServerRuntimeRelease,
   type AppServerConnectionInfo,
 } from "@runweave/shared/src/app-server-node";
 import type { RuntimeRelease } from "./runtime-release.js";
@@ -15,6 +16,19 @@ export async function ensureAppServerViaCli(options: {
   logger?: AppServerCliLogger;
   release: RuntimeRelease;
 }): Promise<AppServerConnectionInfo | null> {
+  const installedRelease = installAppServerRuntimeRelease({
+    entry: options.release.appServerEntry,
+    releaseId: `electron-${options.release.releaseId}`,
+    env: options.env,
+  });
+  options.logger?.info("appServer.runtime.installed", {
+    entry: installedRelease.entry,
+    releaseId: installedRelease.releaseId,
+    runtimeRoot: installedRelease.runtimeRoot,
+    runtimeReleaseId: options.release.releaseId,
+    runtimeSource: options.release.source,
+  });
+
   const existing = await discoverAppServer({ env: options.env });
   if (existing) {
     options.logger?.info("appServer.cli.reuse", {
@@ -73,7 +87,6 @@ function runAppServerStartCommand(options: {
         env: {
           ...options.env,
           ELECTRON_RUN_AS_NODE: "1",
-          RUNWEAVE_CLI_APP_SERVER_ENTRY: options.release.appServerEntry,
         },
         stdio: ["ignore", "pipe", "pipe"],
       },

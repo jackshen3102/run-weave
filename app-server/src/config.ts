@@ -9,6 +9,10 @@ export interface AppServerConfig {
   tokenPath: string;
   eventLogPath: string;
   version: string;
+  source: "global" | "local" | "bundled";
+  releaseId: string | null;
+  entry: string;
+  runtimeRoot: string | null;
 }
 
 export function resolveAppServerConfig(
@@ -26,7 +30,18 @@ export function resolveAppServerConfig(
     tokenPath: path.join(stateDir, "app-server-token"),
     eventLogPath: path.join(stateDir, "app-server-events.jsonl"),
     version: "0.1.0",
+    source: parseSource(env.RUNWEAVE_APP_SERVER_SOURCE),
+    releaseId: env.RUNWEAVE_APP_SERVER_RELEASE_ID?.trim() || null,
+    entry: env.RUNWEAVE_APP_SERVER_ENTRY?.trim() || process.argv[1] || "",
+    runtimeRoot: env.RUNWEAVE_APP_SERVER_RUNTIME_ROOT?.trim() || null,
   };
+}
+
+function parseSource(raw: string | undefined): "global" | "local" | "bundled" {
+  if (raw === "local" || raw === "bundled") {
+    return raw;
+  }
+  return "global";
 }
 
 function parsePort(raw: string | undefined): number {

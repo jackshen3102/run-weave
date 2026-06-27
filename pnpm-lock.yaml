@@ -428,16 +428,6 @@ importers:
         version: 3.32.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
 
   packages/runweave-cli:
-    dependencies:
-      express:
-        specifier: ^4.21.2
-        version: 4.22.1
-      ws:
-        specifier: ^8.18.1
-        version: 8.19.0
-      zod:
-        specifier: ^3.24.2
-        version: 3.25.76
     devDependencies:
       "@runweave/shared":
         specifier: workspace:*
