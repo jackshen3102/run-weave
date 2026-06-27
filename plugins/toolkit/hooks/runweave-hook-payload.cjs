@@ -215,6 +215,7 @@ function buildAppServerBaseEvent({
   threadId,
   dedupePrefix,
 }) {
+  const terminalPanelId = process.env.RUNWEAVE_TERMINAL_PANEL_ID || null;
   return {
     kind,
     source: {
@@ -225,6 +226,7 @@ function buildAppServerBaseEvent({
     scope: {
       projectId: process.env.RUNWEAVE_PROJECT_ID || null,
       terminalSessionId,
+      terminalPanelId,
       cwd:
         typeof payload.cwd === "string" && payload.cwd.trim()
           ? payload.cwd

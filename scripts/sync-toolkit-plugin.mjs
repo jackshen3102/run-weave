@@ -6,6 +6,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
@@ -382,27 +383,64 @@ function preserveCodexCompatibilityCache(
     return;
   }
 
+  const archiveRoot = path.join(cacheRoot, ".archive");
+  replaceCodexCacheAlias(
+    path.join(cacheRoot, "latest"),
+    currentCachePath,
+    archiveRoot,
+    "latest",
+  );
+
   for (const version of compatibilityVersions) {
     if (version === currentVersion) {
       continue;
     }
-    const aliasPath = path.join(cacheRoot, version);
-    const aliasState = getPathState(aliasPath);
-    if (aliasState === "directory") {
-      continue;
-    }
-    if (aliasState === "symlink") {
-      rmSync(aliasPath, { force: true });
-    } else if (aliasState === "other") {
-      log(
-        `Skipping compatibility cache alias over non-directory ${aliasPath}.`,
-      );
-      continue;
-    }
 
-    symlinkSync(currentCachePath, aliasPath, "dir");
+    const aliasPath = path.join(cacheRoot, version);
+    if (
+      !replaceCodexCacheAlias(aliasPath, currentCachePath, archiveRoot, version)
+    ) {
+      continue;
+    }
     log(`Preserved Codex compatibility cache ${version} -> ${currentVersion}.`);
   }
+}
+
+function replaceCodexCacheAlias(
+  aliasPath,
+  currentCachePath,
+  archiveRoot,
+  label,
+) {
+  const aliasState = getPathState(aliasPath);
+  if (aliasState === "symlink") {
+    rmSync(aliasPath, { force: true });
+  } else if (aliasState === "directory") {
+    const archivedPath = archiveCodexCacheDirectory(aliasPath, archiveRoot);
+    log(`Archived Codex plugin cache ${label} -> ${archivedPath}.`);
+  } else if (aliasState === "other") {
+    log(`Skipping compatibility cache alias over non-directory ${aliasPath}.`);
+    return false;
+  }
+
+  symlinkSync(currentCachePath, aliasPath, "dir");
+  return true;
+}
+
+function archiveCodexCacheDirectory(directoryPath, archiveRoot) {
+  mkdirSync(archiveRoot, { recursive: true });
+  const baseName = path.basename(directoryPath);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  let archivePath = path.join(archiveRoot, `${baseName}-${timestamp}`);
+  let index = 1;
+
+  while (existsSync(archivePath)) {
+    archivePath = path.join(archiveRoot, `${baseName}-${timestamp}-${index}`);
+    index += 1;
+  }
+
+  renameSync(directoryPath, archivePath);
+  return archivePath;
 }
 
 function getCodexPluginCacheRoot(pluginName, marketplaceName) {
