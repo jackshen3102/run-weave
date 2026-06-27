@@ -2,10 +2,12 @@ import type {
   CreateTerminalProjectRequest,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
+  CreateTerminalPanelRequest,
   SendTerminalInterruptRequest,
   SendTerminalInterruptResponse,
   SendTerminalInputRequest,
   SendTerminalInputResponse,
+  TerminalPanelWorkspace,
   TerminalProjectListItem,
   TerminalSessionHistoryResponse,
   TerminalSessionListItem,
@@ -77,6 +79,61 @@ export class TerminalHttpClient {
   ): Promise<TerminalSessionHistoryResponse> {
     return this.auth.requestJson<TerminalSessionHistoryResponse>(
       `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/history`,
+    );
+  }
+
+  listPanels(terminalSessionId: string): Promise<TerminalPanelWorkspace> {
+    return this.auth.requestJson<TerminalPanelWorkspace>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels`,
+    );
+  }
+
+  createPanel(
+    terminalSessionId: string,
+    payload: CreateTerminalPanelRequest,
+  ): Promise<TerminalPanelWorkspace> {
+    return this.auth.requestJson<TerminalPanelWorkspace>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  focusPanel(
+    terminalSessionId: string,
+    panelId: string,
+  ): Promise<TerminalPanelWorkspace> {
+    return this.auth.requestJson<TerminalPanelWorkspace>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels/${encodeURIComponent(panelId)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ focus: true }),
+      },
+    );
+  }
+
+  async closePanel(
+    terminalSessionId: string,
+    panelId: string,
+  ): Promise<TerminalPanelWorkspace> {
+    return this.auth.requestJson<TerminalPanelWorkspace>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels/${encodeURIComponent(panelId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+  }
+
+  getPanelHistory(
+    terminalSessionId: string,
+    panelId: string,
+  ): Promise<TerminalSessionHistoryResponse> {
+    return this.auth.requestJson<TerminalSessionHistoryResponse>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels/${encodeURIComponent(panelId)}/history`,
     );
   }
 

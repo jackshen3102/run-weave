@@ -1,4 +1,6 @@
 import type {
+  TerminalPanelListItem,
+  TerminalPanelWorkspace,
   TerminalProjectListItem,
   TerminalSessionHistoryResponse,
   TerminalSessionListItem,
@@ -13,6 +15,10 @@ type TerminalProject = NonNullable<
 
 type TerminalSession = NonNullable<
   ReturnType<TerminalSessionManager["getSession"]>
+>;
+
+type TerminalPanel = NonNullable<
+  ReturnType<TerminalSessionManager["getPanel"]>
 >;
 
 export function toProjectPayload(
@@ -54,6 +60,7 @@ export function toStatusPayload(
 export function toSessionListItem(
   session: TerminalSession,
   terminalState?: TerminalState,
+  panelWorkspace?: TerminalPanelWorkspace | null,
 ): TerminalSessionListItem {
   return {
     terminalSessionId: session.id,
@@ -72,6 +79,15 @@ export function toSessionListItem(
     createdAt: session.createdAt.toISOString(),
     lastActivityAt: session.lastActivityAt.toISOString(),
     exitCode: session.exitCode,
+    ...(panelWorkspace
+      ? {
+          activePanelId: panelWorkspace.activePanelId,
+          panelCount: panelWorkspace.panels.length,
+          panelAliases: panelWorkspace.panels
+            .map((panel) => panel.alias)
+            .filter((alias): alias is string => Boolean(alias)),
+        }
+      : {}),
   };
 }
 
@@ -83,5 +99,44 @@ export function toHistoryPayload(
   return {
     ...toStatusPayload(session, scrollback),
     ...(scrollbackSourceCols ? { scrollbackSourceCols } : {}),
+  };
+}
+
+export function toPanelListItem(
+  panel: TerminalPanel,
+  activePanelId: string | null,
+): TerminalPanelListItem {
+  return {
+    panelId: panel.id,
+    terminalSessionId: panel.terminalSessionId,
+    alias: panel.alias,
+    role: panel.role,
+    cwd: panel.cwd,
+    activeCommand: panel.activeCommand,
+    status: panel.status,
+    createdAt: panel.createdAt.toISOString(),
+    lastActivityAt: panel.lastActivityAt.toISOString(),
+    exitCode: panel.exitCode,
+    focused: panel.id === activePanelId,
+    tmuxPaneId: panel.tmuxPaneId,
+  };
+}
+
+export function toPanelWorkspacePayload(
+  terminalSessionManager: TerminalSessionManager,
+  terminalSessionId: string,
+): TerminalPanelWorkspace | null {
+  const workspace =
+    terminalSessionManager.getPanelWorkspace(terminalSessionId) ?? null;
+  if (!workspace) {
+    return null;
+  }
+  return {
+    terminalSessionId,
+    activePanelId: workspace.activePanelId,
+    panels: terminalSessionManager
+      .listPanels(terminalSessionId)
+      .map((panel) => toPanelListItem(panel, workspace.activePanelId)),
+    renderMode: workspace.renderMode,
   };
 }

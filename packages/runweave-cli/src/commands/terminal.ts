@@ -20,6 +20,7 @@ import { tailLines, writeOutput } from "../output/format.js";
 import type {
   TerminalProjectListItem,
   TerminalInputMode,
+  TerminalPanelWorkspace,
   TerminalSessionListItem,
   TerminalSessionStatusResponse,
   TerminalState,
@@ -39,7 +40,7 @@ export async function runTerminalCommand(
 ): Promise<void> {
   if (!subcommand) {
     throw new CliError(
-      "Usage: rw terminal <create|list|show|snapshot|handoff|send|interrupt|state|history|delete>",
+      "Usage: rw terminal <create|list|show|snapshot|handoff|send|interrupt|state|history|delete|panel>",
       2,
     );
   }
@@ -59,6 +60,74 @@ export async function runTerminalCommand(
     env: io.env,
   });
   const client = new TerminalHttpClient(auth);
+
+  if (subcommand === "panel") {
+    const panelCommand = parsed.positionals[0];
+    const terminalSessionId = parsed.positionals[1];
+    if (!panelCommand || !terminalSessionId) {
+      throw new CliError(
+        "Usage: rw terminal panel <list|split|focus|close> <terminalSessionId>",
+        2,
+      );
+    }
+
+    if (panelCommand === "list") {
+      writeOutput(io.stdout, mode, await client.listPanels(terminalSessionId));
+      return;
+    }
+
+    if (panelCommand === "split") {
+      const workspace = await client.listPanels(terminalSessionId);
+      const from = getStringOption(parsed.options, "from");
+      const direction = requireStringOption(parsed.options, "direction");
+      if (direction !== "right" && direction !== "down") {
+        throw new CliError("--direction must be one of: right, down", 2);
+      }
+      const sourcePanel = from
+        ? resolvePanelIdentifier(workspace, from)
+        : workspace.panels.find((panel) => panel.focused) ?? workspace.panels[0];
+      const result = await client.createPanel(terminalSessionId, {
+        sourcePanelId: sourcePanel?.panelId,
+        direction,
+        alias: getStringOption(parsed.options, "alias") ?? null,
+        role: getStringOption(parsed.options, "role") ?? null,
+      });
+      writeOutput(io.stdout, mode, result);
+      return;
+    }
+
+    if (panelCommand === "focus") {
+      const target = parsed.positionals[2] ?? getStringOption(parsed.options, "panel");
+      if (!target) {
+        throw new CliError("Missing panel id or alias", 2);
+      }
+      const workspace = await client.listPanels(terminalSessionId);
+      const panel = resolvePanelIdentifier(workspace, target);
+      writeOutput(
+        io.stdout,
+        mode,
+        await client.focusPanel(terminalSessionId, panel.panelId),
+      );
+      return;
+    }
+
+    if (panelCommand === "close") {
+      const target = parsed.positionals[2] ?? getStringOption(parsed.options, "panel");
+      if (!target) {
+        throw new CliError("Missing panel id or alias", 2);
+      }
+      const workspace = await client.listPanels(terminalSessionId);
+      const panel = resolvePanelIdentifier(workspace, target);
+      writeOutput(
+        io.stdout,
+        mode,
+        await client.closePanel(terminalSessionId, panel.panelId),
+      );
+      return;
+    }
+
+    throw new CliError(`Unknown terminal panel command: ${panelCommand}`, 2);
+  }
 
   if (subcommand === "create") {
     const inheritFromTerminalSessionId = getStringOption(
@@ -101,7 +170,18 @@ export async function runTerminalCommand(
 
   if (subcommand === "snapshot") {
     const terminalSessionId = requireTerminalId(parsed.positionals);
-    const session = await client.getSession(terminalSessionId);
+    const panelSelector =
+      getStringOption(parsed.options, "panel") ??
+      getStringOption(parsed.options, "role");
+    const session = panelSelector
+      ? await client.getPanelHistory(
+          terminalSessionId,
+          resolvePanelIdentifier(
+            await client.listPanels(terminalSessionId),
+            panelSelector,
+          ).panelId,
+        )
+      : await client.getSessionHistory(terminalSessionId);
     const tail = tailLines(session.scrollback, resolveTail(parsed.options));
     writeOutput(io.stdout, mode, mode === "json" ? { ...session, tail } : tail);
     return;
@@ -109,11 +189,12 @@ export async function runTerminalCommand(
 
   if (subcommand === "handoff") {
     const terminalSessionId = requireTerminalId(parsed.positionals);
-    const [projects, sessions, session, statePayload] = await Promise.all([
+    const [projects, sessions, session, statePayload, panels] = await Promise.all([
       client.listProjects(),
       client.listSessions(),
       client.getSession(terminalSessionId),
       client.getCurrentTerminalState(terminalSessionId),
+      client.listPanels(terminalSessionId).catch(() => null),
     ]);
     writeOutput(
       io.stdout,
@@ -124,6 +205,7 @@ export async function runTerminalCommand(
         sessions,
         resolveTail(parsed.options),
         statePayload.terminalState,
+        panels,
       ),
     );
     return;
@@ -145,7 +227,18 @@ export async function runTerminalCommand(
 
   if (subcommand === "history") {
     const terminalSessionId = requireTerminalId(parsed.positionals);
-    const session = await client.getSessionHistory(terminalSessionId);
+    const panelSelector =
+      getStringOption(parsed.options, "panel") ??
+      getStringOption(parsed.options, "role");
+    const session = panelSelector
+      ? await client.getPanelHistory(
+          terminalSessionId,
+          resolvePanelIdentifier(
+            await client.listPanels(terminalSessionId),
+            panelSelector,
+          ).panelId,
+        )
+      : await client.getSessionHistory(terminalSessionId);
     const tail = tailLines(session.scrollback, resolveTail(parsed.options));
     writeOutput(io.stdout, mode, mode === "json" ? { ...session, tail } : tail);
     return;
@@ -164,6 +257,8 @@ export async function runTerminalCommand(
         inputModeValue ?? (requestedAgent ? "line" : undefined),
       ),
       inputModeProvided: inputModeValue != null || requestedAgent != null,
+      panel: getStringOption(parsed.options, "panel"),
+      role: getStringOption(parsed.options, "role"),
       confirmMode: getStringOption(parsed.options, "confirm") ?? "none",
       confirmTimeoutMs: Number(
         getStringOption(parsed.options, "confirm-timeout-ms") ??
@@ -198,6 +293,8 @@ export async function runTerminalCommand(
     const terminalSessionId = requireTerminalId(parsed.positionals);
     const result = await client.interruptSession(terminalSessionId, {
       operationId: buildOperationId(),
+      panelAlias: getStringOption(parsed.options, "panel"),
+      role: getStringOption(parsed.options, "role"),
     });
     writeOutput(io.stdout, mode, {
       ...result,
@@ -237,6 +334,28 @@ function resolveInputMode(value: string | undefined): TerminalInputMode {
     return value;
   }
   throw new CliError("--mode must be one of: raw, line, codex_slash_command", 2);
+}
+
+function resolvePanelIdentifier(
+  workspace: TerminalPanelWorkspace,
+  value: string,
+): TerminalPanelWorkspace["panels"][number] {
+  const matches = workspace.panels.filter(
+    (panel) =>
+      panel.panelId === value || panel.alias === value || panel.role === value,
+  );
+  if (matches.length === 1) {
+    return matches[0]!;
+  }
+  if (matches.length > 1) {
+    throw new CliError(
+      `Panel selector matches multiple panels: ${matches
+        .map((panel) => panel.panelId)
+        .join(", ")}`,
+      4,
+    );
+  }
+  throw new CliError(`Panel not found: ${value}`, 4);
 }
 
 function extractRepeatedOption(
@@ -301,6 +420,7 @@ function buildHandoff(
   sessions: TerminalSessionListItem[],
   tailLineCount: number,
   terminalState: TerminalState,
+  panels: TerminalPanelWorkspace | null,
 ): Record<string, unknown> {
   const project = projects.find((item) => item.projectId === session.projectId);
   const listed = sessions.find(
@@ -335,9 +455,17 @@ function buildHandoff(
     stateConfidence: "strong",
     stateReasons,
     tail,
+    panels: panels?.panels ?? [],
+    activePanelId: panels?.activePanelId ?? null,
     suggestedCommands: [
       `rw terminal send ${session.terminalSessionId} --text "继续" --enter --confirm short --json`,
       `rw terminal snapshot ${session.terminalSessionId} --tail ${tailLineCount} --plain`,
     ],
+    suggestedPanelCommands: (panels?.panels ?? [])
+      .filter((panel) => panel.alias || panel.role)
+      .map((panel) => {
+        const selector = panel.alias ?? panel.role ?? panel.panelId;
+        return `rw terminal send ${session.terminalSessionId} --panel ${selector} --text "继续" --enter --json`;
+      }),
   };
 }

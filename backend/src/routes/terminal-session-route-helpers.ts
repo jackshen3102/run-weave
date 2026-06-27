@@ -41,12 +41,18 @@ export const sendTerminalInputSchema = z
         "api_terminal_input",
       ])
       .optional(),
+    panelId: z.string().trim().min(1).optional(),
+    panelAlias: z.string().trim().min(1).optional(),
+    role: z.string().trim().min(1).optional(),
   })
   .strict();
 
 export const sendTerminalInterruptSchema = z
   .object({
     operationId: z.string().trim().min(1).optional(),
+    panelId: z.string().trim().min(1).optional(),
+    panelAlias: z.string().trim().min(1).optional(),
+    role: z.string().trim().min(1).optional(),
   })
   .strict();
 

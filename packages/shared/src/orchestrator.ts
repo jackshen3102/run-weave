@@ -87,6 +87,9 @@ export interface OrchestratorRoleDefinition {
 export interface OrchestratorTerminalBinding {
   mode: "new" | "reuse";
   sessionId?: string | null;
+  panelId?: string | null;
+  panelAlias?: string | null;
+  role?: string | null;
 }
 
 export interface OrchestratorRunRole {
@@ -140,6 +143,8 @@ export interface OrchestratorTimelineItem {
   goalId?: string | null;
   roleId?: string | null;
   terminalSessionId?: string | null;
+  terminalPanelId?: string | null;
+  panelAlias?: string | null;
 }
 
 export interface OrchestratorRunPackage {

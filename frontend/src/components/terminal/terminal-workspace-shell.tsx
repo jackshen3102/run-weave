@@ -79,6 +79,8 @@ import { TerminalQuickInputPopover } from "./terminal-quick-input-popover";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
 import { TerminalHeadlessConnection } from "./terminal-headless-connection";
 import { TerminalSurface } from "./terminal-surface";
+import { TerminalPanelTargetBar } from "./terminal-panel-target-bar";
+import { listTerminalPanels } from "../../services/terminal";
 
 const TerminalPreviewPanel = lazy(() =>
   import("./terminal-preview-panel").then((module) => ({
@@ -603,6 +605,15 @@ export function TerminalWorkspaceShell({
   const terminalStateBySessionId = useTerminalWorkspaceStore(
     (state) => state.terminalStateBySessionId,
   );
+  const panelWorkspaceBySessionId = useTerminalWorkspaceStore(
+    (state) => state.panelWorkspaceBySessionId,
+  );
+  const setPanelWorkspaceBySessionId = useTerminalWorkspaceStore(
+    (state) => state.setPanelWorkspaceBySessionId,
+  );
+  const setActivePanelIdBySessionId = useTerminalWorkspaceStore(
+    (state) => state.setActivePanelIdBySessionId,
+  );
   const setActiveProjectId = useTerminalWorkspaceStore(
     (state) => state.setActiveProjectId,
   );
@@ -697,6 +708,41 @@ export function TerminalWorkspaceShell({
     setHistoryTerminalSessionId(terminalSessionId);
     setHistoryDrawerOpen(true);
   };
+  const activePanelWorkspace = activeSession
+    ? panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null
+    : null;
+
+  useEffect(() => {
+    if (!activeSession?.terminalSessionId || isMobileMonitor) {
+      return;
+    }
+    let cancelled = false;
+    void listTerminalPanels(apiBase, token, activeSession.terminalSessionId)
+      .then((workspace) => {
+        if (cancelled) {
+          return;
+        }
+        setPanelWorkspaceBySessionId((current) => ({
+          ...current,
+          [workspace.terminalSessionId]: workspace,
+        }));
+        setActivePanelIdBySessionId((current) => ({
+          ...current,
+          [workspace.terminalSessionId]: workspace.activePanelId,
+        }));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSession?.terminalSessionId,
+    apiBase,
+    isMobileMonitor,
+    setActivePanelIdBySessionId,
+    setPanelWorkspaceBySessionId,
+    token,
+  ]);
 
   return (
     <section
@@ -969,7 +1015,26 @@ export function TerminalWorkspaceShell({
           </p>
         ) : null}
         <div className="relative flex h-full min-h-0">
-          <div className="relative min-h-0 flex-1">
+          <div className="flex min-h-0 flex-1 flex-col">
+            {activeSession && !isMobileMonitor ? (
+              <TerminalPanelTargetBar
+                apiBase={apiBase}
+                token={token}
+                activeSession={activeSession}
+                workspace={activePanelWorkspace}
+                onWorkspaceChange={(workspace) => {
+                  setPanelWorkspaceBySessionId((current) => ({
+                    ...current,
+                    [workspace.terminalSessionId]: workspace,
+                  }));
+                  setActivePanelIdBySessionId((current) => ({
+                    ...current,
+                    [workspace.terminalSessionId]: workspace.activePanelId,
+                  }));
+                }}
+              />
+            ) : null}
+            <div className="relative min-h-0 flex-1">
             {visibleSessions.length > 0 ? (
               <>
                 {visibleSessions.map((session) => {
@@ -1035,6 +1100,7 @@ export function TerminalWorkspaceShell({
                 No terminal tab yet. Create one to start.
               </div>
             )}
+            </div>
           </div>
           {previewOpen && !previewExpanded && !isMobileMonitor ? (
             <Suspense

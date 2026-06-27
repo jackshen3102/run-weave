@@ -5,6 +5,7 @@ import type {
   CreateTerminalClipboardImageResponse,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
+  CreateTerminalPanelRequest,
   CreateTerminalEventsWsTicketResponse,
   CreateTerminalWsTicketResponse,
   InjectOrchestratorPromptRequest,
@@ -19,6 +20,7 @@ import type {
   SendTerminalInputRequest,
   SendTerminalInputResponse,
   TerminalCompletionEventListResponse,
+  TerminalPanelWorkspace,
   TerminalProjectListItem,
   TerminalSessionHistoryResponse,
   TerminalSessionListItem,
@@ -109,6 +111,80 @@ export async function listTerminalSessions(
     apiBase,
     "/api/terminal/session",
     {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function listTerminalPanels(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+): Promise<TerminalPanelWorkspace> {
+  return requestJson<TerminalPanelWorkspace>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function createTerminalPanel(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  payload: CreateTerminalPanelRequest,
+): Promise<TerminalPanelWorkspace> {
+  return requestJson<TerminalPanelWorkspace>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function focusTerminalPanel(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  panelId: string,
+): Promise<TerminalPanelWorkspace> {
+  return requestJson<TerminalPanelWorkspace>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels/${encodeURIComponent(panelId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ focus: true }),
+    },
+  );
+}
+
+export async function closeTerminalPanel(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  panelId: string,
+): Promise<TerminalPanelWorkspace> {
+  return requestJson<TerminalPanelWorkspace>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels/${encodeURIComponent(panelId)}`,
+    {
+      method: "DELETE",
       headers: {
         Authorization: `Bearer ${token}`,
       },
