@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import {
+  APP_SERVER_SKIP_REASON_EXPLICIT,
+  APP_SERVER_SKIP_REASON_NO_CHANGE,
+  APP_SERVER_UPDATE_REASON_CHANGE,
+  APP_SERVER_UPDATE_REASON_EXPLICIT,
+  APP_SERVER_UPDATE_REASON_NO_STATE,
   APP_UPDATE_REASON_NATIVE_CHANGE,
   APP_UPDATE_REASON_NO_STATE,
   APP_UPDATE_REASON_SHELL_VERSION,
   compareVersions,
   incrementMinorVersion,
+  isAppServerSensitivePath,
   isAppSensitivePath,
   parseRunweaveUpdateArgs,
   readDotenvValue,
@@ -27,6 +33,8 @@ const cases = [
       });
       assert.equal(plan.mode, "app");
       assert.equal(plan.reason, APP_UPDATE_REASON_NO_STATE);
+      assert.equal(plan.appServer.action, "update");
+      assert.equal(plan.appServer.reason, APP_SERVER_UPDATE_REASON_NO_STATE);
     },
   },
   {
@@ -44,6 +52,61 @@ const cases = [
       });
       assert.equal(plan.mode, "runtime");
       assert.deepEqual(plan.nativeFiles, []);
+      assert.equal(plan.appServer.action, "skip");
+      assert.equal(plan.appServer.reason, APP_SERVER_SKIP_REASON_NO_CHANGE);
+    },
+  },
+  {
+    name: "auto updates app-server as a separate component for app-server changes",
+    run() {
+      const plan = resolveUpdatePlan({
+        changedFiles: [
+          "app-server/src/index.ts",
+          "packages/shared/src/app-server-node.ts",
+        ],
+        hasPreviousAppServerState: true,
+        hasPreviousState: true,
+        installedAppVersion: "0.124.0",
+        sourceShellVersion: "0.124.0",
+      });
+      assert.equal(plan.mode, "runtime");
+      assert.equal(plan.appServer.action, "update");
+      assert.equal(plan.appServer.reason, APP_SERVER_UPDATE_REASON_CHANGE);
+      assert.deepEqual(plan.appServer.changedFiles, [
+        "app-server/src/index.ts",
+        "packages/shared/src/app-server-node.ts",
+      ]);
+    },
+  },
+  {
+    name: "explicit app-server mode can force update or skip independently",
+    run() {
+      const forcedUpdate = resolveUpdatePlan({
+        appServerMode: "update",
+        changedFiles: ["frontend/src/App.tsx"],
+        hasPreviousAppServerState: true,
+        hasPreviousState: true,
+        installedAppVersion: "0.124.0",
+        sourceShellVersion: "0.124.0",
+      });
+      assert.equal(forcedUpdate.mode, "runtime");
+      assert.equal(forcedUpdate.appServer.action, "update");
+      assert.equal(
+        forcedUpdate.appServer.reason,
+        APP_SERVER_UPDATE_REASON_EXPLICIT,
+      );
+
+      const forcedSkip = resolveUpdatePlan({
+        appServerMode: "skip",
+        changedFiles: ["app-server/src/index.ts"],
+        hasPreviousAppServerState: false,
+        hasPreviousState: true,
+        installedAppVersion: "0.124.0",
+        sourceShellVersion: "0.124.0",
+      });
+      assert.equal(forcedSkip.mode, "runtime");
+      assert.equal(forcedSkip.appServer.action, "skip");
+      assert.equal(forcedSkip.appServer.reason, APP_SERVER_SKIP_REASON_EXPLICIT);
     },
   },
   {
@@ -127,6 +190,9 @@ const cases = [
         "--repo",
         "/Users/bytedance/Code/browser-hub/feature",
         "--mode=app",
+        "--app-server=update",
+        "--app-server-home",
+        "/Users/bytedance/.runweave/app-server-test",
         "--no-restart",
         "--dry-run",
       ]);
@@ -135,6 +201,11 @@ const cases = [
         "/Users/bytedance/Code/browser-hub/feature",
       );
       assert.equal(parsed.mode, "app");
+      assert.equal(parsed.appServerMode, "update");
+      assert.equal(
+        parsed.appServerHome,
+        "/Users/bytedance/.runweave/app-server-test",
+      );
       assert.equal(parsed.noRestart, true);
       assert.equal(parsed.dryRun, true);
     },
@@ -156,6 +227,32 @@ const cases = [
         validateResolvedUpdateOptions({
           noRestart: true,
           plan: {
+            appServer: { action: "skip" },
+            mode: "runtime",
+          },
+        }),
+      );
+    },
+  },
+  {
+    name: "no-restart is rejected for app-server update plans",
+    run() {
+      assert.throws(
+        () =>
+          validateResolvedUpdateOptions({
+            noRestart: true,
+            plan: {
+              appServer: { action: "update" },
+              mode: "runtime",
+            },
+          }),
+        /cannot be combined with an App Server update/,
+      );
+      assert.doesNotThrow(() =>
+        validateResolvedUpdateOptions({
+          noRestart: true,
+          plan: {
+            appServer: { action: "skip" },
             mode: "runtime",
           },
         }),
@@ -176,6 +273,12 @@ const cases = [
       );
       assert.equal(isAppSensitivePath("electron/electron-builder.yml"), true);
       assert.equal(isAppSensitivePath("backend/src/index.ts"), false);
+      assert.equal(isAppServerSensitivePath("app-server/src/index.ts"), true);
+      assert.equal(
+        isAppServerSensitivePath("packages/shared/src/app-server-node.ts"),
+        true,
+      );
+      assert.equal(isAppServerSensitivePath("frontend/src/App.tsx"), false);
     },
   },
   {

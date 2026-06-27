@@ -15,6 +15,7 @@ await verifyStartFailsWithoutRuntime();
 await verifyInstallStartsAndStops();
 await verifyReusesOwner();
 await verifyRestartKeepsRuntime();
+await verifyRestartStopsLegacyLockOwner();
 await verifyStaleLock();
 await verifyConcurrentStart();
 await verifyBadInstallFails();
@@ -92,6 +93,43 @@ async function verifyRestartKeepsRuntime() {
     assert.equal(restarted.json.started, true);
     assert.equal(restarted.json.lock.releaseId, "verify-restart");
     assert.notEqual(restarted.json.pid, first.json.pid);
+    await stopStatusOwner(restarted.json);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}
+
+async function verifyRestartStopsLegacyLockOwner() {
+  const home = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-legacy-lock-"));
+  try {
+    await installRuntime(home, "verify-legacy-current");
+    const first = await runCli(["app-server", "start"], { home });
+    assert.equal(first.code, 0);
+    assert.equal(first.json.started, true);
+    const oldPid = first.json.pid;
+
+    await writeFile(
+      path.join(home, "app-server.lock.json"),
+      JSON.stringify(
+        {
+          pid: first.json.lock.pid,
+          host: first.json.lock.host,
+          port: first.json.lock.port,
+          startedAt: first.json.lock.startedAt,
+          version: first.json.lock.version,
+        },
+        null,
+        2,
+      ),
+    );
+
+    await installRuntime(home, "verify-legacy-next");
+    const restarted = await runCli(["app-server", "restart"], { home });
+    assert.equal(restarted.code, 0);
+    assert.equal(restarted.json.started, true);
+    assert.equal(restarted.json.lock.releaseId, "verify-legacy-next");
+    assert.notEqual(restarted.json.pid, oldPid);
+    assert.equal(isPidAlive(oldPid), false);
     await stopStatusOwner(restarted.json);
   } finally {
     await rm(home, { recursive: true, force: true });

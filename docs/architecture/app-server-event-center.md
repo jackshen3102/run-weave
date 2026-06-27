@@ -36,7 +36,9 @@ Electron bundle 或发布包，但默认运行入口必须先安装/激活到这
 - `rw app-server start` 只启动当前 home 的 `runtime/current.json` 指向的 runtime。
 - `rw app-server restart` 只重启当前 owner，不隐式 build、install 或 pull 代码。
 - packaged Electron 先把自己 runtime release 中的 app-server entry 安装到全局
-  app-server home，再通过 runtime release 中的 CLI entry 执行 `rw app-server start`。
+  app-server home。若当前 owner 已经运行同一个 release，则复用；若 owner 不存在
+  或运行的 `releaseId` 不一致，则通过 runtime release 中的 CLI entry 执行
+  `rw app-server start` 或 `rw app-server restart`。
 - backend 只发现现有 app-server，不负责启动。
 
 hook bridge 只发现 app-server 并写事件，不负责启动 app-server。app-server 自动启动失败时，
@@ -237,13 +239,66 @@ rw app-server start
 lock 路径、runtime root、current runtime 和 health 信息，但不会打印 token 明文。
 
 packaged Electron 使用 runtime release manifest 中的 app-server entry 更新全局
-app-server runtime，然后使用 manifest 中的 CLI entry 运行 `rw app-server start`。
-Electron 退出时不停止 app-server；app-server 视为本机全局服务，而不是 Electron 或
-backend 子进程。
+app-server runtime。若运行中的 owner 已经是刚安装的 release，Electron 只复用；
+若运行中的 owner 是旧 release，Electron 使用 manifest 中的 CLI entry 运行
+`rw app-server restart`，避免安装了新 Runtime 但 app-server 仍跑旧代码。
+Electron 退出时不停止 app-server；app-server 视为本机全局服务，而不是 Electron
+或 backend 子进程。
+
+## 本地更新流程
+
+`pnpm runweave:update` 是本地安装/更新入口。它的 planner 同时判断三个组件：
+
+- Desktop App：Electron shell/native 文件变化、缺少历史 state、shell version
+  升级时选择完整 App 更新。
+- Desktop Runtime：backend/frontend/CLI 等 runtime-loadable 文件变化时选择 runtime
+  热更新。
+- App Server：`app-server/`、`packages/shared` 中的 app-server 协议、CLI app-server
+  命令、app-server 安装/验证脚本变化时，单独执行 app-server runtime 安装和重启。
+
+dry-run 会同时输出桌面更新模式和 app-server 动作：
+
+```bash
+pnpm runweave:update --dry-run
+```
+
+关键输出：
+
+```text
+[runweave-update] selected mode: runtime|app
+[runweave-update] selected app-server action: update|skip
+[runweave-update] app-server home: ~/.runweave/app-server
+```
+
+实际执行时，桌面更新和 app-server 更新是两个独立组件动作：
+
+1. `mode=runtime` 时先构建并安装 Desktop Runtime；除非传入 `--no-restart`，否则重启
+   桌面端。
+2. `mode=app` 时构建并替换 `/Applications/Runweave.app`，然后重新打开桌面端。
+3. `app-server action=update` 时构建当前源码中的 app-server bundle，安装到
+   `app-server home/runtime/releases/<releaseId>`，再通过 `rw app-server restart`
+   切换运行中的全局 owner。
+
+可以显式控制 app-server 组件：
+
+```bash
+pnpm runweave:update --app-server=update
+pnpm runweave:update --app-server=skip
+pnpm runweave:update --app-server-home=$HOME/.runweave/app-server-test
+```
+
+`--no-restart` 只表示不重启桌面端，不能和 `app-server action=update` 组合。
+如果只想安装 Desktop Runtime 且不重启任何本地服务，必须显式使用
+`--app-server=skip --no-restart`。
+
+`--app-server-home` 用于测试 channel。正式更新默认使用
+`~/.runweave/app-server`；测试更新必须使用独立 home，例如
+`~/.runweave/app-server-test`，避免污染正式 singleton。
 
 ## 验证入口
 
 ```bash
+pnpm runweave:update:test-cases
 pnpm app-server:verify
 pnpm app-server:verify-cli-start
 pnpm toolkit:verify-hooks

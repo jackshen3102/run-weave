@@ -270,7 +270,23 @@ export async function readAppServerLock(
 ): Promise<AppServerLock | null> {
   try {
     const parsed = JSON.parse(await readFile(lockPath, "utf8")) as unknown;
-    return isAppServerLock(parsed) ? parsed : null;
+    if (isAppServerLock(parsed)) {
+      return parsed;
+    }
+    if (isLegacyAppServerLock(parsed)) {
+      return {
+        pid: parsed.pid,
+        host: parsed.host,
+        port: parsed.port,
+        startedAt: parsed.startedAt,
+        version: parsed.version,
+        source: "global",
+        releaseId: null,
+        entry: "",
+        runtimeRoot: null,
+      };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -456,6 +472,31 @@ function isAppServerLock(value: unknown): value is AppServerLock {
     (typeof record.releaseId === "string" || record.releaseId === null) &&
     typeof record.entry === "string" &&
     (typeof record.runtimeRoot === "string" || record.runtimeRoot === null)
+  );
+}
+
+function isLegacyAppServerLock(value: unknown): value is {
+  pid: number;
+  host: "127.0.0.1";
+  port: number;
+  startedAt: string;
+  version: string;
+} {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.pid === "number" &&
+    Number.isInteger(record.pid) &&
+    record.pid > 0 &&
+    record.host === "127.0.0.1" &&
+    typeof record.port === "number" &&
+    Number.isInteger(record.port) &&
+    record.port > 0 &&
+    record.port <= 65535 &&
+    typeof record.startedAt === "string" &&
+    typeof record.version === "string"
   );
 }
 

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   commandName,
@@ -76,6 +77,16 @@ async function runChecked(command, args, options = {}) {
       `${command} ${args.join(" ")} failed with exit code ${result.code}`,
     );
   }
+}
+
+async function runCaptureChecked(command, args, options = {}) {
+  const result = await runCapture(command, args, options);
+  if (!result.ok) {
+    throw new Error(
+      `${command} ${args.join(" ")} failed with exit code ${result.code}\n${result.stderr || result.stdout}`,
+    );
+  }
+  return result;
 }
 
 function readJsonFile(filePath) {
@@ -408,6 +419,45 @@ async function runRuntimeUpdate({
   return await findLatestRuntimeManifest(sourceRoot);
 }
 
+async function runAppServerUpdate({ appServerHome, sourceRoot }) {
+  const releaseId = `local-app-server-${Date.now()}`;
+
+  await runChecked(
+    "node",
+    [
+      "./scripts/install-app-server-runtime.mjs",
+      `--release-id=${releaseId}`,
+      `--home=${appServerHome}`,
+    ],
+    { cwd: sourceRoot },
+  );
+
+  const restart = await runCaptureChecked(
+    "node",
+    [
+      "./packages/runweave-cli/dist/index.js",
+      "app-server",
+      "restart",
+      "--home",
+      appServerHome,
+    ],
+    { cwd: sourceRoot },
+  );
+
+  let status = null;
+  try {
+    status = JSON.parse(restart.stdout);
+  } catch {
+    status = null;
+  }
+
+  return {
+    home: appServerHome,
+    releaseId,
+    status,
+  };
+}
+
 async function runAppUpdate({
   appBuildVersion,
   appPath,
@@ -461,6 +511,11 @@ async function main() {
       process.env.RUNWEAVE_RUNTIME_HOME ??
       resolveDefaultRuntimeHome(),
   );
+  const appServerHome = path.resolve(
+    args.appServerHome ??
+      process.env.RUNWEAVE_APP_SERVER_HOME ??
+      path.join(os.homedir(), ".runweave", "app-server"),
+  );
   const statePath = path.resolve(
     args.statePath ??
       process.env.RUNWEAVE_UPDATE_STATE_PATH ??
@@ -473,8 +528,14 @@ async function main() {
   const installedAppVersion = await readInstalledMacAppVersion(appPath);
   const changedFiles = await getGitChangedFilesSinceState(sourceRoot, state);
   const plan = resolveUpdatePlan({
+    appServerMode: args.appServerMode,
     changedFiles,
     forceMode: args.mode,
+    hasPreviousAppServerState: Boolean(
+      state?.appServerReleaseId ??
+        state?.appServer?.releaseId ??
+        state?.appServer?.action,
+    ),
     hasPreviousState: Boolean(state?.gitHead),
     installedAppVersion,
     sourceShellVersion,
@@ -500,6 +561,11 @@ async function main() {
   );
   console.log(`[runweave-update] selected mode: ${plan.mode}`);
   console.log(`[runweave-update] reason: ${plan.reason}`);
+  console.log(`[runweave-update] app-server home: ${appServerHome}`);
+  console.log(
+    `[runweave-update] selected app-server action: ${plan.appServer.action}`,
+  );
+  console.log(`[runweave-update] app-server reason: ${plan.appServer.reason}`);
   if (plan.mode === "app") {
     console.log(
       `[runweave-update] codesign identity: ${codesignIdentity.identity ?? "ad-hoc"} (${codesignIdentity.source})`,
@@ -510,6 +576,11 @@ async function main() {
       `[runweave-update] native-sensitive changes: ${plan.nativeFiles.join(", ")}`,
     );
   }
+  if (plan.appServer.changedFiles.length > 0) {
+    console.log(
+      `[runweave-update] app-server changes: ${plan.appServer.changedFiles.join(", ")}`,
+    );
+  }
 
   if (args.dryRun) {
     console.log("[runweave-update] dry run complete");
@@ -517,6 +588,9 @@ async function main() {
   }
 
   let runtimeRelease = null;
+  let appServerRelease = null;
+  const previousAppServerReleaseId =
+    state?.appServerReleaseId ?? state?.appServer?.releaseId ?? null;
   if (plan.mode === "runtime") {
     runtimeRelease = await runRuntimeUpdate({
       installedAppVersion,
@@ -555,9 +629,27 @@ async function main() {
       });
     }
   }
+  if (plan.appServer.action === "update") {
+    appServerRelease = await runAppServerUpdate({
+      appServerHome,
+      sourceRoot,
+    });
+  }
 
   const nextInstalledVersion = await readInstalledMacAppVersion(appPath);
   await writeUpdateState(statePath, {
+    appServer: {
+      action: plan.appServer.action,
+      changedFiles: plan.appServer.changedFiles,
+      home: appServerHome,
+      reason: plan.appServer.reason,
+      releaseId: appServerRelease?.releaseId ?? previousAppServerReleaseId,
+      status: appServerRelease?.status ?? null,
+    },
+    appServerAction: plan.appServer.action,
+    appServerHome,
+    appServerReason: plan.appServer.reason,
+    appServerReleaseId: appServerRelease?.releaseId ?? previousAppServerReleaseId,
     appPath,
     appVersion: nextInstalledVersion ?? installedAppVersion,
     gitDirty,

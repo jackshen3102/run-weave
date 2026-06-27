@@ -12,6 +12,21 @@ export const APP_UPDATE_REASON_NATIVE_CHANGE =
 
 export const RUNTIME_UPDATE_REASON =
   "Only runtime-loadable files changed since the last local update.";
+
+export const APP_SERVER_UPDATE_REASON_NO_STATE =
+  "No previous app-server update state was found; updating the global app-server runtime.";
+
+export const APP_SERVER_UPDATE_REASON_CHANGE =
+  "App-server files changed since the last local update.";
+
+export const APP_SERVER_UPDATE_REASON_EXPLICIT =
+  "App-server update was requested explicitly.";
+
+export const APP_SERVER_SKIP_REASON_EXPLICIT =
+  "App-server update was skipped explicitly.";
+
+export const APP_SERVER_SKIP_REASON_NO_CHANGE =
+  "No app-server files changed since the last local update.";
 export const RUNWEAVE_CODESIGN_IDENTITY_ENV = "RUNWEAVE_CODESIGN_IDENTITY";
 
 export const APP_SENSITIVE_PATH_PREFIXES = [
@@ -29,6 +44,17 @@ export const APP_SENSITIVE_PATH_PREFIXES = [
   "scripts/runweave-update-core.mjs",
   "scripts/runweave-update-test-cases.mjs",
   "scripts/serve-local-updates.mjs",
+];
+
+export const APP_SERVER_SENSITIVE_PATH_PREFIXES = [
+  "app-server/",
+  "packages/runweave-cli/src/commands/app-server.ts",
+  "packages/shared/src/app-server",
+  "packages/shared/src/index.ts",
+  "scripts/install-app-server-runtime.mjs",
+  "scripts/install-runweave-bin-shim.mjs",
+  "scripts/verify-app-server-cli-start.mjs",
+  "scripts/verify-app-server-event-center.mjs",
 ];
 
 export function commandName(binary, platform = process.platform) {
@@ -71,6 +97,13 @@ export function resolveDefaultUpdateStatePath(homeDir = os.homedir()) {
 export function isAppSensitivePath(filePath) {
   const normalized = filePath.split(path.sep).join("/");
   return APP_SENSITIVE_PATH_PREFIXES.some((prefix) => {
+    return normalized === prefix || normalized.startsWith(prefix);
+  });
+}
+
+export function isAppServerSensitivePath(filePath) {
+  const normalized = filePath.split(path.sep).join("/");
+  return APP_SERVER_SENSITIVE_PATH_PREFIXES.some((prefix) => {
     return normalized === prefix || normalized.startsWith(prefix);
   });
 }
@@ -175,8 +208,10 @@ export function resolveAppBuildVersion({
 }
 
 export function resolveUpdatePlan({
+  appServerMode = "auto",
   changedFiles,
   forceMode = "auto",
+  hasPreviousAppServerState,
   hasPreviousState,
   installedAppVersion,
   sourceShellVersion,
@@ -184,12 +219,23 @@ export function resolveUpdatePlan({
   if (!["auto", "runtime", "app"].includes(forceMode)) {
     throw new Error(`Unsupported update mode: ${forceMode}`);
   }
+  if (!["auto", "update", "skip"].includes(appServerMode)) {
+    throw new Error(`Unsupported app-server update mode: ${appServerMode}`);
+  }
 
   const files = uniqueSorted(changedFiles ?? []);
   const nativeFiles = files.filter(isAppSensitivePath);
+  const appServerFiles = files.filter(isAppServerSensitivePath);
+  const appServer = resolveAppServerUpdatePlan({
+    appServerFiles,
+    appServerMode,
+    hasPreviousAppServerState:
+      hasPreviousAppServerState ?? hasPreviousState,
+  });
 
   if (forceMode === "app") {
     return {
+      appServer,
       mode: "app",
       reason: "App update was requested explicitly.",
       changedFiles: files,
@@ -199,6 +245,7 @@ export function resolveUpdatePlan({
 
   if (forceMode === "runtime") {
     return {
+      appServer,
       mode: "runtime",
       reason: "Runtime update was requested explicitly.",
       changedFiles: files,
@@ -208,6 +255,7 @@ export function resolveUpdatePlan({
 
   if (!hasPreviousState) {
     return {
+      appServer,
       mode: "app",
       reason: APP_UPDATE_REASON_NO_STATE,
       changedFiles: files,
@@ -221,6 +269,7 @@ export function resolveUpdatePlan({
     compareVersions(sourceShellVersion, installedAppVersion) > 0
   ) {
     return {
+      appServer,
       mode: "app",
       reason: APP_UPDATE_REASON_SHELL_VERSION,
       changedFiles: files,
@@ -230,6 +279,7 @@ export function resolveUpdatePlan({
 
   if (nativeFiles.length > 0) {
     return {
+      appServer,
       mode: "app",
       reason: APP_UPDATE_REASON_NATIVE_CHANGE,
       changedFiles: files,
@@ -238,10 +288,55 @@ export function resolveUpdatePlan({
   }
 
   return {
+    appServer,
     mode: "runtime",
     reason: RUNTIME_UPDATE_REASON,
     changedFiles: files,
     nativeFiles,
+  };
+}
+
+function resolveAppServerUpdatePlan({
+  appServerFiles,
+  appServerMode,
+  hasPreviousAppServerState,
+}) {
+  if (appServerMode === "update") {
+    return {
+      action: "update",
+      changedFiles: appServerFiles,
+      reason: APP_SERVER_UPDATE_REASON_EXPLICIT,
+    };
+  }
+
+  if (appServerMode === "skip") {
+    return {
+      action: "skip",
+      changedFiles: appServerFiles,
+      reason: APP_SERVER_SKIP_REASON_EXPLICIT,
+    };
+  }
+
+  if (!hasPreviousAppServerState) {
+    return {
+      action: "update",
+      changedFiles: appServerFiles,
+      reason: APP_SERVER_UPDATE_REASON_NO_STATE,
+    };
+  }
+
+  if (appServerFiles.length > 0) {
+    return {
+      action: "update",
+      changedFiles: appServerFiles,
+      reason: APP_SERVER_UPDATE_REASON_CHANGE,
+    };
+  }
+
+  return {
+    action: "skip",
+    changedFiles: appServerFiles,
+    reason: APP_SERVER_SKIP_REASON_NO_CHANGE,
   };
 }
 
@@ -251,11 +346,18 @@ export function validateResolvedUpdateOptions({ noRestart, plan }) {
       "--no-restart is only supported for runtime updates. App updates must quit and relaunch Runweave to replace /Applications/Runweave.app.",
     );
   }
+  if (noRestart && plan.appServer?.action === "update") {
+    throw new Error(
+      "--no-restart cannot be combined with an App Server update because updating App Server requires rw app-server restart. Use --app-server=skip to skip App Server or rerun without --no-restart.",
+    );
+  }
 }
 
 export function parseRunweaveUpdateArgs(argv) {
   const result = {
     appPath: null,
+    appServerHome: null,
+    appServerMode: "auto",
     dryRun: false,
     mode: "auto",
     noRestart: false,
@@ -289,6 +391,22 @@ export function parseRunweaveUpdateArgs(argv) {
     }
     if (arg.startsWith("--mode=")) {
       result.mode = arg.slice("--mode=".length);
+      continue;
+    }
+    if (arg === "--app-server") {
+      result.appServerMode = readValue("--app-server");
+      continue;
+    }
+    if (arg.startsWith("--app-server=")) {
+      result.appServerMode = arg.slice("--app-server=".length);
+      continue;
+    }
+    if (arg === "--app-server-home") {
+      result.appServerHome = readValue("--app-server-home");
+      continue;
+    }
+    if (arg.startsWith("--app-server-home=")) {
+      result.appServerHome = arg.slice("--app-server-home=".length);
       continue;
     }
     if (arg === "--repo" || arg === "--source-root") {
