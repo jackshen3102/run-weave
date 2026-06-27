@@ -15,6 +15,8 @@ export interface RuntimeRelease {
   releaseId: string;
   frontendDistDir: string;
   backendEntry: string;
+  cliEntry: string;
+  appServerEntry: string;
   nodePtyDir: string;
   runtimeRoot: string | null;
   releaseDir: string | null;
@@ -32,6 +34,12 @@ interface RuntimeManifest {
     index?: unknown;
   };
   backend?: {
+    entry?: unknown;
+  };
+  cli?: {
+    entry?: unknown;
+  };
+  appServer?: {
     entry?: unknown;
   };
   files?: Array<{
@@ -54,6 +62,12 @@ interface ValidRuntimeManifest extends RuntimeManifest {
     index: string;
   };
   backend: {
+    entry: string;
+  };
+  cli: {
+    entry: string;
+  };
+  appServer: {
     entry: string;
   };
   files: Array<{
@@ -86,6 +100,20 @@ export function resolveBundledRuntimeRelease(
       "app.asar",
       "dist",
       "backend",
+      "index.cjs",
+    ),
+    cliEntry: path.join(
+      resourcesPath,
+      "app.asar",
+      "dist",
+      "cli",
+      "index.cjs",
+    ),
+    appServerEntry: path.join(
+      resourcesPath,
+      "app.asar",
+      "dist",
+      "app-server",
       "index.cjs",
     ),
     nodePtyDir: path.join(resourcesPath, "backend", "node_modules", "node-pty"),
@@ -225,7 +253,9 @@ function validateManifestPaths(
   if (
     !isSafeRelativePath(manifest.frontend?.distDir) ||
     !isSafeRelativePath(manifest.frontend?.index) ||
-    !isSafeRelativePath(manifest.backend?.entry)
+    !isSafeRelativePath(manifest.backend?.entry) ||
+    !isSafeRelativePath(manifest.cli?.entry) ||
+    !isSafeRelativePath(manifest.appServer?.entry)
   ) {
     return false;
   }
@@ -275,7 +305,18 @@ export function resolveExternalRuntimeRelease(options: {
     );
     const frontendIndex = resolveInside(releaseDir, manifest.frontend.index);
     const backendEntry = resolveInside(releaseDir, manifest.backend.entry);
-    if (!frontendDistDir || !frontendIndex || !backendEntry) {
+    const cliEntry = resolveInside(releaseDir, manifest.cli.entry);
+    const appServerEntry = resolveInside(
+      releaseDir,
+      manifest.appServer.entry,
+    );
+    if (
+      !frontendDistDir ||
+      !frontendIndex ||
+      !backendEntry ||
+      !cliEntry ||
+      !appServerEntry
+    ) {
       return null;
     }
 
@@ -291,6 +332,8 @@ export function resolveExternalRuntimeRelease(options: {
     const filesToCheck = [
       frontendIndex,
       backendEntry,
+      cliEntry,
+      appServerEntry,
       ...manifestFiles.map((file) => file.filePath),
     ];
 
@@ -309,6 +352,8 @@ export function resolveExternalRuntimeRelease(options: {
       releaseId,
       frontendDistDir,
       backendEntry,
+      cliEntry,
+      appServerEntry,
       nodePtyDir: resolveBundledRuntimeRelease(options.resourcesPath)
         .nodePtyDir,
       runtimeRoot: options.runtimeRoot,

@@ -4,40 +4,41 @@
 
 ## 路由
 
-| 需求                                     | 阅读                                                            |
-| ---------------------------------------- | --------------------------------------------------------------- |
-| 开源项目入口与快速开始                   | ../README.md 或 ../README.zh-CN.md                              |
-| 架构/网络拓扑                            | architecture/network-topology.md                                |
-| app-server Event Center                  | architecture/app-server-event-center.md                         |
-| App 移动端边界                           | architecture/app-mobile.md                                      |
-| App 后端连接管理                         | architecture/app-mobile.md#配置与安全                           |
-| App 终端语音输入                         | architecture/app-mobile.md#app-终端语音输入                     |
-| App 终端输入与快捷键                     | architecture/app-mobile.md#app-终端详情                         |
-| 终端状态模型                             | architecture/terminal-state.md                                  |
-| 终端代码预览 / Terminal Browser          | architecture/terminal-code-preview.md                           |
-| Web Terminal 快捷指令                    | architecture/terminal-code-preview.md#快捷指令入口              |
-| Terminal Browser 注释模式                | architecture/terminal-code-preview.md#terminal-browser-注释模式 |
-| 终端 tmux 恢复                           | architecture/terminal-tmux-recovery.md                          |
-| 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md                       |
-| 终端任务完成通知（桌面/飞书）            | architecture/terminal-completion-notifications.md               |
-| Multi-Agent Orchestrator / Do-A-IDEM     | architecture/multi-agent-orchestrator.md                        |
-| 本机系统资源监控                         | architecture/system-monitor.md                                  |
-| Terminal CLI                             | cli/terminal-cli.md                                             |
-| Runweave Agent CLI 控制面测试            | testing/runweave-cli-control-plane-test-cases.md                |
-| 本地客户端更新测试                       | testing/runweave-local-client-update-test-cases.md              |
-| Multi-Agent Orchestrator 测试            | testing/2026-06-17-multi-agent-orchestrator-test-cases.md       |
-| 质量体系概览                             | quality/quality-harness.md                                      |
-| AI 诊断日志 / Web 日志上报               | quality/ai-diagnostic-logging.md                                |
-| 后端滚动日志                             | quality/backend-rolling-logs.md                                 |
-| 按需录屏的浏览器 MCP 验证                | quality/recorded-browser-mcp-verification.md                    |
-| 终端性能优化                             | quality/terminal-performance-optimization.md                    |
-| 测试层级与命名                           | testing/layers.md                                               |
-| 测试命令选择                             | testing/command-matrix.md                                       |
-| Terminal Browser CDP/MCP 测试            | testing/terminal-browser-cdp-mcp-test-cases.md                  |
-| Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md           |
-| 终端回归                                 | testing/runbooks/terminal-vim.md                                |
-| 部署/环境概览                            | deployment/overview.md                                          |
-| Electron 本地自动更新                    | deployment/electron-local-updates.md                            |
+| 需求                                     | 阅读                                                                               |
+| ---------------------------------------- | ---------------------------------------------------------------------------------- |
+| 开源项目入口与快速开始                   | ../README.md 或 ../README.zh-CN.md                                                 |
+| 架构/网络拓扑                            | architecture/network-topology.md                                                   |
+| app-server Event Center                  | architecture/app-server-event-center.md                                            |
+| app-server CLI 启动测试                  | testing/app-server-event-center-test-cases.md#as-ec-008-cli-owned-app-server-start |
+| App 移动端边界                           | architecture/app-mobile.md                                                         |
+| App 后端连接管理                         | architecture/app-mobile.md#配置与安全                                              |
+| App 终端语音输入                         | architecture/app-mobile.md#app-终端语音输入                                        |
+| App 终端输入与快捷键                     | architecture/app-mobile.md#app-终端详情                                            |
+| 终端状态模型                             | architecture/terminal-state.md                                                     |
+| 终端代码预览 / Terminal Browser          | architecture/terminal-code-preview.md                                              |
+| Web Terminal 快捷指令                    | architecture/terminal-code-preview.md#快捷指令入口                                 |
+| Terminal Browser 注释模式                | architecture/terminal-code-preview.md#terminal-browser-注释模式                    |
+| 终端 tmux 恢复                           | architecture/terminal-tmux-recovery.md                                             |
+| 终端完成事件 Hook                        | architecture/terminal-completion-hooks.md                                          |
+| 终端任务完成通知（桌面/飞书）            | architecture/terminal-completion-notifications.md                                  |
+| Multi-Agent Orchestrator / Do-A-IDEM     | architecture/multi-agent-orchestrator.md                                           |
+| 本机系统资源监控                         | architecture/system-monitor.md                                                     |
+| Terminal CLI                             | cli/terminal-cli.md                                                                |
+| Runweave Agent CLI 控制面测试            | testing/runweave-cli-control-plane-test-cases.md                                   |
+| 本地客户端更新测试                       | testing/runweave-local-client-update-test-cases.md                                 |
+| Multi-Agent Orchestrator 测试            | testing/2026-06-17-multi-agent-orchestrator-test-cases.md                          |
+| 质量体系概览                             | quality/quality-harness.md                                                         |
+| AI 诊断日志 / Web 日志上报               | quality/ai-diagnostic-logging.md                                                   |
+| 后端滚动日志                             | quality/backend-rolling-logs.md                                                    |
+| 按需录屏的浏览器 MCP 验证                | quality/recorded-browser-mcp-verification.md                                       |
+| 终端性能优化                             | quality/terminal-performance-optimization.md                                       |
+| 测试层级与命名                           | testing/layers.md                                                                  |
+| 测试命令选择                             | testing/command-matrix.md                                                          |
+| Terminal Browser CDP/MCP 测试            | testing/terminal-browser-cdp-mcp-test-cases.md                                     |
+| Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md                              |
+| 终端回归                                 | testing/runbooks/terminal-vim.md                                                   |
+| 部署/环境概览                            | deployment/overview.md                                                             |
+| Electron 本地自动更新                    | deployment/electron-local-updates.md                                               |
 
 ## 维护边界
 

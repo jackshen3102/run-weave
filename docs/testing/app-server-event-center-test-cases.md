@@ -15,6 +15,7 @@ and backend-degraded-client semantics.
 
 ```bash
 pnpm app-server:verify
+pnpm app-server:verify-cli-start
 pnpm toolkit:verify-hooks
 pnpm --filter @runweave/app-server typecheck
 pnpm --filter @runweave/app-server lint
@@ -118,17 +119,18 @@ Expected:
 
 Automated by: `pnpm toolkit:verify-hooks`.
 
-## AS-EC-006 Backend Degraded Client
+## AS-EC-006 Backend Discover-Only Degraded Client
 
 Steps:
 
 1. Start backend without app-server.
-2. Start backend with app-server available.
+2. Let backend try to discover app-server after its control plane URL is known.
 3. Write scoped and unscoped `agent.completion` events.
 
 Expected:
 
-- Backend startup is not blocked when app-server is unavailable.
+- Backend startup is not blocked when app-server discovery fails or times out.
+- Backend does not import or spawn app-server.
 - When app-server is available, backend posts `backend.started` and connects to
   `/events/stream?kind=agent.completion`.
 - Backend only processes events whose `terminalSessionId` or `projectId` belongs
@@ -181,5 +183,59 @@ Verification:
 
 - This case is derived from `app-server/src/auth.ts`,
   `app-server/src/http-server.ts`, and `app-server/src/websocket-server.ts`.
-- Add these assertions to `pnpm app-server:verify` before treating this case as
-  automated.
+- Automated by: `pnpm app-server:verify`.
+
+## AS-EC-008 CLI-Owned App-Server Start
+
+Steps:
+
+1. Build the Runweave CLI.
+2. Run `rw app-server start` with a temporary empty state dir.
+3. Run `rw app-server start` again with the same state dir.
+4. Write a stale lock and run `rw app-server start`.
+5. Run `rw app-server start` concurrently from multiple callers.
+6. Run `rw app-server start` with a missing CLI app-server entry.
+
+Expected:
+
+- Empty state starts one app-server and returns redacted status JSON.
+- Existing healthy owner is reused; a second owner is not created.
+- Stale lock is removed and replaced by a healthy owner.
+- Concurrent CLI starts converge on one healthy owner.
+- Missing entry exits nonzero and reports unavailable state.
+- Token value is never printed to stdout.
+
+Automated by: `pnpm app-server:verify-cli-start`.
+
+## AS-EC-009 CLI App-Server Status And Start
+
+Steps:
+
+1. Run `rw app-server status` with an empty temporary state dir.
+2. Run `rw app-server start`.
+3. Run `rw app-server status` again.
+
+Expected:
+
+- First status reports unavailable and does not create a lock.
+- Start creates a healthy owner and reports `baseUrl`, `pid`, lock path, and `hasToken`.
+- Second status reports the same owner.
+- Token value is never printed to stdout.
+
+Automated by: `pnpm app-server:verify-cli-start`.
+
+## AS-EC-010 Hook Does Not Auto-Start App-Server
+
+Steps:
+
+1. Run hook verification with a temporary `HOME`.
+2. Do not provide `RUNWEAVE_APP_SERVER_URL` or `RUNWEAVE_APP_SERVER_TOKEN`.
+3. Provide backend fallback endpoints and Runweave terminal identity.
+
+Expected:
+
+- Hook posts to backend fallback endpoints.
+- Hook does not create `~/.runweave/app-server/app-server.lock.json`.
+- Hook process exit code remains `0`.
+
+Automated by: `pnpm toolkit:verify-hooks`.

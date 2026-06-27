@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -15,6 +15,7 @@ const stateDir = await mkdtemp(path.join(os.tmpdir(), "runweave-app-server-"));
 
 let appServer = null;
 try {
+  run("pnpm", ["--filter", "@runweave/app-server", "build"]);
   appServer = await startAppServer();
   const lock = await readLock();
   const token = (await readFile(path.join(stateDir, "app-server-token"), "utf8"))
@@ -93,6 +94,7 @@ try {
   const afterRestart = await getJson(`${restartedBaseUrl}/events?after=0`, token);
   assert.equal(afterRestart.events.length, 2);
   assert.equal(afterRestart.latestEventId, "2");
+  await verifyAuthOriginQueryAndPayloadValidation(restartedBaseUrl, token);
 
   console.log("app-server event center verification passed");
 } finally {
@@ -103,7 +105,7 @@ try {
 }
 
 function startAppServer() {
-  const child = spawn("pnpm", ["--filter", "@runweave/app-server", "start"], {
+  const child = spawn(process.execPath, ["app-server/dist/index.js"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -142,7 +144,7 @@ async function waitForReady(child) {
 
 function runSecondAppServer() {
   return new Promise((resolve, reject) => {
-    const child = spawn("pnpm", ["--filter", "@runweave/app-server", "start"], {
+    const child = spawn(process.execPath, ["app-server/dist/index.js"], {
       cwd: repoRoot,
       env: {
         ...process.env,
@@ -163,6 +165,23 @@ function runSecondAppServer() {
     });
     child.on("error", reject);
     child.on("close", (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
+function run(command, args) {
+  const child = spawn(command, args, {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+  return new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${command} ${args.join(" ")} exited with ${code}`));
+    });
   });
 }
 
@@ -190,6 +209,201 @@ async function postEvent(baseUrl, token, body) {
     body: JSON.stringify(body),
   });
   return { status: response.status, body: await response.json() };
+}
+
+async function verifyAuthOriginQueryAndPayloadValidation(baseUrl, token) {
+  const before = await readEventLogLineCount();
+
+  const health = await fetch(`${baseUrl}/healthz`);
+  assert.equal(health.status, 200);
+  const healthBody = await health.json();
+  assert.equal(healthBody.service, "runweave-app-server");
+  assert.equal(healthBody.protocolVersion, 1);
+
+  const ready = await fetch(`${baseUrl}/readyz`);
+  assert.equal(ready.status, 200);
+
+  await assertHttpStatus(`${baseUrl}/events`, {
+    expectedStatus: 401,
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    body: JSON.stringify(validAgentCompletionEvent()),
+  });
+  await assertHttpStatus(`${baseUrl}/events`, {
+    expectedStatus: 401,
+    headers: {
+      Authorization: "Bearer wrong-token",
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    body: JSON.stringify(validAgentCompletionEvent()),
+  });
+  await assertHttpStatus(`${baseUrl}/events`, {
+    expectedStatus: 403,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Origin: "https://example.com",
+    },
+    method: "POST",
+    body: JSON.stringify(validAgentCompletionEvent()),
+  });
+  await assertHttpStatus(`${baseUrl}/events`, {
+    expectedStatus: 401,
+  });
+  await assertHttpStatus(`${baseUrl}/events/latest`, {
+    expectedStatus: 401,
+  });
+  await assertHttpStatus(`${baseUrl}/events?after=abc`, {
+    expectedStatus: 400,
+    token,
+  });
+  await assertHttpStatus(`${baseUrl}/events?limit=0`, {
+    expectedStatus: 400,
+    token,
+  });
+
+  await assertPostRejected(baseUrl, token, {
+    ...validAgentHookEvent(),
+    scope: {},
+  });
+  await assertPostRejected(baseUrl, token, {
+    ...validAgentHookEvent(),
+    payload: "not-object",
+  });
+  await assertPostRejected(baseUrl, token, {
+    ...validAgentCompletionEvent(),
+    payload: {
+      completionReason: "hook_stop",
+      source: "invalid-source",
+    },
+  });
+  await assertPostRejected(baseUrl, token, {
+    ...validAgentCompletionEvent(),
+    payload: {
+      completionReason: "unsupported",
+      source: "codex",
+    },
+  });
+
+  await assertUnauthorizedWebSocket(
+    `${baseUrl.replace(/^http/, "ws")}/events/stream`,
+  );
+  await assertUnauthorizedWebSocket(
+    `${baseUrl.replace(/^http/, "ws")}/events/stream`,
+    "wrong-token",
+  );
+  await assertPolicyCloseWebSocket(
+    `${baseUrl.replace(/^http/, "ws")}/events/stream?after=abc`,
+    token,
+  );
+
+  assert.equal(await readEventLogLineCount(), before);
+
+  const valid = await postEvent(baseUrl, token, validAgentCompletionEvent());
+  assert.equal(valid.status, 201);
+  const queried = await getJson(
+    `${baseUrl}/events?after=0&kind=agent.completion`,
+    token,
+  );
+  assert.equal(queried.events.some((event) => event.id === valid.body.event.id), true);
+}
+
+async function assertHttpStatus(url, options) {
+  const headers = { ...(options.headers ?? {}) };
+  if (options.token) {
+    headers.Authorization = `Bearer ${options.token}`;
+  }
+  const response = await fetch(url, {
+    method: options.method ?? "GET",
+    headers,
+    body: options.body,
+  });
+  assert.equal(response.status, options.expectedStatus);
+}
+
+async function assertPostRejected(baseUrl, token, body) {
+  const response = await postEvent(baseUrl, token, body);
+  assert.equal(response.status, 400);
+}
+
+function validAgentHookEvent() {
+  return {
+    kind: "agent.hook",
+    source: { app: "hook", instanceId: "verify-hook", pid: process.pid },
+    scope: { terminalSessionId: "terminal-verify" },
+    payload: { source: "codex" },
+  };
+}
+
+function validAgentCompletionEvent() {
+  return {
+    kind: "agent.completion",
+    source: { app: "hook", instanceId: "verify-completion", pid: process.pid },
+    scope: { terminalSessionId: "terminal-verify" },
+    payload: {
+      completionReason: "hook_stop",
+      source: "codex",
+    },
+  };
+}
+
+function assertUnauthorizedWebSocket(url, token) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url, {
+      ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+    });
+    socket.on("open", () => {
+      socket.close();
+      reject(new Error("WebSocket unexpectedly opened"));
+    });
+    socket.on("unexpected-response", (_request, response) => {
+      try {
+        assert.equal(response.statusCode, 401);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+    socket.on("error", reject);
+  });
+}
+
+function assertPolicyCloseWebSocket(url, token) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    socket.on("message", (raw) => {
+      const message = JSON.parse(String(raw));
+      if (message.type === "error") {
+        assert.match(message.message, /after must be a numeric event id/);
+      }
+    });
+    socket.on("close", (code) => {
+      try {
+        assert.equal(code, 1008);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+    socket.on("error", reject);
+  });
+}
+
+async function readEventLogLineCount() {
+  const eventLogPath = path.join(stateDir, "app-server-events.jsonl");
+  try {
+    const eventLogStat = await stat(eventLogPath);
+    if (eventLogStat.size === 0) {
+      return 0;
+    }
+    const content = await readFile(eventLogPath, "utf8");
+    return content.split(/\r?\n/).filter(Boolean).length;
+  } catch {
+    return 0;
+  }
 }
 
 async function getJson(url, token) {

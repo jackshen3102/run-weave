@@ -2,7 +2,7 @@ import type {
   AppServerEventEnvelope,
   CreateAppServerEventRequest,
 } from "@runweave/shared";
-import type { AppServerEventStore, ListEventsOptions } from "./event-store";
+import type { AppServerEventStore, ListEventsOptions } from "./event-store.js";
 
 export type AppServerEventListener = (event: AppServerEventEnvelope) => void;
 

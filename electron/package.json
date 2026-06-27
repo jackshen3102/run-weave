@@ -14,7 +14,6 @@
     "dist": "electron-builder"
   },
   "dependencies": {
-    "@runweave/app-server": "workspace:*",
     "@runweave/shared": "workspace:*",
     "electron-updater": "^6.6.2",
     "pidusage": "^4.0.1",

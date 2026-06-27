@@ -4,13 +4,13 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import express from "express";
 import { migrateLegacyBrowserProfileRootIfNeeded } from "@runweave/shared/src/browser-profile-node";
+import { discoverAppServer } from "@runweave/shared/src/app-server-node";
 import { LowDbAuthStore } from "./auth/lowdb-store";
 import { loadAuthConfig } from "./auth/config";
 import { createRequireAuth } from "./auth/middleware";
 import { AuthService } from "./auth/service";
 import type { AuthStore } from "./auth/store";
 import { AppServerClient } from "./app-server/client";
-import { discoverAppServer } from "./app-server/discovery";
 import { AppServerEventConsumer } from "./app-server/event-consumer";
 import type { AppServerEventConsumerHandle } from "./app-server/event-consumer";
 import { AppServerEventCursorStore } from "./app-server/event-cursor-store";
@@ -284,7 +284,7 @@ async function initializeAppServerEventIntegration(
   backendBaseUrl: string,
 ): Promise<void> {
   try {
-    const connection = await discoverAppServer();
+    const connection = await discoverAppServer({ env: process.env });
     if (!connection) {
       logger.info("backend.app-server.unavailable", {
         component: "app-server",

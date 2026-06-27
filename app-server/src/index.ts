@@ -1,17 +1,17 @@
 import http from "node:http";
 import { mkdir } from "node:fs/promises";
-import { resolveAppServerConfig } from "./config";
-import { loadOrCreateToken } from "./auth";
-import { AppServerEventCenter } from "./event-center";
-import { AppServerEventStore } from "./event-store";
-import { createHttpApp } from "./http-server";
+import { resolveAppServerConfig } from "./config.js";
+import { loadOrCreateToken } from "./auth.js";
+import { AppServerEventCenter } from "./event-center.js";
+import { AppServerEventStore } from "./event-store.js";
+import { createHttpApp } from "./http-server.js";
 import {
+  acquireSingletonLock,
   preflightSingleton,
   releaseLock,
-  writeLock,
   type AppServerLock,
-} from "./singleton";
-import { attachEventStreamWebSocketServer } from "./websocket-server";
+} from "./singleton.js";
+import { attachEventStreamWebSocketServer } from "./websocket-server.js";
 
 async function main(): Promise<void> {
   const config = resolveAppServerConfig();
@@ -45,7 +45,14 @@ async function main(): Promise<void> {
     startedAt: new Date().toISOString(),
     version: config.version,
   };
-  await writeLock(config.lockPath, lock);
+  const acquire = await acquireSingletonLock(config.lockPath, lock);
+  if (acquire.status === "owned") {
+    await closeServer(server);
+    console.log(
+      `Runweave app-server already running at http://${acquire.lock.host}:${acquire.lock.port}`,
+    );
+    return;
+  }
   console.log(`Runweave app-server listening at http://${lock.host}:${port}`);
 
   attachShutdownHandlers(server, config.lockPath);
@@ -70,6 +77,10 @@ function listen(
   });
 }
 
+function closeServer(server: http.Server): Promise<void> {
+  return new Promise((resolve) => server.close(() => resolve()));
+}
+
 function attachShutdownHandlers(server: http.Server, lockPath: string): void {
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
@@ -77,7 +88,7 @@ function attachShutdownHandlers(server: http.Server, lockPath: string): void {
       return;
     }
     shuttingDown = true;
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await closeServer(server);
     await releaseLock(lockPath);
     process.exit(0);
   };

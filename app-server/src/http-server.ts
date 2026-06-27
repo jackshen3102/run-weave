@@ -7,12 +7,12 @@ import type {
 import {
   APP_SERVER_PROTOCOL_VERSION,
   APP_SERVER_SERVICE_NAME,
-} from "./singleton";
+} from "./singleton.js";
 import {
   rejectNonLoopbackOrigin,
   requireBearerToken,
-} from "./auth";
-import type { AppServerEventCenter } from "./event-center";
+} from "./auth.js";
+import type { AppServerEventCenter } from "./event-center.js";
 
 const MAX_EVENTS_LIMIT = 500;
 
