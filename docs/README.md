@@ -8,7 +8,8 @@
 | ---------------------------------------- | ---------------------------------------------------------------------------------- |
 | 开源项目入口与快速开始                   | ../README.md 或 ../README.zh-CN.md                                                 |
 | 架构/网络拓扑                            | architecture/network-topology.md                                                   |
-| app-server Event Center                  | architecture/app-server-event-center.md                                            |
+| app-server 架构概览                      | architecture/app-server-architecture.md                                            |
+| app-server Event Center 细节             | architecture/app-server-event-center.md                                            |
 | app-server CLI 启动测试                  | testing/app-server-event-center-test-cases.md#as-ec-008-cli-owned-app-server-start |
 | App 移动端边界                           | architecture/app-mobile.md                                                         |
 | App 后端连接管理                         | architecture/app-mobile.md#配置与安全                                              |

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -15,11 +15,13 @@ const stateDir = await mkdtemp(path.join(os.tmpdir(), "runweave-app-server-"));
 
 let appServer = null;
 try {
-  run("pnpm", ["--filter", "@runweave/app-server", "build"]);
+  await run("pnpm", ["--filter", "@runweave/app-server", "build"]);
+  await verifyEventLogRetention();
   appServer = await startAppServer();
   const lock = await readLock();
-  const token = (await readFile(path.join(stateDir, "app-server-token"), "utf8"))
-    .trim();
+  const token = (
+    await readFile(path.join(stateDir, "app-server-token"), "utf8")
+  ).trim();
   const baseUrl = `http://${lock.host}:${lock.port}`;
 
   const duplicate = await runSecondAppServer();
@@ -91,7 +93,10 @@ try {
   appServer = await startAppServer();
   const restartedLock = await readLock();
   const restartedBaseUrl = `http://${restartedLock.host}:${restartedLock.port}`;
-  const afterRestart = await getJson(`${restartedBaseUrl}/events?after=0`, token);
+  const afterRestart = await getJson(
+    `${restartedBaseUrl}/events?after=0`,
+    token,
+  );
   assert.equal(afterRestart.events.length, 2);
   assert.equal(afterRestart.latestEventId, "2");
   await verifyAuthOriginQueryAndPayloadValidation(restartedBaseUrl, token);
@@ -197,6 +202,79 @@ async function readLock() {
   return JSON.parse(
     await readFile(path.join(stateDir, "app-server.lock.json"), "utf8"),
   );
+}
+
+async function verifyEventLogRetention() {
+  const retentionStateDir = await mkdtemp(
+    path.join(os.tmpdir(), "runweave-app-server-retention-"),
+  );
+  try {
+    const { AppServerEventStore } =
+      await import("../app-server/dist/event-store.js");
+    const eventLogPath = path.join(
+      retentionStateDir,
+      "app-server-events.jsonl",
+    );
+    const oldEvent = createStoredEvent({
+      id: "20",
+      createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+      dedupeKey: "retention:expired",
+      message: "expired",
+    });
+    const recentEvent = createStoredEvent({
+      id: "21",
+      createdAt: new Date().toISOString(),
+      dedupeKey: "retention:recent",
+      message: "recent",
+    });
+    await writeFile(
+      eventLogPath,
+      `${JSON.stringify(oldEvent)}\n${JSON.stringify(recentEvent)}\n`,
+    );
+
+    const store = new AppServerEventStore(eventLogPath);
+    await store.initialize();
+    assert.deepEqual(
+      store
+        .listAfter({ after: null, kinds: [], limit: 10 })
+        .map((event) => event.id),
+      ["21"],
+    );
+    assert.equal(store.getLatestId(), "21");
+
+    const recreated = await store.append({
+      kind: "diagnostic.created",
+      source: { app: "cli", instanceId: "retention-verify", pid: process.pid },
+      dedupeKey: "retention:expired",
+      payload: { message: "recreated" },
+    });
+    assert.equal(recreated.created, true);
+    assert.equal(recreated.event.id, "22");
+
+    const lines = (await readFile(eventLogPath, "utf8"))
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(
+      lines.map((event) => event.id),
+      ["21", "22"],
+    );
+  } finally {
+    await rm(retentionStateDir, { recursive: true, force: true });
+  }
+}
+
+function createStoredEvent({ id, createdAt, dedupeKey, message }) {
+  return {
+    id,
+    version: 1,
+    kind: "diagnostic.created",
+    source: { app: "cli", instanceId: "retention-verify", pid: process.pid },
+    dedupeKey,
+    correlationId: null,
+    payload: { message },
+    createdAt,
+  };
 }
 
 async function postEvent(baseUrl, token, body) {
@@ -306,7 +384,10 @@ async function verifyAuthOriginQueryAndPayloadValidation(baseUrl, token) {
     `${baseUrl}/events?after=0&kind=agent.completion`,
     token,
   );
-  assert.equal(queried.events.some((event) => event.id === valid.body.event.id), true);
+  assert.equal(
+    queried.events.some((event) => event.id === valid.body.event.id),
+    true,
+  );
 }
 
 async function assertHttpStatus(url, options) {
