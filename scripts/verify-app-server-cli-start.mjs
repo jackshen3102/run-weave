@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,68 +11,99 @@ const cliEntry = path.join(repoRoot, "packages", "runweave-cli", "dist", "index.
 await run("pnpm", ["--filter", "@runweave/cli", "build"]);
 
 await verifyStatusDoesNotStart();
-await verifyStartsWithoutOwner();
+await verifyStartFailsWithoutRuntime();
+await verifyInstallStartsAndStops();
 await verifyReusesOwner();
+await verifyRestartKeepsRuntime();
 await verifyStaleLock();
 await verifyConcurrentStart();
-await verifyWrongEntryFails();
+await verifyBadInstallFails();
 
 console.log("app-server CLI start verification passed");
 
 async function verifyStatusDoesNotStart() {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-status-"));
+  const home = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-status-"));
   try {
-    const status = await runCli(["app-server", "status"], { stateDir });
+    const status = await runCli(["app-server", "status"], { home });
     assert.equal(status.code, 0);
     assert.equal(status.json.available, false);
-    assert.equal(status.json.hasToken, false);
-    await assertFileMissing(path.join(stateDir, "app-server.lock.json"));
+    assert.equal(status.json.currentRuntime, null);
   } finally {
-    await rm(stateDir, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
   }
 }
 
-async function verifyStartsWithoutOwner() {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-start-"));
+async function verifyStartFailsWithoutRuntime() {
+  const home = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-no-runtime-"));
   try {
-    const start = await runCli(["app-server", "start"], { stateDir });
+    const start = await runCli(["app-server", "start"], { home });
+    assert.equal(start.code, 1);
+    assert.equal(start.json.started, false);
+    assert.match(start.json.error, /global runtime is not installed/);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}
+
+async function verifyInstallStartsAndStops() {
+  const home = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-start-"));
+  try {
+    await installRuntime(home, "verify-start");
+    const start = await runCli(["app-server", "start"], { home });
     assert.equal(start.code, 0);
     assert.equal(start.json.started, true);
-    const status = await readStatus(stateDir);
-    assert.equal(status.available, true);
-    assert.equal(status.baseUrl, start.json.baseUrl);
-    assert.equal(status.pid, start.json.pid);
-    await assertTokenRedacted(stateDir, [start.stdout, JSON.stringify(start.json)]);
-    await assertTokenRedacted(stateDir, [JSON.stringify(status)]);
-    await stopStatusOwner(status);
+    assert.equal(start.json.lock.source, "global");
+    assert.equal(start.json.lock.releaseId, "verify-start");
+    assert.ok(start.json.lock.entry.includes("verify-start"));
+    await assertTokenRedacted(home, [start.stdout, JSON.stringify(start.json)]);
+
+    const stop = await runCli(["app-server", "stop"], { home });
+    assert.equal(stop.code, 0);
+    assert.equal(stop.json.stopped, true);
   } finally {
-    await rm(stateDir, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
   }
 }
 
 async function verifyReusesOwner() {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-reuse-"));
+  const home = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-reuse-"));
   try {
-    const first = await runCli(["app-server", "start"], { stateDir });
-    const firstStatus = await readStatus(stateDir);
-    const second = await runCli(["app-server", "start"], { stateDir });
-    const secondStatus = await readStatus(stateDir);
+    await installRuntime(home, "verify-reuse");
+    const first = await runCli(["app-server", "start"], { home });
+    const second = await runCli(["app-server", "start"], { home });
     assert.equal(first.code, 0);
     assert.equal(second.code, 0);
     assert.equal(second.json.baseUrl, first.json.baseUrl);
-    assert.equal(secondStatus.pid, firstStatus.pid);
-    await assertTokenRedacted(stateDir, [first.stdout, second.stdout]);
-    await stopStatusOwner(secondStatus);
+    assert.equal(second.json.pid, first.json.pid);
+    await stopStatusOwner(second.json);
   } finally {
-    await rm(stateDir, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  }
+}
+
+async function verifyRestartKeepsRuntime() {
+  const home = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-restart-"));
+  try {
+    await installRuntime(home, "verify-restart");
+    const first = await runCli(["app-server", "start"], { home });
+    const restarted = await runCli(["app-server", "restart"], { home });
+    assert.equal(first.code, 0);
+    assert.equal(restarted.code, 0);
+    assert.equal(restarted.json.started, true);
+    assert.equal(restarted.json.lock.releaseId, "verify-restart");
+    assert.notEqual(restarted.json.pid, first.json.pid);
+    await stopStatusOwner(restarted.json);
+  } finally {
+    await rm(home, { recursive: true, force: true });
   }
 }
 
 async function verifyStaleLock() {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-stale-"));
+  const home = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-stale-"));
   try {
+    await installRuntime(home, "verify-stale");
     await writeFile(
-      path.join(stateDir, "app-server.lock.json"),
+      path.join(home, "app-server.lock.json"),
       JSON.stringify(
         {
           pid: 999999,
@@ -80,95 +111,75 @@ async function verifyStaleLock() {
           port: 9,
           startedAt: new Date().toISOString(),
           version: "0.1.0",
+          source: "global",
+          releaseId: "verify-stale",
+          entry: path.join(home, "runtime", "releases", "verify-stale", "app-server", "index.cjs"),
+          runtimeRoot: path.join(home, "runtime"),
         },
         null,
         2,
       ),
     );
-    await writeFile(path.join(stateDir, "app-server-token"), "stale-token\n");
+    await writeFile(path.join(home, "app-server-token"), "stale-token\n");
 
-    const start = await runCli(["app-server", "start"], { stateDir });
+    const start = await runCli(["app-server", "start"], { home });
     assert.equal(start.code, 0);
-    const status = await readStatus(stateDir);
-    assert.equal(status.available, true);
-    assert.notEqual(status.pid, 999999);
-    await assertTokenRedacted(stateDir, [start.stdout, JSON.stringify(status)]);
-    await stopStatusOwner(status);
+    assert.notEqual(start.json.pid, 999999);
+    await stopStatusOwner(start.json);
   } finally {
-    await rm(stateDir, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
   }
 }
 
 async function verifyConcurrentStart() {
-  const stateDir = await mkdtemp(
-    path.join(os.tmpdir(), "runweave-cli-concurrent-"),
-  );
+  const home = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-concurrent-"));
   try {
+    await installRuntime(home, "verify-concurrent");
     const results = await Promise.all(
-      Array.from({ length: 5 }, () =>
-        runCli(["app-server", "start"], { stateDir }),
-      ),
+      Array.from({ length: 5 }, () => runCli(["app-server", "start"], { home })),
     );
     assert.equal(results.every((result) => result.code === 0), true);
-    assert.equal(
-      new Set(results.map((result) => result.json.baseUrl)).size,
-      1,
-    );
-    for (const result of results) {
-      assert.equal(result.json.started, true);
-    }
-    const status = await readStatus(stateDir);
-    assert.equal(status.available, true);
-    await assertTokenRedacted(
-      stateDir,
-      results.map((result) => result.stdout),
-    );
-    await stopStatusOwner(status);
+    assert.equal(new Set(results.map((result) => result.json.baseUrl)).size, 1);
+    await stopStatusOwner(results[0].json);
   } finally {
-    await rm(stateDir, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
   }
 }
 
-async function verifyWrongEntryFails() {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-bad-"));
+async function verifyBadInstallFails() {
+  const home = await mkdtemp(path.join(os.tmpdir(), "runweave-cli-bad-install-"));
   try {
-    const start = await runCli(["app-server", "start"], {
-      extraEnv: {
-        RUNWEAVE_CLI_APP_SERVER_ENTRY: path.join(stateDir, "missing-entry.js"),
-      },
-      stateDir,
-    });
-    assert.equal(start.code, 1);
-    assert.equal(start.json.started, false);
-    const status = await readStatus(stateDir);
-    assert.equal(status.available, false);
+    const install = await runCli(
+      [
+        "app-server",
+        "install",
+        "--entry",
+        path.join(home, "missing.cjs"),
+        "--release-id",
+        "bad-install",
+      ],
+      { home },
+    );
+    assert.equal(install.code, 1);
   } finally {
-    await rm(stateDir, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
   }
 }
 
-async function assertTokenRedacted(stateDir, outputs) {
-  const token = (await readFile(path.join(stateDir, "app-server-token"), "utf8"))
-    .trim();
+async function installRuntime(home, releaseId) {
+  await run("node", [
+    "scripts/install-app-server-runtime.mjs",
+    `--home=${home}`,
+    `--release-id=${releaseId}`,
+  ]);
+}
+
+async function assertTokenRedacted(home, outputs) {
+  const token = (await readFile(path.join(home, "app-server-token"), "utf8")).trim();
   assert.ok(token);
   for (const output of outputs) {
     assert.equal(output.includes(token), false);
   }
-}
-
-async function assertFileMissing(filePath) {
-  try {
-    await access(filePath);
-  } catch {
-    return;
-  }
-  assert.fail(`Expected file to be missing: ${filePath}`);
-}
-
-async function readStatus(stateDir) {
-  const status = await runCli(["app-server", "status"], { stateDir });
-  assert.equal(status.code, 0);
-  return status.json;
 }
 
 function runCli(args, options) {
@@ -177,8 +188,7 @@ function runCli(args, options) {
       cwd: repoRoot,
       env: {
         ...process.env,
-        ...options.extraEnv,
-        RUNWEAVE_APP_SERVER_STATE_DIR: options.stateDir,
+        RUNWEAVE_APP_SERVER_HOME: options.home,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

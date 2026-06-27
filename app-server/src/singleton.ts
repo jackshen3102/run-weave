@@ -10,6 +10,10 @@ export interface AppServerLock {
   port: number;
   startedAt: string;
   version: string;
+  source: "global" | "local" | "bundled";
+  releaseId: string | null;
+  entry: string;
+  runtimeRoot: string | null;
 }
 
 export type SingletonPreflightResult =
@@ -116,7 +120,13 @@ function isLock(value: unknown): value is AppServerLock {
     record.port > 0 &&
     record.port <= 65535 &&
     typeof record.startedAt === "string" &&
-    typeof record.version === "string"
+    typeof record.version === "string" &&
+    (record.source === "global" ||
+      record.source === "local" ||
+      record.source === "bundled") &&
+    (typeof record.releaseId === "string" || record.releaseId === null) &&
+    typeof record.entry === "string" &&
+    (typeof record.runtimeRoot === "string" || record.runtimeRoot === null)
   );
 }
 
