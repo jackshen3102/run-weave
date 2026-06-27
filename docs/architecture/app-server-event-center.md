@@ -29,6 +29,11 @@ app-server home：
 Electron bundle 或发布包，但默认运行入口必须先安装/激活到这个全局 home，再由 CLI
 启动。
 
+事件数据写入 `app-server-events.jsonl`。它是 app-server 的本地事件存储，不是无限保留
+的诊断日志；默认只保留最近 7 天事件。启动时会清理超过保留窗口的旧事件并重写 JSONL
+文件，运行中也会周期性清理。清理旧事件不重置 event id，新的事件仍按历史最大 id 继续
+递增，避免 consumer cursor 因保留窗口裁剪而漏掉新事件。
+
 生命周期规则：
 
 - CLI 提供 `rw app-server status` 与 `rw app-server start`。

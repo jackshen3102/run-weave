@@ -5,11 +5,10 @@
 These cases cover the first implemented Event Center slice from
 `docs/plans/2026-06-25-app-server-event-center.md`.
 
-Current Node runtime is `v22.12.0`, and `node:sqlite` is unavailable in this
-workspace. The implementation therefore uses an append-only JSONL event log at
-`~/.runweave/app-server/app-server-events.jsonl` while preserving the planned
-HTTP, WebSocket, singleton, token, dedupe, restart-recovery, hook double-write,
-and backend-degraded-client semantics.
+The implementation uses an append-only JSONL event log at
+`~/.runweave/app-server/app-server-events.jsonl` with a default 7-day retention
+window, while preserving the planned HTTP, WebSocket, singleton, token, dedupe,
+restart-recovery, hook double-write, and backend-degraded-client semantics.
 
 ## Commands
 
