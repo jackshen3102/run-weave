@@ -1,0 +1,52 @@
+{
+  "title": "原型标题",
+  "subtitle": "把这段文案替换为当前要探索的产品工作流说明。",
+  "activeStepId": "draft",
+  "steps": [
+    {
+      "id": "draft",
+      "label": "草稿",
+      "title": "草稿状态",
+      "status": "编辑中",
+      "items": [
+        {
+          "title": "主要对象",
+          "description": "替换为首屏需要展示的核心业务对象。"
+        },
+        {
+          "title": "决策点",
+          "description": "描述这个原型要帮助用户澄清的关键选择。"
+        }
+      ]
+    },
+    {
+      "id": "review",
+      "label": "评审",
+      "title": "评审状态",
+      "status": "就绪",
+      "items": [
+        {
+          "title": "变化后的状态",
+          "description": "展示用户进入下一步后新增的可见内容或可执行操作。"
+        },
+        {
+          "title": "验证信号",
+          "description": "展示用于确认状态流转的反馈、事件、徽标或状态。"
+        }
+      ]
+    },
+    {
+      "id": "complete",
+      "label": "完成",
+      "title": "完成状态",
+      "status": "已完成",
+      "items": [
+        {
+          "title": "最终结果",
+          "description": "表达后续实施计划需要参考的终态。"
+        }
+      ]
+    }
+  ],
+  "events": ["模拟状态已加载", "原型已启动"]
+}
