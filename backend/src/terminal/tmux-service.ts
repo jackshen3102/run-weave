@@ -123,6 +123,16 @@ const TMUX_SANITIZE_NPM_PREFIX_ENV_ARGS = [
   "-u",
   "CLICOLOR",
   ";",
+  "set-environment",
+  "-g",
+  "-u",
+  "ELECTRON_RUN_AS_NODE",
+  ";",
+  "set-environment",
+  "-g",
+  "-u",
+  "FRONTEND_DIST_DIR",
+  ";",
 ];
 const TMUX_METADATA_FIELD_SEPARATOR = "__RUNWEAVE_METADATA_FIELD__";
 const SHELL_INTEGRATION_ENV_KEYS = [
