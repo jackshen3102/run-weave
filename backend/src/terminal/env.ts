@@ -22,8 +22,6 @@ export function sanitizeCurrentTerminalProcessEnv(): void {
   delete process.env.npm_config_prefix;
   delete process.env.NPM_CONFIG_PREFIX;
   delete process.env.NO_COLOR;
-  delete process.env.ELECTRON_RUN_AS_NODE;
-  delete process.env.FRONTEND_DIST_DIR;
   if (isDisabledColorFlag(process.env.FORCE_COLOR)) {
     delete process.env.FORCE_COLOR;
   }
