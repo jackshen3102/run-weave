@@ -5,6 +5,8 @@ export function sanitizeTerminalProcessEnv(
   delete sanitized.npm_config_prefix;
   delete sanitized.NPM_CONFIG_PREFIX;
   delete sanitized.NO_COLOR;
+  delete sanitized.ELECTRON_RUN_AS_NODE;
+  delete sanitized.FRONTEND_DIST_DIR;
 
   if (isDisabledColorFlag(sanitized.FORCE_COLOR)) {
     delete sanitized.FORCE_COLOR;
@@ -20,6 +22,8 @@ export function sanitizeCurrentTerminalProcessEnv(): void {
   delete process.env.npm_config_prefix;
   delete process.env.NPM_CONFIG_PREFIX;
   delete process.env.NO_COLOR;
+  delete process.env.ELECTRON_RUN_AS_NODE;
+  delete process.env.FRONTEND_DIST_DIR;
   if (isDisabledColorFlag(process.env.FORCE_COLOR)) {
     delete process.env.FORCE_COLOR;
   }
