@@ -9,6 +9,7 @@
 - Web 仍然只有一个 `TerminalSurface`、一个 session-level terminal WebSocket、一个 `tmux attach` runtime。
 - Runweave 业务层新增 `TerminalPanel`，每个 panel 绑定稳定 tmux `%pane_id`，不依赖 pane index。
 - CLI、API、Orchestrator 可以通过 `panelId`、`alias` 或 `role` 定位 pane。
+- 同一 terminal session 内非空 `alias` 和非空 `role` 都必须唯一；创建重复值应返回明确 409，避免后续按 role 路由时随机命中。
 - 未指定 panel 的旧 input/interrupt 路径在发送前同步 tmux selected pane，再路由到 active/default panel。
 - 未指定 panel 的旧 history/snapshot 路径始终读取 default panel，不跟随 selected pane。
 - pty runtime 首期不支持 split，必须返回明确 409。
@@ -100,7 +101,7 @@ $RW_BIN auth login --base-url "$RUNWEAVE_BASE_URL" --username admin
 | TPS-API-003 | create right        | `POST /panels { "direction": "right", "alias": "tests" }` | 201/200，返回新 panel 和 workspace                             |
 | TPS-API-004 | create down         | `POST /panels { "direction": "down", "role": "server" }`  | 新 panel role 为 server                                        |
 | TPS-API-005 | alias 唯一          | 同一 session 内创建重复 alias                             | 409，错误可读                                                  |
-| TPS-API-006 | role 可重复解析冲突 | 创建两个相同 role；用 role send                           | 409，返回候选 panel                                            |
+| TPS-API-006 | role 唯一            | 同一 session 内创建重复 role                              | 409，错误可读                                                  |
 | TPS-API-007 | focus panel         | `PATCH /panels/:panelId { "focus": true }`                | activePanelId 更新；tmux selected pane 同步                    |
 | TPS-API-008 | close panel         | `DELETE /panels/:panelId`                                 | panel 删除；active panel 被删时切到 workspace 新 activePanelId |
 | TPS-API-009 | panel input         | `POST /panels/:panelId/input`                             | 输入只进入目标 pane                                            |
@@ -153,7 +154,7 @@ $RW_BIN auth login --base-url "$RUNWEAVE_BASE_URL" --username admin
 | TPS-CLI-006 | send panel alias    | `$RW_BIN terminal send "$TERMINAL_ID" --panel tests --text "echo tests" --enter --json`                       | 只进入 tests pane                                        |
 | TPS-CLI-007 | send role           | `$RW_BIN terminal send "$TERMINAL_ID" --role server --text "echo server" --enter --json`                      | 只进入 server role pane                                  |
 | TPS-CLI-008 | panel 优先 role     | 同时传 `--panel tests --role server`                                                                          | 发送到 tests                                             |
-| TPS-CLI-009 | role 冲突           | 两个 panel role 都是 worker；按 role send                                                                     | exit code 4，stderr 展示候选                             |
+| TPS-CLI-009 | role 重复           | 已存在 worker role；再次 split `--role worker`                                                                | exit code 4，stderr 保留 409 role 重复错误                |
 | TPS-CLI-010 | snapshot panel      | `$RW_BIN terminal snapshot "$TERMINAL_ID" --panel tests --tail 120 --plain`                                   | 只返回 tests pane 内容                                   |
 | TPS-CLI-011 | interrupt panel     | `$RW_BIN terminal interrupt "$TERMINAL_ID" --panel tests --json`                                              | 只中断 tests pane                                        |
 | TPS-CLI-012 | handoff panel 信息  | `$RW_BIN terminal handoff "$TERMINAL_ID" --json`                                                              | 输出 `panels`、`activePanelId`、`suggestedPanelCommands` |
@@ -171,7 +172,7 @@ $RW_BIN auth login --base-url "$RUNWEAVE_BASE_URL" --username admin
 | TPS-ORCH-004 | reuse by role               | binding 指定 role planner                      | 路由到 planner panel                                       |
 | TPS-ORCH-005 | target 不存在               | binding 指向 missing panel                     | 返回 human-readable error，不静默创建错误 panel            |
 | TPS-ORCH-006 | timeline target             | Orchestrator direct send                       | timeline 包含 `terminalPanelId` 和 `panelAlias`            |
-| TPS-ORCH-007 | role 冲突                   | 多个 panel 匹配同 role                         | 返回冲突和候选，不随机选择                                 |
+| TPS-ORCH-007 | role 已占用                  | new binding 尝试创建已存在 role 的 panel        | 返回明确冲突；需要复用时必须改用 existing binding / role 路由 |
 
 ## Web UI 与 `$playwright-cli` 验收
 
@@ -217,7 +218,7 @@ python3 -m http.server 6188 --directory docs/prototypes/terminal-panel-split
 | TPS-NEG-002 | 关闭最后 panel        | 只剩一个 panel 时 close             | 409，提示关闭 terminal session            |
 | TPS-NEG-003 | alias 空值            | 创建 alias 为空字符串或全空白       | 400 或归一为 null；不得形成不可寻址 alias |
 | TPS-NEG-004 | alias 重复            | 同 session 重复 alias               | 409                                       |
-| TPS-NEG-005 | role 多匹配           | role 匹配多个 panel                 | 409，返回候选                             |
+| TPS-NEG-005 | role 重复             | 同 session 重复 role                | 409                                       |
 | TPS-NEG-006 | pane 被外部删除       | 删除 tmux pane 后发送 input         | 不写入错误目标；先收敛或返回明确错误      |
 | TPS-NEG-007 | terminal exited       | exited session 调 panel input/split | 非 0/4xx，错误可读                        |
 | TPS-NEG-008 | tmux 不可用           | tmux 命令不可用时创建 tmux split    | 返回明确后端错误；不写半状态              |

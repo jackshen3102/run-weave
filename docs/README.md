@@ -26,6 +26,7 @@
 | 本机系统资源监控                         | architecture/system-monitor.md                                                     |
 | Terminal CLI                             | cli/terminal-cli.md                                                                |
 | Runweave Agent CLI 控制面测试            | testing/runweave-cli-control-plane-test-cases.md                                   |
+| Terminal Panel Split 测试                | testing/terminal-panel-split-test-cases.md                                         |
 | 本地客户端更新测试                       | testing/runweave-local-client-update-test-cases.md                                 |
 | Multi-Agent Orchestrator 测试            | testing/2026-06-17-multi-agent-orchestrator-test-cases.md                          |
 | 质量体系概览                             | quality/quality-harness.md                                                         |
