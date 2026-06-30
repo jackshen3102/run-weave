@@ -536,6 +536,18 @@ function assertUniqueAlias(
   }
 }
 
+function assertUniqueRole(
+  panels: TerminalPanelRecord[],
+  role: string | null,
+): void {
+  if (!role) {
+    return;
+  }
+  if (panels.some((panel) => panel.role === role)) {
+    throw new TerminalPanelRouteError(409, "Terminal panel role already exists");
+  }
+}
+
 export function sendTerminalPanelRouteError(
   res: Response,
   error: unknown,
@@ -622,7 +634,9 @@ export function registerTerminalPanelRoutes(
       );
       const panels = terminalSessionManager.listPanels(session.id);
       const alias = parsed.data.alias?.trim() || null;
+      const role = parsed.data.role?.trim() || null;
       assertUniqueAlias(panels, alias);
+      assertUniqueRole(panels, role);
       const sourcePanel =
         panels.find((panel) => panel.id === parsed.data.sourcePanelId) ??
         panels.find(
@@ -657,7 +671,7 @@ export function registerTerminalPanelRoutes(
         buildSplitPanel(session, splitTarget.paneId, {
           panelId,
           alias,
-          role: parsed.data.role?.trim() || null,
+          role,
           cwd,
           activeCommand: null,
         }),

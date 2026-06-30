@@ -78,12 +78,13 @@ export function TerminalPanelTargetBar({
   };
 
   const split = (direction: "right" | "down"): void => {
+    const alias = resolveNextPanelAlias(workspace);
     void runAction(`split-${direction}`, () =>
       createTerminalPanel(apiBase, token, activeSession.terminalSessionId, {
         sourcePanelId: activePanel?.panelId,
         direction,
-        alias: resolveNextPanelAlias(workspace),
-        role: direction === "right" ? "tests" : null,
+        alias,
+        role: direction === "right" && alias === "tests" ? "tests" : null,
       }),
     );
   };
