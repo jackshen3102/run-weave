@@ -66,6 +66,9 @@ Terminal Browser 工具当前边界：
 - CDP Proxy 暴露的是自研 browser-level endpoint，不开启 Electron 全局 `remote-debugging-port`，也不暴露 Runweave 主窗口 renderer 或 DevTools target。
 - Playwright MCP / Playwright CLI 通过 `chromium.connectOverCDP(...)` 连接 Proxy 后，只能发现和操作 Terminal Browser tab。`Target.createTarget` 创建的是 Browser 工具内 AI tab，当前上限为 10；CDP 连接上限为 8。
 - Proxy 负责 target/session 仿真、frame id 重写、导航参数校验、危险命令拦截和 DevTools 状态隔离。`Browser.close`、`Browser.crash`、清 cookie/cache/origin storage、忽略 HTTPS 错误等命令不能影响用户主窗口或真实 profile。
+- 多个 CDP 客户端可以同时连接并操作不同 Browser tab。Proxy 对同一 target 复用同一个 Electron `webContents.debugger` attachment，但每个客户端仍使用自己的 proxy session id；任一客户端断开不应清理其他 target 的有效 session。
+- Browser tab 上的 `MCP` 标志只表示近期有 MCP/CDP session 命中该 target 的用户可感知操作，不等同于 CDP 已连接、tab 由 MCP 创建，或该 tab 正被永久接管。
+- `Page.enable`、`Runtime.enable`、`Target.setAutoAttach`、`Target.getTargetInfo`、`Page.getFrameTree`、`Network.enable` 等初始化、发现或静默同步命令不触发 `MCP` 活动标志；导航、点击、输入、evaluate、截图等真实操作才短暂高亮对应 tab。
 - Browser 工具的 CDP 能力是桌面端本机自动化边界，不是远端协作协议；不要把 endpoint 持久化到项目数据或对公网暴露。
 - Browser tab 状态会持久化到 Electron `userData` 下的 `terminal-browser-tabs.json`。重启客户端时会恢复合法的 `http:`、`https:`、`about:blank` tab，并丢弃不合法或空 URL。
 - Browser tab 支持在右侧工具内部拖拽排序；排序只改变当前 Browser 工具的 tab 顺序和 active tab 组织方式，不影响网页会话、CDP target 身份或项目 / terminal session 顺序。
