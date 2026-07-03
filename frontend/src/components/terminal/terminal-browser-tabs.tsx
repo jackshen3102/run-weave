@@ -1,5 +1,9 @@
 import { Globe2, Plus, X } from "lucide-react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type { TerminalBrowserTabState } from "../../features/terminal/preview-store";
 import { Button } from "../ui/button";
 import {
@@ -28,6 +32,19 @@ export function TerminalBrowserTabs({
   onCloseTab,
   onReorder,
 }: TerminalBrowserTabsProps) {
+  const [now, setNow] = useState(() => Date.now());
+  const hasActiveMcpActivity = tabs.some(
+    (tab) => typeof tab.mcpActivityUntil === "number" && tab.mcpActivityUntil > now,
+  );
+
+  useEffect(() => {
+    if (!hasActiveMcpActivity) {
+      return;
+    }
+    const intervalId = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(intervalId);
+  }, [hasActiveMcpActivity]);
+
   return (
     <div
       className="flex h-9 min-w-0 shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -43,12 +60,17 @@ export function TerminalBrowserTabs({
           renderTab={(tab: TerminalBrowserTabState, sortProps: SortableTabRenderProps) => {
             const selected = tab.id === activeTabId;
             const tabLabel = browserTabLabel(tab.title, tab.url);
+            const mcpOperating =
+              typeof tab.mcpActivityUntil === "number" &&
+              tab.mcpActivityUntil > now;
             return (
               <div
                 className={[
-                  "group flex h-7 min-w-[76px] max-w-[220px] flex-1 basis-0 items-center gap-1 rounded-md border px-2 text-xs",
+                  "group flex h-7 min-w-[76px] max-w-[220px] flex-1 basis-0 items-center gap-1 rounded-md border px-2 text-xs transition-colors",
                   sortProps.isDragging
                     ? "border-sky-500/60 bg-sky-500/20 text-slate-50 opacity-90 shadow-lg scale-[1.02]"
+                    : mcpOperating
+                      ? "border-emerald-400/80 bg-emerald-500/15 text-slate-50 shadow-[0_0_0_1px_rgba(52,211,153,0.28)]"
                     : selected
                       ? "border-sky-500/60 bg-sky-500/15 text-slate-50"
                       : "border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-900",
@@ -65,6 +87,15 @@ export function TerminalBrowserTabs({
                 >
                   <Globe2 className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{tabLabel}</span>
+                  {mcpOperating ? (
+                    <span
+                      className="ml-1 inline-flex h-4 shrink-0 items-center gap-1 rounded bg-emerald-400/20 px-1 text-[9px] font-semibold leading-none text-emerald-100"
+                      title="MCP is controlling this tab"
+                    >
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" />
+                      MCP
+                    </span>
+                  ) : null}
                 </button>
                 <button
                   type="button"
@@ -82,12 +113,17 @@ export function TerminalBrowserTabs({
         tabs.map((tab) => {
           const selected = tab.id === activeTabId;
           const tabLabel = browserTabLabel(tab.title, tab.url);
+          const mcpOperating =
+            typeof tab.mcpActivityUntil === "number" &&
+            tab.mcpActivityUntil > now;
           return (
             <div
               key={tab.id}
               className={[
-                "group flex h-7 min-w-[76px] max-w-[220px] flex-1 basis-0 items-center gap-1 rounded-md border px-2 text-xs",
-                selected
+                "group flex h-7 min-w-[76px] max-w-[220px] flex-1 basis-0 items-center gap-1 rounded-md border px-2 text-xs transition-colors",
+                mcpOperating
+                  ? "border-emerald-400/80 bg-emerald-500/15 text-slate-50 shadow-[0_0_0_1px_rgba(52,211,153,0.28)]"
+                  : selected
                   ? "border-sky-500/60 bg-sky-500/15 text-slate-50"
                   : "border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-900",
               ].join(" ")}
@@ -103,6 +139,15 @@ export function TerminalBrowserTabs({
               >
                 <Globe2 className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{tabLabel}</span>
+                {mcpOperating ? (
+                  <span
+                    className="ml-1 inline-flex h-4 shrink-0 items-center gap-1 rounded bg-emerald-400/20 px-1 text-[9px] font-semibold leading-none text-emerald-100"
+                    title="MCP is controlling this tab"
+                  >
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" />
+                    MCP
+                  </span>
+                ) : null}
               </button>
               <button
                 type="button"

@@ -11,6 +11,7 @@ export interface ElectronBrowserSnapshot {
 export interface ElectronBrowserUpdate extends ElectronBrowserSnapshot {
   loading: boolean;
   cdpProxyAttached?: boolean;
+  mcpActivityUntil?: number | null;
   devtoolsOpen?: boolean;
   deviceState?: TerminalBrowserDeviceState;
 }
@@ -19,6 +20,7 @@ export interface ElectronBrowserTabSnapshot extends ElectronBrowserUpdate {
   tabId: string;
   active: boolean;
   cdpProxyAttached: boolean;
+  mcpActivityUntil: number | null;
   devtoolsOpen: boolean;
   deviceState: TerminalBrowserDeviceState;
 }
@@ -65,6 +67,7 @@ export function buildTabUpdateFromElectronUpdate(
     canGoBack: update.canGoBack,
     canGoForward: update.canGoForward,
     cdpProxyAttached: update.cdpProxyAttached,
+    mcpActivityUntil: update.mcpActivityUntil,
     devtoolsOpen: update.devtoolsOpen,
     deviceState: update.deviceState,
     error: undefined,
@@ -83,6 +86,7 @@ export function buildTabStateFromElectronSnapshot(
     canGoBack: snapshot.canGoBack,
     canGoForward: snapshot.canGoForward,
     cdpProxyAttached: snapshot.cdpProxyAttached,
+    mcpActivityUntil: snapshot.mcpActivityUntil,
     devtoolsOpen: snapshot.devtoolsOpen,
     deviceState: snapshot.deviceState,
   };
