@@ -24,6 +24,7 @@ export interface TerminalBrowserTabState {
   canGoForward: boolean;
   error?: string;
   cdpProxyAttached?: boolean;
+  mcpActivityUntil?: number | null;
   devtoolsOpen?: boolean;
   deviceState: TerminalBrowserDeviceState;
 }

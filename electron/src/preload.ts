@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
         loading: boolean;
         active: boolean;
         cdpProxyAttached: boolean;
+        mcpActivityUntil: number | null;
         devtoolsOpen: boolean;
         deviceState: TerminalBrowserDeviceState;
       }>
@@ -178,6 +179,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       canGoForward: boolean;
       loading: boolean;
       cdpProxyAttached: boolean;
+      mcpActivityUntil: number | null;
       devtoolsOpen: boolean;
       deviceState: TerminalBrowserDeviceState;
     }) => void,
@@ -192,6 +194,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
         canGoForward: boolean;
         loading: boolean;
         cdpProxyAttached: boolean;
+        mcpActivityUntil: number | null;
         devtoolsOpen: boolean;
         deviceState: TerminalBrowserDeviceState;
       },
@@ -212,6 +215,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       canGoForward: boolean;
       loading: boolean;
       cdpProxyAttached: boolean;
+      mcpActivityUntil: number | null;
       devtoolsOpen: boolean;
       deviceState: TerminalBrowserDeviceState;
     }) => void,
@@ -226,6 +230,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
         canGoForward: boolean;
         loading: boolean;
         cdpProxyAttached: boolean;
+        mcpActivityUntil: number | null;
         devtoolsOpen: boolean;
         deviceState: TerminalBrowserDeviceState;
       },

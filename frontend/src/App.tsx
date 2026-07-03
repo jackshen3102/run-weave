@@ -47,6 +47,7 @@ interface TerminalBrowserTabSnapshot extends TerminalBrowserSnapshot {
   loading: boolean;
   active: boolean;
   cdpProxyAttached: boolean;
+  mcpActivityUntil: number | null;
   devtoolsOpen: boolean;
   deviceState: TerminalBrowserDeviceState;
 }
@@ -130,6 +131,7 @@ declare global {
             tabId: string;
             loading: boolean;
             cdpProxyAttached: boolean;
+            mcpActivityUntil: number | null;
             devtoolsOpen: boolean;
             deviceState: TerminalBrowserDeviceState;
           },
@@ -141,6 +143,7 @@ declare global {
             tabId: string;
             loading: boolean;
             cdpProxyAttached: boolean;
+            mcpActivityUntil: number | null;
             devtoolsOpen: boolean;
             deviceState: TerminalBrowserDeviceState;
           },

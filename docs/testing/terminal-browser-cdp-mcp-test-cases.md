@@ -192,6 +192,54 @@ S05-S08 属于高风险安全命令。如果代理没有正确拦截，可能改
 | U10 | 复制 endpoint                | 点击复制按钮                                             | 剪贴板内容等于当前 CDP endpoint                |
 | U11 | MCP attached 时切设备        | CDP attached 后在 Device 面板选择 iPhone/Pixel 预设      | 设备模式切换成功，MCP 连接保持可用             |
 
+## MCP Tab 操作指示器
+
+本组专门覆盖 Browser tab 上的 `MCP` 可视标志。`cdpProxyAttached` 只表示 CDP debugger 已 attach，不等于 MCP 正在操作，也不等于该 tab 由 MCP 创建。Tab bar 只能在真实 MCP/CDP session command 命中对应 target 后短暂显示 `MCP` 标志和高亮。
+
+| ID   | 用例                               | 操作                                                                                                            | 预期                                                                                |
+| ---- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| MI01 | 已有 tab 被 auto-attach            | 先在 Browser 面板打开一个普通 tab，例如 GitHub PR 页面；再让 MCP/CDP 客户端连接并 auto-attach                   | 该已有 tab 不显示常驻 `MCP` badge；只保持普通选中态或普通 tab 样式                  |
+| MI02 | 复现截图回归                       | 在已有 GitHub PR tab 处于 `cdpProxyAttached=true` 但未执行页面命令时观察 tab bar                                | tab 文案类似 `Pull requests · ...`，右侧不出现 `MCP` 标志                           |
+| MI03 | 真实 MCP 操作短暂高亮              | 对某个 attached tab 执行 `page.goto` / `page.click` / `Runtime.evaluate` 等 session command                     | 只有该 target 对应的 tab 显示绿色高亮和 `MCP` badge                                 |
+| MI04 | MCP 操作过期恢复                   | MI03 后等待高亮窗口过期                                                                                         | `MCP` badge 自动消失，tab 恢复普通样式                                              |
+| MI05 | quiet CDP 初始化命令不触发操作标志 | 只执行 `Page.enable` / `Runtime.enable` / `Target.setAutoAttach` / `Target.getTargetInfo` / `Page.getFrameTree` | 不显示 `MCP` badge；这些命令只算连接/初始化，不算用户可感知的软件操作               |
+| MI06 | 多 tab 精确归属                    | 两个 tab 同时 attached；只对第二个 tab 执行 `page.click` 或 `page.goto`                                         | 只有第二个 tab 显示 `MCP` badge；第一个 attached-only tab 不显示                    |
+| MI07 | MCP 创建新 tab                     | MCP 调用 `Target.createTarget` 或 `context.newPage()` 创建新 tab，然后执行一次导航                              | 新 tab 出现；只有执行真实操作期间短暂显示 `MCP` badge，不因“由 MCP 创建”而永久显示  |
+| MI08 | UI 选择态不被操作态覆盖            | 用户当前选中 tab A，MCP 操作 tab B                                                                              | tab B 短暂显示操作高亮；tab A 的选中态仍然可辨认；不会误导为 tab A 正在被 MCP 操作  |
+| MI09 | close 按钮稳定                     | 在 `MCP` badge 显示期间点击 tab close 按钮                                                                      | 关闭的是该 tab；badge 不改变 close hit area，不导致误点其它 tab                     |
+| MI10 | 浏览器重连                         | 断开 MCP/CDP 客户端再重新连接                                                                                   | 重新连接后的 attached-only tab 仍不显示常驻 `MCP`；只有真实操作后才显示短暂操作标志 |
+
+### 自动化回归覆盖
+
+`frontend/tests/terminal-browser-mcp-indicator.spec.ts` 覆盖以下可自动化规则：
+
+- `MI01` / `MI02`：`cdpProxyAttached=true` 但 `mcpActivityUntil=null` 时不显示 `MCP`。
+- `MI03`：`mcpActivityUntil` 未过期时显示且只显示一个 `MCP`。
+- `MI04`：过期时间戳会自动移除 `MCP`。
+- `MI05`：直接覆盖 Playwright/CDP 初始化命令列表，确认 `Page.enable`、`Runtime.enable`、`Target.setAutoAttach`、`Network.enable`、`Emulation.setEmulatedMedia` 等不会触发 MCP 活动标志。
+- `MI06` / `MI08`：用户选中的 tab 与 MCP 操作中的 tab 可以不同，只有操作中的 tab 显示 `MCP`。
+- `MI07`：MCP 创建但没有近期活动的 tab 不显示永久 `MCP`。
+- `MI09`：`MCP` badge 显示期间 close 按钮仍关闭正确 tab。
+
+执行命令：
+
+```bash
+pnpm --filter @runweave/frontend exec playwright test tests/terminal-browser-mcp-indicator.spec.ts
+```
+
+### 桌面端人工验收步骤
+
+1. 启动 `pnpm dev:electron`。
+2. 打开 Terminal Browser 面板，手动打开一个普通 tab 到 `https://github.com/jackshen3102/run-weave/pulls?q=is%3Apr+is%3Aclosed`。
+3. 确认 tab 上没有 `MCP` 标志。
+4. 使用 `<cdp>` 连接 CDP proxy，但只做 `Target.setAutoAttach` 或 Playwright 初始化，不执行 `page.goto` / click / type。
+5. 确认该 GitHub tab 仍没有 `MCP` 标志，覆盖截图中的回归。
+6. 对同一个 page 执行一次真实操作，例如 `await page.title()` 或 `await page.evaluate(() => location.href)`。
+7. 确认该 tab 短暂显示绿色高亮和 `MCP` 标志。
+8. 等待 5 秒，确认 `MCP` 标志消失。
+9. 新建第二个 tab，对第二个 tab 执行 `page.goto("https://example.com")`。
+10. 确认只有第二个 tab 短暂显示 `MCP`，第一个 GitHub tab 不显示。
+
 ## 并发与稳定性
 
 `MAX_AI_TABS` 当前上限是 10，且会受当前已有 Terminal Browser target 数影响。R01 只验证反复创建/关闭的稳定性，不验证批量占满上限；每轮必须先关闭本轮创建的 tab，再进入下一轮。批量上限验证使用 T14。

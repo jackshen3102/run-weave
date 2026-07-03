@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { WebContents } from "electron";
 import {
   getTerminalBrowserEntryByTargetId,
+  markTerminalBrowserMcpActivity,
   setTerminalBrowserCdpProxyAttached,
 } from "./terminal-browser-view.js";
+import { shouldMarkTerminalBrowserMcpActivity } from "./terminal-browser-cdp-activity.js";
 
 export interface CdpProxySession {
   proxySessionId: string;
@@ -162,6 +164,10 @@ export class CdpSessionManager {
       url: target.webContents.getURL(),
       timestamp: Date.now(),
     });
+
+    if (shouldMarkTerminalBrowserMcpActivity(method)) {
+      markTerminalBrowserMcpActivity(targetId);
+    }
 
     const commandParams = this.rewriteFrameIdsForElectron(target, params);
     const result = await target.webContents.debugger.sendCommand(

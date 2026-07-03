@@ -1,5 +1,4 @@
 import {
-  app,
   BrowserWindow,
   ipcMain,
   session as electronSession,
@@ -9,21 +8,16 @@ import {
 } from "electron";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
 import {
   createTerminalBrowserDeviceState,
-  getTerminalBrowserDevicePreset,
   normalizeTerminalBrowserDevicePresetId,
   normalizeTerminalBrowserHeaderRules,
-  type TerminalBrowserDevicePresetId,
   type TerminalBrowserDeviceState,
   type TerminalBrowserHeaderRule,
   type TerminalBrowserHeaderState,
   type TerminalBrowserProxyState,
 } from "@runweave/shared";
 import {
-  normalizeTerminalBrowserPersistedState,
   normalizeTerminalBrowserUrlForStorage,
   selectTerminalBrowserTabsForRestore,
   type TerminalBrowserPersistedState,
@@ -39,6 +33,19 @@ import {
   submitTerminalBrowserAnnotations,
 } from "./terminal-browser-annotation.js";
 import { getIsQuitting } from "./app-state.js";
+import {
+  applyTerminalBrowserDeviceEmulation,
+  clampTerminalBrowserEmulationScale,
+  detachTerminalBrowserDeviceDebugger,
+  getTerminalBrowserDeviceState,
+  isTerminalBrowserMobileDeviceState,
+  updateTerminalBrowserEmulationScale,
+} from "./terminal-browser-device-emulation.js";
+import {
+  readTerminalBrowserPersistedState,
+  writeTerminalBrowserPersistedState,
+} from "./terminal-browser-tabs-persistence.js";
+import { ensureTerminalBrowserCookiePersistence } from "./terminal-browser-cookie-persistence.js";
 
 interface TerminalBrowserBounds {
   x: number;
@@ -59,6 +66,7 @@ export interface TerminalBrowserUpdate extends TerminalBrowserSnapshot {
   tabId: string;
   loading: boolean;
   cdpProxyAttached: boolean;
+  mcpActivityUntil: number | null;
   devtoolsOpen: boolean;
   deviceState: TerminalBrowserDeviceState;
 }
@@ -75,6 +83,7 @@ interface TerminalBrowserEntry {
   attached: boolean;
   targetId: string;
   cdpProxyAttached: boolean;
+  mcpActivityUntil: number | null;
   devtoolsOpen: boolean;
   deviceState: TerminalBrowserDeviceState;
   emulationScale: number;
@@ -100,18 +109,15 @@ const attachedTerminalBrowserByWindowId = new Map<number, string>();
 export const terminalBrowserEvents = new EventEmitter();
 
 const TERMINAL_BROWSER_SESSION_PARTITION = "persist:runweave-terminal-browser";
-const TERMINAL_BROWSER_TABS_STORE_FILE = "terminal-browser-tabs.json";
 const TERMINAL_BROWSER_PROXY_HOST = "127.0.0.1";
 const TERMINAL_BROWSER_PROXY_PORT = 8899;
 const TERMINAL_BROWSER_PROXY_RULES =
   `http=${TERMINAL_BROWSER_PROXY_HOST}:${TERMINAL_BROWSER_PROXY_PORT};https=${TERMINAL_BROWSER_PROXY_HOST}:${TERMINAL_BROWSER_PROXY_PORT}`;
 const TERMINAL_BROWSER_PROXY_BYPASS_RULES = "<local>";
-const TERMINAL_BROWSER_COOKIE_RETENTION_SECONDS = 10 * 365 * 24 * 60 * 60;
 
 let terminalBrowserProxyEnabled = false;
 let terminalBrowserHeaderRules: TerminalBrowserHeaderRule[] = [];
 let terminalBrowserHeaderDispatcherRegistered = false;
-let terminalBrowserCookiePersistenceRegistered = false;
 let terminalBrowserSaveTimer: NodeJS.Timeout | null = null;
 let terminalBrowserPersistedStateRestored = false;
 
@@ -119,57 +125,6 @@ const restoringTerminalBrowserWindows = new Set<number>();
 
 function getTerminalBrowserSession(): Electron.Session {
   return electronSession.fromPartition(TERMINAL_BROWSER_SESSION_PARTITION);
-}
-
-function getTerminalBrowserTabsStorePath(): string {
-  return path.join(app.getPath("userData"), TERMINAL_BROWSER_TABS_STORE_FILE);
-}
-
-async function readTerminalBrowserPersistedState(): Promise<TerminalBrowserPersistedState> {
-  const storePath = getTerminalBrowserTabsStorePath();
-  try {
-    const raw = await readFile(storePath, "utf8");
-    return normalizeTerminalBrowserPersistedState(JSON.parse(raw));
-  } catch (error) {
-    if (
-      error &&
-      typeof error === "object" &&
-      (error as { code?: unknown }).code === "ENOENT"
-    ) {
-      return { version: 1, activeTabId: null, tabs: [] };
-    }
-    console.warn("[electron] failed to read terminal browser tabs state", {
-      path: storePath,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    await backupUnreadableTerminalBrowserTabsStore(storePath);
-    return { version: 1, activeTabId: null, tabs: [] };
-  }
-}
-
-async function backupUnreadableTerminalBrowserTabsStore(
-  storePath: string,
-): Promise<void> {
-  const backupPath = `${storePath}.bad-${Date.now()}`;
-  try {
-    await copyFile(storePath, backupPath);
-    console.warn("[electron] backed up unreadable terminal browser tabs state", {
-      backupPath,
-    });
-  } catch (error) {
-    console.warn("[electron] failed to back up terminal browser tabs state", {
-      path: storePath,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
-async function writeTerminalBrowserPersistedState(
-  state: TerminalBrowserPersistedState,
-): Promise<void> {
-  const storePath = getTerminalBrowserTabsStorePath();
-  await mkdir(path.dirname(storePath), { recursive: true });
-  await writeFile(storePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
 function getTerminalBrowserTabRecords(): TerminalBrowserPersistedTabRecord[] {
@@ -268,76 +223,6 @@ function getTerminalBrowserHeaderState(): TerminalBrowserHeaderState {
   return {
     rules: terminalBrowserHeaderRules,
   };
-}
-
-function getTerminalBrowserCookieExpirationDate(): number {
-  return Math.floor(Date.now() / 1000) + TERMINAL_BROWSER_COOKIE_RETENTION_SECONDS;
-}
-
-function buildTerminalBrowserCookieUrl(cookie: Electron.Cookie): string | null {
-  const domain = cookie.domain?.replace(/^\./, "");
-  if (!domain) {
-    return null;
-  }
-  const protocol = cookie.secure ? "https" : "http";
-  const pathName = cookie.path?.startsWith("/") ? cookie.path : "/";
-  try {
-    return new URL(pathName, `${protocol}://${domain}`).toString();
-  } catch {
-    return null;
-  }
-}
-
-function ensureTerminalBrowserCookiePersistence(): void {
-  if (terminalBrowserCookiePersistenceRegistered) {
-    return;
-  }
-
-  const browserSession = getTerminalBrowserSession();
-  browserSession.cookies.on("changed", (_event, cookie, _cause, removed) => {
-    if (removed || cookie.session !== true) {
-      return;
-    }
-
-    const url = buildTerminalBrowserCookieUrl(cookie);
-    if (!url) {
-      return;
-    }
-
-    void browserSession.cookies
-      .set({
-        url,
-        name: cookie.name,
-        value: cookie.value,
-        ...(cookie.hostOnly ? {} : { domain: cookie.domain }),
-        path: cookie.path,
-        secure: cookie.secure,
-        httpOnly: cookie.httpOnly,
-        sameSite: cookie.sameSite,
-        expirationDate: getTerminalBrowserCookieExpirationDate(),
-      })
-      .then(() => browserSession.cookies.flushStore())
-      .catch((error) => {
-        console.warn("[electron] failed to persist terminal browser session cookie", {
-          domain: cookie.domain,
-          name: cookie.name,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-  });
-  terminalBrowserCookiePersistenceRegistered = true;
-}
-
-function getTerminalBrowserDeviceState(
-  entry: TerminalBrowserEntry,
-): TerminalBrowserDeviceState {
-  return createTerminalBrowserDeviceState(entry.deviceState.presetId);
-}
-
-function isTerminalBrowserMobileDeviceState(
-  entry: TerminalBrowserEntry,
-): boolean {
-  return entry.deviceState.mobile === true;
 }
 
 function wildcardUrlPatternMatches(pattern: string, url: string): boolean {
@@ -594,6 +479,7 @@ function sendTerminalBrowserTabUpdate(
     ...snapshot,
     loading,
     cdpProxyAttached: entry.cdpProxyAttached,
+    mcpActivityUntil: entry.mcpActivityUntil,
     devtoolsOpen: entry.devtoolsOpen,
     deviceState: getTerminalBrowserDeviceState(entry),
   };
@@ -618,6 +504,7 @@ function sendTerminalBrowserTabActivatedFromProxy(
     ...snapshot,
     loading: entry.view.webContents.isLoading(),
     cdpProxyAttached: entry.cdpProxyAttached,
+    mcpActivityUntil: entry.mcpActivityUntil,
     devtoolsOpen: entry.devtoolsOpen,
     deviceState: getTerminalBrowserDeviceState(entry),
   };
@@ -695,6 +582,7 @@ function getOrCreateTerminalBrowserView(
     attached: false,
     targetId: randomUUID(),
     cdpProxyAttached: false,
+    mcpActivityUntil: null,
     devtoolsOpen: false,
     deviceState: createTerminalBrowserDeviceState("desktop"),
     emulationScale: 1,
@@ -863,140 +751,6 @@ function clampTerminalBrowserBounds(
   };
 }
 
-function clampTerminalBrowserEmulationScale(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    return 1;
-  }
-  return Math.max(0.1, Math.min(value, 1));
-}
-
-function attachTerminalBrowserDeviceDebugger(entry: TerminalBrowserEntry): void {
-  if (entry.deviceDebuggerAttached) {
-    return;
-  }
-  const webContents = entry.view.webContents;
-  if (webContents.isDestroyed()) {
-    throw new Error("Cannot emulate a closed browser tab");
-  }
-  if (entry.devtoolsOpen || webContents.isDevToolsOpened()) {
-    throw new Error("Cannot enable mobile mode while DevTools is open");
-  }
-  if (!entry.cdpProxyAttached) {
-    try {
-      webContents.debugger.attach("1.3");
-    } catch (error) {
-      throw new Error(
-        `Cannot enable mobile mode because the debugger is unavailable: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  entry.deviceDebuggerAttached = true;
-  entry.onDeviceDebuggerDetach = (_event, reason) => {
-    entry.deviceDebuggerAttached = false;
-    entry.onDeviceDebuggerDetach = null;
-    console.info("[electron] terminal browser device debugger detached", {
-      targetId: entry.targetId,
-      reason,
-    });
-  };
-  webContents.debugger.on("detach", entry.onDeviceDebuggerDetach);
-}
-
-function detachTerminalBrowserDeviceDebugger(entry: TerminalBrowserEntry): void {
-  if (!entry.deviceDebuggerAttached) {
-    return;
-  }
-  const webContents = entry.view.webContents;
-  if (entry.onDeviceDebuggerDetach) {
-    webContents.debugger.off("detach", entry.onDeviceDebuggerDetach);
-    entry.onDeviceDebuggerDetach = null;
-  }
-  if (!entry.cdpProxyAttached) {
-    try {
-      webContents.debugger.detach();
-    } catch {
-      // Already detached.
-    }
-  }
-  entry.deviceDebuggerAttached = false;
-}
-
-async function applyTerminalBrowserDeviceEmulation(
-  entry: TerminalBrowserEntry,
-  presetId: TerminalBrowserDevicePresetId,
-): Promise<TerminalBrowserDeviceState> {
-  const preset = getTerminalBrowserDevicePreset(presetId);
-  const webContents = entry.view.webContents;
-  if (webContents.isDestroyed()) {
-    throw new Error("Cannot update a closed browser tab");
-  }
-
-  if (!preset.mobile) {
-    if (entry.deviceState.mobile) {
-      await webContents.debugger.sendCommand("Emulation.clearDeviceMetricsOverride");
-      await webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
-        enabled: false,
-      });
-      await webContents.debugger.sendCommand("Network.setUserAgentOverride", {
-        userAgent: entry.defaultUserAgent,
-      });
-    }
-    if (entry.deviceDebuggerAttached) {
-      detachTerminalBrowserDeviceDebugger(entry);
-    }
-    webContents.setUserAgent(entry.defaultUserAgent);
-    entry.emulationScale = 1;
-    const state = createTerminalBrowserDeviceState("desktop");
-    entry.deviceState = state;
-    return state;
-  }
-
-  if (entry.devtoolsOpen || webContents.isDevToolsOpened()) {
-    throw new Error("Cannot enable mobile mode while DevTools is open");
-  }
-
-  const viewport = preset.viewport;
-  if (!viewport || !preset.userAgent) {
-    throw new Error("Invalid terminal browser device preset");
-  }
-
-  attachTerminalBrowserDeviceDebugger(entry);
-  webContents.setUserAgent(preset.userAgent);
-  await webContents.debugger.sendCommand("Network.setUserAgentOverride", {
-    userAgent: preset.userAgent,
-    platform: preset.id === "pixel-7" ? "Android" : "iPhone",
-  });
-  await webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
-    width: viewport.width,
-    height: viewport.height,
-    deviceScaleFactor: viewport.deviceScaleFactor,
-    mobile: true,
-    scale: entry.emulationScale,
-  });
-  await webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
-    enabled: true,
-    configuration: "mobile",
-  });
-
-  const state = createTerminalBrowserDeviceState(preset.id);
-  entry.deviceState = state;
-  return state;
-}
-
-async function updateTerminalBrowserEmulationScale(
-  entry: TerminalBrowserEntry,
-  emulationScale: number,
-): Promise<void> {
-  entry.emulationScale = clampTerminalBrowserEmulationScale(emulationScale);
-  if (!entry.deviceState.mobile) {
-    return;
-  }
-  await applyTerminalBrowserDeviceEmulation(entry, entry.deviceState.presetId);
-}
-
 export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
   const targets: TerminalBrowserCdpTarget[] = [];
   for (const [key, entry] of terminalBrowserEntries) {
@@ -1050,6 +804,7 @@ export function getTerminalBrowserTabsForWindow(
       loading: entry.view.webContents.isLoading(),
       active: activeTabId === tabId,
       cdpProxyAttached: entry.cdpProxyAttached,
+      mcpActivityUntil: entry.mcpActivityUntil,
       devtoolsOpen: entry.devtoolsOpen,
       deviceState: getTerminalBrowserDeviceState(entry),
     });
@@ -1148,9 +903,24 @@ export function setTerminalBrowserCdpProxyAttached(
   }
 }
 
+export function markTerminalBrowserMcpActivity(targetId: string): void {
+  const found = getTerminalBrowserEntryByTargetId(targetId);
+  if (!found) {
+    return;
+  }
+  found.entry.mcpActivityUntil = Date.now() + 4500;
+  const parts = found.key.split(":");
+  const windowId = Number(parts[0]);
+  const tabId = parts.slice(1).join(":");
+  const win = BrowserWindow.fromId(windowId);
+  if (win) {
+    sendTerminalBrowserTabUpdate(win, tabId, found.entry);
+  }
+}
+
 export function registerTerminalBrowserHandlers(): void {
   ensureTerminalBrowserHeaderDispatcher();
-  ensureTerminalBrowserCookiePersistence();
+  ensureTerminalBrowserCookiePersistence(getTerminalBrowserSession());
 
   ipcMain.handle("terminal-browser:get-proxy-state", () => {
     return getTerminalBrowserProxyState();
