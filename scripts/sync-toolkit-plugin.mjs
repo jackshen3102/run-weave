@@ -2,11 +2,11 @@
 
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
   readFileSync,
-  renameSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
@@ -70,6 +70,11 @@ const codexCompatibilityVersions = collectCodexCompatibilityVersions(
   pluginName,
   marketplaceName,
 );
+const codexCacheSnapshot = snapshotCodexCompatibilityCache(
+  pluginName,
+  marketplaceName,
+  codexCompatibilityVersions,
+);
 
 syncToolkitHookAssets();
 validateCodexPlugin();
@@ -81,7 +86,9 @@ preserveCodexCompatibilityCache(
   pluginName,
   marketplaceName,
   codexCompatibilityVersions,
+  codexCacheSnapshot,
 );
+cleanupCodexCompatibilitySnapshot(codexCacheSnapshot);
 installForTrae(pluginName);
 
 if (shouldStageCachebuster) {
@@ -368,6 +375,7 @@ function preserveCodexCompatibilityCache(
   pluginName,
   marketplaceName,
   compatibilityVersions,
+  cacheSnapshot,
 ) {
   const currentVersion = readJson(manifestPath).version;
   if (!currentVersion) {
@@ -383,64 +391,120 @@ function preserveCodexCompatibilityCache(
     return;
   }
 
-  const archiveRoot = path.join(cacheRoot, ".archive");
-  replaceCodexCacheAlias(
-    path.join(cacheRoot, "latest"),
-    currentCachePath,
-    archiveRoot,
-    "latest",
-  );
+  updateCodexLatestCacheAlias(cacheRoot, currentCachePath);
 
   for (const version of compatibilityVersions) {
     if (version === currentVersion) {
       continue;
     }
 
-    const aliasPath = path.join(cacheRoot, version);
+    const versionPath = path.join(cacheRoot, version);
     if (
-      !replaceCodexCacheAlias(aliasPath, currentCachePath, archiveRoot, version)
+      !restoreCodexCompatibilityCacheVersion(
+        versionPath,
+        cacheSnapshot?.snapshots?.get(version),
+        currentCachePath,
+        version,
+      )
     ) {
       continue;
     }
-    log(`Preserved Codex compatibility cache ${version} -> ${currentVersion}.`);
   }
 }
 
-function replaceCodexCacheAlias(
-  aliasPath,
-  currentCachePath,
-  archiveRoot,
-  label,
+function snapshotCodexCompatibilityCache(
+  pluginName,
+  marketplaceName,
+  compatibilityVersions,
 ) {
-  const aliasState = getPathState(aliasPath);
-  if (aliasState === "symlink") {
-    rmSync(aliasPath, { force: true });
-  } else if (aliasState === "directory") {
-    const archivedPath = archiveCodexCacheDirectory(aliasPath, archiveRoot);
-    log(`Archived Codex plugin cache ${label} -> ${archivedPath}.`);
-  } else if (aliasState === "other") {
-    log(`Skipping compatibility cache alias over non-directory ${aliasPath}.`);
+  const cacheRoot = getCodexPluginCacheRoot(pluginName, marketplaceName);
+  const snapshotRoot = path.join(
+    codexHome,
+    ".tmp",
+    `toolkit-cache-snapshot-${Date.now()}-${process.pid}`,
+  );
+  const snapshots = new Map();
+
+  for (const version of compatibilityVersions) {
+    const sourcePath = path.join(cacheRoot, version);
+    const sourceState = getPathState(sourcePath);
+    if (sourceState !== "directory" && sourceState !== "symlink") {
+      continue;
+    }
+
+    mkdirSync(snapshotRoot, { recursive: true });
+    const snapshotPath = path.join(snapshotRoot, version);
+    try {
+      cpSync(sourcePath, snapshotPath, {
+        recursive: true,
+        dereference: true,
+        force: true,
+      });
+      snapshots.set(version, snapshotPath);
+      log(`Snapshotted Codex plugin cache ${version}.`);
+    } catch (error) {
+      log(`Failed to snapshot Codex plugin cache ${version}: ${error.message}`);
+    }
+  }
+
+  if (snapshots.size === 0) {
+    rmSync(snapshotRoot, { recursive: true, force: true });
+    return { root: null, snapshots };
+  }
+
+  return { root: snapshotRoot, snapshots };
+}
+
+function restoreCodexCompatibilityCacheVersion(
+  versionPath,
+  snapshotPath,
+  currentCachePath,
+  version,
+) {
+  const versionState = getPathState(versionPath);
+  if (versionState === "directory") {
+    log(`Keeping existing Codex compatibility cache ${version}.`);
+    return true;
+  }
+  if (versionState === "symlink") {
+    rmSync(versionPath, { force: true });
+  } else if (versionState === "other") {
+    log(`Skipping compatibility cache over non-directory ${versionPath}.`);
     return false;
   }
 
-  symlinkSync(currentCachePath, aliasPath, "dir");
+  const sourcePath =
+    typeof snapshotPath === "string" && existsSync(snapshotPath)
+      ? snapshotPath
+      : currentCachePath;
+  cpSync(sourcePath, versionPath, {
+    recursive: true,
+    dereference: true,
+    force: true,
+  });
+
+  if (sourcePath === currentCachePath) {
+    log(`Backfilled Codex compatibility cache ${version} from current cache.`);
+  } else {
+    log(`Restored historical Codex compatibility cache ${version}.`);
+  }
   return true;
 }
 
-function archiveCodexCacheDirectory(directoryPath, archiveRoot) {
-  mkdirSync(archiveRoot, { recursive: true });
-  const baseName = path.basename(directoryPath);
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  let archivePath = path.join(archiveRoot, `${baseName}-${timestamp}`);
-  let index = 1;
-
-  while (existsSync(archivePath)) {
-    archivePath = path.join(archiveRoot, `${baseName}-${timestamp}-${index}`);
-    index += 1;
+function updateCodexLatestCacheAlias(cacheRoot, currentCachePath) {
+  const latestPath = path.join(cacheRoot, "latest");
+  const latestState = getPathState(latestPath);
+  if (latestState !== "missing") {
+    rmSync(latestPath, { recursive: true, force: true });
   }
+  symlinkSync(currentCachePath, latestPath, "dir");
+}
 
-  renameSync(directoryPath, archivePath);
-  return archivePath;
+function cleanupCodexCompatibilitySnapshot(cacheSnapshot) {
+  if (!cacheSnapshot?.root) {
+    return;
+  }
+  rmSync(cacheSnapshot.root, { recursive: true, force: true });
 }
 
 function getCodexPluginCacheRoot(pluginName, marketplaceName) {
