@@ -20,6 +20,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `diagnostic-log-debugging`
 - `doc-coauthoring`
 - `git-advanced-workflows`
+- `grilling`
 - `github-pr`
 - `karpathy-guidelines`
 - `playwright-cli`
