@@ -246,16 +246,30 @@ pnpm --filter @runweave/frontend exec playwright test tests/terminal-browser-mcp
 
 macOS/Electron 主窗口关闭按钮当前是“隐藏到后台/托盘”语义，不等价于退出 App。点击主窗口关闭按钮不应要求 CDP proxy 断开，也不应要求销毁 Terminal Browser target；只有真正退出 App 才应停止 9224 代理。
 
-| ID  | 用例                    | 操作                                                                 | 预期                                                                                                            |
-| --- | ----------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| R01 | 创建/关闭循环           | 循环 10 次：创建 1 个百度 tab，确认加载后立即关闭，再进入下一轮      | 无残留临时 tab，无明显卡死                                                                                      |
-| R02 | 两个 MCP 连接 discovery | 两个客户端分别 `Target.setDiscoverTargets`                           | discovery 事件只发给各自连接，不串扰                                                                            |
-| R03 | 一个连接关闭 tab        | 连接 A 关闭 target，连接 B 已 discovery                              | 连接 B 收到 target destroyed/detached                                                                           |
-| R04 | 加载中断开 MCP          | 百度加载中直接关闭 MCP 连接                                          | Runweave UI 和 Browser tab 仍可用                                                                               |
-| R05 | 加载中关闭 tab          | 百度加载中在 UI 关闭 tab                                             | MCP 收到 detached，不崩溃                                                                                       |
-| R06 | 隐藏 Electron 主窗口    | MCP 连接存在时点击 Electron 主窗口关闭按钮                           | App 不退出；9224 仍监听；MCP 连接不断开；`Target.getTargets` 仍可见原 target；重新激活窗口后 Browser tab 仍可用 |
-| R07 | 端口占用                | 让 `9224` 被占用后启动 Electron                                      | 端口解析或报错行为明确                                                                                          |
-| R08 | 非法端口环境变量        | 设置 `BROWSER_VIEWER_TERMINAL_BROWSER_CDP_PROXY_PORT=abc` 或 `70000` | 启动失败且错误明确                                                                                              |
+| ID  | 用例                                | 操作                                                                                       | 预期                                                                                                            |
+| --- | ----------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| R01 | 创建/关闭循环                       | 循环 10 次：创建 1 个百度 tab，确认加载后立即关闭，再进入下一轮                            | 无残留临时 tab，无明显卡死                                                                                      |
+| R02 | 两个 MCP 连接 discovery             | 两个客户端分别 `Target.setDiscoverTargets`                                                 | discovery 事件只发给各自连接，不串扰                                                                            |
+| R03 | 两个 Playwright 实例操作不同 tab    | 客户端 A、B 同时 `chromium.connectOverCDP(<cdp>)`，分别对不同 page 执行 `Runtime.evaluate` | 两个 evaluate 都成功；任一客户端断开后，另一客户端仍能继续操作自己的 page                                       |
+| R04 | 两个 raw CDP client 操作不同 target | 客户端 A、B 分别 `Target.attachToTarget` 到不同 target，然后并发 `Runtime.evaluate`        | 两个命令都成功，sessionId 不串扰                                                                                |
+| R05 | 同 target 多客户端边界              | 两个客户端同时操作同一个 page                                                              | 不崩溃；命令可以串行完成或返回明确冲突错误；不得因一个客户端断开导致另一个客户端的不同 target session 失效      |
+| R06 | 一个连接关闭 tab                    | 连接 A 关闭 target，连接 B 已 discovery                                                    | 连接 B 收到 target destroyed/detached                                                                           |
+| R07 | 加载中断开 MCP                      | 百度加载中直接关闭 MCP 连接                                                                | Runweave UI 和 Browser tab 仍可用                                                                               |
+| R08 | 加载中关闭 tab                      | 百度加载中在 UI 关闭 tab                                                                   | MCP 收到 detached，不崩溃                                                                                       |
+| R09 | 隐藏 Electron 主窗口                | MCP 连接存在时点击 Electron 主窗口关闭按钮                                                 | App 不退出；9224 仍监听；MCP 连接不断开；`Target.getTargets` 仍可见原 target；重新激活窗口后 Browser tab 仍可用 |
+| R10 | 端口占用                            | 让 `9224` 被占用后启动 Electron                                                            | 端口解析或报错行为明确                                                                                          |
+| R11 | 非法端口环境变量                    | 设置 `BROWSER_VIEWER_TERMINAL_BROWSER_CDP_PROXY_PORT=abc` 或 `70000`                       | 启动失败且错误明确                                                                                              |
+
+### 多客户端自动化覆盖
+
+`frontend/tests/terminal-browser-cdp-multi-client.spec.ts` 覆盖 `R03`。该用例需要真实桌面端 CDP endpoint；默认 CI 不设置 endpoint 时跳过。
+
+执行命令：
+
+```bash
+RUNWEAVE_DESKTOP_CDP_ENDPOINT=http://127.0.0.1:9224 \
+  pnpm --filter @runweave/frontend exec playwright test tests/terminal-browser-cdp-multi-client.spec.ts
+```
 
 ## Playwright MCP 端到端验收建议
 

@@ -18,6 +18,8 @@ interface AttachedTarget {
   webContents: WebContents;
   proxySessionId: string;
   electronSessionId: string | null;
+  defaultContextId: number | null;
+  defaultContextEmitted: boolean;
   rootFrameId: string | null;
   detached: boolean;
   onDebuggerMessage: (
@@ -30,6 +32,86 @@ interface AttachedTarget {
 }
 
 type MessageRelay = (data: object) => void;
+
+let nextSyntheticContextId = 1_000_000_000;
+
+interface SharedDebuggerAttachment {
+  webContents: WebContents;
+  refCount: number;
+}
+
+const sharedDebuggerAttachments = new Map<string, SharedDebuggerAttachment>();
+
+function attachSharedDebugger(targetId: string, webContents: WebContents): void {
+  const existing = sharedDebuggerAttachments.get(targetId);
+  if (existing) {
+    existing.refCount += 1;
+    setTerminalBrowserCdpProxyAttached(targetId, true);
+    return;
+  }
+
+  const found = getTerminalBrowserEntryByTargetId(targetId);
+  if (found?.entry.devtoolsOpen) {
+    throw new Error("DevTools is already open for this browser tab");
+  }
+
+  if (!found?.entry.deviceDebuggerAttached) {
+    try {
+      webContents.debugger.attach("1.3");
+    } catch {
+      // Debugger may still be attached from a previous connection that did not
+      // cleanly close (e.g. process killed without WebSocket close frame).
+      // Detach first, then retry once — but only if DevTools is not open,
+      // since we must not forcibly steal the debugger from an active DevTools.
+      const entry = getTerminalBrowserEntryByTargetId(targetId);
+      if (entry?.entry.devtoolsOpen || webContents.isDevToolsOpened()) {
+        throw new Error("DevTools is already open for this browser tab");
+      }
+      if (!entry?.entry.deviceDebuggerAttached) {
+        try {
+          webContents.debugger.detach();
+          webContents.debugger.attach("1.3");
+        } catch (retryError) {
+          throw new Error(
+            `Failed to attach debugger: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
+          );
+        }
+      }
+    }
+  }
+
+  sharedDebuggerAttachments.set(targetId, { webContents, refCount: 1 });
+  setTerminalBrowserCdpProxyAttached(targetId, true);
+}
+
+function releaseSharedDebugger(targetId: string): void {
+  const shared = sharedDebuggerAttachments.get(targetId);
+  if (!shared) {
+    setTerminalBrowserCdpProxyAttached(targetId, false);
+    return;
+  }
+
+  shared.refCount -= 1;
+  if (shared.refCount > 0) {
+    return;
+  }
+
+  sharedDebuggerAttachments.delete(targetId);
+  const found = getTerminalBrowserEntryByTargetId(targetId);
+  if (!found?.entry.deviceDebuggerAttached) {
+    try {
+      shared.webContents.debugger.detach();
+    } catch {
+      // Already detached.
+    }
+  }
+  setTerminalBrowserCdpProxyAttached(targetId, false);
+}
+
+function clearSharedDebugger(targetId: string): void {
+  sharedDebuggerAttachments.delete(targetId);
+  setTerminalBrowserCdpProxyAttached(targetId, false);
+}
 
 export class CdpSessionManager {
   private readonly targets = new Map<string, AttachedTarget>();
@@ -50,36 +132,7 @@ export class CdpSessionManager {
       return { proxySessionId: existing.proxySessionId };
     }
 
-    const found = getTerminalBrowserEntryByTargetId(targetId);
-    if (found?.entry.devtoolsOpen) {
-      throw new Error("DevTools is already open for this browser tab");
-    }
-    if (!found?.entry.deviceDebuggerAttached) {
-      try {
-        webContents.debugger.attach("1.3");
-      } catch {
-        // Debugger may still be attached from a previous connection that did not
-        // cleanly close (e.g. process killed without WebSocket close frame).
-        // Detach first, then retry once — but only if DevTools is not open,
-        // since we must not forcibly steal the debugger from an active DevTools.
-        const entry = getTerminalBrowserEntryByTargetId(targetId);
-        if (entry?.entry.devtoolsOpen || webContents.isDevToolsOpened()) {
-          throw new Error("DevTools is already open for this browser tab");
-        }
-        if (!entry?.entry.deviceDebuggerAttached) {
-          try {
-            webContents.debugger.detach();
-            webContents.debugger.attach("1.3");
-          } catch (retryError) {
-            throw new Error(
-              `Failed to attach debugger: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
-            );
-          }
-        }
-      }
-    }
-
-    setTerminalBrowserCdpProxyAttached(targetId, true);
+    attachSharedDebugger(targetId, webContents);
 
     const proxySessionId = randomUUID();
     const onDebuggerMessage = (
@@ -103,6 +156,8 @@ export class CdpSessionManager {
       webContents,
       proxySessionId,
       electronSessionId: null,
+      defaultContextId: null,
+      defaultContextEmitted: false,
       rootFrameId: null,
       detached: false,
       onDebuggerMessage,
@@ -126,16 +181,7 @@ export class CdpSessionManager {
     target.detached = true;
     this.removeDebuggerListeners(target);
 
-    const found = getTerminalBrowserEntryByTargetId(targetId);
-    if (!found?.entry.deviceDebuggerAttached) {
-      try {
-        target.webContents.debugger.detach();
-      } catch {
-        // Already detached.
-      }
-    }
-
-    setTerminalBrowserCdpProxyAttached(targetId, false);
+    releaseSharedDebugger(targetId);
     this.proxySessionToTarget.delete(target.proxySessionId);
     if (target.electronSessionId) {
       this.electronSessionToProxy.delete(target.electronSessionId);
@@ -169,7 +215,10 @@ export class CdpSessionManager {
       markTerminalBrowserMcpActivity(targetId);
     }
 
-    const commandParams = this.rewriteFrameIdsForElectron(target, params);
+    const commandParams = this.rewriteCommandParamsForElectron(
+      target,
+      params,
+    );
     const result = await target.webContents.debugger.sendCommand(
       method,
       commandParams,
@@ -178,6 +227,9 @@ export class CdpSessionManager {
     const safeResult = (result as object) ?? {};
     if (method === "Page.getFrameTree") {
       target.rootFrameId = this.getRootFrameId(safeResult);
+    }
+    if (method === "Runtime.enable") {
+      this.emitDefaultExecutionContext(target);
     }
     return this.rewriteFrameIdsForClient(target, safeResult);
   }
@@ -233,6 +285,10 @@ export class CdpSessionManager {
       }
     }
 
+    if (method === "Runtime.executionContextCreated") {
+      this.handleExecutionContextCreated(target, params);
+    }
+
     if (this.messageRelay) {
       const event: Record<string, unknown> = {
         method,
@@ -250,7 +306,7 @@ export class CdpSessionManager {
     }
     target.detached = true;
     this.removeDebuggerListeners(target);
-    setTerminalBrowserCdpProxyAttached(targetId, false);
+    clearSharedDebugger(targetId);
 
     if (this.messageRelay) {
       this.messageRelay({
@@ -270,6 +326,48 @@ export class CdpSessionManager {
   private removeDebuggerListeners(target: AttachedTarget): void {
     target.webContents.debugger.off("message", target.onDebuggerMessage);
     target.webContents.debugger.off("detach", target.onDebuggerDetach);
+  }
+
+  private emitDefaultExecutionContext(target: AttachedTarget): void {
+    if (target.defaultContextEmitted || !this.messageRelay) {
+      return;
+    }
+
+    target.defaultContextId = nextSyntheticContextId++;
+    target.defaultContextEmitted = true;
+    this.messageRelay({
+      method: "Runtime.executionContextCreated",
+      params: {
+        context: {
+          id: target.defaultContextId,
+          origin: target.webContents.getURL(),
+          name: "",
+          uniqueId: `runweave-default-${target.proxySessionId}`,
+          auxData: {
+            frameId: target.targetId,
+            isDefault: true,
+            type: "default",
+          },
+        },
+      },
+      sessionId: target.proxySessionId,
+    });
+  }
+
+  private handleExecutionContextCreated(
+    target: AttachedTarget,
+    params: object,
+  ): void {
+    const context = (
+      params as {
+        context?: { id?: unknown; auxData?: { isDefault?: unknown } };
+      }
+    ).context;
+    if (context?.auxData?.isDefault !== true || typeof context.id !== "number") {
+      return;
+    }
+    target.defaultContextId = context.id;
+    target.defaultContextEmitted = true;
   }
 
   private getRootFrameId(result: object): string | null {
@@ -297,6 +395,34 @@ export class CdpSessionManager {
       return value;
     }
     return this.rewriteStringValues(value, target.rootFrameId, target.targetId);
+  }
+
+  private rewriteCommandParamsForElectron(
+    target: AttachedTarget,
+    value: object,
+  ): object {
+    const withFrameIds = this.rewriteFrameIdsForElectron(target, value);
+    if (!target.defaultContextId) {
+      return withFrameIds;
+    }
+    return this.omitSyntheticDefaultContextId(
+      withFrameIds,
+      target.defaultContextId,
+    );
+  }
+
+  private omitSyntheticDefaultContextId(value: object, contextId: number): object {
+    const next: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      if (
+        (key === "contextId" || key === "executionContextId") &&
+        child === contextId
+      ) {
+        continue;
+      }
+      next[key] = child;
+    }
+    return next;
   }
 
   private rewriteStringValues(value: unknown, from: string, to: string): object {

@@ -128,17 +128,18 @@ NODE
 
 ### 连接与发现
 
-| ID   | 用例                | 操作                                                             | 预期                                            |
-| ---- | ------------------- | ---------------------------------------------------------------- | ----------------------------------------------- |
-| CP01 | env 自动发现        | 在 Runweave terminal 启动 `@playwright/mcp`，不手动配置 endpoint | 通过 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 自动连接成功 |
-| CP02 | 只看到白名单 target | MCP 连接后列出 pages                                             | 只包含 Terminal Browser tab，无 Runweave 主窗口 |
-| CP03 | 新开页面            | MCP 调用 `browser.newPage()` 或 `context.newPage()`              | 在 Terminal Browser 创建新 AI tab               |
-| CP04 | 新页面 UI 同步      | MCP 创建新 tab 后观察 Runweave UI                                | tab bar 出现新 tab                              |
-| CP05 | 新页面上限          | MCP 连续创建 10 个新 page 后再创建第 11 个                       | 返回 `Maximum AI tab limit` 错误                |
-| CP06 | 关闭页面 UI 同步    | MCP 调用 `page.close()` 后观察 UI                                | tab 从 tab bar 消失，`page.close()` 正常返回    |
-| CP07 | 重新连接            | 断开 MCP 连接后重新连接                                          | 连接成功，能看到之前的 tab                      |
-| CP08 | 多客户端连接        | 两个 MCP 客户端同时连接                                          | 都能看到相同的 target 列表                      |
-| CP09 | 连接数上限          | 8 个客户端已连接后第 9 个尝试连接                                | 返回 503 或明确拒绝                             |
+| ID   | 用例                   | 操作                                                                    | 预期                                                                      |
+| ---- | ---------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| CP01 | env 自动发现           | 在 Runweave terminal 启动 `@playwright/mcp`，不手动配置 endpoint        | 通过 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 自动连接成功                           |
+| CP02 | 只看到白名单 target    | MCP 连接后列出 pages                                                    | 只包含 Terminal Browser tab，无 Runweave 主窗口                           |
+| CP03 | 新开页面               | MCP 调用 `browser.newPage()` 或 `context.newPage()`                     | 在 Terminal Browser 创建新 AI tab                                         |
+| CP04 | 新页面 UI 同步         | MCP 创建新 tab 后观察 Runweave UI                                       | tab bar 出现新 tab                                                        |
+| CP05 | 新页面上限             | MCP 连续创建 10 个新 page 后再创建第 11 个                              | 返回 `Maximum AI tab limit` 错误                                          |
+| CP06 | 关闭页面 UI 同步       | MCP 调用 `page.close()` 后观察 UI                                       | tab 从 tab bar 消失，`page.close()` 正常返回                              |
+| CP07 | 重新连接               | 断开 MCP 连接后重新连接                                                 | 连接成功，能看到之前的 tab                                                |
+| CP08 | 多客户端连接           | 两个 MCP 客户端同时连接                                                 | 都能看到相同的 target 列表                                                |
+| CP10 | 多 Playwright 实例并发 | 两个 `chromium.connectOverCDP(<cdp>)` 实例同时连接，并分别操作不同 page | 两个实例的页面命令都成功；一个实例断开不影响另一个实例继续操作自己的 page |
+| CP09 | 连接数上限             | 8 个客户端已连接后第 9 个尝试连接                                       | 返回 503 或明确拒绝                                                       |
 
 ### Session 管理（双 sessionId 域）
 
@@ -217,9 +218,10 @@ NODE
 | MR01 | MCP 导航中断开        | 百度加载中直接关闭 MCP 连接                            | Runweave UI 和 Browser tab 仍可用                |
 | MR02 | MCP 输入中关闭 tab    | 在 UI 关闭正在输入的 tab                               | MCP 收到 session 断开事件，不崩溃                |
 | MR03 | 快速重连              | 连续连接→操作→断开 5 次                                | 每次都正常工作，无残留状态                       |
-| MR04 | 两个 MCP 操作同一 tab | 两个 MCP 客户端同时对同一 page 发送命令                | 不崩溃，命令按序执行或返回冲突错误               |
-| MR05 | MCP 操作中隐藏窗口    | MCP 操作期间点击 Electron 主窗口关闭按钮（隐藏到后台） | MCP 连接不断开，9224 仍监听，重新激活后 tab 可用 |
-| MR06 | 端口被占用启动        | 9224 端口被占用后启动 Electron                         | 自动漂移到下一个可用端口，或明确报错             |
+| MR04 | 两个 MCP 操作不同 tab | 两个 MCP 客户端同时对不同 page 发送命令                | 两边命令都成功，session 不串扰                   |
+| MR05 | 两个 MCP 操作同一 tab | 两个 MCP 客户端同时对同一 page 发送命令                | 不崩溃，命令按序执行或返回冲突错误               |
+| MR06 | MCP 操作中隐藏窗口    | MCP 操作期间点击 Electron 主窗口关闭按钮（隐藏到后台） | MCP 连接不断开，9224 仍监听，重新激活后 tab 可用 |
+| MR07 | 端口被占用启动        | 9224 端口被占用后启动 Electron                         | 自动漂移到下一个可用端口，或明确报错             |
 
 ## Playwright MCP 端到端验收流程
 
