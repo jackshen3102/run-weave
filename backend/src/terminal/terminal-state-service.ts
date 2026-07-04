@@ -4,13 +4,14 @@ import type {
   TerminalState,
   TerminalStateChangeReason,
 } from "@runweave/shared";
+import { hasCodexReadyPrompt } from "@runweave/shared";
 import type { TerminalSessionRecord } from "./manager";
 import type { TerminalEventService } from "./terminal-event-service";
 import type { TerminalStateStore } from "./terminal-state-store";
 
 type TerminalStateSessionSnapshot = Pick<
   TerminalSessionRecord,
-  "activeCommand" | "command" | "status" | "terminalState"
+  "activeCommand" | "command" | "status" | "terminalState" | "scrollback"
 >;
 
 const SHELL_IDLE: TerminalState = { state: "shell_idle", agent: null };
@@ -52,8 +53,44 @@ export class TerminalStateService {
       terminalSessionId,
       resolveStoredAgentState(stored, agent) ??
         resolveStoredAgentState(persisted, agent) ??
-        createAgentState(agent, "agent_idle"),
+        createAgentState(agent, "agent_starting"),
       context,
+    );
+  }
+
+  setAgentStarting(
+    terminalSessionId: string,
+    agent: TerminalAgentKind,
+    context?: Partial<TerminalStatePublishContext>,
+  ): TerminalState {
+    const publishContext = context
+      ? {
+          projectId: context.projectId ?? null,
+          reason: context.reason ?? "metadata",
+        }
+      : undefined;
+    return this.setAndPublish(
+      terminalSessionId,
+      createAgentState(agent, "agent_starting"),
+      publishContext,
+    );
+  }
+
+  setAgentIdle(
+    terminalSessionId: string,
+    agent: TerminalAgentKind,
+    context?: Partial<TerminalStatePublishContext>,
+  ): TerminalState {
+    const publishContext = context
+      ? {
+          projectId: context.projectId ?? null,
+          reason: context.reason ?? "metadata",
+        }
+      : undefined;
+    return this.setAndPublish(
+      terminalSessionId,
+      createAgentState(agent, "agent_idle"),
+      publishContext,
     );
   }
 
@@ -103,10 +140,28 @@ export class TerminalStateService {
       resolveStoredAgentState(stored, agent) ??
       resolveStoredAgentState(sessionSnapshot.terminalState, agent);
     if (agentState) {
+      if (
+        agentState.state === "agent_starting" &&
+        hasAgentReadyPrompt(agent, sessionSnapshot.scrollback)
+      ) {
+        return this.setAndPublish(
+          terminalSessionId,
+          createAgentState(agent, "agent_idle"),
+          undefined,
+        );
+      }
       return agentState;
     }
 
-    return createAgentState(agent, "agent_idle");
+    if (hasAgentReadyPrompt(agent, sessionSnapshot.scrollback)) {
+      return this.setAndPublish(
+        terminalSessionId,
+        createAgentState(agent, "agent_idle"),
+        undefined,
+      );
+    }
+
+    return createAgentState(agent, "agent_starting");
   }
 
   private setAndPublish(
@@ -185,7 +240,17 @@ export function getAgentForCommand(
 
 function createAgentState(
   agent: TerminalAgentKind,
-  state: "agent_idle" | "agent_running",
+  state: "agent_starting" | "agent_idle" | "agent_running",
 ): TerminalState {
   return { state, agent };
+}
+
+function hasAgentReadyPrompt(
+  agent: TerminalAgentKind,
+  scrollback: string,
+): boolean {
+  if (agent !== "codex") {
+    return false;
+  }
+  return hasCodexReadyPrompt(scrollback);
 }

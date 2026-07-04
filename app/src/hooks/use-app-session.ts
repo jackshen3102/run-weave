@@ -67,6 +67,13 @@ function resolveSessionDisplayStatus(
     };
   }
 
+  if (terminalState.state === "agent_starting") {
+    return {
+      displayStatus: "agent-starting",
+      displayStatusLabel: "Agent Starting",
+    };
+  }
+
   if (terminalState.state === "agent_idle") {
     return {
       displayStatus: "agent-idle",

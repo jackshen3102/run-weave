@@ -1,4 +1,10 @@
-import type { AgentTeamTerminal, TerminalAgentKind } from "@runweave/shared";
+import {
+  hasPendingCodexTrustPrompt,
+  hasStartedCodexUi,
+  stripTerminalControlSequences,
+  type AgentTeamTerminal,
+  type TerminalAgentKind,
+} from "@runweave/shared";
 import type {
   TerminalSessionManager,
   TerminalSessionRecord,
@@ -21,13 +27,6 @@ import { AgentTeamError } from "./errors";
 
 const AGENT_TEAM_AGENT_START_TIMEOUT_MS = 15000;
 const AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS = 250;
-const CODEX_TRUST_PROMPT_PATTERN =
-  /Do you trust the contents of this directory\?|Press enter to continue/;
-const CODEX_READY_PATTERN = /OpenAI Codex/;
-const ANSI_ESCAPE_SEQUENCE_PATTERN = new RegExp(
-  `${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`,
-  "g",
-);
 
 export class AgentTeamAgentReadinessService {
   constructor(
@@ -85,6 +84,12 @@ export class AgentTeamAgentReadinessService {
     agent: TerminalAgentKind,
     paneTarget: TmuxPaneTarget | undefined,
   ): Promise<void> {
+    if (agent === "codex" && !paneTarget) {
+      this.options.terminalStateService.setAgentStarting(session.id, agent, {
+        projectId: session.projectId,
+        reason: "metadata",
+      });
+    }
     await sendInputToSession(
       this.options.terminalSessionManager,
       {
@@ -161,8 +166,33 @@ export class AgentTeamAgentReadinessService {
     if (agent !== "codex") {
       return true;
     }
+    if (!paneTarget) {
+      const currentState = this.options.terminalStateService.getCurrent(
+        session.id,
+        session,
+      );
+      if (currentState.agent === agent && currentState.state === "agent_idle") {
+        return true;
+      }
+      const scrollback = await this.readCleanScrollback(session, paneTarget);
+      if (!hasStartedCodexUi(scrollback)) {
+        return false;
+      }
+      this.options.terminalStateService.setAgentIdle(session.id, agent, {
+        projectId: session.projectId,
+        reason: "metadata",
+      });
+      return true;
+    }
     const scrollback = await this.readCleanScrollback(session, paneTarget);
-    return hasStartedCodexUi(scrollback);
+    if (!hasStartedCodexUi(scrollback)) {
+      return false;
+    }
+    this.options.terminalStateService.setAgentIdle(session.id, agent, {
+      projectId: session.projectId,
+      reason: "metadata",
+    });
+    return true;
   }
 
   private async readCleanScrollback(
@@ -244,41 +274,4 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
-}
-
-function hasPendingCodexTrustPrompt(scrollback: string): boolean {
-  const trustPromptIndex = findLastIndex(
-    scrollback,
-    CODEX_TRUST_PROMPT_PATTERN,
-  );
-  if (trustPromptIndex < 0) {
-    return false;
-  }
-  const readyIndex = findLastIndex(scrollback, CODEX_READY_PATTERN);
-  return readyIndex < trustPromptIndex;
-}
-
-function hasStartedCodexUi(scrollback: string): boolean {
-  const readyIndex = findLastIndex(scrollback, CODEX_READY_PATTERN);
-  if (readyIndex < 0) {
-    return false;
-  }
-  const trustPromptIndex = findLastIndex(
-    scrollback,
-    CODEX_TRUST_PROMPT_PATTERN,
-  );
-  return readyIndex > trustPromptIndex;
-}
-
-function findLastIndex(value: string, pattern: RegExp): number {
-  let latest = -1;
-  const globalPattern = new RegExp(pattern.source, `${pattern.flags}g`);
-  for (const match of value.matchAll(globalPattern)) {
-    latest = match.index ?? latest;
-  }
-  return latest;
-}
-
-function stripTerminalControlSequences(value: string): string {
-  return value.replace(ANSI_ESCAPE_SEQUENCE_PATTERN, "").replace(/\r/g, "");
 }

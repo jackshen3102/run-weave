@@ -414,9 +414,15 @@ export interface UpdateTerminalPanelRequest {
 export interface AppHomeOverviewSession extends TerminalSessionListItem {
   title: string;
   subtitle: string;
-  displayStatus: "running" | "agent-idle" | "idle" | "exited";
+  displayStatus:
+    | "running"
+    | "agent-starting"
+    | "agent-idle"
+    | "idle"
+    | "exited";
   displayStatusLabel:
     | "Agent Running"
+    | "Agent Starting"
     | "Agent Idle"
     | "Running"
     | "Idle"
@@ -481,6 +487,7 @@ export type TerminalAgentKind = "codex" | "trae" | "traex" | "traecli";
 
 export type TerminalStateValue =
   | "shell_idle"
+  | "agent_starting"
   | "agent_idle"
   | "agent_running";
 

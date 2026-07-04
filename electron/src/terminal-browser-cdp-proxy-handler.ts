@@ -19,6 +19,7 @@ const TARGET_COMMANDS = new Set([
   "Target.setDiscoverTargets",
   "Target.setAutoAttach",
   "Target.attachToTarget",
+  "Target.detachFromTarget",
   "Target.activateTarget",
   "Target.createTarget",
   "Target.closeTarget",
@@ -83,6 +84,22 @@ export function buildTargetInfo(target: {
     attached: target.attached ?? false,
     browserContextId: "runweave-terminal-browser",
   };
+}
+
+export function buildJsonTargetList(
+  targets: Array<{ targetId: string; url: string; title: string }>,
+  wsUrl: string,
+): object[] {
+  const wsPath = wsUrl.replace(/^ws:\/\//, "");
+  return targets.map((target) => ({
+    description: "",
+    devtoolsFrontendUrl: `/devtools/inspector.html?ws=${wsPath}`,
+    id: target.targetId,
+    title: target.title,
+    type: "page",
+    url: target.url,
+    webSocketDebuggerUrl: wsUrl,
+  }));
 }
 
 export function isCdpConnectionLimitReached(

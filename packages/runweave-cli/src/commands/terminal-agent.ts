@@ -7,6 +7,7 @@ import type {
   TerminalSessionStatusResponse,
   TerminalState,
 } from "@runweave/shared";
+import { hasCodexReadyPrompt } from "@runweave/shared";
 
 const DEFAULT_TAIL_LINES = 120;
 export const DEFAULT_CONFIRM_TIMEOUT_MS = 3000;
@@ -384,7 +385,7 @@ function resolveCurrentAgent(snapshot: {
 
 function isRequestedAgentReady(
   snapshot: {
-    session: Pick<TerminalSessionStatusResponse, "activeCommand">;
+    session: Pick<TerminalSessionStatusResponse, "activeCommand" | "scrollback">;
     terminalState: TerminalState;
     panel?: Pick<TerminalPanelListItem, "activeCommand"> | null;
   },
@@ -393,10 +394,24 @@ function isRequestedAgentReady(
   if (snapshot.panel) {
     return agentNameOrNull(snapshot.panel.activeCommand) === agent;
   }
+  if (
+    snapshot.terminalState.state === "agent_starting" &&
+    resolveCurrentAgent(snapshot) === agent &&
+    isAgentReadyPrompt(snapshot.session.scrollback, agent)
+  ) {
+    return true;
+  }
   return (
-    snapshot.terminalState.state !== "shell_idle" &&
+    snapshot.terminalState.state === "agent_idle" &&
     resolveCurrentAgent(snapshot) === agent
   );
+}
+
+function isAgentReadyPrompt(scrollback: string, agent: string): boolean {
+  if (agent === "codex") {
+    return hasCodexReadyPrompt(scrollback);
+  }
+  return AGENT_PROMPT_PATTERN.test(stripTerminalControlSequences(scrollback));
 }
 
 async function sendAgentControlLine(

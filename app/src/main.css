@@ -842,6 +842,11 @@ ion-content::part(background) {
   color: #7dd3fc;
 }
 
+.terminal-row__status.is-agent-starting {
+  background: rgba(251, 191, 36, 0.16);
+  color: #facc15;
+}
+
 .terminal-row__status.is-exited {
   background: rgba(148, 163, 184, 0.14);
   color: #a8b3c2;

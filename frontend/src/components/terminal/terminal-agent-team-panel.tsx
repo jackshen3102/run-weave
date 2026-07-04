@@ -54,6 +54,7 @@ interface TerminalAgentTeamPanelProps {
   activeProject: TerminalProjectListItem | null;
   activeSession: TerminalSessionListItem | null;
   onPanelSplitEnabledChange?: (enabled: boolean) => void;
+  onActiveRunChange?: (active: boolean) => void;
   onAuthExpired?: () => void;
 }
 
@@ -68,6 +69,7 @@ export function TerminalAgentTeamPanel({
   activeProject,
   activeSession,
   onPanelSplitEnabledChange,
+  onActiveRunChange,
   onAuthExpired,
 }: TerminalAgentTeamPanelProps) {
   const [run, setRun] = useState<AgentTeamRun | null>(null);
@@ -82,6 +84,8 @@ export function TerminalAgentTeamPanel({
   const projectId = activeProject?.projectId ?? null;
   const terminalSessionId = activeSession?.terminalSessionId ?? null;
   const runIdRef = useRef<string | null>(null);
+  const workerDraftDirtyRef = useRef(false);
+  const workerDraftSourceRef = useRef<string | null>(null);
   runIdRef.current = run?.runId ?? null;
 
   const handleError = useMemoizedFn((caught: unknown): void => {
@@ -92,9 +96,46 @@ export function TerminalAgentTeamPanel({
     setError(caught instanceof Error ? caught.message : String(caught));
   });
 
+  const syncWorkerDraftsFromRun = useMemoizedFn(
+    (next: AgentTeamRun | null, options?: { force?: boolean }): void => {
+      if (next?.phase !== "proposal" || !next.proposal) {
+        workerDraftDirtyRef.current = false;
+        workerDraftSourceRef.current = null;
+        setWorkerDrafts(null);
+        return;
+      }
+
+      const source = `${next.runId}:${next.updatedAt}`;
+      if (
+        !options?.force &&
+        workerDraftSourceRef.current !== null &&
+        workerDraftDirtyRef.current
+      ) {
+        return;
+      }
+
+      workerDraftDirtyRef.current = false;
+      workerDraftSourceRef.current = source;
+      setWorkerDrafts(
+        next.proposal.workers.map((worker) => ({
+          role: worker.role,
+          intent: worker.intent,
+        })),
+      );
+    },
+  );
+
+  const syncActiveRunPresence = useMemoizedFn((next: AgentTeamRun | null) => {
+    onActiveRunChange?.(
+      Boolean(next && next.status !== "done" && next.status !== "failed"),
+    );
+  });
+
   const loadRun = useMemoizedFn(async (): Promise<void> => {
     if (!projectId || !terminalSessionId) {
       setRun(null);
+      syncWorkerDraftsFromRun(null);
+      syncActiveRunPresence(null);
       return;
     }
     try {
@@ -105,17 +146,8 @@ export function TerminalAgentTeamPanel({
         terminalSessionId,
       );
       setRun(next);
-      // Keep the proposal draft in sync when entering proposal phase.
-      if (next?.phase === "proposal" && next.proposal) {
-        setWorkerDrafts(
-          next.proposal.workers.map((worker) => ({
-            role: worker.role,
-            intent: worker.intent,
-          })),
-        );
-      } else if (next?.phase !== "proposal") {
-        setWorkerDrafts(null);
-      }
+      syncWorkerDraftsFromRun(next);
+      syncActiveRunPresence(next);
     } catch (caught) {
       handleError(caught);
     }
@@ -125,13 +157,20 @@ export function TerminalAgentTeamPanel({
   useEffect(() => {
     setRun(null);
     setError(null);
-    setWorkerDrafts(null);
+    syncWorkerDraftsFromRun(null);
+    syncActiveRunPresence(null);
     if (!projectId || !terminalSessionId) {
       return;
     }
     setLoading(true);
     void loadRun().finally(() => setLoading(false));
-  }, [projectId, terminalSessionId, loadRun]);
+  }, [
+    projectId,
+    terminalSessionId,
+    loadRun,
+    syncWorkerDraftsFromRun,
+    syncActiveRunPresence,
+  ]);
 
   // Poll the run so agent-driven transitions (propose-split, loop rounds,
   // escalation) surface without manual refresh — mirrors the human-gate
@@ -153,16 +192,8 @@ export function TerminalAgentTeamPanel({
       try {
         const next = await action();
         setRun(next);
-        if (next.phase === "proposal" && next.proposal) {
-          setWorkerDrafts(
-            next.proposal.workers.map((worker) => ({
-              role: worker.role,
-              intent: worker.intent,
-            })),
-          );
-        } else {
-          setWorkerDrafts(null);
-        }
+        syncWorkerDraftsFromRun(next, { force: true });
+        syncActiveRunPresence(next);
       } catch (caught) {
         handleError(caught);
       } finally {
@@ -275,6 +306,11 @@ export function TerminalAgentTeamPanel({
     );
   });
 
+  const updateWorkerDrafts = useMemoizedFn((drafts: WorkerDraft[]): void => {
+    workerDraftDirtyRef.current = true;
+    setWorkerDrafts(drafts);
+  });
+
   if (!projectId || !terminalSessionId) {
     return (
       <div className="flex h-full items-center justify-center p-4 text-xs text-slate-500">
@@ -334,7 +370,7 @@ export function TerminalAgentTeamPanel({
             run={run}
             workerDrafts={workerDrafts}
             busy={busy}
-            onChangeDrafts={setWorkerDrafts}
+            onChangeDrafts={updateWorkerDrafts}
             onConfirm={confirmSplit}
             onReject={rejectSplit}
           />

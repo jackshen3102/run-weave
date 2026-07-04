@@ -6,6 +6,7 @@ import { CdpSessionManager } from "./terminal-browser-cdp-proxy-session.js";
 import {
   buildVersionResponse,
   buildTargetInfo,
+  buildJsonTargetList,
   buildCdpResult,
   buildCdpError,
   buildCdpSessionResult,
@@ -143,6 +144,18 @@ export async function startCdpProxy(
     if (url === "/json/version" || url === "/json/version/") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(buildVersionResponse(wsUrl)));
+      return;
+    }
+
+    if (
+      url === "/json" ||
+      url === "/json/" ||
+      url === "/json/list" ||
+      url === "/json/list/"
+    ) {
+      const targets = getTerminalBrowserCdpTargets();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(buildJsonTargetList(targets, wsUrl)));
       return;
     }
 
@@ -447,11 +460,13 @@ async function handleMessage(
           sendJson(ws, buildCdpResult(id, {}));
           return;
         }
-        if (detachSessionId) {
-          const targetId = sessionManager.getTargetIdForSession(detachSessionId);
-          if (targetId) {
-            sessionManager.detachDebugger(targetId);
-          }
+        const targetId =
+          (typeof params.targetId === "string" ? params.targetId : null) ??
+          (detachSessionId
+            ? sessionManager.getTargetIdForSession(detachSessionId)
+            : null);
+        if (targetId) {
+          sessionManager.detachDebugger(targetId);
         }
         sendJson(ws, buildCdpResult(id, {}));
         return;

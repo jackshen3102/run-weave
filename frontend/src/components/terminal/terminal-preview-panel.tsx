@@ -37,6 +37,7 @@ interface TerminalPreviewPanelProps {
   onEditProject: () => void;
   onSelectSession?: (terminalSessionId: string) => void;
   onPanelSplitEnabledChange?: (enabled: boolean) => void;
+  onActiveAgentTeamRunChange?: (active: boolean) => void;
 }
 
 interface PreviewFileMutationTarget {
@@ -74,6 +75,7 @@ export function TerminalPreviewPanel({
   onAuthExpired,
   onEditProject,
   onPanelSplitEnabledChange,
+  onActiveAgentTeamRunChange,
 }: TerminalPreviewPanelProps) {
   const [lineTarget, setLineTarget] =
     useState<TerminalPreviewLineTarget | null>(null);
@@ -631,6 +633,7 @@ export function TerminalPreviewPanel({
       activeProject={activeProject}
       activeSession={activeSession}
       onPanelSplitEnabledChange={onPanelSplitEnabledChange}
+      onActiveRunChange={onActiveAgentTeamRunChange}
       onAuthExpired={onAuthExpired}
     />
   );

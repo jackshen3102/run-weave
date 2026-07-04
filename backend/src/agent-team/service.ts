@@ -15,12 +15,16 @@ import type {
 } from "@runweave/shared";
 import type {
   TerminalSessionManager,
+  TerminalPanelRecord,
   TerminalSessionRecord,
 } from "../terminal/manager";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TerminalEventService } from "../terminal/terminal-event-service";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
+import {
+  getAgentForCommand,
+  type TerminalStateService,
+} from "../terminal/terminal-state-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TmuxService } from "../terminal/tmux-service";
 import { logger } from "../logging";
@@ -160,6 +164,10 @@ export class AgentTeamService {
         "This terminal already has an active agent-team run",
       );
     }
+    const terminal = resolveAgentTeamTerminal(input.terminal);
+    this.requireAgentTeamTerminalAvailable(session, terminal);
+    const task = requireRunnableTask(input.task);
+
     // Ensure the panel workspace so worker split is possible later.
     let mainPanelId: string | null = null;
     if (this.tmuxService) {
@@ -185,8 +193,6 @@ export class AgentTeamService {
       }
     }
     const now = new Date().toISOString();
-    const terminal = resolveAgentTeamTerminal(input.terminal);
-    const task = requireRunnableTask(input.task);
     const run: AgentTeamRun = {
       runId: createAgentTeamRunId(input.terminalSessionId),
       projectId: input.projectId,
@@ -213,13 +219,13 @@ export class AgentTeamService {
       createdAt: now,
       updatedAt: now,
     };
-    await this.runStore.writeRun(run);
     await this.agentReadiness.ensureAgentReady(
       session,
       terminal,
       mainPanelId ? { panelId: mainPanelId } : undefined,
     );
-    await this.trySendToMain(run, buildStartupPrompt(run));
+    await this.sendStartupPromptToMain(run, buildStartupPrompt(run));
+    await this.runStore.writeRun(run);
     return run;
   }
 
@@ -429,35 +435,41 @@ export class AgentTeamService {
     for (const worker of workers) {
       let panelId: string | null = null;
       let tmuxPaneId: string | null = null;
+      const panelAlias = `${worker.role}-${boundWorkers.length + 1}`;
       if (this.tmuxService) {
-        try {
-          const { panel } = await createTerminalPanelSplit(
-            this.terminalSessionManager,
-            session,
-            {
-              ptyService: this.ptyService,
-              runtimeRegistry: this.runtimeRegistry,
-              tmuxService: this.tmuxService,
-              tmuxOutputWatcher: this.tmuxOutputWatcher,
-              terminalEventService: this.terminalEventService,
-            },
-            {
-              direction: boundWorkers.length % 2 === 0 ? "right" : "down",
-              role: worker.role,
-              alias: `${worker.role}-${boundWorkers.length + 1}`,
-              cwd: terminal.cwd ?? undefined,
-              focus: false,
-            },
-          );
-          panelId = panel.id;
-          tmuxPaneId = panel.tmuxPaneId;
-        } catch (error) {
-          agentTeamLogger.warn("agent-team.split.pane_failed", {
-            message: "Could not split worker pane",
-            runId: run.runId,
-            role: worker.role,
-            error,
-          });
+        const existingPanel = this.findReusableWorkerPanel(
+          session.id,
+          panelAlias,
+          worker.role,
+        );
+        if (existingPanel) {
+          panelId = existingPanel.id;
+          tmuxPaneId = existingPanel.tmuxPaneId;
+        } else {
+          try {
+            const { panel } = await createTerminalPanelSplit(
+              this.terminalSessionManager,
+              session,
+              {
+                ptyService: this.ptyService,
+                runtimeRegistry: this.runtimeRegistry,
+                tmuxService: this.tmuxService,
+                tmuxOutputWatcher: this.tmuxOutputWatcher,
+                terminalEventService: this.terminalEventService,
+              },
+              {
+                direction: boundWorkers.length % 2 === 0 ? "right" : "down",
+                role: worker.role,
+                alias: panelAlias,
+                cwd: terminal.cwd ?? undefined,
+                focus: false,
+              },
+            );
+            panelId = panel.id;
+            tmuxPaneId = panel.tmuxPaneId;
+          } catch (error) {
+            throw createAgentTeamPanelError(run.runId, worker.role, error);
+          }
         }
       }
       const boundWorker: AgentTeamWorker = {
@@ -658,6 +670,36 @@ export class AgentTeamService {
     }
   }
 
+  private async sendStartupPromptToMain(
+    run: AgentTeamRun,
+    text: string,
+  ): Promise<void> {
+    const session = this.terminalSessionManager.getSession(
+      run.terminalSessionId,
+    );
+    if (!session) {
+      throw new AgentTeamError(404, "Terminal session not found");
+    }
+    try {
+      await this.promptSender.sendPromptToPane(
+        session,
+        text,
+        run.mainPanelId ? { panelId: run.mainPanelId } : undefined,
+      );
+    } catch (error) {
+      agentTeamLogger.warn("agent-team.startup_prompt.failed", {
+        message: "Could not inject startup prompt into main pane",
+        runId: run.runId,
+        error,
+      });
+      throw new AgentTeamError(
+        error instanceof AgentTeamError ? error.statusCode : 500,
+        "Could not inject agent-team startup prompt into the main pane",
+        error instanceof Error ? { cause: error.message } : { cause: error },
+      );
+    }
+  }
+
   private async restoreMainPaneFocus(
     session: TerminalSessionRecord,
     mainPanelId: string | null | undefined,
@@ -748,6 +790,53 @@ export class AgentTeamService {
     }
     return session;
   }
+
+  private requireAgentTeamTerminalAvailable(
+    session: TerminalSessionRecord,
+    terminal: AgentTeamTerminal,
+  ): void {
+    const targetAgent = getAgentForCommand(terminal.command ?? null);
+    if (!targetAgent) {
+      return;
+    }
+    const currentState = this.terminalStateService.getCurrent(
+      session.id,
+      session,
+    );
+    if (currentState.state === "agent_running") {
+      throw new AgentTeamError(
+        409,
+        `Agent-team terminal is already running agent "${currentState.agent ?? "unknown"}"`,
+      );
+    }
+    if (
+      currentState.state !== "shell_idle" &&
+      currentState.agent &&
+      currentState.agent !== targetAgent
+    ) {
+      throw new AgentTeamError(
+        409,
+        `Agent-team terminal is already using agent "${currentState.agent}"`,
+      );
+    }
+  }
+
+  private findReusableWorkerPanel(
+    terminalSessionId: string,
+    alias: string,
+    role: AgentTeamWorkerRole,
+  ): TerminalPanelRecord | null {
+    return (
+      this.terminalSessionManager
+        .listPanels(terminalSessionId)
+        .find(
+          (panel) =>
+            panel.status === "running" &&
+            panel.alias === alias &&
+            panel.role === role,
+        ) ?? null
+    );
+  }
 }
 
 const VALID_WORKER_ROLES: AgentTeamWorkerRole[] = [
@@ -828,4 +917,24 @@ function normalizeAcceptance(
     evidence: [],
     bouncedToPanelId: null,
   }));
+}
+
+function createAgentTeamPanelError(
+  runId: string,
+  role: AgentTeamWorkerRole,
+  error: unknown,
+): AgentTeamError {
+  const message = error instanceof Error ? error.message : String(error);
+  const statusCode =
+    typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    typeof error.statusCode === "number"
+      ? error.statusCode
+      : 409;
+  return new AgentTeamError(
+    statusCode,
+    `Could not split worker pane for role "${role}": ${message}`,
+    { runId, role },
+  );
 }

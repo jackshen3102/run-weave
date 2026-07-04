@@ -108,6 +108,9 @@ function getTerminalStateLabel(
   if (terminalState.state === "agent_running") {
     return "Agent running";
   }
+  if (terminalState.state === "agent_starting") {
+    return "Agent starting";
+  }
   if (terminalState.state === "agent_idle") {
     return "Agent idle";
   }
@@ -138,6 +141,9 @@ function getTerminalStateDetail(
   }
   if (terminalState.state === "agent_running") {
     return "Model response in progress";
+  }
+  if (terminalState.state === "agent_starting") {
+    return "Starting agent";
   }
   if (terminalState.state === "agent_idle") {
     return "Waiting for input";
@@ -201,6 +207,14 @@ function TerminalTabStateDot({
       <span
         aria-hidden="true"
         className="h-2 w-2 shrink-0 rounded-full border border-cyan-200 bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.75)] motion-safe:animate-pulse"
+      />
+    );
+  }
+  if (terminalState.state === "agent_starting") {
+    return (
+      <span
+        aria-hidden="true"
+        className="h-2 w-2 shrink-0 rounded-full border border-amber-200 bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.55)] motion-safe:animate-pulse"
       />
     );
   }
@@ -635,8 +649,12 @@ export function TerminalWorkspaceShell({
   const [aliasTarget, setAliasTarget] =
     useState<TerminalSessionListItem | null>(null);
   const [diagnosticLogOpen, setDiagnosticLogOpen] = useState(false);
-  const [activeAgentTeamRunPresent, setActiveAgentTeamRunPresent] =
-    useState(false);
+  const [activeAgentTeamRunSessionId, setActiveAgentTeamRunSessionId] =
+    useState<string | null>(null);
+  const [pendingAgentTeamSessionId, setPendingAgentTeamSessionId] = useState<
+    string | null
+  >(null);
+  const autoOpenedAgentTeamSessionIdRef = useRef<string | null>(null);
   const isMobileMonitor = clientMode === "mobile";
   const projects = useTerminalWorkspaceStore((state) => state.projects);
   const sessions = useTerminalWorkspaceStore((state) => state.sessions);
@@ -731,6 +749,10 @@ export function TerminalWorkspaceShell({
     ) ??
     visibleSessions[0] ??
     null;
+  const activeAgentTeamRunPresent = Boolean(
+    activeSession &&
+      activeAgentTeamRunSessionId === activeSession.terminalSessionId,
+  );
   const panelSplitEnabled = activeSession?.panelSplitEnabled ?? false;
   const terminalLayoutVersion = isMobileMonitor
     ? "mobile"
@@ -782,31 +804,34 @@ export function TerminalWorkspaceShell({
     setHistoryDrawerOpen(true);
   };
   const setPanelSplitEnabled = useMemoizedFn(
-    (terminalSessionId: string, enabled: boolean): void => {
-      void (async () => {
-        try {
-          const updatedSession = await updateTerminalSession(
-            apiBase,
-            token,
-            terminalSessionId,
-            { panelSplitEnabled: enabled },
-          );
-          setRequestError(null);
-          setSessions((currentSessions) =>
-            currentSessions.map((session) =>
-              session.terminalSessionId === terminalSessionId
-                ? updatedSession
-                : session,
-            ),
-          );
-        } catch (error) {
-          if (error instanceof HttpError && error.status === 401) {
-            onAuthExpired?.();
-            return;
-          }
-          setRequestError(String(error));
+    async (
+      terminalSessionId: string,
+      enabled: boolean,
+    ): Promise<TerminalSessionListItem | null> => {
+      try {
+        const updatedSession = await updateTerminalSession(
+          apiBase,
+          token,
+          terminalSessionId,
+          { panelSplitEnabled: enabled },
+        );
+        setRequestError(null);
+        setSessions((currentSessions) =>
+          currentSessions.map((session) =>
+            session.terminalSessionId === terminalSessionId
+              ? updatedSession
+              : session,
+          ),
+        );
+        return updatedSession;
+      } catch (error) {
+        if (error instanceof HttpError && error.status === 401) {
+          onAuthExpired?.();
+          return null;
         }
-      })();
+        setRequestError(String(error));
+        return null;
+      }
     },
   );
   const activePanelWorkspace = activeSession
@@ -817,14 +842,70 @@ export function TerminalWorkspaceShell({
     activeProject &&
       activeSession &&
       (activeAgentTeamRunPresent ||
+        pendingAgentTeamSessionId === activeSession.terminalSessionId ||
         (panelSplitEnabled && activeAgentTeamAvailable)),
   );
 
   const requestAgentTeam = useMemoizedFn((terminalSessionId: string): void => {
     onSelectSession(terminalSessionId);
-    setPanelSplitEnabled(terminalSessionId, true);
-    useTerminalPreviewStore.getState().openAgentTeam();
+    setPendingAgentTeamSessionId(terminalSessionId);
+    void setPanelSplitEnabled(terminalSessionId, true).then((updatedSession) => {
+      if (!updatedSession) {
+        setPendingAgentTeamSessionId((current) =>
+          current === terminalSessionId ? null : current,
+        );
+        return;
+      }
+      useTerminalPreviewStore.getState().openAgentTeam();
+    });
   });
+
+  const syncActiveAgentTeamRunForActiveSession = useMemoizedFn(
+    (active: boolean): void => {
+      const terminalSessionId = activeSession?.terminalSessionId ?? null;
+      setActiveAgentTeamRunSessionId(active ? terminalSessionId : null);
+    },
+  );
+
+  useEffect(() => {
+    const terminalSessionId = activeSession?.terminalSessionId ?? null;
+    if (!terminalSessionId) {
+      autoOpenedAgentTeamSessionIdRef.current = null;
+      return;
+    }
+    if (!activeAgentTeamRunPresent || !showAgentTeamTool) {
+      if (autoOpenedAgentTeamSessionIdRef.current === terminalSessionId) {
+        autoOpenedAgentTeamSessionIdRef.current = null;
+      }
+      return;
+    }
+    if (autoOpenedAgentTeamSessionIdRef.current === terminalSessionId) {
+      return;
+    }
+    autoOpenedAgentTeamSessionIdRef.current = terminalSessionId;
+    useTerminalPreviewStore.getState().openAgentTeam();
+  }, [
+    activeAgentTeamRunPresent,
+    activeSession?.terminalSessionId,
+    showAgentTeamTool,
+  ]);
+
+  useEffect(() => {
+    if (!pendingAgentTeamSessionId) {
+      return;
+    }
+    if (
+      activeSession?.terminalSessionId === pendingAgentTeamSessionId &&
+      (panelSplitEnabled || activeAgentTeamRunPresent)
+    ) {
+      setPendingAgentTeamSessionId(null);
+    }
+  }, [
+    activeAgentTeamRunPresent,
+    activeSession?.terminalSessionId,
+    panelSplitEnabled,
+    pendingAgentTeamSessionId,
+  ]);
 
   useEffect(() => {
     if (
@@ -865,27 +946,31 @@ export function TerminalWorkspaceShell({
 
   useEffect(() => {
     if (!activeProject?.projectId || !activeSession?.terminalSessionId) {
-      setActiveAgentTeamRunPresent(false);
+      setActiveAgentTeamRunSessionId(null);
       return;
     }
     let cancelled = false;
+    const terminalSessionId = activeSession.terminalSessionId;
+    setActiveAgentTeamRunSessionId(null);
     void getAgentTeamRunForTerminal(
       apiBase,
       token,
       activeProject.projectId,
-      activeSession.terminalSessionId,
+      terminalSessionId,
     )
       .then((run) => {
         if (cancelled) {
           return;
         }
-        setActiveAgentTeamRunPresent(
-          Boolean(run && run.status !== "done" && run.status !== "failed"),
+        setActiveAgentTeamRunSessionId(
+          run && run.status !== "done" && run.status !== "failed"
+            ? terminalSessionId
+            : null,
         );
       })
       .catch(() => {
         if (!cancelled) {
-          setActiveAgentTeamRunPresent(false);
+          setActiveAgentTeamRunSessionId(null);
         }
       });
     return () => {
@@ -1142,7 +1227,10 @@ export function TerminalWorkspaceShell({
                   onRequestCloseSession={onRequestCloseSession}
                   onRequestEditAlias={setAliasTarget}
                   onPanelSplitEnabledChange={(enabled) => {
-                    setPanelSplitEnabled(session.terminalSessionId, enabled);
+                    void setPanelSplitEnabled(
+                      session.terminalSessionId,
+                      enabled,
+                    );
                   }}
                   agentTeamAvailable={canOpenAgentTeamForSession(session)}
                   onRequestAgentTeam={requestAgentTeam}
@@ -1282,9 +1370,15 @@ export function TerminalWorkspaceShell({
                 onSelectSession={onSelectSession}
                 onPanelSplitEnabledChange={(enabled) => {
                   if (activeSession) {
-                    setPanelSplitEnabled(activeSession.terminalSessionId, enabled);
+                    void setPanelSplitEnabled(
+                      activeSession.terminalSessionId,
+                      enabled,
+                    );
                   }
                 }}
+                onActiveAgentTeamRunChange={
+                  syncActiveAgentTeamRunForActiveSession
+                }
                 onEditProject={() => {
                   requestEditProject();
                 }}
@@ -1318,12 +1412,15 @@ export function TerminalWorkspaceShell({
                     onSelectSession={onSelectSession}
                     onPanelSplitEnabledChange={(enabled) => {
                       if (activeSession) {
-                        setPanelSplitEnabled(
+                        void setPanelSplitEnabled(
                           activeSession.terminalSessionId,
                           enabled,
                         );
                       }
                     }}
+                    onActiveAgentTeamRunChange={
+                      syncActiveAgentTeamRunForActiveSession
+                    }
                     onEditProject={() => {
                       requestEditProject();
                     }}

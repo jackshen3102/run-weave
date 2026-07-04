@@ -462,6 +462,7 @@ function createHttpApp(
     createTerminalStateRouter({
       terminalSessionManager: services.terminalSessionManager,
       terminalStateService: services.terminalStateService,
+      tmuxService: services.tmuxService,
     }),
   );
   app.use(

@@ -20,6 +20,9 @@ import {
 import { useTerminalWorkspaceActions } from "./terminal-workspace-actions";
 import { useTerminalWorkspaceEvents } from "./terminal-workspace-events";
 import { TerminalWorkspaceShell } from "./terminal-workspace-shell";
+
+const SESSION_RETRY_DELAY_MS = 2_000;
+
 interface TerminalWorkspaceProps {
   apiBase: string;
   token: string;
@@ -63,6 +66,7 @@ export function TerminalWorkspace({
   const hasLoadedSessions = useTerminalWorkspaceStore(
     (state) => state.hasLoadedSessions,
   );
+  const loading = useTerminalWorkspaceStore((state) => state.loading);
   const requestError = useTerminalWorkspaceStore((state) => state.requestError);
   const projectDialogMode = useTerminalWorkspaceStore(
     (state) => state.projectDialogMode,
@@ -253,6 +257,15 @@ export function TerminalWorkspace({
   useEffect(() => {
     void loadSessions();
   }, [apiBase, initialTerminalSessionId, loadSessions, token]);
+  useEffect(() => {
+    if (!requestError || loading) {
+      return;
+    }
+    const retryTimer = window.setTimeout(() => {
+      void loadSessions();
+    }, SESSION_RETRY_DELAY_MS);
+    return () => window.clearTimeout(retryTimer);
+  }, [loadSessions, loading, requestError]);
   useEffect(() => {
     if (!initialTerminalSessionId) {
       return;
