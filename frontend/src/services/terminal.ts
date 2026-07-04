@@ -12,6 +12,7 @@ import type {
   CreateTerminalWsTicketResponse,
   ProposeAgentTeamSplitRequest,
   RecordAgentTeamRoundRequest,
+  ResizeTerminalPanelRequest,
   ResumeAgentTeamRunRequest,
   SubmitAgentTeamSplitGateRequest,
   SendTerminalInputRequest,
@@ -187,6 +188,27 @@ export async function closeTerminalPanel(
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+  );
+}
+
+export async function resizeTerminalPanel(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  panelId: string,
+  payload: ResizeTerminalPanelRequest,
+): Promise<TerminalPanelWorkspace> {
+  return requestJson<TerminalPanelWorkspace>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels/${encodeURIComponent(panelId)}/resize`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     },
   );
 }

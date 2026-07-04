@@ -13,6 +13,8 @@ export type TerminalChangesViewMode = "diff" | "preview";
 export type TerminalSidecarTool = "preview" | "browser" | "agent-team";
 
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
+const TERMINAL_SIDECAR_WIDTH_STORAGE_KEY =
+  "runweave.terminal.sidecar.width.v1";
 
 export interface TerminalBrowserTabState {
   id: string;
@@ -114,6 +116,59 @@ const DEFAULT_PROJECT_STATE: TerminalPreviewProjectState = {
 const DEFAULT_BROWSER_URL = "http://127.0.0.1:5173";
 let browserTabSequence = 1;
 
+function getMaxSidecarWidth(): number | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return Math.round(window.innerWidth * 0.6);
+}
+
+function normalizeSidecarWidth(widthPx: number): number | undefined {
+  if (!Number.isFinite(widthPx) || widthPx <= 0) {
+    return undefined;
+  }
+  const maxWidth = getMaxSidecarWidth();
+  if (maxWidth === null) {
+    return Math.round(widthPx);
+  }
+  return Math.min(maxWidth, Math.max(320, Math.round(widthPx)));
+}
+
+function readStoredSidecarWidth(): number | undefined {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+  try {
+    const rawWidth = window.localStorage.getItem(
+      TERMINAL_SIDECAR_WIDTH_STORAGE_KEY,
+    );
+    if (!rawWidth) {
+      return undefined;
+    }
+    return normalizeSidecarWidth(Number(rawWidth));
+  } catch {
+    return undefined;
+  }
+}
+
+function persistSidecarWidth(widthPx: number): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const normalizedWidth = normalizeSidecarWidth(widthPx);
+  if (!normalizedWidth) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      TERMINAL_SIDECAR_WIDTH_STORAGE_KEY,
+      String(normalizedWidth),
+    );
+  } catch {
+    // Ignore storage failures; the in-memory resize still applies.
+  }
+}
+
 function createBrowserTabState(url = DEFAULT_BROWSER_URL): TerminalBrowserTabState {
   const id = `browser-tab-${browserTabSequence}`;
   browserTabSequence += 1;
@@ -158,7 +213,12 @@ function labelBrowserUrl(url: string): string {
 const DEFAULT_BROWSER_TAB = createBrowserTabState();
 
 const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => ({
-  ui: { open: true, expanded: false, activeTool: "preview" },
+  ui: {
+    open: true,
+    widthPx: readStoredSidecarWidth(),
+    expanded: false,
+    activeTool: "preview",
+  },
   projects: {},
   browser: {
     tabs: [DEFAULT_BROWSER_TAB],
@@ -201,8 +261,9 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
     }));
   },
   setWidth: (widthPx: number) => {
+    persistSidecarWidth(widthPx);
     set((state: TerminalPreviewStore) => ({
-      ui: { ...state.ui, widthPx },
+      ui: { ...state.ui, widthPx: normalizeSidecarWidth(widthPx) ?? widthPx },
     }));
   },
   setExpanded: (expanded: boolean) => {

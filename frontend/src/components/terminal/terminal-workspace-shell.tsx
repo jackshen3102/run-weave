@@ -85,6 +85,7 @@ import { TerminalPanelTargetBar } from "./terminal-panel-target-bar";
 import {
   getAgentTeamRunForTerminal,
   listTerminalPanels,
+  resizeTerminalPanel,
   updateTerminalSession,
 } from "../../services/terminal";
 import { HttpError } from "../../services/http";
@@ -840,6 +841,61 @@ export function TerminalWorkspaceShell({
       }
     },
   );
+  const resizePanel = useMemoizedFn(
+    async (
+      terminalSessionId: string,
+      panelId: string,
+      direction: "left" | "right" | "up" | "down",
+      cells: number,
+    ): Promise<void> => {
+      try {
+        const workspace = await resizeTerminalPanel(
+          apiBase,
+          token,
+          terminalSessionId,
+          panelId,
+          { direction, cells },
+        );
+        setRequestError(null);
+        setPanelWorkspaceBySessionId((current) => ({
+          ...current,
+          [workspace.terminalSessionId]: workspace,
+        }));
+        setActivePanelIdBySessionId((current) => ({
+          ...current,
+          [workspace.terminalSessionId]: workspace.activePanelId,
+        }));
+      } catch (error) {
+        if (error instanceof HttpError && error.status === 401) {
+          onAuthExpired?.();
+          return;
+        }
+        setRequestError(String(error));
+      }
+    },
+  );
+  const refreshPanelWorkspace = useMemoizedFn(
+    async (terminalSessionId: string): Promise<void> => {
+      // Let the backend apply the tmux window refit that the WS resize just
+      // triggered before we read back pane geometry, otherwise the handles
+      // reposition against the pre-resize columns.
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      try {
+        const workspace = await listTerminalPanels(
+          apiBase,
+          token,
+          terminalSessionId,
+        );
+        setPanelWorkspaceBySessionId((current) => ({
+          ...current,
+          [workspace.terminalSessionId]: workspace,
+        }));
+      } catch {
+        // Geometry refresh is best-effort; a stale handle simply repositions on
+        // the next successful fetch.
+      }
+    },
+  );
   const activePanelWorkspace = activeSession
     ? panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null
     : null;
@@ -1332,10 +1388,38 @@ export function TerminalWorkspaceShell({
                         layoutVersion={terminalLayoutVersion}
                         terminalSessionId={session.terminalSessionId}
                         token={token}
+                        paneWorkspace={
+                          session.panelSplitEnabled
+                            ? panelWorkspaceBySessionId[
+                                session.terminalSessionId
+                              ] ?? null
+                            : null
+                        }
+                        onResizePane={
+                          !isMobileMonitor && session.panelSplitEnabled
+                            ? (panelId, direction, cells) => {
+                                void resizePanel(
+                                  session.terminalSessionId,
+                                  panelId,
+                                  direction,
+                                  cells,
+                                );
+                              }
+                            : undefined
+                        }
                         onAuthExpired={onAuthExpired}
                         onBell={() => {
                           onSessionBell(session.terminalSessionId);
                         }}
+                        onViewportResize={
+                          session.panelSplitEnabled
+                            ? () => {
+                                void refreshPanelWorkspace(
+                                  session.terminalSessionId,
+                                );
+                              }
+                            : undefined
+                        }
                         onMetadata={(metadata) => {
                           onSessionMetadata(
                             session.terminalSessionId,

@@ -423,8 +423,16 @@ export interface UpdateTerminalPanelRequest {
   focus?: boolean;
 }
 
+export type TerminalPanelResizeDirection = "left" | "right" | "up" | "down";
+
+/**
+ * Resize a panel by nudging its shared tmux divider `cells` cells toward
+ * `direction`. `left`/`right` move the vertical divider (columns); `up`/`down`
+ * move a horizontal divider (rows). Used by the pane resize handle drag
+ * interaction.
+ */
 export interface ResizeTerminalPanelRequest {
-  direction: "left" | "right";
+  direction: TerminalPanelResizeDirection;
   /** Number of tmux cells to grow (positive) the pane toward `direction`. */
   cells: number;
 }

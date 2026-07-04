@@ -48,6 +48,7 @@ interface UseTerminalEmulatorArgs {
   onBellRef: MutableRef<(() => void) | undefined>;
   onBottomStateChange: (isAtBottom: boolean) => void;
   onTmuxScrollbackActiveChange: (active: boolean) => void;
+  onViewportResizeRef: MutableRef<(() => void) | undefined>;
   openTerminalLinkRef: MutableRef<(uri: string) => void>;
   refreshTerminalViewportRef: MutableRef<(() => void) | null>;
   runtimeKindRef: MutableRef<"tmux" | "pty" | null>;
@@ -76,6 +77,7 @@ export function useTerminalEmulator({
   onBellRef,
   onBottomStateChange,
   onTmuxScrollbackActiveChange,
+  onViewportResizeRef,
   openTerminalLinkRef,
   refreshTerminalViewportRef,
   runtimeKindRef,
@@ -263,6 +265,7 @@ export function useTerminalEmulator({
         rows: dimensions.rows,
       };
       sendResize(dimensions.cols, dimensions.rows);
+      onViewportResizeRef.current?.();
     };
     const resizeScheduler = createResizeScheduler(
       syncSize,
@@ -529,6 +532,7 @@ export function useTerminalEmulator({
     onBellRef,
     onBottomStateChange,
     onTmuxScrollbackActiveChange,
+    onViewportResizeRef,
     openTerminalLinkRef,
     refreshTerminalViewportRef,
     runtimeKindRef,
