@@ -41,6 +41,12 @@ export interface AgentTeamAcceptanceCase {
   evidence: AgentTeamAcceptanceEvidence[];
   /** Which code pane the failure was bounced back to, if any. */
   bouncedToPanelId?: string | null;
+  /** Recheck dispatch metadata; used by the backend watchdog to detect stuck workers. */
+  recheckRequestedAt?: string | null;
+  recheckWorkerPanelId?: string | null;
+  recheckWorkerRole?: AgentTeamWorkerRole | null;
+  recheckOutboxMtimeMs?: number | null;
+  recheckAttempt?: number;
 }
 
 export interface AgentTeamLoop {
