@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import type {
   AgentTeamAcceptanceCase,
   AgentTeamRun,
@@ -42,6 +43,7 @@ import {
   buildBounceBackPrompt,
   buildHumanNotePrompt,
   buildStartupPrompt,
+  buildWorkerRecheckPrompt,
   buildWorkerStartupPrompt,
 } from "./prompt-builders";
 import {
@@ -55,6 +57,9 @@ import { AgentTeamAgentReadinessService } from "./agent-readiness";
 const agentTeamLogger = logger.child({ component: "agent-team-service" });
 const DEFAULT_AGENT_TEAM_AGENT_COMMAND = "codex";
 const MANUAL_FEEDBACK_COMPLETION_GRACE_MS = 200;
+const RECHECK_WATCHDOG_INTERVAL_MS = 10_000;
+const RECHECK_TIMEOUT_MS = 30_000;
+const MAX_RECHECK_ATTEMPTS = 2;
 
 interface AgentTeamServiceOptions {
   terminalSessionManager: TerminalSessionManager;
@@ -84,6 +89,7 @@ export class AgentTeamService {
   private readonly outboxResolver: AgentTeamOutboxResolver;
   private readonly eventQueues = new Map<string, Promise<unknown>>();
   private readonly pendingCompletionRounds = new Map<string, number>();
+  private recheckWatchdogTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: AgentTeamServiceOptions) {
     this.terminalSessionManager = options.terminalSessionManager;
@@ -131,6 +137,7 @@ export class AgentTeamService {
         });
       });
     });
+    this.startRecheckWatchdog();
   }
 
   async listRuns(projectId: string): Promise<AgentTeamRun[]> {
@@ -458,6 +465,10 @@ export class AgentTeamService {
         true,
       );
     }
+    const executionAcceptance = ensureWorkerGateAcceptance(
+      workers,
+      acceptance,
+    );
     const boundWorkers: AgentTeamWorker[] = [];
     for (const worker of workers) {
       let panelId: string | null = null;
@@ -524,7 +535,7 @@ export class AgentTeamService {
           buildWorkerStartupPrompt({
             run,
             worker: boundWorker,
-            acceptance,
+            acceptance: executionAcceptance,
             outboxPath: this.paths.workerOutboxRelativePath(
               run.terminalSessionId,
               boundWorker,
@@ -555,7 +566,7 @@ export class AgentTeamService {
       terminal,
       proposal: null,
       workers: boundWorkers,
-      acceptance,
+      acceptance: executionAcceptance,
       logs: [...run.logs, context.log],
     });
   }
@@ -565,6 +576,7 @@ export class AgentTeamService {
     params: {
       acceptanceResults?: AgentTeamWorkerOutbox["acceptanceResults"];
       hadDiff?: boolean;
+      forceBounceCaseIds?: string[];
     },
   ): Promise<AgentTeamRun> {
     if (run.phase !== "executing") {
@@ -574,8 +586,12 @@ export class AgentTeamService {
       // Frozen: do not advance the loop until the human resumes.
       return run;
     }
-    const folded = foldRound(run, params);
-    const logs = [...run.logs];
+    const runWithGates = {
+      ...run,
+      acceptance: ensureWorkerGateAcceptance(run.workers, run.acceptance),
+    };
+    const folded = foldRound(runWithGates, params);
+    const logs = [...runWithGates.logs];
     if (folded.hadProgress) {
       logs.push(`round ${run.loop.round} 有进展，noProgress 计数清零`);
     } else if (
@@ -590,7 +606,14 @@ export class AgentTeamService {
     let status: AgentTeamStatus = "running";
     let loop = folded.loop;
     let workers = run.workers;
-    if (shouldEscalate(folded.loop)) {
+    const allAcceptancePassed =
+      folded.acceptance.length > 0 &&
+      folded.acceptance.every((item) => item.status === "pass");
+    if (allAcceptancePassed) {
+      status = "done";
+      workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
+      logs.push(`✅ 所有验收用例通过，run 完成`);
+    } else if (shouldEscalate(folded.loop)) {
       const reason = buildEscalationReason(folded.loop, folded.acceptance);
       loop = { ...folded.loop, escalated: true, lastReason: reason };
       status = "need_human";
@@ -612,7 +635,10 @@ export class AgentTeamService {
     // does not leave later rounds stuck above the threshold forever.
     const caseIdsNeedingBounce =
       status === "running"
-        ? findStableFailCaseIdsNeedingBounce(nextRun)
+        ? mergeCaseIds(
+            findStableFailCaseIdsNeedingBounce(nextRun),
+            params.forceBounceCaseIds ?? [],
+          ).filter((caseId) => isUnbouncedFailCase(nextRun, caseId))
         : [];
     if (caseIdsNeedingBounce.length > 0) {
       return this.bounceFailuresToCode(nextRun, caseIdsNeedingBounce);
@@ -684,7 +710,12 @@ export class AgentTeamService {
       return;
     }
     const outbox = await this.outboxResolver.resolveOutbox(event);
-    if (!outbox?.acceptanceResults?.length) {
+    if (!outbox) {
+      return;
+    }
+    const initialRound = this.resolveOutboxRound(run, outbox);
+    const shouldDispatchRecheck = this.hasBouncedCasesForWorker(run, outbox);
+    if (!initialRound.acceptanceResults.length && !shouldDispatchRecheck) {
       return;
     }
     this.incrementPendingCompletionRound(run.runId);
@@ -694,13 +725,529 @@ export class AgentTeamService {
         if (!latest || latest.phase !== "executing") {
           return;
         }
+        const round = this.resolveOutboxRound(latest, outbox);
+        if (!round.acceptanceResults.length) {
+          await this.dispatchBouncedCasesForRecheck(latest, outbox);
+          return;
+        }
         await this.applyRound(latest, {
-          acceptanceResults: outbox.acceptanceResults,
+          acceptanceResults: round.acceptanceResults,
+          forceBounceCaseIds: round.forceBounceCaseIds,
         });
       } finally {
         this.decrementPendingCompletionRound(run.runId);
       }
     });
+  }
+
+  private hasBouncedCasesForWorker(
+    run: AgentTeamRun,
+    outbox: AgentTeamWorkerOutbox,
+  ): boolean {
+    return this.findBouncedCasesForWorker(run, outbox).length > 0;
+  }
+
+  private findBouncedCasesForWorker(
+    run: AgentTeamRun,
+    outbox: AgentTeamWorkerOutbox,
+  ): AgentTeamAcceptanceCase[] {
+    if (!isImplementationWorkerOutbox(outbox) || !outbox.panelId) {
+      return [];
+    }
+    return ensureWorkerGateAcceptance(run.workers, run.acceptance).filter(
+      (item) =>
+        item.status === "fail" && item.bouncedToPanelId === outbox.panelId,
+    );
+  }
+
+  private async dispatchBouncedCasesForRecheck(
+    run: AgentTeamRun,
+    outbox: AgentTeamWorkerOutbox,
+  ): Promise<AgentTeamRun> {
+    const cases = this.findBouncedCasesForWorker(run, outbox);
+    if (cases.length === 0) {
+      return run;
+    }
+    const session = this.terminalSessionManager.getSession(
+      run.terminalSessionId,
+    );
+    if (!session) {
+      return run;
+    }
+
+    let didUpdateRun = false;
+    let latestRun = run;
+    const dispatches = resolveRecheckDispatches(run, cases);
+    for (const dispatch of dispatches) {
+      if (!dispatch.worker.panelId) {
+        continue;
+      }
+      try {
+        latestRun = await this.sendRecheckToWorker(
+          latestRun,
+          session,
+          dispatch.worker,
+          dispatch.cases,
+          { attempt: 1, sourcePanelId: outbox.panelId ?? null },
+        );
+        didUpdateRun = true;
+      } catch (error) {
+        agentTeamLogger.warn("agent-team.recheck_dispatch.failed", {
+          message: "Could not dispatch recheck to worker pane",
+          runId: run.runId,
+          role: dispatch.worker.role,
+          panelId: dispatch.worker.panelId,
+          error,
+        });
+        latestRun = await this.markRecheckDispatchFailed(
+          latestRun,
+          session,
+          dispatch.worker,
+          dispatch.cases,
+          1,
+        );
+        didUpdateRun = true;
+      }
+    }
+
+    if (!didUpdateRun) {
+      return run;
+    }
+    return latestRun;
+  }
+
+  private async sendRecheckToWorker(
+    run: AgentTeamRun,
+    session: TerminalSessionRecord,
+    worker: AgentTeamWorker,
+    cases: AgentTeamAcceptanceCase[],
+    options: {
+      attempt: number;
+      sourcePanelId?: string | null;
+      reason?: "timeout_retry";
+    },
+  ): Promise<AgentTeamRun> {
+    if (!worker.panelId) {
+      return run;
+    }
+    const terminal = resolveAgentTeamTerminal(run.terminal);
+    await this.agentReadiness.ensureAgentReady(session, terminal, {
+      panelId: worker.panelId,
+    });
+    const outboxPath = this.paths.workerOutboxRelativePath(
+      run.terminalSessionId,
+      worker,
+    );
+    const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(
+      session,
+      worker,
+    );
+    await this.promptSender.sendPromptToPane(
+      session,
+      buildWorkerRecheckPrompt({
+        run,
+        worker,
+        cases,
+        outboxPath,
+      }),
+      { panelId: worker.panelId },
+    );
+
+    const now = new Date().toISOString();
+    const caseIds = new Set(cases.map((item) => item.caseId));
+    const logPrefix =
+      options.reason === "timeout_retry"
+        ? `复验 worker 超时，已重试触发用例`
+        : `code pane ${options.sourcePanelId ?? ""} 已完成，重新触发用例`;
+    return this.updateRun(run, {
+      acceptance: ensureWorkerGateAcceptance(run.workers, run.acceptance).map(
+        (item) =>
+          caseIds.has(item.caseId)
+            ? {
+                ...item,
+                status: "pending" as const,
+                consecutiveFail: 0,
+                bouncedToPanelId: null,
+                recheckRequestedAt: now,
+                recheckWorkerPanelId: worker.panelId,
+                recheckWorkerRole: worker.role,
+                recheckOutboxMtimeMs: outboxMtimeMs,
+                recheckAttempt: options.attempt,
+              }
+            : item,
+      ),
+      logs: [
+        ...run.logs,
+        `${logPrefix} ${Array.from(caseIds).join(", ")} 复验（${worker.role} pane ${worker.panelId}，attempt ${options.attempt}）`,
+      ],
+    });
+  }
+
+  private startRecheckWatchdog(): void {
+    if (this.recheckWatchdogTimer) {
+      return;
+    }
+    this.recheckWatchdogTimer = setInterval(() => {
+      void this.runRecheckWatchdog().catch((error) => {
+        agentTeamLogger.warn("agent-team.recheck_watchdog.failed", {
+          message: "Could not scan pending rechecks",
+          error,
+        });
+      });
+    }, RECHECK_WATCHDOG_INTERVAL_MS);
+    this.recheckWatchdogTimer.unref?.();
+  }
+
+  private async runRecheckWatchdog(): Promise<void> {
+    const projects = this.terminalSessionManager.listProjects();
+    for (const project of projects) {
+      const runs = await this.runStore.listRuns(project.id);
+      for (const run of runs) {
+        if (run.phase !== "executing" || run.status !== "running") {
+          continue;
+        }
+        if (findRecheckWatchdogCases(run).length === 0) {
+          continue;
+        }
+        await this.enqueue(run.runId, async () => {
+          const latest = await this.getRun(run.runId);
+          if (
+            !latest ||
+            latest.phase !== "executing" ||
+            latest.status !== "running"
+          ) {
+            return;
+          }
+          await this.handleTimedOutRechecks(latest);
+        });
+      }
+    }
+  }
+
+  private async handleTimedOutRechecks(run: AgentTeamRun): Promise<AgentTeamRun> {
+    const overdueCases = findRecheckWatchdogCases(run);
+    if (overdueCases.length === 0) {
+      return run;
+    }
+
+    const completedOutbox = await this.resolveUpdatedRecheckOutbox(
+      run,
+      overdueCases,
+    );
+    if (completedOutbox) {
+      const round = this.resolveOutboxRound(run, completedOutbox);
+      if (round.acceptanceResults.length > 0) {
+        return this.applyRound(run, {
+          acceptanceResults: round.acceptanceResults,
+          forceBounceCaseIds: round.forceBounceCaseIds,
+        });
+      }
+    }
+
+    const exhaustedCases = overdueCases.filter(
+      (item) => (item.recheckAttempt ?? 0) >= MAX_RECHECK_ATTEMPTS,
+    );
+    const retryCases = overdueCases.filter(
+      (item) => (item.recheckAttempt ?? 0) < MAX_RECHECK_ATTEMPTS,
+    );
+
+    let latestRun = run;
+    if (retryCases.length > 0) {
+      latestRun = await this.retryTimedOutRechecks(latestRun, retryCases);
+    }
+    if (exhaustedCases.length === 0) {
+      return latestRun;
+    }
+    return this.updateRun(latestRun, {
+      status: "need_human",
+      workers: latestRun.workers.map((worker) => ({ ...worker, frozen: true })),
+      acceptance: latestRun.acceptance.map((item) =>
+        exhaustedCases.some((exhausted) => exhausted.caseId === item.caseId)
+          ? {
+              ...item,
+              status: "fail" as const,
+              consecutiveFail: latestRun.loop.stableFailThreshold,
+              evidence:
+                item.evidence.length > 0
+                  ? item.evidence
+                  : [
+                      {
+                        type: "text" as const,
+                        ref: `recheck watchdog: worker ${item.recheckWorkerPanelId ?? "unknown"} did not update outbox within ${RECHECK_TIMEOUT_MS / 1000}s after ${MAX_RECHECK_ATTEMPTS} attempts`,
+                      },
+                    ],
+              recheckRequestedAt: null,
+              recheckWorkerPanelId: null,
+              recheckWorkerRole: null,
+              recheckOutboxMtimeMs: null,
+              recheckAttempt: 0,
+            }
+          : item,
+      ),
+      logs: [
+        ...latestRun.logs,
+        `⏸ 复验 worker 连续 ${MAX_RECHECK_ATTEMPTS} 次未产出 outbox，升级人工：${exhaustedCases.map((item) => item.caseId).join(", ")}`,
+      ],
+    });
+  }
+
+  private async resolveUpdatedRecheckOutbox(
+    run: AgentTeamRun,
+    cases: AgentTeamAcceptanceCase[],
+  ): Promise<AgentTeamWorkerOutbox | null> {
+    const session = this.terminalSessionManager.getSession(
+      run.terminalSessionId,
+    );
+    if (!session) {
+      return null;
+    }
+    for (const item of cases) {
+      if (item.recheckOutboxMtimeMs === null || item.recheckOutboxMtimeMs === undefined) {
+        continue;
+      }
+      const worker =
+        this.findRecheckWorker(run, item) ??
+        resolveRecheckDispatches(run, [item])[0]?.worker ??
+        null;
+      if (!worker?.panelId) {
+        continue;
+      }
+      const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(session, worker);
+      if (
+        outboxMtimeMs === null ||
+        outboxMtimeMs <= item.recheckOutboxMtimeMs
+      ) {
+        continue;
+      }
+      const outbox = await this.outboxResolver.resolveOutbox(
+        createSyntheticCompletionEvent(run, session, worker),
+      );
+      if (!outbox) {
+        continue;
+      }
+      const round = this.resolveOutboxRound(run, outbox);
+      if (round.acceptanceResults.some((result) => result.caseId === item.caseId)) {
+        return outbox;
+      }
+    }
+    return null;
+  }
+
+  private async retryTimedOutRechecks(
+    run: AgentTeamRun,
+    cases: AgentTeamAcceptanceCase[],
+  ): Promise<AgentTeamRun> {
+    const session = this.terminalSessionManager.getSession(
+      run.terminalSessionId,
+    );
+    if (!session) {
+      return run;
+    }
+    let latestRun = run;
+    for (const group of groupRecheckCasesByWorker(cases)) {
+      const worker =
+        this.findRecheckWorker(latestRun, group[0]!) ??
+        resolveRecheckDispatches(latestRun, [group[0]!])[0]?.worker ??
+        null;
+      if (!worker?.panelId) {
+        continue;
+      }
+      const attempt = Math.max(
+        ...group.map((item) => item.recheckAttempt ?? 0),
+      ) + 1;
+      const refreshed = await this.replaceWorkerPaneForRecheck(
+        latestRun,
+        session,
+        worker,
+        attempt,
+      );
+      latestRun = refreshed.run;
+      try {
+        latestRun = await this.sendRecheckToWorker(
+          latestRun,
+          session,
+          refreshed.worker,
+          group,
+          { attempt, reason: "timeout_retry" },
+        );
+      } catch (error) {
+        agentTeamLogger.warn("agent-team.recheck_retry.failed", {
+          message: "Could not dispatch timed-out recheck",
+          runId: latestRun.runId,
+          role: refreshed.worker.role,
+          panelId: refreshed.worker.panelId,
+          attempt,
+          error,
+        });
+        latestRun = await this.markRecheckDispatchFailed(
+          latestRun,
+          session,
+          refreshed.worker,
+          group,
+          attempt,
+        );
+      }
+    }
+    return latestRun;
+  }
+
+  private async markRecheckDispatchFailed(
+    run: AgentTeamRun,
+    session: TerminalSessionRecord,
+    worker: AgentTeamWorker,
+    cases: AgentTeamAcceptanceCase[],
+    attempt: number,
+  ): Promise<AgentTeamRun> {
+    const now = new Date().toISOString();
+    const caseIds = new Set(cases.map((item) => item.caseId));
+    const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(session, worker);
+    return this.updateRun(run, {
+      acceptance: run.acceptance.map((item) =>
+        caseIds.has(item.caseId)
+          ? {
+              ...item,
+              status: "pending" as const,
+              bouncedToPanelId: null,
+              recheckRequestedAt: now,
+              recheckWorkerPanelId: worker.panelId ?? null,
+              recheckWorkerRole: worker.role,
+              recheckOutboxMtimeMs: outboxMtimeMs,
+              recheckAttempt: attempt,
+            }
+          : item,
+      ),
+      logs: [
+        ...run.logs,
+        `复验 worker ${worker.role} pane ${worker.panelId ?? ""} 投递失败，已记录 attempt ${attempt}：${Array.from(caseIds).join(", ")}`,
+      ],
+    });
+  }
+
+  private async replaceWorkerPaneForRecheck(
+    run: AgentTeamRun,
+    session: TerminalSessionRecord,
+    worker: AgentTeamWorker,
+    attempt: number,
+  ): Promise<{ run: AgentTeamRun; worker: AgentTeamWorker }> {
+    if (!this.tmuxService) {
+      return { run, worker };
+    }
+    try {
+      const suffix = `${worker.role}-retry-${Date.now().toString(36).slice(-6)}`;
+      const { panel } = await createTerminalPanelSplit(
+        this.terminalSessionManager,
+        session,
+        {
+          ptyService: this.ptyService,
+          runtimeRegistry: this.runtimeRegistry,
+          tmuxService: this.tmuxService,
+          tmuxOutputWatcher: this.tmuxOutputWatcher,
+          terminalEventService: this.terminalEventService,
+        },
+        {
+          sourcePanelId: worker.panelId ?? undefined,
+          direction: attempt % 2 === 0 ? "down" : "right",
+          role: suffix,
+          alias: suffix,
+          agentTeamRunId: run.runId,
+          agentTeamWorkerId: worker.id,
+          cwd: run.terminal.cwd ?? undefined,
+          focus: false,
+        },
+      );
+      const replacement = {
+        ...worker,
+        panelId: panel.id,
+        tmuxPaneId: panel.tmuxPaneId,
+      };
+      const nextRun = await this.updateRun(run, {
+        workers: run.workers.map((item) =>
+          item.id === worker.id ? replacement : item,
+        ),
+        logs: [
+          ...run.logs,
+          `复验 worker ${worker.role} pane ${worker.panelId} 超时，已切换到 fresh pane ${panel.id}`,
+        ],
+      });
+      return { run: nextRun, worker: replacement };
+    } catch (error) {
+      agentTeamLogger.warn("agent-team.recheck_worker_replace.failed", {
+        message: "Could not create replacement worker pane for recheck",
+        runId: run.runId,
+        role: worker.role,
+        panelId: worker.panelId,
+        error,
+      });
+      return { run, worker };
+    }
+  }
+
+  private findRecheckWorker(
+    run: AgentTeamRun,
+    acceptanceCase: AgentTeamAcceptanceCase,
+  ): AgentTeamWorker | null {
+    return (
+      run.workers.find(
+        (worker) =>
+          worker.panelId === acceptanceCase.recheckWorkerPanelId ||
+          worker.role === acceptanceCase.recheckWorkerRole,
+      ) ?? null
+    );
+  }
+
+  private async readWorkerOutboxMtimeMs(
+    session: TerminalSessionRecord,
+    worker: Pick<AgentTeamWorker, "panelId" | "tmuxPaneId">,
+  ): Promise<number | null> {
+    try {
+      const fileStat = await stat(
+        this.paths.workerOutboxPath(
+          session.projectId,
+          session.id,
+          worker,
+          session.cwd,
+        ),
+      );
+      return fileStat.mtimeMs;
+    } catch {
+      return null;
+    }
+  }
+
+  private resolveOutboxRound(
+    run: AgentTeamRun,
+    outbox: AgentTeamWorkerOutbox,
+  ): {
+    acceptanceResults: NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>;
+    forceBounceCaseIds: string[];
+  } {
+    const runWithGates = {
+      ...run,
+      acceptance: ensureWorkerGateAcceptance(run.workers, run.acceptance),
+    };
+    const knownCaseIds = new Set(
+      runWithGates.acceptance.map((item) => item.caseId),
+    );
+    const directResults = (outbox.acceptanceResults ?? []).filter((result) =>
+      knownCaseIds.has(result.caseId),
+    );
+    if (directResults.length > 0) {
+      return {
+        acceptanceResults: directResults,
+        forceBounceCaseIds: isReviewWorkerOutbox(outbox)
+          ? directResults
+              .filter((result) => result.status === "fail")
+              .map((result) => result.caseId)
+          : [],
+      };
+    }
+    const reviewResult = synthesizeBlockingReviewResult(runWithGates, outbox);
+    return reviewResult
+      ? {
+          acceptanceResults: [reviewResult],
+          forceBounceCaseIds: [reviewResult.caseId],
+        }
+      : { acceptanceResults: [], forceBounceCaseIds: [] };
   }
 
   private async enqueue<T>(
@@ -981,6 +1528,247 @@ function findStableFailCaseIdsNeedingBounce(run: AgentTeamRun): string[] {
     .map((item) => item.caseId);
 }
 
+function isUnbouncedFailCase(run: AgentTeamRun, caseId: string): boolean {
+  const acceptanceCase = run.acceptance.find((item) => item.caseId === caseId);
+  return Boolean(
+    acceptanceCase &&
+      acceptanceCase.status === "fail" &&
+      !acceptanceCase.bouncedToPanelId,
+  );
+}
+
+function mergeCaseIds(first: string[], second: string[]): string[] {
+  return Array.from(new Set([...first, ...second]));
+}
+
+function ensureWorkerGateAcceptance(
+  workers: AgentTeamWorker[],
+  acceptance: AgentTeamAcceptanceCase[],
+): AgentTeamAcceptanceCase[] {
+  if (!workers.some((worker) => worker.role === "code_review")) {
+    return acceptance;
+  }
+  if (acceptance.some(isReviewGateAcceptanceCase)) {
+    return acceptance;
+  }
+  return [
+    ...acceptance,
+    {
+      caseId: `case_${acceptance.length + 1}`,
+      text: "Code Review 未发现阻断性问题（P0/P1），或阻断问题已修复",
+      status: "pending",
+      consecutiveFail: 0,
+      evidence: [],
+      bouncedToPanelId: null,
+      recheckRequestedAt: null,
+      recheckWorkerPanelId: null,
+      recheckWorkerRole: null,
+      recheckOutboxMtimeMs: null,
+      recheckAttempt: 0,
+    },
+  ];
+}
+
+function isReviewGateAcceptanceCase(item: AgentTeamAcceptanceCase): boolean {
+  return /code review|代码审查|code_review/i.test(item.text);
+}
+
+function synthesizeBlockingReviewResult(
+  run: AgentTeamRun,
+  outbox: AgentTeamWorkerOutbox,
+): NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>[number] | null {
+  if (!isReviewWorkerOutbox(outbox)) {
+    return null;
+  }
+  const summary = summarizeBlockingReviewFindings(outbox);
+  if (!summary) {
+    return null;
+  }
+  const target =
+    run.acceptance.find(isReviewGateAcceptanceCase) ?? run.acceptance[0];
+  if (!target) {
+    return null;
+  }
+  return {
+    caseId: target.caseId,
+    status: "fail",
+    evidence: [
+      {
+        type: "text",
+        ref: `${outbox.role} blocker: ${summary}`,
+      },
+    ],
+  };
+}
+
+function isReviewWorkerOutbox(outbox: AgentTeamWorkerOutbox): boolean {
+  return outbox.role === "code_review" || outbox.role === "plan_review";
+}
+
+function isImplementationWorkerOutbox(outbox: AgentTeamWorkerOutbox): boolean {
+  return outbox.role === "code" || outbox.role === "plan";
+}
+
+function resolveRecheckDispatches(
+  run: AgentTeamRun,
+  cases: AgentTeamAcceptanceCase[],
+): Array<{ worker: AgentTeamWorker; cases: AgentTeamAcceptanceCase[] }> {
+  const dispatches: Array<{
+    worker: AgentTeamWorker;
+    cases: AgentTeamAcceptanceCase[];
+  }> = [];
+  const reviewCases = cases.filter(isReviewGateAcceptanceCase);
+  const behaviorCases = cases.filter((item) => !isReviewGateAcceptanceCase(item));
+  const reviewWorker =
+    run.workers.find(
+      (worker) =>
+        (worker.role === "code_review" || worker.role === "plan_review") &&
+        worker.panelId &&
+        !worker.frozen,
+    ) ?? null;
+  const behaviorWorker =
+    run.workers.find(
+      (worker) =>
+        worker.role === "behavior_verify" && worker.panelId && !worker.frozen,
+    ) ?? null;
+
+  if (reviewCases.length > 0 && reviewWorker) {
+    dispatches.push({ worker: reviewWorker, cases: reviewCases });
+  }
+  if (behaviorCases.length > 0 && behaviorWorker) {
+    dispatches.push({ worker: behaviorWorker, cases: behaviorCases });
+  }
+  return dispatches;
+}
+
+function hasPendingRecheckRequest(item: AgentTeamAcceptanceCase): boolean {
+  return Boolean(item.recheckRequestedAt && item.status === "pending");
+}
+
+function findRecheckWatchdogCases(
+  run: AgentTeamRun,
+): AgentTeamAcceptanceCase[] {
+  return run.acceptance.filter(
+    (item) => isOverdueRecheckCase(item) || isLegacyOverdueRecheckCase(run, item),
+  );
+}
+
+function isOverdueRecheckCase(item: AgentTeamAcceptanceCase): boolean {
+  if (!hasPendingRecheckRequest(item)) {
+    return false;
+  }
+  const requestedAt = Date.parse(item.recheckRequestedAt!);
+  return (
+    Number.isFinite(requestedAt) &&
+    Date.now() - requestedAt >= RECHECK_TIMEOUT_MS
+  );
+}
+
+function isLegacyOverdueRecheckCase(
+  run: AgentTeamRun,
+  item: AgentTeamAcceptanceCase,
+): boolean {
+  if (item.status !== "pending" || item.recheckRequestedAt) {
+    return false;
+  }
+  if (
+    !run.logs.some(
+      (log) => log.includes("复验") && log.includes(`用例 ${item.caseId}`),
+    )
+  ) {
+    return false;
+  }
+  const updatedAt = Date.parse(run.updatedAt);
+  return (
+    Number.isFinite(updatedAt) && Date.now() - updatedAt >= RECHECK_TIMEOUT_MS
+  );
+}
+
+function groupRecheckCasesByWorker(
+  cases: AgentTeamAcceptanceCase[],
+): AgentTeamAcceptanceCase[][] {
+  const groups = new Map<string, AgentTeamAcceptanceCase[]>();
+  for (const item of cases) {
+    const key =
+      item.recheckWorkerPanelId ?? item.recheckWorkerRole ?? item.caseId;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.push(item);
+    } else {
+      groups.set(key, [item]);
+    }
+  }
+  return Array.from(groups.values());
+}
+
+function createSyntheticCompletionEvent(
+  run: AgentTeamRun,
+  session: TerminalSessionRecord,
+  worker: Pick<AgentTeamWorker, "panelId" | "tmuxPaneId">,
+): Extract<TerminalEventEnvelope, { kind: "completion" }> {
+  const now = new Date().toISOString();
+  return {
+    id: `agent-team-recheck-watchdog-${run.runId}-${Date.now()}`,
+    kind: "completion",
+    terminalSessionId: run.terminalSessionId,
+    projectId: run.projectId,
+    createdAt: now,
+    payload: {
+      source: "codex",
+      completionReason: "manual",
+      commandName: run.terminal.command ?? null,
+      rawHookEvent: null,
+      hookEvent: "",
+      cwd: session.cwd,
+      outboxPath: null,
+      summary: null,
+      panelId: worker.panelId ?? null,
+      tmuxPaneId: worker.tmuxPaneId ?? null,
+    },
+  };
+}
+
+function summarizeBlockingReviewFindings(
+  outbox: AgentTeamWorkerOutbox,
+): string | null {
+  const rawFindings = (outbox as AgentTeamWorkerOutbox & {
+    keyFindings?: unknown;
+    findings?: unknown;
+  }).keyFindings ?? (outbox as AgentTeamWorkerOutbox & { findings?: unknown }).findings;
+  if (Array.isArray(rawFindings)) {
+    const blocking = rawFindings
+      .map(formatBlockingFinding)
+      .filter((item): item is string => Boolean(item));
+    if (blocking.length > 0) {
+      return blocking.join("; ").slice(0, 500);
+    }
+  }
+  const reviewText = outbox as AgentTeamWorkerOutbox & {
+    conclusion?: unknown;
+  };
+  const fallback = [outbox.error, outbox.summary, reviewText.conclusion]
+    .filter((item): item is string => Boolean(item))
+    .join(" ");
+  return /\bP0\b|\bP1\b|blocker|critical|阻断|严重/.test(fallback)
+    ? fallback.slice(0, 500)
+    : null;
+}
+
+function formatBlockingFinding(finding: unknown): string | null {
+  if (!finding || typeof finding !== "object") {
+    return null;
+  }
+  const record = finding as Record<string, unknown>;
+  const severity =
+    typeof record.severity === "string" ? record.severity.trim() : "";
+  if (!/^(P0|P1|blocker|critical)$/i.test(severity)) {
+    return null;
+  }
+  const title = typeof record.title === "string" ? record.title.trim() : "";
+  const impact = typeof record.impact === "string" ? record.impact.trim() : "";
+  return [severity, title || impact].filter(Boolean).join(": ");
+}
+
 function isStaleExpectedRound(
   run: AgentTeamRun,
   expectedRound: number | undefined,
@@ -1077,6 +1865,11 @@ function normalizeAcceptance(
     consecutiveFail: 0,
     evidence: [],
     bouncedToPanelId: null,
+    recheckRequestedAt: null,
+    recheckWorkerPanelId: null,
+    recheckWorkerRole: null,
+    recheckOutboxMtimeMs: null,
+    recheckAttempt: 0,
   }));
 }
 

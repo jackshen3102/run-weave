@@ -75,6 +75,11 @@ export function foldRound(
         consecutiveFail: 0,
         evidence: result.evidence,
         bouncedToPanelId: null,
+        recheckRequestedAt: null,
+        recheckWorkerPanelId: null,
+        recheckWorkerRole: null,
+        recheckOutboxMtimeMs: null,
+        recheckAttempt: 0,
       };
     }
     const consecutiveFail = acceptanceCase.consecutiveFail + 1;
@@ -83,6 +88,11 @@ export function foldRound(
       status: "fail",
       consecutiveFail,
       evidence: result.evidence,
+      recheckRequestedAt: null,
+      recheckWorkerPanelId: null,
+      recheckWorkerRole: null,
+      recheckOutboxMtimeMs: null,
+      recheckAttempt: 0,
     };
     // Only a stable-fail (>= threshold) counts as a real fail.
     if (

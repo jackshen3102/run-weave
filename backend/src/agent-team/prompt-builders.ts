@@ -43,6 +43,9 @@ export function buildWorkerStartupPrompt(params: {
     "",
     `Run: ${run.runId}`,
     `Role: ${worker.role}`,
+    `Session: ${run.terminalSessionId}`,
+    `PanelId: ${worker.panelId ?? ""}`,
+    `TmuxPaneId: ${worker.tmuxPaneId ?? ""}`,
     "",
     `意图：${worker.intent}`,
   ];
@@ -56,6 +59,16 @@ export function buildWorkerStartupPrompt(params: {
         ? `把每条用例的结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。`
         : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。",
     );
+  } else if (worker.role === "code_review" || worker.role === "plan_review") {
+    lines.push(
+      "",
+      "审查用例（发现 P0/P1/blocker/critical 时必须写 fail；无阻断问题写 pass）：",
+      ...acceptance.map((item, index) => `${index + 1}. [${item.caseId}] ${item.text}`),
+      "",
+      outboxPath
+        ? `把审查门禁结果写进 ${outboxPath} 的 acceptanceResults。优先使用 Code Review/代码审查相关 caseId；如果没有，使用最相关的 caseId。`
+        : "把审查门禁结果写进 outbox 的 acceptanceResults。优先使用 Code Review/代码审查相关 caseId；如果没有，使用最相关的 caseId。",
+    );
   }
   lines.push(
     "",
@@ -64,6 +77,8 @@ export function buildWorkerStartupPrompt(params: {
     ...(outboxPath
       ? [
           `- 本 worker 的结构化 outbox 固定写入：${outboxPath}。不要写 session 级 .runweave/outbox/${run.terminalSessionId}.json，避免同一 terminal 多 pane 覆盖。`,
+          `- outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
+          '- acceptanceResults[].evidence[].type 只能使用 "text"、"dom"、"screenshot"；命令、日志、JSON、事件、代码证据都用 type="text" 并在 ref 里说明。',
         ]
       : []),
     "- 最终回复以结构化 summary 收尾（状态 / 结论 / 关键发现 / 产物 / 建议下一步）。",
@@ -88,6 +103,33 @@ export function buildBounceBackPrompt(params: {
     }),
     "",
     "修复后无需自己重跑验收；backend 会重新触发 behavior_verify。",
+  ].join("\n");
+}
+
+/** Ask a review/verify worker to rerun cases after a code pane completed fixes. */
+export function buildWorkerRecheckPrompt(params: {
+  run: AgentTeamRun;
+  worker: AgentTeamWorker;
+  cases: AgentTeamAcceptanceCase[];
+  outboxPath?: string | null;
+}): string {
+  const { run, worker, cases, outboxPath } = params;
+  const isReviewWorker =
+    worker.role === "code_review" || worker.role === "plan_review";
+  return [
+    `[loop round ${run.loop.round}] code pane 已完成修复，请重新${isReviewWorker ? "审查" : "验收"}以下用例：`,
+    "",
+    ...cases.map((item) => `- [${item.caseId}] ${item.text}`),
+    "",
+    outboxPath
+      ? `把结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。`
+      : "把结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。",
+    ...(outboxPath
+      ? [
+          `outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
+          'acceptanceResults[].evidence[].type 只能使用 "text"、"dom"、"screenshot"。',
+        ]
+      : []),
   ].join("\n");
 }
 
