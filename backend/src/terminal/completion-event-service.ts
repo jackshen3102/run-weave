@@ -23,6 +23,8 @@ export class TerminalCompletionEventService {
         cwd: input.cwd,
         outboxPath: input.outboxPath ?? null,
         summary: input.summary ?? null,
+        panelId: input.panelId ?? null,
+        tmuxPaneId: input.tmuxPaneId ?? null,
       },
     });
   }

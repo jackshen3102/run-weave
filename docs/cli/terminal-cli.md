@@ -80,6 +80,7 @@ rw terminal send "$TERMINAL_ID" --text "raw bytes" --mode raw --json
 
 ```bash
 rw terminal send "$TERMINAL_ID" --agent codex --text "继续" --json
+rw terminal send "$TERMINAL_ID" --panel reviewer --agent codex --text "继续" --json
 rw terminal send "$TERMINAL_ID" --agent traex --agent-overwrite --text "继续" --json
 ```
 
@@ -91,7 +92,8 @@ rw terminal send "$TERMINAL_ID" --agent traex --agent-overwrite --text "继续" 
 `agent_idle` 或 `agent_running` 状态。若目标 terminal 当前没有 agent，
 CLI 会发送 agent 名本身作为启动命令，也可以通过 `--agent-start-command`
 覆盖启动命令，并在 `--agent-start-timeout-ms`（默认 15000）内等待 agent
-状态就绪。
+状态就绪。若同时传入 `--panel` 或 `--role`，agent 启动、clear、exit 与最终
+输入都会定向到同一个 panel；`--panel` 优先于 `--role`。
 
 若目标 terminal 已经是同一个 agent，默认直接复用；传 `--agent-overwrite`
 时会先发送 `--agent-clear-command`（默认 `/clear`）新开一个 CLI 上下文，再

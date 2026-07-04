@@ -6,7 +6,9 @@ import type {
 } from "@runweave/shared";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
+import { readTerminalScrollback } from "../terminal/runtime-launcher";
 import type { TerminalStateService } from "../terminal/terminal-state-service";
+import type { TmuxService } from "../terminal/tmux-service";
 import { processTerminalAgentHook } from "../terminal/agent-hook-processor";
 
 const terminalStateLogger = logger.child({ component: "terminal-state" });
@@ -25,6 +27,7 @@ const agentHookStateSchema = z
 export function createTerminalStateRouter(options: {
   terminalSessionManager: TerminalSessionManager;
   terminalStateService: TerminalStateService;
+  tmuxService?: TmuxService;
 }): Router {
   const router = Router();
 
@@ -37,10 +40,16 @@ export function createTerminalStateRouter(options: {
       return;
     }
 
-    const terminalState = options.terminalStateService.getCurrent(
-      session.id,
+    const scrollback = await readTerminalScrollback(
       session,
+      options.terminalSessionManager,
+      options.tmuxService,
+      "live",
     );
+    const terminalState = options.terminalStateService.getCurrent(session.id, {
+      ...session,
+      scrollback,
+    });
 
     const payload: TerminalStateResponse = { terminalState };
     res.json(payload);

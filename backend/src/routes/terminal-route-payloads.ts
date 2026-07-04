@@ -79,6 +79,7 @@ export function toSessionListItem(
     createdAt: session.createdAt.toISOString(),
     lastActivityAt: session.lastActivityAt.toISOString(),
     exitCode: session.exitCode,
+    panelSplitEnabled: session.panelSplitEnabled,
     ...(panelWorkspace
       ? {
           activePanelId: panelWorkspace.activePanelId,

@@ -223,6 +223,7 @@ export function useTerminalWorkspaceActions({
               status: "running",
               createdAt,
               lastActivityAt: createdAt,
+              panelSplitEnabled: false,
             },
           ]);
           await loadSessions();

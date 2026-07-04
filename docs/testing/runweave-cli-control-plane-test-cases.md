@@ -13,6 +13,7 @@
 - `rw terminal send --mode line` 不重复追加回车；默认 raw + `--enter` 兼容旧行为；`codex_slash_command` 错误不被 CLI 吞掉。
 - `rw terminal send --agent <name>` 不归一化 agent 名；若未显式传 `--mode`，默认按 `line` 投递。
 - `rw terminal send --agent <name>` 会先确保 terminal 处于该 agent 的 `agent_idle` 或 `agent_running` 状态；若已有其它 agent，必须传 `--agent-overwrite` 才会先退出旧 agent 再启动目标 agent。
+- `rw terminal send --panel <panel> --agent <name>` 会把 agent 启动、clear、exit 与最终输入都定向到该 panel；`--role` 同理，且 `--panel` 优先。
 - `rw project delete` / `rw terminal delete` 只删除显式传入的 project / terminal id，不做批量推断。
 - 通过 `rw project ensure` / `rw terminal create` 创建的项目和终端，会经 `/ws/terminal-events` 推送到 Web/App，界面无需刷新即可新增 project/card/tab。
 - 所有错误路径使用非 0 exit code，并保留可读错误 message。
@@ -182,6 +183,7 @@ $RW_BIN terminal show "$COMMAND_TERMINAL_ID" --json \
 | RW-SEND-017 | 不同 agent 禁止隐式切换 | 当前为 `codex` 时执行 `$RW_BIN terminal send "$TERMINAL_ID" --agent traex --text "继续" --json`                   | exit code `2`；提示传 `--agent-overwrite` 才能替换                                |
 | RW-SEND-018 | 不同 agent 覆盖切换     | 当前为 `codex` 时执行 `$RW_BIN terminal send "$TERMINAL_ID" --agent traex --agent-overwrite --text "继续" --json` | 先发送 `codex` 默认退出命令 `/quit`，等待旧 agent 退出，再启动 `traex` 并投递输入 |
 | RW-SEND-019 | overwrite 缺 agent      | `$RW_BIN terminal send "$TERMINAL_ID" --agent-overwrite --text "pwd" --json`                                      | exit code `2`；stderr 包含 `--agent-overwrite requires --agent`                   |
+| RW-SEND-020 | panel agent 自动启动    | `$RW_BIN terminal send "$TERMINAL_ID" --panel reviewer --agent codex --text "继续" --json`                        | `codex` 启动命令和最终输入都进入 reviewer panel；其它 panel 不应收到该输入        |
 
 ## 上下文读取测试
 

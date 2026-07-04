@@ -357,6 +357,7 @@ export interface TerminalSessionListItem {
   createdAt: string;
   lastActivityAt: string;
   exitCode?: number;
+  panelSplitEnabled: boolean;
   activePanelId?: string;
   panelCount?: number;
   panelAliases?: string[];
@@ -413,9 +414,15 @@ export interface UpdateTerminalPanelRequest {
 export interface AppHomeOverviewSession extends TerminalSessionListItem {
   title: string;
   subtitle: string;
-  displayStatus: "running" | "agent-idle" | "idle" | "exited";
+  displayStatus:
+    | "running"
+    | "agent-starting"
+    | "agent-idle"
+    | "idle"
+    | "exited";
   displayStatusLabel:
     | "Agent Running"
+    | "Agent Starting"
     | "Agent Idle"
     | "Running"
     | "Idle"
@@ -430,6 +437,7 @@ export interface AppHomeOverviewResponse {
 
 export interface UpdateTerminalSessionRequest {
   alias?: string | null;
+  panelSplitEnabled?: boolean;
 }
 
 export type TerminalCompletionReason =
@@ -451,6 +459,14 @@ export interface TerminalCompletionEvent {
   cwd: string | null;
   outboxPath?: string | null;
   summary?: string | null;
+  /**
+   * The panel (workspace pane) that produced the completion, when the terminal
+   * session is split into multiple tmux panes. `null` for single-pane
+   * terminals. Enables pane-as-worker attribution in the agent-team loop.
+   */
+  panelId?: string | null;
+  /** The underlying tmux pane id (e.g. `%12`) for the completing pane, if known. */
+  tmuxPaneId?: string | null;
   createdAt: string;
 }
 
@@ -463,12 +479,15 @@ export interface TerminalCompletionEventPayload {
   cwd: string | null;
   outboxPath?: string | null;
   summary?: string | null;
+  panelId?: string | null;
+  tmuxPaneId?: string | null;
 }
 
 export type TerminalAgentKind = "codex" | "trae" | "traex" | "traecli";
 
 export type TerminalStateValue =
   | "shell_idle"
+  | "agent_starting"
   | "agent_idle"
   | "agent_running";
 

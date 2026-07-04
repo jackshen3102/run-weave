@@ -171,6 +171,7 @@ export function createTerminalRouter(
   const updateTerminalSessionSchema = z
     .object({
       alias: z.string().trim().max(80).nullable().optional(),
+      panelSplitEnabled: z.boolean().optional(),
     })
     .strict();
 
@@ -449,19 +450,27 @@ export function createTerminalRouter(
     }
 
     try {
-      const updatedSession =
-        parsed.data.alias !== undefined
-          ? await terminalSessionManager.updateSessionAlias(
-              session.id,
-              parsed.data.alias,
-            )
-          : session;
+      let updatedSession = session;
+      if (parsed.data.alias !== undefined) {
+        updatedSession =
+          (await terminalSessionManager.updateSessionAlias(
+            session.id,
+            parsed.data.alias,
+          )) ?? updatedSession;
+      }
+      if (parsed.data.panelSplitEnabled !== undefined) {
+        updatedSession =
+          (await terminalSessionManager.updateSessionPanelSplitEnabled(
+            session.id,
+            parsed.data.panelSplitEnabled,
+          )) ?? updatedSession;
+      }
       res.json(
         toSessionListItem(
-          updatedSession ?? session,
+          updatedSession,
           options?.terminalStateService?.getCurrent(
             session.id,
-            updatedSession ?? session,
+            updatedSession,
           ),
           toPanelWorkspacePayload(terminalSessionManager, session.id),
         ),

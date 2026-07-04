@@ -19,10 +19,10 @@ import { useTerminalPreviewPanelActions } from "./terminal-preview-panel-actions
 import { useTerminalPreviewPanelData } from "./use-terminal-preview-panel-data";
 import { TerminalPreviewPanelMutationDialogs } from "./terminal-preview-panel-mutation-dialogs";
 import { TerminalPreviewPanelShell } from "./terminal-preview-panel-shell";
-import { TerminalOrchestratorPanel } from "./terminal-orchestrator-panel";
 import { TerminalPreviewQuickSearch } from "./terminal-preview-quick-search";
 import { useTerminalPreviewQuickSearch } from "./use-terminal-preview-quick-search";
 import type { TerminalPreviewLineTarget } from "./terminal-preview-file-view";
+import { TerminalAgentTeamPanel } from "./terminal-agent-team-panel";
 import { useTerminalFileTree } from "./use-terminal-file-tree";
 
 interface TerminalPreviewPanelProps {
@@ -31,10 +31,13 @@ interface TerminalPreviewPanelProps {
   activeProject: TerminalProjectListItem | null;
   activeSession: TerminalSessionListItem | null;
   sessions: TerminalSessionListItem[];
+  showAgentTeamTool: boolean;
   widthPx?: number;
   onAuthExpired?: () => void;
   onEditProject: () => void;
   onSelectSession?: (terminalSessionId: string) => void;
+  onPanelSplitEnabledChange?: (enabled: boolean) => void;
+  onActiveAgentTeamRunChange?: (active: boolean) => void;
 }
 
 interface PreviewFileMutationTarget {
@@ -67,11 +70,12 @@ export function TerminalPreviewPanel({
   token,
   activeProject,
   activeSession,
-  sessions,
+  showAgentTeamTool,
   widthPx,
   onAuthExpired,
   onEditProject,
-  onSelectSession,
+  onPanelSplitEnabledChange,
+  onActiveAgentTeamRunChange,
 }: TerminalPreviewPanelProps) {
   const [lineTarget, setLineTarget] =
     useState<TerminalPreviewLineTarget | null>(null);
@@ -177,6 +181,12 @@ export function TerminalPreviewPanel({
     widthPx,
     onAuthExpired,
   });
+
+  useEffect(() => {
+    if (activeTool === "agent-team" && !showAgentTeamTool) {
+      setActiveTool("preview");
+    }
+  }, [activeTool, setActiveTool, showAgentTeamTool]);
 
   const getMutationTarget = useMemoizedFn(
     (filePath: string): PreviewFileMutationTarget => ({
@@ -616,14 +626,15 @@ export function TerminalPreviewPanel({
       }}
     />
   );
-  const orchestratorBody = (
-    <TerminalOrchestratorPanel
+  const agentTeamBody = (
+    <TerminalAgentTeamPanel
       apiBase={apiBase}
       token={token}
       activeProject={activeProject}
-      sessions={sessions}
+      activeSession={activeSession}
+      onPanelSplitEnabledChange={onPanelSplitEnabledChange}
+      onActiveRunChange={onActiveAgentTeamRunChange}
       onAuthExpired={onAuthExpired}
-      onSelectSession={onSelectSession}
     />
   );
 
@@ -668,7 +679,8 @@ export function TerminalPreviewPanel({
         token={token}
         activeTerminalSessionId={activeSession?.terminalSessionId ?? null}
         body={previewBody}
-        orchestratorBody={orchestratorBody}
+        showAgentTeamTool={showAgentTeamTool}
+        agentTeamBody={agentTeamBody}
         onStartResize={startResize}
         onSetActiveTool={setActiveTool}
         onSetPreviewMode={(nextMode) => {

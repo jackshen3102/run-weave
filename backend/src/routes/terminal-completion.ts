@@ -34,6 +34,8 @@ const completionEventSchema = z
     cwd: z.string().trim().min(1).nullable().optional(),
     outboxPath: z.string().trim().min(1).nullable().optional(),
     summary: z.string().trim().min(1).nullable().optional(),
+    panelId: z.string().trim().min(1).nullable().optional(),
+    tmuxPaneId: z.string().trim().min(1).nullable().optional(),
   })
   .strict();
 
@@ -89,6 +91,12 @@ export function createInternalTerminalCompletionRouter(options: {
 
     const rawHookEvent =
       parsed.data.rawHookEvent ?? parsed.data.hookEvent ?? null;
+    const { panelId, tmuxPaneId } = resolveCompletionPane(
+      options.terminalSessionManager,
+      session.id,
+      parsed.data.panelId ?? null,
+      parsed.data.tmuxPaneId ?? null,
+    );
     const lastAiActiveCommand =
       options.terminalSessionManager.getLastAiActiveCommand(session.id);
     const currentCommandMatches =
@@ -133,6 +141,8 @@ export function createInternalTerminalCompletionRouter(options: {
           cwd: parsed.data.cwd ?? null,
           outboxPath: parsed.data.outboxPath ?? null,
           summary: parsed.data.summary ?? null,
+          panelId,
+          tmuxPaneId,
         },
         session,
       );
@@ -152,4 +162,27 @@ export function createInternalTerminalCompletionRouter(options: {
   });
 
   return router;
+}
+
+/**
+ * Resolve the completing pane. The hook may report a `panelId` (from the pane's
+ * `RUNWEAVE_TERMINAL_PANEL_ID` env) or a `tmuxPaneId`; fall back to matching an
+ * existing panel record by tmux pane id so pane-as-worker attribution works.
+ */
+function resolveCompletionPane(
+  terminalSessionManager: TerminalSessionManager,
+  terminalSessionId: string,
+  panelId: string | null,
+  tmuxPaneId: string | null,
+): { panelId: string | null; tmuxPaneId: string | null } {
+  const panels = terminalSessionManager.listPanels(terminalSessionId);
+  if (panelId) {
+    const byId = panels.find((panel) => panel.id === panelId);
+    return { panelId, tmuxPaneId: tmuxPaneId ?? byId?.tmuxPaneId ?? null };
+  }
+  if (tmuxPaneId) {
+    const byPane = panels.find((panel) => panel.tmuxPaneId === tmuxPaneId);
+    return { panelId: byPane?.id ?? null, tmuxPaneId };
+  }
+  return { panelId: null, tmuxPaneId: null };
 }

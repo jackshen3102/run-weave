@@ -6,6 +6,7 @@ import type {
   SendTerminalInterruptRequest,
   SendTerminalInputRequest,
   TerminalInputMode,
+  TerminalPanelWorkspace,
   UpdateTerminalPanelRequest,
 } from "@runweave/shared";
 import type {
@@ -576,6 +577,125 @@ function sendRouteError(res: Response, error: unknown): void {
   });
 }
 
+export interface CreateTerminalPanelSplitParams {
+  sourcePanelId?: string;
+  direction: "right" | "down";
+  alias?: string | null;
+  role?: string | null;
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  focus?: boolean;
+}
+
+/**
+ * Split a new tmux pane inside a terminal session and register it as a panel.
+ * Shared by the panel HTTP route and the agent-team run service (worker panes).
+ */
+export async function createTerminalPanelSplit(
+  terminalSessionManager: TerminalSessionManager,
+  session: TerminalSessionRecord,
+  options: TerminalPanelRouteOptions,
+  params: CreateTerminalPanelSplitParams,
+): Promise<{ panel: TerminalPanelRecord; workspace: TerminalPanelWorkspace }> {
+  const tmuxService = requireTmuxSession(session, options.tmuxService);
+  if (!options.runtimeRegistry || !options.ptyService) {
+    throw new TerminalPanelRouteError(
+      503,
+      "Terminal runtime service unavailable",
+    );
+  }
+  await ensureTerminalRuntime({
+    session,
+    terminalSessionManager,
+    runtimeRegistry: options.runtimeRegistry,
+    ptyService: options.ptyService,
+    tmuxService,
+    tmuxOutputWatcher: options.tmuxOutputWatcher,
+  });
+  await ensureTmuxPanelWorkspace(
+    terminalSessionManager,
+    session,
+    tmuxService,
+    options.terminalEventService,
+  );
+  const panels = terminalSessionManager.listPanels(session.id);
+  const alias = params.alias?.trim() || null;
+  const role = params.role?.trim() || null;
+  assertUniqueAlias(panels, alias);
+  assertUniqueRole(panels, role);
+  const sourcePanel =
+    panels.find((panel) => panel.id === params.sourcePanelId) ??
+    panels.find(
+      (panel) =>
+        panel.id ===
+        terminalSessionManager.getPanelWorkspace(session.id)?.activePanelId,
+    ) ??
+    panels[0];
+  if (!sourcePanel) {
+    throw new TerminalPanelRouteError(404, "Source panel not found");
+  }
+
+  const panelId = randomUUID();
+  const command = params.command?.trim() || resolveDefaultTerminalCommand();
+  const args = params.args ?? resolveDefaultTerminalArgs(command);
+  const cwd = params.cwd?.trim() || sourcePanel.cwd || session.cwd;
+  const splitTarget = await tmuxService.splitPane(
+    buildPaneTarget(session, tmuxService, sourcePanel),
+    {
+      direction: params.direction,
+      cwd,
+      command,
+      args,
+      env: {
+        RUNWEAVE_TERMINAL_SESSION_ID: session.id,
+        RUNWEAVE_TERMINAL_PANEL_ID: panelId,
+      },
+    },
+  );
+  const provisionalPanel = await terminalSessionManager.upsertPanel(
+    buildSplitPanel(session, splitTarget.paneId, {
+      panelId,
+      alias,
+      role,
+      cwd,
+      activeCommand: null,
+    }),
+  );
+  const previousWorkspace = terminalSessionManager.getPanelWorkspace(session.id);
+  await terminalSessionManager.upsertPanelWorkspace({
+    terminalSessionId: session.id,
+    activePanelId:
+      params.focus === false
+        ? previousWorkspace?.activePanelId || sourcePanel.id
+        : provisionalPanel.id,
+    panelIds: [...(previousWorkspace?.panelIds ?? []), provisionalPanel.id],
+    renderMode: "tmux-native",
+  });
+  await tmuxService.waitForPaneReady(splitTarget);
+  const metadata = await tmuxService.readPaneMetadata(splitTarget, command);
+  provisionalPanel.cwd = metadata?.cwd || cwd;
+  provisionalPanel.activeCommand = metadata?.activeCommand ?? null;
+  const panel = await terminalSessionManager.upsertPanel(provisionalPanel);
+  if (params.focus !== false) {
+    await tmuxService.selectPane(splitTarget);
+  }
+  const workspace = toPanelWorkspacePayload(terminalSessionManager, session.id);
+  recordPanelEvent(
+    terminalSessionManager,
+    options.terminalEventService,
+    session,
+    "terminal_panel_created",
+    {
+      panel: toPanelListItem(panel, workspace?.activePanelId ?? panel.id),
+    },
+  );
+  if (!workspace) {
+    throw new TerminalPanelRouteError(500, "Terminal panel workspace missing");
+  }
+  return { panel, workspace };
+}
+
 export function registerTerminalPanelRoutes(
   router: Router,
   terminalSessionManager: TerminalSessionManager,
@@ -611,98 +731,19 @@ export function registerTerminalPanelRoutes(
     }
     try {
       const session = getSessionOrThrow(terminalSessionManager, req.params.id);
-      const tmuxService = requireTmuxSession(session, options.tmuxService);
-      if (!options.runtimeRegistry || !options.ptyService) {
-        throw new TerminalPanelRouteError(
-          503,
-          "Terminal runtime service unavailable",
-        );
-      }
-      await ensureTerminalRuntime({
-        session,
-        terminalSessionManager,
-        runtimeRegistry: options.runtimeRegistry,
-        ptyService: options.ptyService,
-        tmuxService,
-        tmuxOutputWatcher: options.tmuxOutputWatcher,
-      });
-      await ensureTmuxPanelWorkspace(
+      const { workspace } = await createTerminalPanelSplit(
         terminalSessionManager,
         session,
-        tmuxService,
-        options.terminalEventService,
-      );
-      const panels = terminalSessionManager.listPanels(session.id);
-      const alias = parsed.data.alias?.trim() || null;
-      const role = parsed.data.role?.trim() || null;
-      assertUniqueAlias(panels, alias);
-      assertUniqueRole(panels, role);
-      const sourcePanel =
-        panels.find((panel) => panel.id === parsed.data.sourcePanelId) ??
-        panels.find(
-          (panel) =>
-            panel.id ===
-            terminalSessionManager.getPanelWorkspace(session.id)?.activePanelId,
-        ) ??
-        panels[0];
-      if (!sourcePanel) {
-        throw new TerminalPanelRouteError(404, "Source panel not found");
-      }
-
-      const panelId = randomUUID();
-      const command =
-        parsed.data.command?.trim() || resolveDefaultTerminalCommand();
-      const args = parsed.data.args ?? resolveDefaultTerminalArgs(command);
-      const cwd = parsed.data.cwd?.trim() || sourcePanel.cwd || session.cwd;
-      const splitTarget = await tmuxService.splitPane(
-        buildPaneTarget(session, tmuxService, sourcePanel),
+        options,
         {
+          sourcePanelId: parsed.data.sourcePanelId,
           direction: parsed.data.direction,
-          cwd,
-          command,
-          args,
-          env: {
-            RUNWEAVE_TERMINAL_SESSION_ID: session.id,
-            RUNWEAVE_TERMINAL_PANEL_ID: panelId,
-          },
-        },
-      );
-      const provisionalPanel = await terminalSessionManager.upsertPanel(
-        buildSplitPanel(session, splitTarget.paneId, {
-          panelId,
-          alias,
-          role,
-          cwd,
-          activeCommand: null,
-        }),
-      );
-      const previousWorkspace =
-        terminalSessionManager.getPanelWorkspace(session.id);
-      await terminalSessionManager.upsertPanelWorkspace({
-        terminalSessionId: session.id,
-        activePanelId:
-          parsed.data.focus === false
-            ? previousWorkspace?.activePanelId || sourcePanel.id
-            : provisionalPanel.id,
-        panelIds: [...(previousWorkspace?.panelIds ?? []), provisionalPanel.id],
-        renderMode: "tmux-native",
-      });
-      await tmuxService.waitForPaneReady(splitTarget);
-      const metadata = await tmuxService.readPaneMetadata(splitTarget, command);
-      provisionalPanel.cwd = metadata?.cwd || cwd;
-      provisionalPanel.activeCommand = metadata?.activeCommand ?? null;
-      const panel = await terminalSessionManager.upsertPanel(provisionalPanel);
-      if (parsed.data.focus !== false) {
-        await tmuxService.selectPane(splitTarget);
-      }
-      const workspace = toPanelWorkspacePayload(terminalSessionManager, session.id);
-      recordPanelEvent(
-        terminalSessionManager,
-        options.terminalEventService,
-        session,
-        "terminal_panel_created",
-        {
-          panel: toPanelListItem(panel, workspace?.activePanelId ?? panel.id),
+          alias: parsed.data.alias,
+          role: parsed.data.role,
+          command: parsed.data.command,
+          args: parsed.data.args,
+          cwd: parsed.data.cwd,
+          focus: parsed.data.focus,
         },
       );
       res.status(201).json(workspace);

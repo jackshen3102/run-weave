@@ -27,8 +27,8 @@ import {
 import { createAuthRouter } from "./routes/auth";
 import { createAppHomeOverviewRouter } from "./routes/app-home-overview";
 import { createDiagnosticLogsRouter } from "./routes/diagnostic-logs";
-import { OrchestratorService } from "./orchestrator/service";
-import { createOrchestratorRouter } from "./routes/orchestrator";
+import { AgentTeamService } from "./agent-team/service";
+import { createAgentTeamRouter } from "./routes/agent-team";
 import {
   createInternalTerminalAgentHookRouter,
   createTerminalStateRouter,
@@ -92,7 +92,7 @@ interface RuntimeServices {
   terminalQuickInputStore: LowDbTerminalQuickInputStore;
   terminalQuickInputService: TerminalQuickInputService;
   terminalStateService: TerminalStateService;
-  orchestratorService: OrchestratorService;
+  agentTeamService: AgentTeamService;
   terminalEventService: TerminalEventService;
   terminalCompletionEventService: TerminalCompletionEventService;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
@@ -248,7 +248,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
   }
   await tmuxOutputWatcher.watchExistingSessions();
-  const orchestratorService = new OrchestratorService({
+  const agentTeamService = new AgentTeamService({
     terminalSessionManager,
     terminalEventService,
     ptyService,
@@ -257,7 +257,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxService,
     tmuxOutputWatcher,
   });
-  await orchestratorService.initialize();
+  agentTeamService.initialize();
 
   return {
     authStore,
@@ -268,7 +268,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalQuickInputStore,
     terminalQuickInputService,
     terminalStateService,
-    orchestratorService,
+    agentTeamService,
     terminalEventService,
     terminalCompletionEventService,
     terminalRuntimeRegistry,
@@ -289,7 +289,8 @@ async function initializeAppServerEventIntegration(
     if (!connection) {
       logger.info("backend.app-server.unavailable", {
         component: "app-server",
-        message: "Runweave app-server unavailable; backend will continue without global event center",
+        message:
+          "Runweave app-server unavailable; backend will continue without global event center",
       });
       return;
     }
@@ -351,7 +352,8 @@ async function initializeAppServerEventIntegration(
   } catch (error) {
     logger.warn("backend.app-server.integration.failed", {
       component: "app-server",
-      message: "Runweave app-server integration failed; backend will continue without global event center",
+      message:
+        "Runweave app-server integration failed; backend will continue without global event center",
       error,
     });
   }
@@ -450,9 +452,9 @@ function createHttpApp(
     }),
   );
   app.use(
-    "/api/orchestrator",
+    "/api/agent-team",
     requireAuth,
-    createOrchestratorRouter(services.orchestratorService),
+    createAgentTeamRouter(services.agentTeamService),
   );
   app.use(
     "/api/terminal",
@@ -460,6 +462,7 @@ function createHttpApp(
     createTerminalStateRouter({
       terminalSessionManager: services.terminalSessionManager,
       terminalStateService: services.terminalStateService,
+      tmuxService: services.tmuxService,
     }),
   );
   app.use(
@@ -488,10 +491,7 @@ function createHttpApp(
     );
 
     app.get("*", (req, res, next) => {
-      if (
-        req.path.startsWith("/api") ||
-        req.path.startsWith("/ws")
-      ) {
+      if (req.path.startsWith("/api") || req.path.startsWith("/ws")) {
         next();
         return;
       }
@@ -654,7 +654,6 @@ async function startRuntime(): Promise<void> {
     // test port.
     process.env.RUNWEAVE_BASE_URL = controlPlaneBaseUrl;
     process.env.RUNWEAVE_BACKEND_PORT = String(port);
-    services.orchestratorService.setControlPlaneBaseUrl(controlPlaneBaseUrl);
     // Always pin the hook endpoint to THIS backend's listening port. Inheriting
     // it from a parent shell spawned by another Runweave backend would deliver
     // codex hook events to the wrong process.

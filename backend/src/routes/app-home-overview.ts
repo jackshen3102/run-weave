@@ -106,6 +106,14 @@ function buildDisplayStatus(
     };
   }
 
+  if (terminalState.state === "agent_starting") {
+    return {
+      displayStatus: "agent-starting",
+      displayStatusLabel: "Agent Starting",
+      terminalState,
+    };
+  }
+
   if (terminalState.state === "agent_idle") {
     return {
       displayStatus: "agent-idle",

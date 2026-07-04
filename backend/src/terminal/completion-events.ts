@@ -12,6 +12,8 @@ export interface RecordTerminalCompletionEventInput {
   cwd: string | null;
   outboxPath?: string | null;
   summary?: string | null;
+  panelId?: string | null;
+  tmuxPaneId?: string | null;
 }
 
 export class TerminalCompletionEventStore {
@@ -34,6 +36,8 @@ export class TerminalCompletionEventStore {
       cwd: input.cwd,
       outboxPath: input.outboxPath ?? null,
       summary: input.summary ?? null,
+      panelId: input.panelId ?? null,
+      tmuxPaneId: input.tmuxPaneId ?? null,
       createdAt: new Date().toISOString(),
     };
     this.nextId += 1;

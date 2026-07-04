@@ -246,6 +246,7 @@ export class TerminalSessionManager {
       lastActivityAt: now,
       runtimeKind: "pty",
       recoverable: false,
+      panelSplitEnabled: false,
     });
 
     await this.sessionStore.insertSession(toPersistedSession(session));
@@ -611,6 +612,25 @@ export class TerminalSessionManager {
     await this.sessionStore.updateSessionAlias({
       terminalSessionId,
       alias: nextAlias,
+    });
+    return session;
+  }
+
+  async updateSessionPanelSplitEnabled(
+    terminalSessionId: string,
+    panelSplitEnabled: boolean,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+    if (session.panelSplitEnabled === panelSplitEnabled) {
+      return session;
+    }
+    session.panelSplitEnabled = panelSplitEnabled;
+    await this.sessionStore.updateSessionPanelSplitEnabled({
+      terminalSessionId,
+      panelSplitEnabled,
     });
     return session;
   }
