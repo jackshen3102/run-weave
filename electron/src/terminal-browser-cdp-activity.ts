@@ -1,27 +1,18 @@
-const QUIET_CDP_COMMAND_PREFIXES = ["Tracing.", "Log.", "Network."] as const;
+const MCP_ACTIVITY_COMMAND_PREFIXES = ["Input."] as const;
 
-const QUIET_CDP_COMMANDS = new Set([
-  "DOM.getDocument",
-  "Emulation.setEmulatedMedia",
-  "Emulation.setFocusEmulationEnabled",
-  "Network.enable",
-  "Page.addScriptToEvaluateOnNewDocument",
-  "Page.createIsolatedWorld",
-  "Page.enable",
-  "Page.getFrameTree",
-  "Page.getLayoutMetrics",
-  "Page.getNavigationHistory",
-  "Page.setLifecycleEventsEnabled",
-  "Performance.enable",
-  "Runtime.enable",
-  "Runtime.runIfWaitingForDebugger",
-  "Target.setAutoAttach",
-  "Target.getTargetInfo",
+const MCP_ACTIVITY_COMMANDS = new Set([
+  "Page.close",
+  "Page.navigate",
+  "Page.reload",
+  "Page.setDocumentContent",
+  "Page.stopLoading",
 ]);
 
 export function shouldMarkTerminalBrowserMcpActivity(method: string): boolean {
-  if (QUIET_CDP_COMMANDS.has(method)) {
-    return false;
+  if (MCP_ACTIVITY_COMMANDS.has(method)) {
+    return true;
   }
-  return !QUIET_CDP_COMMAND_PREFIXES.some((prefix) => method.startsWith(prefix));
+  return MCP_ACTIVITY_COMMAND_PREFIXES.some((prefix) =>
+    method.startsWith(prefix),
+  );
 }
