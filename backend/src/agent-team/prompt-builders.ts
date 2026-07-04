@@ -35,8 +35,9 @@ export function buildWorkerStartupPrompt(params: {
   run: AgentTeamRun;
   worker: AgentTeamWorker;
   acceptance: AgentTeamAcceptanceCase[];
+  outboxPath?: string | null;
 }): string {
-  const { run, worker, acceptance } = params;
+  const { run, worker, acceptance, outboxPath } = params;
   const lines = [
     `你是本 run 的 worker：${ROLE_LABEL[worker.role] ?? worker.role}。`,
     "",
@@ -51,13 +52,20 @@ export function buildWorkerStartupPrompt(params: {
       "验收用例（逐条跑 Playwright，产出 pass/fail + 截图/DOM 证据）：",
       ...acceptance.map((item, index) => `${index + 1}. [${item.caseId}] ${item.text}`),
       "",
-      "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。",
+      outboxPath
+        ? `把每条用例的结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。`
+        : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。",
     );
   }
   lines.push(
     "",
     "完成要求：",
     "- 只处理分配给你的意图，不接管主控调度。",
+    ...(outboxPath
+      ? [
+          `- 本 worker 的结构化 outbox 固定写入：${outboxPath}。不要写 session 级 .runweave/outbox/${run.terminalSessionId}.json，避免同一 terminal 多 pane 覆盖。`,
+        ]
+      : []),
     "- 最终回复以结构化 summary 收尾（状态 / 结论 / 关键发现 / 产物 / 建议下一步）。",
   );
   return lines.join("\n");

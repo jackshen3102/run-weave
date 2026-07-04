@@ -89,6 +89,12 @@ import {
 } from "../../services/terminal";
 import { HttpError } from "../../services/http";
 
+function getWorkspacePanelCount(
+  workspace: { panels?: unknown[] } | null | undefined,
+): number | null {
+  return Array.isArray(workspace?.panels) ? workspace.panels.length : null;
+}
+
 const TerminalPreviewPanel = lazy(() =>
   import("./terminal-preview-panel").then((module) => ({
     default: module.TerminalPreviewPanel,
@@ -1218,8 +1224,9 @@ export function TerminalWorkspaceShell({
                   terminalState={terminalStateBySessionId[session.terminalSessionId]}
                   panelSplitEnabled={session.panelSplitEnabled}
                   panelCount={
-                    panelWorkspaceBySessionId[session.terminalSessionId]
-                      ?.panels.length ??
+                    getWorkspacePanelCount(
+                      panelWorkspaceBySessionId[session.terminalSessionId],
+                    ) ??
                     session.panelCount ??
                     1
                   }

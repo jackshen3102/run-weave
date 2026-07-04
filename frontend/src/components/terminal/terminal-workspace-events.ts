@@ -117,8 +117,8 @@ export function useTerminalWorkspaceEvents({
             if (
               next[event.terminalSessionId]?.activePanelId ===
                 workspace.activePanelId &&
-              next[event.terminalSessionId]?.panels.length ===
-                workspace.panels.length
+              (next[event.terminalSessionId]?.panels?.length ?? 0) ===
+                (workspace.panels?.length ?? 0)
             ) {
               continue;
             }

@@ -52,6 +52,8 @@ export interface TerminalPanelRecord {
   terminalSessionId: string;
   alias: string | null;
   role: string | null;
+  agentTeamRunId: string | null;
+  agentTeamWorkerId: string | null;
   cwd: string;
   activeCommand: string | null;
   status: "running" | "exited";
@@ -214,6 +216,8 @@ export function buildPanelRecord(
     terminalSessionId: persisted.terminalSessionId,
     alias: persisted.alias ?? null,
     role: persisted.role ?? null,
+    agentTeamRunId: persisted.agentTeamRunId ?? null,
+    agentTeamWorkerId: persisted.agentTeamWorkerId ?? null,
     cwd: persisted.cwd,
     activeCommand: persisted.activeCommand ?? null,
     status: persisted.status,
@@ -233,6 +237,8 @@ export function toPersistedPanel(
     terminalSessionId: panel.terminalSessionId,
     alias: panel.alias,
     role: panel.role,
+    agentTeamRunId: panel.agentTeamRunId,
+    agentTeamWorkerId: panel.agentTeamWorkerId,
     cwd: panel.cwd,
     activeCommand: panel.activeCommand,
     status: panel.status,

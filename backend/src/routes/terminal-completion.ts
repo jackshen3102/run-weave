@@ -91,12 +91,28 @@ export function createInternalTerminalCompletionRouter(options: {
 
     const rawHookEvent =
       parsed.data.rawHookEvent ?? parsed.data.hookEvent ?? null;
-    const { panelId, tmuxPaneId } = resolveCompletionPane(
+    const resolvedPane = resolveCompletionPane(
       options.terminalSessionManager,
       session.id,
       parsed.data.panelId ?? null,
       parsed.data.tmuxPaneId ?? null,
     );
+    if (!resolvedPane.ok) {
+      terminalCompletionLogger.warn("terminal-completion.pane.invalid", {
+        message: "Terminal completion pane identity rejected",
+        terminalSessionId: parsed.data.terminalSessionId,
+        panelId: parsed.data.panelId ?? null,
+        tmuxPaneId: parsed.data.tmuxPaneId ?? null,
+        reason: resolvedPane.reason,
+      });
+      res.status(202).json({
+        event: null,
+        ignored: true,
+        reason: resolvedPane.reason,
+      });
+      return;
+    }
+    const { panelId, tmuxPaneId } = resolvedPane;
     const lastAiActiveCommand =
       options.terminalSessionManager.getLastAiActiveCommand(session.id);
     const currentCommandMatches =
@@ -174,15 +190,43 @@ function resolveCompletionPane(
   terminalSessionId: string,
   panelId: string | null,
   tmuxPaneId: string | null,
-): { panelId: string | null; tmuxPaneId: string | null } {
+):
+  | { ok: true; panelId: string | null; tmuxPaneId: string | null }
+  | {
+      ok: false;
+      panelId: string | null;
+      tmuxPaneId: string | null;
+      reason: string;
+    } {
   const panels = terminalSessionManager.listPanels(terminalSessionId);
+  const byId = panelId
+    ? panels.find((panel) => panel.id === panelId) ?? null
+    : null;
+  const byPane = tmuxPaneId
+    ? panels.find((panel) => panel.tmuxPaneId === tmuxPaneId) ?? null
+    : null;
+
   if (panelId) {
-    const byId = panels.find((panel) => panel.id === panelId);
-    return { panelId, tmuxPaneId: tmuxPaneId ?? byId?.tmuxPaneId ?? null };
+    if (!byId) {
+      return {
+        ok: false,
+        panelId,
+        tmuxPaneId,
+        reason: "unknown_panel_id",
+      };
+    }
+    if (tmuxPaneId && byId.tmuxPaneId !== tmuxPaneId) {
+      return {
+        ok: false,
+        panelId,
+        tmuxPaneId,
+        reason: "panel_tmux_mismatch",
+      };
+    }
+    return { ok: true, panelId, tmuxPaneId: byId.tmuxPaneId };
   }
   if (tmuxPaneId) {
-    const byPane = panels.find((panel) => panel.tmuxPaneId === tmuxPaneId);
-    return { panelId: byPane?.id ?? null, tmuxPaneId };
+    return { ok: true, panelId: byPane?.id ?? null, tmuxPaneId };
   }
-  return { panelId: null, tmuxPaneId: null };
+  return { ok: true, panelId: null, tmuxPaneId: null };
 }

@@ -137,6 +137,8 @@ function buildDefaultPanel(
     terminalSessionId: session.id,
     alias: "main",
     role: "main",
+    agentTeamRunId: null,
+    agentTeamWorkerId: null,
     cwd: pane.cwd || session.cwd,
     activeCommand: pane.activeCommand,
     status: "running",
@@ -154,6 +156,8 @@ function buildSplitPanel(
     panelId: string;
     alias: string | null;
     role: string | null;
+    agentTeamRunId: string | null;
+    agentTeamWorkerId: string | null;
     cwd: string;
     activeCommand: string | null;
   },
@@ -164,6 +168,8 @@ function buildSplitPanel(
     terminalSessionId: session.id,
     alias: params.alias,
     role: params.role,
+    agentTeamRunId: params.agentTeamRunId,
+    agentTeamWorkerId: params.agentTeamWorkerId,
     cwd: params.cwd,
     activeCommand: params.activeCommand,
     status: "running",
@@ -288,6 +294,8 @@ async function ensureTmuxPanelWorkspace(
             panelId: randomUUID(),
             alias: null,
             role: null,
+            agentTeamRunId: null,
+            agentTeamWorkerId: null,
             cwd: pane.cwd || session.cwd,
             activeCommand: pane.activeCommand,
           });
@@ -582,6 +590,8 @@ export interface CreateTerminalPanelSplitParams {
   direction: "right" | "down";
   alias?: string | null;
   role?: string | null;
+  agentTeamRunId?: string | null;
+  agentTeamWorkerId?: string | null;
   command?: string;
   args?: string[];
   cwd?: string;
@@ -622,6 +632,8 @@ export async function createTerminalPanelSplit(
   const panels = terminalSessionManager.listPanels(session.id);
   const alias = params.alias?.trim() || null;
   const role = params.role?.trim() || null;
+  const agentTeamRunId = params.agentTeamRunId?.trim() || null;
+  const agentTeamWorkerId = params.agentTeamWorkerId?.trim() || null;
   assertUniqueAlias(panels, alias);
   assertUniqueRole(panels, role);
   const sourcePanel =
@@ -658,6 +670,8 @@ export async function createTerminalPanelSplit(
       panelId,
       alias,
       role,
+      agentTeamRunId,
+      agentTeamWorkerId,
       cwd,
       activeCommand: null,
     }),

@@ -90,6 +90,7 @@ const recordRoundSchema = z
   .object({
     acceptanceResults: z.array(acceptanceResultSchema).optional(),
     hadDiff: z.boolean().optional(),
+    expectedRound: z.number().int().positive().optional(),
   })
   .strict();
 

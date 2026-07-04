@@ -34,6 +34,7 @@ export interface TmuxLaunchCommand {
 export interface TmuxPaneMetadata {
   cwd: string;
   activeCommand: string | null;
+  activeCommandSource: "runweave_command" | "pane_current_command" | null;
 }
 
 export interface TmuxPaneInfo extends TmuxPaneMetadata {
@@ -495,13 +496,16 @@ export class TmuxService {
           rawCommand = "",
           rawActive = "0",
         ] = line.split(TMUX_METADATA_FIELD_SEPARATOR);
+        const activeCommand = resolvePaneActiveCommand(
+          rawRunweaveCommand,
+          rawCommand,
+        );
         return {
           paneId,
           paneIndex: parsePositiveInteger(rawPaneIndex),
           cwd,
-          activeCommand:
-            normalizePaneCommand(rawRunweaveCommand) ??
-            normalizePaneCommand(rawCommand),
+          activeCommand: activeCommand.command,
+          activeCommandSource: activeCommand.source,
           active: rawActive === "1",
         };
       })
@@ -743,12 +747,15 @@ export class TmuxService {
     if (!cwd) {
       return null;
     }
-    const activeCommand =
-      normalizePaneCommand(rawRunweaveCommand) ??
-      normalizePaneCommand(rawCommand, shellCommand);
+    const activeCommand = resolvePaneActiveCommand(
+      rawRunweaveCommand,
+      rawCommand,
+      shellCommand,
+    );
     return {
       cwd,
-      activeCommand,
+      activeCommand: activeCommand.command,
+      activeCommandSource: activeCommand.source,
     };
   }
 
@@ -1146,6 +1153,27 @@ function normalizePaneCommand(
   }
 
   return command;
+}
+
+function resolvePaneActiveCommand(
+  rawRunweaveCommand: string,
+  rawCommand: string,
+  shellCommand?: string,
+): {
+  command: string | null;
+  source: TmuxPaneMetadata["activeCommandSource"];
+} {
+  const runweaveCommand = normalizePaneCommand(rawRunweaveCommand);
+  if (runweaveCommand) {
+    return { command: runweaveCommand, source: "runweave_command" };
+  }
+
+  const paneCommand = normalizePaneCommand(rawCommand, shellCommand);
+  if (paneCommand) {
+    return { command: paneCommand, source: "pane_current_command" };
+  }
+
+  return { command: null, source: null };
 }
 
 function isInteractiveShellName(command: string): boolean {

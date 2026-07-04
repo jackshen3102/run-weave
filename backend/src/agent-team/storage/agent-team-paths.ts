@@ -17,7 +17,7 @@ export class AgentTeamPaths {
     return path.join(this.runsDir(projectId), `${runId}.json`);
   }
 
-  /** Where behavior_verify / worker outboxes are written, keyed by session. */
+  /** Legacy worker outbox path, keyed only by terminal session. */
   defaultOutboxPath(
     projectId: string | null,
     sessionId: string,
@@ -31,6 +31,47 @@ export class AgentTeamPaths {
     );
   }
 
+  /** Worker outbox path scoped to the pane that owns the completion event. */
+  workerOutboxPath(
+    projectId: string | null,
+    sessionId: string,
+    pane: { panelId?: string | null; tmuxPaneId?: string | null },
+    cwd?: string | null,
+  ): string {
+    return path.join(
+      this.projectRoot(projectId, cwd),
+      this.workerOutboxRelativePath(sessionId, pane),
+    );
+  }
+
+  workerOutboxRelativePath(
+    sessionId: string,
+    pane: { panelId?: string | null; tmuxPaneId?: string | null },
+  ): string {
+    return path.join(
+      ".runweave",
+      "outbox",
+      this.workerOutboxFileName(sessionId, pane),
+    );
+  }
+
+  private workerOutboxFileName(
+    sessionId: string,
+    pane: { panelId?: string | null; tmuxPaneId?: string | null },
+  ): string {
+    if (pane.panelId) {
+      return `${sanitizeOutboxSegment(sessionId)}.panel-${sanitizeOutboxSegment(
+        pane.panelId,
+      )}.json`;
+    }
+    if (pane.tmuxPaneId) {
+      return `${sanitizeOutboxSegment(sessionId)}.pane-${sanitizeOutboxSegment(
+        pane.tmuxPaneId,
+      )}.json`;
+    }
+    return `${sanitizeOutboxSegment(sessionId)}.json`;
+  }
+
   private projectRoot(projectId: string | null, cwd?: string | null): string {
     if (projectId) {
       const project = this.terminalSessionManager.getProject(projectId);
@@ -40,4 +81,8 @@ export class AgentTeamPaths {
     }
     return cwd || this.cwd;
   }
+}
+
+function sanitizeOutboxSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_.-]+/g, "-");
 }
