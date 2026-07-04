@@ -53,6 +53,7 @@ interface TerminalAgentTeamPanelProps {
   token: string;
   activeProject: TerminalProjectListItem | null;
   activeSession: TerminalSessionListItem | null;
+  onPanelSplitEnabledChange?: (enabled: boolean) => void;
   onAuthExpired?: () => void;
 }
 
@@ -66,12 +67,14 @@ export function TerminalAgentTeamPanel({
   token,
   activeProject,
   activeSession,
+  onPanelSplitEnabledChange,
   onAuthExpired,
 }: TerminalAgentTeamPanelProps) {
   const [run, setRun] = useState<AgentTeamRun | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [task, setTask] = useState("");
   const [autoApproveSplit, setAutoApproveSplit] = useState(false);
   const [workerDrafts, setWorkerDrafts] = useState<WorkerDraft[] | null>(null);
   const [resumeNote, setResumeNote] = useState("");
@@ -172,11 +175,22 @@ export function TerminalAgentTeamPanel({
     if (!projectId || !terminalSessionId) {
       return;
     }
+    const trimmedTask = task.trim();
+    if (!trimmedTask) {
+      setError("请先填写 Agent Team 要执行的任务。");
+      return;
+    }
     void runAction(() =>
       startAgentTeamRun(apiBase, token, {
         projectId,
         terminalSessionId,
+        task: trimmedTask,
         options: { autoApproveSplit },
+      }).then((next) => {
+        if (next.phase === "executing") {
+          onPanelSplitEnabledChange?.(true);
+        }
+        return next;
       }),
     );
   });
@@ -198,6 +212,11 @@ export function TerminalAgentTeamPanel({
       submitAgentTeamSplitGate(apiBase, token, run.runId, {
         verdict: "confirmed",
         workers: workerDrafts,
+      }).then((next) => {
+        if (next.phase === "executing") {
+          onPanelSplitEnabledChange?.(true);
+        }
+        return next;
       }),
     );
   });
@@ -297,8 +316,10 @@ export function TerminalAgentTeamPanel({
           </div>
         ) : !run ? (
           <StartFlowSection
+            task={task}
             autoApproveSplit={autoApproveSplit}
             busy={busy}
+            onTaskChange={setTask}
             onToggleAutoApprove={() => setAutoApproveSplit((prev) => !prev)}
             onStart={startFlow}
           />
@@ -334,13 +355,17 @@ export function TerminalAgentTeamPanel({
 }
 
 function StartFlowSection({
+  task,
   autoApproveSplit,
   busy,
+  onTaskChange,
   onToggleAutoApprove,
   onStart,
 }: {
+  task: string;
   autoApproveSplit: boolean;
   busy: boolean;
+  onTaskChange: (value: string) => void;
   onToggleAutoApprove: () => void;
   onStart: () => void;
 }) {
@@ -359,6 +384,12 @@ function StartFlowSection({
         <li>澄清充分后产出 worker 拆分提案，你确认</li>
         <li>确认后 split 出 worker pane，右侧退回只读观测</li>
       </ol>
+      <textarea
+        className="min-h-20 w-full resize-y rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
+        value={task}
+        onChange={(event) => onTaskChange(event.target.value)}
+        placeholder="输入这次 Agent Team 要执行的任务"
+      />
       <label className="flex items-center gap-2 text-xs text-slate-300">
         <input
           type="checkbox"
@@ -372,7 +403,7 @@ function StartFlowSection({
         type="button"
         size="sm"
         className="w-full"
-        disabled={busy}
+        disabled={busy || !task.trim()}
         onClick={onStart}
       >
         <Play className="h-4 w-4" /> 在此终端开启 engineering-rules 流程

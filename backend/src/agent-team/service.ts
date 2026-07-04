@@ -2,6 +2,7 @@ import type {
   AgentTeamAcceptanceCase,
   AgentTeamRun,
   AgentTeamStatus,
+  AgentTeamTerminal,
   AgentTeamWorker,
   AgentTeamWorkerOutbox,
   AgentTeamWorkerRole,
@@ -10,6 +11,7 @@ import type {
   RecordAgentTeamRoundRequest,
   ResumeAgentTeamRunRequest,
   SubmitAgentTeamSplitGateRequest,
+  TerminalEventEnvelope,
 } from "@runweave/shared";
 import type {
   TerminalSessionManager,
@@ -18,6 +20,7 @@ import type {
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TerminalEventService } from "../terminal/terminal-event-service";
+import type { TerminalStateService } from "../terminal/terminal-state-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TmuxService } from "../terminal/tmux-service";
 import { logger } from "../logging";
@@ -43,14 +46,17 @@ import {
   foldRound,
   shouldEscalate,
 } from "./loop";
+import { AgentTeamAgentReadinessService } from "./agent-readiness";
 
 const agentTeamLogger = logger.child({ component: "agent-team-service" });
+const DEFAULT_AGENT_TEAM_AGENT_COMMAND = "codex";
 
 interface AgentTeamServiceOptions {
   terminalSessionManager: TerminalSessionManager;
   terminalEventService: TerminalEventService;
   ptyService: PtyService;
   runtimeRegistry: TerminalRuntimeRegistry;
+  terminalStateService: TerminalStateService;
   tmuxService?: TmuxService;
   tmuxOutputWatcher?: TmuxOutputWatcher;
   cwd?: string;
@@ -63,11 +69,13 @@ export class AgentTeamService {
   private readonly terminalEventService: TerminalEventService;
   private readonly ptyService: PtyService;
   private readonly runtimeRegistry: TerminalRuntimeRegistry;
+  private readonly terminalStateService: TerminalStateService;
   private readonly tmuxService?: TmuxService;
   private readonly tmuxOutputWatcher?: TmuxOutputWatcher;
   private readonly paths: AgentTeamPaths;
   private readonly runStore: AgentTeamRunStore;
   private readonly promptSender: AgentTeamPromptSender;
+  private readonly agentReadiness: AgentTeamAgentReadinessService;
   private readonly outboxResolver: AgentTeamOutboxResolver;
   private readonly eventQueues = new Map<string, Promise<void>>();
 
@@ -76,6 +84,7 @@ export class AgentTeamService {
     this.terminalEventService = options.terminalEventService;
     this.ptyService = options.ptyService;
     this.runtimeRegistry = options.runtimeRegistry;
+    this.terminalStateService = options.terminalStateService;
     this.tmuxService = options.tmuxService;
     this.tmuxOutputWatcher = options.tmuxOutputWatcher;
     this.paths = new AgentTeamPaths(
@@ -90,6 +99,14 @@ export class AgentTeamService {
       terminalSessionManager: this.terminalSessionManager,
       ptyService: this.ptyService,
       runtimeRegistry: this.runtimeRegistry,
+      tmuxService: this.tmuxService,
+      tmuxOutputWatcher: this.tmuxOutputWatcher,
+    });
+    this.agentReadiness = new AgentTeamAgentReadinessService({
+      terminalSessionManager: this.terminalSessionManager,
+      ptyService: this.ptyService,
+      runtimeRegistry: this.runtimeRegistry,
+      terminalStateService: this.terminalStateService,
       tmuxService: this.tmuxService,
       tmuxOutputWatcher: this.tmuxOutputWatcher,
     });
@@ -133,7 +150,11 @@ export class AgentTeamService {
       input.projectId,
       input.terminalSessionId,
     );
-    if (existing && existing.status !== "done" && existing.status !== "failed") {
+    if (
+      existing &&
+      existing.status !== "done" &&
+      existing.status !== "failed"
+    ) {
       throw new AgentTeamError(
         409,
         "This terminal already has an active agent-team run",
@@ -164,6 +185,8 @@ export class AgentTeamService {
       }
     }
     const now = new Date().toISOString();
+    const terminal = resolveAgentTeamTerminal(input.terminal);
+    const task = requireRunnableTask(input.task);
     const run: AgentTeamRun = {
       runId: createAgentTeamRunId(input.terminalSessionId),
       projectId: input.projectId,
@@ -172,7 +195,8 @@ export class AgentTeamService {
       phase: "clarify",
       status: "clarifying",
       options: { autoApproveSplit: input.options?.autoApproveSplit ?? false },
-      task: input.task?.trim() ?? "",
+      terminal,
+      task,
       clarify: [
         {
           from: "agent",
@@ -190,7 +214,11 @@ export class AgentTeamService {
       updatedAt: now,
     };
     await this.runStore.writeRun(run);
-    // Inject the startup prompt into the main pane (best-effort).
+    await this.agentReadiness.ensureAgentReady(
+      session,
+      terminal,
+      mainPanelId ? { panelId: mainPanelId } : undefined,
+    );
     await this.trySendToMain(run, buildStartupPrompt(run));
     return run;
   }
@@ -205,6 +233,7 @@ export class AgentTeamService {
     if (run.phase === "executing") {
       throw new AgentTeamError(409, "Run is already executing");
     }
+    requireRunnableTask(run.task);
     const source = input.source ?? "user";
     const workers = normalizeWorkers(input.workers);
     const acceptance = normalizeAcceptance(input.acceptance);
@@ -272,6 +301,7 @@ export class AgentTeamService {
     if (workers.length === 0) {
       throw new AgentTeamError(400, "At least one worker is required");
     }
+    requireRunnableTask(run.task);
     return this.applySplit(run, workers, acceptance, {
       source: run.proposal.source,
       log: `人工确认拆分（${workers.length} worker），split pane`,
@@ -387,6 +417,14 @@ export class AgentTeamService {
     context: { source: "user" | "agent"; log: string },
   ): Promise<AgentTeamRun> {
     const session = this.requireSession(run.terminalSessionId);
+    const terminal = resolveAgentTeamTerminal(run.terminal);
+    requireRunnableTask(run.task);
+    if (this.tmuxService) {
+      await this.terminalSessionManager.updateSessionPanelSplitEnabled(
+        session.id,
+        true,
+      );
+    }
     const boundWorkers: AgentTeamWorker[] = [];
     for (const worker of workers) {
       let panelId: string | null = null;
@@ -407,6 +445,7 @@ export class AgentTeamService {
               direction: boundWorkers.length % 2 === 0 ? "right" : "down",
               role: worker.role,
               alias: `${worker.role}-${boundWorkers.length + 1}`,
+              cwd: terminal.cwd ?? undefined,
               focus: false,
             },
           );
@@ -429,6 +468,9 @@ export class AgentTeamService {
       };
       boundWorkers.push(boundWorker);
       if (panelId) {
+        await this.agentReadiness.ensureAgentReady(session, terminal, {
+          panelId,
+        });
         await this.promptSender.sendPromptToPane(
           session,
           buildWorkerStartupPrompt({ run, worker: boundWorker, acceptance }),
@@ -436,9 +478,11 @@ export class AgentTeamService {
         );
       }
     }
+    await this.restoreMainPaneFocus(session, run.mainPanelId);
     return this.updateRun(run, {
       phase: "executing",
       status: "running",
+      terminal,
       proposal: null,
       workers: boundWorkers,
       acceptance,
@@ -493,7 +537,7 @@ export class AgentTeamService {
     // Bounce newly-stable failing cases back to a code pane (orchestration
     // layer decides; workers never talk to each other).
     if (status === "running" && folded.newlyStableFailCaseIds.length > 0) {
-      await this.bounceFailuresToCode(nextRun, folded.newlyStableFailCaseIds);
+      return this.bounceFailuresToCode(nextRun, folded.newlyStableFailCaseIds);
     }
     return nextRun;
   }
@@ -501,12 +545,12 @@ export class AgentTeamService {
   private async bounceFailuresToCode(
     run: AgentTeamRun,
     caseIds: string[],
-  ): Promise<void> {
+  ): Promise<AgentTeamRun> {
     const codeWorker =
       run.workers.find((worker) => worker.role === "code" && worker.panelId) ??
       run.workers.find((worker) => worker.panelId);
     if (!codeWorker?.panelId) {
-      return;
+      return run;
     }
     const failedCases = run.acceptance.filter((item) =>
       caseIds.includes(item.caseId),
@@ -515,7 +559,7 @@ export class AgentTeamService {
       run.terminalSessionId,
     );
     if (!session) {
-      return;
+      return run;
     }
     try {
       await this.promptSender.sendPromptToPane(
@@ -528,7 +572,7 @@ export class AgentTeamService {
           ? { ...item, bouncedToPanelId: codeWorker.panelId }
           : item,
       );
-      await this.updateRun(run, {
+      return this.updateRun(run, {
         acceptance: bouncedAcceptance,
         logs: [
           ...run.logs,
@@ -541,6 +585,7 @@ export class AgentTeamService {
         runId: run.runId,
         error,
       });
+      return run;
     }
   }
 
@@ -613,6 +658,51 @@ export class AgentTeamService {
     }
   }
 
+  private async restoreMainPaneFocus(
+    session: TerminalSessionRecord,
+    mainPanelId: string | null | undefined,
+  ): Promise<void> {
+    if (!mainPanelId || !this.tmuxService) {
+      return;
+    }
+    const panel = this.terminalSessionManager.getPanel(mainPanelId);
+    if (!panel) {
+      return;
+    }
+    try {
+      await this.tmuxService.selectPane({
+        ...this.tmuxService.buildTarget(session.id),
+        paneId: panel.tmuxPaneId,
+      });
+      await this.terminalSessionManager.focusPanel(session.id, mainPanelId);
+      const workspace = this.terminalSessionManager.getPanelWorkspace(
+        session.id,
+      );
+      if (workspace) {
+        this.terminalEventService.record({
+          kind: "terminal_panel_focused",
+          terminalSessionId: session.id,
+          projectId: session.projectId,
+          payload: {
+            terminalSessionId: session.id,
+            panelId: mainPanelId,
+            alias: panel.alias,
+            role: panel.role,
+            source: "api",
+            workspace,
+          } as never,
+        });
+      }
+    } catch (error) {
+      agentTeamLogger.warn("agent-team.restore_main_focus.failed", {
+        message: "Could not restore main pane focus after split",
+        terminalSessionId: session.id,
+        panelId: mainPanelId,
+        error,
+      });
+    }
+  }
+
   private async updateRun(
     run: AgentTeamRun,
     patch: Partial<
@@ -621,6 +711,7 @@ export class AgentTeamService {
         | "phase"
         | "status"
         | "options"
+        | "terminal"
         | "task"
         | "clarify"
         | "proposal"
@@ -666,6 +757,28 @@ const VALID_WORKER_ROLES: AgentTeamWorkerRole[] = [
   "plan",
   "plan_review",
 ];
+
+function resolveAgentTeamTerminal(
+  terminal: AgentTeamTerminal | undefined,
+): AgentTeamTerminal {
+  return {
+    command: terminal?.command?.trim() || DEFAULT_AGENT_TEAM_AGENT_COMMAND,
+    args: terminal?.args ?? [],
+    cwd: terminal?.cwd?.trim() || null,
+    runtimePreference: terminal?.runtimePreference ?? "auto",
+  };
+}
+
+function requireRunnableTask(task: string | undefined): string {
+  const trimmed = task?.trim() ?? "";
+  if (!trimmed) {
+    throw new AgentTeamError(
+      400,
+      "Agent-team task is required before starting workers",
+    );
+  }
+  return trimmed;
+}
 
 function normalizeWorkers(
   workers: Array<Pick<AgentTeamWorker, "role" | "intent">> | undefined,

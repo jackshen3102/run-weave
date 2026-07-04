@@ -3,6 +3,7 @@ import { CliError } from "../errors.js";
 import { tailLines } from "../output/format.js";
 import type {
   TerminalInputMode,
+  TerminalPanelListItem,
   TerminalSessionStatusResponse,
   TerminalState,
 } from "@runweave/shared";
@@ -39,6 +40,7 @@ interface AgentPreparationResult {
   status: AgentPreparationStatus;
   requestedAgent: string | null;
   previousAgent: string | null;
+  panelId?: string | null;
   terminalState: TerminalState | null;
   actions: string[];
 }
@@ -167,6 +169,9 @@ export async function sendWithConfirmation(params: {
     throw new CliError("--confirm must be one of: none, short", 2);
   }
   const agentPreparation = await prepareAgentSession(params);
+  const targetPanel = agentPreparation.panelId
+    ? { panelId: agentPreparation.panelId }
+    : await resolveSendTargetPanel(params);
 
   const tailBeforeSession = await params.client.getSession(
     params.terminalSessionId,
@@ -182,8 +187,8 @@ export async function sendWithConfirmation(params: {
   const inputPayload = {
     operationId,
     data,
-    ...(params.panel ? { panelAlias: params.panel } : {}),
-    ...(params.role ? { role: params.role } : {}),
+    ...(targetPanel ? { panelId: targetPanel.panelId } : {}),
+    ...(!targetPanel && params.role ? { role: params.role } : {}),
     ...(params.inputModeProvided || params.inputMode !== "raw"
       ? { mode: params.inputMode }
       : {}),
@@ -252,6 +257,8 @@ async function prepareAgentSession(params: {
   agentClearCommand: string;
   agentExitCommand: string | undefined;
   agentStartTimeoutMs: number;
+  panel: string | undefined;
+  role: string | undefined;
 }): Promise<AgentPreparationResult> {
   if (!params.agent) {
     if (params.agentOverwrite) {
@@ -261,6 +268,7 @@ async function prepareAgentSession(params: {
       status: "not_requested",
       requestedAgent: null,
       previousAgent: null,
+      panelId: null,
       terminalState: null,
       actions: [],
     };
@@ -276,6 +284,7 @@ async function prepareAgentSession(params: {
   }
 
   const actions: string[] = [];
+  const targetPanel = await resolveSendTargetPanel(params);
   const initial = await getAgentSessionSnapshot(params);
   if (initial.session.status !== "running") {
     throw new CliError("Terminal session is not running", 4);
@@ -288,6 +297,7 @@ async function prepareAgentSession(params: {
         status: "already_ready",
         requestedAgent: params.agent,
         previousAgent: initialAgent,
+        panelId: targetPanel?.panelId ?? null,
         terminalState: initial.terminalState,
         actions,
       };
@@ -299,6 +309,7 @@ async function prepareAgentSession(params: {
       status: "cleared_existing",
       requestedAgent: params.agent,
       previousAgent: initialAgent,
+      panelId: targetPanel?.panelId ?? null,
       terminalState,
       actions,
     };
@@ -327,6 +338,7 @@ async function prepareAgentSession(params: {
     status: initialAgent ? "restarted" : "started",
     requestedAgent: params.agent,
     previousAgent: initialAgent,
+    panelId: targetPanel?.panelId ?? null,
     terminalState,
     actions,
   };
@@ -335,28 +347,38 @@ async function prepareAgentSession(params: {
 async function getAgentSessionSnapshot(params: {
   client: TerminalHttpClient;
   terminalSessionId: string;
+  panel: string | undefined;
+  role: string | undefined;
 }): Promise<{
   session: TerminalSessionStatusResponse;
   terminalState: TerminalState;
+  panel: TerminalPanelListItem | null;
 }> {
-  const [session, statePayload] = await Promise.all([
+  const [session, statePayload, panel] = await Promise.all([
     params.client.getSession(params.terminalSessionId),
     params.client.getCurrentTerminalState(params.terminalSessionId),
+    resolveSendTargetPanel(params),
   ]);
   return {
     session,
     terminalState: statePayload.terminalState,
+    panel,
   };
 }
 
 function resolveCurrentAgent(snapshot: {
   session: Pick<TerminalSessionStatusResponse, "activeCommand">;
   terminalState: TerminalState;
+  panel?: Pick<TerminalPanelListItem, "activeCommand"> | null;
 }): string | null {
+  const panelAgent = agentNameOrNull(snapshot.panel?.activeCommand ?? null);
+  if (snapshot.panel) {
+    return panelAgent;
+  }
   return (
     (snapshot.terminalState.state !== "shell_idle"
       ? snapshot.terminalState.agent
-      : null) ?? commandNameOrNull(snapshot.session.activeCommand)
+      : null) ?? agentNameOrNull(snapshot.session.activeCommand)
   );
 }
 
@@ -364,9 +386,13 @@ function isRequestedAgentReady(
   snapshot: {
     session: Pick<TerminalSessionStatusResponse, "activeCommand">;
     terminalState: TerminalState;
+    panel?: Pick<TerminalPanelListItem, "activeCommand"> | null;
   },
   agent: string,
 ): boolean {
+  if (snapshot.panel) {
+    return agentNameOrNull(snapshot.panel.activeCommand) === agent;
+  }
   return (
     snapshot.terminalState.state !== "shell_idle" &&
     resolveCurrentAgent(snapshot) === agent
@@ -377,13 +403,18 @@ async function sendAgentControlLine(
   params: {
     client: TerminalHttpClient;
     terminalSessionId: string;
+    panel: string | undefined;
+    role: string | undefined;
   },
   command: string,
 ): Promise<void> {
+  const targetPanel = await resolveSendTargetPanel(params);
   await params.client.sendInput(params.terminalSessionId, {
     operationId: buildOperationId(),
     data: command,
     mode: "line",
+    ...(targetPanel ? { panelId: targetPanel.panelId } : {}),
+    ...(!targetPanel && params.role ? { role: params.role } : {}),
   });
 }
 
@@ -392,6 +423,8 @@ async function waitForRequestedAgent(
     client: TerminalHttpClient;
     terminalSessionId: string;
     agentStartTimeoutMs: number;
+    panel: string | undefined;
+    role: string | undefined;
   },
   agent: string,
 ): Promise<TerminalState> {
@@ -405,6 +438,8 @@ async function waitForNoAgent(params: {
   client: TerminalHttpClient;
   terminalSessionId: string;
   agentStartTimeoutMs: number;
+  panel: string | undefined;
+  role: string | undefined;
 }): Promise<void> {
   await waitForAgentCondition(params, (next) => resolveCurrentAgent(next) === null);
 }
@@ -414,14 +449,18 @@ async function waitForAgentCondition(
     client: TerminalHttpClient;
     terminalSessionId: string;
     agentStartTimeoutMs: number;
+    panel: string | undefined;
+    role: string | undefined;
   },
   predicate: (snapshot: {
     session: TerminalSessionStatusResponse;
     terminalState: TerminalState;
+    panel: TerminalPanelListItem | null;
   }) => boolean,
 ): Promise<{
   session: TerminalSessionStatusResponse;
   terminalState: TerminalState;
+  panel: TerminalPanelListItem | null;
 }> {
   const startedAt = Date.now();
   let lastSnapshot = await getAgentSessionSnapshot(params);
@@ -436,6 +475,35 @@ async function waitForAgentCondition(
     `Timed out waiting for terminal agent state. Last state=${lastSnapshot.terminalState.state}, agent=${lastSnapshot.terminalState.agent ?? "none"}, activeCommand=${lastSnapshot.session.activeCommand ?? "none"}`,
     3,
   );
+}
+
+async function resolveSendTargetPanel(params: {
+  client: TerminalHttpClient;
+  terminalSessionId: string;
+  panel: string | undefined;
+  role: string | undefined;
+}): Promise<TerminalPanelListItem | null> {
+  if (!params.panel && !params.role) {
+    return null;
+  }
+  const workspace = await params.client.listPanels(params.terminalSessionId);
+  const requested = params.panel ?? params.role;
+  const target = workspace.panels.find((panel) =>
+    params.panel
+      ? panel.panelId === requested ||
+        panel.alias === requested ||
+        panel.role === requested
+      : panel.role === requested,
+  );
+  if (!target) {
+    throw new CliError(
+      params.panel
+        ? `Terminal panel not found: ${params.panel}`
+        : `Terminal panel role not found: ${params.role}`,
+      4,
+    );
+  }
+  return target;
 }
 
 function isValidAgentName(value: string): boolean {
@@ -454,6 +522,18 @@ function commandNameOrNull(command: string | null): string | null {
     return null;
   }
   return commandName(command);
+}
+
+function agentNameOrNull(command: string | null): string | null {
+  const name = commandNameOrNull(command);
+  if (!name || !isKnownAgentName(name)) {
+    return null;
+  }
+  return name;
+}
+
+function isKnownAgentName(value: string): boolean {
+  return /^(codex|claude|opencode|coco|trae|traecli|traex)$/i.test(value);
 }
 
 function containsInputEcho(tail: string, text: string): boolean {

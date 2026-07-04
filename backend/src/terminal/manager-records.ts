@@ -44,6 +44,7 @@ export interface TerminalSessionRecord {
   tmuxUnavailableReason?: string;
   recoverable?: boolean;
   terminalState?: TerminalState;
+  panelSplitEnabled: boolean;
 }
 
 export interface TerminalPanelRecord {
@@ -136,6 +137,7 @@ export function buildSessionRecord(
     ...(persisted.terminalState !== undefined
       ? { terminalState: persisted.terminalState }
       : {}),
+    panelSplitEnabled: persisted.panelSplitEnabled ?? false,
   };
 }
 
@@ -200,6 +202,7 @@ export function toPersistedSession(
     ...(session.terminalState !== undefined
       ? { terminalState: session.terminalState }
       : {}),
+    panelSplitEnabled: session.panelSplitEnabled,
   };
 }
 

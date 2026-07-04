@@ -357,6 +357,7 @@ export interface TerminalSessionListItem {
   createdAt: string;
   lastActivityAt: string;
   exitCode?: number;
+  panelSplitEnabled: boolean;
   activePanelId?: string;
   panelCount?: number;
   panelAliases?: string[];
@@ -430,6 +431,7 @@ export interface AppHomeOverviewResponse {
 
 export interface UpdateTerminalSessionRequest {
   alias?: string | null;
+  panelSplitEnabled?: boolean;
 }
 
 export type TerminalCompletionReason =

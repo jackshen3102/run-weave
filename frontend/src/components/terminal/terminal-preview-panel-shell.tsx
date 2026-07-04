@@ -47,6 +47,7 @@ interface TerminalPreviewPanelShellProps {
   token: string;
   activeTerminalSessionId: string | null;
   body: ReactNode;
+  showAgentTeamTool: boolean;
   agentTeamBody?: ReactNode;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onSetActiveTool: (tool: TerminalSidecarPanelTool) => void;
@@ -97,6 +98,7 @@ export function TerminalPreviewPanelShell({
   token,
   activeTerminalSessionId,
   body,
+  showAgentTeamTool,
   agentTeamBody,
   onStartResize,
   onSetActiveTool,
@@ -110,6 +112,9 @@ export function TerminalPreviewPanelShell({
   onSetSvgViewMode,
   onSetChangesViewMode,
 }: TerminalPreviewPanelShellProps) {
+  const tools: TerminalSidecarPanelTool[] = showAgentTeamTool
+    ? ["preview", "browser", "agent-team"]
+    : ["preview", "browser"];
   const saveStatusLabel =
     saveStatus === "conflict"
       ? "Conflict"
@@ -149,7 +154,7 @@ export function TerminalPreviewPanelShell({
                 role="tablist"
                 aria-label="Sidecar tools"
               >
-                {(["preview", "browser", "agent-team"] as const).map((tool) => (
+                {tools.map((tool) => (
                   <button
                     type="button"
                     role="tab"
@@ -390,10 +395,14 @@ export function TerminalPreviewPanelShell({
           <div
             className={[
               "absolute inset-0 min-h-0",
-              activeTool === "agent-team" ? "" : "pointer-events-none hidden",
+              showAgentTeamTool && activeTool === "agent-team"
+                ? ""
+                : "pointer-events-none hidden",
             ].join(" ")}
           >
-            {activeTool === "agent-team" ? agentTeamBody : null}
+            {showAgentTeamTool && activeTool === "agent-team"
+              ? agentTeamBody
+              : null}
           </div>
         </div>
       </div>

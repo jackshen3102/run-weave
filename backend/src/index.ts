@@ -253,6 +253,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalEventService,
     ptyService,
     runtimeRegistry: terminalRuntimeRegistry,
+    terminalStateService,
     tmuxService,
     tmuxOutputWatcher,
   });
@@ -288,7 +289,8 @@ async function initializeAppServerEventIntegration(
     if (!connection) {
       logger.info("backend.app-server.unavailable", {
         component: "app-server",
-        message: "Runweave app-server unavailable; backend will continue without global event center",
+        message:
+          "Runweave app-server unavailable; backend will continue without global event center",
       });
       return;
     }
@@ -350,7 +352,8 @@ async function initializeAppServerEventIntegration(
   } catch (error) {
     logger.warn("backend.app-server.integration.failed", {
       component: "app-server",
-      message: "Runweave app-server integration failed; backend will continue without global event center",
+      message:
+        "Runweave app-server integration failed; backend will continue without global event center",
       error,
     });
   }
@@ -487,10 +490,7 @@ function createHttpApp(
     );
 
     app.get("*", (req, res, next) => {
-      if (
-        req.path.startsWith("/api") ||
-        req.path.startsWith("/ws")
-      ) {
+      if (req.path.startsWith("/api") || req.path.startsWith("/ws")) {
         next();
         return;
       }

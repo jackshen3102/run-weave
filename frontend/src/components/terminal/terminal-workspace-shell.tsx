@@ -83,10 +83,11 @@ import { TerminalHeadlessConnection } from "./terminal-headless-connection";
 import { TerminalSurface } from "./terminal-surface";
 import { TerminalPanelTargetBar } from "./terminal-panel-target-bar";
 import {
-  readTerminalPanelSplitEnabled,
-  writeTerminalPanelSplitEnabled,
-} from "../../features/terminal/preferences";
-import { listTerminalPanels } from "../../services/terminal";
+  getAgentTeamRunForTerminal,
+  listTerminalPanels,
+  updateTerminalSession,
+} from "../../services/terminal";
+import { HttpError } from "../../services/http";
 
 const TerminalPreviewPanel = lazy(() =>
   import("./terminal-preview-panel").then((module) => ({
@@ -111,6 +112,18 @@ function getTerminalStateLabel(
     return "Agent idle";
   }
   return "Shell idle";
+}
+
+function canOpenAgentTeamForSession(
+  session: TerminalSessionListItem | null,
+): boolean {
+  return Boolean(
+    session &&
+      session.status === "running" &&
+      (session.tmuxSessionName ||
+        session.activePanelId ||
+        (session.panelCount ?? 0) > 0),
+  );
 }
 
 function getTerminalStateDetail(
@@ -257,6 +270,8 @@ function TerminalSessionTab({
   onRequestCloseSession,
   onRequestEditAlias,
   onPanelSplitEnabledChange,
+  agentTeamAvailable,
+  onRequestAgentTeam,
 }: {
   session: TerminalSessionListItem;
   isActive: boolean;
@@ -271,6 +286,8 @@ function TerminalSessionTab({
   onRequestCloseSession: (terminalSessionId: string) => void;
   onRequestEditAlias: (session: TerminalSessionListItem) => void;
   onPanelSplitEnabledChange: (enabled: boolean) => void;
+  agentTeamAvailable: boolean;
+  onRequestAgentTeam: (terminalSessionId: string) => void;
 }) {
   const tabRef = useRef<HTMLDivElement | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -454,6 +471,17 @@ function TerminalSessionTab({
             <PanelsTopLeft className="h-4 w-4" />
             {panelSplitEnabled ? "Disable Panel Split" : "Enable Panel Split"}
           </ContextMenuItem>
+          {agentTeamAvailable ? (
+            <ContextMenuItem
+              className="gap-2"
+              onSelect={() => {
+                onRequestAgentTeam(session.terminalSessionId);
+              }}
+            >
+              <Workflow className="h-4 w-4" />
+              Agent Team
+            </ContextMenuItem>
+          ) : null}
         </ContextMenuContent>
       </ContextMenu>
       {detailsCard}
@@ -607,12 +635,12 @@ export function TerminalWorkspaceShell({
   const [aliasTarget, setAliasTarget] =
     useState<TerminalSessionListItem | null>(null);
   const [diagnosticLogOpen, setDiagnosticLogOpen] = useState(false);
-  const [panelSplitEnabled, setPanelSplitEnabledState] = useState(
-    readTerminalPanelSplitEnabled,
-  );
+  const [activeAgentTeamRunPresent, setActiveAgentTeamRunPresent] =
+    useState(false);
   const isMobileMonitor = clientMode === "mobile";
   const projects = useTerminalWorkspaceStore((state) => state.projects);
   const sessions = useTerminalWorkspaceStore((state) => state.sessions);
+  const setSessions = useTerminalWorkspaceStore((state) => state.setSessions);
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeProjectId,
   );
@@ -621,6 +649,9 @@ export function TerminalWorkspaceShell({
   );
   const loading = useTerminalWorkspaceStore((state) => state.loading);
   const requestError = useTerminalWorkspaceStore((state) => state.requestError);
+  const setRequestError = useTerminalWorkspaceStore(
+    (state) => state.setRequestError,
+  );
   const cachedSurfaceSessionIds = useTerminalWorkspaceStore(
     (state) => state.cachedSurfaceSessionIds,
   );
@@ -682,9 +713,6 @@ export function TerminalWorkspaceShell({
   const previewReservedWidth = previewWidthPx
     ? `${previewWidthPx}px`
     : DEFAULT_TERMINAL_SIDECAR_WIDTH;
-  const terminalLayoutVersion = isMobileMonitor
-    ? "mobile"
-    : `desktop:${previewOpen ? previewReservedWidth : "full"}:${panelSplitEnabled ? "panel-split" : "single"}`;
   const visibleProjects = projects;
   const visibleSessions = useMemo(() => {
     if (!activeProjectId) {
@@ -703,6 +731,10 @@ export function TerminalWorkspaceShell({
     ) ??
     visibleSessions[0] ??
     null;
+  const panelSplitEnabled = activeSession?.panelSplitEnabled ?? false;
+  const terminalLayoutVersion = isMobileMonitor
+    ? "mobile"
+    : `desktop:${previewOpen ? previewReservedWidth : "full"}:${panelSplitEnabled ? "panel-split" : "single"}`;
   const surfaceSessions = useMemo(() => {
     const surfaceSessionIds = new Set(cachedSurfaceSessionIds);
     if (activeSession?.terminalSessionId) {
@@ -749,19 +781,50 @@ export function TerminalWorkspaceShell({
     setHistoryTerminalSessionId(terminalSessionId);
     setHistoryDrawerOpen(true);
   };
-  const setPanelSplitEnabled = useMemoizedFn((enabled: boolean) => {
-    setPanelSplitEnabledState((current) => {
-      if (current === enabled) {
-        return current;
-      }
-      writeTerminalPanelSplitEnabled(enabled);
-      return enabled;
-    });
-  });
+  const setPanelSplitEnabled = useMemoizedFn(
+    (terminalSessionId: string, enabled: boolean): void => {
+      void (async () => {
+        try {
+          const updatedSession = await updateTerminalSession(
+            apiBase,
+            token,
+            terminalSessionId,
+            { panelSplitEnabled: enabled },
+          );
+          setRequestError(null);
+          setSessions((currentSessions) =>
+            currentSessions.map((session) =>
+              session.terminalSessionId === terminalSessionId
+                ? updatedSession
+                : session,
+            ),
+          );
+        } catch (error) {
+          if (error instanceof HttpError && error.status === 401) {
+            onAuthExpired?.();
+            return;
+          }
+          setRequestError(String(error));
+        }
+      })();
+    },
+  );
   const activePanelWorkspace = activeSession
     ? panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null
     : null;
-  const activePanelCount = activePanelWorkspace?.panels.length ?? 1;
+  const activeAgentTeamAvailable = canOpenAgentTeamForSession(activeSession);
+  const showAgentTeamTool = Boolean(
+    activeProject &&
+      activeSession &&
+      (activeAgentTeamRunPresent ||
+        (panelSplitEnabled && activeAgentTeamAvailable)),
+  );
+
+  const requestAgentTeam = useMemoizedFn((terminalSessionId: string): void => {
+    onSelectSession(terminalSessionId);
+    setPanelSplitEnabled(terminalSessionId, true);
+    useTerminalPreviewStore.getState().openAgentTeam();
+  });
 
   useEffect(() => {
     if (
@@ -797,6 +860,41 @@ export function TerminalWorkspaceShell({
     panelSplitEnabled,
     setActivePanelIdBySessionId,
     setPanelWorkspaceBySessionId,
+    token,
+  ]);
+
+  useEffect(() => {
+    if (!activeProject?.projectId || !activeSession?.terminalSessionId) {
+      setActiveAgentTeamRunPresent(false);
+      return;
+    }
+    let cancelled = false;
+    void getAgentTeamRunForTerminal(
+      apiBase,
+      token,
+      activeProject.projectId,
+      activeSession.terminalSessionId,
+    )
+      .then((run) => {
+        if (cancelled) {
+          return;
+        }
+        setActiveAgentTeamRunPresent(
+          Boolean(run && run.status !== "done" && run.status !== "failed"),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setActiveAgentTeamRunPresent(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeProject?.projectId,
+    activeSession?.terminalSessionId,
+    apiBase,
     token,
   ]);
 
@@ -988,15 +1086,6 @@ export function TerminalWorkspaceShell({
                 Preview
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={loading || !activeProjectId}
-                onSelect={() => {
-                  useTerminalPreviewStore.getState().openAgentTeam();
-                }}
-              >
-                <Workflow className="h-4 w-4" />
-                Agent Team
-              </DropdownMenuItem>
-              <DropdownMenuItem
                 disabled={!activeSession?.terminalSessionId}
                 onSelect={() => {
                   if (activeSession?.terminalSessionId) {
@@ -1042,12 +1131,21 @@ export function TerminalWorkspaceShell({
                   hasBell={hasBell}
                   hasCompletion={hasCompletion}
                   terminalState={terminalStateBySessionId[session.terminalSessionId]}
-                  panelSplitEnabled={panelSplitEnabled}
-                  panelCount={activePanelCount}
+                  panelSplitEnabled={session.panelSplitEnabled}
+                  panelCount={
+                    panelWorkspaceBySessionId[session.terminalSessionId]
+                      ?.panels.length ??
+                    session.panelCount ??
+                    1
+                  }
                   onSelectSession={onSelectSession}
                   onRequestCloseSession={onRequestCloseSession}
                   onRequestEditAlias={setAliasTarget}
-                  onPanelSplitEnabledChange={setPanelSplitEnabled}
+                  onPanelSplitEnabledChange={(enabled) => {
+                    setPanelSplitEnabled(session.terminalSessionId, enabled);
+                  }}
+                  agentTeamAvailable={canOpenAgentTeamForSession(session)}
+                  onRequestAgentTeam={requestAgentTeam}
                 />
               );
             }}
@@ -1177,10 +1275,16 @@ export function TerminalWorkspaceShell({
                 token={token}
                 activeProject={activeProject}
                 activeSession={activeSession}
+                showAgentTeamTool={showAgentTeamTool}
                 widthPx={previewWidthPx}
                 onAuthExpired={onAuthExpired}
                 sessions={sessions}
                 onSelectSession={onSelectSession}
+                onPanelSplitEnabledChange={(enabled) => {
+                  if (activeSession) {
+                    setPanelSplitEnabled(activeSession.terminalSessionId, enabled);
+                  }
+                }}
                 onEditProject={() => {
                   requestEditProject();
                 }}
@@ -1207,10 +1311,19 @@ export function TerminalWorkspaceShell({
                     token={token}
                     activeProject={activeProject}
                     activeSession={activeSession}
+                    showAgentTeamTool={showAgentTeamTool}
                     widthPx={previewWidthPx}
                     onAuthExpired={onAuthExpired}
                     sessions={sessions}
                     onSelectSession={onSelectSession}
+                    onPanelSplitEnabledChange={(enabled) => {
+                      if (activeSession) {
+                        setPanelSplitEnabled(
+                          activeSession.terminalSessionId,
+                          enabled,
+                        );
+                      }
+                    }}
                     onEditProject={() => {
                       requestEditProject();
                     }}

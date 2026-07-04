@@ -30,6 +30,7 @@ export interface PersistedTerminalSessionRecord {
   tmuxUnavailableReason?: string;
   recoverable?: boolean;
   terminalState?: TerminalState;
+  panelSplitEnabled?: boolean;
   order?: number;
 }
 
@@ -136,6 +137,11 @@ export interface UpdateTerminalSessionTerminalStateParams {
   terminalState: TerminalState;
 }
 
+export interface UpdateTerminalSessionPanelSplitEnabledParams {
+  terminalSessionId: string;
+  panelSplitEnabled: boolean;
+}
+
 export interface UpsertTerminalPanelParams {
   panel: PersistedTerminalPanelRecord;
 }
@@ -201,6 +207,9 @@ export interface TerminalSessionStore {
   ): Promise<void>;
   updateSessionTerminalState(
     params: UpdateTerminalSessionTerminalStateParams,
+  ): Promise<void>;
+  updateSessionPanelSplitEnabled(
+    params: UpdateTerminalSessionPanelSplitEnabledParams,
   ): Promise<void>;
   updateSessionScrollback(
     params: UpdateTerminalSessionScrollbackParams,

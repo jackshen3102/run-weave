@@ -38,42 +38,35 @@
 
 ## 状态与存储设计
 
-新增 Web 本地偏好：
+Panel Split 开关是 terminal session 的服务端状态，不是浏览器本地偏好：
 
-- 新增 localStorage key：`runweave:terminal:panel-split-enabled:v1`
-- 新增 helper：
-  - `readTerminalPanelSplitEnabled(): boolean`
-  - `writeTerminalPanelSplitEnabled(enabled: boolean): void`
-
-为了控制改动范围，不改现有 `TerminalPreferences` 结构，不引入 zustand persist，也不做完整终端设置面板。后续如果要扩展终端设置，再迁移到统一偏好 store。
+- `TerminalSessionListItem.panelSplitEnabled: boolean` 表示该 session 是否展示和启用 panel workspace UI。
+- 新建 session 默认 `panelSplitEnabled=false`。
+- `PATCH /api/terminal/session/:id` 支持 `{ "panelSplitEnabled": true | false }`，写入后端 session metadata，并随 session list 返回。
+- 前端不使用 localStorage 作为权威来源；刷新页面、换浏览器或桌面端重连时，以服务端 session metadata 为准。
 
 读取规则：
 
-- localStorage 不存在、不可读或值不是 `"true"` 时，默认返回 `false`。
-- 写入失败时忽略异常，保持当前页面内存态可用。
+- session list 返回 `panelSplitEnabled` 时直接使用该值。
+- 老数据没有该字段时，后端迁移/构造记录默认补 `false`。
+- 写入失败时前端保留原服务端状态并显示请求错误，不做本地覆盖。
 
 ## 组件设计
 
 ### 1. `terminal-workspace-shell.tsx`
 
-新增状态：
+状态来源：
 
 ```ts
-const [panelSplitEnabled, setPanelSplitEnabledState] = useState(
-  readTerminalPanelSplitEnabled,
-);
+const panelSplitEnabled = activeSession?.panelSplitEnabled ?? false;
 ```
 
 新增 setter：
 
 ```ts
-const setPanelSplitEnabled = (enabled: boolean) => {
-  setPanelSplitEnabledState((current) => {
-    if (current === enabled) {
-      return current;
-    }
-    writeTerminalPanelSplitEnabled(enabled);
-    return enabled;
+const setPanelSplitEnabled = (terminalSessionId: string, enabled: boolean) => {
+  updateTerminalSession(apiBase, token, terminalSessionId, {
+    panelSplitEnabled: enabled,
   });
 };
 ```
@@ -117,9 +110,13 @@ const setPanelSplitEnabled = (enabled: boolean) => {
 ## 文件范围
 
 - `frontend/src/features/terminal/preferences.ts`
-  - 增加 panel split localStorage 读写 helper。
+  - 不保存 panel split 开关；该状态归后端 terminal session metadata。
+- `packages/shared/src/terminal-protocol.ts`
+  - `TerminalSessionListItem` 和 `UpdateTerminalSessionRequest` 增加 `panelSplitEnabled`。
+- `backend/src/terminal/*`、`backend/src/routes/terminal.ts`
+  - 持久化 session 级 `panelSplitEnabled`，并通过 session list / PATCH 暴露。
 - `frontend/src/components/terminal/terminal-workspace-shell.tsx`
-  - 持有 terminal preferences state；
+  - 从 active session 读取 panel split 状态；
   - 按 `panelSplitEnabled` 控制 `listTerminalPanels` 和 `TerminalPanelTargetBar`；
   - 在 `TerminalSessionTab` 右键菜单中加入 panel split toggle item。
 
@@ -147,11 +144,11 @@ git diff --check
 浏览器验收使用 `$playwright-cli`：
 
 1. 打开 `http://localhost:5173/terminal/<active-session-id>`。
-2. 清理或设置 localStorage，使 `panelSplitEnabled` 为默认 false。
+2. 确认 session list 中 `panelSplitEnabled=false`。
 3. 截取 DOM/snapshot，确认 panel 目标条不存在。
 4. 右键 terminal tab，点击 `Enable Panel Split`。
 5. 确认 panel 目标条出现，且 `Split terminal right` / `Split terminal down` / `Close terminal panel` 存在。
-6. 刷新页面，确认启用状态保留。
+6. 刷新页面或重新打开另一个浏览器会话，确认启用状态按服务端 session metadata 保留。
 7. 再次右键取消，确认目标条隐藏。
 
 ## 风险点

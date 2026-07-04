@@ -30,6 +30,14 @@ const workerDraftSchema = z
 const acceptanceDraftSchema = z
   .object({ text: z.string().trim().min(1) })
   .strict();
+const terminalSchema = z
+  .object({
+    command: z.string().trim().min(1).optional(),
+    args: z.array(z.string()).optional(),
+    cwd: z.string().trim().min(1).nullable().optional(),
+    runtimePreference: z.enum(["auto", "tmux", "pty"]).optional(),
+  })
+  .strict();
 
 const createRunSchema = z
   .object({
@@ -40,6 +48,7 @@ const createRunSchema = z
       .object({ autoApproveSplit: z.boolean().optional() })
       .strict()
       .optional(),
+    terminal: terminalSchema.optional(),
   })
   .strict();
 

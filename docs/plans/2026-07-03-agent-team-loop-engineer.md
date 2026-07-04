@@ -30,7 +30,7 @@
 - `packages/shared/src/terminal-protocol.ts:399` `TerminalCompletionEvent`：worker「跑完一轮」的触发信号，带 `outboxPath`。
 - 上一代 outbox：`packages/shared/src/orchestrator.ts:112` `OrchestratorWorkerOutbox`（`artifacts` + free-text `summary` + `completionReason`）——仅作为新 outbox schema 的**结构参考**，随旧模块一起删除。
 - human-gate 思路：上一代 `POST /api/orchestrator/runs/:id/human-gate` + `autoApprovePlanGate/VerifyGate`（`service.ts`）——新流程的「拆分确认门 / 自动确认」**借鉴这套交互模式**重新实现，不保留旧阶段机与旧路由。
-- panel-split 已默认关闭、右键启用（`frontend/src/features/terminal/preferences.ts`、`terminal-workspace-shell.tsx`，见 `docs/plans/2026-06-27-terminal-panel-split-toggle.md`）——loop 流程需要在开启流程时确保该 session 的 pane 能力可用。
+- panel-split 已默认关闭、右键启用，开关记录在服务端 terminal session metadata 中（见 `docs/plans/2026-06-27-terminal-panel-split-toggle.md`）——loop 流程需要在开启流程时确保该 session 的 pane 能力可用。
 
 必须新建（原型虚构、当前 shipping 代码为 0）：
 
@@ -109,7 +109,7 @@ behavior_verify worker 跑完 A 方案后写出该结构；编排层从 `outboxP
 
 ### 阶段 1 — 终端 plain → flow 显式开启
 
-- 前端：普通终端右侧 sidecar 给「▶ 在此终端开启流程」入口（原型已表达）。点击调用后端「开启 run」接口，绑定 `terminalSessionId`，确保该 session 的 panel-split 能力开启（复用 preferences helper）。
+- 前端：普通终端右侧 sidecar 给「▶ 在此终端开启流程」入口（原型已表达）。点击调用后端「开启 run」接口，绑定 `terminalSessionId`，确保该 session 的 panel-split 能力开启（更新服务端 session metadata）。
 - 后端：新建 run（`phase=clarify`, `status=clarifying`），把当前终端的 main pane 标记为主 Agent pane，启动主 Agent（复用 agent-readiness 的「把命令敲进 PTY + 处理 trust prompt」思路）。
 
 ### 阶段 2 — 澄清 → 拆分提案 + 确认门（缺口 7）
@@ -155,7 +155,7 @@ behavior_verify worker 跑完 A 方案后写出该结构；编排层从 `outboxP
 前端（Web desktop）：
 
 - `frontend/src/components/terminal/` — plain 终端「开启流程」入口、flow 三段 sidecar（clarify/proposal/executing）、熔断卡 + 深链聚焦、pane 只读/接管态切换。
-- 复用 `frontend/src/features/terminal/preferences.ts` 的 panel-split 开关，确保开启流程时 pane 能力可用。
+- 复用 terminal session metadata 中的 panel-split 开关，确保开启流程时 pane 能力可用。
 
 废弃清理（上一代 orchestrator 下线）：
 

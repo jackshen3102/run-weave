@@ -104,6 +104,8 @@ export interface AgentTeamRun {
   phase: AgentTeamPhase;
   status: AgentTeamStatus;
   options: AgentTeamRunOptions;
+  /** Agent CLI used by the root engineer and worker panes. */
+  terminal: AgentTeamTerminal;
   task: string;
   clarify: AgentTeamClarifyMessage[];
   proposal: AgentTeamProposal | null;
@@ -153,6 +155,11 @@ export interface CreateAgentTeamRunRequest {
   terminalSessionId: string;
   task?: string;
   options?: Partial<AgentTeamRunOptions>;
+  /**
+   * Defaults to Codex for the current loop-engineer test path. Callers may
+   * override this later without changing the orchestration flow.
+   */
+  terminal?: AgentTeamTerminal;
 }
 
 export interface ProposeAgentTeamSplitRequest {
