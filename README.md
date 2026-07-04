@@ -161,6 +161,9 @@ pnpm dist:electron:mac
 
 ## Documentation
 
+Selected entry points below. See [docs/README.md](docs/README.md) for the full
+documentation index.
+
 | Topic                             | Link                                                                                       |
 | --------------------------------- | ------------------------------------------------------------------------------------------ |
 | CLI                               | [docs/cli/terminal-cli.md](docs/cli/terminal-cli.md)                                       |

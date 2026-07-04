@@ -149,6 +149,8 @@ pnpm dist:electron:mac
 
 ## 文档
 
+以下为精选入口，完整文档索引见 [docs/README.md](docs/README.md)。
+
 | 主题           | 链接                                                                                       |
 | -------------- | ------------------------------------------------------------------------------------------ |
 | CLI            | [docs/cli/terminal-cli.md](docs/cli/terminal-cli.md)                                       |

@@ -78,7 +78,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 3. 建立文档地图。
    - 先读 `docs/README.md`，确认权威入口。
    - 按主题映射到现有文档：架构、终端、Preview、AI 协作、质量、测试、部署。
-   - `docs/superpowers/plans/` 默认视为计划/过程材料，不作为当前功能权威来源；其中仍有效的结论应沉淀到 `docs/architecture/`、`docs/quality/`、`docs/testing/` 或 `docs/deployment/`。
+   - `docs/plans/` 默认视为计划/过程材料，不作为当前功能权威来源；其中仍有效的结论应沉淀到 `docs/architecture/`、`docs/quality/`、`docs/testing/` 或 `docs/deployment/`。
 
 4. 判断是否需要更新。
    - 用户可见功能、协议、路由、状态模型、验证命令、部署方式发生变化：更新权威文档。
