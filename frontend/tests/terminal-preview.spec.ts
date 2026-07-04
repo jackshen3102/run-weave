@@ -186,10 +186,41 @@ async function createPreviewRepo(): Promise<string> {
   await mkdir(path.join(repo, "docs/architecture"), { recursive: true });
   await mkdir(path.join(repo, "assets"), { recursive: true });
   await mkdir(path.join(repo, "generated"), { recursive: true });
+  await mkdir(path.join(repo, "scripts"), { recursive: true });
+  await mkdir(path.join(repo, "src/search/nested"), { recursive: true });
+  await mkdir(path.join(repo, "src/workspaces/needle-room"), {
+    recursive: true,
+  });
   await writeFile(path.join(repo, ".gitignore"), "generated/\n");
   await writeFile(
     path.join(repo, "docs/architecture/terminal-code-preview.md"),
     "# Terminal Preview Plan\n\nPreview content\n",
+  );
+  await writeFile(
+    path.join(repo, "docs/claude-guide.md"),
+    "# Claude Guide\n\nVisible file path match\n",
+  );
+  await writeFile(
+    path.join(repo, "scripts/electron-local-update.mjs"),
+    "export const updateScript = true;\n",
+  );
+  await writeFile(
+    path.join(repo, "src/search/quick-target.ts"),
+    [
+      "export const quickSearchNeedle = 'quick-search-target';",
+      "export const visibleSearchValue = quickSearchNeedle;",
+      "export const literalSearchPattern = '[literal](value)*';",
+      "export const unicodeSearchPattern = '中文needle-after-unicode';",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(repo, "src/search/nested/child.ts"),
+    "export const nestedChild = true;\n",
+  );
+  await writeFile(
+    path.join(repo, "src/workspaces/needle-room/untitled.ts"),
+    "export const unrelatedFile = true;\n",
   );
   await writeFile(
     path.join(repo, "generated/terminal-code-preview.js"),
@@ -210,6 +241,20 @@ async function createPreviewRepo(): Promise<string> {
   });
   await execFileAsync("git", ["add", "."], { cwd: repo });
   await execFileAsync("git", ["commit", "-m", "initial"], { cwd: repo });
+  await mkdir(path.join(repo, "node_modules/hidden"), { recursive: true });
+  await mkdir(path.join(repo, "dist"), { recursive: true });
+  await writeFile(path.join(repo, ".env.local"), "quick-search-target\n");
+  await writeFile(
+    path.join(repo, ".env.production.local"),
+    "quick-search-target\n",
+  );
+  await writeFile(path.join(repo, "SECRET.txt"), "quick-search-target\n");
+  await writeFile(path.join(repo, ".env.example"), "SAFE_TEMPLATE=1\n");
+  await writeFile(
+    path.join(repo, "node_modules/hidden/index.js"),
+    "quick-search-target\n",
+  );
+  await writeFile(path.join(repo, "dist/hidden.js"), "quick-search-target\n");
   await writeFile(
     path.join(repo, "assets/preview-sample.png"),
     Buffer.from(E2E_PNG_ALT_BASE64, "base64"),
@@ -287,6 +332,185 @@ test("terminal preview opens project files and git changes", async ({
       page.locator(".monaco-diff-editor .modified .view-line", {
         hasText: "new readme",
       }),
+    ).toBeVisible();
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test("terminal preview explorer quick search opens files content and folders", async ({
+  page,
+  request,
+}) => {
+  const repo = await createPreviewRepo();
+  const openFilesShortcut = process.platform === "darwin" ? "Meta+P" : "Control+P";
+  const openContentShortcut =
+    process.platform === "darwin" ? "Meta+Shift+F" : "Control+Shift+F";
+
+  try {
+    const token = await loginAndSeedToken(request, page);
+    const session = await createProjectAndSession(request, token, {
+      name: "Preview Quick Search Project",
+      path: repo,
+    });
+
+    await page.goto(
+      `/terminal/${encodeURIComponent(session.terminalSessionId)}`,
+    );
+    await page.getByRole("tab", { name: "Explorer", exact: true }).click();
+    const searchButton = page.getByRole("button", {
+      name: "Search project files",
+    });
+    await expect(searchButton).toBeVisible();
+
+    await searchButton.click();
+    const dialog = page.getByRole("dialog", {
+      name: "Explorer quick search",
+    });
+    await expect(dialog).toBeVisible();
+    const dialogBox = await dialog.boundingBox();
+    const viewport = page.viewportSize();
+    expect(dialogBox).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    if (dialogBox && viewport) {
+      expect(
+        Math.abs(dialogBox.x + dialogBox.width / 2 - viewport.width / 2),
+      ).toBeLessThan(80);
+      expect(Math.abs(dialogBox.y - 80)).toBeLessThan(2);
+      expect(
+        Math.abs(viewport.height - dialogBox.y - dialogBox.height - 80),
+      ).toBeLessThan(2);
+    }
+
+    await page
+      .getByPlaceholder("Search files by name or path...")
+      .fill("terminal preview");
+    await expect(
+      dialog.getByRole("option", { name: /terminal-code-preview\.md/ }),
+    ).toBeVisible();
+    await dialog
+      .getByRole("option", { name: /terminal-code-preview\.md/ })
+      .click();
+    await expect(dialog).not.toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: "Explorer", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(
+      page.locator('[title="docs/architecture/terminal-code-preview.md"]'),
+    ).toBeVisible();
+    await expect(
+      page.getByText("docs/architecture/terminal-code-preview.md"),
+    ).toBeVisible();
+
+    await searchButton.click();
+    await dialog
+      .getByPlaceholder("Search files by name or path...")
+      .fill("claude");
+    await expect(
+      dialog.getByRole("option", { name: /claude-guide\.md/ }),
+    ).toBeVisible();
+    await expect(dialog.getByText("electron-local-update.mjs")).not.toBeVisible();
+
+    await dialog
+      .getByPlaceholder("Search files by name or path...")
+      .fill("needle-room");
+    await expect(dialog.getByText("untitled.ts")).not.toBeVisible();
+    await dialog.getByRole("tab", { name: "Folders" }).click();
+    await page.getByPlaceholder("Search folders by path...").fill("needle-room");
+    await expect(
+      dialog.getByRole("option", { name: /needle-room/ }),
+    ).toBeVisible();
+    await dialog.getByRole("tab", { name: "Files" }).click();
+    await dialog.getByRole("button", { name: "Close" }).click();
+
+    await page.getByRole("tab", { name: "Open", exact: true }).click();
+    await page.getByPlaceholder("Search file or paste absolute path...").focus();
+    await page.keyboard.press(openFilesShortcut);
+    await expect(dialog).not.toBeVisible();
+    await page.getByRole("tab", { name: "Open", exact: true }).click();
+    await page.getByTitle(repo).click();
+    await page.keyboard.press(openFilesShortcut);
+    await expect(dialog).toBeVisible();
+    await page
+      .getByRole("dialog", { name: "Explorer quick search" })
+      .getByPlaceholder("Search files by name or path...")
+      .fill("staged");
+    await dialog.getByRole("option", { name: /staged\.txt/ }).click();
+    await expect(
+      page.getByRole("tab", { name: "Explorer", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator('[title="staged.txt"]')).toBeVisible();
+
+    await page.getByRole("tab", { name: "Changes", exact: true }).click();
+    await page.keyboard.press(openFilesShortcut);
+    await expect(dialog).toBeVisible();
+    await page
+      .getByRole("dialog", { name: "Explorer quick search" })
+      .getByPlaceholder("Search files by name or path...")
+      .fill("README");
+    await dialog.getByRole("option", { name: /README\.md/ }).click();
+    await expect(
+      page.getByRole("tab", { name: "Explorer", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator('[title="README.md"]')).toBeVisible();
+
+    await page.keyboard.press(openContentShortcut);
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByPlaceholder("Search text in current project..."),
+    ).toBeVisible();
+    await page
+      .getByRole("dialog", { name: "Explorer quick search" })
+      .getByPlaceholder("Search text in current project...")
+      .fill("quick-search-target");
+    await expect(
+      dialog.getByRole("option", { name: /quick-target\.ts/ }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByText(".env.local")).not.toBeVisible();
+    await expect(dialog.getByText(".env.production.local")).not.toBeVisible();
+    await expect(dialog.getByText("SECRET.txt")).not.toBeVisible();
+    await expect(dialog.getByText("node_modules/hidden")).not.toBeVisible();
+    await expect(dialog.getByText("dist/hidden")).not.toBeVisible();
+    await page
+      .getByRole("dialog", { name: "Explorer quick search" })
+      .getByPlaceholder("Search text in current project...")
+      .fill("[literal](value)*");
+    await expect(
+      dialog.getByRole("option", { name: /quick-target\.ts/ }),
+    ).toBeVisible({ timeout: 10_000 });
+    await page
+      .getByRole("dialog", { name: "Explorer quick search" })
+      .getByPlaceholder("Search text in current project...")
+      .fill("needle-after-unicode");
+    await expect(
+      dialog.getByRole("option", { name: /quick-target\.ts/ }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+      dialog.locator("mark", { hasText: "needle-after-unicode" }),
+    ).toBeVisible();
+    await dialog.getByRole("option", { name: /quick-target\.ts/ }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: "Explorer", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator('[title="src/search/quick-target.ts"]')).toBeVisible();
+    await expect(
+      page.locator(".monaco-editor .view-line", {
+        hasText: "quick-search-target",
+      }),
+    ).toBeVisible();
+
+    await searchButton.click();
+    await dialog.getByRole("tab", { name: "Folders" }).click();
+    await page.getByPlaceholder("Search folders by path...").fill("nested");
+    await expect(
+      dialog.getByRole("option", { name: /nested/ }),
+    ).toBeVisible();
+    await dialog.getByRole("option", { name: /nested/ }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.locator('[title="src/search/nested"]')).toBeVisible();
+    await expect(
+      page.getByText("src/search/quick-target.ts"),
     ).toBeVisible();
   } finally {
     await rm(repo, { recursive: true, force: true });

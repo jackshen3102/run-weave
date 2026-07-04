@@ -12,7 +12,9 @@ import {
   renamePreviewFile,
   resetPreviewGitChange,
   savePreviewFile,
+  searchPreviewContent,
   searchPreviewFiles,
+  searchPreviewFolders,
   TerminalPreviewError,
 } from "../terminal/preview";
 
@@ -113,6 +115,62 @@ export function registerTerminalPreviewRoutes(
       );
       res.json(
         await searchPreviewFiles({
+          projectId: project.id,
+          projectPath: project.path,
+          query: parsed.data.q,
+          limit: parsed.data.limit,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.get("/project/:id/preview/folders/search", async (req, res) => {
+    const parsed = previewFileSearchSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolveProjectPreviewContext(
+        terminalSessionManager,
+        req.params.id,
+      );
+      res.json(
+        await searchPreviewFolders({
+          projectId: project.id,
+          projectPath: project.path,
+          query: parsed.data.q,
+          limit: parsed.data.limit,
+        }),
+      );
+    } catch (error) {
+      handlePreviewError(res, error);
+    }
+  });
+
+  router.get("/project/:id/preview/content/search", async (req, res) => {
+    const parsed = previewFileSearchSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    try {
+      const { project } = resolveProjectPreviewContext(
+        terminalSessionManager,
+        req.params.id,
+      );
+      res.json(
+        await searchPreviewContent({
           projectId: project.id,
           projectPath: project.path,
           query: parsed.data.q,

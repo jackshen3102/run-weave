@@ -48,6 +48,30 @@ export interface TerminalPreviewFileSearchItem {
   score: number;
 }
 
+export type TerminalPreviewQuickSearchMode = "files" | "content" | "folders";
+
+export interface TerminalPreviewFolderSearchItem {
+  path: string;
+  basename: string;
+  dirname: string;
+  score: number;
+}
+
+export interface TerminalPreviewContentSearchRange {
+  start: number;
+  end: number;
+}
+
+export interface TerminalPreviewContentSearchItem {
+  path: string;
+  basename: string;
+  dirname: string;
+  line: number;
+  column: number;
+  lineText: string;
+  ranges: TerminalPreviewContentSearchRange[];
+}
+
 export type TerminalPreviewTreeEntryKind = "directory" | "file";
 
 export interface TerminalPreviewTreeEntry {
@@ -78,6 +102,24 @@ export interface TerminalPreviewFileSearchResponse {
   query: string;
   absoluteInput: boolean;
   items: TerminalPreviewFileSearchItem[];
+}
+
+export interface TerminalPreviewFolderSearchResponse {
+  kind: "folder-search";
+  projectId: string;
+  projectPath: string;
+  query: string;
+  items: TerminalPreviewFolderSearchItem[];
+  truncated: boolean;
+}
+
+export interface TerminalPreviewContentSearchResponse {
+  kind: "content-search";
+  projectId: string;
+  projectPath: string;
+  query: string;
+  items: TerminalPreviewContentSearchItem[];
+  truncated: boolean;
 }
 
 export interface TerminalPreviewFileResponse {

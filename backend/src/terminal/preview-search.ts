@@ -3,6 +3,8 @@ import type {
   TerminalPreviewChangeFile,
   TerminalPreviewFileSearchItem,
   TerminalPreviewFileSearchResponse,
+  TerminalPreviewFolderSearchItem,
+  TerminalPreviewFolderSearchResponse,
 } from "@runweave/shared";
 import { ensureProjectPath } from "./preview-paths";
 import { getPreviewGitChanges } from "./preview-git";
@@ -30,6 +32,9 @@ function fuzzyScore(query: string, candidate: string): number {
   }
   if (compactCandidate.includes(compactQuery)) {
     return 75 - compactCandidate.indexOf(compactQuery) / 1000;
+  }
+  if (compactQuery.length > 3) {
+    return 0;
   }
 
   let queryIndex = 0;
@@ -88,10 +93,8 @@ function pathBoundaryBonus(query: string, relativePath: string): number {
   return 0;
 }
 
-function rankFile(query: string, relativePath: string): TerminalPreviewFileSearchItem | null {
+function rankPathCandidate(query: string, relativePath: string): number {
   const basename = path.posix.basename(relativePath);
-  const dirname = path.posix.dirname(relativePath);
-  const normalizedDirname = dirname === "." ? "" : dirname;
   const basenameScore = scoreQueryAgainstCandidate(query, basename);
   const pathScore = scoreQueryAgainstCandidate(query, relativePath);
   const segmentScore = relativePath
@@ -100,10 +103,49 @@ function rankFile(query: string, relativePath: string): TerminalPreviewFileSearc
       (best, segment) => Math.max(best, scoreQueryAgainstCandidate(query, segment)),
       0,
     );
-  const score = Math.max(
+
+  return Math.max(
     basenameScore > 0 ? basenameScore + 25 : 0,
     pathScore > 0 ? pathScore + pathBoundaryBonus(query, relativePath) : 0,
     segmentScore > 0 ? segmentScore + 10 : 0,
+  );
+}
+
+function isPathQuery(query: string): boolean {
+  return query.includes("/") || query.includes("\\");
+}
+
+function rankFileCandidate(query: string, relativePath: string): {
+  score: number;
+  basenameScore: number;
+  pathScore: number;
+} {
+  const basename = path.posix.basename(relativePath);
+  const basenameScore = scoreQueryAgainstCandidate(query, basename);
+  const pathScore = isPathQuery(query)
+    ? scoreQueryAgainstCandidate(query, relativePath)
+    : 0;
+
+  return {
+    basenameScore,
+    pathScore,
+    score: Math.max(
+      basenameScore > 0 ? basenameScore + 25 : 0,
+      pathScore > 0 ? pathScore + pathBoundaryBonus(query, relativePath) : 0,
+    ),
+  };
+}
+
+function rankFile(
+  query: string,
+  relativePath: string,
+): TerminalPreviewFileSearchItem | null {
+  const basename = path.posix.basename(relativePath);
+  const dirname = path.posix.dirname(relativePath);
+  const normalizedDirname = dirname === "." ? "" : dirname;
+  const { basenameScore, pathScore, score } = rankFileCandidate(
+    query,
+    relativePath,
   );
   if (score <= 0) {
     return null;
@@ -117,6 +159,34 @@ function rankFile(query: string, relativePath: string): TerminalPreviewFileSearc
       basenameScore >= pathScore
         ? "basename fuzzy match"
         : "relative path fuzzy match",
+    score: score - relativePath.length / 10_000,
+  };
+}
+
+function collectDirectoriesFromFiles(relativePaths: string[]): string[] {
+  const directories = new Set<string>();
+  for (const relativePath of relativePaths) {
+    const segments = relativePath.split("/").filter(Boolean);
+    for (let index = 1; index < segments.length; index += 1) {
+      directories.add(segments.slice(0, index).join("/"));
+    }
+  }
+  return Array.from(directories);
+}
+
+function rankFolder(
+  query: string,
+  relativePath: string,
+): TerminalPreviewFolderSearchItem | null {
+  const score = rankPathCandidate(query, relativePath);
+  if (score <= 0) {
+    return null;
+  }
+  const dirname = path.posix.dirname(relativePath);
+  return {
+    path: relativePath,
+    basename: path.posix.basename(relativePath),
+    dirname: dirname === "." ? "" : dirname,
     score: score - relativePath.length / 10_000,
   };
 }
@@ -229,5 +299,47 @@ export async function searchPreviewFiles(params: {
     query,
     absoluteInput,
     items: rankedItems,
+  };
+}
+
+export async function searchPreviewFolders(params: {
+  projectId: string;
+  projectPath: string | null | undefined;
+  query: string;
+  limit?: number;
+}): Promise<TerminalPreviewFolderSearchResponse> {
+  const projectPath = ensureProjectPath(params.projectPath);
+  const query = params.query.trim();
+  const limit = Math.min(Math.max(params.limit ?? DEFAULT_SEARCH_LIMIT, 1), 100);
+  if (!query || path.isAbsolute(query)) {
+    return {
+      kind: "folder-search",
+      projectId: params.projectId,
+      projectPath,
+      query,
+      items: [],
+      truncated: false,
+    };
+  }
+
+  const rankedItems = collectDirectoriesFromFiles(
+    await collectCachedSearchCandidateFiles(params.projectId, projectPath),
+  )
+    .flatMap((relativePath) => {
+      const ranked = rankFolder(query, relativePath);
+      return ranked ? [ranked] : [];
+    })
+    .sort((left, right) => {
+      const byScore = right.score - left.score;
+      return byScore === 0 ? left.path.localeCompare(right.path) : byScore;
+    });
+
+  return {
+    kind: "folder-search",
+    projectId: params.projectId,
+    projectPath,
+    query,
+    items: rankedItems.slice(0, limit),
+    truncated: rankedItems.length > limit,
   };
 }

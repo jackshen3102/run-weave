@@ -28,6 +28,7 @@ import {
   TerminalMarkdownPreview,
   TerminalMonacoViewer,
   TerminalPreviewFileView,
+  type TerminalPreviewLineTarget,
   TerminalSvgPreview,
 } from "./terminal-preview-file-view";
 import { TerminalPreviewChangeTree } from "./terminal-preview-change-tree";
@@ -71,10 +72,12 @@ interface TerminalPreviewPanelContentProps {
   fileTree: UseTerminalFileTreeReturn;
   assetRefreshKey: number;
   markdownScrollRatio: number;
+  lineTarget: TerminalPreviewLineTarget | null;
   onAuthExpired?: () => void;
   onEditProject: () => void;
   onQueryChange: (nextQuery: string) => void;
   onOpenFilePath: (filePath: string) => void;
+  onOpenQuickSearch: () => void;
   onRequestRenameFile: (filePath: string) => void;
   onRequestDeleteFile: (filePath: string) => void;
   onRequestResetChange: (
@@ -127,10 +130,12 @@ export function TerminalPreviewPanelContent({
   fileTree,
   assetRefreshKey,
   markdownScrollRatio,
+  lineTarget,
   onAuthExpired,
   onEditProject,
   onQueryChange,
   onOpenFilePath,
+  onOpenQuickSearch,
   onRequestRenameFile,
   onRequestDeleteFile,
   onRequestResetChange,
@@ -194,9 +199,11 @@ export function TerminalPreviewPanelContent({
         fileTree={fileTree}
         assetRefreshKey={assetRefreshKey}
         markdownScrollRatio={markdownScrollRatio}
+        lineTarget={lineTarget}
         onAuthExpired={onAuthExpired}
         onQueryChange={onQueryChange}
         onOpenFilePath={onOpenFilePath}
+        onOpenQuickSearch={onOpenQuickSearch}
         onRequestRenameFile={onRequestRenameFile}
         onRequestDeleteFile={onRequestDeleteFile}
         onMarkdownScrollRatioChange={onMarkdownScrollRatioChange}
