@@ -451,6 +451,14 @@ export interface TerminalCompletionEvent {
   cwd: string | null;
   outboxPath?: string | null;
   summary?: string | null;
+  /**
+   * The panel (workspace pane) that produced the completion, when the terminal
+   * session is split into multiple tmux panes. `null` for single-pane
+   * terminals. Enables pane-as-worker attribution in the agent-team loop.
+   */
+  panelId?: string | null;
+  /** The underlying tmux pane id (e.g. `%12`) for the completing pane, if known. */
+  tmuxPaneId?: string | null;
   createdAt: string;
 }
 
@@ -463,6 +471,8 @@ export interface TerminalCompletionEventPayload {
   cwd: string | null;
   outboxPath?: string | null;
   summary?: string | null;
+  panelId?: string | null;
+  tmuxPaneId?: string | null;
 }
 
 export type TerminalAgentKind = "codex" | "trae" | "traex" | "traecli";

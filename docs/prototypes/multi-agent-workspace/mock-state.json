@@ -1,0 +1,364 @@
+{
+  "flowCatalog": [
+    { "id": "discuss", "label": "需求讨论", "short": "Discuss" },
+    { "id": "plan", "label": "计划", "short": "Plan" },
+    { "id": "plan_approval", "label": "计划审批", "short": "Approval" },
+    { "id": "code", "label": "代码执行", "short": "Code" },
+    { "id": "code_review", "label": "代码审查", "short": "Review" },
+    { "id": "behavior_verify", "label": "行为验证", "short": "Behave" },
+    { "id": "human_verify", "label": "人工验收", "short": "Verify" },
+    { "id": "finalize", "label": "收尾", "short": "Finalize" }
+  ],
+  "roleCatalog": [
+    { "id": "code", "label": "代码执行" },
+    { "id": "code_review", "label": "代码审查" },
+    { "id": "behavior_verify", "label": "行为验证" },
+    { "id": "plan_review", "label": "计划审查" },
+    { "id": "test", "label": "测试" },
+    { "id": "research", "label": "调研" }
+  ],
+  "activeProjectId": "proj_bv",
+  "activeTerminalId": "term_shell",
+  "projects": [
+    {
+      "id": "proj_bv",
+      "name": "browser-viewer",
+      "path": "~/Code/browser-hub/browser-viewer"
+    },
+    {
+      "id": "proj_space",
+      "name": "coze-space-web",
+      "path": "~/Code/coze-hub/coze-space-web"
+    }
+  ],
+  "terminals": [
+    {
+      "id": "term_shell",
+      "projectId": "proj_bv",
+      "name": "shell",
+      "mode": "plain",
+      "status": "idle",
+      "session": {
+        "name": "shell",
+        "activePanelId": "term_shell_main",
+        "panels": [
+          {
+            "id": "term_shell_main",
+            "alias": "shell",
+            "role": "shell",
+            "command": "zsh",
+            "tmuxPaneId": "%0",
+            "lines": [
+              "browser-viewer · zsh",
+              "$ git status",
+              "On branch main · nothing to commit, working tree clean",
+              "$ _"
+            ]
+          }
+        ],
+        "layout": { "type": "panel", "panelId": "term_shell_main" }
+      },
+      "logs": []
+    },
+    {
+      "id": "term_gamma",
+      "projectId": "proj_bv",
+      "name": "需求待澄清",
+      "mode": "flow",
+      "status": "clarifying",
+      "lifecycle": "clarify",
+      "currentStageId": "discuss",
+      "stages": ["discuss", "plan", "code", "code_review", "finalize"],
+      "options": { "autoApproveSplit": false },
+      "clarify": {
+        "messages": [
+          { "from": "user", "text": "把终端右侧面板弱化成只读观测区" },
+          {
+            "from": "agent",
+            "text": "想确认几点：1) 右侧还要保留 flow 指示吗？2) Worker 数量你想固定还是让我按任务定？"
+          },
+          {
+            "from": "user",
+            "text": "flow 保留但只读；worker 数量你来定，我最后过一眼"
+          },
+          {
+            "from": "agent",
+            "text": "明白。还差一个：log 只看主 Agent，还是所有 worker 都汇进来？"
+          }
+        ],
+        "ready": false
+      },
+      "proposal": null,
+      "session": {
+        "name": "gamma",
+        "activePanelId": "term_gamma_main",
+        "panels": [
+          {
+            "id": "term_gamma_main",
+            "alias": "main",
+            "role": "main",
+            "command": "codex",
+            "tmuxPaneId": "%30",
+            "lines": [
+              "browser-viewer · codex (main agent)",
+              "> 正在与人澄清需求，未拆分 worker",
+              "> 澄清足够后会产出 worker 拆分提案",
+              "main$ _"
+            ]
+          }
+        ],
+        "layout": { "type": "panel", "panelId": "term_gamma_main" }
+      },
+      "logs": [
+        "engineering-rules 流程已启动 · phase = 需求澄清",
+        "main agent 正在澄清意图（人主导）"
+      ]
+    },
+    {
+      "id": "term_beta",
+      "projectId": "proj_bv",
+      "name": "修 pane 路由",
+      "mode": "flow",
+      "status": "need_human",
+      "lifecycle": "proposal",
+      "currentStageId": "plan",
+      "stages": ["discuss", "plan", "code", "code_review", "finalize"],
+      "options": { "autoApproveSplit": false },
+      "clarify": {
+        "messages": [
+          { "from": "user", "text": "修复 tmux pane 路由 bug，要有回归" },
+          {
+            "from": "agent",
+            "text": "复现路径确认了，根因在 resolvePanelTarget。我准备拆 worker。"
+          }
+        ],
+        "ready": true
+      },
+      "proposal": {
+        "summary": "需求已澄清：修 resolvePanelTarget pane 路由 + 补 E2E 回归。建议拆 3 个 worker：",
+        "workers": [
+          {
+            "id": "p1",
+            "role": "code",
+            "intent": "修 resolvePanelTarget 的 pane id 匹配"
+          },
+          {
+            "id": "p2",
+            "role": "behavior_verify",
+            "intent": "按验收用例跑 Playwright，失败抛回 code"
+          },
+          { "id": "p3", "role": "code_review", "intent": "审查修复与回归覆盖" }
+        ],
+        "acceptance": {
+          "title": "验收用例（主 Agent 草拟，待确认）",
+          "cases": [
+            "拆分终端后，向 pane B 发送命令，输出只出现在 pane B 不串到 pane A",
+            "关闭中间 pane 后，路由仍能命中剩余 pane",
+            "刷新页面后 pane 路由映射保持一致"
+          ]
+        }
+      },
+      "session": {
+        "name": "beta",
+        "activePanelId": "term_beta_main",
+        "panels": [
+          {
+            "id": "term_beta_main",
+            "alias": "main",
+            "role": "main",
+            "command": "codex",
+            "tmuxPaneId": "%20",
+            "lines": [
+              "browser-viewer · codex (main agent)",
+              "> 需求已澄清，已产出 worker 拆分提案",
+              "> 等待人工确认后再 split pane",
+              "main$ _"
+            ]
+          }
+        ],
+        "layout": { "type": "panel", "panelId": "term_beta_main" }
+      },
+      "logs": [
+        "engineering-rules 流程已启动 · phase = 需求澄清",
+        "main agent 澄清完成，产出拆分提案（3 worker）",
+        "⏸ waiting human: 确认 worker 拆分"
+      ]
+    },
+    {
+      "id": "term_alpha",
+      "projectId": "proj_bv",
+      "name": "重构终端布局",
+      "mode": "flow",
+      "status": "running",
+      "lifecycle": "executing",
+      "currentStageId": "code",
+      "stages": ["discuss", "plan", "code", "code_review", "finalize"],
+      "options": { "autoApproveSplit": true },
+      "clarify": {
+        "messages": [
+          { "from": "user", "text": "重构终端布局：终端主导 + 右侧弱化" },
+          { "from": "agent", "text": "澄清完毕，已确认拆 2 个 worker。" }
+        ],
+        "ready": true
+      },
+      "proposal": {
+        "summary": "自动确认已开启：主 Agent 直接拆 2 个 worker",
+        "workers": [
+          { "id": "a1", "role": "code", "intent": "弱化右侧面板为 log 观测区" },
+          { "id": "a2", "role": "code_review", "intent": "审查 split 布局回归" }
+        ],
+        "acceptance": {
+          "title": "验收用例（自动确认，已采用）",
+          "cases": [
+            "单终端时画布宽高撑满，无空白",
+            "拆分多 worker 后右侧面板仍只读、不抢主体",
+            "切换终端时左侧布局随之切换"
+          ]
+        }
+      },
+      "session": {
+        "name": "alpha",
+        "activePanelId": "term_alpha_code",
+        "panels": [
+          {
+            "id": "term_alpha_main",
+            "alias": "main",
+            "role": "main",
+            "command": "codex",
+            "tmuxPaneId": "%10",
+            "lines": [
+              "browser-viewer · codex (main agent)",
+              "> 自动确认拆分已开启，跳过人工门，直接 split",
+              "> dispatch code / code_review",
+              "main$ _"
+            ]
+          },
+          {
+            "id": "term_alpha_code",
+            "alias": "code-1",
+            "role": "code",
+            "command": "codex",
+            "tmuxPaneId": "%11",
+            "lines": [
+              "worker · code",
+              "> editing terminal-preview-panel-shell.tsx",
+              "> editing terminal-workspace.tsx",
+              "  applied 2 edits, running typecheck...",
+              "code-1$ _"
+            ]
+          },
+          {
+            "id": "term_alpha_review",
+            "alias": "review-1",
+            "role": "code_review",
+            "command": "codex --skill review-only",
+            "tmuxPaneId": "%12",
+            "lines": [
+              "worker · code_review",
+              "> waiting for code summary",
+              "review-1$ _"
+            ]
+          },
+          {
+            "id": "term_alpha_verify",
+            "alias": "verify-1",
+            "role": "behavior_verify",
+            "command": "codex --skill playwright-cli",
+            "tmuxPaneId": "%13",
+            "lines": [
+              "worker · behavior_verify",
+              "> 读取 acceptance.md，按用例跑 Playwright",
+              "> case 1 ✓  case 2 ✓  case 3 ✗ (page reload 后映射丢失)",
+              "> 抛回 code-1：用例 3 失败 + 截图证据",
+              "verify-1$ _"
+            ]
+          }
+        ],
+        "layout": {
+          "type": "split",
+          "direction": "horizontal",
+          "ratio": 0.36,
+          "first": { "type": "panel", "panelId": "term_alpha_main" },
+          "second": {
+            "type": "split",
+            "direction": "vertical",
+            "ratio": 0.4,
+            "first": { "type": "panel", "panelId": "term_alpha_code" },
+            "second": {
+              "type": "split",
+              "direction": "vertical",
+              "ratio": 0.5,
+              "first": { "type": "panel", "panelId": "term_alpha_review" },
+              "second": { "type": "panel", "panelId": "term_alpha_verify" }
+            }
+          }
+        }
+      },
+      "acceptance": {
+        "title": "验收用例 + 证据",
+        "cases": [
+          {
+            "id": "c1",
+            "text": "单终端时画布宽高撑满，无空白",
+            "status": "pass",
+            "evidence": "screenshot: full-canvas.png"
+          },
+          {
+            "id": "c2",
+            "text": "拆分多 worker 后右侧面板仍只读、不抢主体",
+            "status": "pass",
+            "evidence": "DOM: aside[readonly] present"
+          },
+          {
+            "id": "c3",
+            "text": "切换终端时左侧布局随之切换",
+            "status": "fail",
+            "evidence": "reload 后 pane 映射丢失 → 抛回 code-1"
+          }
+        ]
+      },
+      "logs": [
+        "engineering-rules 流程已启动 · phase = 需求澄清",
+        "main agent 澄清完成，拆分提案已确认（2 worker）",
+        "split pane code-1 / review-1 created",
+        "code-1 editing terminal-workspace.tsx",
+        "behavior_verify: case 3 失败，抛回 code-1 修复"
+      ],
+      "loop": {
+        "round": 3,
+        "noProgressCount": 1,
+        "maxNoProgress": 3,
+        "escalated": false,
+        "lastReason": null
+      }
+    },
+    {
+      "id": "term_space_dev",
+      "projectId": "proj_space",
+      "name": "dev-server",
+      "mode": "plain",
+      "status": "idle",
+      "session": {
+        "name": "dev-server",
+        "activePanelId": "term_space_main",
+        "panels": [
+          {
+            "id": "term_space_main",
+            "alias": "shell",
+            "role": "shell",
+            "command": "zsh",
+            "tmuxPaneId": "%0",
+            "lines": [
+              "coze-space-web · zsh",
+              "$ rush build --to @coze-space/space",
+              "  building… (this project has no engineering-rules flow yet)",
+              "$ _"
+            ]
+          }
+        ],
+        "layout": { "type": "panel", "panelId": "term_space_main" }
+      },
+      "logs": []
+    }
+  ]
+}

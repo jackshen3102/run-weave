@@ -1,24 +1,33 @@
-import type { TerminalSessionManager, TerminalSessionRecord } from "../../terminal/manager";
-import type { PtyService } from "../../terminal/pty-service";
-import type { TerminalRuntimeRegistry } from "../../terminal/runtime-registry";
-import type { TmuxOutputWatcher } from "../../terminal/tmux-output-watcher";
-import type { TmuxService } from "../../terminal/tmux-service";
+import type {
+  TerminalSessionManager,
+  TerminalSessionRecord,
+} from "../terminal/manager";
+import type { PtyService } from "../terminal/pty-service";
+import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
+import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
+import type { TmuxService } from "../terminal/tmux-service";
 import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
   resolveTmuxTarget,
-} from "../../terminal/runtime-launcher";
+} from "../terminal/runtime-launcher";
 import {
   resolvePanelTarget,
   TerminalPanelRouteError,
-} from "../../routes/terminal-panel-routes";
-import { OrchestratorError } from "../errors";
+} from "../routes/terminal-panel-routes";
+import { AgentTeamError } from "./errors";
 
 const BRACKETED_PASTE_START = "\u001b[200~";
 const BRACKETED_PASTE_END = "\u001b[201~";
 const PROMPT_PASTE_CHUNK_SIZE = 3000;
 
-export class OrchestratorPromptSender {
+/**
+ * Injects prompts into a terminal session, optionally targeting a specific
+ * tmux pane. Migrated from the retired orchestrator prompt-sender; the
+ * bracketed-paste + chunked key-sequence approach is the low-level terminal
+ * capability the agent-team loop reuses.
+ */
+export class AgentTeamPromptSender {
   constructor(
     private readonly options: {
       terminalSessionManager: TerminalSessionManager;
@@ -29,7 +38,7 @@ export class OrchestratorPromptSender {
     },
   ) {}
 
-  async sendPromptToAgent(
+  async sendPromptToPane(
     session: TerminalSessionRecord,
     text: string,
     target?: {
@@ -66,7 +75,7 @@ export class OrchestratorPromptSender {
           ).paneTarget;
         } catch (error) {
           if (error instanceof TerminalPanelRouteError) {
-            throw new OrchestratorError(
+            throw new AgentTeamError(
               error.statusCode,
               error.message,
               error.details,
@@ -75,16 +84,13 @@ export class OrchestratorPromptSender {
           throw error;
         }
       }
-      await this.options.tmuxService.sendKeySequence(
-        paneTarget,
-        [
-          ...splitPromptPaste(pastedPrompt).map((value) => ({
-            type: "literal" as const,
-            value,
-          })),
-          { type: "key", key: "C-m" },
-        ],
-      );
+      await this.options.tmuxService.sendKeySequence(paneTarget, [
+        ...splitPromptPaste(pastedPrompt).map((value) => ({
+          type: "literal" as const,
+          value,
+        })),
+        { type: "key", key: "C-m" },
+      ]);
       return;
     }
     ensured.runtime.write(`${pastedPrompt}\r`);

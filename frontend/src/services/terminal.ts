@@ -1,5 +1,7 @@
 import type {
-  CreateOrchestratorRunRequest,
+  AgentTeamRun,
+  AgentTeamRunsResponse,
+  CreateAgentTeamRunRequest,
   CreateTerminalProjectRequest,
   CreateTerminalClipboardImageRequest,
   CreateTerminalClipboardImageResponse,
@@ -8,15 +10,10 @@ import type {
   CreateTerminalPanelRequest,
   CreateTerminalEventsWsTicketResponse,
   CreateTerminalWsTicketResponse,
-  InjectOrchestratorPromptRequest,
-  OrchestratorRoleDefinition,
-  OrchestratorRolesResponse,
-  OrchestratorRunPackage,
-  OrchestratorRunsResponse,
-  OrchestratorRunStatus,
-  PreviewOrchestratorRunPromptResponse,
-  SubmitOrchestratorRoundConfirmationRequest,
-  SubmitOrchestratorHumanGateRequest,
+  ProposeAgentTeamSplitRequest,
+  RecordAgentTeamRoundRequest,
+  ResumeAgentTeamRunRequest,
+  SubmitAgentTeamSplitGateRequest,
   SendTerminalInputRequest,
   SendTerminalInputResponse,
   TerminalCompletionEventListResponse,
@@ -214,164 +211,118 @@ export async function updateTerminalSession(
   );
 }
 
-export async function listOrchestratorRoles(
-  apiBase: string,
-  token: string,
-): Promise<OrchestratorRolesResponse> {
-  return requestJson<OrchestratorRolesResponse>(
-    apiBase,
-    "/api/orchestrator/roles",
-    {
-      headers: { Authorization: `Bearer ${token}` },
-    },
-  );
-}
+const AGENT_TEAM_JSON_HEADERS = (token: string) => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${token}`,
+});
 
-export async function saveOrchestratorRoles(
-  apiBase: string,
-  token: string,
-  roles: OrchestratorRoleDefinition[],
-): Promise<OrchestratorRolesResponse> {
-  return requestJson<OrchestratorRolesResponse>(
-    apiBase,
-    "/api/orchestrator/roles",
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ roles }),
-    },
-  );
-}
-
-export async function listOrchestratorRuns(
+export async function getAgentTeamRunForTerminal(
   apiBase: string,
   token: string,
   projectId: string,
-): Promise<OrchestratorRunsResponse> {
-  return requestJson<OrchestratorRunsResponse>(
+  terminalSessionId: string,
+): Promise<AgentTeamRun | null> {
+  const response = await requestJson<AgentTeamRunsResponse>(
     apiBase,
-    `/api/orchestrator/runs?projectId=${encodeURIComponent(projectId)}`,
+    `/api/agent-team/runs?projectId=${encodeURIComponent(projectId)}&terminalSessionId=${encodeURIComponent(terminalSessionId)}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
+  return response.runs[0] ?? null;
 }
 
-export async function createOrchestratorRun(
+export async function startAgentTeamRun(
   apiBase: string,
   token: string,
-  payload: CreateOrchestratorRunRequest,
-): Promise<OrchestratorRunPackage> {
-  return requestJson<OrchestratorRunPackage>(
-    apiBase,
-    "/api/orchestrator/runs",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    },
-  );
+  payload: CreateAgentTeamRunRequest,
+): Promise<AgentTeamRun> {
+  return requestJson<AgentTeamRun>(apiBase, "/api/agent-team/runs", {
+    method: "POST",
+    headers: AGENT_TEAM_JSON_HEADERS(token),
+    body: JSON.stringify(payload),
+  });
 }
 
-export async function previewOrchestratorRunPrompt(
-  apiBase: string,
-  token: string,
-  payload: CreateOrchestratorRunRequest,
-): Promise<PreviewOrchestratorRunPromptResponse> {
-  return requestJson<PreviewOrchestratorRunPromptResponse>(
-    apiBase,
-    "/api/orchestrator/runs/preview",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export async function injectOrchestratorPrompt(
+export async function proposeAgentTeamSplit(
   apiBase: string,
   token: string,
   runId: string,
-  payload: InjectOrchestratorPromptRequest,
-): Promise<OrchestratorRunPackage> {
-  return requestJson<OrchestratorRunPackage>(
+  payload: ProposeAgentTeamSplitRequest,
+): Promise<AgentTeamRun> {
+  return requestJson<AgentTeamRun>(
     apiBase,
-    `/api/orchestrator/runs/${encodeURIComponent(runId)}/inject`,
+    `/api/agent-team/runs/${encodeURIComponent(runId)}/propose-split`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: AGENT_TEAM_JSON_HEADERS(token),
       body: JSON.stringify(payload),
     },
   );
 }
 
-export async function submitOrchestratorHumanGate(
+export async function submitAgentTeamSplitGate(
   apiBase: string,
   token: string,
   runId: string,
-  payload: SubmitOrchestratorHumanGateRequest,
-): Promise<OrchestratorRunPackage> {
-  return requestJson<OrchestratorRunPackage>(
+  payload: SubmitAgentTeamSplitGateRequest,
+): Promise<AgentTeamRun> {
+  return requestJson<AgentTeamRun>(
     apiBase,
-    `/api/orchestrator/runs/${encodeURIComponent(runId)}/human-gate`,
+    `/api/agent-team/runs/${encodeURIComponent(runId)}/split-gate`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: AGENT_TEAM_JSON_HEADERS(token),
       body: JSON.stringify(payload),
     },
   );
 }
 
-export async function submitOrchestratorRoundConfirmation(
+export async function recordAgentTeamRound(
   apiBase: string,
   token: string,
   runId: string,
-  payload: SubmitOrchestratorRoundConfirmationRequest,
-): Promise<OrchestratorRunPackage> {
-  return requestJson<OrchestratorRunPackage>(
+  payload: RecordAgentTeamRoundRequest,
+): Promise<AgentTeamRun> {
+  return requestJson<AgentTeamRun>(
     apiBase,
-    `/api/orchestrator/runs/${encodeURIComponent(runId)}/round-confirmation`,
+    `/api/agent-team/runs/${encodeURIComponent(runId)}/round`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: AGENT_TEAM_JSON_HEADERS(token),
       body: JSON.stringify(payload),
     },
   );
 }
 
-export async function setOrchestratorRunStatus(
+export async function resumeAgentTeamRun(
   apiBase: string,
   token: string,
   runId: string,
-  status: OrchestratorRunStatus,
-): Promise<OrchestratorRunPackage> {
-  return requestJson<OrchestratorRunPackage>(
+  payload: ResumeAgentTeamRunRequest,
+): Promise<AgentTeamRun> {
+  return requestJson<AgentTeamRun>(
     apiBase,
-    `/api/orchestrator/runs/${encodeURIComponent(runId)}/status`,
+    `/api/agent-team/runs/${encodeURIComponent(runId)}/resume`,
     {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ status }),
+      method: "POST",
+      headers: AGENT_TEAM_JSON_HEADERS(token),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function focusAgentTeamPane(
+  apiBase: string,
+  token: string,
+  runId: string,
+  panelId: string,
+): Promise<AgentTeamRun> {
+  return requestJson<AgentTeamRun>(
+    apiBase,
+    `/api/agent-team/runs/${encodeURIComponent(runId)}/focus-pane`,
+    {
+      method: "POST",
+      headers: AGENT_TEAM_JSON_HEADERS(token),
+      body: JSON.stringify({ panelId }),
     },
   );
 }

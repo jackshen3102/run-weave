@@ -990,11 +990,11 @@ export function TerminalWorkspaceShell({
               <DropdownMenuItem
                 disabled={loading || !activeProjectId}
                 onSelect={() => {
-                  useTerminalPreviewStore.getState().openOrchestrator();
+                  useTerminalPreviewStore.getState().openAgentTeam();
                 }}
               >
                 <Workflow className="h-4 w-4" />
-                Orchestrator
+                Agent Team
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!activeSession?.terminalSessionId}

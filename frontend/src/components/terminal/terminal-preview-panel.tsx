@@ -19,10 +19,10 @@ import { useTerminalPreviewPanelActions } from "./terminal-preview-panel-actions
 import { useTerminalPreviewPanelData } from "./use-terminal-preview-panel-data";
 import { TerminalPreviewPanelMutationDialogs } from "./terminal-preview-panel-mutation-dialogs";
 import { TerminalPreviewPanelShell } from "./terminal-preview-panel-shell";
-import { TerminalOrchestratorPanel } from "./terminal-orchestrator-panel";
 import { TerminalPreviewQuickSearch } from "./terminal-preview-quick-search";
 import { useTerminalPreviewQuickSearch } from "./use-terminal-preview-quick-search";
 import type { TerminalPreviewLineTarget } from "./terminal-preview-file-view";
+import { TerminalAgentTeamPanel } from "./terminal-agent-team-panel";
 import { useTerminalFileTree } from "./use-terminal-file-tree";
 
 interface TerminalPreviewPanelProps {
@@ -67,11 +67,9 @@ export function TerminalPreviewPanel({
   token,
   activeProject,
   activeSession,
-  sessions,
   widthPx,
   onAuthExpired,
   onEditProject,
-  onSelectSession,
 }: TerminalPreviewPanelProps) {
   const [lineTarget, setLineTarget] =
     useState<TerminalPreviewLineTarget | null>(null);
@@ -616,14 +614,13 @@ export function TerminalPreviewPanel({
       }}
     />
   );
-  const orchestratorBody = (
-    <TerminalOrchestratorPanel
+  const agentTeamBody = (
+    <TerminalAgentTeamPanel
       apiBase={apiBase}
       token={token}
       activeProject={activeProject}
-      sessions={sessions}
+      activeSession={activeSession}
       onAuthExpired={onAuthExpired}
-      onSelectSession={onSelectSession}
     />
   );
 
@@ -668,7 +665,7 @@ export function TerminalPreviewPanel({
         token={token}
         activeTerminalSessionId={activeSession?.terminalSessionId ?? null}
         body={previewBody}
-        orchestratorBody={orchestratorBody}
+        agentTeamBody={agentTeamBody}
         onStartResize={startResize}
         onSetActiveTool={setActiveTool}
         onSetPreviewMode={(nextMode) => {

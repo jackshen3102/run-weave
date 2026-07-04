@@ -197,6 +197,7 @@ function buildCompletionHookBody({
     rawHookEvent: String(rawEvent || "Stop"),
     hookEvent: String(rawEvent || "Stop"),
     summary: extractCompletionSummary(payload),
+    panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID || null,
     cwd:
       typeof payload.cwd === "string" && payload.cwd.trim()
         ? payload.cwd

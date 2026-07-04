@@ -27,8 +27,8 @@ import {
 import { createAuthRouter } from "./routes/auth";
 import { createAppHomeOverviewRouter } from "./routes/app-home-overview";
 import { createDiagnosticLogsRouter } from "./routes/diagnostic-logs";
-import { OrchestratorService } from "./orchestrator/service";
-import { createOrchestratorRouter } from "./routes/orchestrator";
+import { AgentTeamService } from "./agent-team/service";
+import { createAgentTeamRouter } from "./routes/agent-team";
 import {
   createInternalTerminalAgentHookRouter,
   createTerminalStateRouter,
@@ -92,7 +92,7 @@ interface RuntimeServices {
   terminalQuickInputStore: LowDbTerminalQuickInputStore;
   terminalQuickInputService: TerminalQuickInputService;
   terminalStateService: TerminalStateService;
-  orchestratorService: OrchestratorService;
+  agentTeamService: AgentTeamService;
   terminalEventService: TerminalEventService;
   terminalCompletionEventService: TerminalCompletionEventService;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
@@ -248,16 +248,15 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
   }
   await tmuxOutputWatcher.watchExistingSessions();
-  const orchestratorService = new OrchestratorService({
+  const agentTeamService = new AgentTeamService({
     terminalSessionManager,
     terminalEventService,
     ptyService,
     runtimeRegistry: terminalRuntimeRegistry,
-    terminalStateService,
     tmuxService,
     tmuxOutputWatcher,
   });
-  await orchestratorService.initialize();
+  agentTeamService.initialize();
 
   return {
     authStore,
@@ -268,7 +267,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalQuickInputStore,
     terminalQuickInputService,
     terminalStateService,
-    orchestratorService,
+    agentTeamService,
     terminalEventService,
     terminalCompletionEventService,
     terminalRuntimeRegistry,
@@ -450,9 +449,9 @@ function createHttpApp(
     }),
   );
   app.use(
-    "/api/orchestrator",
+    "/api/agent-team",
     requireAuth,
-    createOrchestratorRouter(services.orchestratorService),
+    createAgentTeamRouter(services.agentTeamService),
   );
   app.use(
     "/api/terminal",
@@ -654,7 +653,6 @@ async function startRuntime(): Promise<void> {
     // test port.
     process.env.RUNWEAVE_BASE_URL = controlPlaneBaseUrl;
     process.env.RUNWEAVE_BACKEND_PORT = String(port);
-    services.orchestratorService.setControlPlaneBaseUrl(controlPlaneBaseUrl);
     // Always pin the hook endpoint to THIS backend's listening port. Inheriting
     // it from a parent shell spawned by another Runweave backend would deliver
     // codex hook events to the wrong process.

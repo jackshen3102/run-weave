@@ -1,40 +1,23 @@
 import path from "node:path";
 import type { TerminalSessionManager } from "../../terminal/manager";
-import { assertSafeOrchestratorRunId } from "../run-id";
+import { assertSafeAgentTeamRunId } from "../run-id";
 
-export class OrchestratorPaths {
+export class AgentTeamPaths {
   constructor(
     private readonly terminalSessionManager: TerminalSessionManager,
-    private readonly homeDir: string,
     private readonly cwd: string,
   ) {}
 
-  rolesFilePath(): string {
-    return path.join(this.homeDir, ".runweave", "roles.json");
-  }
-
   runsDir(projectId: string): string {
-    return path.join(this.projectRoot(projectId), ".runweave", "runs");
+    return path.join(this.projectRoot(projectId), ".runweave", "agent-team");
   }
 
   runFilePath(projectId: string, runId: string): string {
-    assertSafeOrchestratorRunId(runId);
+    assertSafeAgentTeamRunId(runId);
     return path.join(this.runsDir(projectId), `${runId}.json`);
   }
 
-  dispatchSidecarPath(
-    projectId: string | null,
-    sessionId: string,
-    cwd?: string | null,
-  ): string {
-    return path.join(
-      this.projectRoot(projectId, cwd),
-      ".runweave",
-      "dispatch",
-      `${sessionId}.json`,
-    );
-  }
-
+  /** Where behavior_verify / worker outboxes are written, keyed by session. */
   defaultOutboxPath(
     projectId: string | null,
     sessionId: string,

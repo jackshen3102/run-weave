@@ -1,22 +1,19 @@
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import type { OrchestratorRunPackage } from "@runweave/shared";
+import type { AgentTeamRun } from "@runweave/shared";
 import type { TerminalSessionManager } from "../../terminal/manager";
-import {
-  assertSafeOrchestratorRunId,
-  isSafeOrchestratorRunId,
-} from "../run-id";
-import type { OrchestratorPaths } from "./orchestrator-paths";
+import { assertSafeAgentTeamRunId, isSafeAgentTeamRunId } from "../run-id";
+import type { AgentTeamPaths } from "./agent-team-paths";
 import { readJsonFile, writeJsonFile } from "./json-file";
 
-export class OrchestratorRunStore {
+export class AgentTeamRunStore {
   constructor(
     private readonly terminalSessionManager: TerminalSessionManager,
-    private readonly paths: OrchestratorPaths,
+    private readonly paths: AgentTeamPaths,
   ) {}
 
-  async listRuns(projectId: string): Promise<OrchestratorRunPackage[]> {
+  async listRuns(projectId: string): Promise<AgentTeamRun[]> {
     const dir = this.paths.runsDir(projectId);
     if (!existsSync(dir)) {
       return [];
@@ -26,19 +23,19 @@ export class OrchestratorRunStore {
       entries
         .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
         .map((entry) =>
-          readJsonFile<OrchestratorRunPackage>(path.join(dir, entry.name)),
+          readJsonFile<AgentTeamRun>(path.join(dir, entry.name)),
         ),
     );
     return runs
       .filter(
-        (run): run is OrchestratorRunPackage =>
+        (run): run is AgentTeamRun =>
           Boolean(run?.runId) && run?.projectId === projectId,
       )
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  async getRun(runId: string): Promise<OrchestratorRunPackage | null> {
-    if (!isSafeOrchestratorRunId(runId)) {
+  async getRun(runId: string): Promise<AgentTeamRun | null> {
+    if (!isSafeAgentTeamRunId(runId)) {
       return null;
     }
     for (const project of this.terminalSessionManager.listProjects()) {
@@ -46,7 +43,7 @@ export class OrchestratorRunStore {
       if (!existsSync(candidate)) {
         continue;
       }
-      const run = await readJsonFile<OrchestratorRunPackage>(candidate);
+      const run = await readJsonFile<AgentTeamRun>(candidate);
       if (run?.projectId === project.id) {
         return run;
       }
@@ -54,8 +51,19 @@ export class OrchestratorRunStore {
     return null;
   }
 
-  async writeRun(run: OrchestratorRunPackage): Promise<void> {
-    assertSafeOrchestratorRunId(run.runId);
+  /** Find the active run bound to a terminal session, if any. */
+  async getRunByTerminalSession(
+    projectId: string,
+    terminalSessionId: string,
+  ): Promise<AgentTeamRun | null> {
+    const runs = await this.listRuns(projectId);
+    return (
+      runs.find((run) => run.terminalSessionId === terminalSessionId) ?? null
+    );
+  }
+
+  async writeRun(run: AgentTeamRun): Promise<void> {
+    assertSafeAgentTeamRunId(run.runId);
     await writeJsonFile(this.paths.runFilePath(run.projectId, run.runId), run);
   }
 }

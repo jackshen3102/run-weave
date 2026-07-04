@@ -16,7 +16,7 @@ interface ActiveProjectLike {
   path?: string | null;
 }
 
-type TerminalSidecarPanelTool = "preview" | "browser" | "orchestrator";
+type TerminalSidecarPanelTool = "preview" | "browser" | "agent-team";
 
 interface TerminalPreviewPanelShellProps {
   panelWidth: string;
@@ -47,7 +47,7 @@ interface TerminalPreviewPanelShellProps {
   token: string;
   activeTerminalSessionId: string | null;
   body: ReactNode;
-  orchestratorBody?: ReactNode;
+  agentTeamBody?: ReactNode;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onSetActiveTool: (tool: TerminalSidecarPanelTool) => void;
   onSetPreviewMode: (mode: "changes" | "file" | "explorer") => void;
@@ -97,7 +97,7 @@ export function TerminalPreviewPanelShell({
   token,
   activeTerminalSessionId,
   body,
-  orchestratorBody,
+  agentTeamBody,
   onStartResize,
   onSetActiveTool,
   onSetPreviewMode,
@@ -149,7 +149,7 @@ export function TerminalPreviewPanelShell({
                 role="tablist"
                 aria-label="Sidecar tools"
               >
-                {(["preview", "browser", "orchestrator"] as const).map((tool) => (
+                {(["preview", "browser", "agent-team"] as const).map((tool) => (
                   <button
                     type="button"
                     role="tab"
@@ -167,7 +167,7 @@ export function TerminalPreviewPanelShell({
                       ? "Preview"
                       : tool === "browser"
                         ? "Browser"
-                        : "Orchestrator"}
+                        : "Agent Team"}
                   </button>
                 ))}
               </div>
@@ -390,10 +390,10 @@ export function TerminalPreviewPanelShell({
           <div
             className={[
               "absolute inset-0 min-h-0",
-              activeTool === "orchestrator" ? "" : "pointer-events-none hidden",
+              activeTool === "agent-team" ? "" : "pointer-events-none hidden",
             ].join(" ")}
           >
-            {activeTool === "orchestrator" ? orchestratorBody : null}
+            {activeTool === "agent-team" ? agentTeamBody : null}
           </div>
         </div>
       </div>
