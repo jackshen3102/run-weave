@@ -534,6 +534,20 @@ export class AgentTeamService {
         );
       }
     }
+    if (this.tmuxService && boundWorkers.some((worker) => worker.panelId)) {
+      try {
+        await this.tmuxService.applyMainVerticalLayout(
+          this.tmuxService.buildTarget(session.id),
+          50,
+        );
+      } catch (error) {
+        agentTeamLogger.warn("agent-team.apply_layout.failed", {
+          message: "Could not normalize pane layout after split",
+          terminalSessionId: session.id,
+          error,
+        });
+      }
+    }
     await this.restoreMainPaneFocus(session, run.mainPanelId);
     return this.updateRun(run, {
       phase: "executing",

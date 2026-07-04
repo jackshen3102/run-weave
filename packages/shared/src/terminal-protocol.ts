@@ -374,6 +374,17 @@ export const TERMINAL_PANEL_ROLE_SUGGESTIONS = [
   "worker",
 ] as const;
 
+export interface TerminalPanelGeometry {
+  /** Pane position/size in tmux cell units. */
+  paneLeft: number;
+  paneTop: number;
+  paneWidth: number;
+  paneHeight: number;
+  /** Enclosing tmux window size in cell units. */
+  windowWidth: number;
+  windowHeight: number;
+}
+
 export interface TerminalPanelListItem {
   panelId: string;
   terminalSessionId: string;
@@ -387,6 +398,7 @@ export interface TerminalPanelListItem {
   exitCode?: number;
   focused: boolean;
   tmuxPaneId?: string;
+  geometry?: TerminalPanelGeometry;
 }
 
 export interface TerminalPanelWorkspace {
@@ -409,6 +421,12 @@ export interface CreateTerminalPanelRequest {
 
 export interface UpdateTerminalPanelRequest {
   focus?: boolean;
+}
+
+export interface ResizeTerminalPanelRequest {
+  direction: "left" | "right";
+  /** Number of tmux cells to grow (positive) the pane toward `direction`. */
+  cells: number;
 }
 
 export interface AppHomeOverviewSession extends TerminalSessionListItem {

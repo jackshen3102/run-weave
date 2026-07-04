@@ -24,6 +24,24 @@ Runweave 是一个本地优先的 AI CLI 终端工作台。它帮助你在桌面
 - 查看实时终端输出、切换终端，并向已有会话继续发送输入。
 - 将终端任务和浏览器 Viewer 会话分开管理，让 Agent 工作流成为独立入口。
 
+### Loop Engineering 引擎
+
+Runweave 不是又一个 AI 终端，而是一台带 Verifier 和熔断的 Loop 引擎。
+`agent-team` 模块逐一实现了 Loop 的完整要素：Goal / Planner / Actor /
+Observer / Verifier / State / Exit Condition。
+
+- **Verifier** = `behavior_verify` worker，按验收用例跑 Playwright，把
+  pass/fail + 证据写回 outbox（五类角色定义见
+  `packages/shared/src/agent-team.ts`，prompt 见
+  `backend/src/agent-team/prompt-builders.ts`）。
+- **State + Exit Condition** 在 `backend/src/agent-team/loop.ts`：
+  `errorFingerprints`（错误指纹去重）、`bestPassCount`（客观进展信号），
+  以及 `shouldEscalate()` —— 当 `noProgressCount` 达到 `maxNoProgress`
+  （默认 3）时自动熔断、升级人工。
+- **verify↔code 子循环**：`buildBounceBackPrompt` 把连续 stable-fail 的用例
+  打回 code pane 修复；修完由 backend 重新触发 `behavior_verify`，人不用
+  自己重跑验收。
+
 ### 长任务连续性
 
 Runweave 面向长时间运行的终端任务设计。当本地环境支持可恢复终端会话时，你可以继

@@ -41,6 +41,12 @@ export interface TmuxPaneInfo extends TmuxPaneMetadata {
   paneId: string;
   paneIndex: number;
   active: boolean;
+  paneLeft: number;
+  paneTop: number;
+  paneWidth: number;
+  paneHeight: number;
+  windowWidth: number;
+  windowHeight: number;
 }
 
 export type TmuxKeySequenceItem =
@@ -479,6 +485,12 @@ export class TmuxService {
           "#{@runweave_command}",
           "#{pane_current_command}",
           "#{pane_active}",
+          "#{pane_left}",
+          "#{pane_top}",
+          "#{pane_width}",
+          "#{pane_height}",
+          "#{window_width}",
+          "#{window_height}",
         ].join(TMUX_METADATA_FIELD_SEPARATOR),
       ],
       target,
@@ -495,6 +507,12 @@ export class TmuxService {
           rawRunweaveCommand = "",
           rawCommand = "",
           rawActive = "0",
+          rawPaneLeft = "0",
+          rawPaneTop = "0",
+          rawPaneWidth = "0",
+          rawPaneHeight = "0",
+          rawWindowWidth = "0",
+          rawWindowHeight = "0",
         ] = line.split(TMUX_METADATA_FIELD_SEPARATOR);
         const activeCommand = resolvePaneActiveCommand(
           rawRunweaveCommand,
@@ -507,6 +525,12 @@ export class TmuxService {
           activeCommand: activeCommand.command,
           activeCommandSource: activeCommand.source,
           active: rawActive === "1",
+          paneLeft: parseNonNegativeInteger(rawPaneLeft),
+          paneTop: parseNonNegativeInteger(rawPaneTop),
+          paneWidth: parseNonNegativeInteger(rawPaneWidth),
+          paneHeight: parseNonNegativeInteger(rawPaneHeight),
+          windowWidth: parseNonNegativeInteger(rawWindowWidth),
+          windowHeight: parseNonNegativeInteger(rawWindowHeight),
         };
       })
       .filter((pane) => pane.paneId.startsWith("%") && pane.cwd);
@@ -581,6 +605,57 @@ export class TmuxService {
 
   async killPane(target: TmuxPaneTarget): Promise<void> {
     await this.runTmux(["kill-pane", "-t", target.paneId], target);
+  }
+
+  /**
+   * Grow the pane by `cells` tmux columns toward `direction` (a drag on the
+   * pane's vertical border). tmux clamps against neighbouring panes and the
+   * window edge, so no explicit bounds handling is needed here.
+   */
+  async resizePane(
+    target: TmuxPaneTarget,
+    params: { direction: "left" | "right"; cells: number },
+  ): Promise<void> {
+    const cells = Math.trunc(params.cells);
+    if (cells <= 0) {
+      return;
+    }
+    await this.runTmux(
+      [
+        "resize-pane",
+        "-t",
+        target.paneId,
+        params.direction === "right" ? "-R" : "-L",
+        String(cells),
+      ],
+      target,
+    );
+  }
+
+  /**
+   * Normalize a window into a main-vertical layout: the main pane (index 0)
+   * on the left at `mainPaneWidthPercent`, remaining panes stacked evenly on
+   * the right. Used after agent-team worker splits so the main terminal keeps
+   * a stable 50% width instead of the uneven residue left by sequential splits.
+   */
+  async applyMainVerticalLayout(
+    target: TmuxTarget,
+    mainPaneWidthPercent = 50,
+  ): Promise<void> {
+    await this.runTmux(
+      [
+        "set-window-option",
+        "-t",
+        target.sessionName,
+        "main-pane-width",
+        `${mainPaneWidthPercent}%`,
+      ],
+      target,
+    );
+    await this.runTmux(
+      ["select-layout", "-t", target.sessionName, "main-vertical"],
+      target,
+    );
   }
 
   async sendInput(target: TmuxTarget | TmuxPaneTarget, data: string): Promise<void> {
@@ -1033,6 +1108,11 @@ export class TmuxService {
 function parsePositiveInteger(value: string): number {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function parseNonNegativeInteger(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function splitInputForSendKeys(
