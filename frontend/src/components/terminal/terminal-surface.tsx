@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal } from "@xterm/xterm";
 import { scrollTerminalToBottom } from "@runweave/common/terminal";
+import type { TerminalPanelWorkspace } from "@runweave/shared";
 import type { ClientMode } from "../../features/client-mode";
 import {
   logTerminalPerf,
@@ -35,12 +36,19 @@ interface TerminalSurfaceProps {
   token: string;
   clientMode?: ClientMode;
   layoutVersion?: string;
+  paneWorkspace?: TerminalPanelWorkspace | null;
   onAuthExpired?: () => void;
   onBell?: () => void;
   onMetadata?: (metadata: {
     cwd: string;
     activeCommand: string | null;
   }) => void;
+  onResizePane?: (
+    panelId: string,
+    direction: "left" | "right" | "up" | "down",
+    cells: number,
+  ) => void;
+  onViewportResize?: () => void;
 }
 
 export function TerminalSurface({
@@ -50,9 +58,12 @@ export function TerminalSurface({
   token,
   clientMode = "desktop",
   layoutVersion = "default",
+  paneWorkspace = null,
   onAuthExpired,
   onBell,
   onMetadata,
+  onResizePane,
+  onViewportResize,
 }: TerminalSurfaceProps) {
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -65,6 +76,7 @@ export function TerminalSurface({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeRef = useRef(active);
   const onBellRef = useRef(onBell);
+  const onViewportResizeRef = useRef(onViewportResize);
   const onAuthExpiredRef = useRef(onAuthExpired);
   const openTerminalLinkRef = useRef<(uri: string) => void>(() => undefined);
   const onMetadataRef = useRef(onMetadata);
@@ -234,6 +246,10 @@ export function TerminalSurface({
   }, [onBell]);
 
   useEffect(() => {
+    onViewportResizeRef.current = onViewportResize;
+  }, [onViewportResize]);
+
+  useEffect(() => {
     onAuthExpiredRef.current = onAuthExpired;
   }, [onAuthExpired]);
 
@@ -274,6 +290,7 @@ export function TerminalSurface({
     lastSentResizeRef,
     onAuthExpired,
     onBellRef,
+    onViewportResizeRef,
     openTerminalLinkRef,
     refreshTerminalViewportRef,
     runtimeKindRef,
@@ -400,6 +417,8 @@ export function TerminalSurface({
 
   const showTerminalToolbar = active && clientMode !== "mobile";
   const showMobileKeybarToggle = active && clientMode === "mobile";
+  const showPaneResizeHandle =
+    active && clientMode !== "mobile" && Boolean(onResizePane);
 
   return (
     <TerminalSurfaceLayout
@@ -409,6 +428,7 @@ export function TerminalSurface({
       mobileKeybarOpen={mobileKeybarOpen}
       pasteError={pasteError}
       pastedImages={pastedImages}
+      paneWorkspace={showPaneResizeHandle ? paneWorkspace : null}
       searchInputRef={searchInputRef}
       searchOpen={searchOpen}
       searchOptions={searchOptions}
@@ -423,6 +443,7 @@ export function TerminalSurface({
       terminalRef={terminalRef}
       hasNewOutputBelow={hasNewOutputBelow}
       onRunSearch={runSearch}
+      onResizePane={onResizePane}
       onSearchOpenChange={setSearchOpen}
       onSearchOptionsChange={setSearchOptions}
       onSearchQueryChange={setSearchQuery}

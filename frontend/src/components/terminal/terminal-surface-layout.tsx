@@ -1,7 +1,9 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { Terminal } from "@xterm/xterm";
+import type { TerminalPanelWorkspace } from "@runweave/shared";
 import { ArrowDownToLine } from "lucide-react";
 import { TerminalMobileKeybar } from "./terminal-mobile-keybar";
+import { TerminalPaneResizeOverlay } from "./terminal-pane-resize-overlay";
 import { TerminalSearchToolbar } from "./terminal-search-toolbar";
 import type {
   PastedImageReference,
@@ -17,6 +19,7 @@ interface TerminalSurfaceLayoutProps {
   mobileKeybarOpen: boolean;
   pasteError: string | null;
   pastedImages: PastedImageReference[];
+  paneWorkspace: TerminalPanelWorkspace | null;
   searchInputRef: RefObject<HTMLInputElement | null>;
   searchOpen: boolean;
   searchOptions: TerminalSearchOptions;
@@ -29,6 +32,11 @@ interface TerminalSurfaceLayoutProps {
   terminalContainerRef: RefObject<HTMLDivElement | null>;
   terminalRef: RefObject<Terminal | null>;
   onRunSearch: (direction: SearchDirection, query?: string) => void;
+  onResizePane?: (
+    panelId: string,
+    direction: "left" | "right" | "up" | "down",
+    cells: number,
+  ) => void;
   onSearchOpenChange: Dispatch<SetStateAction<boolean>>;
   onSearchOptionsChange: Dispatch<SetStateAction<TerminalSearchOptions>>;
   onSearchQueryChange: Dispatch<SetStateAction<string>>;
@@ -44,6 +52,7 @@ export function TerminalSurfaceLayout({
   mobileKeybarOpen,
   pasteError,
   pastedImages,
+  paneWorkspace,
   searchInputRef,
   searchOpen,
   searchOptions,
@@ -56,6 +65,7 @@ export function TerminalSurfaceLayout({
   terminalContainerRef,
   terminalRef,
   onRunSearch,
+  onResizePane,
   onSearchOpenChange,
   onSearchOptionsChange,
   onSearchQueryChange,
@@ -136,6 +146,13 @@ export function TerminalSurfaceLayout({
           }}
           ref={terminalContainerRef}
         />
+        {onResizePane ? (
+          <TerminalPaneResizeOverlay
+            workspace={paneWorkspace}
+            terminalRef={terminalRef}
+            onResize={onResizePane}
+          />
+        ) : null}
         {showScrollToBottomButton ? (
           <div className="pointer-events-none absolute right-4 bottom-4 z-30">
             <button

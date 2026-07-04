@@ -608,24 +608,31 @@ export class TmuxService {
   }
 
   /**
-   * Grow the pane by `cells` tmux columns toward `direction` (a drag on the
-   * pane's vertical border). tmux clamps against neighbouring panes and the
-   * window edge, so no explicit bounds handling is needed here.
+   * Nudge a pane's shared divider by `cells` cells. `-R`/`-L` grow/shrink the
+   * target pane's right edge (vertical divider) and `-D`/`-U` its bottom edge
+   * (horizontal divider) - the dividers the frontend resize handles drag in a
+   * main-vertical layout.
    */
   async resizePane(
     target: TmuxPaneTarget,
-    params: { direction: "left" | "right"; cells: number },
+    params: { direction: "left" | "right" | "up" | "down"; cells: number },
   ): Promise<void> {
     const cells = Math.trunc(params.cells);
     if (cells <= 0) {
       return;
     }
+    const resizeFlag = {
+      right: "-R",
+      left: "-L",
+      down: "-D",
+      up: "-U",
+    }[params.direction];
     await this.runTmux(
       [
         "resize-pane",
         "-t",
         target.paneId,
-        params.direction === "right" ? "-R" : "-L",
+        resizeFlag,
         String(cells),
       ],
       target,

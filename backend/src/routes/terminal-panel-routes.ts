@@ -3,6 +3,7 @@ import { Router, type Response } from "express";
 import { z } from "zod";
 import type {
   CreateTerminalPanelRequest,
+  ResizeTerminalPanelRequest,
   SendTerminalInterruptRequest,
   SendTerminalInputRequest,
   TerminalInputMode,
@@ -86,6 +87,13 @@ const createTerminalPanelSchema = z
 const updateTerminalPanelSchema = z
   .object({
     focus: z.boolean().optional(),
+  })
+  .strict();
+
+const resizeTerminalPanelSchema = z
+  .object({
+    direction: z.enum(["left", "right", "up", "down"]),
+    cells: z.number().int().min(1).max(500),
   })
   .strict();
 
@@ -414,6 +422,55 @@ export async function ensureTerminalPanelWorkspace(
   return workspace;
 }
 
+/**
+ * Attach live tmux pane geometry (cell units) to a workspace payload so the
+ * frontend can position resize handles. Best-effort: on any tmux failure the
+ * workspace is returned unchanged (panels simply lack `geometry`).
+ */
+async function withPaneGeometry(
+  session: TerminalSessionRecord,
+  tmuxService: TmuxService | undefined,
+  workspace: TerminalPanelWorkspace | null,
+): Promise<TerminalPanelWorkspace | null> {
+  if (!workspace || !tmuxService || !isTmuxBackedSession(session)) {
+    return workspace;
+  }
+  let panes: TmuxPaneInfo[];
+  try {
+    panes = await tmuxService.listPanes(resolveTmuxTarget(session, tmuxService));
+  } catch (error) {
+    panelLogger.warn("terminal.panel.geometry.failed", {
+      message: "Could not read tmux pane geometry",
+      terminalSessionId: session.id,
+      error,
+    });
+    return workspace;
+  }
+  const geometryByPaneId = new Map(panes.map((pane) => [pane.paneId, pane]));
+  return {
+    ...workspace,
+    panels: workspace.panels.map((panel) => {
+      const pane = panel.tmuxPaneId
+        ? geometryByPaneId.get(panel.tmuxPaneId)
+        : undefined;
+      if (!pane) {
+        return panel;
+      }
+      return {
+        ...panel,
+        geometry: {
+          paneLeft: pane.paneLeft,
+          paneTop: pane.paneTop,
+          paneWidth: pane.paneWidth,
+          paneHeight: pane.paneHeight,
+          windowWidth: pane.windowWidth,
+          windowHeight: pane.windowHeight,
+        },
+      };
+    }),
+  };
+}
+
 async function syncSelectedPaneToActivePanel(
   terminalSessionManager: TerminalSessionManager,
   session: TerminalSessionRecord,
@@ -718,14 +775,19 @@ export function registerTerminalPanelRoutes(
   router.get("/session/:id/panels", async (req, res) => {
     try {
       const session = getSessionOrThrow(terminalSessionManager, req.params.id);
-      res.json(
-        await ensureTerminalPanelWorkspace(terminalSessionManager, session, {
+      const workspace = await ensureTerminalPanelWorkspace(
+        terminalSessionManager,
+        session,
+        {
           ptyService: options.ptyService,
           runtimeRegistry: options.runtimeRegistry,
           tmuxService: options.tmuxService,
           tmuxOutputWatcher: options.tmuxOutputWatcher,
           terminalEventService: options.terminalEventService,
-        }),
+        },
+      );
+      res.json(
+        await withPaneGeometry(session, options.tmuxService, workspace),
       );
     } catch (error) {
       sendRouteError(res, error);
@@ -760,7 +822,9 @@ export function registerTerminalPanelRoutes(
           focus: parsed.data.focus,
         },
       );
-      res.status(201).json(workspace);
+      res.status(201).json(
+        await withPaneGeometry(session, options.tmuxService, workspace),
+      );
     } catch (error) {
       sendRouteError(res, error);
     }
@@ -802,7 +866,13 @@ export function registerTerminalPanelRoutes(
           },
         );
       }
-      res.json(toPanelWorkspacePayload(terminalSessionManager, session.id));
+      res.json(
+        await withPaneGeometry(
+          session,
+          options.tmuxService,
+          toPanelWorkspacePayload(terminalSessionManager, session.id),
+        ),
+      );
     } catch (error) {
       sendRouteError(res, error);
     }
@@ -835,7 +905,49 @@ export function registerTerminalPanelRoutes(
         "terminal_panel_deleted",
         { panelId: panel.id },
       );
-      res.status(200).json(toPanelWorkspacePayload(terminalSessionManager, session.id));
+      res.status(200).json(
+        await withPaneGeometry(
+          session,
+          options.tmuxService,
+          toPanelWorkspacePayload(terminalSessionManager, session.id),
+        ),
+      );
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  router.post("/session/:id/panels/:panelId/resize", async (req, res) => {
+    const parsed = resizeTerminalPanelSchema.safeParse(
+      req.body as ResizeTerminalPanelRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    try {
+      const session = getSessionOrThrow(terminalSessionManager, req.params.id);
+      const { paneTarget } = await resolvePanelTarget(
+        terminalSessionManager,
+        session,
+        options,
+        { panelId: req.params.panelId },
+        "explicit-or-active",
+      );
+      await options.tmuxService!.resizePane(paneTarget, {
+        direction: parsed.data.direction,
+        cells: parsed.data.cells,
+      });
+      res.json(
+        await withPaneGeometry(
+          session,
+          options.tmuxService,
+          toPanelWorkspacePayload(terminalSessionManager, session.id),
+        ),
+      );
     } catch (error) {
       sendRouteError(res, error);
     }
