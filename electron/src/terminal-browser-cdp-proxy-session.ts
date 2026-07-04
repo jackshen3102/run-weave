@@ -169,6 +169,14 @@ export class CdpSessionManager {
 
     webContents.debugger.on("message", onDebuggerMessage);
     webContents.debugger.on("detach", onDebuggerDetach);
+    void webContents.debugger
+      .sendCommand("Emulation.setFocusEmulationEnabled", { enabled: true })
+      .catch((error: unknown) => {
+        console.warn("[cdp-proxy] failed to enable focus emulation", {
+          targetId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
 
     return { proxySessionId };
   }

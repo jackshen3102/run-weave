@@ -1,4 +1,5 @@
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { BrowserWindow } from "electron";
 import { CdpSessionManager } from "./terminal-browser-cdp-proxy-session.js";
@@ -47,6 +48,7 @@ export interface CdpProxyRuntime {
 interface ConnectionState {
   ws: WebSocket;
   sessionManager: CdpSessionManager;
+  browserSessionIds: Set<string>;
   discoveryEnabled: boolean;
   autoAttachEnabled: boolean;
   waitForDebuggerOnStart: boolean;
@@ -187,6 +189,7 @@ export async function startCdpProxy(
     const conn: ConnectionState = {
       ws,
       sessionManager,
+      browserSessionIds: new Set(),
       discoveryEnabled: false,
       autoAttachEnabled: false,
       waitForDebuggerOnStart: false,
@@ -282,7 +285,16 @@ async function handleMessage(
   const { ws, sessionManager } = conn;
 
   if (sessionId) {
+    if (conn.browserSessionIds.has(sessionId)) {
+      await handleBrowserSessionMessage(conn, id, method, params, sessionId);
+      return;
+    }
     await handleSessionMessage(conn, id, method, params, sessionId);
+    return;
+  }
+
+  if (isSafeNoopCommand(method)) {
+    sendJson(ws, buildCdpResult(id, {}));
     return;
   }
 
@@ -384,6 +396,13 @@ async function handleMessage(
         return;
       }
 
+      case "Target.attachToBrowserTarget": {
+        const browserSessionId = randomUUID();
+        conn.browserSessionIds.add(browserSessionId);
+        sendJson(ws, buildCdpResult(id, { sessionId: browserSessionId }));
+        return;
+      }
+
       case "Target.attachToTarget": {
         const targetId = params.targetId as string;
         if (!targetId) {
@@ -418,6 +437,23 @@ async function handleMessage(
             ),
           );
         }
+        return;
+      }
+
+      case "Target.detachFromTarget": {
+        const detachSessionId =
+          typeof params.sessionId === "string" ? params.sessionId : null;
+        if (detachSessionId && conn.browserSessionIds.delete(detachSessionId)) {
+          sendJson(ws, buildCdpResult(id, {}));
+          return;
+        }
+        if (detachSessionId) {
+          const targetId = sessionManager.getTargetIdForSession(detachSessionId);
+          if (targetId) {
+            sessionManager.detachDebugger(targetId);
+          }
+        }
+        sendJson(ws, buildCdpResult(id, {}));
         return;
       }
 
@@ -520,6 +556,14 @@ async function handleMessage(
         return;
       }
 
+      case "Storage.getCookies":
+        sendJson(ws, buildCdpResult(id, { cookies: [] }));
+        return;
+
+      case "Storage.setCookies":
+        sendJson(ws, buildCdpResult(id, {}));
+        return;
+
       default:
         if (cls === "session") {
           sendJson(
@@ -544,6 +588,96 @@ async function handleMessage(
       ),
     );
   }
+}
+
+async function handleBrowserSessionMessage(
+  conn: ConnectionState,
+  id: number,
+  method: string,
+  params: Record<string, unknown>,
+  sessionId: string,
+): Promise<void> {
+  const { ws } = conn;
+
+  if (isSafeNoopCommand(method)) {
+    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    return;
+  }
+
+  if (method === "Target.detachFromTarget") {
+    const detachSessionId =
+      typeof params.sessionId === "string" ? params.sessionId : sessionId;
+    conn.browserSessionIds.delete(detachSessionId);
+    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    return;
+  }
+
+  if (method === "Browser.getVersion") {
+    sendJson(
+      ws,
+      buildCdpSessionResult(id, sessionId, {
+        protocolVersion: "1.3",
+        product: "Runweave/CDP-Proxy",
+        revision: "",
+        userAgent: "Runweave/CDP-Proxy",
+        jsVersion: "",
+      }),
+    );
+    return;
+  }
+
+  if (method === "Target.getTargets") {
+    const targets = getCurrentTargetInfos(conn.sessionManager);
+    sendJson(ws, buildCdpSessionResult(id, sessionId, { targetInfos: targets }));
+    return;
+  }
+
+  if (method === "Target.getTargetInfo") {
+    const targetInfo = getTargetInfoForRequest(conn.sessionManager, params);
+    if (!targetInfo) {
+      sendJson(
+        ws,
+        buildCdpSessionError(
+          id,
+          sessionId,
+          -32000,
+          "No terminal browser target available",
+        ),
+      );
+      return;
+    }
+    sendJson(ws, buildCdpSessionResult(id, sessionId, { targetInfo }));
+    return;
+  }
+
+  if (method === "Storage.getCookies") {
+    sendJson(ws, buildCdpSessionResult(id, sessionId, { cookies: [] }));
+    return;
+  }
+
+  if (method === "Storage.setCookies") {
+    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    return;
+  }
+
+  if (isBlockedCommand(method)) {
+    sendJson(
+      ws,
+      buildCdpSessionError(id, sessionId, -32601, `${method} is blocked by CDP proxy`),
+    );
+    return;
+  }
+
+  const cls = classifyCdpCommand(method);
+  if (cls === "browser" || cls === "target") {
+    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    return;
+  }
+
+  sendJson(
+    ws,
+    buildCdpSessionError(id, sessionId, -32601, `${method} requires a target sessionId`),
+  );
 }
 
 /**
@@ -572,6 +706,11 @@ async function handleSessionMessage(
   sessionId: string,
 ): Promise<void> {
   const { ws, sessionManager } = conn;
+
+  if (isSafeNoopCommand(method)) {
+    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    return;
+  }
 
   if (isBlockedCommand(method)) {
     sendJson(
@@ -667,4 +806,12 @@ async function handleSessionMessage(
       ),
     );
   }
+}
+
+function isSafeNoopCommand(method: string): boolean {
+  return (
+    method === "Network.clearBrowserCache" ||
+    method === "Network.clearBrowserCookies" ||
+    method === "Storage.clearDataForOrigin"
+  );
 }
