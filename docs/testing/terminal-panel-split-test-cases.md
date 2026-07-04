@@ -8,7 +8,7 @@
 
 - Web 仍然只有一个 `TerminalSurface`、一个 session-level terminal WebSocket、一个 `tmux attach` runtime。
 - Runweave 业务层新增 `TerminalPanel`，每个 panel 绑定稳定 tmux `%pane_id`，不依赖 pane index。
-- CLI、API、Orchestrator 可以通过 `panelId`、`alias` 或 `role` 定位 pane。
+- CLI、API、Agent Team 可以通过 `panelId`、`alias` 或 `role` 定位 pane。
 - 同一 terminal session 内非空 `alias` 和非空 `role` 都必须唯一；创建重复值应返回明确 409，避免后续按 role 路由时随机命中。
 - 未指定 panel 的旧 input/interrupt 路径在发送前同步 tmux selected pane，再路由到 active/default panel。
 - 未指定 panel 的旧 history/snapshot 路径始终读取 default panel，不跟随 selected pane。
@@ -162,17 +162,17 @@ $RW_BIN auth login --base-url "$RUNWEAVE_BASE_URL" --username admin
 | TPS-CLI-014 | missing panel       | 指定不存在 alias                                                                                              | exit code 4；不伪装成功                                  |
 | TPS-CLI-015 | no panel 兼容 send  | `$RW_BIN terminal send "$TERMINAL_ID" --text "echo default" --enter --json`                                   | 走 selected pane sync 兼容路径                           |
 
-## Orchestrator 路由
+## Agent Team pane 路由
 
-| ID           | 场景                        | 步骤                                           | 预期                                                       |
-| ------------ | --------------------------- | ---------------------------------------------- | ---------------------------------------------------------- |
-| TPS-ORCH-001 | new binding 创建 role panel | worker binding `mode: "new"`，role 为 reviewer | 创建或复用 session 后 split reviewer panel，alias 默认可用 |
-| TPS-ORCH-002 | reuse by panelId            | binding 指定 existing session + panelId        | worker direct send 路由到目标 panel                        |
-| TPS-ORCH-003 | reuse by alias              | binding 指定 alias tests                       | 路由到 tests panel                                         |
-| TPS-ORCH-004 | reuse by role               | binding 指定 role planner                      | 路由到 planner panel                                       |
-| TPS-ORCH-005 | target 不存在               | binding 指向 missing panel                     | 返回 human-readable error，不静默创建错误 panel            |
-| TPS-ORCH-006 | timeline target             | Orchestrator direct send                       | timeline 包含 `terminalPanelId` 和 `panelAlias`            |
-| TPS-ORCH-007 | role 已占用                  | new binding 尝试创建已存在 role 的 panel        | 返回明确冲突；需要复用时必须改用 existing binding / role 路由 |
+| ID         | 场景                         | 步骤                                                       | 预期                                                                |
+| ---------- | ---------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------- |
+| TPS-AT-001 | 开启 Agent Team 创建 main pane | 在 tmux terminal 上通过右键打开 Agent Team 并创建 run       | run 绑定当前 `terminalSessionId` 和 `mainPanelId`                    |
+| TPS-AT-002 | split worker pane            | 确认或自动确认拆分，创建 `code` / `behavior_verify` worker | worker 绑定 `panelId`、`tmuxPaneId`、role 和稳定 alias               |
+| TPS-AT-003 | worker pane 复用             | 同一 run 恢复或重试 split                                  | 已属于该 run 的 worker pane 可复用，不重复创建冲突 role             |
+| TPS-AT-004 | focus pane                   | 调用 `/api/agent-team/runs/:runId/focus-pane`              | 只能聚焦该 run 的 main/worker pane；缺失或外部 pane 返回明确错误    |
+| TPS-AT-005 | completion pane 归属          | worker pane 触发 completion 并写 outbox                    | Agent Team 按 `runId`、`panelId`、worker role 折叠结果               |
+| TPS-AT-006 | route 下线回归               | 观察 Agent Team 操作请求路径                               | 请求走 `/api/agent-team/*`；不再依赖 `/api/orchestrator/*`           |
+| TPS-AT-007 | role 已占用                   | 同一 session 重复创建相同 worker role panel                | 返回明确冲突；需要复用时必须命中已属于该 run 的 pane                |
 
 ## Web UI 与 `$playwright-cli` 验收
 
@@ -242,5 +242,5 @@ python3 -m http.server 6188 --directory docs/prototypes/terminal-panel-split
 | 阶段 2 tmux pane 能力和 panel API        | TPS-TMUX、TPS-API、TPS-NEG                              |
 | 阶段 3 Hook 和事件同步                   | TPS-EVT、TPS-WEB-006 至 TPS-WEB-013                     |
 | 阶段 4 Web tmux-native Panel UI          | TPS-WEB、TPS-PROTOTYPE                                  |
-| 阶段 5 CLI 和 Orchestrator 路由          | TPS-CLI、TPS-ORCH                                       |
+| 阶段 5 CLI 和 Agent Team pane 路由       | TPS-CLI、TPS-AT                                         |
 | 非目标约束                               | TPS-PROTO-005、TPS-WEB-001、TPS-WEB-014、发布前回归清单 |

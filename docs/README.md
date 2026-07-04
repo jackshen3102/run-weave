@@ -27,7 +27,7 @@
 | 终端 tmux 恢复                       | architecture/terminal-tmux-recovery.md                          |
 | 终端完成事件 Hook                    | architecture/terminal-completion-hooks.md                       |
 | 终端任务完成通知（桌面/飞书）        | architecture/terminal-completion-notifications.md               |
-| Multi-Agent Orchestrator / Do-A-IDEM | architecture/multi-agent-orchestrator.md                        |
+| Agent Team / Loop Engine             | architecture/multi-agent-orchestrator.md                        |
 | 本机系统资源监控                     | architecture/system-monitor.md                                  |
 
 ## 操作指南（活文档）

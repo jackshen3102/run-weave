@@ -38,7 +38,7 @@ Terminal 现在是 Runweave 里和 AI 协作最密集的页面。用户会在终
 - `frontend/src/components/terminal/terminal-preview-panel-content.tsx`：Preview 面板内容层，负责 Open file、Markdown、SVG、图片和内容渲染。
 - `frontend/src/components/terminal/terminal-preview-change-tree.tsx`：Changes 左栏渲染层，负责 staged / working 文件分组、文件选择和文件项上的重命名 / 删除入口。
 - `frontend/src/components/terminal/terminal-preview-panel-shell.tsx`：Preview 面板外壳层，负责 Header、工具 tab、路径栏、视图切换控件和右侧 Browser 工具挂载。
-- `frontend/src/components/terminal/terminal-workspace-shell.tsx`：Terminal 顶部栏里的 `...` 更多入口承载 Preview、Orchestrator、Terminal History 等低频动作；顶部外露入口只保留快捷指令。
+- `frontend/src/components/terminal/terminal-workspace-shell.tsx`：Terminal 顶部栏和 tab 菜单承载 Preview、Agent Team、Terminal History 等低频动作；顶部外露入口只保留快捷指令。
 - `frontend/src/components/terminal/terminal-open-file-command.tsx`：Open file 的搜索输入和结果列表，不依赖 Monaco。
 - `frontend/src/components/terminal/terminal-monaco-viewer.tsx`：Monaco Editor / Diff Editor 封装，已通过 lazy boundary 加载；在文件或 diff 选区非空时可复制 `path:line` / `path:start-end` 行引用。
 - `frontend/src/components/terminal/terminal-line-reference.tsx`：行引用复制的选择范围、按钮和 clipboard 状态封装，避免 Monaco viewer 继续堆叠行引用细节。
