@@ -3,19 +3,38 @@ import { shouldMarkTerminalBrowserMcpActivity } from "../../electron/src/termina
 
 const STALE_ACTIVITY_UNTIL = Date.now() - 60_000;
 const ACTIVE_ACTIVITY_UNTIL = Date.now() + 60_000;
-const QUIET_PLAYWRIGHT_SETUP_COMMANDS = [
+const READ_OR_SETUP_CDP_COMMANDS = [
+  "DOM.getDocument",
+  "DOM.getBoxModel",
   "Page.enable",
   "Page.getFrameTree",
+  "Page.getLayoutMetrics",
+  "Page.getNavigationHistory",
+  "Page.captureScreenshot",
   "Log.enable",
   "Page.setLifecycleEventsEnabled",
   "Runtime.enable",
+  "Runtime.evaluate",
+  "Runtime.callFunctionOn",
   "Page.addScriptToEvaluateOnNewDocument",
   "Network.enable",
   "Target.setAutoAttach",
+  "Target.getTargetInfo",
   "Emulation.setFocusEmulationEnabled",
   "Emulation.setEmulatedMedia",
   "Runtime.runIfWaitingForDebugger",
   "Page.createIsolatedWorld",
+] as const;
+
+const OPERATING_CDP_COMMANDS = [
+  "Input.dispatchMouseEvent",
+  "Input.dispatchKeyEvent",
+  "Input.insertText",
+  "Page.close",
+  "Page.navigate",
+  "Page.reload",
+  "Page.setDocumentContent",
+  "Page.stopLoading",
 ] as const;
 
 async function renderTerminalBrowserTabs(
@@ -203,14 +222,14 @@ test("closes the correct tab while the MCP badge is visible", async ({
     .toEqual(["close-while-active"]);
 });
 
-test("does not mark Playwright CDP setup commands as MCP activity", () => {
-  for (const method of QUIET_PLAYWRIGHT_SETUP_COMMANDS) {
+test("does not mark Playwright CDP setup or read commands as MCP activity", () => {
+  for (const method of READ_OR_SETUP_CDP_COMMANDS) {
     expect(shouldMarkTerminalBrowserMcpActivity(method), method).toBe(false);
   }
+});
 
-  expect(shouldMarkTerminalBrowserMcpActivity("Page.navigate")).toBe(true);
-  expect(shouldMarkTerminalBrowserMcpActivity("Input.dispatchMouseEvent")).toBe(
-    true,
-  );
-  expect(shouldMarkTerminalBrowserMcpActivity("Runtime.evaluate")).toBe(true);
+test("marks visible browser operations as MCP activity", () => {
+  for (const method of OPERATING_CDP_COMMANDS) {
+    expect(shouldMarkTerminalBrowserMcpActivity(method), method).toBe(true);
+  }
 });
