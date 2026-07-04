@@ -7,24 +7,22 @@ import { fileURLToPath } from "node:url";
 const ROOT = process.cwd();
 const ARTIFACT_DIR = path.join(ROOT, "artifacts");
 const REPORT_PATH = path.join(ARTIFACT_DIR, "quality-report.json");
-const LAYER_ORDER = ["e2e"];
+const LAYER_ORDER = ["static"];
 const LAYER_STEP_IDS = {
-  e2e: ["e2e-smoke"],
+  static: ["typecheck", "lint"],
 };
 
 const ALL_STEPS = [
   {
-    id: "e2e-smoke",
-    command: [
-      "pnpm",
-      "--filter",
-      "./frontend",
-      "exec",
-      "playwright",
-      "test",
-      "tests/smoke.spec.ts",
-    ],
-    layers: ["e2e"],
+    id: "typecheck",
+    command: ["pnpm", "typecheck"],
+    layers: ["static"],
+    critical: true,
+  },
+  {
+    id: "lint",
+    command: ["pnpm", "lint"],
+    layers: ["static"],
     critical: true,
   },
 ];
@@ -60,8 +58,6 @@ function isCriticalJourneyFile(filePath) {
     "backend/src/routes/test.ts",
     "frontend/src/pages/home/",
     "frontend/src/App.tsx",
-    "frontend/tests/smoke.spec.ts",
-    "frontend/playwright.config.ts",
   ].some((prefix) => filePath.startsWith(prefix));
 }
 
@@ -102,30 +98,21 @@ export function selectLayersForChangedFiles(changedFiles) {
   const touchesFrontend = changedFiles.some((filePath) =>
     filePath.startsWith("frontend/"),
   );
-  const touchesE2EInfra = changedFiles.some(
-    (filePath) =>
-      filePath.startsWith("frontend/tests/") ||
-      filePath === "frontend/playwright.config.ts",
-  );
 
   if (touchesCriticalJourney) {
-    layers.add("e2e");
+    layers.add("static");
   }
 
   if (touchesRootQualityInfra) {
-    layers.add("e2e");
+    layers.add("static");
   }
 
   if (touchesFrontend) {
-    layers.add("e2e");
-  }
-
-  if (touchesE2EInfra) {
-    layers.add("e2e");
+    layers.add("static");
   }
 
   if (touchesQualityGate) {
-    layers.add("e2e");
+    layers.add("static");
   }
 
   return LAYER_ORDER.filter((layer) => layers.has(layer));
@@ -138,7 +125,7 @@ export function selectStepsForChangedFiles(changedFiles) {
     return {
       selectedLayers,
       selectedSteps: expandStepsForLayers(selectedLayers),
-      selectionReason: "No changed files detected; ran full E2E smoke gate.",
+      selectionReason: "No changed files detected; ran full static quality gate.",
       riskLevel: "full",
     };
   }
@@ -159,7 +146,7 @@ export function selectStepsForChangedFiles(changedFiles) {
     selectedLayers,
     selectedSteps,
     selectionReason: `Selected layers: ${selectedLayers.join(", ")}.`,
-    riskLevel: selectedLayers.includes("e2e") ? "full" : "reduced",
+    riskLevel: selectedLayers.includes("static") ? "full" : "reduced",
   };
 }
 

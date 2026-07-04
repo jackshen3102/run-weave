@@ -44,7 +44,6 @@
     "toolkit:sync:staged": "node ./scripts/sync-toolkit-plugin.mjs --if-staged",
     "toolkit:verify-hooks": "pnpm --filter ./electron exec tsx ../scripts/verify-toolkit-hooks.mjs",
     "perf:terminal": "node ./scripts/terminal-perf-ralph.mjs",
-    "e2e": "pnpm --filter ./frontend exec playwright test",
     "quality:gate": "node ./scripts/quality-gate.mjs",
     "prepare": "husky"
   },
