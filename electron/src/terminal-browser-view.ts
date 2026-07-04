@@ -555,7 +555,7 @@ function getOrCreateTerminalBrowserView(
       sandbox: true,
     },
   });
-  view.webContents.setWindowOpenHandler(({ url }) => {
+  view.webContents.setWindowOpenHandler(({ url, disposition }) => {
     // When CDP proxy is attached, deny without opening externally —
     // Playwright controls navigation via CDP commands.
     if (entry.cdpProxyAttached) {
@@ -566,10 +566,21 @@ function getOrCreateTerminalBrowserView(
       openTerminalBrowserExternalUrl(url);
       return { action: "deny" };
     }
-    return {
-      action: "allow",
-      overrideBrowserWindowOptions: createTerminalBrowserPopupWindowOptions(win),
-    };
+    // `window.open(url, name, "width=...,height=...")` reports `new-window`;
+    // keep those as real popup windows so OAuth / auth flows that rely on
+    // `window.opener` and `postMessage` callbacks keep working. Plain
+    // `target="_blank"` / tab-style opens report `foreground-tab` /
+    // `background-tab` — surface those as a new tab in the right-side panel
+    // instead of spawning a separate window.
+    if (disposition === "new-window") {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions:
+          createTerminalBrowserPopupWindowOptions(win),
+      };
+    }
+    createTerminalBrowserTabFromPageOpen(win, safeUrl);
+    return { action: "deny" };
   });
   view.webContents.on("did-create-window", (popupWindow) => {
     configureTerminalBrowserPopupWindow(win, popupWindow);
@@ -621,6 +632,30 @@ function getOrCreateTerminalBrowserView(
 
   terminalBrowserEntries.set(key, entry);
   return view;
+}
+
+function createTerminalBrowserTabFromPageOpen(
+  win: BrowserWindow,
+  url: string,
+): void {
+  const tabId = `browser-tab-${randomUUID().slice(0, 8)}`;
+  const view = getOrCreateTerminalBrowserView(win, tabId);
+  const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, tabId));
+  if (!entry) {
+    return;
+  }
+
+  attachTerminalBrowser(win, tabId, view);
+  entry.lastKnownUrl = url;
+  // Notify the renderer so the frontend tab bar picks up the new tab.
+  win.webContents.send("terminal-browser:tab-created-from-proxy", {
+    tabId,
+    url,
+    title: "",
+  });
+  void view.webContents.loadURL(url).catch(() => {
+    sendTerminalBrowserTabUpdate(win, tabId, entry, false);
+  });
 }
 
 function configureTerminalBrowserPopupWindow(
