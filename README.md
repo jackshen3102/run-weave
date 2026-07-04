@@ -169,19 +169,13 @@ pnpm dist:electron:mac
 | Deployment                        | [docs/deployment/overview.md](docs/deployment/overview.md)                                 |
 | Terminal recovery                 | [docs/architecture/terminal-tmux-recovery.md](docs/architecture/terminal-tmux-recovery.md) |
 | Architecture and network topology | [docs/architecture/network-topology.md](docs/architecture/network-topology.md)             |
-| Testing commands                  | [docs/testing/command-matrix.md](docs/testing/command-matrix.md)                           |
 
 ## Verification
 
 ```bash
 pnpm typecheck
 pnpm lint
-pnpm test:e2e
-pnpm test
 ```
-
-Frontend formal automation is E2E-first. Do not add frontend unit tests under
-`frontend/src` for README-only work.
 
 ## License
 

@@ -27,7 +27,6 @@
 - Electron mac 打包：`pnpm dist:electron:mac`
 - 类型检查：`pnpm typecheck`
 - Lint：`pnpm lint`
-- 测试：`pnpm test`
 
 ## 操作与验证技能约束
 
@@ -36,7 +35,19 @@
 - `$playwright-cli` 适合打开 Web/App 页面、点击、输入、截图、读取 DOM 状态和做浏览器自动化验收。
 - 涉及浏览器页面复现、修复或验收时，必须使用 `$playwright-cli`；不要用 `$computer-use` 或其它方案替代浏览器操作验证。
 - 当任务同时涉及桌面端和浏览器页面时，推荐用 `$computer-use` 把桌面端或运行环境准备到目标状态，再用 `$playwright-cli` 完成页面级验证与证据采集。
-- 如果计划、实施说明或最终验收里写到会使用 Playwright、Computer use 或浏览器验证，那么完成前必须实际执行对应工具并在最终回复中列出验证命令或关键证据。若因为环境、权限、服务不可用等原因无法执行，必须明确写出“未执行”和阻塞原因；不能用静态检查、代码阅读或截图推测替代已经承诺的浏览器验证。
+- 如果计划、实施说明或最终验收里写到会使用 Playwright、Computer use 或浏览器验证，那么完成前必须实际执行对应工具并在最终回复中列出验证命令或关键证据。若因为环境、权限、服务不可用等原因无法执行，必须明确写出”未执行”和阻塞原因；不能用静态检查、代码阅读或截图推测替代已经承诺的浏览器验证。
+
+## 文档路由（按需读取）
+
+| 需求           | 阅读                                  |
+| -------------- | ------------------------------------- |
+| 架构/网络拓扑  | docs/architecture/network-topology.md |
+| 质量体系概览   | docs/quality/quality-harness.md       |
+| 测试层级与命名 | docs/testing/layers.md                |
+| 测试命令选择   | docs/testing/command-matrix.md        |
+| 终端回归       | docs/testing/runbooks/terminal-vim.md |
+| 部署/环境概览  | docs/deployment/overview.md           |
+| 文档总入口     | docs/README.md                        |
 
 ## React Hooks 约束
 
@@ -57,26 +68,7 @@
 - 使用命令：`pnpm dist:electron:mac`
 - 不要默认打包 Windows 客户端，也不要为了兼容性额外生成 Windows 安装包，除非用户明确提出。
 
-## 测试约束
-
-- 本仓库不维护单元测试、Vitest 测试、Node test 测试或 coverage 门槛，不新增 `*.test.*`、`*.spec.*`、`*.ui.test.*` 等非 E2E 测试文件。
-- 自动化测试只保留 Playwright E2E：`frontend/tests/*.spec.ts`。需要浏览器操作验证时，必须使用 `$playwright-cli`。
-- 非浏览器层变更优先使用 `typecheck`、`lint`、构建命令或手工/脚本化冒烟验证；不要为了补充信心新增单测。
-- 如用户明确要求恢复或迁移测试体系，先给出保留/删除范围与脚本影响，再执行。
-
-## 文档路由（按需读取）
-
-| 需求           | 阅读                                  |
-| -------------- | ------------------------------------- |
-| 架构/网络拓扑  | docs/architecture/network-topology.md |
-| 质量体系概览   | docs/quality/quality-harness.md       |
-| 测试层级与命名 | docs/testing/layers.md                |
-| 测试命令选择   | docs/testing/command-matrix.md        |
-| 终端回归       | docs/testing/runbooks/terminal-vim.md |
-| 部署/环境概览  | docs/deployment/overview.md           |
-| 文档总入口     | docs/README.md                        |
-
-# 架构规范
+## React Hooks 约束
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
