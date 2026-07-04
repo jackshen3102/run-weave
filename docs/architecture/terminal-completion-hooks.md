@@ -73,7 +73,7 @@ launcher 行为很窄：
 
 Codex 的 `notify` 命令也可以在系统通知后调用同一个 launcher。这不是另一套状态协议，只是把 Codex 的“通知已发生”转成同一个 Runweave completion event。
 
-完成提醒和 `TerminalState` 是两条链路：完成提醒点亮非当前终端的小绿点，`TerminalState` 只表达当前终端是否处在 `shell_idle`、`agent_idle` 或 `agent_running`。completion event/feed 不能写入或修正 `TerminalState`。
+完成提醒和 `TerminalState` 是两条链路：完成提醒点亮非当前终端的小绿点，`TerminalState` 只表达当前终端是否处在 `shell_idle`、`agent_idle` 或 `agent_running`。`/internal/terminal-completion` 和普通 completion feed 不能写入或修正 `TerminalState`。唯一受限例外是 hook bridge 双写到 app-server 的 `agent.completion`：当 payload 明确表示 `completionReason="hook_stop"` 且原始 hook event 是 `Stop` / `SubagentStop` 时，backend consumer 可以把它作为丢失直连 agent hook 时的 Stop fallback，并交给 agent hook processor 复用既有状态门禁；notify、manual completion、AI process exit 或其他 completion reason 不能写状态。
 
 上报 payload 示例：
 
