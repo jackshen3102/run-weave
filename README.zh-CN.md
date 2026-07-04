@@ -149,25 +149,21 @@ pnpm dist:electron:mac
 
 ## 文档
 
+以下为精选入口，完整文档索引见 [docs/README.md](docs/README.md)。
+
 | 主题           | 链接                                                                                       |
 | -------------- | ------------------------------------------------------------------------------------------ |
 | CLI            | [docs/cli/terminal-cli.md](docs/cli/terminal-cli.md)                                       |
 | 部署           | [docs/deployment/overview.md](docs/deployment/overview.md)                                 |
 | 终端恢复       | [docs/architecture/terminal-tmux-recovery.md](docs/architecture/terminal-tmux-recovery.md) |
 | 架构与网络拓扑 | [docs/architecture/network-topology.md](docs/architecture/network-topology.md)             |
-| 测试命令       | [docs/testing/command-matrix.md](docs/testing/command-matrix.md)                           |
 
 ## 验证
 
 ```bash
 pnpm typecheck
 pnpm lint
-pnpm test:e2e
-pnpm test
 ```
-
-前端正式自动化验证以 E2E 为主。README-only 工作不要在 `frontend/src` 下新增前端
-单测。
 
 ## License
 
