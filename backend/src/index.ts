@@ -333,7 +333,10 @@ async function initializeAppServerEventIntegration(
           return;
         }
         if (event.kind === "agent.completion") {
-          await handleAgentCompletionEvent(event);
+          await handleAgentCompletionEvent(event, {
+            terminalSessionManager: services.terminalSessionManager,
+            terminalStateService: services.terminalStateService,
+          });
         }
       },
     });
