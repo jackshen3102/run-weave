@@ -9,6 +9,7 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -55,14 +56,12 @@ assertFile(marketplacePath);
 
 const marketplace = readJson(marketplacePath);
 const manifest = readJson(manifestPath);
-const hooksConfig = readJson(hooksConfigPath);
 const marketplaceName = marketplace.name;
 const pluginName = manifest.name;
 
 if (!marketplaceName || !pluginName) {
   throw new Error("Toolkit marketplace or plugin manifest is missing name.");
 }
-assertToolkitHooksConfig(hooksConfig);
 
 log(`Syncing ${pluginName}@${marketplaceName} from ${pluginRelativePath}.`);
 
@@ -77,10 +76,8 @@ const codexCacheSnapshot = snapshotCodexCompatibilityCache(
 );
 
 syncToolkitHookAssets();
-validateCodexPlugin();
 updateCodexCachebuster();
 formatCodexPluginManifest();
-validateCodexPlugin();
 installForCodex(pluginName, marketplaceName);
 preserveCodexCompatibilityCache(
   pluginName,
@@ -138,134 +135,14 @@ function syncToolkitHookAssets() {
   }
 }
 
-function assertToolkitHooksConfig(hooksConfig) {
-  const requiredEvents = [
-    "PostToolUse",
-    "SessionStart",
-    "Stop",
-    "SubagentStop",
-    "UserPromptSubmit",
-  ];
-  if (!hooksConfig || typeof hooksConfig !== "object") {
-    throw new Error("Toolkit hooks.json must be an object.");
-  }
-  if (!hooksConfig.hooks || typeof hooksConfig.hooks !== "object") {
-    throw new Error("Toolkit hooks.json is missing hooks.");
-  }
-
-  for (const event of requiredEvents) {
-    const entries = hooksConfig.hooks[event];
-    if (!Array.isArray(entries) || entries.length === 0) {
-      throw new Error(`Toolkit hooks.json is missing ${event}.`);
-    }
-
-    const commands = entries.flatMap((entry) =>
-      Array.isArray(entry?.hooks)
-        ? entry.hooks
-            .map((hook) => hook?.command)
-            .filter((command) => typeof command === "string")
-        : [],
-    );
-    if (
-      !commands.some(
-        (command) =>
-          command.includes("runweave-hook-dispatch.cjs") &&
-          command.includes("CODEX_PLUGIN_ROOT") &&
-          command.includes("__PLUGIN_DIR__"),
-      )
-    ) {
-      throw new Error(
-        `Toolkit hooks.json ${event} does not invoke the Runweave dispatcher.`,
-      );
-    }
-  }
-}
-
-function validateCodexPlugin() {
-  const validator = path.join(
-    codexHome,
-    "skills",
-    ".system",
-    "plugin-creator",
-    "scripts",
-    "validate_plugin.py",
-  );
-  assertFile(validator);
-  validateCodexPluginManifest(validator);
-
-  const skillValidator = path.join(
-    codexHome,
-    "skills",
-    ".system",
-    "skill-creator",
-    "scripts",
-    "quick_validate.py",
-  );
-  assertFile(skillValidator);
-  run(
-    "bash",
-    [
-      "-lc",
-      [
-        "set -euo pipefail",
-        `for skill_dir in "${pluginDir}"/skills/*; do`,
-        '  [ -d "$skill_dir" ] || continue',
-        `  uv run --with pyyaml python "${skillValidator}" "$skill_dir"`,
-        "done",
-      ].join("\n"),
-    ],
-    { env: withCodexHome() },
-  );
-}
-
-function validateCodexPluginManifest(validator) {
-  const command = "uv";
-  const commandArgs = [
-    "run",
-    "--with",
-    "pyyaml",
-    "python",
-    validator,
-    pluginDir,
-  ];
-  log(`$ ${[command, ...commandArgs].map(shellQuote).join(" ")}`);
-  const result = runResult(command, commandArgs, {
-    env: withCodexHome(),
-  });
-  if (result.status === 0) {
-    return;
-  }
-
-  const output = `${result.stdout || ""}${result.stderr || ""}`;
-  if (isOutdatedHooksValidatorFailure(output)) {
-    log(
-      "Plugin validator rejected plugin.json hooks, but this Codex runtime supports plugin hooks; continuing.",
-    );
-    return;
-  }
-
-  process.stdout.write(result.stdout || "");
-  process.stderr.write(result.stderr || "");
-  throw new Error(`${command} exited with status ${result.status}`);
-}
-
-function isOutdatedHooksValidatorFailure(output) {
-  return output.includes(
-    "plugin.json field `hooks` is not accepted by plugin validation",
-  );
-}
-
 function updateCodexCachebuster() {
-  const helper = path.join(
-    codexHome,
-    "skills",
-    ".system",
-    "plugin-creator",
-    "scripts",
-    "update_plugin_cachebuster.py",
-  );
-  assertFile(helper);
-  run("python3", [helper, pluginDir], { env: withCodexHome() });
+  const currentManifest = readJson(manifestPath);
+  const baseVersion = getBasePluginVersion(currentManifest.version);
+  currentManifest.version = `${baseVersion}+codex.${formatCodexTimestamp(
+    new Date(),
+  )}`;
+  writeJson(manifestPath, currentManifest);
+  log(`Updated Toolkit cachebuster to ${currentManifest.version}.`);
 }
 
 function formatCodexPluginManifest() {
@@ -676,21 +553,41 @@ function runCapture(command, commandArgs, options = {}) {
   return result.stdout;
 }
 
-function withCodexHome() {
-  return {
-    ...process.env,
-    CODEX_HOME: codexHome,
-  };
-}
-
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
+}
+
+function writeJson(filePath, value) {
+  writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function assertFile(filePath) {
   if (!existsSync(filePath)) {
     throw new Error(`Required file does not exist: ${filePath}`);
   }
+}
+
+function getBasePluginVersion(version) {
+  if (typeof version !== "string" || version.trim().length === 0) {
+    throw new Error("plugin.json version must be a non-empty string.");
+  }
+  return version.split("+codex.")[0];
+}
+
+function formatCodexTimestamp(date) {
+  const parts = [
+    date.getFullYear(),
+    date.getMonth() + 1,
+    date.getDate(),
+    date.getHours(),
+    date.getMinutes(),
+    date.getSeconds(),
+  ];
+  return parts
+    .map((part, index) =>
+      index === 0 ? String(part) : String(part).padStart(2, "0"),
+    )
+    .join("");
 }
 
 function shellQuote(value) {

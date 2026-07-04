@@ -58,7 +58,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
-    "@playwright/test": "^1.52.0",
+    "@playwright/test": "^1.61.1",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.12",
