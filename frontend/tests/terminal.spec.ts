@@ -478,6 +478,38 @@ test("terminal sessions drop backend color suppression env and render ANSI color
   expect(renderedColor).not.toBe("rgb(226, 232, 240)");
 });
 
+test("tmux terminal sessions render UTF-8 filenames", async ({ page, request }) => {
+  const token = await loginAndSeedToken(request, page);
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "runweave-e2e-utf8-"));
+  const filename = "中文文件名.txt";
+
+  try {
+    await writeFile(path.join(cwd, filename), "ok\n");
+    const session = await createTerminalSession(request, token, {
+      command: "/bin/bash",
+      args: [
+        "-lc",
+        'printf "locale=%s/%s/%s\\n" "$LANG" "$LC_CTYPE" "${LC_ALL-unset}"; /bin/ls -1; sleep 2',
+      ],
+      cwd,
+      runtimePreference: "tmux",
+    });
+
+    await expect
+      .poll(() =>
+        getTerminalScrollback(request, token, session.terminalSessionId),
+      )
+      .toContain(filename);
+    await expect
+      .poll(() =>
+        getTerminalScrollback(request, token, session.terminalSessionId),
+      )
+      .toMatch(/utf-?8/i);
+  } finally {
+    await rm(cwd, { force: true, recursive: true });
+  }
+});
+
 test("does not duplicate committed IME text", async ({ page, request }) => {
   const token = await loginAndSeedToken(request, page);
   const session = await createTerminalSession(request, token, {

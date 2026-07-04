@@ -3,9 +3,11 @@ import type {
   TerminalPreviewDeleteFileRequest,
   TerminalPreviewDeleteFileResponse,
   TerminalPreviewDirectoryResponse,
+  TerminalPreviewContentSearchResponse,
   TerminalPreviewFileDiffResponse,
   TerminalPreviewFileResponse,
   TerminalPreviewFileSearchResponse,
+  TerminalPreviewFolderSearchResponse,
   TerminalPreviewGitChangesResponse,
   TerminalPreviewRenameFileRequest,
   TerminalPreviewResetChangeRequest,
@@ -30,6 +32,52 @@ export async function searchTerminalProjectPreviewFiles(
   return requestJson<TerminalPreviewFileSearchResponse>(
     apiBase,
     `/api/terminal/project/${encodeURIComponent(projectId)}/preview/files/search?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function searchTerminalProjectPreviewFolders(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  params: { query: string; limit?: number },
+): Promise<TerminalPreviewFolderSearchResponse> {
+  const query = new URLSearchParams();
+  query.set("q", params.query);
+  if (params.limit !== undefined) {
+    query.set("limit", String(params.limit));
+  }
+
+  return requestJson<TerminalPreviewFolderSearchResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/folders/search?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function searchTerminalProjectPreviewContent(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  params: { query: string; limit?: number },
+): Promise<TerminalPreviewContentSearchResponse> {
+  const query = new URLSearchParams();
+  query.set("q", params.query);
+  if (params.limit !== undefined) {
+    query.set("limit", String(params.limit));
+  }
+
+  return requestJson<TerminalPreviewContentSearchResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/content/search?${query.toString()}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,

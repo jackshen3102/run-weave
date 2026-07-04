@@ -1,5 +1,5 @@
 import { useMemoizedFn } from "ahooks";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   TerminalPreviewChangeKind,
   TerminalProjectListItem,
@@ -20,6 +20,9 @@ import { useTerminalPreviewPanelData } from "./use-terminal-preview-panel-data";
 import { TerminalPreviewPanelMutationDialogs } from "./terminal-preview-panel-mutation-dialogs";
 import { TerminalPreviewPanelShell } from "./terminal-preview-panel-shell";
 import { TerminalOrchestratorPanel } from "./terminal-orchestrator-panel";
+import { TerminalPreviewQuickSearch } from "./terminal-preview-quick-search";
+import { useTerminalPreviewQuickSearch } from "./use-terminal-preview-quick-search";
+import type { TerminalPreviewLineTarget } from "./terminal-preview-file-view";
 import { useTerminalFileTree } from "./use-terminal-file-tree";
 
 interface TerminalPreviewPanelProps {
@@ -45,6 +48,20 @@ function getPreviewParentDirectory(filePath: string): string {
   return lastSlashIndex > 0 ? normalized.slice(0, lastSlashIndex) : ".";
 }
 
+function shouldIgnoreQuickSearchShortcut(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  if (
+    target.closest(
+      "input, textarea, select, [contenteditable='true'], .monaco-editor, .xterm",
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function TerminalPreviewPanel({
   apiBase,
   token,
@@ -56,6 +73,9 @@ export function TerminalPreviewPanel({
   onEditProject,
   onSelectSession,
 }: TerminalPreviewPanelProps) {
+  const [lineTarget, setLineTarget] =
+    useState<TerminalPreviewLineTarget | null>(null);
+  const lineTargetSequenceRef = useRef(0);
   const {
     closePreview,
     setWidth,
@@ -244,6 +264,13 @@ export function TerminalPreviewPanel({
   });
   const { loadRootDirectory, resetTree, invalidateDirectory } = fileTree;
 
+  const quickSearch = useTerminalPreviewQuickSearch({
+    apiBase,
+    token,
+    projectId,
+    onRequestError: handleRequestError,
+  });
+
   useEffect(() => {
     resetTree();
   }, [projectId, hasProjectPath, resetTree]);
@@ -260,6 +287,72 @@ export function TerminalPreviewPanel({
       invalidateDirectory(directoryPath);
     }
   });
+
+  const openQuickSearchFileResult = useMemoizedFn(
+    (filePath: string, target?: { line: number; column: number }): void => {
+      if (!projectId || !confirmDiscardDraft()) {
+        return;
+      }
+      quickSearch.closeSearch();
+      setActiveTool("preview");
+      openFileInStore(projectId, filePath, "explorer");
+      void fileTree.revealFile(filePath);
+      setFilePreview(null);
+      setFileError(null);
+      setMarkdownScrollRatio(0);
+      if (target) {
+        lineTargetSequenceRef.current += 1;
+        setLineTarget({
+          path: filePath,
+          line: target.line,
+          column: target.column,
+          key: `${filePath}:${target.line}:${target.column}:${lineTargetSequenceRef.current}`,
+        });
+      } else {
+        setLineTarget(null);
+      }
+    },
+  );
+
+  const revealQuickSearchDirectory = useMemoizedFn((directoryPath: string): void => {
+    if (!projectId) {
+      return;
+    }
+    quickSearch.closeSearch();
+    setActiveTool("preview");
+    setProjectPreviewMode(projectId, "explorer");
+    void fileTree.revealDirectory(directoryPath);
+  });
+
+  const handleQuickSearchShortcut = useMemoizedFn((event: KeyboardEvent): void => {
+    if (
+      quickSearch.open ||
+      activeTool !== "preview" ||
+      !projectId ||
+      !hasProjectPath ||
+      !(event.metaKey || event.ctrlKey) ||
+      shouldIgnoreQuickSearchShortcut(event.target)
+    ) {
+      return;
+    }
+    const key = event.key.toLowerCase();
+    if (key === "p" && !event.shiftKey) {
+      event.preventDefault();
+      quickSearch.openSearch("files");
+      return;
+    }
+    if (key === "f" && event.shiftKey) {
+      event.preventDefault();
+      quickSearch.openSearch("content");
+    }
+  });
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleQuickSearchShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleQuickSearchShortcut);
+    };
+  }, [handleQuickSearchShortcut]);
 
   const submitRenameFile = useMemoizedFn(async (): Promise<void> => {
     if (!projectId || !renameTarget || mutationPending) {
@@ -487,6 +580,7 @@ export function TerminalPreviewPanel({
       fileTree={fileTree}
       assetRefreshKey={assetRefreshKey}
       markdownScrollRatio={markdownScrollRatio}
+      lineTarget={lineTarget}
       onAuthExpired={onAuthExpired}
       onEditProject={onEditProject}
       onQueryChange={(nextQuery) => {
@@ -495,6 +589,7 @@ export function TerminalPreviewPanel({
         }
       }}
       onOpenFilePath={openFilePath}
+      onOpenQuickSearch={() => quickSearch.openSearch("files")}
       onRequestRenameFile={requestRenameFile}
       onRequestDeleteFile={requestDeleteFile}
       onRequestResetChange={requestResetChange}
@@ -607,6 +702,21 @@ export function TerminalPreviewPanel({
         onSetMarkdownViewMode={setMarkdownViewMode}
         onSetSvgViewMode={setSvgViewMode}
         onSetChangesViewMode={setChangesViewMode}
+      />
+
+      <TerminalPreviewQuickSearch
+        open={quickSearch.open}
+        mode={quickSearch.mode}
+        query={quickSearch.query}
+        results={quickSearch.results}
+        loading={quickSearch.loading}
+        error={quickSearch.error}
+        truncated={quickSearch.truncated}
+        onOpenChange={quickSearch.setOpen}
+        onModeChange={quickSearch.setMode}
+        onQueryChange={quickSearch.setQuery}
+        onOpenFile={openQuickSearchFileResult}
+        onRevealDirectory={revealQuickSearchDirectory}
       />
 
       <TerminalPreviewPanelMutationDialogs

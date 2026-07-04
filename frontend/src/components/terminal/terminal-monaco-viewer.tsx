@@ -1,5 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
+import "./terminal-monaco-viewer.css";
 import "./monaco-workers";
 import Editor, {
   DiffEditor,
@@ -29,6 +30,11 @@ interface TerminalMonacoViewerProps {
   editable?: boolean;
   onContentChange?: (content: string) => void;
   lineReferencePath?: string;
+  initialRevealPosition?: {
+    line: number;
+    column: number;
+    key: string;
+  };
 }
 
 const EDITOR_OPTIONS = {
@@ -68,9 +74,13 @@ export function TerminalMonacoViewer({
   editable = false,
   onContentChange,
   lineReferencePath,
+  initialRevealPosition,
 }: TerminalMonacoViewerProps) {
   const editorRef = useRef<MonacoEditor | null>(null);
+  const monacoRef = useRef<MonacoApi | null>(null);
   const diffModelRef = useRef<MonacoDiffModel | null>(null);
+  const revealDecorationIdsRef = useRef<string[]>([]);
+  const revealedPositionKeyRef = useRef<string | null>(null);
   const scrollDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const selectionDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const shortcutDisposableRef = useRef<{ dispose: () => void } | null>(null);
@@ -104,6 +114,7 @@ export function TerminalMonacoViewer({
   const bindLineReferenceEditor = useMemoizedFn(
     (editor: MonacoEditor, monaco: MonacoApi): void => {
       editorRef.current = editor;
+      monacoRef.current = monaco;
       scrollDisposableRef.current?.dispose();
       selectionDisposableRef.current?.dispose();
       shortcutDisposableRef.current?.dispose();
@@ -157,6 +168,50 @@ export function TerminalMonacoViewer({
   }, [diff, scrollRatio]);
 
   useEffect(() => {
+    if (diff || !initialRevealPosition) {
+      return;
+    }
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco) {
+      return;
+    }
+    if (revealedPositionKeyRef.current === initialRevealPosition.key) {
+      return;
+    }
+    revealedPositionKeyRef.current = initialRevealPosition.key;
+    const model = editor.getModel();
+    const line = Math.min(
+      Math.max(1, initialRevealPosition.line),
+      model?.getLineCount() ?? initialRevealPosition.line,
+    );
+    const column = Math.max(1, initialRevealPosition.column);
+    const position = { lineNumber: line, column };
+    editor.setPosition(position);
+    editor.revealPositionInCenter(position);
+    revealDecorationIdsRef.current = editor.deltaDecorations(
+      revealDecorationIdsRef.current,
+      [
+        {
+          range: new monaco.Range(line, 1, line, 1),
+          options: {
+            isWholeLine: true,
+            className: "rw-monaco-search-hit-line",
+          },
+        },
+      ],
+    );
+    window.setTimeout(() => {
+      if (editorRef.current === editor) {
+        revealDecorationIdsRef.current = editor.deltaDecorations(
+          revealDecorationIdsRef.current,
+          [],
+        );
+      }
+    }, 1800);
+  }, [diff, initialRevealPosition, content]);
+
+  useEffect(() => {
     return () => {
       scrollDisposableRef.current?.dispose();
       scrollDisposableRef.current = null;
@@ -164,6 +219,11 @@ export function TerminalMonacoViewer({
       selectionDisposableRef.current = null;
       shortcutDisposableRef.current?.dispose();
       shortcutDisposableRef.current = null;
+      const editor = editorRef.current;
+      if (editor) {
+        editor.deltaDecorations(revealDecorationIdsRef.current, []);
+      }
+      revealDecorationIdsRef.current = [];
       const diffModel = diffModelRef.current;
       diffModelRef.current = null;
       if (diffModel) {

@@ -22,7 +22,9 @@ export { TerminalPreviewError, normalizeProjectPath } from "./preview-paths";
 export {
   clearPreviewFileSearchCache,
   searchPreviewFiles,
+  searchPreviewFolders,
 } from "./preview-search";
+export { searchPreviewContent } from "./preview-content-search";
 export { getPreviewFileDiff, getPreviewGitChanges } from "./preview-git";
 
 const FILE_PREVIEW_MAX_BYTES = 1024 * 1024;

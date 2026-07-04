@@ -96,6 +96,7 @@ const CaptureHistoryLines = 5_000;
 const InteractivePaneReadyMinWaitMs = 1_000;
 const InteractivePaneReadyStableMs = 200;
 const InteractivePaneReadyTimeoutMs = 2_500;
+const DEFAULT_UTF8_LOCALE = "en_US.UTF-8";
 const TMUX_RUNTIME_OPTION_ARGS = ["set-option", "-g", "mouse", "on"];
 const TMUX_SANITIZE_NPM_PREFIX_ENV_ARGS = [
   "set-environment",
@@ -150,6 +151,33 @@ function isExecutablePath(filePath: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isUnsetEnvValue(value: string | undefined): boolean {
+  if (value === undefined) {
+    return true;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === "" || normalized === "undefined" || normalized === "null";
+}
+
+function isUtf8Locale(value: string | undefined): boolean {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return false;
+  }
+  const lowerValue = normalized.toLowerCase();
+  if (lowerValue === "undefined" || lowerValue === "null") {
+    return false;
+  }
+  return /utf-?8/i.test(normalized);
+}
+
+function resolveUtf8Locale(env: NodeJS.ProcessEnv): string {
+  return (
+    [env.LC_ALL, env.LC_CTYPE, env.LANG].find(isUtf8Locale)?.trim() ??
+    DEFAULT_UTF8_LOCALE
+  );
 }
 
 function resolveExecutableFromPath(
@@ -944,6 +972,21 @@ export class TmuxService {
     const cdpEndpoint = this.env.PLAYWRIGHT_MCP_CDP_ENDPOINT;
     if (cdpEndpoint) {
       args.push("-e", `PLAYWRIGHT_MCP_CDP_ENDPOINT=${cdpEndpoint}`);
+    }
+    const utf8Locale = resolveUtf8Locale(this.env);
+    args.push(
+      "-e",
+      `LANG=${isUtf8Locale(this.env.LANG) ? this.env.LANG!.trim() : utf8Locale}`,
+    );
+    args.push(
+      "-e",
+      `LC_CTYPE=${isUtf8Locale(this.env.LC_CTYPE) ? this.env.LC_CTYPE!.trim() : utf8Locale}`,
+    );
+    if (!isUnsetEnvValue(this.env.LC_ALL)) {
+      args.push(
+        "-e",
+        `LC_ALL=${isUtf8Locale(this.env.LC_ALL) ? this.env.LC_ALL!.trim() : utf8Locale}`,
+      );
     }
     args.push("-e", `COLORTERM=${this.env.COLORTERM?.trim() || "truecolor"}`);
     return args;

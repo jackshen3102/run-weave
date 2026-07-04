@@ -4,6 +4,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { Search } from "lucide-react";
 import type {
   TerminalPreviewFileResponse,
   TerminalPreviewFileSearchItem,
@@ -18,6 +19,13 @@ import { Button } from "../ui/button";
 import { TerminalFileExplorer } from "./terminal-file-explorer";
 import { TerminalOpenFileCommand } from "./terminal-open-file-command";
 import type { UseTerminalFileTreeReturn } from "./use-terminal-file-tree";
+
+export interface TerminalPreviewLineTarget {
+  path: string;
+  line: number;
+  column: number;
+  key: string;
+}
 
 const TerminalMonacoViewer = lazy(() =>
   import("./terminal-monaco-viewer").then((module) => ({
@@ -81,9 +89,11 @@ interface TerminalPreviewFileViewProps {
   fileTree: UseTerminalFileTreeReturn;
   assetRefreshKey: number;
   markdownScrollRatio: number;
+  lineTarget: TerminalPreviewLineTarget | null;
   onAuthExpired?: () => void;
   onQueryChange: (nextQuery: string) => void;
   onOpenFilePath: (filePath: string) => void;
+  onOpenQuickSearch: () => void;
   onRequestRenameFile: (filePath: string) => void;
   onRequestDeleteFile: (filePath: string) => void;
   onMarkdownScrollRatioChange: (ratio: number) => void;
@@ -119,9 +129,11 @@ export function TerminalPreviewFileView({
   fileTree,
   assetRefreshKey,
   markdownScrollRatio,
+  lineTarget,
   onAuthExpired,
   onQueryChange,
   onOpenFilePath,
+  onOpenQuickSearch,
   onRequestRenameFile,
   onRequestDeleteFile,
   onMarkdownScrollRatioChange,
@@ -130,15 +142,39 @@ export function TerminalPreviewFileView({
   const monacoLanguage = getTerminalPreviewMonacoLanguage(
     filePreview?.language,
   );
+  const revealPosition =
+    lineTarget && lineTarget.path === selectedFilePath
+      ? {
+          line: lineTarget.line,
+          column: lineTarget.column,
+          key: lineTarget.key,
+        }
+      : undefined;
   const sidebar =
     mode === "explorer" ? (
-      <TerminalFileExplorer
-        tree={fileTree}
-        selectedFilePath={selectedFilePath}
-        onOpenFilePath={onOpenFilePath}
-        onRequestRenameFile={onRequestRenameFile}
-        onRequestDeleteFile={onRequestDeleteFile}
-      />
+      <>
+        <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-800 px-3">
+          <span className="text-xs font-medium text-slate-300">
+            Project Files
+          </span>
+          <button
+            type="button"
+            aria-label="Search project files"
+            title="Search project files"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-500"
+            onClick={onOpenQuickSearch}
+          >
+            <Search className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <TerminalFileExplorer
+          tree={fileTree}
+          selectedFilePath={selectedFilePath}
+          onOpenFilePath={onOpenFilePath}
+          onRequestRenameFile={onRequestRenameFile}
+          onRequestDeleteFile={onRequestDeleteFile}
+        />
+      </>
     ) : (
       <TerminalOpenFileCommand
         query={query}
@@ -190,6 +226,7 @@ export function TerminalPreviewFileView({
       onStartMarkdownResize,
       onAuthExpired,
       onOpenFilePath,
+      initialRevealPosition: revealPosition,
     });
   } else if (filePreview && fileKind === "svg") {
     fileContent =
@@ -201,6 +238,7 @@ export function TerminalPreviewFileView({
             editable={editable}
             onContentChange={onEditorContentChange}
             lineReferencePath={filePreview.absolutePath}
+            initialRevealPosition={revealPosition}
           />
         </Suspense>
       ) : (
@@ -217,6 +255,7 @@ export function TerminalPreviewFileView({
           editable={editable}
           onContentChange={onEditorContentChange}
           lineReferencePath={filePreview.absolutePath}
+          initialRevealPosition={revealPosition}
         />
       </Suspense>
     );
@@ -277,6 +316,11 @@ interface RenderMarkdownContentArgs {
   onStartMarkdownResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onAuthExpired?: () => void;
   onOpenFilePath: (filePath: string) => void;
+  initialRevealPosition?: {
+    line: number;
+    column: number;
+    key: string;
+  };
 }
 
 function renderMarkdownContent({
@@ -294,6 +338,7 @@ function renderMarkdownContent({
   onStartMarkdownResize,
   onAuthExpired,
   onOpenFilePath,
+  initialRevealPosition,
 }: RenderMarkdownContentArgs): ReactNode {
   if (markdownViewMode === "source") {
     return (
@@ -304,6 +349,7 @@ function renderMarkdownContent({
           editable={editable}
           onContentChange={onEditorContentChange}
           lineReferencePath={filePreview.absolutePath}
+          initialRevealPosition={initialRevealPosition}
         />
       </Suspense>
     );
@@ -341,6 +387,7 @@ function renderMarkdownContent({
           editable={editable}
           onContentChange={onEditorContentChange}
           lineReferencePath={filePreview.absolutePath}
+          initialRevealPosition={initialRevealPosition}
         />
       </Suspense>
       <div

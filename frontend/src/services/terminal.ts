@@ -47,7 +47,9 @@ export {
   renameTerminalProjectPreviewFile,
   resetTerminalProjectPreviewChange,
   saveTerminalProjectPreviewFile,
+  searchTerminalProjectPreviewContent,
   searchTerminalProjectPreviewFiles,
+  searchTerminalProjectPreviewFolders,
 } from "./terminal-preview";
 
 export async function createTerminalProject(

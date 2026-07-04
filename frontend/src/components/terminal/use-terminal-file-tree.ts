@@ -38,6 +38,7 @@ export interface UseTerminalFileTreeReturn {
   handlePrimaryAction: (item: TreeItem<FileTreeData>) => void;
   handleMissingItems: (itemIds: TreeItemIndex[]) => void;
   revealFile: (relativePath: string) => Promise<void>;
+  revealDirectory: (relativePath: string) => Promise<void>;
   invalidateDirectory: (directoryPath: string) => void;
   resetTree: () => void;
 }
@@ -260,6 +261,37 @@ export function useTerminalFileTree({
     setFocusedItem(relativePath);
   });
 
+  const revealDirectory = useMemoizedFn(async (relativePath: string) => {
+    if (!relativePath) return;
+
+    if (!loadedDirsRef.current.has(".")) {
+      await loadDirectory(".");
+    }
+
+    const segments = relativePath.split("/").filter(Boolean);
+    const pathsToExpand: string[] = [];
+    for (let i = 1; i <= segments.length; i++) {
+      pathsToExpand.push(segments.slice(0, i).join("/"));
+    }
+
+    for (const dirPath of pathsToExpand) {
+      if (!loadedDirsRef.current.has(dirPath)) {
+        await loadDirectory(dirPath);
+      }
+    }
+
+    setExpandedItems((prev) => {
+      const next = [...prev];
+      for (const p of pathsToExpand) {
+        if (!next.includes(p)) next.push(p);
+      }
+      return next;
+    });
+
+    setSelectedItems([relativePath]);
+    setFocusedItem(relativePath);
+  });
+
   const invalidateDirectory = useMemoizedFn((directoryPath: string) => {
     const normalized = normalizeDirectoryPath(directoryPath);
     const shouldReload =
@@ -302,6 +334,7 @@ export function useTerminalFileTree({
     handlePrimaryAction,
     handleMissingItems,
     revealFile,
+    revealDirectory,
     invalidateDirectory,
     resetTree,
   };

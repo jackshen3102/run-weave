@@ -246,15 +246,8 @@ function toRgExcludeGlob(directoryName: string): string {
   return `!**/${directoryName}/**`;
 }
 
-function buildRgFileArgs(): string[] {
-  const args = [
-    "--files",
-    "--hidden",
-    "--case-sensitive",
-    "--no-require-git",
-    "--no-config",
-  ];
-
+export function buildRgSearchExclusionArgs(): string[] {
+  const args: string[] = [];
   for (const directoryName of EXCLUDED_DIRECTORIES) {
     args.push("-g", toRgExcludeGlob(directoryName));
   }
@@ -267,6 +260,19 @@ function buildRgFileArgs(): string[] {
   for (const sensitiveGlob of SENSITIVE_FILE_GLOBS) {
     args.push("-g", `!${sensitiveGlob}`);
   }
+  return args;
+}
+
+function buildRgFileArgs(): string[] {
+  const args = [
+    "--files",
+    "--hidden",
+    "--case-sensitive",
+    "--no-require-git",
+    "--no-config",
+  ];
+
+  args.push(...buildRgSearchExclusionArgs());
 
   return args;
 }
@@ -285,7 +291,7 @@ function isSensitiveSearchPath(relativePath: string): boolean {
   return basename.includes("secret");
 }
 
-function shouldIncludeSearchCandidate(relativePath: string): boolean {
+export function shouldIncludeSearchCandidate(relativePath: string): boolean {
   if (isSensitiveSearchPath(relativePath)) {
     return false;
   }
