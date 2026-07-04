@@ -181,6 +181,8 @@ export interface RecordAgentTeamRoundRequest {
   acceptanceResults?: AgentTeamWorkerOutbox["acceptanceResults"];
   /** Force-mark this round's objective progress signal. */
   hadDiff?: boolean;
+  /** UI-observed round baseline. Stale manual rounds are ignored. */
+  expectedRound?: number;
 }
 
 export interface ResumeAgentTeamRunRequest {

@@ -19,13 +19,6 @@ const agentHookProcessorLogger = logger.child({
   component: "terminal-agent-hook",
 });
 
-const AGENT_ACTIVE_COMMANDS = {
-  codex: "codex",
-  trae: "trae",
-  traecli: "traecli",
-  traex: "traex",
-} as const satisfies Record<TerminalAgentKind, string>;
-
 export interface ProcessTerminalAgentHookInput {
   terminalSessionId: string;
   agent: TerminalAgentKind;
@@ -84,14 +77,6 @@ export async function processTerminalAgentHook(
         session,
       ),
     };
-  }
-
-  if (commandBasename(session.activeCommand) === "node") {
-    session =
-      (await options.terminalSessionManager.updateSessionMetadata(session.id, {
-        cwd: session.cwd,
-        activeCommand: AGENT_ACTIVE_COMMANDS[input.agent],
-      })) ?? session;
   }
 
   if (input.agent === "codex" && input.threadId) {
@@ -174,14 +159,6 @@ export async function processTerminalAgentHook(
     hookEvent: input.hookEvent,
     terminalState,
   };
-}
-
-function commandBasename(command: string | null): string | null {
-  const normalized = command?.trim().replace(/\\+/g, "/");
-  if (!normalized) {
-    return null;
-  }
-  return normalized.split("/").filter(Boolean).at(-1) ?? normalized;
 }
 
 function updateCodexThreadPreviewInBackground(

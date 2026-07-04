@@ -6,7 +6,7 @@ const ANSI_ESCAPE_SEQUENCE_PATTERN = new RegExp(
 const CODEX_TRUST_PROMPT_PATTERN =
   /Do you trust the contents of this directory\?|Press enter to continue/;
 const CODEX_READY_PATTERN =
-  /OpenAI Codex|(?:^|\n)\s*(?:gpt-[\w.-]+|codex-[\w.-]+|o\d(?:-[\w.-]+)?)\s+(?:low|medium|high)\b|(?:^|\n)\s*›\s/m;
+  /OpenAI Codex|(?:^|\n)\s*(?:gpt-[\w.-]+|codex-[\w.-]+|o\d(?:-[\w.-]+)?)\s+(?:low|medium|high)\b/m;
 
 export function stripTerminalControlSequences(value: string): string {
   return value.replace(ANSI_ESCAPE_SEQUENCE_PATTERN, "").replace(/\r/g, "");

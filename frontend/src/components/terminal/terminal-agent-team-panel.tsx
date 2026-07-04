@@ -267,22 +267,10 @@ export function TerminalAgentTeamPanel({
     if (!run) {
       return;
     }
-    // Drive the loop from the current acceptance cases: progress => all pass,
-    // no-progress => all fail (with debounce handled server-side).
-    const acceptanceResults = run.acceptance.map((item) => ({
-      caseId: item.caseId,
-      status: hadProgress ? ("pass" as const) : ("fail" as const),
-      evidence: [
-        {
-          type: "text" as const,
-          ref: hadProgress ? "manual: progress" : "manual: no-progress",
-        },
-      ],
-    }));
     void runAction(() =>
       recordAgentTeamRound(apiBase, token, run.runId, {
-        acceptanceResults,
         hadDiff: hadProgress,
+        expectedRound: run.loop.round,
       }),
     );
   });

@@ -39,6 +39,8 @@ export interface PersistedTerminalPanelRecord {
   terminalSessionId: string;
   alias?: string | null;
   role?: string | null;
+  agentTeamRunId?: string | null;
+  agentTeamWorkerId?: string | null;
   cwd: string;
   activeCommand: string | null;
   status: "running" | "exited";

@@ -102,6 +102,8 @@ export function foldRound(
   loop.bestPassCount = Math.max(loop.bestPassCount, passCount);
   if (hadProgress) {
     loop.noProgressCount = 0;
+  } else if (params.hadDiff === false && resultById.size === 0) {
+    loop.noProgressCount += 1;
   } else if (params.acceptanceResults && params.acceptanceResults.length > 0) {
     // Only count a no-progress round when there were real stable fails; a
     // single-round flip (consecutiveFail below threshold) does not increment.

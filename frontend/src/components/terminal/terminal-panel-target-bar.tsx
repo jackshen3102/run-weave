@@ -8,6 +8,12 @@ import {
   focusTerminalPanel,
 } from "../../services/terminal";
 
+function getWorkspacePanels(
+  workspace: TerminalPanelWorkspace | null,
+): TerminalPanelWorkspace["panels"] {
+  return Array.isArray(workspace?.panels) ? workspace.panels : [];
+}
+
 interface TerminalPanelTargetBarProps {
   apiBase: string;
   token: string;
@@ -26,15 +32,16 @@ function resolveNextPanelAlias(workspace: TerminalPanelWorkspace | null): string
   if (!workspace) {
     return "tests";
   }
+  const panels = getWorkspacePanels(workspace);
   const aliases = new Set(
-    workspace.panels
+    panels
       .map((panel) => panel.alias)
       .filter((alias): alias is string => Boolean(alias)),
   );
   if (!aliases.has("tests")) {
     return "tests";
   }
-  const nextIndex = workspace.panels.length + 1;
+  const nextIndex = panels.length + 1;
   return `panel-${nextIndex}`;
 }
 
@@ -47,15 +54,15 @@ export function TerminalPanelTargetBar({
 }: TerminalPanelTargetBarProps) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const panels = getWorkspacePanels(workspace);
+  const activePanelId = workspace?.activePanelId ?? null;
   const activePanel = useMemo(
     () =>
-      workspace?.panels.find(
-        (panel) => panel.panelId === workspace.activePanelId,
-      ) ??
-      workspace?.panels.find((panel) => panel.focused) ??
-      workspace?.panels[0] ??
+      panels.find((panel) => panel.panelId === activePanelId) ??
+      panels.find((panel) => panel.focused) ??
+      panels[0] ??
       null,
-    [workspace],
+    [activePanelId, panels],
   );
   const disabled =
     activeSession.status !== "running" || pendingAction !== null || !workspace;
@@ -99,8 +106,8 @@ export function TerminalPanelTargetBar({
         </span>
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {(workspace?.panels ?? []).map((panel) => {
-          const active = panel.panelId === workspace?.activePanelId;
+        {panels.map((panel) => {
+          const active = panel.panelId === activePanelId;
           return (
             <button
               key={panel.panelId}
@@ -161,7 +168,7 @@ export function TerminalPanelTargetBar({
         type="button"
         variant="ghost"
         size="sm"
-        disabled={disabled || !activePanel || (workspace?.panels.length ?? 0) <= 1}
+        disabled={disabled || !activePanel || panels.length <= 1}
         aria-label="Close terminal panel"
         title="Close terminal panel"
         className="h-6 w-7 rounded-md px-0 text-slate-300 hover:bg-rose-950/50 hover:text-rose-200"

@@ -54,6 +54,7 @@ import { AgentTeamAgentReadinessService } from "./agent-readiness";
 
 const agentTeamLogger = logger.child({ component: "agent-team-service" });
 const DEFAULT_AGENT_TEAM_AGENT_COMMAND = "codex";
+const MANUAL_FEEDBACK_COMPLETION_GRACE_MS = 200;
 
 interface AgentTeamServiceOptions {
   terminalSessionManager: TerminalSessionManager;
@@ -81,7 +82,8 @@ export class AgentTeamService {
   private readonly promptSender: AgentTeamPromptSender;
   private readonly agentReadiness: AgentTeamAgentReadinessService;
   private readonly outboxResolver: AgentTeamOutboxResolver;
-  private readonly eventQueues = new Map<string, Promise<void>>();
+  private readonly eventQueues = new Map<string, Promise<unknown>>();
+  private readonly pendingCompletionRounds = new Map<string, number>();
 
   constructor(options: AgentTeamServiceOptions) {
     this.terminalSessionManager = options.terminalSessionManager;
@@ -222,7 +224,9 @@ export class AgentTeamService {
     await this.agentReadiness.ensureAgentReady(
       session,
       terminal,
-      mainPanelId ? { panelId: mainPanelId } : undefined,
+      mainPanelId
+        ? { panelId: mainPanelId, publishSessionState: true }
+        : undefined,
     );
     await this.sendStartupPromptToMain(run, buildStartupPrompt(run));
     await this.runStore.writeRun(run);
@@ -324,10 +328,28 @@ export class AgentTeamService {
     runId: string,
     input: RecordAgentTeamRoundRequest,
   ): Promise<AgentTeamRun> {
-    const run = await this.requireRun(runId);
-    return this.applyRound(run, {
-      acceptanceResults: input.acceptanceResults,
-      hadDiff: input.hadDiff,
+    return this.enqueue(runId, async () => {
+      let latest = await this.requireRun(runId);
+      if (isStaleExpectedRound(latest, input.expectedRound)) {
+        return latest;
+      }
+      const manualFeedbackRound = isManualFeedbackRound(input);
+      if (manualFeedbackRound) {
+        await delay(MANUAL_FEEDBACK_COMPLETION_GRACE_MS);
+        latest = await this.requireRun(runId);
+        if (
+          isStaleExpectedRound(latest, input.expectedRound) ||
+          (this.pendingCompletionRounds.get(runId) ?? 0) > 0
+        ) {
+          return latest;
+        }
+      }
+      return this.applyRound(latest, {
+        acceptanceResults: manualFeedbackRound
+          ? undefined
+          : input.acceptanceResults,
+        hadDiff: input.hadDiff,
+      });
     });
   }
 
@@ -344,6 +366,13 @@ export class AgentTeamService {
     }
     const now = new Date().toISOString();
     const clearedFingerprints = [...run.loop.errorFingerprints];
+    const resumedAcceptance = run.acceptance.map((item) => ({
+      ...item,
+      consecutiveFail: 0,
+    }));
+    const resumedBestPassCount = resumedAcceptance.filter(
+      (item) => item.status === "pass",
+    ).length;
     const nextRun = await this.updateRun(run, {
       status: "running",
       workers: run.workers.map((worker) => ({ ...worker, frozen: false })),
@@ -353,11 +382,9 @@ export class AgentTeamService {
         escalated: false,
         lastReason: null,
         errorFingerprints: [],
+        bestPassCount: resumedBestPassCount,
       },
-      acceptance: run.acceptance.map((item) => ({
-        ...item,
-        consecutiveFail: 0,
-      })),
+      acceptance: resumedAcceptance,
       humanNotes: [
         ...run.humanNotes,
         { id: `note_${Date.now()}`, at: now, text: note, clearedFingerprints },
@@ -435,12 +462,19 @@ export class AgentTeamService {
     for (const worker of workers) {
       let panelId: string | null = null;
       let tmuxPaneId: string | null = null;
-      const panelAlias = `${worker.role}-${boundWorkers.length + 1}`;
+      const panelAlias = this.resolveWorkerPanelAlias(
+        session.id,
+        `${worker.role}-${boundWorkers.length + 1}`,
+        run.runId,
+        worker.role,
+      );
+      const panelRole = buildAgentTeamPanelRole(run.runId, worker.role);
       if (this.tmuxService) {
         const existingPanel = this.findReusableWorkerPanel(
           session.id,
+          run.runId,
           panelAlias,
-          worker.role,
+          panelRole,
         );
         if (existingPanel) {
           panelId = existingPanel.id;
@@ -459,8 +493,10 @@ export class AgentTeamService {
               },
               {
                 direction: boundWorkers.length % 2 === 0 ? "right" : "down",
-                role: worker.role,
+                role: panelRole,
                 alias: panelAlias,
+                agentTeamRunId: run.runId,
+                agentTeamWorkerId: worker.id,
                 cwd: terminal.cwd ?? undefined,
                 focus: false,
               },
@@ -485,7 +521,15 @@ export class AgentTeamService {
         });
         await this.promptSender.sendPromptToPane(
           session,
-          buildWorkerStartupPrompt({ run, worker: boundWorker, acceptance }),
+          buildWorkerStartupPrompt({
+            run,
+            worker: boundWorker,
+            acceptance,
+            outboxPath: this.paths.workerOutboxRelativePath(
+              run.terminalSessionId,
+              boundWorker,
+            ),
+          }),
           { panelId },
         );
       }
@@ -520,7 +564,10 @@ export class AgentTeamService {
     const logs = [...run.logs];
     if (folded.hadProgress) {
       logs.push(`round ${run.loop.round} 有进展，noProgress 计数清零`);
-    } else if (params.acceptanceResults?.length) {
+    } else if (
+      params.acceptanceResults?.length ||
+      params.hadDiff === false
+    ) {
       logs.push(
         `round ${run.loop.round} 无进展，noProgress=${folded.loop.noProgressCount}/${folded.loop.maxNoProgress}`,
       );
@@ -546,10 +593,15 @@ export class AgentTeamService {
       logs,
     });
 
-    // Bounce newly-stable failing cases back to a code pane (orchestration
-    // layer decides; workers never talk to each other).
-    if (status === "running" && folded.newlyStableFailCaseIds.length > 0) {
-      return this.bounceFailuresToCode(nextRun, folded.newlyStableFailCaseIds);
+    // Bounce stable failing cases back to a code pane. Retry any stable fail
+    // that has not been marked as bounced yet, so a transient prompt-send miss
+    // does not leave later rounds stuck above the threshold forever.
+    const caseIdsNeedingBounce =
+      status === "running"
+        ? findStableFailCaseIdsNeedingBounce(nextRun)
+        : [];
+    if (caseIdsNeedingBounce.length > 0) {
+      return this.bounceFailuresToCode(nextRun, caseIdsNeedingBounce);
     }
     return nextRun;
   }
@@ -621,31 +673,52 @@ export class AgentTeamService {
     if (!outbox?.acceptanceResults?.length) {
       return;
     }
+    this.incrementPendingCompletionRound(run.runId);
     await this.enqueue(run.runId, async () => {
-      const latest = await this.getRun(run.runId);
-      if (!latest || latest.phase !== "executing") {
-        return;
+      try {
+        const latest = await this.getRun(run.runId);
+        if (!latest || latest.phase !== "executing") {
+          return;
+        }
+        await this.applyRound(latest, {
+          acceptanceResults: outbox.acceptanceResults,
+        });
+      } finally {
+        this.decrementPendingCompletionRound(run.runId);
       }
-      await this.applyRound(latest, {
-        acceptanceResults: outbox.acceptanceResults,
-      });
     });
   }
 
-  private async enqueue(
+  private async enqueue<T>(
     runId: string,
-    task: () => Promise<void>,
-  ): Promise<void> {
+    task: () => Promise<T>,
+  ): Promise<T> {
     const previous = this.eventQueues.get(runId) ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(task);
     this.eventQueues.set(runId, next);
     try {
-      await next;
+      return await next;
     } finally {
       if (this.eventQueues.get(runId) === next) {
         this.eventQueues.delete(runId);
       }
     }
+  }
+
+  private incrementPendingCompletionRound(runId: string): void {
+    this.pendingCompletionRounds.set(
+      runId,
+      (this.pendingCompletionRounds.get(runId) ?? 0) + 1,
+    );
+  }
+
+  private decrementPendingCompletionRound(runId: string): void {
+    const nextCount = (this.pendingCompletionRounds.get(runId) ?? 0) - 1;
+    if (nextCount > 0) {
+      this.pendingCompletionRounds.set(runId, nextCount);
+      return;
+    }
+    this.pendingCompletionRounds.delete(runId);
   }
 
   private async trySendToMain(run: AgentTeamRun, text: string): Promise<void> {
@@ -823,8 +896,9 @@ export class AgentTeamService {
 
   private findReusableWorkerPanel(
     terminalSessionId: string,
+    runId: string,
     alias: string,
-    role: AgentTeamWorkerRole,
+    role: string,
   ): TerminalPanelRecord | null {
     return (
       this.terminalSessionManager
@@ -832,10 +906,38 @@ export class AgentTeamService {
         .find(
           (panel) =>
             panel.status === "running" &&
+            panel.agentTeamRunId === runId &&
             panel.alias === alias &&
             panel.role === role,
         ) ?? null
     );
+  }
+
+  private resolveWorkerPanelAlias(
+    terminalSessionId: string,
+    baseAlias: string,
+    runId: string,
+    role: AgentTeamWorkerRole,
+  ): string {
+    const panels = this.terminalSessionManager.listPanels(terminalSessionId);
+    const panelRole = buildAgentTeamPanelRole(runId, role);
+    const reusablePanel = panels.find(
+      (panel) =>
+        panel.status === "running" &&
+        panel.agentTeamRunId === runId &&
+        panel.alias === baseAlias &&
+        panel.role === panelRole,
+    );
+    if (reusablePanel || !panels.some((panel) => panel.alias === baseAlias)) {
+      return baseAlias;
+    }
+    let suffix = 2;
+    let nextAlias = `${baseAlias}-${suffix}`;
+    while (panels.some((panel) => panel.alias === nextAlias)) {
+      suffix += 1;
+      nextAlias = `${baseAlias}-${suffix}`;
+    }
+    return nextAlias;
   }
 }
 
@@ -846,6 +948,51 @@ const VALID_WORKER_ROLES: AgentTeamWorkerRole[] = [
   "plan",
   "plan_review",
 ];
+
+function buildAgentTeamPanelRole(
+  runId: string,
+  role: AgentTeamWorkerRole,
+): string {
+  return `agent-team:${runId}:${role}`;
+}
+
+function findStableFailCaseIdsNeedingBounce(run: AgentTeamRun): string[] {
+  return run.acceptance
+    .filter(
+      (item) =>
+        item.status === "fail" &&
+        item.consecutiveFail >= run.loop.stableFailThreshold &&
+        !item.bouncedToPanelId,
+    )
+    .map((item) => item.caseId);
+}
+
+function isStaleExpectedRound(
+  run: AgentTeamRun,
+  expectedRound: number | undefined,
+): boolean {
+  return expectedRound !== undefined && expectedRound !== run.loop.round;
+}
+
+function isManualFeedbackRound(input: RecordAgentTeamRoundRequest): boolean {
+  const results = input.acceptanceResults;
+  return (
+    Boolean(results?.length) &&
+    results!.every(
+      (result) =>
+        result.evidence.some(
+          (evidence) =>
+            evidence.type === "text" &&
+            (evidence.ref === "manual: progress" ||
+              evidence.ref === "manual: no-progress"),
+        ),
+    )
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function resolveAgentTeamTerminal(
   terminal: AgentTeamTerminal | undefined,

@@ -11,7 +11,7 @@ import type { TerminalStateStore } from "./terminal-state-store";
 
 type TerminalStateSessionSnapshot = Pick<
   TerminalSessionRecord,
-  "activeCommand" | "command" | "status" | "terminalState" | "scrollback"
+  "activeCommand" | "status" | "terminalState" | "scrollback"
 >;
 
 const SHELL_IDLE: TerminalState = { state: "shell_idle", agent: null };
@@ -202,7 +202,7 @@ function resolveStoredAgentState(
 }
 
 export function isCodexSession(
-  sessionSnapshot: Pick<TerminalSessionRecord, "activeCommand" | "command">,
+  sessionSnapshot: Pick<TerminalSessionRecord, "activeCommand">,
 ): boolean {
   return getTerminalSessionAgent(sessionSnapshot) === "codex";
 }
@@ -212,14 +212,9 @@ export function isCodexActiveCommand(activeCommand: string | null): boolean {
 }
 
 export function getTerminalSessionAgent(
-  sessionSnapshot: Pick<TerminalSessionRecord, "activeCommand" | "command">,
+  sessionSnapshot: Pick<TerminalSessionRecord, "activeCommand">,
 ): TerminalAgentKind | null {
-  return (
-    getAgentForCommand(sessionSnapshot.activeCommand) ??
-    (sessionSnapshot.activeCommand !== null
-      ? getAgentForCommand(sessionSnapshot.command)
-      : null)
-  );
+  return getAgentForCommand(sessionSnapshot.activeCommand);
 }
 
 export function getAgentForCommand(

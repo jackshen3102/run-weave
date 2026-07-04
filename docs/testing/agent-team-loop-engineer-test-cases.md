@@ -581,8 +581,9 @@ git diff --check
 
 期望：
 
-- 记录 `bestPassCount` 是否导致恢复后进展判断变严。
-- 若恢复后因为未重置 `bestPassCount` 而更容易再次无进展，标记为设计风险。
+- 恢复时 `bestPassCount` 重置为当前验收状态的 pass 基线。
+- 恢复后的下一轮 pass 能按新基线计为有进展，清零 `noProgressCount`。
+- 不应因为恢复前的历史最高 pass 数导致恢复后更容易再次无进展。
 - 最终判断以右侧 UI 和 run JSON 证据为准。
 
 ## 真实 completion / outbox 用例
@@ -592,14 +593,14 @@ git diff --check
 步骤：
 
 1. 进入 executing，并确认存在 behavior_verify pane。
-2. 在 behavior_verify pane 中写出 `.runweave/outbox/<terminalSessionId>.json`，内容包含 `acceptanceResults`。
+2. 在 behavior_verify pane 中按 worker 启动提示写出 `.runweave/outbox/<terminalSessionId>.panel-<panelId>.json`（或该提示给出的等价 pane 级路径），内容包含 `acceptanceResults`。
 3. 在同一 pane 触发真实 Codex/agent Stop hook，或用真实 hook 命令路径触发 `/internal/terminal-completion`。
 4. 用 `$playwright-cli` 观察右侧面板更新。
 
 期望：
 
 - completion 事件带 `terminalSessionId`，能解析 `panelId` 或 `tmuxPaneId`。
-- Agent Team 读取 outbox 并推进 acceptance。
+- Agent Team 优先读取当前 pane 的 outbox 并推进 acceptance；只有 completion 事件缺少 pane 标识时才回退到旧 session 级 outbox。
 - 右侧 UI 的 pass/fail、证据、round 和日志与 outbox 内容一致。
 - 证据中保留 outbox 片段和 UI 截图。
 
@@ -608,13 +609,14 @@ git diff --check
 步骤：
 
 1. 在同一 run 中至少保留两个 worker pane。
-2. 分别让两个 worker 几乎同时写 `.runweave/outbox/<terminalSessionId>.json` 并触发 completion。
+2. 分别让两个 worker 几乎同时写各自启动提示中的 pane 级 outbox，并触发 completion。
 3. 观察右侧 acceptance 和日志。
 
 期望：
 
 - 不应读到错误 pane 的验收结果。
 - 不应因同一 session outbox 文件互相覆盖而丢失结果。
+- 若某 worker 仍写旧 session 级 outbox，带 `panelId` 或 `tmuxPaneId` 的 completion 不应盲读无归属旧文件。
 - 若当前实现出现覆盖或错归因，记录为高优先级缺陷，并附两个 pane 的 outbox 写入时间和 UI 结果。
 
 ### AGT-OUTBOX-003 脏 panel env 的归因
@@ -808,22 +810,6 @@ git diff --check
 
 ## Electron / Computer Use 用例
 
-### AGT-DESK-001 Electron 桌面端打开 Agent Team
-
-步骤：
-
-1. 用 `$computer-use` 启动 Runweave Electron 桌面端。
-2. 进入目标 backend 的 terminal 页面。
-3. 右键目标终端 tab，点击 Agent Team。
-4. 打开 Agent Team tab。
-
-期望：
-
-- 桌面端可以进入同一 Agent Team 流程。
-- 登录态、backend 连接和终端切换正常。
-- session 级 panelSplitEnabled 与 Web 端保持一致。
-- UI 与 Web 端保持同一 run 状态。
-
 ### AGT-DESK-002 桌面端准备环境，浏览器验收页面
 
 步骤：
@@ -853,7 +839,7 @@ git diff --check
 - AGT-CONC-001/002/003
 - AGT-ERR-001/002/003/004
 - AGT-REG-001/002/003/004
-- Electron 相关改动需要覆盖 AGT-DESK-001/002
+- Electron 相关改动需要覆盖 AGT-DESK-002
 
 可接受通过标准：
 

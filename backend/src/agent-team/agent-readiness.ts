@@ -47,14 +47,20 @@ export class AgentTeamAgentReadinessService {
       panelId?: string | null;
       panelAlias?: string | null;
       role?: string | null;
+      publishSessionState?: boolean;
     },
   ): Promise<void> {
     const agent = getAgentForCommand(terminal.command ?? null);
     if (!agent) {
       return;
     }
+    const publishSessionState = target?.publishSessionState ?? !target;
     const paneTarget = await this.resolvePaneTarget(session, target);
-    if (await this.isAgentUiReady(session, agent, paneTarget)) {
+    if (
+      await this.isAgentUiReady(session, agent, paneTarget, {
+        publishSessionState,
+      })
+    ) {
       return;
     }
 
@@ -74,8 +80,12 @@ export class AgentTeamAgentReadinessService {
       );
     }
 
-    await this.sendAgentStartCommand(session, terminal, agent, paneTarget);
-    await this.waitForAgentUi(session, agent, paneTarget);
+    await this.sendAgentStartCommand(session, terminal, agent, paneTarget, {
+      publishSessionState,
+    });
+    await this.waitForAgentUi(session, agent, paneTarget, {
+      publishSessionState,
+    });
   }
 
   private async sendAgentStartCommand(
@@ -83,8 +93,9 @@ export class AgentTeamAgentReadinessService {
     terminal: AgentTeamTerminal,
     agent: TerminalAgentKind,
     paneTarget: TmuxPaneTarget | undefined,
+    options: { publishSessionState: boolean },
   ): Promise<void> {
-    if (agent === "codex" && !paneTarget) {
+    if (agent === "codex" && options.publishSessionState) {
       this.options.terminalStateService.setAgentStarting(session.id, agent, {
         projectId: session.projectId,
         reason: "metadata",
@@ -111,6 +122,7 @@ export class AgentTeamAgentReadinessService {
     session: TerminalSessionRecord,
     agent: TerminalAgentKind,
     paneTarget: TmuxPaneTarget | undefined,
+    options: { publishSessionState: boolean },
   ): Promise<void> {
     if (agent !== "codex") {
       return;
@@ -118,7 +130,7 @@ export class AgentTeamAgentReadinessService {
     const deadline = Date.now() + AGENT_TEAM_AGENT_START_TIMEOUT_MS;
     while (Date.now() <= deadline) {
       await this.acceptCodexTrustPromptIfNeeded(session, agent, paneTarget);
-      if (await this.isAgentUiReady(session, agent, paneTarget)) {
+      if (await this.isAgentUiReady(session, agent, paneTarget, options)) {
         return;
       }
       await wait(AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS);
@@ -162,11 +174,12 @@ export class AgentTeamAgentReadinessService {
     session: TerminalSessionRecord,
     agent: TerminalAgentKind,
     paneTarget: TmuxPaneTarget | undefined,
+    options: { publishSessionState: boolean },
   ): Promise<boolean> {
     if (agent !== "codex") {
       return true;
     }
-    if (!paneTarget) {
+    if (options.publishSessionState) {
       const currentState = this.options.terminalStateService.getCurrent(
         session.id,
         session,
@@ -188,10 +201,6 @@ export class AgentTeamAgentReadinessService {
     if (!hasStartedCodexUi(scrollback)) {
       return false;
     }
-    this.options.terminalStateService.setAgentIdle(session.id, agent, {
-      projectId: session.projectId,
-      reason: "metadata",
-    });
     return true;
   }
 
