@@ -44,6 +44,7 @@ const createRunSchema = z
     projectId: z.string().trim().min(1),
     terminalSessionId: z.string().trim().min(1),
     task: z.string().trim().optional(),
+    planFile: z.string().trim().min(1).optional(),
     options: z
       .object({ autoApproveSplit: z.boolean().optional() })
       .strict()

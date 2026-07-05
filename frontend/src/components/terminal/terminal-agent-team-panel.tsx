@@ -10,7 +10,6 @@ import {
   completeAgentTeamRun,
   focusAgentTeamPane,
   getAgentTeamRunForTerminal,
-  proposeAgentTeamSplit,
   recordAgentTeamRound,
   resumeAgentTeamRun,
   startAgentTeamRun,
@@ -23,8 +22,8 @@ import {
   type WorkerDraft,
 } from "./terminal-agent-team-panel-model";
 import {
-  ClarifySection,
   ExecutingSection,
+  PlanReviewSection,
   ProposalSection,
   StartFlowSection,
 } from "./terminal-agent-team-panel-sections";
@@ -53,6 +52,7 @@ export function TerminalAgentTeamPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [task, setTask] = useState("");
+  const [planFile, setPlanFile] = useState("");
   const [autoApproveSplit, setAutoApproveSplit] = useState(false);
   const [workerDrafts, setWorkerDrafts] = useState<WorkerDraft[] | null>(null);
   const [resumeNote, setResumeNote] = useState("");
@@ -179,6 +179,7 @@ export function TerminalAgentTeamPanel({
       return;
     }
     const trimmedTask = task.trim();
+    const trimmedPlanFile = planFile.trim();
     if (!trimmedTask) {
       setError("请先填写 Agent Team 要执行的任务。");
       return;
@@ -188,6 +189,7 @@ export function TerminalAgentTeamPanel({
         projectId,
         terminalSessionId,
         task: trimmedTask,
+        ...(trimmedPlanFile ? { planFile: trimmedPlanFile } : {}),
         options: { autoApproveSplit },
       }).then((next) => {
         if (next.phase === "executing") {
@@ -195,15 +197,6 @@ export function TerminalAgentTeamPanel({
         }
         return next;
       }),
-    );
-  });
-
-  const requestSplit = useMemoizedFn((source: "user" | "agent"): void => {
-    if (!run) {
-      return;
-    }
-    void runAction(() =>
-      proposeAgentTeamSplit(apiBase, token, run.runId, { source }),
     );
   });
 
@@ -327,14 +320,23 @@ export function TerminalAgentTeamPanel({
         ) : !run ? (
           <StartFlowSection
             task={task}
+            planFile={planFile}
             autoApproveSplit={autoApproveSplit}
             busy={busy}
             onTaskChange={setTask}
+            onPlanFileChange={setPlanFile}
             onToggleAutoApprove={() => setAutoApproveSplit((prev) => !prev)}
             onStart={startFlow}
           />
-        ) : run.phase === "clarify" ? (
-          <ClarifySection run={run} busy={busy} onRequestSplit={requestSplit} />
+        ) : run.phase === "plan_review" ? (
+          <PlanReviewSection
+            run={run}
+            busy={busy}
+            resumeNote={resumeNote}
+            onResumeNoteChange={setResumeNote}
+            onResume={resume}
+            onFocusPane={focusPane}
+          />
         ) : run.phase === "proposal" && workerDrafts ? (
           <ProposalSection
             run={run}

@@ -37,16 +37,20 @@ const EVIDENCE_ATTACHMENT_LABEL: Partial<
 
 export function StartFlowSection({
   task,
+  planFile,
   autoApproveSplit,
   busy,
   onTaskChange,
+  onPlanFileChange,
   onToggleAutoApprove,
   onStart,
 }: {
   task: string;
+  planFile: string;
   autoApproveSplit: boolean;
   busy: boolean;
   onTaskChange: (value: string) => void;
+  onPlanFileChange: (value: string) => void;
   onToggleAutoApprove: () => void;
   onStart: () => void;
 }) {
@@ -54,22 +58,28 @@ export function StartFlowSection({
     <div className="space-y-3">
       <div className="text-sm font-medium text-slate-200">这是一个普通终端</div>
       <p className="text-xs leading-relaxed text-slate-400">
-        当前是标准 shell 会话，没有多 Agent 流程。想让主 Agent 接管、驱动
+        当前是标准 shell 会话，没有多 Agent 流程。提交任务后，Agent Team 会进入
         <code className="mx-1 rounded bg-slate-800 px-1">
-          需求澄清 → 拆分提案 → 执行观测
+          计划审查（可选）→ 拆分提案 → 执行观测
         </code>
-        的 engineering-rules 流程，点下面开启。
+        。
       </p>
       <ol className="space-y-1 pl-4 text-xs text-slate-400 [list-style:decimal]">
-        <li>主 Agent 在本终端里跑，与你澄清意图</li>
-        <li>澄清充分后产出 worker 拆分提案，你确认</li>
-        <li>确认后 split 出 worker pane，右侧退回只读观测</li>
+        <li>可选计划文件先由 plan_review 审查</li>
+        <li>计划通过后产出 worker 拆分提案，你确认</li>
+        <li>确认后 split 出 worker pane，并按 code → review → verify 串行门禁推进</li>
       </ol>
       <textarea
         className="min-h-20 w-full resize-y rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
         value={task}
         onChange={(event) => onTaskChange(event.target.value)}
-        placeholder="输入这次 Agent Team 要执行的任务"
+        placeholder="描述要执行的任务"
+      />
+      <input
+        className="w-full rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
+        value={planFile}
+        onChange={(event) => onPlanFileChange(event.target.value)}
+        placeholder="可选：计划文件路径，如 docs/plans/xxx.md"
       />
       <label className="flex items-center gap-2 text-xs text-slate-300">
         <input
@@ -87,61 +97,176 @@ export function StartFlowSection({
         disabled={busy || !task.trim()}
         onClick={onStart}
       >
-        <Play className="h-4 w-4" /> 在此终端开启 engineering-rules 流程
+        <Play className="h-4 w-4" /> 开始 Agent Team
       </Button>
     </div>
   );
 }
 
-export function ClarifySection({
+export function PlanReviewSection({
   run,
   busy,
-  onRequestSplit,
+  resumeNote,
+  onResumeNoteChange,
+  onResume,
+  onFocusPane,
 }: {
   run: AgentTeamRun;
   busy: boolean;
-  onRequestSplit: (source: "user" | "agent") => void;
+  resumeNote: string;
+  onResumeNoteChange: (value: string) => void;
+  onResume: () => void;
+  onFocusPane: (panelId: string) => void;
 }) {
-  const auto = run.options.autoApproveSplit;
+  const { loop, acceptance } = run;
+  const ratio =
+    loop.maxNoProgress > 0 ? loop.noProgressCount / loop.maxNoProgress : 0;
+  const level = loop.escalated ? "escalated" : ratio >= 0.66 ? "warn" : "ok";
+  const passed = acceptance.filter((item) => item.status === "pass").length;
+  const failed = acceptance.filter((item) => item.status === "fail").length;
+
   return (
     <div className="space-y-3">
-      <h3 className="text-xs font-semibold uppercase text-slate-400">
-        需求澄清
-      </h3>
-      <div className="space-y-2">
-        {run.clarify.map((message, index) => (
-          <div
-            key={`${message.at}-${index}`}
-            className={[
-              "rounded px-2 py-1.5 text-xs",
-              message.from === "agent"
-                ? "bg-slate-800/70 text-slate-200"
-                : "bg-sky-950/50 text-sky-200",
-            ].join(" ")}
-          >
-            {message.text}
-          </div>
-        ))}
+      <div>
+        <h3 className="text-xs font-semibold uppercase text-slate-400">
+          计划审查
+        </h3>
+        <div className="mt-1 rounded border border-slate-800 bg-slate-900/40 px-2 py-1.5 text-[11px] text-slate-300">
+          {run.planFile}
+        </div>
+        <div className="mt-1 text-[10px] text-slate-500">
+          当前门禁：{run.activeWorkerRole ? ROLE_LABEL[run.activeWorkerRole] : "无"}
+        </div>
       </div>
-      <Button
-        type="button"
-        size="sm"
-        className="w-full"
-        disabled={busy}
-        onClick={() => onRequestSplit("user")}
+
+      <div
+        className={[
+          "rounded border p-2",
+          level === "escalated"
+            ? "border-rose-800 bg-rose-950/40"
+            : level === "warn"
+              ? "border-amber-800 bg-amber-950/30"
+              : "border-slate-800 bg-slate-900/40",
+        ].join(" ")}
       >
-        {auto ? "澄清完成 · 自动拆分并执行 →" : "澄清完成 · 让主 Agent 拆分 →"}
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="w-full"
-        disabled={busy}
-        onClick={() => onRequestSplit("agent")}
-      >
-        模拟主 Agent 判断澄清充分（Agent 主导）
-      </Button>
+        <div className="flex items-center justify-between text-xs text-slate-300">
+          <span>修复轮次</span>
+          <span>round {loop.round}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs text-slate-300">
+          <span>无进展</span>
+          <span>
+            {loop.noProgressCount} / {loop.maxNoProgress}
+          </span>
+        </div>
+        <div className="mt-1.5 flex gap-1">
+          {Array.from({ length: loop.maxNoProgress }).map((_, index) => (
+            <span
+              key={index}
+              className={[
+                "h-1.5 flex-1 rounded",
+                index < loop.noProgressCount
+                  ? level === "escalated"
+                    ? "bg-rose-500"
+                    : "bg-amber-400"
+                  : "bg-slate-700",
+              ].join(" ")}
+            />
+          ))}
+        </div>
+      </div>
+
+      {loop.escalated ? (
+        <div className="space-y-2 rounded border border-rose-800 bg-rose-950/40 p-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
+            <AlertTriangle className="h-4 w-4" /> 计划修复无进展
+          </div>
+          <p className="text-[11px] text-rose-200">{loop.lastReason}</p>
+          <PaneFocusList run={run} onFocusPane={onFocusPane} />
+          <textarea
+            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+            rows={2}
+            placeholder="填写人工干预 note"
+            value={resumeNote}
+            onChange={(event) => onResumeNoteChange(event.target.value)}
+          />
+          <Button
+            type="button"
+            size="sm"
+            className="w-full"
+            disabled={busy || !resumeNote.trim()}
+            onClick={onResume}
+          >
+            人工已介入 · 恢复计划 loop →
+          </Button>
+        </div>
+      ) : null}
+
+      <div>
+        <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-400">
+          <span>审查用例 + 证据</span>
+          <span className="text-[10px] text-slate-500">
+            {passed}✓{failed > 0 ? ` ${failed}✗` : ""}
+          </span>
+        </div>
+        <div className="space-y-1.5">
+          {acceptance.map((item) => (
+            <div
+              key={item.caseId}
+              className={[
+                "rounded border px-2 py-1.5 text-[11px]",
+                item.status === "pass"
+                  ? "border-emerald-900 bg-emerald-950/30"
+                  : item.status === "fail"
+                    ? "border-rose-900 bg-rose-950/30"
+                    : "border-slate-800 bg-slate-900/40",
+              ].join(" ")}
+            >
+              <div className="flex items-start gap-1.5">
+                <span
+                  className={
+                    item.status === "pass"
+                      ? "text-emerald-400"
+                      : item.status === "fail"
+                        ? "text-rose-400"
+                        : "text-slate-500"
+                  }
+                >
+                  {item.status === "pass"
+                    ? "✓"
+                    : item.status === "fail"
+                      ? "✗"
+                      : "•"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-slate-300">{item.text}</div>
+                  <AcceptanceEvidenceDetails
+                    status={item.status}
+                    evidence={item.evidence}
+                  />
+                  {item.status === "fail" && item.bouncedToPanelId ? (
+                    <div className="mt-0.5 text-[10px] text-amber-400">
+                      → 已抛回 plan worker 修复
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-1 text-xs font-semibold text-slate-400">Log</div>
+        <div className="space-y-0.5 rounded border border-slate-800 bg-slate-950/60 p-2 font-mono text-[10px] text-slate-400">
+          {run.logs
+            .slice()
+            .reverse()
+            .map((line, index) => (
+              <div key={`${index}-${line}`}>{line}</div>
+            ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -214,7 +339,7 @@ export function ProposalSection({
             验收用例草案
           </div>
           <p className="mb-1 text-[10px] text-slate-500">
-            主 Agent 把澄清目标落成可观测验收用例，由 behavior_verify worker
+            Agent Team 把任务目标落成可观测验收用例，由 behavior_verify worker
             跑。与拆分一并确认。
           </p>
           <ol className="space-y-0.5 pl-4 text-[11px] text-slate-400 [list-style:decimal]">
@@ -282,7 +407,7 @@ export function ExecutingSection({
           Loop 状态
         </h3>
         <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">
-          Observe Only
+          {run.activeWorkerRole ? ROLE_LABEL[run.activeWorkerRole] : "Observe Only"}
         </span>
       </div>
 
