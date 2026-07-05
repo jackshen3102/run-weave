@@ -227,6 +227,10 @@ function runCli(args, options) {
       env: {
         ...process.env,
         RUNWEAVE_APP_SERVER_HOME: options.home,
+        RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: path.join(
+          options.home,
+          "app-server-cloud-sync-sim",
+        ),
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

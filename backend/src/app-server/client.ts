@@ -3,6 +3,10 @@ import type {
   AppServerEventEnvelope,
   AppServerEventListResponse,
   AppServerEventStreamMessage,
+  AppServerAgentSessionListResponse,
+  AppServerSyncStatusResponse,
+  AppServerThreadListResponse,
+  AppServerThreadResponse,
   CreateAppServerEventRequest,
 } from "@runweave/shared";
 import type { AppServerConnectionInfo } from "@runweave/shared/src/app-server-node";
@@ -47,6 +51,65 @@ export class AppServerClient {
     return (await response.json()) as AppServerEventListResponse;
   }
 
+  async listThreads(options: {
+    projectId?: string;
+    terminalSessionId?: string;
+    terminalPanelId?: string;
+    agent?: string;
+    status?: string;
+    after?: string | null;
+    limit?: number;
+  } = {}): Promise<AppServerThreadListResponse | null> {
+    const response = await fetch(
+      this.buildStateUrl("/threads", options),
+      { headers: this.headers() },
+    );
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as AppServerThreadListResponse;
+  }
+
+  async getThread(threadId: string): Promise<AppServerThreadResponse | null> {
+    const response = await fetch(
+      `${this.connection.baseUrl}/threads/${encodeURIComponent(threadId)}`,
+      { headers: this.headers() },
+    );
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as AppServerThreadResponse;
+  }
+
+  async listAgentSessions(options: {
+    projectId?: string;
+    terminalSessionId?: string;
+    terminalPanelId?: string;
+    agent?: string;
+    status?: string;
+    after?: string | null;
+    limit?: number;
+  } = {}): Promise<AppServerAgentSessionListResponse | null> {
+    const response = await fetch(
+      this.buildStateUrl("/agent-sessions", options),
+      { headers: this.headers() },
+    );
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as AppServerAgentSessionListResponse;
+  }
+
+  async getSyncStatus(): Promise<AppServerSyncStatusResponse | null> {
+    const response = await fetch(`${this.connection.baseUrl}/sync/status`, {
+      headers: this.headers(),
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as AppServerSyncStatusResponse;
+  }
+
   connectStream(options: {
     after: string | null;
     kinds: string[];
@@ -84,5 +147,42 @@ export class AppServerClient {
       ...extra,
       Authorization: `Bearer ${this.connection.token}`,
     };
+  }
+
+  private buildStateUrl(
+    pathname: string,
+    options: {
+      projectId?: string;
+      terminalSessionId?: string;
+      terminalPanelId?: string;
+      agent?: string;
+      status?: string;
+      after?: string | null;
+      limit?: number;
+    },
+  ): string {
+    const url = new URL(`${this.connection.baseUrl}${pathname}`);
+    if (options.projectId) {
+      url.searchParams.set("projectId", options.projectId);
+    }
+    if (options.terminalSessionId) {
+      url.searchParams.set("terminalSessionId", options.terminalSessionId);
+    }
+    if (options.terminalPanelId) {
+      url.searchParams.set("terminalPanelId", options.terminalPanelId);
+    }
+    if (options.agent) {
+      url.searchParams.set("agent", options.agent);
+    }
+    if (options.status) {
+      url.searchParams.set("status", options.status);
+    }
+    if (options.after) {
+      url.searchParams.set("after", options.after);
+    }
+    if (options.limit) {
+      url.searchParams.set("limit", String(options.limit));
+    }
+    return url.toString();
   }
 }

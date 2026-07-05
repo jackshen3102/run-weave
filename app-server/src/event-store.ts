@@ -115,6 +115,10 @@ export class AppServerEventStore {
     return this.events[this.events.length - 1]?.id ?? null;
   }
 
+  listAll(): AppServerEventEnvelope[] {
+    return [...this.events];
+  }
+
   private getCutoffTimeMs(): number {
     if (this.retentionMs <= 0) {
       return Date.now();
