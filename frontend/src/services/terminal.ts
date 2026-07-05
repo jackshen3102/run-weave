@@ -473,6 +473,23 @@ export async function getTerminalHistory(
   );
 }
 
+export async function getTerminalPanelHistory(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  panelId: string,
+): Promise<TerminalSessionHistoryResponse> {
+  return requestJson<TerminalSessionHistoryResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels/${encodeURIComponent(panelId)}/history`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
 export async function deleteTerminalSession(
   apiBase: string,
   token: string,

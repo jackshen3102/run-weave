@@ -110,6 +110,9 @@ export function TerminalWorkspace({
   const setHistoryTerminalSessionId = useTerminalWorkspaceStore(
     (state) => state.setHistoryTerminalSessionId,
   );
+  const setHistoryTerminalPanelId = useTerminalWorkspaceStore(
+    (state) => state.setHistoryTerminalPanelId,
+  );
   const selectActiveSession = useTerminalWorkspaceStore(
     (state) => state.selectActiveSession,
   );
@@ -418,6 +421,7 @@ export function TerminalWorkspace({
     setBellMarkers,
     setHistoryDrawerOpen,
     setHistoryTerminalSessionId,
+    setHistoryTerminalPanelId,
   });
   useEffect(() => {
     const knownSessionIds = new Set(sessionIds);

@@ -5,6 +5,7 @@ import type {
   TerminalStateChangeReason,
 } from "@runweave/shared";
 import { hasCodexReadyPrompt } from "@runweave/shared";
+import { getExecutableCommandName } from "./completion-source-gate";
 import type { TerminalSessionRecord } from "./manager";
 import type { TerminalEventService } from "./terminal-event-service";
 import type { TerminalStateStore } from "./terminal-state-store";
@@ -12,6 +13,10 @@ import type { TerminalStateStore } from "./terminal-state-store";
 type TerminalStateSessionSnapshot = Pick<
   TerminalSessionRecord,
   "activeCommand" | "status" | "terminalState" | "scrollback"
+>;
+type TerminalStatePanelSnapshot = Pick<
+  TerminalStateSessionSnapshot,
+  "activeCommand" | "status" | "terminalState"
 >;
 
 const SHELL_IDLE: TerminalState = { state: "shell_idle", agent: null };
@@ -223,14 +228,47 @@ export function getAgentForCommand(
   if (!activeCommand) {
     return null;
   }
-  const normalized = activeCommand.trim().replace(/\\+/g, "/");
-  const basename = normalized.split("/").filter(Boolean).at(-1) ?? normalized;
+  const basename = getExecutableCommandName(activeCommand);
+  if (!basename) {
+    return null;
+  }
   for (const [agent, commands] of Object.entries(AGENT_COMMANDS)) {
     if (commands.has(basename)) {
       return agent as TerminalAgentKind;
     }
   }
   return null;
+}
+
+export function aggregatePanelTerminalState(
+  panels: TerminalStatePanelSnapshot[],
+): TerminalState {
+  const runningPanels = panels.filter((panel) => panel.status === "running");
+  const agentPanels = runningPanels
+    .map((panel) => ({
+      agent: panel.terminalState?.agent ?? getAgentForCommand(panel.activeCommand),
+      state: panel.terminalState?.state,
+    }))
+    .filter(
+      (panel): panel is {
+        agent: TerminalAgentKind;
+        state: TerminalState["state"] | undefined;
+      } => Boolean(panel.agent),
+    );
+
+  const runningAgentPanel = agentPanels.find(
+    (panel) => panel.state === "agent_running",
+  );
+  if (runningAgentPanel) {
+    return createAgentState(runningAgentPanel.agent, "agent_running");
+  }
+
+  const idleAgentPanel = agentPanels[0];
+  if (idleAgentPanel) {
+    return createAgentState(idleAgentPanel.agent, "agent_idle");
+  }
+
+  return SHELL_IDLE;
 }
 
 function createAgentState(

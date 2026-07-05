@@ -198,6 +198,7 @@ function buildCompletionHookBody({
     hookEvent: String(rawEvent || "Stop"),
     summary: extractCompletionSummary(payload),
     panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID || null,
+    tmuxPaneId: process.env.TMUX_PANE || null,
     cwd:
       typeof payload.cwd === "string" && payload.cwd.trim()
         ? payload.cwd
@@ -214,9 +215,11 @@ function buildAppServerBaseEvent({
   source,
   terminalSessionId,
   threadId,
+  commandName,
   dedupePrefix,
 }) {
   const terminalPanelId = process.env.RUNWEAVE_TERMINAL_PANEL_ID || null;
+  const tmuxPaneId = process.env.TMUX_PANE || null;
   return {
     kind,
     source: {
@@ -228,6 +231,7 @@ function buildAppServerBaseEvent({
       projectId: process.env.RUNWEAVE_PROJECT_ID || null,
       terminalSessionId,
       terminalPanelId,
+      terminalTmuxPaneId: tmuxPaneId,
       cwd:
         typeof payload.cwd === "string" && payload.cwd.trim()
           ? payload.cwd
@@ -242,6 +246,9 @@ function buildAppServerBaseEvent({
       rawHookEvent: String(rawEvent || "Unknown"),
       normalizedEvent,
       stateHookEvent,
+      panelId: terminalPanelId,
+      tmuxPaneId,
+      commandName: commandName || null,
     },
   };
 }

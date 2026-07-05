@@ -52,10 +52,13 @@ export interface TerminalPanelRecord {
   terminalSessionId: string;
   alias: string | null;
   role: string | null;
+  threadId?: string;
+  preview?: string;
   agentTeamRunId: string | null;
   agentTeamWorkerId: string | null;
   cwd: string;
   activeCommand: string | null;
+  terminalState?: TerminalState;
   status: "running" | "exited";
   createdAt: Date;
   lastActivityAt: Date;
@@ -216,10 +219,15 @@ export function buildPanelRecord(
     terminalSessionId: persisted.terminalSessionId,
     alias: persisted.alias ?? null,
     role: persisted.role ?? null,
+    threadId: persisted.threadId,
+    preview: persisted.preview,
     agentTeamRunId: persisted.agentTeamRunId ?? null,
     agentTeamWorkerId: persisted.agentTeamWorkerId ?? null,
     cwd: persisted.cwd,
     activeCommand: persisted.activeCommand ?? null,
+    ...(persisted.terminalState !== undefined
+      ? { terminalState: persisted.terminalState }
+      : {}),
     status: persisted.status,
     createdAt: new Date(persisted.createdAt),
     lastActivityAt: new Date(persisted.lastActivityAt),
@@ -237,10 +245,15 @@ export function toPersistedPanel(
     terminalSessionId: panel.terminalSessionId,
     alias: panel.alias,
     role: panel.role,
+    threadId: panel.threadId,
+    preview: panel.preview,
     agentTeamRunId: panel.agentTeamRunId,
     agentTeamWorkerId: panel.agentTeamWorkerId,
     cwd: panel.cwd,
     activeCommand: panel.activeCommand,
+    ...(panel.terminalState !== undefined
+      ? { terminalState: panel.terminalState }
+      : {}),
     status: panel.status,
     createdAt: panel.createdAt.toISOString(),
     lastActivityAt: panel.lastActivityAt.toISOString(),

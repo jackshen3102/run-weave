@@ -7,7 +7,10 @@ import type {
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { readTerminalScrollback } from "../terminal/runtime-launcher";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
+import {
+  aggregatePanelTerminalState,
+  type TerminalStateService,
+} from "../terminal/terminal-state-service";
 import type { TmuxService } from "../terminal/tmux-service";
 import { processTerminalAgentHook } from "../terminal/agent-hook-processor";
 
@@ -19,6 +22,9 @@ const agentHookStateSchema = z
     terminalSessionId: z.string().trim().min(1),
     projectId: z.string().trim().min(1).optional(),
     threadId: z.string().trim().min(1).optional(),
+    panelId: z.string().trim().min(1).nullable().optional(),
+    tmuxPaneId: z.string().trim().min(1).nullable().optional(),
+    commandName: z.string().trim().min(1).nullable().optional(),
     agent: z.enum(AGENT_HOOKS),
     hookEvent: z.enum(["SessionStart", "UserPromptSubmit", "Stop"]),
   })
@@ -40,16 +46,21 @@ export function createTerminalStateRouter(options: {
       return;
     }
 
-    const scrollback = await readTerminalScrollback(
-      session,
-      options.terminalSessionManager,
-      options.tmuxService,
-      "live",
-    );
-    const terminalState = options.terminalStateService.getCurrent(session.id, {
-      ...session,
-      scrollback,
-    });
+    const runningPanels = options.terminalSessionManager
+      .listPanels(session.id)
+      .filter((panel) => panel.status === "running");
+    const terminalState =
+      runningPanels.length > 0
+        ? aggregatePanelTerminalState(runningPanels)
+        : options.terminalStateService.getCurrent(session.id, {
+            ...session,
+            scrollback: await readTerminalScrollback(
+              session,
+              options.terminalSessionManager,
+              options.tmuxService,
+              "live",
+            ),
+          });
 
     const payload: TerminalStateResponse = { terminalState };
     res.json(payload);
@@ -107,6 +118,7 @@ export function createInternalTerminalAgentHookRouter(options: {
         agent: result.agent,
         hookEvent: result.hookEvent,
         activeCommand: result.activeCommand,
+        panelId: result.panelId,
       });
       res.status(202).json({ terminalState: result.terminalState });
       return;
@@ -117,6 +129,7 @@ export function createInternalTerminalAgentHookRouter(options: {
       terminalSessionId: result.terminalSessionId,
       agent: result.agent,
       hookEvent: result.hookEvent,
+      panelId: result.panelId,
       state: result.terminalState.state,
     });
     res.status(202).json({ terminalState: result.terminalState });

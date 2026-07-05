@@ -24,6 +24,9 @@ export interface ProcessTerminalAgentHookInput {
   agent: TerminalAgentKind;
   hookEvent: AgentHookStateEvent;
   threadId?: string | null;
+  panelId?: string | null;
+  tmuxPaneId?: string | null;
+  commandName?: string | null;
 }
 
 export type ProcessTerminalAgentHookResult =
@@ -43,6 +46,7 @@ export type ProcessTerminalAgentHookResult =
       hookEvent: AgentHookStateEvent;
       activeCommand: string | null;
       terminalState: TerminalState;
+      panelId: string | null;
     }
   | {
       status: "recorded";
@@ -50,6 +54,7 @@ export type ProcessTerminalAgentHookResult =
       agent: TerminalAgentKind;
       hookEvent: AgentHookStateEvent;
       terminalState: TerminalState;
+      panelId: string | null;
     };
 
 export async function processTerminalAgentHook(
@@ -79,42 +84,103 @@ export async function processTerminalAgentHook(
     };
   }
 
+  const panelResolution = resolveHookPanel(
+    options.terminalSessionManager,
+    session.id,
+    input.panelId ?? null,
+    input.tmuxPaneId ?? null,
+  );
+  if (!panelResolution.ok) {
+    return {
+      status: "ignored",
+      terminalSessionId: session.id,
+      agent: input.agent,
+      hookEvent: input.hookEvent,
+      activeCommand: session.activeCommand,
+      terminalState: options.terminalStateService.getCurrent(
+        session.id,
+        session,
+      ),
+      panelId: null,
+    };
+  }
+  const panel = panelResolution.panel;
+
   if (input.agent === "codex" && input.threadId) {
+    const runningPanelCount = options.terminalSessionManager
+      .listPanels(session.id)
+      .filter((candidate) => candidate.status === "running").length;
+    const shouldWriteSessionMetadata = runningPanelCount <= 1;
     const previousThreadId = session.threadId;
-    session =
-      (await options.terminalSessionManager.updateSessionThreadId(
-        session.id,
-        input.threadId,
-      )) ?? session;
-    if (
-      input.hookEvent === "SessionStart" &&
-      previousThreadId !== input.threadId
-    ) {
-      await options.terminalSessionManager.updateSessionPreview(
-        session.id,
-        null,
-      );
+    const previousPanelThreadId = panel?.threadId;
+    if (shouldWriteSessionMetadata) {
+      session =
+        (await options.terminalSessionManager.updateSessionThreadId(
+          session.id,
+          input.threadId,
+        )) ?? session;
+      if (
+        input.hookEvent === "SessionStart" &&
+        previousThreadId !== input.threadId
+      ) {
+        await options.terminalSessionManager.updateSessionPreview(
+          session.id,
+          null,
+        );
+      }
     }
     if (input.hookEvent === "SessionStart") {
       updateCodexThreadPreviewInBackground(
         options.terminalSessionManager,
         session.id,
         input.threadId,
+        panel?.id ?? null,
+        shouldWriteSessionMetadata,
       );
+    }
+    if (panel) {
+      await options.terminalSessionManager.updatePanelThreadId(
+        panel.id,
+        input.threadId,
+      );
+      if (
+        input.hookEvent === "SessionStart" &&
+        previousPanelThreadId !== input.threadId
+      ) {
+        await options.terminalSessionManager.updatePanelPreview(panel.id, null);
+      }
     }
   }
 
   const sessionAgent = getTerminalSessionAgent(session);
+  const panelAgent = panel ? getTerminalSessionAgent(panel) : null;
   const effectiveAgent =
-    sessionAgent &&
-    isCompletionSourceAllowedForCommand(input.agent, session.activeCommand)
-      ? sessionAgent
-      : input.agent;
+    panel &&
+    panelAgent &&
+    (isCompletionSourceAllowedForCommand(input.agent, panel.activeCommand) ||
+      isCompletionSourceAllowedForCommand(input.agent, input.commandName ?? null))
+      ? panelAgent
+      : sessionAgent &&
+          (isCompletionSourceAllowedForCommand(
+            input.agent,
+            session.activeCommand,
+          ) ||
+            isCompletionSourceAllowedForCommand(
+              input.agent,
+              input.commandName ?? null,
+            ))
+        ? sessionAgent
+        : input.agent;
   const lastAiActiveCommand =
     options.terminalSessionManager.getLastAiActiveCommand(session.id);
   const currentCommandMatches =
     isCompletionSourceAllowedForCommand(input.agent, session.activeCommand) ||
-    sessionAgent === effectiveAgent;
+    (panel
+      ? isCompletionSourceAllowedForCommand(input.agent, panel.activeCommand)
+      : false) ||
+    isCompletionSourceAllowedForCommand(input.agent, input.commandName ?? null) ||
+    sessionAgent === effectiveAgent ||
+    panelAgent === effectiveAgent;
   const graceCommandMatches =
     session.activeCommand === null &&
     lastAiActiveCommand !== null &&
@@ -140,6 +206,7 @@ export async function processTerminalAgentHook(
         session.id,
         session,
       ),
+      panelId: panel?.id ?? null,
     };
   }
 
@@ -152,12 +219,19 @@ export async function processTerminalAgentHook(
       reason: "agent_hook",
     },
   );
+  if (panel) {
+    await options.terminalSessionManager.updatePanelTerminalState(
+      panel.id,
+      terminalState,
+    );
+  }
   return {
     status: "recorded",
     terminalSessionId: session.id,
     agent: effectiveAgent,
     hookEvent: input.hookEvent,
     terminalState,
+    panelId: panel?.id ?? null,
   };
 }
 
@@ -165,13 +239,20 @@ function updateCodexThreadPreviewInBackground(
   terminalSessionManager: TerminalSessionManager,
   terminalSessionId: string,
   threadId: string,
+  panelId: string | null,
+  updateSessionPreview: boolean,
 ): void {
   void readCodexThreadSnapshot(threadId)
     .then(async ({ preview }) => {
-      await terminalSessionManager.updateSessionPreview(
-        terminalSessionId,
-        preview,
-      );
+      if (updateSessionPreview) {
+        await terminalSessionManager.updateSessionPreview(
+          terminalSessionId,
+          preview,
+        );
+      }
+      if (panelId) {
+        await terminalSessionManager.updatePanelPreview(panelId, preview);
+      }
     })
     .catch((error) => {
       agentHookProcessorLogger.warn("terminal-agent-hook.preview.failed", {
@@ -181,4 +262,41 @@ function updateCodexThreadPreviewInBackground(
         error,
       });
     });
+}
+
+function resolveHookPanel(
+  terminalSessionManager: TerminalSessionManager,
+  terminalSessionId: string,
+  panelId: string | null,
+  tmuxPaneId: string | null,
+):
+  | {
+      ok: true;
+      panel: ReturnType<TerminalSessionManager["getPanel"]> | null;
+    }
+  | { ok: false } {
+  const byId = panelId
+    ? terminalSessionManager.getPanel(panelId) ?? null
+    : null;
+  const panels = tmuxPaneId
+    ? terminalSessionManager.listPanels(terminalSessionId)
+    : [];
+  const byPane = tmuxPaneId
+    ? panels.find((panel) => panel.tmuxPaneId === tmuxPaneId) ?? null
+    : null;
+
+  if (panelId) {
+    if (
+      !byId ||
+      byId.terminalSessionId !== terminalSessionId ||
+      (tmuxPaneId && byId.tmuxPaneId !== tmuxPaneId)
+    ) {
+      return { ok: false };
+    }
+    return { ok: true, panel: byId };
+  }
+  if (tmuxPaneId) {
+    return { ok: true, panel: byPane };
+  }
+  return { ok: true, panel: null };
 }

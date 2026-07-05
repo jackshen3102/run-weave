@@ -187,6 +187,9 @@ async function postAgentHook({
   agent,
   hookEvent,
   threadId,
+  panelId,
+  tmuxPaneId,
+  commandName,
 }) {
   try {
     const response = await fetch(endpoint, {
@@ -199,6 +202,9 @@ async function postAgentHook({
         terminalSessionId,
         projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
         ...(threadId ? { threadId } : {}),
+        ...(panelId ? { panelId } : {}),
+        ...(tmuxPaneId ? { tmuxPaneId } : {}),
+        commandName: commandName || null,
         agent,
         hookEvent,
       }),
@@ -272,12 +278,14 @@ async function main() {
   const token = process.env.RUNWEAVE_HOOK_TOKEN;
   const terminalSessionId = process.env.RUNWEAVE_TERMINAL_SESSION_ID;
   const terminalPanelId = process.env.RUNWEAVE_TERMINAL_PANEL_ID || null;
+  const tmuxPaneId = process.env.TMUX_PANE || null;
   appendDebugLog("hook bridge invoked", {
     rawEvent: String(rawEvent || "Unknown"),
     normalizedEvent,
     source,
     terminalSessionId: terminalSessionId || null,
     terminalPanelId,
+    tmuxPaneId,
     projectId: process.env.RUNWEAVE_PROJECT_ID || null,
     hasToken: Boolean(token),
     endpoint: redactEndpoint(endpoint),
@@ -320,6 +328,7 @@ async function main() {
         source,
         terminalSessionId,
         threadId,
+        commandName: args.commandName,
         dedupePrefix: "hook",
       }),
     );
@@ -344,6 +353,9 @@ async function main() {
       agent: source,
       hookEvent: stateHookEvent,
       threadId,
+      panelId: terminalPanelId,
+      tmuxPaneId,
+      commandName: args.commandName,
     });
     appendDebugLog("hook bridge posted agent hook", {
       terminalSessionId,
@@ -371,11 +383,12 @@ async function main() {
         rawEvent,
         normalizedEvent,
         stateHookEvent,
-        source,
-        terminalSessionId,
-        threadId,
-        dedupePrefix: "completion",
-      });
+          source,
+          terminalSessionId,
+          threadId,
+          commandName: args.commandName,
+          dedupePrefix: "completion",
+        });
       completionEvent.payload = {
         source: completionBody.source,
         completionReason: completionBody.completionReason,

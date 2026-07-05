@@ -14,7 +14,10 @@ import "@xterm/xterm/css/xterm.css";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import { DEFAULT_TERMINAL_PREFERENCES } from "../../features/terminal/preferences";
 import { HttpError } from "../../services/http";
-import { getTerminalHistory } from "../../services/terminal";
+import {
+  getTerminalHistory,
+  getTerminalPanelHistory,
+} from "../../services/terminal";
 import {
   Sheet,
   SheetContent,
@@ -28,6 +31,7 @@ interface TerminalHistoryDrawerProps {
   apiBase: string;
   token: string;
   terminalSessionId: string | null;
+  terminalPanelId?: string | null;
   terminalName?: string;
   onOpenChange: (open: boolean) => void;
   onAuthExpired?: () => void;
@@ -38,6 +42,7 @@ export function TerminalHistoryDrawer({
   apiBase,
   token,
   terminalSessionId,
+  terminalPanelId,
   terminalName,
   onOpenChange,
   onAuthExpired,
@@ -57,7 +62,11 @@ export function TerminalHistoryDrawer({
     setLoading(true);
     setRequestError(null);
 
-    void getTerminalHistory(apiBase, token, terminalSessionId)
+    const request = terminalPanelId
+      ? getTerminalPanelHistory(apiBase, token, terminalSessionId, terminalPanelId)
+      : getTerminalHistory(apiBase, token, terminalSessionId);
+
+    void request
       .then((payload) => {
         if (cancelled) {
           return;
@@ -84,7 +93,7 @@ export function TerminalHistoryDrawer({
     return () => {
       cancelled = true;
     };
-  }, [apiBase, onAuthExpired, open, terminalSessionId, token]);
+  }, [apiBase, onAuthExpired, open, terminalPanelId, terminalSessionId, token]);
 
   const renderedTitle =
     terminalName ??
@@ -207,6 +216,7 @@ export function TerminalHistoryDrawer({
     history?.scrollback,
     history?.scrollbackSourceCols,
     open,
+    terminalPanelId,
     terminalSessionId,
   ]);
 

@@ -16,6 +16,7 @@ export interface AppServerEventScope {
   projectId?: string | null;
   terminalSessionId?: string | null;
   terminalPanelId?: string | null;
+  terminalTmuxPaneId?: string | null;
   runId?: string | null;
   cwd?: string | null;
 }

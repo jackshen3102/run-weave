@@ -53,6 +53,13 @@ export async function handleAgentCompletionEvent(
     agent,
     hookEvent: "Stop",
     threadId: event.correlationId,
+    panelId:
+      event.scope?.terminalPanelId ??
+      readAppServerPayloadString(event.payload, "panelId"),
+    tmuxPaneId:
+      event.scope?.terminalTmuxPaneId ??
+      readAppServerPayloadString(event.payload, "tmuxPaneId"),
+    commandName: readAppServerPayloadString(event.payload, "commandName"),
   });
   if (result.status === "not_found" || result.status === "exited") {
     return;
@@ -64,6 +71,7 @@ export async function handleAgentCompletionEvent(
       terminalSessionId: result.terminalSessionId,
       agent: result.agent,
       activeCommand: result.activeCommand,
+      panelId: result.panelId,
       state: result.terminalState.state,
     });
     return;
@@ -75,5 +83,6 @@ export async function handleAgentCompletionEvent(
     terminalSessionId: result.terminalSessionId,
     agent: result.agent,
     state: result.terminalState.state,
+    panelId: result.panelId,
   });
 }

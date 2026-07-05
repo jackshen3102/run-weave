@@ -441,6 +441,82 @@ export class TerminalSessionManager {
     });
   }
 
+  async updatePanelThreadId(
+    panelId: string,
+    threadId: string | null,
+  ): Promise<TerminalPanelRecord | undefined> {
+    const panel = this.panels.get(panelId);
+    if (!panel) {
+      return undefined;
+    }
+
+    const nextThreadId = threadId?.trim() || undefined;
+    if (panel.threadId === nextThreadId) {
+      return panel;
+    }
+
+    if (nextThreadId) {
+      panel.threadId = nextThreadId;
+    } else {
+      delete panel.threadId;
+    }
+    await this.sessionStore.updatePanelThreadId({
+      panelId,
+      threadId: nextThreadId ?? null,
+    });
+    return panel;
+  }
+
+  async updatePanelPreview(
+    panelId: string,
+    preview: string | null,
+  ): Promise<TerminalPanelRecord | undefined> {
+    const panel = this.panels.get(panelId);
+    if (!panel) {
+      return undefined;
+    }
+
+    const nextPreview = preview?.trim() || undefined;
+    if (panel.preview === nextPreview) {
+      return panel;
+    }
+
+    if (nextPreview) {
+      panel.preview = nextPreview;
+    } else {
+      delete panel.preview;
+    }
+    await this.sessionStore.updatePanelPreview({
+      panelId,
+      preview: nextPreview ?? null,
+    });
+    return panel;
+  }
+
+  async updatePanelTerminalState(
+    panelId: string,
+    terminalState: TerminalState,
+  ): Promise<TerminalPanelRecord | undefined> {
+    const panel = this.panels.get(panelId);
+    if (!panel) {
+      return undefined;
+    }
+
+    if (
+      panel.terminalState?.state === terminalState.state &&
+      panel.terminalState.agent === terminalState.agent
+    ) {
+      return panel;
+    }
+
+    panel.terminalState = terminalState;
+    await this.sessionStore.updatePanelTerminalState({
+      panelId,
+      terminalState,
+    });
+    return panel;
+  }
+
   async clearPanelsForSession(terminalSessionId: string): Promise<void> {
     for (const panel of this.panels.values()) {
       if (panel.terminalSessionId === terminalSessionId) {
@@ -501,16 +577,22 @@ export class TerminalSessionManager {
       return session;
     }
 
+    const runningPanelCount = this.listPanels(terminalSessionId).filter(
+      (panel) => panel.status === "running",
+    ).length;
+    const nextActiveCommand =
+      runningPanelCount > 1 ? null : metadata.activeCommand;
+
     if (
       session.cwd === metadata.cwd &&
-      session.activeCommand === metadata.activeCommand
+      session.activeCommand === nextActiveCommand
     ) {
       return session;
     }
 
-    this.observeActiveCommand(terminalSessionId, metadata.activeCommand);
+    this.observeActiveCommand(terminalSessionId, nextActiveCommand);
     session.cwd = metadata.cwd;
-    session.activeCommand = metadata.activeCommand;
+    session.activeCommand = nextActiveCommand;
     const shouldClearCodexThreadMetadata =
       Boolean(session.threadId || session.preview) &&
       getTerminalSessionAgent(session) !== "codex";
@@ -521,7 +603,7 @@ export class TerminalSessionManager {
     await this.sessionStore.updateSessionMetadata({
       terminalSessionId,
       cwd: metadata.cwd,
-      activeCommand: metadata.activeCommand,
+      activeCommand: nextActiveCommand,
       lastActivityAt: lastActivityAt.toISOString(),
     });
     if (shouldClearCodexThreadMetadata) {

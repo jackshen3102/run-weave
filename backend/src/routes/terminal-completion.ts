@@ -127,6 +127,10 @@ export function createInternalTerminalCompletionRouter(options: {
         parsed.data.source,
         paneActiveCommand,
       ) ||
+      isCompletionSourceAllowedForCommand(
+        parsed.data.source,
+        parsed.data.commandName ?? null,
+      ) ||
       getTerminalSessionAgent(session) === parsed.data.source;
     const now = Date.now();
     const graceCommandMatches =

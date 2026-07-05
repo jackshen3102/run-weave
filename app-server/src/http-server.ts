@@ -36,6 +36,7 @@ const scopeSchema = z
     projectId: z.string().trim().min(1).nullable().optional(),
     terminalSessionId: z.string().trim().min(1).nullable().optional(),
     terminalPanelId: z.string().trim().min(1).nullable().optional(),
+    terminalTmuxPaneId: z.string().trim().min(1).nullable().optional(),
     runId: z.string().trim().min(1).nullable().optional(),
     cwd: z.string().trim().min(1).nullable().optional(),
   })

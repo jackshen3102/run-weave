@@ -39,10 +39,13 @@ export interface PersistedTerminalPanelRecord {
   terminalSessionId: string;
   alias?: string | null;
   role?: string | null;
+  threadId?: string;
+  preview?: string;
   agentTeamRunId?: string | null;
   agentTeamWorkerId?: string | null;
   cwd: string;
   activeCommand: string | null;
+  terminalState?: TerminalState;
   status: "running" | "exited";
   createdAt: string;
   lastActivityAt: string;
@@ -139,6 +142,21 @@ export interface UpdateTerminalSessionTerminalStateParams {
   terminalState: TerminalState;
 }
 
+export interface UpdateTerminalPanelThreadIdParams {
+  panelId: string;
+  threadId: string | null;
+}
+
+export interface UpdateTerminalPanelPreviewParams {
+  panelId: string;
+  preview: string | null;
+}
+
+export interface UpdateTerminalPanelTerminalStateParams {
+  panelId: string;
+  terminalState: TerminalState;
+}
+
 export interface UpdateTerminalSessionPanelSplitEnabledParams {
   terminalSessionId: string;
   panelSplitEnabled: boolean;
@@ -182,6 +200,11 @@ export interface TerminalSessionStore {
   listPanels(): Promise<PersistedTerminalPanelRecord[]>;
   listPanelWorkspaces(): Promise<PersistedTerminalPanelWorkspaceRecord[]>;
   upsertPanel(params: UpsertTerminalPanelParams): Promise<void>;
+  updatePanelThreadId(params: UpdateTerminalPanelThreadIdParams): Promise<void>;
+  updatePanelPreview(params: UpdateTerminalPanelPreviewParams): Promise<void>;
+  updatePanelTerminalState(
+    params: UpdateTerminalPanelTerminalStateParams,
+  ): Promise<void>;
   updatePanelStatus(params: UpdateTerminalPanelStatusParams): Promise<void>;
   updatePanelWorkspace(
     params: UpdateTerminalPanelWorkspaceParams,
