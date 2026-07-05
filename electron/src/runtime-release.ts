@@ -16,7 +16,6 @@ export interface RuntimeRelease {
   frontendDistDir: string;
   backendEntry: string;
   cliEntry: string;
-  appServerEntry: string;
   nodePtyDir: string;
   runtimeRoot: string | null;
   releaseDir: string | null;
@@ -37,9 +36,6 @@ interface RuntimeManifest {
     entry?: unknown;
   };
   cli?: {
-    entry?: unknown;
-  };
-  appServer?: {
     entry?: unknown;
   };
   files?: Array<{
@@ -65,9 +61,6 @@ interface ValidRuntimeManifest extends RuntimeManifest {
     entry: string;
   };
   cli: {
-    entry: string;
-  };
-  appServer: {
     entry: string;
   };
   files: Array<{
@@ -107,13 +100,6 @@ export function resolveBundledRuntimeRelease(
       "app.asar",
       "dist",
       "cli",
-      "index.cjs",
-    ),
-    appServerEntry: path.join(
-      resourcesPath,
-      "app.asar",
-      "dist",
-      "app-server",
       "index.cjs",
     ),
     nodePtyDir: path.join(resourcesPath, "backend", "node_modules", "node-pty"),
@@ -254,8 +240,7 @@ function validateManifestPaths(
     !isSafeRelativePath(manifest.frontend?.distDir) ||
     !isSafeRelativePath(manifest.frontend?.index) ||
     !isSafeRelativePath(manifest.backend?.entry) ||
-    !isSafeRelativePath(manifest.cli?.entry) ||
-    !isSafeRelativePath(manifest.appServer?.entry)
+    !isSafeRelativePath(manifest.cli?.entry)
   ) {
     return false;
   }
@@ -306,16 +291,11 @@ export function resolveExternalRuntimeRelease(options: {
     const frontendIndex = resolveInside(releaseDir, manifest.frontend.index);
     const backendEntry = resolveInside(releaseDir, manifest.backend.entry);
     const cliEntry = resolveInside(releaseDir, manifest.cli.entry);
-    const appServerEntry = resolveInside(
-      releaseDir,
-      manifest.appServer.entry,
-    );
     if (
       !frontendDistDir ||
       !frontendIndex ||
       !backendEntry ||
-      !cliEntry ||
-      !appServerEntry
+      !cliEntry
     ) {
       return null;
     }
@@ -333,7 +313,6 @@ export function resolveExternalRuntimeRelease(options: {
       frontendIndex,
       backendEntry,
       cliEntry,
-      appServerEntry,
       ...manifestFiles.map((file) => file.filePath),
     ];
 
@@ -353,7 +332,6 @@ export function resolveExternalRuntimeRelease(options: {
       frontendDistDir,
       backendEntry,
       cliEntry,
-      appServerEntry,
       nodePtyDir: resolveBundledRuntimeRelease(options.resourcesPath)
         .nodePtyDir,
       runtimeRoot: options.runtimeRoot,

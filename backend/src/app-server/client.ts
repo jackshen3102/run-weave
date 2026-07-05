@@ -3,7 +3,6 @@ import type {
   AppServerEventEnvelope,
   AppServerEventListResponse,
   AppServerEventStreamMessage,
-  AppServerAgentSessionListResponse,
   AppServerSyncStatusResponse,
   AppServerThreadListResponse,
   AppServerThreadResponse,
@@ -79,25 +78,6 @@ export class AppServerClient {
       return null;
     }
     return (await response.json()) as AppServerThreadResponse;
-  }
-
-  async listAgentSessions(options: {
-    projectId?: string;
-    terminalSessionId?: string;
-    terminalPanelId?: string;
-    agent?: string;
-    status?: string;
-    after?: string | null;
-    limit?: number;
-  } = {}): Promise<AppServerAgentSessionListResponse | null> {
-    const response = await fetch(
-      this.buildStateUrl("/agent-sessions", options),
-      { headers: this.headers() },
-    );
-    if (!response.ok) {
-      return null;
-    }
-    return (await response.json()) as AppServerAgentSessionListResponse;
   }
 
   async getSyncStatus(): Promise<AppServerSyncStatusResponse | null> {

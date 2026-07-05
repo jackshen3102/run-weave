@@ -112,32 +112,9 @@ export interface AppServerThreadRef {
   updatedAt: string;
 }
 
-export interface AppServerAgentSessionRef {
-  agentSessionId: string;
-  agent: AppServerAgentKind;
-  status: AppServerAgentRunStatus;
-  threadId: string | null;
-  projectId: string | null;
-  terminalSessionId: string | null;
-  terminalPanelId: string | null;
-  runId: string | null;
-  cwd: string | null;
-  sourceInstanceId: string | null;
-  lastEventId: string;
-  lastHookEvent: string | null;
-  lastCompletionReason: AppServerCompletionReason | null;
-  lastActivityAt: string;
-  updatedAt: string;
-}
-
 export interface AppServerThreadStateChangedPayload {
   thread: AppServerThreadRef;
   previous: AppServerThreadRef | null;
-}
-
-export interface AppServerAgentSessionStateChangedPayload {
-  agentSession: AppServerAgentSessionRef;
-  previous: AppServerAgentSessionRef | null;
 }
 
 export interface AppServerThreadListResponse {
@@ -147,11 +124,6 @@ export interface AppServerThreadListResponse {
 
 export interface AppServerThreadResponse {
   thread: AppServerThreadRef;
-}
-
-export interface AppServerAgentSessionListResponse {
-  agentSessions: AppServerAgentSessionRef[];
-  latestEventId: string | null;
 }
 
 export interface AppServerSyncStatusResponse {

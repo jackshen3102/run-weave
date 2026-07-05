@@ -4,7 +4,6 @@ import type {
   AppServerCompletionReason,
   AppServerEventEnvelope,
   AppServerThreadRef,
-  AppServerAgentSessionRef,
 } from "@runweave/shared";
 import {
   AppServerStateStore,
@@ -15,7 +14,6 @@ import {
 
 export interface AppServerProjectionResult {
   threadChange: StateStoreChange<AppServerThreadRef> | null;
-  agentSessionChange: StateStoreChange<AppServerAgentSessionRef> | null;
 }
 
 const AGENT_KINDS = new Set<AppServerAgentKind>([
@@ -32,24 +30,20 @@ export class AppServerStateProjector {
   constructor(private readonly stateStore: AppServerStateStore) {}
 
   project(event: AppServerEventEnvelope): AppServerProjectionResult {
-    if (
-      event.kind === "thread.state.changed" ||
-      event.kind === "agent_session.state.changed"
-    ) {
-      return { threadChange: null, agentSessionChange: null };
+    if (event.kind === "thread.state.changed") {
+      return { threadChange: null };
     }
     if (event.kind !== "agent.hook" && event.kind !== "agent.completion") {
-      return { threadChange: null, agentSessionChange: null };
+      return { threadChange: null };
     }
 
     const projection = buildProjection(event);
     if (!projection) {
-      return { threadChange: null, agentSessionChange: null };
+      return { threadChange: null };
     }
 
     const threadChange = this.stateStore.upsertThread(projection);
-    const agentSessionChange = this.stateStore.upsertAgentSession(projection);
-    return { threadChange, agentSessionChange };
+    return { threadChange };
   }
 }
 

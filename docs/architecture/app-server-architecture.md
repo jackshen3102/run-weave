@@ -8,7 +8,7 @@
 
 App Server 是 Runweave 在本机上的全局事件中心、轻量状态中心和本地云同步模拟入口。它
 独立于 Desktop backend、Electron shell、CLI 和 hook 进程运行，负责把来自不同进程的本地
-事件持久化并实时分发，同时从 agent 事件投影出轻量 Thread / Agent Session 当前视图。
+事件持久化并实时分发，同时从 agent 事件投影出轻量 Thread 当前视图。
 
 当前 app-server 不保存完整 thread 对话正文，不管理 terminal，不启动 backend，不拥有浏览器
 profile，也不替代 backend 现有的 terminal websocket。本地同步模拟目录只用于后续云同步的
@@ -20,13 +20,13 @@ profile，也不替代 backend 现有的 terminal websocket。本地同步模拟
 - **运行位置稳定**：代码可以来自任意 repo、branch 或 packaged runtime，但运行入口必须
   先安装到 app-server home 下的 runtime release。
 - **生命周期解耦**：Electron、backend、hook、CLI 都可以发现 app-server；只有 CLI 和
-  Electron packaged runtime 路径可以启动或重启它。
+  本地更新器可以启动或重启它。Electron 只检查服务是否可用。
 - **故障降级**：app-server 不可用时，backend 和 hook 的既有主流程继续工作。
 - **测试隔离**：测试 app-server 使用独立 home，与正式全局 singleton 不共享 lock、token、
   event log 或 runtime。
 - **事件 at-least-once**：app-server 只负责持久化和投递；consumer 自己保存 cursor，并在
   handler 成功后推进。
-- **状态可重建**：Thread / Agent Session 状态由 event log 投影而来，状态 JSON 损坏或丢失时
+- **状态可重建**：Thread 状态由 event log 投影而来，状态 JSON 损坏或丢失时
   可以从 `app-server-events.jsonl` 重建。
 - **同步不阻断**：本地云同步模拟写失败只记录 degraded 状态，不阻断 `/events` 写入、projection
   或 WebSocket 分发。
@@ -46,7 +46,6 @@ flowchart LR
     AppServer[App Server Process]
     EventLog[(app-server-events.jsonl)]
     ThreadState[(app-server-thread-state.json)]
-    AgentSessionState[(app-server-agent-session-state.json)]
     Lock[(app-server.lock.json)]
     Token[(app-server-token)]
     Runtime[(runtime/current.json + releases)]
@@ -65,12 +64,11 @@ flowchart LR
 
   Hook -->|HTTP events| AppServer
   BackendProducer -->|HTTP events| AppServer
-  Electron -->|install/start/restart via CLI| AppServer
+  Electron -->|status check only| AppServer
   Cli -->|status/install/start/stop/restart| AppServer
 
   AppServer --> EventLog
   AppServer --> ThreadState
-  AppServer --> AgentSessionState
   AppServer --> Lock
   AppServer --> Token
   AppServer --> SyncEvents
@@ -84,21 +82,21 @@ flowchart LR
 
 ## 核心组件
 
-| 组件                      | 代码入口                                                  | 职责                                                                          | 非职责                          |
-| ------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------- |
-| app-server process        | `app-server/src/index.ts`                                 | 启动 HTTP/WS server、加载 token、初始化事件与状态存储、写 singleton lock      | 不启动 backend，不管理 terminal |
-| singleton/runtime helpers | `packages/shared/src/app-server-node.ts`                  | 解析 home/runtime、发现 owner、校验 health、安装 runtime release、兼容旧 lock | 不包含 HTTP 业务逻辑            |
-| event schema              | `packages/shared/src/app-server-events.ts`                | 定义事件 envelope、状态 ref、source、scope、stream message 类型               | 不决定 handler 语义             |
-| HTTP API                  | `app-server/src/http-server.ts`                           | 鉴权、Origin 校验、事件写入、事件查询、状态查询、sync status                  | 不保存 consumer cursor          |
-| WebSocket API             | `app-server/src/websocket-server.ts`                      | catchup + live 事件投递                                                       | 不做 ack，不保证 exactly-once   |
-| event store               | `app-server/src/event-store.ts`                           | append-only JSONL 持久化、7 天保留窗口、dedupe、按 id 查询                    | 不做跨机器同步                  |
-| state store/projector     | `app-server/src/state-store.ts`、`state-projector.ts`     | 从 `agent.hook` / `agent.completion` 投影 ThreadRef 和 AgentSessionRef        | 不保存完整 thread 内容          |
-| local sync sim            | `app-server/src/cloud-sync-sim.ts`                        | 镜像事件、latest projection、cursor、manifest                                 | 不上传真实云端                  |
-| CLI lifecycle             | `packages/runweave-cli/src/commands/app-server.ts`        | 安装、启动、停止、重启、状态查询                                              | 不编译源码，不决定更新策略      |
-| Electron bridge           | `electron/src/app-server-cli.ts`                          | 从 packaged runtime 安装 app-server entry，并按 release 差异启动或重启        | 不直接 import app-server 源码   |
-| backend consumer          | `backend/src/app-server/*`                                | 发现 app-server、订阅事件、按 ownership 过滤并处理                            | 不启动 app-server               |
-| hook bridge               | `plugins/toolkit/hooks/*` 和 `electron/resources/hooks/*` | 将 AI hook 事件双写到 app-server 和 backend fallback                          | 不启动 app-server               |
-| local updater             | `scripts/runweave-update*.mjs`                            | 判断 Desktop App、Desktop Runtime、App Server 三类更新动作                    | 不绕过 CLI 直接杀进程           |
+| 组件                      | 代码入口                                                  | 职责                                                                           | 非职责                          |
+| ------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------- |
+| app-server process        | `app-server/src/index.ts`                                 | 启动 HTTP/WS server、加载 token、初始化事件与状态存储、写 singleton lock       | 不启动 backend，不管理 terminal |
+| singleton/runtime helpers | `packages/shared/src/app-server-node.ts`                  | 解析 home/runtime、发现 owner、校验 health、安装 runtime release、兼容旧 lock  | 不包含 HTTP 业务逻辑            |
+| event schema              | `packages/shared/src/app-server-events.ts`                | 定义事件 envelope、状态 ref、source、scope、stream message 类型                | 不决定 handler 语义             |
+| HTTP API                  | `app-server/src/http-server.ts`                           | 鉴权、Origin 校验、事件写入、事件查询、状态查询、sync status                   | 不保存 consumer cursor          |
+| WebSocket API             | `app-server/src/websocket-server.ts`                      | catchup + live 事件投递                                                        | 不做 ack，不保证 exactly-once   |
+| event store               | `app-server/src/event-store.ts`                           | append-only JSONL 持久化、7 天保留窗口、dedupe、按 id 查询                     | 不做跨机器同步                  |
+| state store/projector     | `app-server/src/state-store.ts`、`state-projector.ts`     | 从 `agent.hook` / `agent.completion` 投影 ThreadRef，使用 `agent` 字段区分类型 | 不保存完整 thread 内容          |
+| local sync sim            | `app-server/src/cloud-sync-sim.ts`                        | 镜像事件、latest projection、cursor、manifest                                  | 不上传真实云端                  |
+| CLI lifecycle             | `packages/runweave-cli/src/commands/app-server.ts`        | 安装、启动、停止、重启、状态查询                                               | 不编译源码，不决定更新策略      |
+| Electron bridge           | `electron/src/app-server-cli.ts`                          | 检查 app-server 是否可用；不可用时提示用户                                     | 不安装、启动或重启 app-server   |
+| backend consumer          | `backend/src/app-server/*`                                | 发现 app-server、订阅事件、按 ownership 过滤并处理                             | 不启动 app-server               |
+| hook bridge               | `plugins/toolkit/hooks/*` 和 `electron/resources/hooks/*` | 将 AI hook 事件双写到 app-server 和 backend fallback                           | 不启动 app-server               |
+| local updater             | `scripts/runweave-update*.mjs`                            | 判断 Desktop App、Desktop Runtime、App Server 三类更新动作                     | 不绕过 CLI 直接杀进程           |
 
 ## Home、Runtime 与 Singleton
 
@@ -110,7 +108,6 @@ app-server home
   app-server-token
   app-server-events.jsonl
   app-server-thread-state.json
-  app-server-agent-session-state.json
   app-server.log
   runtime/
     current.json
@@ -127,7 +124,8 @@ app-server home
 继续递增，避免 consumer 已保存的 cursor 因旧事件被清理后错过新事件。
 
 状态文件保存的是从事件投影出来的 latest view，而不是新的事实源。启动时 app-server 会从
-event log 重建 ThreadRef / AgentSessionRef，然后写回 latest state JSON。
+event log 重建 ThreadRef，然后写回 latest state JSON。ThreadRef 的 `threadId` 是唯一键，
+`agent` 字段用于区分 Codex、Trae 等 agent 类型。
 
 默认本地同步模拟目录：
 
@@ -135,9 +133,7 @@ event log 重建 ThreadRef / AgentSessionRef，然后写回 latest state JSON。
 ~/.runweave/app-server-cloud-sync-sim/
   events/app-server-events.jsonl
   projections/threads.jsonl
-  projections/agent-sessions.jsonl
   projections/latest-threads.json
-  projections/latest-agent-sessions.json
   cursors/upload-cursor.json
   manifests/sync-manifest.json
 ```
@@ -193,8 +189,8 @@ stateDiagram-v2
 - 启动不隐式编译或安装。
 - 重启只针对同一个 home 内的 owner。
 - 旧 lock schema 必须能被识别，至少要保留 stop/restart 能力，避免升级时留下旧 owner。
-- Electron 可以安装 packaged runtime 中的 app-server release；如果当前 owner 不是该
-  release，Electron 应通过 CLI 重启 app-server。
+- Electron 只检查 app-server 是否已启动；如果不可用，只提示用户，不安装、启动或重启
+  app-server。
 
 ## 发现与鉴权
 
@@ -286,7 +282,6 @@ app-server 只提供 append-only 持久化和实时 fan-out，不维护 subscrib
 projection 会生成普通 app-server event：
 
 - `thread.state.changed`
-- `agent_session.state.changed`
 
 这些事件写入同一 event log，并通过 `/events/stream` 推送，但 projector 会忽略它们，避免递归。
 
@@ -294,7 +289,6 @@ projection 会生成普通 app-server event：
 
 - `GET /threads`
 - `GET /threads/:threadId`
-- `GET /agent-sessions`
 - `GET /sync/status`
 
 这些接口与 `/events` 一样需要 bearer token；`/healthz` 和 `/readyz` 仍不需要 token。
@@ -389,8 +383,7 @@ flowchart TD
 - Desktop App、Desktop Runtime、App Server 是三个组件，不应互相伪装。
 - App Server 更新意味着安装新 app-server runtime，并重启 app-server owner。
 - “不重启桌面端”不能和 App Server 更新混用，因为 App Server 更新必须重启服务进程。
-- Electron packaged runtime 启动时会安装自己携带的 app-server entry，并根据 running
-  owner 的 `releaseId` 决定复用还是重启。
+- Electron 启动时只检查 app-server；如果服务未启动，会提示用户，不执行安装、启动或重启。
 
 ## 失败与降级原则
 
@@ -431,7 +424,7 @@ flowchart TD
 - 不要从 Electron 或 backend 直接 import app-server 源码启动服务。
 - 不要把 App Server 当成 Desktop backend 子进程。
 - 不要把本地同步模拟目录当作正式云服务或唯一事实源。
-- 不要把完整 Codex/Trae thread 正文写入 ThreadRef / AgentSessionRef。
+- 不要把完整 Codex/Trae thread 正文写入 ThreadRef。
 - 不要把 event stream 当作 exactly-once 队列。
 - 不要让 hook bridge 自动启动 app-server。
 - 不要在更新流程里绕过 CLI 直接杀 app-server 进程。

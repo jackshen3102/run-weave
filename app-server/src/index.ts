@@ -23,19 +23,17 @@ async function main(): Promise<void> {
 
   const preflight = await preflightSingleton(config.lockPath);
   if (preflight.status === "owned") {
-    console.log(
-      `Runweave app-server already running at http://${preflight.lock.host}:${preflight.lock.port}`,
-    );
+    logInfo("Runweave app-server already running", {
+      phase: "preflight",
+      ...buildLockLogFields(preflight.lock),
+    });
     return;
   }
 
   const token = await loadOrCreateToken(config.tokenPath);
   const store = new AppServerEventStore(config.eventLogPath);
   await store.initialize();
-  const stateStore = new AppServerStateStore(
-    config.threadStatePath,
-    config.agentSessionStatePath,
-  );
+  const stateStore = new AppServerStateStore(config.threadStatePath);
   await stateStore.initialize();
   stateStore.clear();
   const stateProjector = new AppServerStateProjector(stateStore);
@@ -55,7 +53,6 @@ async function main(): Promise<void> {
     events: store.listAll(),
     ...stateStore.getSnapshot(),
     threadChanges: [],
-    agentSessionChanges: [],
   });
   const eventCenter = new AppServerEventCenter(store, {
     sourceInstanceId,
@@ -90,12 +87,22 @@ async function main(): Promise<void> {
   const acquire = await acquireSingletonLock(config.lockPath, lock);
   if (acquire.status === "owned") {
     await closeServer(server);
-    console.log(
-      `Runweave app-server already running at http://${acquire.lock.host}:${acquire.lock.port}`,
-    );
+    logInfo("Runweave app-server already running", {
+      phase: "acquire",
+      attemptedPort: port,
+      ...buildLockLogFields(acquire.lock),
+    });
     return;
   }
-  console.log(`Runweave app-server listening at http://${lock.host}:${port}`);
+  logInfo("Runweave app-server listening", {
+    phase: "listening",
+    requestedPort: config.requestedPort,
+    ...buildLockLogFields(lock),
+    stateDir: config.stateDir,
+    eventLogPath: config.eventLogPath,
+    threadStatePath: config.threadStatePath,
+    cloudSyncDir: config.cloudSyncDir,
+  });
 
   attachShutdownHandlers(server, eventStreamServer, config.lockPath);
 }
@@ -165,7 +172,57 @@ function attachShutdownHandlers(
   });
 }
 
+function buildLockLogFields(lock: AppServerLock): Record<string, unknown> {
+  return {
+    pid: lock.pid,
+    baseUrl: `http://${lock.host}:${lock.port}`,
+    host: lock.host,
+    port: lock.port,
+    startedAt: lock.startedAt,
+    version: lock.version,
+    source: lock.source,
+    releaseId: lock.releaseId,
+    entry: lock.entry,
+    runtimeRoot: lock.runtimeRoot,
+  };
+}
+
+function logInfo(message: string, fields: Record<string, unknown>): void {
+  console.log(formatLogEntry("info", message, fields));
+}
+
+function logError(message: string, fields: Record<string, unknown>): void {
+  console.error(formatLogEntry("error", message, fields));
+}
+
+function formatLogEntry(
+  level: "info" | "error",
+  message: string,
+  fields: Record<string, unknown>,
+): string {
+  return JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level,
+    service: "runweave-app-server",
+    message,
+    ...fields,
+  });
+}
+
+function serializeError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorMessage: error.message,
+      stack: error.stack,
+    };
+  }
+  return {
+    error: String(error),
+  };
+}
+
 main().catch((error: unknown) => {
-  console.error(error);
+  logError("Runweave app-server failed", serializeError(error));
   process.exitCode = 1;
 });

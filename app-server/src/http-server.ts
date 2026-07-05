@@ -3,7 +3,6 @@ import { z } from "zod";
 import type {
   AppServerAgentKind,
   AppServerAgentRunStatus,
-  AppServerAgentSessionListResponse,
   AppServerEventListResponse,
   AppServerSyncStatusResponse,
   AppServerThreadListResponse,
@@ -188,21 +187,6 @@ export function createHttpApp(options: {
       return;
     }
     const response: AppServerThreadResponse = { thread };
-    res.json(response);
-  });
-
-  app.get("/agent-sessions", (req, res) => {
-    const parsed = parseStateQuery(req.query);
-    if (!parsed.ok) {
-      res.status(400).json({ message: parsed.message });
-      return;
-    }
-    const response: AppServerAgentSessionListResponse = {
-      agentSessions: options.eventCenter
-        .getStateStore()
-        .listAgentSessions(parsed.value),
-      latestEventId: options.eventCenter.getLatestId(),
-    };
     res.json(response);
   });
 
