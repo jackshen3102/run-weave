@@ -1,0 +1,302 @@
+{
+  "backends": [
+    { "id": "local", "label": "本机 backend", "host": "127.0.0.1:8917" },
+    { "id": "devbox", "label": "devbox-sg", "host": "10.37.2.14:8917" }
+  ],
+  "projects": [
+    { "id": "coze-space", "label": "coze-space-web", "backendId": "local" },
+    { "id": "claw", "label": "coze-claw", "backendId": "local" },
+    { "id": "runweave", "label": "browser-viewer", "backendId": "devbox" }
+  ],
+
+  "fleet": {
+    "terminals": [
+      {
+        "id": "t-1",
+        "name": "space · feat/list",
+        "projectId": "coze-space",
+        "backendId": "local",
+        "agent": "codex",
+        "status": "running",
+        "aiMarker": true,
+        "task": "抽离 useClawFileTracking 埋点 hook",
+        "cpuPercent": 41,
+        "memoryMb": 612,
+        "lastActivitySec": 4,
+        "round": 3,
+        "diffFiles": 5
+      },
+      {
+        "id": "t-2",
+        "name": "space · sem-pages",
+        "projectId": "coze-space",
+        "backendId": "local",
+        "agent": "claude",
+        "status": "waiting_input",
+        "aiMarker": false,
+        "task": "landing 页 3001 端口起服务，等确认改动范围",
+        "cpuPercent": 2,
+        "memoryMb": 340,
+        "lastActivitySec": 92,
+        "round": 1,
+        "diffFiles": 0
+      },
+      {
+        "id": "t-3",
+        "name": "claw · bff middleware",
+        "projectId": "claw",
+        "backendId": "local",
+        "agent": "codex",
+        "status": "blocked",
+        "aiMarker": false,
+        "task": "清理 IDL regen 后的孤儿中间件",
+        "cpuPercent": 0,
+        "memoryMb": 210,
+        "lastActivitySec": 610,
+        "blockedReason": "go vet 需要 escalated 权限（Go cache 在只读区）",
+        "round": 2,
+        "diffFiles": 1
+      },
+      {
+        "id": "t-4",
+        "name": "runweave · agent-team",
+        "projectId": "runweave",
+        "backendId": "devbox",
+        "agent": "coco",
+        "status": "done",
+        "aiMarker": true,
+        "task": "loop-engineer 面板状态点渲染",
+        "cpuPercent": 0,
+        "memoryMb": 180,
+        "lastActivitySec": 30,
+        "round": 6,
+        "diffFiles": 12
+      },
+      {
+        "id": "t-5",
+        "name": "runweave · preview",
+        "projectId": "runweave",
+        "backendId": "devbox",
+        "agent": "codex",
+        "status": "running",
+        "aiMarker": true,
+        "task": "preview panel 变更树按 panel 隔离",
+        "cpuPercent": 27,
+        "memoryMb": 455,
+        "lastActivitySec": 1,
+        "round": 4,
+        "diffFiles": 3
+      },
+      {
+        "id": "t-6",
+        "name": "claw · latency 排查",
+        "projectId": "claw",
+        "backendId": "local",
+        "agent": "bash",
+        "status": "idle",
+        "aiMarker": false,
+        "task": "bytedcli LogID trace-tree（空闲）",
+        "cpuPercent": 0,
+        "memoryMb": 60,
+        "lastActivitySec": 1800,
+        "round": 0,
+        "diffFiles": 0
+      }
+    ]
+  },
+
+  "budget": {
+    "windowLabel": "本自然月（7 月）",
+    "scopes": [
+      {
+        "id": "s-space",
+        "label": "coze-space-web",
+        "kind": "project",
+        "usd": 42.7,
+        "hardCapUsd": 60,
+        "warnUsd": 45,
+        "tokensIn": 3120000,
+        "tokensOut": 486000,
+        "state": "warn",
+        "topModel": "claude-opus-4-8"
+      },
+      {
+        "id": "s-claw",
+        "label": "coze-claw",
+        "kind": "project",
+        "usd": 8.1,
+        "hardCapUsd": 30,
+        "warnUsd": 24,
+        "tokensIn": 610000,
+        "tokensOut": 92000,
+        "state": "ok",
+        "topModel": "codex-mini"
+      },
+      {
+        "id": "s-runweave",
+        "label": "browser-viewer",
+        "kind": "project",
+        "usd": 61.4,
+        "hardCapUsd": 60,
+        "warnUsd": 48,
+        "tokensIn": 5400000,
+        "tokensOut": 910000,
+        "state": "stopped",
+        "topModel": "claude-opus-4-8"
+      }
+    ],
+    "agents": [
+      { "id": "a-codex", "label": "codex", "usd": 58.2, "share": 0.51 },
+      { "id": "a-claude", "label": "claude", "usd": 39.9, "share": 0.35 },
+      { "id": "a-coco", "label": "coco", "usd": 14.1, "share": 0.12 },
+      { "id": "a-bash", "label": "bash", "usd": 2.0, "share": 0.02 }
+    ]
+  },
+
+  "routines": [
+    {
+      "id": "r-1",
+      "name": "每日 lint + typecheck 巡检",
+      "projectId": "runweave",
+      "agent": "codex",
+      "trigger": "cron",
+      "schedule": "每天 09:00",
+      "enabled": true,
+      "lastRun": "今天 09:00",
+      "lastResult": "ok",
+      "nextRun": "明天 09:00",
+      "note": "pnpm typecheck + pnpm lint，失败开 issue"
+    },
+    {
+      "id": "r-2",
+      "name": "claw 延迟基线报告",
+      "projectId": "claw",
+      "agent": "bash",
+      "trigger": "cron",
+      "schedule": "每周一 10:00",
+      "enabled": true,
+      "lastRun": "周一 10:00",
+      "lastResult": "ok",
+      "nextRun": "下周一 10:00",
+      "note": "bytedcli trace-tree 采样，写周报"
+    },
+    {
+      "id": "r-3",
+      "name": "PR 门禁失败自动重试",
+      "projectId": "coze-space",
+      "agent": "claude",
+      "trigger": "webhook",
+      "schedule": "CI 失败事件",
+      "enabled": false,
+      "lastRun": "3 天前",
+      "lastResult": "skipped",
+      "nextRun": "事件触发",
+      "note": "门禁红了唤醒 agent 看日志、增量修复"
+    }
+  ],
+
+  "approvals": [
+    {
+      "id": "ap-1",
+      "terminalId": "t-5",
+      "agent": "codex",
+      "projectId": "runweave",
+      "action": "git push --force-with-lease origin feat/preview-panel",
+      "risk": "high",
+      "reason": "改写远端历史；本仓库禁止 --force，仅允许 --force-with-lease",
+      "requestedSec": 45,
+      "state": "pending",
+      "diffSummary": "3 files · +128 / -64"
+    },
+    {
+      "id": "ap-2",
+      "terminalId": "t-1",
+      "agent": "codex",
+      "projectId": "coze-space",
+      "action": "rm -rf node_modules && rush update",
+      "risk": "medium",
+      "reason": "重装依赖，耗时且可能改锁文件",
+      "requestedSec": 120,
+      "state": "pending",
+      "diffSummary": "pnpm-lock.yaml 可能变更"
+    },
+    {
+      "id": "ap-3",
+      "terminalId": "t-4",
+      "agent": "coco",
+      "projectId": "runweave",
+      "action": "pnpm dist:electron:mac",
+      "risk": "low",
+      "reason": "本地打包 mac 客户端，无外发",
+      "requestedSec": 300,
+      "state": "approved",
+      "diffSummary": "产物写入 releases/"
+    }
+  ],
+
+  "activity": [
+    {
+      "id": "e-1",
+      "ts": "14:28:07",
+      "terminalId": "t-5",
+      "agent": "codex",
+      "kind": "tool",
+      "text": "edit terminal-preview-change-tree.tsx",
+      "meta": "+41 / -12"
+    },
+    {
+      "id": "e-2",
+      "ts": "14:27:51",
+      "terminalId": "t-5",
+      "agent": "codex",
+      "kind": "cost",
+      "text": "+$0.42 · claude-opus-4-8",
+      "meta": "12.4k in / 2.1k out"
+    },
+    {
+      "id": "e-3",
+      "ts": "14:27:12",
+      "terminalId": "t-1",
+      "agent": "codex",
+      "kind": "completion",
+      "text": "AI 回合完成（绿点）",
+      "meta": "reason=turn-complete"
+    },
+    {
+      "id": "e-4",
+      "ts": "14:25:40",
+      "terminalId": "t-5",
+      "agent": "codex",
+      "kind": "approval",
+      "text": "请求 push --force-with-lease",
+      "meta": "等待人工批准"
+    },
+    {
+      "id": "e-5",
+      "ts": "14:22:03",
+      "terminalId": "t-3",
+      "agent": "codex",
+      "kind": "blocked",
+      "text": "go vet 失败：权限不足",
+      "meta": "escalated required"
+    },
+    {
+      "id": "e-6",
+      "ts": "14:20:18",
+      "terminalId": "t-4",
+      "agent": "coco",
+      "kind": "completion",
+      "text": "loop round 6 收尾",
+      "meta": "diff 12 files"
+    },
+    {
+      "id": "e-7",
+      "ts": "09:00:02",
+      "terminalId": "r-1",
+      "agent": "codex",
+      "kind": "routine",
+      "text": "每日巡检触发",
+      "meta": "typecheck + lint ok"
+    }
+  ]
+}
