@@ -33,11 +33,11 @@ async function run() {
   });
   reservedPorts.add(frontendPort);
 
-  const backendUrl = `http://localhost:${backendPort}`;
+  const backendUrl = `http://127.0.0.1:${backendPort}`;
 
   console.log(`[electron-dev] backend=${backendPort} frontend=${frontendPort}`);
   console.log(`[electron-dev] backend url: ${backendUrl}`);
-  console.log(`[electron-dev] frontend url: http://localhost:${frontendPort}`);
+  console.log(`[electron-dev] frontend url: http://127.0.0.1:${frontendPort}`);
 
   const backend = startBackend({
     host: DEV_HOST,
@@ -73,7 +73,7 @@ async function run() {
   const electronBin = resolveElectronBin(electronDir);
   const electronEnv = {
     ...process.env,
-    BROWSER_VIEWER_DEV_URL: `http://localhost:${frontendPort}`,
+    BROWSER_VIEWER_DEV_URL: `http://127.0.0.1:${frontendPort}`,
     BROWSER_VIEWER_BACKEND_URL: backendUrl,
     BROWSER_VIEWER_MANAGES_PACKAGED_BACKEND: "false",
   };
