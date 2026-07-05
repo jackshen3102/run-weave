@@ -17,6 +17,7 @@ app-server home：
   app-server.lock.json
   app-server-token
   app-server-events.jsonl
+  app-server-thread-state.json
   app-server.log
   runtime/
     current.json
@@ -33,6 +34,13 @@ app-server 是否可用，不安装、启动或重启它。
 的诊断日志；默认只保留最近 7 天事件。启动时会清理超过保留窗口的旧事件并重写 JSONL
 文件，运行中也会周期性清理。清理旧事件不重置 event id，新的事件仍按历史最大 id 继续
 递增，避免 consumer cursor 因保留窗口裁剪而漏掉新事件。
+
+`app-server-thread-state.json` 保存从事件投影出来的 latest ThreadRef 视图。它不是新的
+事实源；文件损坏或丢失时，app-server 会从 event log 重建。
+
+本地 cloud sync 模拟目录默认写到 `~/.runweave/app-server-cloud-sync-sim/`，包含事件镜像、
+latest projection、sync cursor 和 manifest。测试必须通过
+`RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR` 指到临时目录，避免污染默认同步模拟状态。
 
 生命周期规则：
 
@@ -91,6 +99,7 @@ pnpm cli:shim:local
 - `RUNWEAVE_APP_SERVER_PORT`：指定监听端口；为空或非法时使用动态端口。
 - `RUNWEAVE_APP_SERVER_STATE_DIR`：底层状态目录覆盖，仅用于脚本化验证；常规测试
   应优先切换 `RUNWEAVE_APP_SERVER_HOME`。
+- `RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR`：覆盖本地 cloud sync 模拟目录，验证和自动化必须使用临时目录。
 
 app-server 只监听 `127.0.0.1`。启动时先读取 lock 文件；如果 lock 中 pid 存活，
 且 `GET /healthz` 返回 `service: "runweave-app-server"`、`protocolVersion: 1`
@@ -153,6 +162,50 @@ GET /events/latest
 事件 id 是全局单调递增字符串。`dedupeKey` 相同的重复写入会返回已有事件，不追加
 新的 JSONL 记录。
 
+## ThreadRef 状态查询
+
+app-server 会从 `agent.hook` 与 `agent.completion` 投影轻量 ThreadRef。ThreadRef 只保存
+当前状态和归属上下文，不保存完整 thread 正文、prompt、模型输出或 token。
+
+状态映射：
+
+- `agent.hook` + `SessionStart` -> `starting`
+- `agent.hook` + `UserPromptSubmit` -> `running`
+- `agent.hook` + `Stop` -> `idle`
+- `agent.completion` + `completionReason=hook_stop` 且 raw hook event 是 `Stop` / `SubagentStop` -> `idle`
+- `agent.completion` + `completionReason=ai_process_exit` -> `completed`
+- `notify`、`manual` 和无法解释的 completion 不覆盖已有明确状态
+
+状态变化会追加普通事件：
+
+```text
+thread.state.changed
+```
+
+该事件进入同一 event log 和 `/events/stream`，但 projector 会忽略它，避免递归投影。
+
+查询接口：
+
+```text
+GET /threads?projectId=<id>&terminalSessionId=<id>&terminalPanelId=<id>&agent=<agent>&status=<status>&after=<eventId>&limit=<n>
+GET /threads/:threadId
+GET /sync/status
+```
+
+`/threads` 返回按 `lastEventId` 升序的 ThreadRef 列表；展示层如果需要“running 优先”或
+“更新时间倒序”，必须自行排序。`/sync/status` 只暴露本地同步模拟状态和最近错误，不暴露
+bearer token、Authorization、cookie 或完整事件正文。
+
+backend 为已登录 Web 前端提供代理：
+
+```text
+GET /api/app-server/threads
+GET /api/app-server/threads/:threadId
+```
+
+代理只在 backend 侧读取 app-server lock/token 并转发轻量 ThreadRef 响应。App Server 未发现、
+不可达或返回非预期状态时，代理返回 503；前端不直接接触 App Server token。
+
 ## 实时消费
 
 实时消费使用 WebSocket：
@@ -204,7 +257,7 @@ backend 启动时通过环境变量或 `~/.runweave/app-server` 下的 lock/toke
 发现成功后，backend 会：
 
 - 发布 `backend.started`。
-- 连接 `/events/stream?kind=agent.completion`。
+- 连接 `/events/stream?kind=agent.hook&kind=agent.completion`。
 - 只处理 `terminalSessionId` 或 `projectId` 属于当前 backend 的事件。
 - 在 handler 成功后推进本地 cursor。
 

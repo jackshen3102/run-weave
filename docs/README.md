@@ -61,6 +61,7 @@
 | Terminal activeCommand 一致性测试        | testing/terminal-active-command-consistency-test-cases.md                          |
 | App 设备在线测试                         | testing/app-device-online-test-cases.md                                            |
 | app-server CLI 启动测试                  | testing/app-server-event-center-test-cases.md#as-ec-008-cli-owned-app-server-start |
+| app-server 状态同步测试                  | testing/app-server-state-sync-test-cases.md                                        |
 | Runweave Agent CLI 控制面测试            | testing/runweave-cli-control-plane-test-cases.md                                   |
 | Agent Team / Loop Engineer 测试          | testing/agent-team-loop-engineer-test-cases.md                                     |
 | App Server ThreadRef fixture             | testing/app-server-threadref-fixture.md                                            |
@@ -70,6 +71,7 @@
 | Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md                              |
 | 终端回归（Vim）                          | testing/runbooks/terminal-vim.md                                                   |
 | Explorer Quick Search 回归               | testing/runbooks/explorer-quick-search.md                                          |
+| Web Terminal 状态查询回归                | testing/runbooks/status-lookup-ui.md                                               |
 
 ## 历史归档（冻结，不代表当前事实）
 
