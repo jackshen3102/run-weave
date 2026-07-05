@@ -26,6 +26,7 @@
     "app-server:verify": "node ./scripts/verify-app-server-event-center.mjs",
     "app-server:verify-cli-start": "node ./scripts/verify-app-server-cli-start.mjs",
     "app-server:verify-state-sync": "node ./scripts/verify-app-server-state-sync.mjs",
+    "app-server:seed-threadref-fixture": "node ./scripts/seed-app-server-threadref-fixture.mjs",
     "app:ios:device": "pnpm --filter @runweave/app ios:open",
     "app:ios:local": "node ./scripts/app-ios-local.mjs",
     "app:version:bump": "node ./scripts/bump-app-version.mjs",

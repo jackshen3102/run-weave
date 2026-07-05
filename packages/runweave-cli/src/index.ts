@@ -2,6 +2,7 @@
 import { stdin, stdout, stderr } from "node:process";
 import { runAppServerCommand } from "./commands/app-server.js";
 import { runAppCommand } from "./commands/app.js";
+import { runAgentTeamCommand } from "./commands/agent-team.js";
 import { runAuthCommand } from "./commands/auth.js";
 import { runHealthCommand } from "./commands/health.js";
 import { runProjectCommand } from "./commands/project.js";
@@ -52,6 +53,10 @@ export async function runCli(
       await runAppServerCommand(subcommand, args, io);
       return 0;
     }
+    if (group === "agent-team") {
+      await runAgentTeamCommand(subcommand, args, io);
+      return 0;
+    }
     if (group === "project") {
       await runProjectCommand(subcommand, args, io);
       return 0;
@@ -61,7 +66,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw <app|app-server|auth|project|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw <agent-team|app|app-server|auth|project|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

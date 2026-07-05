@@ -1,4 +1,7 @@
 import type {
+  AgentTeamExportHistoryMode,
+  AgentTeamExportResponse,
+  AgentTeamRunsResponse,
   CreateTerminalProjectRequest,
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
@@ -179,6 +182,48 @@ export class TerminalHttpClient {
       {
         method: "DELETE",
       },
+    );
+  }
+
+  listAgentTeamRuns(
+    projectId: string,
+    terminalSessionId?: string,
+  ): Promise<AgentTeamRunsResponse> {
+    const query = new URLSearchParams({ projectId });
+    if (terminalSessionId) {
+      query.set("terminalSessionId", terminalSessionId);
+    }
+    return this.auth.requestJson<AgentTeamRunsResponse>(
+      `/api/agent-team/runs?${query.toString()}`,
+    );
+  }
+
+  exportAgentTeamRun(
+    runId: string,
+    options: {
+      history?: AgentTeamExportHistoryMode;
+      tail?: number;
+      includeSessionOther?: boolean;
+      includeOutboxes?: boolean;
+    } = {},
+  ): Promise<AgentTeamExportResponse> {
+    const query = new URLSearchParams();
+    if (options.history) {
+      query.set("history", options.history);
+    }
+    if (options.tail !== undefined) {
+      query.set("tail", String(options.tail));
+    }
+    if (options.includeSessionOther !== undefined) {
+      query.set("includeSessionOther", String(options.includeSessionOther));
+    }
+    if (options.includeOutboxes !== undefined) {
+      query.set("includeOutboxes", String(options.includeOutboxes));
+    }
+    const queryText = query.toString();
+    const suffix = queryText ? `?${queryText}` : "";
+    return this.auth.requestJson<AgentTeamExportResponse>(
+      `/api/agent-team/runs/${encodeURIComponent(runId)}/export${suffix}`,
     );
   }
 }

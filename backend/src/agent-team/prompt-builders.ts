@@ -13,6 +13,8 @@ const ROLE_LABEL: Record<string, string> = {
 };
 const EVIDENCE_SCHEMA =
   'acceptanceResults[].evidence[] 必须使用 { type, label, summary, ref, detail? }；type 可用 "text"、"dom"、"screenshot"、"command"、"event"、"json"、"log"、"code"。label 是短标题，summary 是给人看的单句结论，ref 保留原始证据路径、文本或标识。';
+const FINDING_SCHEMA =
+  '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings；字段为 { severity: "P0"|"P1"|"P2"|"P3", status?: "open"|"resolved"|"informational", title, summary, ref? }。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
 
 export function buildWorkerStartupPrompt(params: {
   run: AgentTeamRun;
@@ -80,6 +82,9 @@ export function buildWorkerStartupPrompt(params: {
           `- 本 worker 的结构化 outbox 固定写入：${outboxPath}。不要写 session 级 .runweave/outbox/${run.terminalSessionId}.json，避免同一 terminal 多 pane 覆盖。`,
           `- outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
           `- ${EVIDENCE_SCHEMA}`,
+          ...(worker.role === "code_review" || worker.role === "plan_review"
+            ? [`- ${FINDING_SCHEMA}`]
+            : []),
         ]
       : []),
     "- 最终回复以结构化 summary 收尾（状态 / 结论 / 关键发现 / 产物 / 建议下一步）。",
@@ -167,6 +172,7 @@ export function buildWorkerRecheckPrompt(params: {
       ? [
           `outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
           EVIDENCE_SCHEMA,
+          ...(isReviewWorker ? [FINDING_SCHEMA] : []),
         ]
       : []),
   ].join("\n");
