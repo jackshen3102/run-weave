@@ -2,9 +2,12 @@ import http from "node:http";
 import { mkdir } from "node:fs/promises";
 import { resolveAppServerConfig } from "./config.js";
 import { loadOrCreateToken } from "./auth.js";
+import { AppServerCloudSyncSim } from "./cloud-sync-sim.js";
 import { AppServerEventCenter } from "./event-center.js";
 import { AppServerEventStore } from "./event-store.js";
 import { createHttpApp } from "./http-server.js";
+import { AppServerStateProjector } from "./state-projector.js";
+import { AppServerStateStore } from "./state-store.js";
 import {
   acquireSingletonLock,
   preflightSingleton,
@@ -28,7 +31,37 @@ async function main(): Promise<void> {
   const token = await loadOrCreateToken(config.tokenPath);
   const store = new AppServerEventStore(config.eventLogPath);
   await store.initialize();
-  const eventCenter = new AppServerEventCenter(store);
+  const stateStore = new AppServerStateStore(
+    config.threadStatePath,
+    config.agentSessionStatePath,
+  );
+  await stateStore.initialize();
+  stateStore.clear();
+  const stateProjector = new AppServerStateProjector(stateStore);
+  for (const event of store.listAll()) {
+    stateProjector.project(event);
+  }
+  await stateStore.persist();
+  const sourceInstanceId = `app-server:${process.pid}`;
+  const cloudSync = new AppServerCloudSyncSim({
+    syncDir: config.cloudSyncDir,
+    stateDir: config.stateDir,
+    instanceId: sourceInstanceId,
+    version: config.version,
+  });
+  await cloudSync.initialize();
+  await cloudSync.sync({
+    events: store.listAll(),
+    ...stateStore.getSnapshot(),
+    threadChanges: [],
+    agentSessionChanges: [],
+  });
+  const eventCenter = new AppServerEventCenter(store, {
+    sourceInstanceId,
+    stateStore,
+    stateProjector,
+    cloudSync,
+  });
   const app = createHttpApp({
     eventCenter,
     token,

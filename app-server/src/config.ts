@@ -8,6 +8,9 @@ export interface AppServerConfig {
   lockPath: string;
   tokenPath: string;
   eventLogPath: string;
+  threadStatePath: string;
+  agentSessionStatePath: string;
+  cloudSyncDir: string;
   version: string;
   source: "global" | "local" | "bundled";
   releaseId: string | null;
@@ -29,6 +32,15 @@ export function resolveAppServerConfig(
     lockPath: path.join(stateDir, "app-server.lock.json"),
     tokenPath: path.join(stateDir, "app-server-token"),
     eventLogPath: path.join(stateDir, "app-server-events.jsonl"),
+    threadStatePath: path.join(stateDir, "app-server-thread-state.json"),
+    agentSessionStatePath: path.join(
+      stateDir,
+      "app-server-agent-session-state.json",
+    ),
+    cloudSyncDir: path.resolve(
+      expandHomePath(env.RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR) ??
+        path.join(os.homedir(), ".runweave", "app-server-cloud-sync-sim"),
+    ),
     version: "0.1.0",
     source: parseSource(env.RUNWEAVE_APP_SERVER_SOURCE),
     releaseId: env.RUNWEAVE_APP_SERVER_RELEASE_ID?.trim() || null,

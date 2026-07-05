@@ -12,6 +12,7 @@ const requireFromAppServer = createRequire(
 );
 const { WebSocket } = requireFromAppServer("ws");
 const stateDir = await mkdtemp(path.join(os.tmpdir(), "runweave-app-server-"));
+const cloudSyncDir = path.join(stateDir, "app-server-cloud-sync-sim");
 
 let appServer = null;
 try {
@@ -115,6 +116,7 @@ function startAppServer() {
     env: {
       ...process.env,
       RUNWEAVE_APP_SERVER_STATE_DIR: stateDir,
+      RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: cloudSyncDir,
       RUNWEAVE_APP_SERVER_PORT: "0",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -154,6 +156,7 @@ function runSecondAppServer() {
       env: {
         ...process.env,
         RUNWEAVE_APP_SERVER_STATE_DIR: stateDir,
+        RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: cloudSyncDir,
         RUNWEAVE_APP_SERVER_PORT: "0",
       },
       stdio: ["ignore", "pipe", "pipe"],

@@ -1,0 +1,573 @@
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const requireFromAppServer = createRequire(
+  new URL("../app-server/package.json", import.meta.url),
+);
+const { WebSocket } = requireFromAppServer("ws");
+
+const ids = {
+  projectId: "project-state-sync-001",
+  terminalSessionId: "terminal-state-sync-001",
+  terminalPanelId: "panel-main-001",
+  runId: "run-state-sync-001",
+  threadId: "thread-state-sync-001",
+  cwd: "/tmp/runweave-state-sync",
+};
+
+const source = {
+  app: "hook",
+  instanceId: "hook-state-sync-test",
+  pid: 12345,
+};
+
+const stateDir = await mkdtemp(
+  path.join(os.tmpdir(), "runweave-app-server-state-sync-"),
+);
+const syncDir = await mkdtemp(
+  path.join(os.tmpdir(), "runweave-app-server-cloud-sync-"),
+);
+const badSyncPath = path.join(os.tmpdir(), `runweave-sync-file-${process.pid}`);
+
+let appServer = null;
+try {
+  await run("pnpm", ["--filter", "@runweave/app-server", "build"]);
+  appServer = await startAppServer({ stateDir, syncDir });
+  let context = await readContext(stateDir);
+
+  await verifyStateProjection(context, syncDir);
+  await verifyCompletionSemantics(context);
+  await verifyIsolationAndFallbackKeys(context);
+  await verifyDedupe(context, syncDir);
+  await verifyFilteringAndAuth(context);
+  await verifyWebSocketStateEvents(context);
+  await verifyLargeEventPaging(context, syncDir);
+  await verifySyncFiles(syncDir);
+
+  await stopAppServer(appServer);
+  appServer = await startAppServer({ stateDir, syncDir });
+  context = await readContext(stateDir);
+  await verifyRestartRecovery(context);
+
+  await unlink(path.join(stateDir, "app-server-thread-state.json"));
+  await unlink(path.join(stateDir, "app-server-agent-session-state.json"));
+  await rm(path.join(syncDir, "projections", "latest-threads.json"), {
+    force: true,
+  });
+  await stopAppServer(appServer);
+  appServer = await startAppServer({ stateDir, syncDir });
+  context = await readContext(stateDir);
+  await verifyProjectionRebuild(context, syncDir);
+
+  await stopAppServer(appServer);
+  appServer = null;
+  await writeFile(badSyncPath, "not-a-directory", "utf8");
+  const badSyncStateDir = await mkdtemp(
+    path.join(os.tmpdir(), "runweave-app-server-bad-sync-"),
+  );
+  let badSyncServer = null;
+  try {
+    badSyncServer = await startAppServer({
+      stateDir: badSyncStateDir,
+      syncDir: badSyncPath,
+    });
+    const badContext = await readContext(badSyncStateDir);
+    await verifySyncDegrades(badContext);
+  } finally {
+    if (badSyncServer) {
+      await stopAppServer(badSyncServer);
+    }
+    await rm(badSyncStateDir, { recursive: true, force: true });
+  }
+
+  console.log("app-server state sync verification passed");
+} finally {
+  if (appServer) {
+    await stopAppServer(appServer);
+  }
+  await rm(stateDir, { recursive: true, force: true });
+  await rm(syncDir, { recursive: true, force: true });
+  await rm(badSyncPath, { force: true });
+}
+
+async function verifyStateProjection(context, syncDir) {
+  const sessionStart = await postEvent(context, hookEvent("SessionStart"));
+  assert.equal(sessionStart.status, 201);
+  const thread = await getThread(context, ids.threadId);
+  assert.equal(thread.thread.threadId, ids.threadId);
+  assert.equal(thread.thread.agent, "codex");
+  assert.equal(thread.thread.status, "starting");
+  assert.equal(thread.thread.projectId, ids.projectId);
+  assert.equal(thread.thread.terminalSessionId, ids.terminalSessionId);
+  assert.equal(thread.thread.terminalPanelId, ids.terminalPanelId);
+  assert.equal(thread.thread.cwd, ids.cwd);
+  assert.equal(thread.thread.lastEventId, sessionStart.body.event.id);
+
+  const threadProjectionLines = await readJsonl(
+    path.join(syncDir, "projections", "threads.jsonl"),
+  );
+  assert.equal(threadProjectionLines.at(-1).threadId, ids.threadId);
+
+  const running = await postEvent(context, hookEvent("UserPromptSubmit"));
+  assert.equal(running.status, 201);
+  const runningThreads = await getJson(
+    context,
+    `/threads?projectId=${ids.projectId}&agent=codex&status=running`,
+  );
+  assert.equal(runningThreads.threads.length, 1);
+  assert.equal(runningThreads.threads[0].status, "running");
+  const sessions = await getJson(context, "/agent-sessions?agent=codex");
+  assert.equal(sessions.agentSessions.length, 1);
+  assert.equal(sessions.agentSessions[0].agentSessionId, `codex:${ids.threadId}`);
+  assert.equal(sessions.agentSessions[0].status, "running");
+}
+
+async function verifyCompletionSemantics(context) {
+  await postEvent(context, hookEvent("Stop"));
+  assert.equal((await getThread(context, ids.threadId)).thread.status, "idle");
+  assert.equal(
+    (await getThread(context, ids.threadId)).thread.lastHookEvent,
+    "Stop",
+  );
+
+  await postEvent(context, hookEvent("UserPromptSubmit"));
+  await postEvent(context, completionEvent("notify", "Notify"));
+  assert.equal((await getThread(context, ids.threadId)).thread.status, "running");
+
+  await postEvent(context, completionEvent("hook_stop", "Stop"));
+  const idleThread = await getThread(context, ids.threadId);
+  assert.equal(idleThread.thread.status, "idle");
+  assert.equal(idleThread.thread.lastCompletionReason, "hook_stop");
+
+  await postEvent(context, hookEvent("UserPromptSubmit"));
+  await postEvent(context, completionEvent("ai_process_exit", "Exit"));
+  const completed = await getThread(context, ids.threadId);
+  assert.equal(completed.thread.status, "completed");
+  assert.equal(completed.thread.lastCompletionReason, "ai_process_exit");
+}
+
+async function verifyIsolationAndFallbackKeys(context) {
+  await postEvent(
+    context,
+    hookEvent("UserPromptSubmit", {
+      correlationId: "thread-state-sync-trae-001",
+      payload: { source: "trae", stateHookEvent: "UserPromptSubmit" },
+    }),
+  );
+  assert.equal(
+    (await getThread(context, "thread-state-sync-trae-001")).thread.agent,
+    "trae",
+  );
+  assert.equal((await getThread(context, ids.threadId)).thread.agent, "codex");
+
+  await postEvent(
+    context,
+    hookEvent("UserPromptSubmit", {
+      correlationId: "thread-panel-a",
+      scope: { terminalPanelId: "panel-a" },
+    }),
+  );
+  await postEvent(
+    context,
+    hookEvent("UserPromptSubmit", {
+      correlationId: "thread-panel-b",
+      scope: { terminalPanelId: "panel-b" },
+    }),
+  );
+  await postEvent(
+    context,
+    hookEvent("Stop", {
+      correlationId: "thread-panel-a",
+      scope: { terminalPanelId: "panel-a" },
+    }),
+  );
+  assert.equal((await getThread(context, "thread-panel-a")).thread.status, "idle");
+  assert.equal(
+    (await getThread(context, "thread-panel-b")).thread.status,
+    "running",
+  );
+
+  await postEvent(
+    context,
+    hookEvent("SessionStart", {
+      correlationId: null,
+      scope: { terminalPanelId: "panel-fallback" },
+    }),
+  );
+  const fallbackSessions = await getJson(
+    context,
+    "/agent-sessions?terminalPanelId=panel-fallback",
+  );
+  assert.equal(fallbackSessions.agentSessions.length, 1);
+  assert.equal(fallbackSessions.agentSessions[0].status, "starting");
+
+  await postEvent(
+    context,
+    hookEvent("UserPromptSubmit", {
+      correlationId: "thread-fallback-real",
+      scope: { terminalPanelId: "panel-fallback" },
+    }),
+  );
+  const migratedSessions = await getJson(
+    context,
+    "/agent-sessions?terminalPanelId=panel-fallback&status=running",
+  );
+  assert.equal(migratedSessions.agentSessions.length, 1);
+  assert.equal(migratedSessions.agentSessions[0].threadId, "thread-fallback-real");
+}
+
+async function verifyDedupe(context, syncDir) {
+  const beforeProjectionLines = (
+    await readJsonl(path.join(syncDir, "projections", "threads.jsonl"))
+  ).length;
+  const body = hookEvent("UserPromptSubmit", {
+    correlationId: "thread-dedupe",
+    dedupeKey: "state-sync-dedupe",
+  });
+  const first = await postEvent(context, body);
+  const second = await postEvent(context, body);
+  assert.equal(first.status, 201);
+  assert.equal(second.status, 200);
+  assert.equal(second.body.event.id, first.body.event.id);
+  const afterProjectionLines = (
+    await readJsonl(path.join(syncDir, "projections", "threads.jsonl"))
+  ).length;
+  assert.equal(afterProjectionLines, beforeProjectionLines + 1);
+}
+
+async function verifyFilteringAndAuth(context) {
+  await assertStatus(context, "/threads", 401, null);
+  await assertStatus(context, "/agent-sessions", 401, null);
+  await assertStatus(context, "/sync/status", 401, null);
+  await assertStatus(context, "/threads", 401, "wrong-token");
+  await assertStatus(context, "/healthz", 200, null);
+  await assertStatus(context, "/readyz", 200, null);
+
+  await postEvent(
+    context,
+    hookEvent("UserPromptSubmit", {
+      correlationId: "thread-other-project",
+      scope: { projectId: "project-other" },
+    }),
+  );
+  const filtered = await getJson(
+    context,
+    `/threads?projectId=${ids.projectId}&terminalSessionId=${ids.terminalSessionId}&terminalPanelId=${ids.terminalPanelId}&agent=codex&limit=50`,
+  );
+  assert.equal(filtered.threads.every((thread) => thread.projectId === ids.projectId), true);
+  assert.equal(filtered.threads.every((thread) => thread.agent === "codex"), true);
+}
+
+async function verifyWebSocketStateEvents(context) {
+  const stream = await connectStream(
+    `${context.baseUrl.replace(/^http/, "ws")}/events/stream?kind=thread.state.changed&kind=agent_session.state.changed`,
+    context.token,
+  );
+  const liveEvents = collectLiveEvents(stream, 2);
+  await postEvent(
+    context,
+    hookEvent("UserPromptSubmit", { correlationId: "thread-ws-live" }),
+  );
+  const messages = await liveEvents;
+  assert.equal(messages.length, 2);
+  assert.equal(messages.some((event) => event.kind === "thread.state.changed"), true);
+  assert.equal(
+    messages.some((event) => event.kind === "agent_session.state.changed"),
+    true,
+  );
+  stream.close();
+}
+
+async function verifyLargeEventPaging(context, syncDir) {
+  for (let index = 0; index < 1200; index += 1) {
+    await postEvent(context, {
+      kind: "diagnostic.created",
+      source,
+      payload: { index },
+    });
+  }
+  const page = await getJson(context, "/events?after=0&limit=1200");
+  assert.equal(page.events.length, 500);
+  const mirror = await readJsonl(
+    path.join(syncDir, "events", "app-server-events.jsonl"),
+  );
+  assert.ok(mirror.length >= 1200);
+}
+
+async function verifySyncFiles(syncDir) {
+  const events = await readJsonl(
+    path.join(syncDir, "events", "app-server-events.jsonl"),
+  );
+  assert.ok(events.length > 0);
+  const latestThreads = await readJson(
+    path.join(syncDir, "projections", "latest-threads.json"),
+  );
+  const latestAgentSessions = await readJson(
+    path.join(syncDir, "projections", "latest-agent-sessions.json"),
+  );
+  assert.ok(Array.isArray(latestThreads));
+  assert.ok(Array.isArray(latestAgentSessions));
+  assert.equal(JSON.stringify(latestThreads).includes("Authorization"), false);
+  const cursor = await readJson(
+    path.join(syncDir, "cursors", "upload-cursor.json"),
+  );
+  assert.ok(cursor.latestSyncedEventId);
+  const manifest = await readJson(
+    path.join(syncDir, "manifests", "sync-manifest.json"),
+  );
+  assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.syncDir, syncDir);
+  assert.equal(JSON.stringify(manifest).includes(contextTokenPattern()), false);
+}
+
+async function verifyRestartRecovery(context) {
+  const thread = await getThread(context, ids.threadId);
+  assert.equal(thread.thread.status, "completed");
+  const latest = await getJson(context, "/events/latest");
+  const created = await postEvent(
+    context,
+    hookEvent("Stop", { correlationId: "thread-after-restart" }),
+  );
+  assert.ok(Number(created.body.event.id) > Number(latest.latestEventId));
+}
+
+async function verifyProjectionRebuild(context, syncDir) {
+  const rebuilt = await getThread(context, ids.threadId);
+  assert.equal(rebuilt.thread.status, "completed");
+  const latestThreads = await readJson(
+    path.join(syncDir, "projections", "latest-threads.json"),
+  );
+  assert.equal(
+    latestThreads.some((thread) => thread.threadId === ids.threadId),
+    true,
+  );
+}
+
+async function verifySyncDegrades(context) {
+  const response = await postEvent(context, hookEvent("SessionStart"));
+  assert.equal(response.status, 201);
+  assert.equal((await getThread(context, ids.threadId)).thread.status, "starting");
+  const status = await getJson(context, "/sync/status");
+  assert.ok(status.lastError);
+}
+
+function hookEvent(hookEventName, overrides = {}) {
+  const scope = {
+    projectId: ids.projectId,
+    terminalSessionId: ids.terminalSessionId,
+    terminalPanelId: ids.terminalPanelId,
+    runId: ids.runId,
+    cwd: ids.cwd,
+    ...(overrides.scope ?? {}),
+  };
+  return {
+    kind: "agent.hook",
+    source,
+    scope,
+    correlationId:
+      "correlationId" in overrides ? overrides.correlationId : ids.threadId,
+    dedupeKey: overrides.dedupeKey ?? null,
+    payload: {
+      source: "codex",
+      stateHookEvent: hookEventName,
+      ...(overrides.payload ?? {}),
+    },
+  };
+}
+
+function completionEvent(reason, rawHookEvent) {
+  return {
+    kind: "agent.completion",
+    source,
+    scope: {
+      projectId: ids.projectId,
+      terminalSessionId: ids.terminalSessionId,
+      terminalPanelId: ids.terminalPanelId,
+      runId: ids.runId,
+      cwd: ids.cwd,
+    },
+    correlationId: ids.threadId,
+    payload: {
+      source: "codex",
+      completionReason: reason,
+      rawHookEvent,
+    },
+  };
+}
+
+function startAppServer({ stateDir, syncDir }) {
+  const child = spawn(process.execPath, ["app-server/dist/index.js"], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      RUNWEAVE_APP_SERVER_STATE_DIR: stateDir,
+      RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: syncDir,
+      RUNWEAVE_APP_SERVER_PORT: "0",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return waitForReady(child, stateDir);
+}
+
+async function waitForReady(child, stateDir) {
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 10_000) {
+    if (child.exitCode !== null) {
+      throw new Error(`app-server exited early: ${stderr}`);
+    }
+    try {
+      const context = await readContext(stateDir);
+      const response = await fetch(`${context.baseUrl}/healthz`);
+      if (response.ok) {
+        return child;
+      }
+    } catch {
+      // Keep polling until the server writes the lock and answers health.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`app-server did not become ready: ${stderr}`);
+}
+
+async function readContext(stateDir) {
+  const lock = JSON.parse(
+    await readFile(path.join(stateDir, "app-server.lock.json"), "utf8"),
+  );
+  const token = (
+    await readFile(path.join(stateDir, "app-server-token"), "utf8")
+  ).trim();
+  return {
+    stateDir,
+    token,
+    baseUrl: `http://${lock.host}:${lock.port}`,
+  };
+}
+
+async function stopAppServer(child) {
+  if (child.exitCode !== null) {
+    return;
+  }
+  child.kill("SIGTERM");
+  await new Promise((resolve) => child.on("close", resolve));
+}
+
+async function postEvent(context, body) {
+  const response = await fetch(`${context.baseUrl}/events`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${context.token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  return { status: response.status, body: await response.json() };
+}
+
+async function getThread(context, threadId) {
+  return getJson(context, `/threads/${encodeURIComponent(threadId)}`);
+}
+
+async function getJson(context, pathName) {
+  const response = await fetch(`${context.baseUrl}${pathName}`, {
+    headers: { Authorization: `Bearer ${context.token}` },
+  });
+  assert.equal(response.ok, true, `${pathName} returned ${response.status}`);
+  return response.json();
+}
+
+async function assertStatus(context, pathName, expectedStatus, token) {
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+  const response = await fetch(`${context.baseUrl}${pathName}`, { headers });
+  assert.equal(response.status, expectedStatus, pathName);
+}
+
+async function connectStream(url, token) {
+  const socket = new WebSocket(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const messages = [];
+  socket.on("message", (raw) => {
+    messages.push(JSON.parse(String(raw)));
+  });
+  await new Promise((resolve, reject) => {
+    socket.once("open", resolve);
+    socket.once("error", reject);
+  });
+  await waitFor(() => messages.some((message) => message.type === "events"));
+  return {
+    close: () => socket.close(),
+    messages,
+  };
+}
+
+function collectLiveEvents(stream, count) {
+  return waitFor(() => {
+    const events = stream.messages
+      .filter((message) => message.type === "event")
+      .map((message) => message.event);
+    return events.length >= count ? events.slice(0, count) : null;
+  });
+}
+
+function waitFor(predicate) {
+  const startedAt = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = () => {
+      const value = predicate();
+      if (value) {
+        resolve(value);
+        return;
+      }
+      if (Date.now() - startedAt > 10_000) {
+        reject(new Error("Timed out waiting for condition"));
+        return;
+      }
+      setTimeout(tick, 50);
+    };
+    tick();
+  });
+}
+
+async function readJson(filePath) {
+  return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+async function readJsonl(filePath) {
+  const content = await readFile(filePath, "utf8");
+  return content
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+function run(command, args) {
+  const child = spawn(command, args, {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+  return new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${command} ${args.join(" ")} exited with ${code}`));
+    });
+  });
+}
+
+function contextTokenPattern() {
+  return "app-server-token";
+}

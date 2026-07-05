@@ -1,7 +1,13 @@
 import express from "express";
 import { z } from "zod";
 import type {
+  AppServerAgentKind,
+  AppServerAgentRunStatus,
+  AppServerAgentSessionListResponse,
   AppServerEventListResponse,
+  AppServerSyncStatusResponse,
+  AppServerThreadListResponse,
+  AppServerThreadResponse,
   CreateAppServerEventRequest,
 } from "@runweave/shared";
 import {
@@ -15,6 +21,7 @@ import {
 import type { AppServerEventCenter } from "./event-center.js";
 
 const MAX_EVENTS_LIMIT = 500;
+const MAX_STATE_LIMIT = 500;
 
 const sourceSchema = z
   .object({
@@ -158,6 +165,52 @@ export function createHttpApp(options: {
     res.json({ latestEventId: options.eventCenter.getLatestId() });
   });
 
+  app.get("/threads", (req, res) => {
+    const parsed = parseStateQuery(req.query);
+    if (!parsed.ok) {
+      res.status(400).json({ message: parsed.message });
+      return;
+    }
+    const response: AppServerThreadListResponse = {
+      threads: options.eventCenter.getStateStore().listThreads(parsed.value),
+      latestEventId: options.eventCenter.getLatestId(),
+    };
+    res.json(response);
+  });
+
+  app.get("/threads/:threadId", (req, res) => {
+    const thread = options.eventCenter
+      .getStateStore()
+      .getThread(req.params.threadId);
+    if (!thread) {
+      res.status(404).json({ message: "Thread not found" });
+      return;
+    }
+    const response: AppServerThreadResponse = { thread };
+    res.json(response);
+  });
+
+  app.get("/agent-sessions", (req, res) => {
+    const parsed = parseStateQuery(req.query);
+    if (!parsed.ok) {
+      res.status(400).json({ message: parsed.message });
+      return;
+    }
+    const response: AppServerAgentSessionListResponse = {
+      agentSessions: options.eventCenter
+        .getStateStore()
+        .listAgentSessions(parsed.value),
+      latestEventId: options.eventCenter.getLatestId(),
+    };
+    res.json(response);
+  });
+
+  app.get("/sync/status", (_req, res) => {
+    const response: AppServerSyncStatusResponse =
+      options.eventCenter.getSyncStatus();
+    res.json(response);
+  });
+
   return app;
 }
 
@@ -196,4 +249,89 @@ export function parseEventsQuery(query: {
       limit: Math.min(limit, MAX_EVENTS_LIMIT),
     },
   };
+}
+
+function parseStateQuery(query: {
+  projectId?: unknown;
+  terminalSessionId?: unknown;
+  terminalPanelId?: unknown;
+  agent?: unknown;
+  status?: unknown;
+  after?: unknown;
+  limit?: unknown;
+}):
+  | {
+      ok: true;
+      value: {
+        projectId: string | null;
+        terminalSessionId: string | null;
+        terminalPanelId: string | null;
+        agent: AppServerAgentKind | null;
+        status: AppServerAgentRunStatus | null;
+        after: string | null;
+        limit: number;
+      };
+    }
+  | { ok: false; message: string } {
+  const after = typeof query.after === "string" ? query.after.trim() : "";
+  if (after && !/^\d+$/.test(after)) {
+    return { ok: false, message: "after must be a numeric event id" };
+  }
+
+  const rawLimit = typeof query.limit === "string" ? query.limit.trim() : "";
+  const limit = rawLimit ? Number(rawLimit) : 100;
+  if (!Number.isInteger(limit) || limit < 1) {
+    return { ok: false, message: "limit must be a positive integer" };
+  }
+
+  const rawAgent = readOptionalString(query.agent);
+  if (rawAgent && !isAgentKind(rawAgent)) {
+    return { ok: false, message: "agent is invalid" };
+  }
+  const agent = rawAgent as AppServerAgentKind | null;
+
+  const rawStatus = readOptionalString(query.status);
+  if (rawStatus && !isRunStatus(rawStatus)) {
+    return { ok: false, message: "status is invalid" };
+  }
+  const status = rawStatus as AppServerAgentRunStatus | null;
+
+  return {
+    ok: true,
+    value: {
+      projectId: readOptionalString(query.projectId),
+      terminalSessionId: readOptionalString(query.terminalSessionId),
+      terminalPanelId: readOptionalString(query.terminalPanelId),
+      agent,
+      status,
+      after: after || null,
+      limit: Math.min(limit, MAX_STATE_LIMIT),
+    },
+  };
+}
+
+function readOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isAgentKind(value: string): value is AppServerAgentKind {
+  return (
+    value === "claude" ||
+    value === "codex" ||
+    value === "trae" ||
+    value === "traecli" ||
+    value === "traex" ||
+    value === "unknown"
+  );
+}
+
+function isRunStatus(value: string): value is AppServerAgentRunStatus {
+  return (
+    value === "starting" ||
+    value === "running" ||
+    value === "idle" ||
+    value === "completed" ||
+    value === "failed" ||
+    value === "unknown"
+  );
 }
