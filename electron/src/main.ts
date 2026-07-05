@@ -85,7 +85,7 @@ const isDev = !app.isPackaged;
 process.env.BROWSER_VIEWER_MANAGES_PACKAGED_BACKEND = isDev ? "false" : "true";
 
 const DEV_SERVER_URL =
-  process.env.BROWSER_VIEWER_DEV_URL ?? "http://localhost:5173";
+  process.env.BROWSER_VIEWER_DEV_URL ?? "http://127.0.0.1:5173";
 
 const DEV_RENDERER_DIST = path.join(__dirname, "../../frontend/dist");
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");

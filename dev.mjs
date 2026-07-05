@@ -100,7 +100,7 @@ export function createFrontendEnv({
   const env = createDevChildBaseEnv(baseEnv);
   return {
     ...env,
-    VITE_PROXY_TARGET: `http://localhost:${backendPort}`,
+    VITE_PROXY_TARGET: `http://127.0.0.1:${backendPort}`,
     VITE_STRICT_PORT: "true",
     ...(frontendHost ? { VITE_DEV_HOST: frontendHost } : {}),
     VITE_DEV_PORT: frontendPort,
@@ -402,7 +402,7 @@ async function run() {
     env: process.env,
   });
 
-  const backendUrl = `http://localhost:${backendPort}`;
+  const backendUrl = `http://127.0.0.1:${backendPort}`;
 
   try {
     await waitForBackendReady(backend, backendUrl);
