@@ -25,9 +25,9 @@ app-server home：
       app-server/index.cjs
 ```
 
-这里同时保存状态和当前激活的 app-server runtime。代码可以来自任意 repo、分支、
-Electron bundle 或发布包，但默认运行入口必须先安装/激活到这个全局 home，再由 CLI
-启动。
+这里同时保存状态和当前激活的 app-server runtime。代码可以来自任意 repo、分支或发布包，
+但默认运行入口必须先安装/激活到这个全局 home，再由 CLI 启动。Electron 只检查现有
+app-server 是否可用，不安装、启动或重启它。
 
 事件数据写入 `app-server-events.jsonl`。它是 app-server 的本地事件存储，不是无限保留
 的诊断日志；默认只保留最近 7 天事件。启动时会清理超过保留窗口的旧事件并重写 JSONL
@@ -40,10 +40,8 @@ Electron bundle 或发布包，但默认运行入口必须先安装/激活到这
 - `rw app-server install --entry <path> --release-id <id>` 只安装/激活 runtime。
 - `rw app-server start` 只启动当前 home 的 `runtime/current.json` 指向的 runtime。
 - `rw app-server restart` 只重启当前 owner，不隐式 build、install 或 pull 代码。
-- packaged Electron 先把自己 runtime release 中的 app-server entry 安装到全局
-  app-server home。若当前 owner 已经运行同一个 release，则复用；若 owner 不存在
-  或运行的 `releaseId` 不一致，则通过 runtime release 中的 CLI entry 执行
-  `rw app-server start` 或 `rw app-server restart`。
+- packaged Electron 只检查 app-server 是否已启动；如果不可用，只弹出提示，不执行
+  `rw app-server start`、`rw app-server restart` 或 runtime 安装。
 - backend 只发现现有 app-server，不负责启动。
 
 hook bridge 只发现 app-server 并写事件，不负责启动 app-server。app-server 自动启动失败时，
@@ -243,12 +241,9 @@ rw app-server start
 `runtime/current.json` 启动 app-server。输出包含 `baseUrl`、`pid`、`hasToken`、
 lock 路径、runtime root、current runtime 和 health 信息，但不会打印 token 明文。
 
-packaged Electron 使用 runtime release manifest 中的 app-server entry 更新全局
-app-server runtime。若运行中的 owner 已经是刚安装的 release，Electron 只复用；
-若运行中的 owner 是旧 release，Electron 使用 manifest 中的 CLI entry 运行
-`rw app-server restart`，避免安装了新 Runtime 但 app-server 仍跑旧代码。
-Electron 退出时不停止 app-server；app-server 视为本机全局服务，而不是 Electron
-或 backend 子进程。
+packaged Electron 只做 app-server 可用性诊断。若服务未启动，Electron 弹出提示；
+若服务已启动，则把发现到的连接信息传给 packaged backend。Electron 退出时不停止
+app-server；app-server 视为本机全局服务，而不是 Electron 或 backend 子进程。
 
 ## 本地更新流程
 

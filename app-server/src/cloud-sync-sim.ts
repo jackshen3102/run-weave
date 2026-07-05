@@ -1,7 +1,6 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
-  AppServerAgentSessionRef,
   AppServerEventEnvelope,
   AppServerSyncStatusResponse,
   AppServerThreadRef,
@@ -17,9 +16,7 @@ export interface AppServerCloudSyncSimOptions {
 export interface AppServerCloudSyncPayload {
   events: AppServerEventEnvelope[];
   threads: AppServerThreadRef[];
-  agentSessions: AppServerAgentSessionRef[];
   threadChanges: AppServerThreadRef[];
-  agentSessionChanges: AppServerAgentSessionRef[];
 }
 
 interface UploadCursor {
@@ -67,12 +64,7 @@ export class AppServerCloudSyncSim {
         payload.threadChanges,
         this.threadProjectionPath,
       );
-      await this.appendProjectionChanges(
-        payload.agentSessionChanges,
-        this.agentSessionProjectionPath,
-      );
       await writeJsonFile(this.latestThreadsPath, payload.threads);
-      await writeJsonFile(this.latestAgentSessionsPath, payload.agentSessions);
       this.lastSyncAt = new Date().toISOString();
       this.lastError = null;
       await writeJsonFile(this.cursorPath, {
@@ -147,24 +139,8 @@ export class AppServerCloudSyncSim {
     return path.join(this.options.syncDir, "projections", "threads.jsonl");
   }
 
-  private get agentSessionProjectionPath(): string {
-    return path.join(
-      this.options.syncDir,
-      "projections",
-      "agent-sessions.jsonl",
-    );
-  }
-
   private get latestThreadsPath(): string {
     return path.join(this.options.syncDir, "projections", "latest-threads.json");
-  }
-
-  private get latestAgentSessionsPath(): string {
-    return path.join(
-      this.options.syncDir,
-      "projections",
-      "latest-agent-sessions.json",
-    );
   }
 
   private get cursorPath(): string {

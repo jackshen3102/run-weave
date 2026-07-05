@@ -281,10 +281,9 @@ function validateManifest(packageRoot, manifest, targetShellVersion) {
     !isSafeRelativePath(manifest.frontend?.distDir) ||
     !isSafeRelativePath(manifest.frontend?.index) ||
     !isSafeRelativePath(manifest.backend?.entry) ||
-    !isSafeRelativePath(manifest.cli?.entry) ||
-    !isSafeRelativePath(manifest.appServer?.entry)
+    !isSafeRelativePath(manifest.cli?.entry)
   ) {
-    throw new Error("Runtime manifest contains invalid frontend/backend/cli/app-server paths");
+    throw new Error("Runtime manifest contains invalid frontend/backend/cli paths");
   }
 
   if (!Array.isArray(manifest.files)) {
@@ -295,7 +294,6 @@ function validateManifest(packageRoot, manifest, targetShellVersion) {
     manifest.frontend.index,
     manifest.backend.entry,
     manifest.cli.entry,
-    manifest.appServer.entry,
     ...manifest.files.map((file) => file.path),
   ];
 

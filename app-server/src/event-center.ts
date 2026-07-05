@@ -1,5 +1,4 @@
 import type {
-  AppServerAgentSessionStateChangedPayload,
   AppServerEventEnvelope,
   AppServerThreadStateChangedPayload,
   CreateAppServerEventRequest,
@@ -38,13 +37,6 @@ export class AppServerEventCenter {
           .map((event) => {
             const payload = event.payload as AppServerThreadStateChangedPayload;
             return payload.thread;
-          }),
-        derivedEvents
-          .filter((event) => event.kind === "agent_session.state.changed")
-          .map((event) => {
-            const payload =
-              event.payload as AppServerAgentSessionStateChangedPayload;
-            return payload.agentSession;
           }),
       );
       this.notify(result.event);
@@ -105,31 +97,6 @@ export class AppServerEventCenter {
         } satisfies AppServerThreadStateChangedPayload,
       });
     }
-    if (projection.agentSessionChange?.changed) {
-      derivedInputs.push({
-        kind: "agent_session.state.changed",
-        source: {
-          app: "app-server",
-          instanceId: this.options.sourceInstanceId,
-          pid: process.pid,
-        },
-        scope: {
-          projectId: projection.agentSessionChange.current.projectId,
-          terminalSessionId:
-            projection.agentSessionChange.current.terminalSessionId,
-          terminalPanelId:
-            projection.agentSessionChange.current.terminalPanelId,
-          runId: projection.agentSessionChange.current.runId,
-          cwd: projection.agentSessionChange.current.cwd,
-        },
-        correlationId: projection.agentSessionChange.current.threadId,
-        payload: {
-          agentSession: projection.agentSessionChange.current,
-          previous: projection.agentSessionChange.previous,
-        } satisfies AppServerAgentSessionStateChangedPayload,
-      });
-    }
-
     const derivedEvents: AppServerEventEnvelope[] = [];
     for (const input of derivedInputs) {
       const result = await this.store.append(input);
@@ -145,15 +112,12 @@ export class AppServerEventCenter {
 
   private async syncCloud(
     threadChanges: ReturnType<AppServerStateStore["listThreads"]>,
-    agentSessionChanges: ReturnType<AppServerStateStore["listAgentSessions"]>,
   ): Promise<void> {
     const snapshot = this.options.stateStore.getSnapshot();
     await this.options.cloudSync.sync({
       events: this.store.listAll(),
       threads: snapshot.threads,
-      agentSessions: snapshot.agentSessions,
       threadChanges,
-      agentSessionChanges,
     });
   }
 

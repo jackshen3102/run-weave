@@ -522,6 +522,7 @@ function runLauncher(launcherPath, extraEnv) {
     const child = spawn(process.execPath, [launcherPath, "--source", "codex"], {
       env: {
         ...env,
+        TMUX_PANE: "%13",
         ...extraEnv,
       },
       stdio: ["pipe", "pipe", "pipe"],
@@ -573,6 +574,7 @@ function runToolkitHookCommand(command, source, extraEnv) {
       cwd: toolkitDir,
       env: {
         ...env,
+        TMUX_PANE: "%13",
         ...extraEnv,
         RUNWEAVE_HOOK_SOURCE: source,
       },

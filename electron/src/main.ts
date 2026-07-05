@@ -56,7 +56,7 @@ import {
   resolveRuntimeRoot,
   type RuntimeRelease,
 } from "./runtime-release.js";
-import { ensureAppServerViaCli } from "./app-server-cli.js";
+import { checkAppServerAvailability } from "./app-server-cli.js";
 import { createTray } from "./tray.js";
 import { initAutoUpdater, checkForUpdates } from "./updater.js";
 import { getIsQuitting, setIsQuitting } from "./app-state.js";
@@ -378,6 +378,7 @@ const expectedPackagedBackendExits = new WeakSet<object>();
 let packagedBackendsStoppedForQuit = false;
 let stoppingPackagedBackendsForQuit = false;
 let desktopIncidentLogger: DesktopIncidentLogger | null = null;
+let appServerUnavailableDialogShown = false;
 
 interface PackagedBackendAuthConfig {
   username: string;
@@ -725,6 +726,31 @@ async function stopPackagedBackendRuntimeForRestart(): Promise<void> {
   await runtime.stop();
 }
 
+async function checkAppServerForPackagedBackend(
+  env: NodeJS.ProcessEnv,
+): Promise<Awaited<ReturnType<typeof checkAppServerAvailability>>> {
+  const connection = await checkAppServerAvailability({
+    env,
+    logger: desktopIncidentLogger ?? undefined,
+  });
+  if (connection) {
+    appServerUnavailableDialogShown = false;
+    return connection;
+  }
+
+  if (!appServerUnavailableDialogShown) {
+    appServerUnavailableDialogShown = true;
+    void dialog.showMessageBox({
+      type: "warning",
+      title: "App Server",
+      message: "App Server 没有启动",
+      detail: "Runweave 不会自动安装、启动或重启 App Server。",
+    });
+  }
+
+  return null;
+}
+
 async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionState> {
   try {
     desktopIncidentLogger?.info("packagedBackend.start.requested", {
@@ -735,12 +761,8 @@ async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionS
     });
     const runtime = await startPackagedBackend({
       baseEnv: buildPackagedBackendBaseEnv(),
-      ensureAppServer: async (release, env) =>
-        await ensureAppServerViaCli({
-          env,
-          logger: desktopIncidentLogger ?? undefined,
-          release,
-        }),
+      ensureAppServer: async (_release, env) =>
+        await checkAppServerForPackagedBackend(env),
       onIncidentEvent: logDesktopIncident,
       runtimeRoot: getPackagedRuntimeRoot(),
       resourcesPath: process.resourcesPath,

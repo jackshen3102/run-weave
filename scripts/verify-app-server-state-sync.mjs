@@ -56,7 +56,6 @@ try {
   await verifyRestartRecovery(context);
 
   await unlink(path.join(stateDir, "app-server-thread-state.json"));
-  await unlink(path.join(stateDir, "app-server-agent-session-state.json"));
   await rm(path.join(syncDir, "projections", "latest-threads.json"), {
     force: true,
   });
@@ -122,10 +121,6 @@ async function verifyStateProjection(context, syncDir) {
   );
   assert.equal(runningThreads.threads.length, 1);
   assert.equal(runningThreads.threads[0].status, "running");
-  const sessions = await getJson(context, "/agent-sessions?agent=codex");
-  assert.equal(sessions.agentSessions.length, 1);
-  assert.equal(sessions.agentSessions[0].agentSessionId, `codex:${ids.threadId}`);
-  assert.equal(sessions.agentSessions[0].status, "running");
 }
 
 async function verifyCompletionSemantics(context) {
@@ -200,12 +195,12 @@ async function verifyIsolationAndFallbackKeys(context) {
       scope: { terminalPanelId: "panel-fallback" },
     }),
   );
-  const fallbackSessions = await getJson(
+  const fallbackThreads = await getJson(
     context,
-    "/agent-sessions?terminalPanelId=panel-fallback",
+    "/threads?terminalPanelId=panel-fallback",
   );
-  assert.equal(fallbackSessions.agentSessions.length, 1);
-  assert.equal(fallbackSessions.agentSessions[0].status, "starting");
+  assert.equal(fallbackThreads.threads.length, 1);
+  assert.equal(fallbackThreads.threads[0].status, "starting");
 
   await postEvent(
     context,
@@ -214,12 +209,12 @@ async function verifyIsolationAndFallbackKeys(context) {
       scope: { terminalPanelId: "panel-fallback" },
     }),
   );
-  const migratedSessions = await getJson(
+  const migratedThreads = await getJson(
     context,
-    "/agent-sessions?terminalPanelId=panel-fallback&status=running",
+    "/threads?terminalPanelId=panel-fallback&status=running",
   );
-  assert.equal(migratedSessions.agentSessions.length, 1);
-  assert.equal(migratedSessions.agentSessions[0].threadId, "thread-fallback-real");
+  assert.equal(migratedThreads.threads.length, 1);
+  assert.equal(migratedThreads.threads[0].threadId, "thread-fallback-real");
 }
 
 async function verifyDedupe(context, syncDir) {
@@ -243,7 +238,6 @@ async function verifyDedupe(context, syncDir) {
 
 async function verifyFilteringAndAuth(context) {
   await assertStatus(context, "/threads", 401, null);
-  await assertStatus(context, "/agent-sessions", 401, null);
   await assertStatus(context, "/sync/status", 401, null);
   await assertStatus(context, "/threads", 401, "wrong-token");
   await assertStatus(context, "/healthz", 200, null);
@@ -266,21 +260,17 @@ async function verifyFilteringAndAuth(context) {
 
 async function verifyWebSocketStateEvents(context) {
   const stream = await connectStream(
-    `${context.baseUrl.replace(/^http/, "ws")}/events/stream?kind=thread.state.changed&kind=agent_session.state.changed`,
+    `${context.baseUrl.replace(/^http/, "ws")}/events/stream?kind=thread.state.changed`,
     context.token,
   );
-  const liveEvents = collectLiveEvents(stream, 2);
+  const liveEvents = collectLiveEvents(stream, 1);
   await postEvent(
     context,
     hookEvent("UserPromptSubmit", { correlationId: "thread-ws-live" }),
   );
   const messages = await liveEvents;
-  assert.equal(messages.length, 2);
+  assert.equal(messages.length, 1);
   assert.equal(messages.some((event) => event.kind === "thread.state.changed"), true);
-  assert.equal(
-    messages.some((event) => event.kind === "agent_session.state.changed"),
-    true,
-  );
   stream.close();
 }
 
@@ -308,11 +298,7 @@ async function verifySyncFiles(syncDir) {
   const latestThreads = await readJson(
     path.join(syncDir, "projections", "latest-threads.json"),
   );
-  const latestAgentSessions = await readJson(
-    path.join(syncDir, "projections", "latest-agent-sessions.json"),
-  );
   assert.ok(Array.isArray(latestThreads));
-  assert.ok(Array.isArray(latestAgentSessions));
   assert.equal(JSON.stringify(latestThreads).includes("Authorization"), false);
   const cursor = await readJson(
     path.join(syncDir, "cursors", "upload-cursor.json"),
