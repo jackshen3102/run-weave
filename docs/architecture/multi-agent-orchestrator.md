@@ -73,8 +73,19 @@ Agent Team 的 Loop Engine 由 `backend/src/agent-team/loop.ts` 维护：
 - `POST /runs/:runId/round`：记录一轮验收结果或进展信号。
 - `POST /runs/:runId/resume`：人工 note 介入并恢复 loop。
 - `POST /runs/:runId/focus-pane`：聚焦属于该 run 的主 pane 或 worker pane。
+- `GET /runs/:runId/export`：导出复盘包，供 CLI 和人工排障读取 run、pane、outbox、history tail 与验收摘要。
 
 旧 `/api/orchestrator/*`、Orchestrator 前端 tab 和 shared `orchestrator` 类型已下线；当前 UI 入口是 Terminal tab 右键打开 Agent Team，并在右侧 sidecar 显示 Agent Team tab。
+
+CLI 复盘入口：
+
+```bash
+rw agent-team export <runId> --tail 1000 --json
+rw agent-team export --project-id <projectId> --terminal-session-id <terminalSessionId> --history none --json
+rw agent-team export <runId> --plain
+```
+
+导出结果用于回看一次 run 的任务包、run-bound panels、session-other panels、pane-scoped outbox、legacy session outbox、acceptance summary 和 warnings。它不替代可见终端流程，也不自动提交、push 或发布代码。
 
 ## 约束和风险
 
