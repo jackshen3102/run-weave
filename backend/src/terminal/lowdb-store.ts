@@ -23,6 +23,7 @@ import type {
   PersistedTerminalSessionMetadataRecord,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
+  UpdateTerminalPanelLastThreadParams,
   UpdateTerminalPanelPreviewParams,
   UpdateTerminalPanelStatusParams,
   UpdateTerminalPanelTerminalStateParams,
@@ -35,6 +36,7 @@ import type {
   UpdateTerminalSessionAliasParams,
   UpdateTerminalSessionLaunchParams,
   UpdateTerminalSessionMetadataParams,
+  UpdateTerminalSessionLastThreadParams,
   UpdateTerminalSessionPreviewParams,
   UpdateTerminalSessionPanelSplitEnabledParams,
   UpdateTerminalSessionRuntimeMetadataParams,
@@ -262,6 +264,24 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       } else {
         delete panel.preview;
       }
+      await database.write();
+    });
+  }
+
+  async updatePanelLastThread(
+    params: UpdateTerminalPanelLastThreadParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = database.data.panels.find(
+        (candidate) => candidate.id === params.panelId,
+      );
+      if (!panel) {
+        return;
+      }
+      panel.lastThreadId = params.threadId;
+      panel.lastThreadStatus = params.status;
+      panel.lastThreadUpdatedAt = params.updatedAt;
       await database.write();
     });
   }
@@ -534,6 +554,24 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       } else {
         delete session.preview;
       }
+      await database.write();
+    });
+  }
+
+  async updateSessionLastThread(
+    params: UpdateTerminalSessionLastThreadParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const session = database.data.sessions.find(
+        (candidate) => candidate.id === params.terminalSessionId,
+      );
+      if (!session) {
+        return;
+      }
+      session.lastThreadId = params.threadId;
+      session.lastThreadStatus = params.status;
+      session.lastThreadUpdatedAt = params.updatedAt;
       await database.write();
     });
   }

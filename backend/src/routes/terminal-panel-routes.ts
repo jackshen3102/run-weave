@@ -563,10 +563,16 @@ async function ensureTmuxPanelWorkspace(
         shouldClearCodexThreadMetadata ||
         shouldBackfillSessionAgentMetadata
       ) {
+        const updatedAt = new Date();
         existingPanel.cwd = pane.cwd || existingPanel.cwd;
         existingPanel.activeCommand = effectiveActiveCommand;
         existingPanel.terminalState = nextTerminalState;
         if (shouldClearCodexThreadMetadata) {
+          if (existingPanel.threadId) {
+            existingPanel.lastThreadId = existingPanel.threadId;
+            existingPanel.lastThreadStatus = "idle";
+            existingPanel.lastThreadUpdatedAt = updatedAt;
+          }
           delete existingPanel.threadId;
           delete existingPanel.preview;
         } else if (shouldBackfillSessionAgentMetadata) {
@@ -577,7 +583,7 @@ async function ensureTmuxPanelWorkspace(
           );
         }
         existingPanel.status = "running";
-        existingPanel.lastActivityAt = new Date();
+        existingPanel.lastActivityAt = updatedAt;
         await terminalSessionManager.upsertPanel(existingPanel);
         changed = true;
       }

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
   TERMINAL_LIVE_SCROLLBACK_BYTES,
+  type TerminalLastThreadStatus,
   type TerminalState,
 } from "@runweave/shared";
 import type {
@@ -493,6 +494,42 @@ export class TerminalSessionManager {
     return panel;
   }
 
+  async updatePanelLastThread(
+    panelId: string,
+    threadId: string,
+    status: TerminalLastThreadStatus,
+    updatedAt = new Date(),
+  ): Promise<TerminalPanelRecord | undefined> {
+    const panel = this.panels.get(panelId);
+    if (!panel) {
+      return undefined;
+    }
+
+    const nextThreadId = threadId.trim();
+    if (!nextThreadId) {
+      return panel;
+    }
+
+    if (
+      panel.lastThreadId === nextThreadId &&
+      panel.lastThreadStatus === status &&
+      panel.lastThreadUpdatedAt?.getTime() === updatedAt.getTime()
+    ) {
+      return panel;
+    }
+
+    panel.lastThreadId = nextThreadId;
+    panel.lastThreadStatus = status;
+    panel.lastThreadUpdatedAt = updatedAt;
+    await this.sessionStore.updatePanelLastThread({
+      panelId,
+      threadId: nextThreadId,
+      status,
+      updatedAt: updatedAt.toISOString(),
+    });
+    return panel;
+  }
+
   async updatePanelTerminalState(
     panelId: string,
     terminalState: TerminalState,
@@ -596,6 +633,9 @@ export class TerminalSessionManager {
     const shouldClearCodexThreadMetadata =
       Boolean(session.threadId || session.preview) &&
       getAgentForCommand(nextActiveCommand) !== "codex";
+    const clearedThreadId = shouldClearCodexThreadMetadata
+      ? session.threadId
+      : undefined;
     if (shouldClearCodexThreadMetadata) {
       this.clearCodexThreadMetadata(session);
     }
@@ -607,6 +647,13 @@ export class TerminalSessionManager {
       lastActivityAt: lastActivityAt.toISOString(),
     });
     if (shouldClearCodexThreadMetadata) {
+      if (clearedThreadId) {
+        await this.updateSessionLastThread(
+          terminalSessionId,
+          clearedThreadId,
+          "idle",
+        );
+      }
       await this.persistClearedCodexThreadMetadata(terminalSessionId);
     }
     return session;
@@ -644,6 +691,9 @@ export class TerminalSessionManager {
     const shouldClearCodexThreadMetadata =
       Boolean(session.threadId || session.preview) &&
       getAgentForCommand(launch.command) !== "codex";
+    const clearedThreadId = shouldClearCodexThreadMetadata
+      ? session.threadId
+      : undefined;
     if (shouldClearCodexThreadMetadata) {
       this.clearCodexThreadMetadata(session);
     }
@@ -653,6 +703,13 @@ export class TerminalSessionManager {
       args: nextArgs,
     });
     if (shouldClearCodexThreadMetadata) {
+      if (clearedThreadId) {
+        await this.updateSessionLastThread(
+          terminalSessionId,
+          clearedThreadId,
+          "idle",
+        );
+      }
       await this.persistClearedCodexThreadMetadata(terminalSessionId);
     }
     return session;
@@ -765,6 +822,42 @@ export class TerminalSessionManager {
     await this.sessionStore.updateSessionPreview({
       terminalSessionId,
       preview: nextPreview ?? null,
+    });
+    return session;
+  }
+
+  async updateSessionLastThread(
+    terminalSessionId: string,
+    threadId: string,
+    status: TerminalLastThreadStatus,
+    updatedAt = new Date(),
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const nextThreadId = threadId.trim();
+    if (!nextThreadId) {
+      return session;
+    }
+
+    if (
+      session.lastThreadId === nextThreadId &&
+      session.lastThreadStatus === status &&
+      session.lastThreadUpdatedAt?.getTime() === updatedAt.getTime()
+    ) {
+      return session;
+    }
+
+    session.lastThreadId = nextThreadId;
+    session.lastThreadStatus = status;
+    session.lastThreadUpdatedAt = updatedAt;
+    await this.sessionStore.updateSessionLastThread({
+      terminalSessionId,
+      threadId: nextThreadId,
+      status,
+      updatedAt: updatedAt.toISOString(),
     });
     return session;
   }

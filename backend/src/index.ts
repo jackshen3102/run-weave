@@ -26,6 +26,7 @@ import {
 } from "./logging";
 import { createAuthRouter } from "./routes/auth";
 import { createAppHomeOverviewRouter } from "./routes/app-home-overview";
+import { createAppServerStateRouter } from "./routes/app-server-state";
 import { createDiagnosticLogsRouter } from "./routes/diagnostic-logs";
 import { AgentTeamService } from "./agent-team/service";
 import { createAgentTeamRouter } from "./routes/agent-team";
@@ -451,6 +452,7 @@ function createHttpApp(
       terminalStateService: services.terminalStateService,
     }),
   );
+  app.use("/api/app-server", requireAuth, createAppServerStateRouter());
   app.use(
     "/api/agent-team",
     requireAuth,
