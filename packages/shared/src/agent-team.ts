@@ -6,7 +6,11 @@ import type { TerminalRuntimePreference } from "./terminal-protocol";
  * that terminal's session.
  */
 
-export type AgentTeamPhase = "clarify" | "proposal" | "executing";
+export type AgentTeamPhase =
+  | "intake"
+  | "plan_review"
+  | "proposal"
+  | "executing";
 
 export type AgentTeamStatus =
   | "clarifying"
@@ -24,7 +28,22 @@ export type AgentTeamWorkerRole =
   | "plan_review";
 
 export interface AgentTeamAcceptanceEvidence {
-  type: "screenshot" | "dom" | "text";
+  type:
+    | "screenshot"
+    | "dom"
+    | "text"
+    | "command"
+    | "event"
+    | "json"
+    | "log"
+    | "code";
+  /** Short human-facing title, e.g. "状态推送". */
+  label: string;
+  /** One-line human-facing explanation. */
+  summary: string;
+  /** Optional extra detail for expanded evidence views. */
+  detail?: string;
+  /** Raw evidence pointer or text. */
   ref: string;
 }
 
@@ -113,6 +132,9 @@ export interface AgentTeamRun {
   /** Agent CLI used by the root engineer and worker panes. */
   terminal: AgentTeamTerminal;
   task: string;
+  planFile?: string | null;
+  /** The only worker role currently allowed to do work in the serial flow. */
+  activeWorkerRole?: AgentTeamWorkerRole | null;
   clarify: AgentTeamClarifyMessage[];
   proposal: AgentTeamProposal | null;
   workers: AgentTeamWorker[];
@@ -160,6 +182,7 @@ export interface CreateAgentTeamRunRequest {
   projectId: string;
   terminalSessionId: string;
   task?: string;
+  planFile?: string;
   options?: Partial<AgentTeamRunOptions>;
   /**
    * Defaults to Codex for the current loop-engineer test path. Callers may
@@ -193,6 +216,10 @@ export interface RecordAgentTeamRoundRequest {
 
 export interface ResumeAgentTeamRunRequest {
   note: string;
+}
+
+export interface CompleteAgentTeamRunRequest {
+  note?: string;
 }
 
 export interface FocusAgentTeamPaneRequest {

@@ -1,6 +1,7 @@
 import type {
   AgentTeamRun,
   AgentTeamRunsResponse,
+  CompleteAgentTeamRunRequest,
   CreateAgentTeamRunRequest,
   CreateTerminalProjectRequest,
   CreateTerminalClipboardImageRequest,
@@ -324,6 +325,23 @@ export async function resumeAgentTeamRun(
   return requestJson<AgentTeamRun>(
     apiBase,
     `/api/agent-team/runs/${encodeURIComponent(runId)}/resume`,
+    {
+      method: "POST",
+      headers: AGENT_TEAM_JSON_HEADERS(token),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function completeAgentTeamRun(
+  apiBase: string,
+  token: string,
+  runId: string,
+  payload: CompleteAgentTeamRunRequest,
+): Promise<AgentTeamRun> {
+  return requestJson<AgentTeamRun>(
+    apiBase,
+    `/api/agent-team/runs/${encodeURIComponent(runId)}/complete`,
     {
       method: "POST",
       headers: AGENT_TEAM_JSON_HEADERS(token),

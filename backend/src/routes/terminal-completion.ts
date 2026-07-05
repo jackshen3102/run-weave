@@ -113,12 +113,19 @@ export function createInternalTerminalCompletionRouter(options: {
       return;
     }
     const { panelId, tmuxPaneId } = resolvedPane;
+    const paneActiveCommand = panelId
+      ? (options.terminalSessionManager.getPanel(panelId)?.activeCommand ?? null)
+      : null;
     const lastAiActiveCommand =
       options.terminalSessionManager.getLastAiActiveCommand(session.id);
     const currentCommandMatches =
       isCompletionSourceAllowedForCommand(
         parsed.data.source,
         session.activeCommand,
+      ) ||
+      isCompletionSourceAllowedForCommand(
+        parsed.data.source,
+        paneActiveCommand,
       ) ||
       getTerminalSessionAgent(session) === parsed.data.source;
     const now = Date.now();
@@ -136,6 +143,7 @@ export function createInternalTerminalCompletionRouter(options: {
         terminalSessionId: parsed.data.terminalSessionId,
         source: parsed.data.source,
         activeCommand: session.activeCommand,
+        paneActiveCommand,
         lastAiActiveCommand: lastAiActiveCommand?.command ?? null,
         lastAiActiveCommandClearedAt: lastAiActiveCommand?.clearedAt
           ? new Date(lastAiActiveCommand.clearedAt).toISOString()
@@ -168,6 +176,7 @@ export function createInternalTerminalCompletionRouter(options: {
       terminalSessionId: event.terminalSessionId,
       source: event.kind === "completion" ? event.payload.source : null,
       activeCommand: session.activeCommand,
+      paneActiveCommand,
       lastAiActiveCommand: lastAiActiveCommand?.command ?? null,
       lastAiActiveCommandClearedAt: lastAiActiveCommand?.clearedAt
         ? new Date(lastAiActiveCommand.clearedAt).toISOString()

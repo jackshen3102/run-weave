@@ -3,7 +3,8 @@ import type { AgentTeamRun, AgentTeamWorkerRole } from "@runweave/shared";
 export const AGENT_TEAM_POLL_INTERVAL_MS = 4000;
 
 export const PHASE_LABEL: Record<AgentTeamRun["phase"], string> = {
-  clarify: "需求澄清",
+  intake: "任务接收",
+  plan_review: "计划审查",
   proposal: "拆分提案",
   executing: "执行观测",
 };

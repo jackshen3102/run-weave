@@ -16,6 +16,11 @@ const VALID_EVIDENCE_TYPES = new Set<AgentTeamAcceptanceEvidence["type"]>([
   "screenshot",
   "dom",
   "text",
+  "command",
+  "event",
+  "json",
+  "log",
+  "code",
 ]);
 
 /**
@@ -206,11 +211,23 @@ export class AgentTeamOutboxResolver {
         status: result.status,
         evidence: Array.isArray(result.evidence)
           ? result.evidence
-              .filter((evidence) => typeof evidence.ref === "string")
+              .filter(
+                (evidence) =>
+                  VALID_EVIDENCE_TYPES.has(evidence.type) &&
+                  typeof evidence.ref === "string" &&
+                  typeof evidence.label === "string" &&
+                  evidence.label.trim() &&
+                  typeof evidence.summary === "string" &&
+                  evidence.summary.trim(),
+              )
               .map((evidence) => ({
-                type: VALID_EVIDENCE_TYPES.has(evidence.type)
-                  ? evidence.type
-                  : "text",
+                type: evidence.type,
+                label: evidence.label.trim(),
+                summary: evidence.summary.trim(),
+                ...(typeof evidence.detail === "string" &&
+                evidence.detail.trim()
+                  ? { detail: evidence.detail.trim() }
+                  : {}),
                 ref: evidence.ref,
               }))
           : [],

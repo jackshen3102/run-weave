@@ -44,6 +44,7 @@ const createRunSchema = z
     projectId: z.string().trim().min(1),
     terminalSessionId: z.string().trim().min(1),
     task: z.string().trim().optional(),
+    planFile: z.string().trim().min(1).optional(),
     options: z
       .object({ autoApproveSplit: z.boolean().optional() })
       .strict()
@@ -77,7 +78,19 @@ const acceptanceResultSchema = z
       .array(
         z
           .object({
-            type: z.enum(["screenshot", "dom", "text"]),
+            type: z.enum([
+              "screenshot",
+              "dom",
+              "text",
+              "command",
+              "event",
+              "json",
+              "log",
+              "code",
+            ]),
+            label: z.string().trim().min(1),
+            summary: z.string().trim().min(1),
+            detail: z.string().trim().min(1).optional(),
             ref: z.string().trim().min(1),
           })
           .strict(),
@@ -95,6 +108,9 @@ const recordRoundSchema = z
   .strict();
 
 const resumeSchema = z.object({ note: z.string().trim().min(1) }).strict();
+const completeSchema = z
+  .object({ note: z.string().trim().min(1).optional() })
+  .strict();
 const focusSchema = z.object({ panelId: z.string().trim().min(1) }).strict();
 
 export function createAgentTeamRouter(
@@ -223,6 +239,25 @@ export function createAgentTeamRouter(
     }
     await handleServiceCall(res, () =>
       agentTeamService.resumeRun(params.data.runId, parsed.data),
+    );
+  });
+
+  router.post("/runs/:runId/complete", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params" });
+      return;
+    }
+    const parsed = completeSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.completeRun(params.data.runId, parsed.data),
     );
   });
 
