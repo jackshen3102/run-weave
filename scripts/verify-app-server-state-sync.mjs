@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  readFile,
+  rm,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -34,10 +41,12 @@ const syncDir = await mkdtemp(
   path.join(os.tmpdir(), "runweave-app-server-cloud-sync-"),
 );
 const badSyncPath = path.join(os.tmpdir(), `runweave-sync-file-${process.pid}`);
+const fakeCodexBinPath = path.join(stateDir, "fake-codex-app-server.mjs");
 
 let appServer = null;
 try {
   await run("pnpm", ["--filter", "@runweave/app-server", "build"]);
+  await writeFakeCodexBin(fakeCodexBinPath);
   appServer = await startAppServer({ stateDir, syncDir });
   let context = await readContext(stateDir);
 
@@ -47,6 +56,7 @@ try {
   await verifyDedupe(context, syncDir);
   await verifyFilteringAndAuth(context);
   await verifyWebSocketStateEvents(context);
+  await verifyCodexThreadStatusCompensation(context);
   await verifyLargeEventPaging(context, syncDir);
   await verifySyncFiles(syncDir);
 
@@ -274,6 +284,70 @@ async function verifyWebSocketStateEvents(context) {
   stream.close();
 }
 
+async function verifyCodexThreadStatusCompensation(context) {
+  const threadId = "thread-compensation";
+  const activeThreadId = "thread-active-compensation";
+  const running = await postEvent(
+    context,
+    hookEvent("UserPromptSubmit", {
+      correlationId: threadId,
+      scope: { terminalPanelId: "panel-compensation" },
+    }),
+  );
+  assert.equal(running.status, 201);
+  assert.equal((await getThread(context, threadId)).thread.status, "running");
+
+  await waitFor(async () => {
+    const thread = await getThread(context, threadId);
+    return thread.thread.status === "idle" ? thread : null;
+  });
+  const events = await getJson(
+    context,
+    `/events?after=${running.body.event.id}&kind=agent.hook&limit=50`,
+  );
+  const compensationEvent = events.events.find(
+    (event) =>
+      event.correlationId === threadId &&
+      event.payload?.compensation === true,
+  );
+  assert.ok(compensationEvent);
+  assert.equal(compensationEvent.payload.source, "codex");
+  assert.equal(compensationEvent.payload.stateHookEvent, "Stop");
+  assert.equal(
+    compensationEvent.payload.compensationReason,
+    "codex_thread_status_mismatch",
+  );
+
+  await postEvent(
+    context,
+    hookEvent("Stop", {
+      correlationId: activeThreadId,
+      scope: { terminalPanelId: "panel-active-compensation" },
+    }),
+  );
+  assert.equal((await getThread(context, activeThreadId)).thread.status, "idle");
+
+  await waitFor(async () => {
+    const thread = await getThread(context, activeThreadId);
+    return thread.thread.status === "running" ? thread : null;
+  });
+  const activeEvents = await getJson(
+    context,
+    `/events?after=${running.body.event.id}&kind=agent.hook&limit=50`,
+  );
+  const activeCompensationEvent = activeEvents.events.find(
+    (event) =>
+      event.correlationId === activeThreadId &&
+      event.payload?.compensation === true,
+  );
+  assert.ok(activeCompensationEvent);
+  assert.equal(
+    activeCompensationEvent.payload.stateHookEvent,
+    "UserPromptSubmit",
+  );
+  assert.equal(activeCompensationEvent.payload.observedThreadStatus, "active");
+}
+
 async function verifyLargeEventPaging(context, syncDir) {
   for (let index = 0; index < 1200; index += 1) {
     await postEvent(context, {
@@ -395,6 +469,9 @@ function startAppServer({ stateDir, syncDir }) {
       RUNWEAVE_APP_SERVER_STATE_DIR: stateDir,
       RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: syncDir,
       RUNWEAVE_APP_SERVER_PORT: "0",
+      RUNWEAVE_APP_SERVER_CODEX_STATUS_START_DELAY_MS: "100",
+      RUNWEAVE_APP_SERVER_CODEX_STATUS_INTERVAL_MS: "100",
+      CODEX_BIN: fakeCodexBinPath,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -509,8 +586,8 @@ function collectLiveEvents(stream, count) {
 function waitFor(predicate) {
   const startedAt = Date.now();
   return new Promise((resolve, reject) => {
-    const tick = () => {
-      const value = predicate();
+    const tick = async () => {
+      const value = await predicate();
       if (value) {
         resolve(value);
         return;
@@ -535,6 +612,45 @@ async function readJsonl(filePath) {
     .split(/\r?\n/)
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+}
+
+async function writeFakeCodexBin(filePath) {
+  await writeFile(
+    filePath,
+    `#!/usr/bin/env node
+import readline from "node:readline";
+
+const rl = readline.createInterface({ input: process.stdin });
+
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (!message.id) {
+    return;
+  }
+  if (message.method === "initialize") {
+    process.stdout.write(JSON.stringify({ id: message.id, result: {} }) + "\\n");
+    return;
+  }
+  if (message.method === "thread/read" || message.method === "thread/resume") {
+    const threadId = message.params?.threadId;
+    const type =
+      threadId === "thread-compensation"
+        ? "idle"
+        : threadId === "thread-active-compensation"
+          ? "active"
+          : null;
+    process.stdout.write(
+      JSON.stringify({
+        id: message.id,
+        result: type ? { thread: { status: { type } } } : {},
+      }) + "\\n",
+    );
+  }
+});
+`,
+    "utf8",
+  );
+  await chmod(filePath, 0o755);
 }
 
 function run(command, args) {

@@ -4,6 +4,11 @@ import type { WebSocketServer } from "ws";
 import { resolveAppServerConfig } from "./config.js";
 import { loadOrCreateToken } from "./auth.js";
 import { AppServerCloudSyncSim } from "./cloud-sync-sim.js";
+import { CodexAppServerClient } from "./codex-app-server-client.js";
+import {
+  CodexThreadStatusCompensator,
+  parseOptionalPositiveInteger,
+} from "./codex-thread-status-compensator.js";
 import { AppServerEventCenter } from "./event-center.js";
 import { AppServerEventStore } from "./event-store.js";
 import { createHttpApp } from "./http-server.js";
@@ -60,6 +65,17 @@ async function main(): Promise<void> {
     stateProjector,
     cloudSync,
   });
+  const codexThreadStatusCompensator = new CodexThreadStatusCompensator({
+    eventCenter,
+    sourceInstanceId,
+    statusReader: new CodexAppServerClient(),
+    startDelayMs: parseOptionalPositiveInteger(
+      process.env.RUNWEAVE_APP_SERVER_CODEX_STATUS_START_DELAY_MS,
+    ),
+    intervalMs: parseOptionalPositiveInteger(
+      process.env.RUNWEAVE_APP_SERVER_CODEX_STATUS_INTERVAL_MS,
+    ),
+  });
   const app = createHttpApp({
     eventCenter,
     token,
@@ -103,8 +119,14 @@ async function main(): Promise<void> {
     threadStatePath: config.threadStatePath,
     cloudSyncDir: config.cloudSyncDir,
   });
+  codexThreadStatusCompensator.start();
 
-  attachShutdownHandlers(server, eventStreamServer, config.lockPath);
+  attachShutdownHandlers(
+    server,
+    eventStreamServer,
+    config.lockPath,
+    codexThreadStatusCompensator,
+  );
 }
 
 function listen(
@@ -151,6 +173,7 @@ function attachShutdownHandlers(
   server: http.Server,
   eventStreamServer: WebSocketServer,
   lockPath: string,
+  codexThreadStatusCompensator: CodexThreadStatusCompensator,
 ): void {
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
@@ -158,6 +181,7 @@ function attachShutdownHandlers(
       return;
     }
     shuttingDown = true;
+    codexThreadStatusCompensator.stop();
     await closeEventStreamServer(eventStreamServer);
     await closeServer(server);
     await releaseLock(lockPath);

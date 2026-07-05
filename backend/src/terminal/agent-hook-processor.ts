@@ -105,52 +105,7 @@ export async function processTerminalAgentHook(
     };
   }
   const panel = panelResolution.panel;
-
-  if (input.agent === "codex" && input.threadId) {
-    const runningPanelCount = options.terminalSessionManager
-      .listPanels(session.id)
-      .filter((candidate) => candidate.status === "running").length;
-    const shouldWriteSessionMetadata = runningPanelCount <= 1;
-    const previousThreadId = session.threadId;
-    const previousPanelThreadId = panel?.threadId;
-    if (shouldWriteSessionMetadata) {
-      session =
-        (await options.terminalSessionManager.updateSessionThreadId(
-          session.id,
-          input.threadId,
-        )) ?? session;
-      if (
-        input.hookEvent === "SessionStart" &&
-        previousThreadId !== input.threadId
-      ) {
-        await options.terminalSessionManager.updateSessionPreview(
-          session.id,
-          null,
-        );
-      }
-    }
-    if (input.hookEvent === "SessionStart") {
-      updateCodexThreadPreviewInBackground(
-        options.terminalSessionManager,
-        session.id,
-        input.threadId,
-        panel?.id ?? null,
-        shouldWriteSessionMetadata,
-      );
-    }
-    if (panel) {
-      await options.terminalSessionManager.updatePanelThreadId(
-        panel.id,
-        input.threadId,
-      );
-      if (
-        input.hookEvent === "SessionStart" &&
-        previousPanelThreadId !== input.threadId
-      ) {
-        await options.terminalSessionManager.updatePanelPreview(panel.id, null);
-      }
-    }
-  }
+  const hookThreadId = input.threadId?.trim() || null;
 
   const sessionAgent = getTerminalSessionAgent(session);
   const panelAgent = panel ? getTerminalSessionAgent(panel) : null;
@@ -225,6 +180,16 @@ export async function processTerminalAgentHook(
       terminalState,
     );
   }
+  if (input.agent === "codex" && hookThreadId) {
+    session =
+      (await syncCodexThreadMetadata({
+        terminalSessionManager: options.terminalSessionManager,
+        session,
+        panel,
+        hookEvent: input.hookEvent,
+        threadId: hookThreadId,
+      })) ?? session;
+  }
   return {
     status: "recorded",
     terminalSessionId: session.id,
@@ -233,6 +198,99 @@ export async function processTerminalAgentHook(
     terminalState,
     panelId: panel?.id ?? null,
   };
+}
+
+async function syncCodexThreadMetadata(options: {
+  terminalSessionManager: TerminalSessionManager;
+  session: ReturnType<TerminalSessionManager["getSession"]>;
+  panel: ReturnType<TerminalSessionManager["getPanel"]> | null;
+  hookEvent: AgentHookStateEvent;
+  threadId: string;
+}): Promise<ReturnType<TerminalSessionManager["getSession"]>> {
+  const session = options.session;
+  if (!session) {
+    return session;
+  }
+
+  if (
+    options.hookEvent === "SessionStart" ||
+    options.hookEvent === "UserPromptSubmit"
+  ) {
+    const runningPanelCount = options.terminalSessionManager
+      .listPanels(session.id)
+      .filter((candidate) => candidate.status === "running").length;
+    const shouldWriteSessionMetadata = runningPanelCount <= 1;
+    const previousThreadId = session.threadId;
+    const previousPanelThreadId = options.panel?.threadId;
+    let nextSession = session;
+
+    if (shouldWriteSessionMetadata) {
+      nextSession =
+        (await options.terminalSessionManager.updateSessionThreadId(
+          session.id,
+          options.threadId,
+        )) ?? nextSession;
+      if (previousThreadId !== options.threadId) {
+        await options.terminalSessionManager.updateSessionPreview(
+          session.id,
+          null,
+        );
+      }
+    }
+    if (options.hookEvent === "SessionStart") {
+      updateCodexThreadPreviewInBackground(
+        options.terminalSessionManager,
+        session.id,
+        options.threadId,
+        options.panel?.id ?? null,
+        shouldWriteSessionMetadata,
+      );
+    }
+    if (options.panel) {
+      await options.terminalSessionManager.updatePanelThreadId(
+        options.panel.id,
+        options.threadId,
+      );
+      if (previousPanelThreadId !== options.threadId) {
+        await options.terminalSessionManager.updatePanelPreview(
+          options.panel.id,
+          null,
+        );
+      }
+    }
+    return nextSession;
+  }
+
+  if (options.hookEvent !== "Stop") {
+    return session;
+  }
+
+  const runningPanelCount = options.terminalSessionManager
+    .listPanels(session.id)
+    .filter((candidate) => candidate.status === "running").length;
+  let nextSession = session;
+  if (
+    session.threadId === options.threadId &&
+    (runningPanelCount <= 1 || !options.panel)
+  ) {
+    nextSession =
+      (await options.terminalSessionManager.updateSessionThreadId(
+        session.id,
+        null,
+      )) ?? nextSession;
+    await options.terminalSessionManager.updateSessionPreview(session.id, null);
+  }
+  if (options.panel?.threadId === options.threadId) {
+    await options.terminalSessionManager.updatePanelThreadId(
+      options.panel.id,
+      null,
+    );
+    await options.terminalSessionManager.updatePanelPreview(
+      options.panel.id,
+      null,
+    );
+  }
+  return nextSession;
 }
 
 function updateCodexThreadPreviewInBackground(
