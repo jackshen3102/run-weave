@@ -1,0 +1,327 @@
+{
+  "backends": [
+    {
+      "id": "local",
+      "label": "本机 Electron",
+      "kind": "local",
+      "online": true
+    },
+    {
+      "id": "dev-box",
+      "label": "dev-box (SSH)",
+      "kind": "remote",
+      "online": true
+    },
+    {
+      "id": "ci-runner",
+      "label": "ci-runner",
+      "kind": "remote",
+      "online": false
+    }
+  ],
+
+  "share": {
+    "terminals": [
+      {
+        "id": "t-space-web",
+        "backend": "local",
+        "project": "coze-space-web",
+        "session": "space:pnpm-dev",
+        "agent": "codex",
+        "task": "对齐 HomeV3 fallback 上报",
+        "cols": 132,
+        "rows": 40
+      },
+      {
+        "id": "t-claw-bff",
+        "backend": "dev-box",
+        "project": "coze-claw",
+        "session": "claw:go-run",
+        "agent": "claude",
+        "task": "rebase feat/bff 到 master",
+        "cols": 120,
+        "rows": 36
+      },
+      {
+        "id": "t-runweave",
+        "backend": "local",
+        "project": "browser-viewer",
+        "session": "rw:vite",
+        "agent": "bash",
+        "task": "pnpm dev 热更调试",
+        "cols": 148,
+        "rows": 44
+      }
+    ],
+    "activeShare": {
+      "terminalId": "t-space-web",
+      "shareId": "shr_7Qk2ax",
+      "createdAt": "14:22",
+      "ttlSec": 3600,
+      "spectatorOnly": false,
+      "maxSpectators": 10,
+      "tunnel": "loopback",
+      "frontendUrl": "share.runweave.local",
+      "crypto": ["ChaCha20-Poly1305", "X25519 (eph.)", "ML-KEM-768"],
+      "links": [
+        {
+          "role": "operator",
+          "token": "op_9fA1…c3",
+          "note": "可输入 · 视同 shell 凭据"
+        },
+        {
+          "role": "spectator",
+          "token": "sp_2bE7…7d",
+          "note": "只读 · 可公开分享"
+        }
+      ],
+      "viewers": [
+        {
+          "id": "v1",
+          "name": "@lyn (dev-box)",
+          "role": "operator",
+          "since": "14:23",
+          "rtt": 38,
+          "state": "active"
+        },
+        {
+          "id": "v2",
+          "name": "匿名 · Safari/iOS",
+          "role": "spectator",
+          "since": "14:31",
+          "rtt": 120,
+          "state": "active"
+        },
+        {
+          "id": "v3",
+          "name": "匿名 · Chrome",
+          "role": "spectator",
+          "since": "14:40",
+          "rtt": 640,
+          "state": "backpressure"
+        }
+      ]
+    },
+    "closeCodes": [
+      {
+        "code": "1000",
+        "reason": "session_closed",
+        "desc": "分享正常关闭 / 会话结束"
+      },
+      {
+        "code": "4000",
+        "reason": "handshake_rejected",
+        "desc": "链接失效 / 过期 / PIN 错误（统一路径，不做 oracle）"
+      },
+      {
+        "code": "4001",
+        "reason": "viewer_backpressure",
+        "desc": "观看端跟不上输出，被踢"
+      },
+      {
+        "code": "4006",
+        "reason": "role_violation",
+        "desc": "spectator 尝试写入 / 非法控制帧"
+      },
+      {
+        "code": "4008",
+        "reason": "pin_required",
+        "desc": "token 有效后要求配对 PIN"
+      }
+    ]
+  },
+
+  "verify": {
+    "runId": "run_agentteam_204",
+    "project": "browser-viewer",
+    "target": "local:rw:vite%1",
+    "useCase": "docs/plans/2026-07-03-agent-team-loop-engineer.md · 用例3 终端热更验收",
+    "steps": [
+      {
+        "id": "s1",
+        "op": "send_text",
+        "arg": "pnpm dev\\n",
+        "desc": "启动 dev server",
+        "status": "pass",
+        "ms": 12,
+        "detail": "已写入 target pane"
+      },
+      {
+        "id": "s2",
+        "op": "expect_visible_text",
+        "matcher": "to_contain",
+        "arg": "Local:   http://localhost:5173",
+        "timeoutMs": 8000,
+        "desc": "等待 Vite 就绪",
+        "status": "pass",
+        "ms": 2140,
+        "detail": "第 2140ms 命中"
+      },
+      {
+        "id": "s3",
+        "op": "capture_pane",
+        "arg": "snapshot#server-ready",
+        "desc": "抓取就绪快照",
+        "status": "pass",
+        "ms": 40,
+        "detail": "> VITE v5.4.2  ready in 812 ms\\n> Local:   http://localhost:5173/\\n> press h + enter to show help"
+      },
+      {
+        "id": "s4",
+        "op": "send_text",
+        "arg": "touch frontend/src/App.tsx\\n",
+        "desc": "触发一次 HMR",
+        "status": "pass",
+        "ms": 15,
+        "detail": "已写入"
+      },
+      {
+        "id": "s5",
+        "op": "expect_visible_text",
+        "matcher": "to_contain",
+        "arg": "hmr update /src/App.tsx",
+        "timeoutMs": 5000,
+        "desc": "断言 HMR 生效",
+        "status": "fail",
+        "ms": 5000,
+        "detail": "超时未命中：日志出现 'page reload'（整页刷新）而非 hmr update —— 疑似 React fast-refresh 边界被破坏"
+      }
+    ],
+    "palette": [
+      {
+        "op": "send_text",
+        "hint": "text: string —— 写入目标 pane（含 \\n 表示回车）"
+      },
+      {
+        "op": "expect_visible_text",
+        "hint": "matcher: to_contain | to_match, arg, timeoutMs —— 断言可见文本"
+      },
+      { "op": "capture_pane", "hint": "label: string —— 抓取当前渲染快照" },
+      { "op": "wait_ms", "hint": "ms: number —— 固定等待" },
+      {
+        "op": "assert_dom",
+        "hint": "selector, expect —— 结合 $playwright-cli 断言浏览器 DOM"
+      }
+    ]
+  },
+
+  "diagnose": {
+    "backends": [
+      {
+        "id": "local",
+        "label": "本机 Electron",
+        "online": true,
+        "health": 100,
+        "caps": {
+          "tmux": "3.4 (native)",
+          "pty": "conpty/openpty",
+          "runtime": "node v22.12.0",
+          "webShare": true,
+          "sdkProto": "v3",
+          "captureSnapshot": true,
+          "cdpProxy": true
+        },
+        "warnings": []
+      },
+      {
+        "id": "dev-box",
+        "label": "dev-box (SSH)",
+        "online": true,
+        "health": 78,
+        "caps": {
+          "tmux": "3.2a",
+          "pty": "openpty",
+          "runtime": "node v18.19.0",
+          "webShare": true,
+          "sdkProto": "v2",
+          "captureSnapshot": true,
+          "cdpProxy": false
+        },
+        "warnings": [
+          "sdkProto v2 < 本机 v3：capture_pane 的 locators 字段缺失，behavior_verify 的 assert_dom 会降级为纯文本断言",
+          "runtime node v18 已 EOL，建议升级到 v22 保持一致"
+        ]
+      },
+      {
+        "id": "ci-runner",
+        "label": "ci-runner",
+        "online": false,
+        "health": 0,
+        "caps": null,
+        "warnings": [
+          "backend 离线：最近一次握手 26 分钟前，capabilities 无法协商"
+        ]
+      }
+    ],
+    "rawSample": "{\n  \"build\": \"runweave 0.9.0\",\n  \"platform\": \"darwin-arm64\",\n  \"tmux\": { \"version\": \"3.4\", \"native\": true },\n  \"pty\": \"conpty/openpty\",\n  \"sdk_proto\": 3,\n  \"web_share\": true,\n  \"capture_snapshot\": true\n}"
+  },
+
+  "commands": {
+    "target": "local:rw:vite",
+    "list": [
+      {
+        "name": "split-window",
+        "cat": "layout",
+        "args": "-h | -v [-p 30] [-c cwd]",
+        "desc": "在当前 pane 原生 split（tmux splitPane 真实存在）",
+        "example": "split-window -h -p 40 -c ~/Code/browser-hub/browser-viewer"
+      },
+      {
+        "name": "select-pane",
+        "cat": "layout",
+        "args": "-t {target} [-L|-R|-U|-D]",
+        "desc": "切换/聚焦 pane，深链到 panel target bar",
+        "example": "select-pane -t local:rw:vite%2"
+      },
+      {
+        "name": "resize-pane",
+        "cat": "layout",
+        "args": "-t {target} -x 80 | -y 24",
+        "desc": "调整 pane 尺寸",
+        "example": "resize-pane -t %2 -x 100"
+      },
+      {
+        "name": "send-keys",
+        "cat": "io",
+        "args": "-t {target} 'text' [Enter]",
+        "desc": "向 pane 注入按键 / 文本",
+        "example": "send-keys -t %1 'pnpm typecheck' Enter"
+      },
+      {
+        "name": "capture-pane",
+        "cat": "io",
+        "args": "-t {target} [-p] [-S -100]",
+        "desc": "抓取滚动缓冲区文本快照，供断言/审计",
+        "example": "capture-pane -t %1 -p -S -200"
+      },
+      {
+        "name": "new-window",
+        "cat": "session",
+        "args": "-n name [-c cwd]",
+        "desc": "在当前 session 新建 window（= 一套新 run）",
+        "example": "new-window -n verify -c ~/Code/browser-hub/browser-viewer"
+      },
+      {
+        "name": "list-panes",
+        "cat": "session",
+        "args": "-t {session} [-F fmt]",
+        "desc": "列出 session 下所有 pane 及其 target 句柄",
+        "example": "list-panes -t rw:vite -F '#{pane_id} #{pane_active}'"
+      },
+      {
+        "name": "web-share",
+        "cat": "share",
+        "args": "-t {target} [--spectator-only] [--ttl 3600]",
+        "desc": "把该 pane/session 开成浏览器分享（借鉴点 1）",
+        "example": "web-share -t rw:vite --spectator-only --ttl 3600"
+      },
+      {
+        "name": "wait-for",
+        "cat": "sdk",
+        "args": "-t {target} --contains 'text' --timeout 8s",
+        "desc": "阻塞直到 pane 出现指定文本（behavior_verify 底座）",
+        "example": "wait-for -t %1 --contains 'ready in' --timeout 8s"
+      }
+    ]
+  }
+}
