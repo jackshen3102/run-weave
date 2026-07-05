@@ -35,7 +35,15 @@ interface TerminalHistoryDrawerProps {
   terminalPanelId?: string | null;
   terminalProjectId?: string | null;
   terminalThreadId?: string | null;
+  terminalLastThreadId?: string | null;
+  terminalLastThreadStatus?:
+    | TerminalSessionHistoryResponse["lastThreadStatus"]
+    | null;
   terminalPanelThreadId?: string | null;
+  terminalPanelLastThreadId?: string | null;
+  terminalPanelLastThreadStatus?:
+    | TerminalSessionHistoryResponse["lastThreadStatus"]
+    | null;
   terminalName?: string;
   onOpenChange: (open: boolean) => void;
   onAuthExpired?: () => void;
@@ -49,7 +57,11 @@ export function TerminalHistoryDrawer({
   terminalPanelId,
   terminalProjectId,
   terminalThreadId,
+  terminalLastThreadId,
+  terminalLastThreadStatus,
   terminalPanelThreadId,
+  terminalPanelLastThreadId,
+  terminalPanelLastThreadStatus,
   terminalName,
   onOpenChange,
   onAuthExpired,
@@ -139,6 +151,14 @@ export function TerminalHistoryDrawer({
         value: history?.threadId ?? terminalThreadId ?? null,
       },
       {
+        label: "Recent Thread",
+        value: history?.lastThreadId ?? terminalLastThreadId ?? null,
+      },
+      {
+        label: "Recent Thread State",
+        value: history?.lastThreadStatus ?? terminalLastThreadStatus ?? null,
+      },
+      {
         label: "Panel ID",
         value: terminalPanelId ?? null,
       },
@@ -146,12 +166,26 @@ export function TerminalHistoryDrawer({
         label: "Panel Thread",
         value: terminalPanelThreadId ?? null,
       },
+      {
+        label: "Panel Recent Thread",
+        value: terminalPanelLastThreadId ?? null,
+      },
+      {
+        label: "Panel Recent State",
+        value: terminalPanelLastThreadStatus ?? null,
+      },
     ],
     [
+      history?.lastThreadId,
+      history?.lastThreadStatus,
       history?.projectId,
       history?.terminalSessionId,
       history?.threadId,
+      terminalLastThreadId,
+      terminalLastThreadStatus,
       terminalPanelId,
+      terminalPanelLastThreadId,
+      terminalPanelLastThreadStatus,
       terminalPanelThreadId,
       terminalProjectId,
       terminalSessionId,

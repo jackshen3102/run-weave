@@ -318,12 +318,17 @@ export interface CreateTerminalClipboardImageResponse {
   filePath: string;
 }
 
+export type TerminalLastThreadStatus = "idle" | "running";
+
 export interface TerminalSessionStatusResponse {
   terminalSessionId: string;
   projectId: string;
   alias?: string | null;
   threadId?: string;
   preview?: string;
+  lastThreadId?: string;
+  lastThreadStatus?: TerminalLastThreadStatus;
+  lastThreadUpdatedAt?: string;
   command: string;
   args: string[];
   cwd: string;
@@ -346,6 +351,9 @@ export interface TerminalSessionListItem {
   alias?: string | null;
   threadId?: string;
   preview?: string;
+  lastThreadId?: string;
+  lastThreadStatus?: TerminalLastThreadStatus;
+  lastThreadUpdatedAt?: string;
   command: string;
   args: string[];
   cwd: string;
@@ -392,6 +400,9 @@ export interface TerminalPanelListItem {
   role?: TerminalPanelRole | null;
   threadId?: string;
   preview?: string;
+  lastThreadId?: string;
+  lastThreadStatus?: TerminalLastThreadStatus;
+  lastThreadUpdatedAt?: string;
   cwd: string;
   activeCommand: string | null;
   terminalState?: TerminalState;

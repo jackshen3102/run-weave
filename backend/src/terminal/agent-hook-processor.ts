@@ -1,6 +1,7 @@
 import type {
   AgentHookStateEvent,
   TerminalAgentKind,
+  TerminalLastThreadStatus,
   TerminalState,
 } from "@runweave/shared";
 import { logger } from "../logging";
@@ -18,6 +19,12 @@ import { readCodexThreadSnapshot } from "./codex-thread-snapshot";
 const agentHookProcessorLogger = logger.child({
   component: "terminal-agent-hook",
 });
+
+function getLastThreadStatusForHookEvent(
+  hookEvent: AgentHookStateEvent,
+): TerminalLastThreadStatus {
+  return hookEvent === "UserPromptSubmit" ? "running" : "idle";
+}
 
 export interface ProcessTerminalAgentHookInput {
   terminalSessionId: string;
@@ -210,6 +217,23 @@ async function syncCodexThreadMetadata(options: {
   const session = options.session;
   if (!session) {
     return session;
+  }
+
+  const lastThreadUpdatedAt = new Date();
+  const lastThreadStatus = getLastThreadStatusForHookEvent(options.hookEvent);
+  await options.terminalSessionManager.updateSessionLastThread(
+    session.id,
+    options.threadId,
+    lastThreadStatus,
+    lastThreadUpdatedAt,
+  );
+  if (options.panel) {
+    await options.terminalSessionManager.updatePanelLastThread(
+      options.panel.id,
+      options.threadId,
+      lastThreadStatus,
+      lastThreadUpdatedAt,
+    );
   }
 
   if (

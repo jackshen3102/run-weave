@@ -1,4 +1,4 @@
-import type { TerminalState } from "@runweave/shared";
+import type { TerminalLastThreadStatus, TerminalState } from "@runweave/shared";
 import type {
   PersistedTerminalProjectRecord,
   PersistedTerminalPanelRecord,
@@ -28,6 +28,9 @@ export interface TerminalSessionRecord {
   alias: string | null;
   threadId?: string;
   preview?: string;
+  lastThreadId?: string;
+  lastThreadStatus?: TerminalLastThreadStatus;
+  lastThreadUpdatedAt?: Date;
   command: string;
   args: string[];
   cwd: string;
@@ -54,6 +57,9 @@ export interface TerminalPanelRecord {
   role: string | null;
   threadId?: string;
   preview?: string;
+  lastThreadId?: string;
+  lastThreadStatus?: TerminalLastThreadStatus;
+  lastThreadUpdatedAt?: Date;
   agentTeamRunId: string | null;
   agentTeamWorkerId: string | null;
   cwd: string;
@@ -124,6 +130,11 @@ export function buildSessionRecord(
     alias: persisted.alias ?? null,
     threadId: persisted.threadId,
     preview: persisted.preview,
+    lastThreadId: persisted.lastThreadId,
+    lastThreadStatus: persisted.lastThreadStatus,
+    ...(persisted.lastThreadUpdatedAt
+      ? { lastThreadUpdatedAt: new Date(persisted.lastThreadUpdatedAt) }
+      : {}),
     command: persisted.command,
     args: persisted.args,
     cwd: persisted.cwd,
@@ -190,6 +201,11 @@ export function toPersistedSession(
     alias: session.alias,
     threadId: session.threadId,
     preview: session.preview,
+    lastThreadId: session.lastThreadId,
+    lastThreadStatus: session.lastThreadStatus,
+    ...(session.lastThreadUpdatedAt
+      ? { lastThreadUpdatedAt: session.lastThreadUpdatedAt.toISOString() }
+      : {}),
     command: session.command,
     args: session.args,
     cwd: session.cwd,
@@ -221,6 +237,11 @@ export function buildPanelRecord(
     role: persisted.role ?? null,
     threadId: persisted.threadId,
     preview: persisted.preview,
+    lastThreadId: persisted.lastThreadId,
+    lastThreadStatus: persisted.lastThreadStatus,
+    ...(persisted.lastThreadUpdatedAt
+      ? { lastThreadUpdatedAt: new Date(persisted.lastThreadUpdatedAt) }
+      : {}),
     agentTeamRunId: persisted.agentTeamRunId ?? null,
     agentTeamWorkerId: persisted.agentTeamWorkerId ?? null,
     cwd: persisted.cwd,
@@ -247,6 +268,11 @@ export function toPersistedPanel(
     role: panel.role,
     threadId: panel.threadId,
     preview: panel.preview,
+    lastThreadId: panel.lastThreadId,
+    lastThreadStatus: panel.lastThreadStatus,
+    ...(panel.lastThreadUpdatedAt
+      ? { lastThreadUpdatedAt: panel.lastThreadUpdatedAt.toISOString() }
+      : {}),
     agentTeamRunId: panel.agentTeamRunId,
     agentTeamWorkerId: panel.agentTeamWorkerId,
     cwd: panel.cwd,

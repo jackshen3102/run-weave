@@ -1,10 +1,14 @@
 import { Router } from "express";
 import { z } from "zod";
-import type { TerminalEventEnvelope } from "@runweave/shared";
+import type {
+  TerminalCompletionEvent,
+  TerminalEventEnvelope,
+} from "@runweave/shared";
 import { logger } from "../logging";
 import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
 import {
   AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS,
+  getCompletionSourceForCommand,
   isCompletionSourceAllowedForCommand,
 } from "../terminal/completion-source-gate";
 import type { TerminalSessionManager } from "../terminal/manager";
@@ -116,27 +120,33 @@ export function createInternalTerminalCompletionRouter(options: {
     const paneActiveCommand = panelId
       ? (options.terminalSessionManager.getPanel(panelId)?.activeCommand ?? null)
       : null;
+    const effectiveSource = resolveEffectiveCompletionSource({
+      reportedSource: parsed.data.source,
+      paneActiveCommand,
+      sessionActiveCommand: session.activeCommand,
+      commandName: parsed.data.commandName ?? null,
+    });
     const lastAiActiveCommand =
       options.terminalSessionManager.getLastAiActiveCommand(session.id);
     const currentCommandMatches =
       isCompletionSourceAllowedForCommand(
-        parsed.data.source,
+        effectiveSource,
         session.activeCommand,
       ) ||
       isCompletionSourceAllowedForCommand(
-        parsed.data.source,
+        effectiveSource,
         paneActiveCommand,
       ) ||
       isCompletionSourceAllowedForCommand(
-        parsed.data.source,
+        effectiveSource,
         parsed.data.commandName ?? null,
       ) ||
-      getTerminalSessionAgent(session) === parsed.data.source;
+      getTerminalSessionAgent(session) === effectiveSource;
     const now = Date.now();
     const graceCommandMatches =
       session.activeCommand === null &&
       lastAiActiveCommand !== null &&
-      lastAiActiveCommand.source === parsed.data.source &&
+      lastAiActiveCommand.source === effectiveSource &&
       lastAiActiveCommand.clearedAt !== null &&
       now - lastAiActiveCommand.clearedAt <=
         AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS;
@@ -146,6 +156,7 @@ export function createInternalTerminalCompletionRouter(options: {
         message: "Terminal completion event ignored",
         terminalSessionId: parsed.data.terminalSessionId,
         source: parsed.data.source,
+        effectiveSource,
         activeCommand: session.activeCommand,
         paneActiveCommand,
         lastAiActiveCommand: lastAiActiveCommand?.command ?? null,
@@ -162,7 +173,7 @@ export function createInternalTerminalCompletionRouter(options: {
       options.completionEventService.record(
         {
           terminalSessionId: parsed.data.terminalSessionId,
-          source: parsed.data.source,
+          source: effectiveSource,
           completionReason: parsed.data.completionReason ?? "hook_stop",
           commandName: parsed.data.commandName ?? null,
           rawHookEvent,
@@ -179,6 +190,7 @@ export function createInternalTerminalCompletionRouter(options: {
       id: event.id,
       terminalSessionId: event.terminalSessionId,
       source: event.kind === "completion" ? event.payload.source : null,
+      reportedSource: parsed.data.source,
       activeCommand: session.activeCommand,
       paneActiveCommand,
       lastAiActiveCommand: lastAiActiveCommand?.command ?? null,
@@ -191,6 +203,20 @@ export function createInternalTerminalCompletionRouter(options: {
   });
 
   return router;
+}
+
+function resolveEffectiveCompletionSource(params: {
+  reportedSource: TerminalCompletionEvent["source"];
+  paneActiveCommand: string | null;
+  sessionActiveCommand: string | null;
+  commandName: string | null;
+}): TerminalCompletionEvent["source"] {
+  const inferredSource =
+    getCompletionSourceForCommand(params.paneActiveCommand) ??
+    getCompletionSourceForCommand(params.commandName) ??
+    getCompletionSourceForCommand(params.sessionActiveCommand);
+
+  return inferredSource ?? params.reportedSource;
 }
 
 /**

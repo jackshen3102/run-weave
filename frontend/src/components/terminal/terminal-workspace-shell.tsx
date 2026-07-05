@@ -18,6 +18,7 @@ import type {
 } from "@runweave/shared";
 import {
   ClipboardList,
+  Activity,
   Eye,
   History,
   Home,
@@ -79,6 +80,7 @@ import { Label } from "../ui/label";
 import { DiagnosticLogEntry } from "../diagnostic-log-entry";
 import { TerminalHistoryDrawer } from "./terminal-history-drawer";
 import { TerminalQuickInputPopover } from "./terminal-quick-input-popover";
+import { TerminalStatusLookupDialog } from "./terminal-status-lookup-dialog";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
 import { TerminalHeadlessConnection } from "./terminal-headless-connection";
 import { TerminalSurface } from "./terminal-surface";
@@ -680,6 +682,7 @@ export function TerminalWorkspaceShell({
   const [aliasTarget, setAliasTarget] =
     useState<TerminalSessionListItem | null>(null);
   const [diagnosticLogOpen, setDiagnosticLogOpen] = useState(false);
+  const [statusLookupOpen, setStatusLookupOpen] = useState(false);
   const [activeAgentTeamRunSessionId, setActiveAgentTeamRunSessionId] =
     useState<string | null>(null);
   const [pendingAgentTeamSessionId, setPendingAgentTeamSessionId] = useState<
@@ -821,6 +824,13 @@ export function TerminalWorkspaceShell({
           activePanelIdBySessionId[activeSession.terminalSessionId] ?? null,
         )
       : null;
+  const activeStatusLookupPanelId =
+    activeHistoryPanelId ??
+    (activeSession
+      ? activePanelIdBySessionId[activeSession.terminalSessionId] ??
+        activeSession.activePanelId ??
+        null
+      : null);
   const historySession =
     sessions.find(
       (session) => session.terminalSessionId === historyTerminalSessionId,
@@ -1308,6 +1318,14 @@ export function TerminalWorkspaceShell({
                 <ClipboardList className="h-4 w-4" />
                 日志上报
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setStatusLookupOpen(true);
+                }}
+              >
+                <Activity className="h-4 w-4" />
+                状态查询
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}
@@ -1597,7 +1615,11 @@ export function TerminalWorkspaceShell({
         terminalPanelId={historyTerminalPanelId}
         terminalProjectId={historySession?.projectId ?? null}
         terminalThreadId={historySession?.threadId ?? null}
+        terminalLastThreadId={historySession?.lastThreadId ?? null}
+        terminalLastThreadStatus={historySession?.lastThreadStatus ?? null}
         terminalPanelThreadId={historyPanel?.threadId ?? null}
+        terminalPanelLastThreadId={historyPanel?.lastThreadId ?? null}
+        terminalPanelLastThreadStatus={historyPanel?.lastThreadStatus ?? null}
         terminalName={historyTerminalName}
         onOpenChange={(open) => {
           setHistoryDrawerOpen(open);
@@ -1631,6 +1653,17 @@ export function TerminalWorkspaceShell({
           token={token}
           open={diagnosticLogOpen}
           onOpenChange={setDiagnosticLogOpen}
+        />
+      ) : null}
+      {!isMobileMonitor ? (
+        <TerminalStatusLookupDialog
+          apiBase={apiBase}
+          token={token}
+          open={statusLookupOpen}
+          onOpenChange={setStatusLookupOpen}
+          activeProjectId={activeProjectId}
+          activeSessionId={activeSession?.terminalSessionId ?? null}
+          activePanelId={activeStatusLookupPanelId}
         />
       ) : null}
       <AlertDialog

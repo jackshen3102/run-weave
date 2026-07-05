@@ -1,4 +1,4 @@
-import type { TerminalState } from "@runweave/shared";
+import type { TerminalLastThreadStatus, TerminalState } from "@runweave/shared";
 
 export interface PersistedTerminalProjectRecord {
   id: string;
@@ -15,6 +15,9 @@ export interface PersistedTerminalSessionRecord {
   alias?: string | null;
   threadId?: string;
   preview?: string;
+  lastThreadId?: string;
+  lastThreadStatus?: TerminalLastThreadStatus;
+  lastThreadUpdatedAt?: string;
   command: string;
   args: string[];
   cwd: string;
@@ -41,6 +44,9 @@ export interface PersistedTerminalPanelRecord {
   role?: string | null;
   threadId?: string;
   preview?: string;
+  lastThreadId?: string;
+  lastThreadStatus?: TerminalLastThreadStatus;
+  lastThreadUpdatedAt?: string;
   agentTeamRunId?: string | null;
   agentTeamWorkerId?: string | null;
   cwd: string;
@@ -133,6 +139,13 @@ export interface UpdateTerminalSessionPreviewParams {
   preview: string | null;
 }
 
+export interface UpdateTerminalSessionLastThreadParams {
+  terminalSessionId: string;
+  threadId: string;
+  status: TerminalLastThreadStatus;
+  updatedAt: string;
+}
+
 export interface UpdateTerminalSessionRuntimeMetadataParams extends TerminalRuntimeMetadata {
   terminalSessionId: string;
 }
@@ -150,6 +163,13 @@ export interface UpdateTerminalPanelThreadIdParams {
 export interface UpdateTerminalPanelPreviewParams {
   panelId: string;
   preview: string | null;
+}
+
+export interface UpdateTerminalPanelLastThreadParams {
+  panelId: string;
+  threadId: string;
+  status: TerminalLastThreadStatus;
+  updatedAt: string;
 }
 
 export interface UpdateTerminalPanelTerminalStateParams {
@@ -202,6 +222,9 @@ export interface TerminalSessionStore {
   upsertPanel(params: UpsertTerminalPanelParams): Promise<void>;
   updatePanelThreadId(params: UpdateTerminalPanelThreadIdParams): Promise<void>;
   updatePanelPreview(params: UpdateTerminalPanelPreviewParams): Promise<void>;
+  updatePanelLastThread(
+    params: UpdateTerminalPanelLastThreadParams,
+  ): Promise<void>;
   updatePanelTerminalState(
     params: UpdateTerminalPanelTerminalStateParams,
   ): Promise<void>;
@@ -226,6 +249,9 @@ export interface TerminalSessionStore {
   ): Promise<void>;
   updateSessionPreview(
     params: UpdateTerminalSessionPreviewParams,
+  ): Promise<void>;
+  updateSessionLastThread(
+    params: UpdateTerminalSessionLastThreadParams,
   ): Promise<void>;
   updateSessionRuntimeMetadata(
     params: UpdateTerminalSessionRuntimeMetadataParams,
