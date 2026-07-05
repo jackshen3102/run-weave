@@ -27,10 +27,12 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `react-best-practices`
 - `recorded-browser-mcp-verification`
 - `review-only`
+- `run-test-cases`
 - `shadcn`
 - `sync-branch-hard-reset`
 - `using-rw`
 - `write-plan`
+- `write-test-cases`
 
 ## 验证
 
