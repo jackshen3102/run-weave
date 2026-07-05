@@ -11,7 +11,6 @@ import { createRequireAuth } from "./auth/middleware";
 import { AuthService } from "./auth/service";
 import type { AuthStore } from "./auth/store";
 import { AppServerClient } from "./app-server/client";
-import { CodexInterruptStateReconciler } from "./app-server/codex-interrupt-state-reconciler";
 import { AppServerEventConsumer } from "./app-server/event-consumer";
 import type { AppServerEventConsumerHandle } from "./app-server/event-consumer";
 import { AppServerEventCursorStore } from "./app-server/event-cursor-store";
@@ -102,7 +101,6 @@ interface RuntimeServices {
   tmuxService: TmuxService;
   tmuxOutputWatcher: TmuxOutputWatcher;
   appServerEventConsumer: AppServerEventConsumerHandle | null;
-  codexInterruptStateReconciler: CodexInterruptStateReconciler | null;
 }
 
 type BackendStartStage =
@@ -279,7 +277,6 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxService,
     tmuxOutputWatcher,
     appServerEventConsumer: null,
-    codexInterruptStateReconciler: null,
   };
 }
 
@@ -346,16 +343,6 @@ async function initializeAppServerEventIntegration(
     });
     await consumer.start();
     services.appServerEventConsumer = consumer;
-
-    const codexInterruptStateReconciler =
-      new CodexInterruptStateReconciler({
-        client,
-        cursorStore,
-        terminalSessionManager: services.terminalSessionManager,
-        terminalStateService: services.terminalStateService,
-      });
-    codexInterruptStateReconciler.start();
-    services.codexInterruptStateReconciler = codexInterruptStateReconciler;
 
     logger.info("backend.app-server.connected", {
       component: "app-server",
@@ -558,7 +545,6 @@ function attachLifecycleHandlers(
     try {
       await closeServer(server);
       await services.tmuxOutputWatcher.dispose();
-      services.codexInterruptStateReconciler?.stop();
       services.appServerEventConsumer?.stop();
       await services.terminalRuntimeRegistry.disposeAll();
       await services.terminalSessionManager.dispose();

@@ -293,6 +293,32 @@ projection 会生成普通 app-server event：
 
 这些接口与 `/events` 一样需要 bearer token；`/healthz` 和 `/readyz` 仍不需要 token。
 
+## Codex Thread 状态补偿
+
+App Server 内置一个低频 Codex Thread 状态补偿器。它不保存完整 thread 内容，只读取
+当前 projection 中最近活跃且 `agent=codex` 的 ThreadRef，然后按同一策略轮询
+Codex app-server 的 `thread/read`：
+
+- 默认启动延迟 10 秒。
+- 默认间隔 30 秒。
+- 只处理最近 3 小时内活跃的 ThreadRef。
+- 单轮最多处理 100 个候选 ThreadRef。
+
+当 Codex 返回的真实 thread status 与 App Server projection 不一致时，补偿器写入
+一条普通 `agent.hook` 事件：
+
+- `kind="agent.hook"`
+- `payload.source="codex"`
+- Codex `idle` -> `payload.stateHookEvent="Stop"`
+- Codex `active` -> `payload.stateHookEvent="UserPromptSubmit"`
+- `payload.compensation=true`
+- `payload.compensationReason="codex_thread_status_mismatch"`
+
+这条事件和 hook bridge 上报的对应 hook 事件走同一条 projection、event log、
+WebSocket 推送和 backend consumer 链路。Backend 不再启动自己的 Codex interrupt 轮询器；它只
+消费 App Server 事件，并继续通过 `TerminalStateService` 写入终端状态和推送
+`terminal_state_changed`。
+
 ## Consumer Cursor 与 At-Least-Once
 
 ```mermaid

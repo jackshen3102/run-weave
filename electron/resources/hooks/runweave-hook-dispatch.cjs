@@ -20,8 +20,11 @@ function inferSource() {
     return explicit;
   }
 
-  if (process.env.CLAUDE_PLUGIN_ROOT) {
+  if (process.env.CODEX_PLUGIN_ROOT) {
     return "codex";
+  }
+  if (process.env.CLAUDE_PLUGIN_ROOT) {
+    return "claude";
   }
 
   const pluginRoot = path.resolve(__dirname, "..");

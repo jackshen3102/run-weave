@@ -35,7 +35,7 @@ const toolkitHookEvents = [
   "UserPromptSubmit",
 ];
 const toolkitHookCommand =
-  'sh -c \'for root in "${CLAUDE_PLUGIN_ROOT:-}" "${CODEX_PLUGIN_ROOT:-}" . "__PLUGIN_DIR__"; do if [ -n "$root" ] && [ -f "$root/hooks/runweave-hook-dispatch.cjs" ]; then exec node "$root/hooks/runweave-hook-dispatch.cjs"; fi; done; exit 0\'';
+  'sh -c \'for root in "${RUNWEAVE_TOOLKIT_PLUGIN_ROOT:-}" "${CODEX_PLUGIN_ROOT:-}" "${CLAUDE_PLUGIN_ROOT:-}" . "__PLUGIN_DIR__" "$HOME/.codex/plugins/cache/runweave/toolkit/latest" "$HOME/.codex/plugins/cache/runweave/toolkit"/*; do if [ -n "$root" ] && [ -f "$root/hooks/runweave-hook-dispatch.cjs" ]; then exec node "$root/hooks/runweave-hook-dispatch.cjs"; fi; done; exit 0\'';
 
 const toolkitHooksConfig = JSON.parse(
   await readFile(toolkitHooksConfigPath, "utf8"),
@@ -394,6 +394,50 @@ try {
     assert.equal(requests[3].body.summary, "done");
 
     await runToolkitHookCommand(
+      getToolkitHookCommand(toolkitHooksConfig, "UserPromptSubmit"),
+      "codex",
+      {
+        HOME: homeDir,
+        RUNWEAVE_TOOLKIT_PLUGIN_ROOT: toolkitDir,
+        RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
+        RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
+        RUNWEAVE_HOOK_ENDPOINT: endpoint,
+        RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
+        RUNWEAVE_HOOK_TOKEN: "token-2b",
+        RUNWEAVE_TERMINAL_SESSION_ID: "terminal-2b",
+        RUNWEAVE_PROJECT_ID: "project-2b",
+        RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+      },
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "thread-2b",
+      },
+      { replacePluginDirPlaceholder: false },
+    );
+
+    assert.equal(requests.length, 5);
+    assert.equal(appServerRequests.length, 5);
+    assert.equal(appServerRequests[4].kind, "agent.hook");
+    assert.equal(appServerRequests[4].payload.source, "codex");
+    assert.equal(appServerRequests[4].payload.rawHookEvent, "UserPromptSubmit");
+    assert.equal(
+      appServerRequests[4].payload.stateHookEvent,
+      "UserPromptSubmit",
+    );
+    assert.equal(appServerRequests[4].correlationId, "thread-2b");
+    assert.equal(requests[4].url, "/internal/terminal/agent-hook");
+    assert.equal(requests[4].token, "token-2b");
+    assert.deepEqual(requests[4].body, {
+      terminalSessionId: "terminal-2b",
+      projectId: "project-2b",
+      tmuxPaneId: "%13",
+      threadId: "thread-2b",
+      agent: "codex",
+      hookEvent: "UserPromptSubmit",
+      commandName: null,
+    });
+
+    await runToolkitHookCommand(
       getToolkitHookCommand(toolkitHooksConfig, "Stop"),
       "trae",
       {
@@ -409,15 +453,15 @@ try {
       },
     );
 
-    assert.equal(requests.length, 6);
-    assert.equal(appServerRequests.length, 6);
-    assert.equal(appServerRequests[4].kind, "agent.hook");
-    assert.equal(appServerRequests[4].payload.source, "trae");
-    assert.equal(appServerRequests[5].kind, "agent.completion");
+    assert.equal(requests.length, 7);
+    assert.equal(appServerRequests.length, 7);
+    assert.equal(appServerRequests[5].kind, "agent.hook");
     assert.equal(appServerRequests[5].payload.source, "trae");
-    assert.equal(requests[4].url, "/internal/terminal/agent-hook");
-    assert.equal(requests[4].token, "token-3");
-    assert.deepEqual(requests[4].body, {
+    assert.equal(appServerRequests[6].kind, "agent.completion");
+    assert.equal(appServerRequests[6].payload.source, "trae");
+    assert.equal(requests[5].url, "/internal/terminal/agent-hook");
+    assert.equal(requests[5].token, "token-3");
+    assert.deepEqual(requests[5].body, {
       terminalSessionId: "terminal-3",
       projectId: "project-3",
       tmuxPaneId: "%13",
@@ -425,12 +469,12 @@ try {
       hookEvent: "Stop",
       commandName: null,
     });
-    assert.equal(requests[5].url, "/internal/terminal-completion");
-    assert.equal(requests[5].token, "token-3");
-    assert.equal(requests[5].body.terminalSessionId, "terminal-3");
-    assert.equal(requests[5].body.source, "trae");
-    assert.equal(requests[5].body.rawHookEvent, "Stop");
-    assert.equal(requests[5].body.summary, "done");
+    assert.equal(requests[6].url, "/internal/terminal-completion");
+    assert.equal(requests[6].token, "token-3");
+    assert.equal(requests[6].body.terminalSessionId, "terminal-3");
+    assert.equal(requests[6].body.source, "trae");
+    assert.equal(requests[6].body.rawHookEvent, "Stop");
+    assert.equal(requests[6].body.summary, "done");
 
     await runLauncher(launcherPath, {
       HOME: homeDir,
@@ -444,14 +488,14 @@ try {
       RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
     });
 
-    assert.equal(requests.length, 8);
+    assert.equal(requests.length, 9);
     assert.equal(
       appServerRequests.length,
-      6,
+      7,
       "app-server 401 must not prevent backend hook fallback",
     );
-    assert.equal(requests[6].url, "/internal/terminal/agent-hook");
-    assert.equal(requests[7].url, "/internal/terminal-completion");
+    assert.equal(requests[7].url, "/internal/terminal/agent-hook");
+    assert.equal(requests[8].url, "/internal/terminal-completion");
 
     await runLauncher(launcherPath, {
       HOME: homeDir,
@@ -464,12 +508,12 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(
       requests.length,
-      8,
+      9,
       "launcher without Runweave identity must not post any request",
     );
     assert.equal(
       appServerRequests.length,
-      6,
+      7,
       "launcher without Runweave identity must not post app-server events",
     );
   } finally {
@@ -553,14 +597,24 @@ async function assertFileMissing(filePath, message) {
   assert.fail(message);
 }
 
-function runToolkitHookCommand(command, source, extraEnv) {
+function runToolkitHookCommand(
+  command,
+  source,
+  extraEnv,
+  payloadOverrides = {},
+  options = {},
+) {
   const payload = JSON.stringify({
     hook_event_name: "Stop",
     cwd: "/tmp/runweave-hook-test",
     summary: "done",
     session_id: "thread-1",
+    ...payloadOverrides,
   });
-  const runnableCommand = command.replaceAll("__PLUGIN_DIR__", toolkitDir);
+  const runnableCommand =
+    options.replacePluginDirPlaceholder === false
+      ? command
+      : command.replaceAll("__PLUGIN_DIR__", toolkitDir);
 
   return new Promise((resolve, reject) => {
     const env = { ...process.env };

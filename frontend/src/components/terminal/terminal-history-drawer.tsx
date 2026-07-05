@@ -10,6 +10,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
+import { Copy } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import { DEFAULT_TERMINAL_PREFERENCES } from "../../features/terminal/preferences";
@@ -32,6 +33,9 @@ interface TerminalHistoryDrawerProps {
   token: string;
   terminalSessionId: string | null;
   terminalPanelId?: string | null;
+  terminalProjectId?: string | null;
+  terminalThreadId?: string | null;
+  terminalPanelThreadId?: string | null;
   terminalName?: string;
   onOpenChange: (open: boolean) => void;
   onAuthExpired?: () => void;
@@ -43,6 +47,9 @@ export function TerminalHistoryDrawer({
   token,
   terminalSessionId,
   terminalPanelId,
+  terminalProjectId,
+  terminalThreadId,
+  terminalPanelThreadId,
   terminalName,
   onOpenChange,
   onAuthExpired,
@@ -117,6 +124,40 @@ export function TerminalHistoryDrawer({
         : "Running";
     return `${statusLabel}  ${history.cwd}`;
   }, [history, terminalSessionId]);
+  const idRows = useMemo(
+    () => [
+      {
+        label: "Project ID",
+        value: history?.projectId ?? terminalProjectId ?? null,
+      },
+      {
+        label: "Terminal ID",
+        value: history?.terminalSessionId ?? terminalSessionId,
+      },
+      {
+        label: "Thread ID",
+        value: history?.threadId ?? terminalThreadId ?? null,
+      },
+      {
+        label: "Panel ID",
+        value: terminalPanelId ?? null,
+      },
+      {
+        label: "Panel Thread",
+        value: terminalPanelThreadId ?? null,
+      },
+    ],
+    [
+      history?.projectId,
+      history?.terminalSessionId,
+      history?.threadId,
+      terminalPanelId,
+      terminalPanelThreadId,
+      terminalProjectId,
+      terminalSessionId,
+      terminalThreadId,
+    ],
+  );
 
   useEffect(() => {
     const container = terminalContainerRef.current;
@@ -246,6 +287,15 @@ export function TerminalHistoryDrawer({
           <SheetDescription className="truncate text-[11px] text-slate-400">
             {renderedStatus}
           </SheetDescription>
+          <div className="grid grid-cols-1 gap-1 pt-1 text-[11px] sm:grid-cols-2">
+            {idRows.map((row) => (
+              <CopyableHistoryIdRow
+                key={row.label}
+                label={row.label}
+                value={row.value}
+              />
+            ))}
+          </div>
         </SheetHeader>
         {requestError ? (
           <p className="border-b border-slate-800 px-3 py-1.5 text-xs text-rose-400">
@@ -265,5 +315,45 @@ export function TerminalHistoryDrawer({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function CopyableHistoryIdRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null | undefined;
+}) {
+  const displayValue = value?.trim() || "-";
+  const canCopy = displayValue !== "-";
+  const handleCopy = async (): Promise<void> => {
+    if (!canCopy || !navigator.clipboard?.writeText) {
+      return;
+    }
+    await navigator.clipboard.writeText(displayValue);
+  };
+  return (
+    <div className="grid min-w-0 grid-cols-[5.75rem_minmax(0,1fr)] items-center gap-2">
+      <span className="text-slate-500">{label}</span>
+      <span className="flex min-w-0 items-center gap-1 text-slate-200">
+        <span className="min-w-0 flex-1 truncate">{displayValue}</span>
+        {canCopy ? (
+          <button
+            type="button"
+            aria-label={`Copy ${label}`}
+            title={`Copy ${label}`}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-100"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void handleCopy();
+            }}
+          >
+            <Copy className="h-3 w-3" />
+          </button>
+        ) : null}
+      </span>
+    </div>
   );
 }

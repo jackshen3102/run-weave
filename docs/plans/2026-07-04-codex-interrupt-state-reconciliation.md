@@ -1,5 +1,10 @@
 # Codex 中断状态补偿校准方案
 
+> 状态：已被 App Server 下沉方案取代。当前实现不再由 backend 启动
+> `CodexInterruptStateReconciler`；补偿轮询位于 App Server，发现 Codex thread
+> 状态不一致时追加同协议 `agent.hook Stop` 补偿事件。当前架构以
+> `docs/architecture/app-server-architecture.md` 的 “Codex Thread 状态补偿” 为准。
+
 ## 目标
 
 在现有 Hook 事件偶发不可靠时，为 Codex 终端的中断状态增加一个 backend 侧补偿校准机制：

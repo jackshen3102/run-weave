@@ -51,7 +51,7 @@ import {
   getCompletionSourceForCommand,
   type LastAiActiveCommandRecord,
 } from "./completion-source-gate";
-import { getAgentForCommand, getTerminalSessionAgent } from "./terminal-state-service";
+import { getAgentForCommand } from "./terminal-state-service";
 
 const SCROLLBACK_FLUSH_DELAY_MS = 250;
 const ACTIVITY_FLUSH_DELAY_MS = 10_000;
@@ -595,7 +595,7 @@ export class TerminalSessionManager {
     session.activeCommand = nextActiveCommand;
     const shouldClearCodexThreadMetadata =
       Boolean(session.threadId || session.preview) &&
-      getTerminalSessionAgent(session) !== "codex";
+      getAgentForCommand(nextActiveCommand) !== "codex";
     if (shouldClearCodexThreadMetadata) {
       this.clearCodexThreadMetadata(session);
     }

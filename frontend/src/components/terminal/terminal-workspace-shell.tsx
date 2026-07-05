@@ -815,7 +815,7 @@ export function TerminalWorkspaceShell({
     ? panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null
     : null;
   const activeHistoryPanelId =
-    activeSession && activePanelWorkspace
+    activeSession?.tmuxSessionName && activePanelWorkspace
       ? resolveHistoryPanelId(
           activePanelWorkspace,
           activePanelIdBySessionId[activeSession.terminalSessionId] ?? null,
@@ -1595,6 +1595,9 @@ export function TerminalWorkspaceShell({
         token={token}
         terminalSessionId={historyTerminalSessionId}
         terminalPanelId={historyTerminalPanelId}
+        terminalProjectId={historySession?.projectId ?? null}
+        terminalThreadId={historySession?.threadId ?? null}
+        terminalPanelThreadId={historyPanel?.threadId ?? null}
         terminalName={historyTerminalName}
         onOpenChange={(open) => {
           setHistoryDrawerOpen(open);
