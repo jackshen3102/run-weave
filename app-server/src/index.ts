@@ -1,5 +1,6 @@
 import http from "node:http";
 import { mkdir } from "node:fs/promises";
+import type { WebSocketServer } from "ws";
 import { resolveAppServerConfig } from "./config.js";
 import { loadOrCreateToken } from "./auth.js";
 import { AppServerCloudSyncSim } from "./cloud-sync-sim.js";
@@ -68,7 +69,11 @@ async function main(): Promise<void> {
     version: config.version,
   });
   const server = http.createServer(app);
-  attachEventStreamWebSocketServer({ server, eventCenter, token });
+  const eventStreamServer = attachEventStreamWebSocketServer({
+    server,
+    eventCenter,
+    token,
+  });
 
   const port = await listen(server, config.requestedPort, config.host);
   const lock: AppServerLock = {
@@ -92,7 +97,7 @@ async function main(): Promise<void> {
   }
   console.log(`Runweave app-server listening at http://${lock.host}:${port}`);
 
-  attachShutdownHandlers(server, config.lockPath);
+  attachShutdownHandlers(server, eventStreamServer, config.lockPath);
 }
 
 function listen(
@@ -118,13 +123,35 @@ function closeServer(server: http.Server): Promise<void> {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
-function attachShutdownHandlers(server: http.Server, lockPath: string): void {
+function closeEventStreamServer(wss: WebSocketServer): Promise<void> {
+  for (const client of wss.clients) {
+    client.close();
+  }
+  return new Promise((resolve) => {
+    const forceClose = setTimeout(() => {
+      for (const client of wss.clients) {
+        client.terminate();
+      }
+    }, 1000);
+    wss.close(() => {
+      clearTimeout(forceClose);
+      resolve();
+    });
+  });
+}
+
+function attachShutdownHandlers(
+  server: http.Server,
+  eventStreamServer: WebSocketServer,
+  lockPath: string,
+): void {
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
     if (shuttingDown) {
       return;
     }
     shuttingDown = true;
+    await closeEventStreamServer(eventStreamServer);
     await closeServer(server);
     await releaseLock(lockPath);
     process.exit(0);

@@ -9,7 +9,7 @@ export function attachEventStreamWebSocketServer(options: {
   server: http.Server;
   eventCenter: AppServerEventCenter;
   token: string;
-}): void {
+}): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
   options.server.on("upgrade", (request, socket, head) => {
@@ -69,6 +69,8 @@ export function attachEventStreamWebSocketServer(options: {
       unsubscribe();
     });
   });
+
+  return wss;
 }
 
 function send(ws: WebSocket, message: AppServerEventStreamMessage): void {

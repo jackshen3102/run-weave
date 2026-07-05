@@ -59,13 +59,7 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
       kinds: this.options.kinds,
       onMessage: (message) => this.enqueueMessage(message),
       onClose: () => this.scheduleReconnect(),
-      onError: (error) => {
-        eventConsumerLogger.warn("app-server.consumer.socket.error", {
-          message: "App-server event stream socket error",
-          consumerId: this.options.consumerId,
-          error,
-        });
-      },
+      onError: (error) => this.handleSocketError(error),
     });
     eventConsumerLogger.info("app-server.consumer.started", {
       message: "App-server event consumer started",
@@ -88,6 +82,17 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
       );
       this.connect(cursor);
     }, delay);
+  }
+
+  private handleSocketError(error: Error): void {
+    eventConsumerLogger.warn("app-server.consumer.socket.error", {
+      message: "App-server event stream socket error",
+      consumerId: this.options.consumerId,
+      error,
+    });
+    this.socket?.terminate();
+    this.socket = null;
+    this.scheduleReconnect();
   }
 
   private enqueueMessage(message: AppServerEventStreamMessage): void {
