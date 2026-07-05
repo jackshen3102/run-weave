@@ -11,6 +11,8 @@ const ROLE_LABEL: Record<string, string> = {
   plan: "plan_agent（形成计划）",
   plan_review: "plan_reviewer（审查计划）",
 };
+const EVIDENCE_SCHEMA =
+  'acceptanceResults[].evidence[] 必须使用 { type, label, summary, ref, detail? }；type 可用 "text"、"dom"、"screenshot"、"command"、"event"、"json"、"log"、"code"。label 是短标题，summary 是给人看的单句结论，ref 保留原始证据路径、文本或标识。';
 
 export function buildStartupPrompt(run: AgentTeamRun): string {
   return [
@@ -78,7 +80,7 @@ export function buildWorkerStartupPrompt(params: {
       ? [
           `- 本 worker 的结构化 outbox 固定写入：${outboxPath}。不要写 session 级 .runweave/outbox/${run.terminalSessionId}.json，避免同一 terminal 多 pane 覆盖。`,
           `- outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
-          '- acceptanceResults[].evidence[].type 只能使用 "text"、"dom"、"screenshot"；命令、日志、JSON、事件、代码证据都用 type="text" 并在 ref 里说明。',
+          `- ${EVIDENCE_SCHEMA}`,
         ]
       : []),
     "- 最终回复以结构化 summary 收尾（状态 / 结论 / 关键发现 / 产物 / 建议下一步）。",
@@ -97,7 +99,7 @@ export function buildBounceBackPrompt(params: {
     "",
     ...failedCases.map((item) => {
       const evidence = item.evidence
-        .map((ev) => `${ev.type}:${ev.ref}`)
+        .map((ev) => `${ev.label}: ${ev.summary}`)
         .join("; ");
       return `- [${item.caseId}] ${item.text}${evidence ? `\n  证据：${evidence}` : ""}`;
     }),
@@ -127,7 +129,7 @@ export function buildWorkerRecheckPrompt(params: {
     ...(outboxPath
       ? [
           `outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
-          'acceptanceResults[].evidence[].type 只能使用 "text"、"dom"、"screenshot"。',
+          EVIDENCE_SCHEMA,
         ]
       : []),
   ].join("\n");

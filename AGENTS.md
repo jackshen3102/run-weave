@@ -24,32 +24,17 @@
 
 超出常识默认、必须遵守的项目专属规则。分领域列出。
 
-### 执行前强制检查（Mandatory Checklist）
+### 验收与改动约束
 
-以下是模型反复踩坑或后果严重的项。**在做任何代码改动前，先逐条核对并输出下面的 `[Context Loaded]` 勾选块**（每条命中就打 ✓ 并附一句依据，不涉及则标 N/A 并写原因）。这不是走形式：只需核对这几条，其余规则按常识遵循即可。
-
-- **C1 `packages/common` 包边界**：`packages/common`（`@runweave/common`）只放 Web 与 App 都实际复用的前端代码，且只允许子路径导入（如 `@runweave/common/terminal`），不加根导出。新增/移动导出前必须写出 Web 与 App 两个真实调用方；backend/Electron/CLI/协议/DTO/存储/跨运行时合约一律进 `packages/shared`。完整规则见 `packages/common/AGENTS.md`。
-- **C2 禁用 `useCallback`**：前端与 App 代码不得出现 `useCallback` / `React.useCallback`；需要稳定引用用 `ahooks` 的 `useMemoizedFn`。确有 `useMemoizedFn` 覆盖不了的场景，先说明原因与替代方案，不要静默引入。
-- **C3 Surgical Changes**：每一行改动都能追溯到本次需求；不顺手「优化」相邻代码、格式、注释；只清理自己改动产生的孤儿。详见「通用工作准则 §3」。
-- **C4 Git 强推只用 `--force-with-lease`**：禁止裸 `git push --force`。
-- **C5 禁新增测试文件**：本仓库没有任何单测、TDD 或其他测试，不新增任何单测文件。唯一的正式自动化测试是 `frontend/tests/*.spec.ts` 的 Playwright E2E（见 `docs/testing/layers.md`）。
-- **C6 浏览器验收必须真跑**：若计划或验收里承诺了 Playwright/浏览器验证，完成前必须实际执行 `$playwright-cli` 并给出命令或关键证据；未执行则明确写「未执行 + 阻塞原因」，禁止用静态检查/代码阅读/截图冒充。详见「操作与验证技能」。
-
-输出模板（示例）：
-
-```
-[Context Loaded]
-✓ C2 useCallback：本次改动无 useCallback
-✓ C3 Surgical：3 处改动均对应需求，无越界
-- C1 common 包边界：未改 packages/common（N/A）
-- C4 force-with-lease：本次不涉及 push（N/A）
-- C5 前端测试：未新增测试（N/A）
-- C6 浏览器验收：本次未承诺浏览器验证（N/A）
-```
+- 本仓库不写单测/TDD，不新增单元测试文件。验证靠 `pnpm typecheck`、`pnpm lint`、`frontend/tests/*.spec.ts` 的 Playwright E2E，以及实际行为核对。
+- 若计划或验收里承诺了 Playwright/浏览器验证，完成前必须实际执行 `$playwright-cli` 并给出命令或关键证据；未执行则明确写「未执行 + 阻塞原因」，禁止用静态检查/代码阅读/截图冒充。
+- 每一行改动都必须能追溯到本次需求来源；不顺手「优化」相邻代码、格式、注释，只清理自己改动产生的孤儿。
 
 ### 包边界（详情）
 
-见 C1 与 `packages/common/AGENTS.md`。补充：`packages/shared`（`@runweave/shared`）是前后端共享合约包，放类型、协议、DTO、跨 backend/frontend/app/electron/CLI 的纯 TS 合约；不要因为「未来可能复用」把 App-only 或 Web-only 代码迁进 `packages/common`；计划里写成 `packages/commom` 按拼写错误处理。
+`packages/common`（`@runweave/common`）只放 Web 与 App 都实际复用的前端代码，且只允许子路径导入（如 `@runweave/common/terminal`），不加根导出。新增/移动导出前必须写出 Web 与 App 两个真实调用方；backend/Electron/CLI/协议/DTO/存储/跨运行时合约一律进 `packages/shared`。完整规则见 `packages/common/AGENTS.md`。
+
+`packages/shared`（`@runweave/shared`）是前后端共享合约包，放类型、协议、DTO、跨 backend/frontend/app/electron/CLI 的纯 TS 合约；不要因为「未来可能复用」把 App-only 或 Web-only 代码迁进 `packages/common`；计划里写成 `packages/commom` 按拼写错误处理。
 
 ### App 架构与 UI
 
@@ -68,7 +53,10 @@
 - `$computer-use` 和 `$playwright-cli` 都是本项目高价值技能；遇到真实桌面端、浏览器页面、终端页面联动的场景时，优先把两者结合使用，而不是停留在代码阅读或命令行猜测。
 - 分工：`$computer-use` 管本机桌面端、系统弹窗、应用启动/重启、菜单、安装器，以及进入 Runweave 桌面端具体页面；`$playwright-cli` 管打开 Web/App 页面、点击、输入、截图、读 DOM 和浏览器自动化验收。
 - 涉及浏览器页面复现、修复或验收时，必须用 `$playwright-cli`，不要用 `$computer-use` 或其它方案替代。两端都涉及时，先用 `$computer-use` 把环境准备到目标状态，再用 `$playwright-cli` 做页面级验证与取证。
-- 具体的浏览器验收执行要求见 C6。
+
+## 编码约定
+
+- 前端与 App 代码优先使用 `ahooks` 的 `useMemoizedFn` 处理稳定函数引用；如需使用 `useCallback` / `React.useCallback`，先说明原因与替代方案，不要静默引入。
 
 ## 通用工作准则
 
@@ -127,7 +115,7 @@ Transform tasks into verifiable goals:
 - "Fix the bug" → "Reproduce it first (steps or a Playwright E2E case), then confirm the fix makes it pass"
 - "Refactor X" → "Ensure `pnpm typecheck`/`pnpm lint` pass and behavior is unchanged before and after"
 
-> 本仓库不写单测/TDD（见硬约束 C5）。验证靠 `pnpm typecheck`、`pnpm lint`、`frontend/tests/*.spec.ts` 的 Playwright E2E，以及实际行为核对——不要用「写单元测试」作为验收手段。
+> 本仓库不写单测/TDD。验证靠 `pnpm typecheck`、`pnpm lint`、`frontend/tests/*.spec.ts` 的 Playwright E2E，以及实际行为核对——不要用「写单元测试」作为验收手段。
 
 For multi-step tasks, state a brief plan:
 

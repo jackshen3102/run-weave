@@ -7,6 +7,7 @@ import type {
   AgentTeamWorker,
   AgentTeamWorkerOutbox,
   AgentTeamWorkerRole,
+  CompleteAgentTeamRunRequest,
   CreateAgentTeamRunRequest,
   ProposeAgentTeamSplitRequest,
   RecordAgentTeamRoundRequest,
@@ -401,6 +402,50 @@ export class AgentTeamService {
     // Inject the human note back into the main agent context.
     await this.trySendToMain(nextRun, buildHumanNotePrompt(note));
     return nextRun;
+  }
+
+  async completeRun(
+    runId: string,
+    input: CompleteAgentTeamRunRequest,
+  ): Promise<AgentTeamRun> {
+    const run = await this.requireRun(runId);
+    if (run.phase !== "executing") {
+      throw new AgentTeamError(409, "Run is not executing");
+    }
+    if (run.status === "done") {
+      return run;
+    }
+    if (run.status === "failed") {
+      throw new AgentTeamError(409, "Run has already failed");
+    }
+    const note = input.note?.trim();
+    const now = new Date().toISOString();
+    return this.updateRun(run, {
+      status: "done",
+      workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+      loop: {
+        ...run.loop,
+        escalated: false,
+        lastReason: null,
+      },
+      humanNotes: note
+        ? [
+            ...run.humanNotes,
+            {
+              id: `note_${Date.now()}`,
+              at: now,
+              text: note,
+              clearedFingerprints: [...run.loop.errorFingerprints],
+            },
+          ]
+        : run.humanNotes,
+      logs: [
+        ...run.logs,
+        note
+          ? `✅ 人工确认完成：${note}`
+          : "✅ 人工确认完成，loop 已结束",
+      ],
+    });
   }
 
   async focusPane(runId: string, panelId: string): Promise<AgentTeamRun> {
@@ -973,6 +1018,9 @@ export class AgentTeamService {
                   : [
                       {
                         type: "text" as const,
+                        label: "复验超时",
+                        summary: `worker ${item.recheckWorkerPanelId ?? "unknown"} 连续 ${MAX_RECHECK_ATTEMPTS} 次未更新 outbox`,
+                        detail: `超过 ${RECHECK_TIMEOUT_MS / 1000}s 未产出复验结果，已升级人工处理。`,
                         ref: `recheck watchdog: worker ${item.recheckWorkerPanelId ?? "unknown"} did not update outbox within ${RECHECK_TIMEOUT_MS / 1000}s after ${MAX_RECHECK_ATTEMPTS} attempts`,
                       },
                     ],
@@ -1595,6 +1643,8 @@ function synthesizeBlockingReviewResult(
     evidence: [
       {
         type: "text",
+        label: "审查阻断",
+        summary: `${outbox.role} 发现阻断问题：${summary}`,
         ref: `${outbox.role} blocker: ${summary}`,
       },
     ],

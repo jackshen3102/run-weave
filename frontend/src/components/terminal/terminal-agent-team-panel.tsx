@@ -7,6 +7,7 @@ import type {
   TerminalSessionListItem,
 } from "@runweave/shared";
 import {
+  completeAgentTeamRun,
   focusAgentTeamPane,
   getAgentTeamRunForTerminal,
   proposeAgentTeamSplit,
@@ -256,6 +257,16 @@ export function TerminalAgentTeamPanel({
     ).then(() => setResumeNote(""));
   });
 
+  const complete = useMemoizedFn((): void => {
+    if (!run) {
+      return;
+    }
+    const note = resumeNote.trim();
+    void runAction(() =>
+      completeAgentTeamRun(apiBase, token, run.runId, note ? { note } : {}),
+    ).then(() => setResumeNote(""));
+  });
+
   const focusPane = useMemoizedFn((panelId: string): void => {
     if (!run) {
       return;
@@ -293,7 +304,11 @@ export function TerminalAgentTeamPanel({
                   : "bg-slate-700 text-slate-300",
             ].join(" ")}
           >
-            {PHASE_LABEL[run.phase]}
+            {run.status === "done"
+              ? "已完成"
+              : run.status === "failed"
+                ? "失败"
+                : PHASE_LABEL[run.phase]}
           </span>
         ) : null}
       </div>
@@ -337,6 +352,7 @@ export function TerminalAgentTeamPanel({
             onResumeNoteChange={setResumeNote}
             onRecordRound={recordRound}
             onResume={resume}
+            onComplete={complete}
             onFocusPane={focusPane}
           />
         ) : null}
