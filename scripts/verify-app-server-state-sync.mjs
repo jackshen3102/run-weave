@@ -12,6 +12,10 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  buildCompletionEvent,
+  buildHookEvent,
+} from "./lib/app-server-threadref-fixture.mjs";
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const requireFromAppServer = createRequire(
@@ -418,47 +422,11 @@ async function verifySyncDegrades(context) {
 }
 
 function hookEvent(hookEventName, overrides = {}) {
-  const scope = {
-    projectId: ids.projectId,
-    terminalSessionId: ids.terminalSessionId,
-    terminalPanelId: ids.terminalPanelId,
-    runId: ids.runId,
-    cwd: ids.cwd,
-    ...(overrides.scope ?? {}),
-  };
-  return {
-    kind: "agent.hook",
-    source,
-    scope,
-    correlationId:
-      "correlationId" in overrides ? overrides.correlationId : ids.threadId,
-    dedupeKey: overrides.dedupeKey ?? null,
-    payload: {
-      source: "codex",
-      stateHookEvent: hookEventName,
-      ...(overrides.payload ?? {}),
-    },
-  };
+  return buildHookEvent(ids, hookEventName, { source, ...overrides });
 }
 
 function completionEvent(reason, rawHookEvent) {
-  return {
-    kind: "agent.completion",
-    source,
-    scope: {
-      projectId: ids.projectId,
-      terminalSessionId: ids.terminalSessionId,
-      terminalPanelId: ids.terminalPanelId,
-      runId: ids.runId,
-      cwd: ids.cwd,
-    },
-    correlationId: ids.threadId,
-    payload: {
-      source: "codex",
-      completionReason: reason,
-      rawHookEvent,
-    },
-  };
+  return buildCompletionEvent(ids, reason, rawHookEvent, { source });
 }
 
 function startAppServer({ stateDir, syncDir }) {

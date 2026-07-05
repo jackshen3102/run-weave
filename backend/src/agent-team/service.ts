@@ -1,6 +1,13 @@
-import { stat } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { readFile, stat } from "node:fs/promises";
+import { promisify } from "node:util";
 import type {
   AgentTeamAcceptanceCase,
+  AgentTeamExportHistoryMode,
+  AgentTeamExportOutbox,
+  AgentTeamExportPanel,
+  AgentTeamExportResponse,
+  AgentTeamFindingStatus,
   AgentTeamRun,
   AgentTeamStatus,
   AgentTeamTerminal,
@@ -35,7 +42,10 @@ import {
   ensureTerminalPanelWorkspace,
 } from "../routes/terminal-panel-routes";
 import { AgentTeamError } from "./errors";
-import { AgentTeamOutboxResolver } from "./outbox-resolver";
+import {
+  AgentTeamOutboxResolver,
+  normalizeAgentTeamWorkerOutbox,
+} from "./outbox-resolver";
 import { AgentTeamPromptSender } from "./prompt-sender";
 import { AgentTeamPaths } from "./storage/agent-team-paths";
 import { AgentTeamRunStore } from "./storage/run-store";
@@ -56,11 +66,14 @@ import {
 import { AgentTeamAgentReadinessService } from "./agent-readiness";
 
 const agentTeamLogger = logger.child({ component: "agent-team-service" });
+const execFileAsync = promisify(execFile);
 const DEFAULT_AGENT_TEAM_AGENT_COMMAND = "codex";
 const MANUAL_FEEDBACK_COMPLETION_GRACE_MS = 200;
 const RECHECK_WATCHDOG_INTERVAL_MS = 10_000;
 const RECHECK_TIMEOUT_MS = 60 * 60 * 1000;
 const MAX_RECHECK_ATTEMPTS = 2;
+const DEFAULT_EXPORT_TAIL_LINES = 1_000;
+const MAX_EXPORT_TAIL_LINES = 5_000;
 
 interface AgentTeamServiceOptions {
   terminalSessionManager: TerminalSessionManager;
@@ -71,6 +84,13 @@ interface AgentTeamServiceOptions {
   tmuxService?: TmuxService;
   tmuxOutputWatcher?: TmuxOutputWatcher;
   cwd?: string;
+}
+
+export interface ExportAgentTeamRunOptions {
+  history?: AgentTeamExportHistoryMode;
+  tailLines?: number;
+  includeSessionOther?: boolean;
+  includeOutboxes?: boolean;
 }
 
 let workerCounter = 0;
@@ -156,6 +176,99 @@ export class AgentTeamService {
     return this.runStore.getRunByTerminalSession(projectId, terminalSessionId);
   }
 
+  async exportRun(
+    runId: string,
+    options: ExportAgentTeamRunOptions = {},
+  ): Promise<AgentTeamExportResponse> {
+    const run = await this.requireRun(runId);
+    const session = this.requireSession(run.terminalSessionId);
+    const panels = this.terminalSessionManager.listPanels(run.terminalSessionId);
+    const warnings: string[] = [];
+    const historyMode = options.history ?? "tail";
+    const tailLines = clampExportTailLines(options.tailLines);
+    const includeSessionOther = options.includeSessionOther ?? true;
+    const includeOutboxes = options.includeOutboxes ?? true;
+    if (historyMode === "full") {
+      warnings.push(
+        `history=full is capped at ${MAX_EXPORT_TAIL_LINES} lines per pane by tmux capture-pane`,
+      );
+    }
+    const runBoundPanelIds = new Set<string>();
+    if (run.mainPanelId) {
+      runBoundPanelIds.add(run.mainPanelId);
+    }
+    for (const worker of run.workers) {
+      if (worker.panelId) {
+        runBoundPanelIds.add(worker.panelId);
+      }
+    }
+    for (const panel of panels) {
+      if (panel.agentTeamRunId === run.runId) {
+        runBoundPanelIds.add(panel.id);
+      }
+      if (panel.role?.startsWith(`agent-team:${run.runId}:`)) {
+        runBoundPanelIds.add(panel.id);
+      }
+    }
+
+    const runBound: AgentTeamExportPanel[] = [];
+    const sessionOther: AgentTeamExportPanel[] = [];
+    for (const panel of panels) {
+      const exportPanel = await this.buildExportPanel({
+        run,
+        session,
+        panel,
+        source: runBoundPanelIds.has(panel.id) ? "run-bound" : "session-other",
+        historyMode,
+        tailLines,
+      });
+      if (runBoundPanelIds.has(panel.id)) {
+        runBound.push(exportPanel);
+      } else if (includeSessionOther) {
+        sessionOther.push(exportPanel);
+      }
+    }
+
+    for (const panelId of runBoundPanelIds) {
+      if (panels.some((panel) => panel.id === panelId)) {
+        continue;
+      }
+      warnings.push(`Run-bound panel ${panelId} is not present in session workspace`);
+      runBound.push({
+        panelId,
+        tmuxPaneId: null,
+        alias: null,
+        role: null,
+        workerRole: panelId === run.mainPanelId ? "main" : "unknown",
+        workerId: null,
+        source: panelId === run.mainPanelId ? "main" : "worker",
+        history:
+          historyMode === "none"
+            ? undefined
+            : {
+                mode: "unavailable",
+                tailLines: null,
+                scrollback: null,
+                error: "Panel is not present in session workspace",
+              },
+      });
+    }
+
+    const outboxes = includeOutboxes
+      ? await this.collectExportOutboxes(run, session, runBound, warnings)
+      : [];
+
+    return {
+      run,
+      generatedAt: new Date().toISOString(),
+      projectRoot: this.resolveProjectRoot(run.projectId, session.cwd),
+      panels: { runBound, sessionOther },
+      outboxes,
+      acceptanceSummary: buildExportAcceptanceSummary(run, outboxes),
+      warnings,
+    };
+  }
+
   // --- Phase 1: plain terminal -> flow (start run) ---
 
   async startRun(input: CreateAgentTeamRunRequest): Promise<AgentTeamRun> {
@@ -204,6 +317,7 @@ export class AgentTeamService {
       }
     }
     const now = new Date().toISOString();
+    const scopeSnapshot = await this.captureScopeSnapshot(session.cwd);
     const run: AgentTeamRun = {
       runId: createAgentTeamRunId(input.terminalSessionId),
       projectId: input.projectId,
@@ -222,6 +336,7 @@ export class AgentTeamService {
       acceptance: [],
       loop: createInitialLoop(),
       humanNotes: [],
+      scopeSnapshot,
       logs: [
         planFile
           ? `Agent Team 任务已提交，进入计划审查：${planFile}`
@@ -505,6 +620,206 @@ export class AgentTeamService {
       }
     }
     return run;
+  }
+
+  private async buildExportPanel(params: {
+    run: AgentTeamRun;
+    session: TerminalSessionRecord;
+    panel: TerminalPanelRecord;
+    source: "run-bound" | "session-other";
+    historyMode: AgentTeamExportHistoryMode;
+    tailLines: number;
+  }): Promise<AgentTeamExportPanel> {
+    const { run, session, panel, source, historyMode, tailLines } = params;
+    const worker = run.workers.find((item) => item.panelId === panel.id) ?? null;
+    const workerRole =
+      panel.id === run.mainPanelId
+        ? "main"
+        : worker?.role ?? parseWorkerRoleFromPanelRole(run.runId, panel.role);
+    const exportPanel: AgentTeamExportPanel = {
+      panelId: panel.id,
+      tmuxPaneId: panel.tmuxPaneId ?? null,
+      alias: panel.alias,
+      role: panel.role,
+      workerRole: workerRole ?? "unknown",
+      workerId: worker?.id ?? panel.agentTeamWorkerId ?? null,
+      source:
+        panel.id === run.mainPanelId
+          ? "main"
+          : source === "run-bound"
+            ? "worker"
+            : "session-other",
+    };
+    if (historyMode === "none") {
+      return exportPanel;
+    }
+    if (!this.tmuxService) {
+      return {
+        ...exportPanel,
+        history: {
+          mode: "unavailable",
+          tailLines: null,
+          scrollback: null,
+          error: "tmux service is unavailable",
+        },
+      };
+    }
+    try {
+      const capture = await this.tmuxService.capturePane(
+        {
+          ...this.tmuxService.buildTarget(session.id),
+          paneId: panel.tmuxPaneId,
+        },
+        historyMode === "full" ? MAX_EXPORT_TAIL_LINES : tailLines,
+      );
+      return {
+        ...exportPanel,
+        history: {
+          mode: historyMode === "full" ? "full" : "tail",
+          tailLines: historyMode === "full" ? null : tailLines,
+          scrollback: capture.data,
+        },
+      };
+    } catch (error) {
+      return {
+        ...exportPanel,
+        history: {
+          mode: "unavailable",
+          tailLines: null,
+          scrollback: null,
+          error: formatErrorMessage(error),
+        },
+      };
+    }
+  }
+
+  private async collectExportOutboxes(
+    run: AgentTeamRun,
+    session: TerminalSessionRecord,
+    panels: AgentTeamExportPanel[],
+    warnings: string[],
+  ): Promise<AgentTeamExportOutbox[]> {
+    const candidates: AgentTeamExportOutbox[] = [];
+    const addCandidate = (candidate: Omit<AgentTeamExportOutbox, "exists" | "outbox">) => {
+      if (candidates.some((item) => item.path === candidate.path)) {
+        return;
+      }
+      candidates.push({ ...candidate, exists: false, outbox: null });
+    };
+    for (const panel of panels) {
+      if (panel.panelId) {
+        addCandidate({
+          path: this.paths.workerOutboxPath(
+            run.projectId,
+            run.terminalSessionId,
+            { panelId: panel.panelId },
+            session.cwd,
+          ),
+          scope: "panel",
+          panelId: panel.panelId,
+          tmuxPaneId: panel.tmuxPaneId,
+        });
+      }
+      if (panel.tmuxPaneId) {
+        addCandidate({
+          path: this.paths.workerOutboxPath(
+            run.projectId,
+            run.terminalSessionId,
+            { tmuxPaneId: panel.tmuxPaneId },
+            session.cwd,
+          ),
+          scope: "tmux-pane",
+          panelId: panel.panelId,
+          tmuxPaneId: panel.tmuxPaneId,
+        });
+      }
+    }
+    addCandidate({
+      path: this.paths.defaultOutboxPath(
+        run.projectId,
+        run.terminalSessionId,
+        session.cwd,
+      ),
+      scope: "legacy-session",
+      panelId: null,
+      tmuxPaneId: null,
+    });
+
+    return Promise.all(
+      candidates.map(async (candidate) => {
+        try {
+          const raw = await readFile(candidate.path, "utf8");
+          const fileStat = await stat(candidate.path);
+          const outbox = normalizeAgentTeamWorkerOutbox(JSON.parse(raw), {
+            terminalSessionId: run.terminalSessionId,
+            projectId: run.projectId,
+            panelId: candidate.panelId,
+            tmuxPaneId: candidate.tmuxPaneId,
+            finishedAt: fileStat.mtime.toISOString(),
+          });
+          if (!outbox) {
+            const message = `Outbox ${candidate.path} has an invalid schema`;
+            warnings.push(message);
+            return {
+              ...candidate,
+              exists: true,
+              outbox: null,
+              error: message,
+            };
+          }
+          return {
+            ...candidate,
+            exists: true,
+            outbox,
+          };
+        } catch (error) {
+          const code =
+            error && typeof error === "object" && "code" in error
+              ? String((error as { code?: unknown }).code)
+              : "";
+          if (code !== "ENOENT") {
+            warnings.push(
+              `Could not read outbox ${candidate.path}: ${formatErrorMessage(error)}`,
+            );
+            return {
+              ...candidate,
+              error: formatErrorMessage(error),
+            };
+          }
+          return candidate;
+        }
+      }),
+    );
+  }
+
+  private async captureScopeSnapshot(
+    cwd: string,
+  ): Promise<AgentTeamRun["scopeSnapshot"]> {
+    const capturedAt = new Date().toISOString();
+    try {
+      const { stdout } = await execFileAsync("git", ["status", "--short"], {
+        cwd,
+        timeout: 5_000,
+        maxBuffer: 1024 * 1024,
+      });
+      return {
+        capturedAt,
+        gitStatusShort: stdout
+          .split("\n")
+          .map((line) => line.trimEnd())
+          .filter(Boolean),
+      };
+    } catch (error) {
+      return {
+        capturedAt,
+        gitStatusShort: [],
+        error: formatErrorMessage(error),
+      };
+    }
+  }
+
+  private resolveProjectRoot(projectId: string, cwd: string): string | null {
+    return this.terminalSessionManager.getProject(projectId)?.path ?? cwd ?? null;
   }
 
   // --- internal helpers ---
@@ -1764,10 +2079,11 @@ export class AgentTeamService {
         | "workers"
         | "acceptance"
         | "loop"
-        | "humanNotes"
-        | "logs"
-        | "mainPanelId"
-      >
+	        | "humanNotes"
+	        | "scopeSnapshot"
+	        | "logs"
+	        | "mainPanelId"
+	      >
     >,
   ): Promise<AgentTeamRun> {
     const next: AgentTeamRun = {
@@ -1896,6 +2212,24 @@ function parseWorkerRole(role: string | null | undefined): AgentTeamWorkerRole |
   return VALID_WORKER_ROLES.includes(role as AgentTeamWorkerRole)
     ? (role as AgentTeamWorkerRole)
     : null;
+}
+
+function parseWorkerRoleFromPanelRole(
+  runId: string,
+  role: string | null | undefined,
+): AgentTeamWorkerRole | null {
+  const prefix = `agent-team:${runId}:`;
+  if (!role?.startsWith(prefix)) {
+    return null;
+  }
+  return parseWorkerRole(role.slice(prefix.length));
+}
+
+function clampExportTailLines(value: number | undefined): number {
+  if (!Number.isFinite(value) || value === undefined) {
+    return DEFAULT_EXPORT_TAIL_LINES;
+  }
+  return Math.min(Math.max(Math.trunc(value), 1), MAX_EXPORT_TAIL_LINES);
 }
 
 function resolveInitialActiveWorkerRole(
@@ -2228,17 +2562,32 @@ function createSyntheticCompletionEvent(
 function summarizeBlockingReviewFindings(
   outbox: AgentTeamWorkerOutbox,
 ): string | null {
-  const rawFindings = (outbox as AgentTeamWorkerOutbox & {
-    keyFindings?: unknown;
-    findings?: unknown;
-  }).keyFindings ?? (outbox as AgentTeamWorkerOutbox & { findings?: unknown }).findings;
-  if (Array.isArray(rawFindings)) {
-    const blocking = rawFindings
-      .map(formatBlockingFinding)
-      .filter((item): item is string => Boolean(item));
-    if (blocking.length > 0) {
-      return blocking.join("; ").slice(0, 500);
-    }
+  const remainingFindings = normalizeOutboxFindingList(
+    outbox.remainingFindings,
+    "open",
+  );
+  const blockingRemaining = remainingFindings
+    .filter(isOpenBlockingFinding)
+    .map(formatBlockingFindingSummary);
+  if (blockingRemaining.length > 0) {
+    return blockingRemaining.join("; ").slice(0, 500);
+  }
+  if (Array.isArray(outbox.remainingFindings)) {
+    return null;
+  }
+  const legacyFindings = normalizeOutboxFindingList(
+    (outbox as AgentTeamWorkerOutbox & {
+      keyFindings?: unknown;
+      findings?: unknown;
+    }).keyFindings ??
+      (outbox as AgentTeamWorkerOutbox & { findings?: unknown }).findings,
+    "open",
+  );
+  const blockingLegacy = legacyFindings
+    .filter(isOpenBlockingFinding)
+    .map(formatBlockingFindingSummary);
+  if (blockingLegacy.length > 0) {
+    return blockingLegacy.join("; ").slice(0, 500);
   }
   const reviewText = outbox as AgentTeamWorkerOutbox & {
     conclusion?: unknown;
@@ -2251,19 +2600,120 @@ function summarizeBlockingReviewFindings(
     : null;
 }
 
-function formatBlockingFinding(finding: unknown): string | null {
+function normalizeOutboxFindingList(
+  findings: unknown,
+  defaultStatus: AgentTeamFindingStatus,
+): NonNullable<AgentTeamWorkerOutbox["remainingFindings"]> {
+  if (!Array.isArray(findings)) {
+    return [];
+  }
+  return findings
+    .map((finding) => normalizeOutboxFinding(finding, defaultStatus))
+    .filter((finding): finding is NonNullable<AgentTeamWorkerOutbox["remainingFindings"]>[number] =>
+      Boolean(finding),
+    );
+}
+
+function normalizeOutboxFinding(
+  finding: unknown,
+  defaultStatus: AgentTeamFindingStatus,
+): NonNullable<AgentTeamWorkerOutbox["remainingFindings"]>[number] | null {
   if (!finding || typeof finding !== "object") {
     return null;
   }
   const record = finding as Record<string, unknown>;
   const severity =
     typeof record.severity === "string" ? record.severity.trim() : "";
-  if (!/^(P0|P1|blocker|critical)$/i.test(severity)) {
+  if (!/^(P0|P1|P2|P3)$/i.test(severity)) {
     return null;
   }
   const title = typeof record.title === "string" ? record.title.trim() : "";
+  const summary = typeof record.summary === "string" ? record.summary.trim() : "";
   const impact = typeof record.impact === "string" ? record.impact.trim() : "";
-  return [severity, title || impact].filter(Boolean).join(": ");
+  const resolvedSummary = summary || impact || title;
+  if (!resolvedSummary) {
+    return null;
+  }
+  const rawStatus =
+    typeof record.status === "string" && record.status.trim()
+      ? record.status.trim()
+      : defaultStatus;
+  const status =
+    rawStatus === "resolved" || rawStatus === "informational" ? rawStatus : "open";
+  return {
+    severity: severity.toUpperCase() as "P0" | "P1" | "P2" | "P3",
+    status,
+    title: title || resolvedSummary.slice(0, 120),
+    summary: resolvedSummary,
+    ...(typeof record.ref === "string" && record.ref.trim()
+      ? { ref: record.ref.trim() }
+      : {}),
+  };
+}
+
+function isOpenBlockingFinding(
+  finding: NonNullable<AgentTeamWorkerOutbox["remainingFindings"]>[number],
+): boolean {
+  return (
+    (finding.severity === "P0" || finding.severity === "P1") &&
+    (finding.status ?? "open") === "open"
+  );
+}
+
+function formatBlockingFindingSummary(
+  finding: NonNullable<AgentTeamWorkerOutbox["remainingFindings"]>[number],
+): string {
+  return [finding.severity, finding.title || finding.summary]
+    .filter(Boolean)
+    .join(": ");
+}
+
+function buildExportAcceptanceSummary(
+  run: AgentTeamRun,
+  outboxes: AgentTeamExportOutbox[],
+): AgentTeamExportResponse["acceptanceSummary"] {
+  const outboxesByCase = new Map<string, AgentTeamWorkerOutbox[]>();
+  for (const item of outboxes) {
+    const outbox = item.outbox;
+    if (!outbox?.acceptanceResults) {
+      continue;
+    }
+    for (const result of outbox.acceptanceResults) {
+      const current = outboxesByCase.get(result.caseId) ?? [];
+      current.push(outbox);
+      outboxesByCase.set(result.caseId, current);
+    }
+  }
+  return run.acceptance.map((item) => {
+    const caseOutboxes = outboxesByCase.get(item.caseId) ?? [];
+    return {
+      caseId: item.caseId,
+      status: item.status,
+      evidenceCount: item.evidence.length,
+      sourceRoles: Array.from(
+        new Set(
+          caseOutboxes
+            .map((outbox) => outbox.role)
+            .filter((role): role is string => Boolean(role)),
+        ),
+      ),
+      remainingFindingCount: caseOutboxes.reduce(
+        (sum, outbox) =>
+          sum + normalizeOutboxFindingList(outbox.remainingFindings, "open").length,
+        0,
+      ),
+      resolvedFindingCount: caseOutboxes.reduce(
+        (sum, outbox) =>
+          sum +
+          normalizeOutboxFindingList(outbox.resolvedFindings, "resolved").length,
+        0,
+      ),
+    };
+  });
+}
+
+function formatErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function isStaleExpectedRound(

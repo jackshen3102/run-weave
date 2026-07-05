@@ -115,6 +115,13 @@ export interface HumanInterventionNote {
   clearedFingerprints: string[];
 }
 
+export interface AgentTeamRunScopeSnapshot {
+  capturedAt: string;
+  gitStatusShort: string[];
+  allowedPaths?: string[];
+  error?: string;
+}
+
 export interface AgentTeamRunOptions {
   autoApproveSplit: boolean;
 }
@@ -141,6 +148,7 @@ export interface AgentTeamRun {
   acceptance: AgentTeamAcceptanceCase[];
   loop: AgentTeamLoop;
   humanNotes: HumanInterventionNote[];
+  scopeSnapshot?: AgentTeamRunScopeSnapshot;
   /** Observation log for the executing sidecar. */
   logs: string[];
   createdAt: string;
@@ -156,8 +164,24 @@ export interface AgentTeamTerminal {
 
 /** Worker outbox schema, extended with per-case acceptance results. */
 export type AgentTeamOutboxStatus = "completed" | "failed";
+export type AgentTeamFindingStatus = "open" | "resolved" | "informational";
+export type AgentTeamFindingSeverity = "P0" | "P1" | "P2" | "P3";
+
+export interface AgentTeamOutboxFinding {
+  severity: AgentTeamFindingSeverity;
+  status?: AgentTeamFindingStatus;
+  title: string;
+  summary: string;
+  ref?: string;
+}
+
+export interface AgentTeamOutboxRecommendation {
+  severity?: AgentTeamFindingSeverity;
+  summary: string;
+}
 
 export interface AgentTeamWorkerOutbox {
+  schemaVersion?: 1;
   sessionId: string;
   panelId?: string | null;
   tmuxPaneId?: string | null;
@@ -169,6 +193,10 @@ export interface AgentTeamWorkerOutbox {
   error: string | null;
   completionReason?: string | null;
   finishedAt: string;
+  findings?: AgentTeamOutboxFinding[];
+  resolvedFindings?: AgentTeamOutboxFinding[];
+  remainingFindings?: AgentTeamOutboxFinding[];
+  recommendations?: AgentTeamOutboxRecommendation[];
   acceptanceResults?: Array<{
     caseId: string;
     status: "pass" | "fail";
@@ -228,4 +256,54 @@ export interface FocusAgentTeamPaneRequest {
 
 export interface AgentTeamRunsResponse {
   runs: AgentTeamRun[];
+}
+
+export type AgentTeamExportHistoryMode = "none" | "tail" | "full";
+
+export interface AgentTeamExportPanel {
+  panelId: string;
+  tmuxPaneId: string | null;
+  alias: string | null;
+  role: string | null;
+  workerRole: AgentTeamWorkerRole | "main" | "unknown";
+  workerId: string | null;
+  source: "main" | "worker" | "session-other";
+  history?: {
+    mode: "tail" | "full" | "unavailable";
+    tailLines: number | null;
+    scrollback: string | null;
+    error?: string;
+  };
+}
+
+export interface AgentTeamExportOutbox {
+  path: string;
+  exists: boolean;
+  scope: "panel" | "tmux-pane" | "legacy-session";
+  panelId: string | null;
+  tmuxPaneId: string | null;
+  outbox: AgentTeamWorkerOutbox | null;
+  error?: string;
+}
+
+export interface AgentTeamExportAcceptanceSummary {
+  caseId: string;
+  status: AgentTeamAcceptanceStatus;
+  evidenceCount: number;
+  sourceRoles: string[];
+  remainingFindingCount: number;
+  resolvedFindingCount: number;
+}
+
+export interface AgentTeamExportResponse {
+  run: AgentTeamRun;
+  generatedAt: string;
+  projectRoot: string | null;
+  panels: {
+    runBound: AgentTeamExportPanel[];
+    sessionOther: AgentTeamExportPanel[];
+  };
+  outboxes: AgentTeamExportOutbox[];
+  acceptanceSummary: AgentTeamExportAcceptanceSummary[];
+  warnings: string[];
 }

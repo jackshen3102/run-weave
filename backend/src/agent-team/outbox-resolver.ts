@@ -1,5 +1,9 @@
 import type {
   AgentTeamAcceptanceEvidence,
+  AgentTeamFindingSeverity,
+  AgentTeamFindingStatus,
+  AgentTeamOutboxFinding,
+  AgentTeamOutboxRecommendation,
   AgentTeamWorkerOutbox,
   TerminalEventEnvelope,
 } from "@runweave/shared";
@@ -11,6 +15,14 @@ type OutboxCandidate = {
   path: string;
   allowMissingPaneIdentity: boolean;
 };
+export interface NormalizeAgentTeamWorkerOutboxOptions {
+  terminalSessionId?: string;
+  projectId?: string | null;
+  panelId?: string | null;
+  tmuxPaneId?: string | null;
+  completionReason?: string | null;
+  finishedAt?: string;
+}
 
 const VALID_EVIDENCE_TYPES = new Set<AgentTeamAcceptanceEvidence["type"]>([
   "screenshot",
@@ -21,6 +33,17 @@ const VALID_EVIDENCE_TYPES = new Set<AgentTeamAcceptanceEvidence["type"]>([
   "json",
   "log",
   "code",
+]);
+const VALID_FINDING_SEVERITIES = new Set<AgentTeamFindingSeverity>([
+  "P0",
+  "P1",
+  "P2",
+  "P3",
+]);
+const VALID_FINDING_STATUSES = new Set<AgentTeamFindingStatus>([
+  "open",
+  "resolved",
+  "informational",
 ]);
 
 /**
@@ -46,7 +69,17 @@ export class AgentTeamOutboxResolver {
       ) {
         continue;
       }
-      const normalized = this.normalizeOutbox(event, outbox);
+      const normalized = normalizeAgentTeamWorkerOutbox(outbox, {
+        terminalSessionId: event.terminalSessionId,
+        projectId: event.projectId,
+        panelId: event.payload.panelId ?? null,
+        tmuxPaneId: event.payload.tmuxPaneId ?? null,
+        completionReason: event.payload.completionReason,
+        finishedAt: event.createdAt,
+      });
+      if (!normalized) {
+        continue;
+      }
       return {
         ...normalized,
         sessionId: normalized.sessionId || event.terminalSessionId,
@@ -153,84 +186,185 @@ export class AgentTeamOutboxResolver {
     return false;
   }
 
-  private normalizeOutbox(
-    event: CompletionEvent,
-    outbox: AgentTeamWorkerOutbox,
-  ): AgentTeamWorkerOutbox {
-    const legacyOutbox = outbox as AgentTeamWorkerOutbox & {
-      conclusion?: unknown;
-      terminalSessionId?: unknown;
-      workerRole?: unknown;
-    };
-    const normalizedStatus =
-      outbox.status === "failed" ? "failed" : "completed";
-    return {
-      ...outbox,
-      sessionId:
-        outbox.sessionId ||
-        (typeof legacyOutbox.terminalSessionId === "string"
-          ? legacyOutbox.terminalSessionId
-          : event.terminalSessionId),
-      role:
-        outbox.role ??
-        (typeof legacyOutbox.workerRole === "string"
-          ? legacyOutbox.workerRole
-          : null),
-      status: normalizedStatus,
-      summary:
-        typeof outbox.summary === "string"
-          ? outbox.summary
-          : typeof legacyOutbox.conclusion === "string"
-            ? legacyOutbox.conclusion
-            : "Worker completed",
-      error: typeof outbox.error === "string" ? outbox.error : null,
-      finishedAt:
-        typeof outbox.finishedAt === "string"
-          ? outbox.finishedAt
-          : event.createdAt,
-      acceptanceResults: this.normalizeAcceptanceResults(
-        outbox.acceptanceResults,
-      ),
-    };
+}
+
+export function normalizeAgentTeamWorkerOutbox(
+  outbox: unknown,
+  options: NormalizeAgentTeamWorkerOutboxOptions = {},
+): AgentTeamWorkerOutbox | null {
+  if (!outbox || typeof outbox !== "object") {
+    return null;
+  }
+  const record = outbox as AgentTeamWorkerOutbox & {
+    conclusion?: unknown;
+    terminalSessionId?: unknown;
+    workerRole?: unknown;
+  };
+  const normalizedStatus = record.status === "failed" ? "failed" : "completed";
+  const sessionId =
+    typeof record.sessionId === "string" && record.sessionId.trim()
+      ? record.sessionId
+      : typeof record.terminalSessionId === "string" &&
+          record.terminalSessionId.trim()
+        ? record.terminalSessionId.trim()
+        : options.terminalSessionId;
+  if (!sessionId) {
+    return null;
   }
 
-  private normalizeAcceptanceResults(
-    results: AgentTeamWorkerOutbox["acceptanceResults"],
-  ): AgentTeamWorkerOutbox["acceptanceResults"] {
-    if (!Array.isArray(results)) {
-      return undefined;
-    }
-    return results
-      .filter(
-        (result) =>
-          typeof result.caseId === "string" &&
-          (result.status === "pass" || result.status === "fail"),
-      )
-      .map((result) => ({
-        caseId: result.caseId,
-        status: result.status,
-        evidence: Array.isArray(result.evidence)
-          ? result.evidence
-              .filter(
-                (evidence) =>
-                  VALID_EVIDENCE_TYPES.has(evidence.type) &&
-                  typeof evidence.ref === "string" &&
-                  typeof evidence.label === "string" &&
-                  evidence.label.trim() &&
-                  typeof evidence.summary === "string" &&
-                  evidence.summary.trim(),
-              )
-              .map((evidence) => ({
-                type: evidence.type,
-                label: evidence.label.trim(),
-                summary: evidence.summary.trim(),
-                ...(typeof evidence.detail === "string" &&
-                evidence.detail.trim()
-                  ? { detail: evidence.detail.trim() }
-                  : {}),
-                ref: evidence.ref,
-              }))
-          : [],
-      }));
+  return {
+    ...record,
+    sessionId,
+    projectId: record.projectId ?? options.projectId ?? null,
+    panelId: record.panelId ?? options.panelId ?? null,
+    tmuxPaneId: record.tmuxPaneId ?? options.tmuxPaneId ?? null,
+    role:
+      record.role ??
+      (typeof record.workerRole === "string" ? record.workerRole : null),
+    status: normalizedStatus,
+    summary:
+      typeof record.summary === "string"
+        ? record.summary
+        : typeof record.conclusion === "string"
+          ? record.conclusion
+          : "Worker completed",
+    error: typeof record.error === "string" ? record.error : null,
+    completionReason: record.completionReason ?? options.completionReason ?? null,
+    finishedAt:
+      typeof record.finishedAt === "string"
+        ? record.finishedAt
+        : options.finishedAt ?? new Date(0).toISOString(),
+    findings: normalizeFindings(record.findings, "open"),
+    resolvedFindings: normalizeFindings(record.resolvedFindings, "resolved"),
+    remainingFindings: normalizeFindings(record.remainingFindings, "open"),
+    recommendations: normalizeRecommendations(record.recommendations),
+    acceptanceResults: normalizeAcceptanceResults(record.acceptanceResults),
+  };
+}
+
+function normalizeAcceptanceResults(
+  results: AgentTeamWorkerOutbox["acceptanceResults"],
+): AgentTeamWorkerOutbox["acceptanceResults"] {
+  if (!Array.isArray(results)) {
+    return undefined;
   }
+  return results
+    .filter(
+      (result) =>
+        typeof result.caseId === "string" &&
+        (result.status === "pass" || result.status === "fail"),
+    )
+    .map((result) => ({
+      caseId: result.caseId,
+      status: result.status,
+      evidence: Array.isArray(result.evidence)
+        ? result.evidence
+            .filter(
+              (evidence) =>
+                VALID_EVIDENCE_TYPES.has(evidence.type) &&
+                typeof evidence.ref === "string" &&
+                typeof evidence.label === "string" &&
+                evidence.label.trim() &&
+                typeof evidence.summary === "string" &&
+                evidence.summary.trim(),
+            )
+            .map((evidence) => ({
+              type: evidence.type,
+              label: evidence.label.trim(),
+              summary: evidence.summary.trim(),
+              ...(typeof evidence.detail === "string" && evidence.detail.trim()
+                ? { detail: evidence.detail.trim() }
+                : {}),
+              ref: evidence.ref,
+            }))
+        : [],
+    }));
+}
+
+function normalizeFindings(
+  findings: unknown,
+  defaultStatus: AgentTeamFindingStatus,
+): AgentTeamOutboxFinding[] | undefined {
+  if (!Array.isArray(findings)) {
+    return undefined;
+  }
+  const normalized = findings
+    .map((finding) => normalizeFinding(finding, defaultStatus))
+    .filter((finding): finding is AgentTeamOutboxFinding => Boolean(finding));
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeRecommendations(
+  recommendations: unknown,
+): AgentTeamOutboxRecommendation[] | undefined {
+  if (!Array.isArray(recommendations)) {
+    return undefined;
+  }
+  const normalized = recommendations
+    .map(normalizeRecommendation)
+    .filter((item): item is AgentTeamOutboxRecommendation => Boolean(item));
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeFinding(
+  finding: unknown,
+  defaultStatus: AgentTeamFindingStatus,
+): AgentTeamOutboxFinding | null {
+  if (!finding || typeof finding !== "object") {
+    return null;
+  }
+  const record = finding as Record<string, unknown>;
+  const severity = normalizeSeverity(record.severity);
+  const title =
+    typeof record.title === "string"
+      ? record.title.trim()
+      : typeof record.summary === "string"
+        ? record.summary.trim().slice(0, 120)
+        : "";
+  const summary = typeof record.summary === "string" ? record.summary.trim() : "";
+  if (!severity || !title || !summary) {
+    return null;
+  }
+  const rawStatus =
+    typeof record.status === "string" ? record.status.trim() : defaultStatus;
+  const status = VALID_FINDING_STATUSES.has(rawStatus as AgentTeamFindingStatus)
+    ? (rawStatus as AgentTeamFindingStatus)
+    : defaultStatus;
+  return {
+    severity,
+    status,
+    title,
+    summary,
+    ...(typeof record.ref === "string" && record.ref.trim()
+      ? { ref: record.ref.trim() }
+      : {}),
+  };
+}
+
+function normalizeRecommendation(
+  recommendation: unknown,
+): AgentTeamOutboxRecommendation | null {
+  if (!recommendation || typeof recommendation !== "object") {
+    return null;
+  }
+  const record = recommendation as Record<string, unknown>;
+  const summary = typeof record.summary === "string" ? record.summary.trim() : "";
+  if (!summary) {
+    return null;
+  }
+  const severity = normalizeSeverity(record.severity);
+  return {
+    ...(severity ? { severity } : {}),
+    summary,
+  };
+}
+
+function normalizeSeverity(value: unknown): AgentTeamFindingSeverity | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toUpperCase();
+  return VALID_FINDING_SEVERITIES.has(normalized as AgentTeamFindingSeverity)
+    ? (normalized as AgentTeamFindingSeverity)
+    : null;
 }

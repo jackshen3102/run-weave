@@ -112,6 +112,20 @@ const completeSchema = z
   .object({ note: z.string().trim().min(1).optional() })
   .strict();
 const focusSchema = z.object({ panelId: z.string().trim().min(1) }).strict();
+const exportQuerySchema = z
+  .object({
+    history: z.enum(["none", "tail", "full"]).optional(),
+    tail: z.coerce.number().int().positive().max(5000).optional(),
+    includeSessionOther: z
+      .enum(["true", "false"])
+      .optional()
+      .transform((value) => (value === undefined ? undefined : value === "true")),
+    includeOutboxes: z
+      .enum(["true", "false"])
+      .optional()
+      .transform((value) => (value === undefined ? undefined : value === "true")),
+  })
+  .strict();
 
 export function createAgentTeamRouter(
   agentTeamService: AgentTeamService,
@@ -152,6 +166,30 @@ export function createAgentTeamRouter(
       return;
     }
     res.json(run);
+  });
+
+  router.get("/runs/:runId/export", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params" });
+      return;
+    }
+    const parsed = exportQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request query",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.exportRun(params.data.runId, {
+        history: parsed.data.history,
+        tailLines: parsed.data.tail,
+        includeSessionOther: parsed.data.includeSessionOther,
+        includeOutboxes: parsed.data.includeOutboxes,
+      }),
+    );
   });
 
   router.post("/runs", async (req, res) => {
