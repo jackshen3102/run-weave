@@ -24,15 +24,83 @@ export interface LastAiActiveCommandRecord {
   clearedAt: number | null;
 }
 
-function normalizeCommand(command: string | null): string | null {
+function tokenizeShellCommand(command: string): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | null = null;
+  let escaping = false;
+
+  for (const character of command) {
+    if (escaping) {
+      current += character;
+      escaping = false;
+      continue;
+    }
+    if (character === "\\") {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) {
+        quote = null;
+      } else {
+        current += character;
+      }
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+    if (/\s/.test(character)) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += character;
+  }
+
+  if (current) {
+    tokens.push(current);
+  }
+  return tokens;
+}
+
+function isEnvironmentAssignment(token: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*=.*/.test(token);
+}
+
+export function getExecutableCommandName(command: string | null): string | null {
   const normalized = command?.trim();
-  return normalized || null;
+  if (!normalized) {
+    return null;
+  }
+
+  const tokens = tokenizeShellCommand(normalized.replace(/\\+/g, "/"));
+  let index = 0;
+  if (tokens[index] === "env") {
+    index += 1;
+    while (tokens[index]?.startsWith("-")) {
+      index += 1;
+    }
+  }
+  while (tokens[index] && isEnvironmentAssignment(tokens[index]!)) {
+    index += 1;
+  }
+
+  const executable = tokens[index];
+  if (!executable) {
+    return null;
+  }
+  return executable.split("/").filter(Boolean).at(-1) ?? executable;
 }
 
 export function getCompletionSourceForCommand(
   command: string | null,
 ): TerminalCompletionEvent["source"] | null {
-  const normalized = normalizeCommand(command);
+  const normalized = getExecutableCommandName(command);
   if (!normalized) {
     return null;
   }
@@ -51,7 +119,7 @@ export function isCompletionSourceAllowedForCommand(
   source: TerminalCompletionEvent["source"],
   command: string | null,
 ): boolean {
-  const normalized = normalizeCommand(command);
+  const normalized = getExecutableCommandName(command);
   if (!normalized) {
     return false;
   }

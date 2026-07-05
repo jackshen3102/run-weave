@@ -23,7 +23,10 @@ import type {
   PersistedTerminalSessionMetadataRecord,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
+  UpdateTerminalPanelPreviewParams,
   UpdateTerminalPanelStatusParams,
+  UpdateTerminalPanelTerminalStateParams,
+  UpdateTerminalPanelThreadIdParams,
   UpdateTerminalPanelWorkspaceParams,
   UpdateTerminalProjectParams,
   UpdateTerminalSessionExitParams,
@@ -219,6 +222,62 @@ export class LowDbTerminalSessionStore implements TerminalSessionStore {
       } else {
         database.data.panels.push(panel);
       }
+      await database.write();
+    });
+  }
+
+  async updatePanelThreadId(
+    params: UpdateTerminalPanelThreadIdParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = database.data.panels.find(
+        (candidate) => candidate.id === params.panelId,
+      );
+      if (!panel) {
+        return;
+      }
+      if (params.threadId) {
+        panel.threadId = params.threadId;
+      } else {
+        delete panel.threadId;
+      }
+      await database.write();
+    });
+  }
+
+  async updatePanelPreview(
+    params: UpdateTerminalPanelPreviewParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = database.data.panels.find(
+        (candidate) => candidate.id === params.panelId,
+      );
+      if (!panel) {
+        return;
+      }
+      if (params.preview) {
+        panel.preview = params.preview;
+      } else {
+        delete panel.preview;
+      }
+      await database.write();
+    });
+  }
+
+  async updatePanelTerminalState(
+    params: UpdateTerminalPanelTerminalStateParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = database.data.panels.find(
+        (candidate) => candidate.id === params.panelId,
+      );
+      if (!panel) {
+        return;
+      }
+      panel.terminalState = params.terminalState;
       await database.write();
     });
   }

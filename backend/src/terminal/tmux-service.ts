@@ -35,6 +35,7 @@ export interface TmuxPaneMetadata {
   cwd: string;
   activeCommand: string | null;
   activeCommandSource: "runweave_command" | "pane_current_command" | null;
+  paneCommand: string | null;
 }
 
 export interface TmuxPaneInfo extends TmuxPaneMetadata {
@@ -524,6 +525,7 @@ export class TmuxService {
           cwd,
           activeCommand: activeCommand.command,
           activeCommandSource: activeCommand.source,
+          paneCommand: normalizePaneCommand(rawCommand),
           active: rawActive === "1",
           paneLeft: parseNonNegativeInteger(rawPaneLeft),
           paneTop: parseNonNegativeInteger(rawPaneTop),
@@ -838,6 +840,7 @@ export class TmuxService {
       cwd,
       activeCommand: activeCommand.command,
       activeCommandSource: activeCommand.source,
+      paneCommand: normalizePaneCommand(rawCommand),
     };
   }
 

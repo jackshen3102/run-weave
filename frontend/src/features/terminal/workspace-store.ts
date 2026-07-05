@@ -28,6 +28,7 @@ interface TerminalWorkspaceState {
   projectDialogError: string | null;
   projectPendingDeletion: TerminalProjectListItem | null;
   historyTerminalSessionId: string | null;
+  historyTerminalPanelId: string | null;
   historyDrawerOpen: boolean;
 }
 
@@ -59,6 +60,7 @@ interface TerminalWorkspaceActions {
     next: StateUpdater<TerminalProjectListItem | null>,
   ) => void;
   setHistoryTerminalSessionId: (next: StateUpdater<string | null>) => void;
+  setHistoryTerminalPanelId: (next: StateUpdater<string | null>) => void;
   setHistoryDrawerOpen: (next: StateUpdater<boolean>) => void;
   selectActiveSession: (terminalSessionId: string | null) => void;
   resetForConnection: (initialTerminalSessionId?: string) => void;
@@ -91,6 +93,7 @@ const initialState: TerminalWorkspaceState = {
   projectDialogError: null,
   projectPendingDeletion: null,
   historyTerminalSessionId: null,
+  historyTerminalPanelId: null,
   historyDrawerOpen: false,
 };
 
@@ -176,6 +179,10 @@ export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
           next,
           state.historyTerminalSessionId,
         ),
+      })),
+    setHistoryTerminalPanelId: (next) =>
+      set((state) => ({
+        historyTerminalPanelId: resolveNext(next, state.historyTerminalPanelId),
       })),
     setHistoryDrawerOpen: (next) =>
       set((state) => ({

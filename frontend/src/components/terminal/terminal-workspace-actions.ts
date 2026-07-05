@@ -82,6 +82,9 @@ export function useTerminalWorkspaceActions({
   const setHistoryTerminalSessionId = useTerminalWorkspaceStore(
     (state) => state.setHistoryTerminalSessionId,
   );
+  const setHistoryTerminalPanelId = useTerminalWorkspaceStore(
+    (state) => state.setHistoryTerminalPanelId,
+  );
   const setBellMarkers = useTerminalWorkspaceStore(
     (state) => state.setBellMarkers,
   );
@@ -363,6 +366,7 @@ export function useTerminalWorkspaceActions({
 
   const openHistoryDrawer = useMemoizedFn((terminalSessionId: string) => {
     setHistoryTerminalSessionId(terminalSessionId);
+    setHistoryTerminalPanelId(null);
     setHistoryDrawerOpen(true);
   });
 

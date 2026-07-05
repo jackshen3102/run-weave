@@ -6,6 +6,7 @@ import type {
   ResizeTerminalPanelRequest,
   SendTerminalInterruptRequest,
   SendTerminalInputRequest,
+  TerminalState,
   TerminalInputMode,
   TerminalPanelWorkspace,
   UpdateTerminalPanelRequest,
@@ -25,7 +26,12 @@ import {
 import type { TmuxPaneInfo, TmuxPaneTarget, TmuxService } from "../terminal/tmux-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TerminalEventService } from "../terminal/terminal-event-service";
-import type { TerminalStateService } from "../terminal/terminal-state-service";
+import { getExecutableCommandName } from "../terminal/completion-source-gate";
+import {
+  aggregatePanelTerminalState,
+  getAgentForCommand,
+  type TerminalStateService,
+} from "../terminal/terminal-state-service";
 import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,
@@ -140,15 +146,22 @@ function buildDefaultPanel(
   pane: TmuxPaneInfo,
 ): TerminalPanelRecord {
   const now = new Date();
+  const terminalState = getPanelTerminalStateForActiveCommand(pane.activeCommand);
+  const sessionMetadata = getSessionAgentMetadataForMainPanel(
+    session,
+    terminalState,
+  );
   return {
     id: randomUUID(),
     terminalSessionId: session.id,
     alias: "main",
     role: "main",
+    ...sessionMetadata,
     agentTeamRunId: null,
     agentTeamWorkerId: null,
     cwd: pane.cwd || session.cwd,
     activeCommand: pane.activeCommand,
+    terminalState: sessionMetadata.terminalState ?? terminalState,
     status: "running",
     createdAt: now,
     lastActivityAt: now,
@@ -180,12 +193,256 @@ function buildSplitPanel(
     agentTeamWorkerId: params.agentTeamWorkerId,
     cwd: params.cwd,
     activeCommand: params.activeCommand,
+    terminalState: getPanelTerminalStateForActiveCommand(params.activeCommand),
     status: "running",
     createdAt: now,
     lastActivityAt: now,
     runtimeKind: "tmux",
     tmuxPaneId: paneId,
   };
+}
+
+function getPanelTerminalStateForActiveCommand(
+  activeCommand: string | null,
+  previous?: TerminalState,
+): TerminalState {
+  const agent = getAgentForCommand(activeCommand);
+  if (!agent) {
+    return { state: "shell_idle", agent: null };
+  }
+  if (previous?.agent === agent) {
+    return previous;
+  }
+  return { state: "agent_starting", agent };
+}
+
+function getSessionAgentForPanelBackfill(
+  session: TerminalSessionRecord,
+): string | null {
+  return session.terminalState?.agent ?? getAgentForCommand(session.activeCommand);
+}
+
+function getSessionAgentMetadataForMainPanel(
+  session: TerminalSessionRecord,
+  panelTerminalState: TerminalState,
+): Pick<TerminalPanelRecord, "threadId" | "preview" | "terminalState"> {
+  const sessionAgent = getSessionAgentForPanelBackfill(session);
+  if (
+    !sessionAgent ||
+    panelTerminalState.agent !== sessionAgent ||
+    (!session.threadId && !session.preview)
+  ) {
+    return {};
+  }
+  return {
+    ...(session.threadId ? { threadId: session.threadId } : {}),
+    ...(session.preview ? { preview: session.preview } : {}),
+    ...(session.terminalState ? { terminalState: session.terminalState } : {}),
+  };
+}
+
+function isMainPanel(panel: TerminalPanelRecord): boolean {
+  return panel.alias === "main" || panel.role === "main";
+}
+
+function isPrimaryPanel(
+  panel: TerminalPanelRecord,
+  panels: TerminalPanelRecord[],
+): boolean {
+  if (isMainPanel(panel)) {
+    return true;
+  }
+  const runningPanels = panels.filter((candidate) => candidate.status === "running");
+  return (
+    runningPanels.length === 1 &&
+    runningPanels[0]?.id === panel.id &&
+    !runningPanels.some(isMainPanel)
+  );
+}
+
+function shouldBackfillSessionAgentMetadataToMainPanel(
+  session: TerminalSessionRecord,
+  panel: TerminalPanelRecord,
+  nextTerminalState: TerminalState,
+  panels: TerminalPanelRecord[],
+): boolean {
+  if (!isPrimaryPanel(panel, panels) || panel.threadId || panel.preview) {
+    return false;
+  }
+  const sessionAgent = getSessionAgentForPanelBackfill(session);
+  if (
+    !sessionAgent ||
+    nextTerminalState.agent !== sessionAgent ||
+    (!session.threadId && !session.preview)
+  ) {
+    return false;
+  }
+  return !panels.some(
+    (candidate) =>
+      candidate.id !== panel.id &&
+      candidate.status === "running" &&
+      ((session.threadId && candidate.threadId === session.threadId) ||
+        (session.preview && candidate.preview === session.preview)),
+  );
+}
+
+function isEnvironmentAssignmentOnlyActiveCommand(
+  activeCommand: string | null,
+): boolean {
+  const normalized = activeCommand?.trim();
+  return Boolean(
+    normalized &&
+      /^[A-Za-z_][A-Za-z0-9_]*=.*/.test(normalized) &&
+      !getExecutableCommandName(normalized),
+  );
+}
+
+function getCommandBasename(activeCommand: string | null): string | null {
+  const normalized = activeCommand?.trim();
+  if (!normalized) {
+    return null;
+  }
+  return normalized.split(/[\\/]/).at(-1) ?? normalized;
+}
+
+function isInteractiveShellActiveCommand(activeCommand: string | null): boolean {
+  const basename = getCommandBasename(activeCommand);
+  return Boolean(basename && ["bash", "zsh", "sh", "fish"].includes(basename));
+}
+
+function terminalStatesEqual(
+  left: TerminalState | undefined,
+  right: TerminalState | undefined,
+): boolean {
+  return left?.state === right?.state && left?.agent === right?.agent;
+}
+
+function resolveEffectivePanelActiveCommand(pane: TmuxPaneInfo): string | null {
+  if (
+    pane.activeCommandSource === "runweave_command" &&
+    isInteractiveShellActiveCommand(pane.paneCommand)
+  ) {
+    return pane.paneCommand;
+  }
+  return pane.activeCommand;
+}
+
+async function backfillSessionAgentMetadataToPrimaryPanel(
+  terminalSessionManager: TerminalSessionManager,
+  session: TerminalSessionRecord,
+  panel: TerminalPanelRecord,
+): Promise<boolean> {
+  const nextTerminalState = getPanelTerminalStateForActiveCommand(
+    panel.activeCommand,
+    panel.terminalState,
+  );
+  const panels = terminalSessionManager.listPanels(session.id);
+  if (
+    !shouldBackfillSessionAgentMetadataToMainPanel(
+      session,
+      panel,
+      nextTerminalState,
+      panels,
+    )
+  ) {
+    return false;
+  }
+  if (session.threadId) {
+    panel.threadId = session.threadId;
+  }
+  if (session.preview) {
+    panel.preview = session.preview;
+  }
+  panel.terminalState = session.terminalState ?? nextTerminalState;
+  panel.lastActivityAt = new Date();
+  await terminalSessionManager.upsertPanel(panel);
+  return true;
+}
+
+async function syncSinglePanelMetadataToSession(
+  terminalSessionManager: TerminalSessionManager,
+  session: TerminalSessionRecord,
+  panel: TerminalPanelRecord,
+): Promise<boolean> {
+  const runningPanels = terminalSessionManager
+    .listPanels(session.id)
+    .filter((candidate) => candidate.status === "running");
+  if (runningPanels.length !== 1 || runningPanels[0]?.id !== panel.id) {
+    return false;
+  }
+
+  let changed = false;
+  const panelThreadId = panel.threadId ?? null;
+  if ((session.threadId ?? null) !== panelThreadId) {
+    await terminalSessionManager.updateSessionThreadId(session.id, panelThreadId);
+    changed = true;
+  }
+
+  const panelPreview = panel.preview ?? null;
+  if ((session.preview ?? null) !== panelPreview) {
+    await terminalSessionManager.updateSessionPreview(session.id, panelPreview);
+    changed = true;
+  }
+
+  if (
+    panel.terminalState &&
+    !terminalStatesEqual(session.terminalState, panel.terminalState)
+  ) {
+    await terminalSessionManager.updateSessionTerminalState(
+      session.id,
+      panel.terminalState,
+    );
+    changed = true;
+  }
+
+  if (session.cwd !== panel.cwd || session.activeCommand !== panel.activeCommand) {
+    const updated = await terminalSessionManager.updateSessionMetadata(session.id, {
+      cwd: panel.cwd,
+      activeCommand: panel.activeCommand,
+    });
+    changed = changed || Boolean(updated);
+  }
+
+  return changed;
+}
+
+async function clearMultiPanelMetadataFromSession(
+  terminalSessionManager: TerminalSessionManager,
+  session: TerminalSessionRecord,
+  panels: TerminalPanelRecord[],
+): Promise<boolean> {
+  const runningPanels = panels.filter((panel) => panel.status === "running");
+  if (runningPanels.length <= 1) {
+    return false;
+  }
+
+  let changed = false;
+  if (session.threadId) {
+    await terminalSessionManager.updateSessionThreadId(session.id, null);
+    changed = true;
+  }
+  if (session.preview) {
+    await terminalSessionManager.updateSessionPreview(session.id, null);
+    changed = true;
+  }
+  if (session.activeCommand !== null) {
+    await terminalSessionManager.updateSessionMetadata(session.id, {
+      cwd: session.cwd,
+      activeCommand: null,
+    });
+    changed = true;
+  }
+
+  const aggregateState = aggregatePanelTerminalState(runningPanels);
+  if (!terminalStatesEqual(session.terminalState, aggregateState)) {
+    await terminalSessionManager.updateSessionTerminalState(
+      session.id,
+      aggregateState,
+    );
+    changed = true;
+  }
+
+  return changed;
 }
 
 function recordPanelEvent(
@@ -279,13 +536,46 @@ async function ensureTmuxPanelWorkspace(
   for (const pane of panes) {
     const existingPanel = panelsByPaneId.get(pane.paneId);
     if (existingPanel) {
+      const effectiveActiveCommand = resolveEffectivePanelActiveCommand(pane);
+      const nextTerminalState = getPanelTerminalStateForActiveCommand(
+        effectiveActiveCommand,
+        existingPanel.terminalState,
+      );
+      const shouldClearCodexThreadMetadata =
+        Boolean(existingPanel.threadId || existingPanel.preview) &&
+        nextTerminalState.agent !== "codex" &&
+        !isEnvironmentAssignmentOnlyActiveCommand(effectiveActiveCommand);
+      const shouldBackfillSessionAgentMetadata =
+        shouldBackfillSessionAgentMetadataToMainPanel(
+          session,
+          existingPanel,
+          nextTerminalState,
+          existingPanels,
+        );
+      const terminalStateChanged =
+        existingPanel.terminalState?.state !== nextTerminalState.state ||
+        existingPanel.terminalState.agent !== nextTerminalState.agent;
       if (
         existingPanel.cwd !== pane.cwd ||
-        existingPanel.activeCommand !== pane.activeCommand ||
-        existingPanel.status !== "running"
+        existingPanel.activeCommand !== effectiveActiveCommand ||
+        existingPanel.status !== "running" ||
+        terminalStateChanged ||
+        shouldClearCodexThreadMetadata ||
+        shouldBackfillSessionAgentMetadata
       ) {
         existingPanel.cwd = pane.cwd || existingPanel.cwd;
-        existingPanel.activeCommand = pane.activeCommand;
+        existingPanel.activeCommand = effectiveActiveCommand;
+        existingPanel.terminalState = nextTerminalState;
+        if (shouldClearCodexThreadMetadata) {
+          delete existingPanel.threadId;
+          delete existingPanel.preview;
+        } else if (shouldBackfillSessionAgentMetadata) {
+          await backfillSessionAgentMetadataToPrimaryPanel(
+            terminalSessionManager,
+            session,
+            existingPanel,
+          );
+        }
         existingPanel.status = "running";
         existingPanel.lastActivityAt = new Date();
         await terminalSessionManager.upsertPanel(existingPanel);
@@ -296,7 +586,8 @@ async function ensureTmuxPanelWorkspace(
     }
 
     const panel =
-      livePanelIds.length === 0 && existingPanels.length === 0
+      livePanelIds.length === 0 &&
+      !existingPanels.some((existingPanel) => existingPanel.status === "running")
         ? buildDefaultPanel(session, pane)
         : buildSplitPanel(session, pane.paneId, {
             panelId: randomUUID(),
@@ -310,6 +601,25 @@ async function ensureTmuxPanelWorkspace(
     await terminalSessionManager.upsertPanel(panel);
     livePanelIds.push(panel.id);
     changed = true;
+  }
+
+  const runningPanels = terminalSessionManager
+    .listPanels(session.id)
+    .filter((panel) => panel.status === "running");
+  if (runningPanels.length === 1) {
+    changed =
+      (await syncSinglePanelMetadataToSession(
+        terminalSessionManager,
+        session,
+        runningPanels[0]!,
+      )) || changed;
+  } else if (runningPanels.length > 1) {
+    changed =
+      (await clearMultiPanelMetadataFromSession(
+        terminalSessionManager,
+        session,
+        runningPanels,
+      )) || changed;
   }
 
   const activePane = panes.find((pane) => pane.active) ?? panes[0]!;
@@ -704,6 +1014,11 @@ export async function createTerminalPanelSplit(
   if (!sourcePanel) {
     throw new TerminalPanelRouteError(404, "Source panel not found");
   }
+  await backfillSessionAgentMetadataToPrimaryPanel(
+    terminalSessionManager,
+    session,
+    sourcePanel,
+  );
 
   const panelId = randomUUID();
   const command = params.command?.trim() || resolveDefaultTerminalCommand();
@@ -748,6 +1063,11 @@ export async function createTerminalPanelSplit(
   provisionalPanel.cwd = metadata?.cwd || cwd;
   provisionalPanel.activeCommand = metadata?.activeCommand ?? null;
   const panel = await terminalSessionManager.upsertPanel(provisionalPanel);
+  await clearMultiPanelMetadataFromSession(
+    terminalSessionManager,
+    session,
+    terminalSessionManager.listPanels(session.id),
+  );
   if (params.focus !== false) {
     await tmuxService.selectPane(splitTarget);
   }
@@ -897,7 +1217,29 @@ export function registerTerminalPanelRoutes(
       }
       await options.tmuxService!.killPane(paneTarget);
       await terminalSessionManager.markPanelExited(panel.id);
-      await terminalSessionManager.removePanelFromWorkspace(session.id, panel.id);
+      const nextWorkspace = await terminalSessionManager.removePanelFromWorkspace(
+        session.id,
+        panel.id,
+      );
+      if (nextWorkspace?.panelIds.length === 1) {
+        const remainingPanel = terminalSessionManager.getPanel(
+          nextWorkspace.panelIds[0]!,
+        );
+        if (remainingPanel) {
+          const syncedFromPanel = await syncSinglePanelMetadataToSession(
+            terminalSessionManager,
+            session,
+            remainingPanel,
+          );
+          if (!syncedFromPanel) {
+            await backfillSessionAgentMetadataToPrimaryPanel(
+              terminalSessionManager,
+              session,
+              remainingPanel,
+            );
+          }
+        }
+      }
       recordPanelEvent(
         terminalSessionManager,
         options.terminalEventService,

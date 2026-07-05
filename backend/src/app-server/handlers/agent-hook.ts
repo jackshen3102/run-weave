@@ -6,6 +6,7 @@ import type { TerminalStateService } from "../../terminal/terminal-state-service
 import {
   readAppServerAgent,
   readAppServerHookEvent,
+  readAppServerPayloadString,
 } from "./agent-event-payload";
 
 const agentHookLogger = logger.child({
@@ -38,6 +39,13 @@ export async function handleAgentHookEvent(
     agent,
     hookEvent,
     threadId: event.correlationId,
+    panelId:
+      event.scope?.terminalPanelId ??
+      readAppServerPayloadString(event.payload, "panelId"),
+    tmuxPaneId:
+      event.scope?.terminalTmuxPaneId ??
+      readAppServerPayloadString(event.payload, "tmuxPaneId"),
+    commandName: readAppServerPayloadString(event.payload, "commandName"),
   });
   if (result.status === "not_found" || result.status === "exited") {
     return;
@@ -50,6 +58,7 @@ export async function handleAgentHookEvent(
       agent: result.agent,
       hookEvent: result.hookEvent,
       activeCommand: result.activeCommand,
+      panelId: result.panelId,
     });
     return;
   }
@@ -61,5 +70,6 @@ export async function handleAgentHookEvent(
     agent: result.agent,
     hookEvent: result.hookEvent,
     state: result.terminalState.state,
+    panelId: result.panelId,
   });
 }

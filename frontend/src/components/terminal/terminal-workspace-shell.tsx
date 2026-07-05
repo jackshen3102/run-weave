@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { useMemoizedFn } from "ahooks";
 import type {
+  TerminalPanelWorkspace,
   TerminalProjectListItem,
   TerminalSessionListItem,
   TerminalState,
@@ -94,6 +95,29 @@ function getWorkspacePanelCount(
   workspace: { panels?: unknown[] } | null | undefined,
 ): number | null {
   return Array.isArray(workspace?.panels) ? workspace.panels.length : null;
+}
+
+function formatHistoryPanelLabel(
+  panel: TerminalPanelWorkspace["panels"][number],
+): string {
+  return panel.alias || panel.role || panel.panelId.slice(0, 8);
+}
+
+function resolveHistoryPanelId(
+  workspace: TerminalPanelWorkspace | null,
+  activePanelId: string | null,
+): string | null {
+  if (!workspace) {
+    return null;
+  }
+  return (
+    workspace.panels.find((panel) => panel.panelId === activePanelId)?.panelId ??
+    workspace.panels.find((panel) => panel.panelId === workspace.activePanelId)
+      ?.panelId ??
+    workspace.panels.find((panel) => panel.focused)?.panelId ??
+    workspace.panels[0]?.panelId ??
+    null
+  );
 }
 
 const TerminalPreviewPanel = lazy(() =>
@@ -686,6 +710,9 @@ export function TerminalWorkspaceShell({
   const historyTerminalSessionId = useTerminalWorkspaceStore(
     (state) => state.historyTerminalSessionId,
   );
+  const historyTerminalPanelId = useTerminalWorkspaceStore(
+    (state) => state.historyTerminalPanelId,
+  );
   const projectDialogMode = useTerminalWorkspaceStore(
     (state) => state.projectDialogMode,
   );
@@ -704,6 +731,9 @@ export function TerminalWorkspaceShell({
   );
   const panelWorkspaceBySessionId = useTerminalWorkspaceStore(
     (state) => state.panelWorkspaceBySessionId,
+  );
+  const activePanelIdBySessionId = useTerminalWorkspaceStore(
+    (state) => state.activePanelIdBySessionId,
   );
   const setPanelWorkspaceBySessionId = useTerminalWorkspaceStore(
     (state) => state.setPanelWorkspaceBySessionId,
@@ -728,6 +758,9 @@ export function TerminalWorkspaceShell({
   );
   const setHistoryTerminalSessionId = useTerminalWorkspaceStore(
     (state) => state.setHistoryTerminalSessionId,
+  );
+  const setHistoryTerminalPanelId = useTerminalWorkspaceStore(
+    (state) => state.setHistoryTerminalPanelId,
   );
   const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
   const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
@@ -778,16 +811,36 @@ export function TerminalWorkspaceShell({
       new Set(surfaceSessions.map((session) => session.terminalSessionId)),
     [surfaceSessions],
   );
+  const activePanelWorkspace = activeSession
+    ? panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null
+    : null;
+  const activeHistoryPanelId =
+    activeSession && activePanelWorkspace
+      ? resolveHistoryPanelId(
+          activePanelWorkspace,
+          activePanelIdBySessionId[activeSession.terminalSessionId] ?? null,
+        )
+      : null;
   const historySession =
     sessions.find(
       (session) => session.terminalSessionId === historyTerminalSessionId,
     ) ?? null;
+  const historyPanel = historyTerminalSessionId
+    ? (panelWorkspaceBySessionId[historyTerminalSessionId]?.panels.find(
+        (panel) => panel.panelId === historyTerminalPanelId,
+      ) ?? null)
+    : null;
   const historyTerminalName = historySession
-    ? formatTerminalSessionName({
-        alias: historySession.alias,
-        cwd: historySession.cwd,
-        activeCommand: historySession.activeCommand,
-      })
+    ? [
+        formatTerminalSessionName({
+          alias: historySession.alias,
+          cwd: historySession.cwd,
+          activeCommand: historySession.activeCommand,
+        }),
+        historyPanel ? formatHistoryPanelLabel(historyPanel) : null,
+      ]
+        .filter(Boolean)
+        .join(" / ")
     : undefined;
   const requestCreateProject = () => {
     setPreviewActiveTool("preview");
@@ -806,8 +859,12 @@ export function TerminalWorkspaceShell({
     setPreviewActiveTool("preview");
     setProjectPendingDeletion(project);
   };
-  const openHistoryDrawer = (terminalSessionId: string) => {
+  const openHistoryDrawer = (
+    terminalSessionId: string,
+    terminalPanelId?: string | null,
+  ) => {
     setHistoryTerminalSessionId(terminalSessionId);
+    setHistoryTerminalPanelId(terminalPanelId ?? null);
     setHistoryDrawerOpen(true);
   };
   const setPanelSplitEnabled = useMemoizedFn(
@@ -896,9 +953,6 @@ export function TerminalWorkspaceShell({
       }
     },
   );
-  const activePanelWorkspace = activeSession
-    ? panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null
-    : null;
   const activeAgentTeamAvailable = canOpenAgentTeamForSession(activeSession);
   const showAgentTeamTool = Boolean(
     activeProject &&
@@ -1236,7 +1290,10 @@ export function TerminalWorkspaceShell({
                 disabled={!activeSession?.terminalSessionId}
                 onSelect={() => {
                   if (activeSession?.terminalSessionId) {
-                    openHistoryDrawer(activeSession.terminalSessionId);
+                    openHistoryDrawer(
+                      activeSession.terminalSessionId,
+                      activeHistoryPanelId,
+                    );
                   }
                 }}
               >
@@ -1537,11 +1594,13 @@ export function TerminalWorkspaceShell({
         apiBase={apiBase}
         token={token}
         terminalSessionId={historyTerminalSessionId}
+        terminalPanelId={historyTerminalPanelId}
         terminalName={historyTerminalName}
         onOpenChange={(open) => {
           setHistoryDrawerOpen(open);
           if (!open) {
             setHistoryTerminalSessionId(null);
+            setHistoryTerminalPanelId(null);
           }
         }}
         onAuthExpired={onAuthExpired}

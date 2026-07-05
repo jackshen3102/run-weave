@@ -149,6 +149,7 @@ interface SessionMarkerCleanupOptions {
   setBellMarkers: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   setHistoryDrawerOpen: (open: boolean) => void;
   setHistoryTerminalSessionId: (terminalSessionId: string | null) => void;
+  setHistoryTerminalPanelId: (terminalPanelId: string | null) => void;
 }
 
 export function useSessionMarkerCleanup({
@@ -158,6 +159,7 @@ export function useSessionMarkerCleanup({
   setBellMarkers,
   setHistoryDrawerOpen,
   setHistoryTerminalSessionId,
+  setHistoryTerminalPanelId,
 }: SessionMarkerCleanupOptions): void {
   useEffect(() => {
     const sessionIds = new Set(sessions.map((session) => session.terminalSessionId));
@@ -214,10 +216,12 @@ export function useSessionMarkerCleanup({
 
     setHistoryDrawerOpen(false);
     setHistoryTerminalSessionId(null);
+    setHistoryTerminalPanelId(null);
   }, [
     historyTerminalSessionId,
     sessions,
     setHistoryDrawerOpen,
+    setHistoryTerminalPanelId,
     setHistoryTerminalSessionId,
   ]);
 }

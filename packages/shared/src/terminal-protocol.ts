@@ -390,8 +390,11 @@ export interface TerminalPanelListItem {
   terminalSessionId: string;
   alias: string | null;
   role?: TerminalPanelRole | null;
+  threadId?: string;
+  preview?: string;
   cwd: string;
   activeCommand: string | null;
+  terminalState?: TerminalState;
   status: "running" | "exited";
   createdAt: string;
   lastActivityAt: string;
@@ -702,6 +705,9 @@ export interface AgentHookStateRequest {
   terminalSessionId: string;
   projectId?: string;
   threadId?: string;
+  panelId?: string | null;
+  tmuxPaneId?: string | null;
+  commandName?: string | null;
   agent: TerminalAgentKind;
   hookEvent: AgentHookStateEvent;
 }

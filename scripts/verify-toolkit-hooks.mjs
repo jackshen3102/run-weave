@@ -339,9 +339,11 @@ try {
     assert.deepEqual(requests[0].body, {
       terminalSessionId: "terminal-1",
       projectId: "project-1",
+      tmuxPaneId: "%13",
       threadId: "thread-1",
       agent: "codex",
       hookEvent: "Stop",
+      commandName: null,
     });
     assert.equal(requests[1].url, "/internal/terminal-completion");
     assert.equal(requests[1].token, "token-1");
@@ -378,9 +380,11 @@ try {
     assert.deepEqual(requests[2].body, {
       terminalSessionId: "terminal-2",
       projectId: "project-2",
+      tmuxPaneId: "%13",
       threadId: "thread-1",
       agent: "codex",
       hookEvent: "Stop",
+      commandName: null,
     });
     assert.equal(requests[3].url, "/internal/terminal-completion");
     assert.equal(requests[3].token, "token-2");
@@ -416,8 +420,10 @@ try {
     assert.deepEqual(requests[4].body, {
       terminalSessionId: "terminal-3",
       projectId: "project-3",
+      tmuxPaneId: "%13",
       agent: "trae",
       hookEvent: "Stop",
+      commandName: null,
     });
     assert.equal(requests[5].url, "/internal/terminal-completion");
     assert.equal(requests[5].token, "token-3");
