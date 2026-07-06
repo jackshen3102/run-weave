@@ -2,7 +2,7 @@
 
 ## 前置条件
 
-- 使用已运行的 Web 前端：`http://localhost:5173/`。
+- 使用已运行的 Web 前端：`http://127.0.0.1:5173/`。
 - 后端已登录且 Web Terminal 可打开。
 - App Server 至少存在一条 `ThreadRef`；若没有，先运行 `pnpm app-server:verify-state-sync` 或通过真实 terminal/hook 事件生成状态。
 
