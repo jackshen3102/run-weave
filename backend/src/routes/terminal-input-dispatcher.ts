@@ -1,7 +1,7 @@
 import type { SendTerminalInputResponse, TerminalInputMode } from "@runweave/shared";
 import { aiDiagnosticLog } from "../diagnostic-logs/recorder";
 import type { TerminalSessionManager, TerminalSessionRecord } from "../terminal/manager";
-import type { PtyService } from "../terminal/pty-service";
+import type { PtyRuntime, PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import {
   ensureTerminalRuntime,
@@ -21,6 +21,7 @@ import {
 } from "./terminal-session-route-helpers";
 
 const CODEX_COMPOSER_SUBMIT_DELAY_MS = 200;
+const PROMPT_REPLACE_CLEAR_DELAY_MS = 50;
 const BRACKETED_PASTE_START = "\u001b[200~";
 const BRACKETED_PASTE_END = "\u001b[201~";
 const PROMPT_PASTE_CHUNK_SIZE = 3000;
@@ -118,6 +119,41 @@ function buildPromptPasteSequence(
   ];
 }
 
+function buildPromptReplaceSequence(
+  text: string,
+  submit: boolean,
+): TmuxKeySequenceItem[] {
+  return [
+    { type: "key", key: "C-u" },
+    {
+      type: "literal",
+      value: text,
+      delayAfterMs: submit ? CODEX_COMPOSER_SUBMIT_DELAY_MS : undefined,
+    },
+    ...(submit ? [{ type: "key" as const, key: "C-m" }] : []),
+  ];
+}
+
+async function writePromptReplacePtyInput(
+  runtime: PtyRuntime,
+  text: string,
+  submit: boolean,
+): Promise<void> {
+  runtime.write("\x15");
+  await delay(PROMPT_REPLACE_CLEAR_DELAY_MS);
+  runtime.write("\x01");
+  await delay(PROMPT_REPLACE_CLEAR_DELAY_MS);
+  runtime.write("\x0b");
+  await delay(PROMPT_REPLACE_CLEAR_DELAY_MS);
+  if (text) {
+    runtime.write(text);
+  }
+  if (submit) {
+    await delay(CODEX_COMPOSER_SUBMIT_DELAY_MS);
+    runtime.write("\r");
+  }
+}
+
 function buildTerminalLineSequence(data: string): TmuxKeySequenceItem[] {
   return [
     {
@@ -134,6 +170,10 @@ export function isMissingTerminalRuntimeError(error: unknown): boolean {
   return /can't find (pane|session)|no server running/i.test(message);
 }
 
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function sendInputToSession(
   terminalSessionManager: TerminalSessionManager,
   options: TerminalInputDispatchOptions | undefined,
@@ -142,6 +182,7 @@ export async function sendInputToSession(
   mode?: TerminalInputMode,
   operationId?: string,
   paneTarget?: TmuxPaneTarget,
+  submit?: boolean,
 ): Promise<SendTerminalInputResponse> {
   if (!options?.runtimeRegistry || !options.ptyService) {
     throw new Error("Terminal runtime service unavailable");
@@ -177,6 +218,7 @@ export async function sendInputToSession(
     input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
     codexSlashSubmitKey: codexSlashCommand ? composerSubmitKey : null,
     promptPasteSubmitKey: mode === "prompt_paste" ? composerSubmitKey : null,
+    promptReplaceSubmit: mode === "prompt_replace" ? submit === true : null,
     exitTmuxCopyMode,
   });
   if (isTmuxBackedSession(session) && options.tmuxService) {
@@ -190,6 +232,7 @@ export async function sendInputToSession(
       input: describeTerminalInput(dispatchData ?? codexSlashCommand ?? data),
       codexSlashSubmitKey: codexSlashCommand ? composerSubmitKey : null,
       promptPasteSubmitKey: mode === "prompt_paste" ? composerSubmitKey : null,
+      promptReplaceSubmit: mode === "prompt_replace" ? submit === true : null,
       exitTmuxCopyMode,
     });
     if (exitTmuxCopyMode) {
@@ -204,6 +247,11 @@ export async function sendInputToSession(
         target,
         buildPromptPasteSequence(data, composerSubmitKey),
       );
+    } else if (mode === "prompt_replace") {
+      await options.tmuxService.sendKeySequence(
+        target,
+        buildPromptReplaceSequence(data, submit === true),
+      );
     } else if (mode === "line") {
       await options.tmuxService.sendKeySequence(
         target,
@@ -214,13 +262,17 @@ export async function sendInputToSession(
     }
   } else {
     if (!exitTmuxCopyMode) {
-      ensured.runtime.write(
-        codexSlashCommand
-          ? buildCodexSlashCommandPtyInput(codexSlashCommand, composerSubmitKey)
-          : mode === "prompt_paste"
-            ? buildPromptPastePtyInput(data, composerSubmitKey)
-          : (dispatchData ?? ""),
-      );
+      if (mode === "prompt_replace") {
+        await writePromptReplacePtyInput(ensured.runtime, data, submit === true);
+      } else {
+        ensured.runtime.write(
+          codexSlashCommand
+            ? buildCodexSlashCommandPtyInput(codexSlashCommand, composerSubmitKey)
+            : mode === "prompt_paste"
+              ? buildPromptPastePtyInput(data, composerSubmitKey)
+              : (dispatchData ?? ""),
+        );
+      }
     }
   }
 

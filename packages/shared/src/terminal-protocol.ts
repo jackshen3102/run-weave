@@ -226,6 +226,7 @@ export type TerminalInputMode =
   | "line"
   | "codex_slash_command"
   | "prompt_paste"
+  | "prompt_replace"
   | "tmux_exit_copy_mode";
 
 export type TerminalQuickInputListKind = "recent" | "pinned" | "all";
@@ -279,6 +280,7 @@ export interface UpdateTerminalQuickInputRequest {
 export interface SendTerminalInputRequest {
   data: string;
   mode?: TerminalInputMode;
+  submit?: boolean;
   operationId?: string;
   quickInputSource?: TerminalQuickInputSource;
   panelId?: string;

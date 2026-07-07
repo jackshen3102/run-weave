@@ -329,6 +329,7 @@ export function registerTerminalPanelRoutes(
         parsed.data.mode as TerminalInputMode | undefined,
         operationId,
         paneTarget,
+        parsed.data.submit,
       );
       recordPanelEvent(
         terminalSessionManager,

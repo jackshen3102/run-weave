@@ -183,7 +183,9 @@ export async function sendWithConfirmation(params: {
   );
   const sendStartedAt = new Date().toISOString();
   const data =
-    params.inputMode === "line" ? params.text : `${params.text}${params.enter ? "\r" : ""}`;
+    params.inputMode === "line" || params.inputMode === "prompt_replace"
+      ? params.text
+      : `${params.text}${params.enter ? "\r" : ""}`;
   const operationId = buildOperationId();
   const inputPayload = {
     operationId,
@@ -192,6 +194,9 @@ export async function sendWithConfirmation(params: {
     ...(!targetPanel && params.role ? { role: params.role } : {}),
     ...(params.inputModeProvided || params.inputMode !== "raw"
       ? { mode: params.inputMode }
+      : {}),
+    ...(params.inputMode === "prompt_replace" && params.enter
+      ? { submit: true }
       : {}),
   };
   const inputResult = await params.client.sendInput(

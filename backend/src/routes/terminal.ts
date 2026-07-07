@@ -575,6 +575,7 @@ export function createTerminalRouter(
         inputMode,
         parsed.data.operationId,
         paneTarget,
+        parsed.data.submit,
       );
       if (options?.quickInputService && payload.inputAccepted) {
         try {

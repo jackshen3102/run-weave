@@ -330,10 +330,19 @@ function resolveInputMode(value: string | undefined): TerminalInputMode {
   if (!value) {
     return "raw";
   }
-  if (value === "raw" || value === "line" || value === "codex_slash_command") {
+  if (
+    value === "raw" ||
+    value === "line" ||
+    value === "codex_slash_command" ||
+    value === "prompt_paste" ||
+    value === "prompt_replace"
+  ) {
     return value;
   }
-  throw new CliError("--mode must be one of: raw, line, codex_slash_command", 2);
+  throw new CliError(
+    "--mode must be one of: raw, line, codex_slash_command, prompt_paste, prompt_replace",
+    2,
+  );
 }
 
 function resolvePanelIdentifier(
