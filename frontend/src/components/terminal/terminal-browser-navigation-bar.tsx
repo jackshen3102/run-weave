@@ -37,6 +37,8 @@ interface TerminalBrowserNavigationBarProps {
   annotationSubmitting: boolean;
   onSubmitAddress: (event: FormEvent<HTMLFormElement>) => void;
   onAddressInputChange: (value: string) => void;
+  onAddressFocus: () => void;
+  onAddressBlur: () => void;
   onGo: (direction: "back" | "forward") => void;
   onReload: () => void;
   onStop: () => void;
@@ -63,6 +65,8 @@ export function TerminalBrowserNavigationBar({
   annotationSubmitting,
   onSubmitAddress,
   onAddressInputChange,
+  onAddressFocus,
+  onAddressBlur,
   onGo,
   onReload,
   onStop,
@@ -135,6 +139,8 @@ export function TerminalBrowserNavigationBar({
         className="h-7 min-w-0 flex-1 rounded-md border border-slate-800 bg-slate-900 px-2 text-xs text-slate-100 outline-none focus:border-sky-500"
         value={activeTab.addressInput}
         onChange={(event) => onAddressInputChange(event.target.value)}
+        onFocus={onAddressFocus}
+        onBlur={onAddressBlur}
       />
       <Button
         type="button"

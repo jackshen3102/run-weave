@@ -11,24 +11,25 @@
 
 ## 与原生浏览器 MCP 的关键差异
 
-| 维度                | 原生浏览器 MCP（Chrome/标准 CDP） | Runweave CDP Proxy                             |
-| ------------------- | --------------------------------- | ---------------------------------------------- |
-| Target 可见范围     | 所有 browser target               | 仅 Terminal Browser 白名单 tab                 |
-| Target.createTarget | 可创建任意 window/tab             | 只创建 Terminal Browser AI tab（上限 10）      |
-| 导航协议            | 无限制                            | 仅 http/https/about:blank                      |
-| 危险命令            | 全部可用                          | Browser.close 等 8 个永久阻断                  |
-| DevTools            | 可并存                            | 硬性互斥                                       |
-| Session ID          | 透传                              | 双域翻译（proxySessionId ↔ electronSessionId） |
-| Frame ID            | 透传                              | Proxy 双向重写（targetId ↔ rootFrameId）       |
-| 连接数              | 无限制                            | 最大 8 个 CDP 连接                             |
-| Env 传播            | 手动配置                          | 自动 PLAYWRIGHT_MCP_CDP_ENDPOINT               |
+| 维度                | 原生浏览器 MCP（Chrome/标准 CDP）  | Runweave CDP Proxy                                                      |
+| ------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
+| Target 可见范围     | 所有 browser target                | 仅 Terminal Browser 白名单 tab                                          |
+| Target.createTarget | 可创建任意 window/tab              | 只创建 Terminal Browser AI tab（上限 10）                               |
+| 导航协议            | 无限制                             | 仅 http/https/about:blank                                               |
+| 危险命令            | 全部可用                           | Browser.close 等 8 个永久阻断                                           |
+| DevTools            | 可并存                             | 硬性互斥                                                                |
+| Session ID          | 透传                               | 双域翻译（proxySessionId ↔ electronSessionId）                          |
+| Frame ID            | 透传                               | Proxy 双向重写（targetId ↔ rootFrameId）                                |
+| 连接数              | 无限制                             | 最大 8 个 CDP 连接                                                      |
+| Env 传播            | 手动配置                           | 自动 PLAYWRIGHT_MCP_CDP_ENDPOINT；当前 tab 可复制 group scoped endpoint |
+| 默认 tab            | 通常由浏览器当前 target/客户端决定 | 全局 endpoint 当前激活 tab 优先；group scoped endpoint 只暴露对应 group |
 
 ## 前置条件
 
 1. 启动 Electron 客户端 `pnpm dev:electron`。
 2. 打开 Terminal 侧边栏的 Browser 面板。
-3. 点击 CDP/AI endpoint 按钮，复制当前 endpoint，后文统一记为 `<cdp>`。
-4. 确认 Runweave terminal 内 `echo $PLAYWRIGHT_MCP_CDP_ENDPOINT` 输出与 `<cdp>` 一致。
+3. 点击 CDP/AI endpoint 按钮，复制当前 tab endpoint，后文统一记为 `<cdp>`。该 endpoint 应为 group scoped WebSocket endpoint；如需验证全局兼容路径，使用 `http://127.0.0.1:<port>`。
+4. 确认 Runweave terminal 内 `echo $PLAYWRIGHT_MCP_CDP_ENDPOINT` 指向全局 CDP Proxy；若本轮验证 group scoped endpoint，需要把复制到的 `<cdp>` 显式传给对应 MCP/Playwright 客户端。
 5. 记录 Runweave 主窗口状态、Browser tab 数量，测试后验证这些状态未被破坏。
 
 ## Playwright MCP 连接验证脚本
@@ -213,15 +214,16 @@ NODE
 
 ## 并发与稳定性
 
-| ID   | 用例                  | 操作                                                   | 预期                                             |
-| ---- | --------------------- | ------------------------------------------------------ | ------------------------------------------------ |
-| MR01 | MCP 导航中断开        | 百度加载中直接关闭 MCP 连接                            | Runweave UI 和 Browser tab 仍可用                |
-| MR02 | MCP 输入中关闭 tab    | 在 UI 关闭正在输入的 tab                               | MCP 收到 session 断开事件，不崩溃                |
-| MR03 | 快速重连              | 连续连接→操作→断开 5 次                                | 每次都正常工作，无残留状态                       |
-| MR04 | 两个 MCP 操作不同 tab | 两个 MCP 客户端同时对不同 page 发送命令                | 两边命令都成功，session 不串扰                   |
-| MR05 | 两个 MCP 操作同一 tab | 两个 MCP 客户端同时对同一 page 发送命令                | 不崩溃，命令按序执行或返回冲突错误               |
-| MR06 | MCP 操作中隐藏窗口    | MCP 操作期间点击 Electron 主窗口关闭按钮（隐藏到后台） | MCP 连接不断开，9224 仍监听，重新激活后 tab 可用 |
-| MR07 | 端口被占用启动        | 9224 端口被占用后启动 Electron                         | 自动漂移到下一个可用端口，或明确报错             |
+| ID   | 用例                    | 操作                                                                                       | 预期                                                                             |
+| ---- | ----------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| MR01 | MCP 导航中断开          | 百度加载中直接关闭 MCP 连接                                                                | Runweave UI 和 Browser tab 仍可用                                                |
+| MR02 | MCP 输入中关闭 tab      | 在 UI 关闭正在输入的 tab                                                                   | MCP 收到 session 断开事件，不崩溃                                                |
+| MR03 | 快速重连                | 连续连接→操作→断开 5 次                                                                    | 每次都正常工作，无残留状态                                                       |
+| MR04 | 两个 MCP 操作不同 tab   | 两个 MCP 客户端同时对不同 page 发送命令                                                    | 两边命令都成功，session 不串扰                                                   |
+| MR05 | 两个 MCP 操作同一 tab   | 两个 MCP 客户端同时对同一 page 发送命令                                                    | 不崩溃，命令按序执行或返回冲突错误                                               |
+| MR06 | MCP 操作中隐藏窗口      | MCP 操作期间点击 Electron 主窗口关闭按钮（隐藏到后台）                                     | MCP 连接不断开，9224 仍监听，重新激活后 tab 可用                                 |
+| MR07 | 两个 MCP group 默认 tab | 两个 MCP 客户端分别使用 tab A、tab B 的 group scoped endpoint，直接调用 `browser_navigate` | A 只改 group A 的默认 page，B 只改 group B 的默认 page，不共同导航历史第一个 tab |
+| MR08 | 端口被占用启动          | 9224 端口被占用后启动 Electron                                                             | 自动漂移到下一个可用端口，或明确报错                                             |
 
 ## Playwright MCP 端到端验收流程
 

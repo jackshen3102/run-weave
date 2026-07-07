@@ -33,13 +33,15 @@ export function TerminalBrowserCdpEndpointPopover({
   });
 
   const copyEndpoint = useMemoizedFn(async () => {
-    if (!info?.endpoint) {
+    const endpoint = info?.webSocketEndpoint ?? info?.endpoint;
+    if (!endpoint) {
       return;
     }
-    await navigator.clipboard.writeText(info.endpoint);
+    await navigator.clipboard.writeText(endpoint);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   });
+  const endpoint = info?.webSocketEndpoint ?? info?.endpoint;
 
   return (
     <Popover
@@ -71,11 +73,11 @@ export function TerminalBrowserCdpEndpointPopover({
             DevTools is open, CDP proxy unavailable for this tab
           </p>
         ) : null}
-        {info?.endpoint && !info.devtoolsOpen ? (
+        {info && endpoint && !info.devtoolsOpen ? (
           <>
             <div className="flex items-center gap-1.5">
               <code className="min-w-0 flex-1 truncate rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-sky-300">
-                {info.endpoint}
+                {endpoint}
               </code>
               <Button
                 type="button"
@@ -100,7 +102,7 @@ export function TerminalBrowserCdpEndpointPopover({
               This is a Runweave CDP Proxy endpoint, not the Electron native
               CDP. Use with Playwright CLI / MCP via{" "}
               <code className="text-slate-400">
-                chromium.connectOverCDP(&quot;{info.endpoint}&quot;)
+                chromium.connectOverCDP(&quot;{endpoint}&quot;)
               </code>
             </p>
           </>

@@ -64,6 +64,7 @@ interface TerminalBrowserSnapshot {
 
 export interface TerminalBrowserUpdate extends TerminalBrowserSnapshot {
   tabId: string;
+  browserGroupId: string;
   loading: boolean;
   cdpProxyAttached: boolean;
   mcpActivityUntil: number | null;
@@ -82,6 +83,7 @@ interface TerminalBrowserEntry {
   view: WebContentsView;
   attached: boolean;
   targetId: string;
+  browserGroupId: string;
   cdpProxyAttached: boolean;
   mcpActivityUntil: number | null;
   devtoolsOpen: boolean;
@@ -97,7 +99,10 @@ interface TerminalBrowserEntry {
 export interface TerminalBrowserCdpTarget {
   key: string;
   targetId: string;
+  browserGroupId: string;
   windowId: number;
+  active: boolean;
+  lastActiveAt: number;
   url: string;
   title: string;
   webContents: WebContents;
@@ -122,6 +127,10 @@ let terminalBrowserSaveTimer: NodeJS.Timeout | null = null;
 let terminalBrowserPersistedStateRestored = false;
 
 const restoringTerminalBrowserWindows = new Set<number>();
+
+function createTerminalBrowserGroupId(): string {
+  return `browser-group-${randomUUID().slice(0, 8)}`;
+}
 
 function getTerminalBrowserSession(): Electron.Session {
   return electronSession.fromPartition(TERMINAL_BROWSER_SESSION_PARTITION);
@@ -152,6 +161,7 @@ function getTerminalBrowserTabRecords(): TerminalBrowserPersistedTabRecord[] {
       url,
       title: webContents.getTitle(),
       lastActiveAt: entry.lastActiveAt,
+      browserGroupId: entry.browserGroupId,
     });
   }
 
@@ -424,7 +434,9 @@ async function restoreTerminalBrowserTabsForWindow(
       state.activeTabId,
     );
     for (const tab of restoredTabs) {
-      const view = getOrCreateTerminalBrowserView(win, tab.id);
+      const view = getOrCreateTerminalBrowserView(win, tab.id, {
+        browserGroupId: tab.browserGroupId,
+      });
       const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, tab.id));
       if (!entry) {
         continue;
@@ -470,12 +482,16 @@ function sendTerminalBrowserTabUpdate(
   if (win.isDestroyed() || win.webContents.isDestroyed()) {
     return;
   }
+  if (entry.view.webContents.isDestroyed()) {
+    return;
+  }
   const snapshot = getTerminalBrowserSnapshot(entry.view, entry.lastKnownUrl);
   if (snapshot.url) {
     entry.lastKnownUrl = snapshot.url;
   }
   const update: TerminalBrowserUpdate = {
     tabId,
+    browserGroupId: entry.browserGroupId,
     ...snapshot,
     loading,
     cdpProxyAttached: entry.cdpProxyAttached,
@@ -495,12 +511,16 @@ function sendTerminalBrowserTabActivatedFromProxy(
   if (win.isDestroyed() || win.webContents.isDestroyed()) {
     return;
   }
+  if (entry.view.webContents.isDestroyed()) {
+    return;
+  }
   const snapshot = getTerminalBrowserSnapshot(entry.view, entry.lastKnownUrl);
   if (snapshot.url) {
     entry.lastKnownUrl = snapshot.url;
   }
   const update: TerminalBrowserUpdate = {
     tabId,
+    browserGroupId: entry.browserGroupId,
     ...snapshot,
     loading: entry.view.webContents.isLoading(),
     cdpProxyAttached: entry.cdpProxyAttached,
@@ -540,6 +560,7 @@ function getExistingTerminalBrowserEntry(
 function getOrCreateTerminalBrowserView(
   win: BrowserWindow,
   tabId: string,
+  options: { browserGroupId?: string } = {},
 ): WebContentsView {
   const key = getTerminalBrowserKey(win, tabId);
   const existing = terminalBrowserEntries.get(key);
@@ -579,7 +600,7 @@ function getOrCreateTerminalBrowserView(
           createTerminalBrowserPopupWindowOptions(win),
       };
     }
-    createTerminalBrowserTabFromPageOpen(win, safeUrl);
+    createTerminalBrowserTabFromPageOpen(win, safeUrl, entry.browserGroupId);
     return { action: "deny" };
   });
   view.webContents.on("did-create-window", (popupWindow) => {
@@ -592,6 +613,7 @@ function getOrCreateTerminalBrowserView(
     view,
     attached: false,
     targetId: randomUUID(),
+    browserGroupId: options.browserGroupId ?? createTerminalBrowserGroupId(),
     cdpProxyAttached: false,
     mcpActivityUntil: null,
     devtoolsOpen: false,
@@ -637,9 +659,10 @@ function getOrCreateTerminalBrowserView(
 function createTerminalBrowserTabFromPageOpen(
   win: BrowserWindow,
   url: string,
+  browserGroupId: string,
 ): void {
   const tabId = `browser-tab-${randomUUID().slice(0, 8)}`;
-  const view = getOrCreateTerminalBrowserView(win, tabId);
+  const view = getOrCreateTerminalBrowserView(win, tabId, { browserGroupId });
   const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, tabId));
   if (!entry) {
     return;
@@ -650,6 +673,7 @@ function createTerminalBrowserTabFromPageOpen(
   // Notify the renderer so the frontend tab bar picks up the new tab.
   win.webContents.send("terminal-browser:tab-created-from-proxy", {
     tabId,
+    browserGroupId: entry.browserGroupId,
     url,
     title: "",
   });
@@ -742,7 +766,10 @@ function closeTerminalBrowserEntry(
   detachTerminalBrowserDeviceDebugger(entry);
   terminalBrowserEntries.delete(key);
   clearTerminalBrowserAnnotation(key);
-  terminalBrowserEvents.emit("tab-closed", { targetId: entry.targetId });
+  terminalBrowserEvents.emit("tab-closed", {
+    targetId: entry.targetId,
+    browserGroupId: entry.browserGroupId,
+  });
   if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
     win.webContents.send("terminal-browser:tab-closed", { tabId });
   }
@@ -761,7 +788,10 @@ export function closeTerminalBrowsersForWindow(windowId: number): void {
     }
     terminalBrowserEntries.delete(key);
     clearTerminalBrowserAnnotation(key);
-    terminalBrowserEvents.emit("tab-closed", { targetId: entry.targetId });
+    terminalBrowserEvents.emit("tab-closed", {
+      targetId: entry.targetId,
+      browserGroupId: entry.browserGroupId,
+    });
     detachTerminalBrowserDeviceDebugger(entry);
     entry.view.webContents.close();
   }
@@ -793,16 +823,25 @@ export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
     if (!wc || wc.isDestroyed()) {
       continue;
     }
+    const tabId = key.split(":").slice(1).join(":");
     targets.push({
       key,
       targetId: entry.targetId,
+      browserGroupId: entry.browserGroupId,
       windowId: entry.windowId,
+      active: attachedTerminalBrowserByWindowId.get(entry.windowId) === tabId,
+      lastActiveAt: entry.lastActiveAt,
       url: wc.getURL() || entry.lastKnownUrl,
       title: wc.getTitle(),
       webContents: wc,
     });
   }
-  return targets;
+  return targets.sort((left, right) => {
+    if (left.active !== right.active) {
+      return left.active ? -1 : 1;
+    }
+    return right.lastActiveAt - left.lastActiveAt;
+  });
 }
 
 export function getTerminalBrowserEntryByTargetId(
@@ -832,9 +871,13 @@ export function getTerminalBrowserTabsForWindow(
     if (entry.windowId !== windowId || !key.startsWith(prefix)) {
       continue;
     }
+    if (entry.view.webContents.isDestroyed()) {
+      continue;
+    }
     const tabId = key.slice(prefix.length);
     tabs.push({
       tabId,
+      browserGroupId: entry.browserGroupId,
       ...getTerminalBrowserSnapshot(entry.view, entry.lastKnownUrl),
       loading: entry.view.webContents.isLoading(),
       active: activeTabId === tabId,
@@ -850,13 +893,19 @@ export function getTerminalBrowserTabsForWindow(
 export async function createTerminalBrowserTabFromProxy(
   windowId: number,
   url: string,
-): Promise<{ key: string; targetId: string; webContents: WebContents } | null> {
+  browserGroupId?: string,
+): Promise<{
+  key: string;
+  targetId: string;
+  browserGroupId: string;
+  webContents: WebContents;
+} | null> {
   const win = BrowserWindow.fromId(windowId);
   if (!win) {
     return null;
   }
   const tabId = `ai-tab-${randomUUID().slice(0, 8)}`;
-  const view = getOrCreateTerminalBrowserView(win, tabId);
+  const view = getOrCreateTerminalBrowserView(win, tabId, { browserGroupId });
   const key = makeKeyFromWindowIdAndTabId(windowId, tabId);
   const entry = terminalBrowserEntries.get(key);
   if (!entry) {
@@ -881,11 +930,17 @@ export async function createTerminalBrowserTabFromProxy(
   // Notify the renderer so the frontend tab bar picks up the new tab.
   win.webContents.send("terminal-browser:tab-created-from-proxy", {
     tabId,
+    browserGroupId: entry.browserGroupId,
     url: safeUrl ?? url,
     title: "",
   });
 
-  return { key, targetId: entry.targetId, webContents: view.webContents };
+  return {
+    key,
+    targetId: entry.targetId,
+    browserGroupId: entry.browserGroupId,
+    webContents: view.webContents,
+  };
 }
 
 export function closeTerminalBrowserTabFromProxy(targetId: string): boolean {
@@ -998,6 +1053,10 @@ export function registerTerminalBrowserHandlers(): void {
     }
     const view = getOrCreateTerminalBrowserView(win, tabId);
     attachTerminalBrowser(win, tabId, view);
+    const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, tabId));
+    if (entry) {
+      sendTerminalBrowserTabUpdate(win, tabId, entry);
+    }
   });
 
   ipcMain.handle("terminal-browser:hide", (event, tabId: string) => {

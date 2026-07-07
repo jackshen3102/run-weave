@@ -5,14 +5,14 @@
 ## 适用范围
 
 - Runweave Electron 客户端中的 Terminal Browser。
-- CDP Proxy endpoint，例如 `http://127.0.0.1:9224`。
+- CDP Proxy endpoint，例如全局 HTTP endpoint `http://127.0.0.1:9224`，或当前 tab 所属 Agent Control Group 的 scoped WebSocket endpoint `ws://127.0.0.1:9224/devtools/browser/runweave-terminal-browser?groupId=...`。
 - 通过 Playwright MCP 或 `chromium.connectOverCDP(...)` 连接上述 endpoint 的自动化客户端。
 
 ## 前置条件
 
 1. 启动 Electron 客户端。
 2. 打开 Terminal 侧边栏的 Browser 面板。
-3. 点击 CDP/AI endpoint 按钮，复制当前 tab 的 endpoint，后文统一记为 `<cdp>`。
+3. 点击 CDP/AI endpoint 按钮，复制当前 tab 的 endpoint，后文统一记为 `<cdp>`。若需要验证全局 endpoint，把 `<cdp>` 替换成 `http://127.0.0.1:<port>`。
 4. Browser 面板保持可见，先完成普通截图验证；隐藏或 0 宽高状态下的截图也应可用，见 P10。
 5. 记录执行前的 Runweave 主窗口状态、Browser tab 数量和登录状态，安全用例执行后需要确认这些状态没有被破坏。
 
@@ -118,6 +118,9 @@ NODE
 | T14 | AI tab 上限                          | 连续创建 10 个 AI tab 后再创建第 11 个                                                              | 第 11 个返回 `Maximum AI tab limit`                                         |
 | T15 | 关闭 target                          | 发送 `Target.closeTarget`                                                                           | UI tab 关闭，并推送 `Target.targetDestroyed` / `Target.detachedFromTarget`  |
 | T16 | 关闭非法 target                      | 发送 `Target.closeTarget { "targetId": "not-exist" }`                                               | 不关闭主窗口，不影响其他 tab                                                |
+| T17 | group scoped endpoint 隔离           | 手动新建 tab A、tab B，分别复制两个 group scoped endpoint；对 A 连接发送 `Target.getTargets`        | 只返回 group A 的 target，不返回 group B                                    |
+| T19 | group 派生 tab 继承                  | 使用 tab A 的 group scoped endpoint 发送 `Target.createTarget`                                      | 新 tab 属于 group A；同一连接 `Target.getTargets` 同时返回 tab A 和新 tab   |
+| T18 | 全局 endpoint 当前 tab 优先          | UI 选中 tab B 后连接全局 HTTP endpoint 并读取 `context.pages()[0]`                                  | 默认 page 对应 tab B，不再固定落到历史第一个 tab                            |
 
 ## 页面能力
 
@@ -246,19 +249,22 @@ pnpm --filter @runweave/frontend exec playwright test tests/terminal-browser-mcp
 
 macOS/Electron 主窗口关闭按钮当前是“隐藏到后台/托盘”语义，不等价于退出 App。点击主窗口关闭按钮不应要求 CDP proxy 断开，也不应要求销毁 Terminal Browser target；只有真正退出 App 才应停止 9224 代理。
 
-| ID  | 用例                                | 操作                                                                                       | 预期                                                                                                            |
-| --- | ----------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| R01 | 创建/关闭循环                       | 循环 10 次：创建 1 个百度 tab，确认加载后立即关闭，再进入下一轮                            | 无残留临时 tab，无明显卡死                                                                                      |
-| R02 | 两个 MCP 连接 discovery             | 两个客户端分别 `Target.setDiscoverTargets`                                                 | discovery 事件只发给各自连接，不串扰                                                                            |
-| R03 | 两个 Playwright 实例操作不同 tab    | 客户端 A、B 同时 `chromium.connectOverCDP(<cdp>)`，分别对不同 page 执行 `Runtime.evaluate` | 两个 evaluate 都成功；任一客户端断开后，另一客户端仍能继续操作自己的 page                                       |
-| R04 | 两个 raw CDP client 操作不同 target | 客户端 A、B 分别 `Target.attachToTarget` 到不同 target，然后并发 `Runtime.evaluate`        | 两个命令都成功，sessionId 不串扰                                                                                |
-| R05 | 同 target 多客户端边界              | 两个客户端同时操作同一个 page                                                              | 不崩溃；命令可以串行完成或返回明确冲突错误；不得因一个客户端断开导致另一个客户端的不同 target session 失效      |
-| R06 | 一个连接关闭 tab                    | 连接 A 关闭 target，连接 B 已 discovery                                                    | 连接 B 收到 target destroyed/detached                                                                           |
-| R07 | 加载中断开 MCP                      | 百度加载中直接关闭 MCP 连接                                                                | Runweave UI 和 Browser tab 仍可用                                                                               |
-| R08 | 加载中关闭 tab                      | 百度加载中在 UI 关闭 tab                                                                   | MCP 收到 detached，不崩溃                                                                                       |
-| R09 | 隐藏 Electron 主窗口                | MCP 连接存在时点击 Electron 主窗口关闭按钮                                                 | App 不退出；9224 仍监听；MCP 连接不断开；`Target.getTargets` 仍可见原 target；重新激活窗口后 Browser tab 仍可用 |
-| R10 | 端口占用                            | 让 `9224` 被占用后启动 Electron                                                            | 端口解析或报错行为明确                                                                                          |
-| R11 | 非法端口环境变量                    | 设置 `BROWSER_VIEWER_TERMINAL_BROWSER_CDP_PROXY_PORT=abc` 或 `70000`                       | 启动失败且错误明确                                                                                              |
+| ID  | 用例                                | 操作                                                                                                                           | 预期                                                                                                            |
+| --- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| R01 | 创建/关闭循环                       | 循环 10 次：创建 1 个百度 tab，确认加载后立即关闭，再进入下一轮                                                                | 无残留临时 tab，无明显卡死                                                                                      |
+| R02 | 两个 MCP 连接 discovery             | 两个客户端分别 `Target.setDiscoverTargets`                                                                                     | discovery 事件只发给各自连接，不串扰                                                                            |
+| R03 | 两个 Playwright 实例操作不同 tab    | 客户端 A、B 同时 `chromium.connectOverCDP(<cdp>)`，分别对不同 page 执行 `Runtime.evaluate`                                     | 两个 evaluate 都成功；任一客户端断开后，另一客户端仍能继续操作自己的 page                                       |
+| R04 | 两个 raw CDP client 操作不同 target | 客户端 A、B 分别 `Target.attachToTarget` 到不同 target，然后并发 `Runtime.evaluate`                                            | 两个命令都成功，sessionId 不串扰                                                                                |
+| R05 | 同 target 多客户端边界              | 两个客户端同时操作同一个 page                                                                                                  | 不崩溃；命令可以串行完成或返回明确冲突错误；不得因一个客户端断开导致另一个客户端的不同 target session 失效      |
+| R06 | 一个连接关闭 tab                    | 连接 A 关闭 target，连接 B 已 discovery                                                                                        | 连接 B 收到 target destroyed/detached                                                                           |
+| R07 | 加载中断开 MCP                      | 百度加载中直接关闭 MCP 连接                                                                                                    | Runweave UI 和 Browser tab 仍可用                                                                               |
+| R08 | 加载中关闭 tab                      | 百度加载中在 UI 关闭 tab                                                                                                       | MCP 收到 detached，不崩溃                                                                                       |
+| R09 | 隐藏 Electron 主窗口                | MCP 连接存在时点击 Electron 主窗口关闭按钮                                                                                     | App 不退出；9224 仍监听；MCP 连接不断开；`Target.getTargets` 仍可见原 target；重新激活窗口后 Browser tab 仍可用 |
+| R10 | 端口占用                            | 让 `9224` 被占用后启动 Electron                                                                                                | 端口解析或报错行为明确                                                                                          |
+| R11 | 非法端口环境变量                    | 设置 `BROWSER_VIEWER_TERMINAL_BROWSER_CDP_PROXY_PORT=abc` 或 `70000`                                                           | 启动失败且错误明确                                                                                              |
+| R12 | 两个 Agent group 默认 page          | tab A、tab B 分别复制 group scoped endpoint；两个客户端各自 `connectOverCDP(endpoint)` 后直接用 `context.pages()[0].goto(...)` | A 只导航 group A 的默认 page，B 只导航 group B 的默认 page；不会共同改写同一个历史第一个 tab                    |
+
+R12 需要基于真实 Terminal Browser 验收：分别复制 tab A、tab B 的 group scoped endpoint，用两个独立 Playwright/CDP 客户端连接后直接操作默认 page，确认两个客户端不会共同改写同一个历史第一个 tab。
 
 ### 多客户端自动化覆盖
 

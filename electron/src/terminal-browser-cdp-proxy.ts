@@ -49,6 +49,7 @@ export interface CdpProxyRuntime {
 interface ConnectionState {
   ws: WebSocket;
   sessionManager: CdpSessionManager;
+  scopedGroupId: string | null;
   browserSessionIds: Set<string>;
   discoveryEnabled: boolean;
   autoAttachEnabled: boolean;
@@ -58,6 +59,23 @@ interface ConnectionState {
 function getFirstWindowId(): number | null {
   const windows = BrowserWindow.getAllWindows();
   return windows.length > 0 ? windows[0]!.id : null;
+}
+
+function canUseTarget(conn: ConnectionState, targetId: string): boolean {
+  if (!conn.scopedGroupId) {
+    return true;
+  }
+  return getTerminalBrowserCdpTargets().some(
+    (target) =>
+      target.targetId === targetId &&
+      target.browserGroupId === conn.scopedGroupId,
+  );
+}
+
+function getScopedTargets(scopedGroupId: string | null) {
+  return getTerminalBrowserCdpTargets().filter(
+    (target) => !scopedGroupId || target.browserGroupId === scopedGroupId,
+  );
 }
 
 function sendJson(ws: WebSocket, data: object): void {
@@ -74,19 +92,23 @@ function sendJson(ws: WebSocket, data: object): void {
 
 function getCurrentTargetInfos(
   sessionManager: CdpSessionManager,
+  scopedGroupId: string | null,
 ): CdpTargetInfo[] {
-  return getTerminalBrowserCdpTargets().map((t) =>
-    buildTargetInfo({
-      targetId: t.targetId,
-      url: t.url,
-      title: t.title,
-      attached: sessionManager.isTargetAttached(t.targetId),
-    }),
-  );
+  return getScopedTargets(scopedGroupId)
+    .map((t) =>
+      buildTargetInfo({
+        targetId: t.targetId,
+        url: t.url,
+        title: t.title,
+        browserContextId: t.browserGroupId,
+        attached: sessionManager.isTargetAttached(t.targetId),
+      }),
+    );
 }
 
 function getTargetInfoForRequest(
   sessionManager: CdpSessionManager,
+  scopedGroupId: string | null,
   params: Record<string, unknown>,
   sessionId?: string,
 ): CdpTargetInfo | null {
@@ -96,7 +118,7 @@ function getTargetInfoForRequest(
     ? sessionManager.getTargetIdForSession(sessionId)
     : null;
   const targetId = requestedTargetId ?? sessionTargetId;
-  const targets = getCurrentTargetInfos(sessionManager);
+  const targets = getCurrentTargetInfos(sessionManager, scopedGroupId);
 
   if (targetId) {
     return targets.find((target) => target.targetId === targetId) ?? null;
@@ -107,9 +129,12 @@ function getTargetInfoForRequest(
 function broadcastTargetCreated(
   connections: Set<ConnectionState>,
   initiator: ConnectionState,
-  target: { targetId: string; url: string; title: string },
+  target: { targetId: string; browserGroupId: string; url: string; title: string },
 ): void {
   for (const conn of connections) {
+    if (conn.scopedGroupId && conn.scopedGroupId !== target.browserGroupId) {
+      continue;
+    }
     if (
       !shouldSendTargetCreatedEvent(conn.discoveryEnabled, conn === initiator)
     ) {
@@ -122,6 +147,7 @@ function broadcastTargetCreated(
           targetId: target.targetId,
           url: target.url,
           title: target.title,
+          browserContextId: target.browserGroupId,
           attached: false,
         }),
       },
@@ -137,29 +163,50 @@ export async function startCdpProxy(
   const wsUrl = `ws://${host}:${port}/devtools/browser/${BROWSER_ID}`;
 
   const connections = new Set<ConnectionState>();
+  const buildScopedWsUrl = (groupId: string | null): string => {
+    if (!groupId) {
+      return wsUrl;
+    }
+    return `${wsUrl}?groupId=${encodeURIComponent(groupId)}`;
+  };
+  const resolveScopedGroupId = (rawUrl: string): string | null => {
+    const parsed = new URL(rawUrl, endpoint);
+    return parsed.searchParams.get("groupId")?.trim() || null;
+  };
 
   const server = http.createServer((req, res) => {
     const url = req.url ?? "";
+    const scopedGroupId = resolveScopedGroupId(url);
 
-    if (url === "/json/version" || url === "/json/version/") {
+    if (url.startsWith("/json/version")) {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(buildVersionResponse(wsUrl)));
+      res.end(
+        JSON.stringify(buildVersionResponse(buildScopedWsUrl(scopedGroupId))),
+      );
       return;
     }
 
     if (
       url === "/json" ||
+      url.startsWith("/json?") ||
       url === "/json/" ||
+      url.startsWith("/json/?") ||
       url === "/json/list" ||
-      url === "/json/list/"
+      url.startsWith("/json/list?") ||
+      url === "/json/list/" ||
+      url.startsWith("/json/list/?")
     ) {
-      const targets = getTerminalBrowserCdpTargets();
+      const targets = getScopedTargets(scopedGroupId);
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(buildJsonTargetList(targets, wsUrl)));
+      res.end(
+        JSON.stringify(
+          buildJsonTargetList(targets, buildScopedWsUrl(scopedGroupId)),
+        ),
+      );
       return;
     }
 
-    if (url === "/json/protocol" || url === "/json/protocol/") {
+    if (url.startsWith("/json/protocol")) {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ version: { major: "1", minor: "3" } }));
       return;
@@ -197,11 +244,12 @@ export async function startCdpProxy(
     }
   });
 
-  wss.on("connection", (ws: WebSocket) => {
+  wss.on("connection", (ws: WebSocket, req) => {
     const sessionManager = new CdpSessionManager();
     const conn: ConnectionState = {
       ws,
       sessionManager,
+      scopedGroupId: resolveScopedGroupId(req.url ?? ""),
       browserSessionIds: new Set(),
       discoveryEnabled: false,
       autoAttachEnabled: false,
@@ -239,8 +287,17 @@ export async function startCdpProxy(
     });
   });
 
-  const onTabClosed = ({ targetId }: { targetId: string }): void => {
+  const onTabClosed = ({
+    targetId,
+    browserGroupId,
+  }: {
+    targetId: string;
+    browserGroupId: string;
+  }): void => {
     for (const conn of connections) {
+      if (conn.scopedGroupId && conn.scopedGroupId !== browserGroupId) {
+        continue;
+      }
       const proxySessionId = conn.sessionManager.getProxySessionId(targetId);
       conn.sessionManager.detachDebugger(targetId);
       if (conn.discoveryEnabled) {
@@ -306,13 +363,13 @@ async function handleMessage(
     return;
   }
 
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpResult(id, {}));
+  if (isBlockedCommand(method)) {
+    sendJson(ws, buildCdpError(id, -32601, `${method} is blocked by CDP proxy`));
     return;
   }
 
-  if (isBlockedCommand(method)) {
-    sendJson(ws, buildCdpError(id, -32601, `${method} is blocked by CDP proxy`));
+  if (isSafeNoopCommand(method)) {
+    sendJson(ws, buildCdpResult(id, {}));
     return;
   }
 
@@ -334,13 +391,20 @@ async function handleMessage(
         return;
 
       case "Target.getTargets": {
-        const targets = getCurrentTargetInfos(sessionManager);
+        const targets = getCurrentTargetInfos(
+          sessionManager,
+          conn.scopedGroupId,
+        );
         sendJson(ws, buildCdpResult(id, { targetInfos: targets }));
         return;
       }
 
       case "Target.getTargetInfo": {
-        const targetInfo = getTargetInfoForRequest(sessionManager, params);
+        const targetInfo = getTargetInfoForRequest(
+          sessionManager,
+          conn.scopedGroupId,
+          params,
+        );
         if (!targetInfo) {
           sendJson(
             ws,
@@ -358,7 +422,10 @@ async function handleMessage(
         sendJson(ws, buildCdpResult(id, {}));
 
         if (discover) {
-          const targets = getCurrentTargetInfos(sessionManager);
+          const targets = getCurrentTargetInfos(
+            sessionManager,
+            conn.scopedGroupId,
+          );
           for (const info of targets) {
             sendJson(ws, {
               method: "Target.targetCreated",
@@ -377,7 +444,7 @@ async function handleMessage(
         sendJson(ws, buildCdpResult(id, {}));
 
         if (autoAttach) {
-          const targets = getTerminalBrowserCdpTargets();
+          const targets = getScopedTargets(conn.scopedGroupId);
           for (const t of targets) {
             try {
               const { proxySessionId } = sessionManager.attachDebugger(
@@ -388,6 +455,7 @@ async function handleMessage(
                 targetId: t.targetId,
                 url: t.url,
                 title: t.title,
+                browserContextId: t.browserGroupId,
                 attached: true,
               });
               sendJson(ws, {
@@ -429,7 +497,9 @@ async function handleMessage(
         }
         try {
           const target = getTerminalBrowserCdpTargets().find(
-            (t) => t.targetId === targetId,
+            (t) =>
+              t.targetId === targetId &&
+              (!conn.scopedGroupId || t.browserGroupId === conn.scopedGroupId),
           );
           if (!target) {
             sendJson(ws, buildCdpError(id, -32602, `Target not found: ${targetId}`));
@@ -465,7 +535,7 @@ async function handleMessage(
           (detachSessionId
             ? sessionManager.getTargetIdForSession(detachSessionId)
             : null);
-        if (targetId) {
+        if (targetId && canUseTarget(conn, targetId)) {
           sessionManager.detachDebugger(targetId);
         }
         sendJson(ws, buildCdpResult(id, {}));
@@ -476,6 +546,10 @@ async function handleMessage(
         const targetId = params.targetId as string;
         if (!targetId) {
           sendJson(ws, buildCdpError(id, -32602, "targetId required"));
+          return;
+        }
+        if (!canUseTarget(conn, targetId)) {
+          sendJson(ws, buildCdpError(id, -32602, `Unknown target: ${targetId}`));
           return;
         }
         activateTerminalBrowserTabFromProxy(targetId);
@@ -491,8 +565,16 @@ async function handleMessage(
           return;
         }
 
-        const currentTargets = getTerminalBrowserCdpTargets();
-        if (currentTargets.length >= MAX_AI_TABS) {
+        const allTargets = getTerminalBrowserCdpTargets();
+        const currentTargets = getScopedTargets(conn.scopedGroupId);
+        if (conn.scopedGroupId && currentTargets.length === 0) {
+          sendJson(
+            ws,
+            buildCdpError(id, -32602, `Unknown group: ${conn.scopedGroupId}`),
+          );
+          return;
+        }
+        if (allTargets.length >= MAX_AI_TABS) {
           sendJson(
             ws,
             buildCdpError(id, -32000, `Maximum AI tab limit (${MAX_AI_TABS}) reached`),
@@ -510,7 +592,11 @@ async function handleMessage(
           return;
         }
 
-        const created = await createTerminalBrowserTabFromProxy(windowId, url);
+        const created = await createTerminalBrowserTabFromProxy(
+          windowId,
+          url,
+          conn.scopedGroupId ?? undefined,
+        );
         if (!created) {
           sendJson(ws, buildCdpError(id, -32000, "Failed to create tab"));
           return;
@@ -521,6 +607,7 @@ async function handleMessage(
           conn,
           {
             targetId: created.targetId,
+            browserGroupId: created.browserGroupId,
             url,
             title: "",
           },
@@ -540,6 +627,7 @@ async function handleMessage(
                   targetId: created.targetId,
                   url,
                   title: "",
+                  browserContextId: created.browserGroupId,
                   attached: true,
                 }),
                 waitingForDebugger: conn.waitForDebuggerOnStart,
@@ -561,6 +649,10 @@ async function handleMessage(
         const targetId = params.targetId as string;
         if (!targetId) {
           sendJson(ws, buildCdpError(id, -32602, "targetId required"));
+          return;
+        }
+        if (!canUseTarget(conn, targetId)) {
+          sendJson(ws, buildCdpError(id, -32602, `Unknown target: ${targetId}`));
           return;
         }
         const success = closeTerminalBrowserTabFromProxy(targetId);
@@ -614,11 +706,6 @@ async function handleBrowserSessionMessage(
 ): Promise<void> {
   const { ws } = conn;
 
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    return;
-  }
-
   if (method === "Target.detachFromTarget") {
     const detachSessionId =
       typeof params.sessionId === "string" ? params.sessionId : sessionId;
@@ -642,13 +729,20 @@ async function handleBrowserSessionMessage(
   }
 
   if (method === "Target.getTargets") {
-    const targets = getCurrentTargetInfos(conn.sessionManager);
+    const targets = getCurrentTargetInfos(
+      conn.sessionManager,
+      conn.scopedGroupId,
+    );
     sendJson(ws, buildCdpSessionResult(id, sessionId, { targetInfos: targets }));
     return;
   }
 
   if (method === "Target.getTargetInfo") {
-    const targetInfo = getTargetInfoForRequest(conn.sessionManager, params);
+    const targetInfo = getTargetInfoForRequest(
+      conn.sessionManager,
+      conn.scopedGroupId,
+      params,
+    );
     if (!targetInfo) {
       sendJson(
         ws,
@@ -680,6 +774,11 @@ async function handleBrowserSessionMessage(
       ws,
       buildCdpSessionError(id, sessionId, -32601, `${method} is blocked by CDP proxy`),
     );
+    return;
+  }
+
+  if (isSafeNoopCommand(method)) {
+    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
     return;
   }
 
@@ -722,11 +821,6 @@ async function handleSessionMessage(
 ): Promise<void> {
   const { ws, sessionManager } = conn;
 
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    return;
-  }
-
   if (isBlockedCommand(method)) {
     sendJson(
       ws,
@@ -735,11 +829,21 @@ async function handleSessionMessage(
     return;
   }
 
+  if (isSafeNoopCommand(method)) {
+    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    return;
+  }
+
   // Intercept session-level Target.* commands — never forward these to
   // Electron's internal CDP as they would create new windows or expose
   // targets outside the Terminal Browser sandbox.
   if (method === "Target.getTargetInfo") {
-    const targetInfo = getTargetInfoForRequest(sessionManager, params, sessionId);
+    const targetInfo = getTargetInfoForRequest(
+      sessionManager,
+      conn.scopedGroupId,
+      params,
+      sessionId,
+    );
     if (!targetInfo) {
       sendJson(
         ws,

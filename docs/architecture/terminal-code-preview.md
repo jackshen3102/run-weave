@@ -64,7 +64,9 @@ Terminal Browser 工具当前边界：
 - CDP Proxy 只监听 `127.0.0.1`，默认从 `9224` 开始找可用端口，并通过 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 传给 Runweave terminal 里的子进程。
 - 如果显式设置 `BROWSER_VIEWER_TERMINAL_BROWSER_CDP_PROXY_PORT`，端口必须是合法端口且不自动漂移；非法值会让 Electron 启动失败并给出明确错误。
 - CDP Proxy 暴露的是自研 browser-level endpoint，不开启 Electron 全局 `remote-debugging-port`，也不暴露 Runweave 主窗口 renderer 或 DevTools target。
-- Playwright MCP / Playwright CLI 通过 `chromium.connectOverCDP(...)` 连接 Proxy 后，只能发现和操作 Terminal Browser tab。`Target.createTarget` 创建的是 Browser 工具内 AI tab，当前上限为 10；CDP 连接上限为 8。
+- Playwright MCP / Playwright CLI 通过 `chromium.connectOverCDP(...)` 连接 Proxy 后，只能发现和操作 Terminal Browser tab。全局 endpoint 会把当前激活 Browser tab 排在 target 列表第一位，避免无显式 page 选择的客户端落到历史第一个 tab。
+- 当前 tab 的 CDP/AI 按钮返回 Agent Control Group scoped WebSocket endpoint（`groupId=...`）；使用该 endpoint 连接时，`Target.getTargets` / discovery / auto-attach 只暴露该 group 内的 Terminal Browser tabs。手动新建 tab 默认新建 group；页面或 Agent 派生的新 tab 继承 opener group，使“Agent 打开的 tab 由同一个 Agent 控制”成为协议语义，而不依赖 UI 当前选择。
+- `Target.createTarget` 创建的是 Browser 工具内 AI tab，当前上限为 10；CDP 连接上限为 8。
 - Proxy 负责 target/session 仿真、frame id 重写、导航参数校验、危险命令拦截和 DevTools 状态隔离。`Browser.close`、`Browser.crash`、清 cookie/cache/origin storage、忽略 HTTPS 错误等命令不能影响用户主窗口或真实 profile。
 - 多个 CDP 客户端可以同时连接并操作不同 Browser tab。Proxy 对同一 target 复用同一个 Electron `webContents.debugger` attachment，但每个客户端仍使用自己的 proxy session id；任一客户端断开不应清理其他 target 的有效 session。
 - Browser tab 上的 `MCP` 标志只表示近期有 MCP/CDP session 命中该 target 的用户可感知操作，不等同于 CDP 已连接、tab 由 MCP 创建，或该 tab 正被永久接管。

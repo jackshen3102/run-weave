@@ -44,6 +44,7 @@ interface TerminalBrowserSnapshot {
 
 interface TerminalBrowserTabSnapshot extends TerminalBrowserSnapshot {
   tabId: string;
+  browserGroupId: string;
   loading: boolean;
   active: boolean;
   cdpProxyAttached: boolean;
@@ -123,12 +124,18 @@ declare global {
         tabId: string,
       ) => Promise<TerminalBrowserAnnotationSubmission>;
       onTerminalBrowserTabCreatedFromProxy?: (
-        listener: (data: { tabId: string; url: string; title: string }) => void,
+        listener: (data: {
+          tabId: string;
+          browserGroupId: string;
+          url: string;
+          title: string;
+        }) => void,
       ) => () => void;
       onTerminalBrowserTabUpdated?: (
         listener: (
           data: TerminalBrowserSnapshot & {
             tabId: string;
+            browserGroupId: string;
             loading: boolean;
             cdpProxyAttached: boolean;
             mcpActivityUntil: number | null;
@@ -141,6 +148,7 @@ declare global {
         listener: (
           data: TerminalBrowserSnapshot & {
             tabId: string;
+            browserGroupId: string;
             loading: boolean;
             cdpProxyAttached: boolean;
             mcpActivityUntil: number | null;

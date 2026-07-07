@@ -9,6 +9,7 @@ export interface ElectronBrowserSnapshot {
 }
 
 export interface ElectronBrowserUpdate extends ElectronBrowserSnapshot {
+  browserGroupId?: string;
   loading: boolean;
   cdpProxyAttached?: boolean;
   mcpActivityUntil?: number | null;
@@ -18,6 +19,7 @@ export interface ElectronBrowserUpdate extends ElectronBrowserSnapshot {
 
 export interface ElectronBrowserTabSnapshot extends ElectronBrowserUpdate {
   tabId: string;
+  browserGroupId: string;
   active: boolean;
   cdpProxyAttached: boolean;
   mcpActivityUntil: number | null;
@@ -45,10 +47,11 @@ export function isNavigationAbortError(error: unknown): boolean {
 export function buildTabUpdateFromElectronSnapshot(
   snapshot: ElectronBrowserSnapshot,
 ) {
+  const url = normalizeElectronBrowserUrl(snapshot.url);
   return {
-    url: snapshot.url,
-    addressInput: snapshot.url,
-    title: snapshot.title || browserTabLabel("", snapshot.url),
+    url,
+    addressInput: url,
+    title: getElectronBrowserTitle(snapshot.title, url),
     loading: false,
     canGoBack: snapshot.canGoBack,
     canGoForward: snapshot.canGoForward,
@@ -59,13 +62,15 @@ export function buildTabUpdateFromElectronSnapshot(
 export function buildTabUpdateFromElectronUpdate(
   update: ElectronBrowserUpdate,
 ) {
+  const url = normalizeElectronBrowserUrl(update.url);
   return {
-    url: update.url,
-    addressInput: update.url,
-    title: update.title || browserTabLabel("", update.url),
+    url,
+    addressInput: url,
+    title: getElectronBrowserTitle(update.title, url),
     loading: update.loading,
     canGoBack: update.canGoBack,
     canGoForward: update.canGoForward,
+    browserGroupId: update.browserGroupId,
     cdpProxyAttached: update.cdpProxyAttached,
     mcpActivityUntil: update.mcpActivityUntil,
     devtoolsOpen: update.devtoolsOpen,
@@ -77,11 +82,13 @@ export function buildTabUpdateFromElectronUpdate(
 export function buildTabStateFromElectronSnapshot(
   snapshot: ElectronBrowserTabSnapshot,
 ) {
+  const url = normalizeElectronBrowserUrl(snapshot.url);
   return {
     id: snapshot.tabId,
-    url: snapshot.url,
-    addressInput: snapshot.url,
-    title: snapshot.title || browserTabLabel("", snapshot.url),
+    browserGroupId: snapshot.browserGroupId,
+    url,
+    addressInput: url,
+    title: getElectronBrowserTitle(snapshot.title, url),
     loading: snapshot.loading,
     canGoBack: snapshot.canGoBack,
     canGoForward: snapshot.canGoForward,
@@ -90,4 +97,15 @@ export function buildTabStateFromElectronSnapshot(
     devtoolsOpen: snapshot.devtoolsOpen,
     deviceState: snapshot.deviceState,
   };
+}
+
+function normalizeElectronBrowserUrl(url: string): string {
+  return url === "about:blank" ? "" : url;
+}
+
+function getElectronBrowserTitle(title: string, url: string): string {
+  if (!url && (!title.trim() || title.trim() === "about:blank")) {
+    return browserTabLabel("", "");
+  }
+  return browserTabLabel(title, url);
 }
