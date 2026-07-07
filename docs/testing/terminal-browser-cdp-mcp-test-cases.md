@@ -119,8 +119,8 @@ NODE
 | T15 | 关闭 target                          | 发送 `Target.closeTarget`                                                                           | UI tab 关闭，并推送 `Target.targetDestroyed` / `Target.detachedFromTarget`  |
 | T16 | 关闭非法 target                      | 发送 `Target.closeTarget { "targetId": "not-exist" }`                                               | 不关闭主窗口，不影响其他 tab                                                |
 | T17 | group scoped endpoint 隔离           | 手动新建 tab A、tab B，分别复制两个 group scoped endpoint；对 A 连接发送 `Target.getTargets`        | 只返回 group A 的 target，不返回 group B                                    |
-| T19 | group 派生 tab 继承                  | 使用 tab A 的 group scoped endpoint 发送 `Target.createTarget`                                      | 新 tab 属于 group A；同一连接 `Target.getTargets` 同时返回 tab A 和新 tab   |
 | T18 | 全局 endpoint 当前 tab 优先          | UI 选中 tab B 后连接全局 HTTP endpoint 并读取 `context.pages()[0]`                                  | 默认 page 对应 tab B，不再固定落到历史第一个 tab                            |
+| T19 | group 派生 tab 继承                  | 使用 tab A 的 group scoped endpoint 发送 `Target.createTarget`                                      | 新 tab 属于 group A；同一连接 `Target.getTargets` 同时返回 tab A 和新 tab   |
 
 ## 页面能力
 
