@@ -363,13 +363,13 @@ async function handleMessage(
     return;
   }
 
-  if (isBlockedCommand(method)) {
-    sendJson(ws, buildCdpError(id, -32601, `${method} is blocked by CDP proxy`));
+  if (isSafeNoopCommand(method)) {
+    sendJson(ws, buildCdpResult(id, {}));
     return;
   }
 
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpResult(id, {}));
+  if (isBlockedCommand(method)) {
+    sendJson(ws, buildCdpError(id, -32601, `${method} is blocked by CDP proxy`));
     return;
   }
 
@@ -769,16 +769,16 @@ async function handleBrowserSessionMessage(
     return;
   }
 
+  if (isSafeNoopCommand(method)) {
+    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    return;
+  }
+
   if (isBlockedCommand(method)) {
     sendJson(
       ws,
       buildCdpSessionError(id, sessionId, -32601, `${method} is blocked by CDP proxy`),
     );
-    return;
-  }
-
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
     return;
   }
 
@@ -821,16 +821,16 @@ async function handleSessionMessage(
 ): Promise<void> {
   const { ws, sessionManager } = conn;
 
+  if (isSafeNoopCommand(method)) {
+    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    return;
+  }
+
   if (isBlockedCommand(method)) {
     sendJson(
       ws,
       buildCdpSessionError(id, sessionId, -32601, `${method} is blocked by CDP proxy`),
     );
-    return;
-  }
-
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
     return;
   }
 

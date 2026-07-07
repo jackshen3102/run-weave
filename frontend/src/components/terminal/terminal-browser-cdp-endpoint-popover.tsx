@@ -27,6 +27,7 @@ export function TerminalBrowserCdpEndpointPopover({
     }
     setInfo(result);
     updateBrowserTab(tabId, {
+      browserGroupId: result.browserGroupId ?? undefined,
       cdpProxyAttached: result.attached,
       devtoolsOpen: result.devtoolsOpen,
     });
