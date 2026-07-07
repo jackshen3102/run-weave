@@ -29,9 +29,11 @@ export const sendTerminalInputSchema = z
         "line",
         "codex_slash_command",
         "prompt_paste",
+        "prompt_replace",
         "tmux_exit_copy_mode",
       ])
       .optional(),
+    submit: z.boolean().optional(),
     operationId: z.string().trim().min(1).optional(),
     quickInputSource: z
       .enum([

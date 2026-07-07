@@ -1458,10 +1458,17 @@ export function TerminalWorkspaceShell({
                     >
                       <TerminalSurface
                         active={isActive}
+                        activeCommand={session.activeCommand}
                         apiBase={apiBase}
                         clientMode={clientMode}
                         layoutVersion={terminalLayoutVersion}
+                        sessionStatus={session.status}
                         terminalSessionId={session.terminalSessionId}
+                        terminalState={
+                          terminalStateBySessionId[
+                            session.terminalSessionId
+                          ] ?? session.terminalState
+                        }
                         token={token}
                         paneWorkspace={
                           session.panelSplitEnabled

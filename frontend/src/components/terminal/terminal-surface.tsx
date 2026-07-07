@@ -2,9 +2,16 @@ import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal } from "@xterm/xterm";
-import { scrollTerminalToBottom } from "@runweave/common/terminal";
-import type { TerminalPanelWorkspace } from "@runweave/shared";
+import {
+  scrollTerminalToBottom,
+  type TerminalBottomState,
+} from "@runweave/common/terminal";
+import type { TerminalPanelWorkspace, TerminalState } from "@runweave/shared";
 import type { ClientMode } from "../../features/client-mode";
+import {
+  applyTerminalDraftInput,
+  shouldEnableFloatingComposer,
+} from "../../features/terminal/floating-composer";
 import {
   logTerminalPerf,
   summarizeTerminalChunk,
@@ -34,9 +41,12 @@ interface TerminalSurfaceProps {
   apiBase: string;
   terminalSessionId: string;
   token: string;
+  activeCommand?: string | null;
   clientMode?: ClientMode;
   layoutVersion?: string;
   paneWorkspace?: TerminalPanelWorkspace | null;
+  sessionStatus?: "running" | "exited";
+  terminalState?: TerminalState;
   onAuthExpired?: () => void;
   onBell?: () => void;
   onMetadata?: (metadata: {
@@ -56,9 +66,12 @@ export function TerminalSurface({
   apiBase,
   terminalSessionId,
   token,
+  activeCommand = null,
   clientMode = "desktop",
   layoutVersion = "default",
   paneWorkspace = null,
+  sessionStatus = "running",
+  terminalState,
   onAuthExpired,
   onBell,
   onMetadata,
@@ -97,8 +110,20 @@ export function TerminalSurface({
   const restoreSnapshotRequestRef = useRef(0);
   const websocketContentVersionRef = useRef(0);
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  const lastSyncedTuiDraftRef = useRef("");
+  const floatingDraftRef = useRef("");
+  const floatingDraftDirtyRef = useRef(false);
+  const floatingDraftSyncPendingRef = useRef(false);
+  const floatingComposerVisibleRef = useRef(false);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<PastedImageReference[]>([]);
+  const [bufferType, setBufferType] = useState<
+    "normal" | "alternate" | undefined
+  >(undefined);
+  const [bottomOffsetRows, setBottomOffsetRows] = useState(0);
+  const [floatingComposerOpen, setFloatingComposerOpen] = useState(false);
+  const [floatingDraft, setFloatingDraft] = useState("");
+  const [draftMirrorSupported, setDraftMirrorSupported] = useState(true);
   const [mobileKeybarOpen, setMobileKeybarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -173,12 +198,110 @@ export function TerminalSurface({
     sendInput(data);
   });
 
-  const handleBottomStateChange = useMemoizedFn((isAtBottom: boolean) => {
-    setTerminalAtBottom(isAtBottom);
-    if (isAtBottom) {
-      setHasNewOutputBelow(false);
-    }
+  const floatingComposerEligible = shouldEnableFloatingComposer({
+    activeCommand,
+    bufferType,
+    clientMode,
+    searchOpen,
+    sessionRunning: sessionStatus === "running",
+    terminalState,
   });
+
+  const handleBottomStateChange = useMemoizedFn(
+    (state: TerminalBottomState) => {
+      setTerminalAtBottom(state.isAtBottom);
+      setBottomOffsetRows(state.bottomOffsetRows);
+      if (state.isAtBottom) {
+        setHasNewOutputBelow(false);
+      }
+    },
+  );
+
+  const handleUserInputData = useMemoizedFn((data: string) => {
+    if (!floatingComposerEligible || !draftMirrorSupported) {
+      return;
+    }
+
+    const next = applyTerminalDraftInput(lastSyncedTuiDraftRef.current, data);
+    if (!next.supported) {
+      if (!lastSyncedTuiDraftRef.current) {
+        return;
+      }
+
+      setDraftMirrorSupported(false);
+      return;
+    }
+
+    lastSyncedTuiDraftRef.current = next.draft;
+    floatingDraftDirtyRef.current = false;
+    setFloatingDraft(next.draft);
+  });
+
+  const handleFloatingDraftChange = useMemoizedFn((value: string) => {
+    setFloatingDraft(value);
+    floatingDraftDirtyRef.current = value !== lastSyncedTuiDraftRef.current;
+  });
+
+  const sendFloatingDraftToTui = useMemoizedFn(
+    (options: { delayMs?: number; submit?: boolean } = {}): boolean => {
+      const shouldReplay = floatingDraftDirtyRef.current;
+      const shouldSubmit = options.submit === true;
+      if (!shouldReplay && !shouldSubmit) {
+        return true;
+      }
+
+      if (error) {
+        return false;
+      }
+
+      const draftToReplay = floatingDraft;
+      const sendSequence = () => {
+        floatingDraftSyncPendingRef.current = true;
+        void sendTerminalInputRequest(
+          apiBase,
+          token,
+          terminalSessionId,
+          {
+            data: draftToReplay,
+            mode: "prompt_replace",
+            submit: shouldSubmit,
+            ...(paneWorkspace?.activePanelId
+              ? { panelId: paneWorkspace.activePanelId }
+              : {}),
+          },
+        )
+          .then(() => {
+            floatingDraftSyncPendingRef.current = false;
+            const draftStillCurrent = floatingDraftRef.current === draftToReplay;
+            if (!draftStillCurrent) {
+              return;
+            }
+
+            lastSyncedTuiDraftRef.current = shouldSubmit ? "" : draftToReplay;
+            floatingDraftDirtyRef.current = false;
+
+            if (shouldSubmit) {
+              setFloatingDraft("");
+            }
+          })
+          .catch((requestError: unknown) => {
+            logTerminalPerf("terminal.floating_composer.sync.failed", {
+              terminalSessionId,
+              error: String(requestError),
+            });
+            floatingDraftSyncPendingRef.current = false;
+          });
+      };
+
+      if (options.delayMs && options.delayMs > 0) {
+        window.setTimeout(sendSequence, options.delayMs);
+      } else {
+        sendSequence();
+      }
+
+      return true;
+    },
+  );
 
   const requestTmuxExitCopyMode = useMemoizedFn(() => {
     const sendExitRequest = () => {
@@ -205,9 +328,32 @@ export function TerminalSurface({
     }
     scrollTerminalToBottom(terminal);
     setTerminalAtBottom(true);
+    setBottomOffsetRows(0);
     setHasNewOutputBelow(false);
     setTmuxScrollbackActive(false);
     terminal.focus();
+  });
+
+  const handleFloatingComposerScrollToBottom = useMemoizedFn(() => {
+    handleScrollToBottom();
+  });
+
+  const handleFloatingComposerSend = useMemoizedFn(() => {
+    if (!floatingDraft) {
+      return;
+    }
+
+    const replayDelayMs = tmuxScrollbackActive ? 320 : 0;
+    if (
+      !sendFloatingDraftToTui({
+        delayMs: replayDelayMs,
+        submit: true,
+      })
+    ) {
+      return;
+    }
+
+    handleScrollToBottom();
   });
 
   const clearSearch = useMemoizedFn(() => {
@@ -240,6 +386,10 @@ export function TerminalSurface({
   useEffect(() => {
     activeRef.current = active;
   }, [active]);
+
+  useEffect(() => {
+    floatingDraftRef.current = floatingDraft;
+  }, [floatingDraft]);
 
   useEffect(() => {
     onBellRef.current = onBell;
@@ -290,7 +440,9 @@ export function TerminalSurface({
     lastSentResizeRef,
     onAuthExpired,
     onBellRef,
+    onBufferTypeChange: setBufferType,
     onViewportResizeRef,
+    onUserInputData: handleUserInputData,
     openTerminalLinkRef,
     refreshTerminalViewportRef,
     runtimeKindRef,
@@ -415,10 +567,69 @@ export function TerminalSurface({
     setMobileKeybarOpen(false);
   }, [active, clientMode]);
 
+  const showScrollToBottomControl =
+    active && (!terminalAtBottom || hasNewOutputBelow || tmuxScrollbackActive);
+  const floatingComposerAvailable =
+    floatingComposerEligible &&
+    draftMirrorSupported &&
+    showScrollToBottomControl;
+  const floatingComposerVisible = floatingComposerAvailable && floatingComposerOpen;
+  const showFloatingComposerTrigger =
+    floatingComposerAvailable && !floatingComposerOpen;
+
+  useEffect(() => {
+    const wasVisible = floatingComposerVisibleRef.current;
+    floatingComposerVisibleRef.current = floatingComposerVisible;
+
+    if (!wasVisible && floatingComposerVisible) {
+      const syncedDraft = lastSyncedTuiDraftRef.current;
+      floatingDraftRef.current = syncedDraft;
+      floatingDraftDirtyRef.current = false;
+      setFloatingDraft(syncedDraft);
+      return;
+    }
+
+    if (
+      wasVisible &&
+      !floatingComposerVisible &&
+      floatingDraftDirtyRef.current &&
+      !floatingDraftSyncPendingRef.current
+    ) {
+      const syncDelayMs = runtimeKindRef.current === "tmux" ? 320 : 0;
+      if (runtimeKindRef.current === "tmux") {
+        requestTmuxExitCopyMode();
+      }
+      sendFloatingDraftToTui({ delayMs: syncDelayMs });
+    }
+  }, [
+    floatingComposerVisible,
+    requestTmuxExitCopyMode,
+    sendFloatingDraftToTui,
+  ]);
+
+  useEffect(() => {
+    if (!terminalAtBottom) {
+      return;
+    }
+
+    setDraftMirrorSupported(true);
+  }, [terminalAtBottom]);
+
+  useEffect(() => {
+    setDraftMirrorSupported(true);
+  }, [
+    activeCommand,
+    terminalSessionId,
+    terminalState?.agent,
+    terminalState?.state,
+  ]);
+
   const showTerminalToolbar = active && clientMode !== "mobile";
   const showMobileKeybarToggle = active && clientMode === "mobile";
   const showPaneResizeHandle =
     active && clientMode !== "mobile" && Boolean(onResizePane);
+  const showFloatingComposerScrollButton =
+    floatingComposerVisible && (!terminalAtBottom || tmuxScrollbackActive);
 
   return (
     <TerminalSurfaceLayout
@@ -434,10 +645,26 @@ export function TerminalSurface({
       searchOptions={searchOptions}
       searchQuery={searchQuery}
       searchResults={searchResults}
+      floatingComposerDraft={floatingDraft}
+      floatingComposerDiagnostics={{
+        activeCommand,
+        bottomOffsetRows,
+        bufferType,
+        draftMirrorSupported,
+        floatingComposerEligible,
+        sessionStatus,
+        terminalAgent: terminalState?.agent ?? null,
+        terminalAtBottom,
+        terminalState: terminalState?.state ?? null,
+        tmuxScrollbackActive,
+      }}
+      showFloatingComposerTrigger={showFloatingComposerTrigger}
+      floatingComposerVisible={floatingComposerVisible}
       showMobileKeybarToggle={showMobileKeybarToggle}
       showScrollToBottomButton={
-        active && (!terminalAtBottom || hasNewOutputBelow || tmuxScrollbackActive)
+        showScrollToBottomControl && !floatingComposerVisible
       }
+      showFloatingComposerScrollButton={showFloatingComposerScrollButton}
       showTerminalToolbar={showTerminalToolbar}
       terminalContainerRef={terminalContainerRef}
       terminalRef={terminalRef}
@@ -447,7 +674,19 @@ export function TerminalSurface({
       onSearchOpenChange={setSearchOpen}
       onSearchOptionsChange={setSearchOptions}
       onSearchQueryChange={setSearchQuery}
+      onFloatingComposerClose={() => {
+        setFloatingComposerOpen(false);
+        requestAnimationFrame(() => {
+          terminalRef.current?.focus();
+        });
+      }}
       onSendInput={sendTerminalInput}
+      onFloatingComposerDraftChange={handleFloatingDraftChange}
+      onFloatingComposerOpen={() => {
+        setFloatingComposerOpen(true);
+      }}
+      onFloatingComposerScrollToBottom={handleFloatingComposerScrollToBottom}
+      onFloatingComposerSend={handleFloatingComposerSend}
       onMobileKeybarOpenChange={setMobileKeybarOpen}
       onScrollToBottom={handleScrollToBottom}
     />

@@ -1,0 +1,61 @@
+{
+  "session": {
+    "id": "term-floating-composer",
+    "name": "Runweave terminal",
+    "cwd": "~/Code/browser-hub/browser-viewer",
+    "prompt": "browser-viewer %"
+  },
+  "ui": {
+    "thresholdRows": 8,
+    "rowHeight": 20,
+    "initialDraft": "pnpm typecheck",
+    "mode": "bottom"
+  },
+  "terminalLines": [
+    "browser-viewer % pnpm dev",
+    "> runweave@0.0.0 dev ~/Code/browser-hub/browser-viewer",
+    "> vite --host 127.0.0.1",
+    "",
+    "  VITE v7.0.0  ready in 521 ms",
+    "",
+    "  Local:   http://127.0.0.1:5175/",
+    "  Network: use --host to expose",
+    "",
+    "browser-viewer % rg -n \"TerminalSurface\" frontend/src/components/terminal",
+    "frontend/src/components/terminal/terminal-surface.tsx:54:export function TerminalSurface({",
+    "frontend/src/components/terminal/terminal-surface-layout.tsx:48:export function TerminalSurfaceLayout({",
+    "",
+    "browser-viewer % sed -n '1,220p' frontend/src/components/terminal/terminal-surface.tsx",
+    "import { useMemoizedFn } from \"ahooks\";",
+    "import { useEffect, useRef, useState } from \"react\";",
+    "const [terminalAtBottom, setTerminalAtBottom] = useState(true);",
+    "const [hasNewOutputBelow, setHasNewOutputBelow] = useState(false);",
+    "const [tmuxScrollbackActive, setTmuxScrollbackActive] = useState(false);",
+    "",
+    "browser-viewer % pnpm lint",
+    "> runweave@0.0.0 lint ~/Code/browser-hub/browser-viewer",
+    "> eslint .",
+    "",
+    "frontend/src/components/terminal/terminal-surface-layout.tsx",
+    "  160:15  warning  Scroll-to-bottom button is visible when terminal is away from bottom",
+    "",
+    "browser-viewer % git diff -- frontend/src/components/terminal",
+    "diff --git a/frontend/src/components/terminal/terminal-surface.tsx b/frontend/src/components/terminal/terminal-surface.tsx",
+    "@@ -107,6 +107,7 @@ export function TerminalSurface({",
+    "   const [terminalAtBottom, setTerminalAtBottom] = useState(true);",
+    "   const [hasNewOutputBelow, setHasNewOutputBelow] = useState(false);",
+    "   const [tmuxScrollbackActive, setTmuxScrollbackActive] = useState(false);",
+    "+  const [floatingComposerOpen, setFloatingComposerOpen] = useState(false);",
+    "",
+    "browser-viewer %",
+    "",
+    "# Scroll up to inspect the earlier grep output.",
+    "# The native TUI prompt is now below the viewport.",
+    "# The floating composer appears only while away from bottom."
+  ],
+  "events": [
+    "session attached",
+    "bottomOffsetRows=0 native prompt visible",
+    "floating composer idle"
+  ]
+}
