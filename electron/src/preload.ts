@@ -157,11 +157,21 @@ contextBridge.exposeInMainWorld("electronAPI", {
       tabId,
     ) as Promise<TerminalBrowserAnnotationSubmission>,
   onTerminalBrowserTabCreatedFromProxy: (
-    listener: (data: { tabId: string; url: string; title: string }) => void,
+    listener: (data: {
+      tabId: string;
+      browserGroupId: string;
+      url: string;
+      title: string;
+    }) => void,
   ) => {
     const wrapped = (
       _event: Electron.IpcRendererEvent,
-      data: { tabId: string; url: string; title: string },
+      data: {
+        tabId: string;
+        browserGroupId: string;
+        url: string;
+        title: string;
+      },
     ) => {
       listener(data);
     };
@@ -173,6 +183,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onTerminalBrowserTabUpdated: (
     listener: (data: {
       tabId: string;
+      browserGroupId: string;
       url: string;
       title: string;
       canGoBack: boolean;
@@ -188,6 +199,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       _event: Electron.IpcRendererEvent,
       data: {
         tabId: string;
+        browserGroupId: string;
         url: string;
         title: string;
         canGoBack: boolean;
@@ -209,6 +221,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onTerminalBrowserTabActivatedFromProxy: (
     listener: (data: {
       tabId: string;
+      browserGroupId: string;
       url: string;
       title: string;
       canGoBack: boolean;
@@ -224,6 +237,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       _event: Electron.IpcRendererEvent,
       data: {
         tabId: string;
+        browserGroupId: string;
         url: string;
         title: string;
         canGoBack: boolean;

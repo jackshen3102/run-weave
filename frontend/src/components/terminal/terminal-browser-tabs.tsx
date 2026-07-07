@@ -2,6 +2,7 @@ import { Globe2, Plus, X } from "lucide-react";
 import {
   useEffect,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { TerminalBrowserTabState } from "../../features/terminal/preview-store";
@@ -20,8 +21,68 @@ interface TerminalBrowserTabsProps {
   onReorder?: (fromIndex: number, toIndex: number) => void;
 }
 
+const BROWSER_GROUP_COLORS = [
+  "#38bdf8",
+  "#34d399",
+  "#f59e0b",
+  "#f472b6",
+  "#a78bfa",
+  "#2dd4bf",
+  "#fb7185",
+  "#84cc16",
+  "#60a5fa",
+  "#f87171",
+  "#22c55e",
+  "#e879f9",
+  "#06b6d4",
+  "#f97316",
+  "#c084fc",
+  "#14b8a6",
+  "#eab308",
+  "#ec4899",
+  "#10b981",
+  "#818cf8",
+  "#ef4444",
+  "#65a30d",
+  "#d946ef",
+  "#0ea5e9",
+];
+
 export function browserTabLabel(title: string, url: string): string {
-  return title.trim() || url.replace(/^https?:\/\//, "");
+  const normalizedUrl = url === "about:blank" ? "" : url;
+  return title.trim() || normalizedUrl.replace(/^https?:\/\//, "") || "New Tab";
+}
+
+function getBrowserGroupColor(browserGroupId?: string): string {
+  if (!browserGroupId) {
+    return "#64748b";
+  }
+  let hash = 0;
+  for (let index = 0; index < browserGroupId.length; index += 1) {
+    hash = (hash * 31 + browserGroupId.charCodeAt(index)) >>> 0;
+  }
+  return BROWSER_GROUP_COLORS[hash % BROWSER_GROUP_COLORS.length]!;
+}
+
+function getBrowserGroupLabel(browserGroupId?: string): string {
+  if (!browserGroupId) {
+    return "Group pending";
+  }
+  return `Group ${browserGroupId.slice(-6)}`;
+}
+
+function BrowserGroupMarker({ browserGroupId }: { browserGroupId?: string }) {
+  const style: CSSProperties = {
+    backgroundColor: getBrowserGroupColor(browserGroupId),
+  };
+  return (
+    <span
+      className="h-4 w-1.5 shrink-0 rounded-full"
+      style={style}
+      title={getBrowserGroupLabel(browserGroupId)}
+      aria-hidden="true"
+    />
+  );
 }
 
 export function TerminalBrowserTabs({
@@ -85,6 +146,7 @@ export function TerminalBrowserTabs({
                   className="flex min-w-0 flex-1 items-center gap-1"
                   onClick={() => onSelectTab(tab.id)}
                 >
+                  <BrowserGroupMarker browserGroupId={tab.browserGroupId} />
                   <Globe2 className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{tabLabel}</span>
                   {mcpOperating ? (
@@ -137,6 +199,7 @@ export function TerminalBrowserTabs({
                 className="flex min-w-0 flex-1 items-center gap-1"
                 onClick={() => onSelectTab(tab.id)}
               >
+                <BrowserGroupMarker browserGroupId={tab.browserGroupId} />
                 <Globe2 className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{tabLabel}</span>
                 {mcpOperating ? (

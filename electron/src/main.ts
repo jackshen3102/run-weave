@@ -890,10 +890,12 @@ function registerCdpProxyHandlers(): void {
         return {
           available: false,
           endpoint: null,
+          webSocketEndpoint: null,
           port: null,
           host: "127.0.0.1",
           tabId,
           targetId: null,
+          browserGroupId: null,
           url: "",
           title: "",
           attached: false,
@@ -903,18 +905,30 @@ function registerCdpProxyHandlers(): void {
         };
       }
 
+      const webSocketEndpoint = match?.browserGroupId
+        ? [
+            `ws://${proxy.host}:${proxy.port}`,
+            "/devtools/browser/runweave-terminal-browser",
+            `?groupId=${encodeURIComponent(match.browserGroupId)}`,
+          ].join("")
+        : null;
+
       return {
         available: true,
         endpoint: proxy.endpoint,
+        webSocketEndpoint,
         port: proxy.port,
         host: "127.0.0.1",
         tabId,
         targetId: match?.targetId ?? null,
+        browserGroupId: match?.browserGroupId ?? null,
         url: match?.url ?? "",
         title: match?.title ?? "",
         attached: found?.entry.cdpProxyAttached ?? false,
         devtoolsOpen: found?.entry.devtoolsOpen ?? false,
-        env: { PLAYWRIGHT_MCP_CDP_ENDPOINT: proxy.endpoint },
+        env: {
+          PLAYWRIGHT_MCP_CDP_ENDPOINT: webSocketEndpoint ?? proxy.endpoint,
+        },
       };
     },
   );

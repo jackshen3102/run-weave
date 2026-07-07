@@ -74,6 +74,7 @@ export function buildTargetInfo(target: {
   targetId: string;
   url: string;
   title: string;
+  browserContextId?: string;
   attached?: boolean;
 }): CdpTargetInfo {
   return {
@@ -82,12 +83,17 @@ export function buildTargetInfo(target: {
     title: target.title,
     url: target.url,
     attached: target.attached ?? false,
-    browserContextId: "runweave-terminal-browser",
+    browserContextId: target.browserContextId ?? "runweave-terminal-browser",
   };
 }
 
 export function buildJsonTargetList(
-  targets: Array<{ targetId: string; url: string; title: string }>,
+  targets: Array<{
+    targetId: string;
+    url: string;
+    title: string;
+    browserGroupId?: string;
+  }>,
   wsUrl: string,
 ): object[] {
   const wsPath = wsUrl.replace(/^ws:\/\//, "");
@@ -98,6 +104,7 @@ export function buildJsonTargetList(
     title: target.title,
     type: "page",
     url: target.url,
+    browserContextId: target.browserGroupId,
     webSocketDebuggerUrl: wsUrl,
   }));
 }

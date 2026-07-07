@@ -87,6 +87,7 @@ export function useTerminalBrowserController({
   const annotationTabIdRef = useRef<string | null>(null);
   const handledAnnotationSubmitRequestRef = useRef<string | null>(null);
   const annotationSubmittingRef = useRef(false);
+  const editingAddressTabIdRef = useRef<string | null>(null);
   const [annotationState, setAnnotationState] =
     useState<TerminalBrowserAnnotationState>({
       active: false,
@@ -127,7 +128,14 @@ export function useTerminalBrowserController({
   );
   const applyElectronUpdate = useMemoizedFn(
     (tabId: string, update: ElectronBrowserUpdate) => {
-      updateBrowserTab(tabId, buildTabUpdateFromElectronUpdate(update));
+      const tabUpdate = buildTabUpdateFromElectronUpdate(update);
+      if (editingAddressTabIdRef.current === tabId) {
+        const { addressInput, ...updateWithoutAddressInput } = tabUpdate;
+        void addressInput;
+        updateBrowserTab(tabId, updateWithoutAddressInput);
+        return;
+      }
+      updateBrowserTab(tabId, tabUpdate);
     },
   );
 
@@ -417,9 +425,9 @@ export function useTerminalBrowserController({
     }
     void syncElectronTabs();
     return window.electronAPI?.onTerminalBrowserTabCreatedFromProxy?.(
-      ({ tabId, url, title }) => {
+      ({ tabId, browserGroupId, url, title }) => {
         loadedUrlByTabRef.current[tabId] = url;
-        addProxyBrowserTab(tabId, url, title);
+        addProxyBrowserTab(tabId, browserGroupId, url, title);
       },
     );
   }, [isElectron, addProxyBrowserTab, syncElectronTabs]);
@@ -459,7 +467,12 @@ export function useTerminalBrowserController({
     }
     return window.electronAPI?.onTerminalBrowserTabActivatedFromProxy?.(
       ({ tabId, ...update }) => {
-        addProxyBrowserTab(tabId, update.url, update.title);
+        addProxyBrowserTab(
+          tabId,
+          update.browserGroupId,
+          update.url,
+          update.title,
+        );
         loadedUrlByTabRef.current[tabId] = update.url;
         applyElectronUpdate(tabId, update);
         setActiveBrowserTab(tabId);
@@ -572,7 +585,18 @@ export function useTerminalBrowserController({
 
   const submitAddress = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+    editingAddressTabIdRef.current = null;
     void navigateTab(activeTab.id, activeTab.addressInput);
+  };
+
+  const handleAddressFocus = (): void => {
+    editingAddressTabIdRef.current = activeTab.id;
+  };
+
+  const handleAddressBlur = (): void => {
+    if (editingAddressTabIdRef.current === activeTab.id) {
+      editingAddressTabIdRef.current = null;
+    }
   };
 
   const reload = async (): Promise<void> => {
@@ -764,6 +788,8 @@ export function useTerminalBrowserController({
     headerRules,
     headerRulesPanelOpen,
     headerSaving,
+    handleAddressBlur,
+    handleAddressFocus,
     isElectron,
     mobileDisabledReason,
     openUrlExternally,

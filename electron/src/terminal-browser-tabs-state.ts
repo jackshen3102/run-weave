@@ -5,6 +5,7 @@ export interface TerminalBrowserPersistedTabRecord {
   url: string;
   title: string;
   lastActiveAt: number;
+  browserGroupId: string;
 }
 
 export interface TerminalBrowserPersistedState {
@@ -97,6 +98,10 @@ export function normalizeTerminalBrowserPersistedState(
         Number.isFinite(tab.lastActiveAt)
           ? tab.lastActiveAt
           : 0,
+      browserGroupId:
+        typeof tab.browserGroupId === "string" && tab.browserGroupId.trim()
+          ? tab.browserGroupId.trim()
+          : `browser-group-${id}`,
     });
   }
 

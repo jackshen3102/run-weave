@@ -43,6 +43,8 @@ export function TerminalBrowserTool({
     headerRules,
     headerRulesPanelOpen,
     headerSaving,
+    handleAddressBlur,
+    handleAddressFocus,
     isElectron,
     mobileDisabledReason,
     openUrlExternally,
@@ -92,6 +94,8 @@ export function TerminalBrowserTool({
         onAddressInputChange={(addressInput) =>
           updateBrowserTab(activeTab.id, { addressInput })
         }
+        onAddressFocus={handleAddressFocus}
+        onAddressBlur={handleAddressBlur}
         onGo={(direction) => void go(direction)}
         onReload={() => void reload()}
         onStop={stop}

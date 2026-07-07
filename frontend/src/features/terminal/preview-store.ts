@@ -18,6 +18,7 @@ const TERMINAL_SIDECAR_WIDTH_STORAGE_KEY =
 
 export interface TerminalBrowserTabState {
   id: string;
+  browserGroupId?: string;
   url: string;
   addressInput: string;
   title: string;
@@ -96,7 +97,12 @@ interface TerminalPreviewStore {
   setChangesViewMode: (projectId: string, mode: TerminalChangesViewMode) => void;
   removeProjectPreview: (projectId: string) => void;
   createBrowserTab: (url?: string) => void;
-  addProxyBrowserTab: (tabId: string, url: string, title: string) => void;
+  addProxyBrowserTab: (
+    tabId: string,
+    browserGroupId: string | undefined,
+    url: string,
+    title: string,
+  ) => void;
   replaceBrowserTabs: (
     tabs: TerminalBrowserTabState[],
     activeTabId?: string,
@@ -113,7 +119,8 @@ interface TerminalPreviewStore {
 const DEFAULT_PROJECT_STATE: TerminalPreviewProjectState = {
   mode: null,
 };
-const DEFAULT_BROWSER_URL = "http://127.0.0.1:5173";
+const DEFAULT_BROWSER_URL = "";
+const DEFAULT_BROWSER_TAB_TITLE = "New Tab";
 let browserTabSequence = 1;
 
 function getMaxSidecarWidth(): number | null {
@@ -172,11 +179,12 @@ function persistSidecarWidth(widthPx: number): void {
 function createBrowserTabState(url = DEFAULT_BROWSER_URL): TerminalBrowserTabState {
   const id = `browser-tab-${browserTabSequence}`;
   browserTabSequence += 1;
+  const browserUrl = normalizeBrowserTabUrl(url);
   return {
     id,
-    url,
-    addressInput: url,
-    title: labelBrowserUrl(url),
+    url: browserUrl,
+    addressInput: browserUrl,
+    title: labelBrowserUrl(browserUrl),
     loading: false,
     canGoBack: false,
     canGoForward: false,
@@ -196,6 +204,9 @@ function createUniqueBrowserTabState(
 }
 
 function labelBrowserUrl(url: string): string {
+  if (!url || url === "about:blank") {
+    return DEFAULT_BROWSER_TAB_TITLE;
+  }
   try {
     const parsed = new URL(url);
     if (
@@ -206,8 +217,12 @@ function labelBrowserUrl(url: string): string {
     }
     return parsed.hostname || url;
   } catch {
-    return url;
+    return url || DEFAULT_BROWSER_TAB_TITLE;
   }
+}
+
+function normalizeBrowserTabUrl(url: string): string {
+  return url === "about:blank" ? "" : url;
 }
 
 const DEFAULT_BROWSER_TAB = createBrowserTabState();
@@ -423,16 +438,33 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
       };
     });
   },
-  addProxyBrowserTab: (tabId: string, url: string, title: string) => {
+  addProxyBrowserTab: (
+    tabId: string,
+    browserGroupId: string | undefined,
+    url: string,
+    title: string,
+  ) => {
     set((state: TerminalPreviewStore) => {
       if (state.browser.tabs.some((tab) => tab.id === tabId)) {
-        return state;
+        return {
+          browser: {
+            ...state.browser,
+            tabs: state.browser.tabs.map((tab) =>
+              tab.id === tabId && browserGroupId
+                ? { ...tab, browserGroupId }
+                : tab,
+            ),
+          },
+        };
       }
+      const browserUrl = normalizeBrowserTabUrl(url);
+      const browserTitle = title.trim() === "about:blank" ? "" : title;
       const nextTab: TerminalBrowserTabState = {
         id: tabId,
-        url,
-        addressInput: url,
-        title: title || labelBrowserUrl(url),
+        browserGroupId,
+        url: browserUrl,
+        addressInput: browserUrl,
+        title: browserTitle || labelBrowserUrl(browserUrl),
         loading: false,
         canGoBack: false,
         canGoForward: false,
