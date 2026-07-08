@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent Team / Loop Engine 流程图</title>
+    <style>
+      :root {
+        --bg: #020617;
+        --surface: #050816;
+        --surface-2: #0b1220;
+        --border: #1e293b;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --cyan: #22d3ee;
+        --green: #34d399;
+        --amber: #fbbf24;
+        --red: #f87171;
+        --violet: #a78bfa;
+        --blue: #60a5fa;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: radial-gradient(1200px 800px at 20% -10%, #0b1220 0%, var(--bg) 60%);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        line-height: 1.6;
+        padding: 40px 24px 80px;
+      }
+      .wrap {
+        max-width: 1080px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 26px;
+        margin: 0 0 6px;
+        letter-spacing: 0.5px;
+      }
+      h1 .tag {
+        font-size: 13px;
+        color: var(--bg);
+        background: var(--cyan);
+        border-radius: 6px;
+        padding: 2px 8px;
+        vertical-align: middle;
+        margin-left: 8px;
+        font-weight: 600;
+      }
+      .lede {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0 0 4px;
+      }
+      .lede code {
+        color: var(--cyan);
+        background: var(--surface-2);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 12.5px;
+      }
+      section {
+        margin-top: 40px;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 0 0 4px;
+        padding-left: 12px;
+        border-left: 3px solid var(--cyan);
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 0 0 18px;
+        padding-left: 15px;
+      }
+      /* ---- generic flow primitives ---- */
+      .flow {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        align-items: center;
+      }
+      .row {
+        display: flex;
+        gap: 16px;
+        align-items: stretch;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .node {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 18px;
+        min-width: 180px;
+        position: relative;
+      }
+      .node .kicker {
+        font-size: 11px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      .node .title {
+        font-weight: 600;
+        font-size: 15px;
+      }
+      .node .desc {
+        font-size: 12.5px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+      .node code {
+        color: var(--cyan);
+        font-size: 12px;
+      }
+      .arrow {
+        color: var(--muted);
+        font-size: 22px;
+        line-height: 1;
+        padding: 8px 0;
+        text-align: center;
+      }
+      .arrow small {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      /* colored accents */
+      .n-cyan { border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.15); }
+      .n-green { border-color: var(--green); }
+      .n-amber { border-color: var(--amber); }
+      .n-red { border-color: var(--red); }
+      .n-violet { border-color: var(--violet); }
+      .n-blue { border-color: var(--blue); }
+      .dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 6px;
+        vertical-align: middle;
+      }
+      .d-cyan { background: var(--cyan); }
+      .d-green { background: var(--green); }
+      .d-amber { background: var(--amber); }
+      .d-red { background: var(--red); }
+      .d-violet { background: var(--violet); }
+      .d-blue { background: var(--blue); }
+      /* ---- phase state machine ---- */
+      .phase-track {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .pill {
+        border: 1px solid var(--border);
+        background: var(--surface);
+        border-radius: 999px;
+        padding: 10px 16px;
+        font-weight: 600;
+        font-size: 14px;
+        white-space: nowrap;
+      }
+      .pill .st {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 400;
+        margin-top: 2px;
+      }
+      .sep {
+        color: var(--muted);
+        font-size: 20px;
+        padding: 0 4px;
+      }
+      /* ---- loop diagram ---- */
+      .loop-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+      .lane {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 14px;
+        align-items: center;
+      }
+      .lane .lane-label {
+        text-align: right;
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .steps {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 12.5px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .chip b { font-size: 13px; }
+      .chip span { color: var(--muted); font-size: 11.5px; }
+      .go { color: var(--muted); }
+      /* ---- legend / notes ---- */
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px 18px;
+      }
+      .card h3 {
+        margin: 0 0 10px;
+        font-size: 14px;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 12px;
+        font-size: 13px;
+      }
+      .kv dt { color: var(--cyan); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+      .kv dd { margin: 0; color: var(--muted); }
+      ul.clean { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+      ul.clean li { margin: 4px 0; }
+      ul.clean b { color: var(--text); }
+      code.inl { color: var(--cyan); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+      .foot {
+        margin-top: 48px;
+        border-top: 1px solid var(--border);
+        padding-top: 16px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .foot code { color: var(--cyan); }
+      @media (max-width: 720px) {
+        .grid2 { grid-template-columns: 1fr; }
+        .lane { grid-template-columns: 1fr; }
+        .lane .lane-label { text-align: left; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Agent Team / Loop Engine 流程<span class="tag">browser-viewer</span></h1>
+      <p class="lede">
+        代码源: <code>backend/src/agent-team/{service,loop,prompt-builders}.ts</code> ·
+        模型 <code>packages/shared/src/agent-team.ts</code> ·
+        完成事件 <code>docs/architecture/terminal-completion-hooks.md</code>
+      </p>
+      <p class="lede">
+        一句话: <b>一个终端 = 一个 run</b>；主 Agent pane 调度，worker 是同 tmux session 里的额外 pane；
+        后端只做<b>薄路由</b>（状态守卫 / 建 pane / 注入 prompt / 消费 outbox），不替 agent 做智能决策。
+      </p>
+
+      <!-- ============ 1. 阶段状态机 ============ -->
+      <section>
+        <h2>1 · 生命周期状态机</h2>
+        <p class="sub">一个 terminal session 同时最多绑定一个 active run。<code style="color:var(--cyan)">phase</code> 是主轴，<code style="color:var(--cyan)">status</code> 是当前是否卡住。</p>
+        <div class="phase-track">
+          <div class="pill"><span class="dot d-blue"></span>intake<span class="st">status: running</span></div>
+          <span class="sep">→</span>
+          <div class="pill" style="opacity:0.72;border-style:dashed"><span class="dot d-amber"></span>proposal<span class="st">仅 autoApproveSplit=false（非默认）</span></div>
+          <span class="sep">→</span>
+          <div class="pill"><span class="dot d-cyan"></span>executing<span class="st">status: running ⇄ need_human</span></div>
+          <span class="sep">→</span>
+          <div class="pill"><span class="dot d-green"></span>done<span class="st">全部验收 pass</span></div>
+        </div>
+        <p class="sub" style="margin-top:14px;text-align:center;padding:0">
+          <b style="color:var(--green)">默认（前端）：autoApproveSplit=true，intake 后跳过 proposal 直达 executing，无需人工确认。</b><br />
+          proposal / need_human 这道拆分人工门只在 <code style="color:var(--amber)">autoApproveSplit=false</code>（API 直连 / CLI / 测试）时才出现。<br />
+          旁路：<code style="color:var(--amber)">executing</code> 中 loop 熔断或复验超时 → <b style="color:var(--amber)">need_human</b>（冻结 worker，保留现场）→ <code style="color:var(--cyan)">resume(note)</code> 清零后继续；复验彻底耗尽或初始化失败 → <b style="color:var(--red)">failed</b>。
+        </p>
+      </section>
+
+      <!-- ============ 2. 起手：从提交到 split ============ -->
+      <section>
+        <h2>2 · 起手流程：提交任务 → split → 建 pane</h2>
+        <p class="sub">
+          <b>前端默认路径</b>：<code>startFlow</code> 硬编码 <code style="color:var(--green)">autoApproveSplit: true</code>，<b>跳过人工门直达 executing</b>（见 <code>terminal-agent-team-panel.tsx:188</code>）。
+          人工 split gate 只在 <code style="color:var(--amber)">autoApproveSplit=false</code>（API 直连 / CLI / 测试）时才走。
+        </p>
+        <div class="flow">
+          <div class="row">
+            <div class="node n-blue">
+              <div class="kicker">POST /runs</div>
+              <div class="title">startRun</div>
+              <div class="desc">建主 pane workspace，生成拆分提案。<br /><b style="color:var(--green)">默认 autoApproveSplit=true → 直接 applySplit</b>。</div>
+            </div>
+          </div>
+          <div class="arrow">↓<small style="color:var(--amber)">仅当 autoApproveSplit=false 才有下面这道人工门（可选旁路）</small></div>
+          <div class="row">
+            <div class="node n-amber" style="opacity:0.72;border-style:dashed">
+              <div class="kicker">可选人工门 · split gate（非默认）</div>
+              <div class="title">submitSplitGate</div>
+              <div class="desc">进入 <b>proposal / need_human</b>，等人确认：<b>confirmed</b> → 确认 worker &amp; 验收用例；<b>rejected</b> → 退回 intake。主 Agent 或用户可先 <code>propose-split</code> 调整提案。</div>
+            </div>
+          </div>
+          <div class="arrow">↓<small>applySplit：为每个 worker split 一个 tmux pane（默认路径与人工门在此汇合）</small></div>
+          <div class="row">
+            <div class="node n-cyan">
+              <div class="kicker">worker pane</div>
+              <div class="title"><span class="dot d-cyan"></span>code</div>
+              <div class="desc">执行代码/文档改动</div>
+            </div>
+            <div class="node n-violet">
+              <div class="kicker">worker pane</div>
+              <div class="title"><span class="dot d-violet"></span>code_review</div>
+              <div class="desc">审查，输出可执行结论</div>
+            </div>
+            <div class="node n-green">
+              <div class="kicker">worker pane</div>
+              <div class="title"><span class="dot d-green"></span>behavior_verify</div>
+              <div class="desc">跑 Playwright 行为验收，写 pass/fail + 证据</div>
+            </div>
+          </div>
+          <div class="arrow">↓<small>ensureAgentReady + 注入 startup prompt（只给 active worker，串行）</small></div>
+          <div class="row">
+            <div class="node n-cyan">
+              <div class="kicker">phase = executing</div>
+              <div class="title">进入 Loop Engine</div>
+              <div class="desc">首个 active worker = <code>code</code>，其余 <code>frozen</code>。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 3. 核心 loop ============ -->
+      <section>
+        <h2>3 · 核心 Loop：事件驱动，不是轮询</h2>
+        <p class="sub">发条来自 worker 完成事件；后端订阅后闭环推进。串行顺序 <code>code → code_review → behavior_verify</code>，失败反弹回 code。</p>
+
+        <div class="loop-grid">
+          <div class="lane">
+            <div class="lane-label">① 发条<br />（completion hook）</div>
+            <div class="steps">
+              <div class="chip"><b>worker 跑完</b><span>AI CLI stop hook</span></div>
+              <span class="go">→</span>
+              <div class="chip"><b>runweave-hook-bridge</b><span>读 tmux pane 身份</span></div>
+              <span class="go">→</span>
+              <div class="chip"><b>POST /internal/terminal-completion</b><span>token + source 门禁</span></div>
+              <span class="go">→</span>
+              <div class="chip"><b>completion 事件</b><span>TerminalEventService</span></div>
+            </div>
+          </div>
+
+          <div class="lane">
+            <div class="lane-label">② 接线<br />（service）</div>
+            <div class="steps">
+              <div class="chip"><b>handleTerminalEvent</b><span>订阅 completion</span></div>
+              <span class="go">→</span>
+              <div class="chip"><b>按 session 找 active run</b><span>phase=executing</span></div>
+              <span class="go">→</span>
+              <div class="chip"><b>outboxResolver</b><span>按 pane 解析结构化 outbox</span></div>
+              <span class="go">→</span>
+              <div class="chip"><b>acceptanceResults[]</b><span>{caseId, pass|fail, evidence}</span></div>
+            </div>
+          </div>
+
+          <div class="lane">
+            <div class="lane-label">③ 串行调度<br />（serial）</div>
+            <div class="steps">
+              <div class="chip"><b>code 完成</b><span></span></div>
+              <span class="go">→</span>
+              <div class="chip"><b>dispatch code_review</b><span></span></div>
+              <span class="go">→</span>
+              <div class="chip"><b>review 通过</b><span></span></div>
+              <span class="go">→</span>
+              <div class="chip"><b>dispatch behavior_verify</b><span></span></div>
+              <span class="go">→</span>
+              <div class="chip" style="border-color:var(--red)"><b>任一门禁 fail</b><span style="color:var(--red)">bounce 回 code pane</span></div>
+            </div>
+          </div>
+
+          <div class="lane">
+            <div class="lane-label">④ 折叠一轮<br /><code class="inl">foldRound</code></div>
+            <div class="steps">
+              <div class="chip"><b>pass</b><span>consecutiveFail=0</span></div>
+              <span class="go">·</span>
+              <div class="chip"><b>fail</b><span>consecutiveFail++（debounce=2）</span></div>
+              <span class="go">·</span>
+              <div class="chip"><b>hadProgress?</b><span>passCount↑ 或 hadDiff</span></div>
+              <span class="go">→</span>
+              <div class="chip"><b>有进展</b><span>noProgressCount=0</span></div>
+              <span class="go">·</span>
+              <div class="chip"><b>无进展(稳定fail)</b><span>noProgressCount++ + 记指纹</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arrow" style="text-align:center;font-size:14px;color:var(--muted)">
+          ▼ &nbsp; foldRound 之后的收敛判定 &nbsp; ▼
+        </div>
+
+        <div class="row">
+          <div class="node n-green" style="min-width:220px">
+            <div class="kicker">出口 A · 收敛</div>
+            <div class="title"><span class="dot d-green"></span>全部验收 pass → done</div>
+            <div class="desc">冻结所有 worker，<code>activeWorkerRole=null</code>，loop 结束。</div>
+          </div>
+          <div class="node n-cyan" style="min-width:220px">
+            <div class="kicker">出口 B · 继续</div>
+            <div class="title"><span class="dot d-cyan"></span>还有 fail → 继续 loop</div>
+            <div class="desc">稳定 fail 用例 <code>bounceFailuresToCode</code> 反弹 code pane；等下一次 completion 事件。</div>
+          </div>
+          <div class="node n-amber" style="min-width:220px">
+            <div class="kicker">出口 C · 熔断</div>
+            <div class="title"><span class="dot d-amber"></span>noProgress ≥ 3 → need_human</div>
+            <div class="desc"><code>shouldEscalate</code> 触发；冻结 worker，<b>不删 pane / outbox</b>，保留现场给人。</div>
+          </div>
+        </div>
+
+        <div class="arrow">↺<small>出口 B 的反弹 prompt 让 code pane 再次工作 → 跑完再发一次 completion → 回到 ①，闭环</small></div>
+      </section>
+
+      <!-- ============ 4. 人工恢复 + 兜底 ============ -->
+      <section>
+        <h2>4 · 人工恢复 &amp; 复验兜底</h2>
+        <div class="grid2">
+          <div class="card">
+            <h3><span class="dot d-amber"></span>熔断后人工恢复 · resumeRun(note)</h3>
+            <ul class="clean">
+              <li>清空 <b>errorFingerprints</b> + <b>noProgressCount</b> 归零 + <b>escalated=false</b></li>
+              <li>所有用例 <code class="inl">consecutiveFail=0</code>，<code class="inl">bestPassCount</code> 按当前 pass 数重算</li>
+              <li>note 通过 <code class="inl">buildHumanNotePrompt</code> 注入主 Agent 上下文</li>
+              <li>恢复 active worker，loop 重新计数继续推进</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3><span class="dot d-red"></span>复验看门狗 · recheck watchdog（每 10s）</h3>
+            <ul class="clean">
+              <li>扫描已派复验但 <b>超时 1h 未更新 outbox</b> 的用例</li>
+              <li>outbox 有更新 → 直接 <code class="inl">applyRound</code> 收结果</li>
+              <li>未超上限 → 换 <b>fresh pane</b> 重试（≤ 2 次）</li>
+              <li>重试耗尽 → 该用例判 fail，升级 <b>need_human</b></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 5. 关键参数 & 设计取舍 ============ -->
+      <section>
+        <h2>5 · 关键 loop 参数（<code>AgentTeamLoop</code>）</h2>
+        <div class="grid2">
+          <div class="card">
+            <h3>状态字段</h3>
+            <dl class="kv">
+              <dt>round</dt><dd>验收轮次</dd>
+              <dt>bestPassCount</dt><dd>历史最高通过数 = 客观进展信号</dd>
+              <dt>errorFingerprints</dt><dd>归一化失败签名，识别“同错重复”</dd>
+              <dt>noProgressCount</dt><dd>无进展累计（熔断计数）</dd>
+              <dt>stableFailThreshold</dt><dd>默认 <b>2</b> · debounce，单轮抖动不算数</dd>
+              <dt>maxNoProgress</dt><dd>默认 <b>3</b> · 连续无进展熔断阈值</dd>
+            </dl>
+          </div>
+          <div class="card">
+            <h3>三个设计取舍（数字化）</h3>
+            <ul class="clean">
+              <li><b>debounce=2</b>：一次偶发 fail 不反弹 code，避免抖动打断改动。</li>
+              <li><b>熔断=3 轮无进展</b>：只有 <i>pass 数上升</i> 或 <i>有 diff</i> 才算进展，防“改了但没效果”的死循环。</li>
+              <li><b>串行 code→review→verify</b>：保证每次验收针对的都是最新代码，而非并行错位。</li>
+              <li><b>熔断不删 pane/outbox</b>：冻结只停止注入，现场留给人；符合“可见流程 + 人工验收”边界。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <div class="foot">
+        原型/图示为设计梳理产物，最终以线上代码与 <code>docs/architecture/multi-agent-orchestrator.md</code> 为准。
+        本地预览：<code>python3 -m http.server --directory docs/prototypes/agent-team-loop-flow</code>
+      </div>
+    </div>
+  </body>
+</html>
