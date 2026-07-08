@@ -13,7 +13,6 @@
     { "id": "code", "label": "代码执行" },
     { "id": "code_review", "label": "代码审查" },
     { "id": "behavior_verify", "label": "行为验证" },
-    { "id": "plan_review", "label": "计划审查" },
     { "id": "test", "label": "测试" },
     { "id": "research", "label": "调研" }
   ],

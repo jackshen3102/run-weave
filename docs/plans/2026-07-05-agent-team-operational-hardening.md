@@ -80,7 +80,7 @@
 
 - CLI 需要自行猜项目 root/outbox 路径，容易再次出现 profile/auth/path 偏差。
 - 后续 UI 不能复用。
-- 对 plan_review 这类非最终 workers 的归属恢复仍不够稳。
+- 对串行门禁 worker 的归属恢复仍不够稳。
 
 ### 方案 C：先做 UI 复盘面板
 
@@ -248,7 +248,6 @@ query 规则：
 1. `runBound` 必须包含：
    - main panel
    - `run.workers[].panelId` 对应 panels
-   - plan_review 阶段产生但最终不在执行 workers 中的 panel，如果能从 outbox 或 panel role `agent-team:<runId>:plan_review` 恢复，也必须纳入。
 2. `sessionOther` 只放同一 terminal session 下但不属于该 run 的 panels。
 3. panel history 通过 `tmuxService.capturePane()` 获取；没有 tmux 或 pane 不存在时写 `history.mode="unavailable"`。
 4. outbox 路径按 `AgentTeamPaths.workerOutboxPath()` 与 legacy path 枚举，不扫描项目任意 JSON。
@@ -268,7 +267,6 @@ curl -sS -H "Authorization: Bearer <token>" \
 
 - 对 `e9d9da4e` 这类 run，导出结果能区分：
   - main panel
-  - plan_review panel
   - code panel
   - code_review panel
   - behavior_verify panel
@@ -410,7 +408,6 @@ export interface AgentTeamRun {
 规则：
 
 - start run 时记录 `git status --short`，失败则写 warning，不阻断 run。
-- 如果 planFile 存在，allowedPaths 可以先为空；后续由 plan 或用户显式补充。
 - review/export 展示“本轮前已有改动”和“本轮涉及文件”，降低脏改动误判。
 
 验证：
@@ -447,7 +444,7 @@ pnpm --filter ./frontend typecheck
 
 步骤：
 
-1. 准备一个已完成的 Agent Team run，包含 main、plan_review、code、code_review、behavior_verify 和一个无关 idle pane。
+1. 准备一个已完成的 Agent Team run，包含 main、code、code_review、behavior_verify 和一个无关 idle pane。
 2. 执行：
 
 ```bash
@@ -457,7 +454,7 @@ rw agent-team export <runId> --tail 200 --json > /tmp/agent-team-export.json
 预期：
 
 - `.run.runId` 等于目标 run。
-- `.panels.runBound` 包含 main/plan_review/code/code_review/behavior_verify。
+- `.panels.runBound` 包含 main/code/code_review/behavior_verify。
 - `.panels.sessionOther` 包含 idle pane。
 - `.outboxes` 包含 pane-scoped outbox，并标出缺失 warning。
 - `.acceptanceSummary` 能显示 pass/fail、evidenceCount、resolved/remaining finding 数量。

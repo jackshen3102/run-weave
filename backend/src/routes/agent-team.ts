@@ -21,8 +21,6 @@ const workerRoleEnum = z.enum([
   "code",
   "code_review",
   "behavior_verify",
-  "plan",
-  "plan_review",
 ]);
 const workerDraftSchema = z
   .object({ role: workerRoleEnum, intent: z.string().trim().min(1) })
@@ -44,7 +42,6 @@ const createRunSchema = z
     projectId: z.string().trim().min(1),
     terminalSessionId: z.string().trim().min(1),
     task: z.string().trim().optional(),
-    planFile: z.string().trim().min(1).optional(),
     options: z
       .object({ autoApproveSplit: z.boolean().optional() })
       .strict()

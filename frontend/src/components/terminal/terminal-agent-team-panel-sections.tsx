@@ -16,17 +16,13 @@ import {
 
 export function StartFlowSection({
   task,
-  planFile,
   busy,
   onTaskChange,
-  onPlanFileChange,
   onStart,
 }: {
   task: string;
-  planFile: string;
   busy: boolean;
   onTaskChange: (value: string) => void;
-  onPlanFileChange: (value: string) => void;
   onStart: () => void;
 }) {
   return (
@@ -35,13 +31,12 @@ export function StartFlowSection({
       <p className="text-xs leading-relaxed text-slate-400">
         当前是标准 shell 会话，没有多 Agent 流程。提交任务后，Agent Team 会进入
         <code className="mx-1 rounded bg-slate-800 px-1">
-          计划审查（可选）→ 拆分提案 → 执行观测
+          拆分提案 → 执行观测
         </code>
         。
       </p>
       <ol className="space-y-1 pl-4 text-xs text-slate-400 [list-style:decimal]">
-        <li>可选计划文件先由 plan_review 审查</li>
-        <li>计划通过后由服务端自动生成并确认 worker 拆分</li>
+        <li>服务端自动生成并确认 worker 拆分</li>
         <li>自动 split 出 worker pane，并按 code → review → verify 串行门禁推进</li>
       </ol>
       <div className="rounded border border-slate-800 bg-slate-900/50 px-2 py-1.5 text-[11px] leading-relaxed text-slate-400">
@@ -53,12 +48,6 @@ export function StartFlowSection({
         onChange={(event) => onTaskChange(event.target.value)}
         placeholder="描述要执行的任务"
       />
-      <input
-        className="w-full rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
-        value={planFile}
-        onChange={(event) => onPlanFileChange(event.target.value)}
-        placeholder="可选：计划文件路径，如 docs/plans/xxx.md"
-      />
       <Button
         type="button"
         size="sm"
@@ -68,175 +57,6 @@ export function StartFlowSection({
       >
         <Play className="h-4 w-4" /> 开始 Agent Team
       </Button>
-    </div>
-  );
-}
-
-export function PlanReviewSection({
-  run,
-  busy,
-  resumeNote,
-  onResumeNoteChange,
-  onResume,
-  onFocusPane,
-}: {
-  run: AgentTeamRun;
-  busy: boolean;
-  resumeNote: string;
-  onResumeNoteChange: (value: string) => void;
-  onResume: () => void;
-  onFocusPane: (panelId: string) => void;
-}) {
-  const { loop, acceptance } = run;
-  const ratio =
-    loop.maxNoProgress > 0 ? loop.noProgressCount / loop.maxNoProgress : 0;
-  const level = loop.escalated ? "escalated" : ratio >= 0.66 ? "warn" : "ok";
-  const passed = acceptance.filter((item) => item.status === "pass").length;
-  const failed = acceptance.filter((item) => item.status === "fail").length;
-
-  return (
-    <div className="space-y-3">
-      <div>
-        <h3 className="text-xs font-semibold uppercase text-slate-400">
-          计划审查
-        </h3>
-        <div className="mt-1 rounded border border-slate-800 bg-slate-900/40 px-2 py-1.5 text-[11px] text-slate-300">
-          {run.planFile}
-        </div>
-        <div className="mt-1 text-[10px] text-slate-500">
-          当前门禁：{run.activeWorkerRole ? ROLE_LABEL[run.activeWorkerRole] : "无"}
-        </div>
-      </div>
-      <ScopeSnapshotDetails run={run} />
-
-      <div
-        className={[
-          "rounded border p-2",
-          level === "escalated"
-            ? "border-rose-800 bg-rose-950/40"
-            : level === "warn"
-              ? "border-amber-800 bg-amber-950/30"
-              : "border-slate-800 bg-slate-900/40",
-        ].join(" ")}
-      >
-        <div className="flex items-center justify-between text-xs text-slate-300">
-          <span>修复轮次</span>
-          <span>round {loop.round}</span>
-        </div>
-        <div className="flex items-center justify-between text-xs text-slate-300">
-          <span>无进展</span>
-          <span>
-            {loop.noProgressCount} / {loop.maxNoProgress}
-          </span>
-        </div>
-        <div className="mt-1.5 flex gap-1">
-          {Array.from({ length: loop.maxNoProgress }).map((_, index) => (
-            <span
-              key={index}
-              className={[
-                "h-1.5 flex-1 rounded",
-                index < loop.noProgressCount
-                  ? level === "escalated"
-                    ? "bg-rose-500"
-                    : "bg-amber-400"
-                  : "bg-slate-700",
-              ].join(" ")}
-            />
-          ))}
-        </div>
-      </div>
-
-      {loop.escalated ? (
-        <div className="space-y-2 rounded border border-rose-800 bg-rose-950/40 p-2">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
-            <AlertTriangle className="h-4 w-4" /> 计划修复无进展
-          </div>
-          <p className="text-[11px] text-rose-200">{loop.lastReason}</p>
-          <PaneFocusList run={run} onFocusPane={onFocusPane} />
-          <textarea
-            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
-            rows={2}
-            placeholder="填写人工干预 note"
-            value={resumeNote}
-            onChange={(event) => onResumeNoteChange(event.target.value)}
-          />
-          <Button
-            type="button"
-            size="sm"
-            className="w-full"
-            disabled={busy || !resumeNote.trim()}
-            onClick={onResume}
-          >
-            人工已介入 · 恢复计划 loop →
-          </Button>
-        </div>
-      ) : null}
-
-      <div>
-        <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-400">
-          <span>审查用例 + 证据</span>
-          <span className="text-[10px] text-slate-500">
-            {passed}✓{failed > 0 ? ` ${failed}✗` : ""}
-          </span>
-        </div>
-        <div className="space-y-1.5">
-          {acceptance.map((item) => (
-            <div
-              key={item.caseId}
-              className={[
-                "rounded border px-2 py-1.5 text-[11px]",
-                item.status === "pass"
-                  ? "border-emerald-900 bg-emerald-950/30"
-                  : item.status === "fail"
-                    ? "border-rose-900 bg-rose-950/30"
-                    : "border-slate-800 bg-slate-900/40",
-              ].join(" ")}
-            >
-              <div className="flex items-start gap-1.5">
-                <span
-                  className={
-                    item.status === "pass"
-                      ? "text-emerald-400"
-                      : item.status === "fail"
-                        ? "text-rose-400"
-                        : "text-slate-500"
-                  }
-                >
-                  {item.status === "pass"
-                    ? "✓"
-                    : item.status === "fail"
-                      ? "✗"
-                      : "•"}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-slate-300">{item.text}</div>
-                  <AcceptanceEvidenceDetails
-                    status={item.status}
-                    evidence={item.evidence}
-                  />
-                  {item.status === "fail" && item.bouncedToPanelId ? (
-                    <div className="mt-0.5 text-[10px] text-amber-400">
-                      → 已抛回 plan worker 修复
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <div className="mb-1 text-xs font-semibold text-slate-400">Log</div>
-        <div className="space-y-0.5 rounded border border-slate-800 bg-slate-950/60 p-2 font-mono text-[10px] text-slate-400">
-          {run.logs
-            .slice()
-            .reverse()
-            .map((line, index) => (
-              <div key={`${index}-${line}`}>{line}</div>
-            ))}
-        </div>
-      </div>
     </div>
   );
 }

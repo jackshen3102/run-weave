@@ -6,11 +6,7 @@ import type { TerminalRuntimePreference } from "./terminal-protocol";
  * that terminal's session.
  */
 
-export type AgentTeamPhase =
-  | "intake"
-  | "plan_review"
-  | "proposal"
-  | "executing";
+export type AgentTeamPhase = "intake" | "proposal" | "executing";
 
 export type AgentTeamStatus =
   | "clarifying"
@@ -23,9 +19,7 @@ export type AgentTeamStatus =
 export type AgentTeamWorkerRole =
   | "code"
   | "code_review"
-  | "behavior_verify"
-  | "plan"
-  | "plan_review";
+  | "behavior_verify";
 
 export interface AgentTeamAcceptanceEvidence {
   type:
@@ -139,7 +133,6 @@ export interface AgentTeamRun {
   /** Agent CLI used by the root engineer and worker panes. */
   terminal: AgentTeamTerminal;
   task: string;
-  planFile?: string | null;
   /** The only worker role currently allowed to do work in the serial flow. */
   activeWorkerRole?: AgentTeamWorkerRole | null;
   clarify: AgentTeamClarifyMessage[];
@@ -210,7 +203,6 @@ export interface CreateAgentTeamRunRequest {
   projectId: string;
   terminalSessionId: string;
   task?: string;
-  planFile?: string;
   options?: Partial<AgentTeamRunOptions>;
   /**
    * Defaults to Codex for the current loop-engineer test path. Callers may

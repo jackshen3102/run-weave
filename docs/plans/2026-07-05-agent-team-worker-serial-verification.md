@@ -6,11 +6,10 @@
 
 核心契约：
 
-1. 计划文件流程：`plan_review -> plan -> plan_review` 串行循环。
-2. 执行流程：`code -> code_review -> behavior_verify` 串行推进。
-3. `code_review` 或 `behavior_verify` 失败时，必须回到 `code`。
-4. 任意时刻只有一个 `activeWorkerRole`，非 active worker 不应收到工作 prompt。
-5. `typecheck` / `lint` 只作为静态辅助，不能替代浏览器、run JSON、tmux pane、outbox 证据。
+1. 执行流程：`code -> code_review -> behavior_verify` 串行推进。
+2. `code_review` 或 `behavior_verify` 失败时，必须回到 `code`。
+3. 任意时刻只有一个 `activeWorkerRole`，非 active worker 不应收到工作 prompt。
+4. `typecheck` / `lint` 只作为静态辅助，不能替代浏览器、run JSON、tmux pane、outbox 证据。
 
 ## 非目标
 
@@ -239,93 +238,6 @@ pnpm lint
 
 - 非 active worker completion 推进了 run。
 - 非 active outbox 改写了 acceptance。
-
-## 用例 8：计划文件流程只激活 plan_review
-
-步骤：
-
-1. 创建一个测试计划文件路径，例如 `docs/plans/tmp-agent-team-serial-test.md`。
-2. 启动 Agent Team 时填写任务和计划文件路径。
-3. 进入计划审查流程。
-4. 读取 run JSON、右侧 UI、plan/plan_review pane。
-
-期望：
-
-- `phase=plan_review`。
-- `activeWorkerRole=plan_review`。
-- `plan_review.frozen=false`。
-- `plan.frozen=true`。
-- plan_review pane 收到审查 prompt。
-- plan pane 不应收到修复 prompt。
-
-失败判定：
-
-- plan 和 plan_review 同时收到 work prompt。
-- `activeWorkerRole` 不是 `plan_review`。
-
-## 用例 9：plan_review 失败后才激活 plan
-
-步骤：
-
-1. 执行用例 8。
-2. 在 plan_review pane 写入 fail outbox。
-3. 触发 completion hook。
-4. 读取 run JSON、右侧 UI、plan pane。
-
-期望：
-
-- `activeWorkerRole=plan`。
-- plan pane 收到计划修复 prompt。
-- plan_review pane 冻结。
-- 右侧失败 case 显示已抛回 plan worker。
-
-失败判定：
-
-- plan_review fail 后没有切到 plan。
-- plan 与 plan_review 同时 active。
-
-## 用例 10：plan 完成后回到 plan_review
-
-步骤：
-
-1. 执行用例 9，使 run 停在 `activeWorkerRole=plan`。
-2. 在 plan pane 写入 completed outbox。
-3. 触发 completion hook。
-4. 读取 run JSON、右侧 UI、plan_review pane。
-
-期望：
-
-- `activeWorkerRole=plan_review`。
-- plan_review pane 收到重新审查 prompt。
-- plan pane 冻结。
-
-失败判定：
-
-- plan 完成后直接进入 proposal。
-- plan 完成后没有重新启动 plan_review。
-- plan 与 plan_review 同时 active。
-
-## 用例 11：plan_review 通过后进入 proposal，不启动执行 worker
-
-步骤：
-
-1. 执行到 `activeWorkerRole=plan_review`。
-2. 写入所有计划审查 case 的 `pass` outbox。
-3. 触发 completion hook。
-4. 读取 run JSON 和右侧 UI。
-
-期望：
-
-- `phase=proposal`。
-- `status=need_human`。
-- `activeWorkerRole=null`。
-- plan/plan_review worker 均冻结。
-- 只出现拆分提案，不启动 code/code_review/behavior_verify。
-
-失败判定：
-
-- 计划审查通过后直接进入 executing。
-- 未经人工确认启动执行 worker。
 
 ## 用例 12：人工恢复不解冻所有 worker
 

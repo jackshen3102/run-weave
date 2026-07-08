@@ -8,8 +8,6 @@ const ROLE_LABEL: Record<string, string> = {
   code: "code_agent（写代码）",
   code_review: "code_reviewer（审查）",
   behavior_verify: "behavior_verifier（按验收用例跑 Playwright）",
-  plan: "plan_agent（形成计划）",
-  plan_review: "plan_reviewer（审查计划）",
 };
 const EVIDENCE_SCHEMA =
   'acceptanceResults[].evidence[] 必须使用 { type, label, summary, ref, detail? }；type 可用 "text"、"dom"、"screenshot"、"command"、"event"、"json"、"log"、"code"。label 是短标题，summary 是给人看的单句结论，ref 保留原始证据路径、文本或标识。';
@@ -44,24 +42,6 @@ export function buildWorkerStartupPrompt(params: {
         ? `把每条用例的结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。`
         : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。",
     );
-  } else if (worker.role === "plan") {
-    lines.push(
-      "",
-      `计划文件：${run.planFile ?? ""}`,
-      "职责：等待 plan_review 的审查失败证据，只修改计划文件本身，不接管执行 worker 的代码实现。",
-    );
-  } else if (worker.role === "plan_review") {
-    lines.push(
-      "",
-      `任务：${run.task}`,
-      `计划文件：${run.planFile ?? ""}`,
-      "审查用例（发现计划不可执行、缺少验收、范围越界或 blocker 时必须写 fail；无阻断问题写 pass）：",
-      ...acceptance.map((item, index) => `${index + 1}. [${item.caseId}] ${item.text}`),
-      "",
-      outboxPath
-        ? `把计划审查结果写进 ${outboxPath} 的 acceptanceResults。`
-        : "把计划审查结果写进 outbox 的 acceptanceResults。",
-    );
   } else if (worker.role === "code_review") {
     lines.push(
       "",
@@ -82,9 +62,7 @@ export function buildWorkerStartupPrompt(params: {
           `- 本 worker 的结构化 outbox 固定写入：${outboxPath}。不要写 session 级 .runweave/outbox/${run.terminalSessionId}.json，避免同一 terminal 多 pane 覆盖。`,
           `- outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
           `- ${EVIDENCE_SCHEMA}`,
-          ...(worker.role === "code_review" || worker.role === "plan_review"
-            ? [`- ${FINDING_SCHEMA}`]
-            : []),
+          ...(worker.role === "code_review" ? [`- ${FINDING_SCHEMA}`] : []),
         ]
       : []),
     "- 最终回复以结构化 summary 收尾（状态 / 结论 / 关键发现 / 产物 / 建议下一步）。",
@@ -122,28 +100,6 @@ function isReviewGateAcceptanceCase(item: AgentTeamAcceptanceCase): boolean {
   return /code review|代码审查|code_review/i.test(item.text);
 }
 
-/** Bounce a stable-failing plan review case back to the plan pane. */
-export function buildPlanFixPrompt(params: {
-  run: AgentTeamRun;
-  failedCases: AgentTeamAcceptanceCase[];
-}): string {
-  const { run, failedCases } = params;
-  return [
-    `[plan review round ${run.loop.round}] plan_review 报以下计划审查用例失败，请修复计划文件：`,
-    "",
-    `计划文件：${run.planFile ?? ""}`,
-    "",
-    ...failedCases.map((item) => {
-      const evidence = item.evidence
-        .map((ev) => `${ev.label}: ${ev.summary}`)
-        .join("; ");
-      return `- [${item.caseId}] ${item.text}${evidence ? `\n  证据：${evidence}` : ""}`;
-    }),
-    "",
-    "只修改计划文件。修复后无需自己复审；backend 会重新触发 plan_review。",
-  ].join("\n");
-}
-
 /** Ask a review/verify worker to rerun cases after a code pane completed fixes. */
 export function buildWorkerRecheckPrompt(params: {
   run: AgentTeamRun;
@@ -152,14 +108,9 @@ export function buildWorkerRecheckPrompt(params: {
   outboxPath?: string | null;
 }): string {
   const { run, worker, cases, outboxPath } = params;
-  const isReviewWorker =
-    worker.role === "code_review" || worker.role === "plan_review";
+  const isReviewWorker = worker.role === "code_review";
   const sourceLabel =
-    run.phase === "plan_review"
-      ? "plan pane"
-      : worker.role === "behavior_verify"
-        ? "code_review"
-        : "code pane";
+    worker.role === "behavior_verify" ? "code_review" : "code pane";
   return [
     `[loop round ${run.loop.round}] ${sourceLabel} 已完成修复，请重新${isReviewWorker ? "审查" : "验收"}以下用例：`,
     "",
