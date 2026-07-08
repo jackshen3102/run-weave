@@ -1,52 +1,60 @@
 {
   "title": "原型标题",
-  "subtitle": "把这段文案替换为当前要探索的产品工作流说明。",
-  "activeStepId": "draft",
-  "steps": [
+  "subtitle": "当前产品区域",
+  "navigationLabel": "主要导航",
+  "activeViewId": "primary",
+  "actions": [
     {
-      "id": "draft",
-      "label": "草稿",
-      "title": "草稿状态",
-      "status": "编辑中",
+      "id": "secondary",
+      "label": "次要操作",
+      "primary": false
+    },
+    {
+      "id": "primary",
+      "label": "主要操作",
+      "primary": true
+    }
+  ],
+  "views": [
+    {
+      "id": "primary",
+      "label": "主视图",
+      "title": "主要内容",
+      "status": "进行中",
       "items": [
         {
-          "title": "主要对象",
-          "description": "替换为首屏需要展示的核心业务对象。"
+          "title": "核心对象",
+          "description": "对象的当前状态、主要字段和可执行动作。"
         },
         {
-          "title": "决策点",
-          "description": "描述这个原型要帮助用户澄清的关键选择。"
+          "title": "状态反馈",
+          "description": "用户完成操作后可见的状态变化。"
         }
       ]
     },
     {
-      "id": "review",
-      "label": "评审",
-      "title": "评审状态",
+      "id": "secondary",
+      "label": "次视图",
+      "title": "关联内容",
       "status": "就绪",
       "items": [
         {
-          "title": "变化后的状态",
-          "description": "展示用户进入下一步后新增的可见内容或可执行操作。"
-        },
-        {
-          "title": "验证信号",
-          "description": "展示用于确认状态流转的反馈、事件、徽标或状态。"
+          "title": "关联对象",
+          "description": "与当前流程相关的补充信息。"
         }
       ]
     },
     {
-      "id": "complete",
-      "label": "完成",
-      "title": "完成状态",
-      "status": "已完成",
+      "id": "empty",
+      "label": "空状态",
+      "title": "暂无内容",
+      "status": "待处理",
       "items": [
         {
-          "title": "最终结果",
-          "description": "表达后续实施计划需要参考的终态。"
+          "title": "空状态提示",
+          "description": "无数据时用户需要看到的反馈和后续入口。"
         }
       ]
     }
-  ],
-  "events": ["模拟状态已加载", "原型已启动"]
+  ]
 }
