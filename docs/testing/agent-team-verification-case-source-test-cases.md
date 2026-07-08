@@ -1,6 +1,6 @@
 # Agent Team 验证用例来源测试案例
 
-本文档由 `docs/plans/2026-07-08-agent-team-verification-case-source.md` 生成，用于验证 Agent Team 的 `behavior_verify` 验收来源从后端泛化默认用例改为可追溯的计划文件 / 测试案例文件合同。
+本文档用于验证 Agent Team 的 `behavior_verify` 验收来源从后端泛化默认用例改为可追溯的计划文件 / 测试案例文件合同。当前产品边界见 `docs/architecture/multi-agent-orchestrator.md#验收来源`。
 
 ## 范围
 
@@ -23,7 +23,7 @@
 
 ## 前提事实
 
-- 计划来源：`docs/plans/2026-07-08-agent-team-verification-case-source.md`。
+- 验收来源契约：`docs/architecture/multi-agent-orchestrator.md#验收来源`。
 - Agent Team UI 入口：`frontend/src/components/terminal/terminal-agent-team-panel.tsx`。
 - Proposal / Executing 展示：`frontend/src/components/terminal/terminal-agent-team-panel-sections.tsx`。
 - API 路由：`backend/src/routes/agent-team.ts`。
@@ -130,7 +130,7 @@ git diff --check
 
 前置条件：
 
-- 存在计划文件 `docs/plans/2026-07-08-agent-team-verification-case-source.md`。
+- 存在项目内输入文件 `docs/architecture/multi-agent-orchestrator.md`，用于填写启动面板的 `计划文件` 字段。
 - 存在测试案例文件 `docs/testing/agent-team-verification-case-source-test-cases.md`，包含 `AGT-VERIFY-003`。
 
 步骤：
@@ -161,13 +161,13 @@ git diff --check
 
 前置条件：
 
-- 存在计划文件 `docs/plans/2026-07-08-agent-team-verification-case-source.md`。
+- 存在项目内输入文件 `docs/architecture/multi-agent-orchestrator.md`，用于填写启动面板的 `计划文件` 字段。
 - 启动 run 时不填写测试案例文件。
 
 步骤：
 
 1. 启动 Agent Team run，任务描述说明“基于计划文件生成测试案例并拆分 worker”。
-2. `计划文件` 填写 `docs/plans/2026-07-08-agent-team-verification-case-source.md`。
+2. `计划文件` 填写 `docs/architecture/multi-agent-orchestrator.md`。
 3. 观察主 Agent pane 的 prompt 或 run logs。
 4. 等待主 Agent 调用 `$toolkit:write-test-cases` 并生成 `docs/testing/*-test-cases.md`。
 5. 主 Agent 调用 `POST /api/agent-team/runs/:runId/propose-split`，payload 带 `generatedTestCaseFilePath` 和三类 worker。

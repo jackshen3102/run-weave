@@ -24,8 +24,8 @@
 - `TerminalState` 协议允许：
   - `shell_idle` + `agent=null`
   - `agent_starting` + `agent="codex" | "trae" | "traecli" | "traex"`
-  - `agent_idle` + `agent="codex"`
-  - `agent_running` + `agent="codex"`
+  - `agent_idle` + `agent="codex" | "trae" | "traecli" | "traex"`
+  - `agent_running` + `agent="codex" | "trae" | "traecli" | "traex"`
 - `TerminalStateService.handleAgentHook()` 当前映射：
   - `SessionStart` -> `agent_idle`
   - `UserPromptSubmit` -> `agent_running`
@@ -42,7 +42,7 @@
 
 ### K1 原始启动命令不应永久代表当前仍在 Codex
 
-目标契约来自 `docs/plans/2026-06-09-codex-cli-terminal-state.md`：`activeCommand=codex` 表示进入 Codex CLI；`activeCommand=null` 或非 Codex 要把状态推进到 `shell_idle`。
+目标契约来自 `docs/architecture/terminal-state.md`：`activeCommand=codex` 表示进入 Codex CLI；`activeCommand=null` 或非 Codex 要把状态推进到 `shell_idle`。
 
 系统验收不要求强行制造 `command="codex" + activeCommand=node/null`。真实场景应验证：用户曾进入 Codex 并产生 Codex 状态后，真实 shell hook/tmux metadata 报告 `activeCommand=null` 或普通命令时，状态回到 `shell_idle/null`。代码审查层面再确认状态判断只依赖当前 `activeCommand`，不依赖 session 原始 `command`。
 

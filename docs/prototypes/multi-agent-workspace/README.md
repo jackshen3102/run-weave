@@ -22,7 +22,7 @@
 
 ## 灵魂拷问收敛（原型 → 落地）
 
-> 一轮针对「离实际落地还差什么」的灵魂拷问后的结论。这一版流程被定位成**全新的 agent-team / loop-engineer 流程**，**完全取代并废弃上一代 orchestrator**（`backend/src/orchestrator/*`、`packages/shared/src/orchestrator.ts`、前端 Orchestrator sidecar tab、`/api/orchestrator` 路由）——旧模块在落地时清理，不并存、不维护向后兼容。落地方案详见 `docs/plans/2026-07-03-agent-team-loop-engineer.md`。
+> 一轮针对「离实际落地还差什么」的灵魂拷问后的结论。这一版流程被定位成**全新的 agent-team / loop-engineer 流程**，**完全取代并废弃上一代 orchestrator**（`backend/src/orchestrator/*`、`packages/shared/src/orchestrator.ts`、前端 Orchestrator sidecar tab、`/api/orchestrator` 路由）——旧模块在落地时清理，不并存、不维护向后兼容。当前落地边界见 `docs/architecture/multi-agent-orchestrator.md`。
 
 ### 已锁定的设计决策
 
@@ -144,7 +144,7 @@ flow 终端有三段生命周期，右侧面板按阶段切换职责：
 - v3（Loop Engineer 视角）：executing 阶段观测面板新增 **Loop 状态条 + 无进展熔断升级**。不加确定性自检断言（agent 自己会跑 typecheck/lint/test），只补 loop 的「底」：连续 `maxNoProgress`（默认 3）轮无进展自动熔断、升级人工、人介入后恢复。修单终端不撑满 canvas 的样式 bug。
 - v4（行为验证闭环）：新增 `behavior_verify` 阶段 + 角色。proposal 卡加**验收用例草案**（主 Agent 草拟、随拆分确认或自动采用）；executing 加 **验收用例 + 证据**块（每条 pass/fail + 截图/DOM 证据，失败抛回 code agent）。左侧终端多一个 verify worker pane。这层补的是 agent 盲区（行为/可观测性验证）+ 意图对齐。
 - v5（套进真实架构）：把顶部单一 run 切换条改成对齐真实终端页的**两行 tab**（项目行 + 终端行）。run 概念下沉到「终端」这一层——**一个终端 = 一套 run**，worker 是终端内的 tmux split。新增终端 `mode`：新终端先是**普通 shell（plain）**，右侧给「开启 engineering-rules 流程」入口，显式开启后才进入 clarify → proposal → executing。mock-state 从 `runs[]` 重构为 `projects[]` + `terminals[]`。
-- v6（灵魂拷问收敛）：一轮「离落地还差什么」拷问后，新增「灵魂拷问收敛」章节，落定 6 条设计决策（承载模型 / loop 信号 / 熔断接管恢复 / 验收证据回传 / 可视终端定位 / 崩溃恢复 backlog）与 7 条落地硬缺口，并明确本流程是**全新 agent-team/loop-engineer 流程**，不受上一代 orchestrator 默认约束。落地方案见 `docs/plans/2026-07-03-agent-team-loop-engineer.md`。原型交互本身未改，仅补设计记录。
+- v6（灵魂拷问收敛）：一轮「离落地还差什么」拷问后，新增「灵魂拷问收敛」章节，落定 6 条设计决策（承载模型 / loop 信号 / 熔断接管恢复 / 验收证据回传 / 可视终端定位 / 崩溃恢复 backlog）与 7 条落地硬缺口，并明确本流程是**全新 agent-team/loop-engineer 流程**，不受上一代 orchestrator 默认约束。当前落地边界见 `docs/architecture/multi-agent-orchestrator.md`。原型交互本身未改，仅补设计记录。
 
 ## 验证点
 

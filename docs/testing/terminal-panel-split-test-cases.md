@@ -1,6 +1,6 @@
 # Terminal Panel Split 测试计划
 
-本文档基于 `docs/plans/2026-06-26-terminal-panel-split.md`，用于覆盖 tmux 原生 split 方案从协议、后端、CLI、事件同步到 Web 验收的测试范围。
+本文档覆盖 tmux 原生 split 方案从协议、后端、CLI、事件同步到 Web 验收的测试范围。Agent Team 对 worker pane 的当前使用边界见 `docs/architecture/multi-agent-orchestrator.md`。
 
 涉及打开页面、点击、输入、截图或浏览器自动化验证时，必须使用 `$playwright-cli`。本计划不要求新增前端 Vitest、React unit test、Node test 或其它非 E2E 测试文件；浏览器自动化只放在 `frontend/tests/*.spec.ts`。
 

@@ -33,7 +33,7 @@ http://127.0.0.1:6188/
 
 - `frontend/src/components/terminal/terminal-workspace-shell.tsx`：Web Terminal 右上角已有 `More actions`，菜单里已有 `Preview`、`Terminal History`、`日志上报`。
 - `packages/shared/src/app-server-events.ts`：已有 `AppServerThreadRef`、`AppServerThreadListResponse`、`AppServerThreadResponse` 类型。
-- `docs/plans/2026-07-05-app-server-state-sync.md`：ThreadRef 只保存轻量状态，不保存完整 thread 详情；查询 API 方向是 `/threads` 与 `/threads/:threadId`。
+- `docs/architecture/terminal-state.md`：ThreadRef 只保存轻量状态，不保存完整 thread 详情；查询 API 方向是 `/threads` 与 `/threads/:threadId`。
 
 ## 验证点
 
