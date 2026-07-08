@@ -15,6 +15,8 @@ interface TmuxOutputWatcherOptions {
   tmuxLifecycleCoordinator?: TmuxLifecycleCoordinator;
   pollIntervalMs?: number;
   maxTransportBytes?: number;
+  startupMaxSessions?: number;
+  startupConcurrency?: number;
 }
 
 interface WatchedTmuxSession {
@@ -28,6 +30,8 @@ interface WatchedTmuxSession {
 
 const DEFAULT_TMUX_OUTPUT_POLL_INTERVAL_MS = 500;
 const DEFAULT_TMUX_OUTPUT_MAX_TRANSPORT_BYTES = 1024 * 1024;
+const DEFAULT_TMUX_OUTPUT_STARTUP_MAX_SESSIONS = 8;
+const DEFAULT_TMUX_OUTPUT_STARTUP_CONCURRENCY = 2;
 const FORCE_TRUNCATE_TRANSPORT_BYTES_MULTIPLIER = 2;
 const tmuxOutputLogger = logger.child({ component: "terminal" });
 
@@ -38,6 +42,8 @@ export class TmuxOutputWatcher {
   private readonly terminalSessionManager: TerminalSessionManager;
   private readonly tmuxService: TmuxService;
   private readonly tmuxLifecycleCoordinator?: TmuxLifecycleCoordinator;
+  private readonly startupMaxSessions: number;
+  private readonly startupConcurrency: number;
   private readonly watchedSessions = new Map<string, WatchedTmuxSession>();
   private pollTimer: NodeJS.Timeout | null = null;
   private disposed = false;
@@ -48,17 +54,53 @@ export class TmuxOutputWatcher {
       options.pollIntervalMs ?? DEFAULT_TMUX_OUTPUT_POLL_INTERVAL_MS;
     this.maxTransportBytes =
       options.maxTransportBytes ?? DEFAULT_TMUX_OUTPUT_MAX_TRANSPORT_BYTES;
+    this.startupMaxSessions =
+      options.startupMaxSessions ?? DEFAULT_TMUX_OUTPUT_STARTUP_MAX_SESSIONS;
+    this.startupConcurrency = Math.max(
+      1,
+      options.startupConcurrency ?? DEFAULT_TMUX_OUTPUT_STARTUP_CONCURRENCY,
+    );
     this.terminalSessionManager = options.terminalSessionManager;
     this.tmuxService = options.tmuxService;
     this.tmuxLifecycleCoordinator = options.tmuxLifecycleCoordinator;
   }
 
   async watchExistingSessions(): Promise<void> {
-    await Promise.all(
-      this.terminalSessionManager
-        .listSessions()
-        .filter((session) => shouldWatchSession(session))
-        .map((session) => this.watchSession(session)),
+    const sessions = this.terminalSessionManager
+      .listSessions()
+      .filter((session) => shouldWatchSession(session))
+      .sort(
+        (a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime(),
+      );
+    const selectedSessions = sessions.slice(0, this.startupMaxSessions);
+    const skippedCount = Math.max(0, sessions.length - selectedSessions.length);
+    if (skippedCount > 0) {
+      tmuxOutputLogger.info("terminal.tmux.output-watch.startup.limited", {
+        message: "Limited tmux output watcher startup recovery",
+        selectedCount: selectedSessions.length,
+        skippedCount,
+        totalCount: sessions.length,
+      });
+    }
+
+    for (
+      let index = 0;
+      index < selectedSessions.length;
+      index += this.startupConcurrency
+    ) {
+      await Promise.all(
+        selectedSessions
+          .slice(index, index + this.startupConcurrency)
+          .map((session) => this.watchSession(session)),
+      );
+    }
+    tmuxOutputLogger.info(
+      "terminal.tmux.output-watch.startup.recovered",
+      {
+        message: "Recovered tmux output watchers for existing sessions",
+        selectedCount: selectedSessions.length,
+        totalCount: sessions.length,
+      },
     );
   }
 
