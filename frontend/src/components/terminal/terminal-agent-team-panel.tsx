@@ -53,7 +53,6 @@ export function TerminalAgentTeamPanel({
   const [error, setError] = useState<string | null>(null);
   const [task, setTask] = useState("");
   const [planFile, setPlanFile] = useState("");
-  const [autoApproveSplit, setAutoApproveSplit] = useState(false);
   const [workerDrafts, setWorkerDrafts] = useState<WorkerDraft[] | null>(null);
   const [resumeNote, setResumeNote] = useState("");
 
@@ -190,7 +189,7 @@ export function TerminalAgentTeamPanel({
         terminalSessionId,
         task: trimmedTask,
         ...(trimmedPlanFile ? { planFile: trimmedPlanFile } : {}),
-        options: { autoApproveSplit },
+        options: { autoApproveSplit: true },
       }).then((next) => {
         if (next.phase === "executing") {
           onPanelSplitEnabledChange?.(true);
@@ -321,11 +320,9 @@ export function TerminalAgentTeamPanel({
           <StartFlowSection
             task={task}
             planFile={planFile}
-            autoApproveSplit={autoApproveSplit}
             busy={busy}
             onTaskChange={setTask}
             onPlanFileChange={setPlanFile}
-            onToggleAutoApprove={() => setAutoApproveSplit((prev) => !prev)}
             onStart={startFlow}
           />
         ) : run.phase === "plan_review" ? (

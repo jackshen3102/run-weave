@@ -17,20 +17,16 @@ import {
 export function StartFlowSection({
   task,
   planFile,
-  autoApproveSplit,
   busy,
   onTaskChange,
   onPlanFileChange,
-  onToggleAutoApprove,
   onStart,
 }: {
   task: string;
   planFile: string;
-  autoApproveSplit: boolean;
   busy: boolean;
   onTaskChange: (value: string) => void;
   onPlanFileChange: (value: string) => void;
-  onToggleAutoApprove: () => void;
   onStart: () => void;
 }) {
   return (
@@ -45,9 +41,12 @@ export function StartFlowSection({
       </p>
       <ol className="space-y-1 pl-4 text-xs text-slate-400 [list-style:decimal]">
         <li>可选计划文件先由 plan_review 审查</li>
-        <li>计划通过后产出 worker 拆分提案，你确认</li>
-        <li>确认后 split 出 worker pane，并按 code → review → verify 串行门禁推进</li>
+        <li>计划通过后由服务端自动生成并确认 worker 拆分</li>
+        <li>自动 split 出 worker pane，并按 code → review → verify 串行门禁推进</li>
       </ol>
+      <div className="rounded border border-slate-800 bg-slate-900/50 px-2 py-1.5 text-[11px] leading-relaxed text-slate-400">
+        拆分策略：服务端自动拆分。右侧面板只展示状态与日志，不需要手动点击“拆分”。
+      </div>
       <textarea
         className="min-h-20 w-full resize-y rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
         value={task}
@@ -60,15 +59,6 @@ export function StartFlowSection({
         onChange={(event) => onPlanFileChange(event.target.value)}
         placeholder="可选：计划文件路径，如 docs/plans/xxx.md"
       />
-      <label className="flex items-center gap-2 text-xs text-slate-300">
-        <input
-          type="checkbox"
-          checked={autoApproveSplit}
-          onChange={onToggleAutoApprove}
-          className="h-3.5 w-3.5"
-        />
-        自动确认拆分（跳过人工门）
-      </label>
       <Button
         type="button"
         size="sm"
@@ -266,10 +256,19 @@ export function ProposalSection({
   onConfirm: () => void;
   onReject: () => void;
 }) {
+  const splitManagedByServer = run.options.autoApproveSplit;
+  const canEditSplit = !splitManagedByServer && run.workers.length === 0;
+  const recentLogs = run.logs.slice(-5).reverse();
   const removeWorker = (index: number) => {
+    if (!canEditSplit) {
+      return;
+    }
     onChangeDrafts(workerDrafts.filter((_, current) => current !== index));
   };
   const addWorker = () => {
+    if (!canEditSplit) {
+      return;
+    }
     const nextRole = ROLE_CYCLE[workerDrafts.length % ROLE_CYCLE.length]!;
     onChangeDrafts([
       ...workerDrafts,
@@ -294,24 +293,28 @@ export function ProposalSection({
             <span className="min-w-0 flex-1 truncate text-xs text-slate-300">
               {worker.intent}
             </span>
-            <button
-              type="button"
-              className="text-slate-500 hover:text-rose-400"
-              onClick={() => removeWorker(index)}
-              aria-label="移除 worker"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            {canEditSplit ? (
+              <button
+                type="button"
+                className="text-slate-500 hover:text-rose-400"
+                onClick={() => removeWorker(index)}
+                aria-label="移除 worker"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
           </div>
         ))}
       </div>
-      <button
-        type="button"
-        className="flex w-full items-center justify-center gap-1 rounded border border-dashed border-slate-700 py-1.5 text-xs text-slate-400 hover:text-slate-200"
-        onClick={addWorker}
-      >
-        <Plus className="h-3.5 w-3.5" /> 加一个 worker
-      </button>
+      {canEditSplit ? (
+        <button
+          type="button"
+          className="flex w-full items-center justify-center gap-1 rounded border border-dashed border-slate-700 py-1.5 text-xs text-slate-400 hover:text-slate-200"
+          onClick={addWorker}
+        >
+          <Plus className="h-3.5 w-3.5" /> 加一个 worker
+        </button>
+      ) : null}
 
       {run.proposal && run.proposal.acceptance.length > 0 ? (
         <div className="rounded border border-slate-800 bg-slate-900/40 p-2">
@@ -320,7 +323,7 @@ export function ProposalSection({
           </div>
           <p className="mb-1 text-[10px] text-slate-500">
             Agent Team 把任务目标落成可观测验收用例，由 behavior_verify worker
-            跑。与拆分一并确认。
+            跑。{splitManagedByServer ? "由服务端随拆分自动确认。" : "与拆分一并确认。"}
           </p>
           <ol className="space-y-0.5 pl-4 text-[11px] text-slate-400 [list-style:decimal]">
             {run.proposal.acceptance.map((item) => (
@@ -330,25 +333,44 @@ export function ProposalSection({
         </div>
       ) : null}
 
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          size="sm"
-          className="flex-1"
-          disabled={busy || workerDrafts.length === 0}
-          onClick={onConfirm}
-        >
-          确认拆分 · split {workerDrafts.length} 个 pane →
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={busy}
-          onClick={onReject}
-        >
-          驳回
-        </Button>
+      {canEditSplit ? (
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            className="flex-1"
+            disabled={busy || workerDrafts.length === 0}
+            onClick={onConfirm}
+          >
+            确认拆分 · split {workerDrafts.length} 个 pane →
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={onReject}
+          >
+            驳回
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded border border-slate-800 bg-slate-900/50 px-2 py-1.5 text-[11px] leading-relaxed text-slate-400">
+          服务端正在自动确认拆分并创建 worker pane。这里不再提供手动拆分入口。
+        </div>
+      )}
+
+      <div>
+        <div className="mb-1 text-xs font-semibold text-slate-400">Log</div>
+        <div className="space-y-0.5 rounded border border-slate-800 bg-slate-950/60 p-2 font-mono text-[10px] text-slate-400">
+          {recentLogs.length > 0 ? (
+            recentLogs.map((line, index) => (
+              <div key={`${index}-${line}`}>{line}</div>
+            ))
+          ) : (
+            <div>等待服务端自动拆分...</div>
+          )}
+        </div>
       </div>
     </div>
   );
