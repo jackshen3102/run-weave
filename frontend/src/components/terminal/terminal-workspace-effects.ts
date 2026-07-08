@@ -1,5 +1,8 @@
 import { useEffect } from "react";
-import type { TerminalSessionListItem } from "@runweave/shared";
+import type {
+  TerminalProjectListItem,
+  TerminalSessionListItem,
+} from "@runweave/shared";
 import {
   loadRecentTerminalSelection,
   saveRecentTerminalSelection,
@@ -33,6 +36,43 @@ export function resolvePreferredSessionId(
   }
 
   return projectSessions[0]?.terminalSessionId ?? null;
+}
+
+export function resolvePreferredProjectId(
+  apiBase: string,
+  projects: TerminalProjectListItem[],
+  sessions: TerminalSessionListItem[],
+  currentProjectId?: string | null,
+  preferredSessionId?: string | null,
+): string | null {
+  const preferredSessionProjectId = preferredSessionId
+    ? sessions.find(
+        (session) => session.terminalSessionId === preferredSessionId,
+      )?.projectId
+    : null;
+  if (
+    preferredSessionProjectId &&
+    projects.some((project) => project.projectId === preferredSessionProjectId)
+  ) {
+    return preferredSessionProjectId;
+  }
+
+  if (
+    currentProjectId &&
+    projects.some((project) => project.projectId === currentProjectId)
+  ) {
+    return currentProjectId;
+  }
+
+  const recentSelection = loadRecentTerminalSelection(apiBase);
+  if (
+    recentSelection?.projectId &&
+    projects.some((project) => project.projectId === recentSelection.projectId)
+  ) {
+    return recentSelection.projectId;
+  }
+
+  return projects[0]?.projectId ?? null;
 }
 
 function cycleIndex(currentIndex: number, total: number, delta: number): number {
@@ -230,7 +270,7 @@ interface PersistRecentSelectionOptions {
   apiBase: string;
   activeProjectId: string | null;
   activeSessionId: string | null;
-  hasLoadedSessions: boolean;
+  canPersist: boolean;
   requestError: string | null;
 }
 
@@ -238,11 +278,11 @@ export function usePersistRecentSelection({
   apiBase,
   activeProjectId,
   activeSessionId,
-  hasLoadedSessions,
+  canPersist,
   requestError,
 }: PersistRecentSelectionOptions): void {
   useEffect(() => {
-    if (!hasLoadedSessions || requestError || !activeProjectId) {
+    if (!canPersist || requestError || !activeProjectId) {
       return;
     }
 
@@ -250,5 +290,5 @@ export function usePersistRecentSelection({
       projectId: activeProjectId,
       terminalSessionId: activeSessionId,
     });
-  }, [activeProjectId, activeSessionId, apiBase, hasLoadedSessions, requestError]);
+  }, [activeProjectId, activeSessionId, apiBase, canPersist, requestError]);
 }
