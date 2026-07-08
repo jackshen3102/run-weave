@@ -12,6 +12,8 @@ import { hasCodexReadyPrompt } from "@runweave/shared";
 const DEFAULT_TAIL_LINES = 120;
 export const DEFAULT_CONFIRM_TIMEOUT_MS = 3000;
 export const DEFAULT_AGENT_START_TIMEOUT_MS = 15000;
+const CODEX_SKIP_UPDATE_ON_STARTUP_COMMAND =
+  "codex -c check_for_update_on_startup=false";
 const AGENT_COMMAND_PATTERN =
   /(?:^|\/)(codex|claude|opencode|coco|trae|traecli|traex)(?:$|\s|-)/i;
 const SHELL_COMMAND_PATTERN = /(?:^|\/)(zsh|bash|fish|sh)$/i;
@@ -337,7 +339,13 @@ async function prepareAgentSession(params: {
     await waitForNoAgent(params);
   }
 
-  await sendAgentControlLine(params, params.agentStartCommand ?? params.agent);
+  await sendAgentControlLine(
+    params,
+    resolveAgentStartCommand({
+      agent: params.agent,
+      agentStartCommand: params.agentStartCommand,
+    }),
+  );
   actions.push("start");
   const terminalState = await waitForRequestedAgent(params, params.agent);
   return {
@@ -348,6 +356,38 @@ async function prepareAgentSession(params: {
     terminalState,
     actions,
   };
+}
+
+function resolveAgentStartCommand(params: {
+  agent: string;
+  agentStartCommand: string | undefined;
+}): string {
+  if (params.agentStartCommand) {
+    return withCodexSkipUpdateOnStartup(params.agentStartCommand);
+  }
+  if (params.agent.toLowerCase() === "codex") {
+    return CODEX_SKIP_UPDATE_ON_STARTUP_COMMAND;
+  }
+  return params.agent;
+}
+
+function withCodexSkipUpdateOnStartup(command: string): string {
+  if (command.includes("check_for_update_on_startup")) {
+    return command;
+  }
+  const match = /^(\S+)(.*)$/s.exec(command.trim());
+  if (!match) {
+    return command;
+  }
+  const executable = match[1];
+  const rest = match[2] ?? "";
+  if (!executable) {
+    return command;
+  }
+  if (commandName(executable).toLowerCase() !== "codex") {
+    return command;
+  }
+  return `${executable} -c check_for_update_on_startup=false${rest}`;
 }
 
 async function getAgentSessionSnapshot(params: {

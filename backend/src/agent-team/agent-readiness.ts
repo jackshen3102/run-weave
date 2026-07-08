@@ -1,5 +1,7 @@
 import {
+  hasCodexRestartRequiredAfterUpdate,
   hasPendingCodexTrustPrompt,
+  hasPendingCodexUpdatePrompt,
   hasStartedCodexUi,
   stripTerminalControlSequences,
   type AgentTeamTerminal,
@@ -27,6 +29,10 @@ import { AgentTeamError } from "./errors";
 
 const AGENT_TEAM_AGENT_START_TIMEOUT_MS = 15000;
 const AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS = 250;
+const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
+  "-c",
+  "check_for_update_on_startup=false",
+] as const;
 
 export class AgentTeamAgentReadinessService {
   constructor(
@@ -83,7 +89,7 @@ export class AgentTeamAgentReadinessService {
     await this.sendAgentStartCommand(session, terminal, agent, paneTarget, {
       publishSessionState,
     });
-    await this.waitForAgentUi(session, agent, paneTarget, {
+    await this.waitForAgentUi(session, terminal, agent, paneTarget, {
       publishSessionState,
     });
   }
@@ -120,6 +126,7 @@ export class AgentTeamAgentReadinessService {
 
   private async waitForAgentUi(
     session: TerminalSessionRecord,
+    terminal: AgentTeamTerminal,
     agent: TerminalAgentKind,
     paneTarget: TmuxPaneTarget | undefined,
     options: { publishSessionState: boolean },
@@ -128,7 +135,31 @@ export class AgentTeamAgentReadinessService {
       return;
     }
     const deadline = Date.now() + AGENT_TEAM_AGENT_START_TIMEOUT_MS;
+    let skippedCodexUpdatePrompt = false;
+    let restartedAfterCodexUpdate = false;
     while (Date.now() <= deadline) {
+      const startupInterruptionHandled =
+        await this.handleCodexStartupInterruptionIfNeeded(
+          session,
+          terminal,
+          agent,
+          paneTarget,
+          options,
+          {
+            canSkipUpdatePrompt: !skippedCodexUpdatePrompt,
+            canRestartAfterUpdate: !restartedAfterCodexUpdate,
+          },
+        );
+      if (startupInterruptionHandled === "skipped_update_prompt") {
+        skippedCodexUpdatePrompt = true;
+        await wait(AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS);
+        continue;
+      }
+      if (startupInterruptionHandled === "restarted_after_update") {
+        restartedAfterCodexUpdate = true;
+        await wait(AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS);
+        continue;
+      }
       await this.acceptCodexTrustPromptIfNeeded(session, agent, paneTarget);
       if (await this.isAgentUiReady(session, agent, paneTarget, options)) {
         return;
@@ -139,6 +170,54 @@ export class AgentTeamAgentReadinessService {
       409,
       `Timed out waiting for agent-team agent "${agent}" to start`,
     );
+  }
+
+  private async handleCodexStartupInterruptionIfNeeded(
+    session: TerminalSessionRecord,
+    terminal: AgentTeamTerminal,
+    agent: TerminalAgentKind,
+    paneTarget: TmuxPaneTarget | undefined,
+    options: { publishSessionState: boolean },
+    controls: {
+      canSkipUpdatePrompt: boolean;
+      canRestartAfterUpdate: boolean;
+    },
+  ): Promise<"skipped_update_prompt" | "restarted_after_update" | null> {
+    if (agent !== "codex") {
+      return null;
+    }
+    const scrollback = await this.readCleanScrollback(session, paneTarget);
+    if (
+      controls.canSkipUpdatePrompt &&
+      hasPendingCodexUpdatePrompt(scrollback)
+    ) {
+      await sendInputToSession(
+        this.options.terminalSessionManager,
+        {
+          runtimeRegistry: this.options.runtimeRegistry,
+          ptyService: this.options.ptyService,
+          tmuxService: this.options.tmuxService,
+          tmuxOutputWatcher: this.options.tmuxOutputWatcher,
+          terminalStateService: this.options.terminalStateService,
+        },
+        session,
+        "2",
+        "line",
+        `agent_team_agent_skip_update_${Date.now()}`,
+        paneTarget,
+      );
+      return "skipped_update_prompt";
+    }
+    if (
+      controls.canRestartAfterUpdate &&
+      hasCodexRestartRequiredAfterUpdate(scrollback)
+    ) {
+      await this.sendAgentStartCommand(session, terminal, agent, paneTarget, {
+        publishSessionState: options.publishSessionState,
+      });
+      return "restarted_after_update";
+    }
+    return null;
   }
 
   private async acceptCodexTrustPromptIfNeeded(
@@ -268,11 +347,23 @@ function buildAgentStartCommand(
   agent: TerminalAgentKind,
 ): string {
   const command = terminal.command?.trim() || agent;
-  const args = terminal.args ?? [];
+  const args =
+    agent === "codex"
+      ? withCodexSkipUpdateOnStartupArgs(terminal.args ?? [])
+      : (terminal.args ?? []);
   if (args.length === 0) {
     return command;
   }
   return [command, ...args.map(shellQuote)].join(" ");
+}
+
+function withCodexSkipUpdateOnStartupArgs(
+  args: readonly string[],
+): readonly string[] {
+  if (args.some((arg) => arg.includes("check_for_update_on_startup"))) {
+    return args;
+  }
+  return [...CODEX_SKIP_UPDATE_ON_STARTUP_ARGS, ...args];
 }
 
 function shellQuote(value: string): string {

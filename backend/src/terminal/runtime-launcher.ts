@@ -30,6 +30,10 @@ interface EnsureTerminalRuntimeOptions {
 const TmuxPostEnterInputDelayMs = 300;
 const BRACKETED_PASTE_START = "\u001b[200~";
 const BRACKETED_PASTE_END = "\u001b[201~";
+const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
+  "-c",
+  "check_for_update_on_startup=false",
+] as const;
 const terminalLogger = logger.child({ component: "terminal" });
 
 export function isTmuxBackedSession(
@@ -225,7 +229,7 @@ export async function ensureTerminalRuntime(
         if (codexThreadIdToResume) {
           await options.tmuxService!.sendInput(
             target,
-            `codex resume ${shellQuote(codexThreadIdToResume)}\n`,
+            buildCodexResumeCommand(codexThreadIdToResume),
           );
         }
       }
@@ -310,6 +314,15 @@ function isInteractiveShellLaunch(command: string, args: string[]): boolean {
     return false;
   }
   return !args.some((arg) => arg === "-c" || arg === "-lc");
+}
+
+function buildCodexResumeCommand(codexThreadId: string): string {
+  const args = [
+    ...CODEX_SKIP_UPDATE_ON_STARTUP_ARGS,
+    "resume",
+    codexThreadId,
+  ];
+  return `codex ${args.map(shellQuote).join(" ")}\n`;
 }
 
 function shouldResumeCodexThreadAfterTmuxLoss(

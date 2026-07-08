@@ -252,11 +252,16 @@ function normalizeAcceptanceResults(
     .filter(
       (result) =>
         typeof result.caseId === "string" &&
-        (result.status === "pass" || result.status === "fail"),
+        (result.status === "pass" ||
+          result.status === "fail" ||
+          result.status === "skipped"),
     )
     .map((result) => ({
       caseId: result.caseId,
       status: result.status,
+      ...(typeof result.skipReason === "string" && result.skipReason.trim()
+        ? { skipReason: result.skipReason.trim() }
+        : {}),
       evidence: Array.isArray(result.evidence)
         ? result.evidence
             .filter(

@@ -49,6 +49,10 @@ interface CodexThreadReadResponse {
   };
 }
 
+const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
+  "-c",
+  "check_for_update_on_startup=false",
+] as const;
 const CODEX_APP_SERVER_ARGS = ["app-server"] as const;
 const CODEX_THREAD_STATUS_TYPES = new Set<CodexThreadStatusType>([
   "notLoaded",
@@ -305,11 +309,12 @@ interface CodexLaunchPlan {
 }
 
 function resolveCodexLaunchPlan(env: NodeJS.ProcessEnv): CodexLaunchPlan {
+  const args = buildCodexAppServerArgs();
   const configured = env.CODEX_BIN?.trim();
   if (configured && isExecutableFile(configured)) {
     return {
       command: configured,
-      args: [...CODEX_APP_SERVER_ARGS],
+      args,
     };
   }
 
@@ -317,15 +322,19 @@ function resolveCodexLaunchPlan(env: NodeJS.ProcessEnv): CodexLaunchPlan {
     if (isExecutableFile(candidate)) {
       return {
         command: candidate,
-        args: [...CODEX_APP_SERVER_ARGS],
+        args,
       };
     }
   }
 
   return {
     command: "codex",
-    args: [...CODEX_APP_SERVER_ARGS],
+    args,
   };
+}
+
+function buildCodexAppServerArgs(): string[] {
+  return [...CODEX_SKIP_UPDATE_ON_STARTUP_ARGS, ...CODEX_APP_SERVER_ARGS];
 }
 
 function buildCodexProcessEnv(

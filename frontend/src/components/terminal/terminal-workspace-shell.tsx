@@ -999,7 +999,7 @@ export function TerminalWorkspaceShell({
       activeSession &&
       (activeAgentTeamRunPresent ||
         pendingAgentTeamSessionId === activeSession.terminalSessionId ||
-        (panelSplitEnabled && activeAgentTeamAvailable)),
+        activeAgentTeamAvailable),
   );
 
   useEffect(() => {

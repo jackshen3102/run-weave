@@ -42,11 +42,29 @@ export interface AgentTeamAcceptanceEvidence {
 }
 
 export type AgentTeamAcceptanceStatus = "pass" | "fail" | "pending";
+export type AgentTeamAcceptanceSource =
+  | "test_case_file"
+  | "plan_file_generated"
+  | "task_generated";
+
+export interface AgentTeamVerificationConfig {
+  planFilePath?: string | null;
+  testCaseFilePath?: string | null;
+  generatedTestCaseFilePath?: string | null;
+  acceptanceSource: AgentTeamAcceptanceSource;
+}
 
 /** A single markdown acceptance case, drafted at proposal, tracked in loop. */
 export interface AgentTeamAcceptanceCase {
   caseId: string;
   text: string;
+  sourceCaseId?: string | null;
+  sourceFilePath?: string | null;
+  sourceHeading?: string | null;
+  tags?: string[];
+  dependsOn?: string[];
+  lastRunStatus?: "pass" | "fail" | "skipped" | "pending";
+  skipReason?: string | null;
   /** Latest observed status from the behavior_verify worker. */
   status: AgentTeamAcceptanceStatus;
   /** Consecutive stable-fail rounds (debounce state); reset on pass/flip. */
@@ -109,13 +127,6 @@ export interface HumanInterventionNote {
   clearedFingerprints: string[];
 }
 
-export interface AgentTeamRunScopeSnapshot {
-  capturedAt: string;
-  gitStatusShort: string[];
-  allowedPaths?: string[];
-  error?: string;
-}
-
 export interface AgentTeamRunOptions {
   autoApproveSplit: boolean;
 }
@@ -133,6 +144,7 @@ export interface AgentTeamRun {
   /** Agent CLI used by the root engineer and worker panes. */
   terminal: AgentTeamTerminal;
   task: string;
+  verification?: AgentTeamVerificationConfig | null;
   /** The only worker role currently allowed to do work in the serial flow. */
   activeWorkerRole?: AgentTeamWorkerRole | null;
   clarify: AgentTeamClarifyMessage[];
@@ -141,7 +153,6 @@ export interface AgentTeamRun {
   acceptance: AgentTeamAcceptanceCase[];
   loop: AgentTeamLoop;
   humanNotes: HumanInterventionNote[];
-  scopeSnapshot?: AgentTeamRunScopeSnapshot;
   /** Observation log for the executing sidecar. */
   logs: string[];
   createdAt: string;
@@ -192,9 +203,20 @@ export interface AgentTeamWorkerOutbox {
   recommendations?: AgentTeamOutboxRecommendation[];
   acceptanceResults?: Array<{
     caseId: string;
-    status: "pass" | "fail";
+    status: "pass" | "fail" | "skipped";
+    skipReason?: string | null;
     evidence: AgentTeamAcceptanceEvidence[];
   }>;
+}
+
+export interface AgentTeamAcceptanceDraft {
+  caseId?: string | null;
+  text: string;
+  sourceCaseId?: string | null;
+  sourceFilePath?: string | null;
+  sourceHeading?: string | null;
+  tags?: string[];
+  dependsOn?: string[];
 }
 
 // --- request / response DTOs ---
@@ -203,6 +225,8 @@ export interface CreateAgentTeamRunRequest {
   projectId: string;
   terminalSessionId: string;
   task?: string;
+  planFilePath?: string | null;
+  testCaseFilePath?: string | null;
   options?: Partial<AgentTeamRunOptions>;
   /**
    * Defaults to Codex for the current loop-engineer test path. Callers may
@@ -216,13 +240,19 @@ export interface ProposeAgentTeamSplitRequest {
   source?: "user" | "agent";
   summary?: string;
   workers?: Array<Pick<AgentTeamWorker, "role" | "intent">>;
-  acceptance?: Array<Pick<AgentTeamAcceptanceCase, "text">>;
+  acceptance?: AgentTeamAcceptanceDraft[];
+  planFilePath?: string | null;
+  testCaseFilePath?: string | null;
+  generatedTestCaseFilePath?: string | null;
 }
 
 export interface SubmitAgentTeamSplitGateRequest {
   verdict: "confirmed" | "rejected";
   workers?: Array<Pick<AgentTeamWorker, "role" | "intent">>;
-  acceptance?: Array<Pick<AgentTeamAcceptanceCase, "text">>;
+  acceptance?: AgentTeamAcceptanceDraft[];
+  planFilePath?: string | null;
+  testCaseFilePath?: string | null;
+  generatedTestCaseFilePath?: string | null;
 }
 
 export interface RecordAgentTeamRoundRequest {

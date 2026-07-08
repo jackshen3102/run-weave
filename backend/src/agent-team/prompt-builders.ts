@@ -14,6 +14,33 @@ const EVIDENCE_SCHEMA =
 const FINDING_SCHEMA =
   '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings；字段为 { severity: "P0"|"P1"|"P2"|"P3", status?: "open"|"resolved"|"informational", title, summary, ref? }。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
 
+export function buildMainTestCaseGenerationPrompt(params: {
+  run: AgentTeamRun;
+  planFilePath?: string | null;
+}): string {
+  const { run, planFilePath } = params;
+  const sourceText = planFilePath
+    ? `计划文件：${planFilePath}`
+    : `任务描述：${run.task}`;
+  return [
+    "你是本 Agent Team run 的主 Agent。",
+    "",
+    `Run: ${run.runId}`,
+    `Session: ${run.terminalSessionId}`,
+    `ProjectId: ${run.projectId}`,
+    "",
+    "当前缺少可追溯测试案例文件，禁止直接进入 worker split，也禁止使用默认泛化 acceptance。",
+    "请先调用 $toolkit:write-test-cases 生成测试案例文档，然后再提交 worker 拆分提案。",
+    "",
+    "输入来源：",
+    sourceText,
+    "",
+    "接续要求：",
+    "- 测试案例文档写完后，调用 POST /api/agent-team/runs/:runId/propose-split，payload 带 generatedTestCaseFilePath，并使用 code、code_review、behavior_verify 三类 worker。",
+    "- 如果无法生成可解析测试案例文件，停止并向用户说明“缺少可追溯测试案例文件”，不要提交 split。",
+  ].join("\n");
+}
+
 export function buildWorkerStartupPrompt(params: {
   run: AgentTeamRun;
   worker: AgentTeamWorker;
@@ -30,17 +57,22 @@ export function buildWorkerStartupPrompt(params: {
     `PanelId: ${worker.panelId ?? ""}`,
     `TmuxPaneId: ${worker.tmuxPaneId ?? ""}`,
     "",
+    `任务：${run.task}`,
+    "",
     `意图：${worker.intent}`,
   ];
   if (worker.role === "behavior_verify") {
+    const sourceDescription = formatAcceptanceSource(run);
     lines.push(
       "",
+      `验收来源：${sourceDescription}`,
       "验收用例（逐条跑 Playwright，产出 pass/fail + 截图/DOM 证据）：",
-      ...acceptance.map((item, index) => `${index + 1}. [${item.caseId}] ${item.text}`),
+      ...acceptance.map(formatAcceptancePromptLine),
       "",
       outboxPath
-        ? `把每条用例的结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。`
-        : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。",
+        ? `把每条用例的结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, skipReason?, evidence[] }]。`
+        : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, skipReason?, evidence[] }]。",
+      "首轮按测试案例顺序执行；遇到阻断失败可以停止，但必须在 outbox 写清失败 case、失败步骤和证据。",
     );
   } else if (worker.role === "code_review") {
     lines.push(
@@ -106,19 +138,47 @@ export function buildWorkerRecheckPrompt(params: {
   worker: AgentTeamWorker;
   cases: AgentTeamAcceptanceCase[];
   outboxPath?: string | null;
+  triggerSummary?: string | null;
 }): string {
-  const { run, worker, cases, outboxPath } = params;
+  const { run, worker, cases, outboxPath, triggerSummary } = params;
   const isReviewWorker = worker.role === "code_review";
   const sourceLabel =
     worker.role === "behavior_verify" ? "code_review" : "code pane";
+  const caseIds = new Set(cases.map((item) => item.caseId));
+  const skippedCases =
+    worker.role === "behavior_verify"
+      ? run.acceptance.filter(
+          (item) => item.status === "pass" && !caseIds.has(item.caseId),
+        )
+      : [];
   return [
     `[loop round ${run.loop.round}] ${sourceLabel} 已完成修复，请重新${isReviewWorker ? "审查" : "验收"}以下用例：`,
     "",
-    ...cases.map((item) => `- [${item.caseId}] ${item.text}`),
+    ...(worker.role === "behavior_verify"
+      ? [
+          `验收来源：${formatAcceptanceSource(run)}`,
+          triggerSummary ? `本轮修复摘要：${triggerSummary}` : null,
+          "",
+          "默认重跑范围：失败 case、未执行 case、依赖 case，以及你判断被本轮 diff 影响的已通过 case。",
+          "如果扩大为全量重跑，必须在 outbox summary 或 evidence 中写明原因。",
+          "",
+        ].filter((item): item is string => Boolean(item))
+      : []),
+    ...cases.map(formatAcceptancePromptLine),
+    ...(skippedCases.length > 0
+      ? [
+          "",
+          "默认跳过的已通过用例（若本轮 diff 影响它们，请扩大重跑；否则在 outbox 写 skipped + skipReason）：",
+          ...skippedCases.map(
+            (item) =>
+              `- [${item.caseId}] ${item.sourceFilePath ?? "unknown"}：上轮已通过，未被失败点/未执行项/依赖关系命中`,
+          ),
+        ]
+      : []),
     "",
     outboxPath
-      ? `把结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。`
-      : "把结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail, evidence[] }]。",
+      ? `把结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, skipReason?, evidence[] }]。`
+      : "把结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, skipReason?, evidence[] }]。",
     ...(outboxPath
       ? [
           `outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
@@ -137,4 +197,33 @@ export function buildHumanNotePrompt(note: string): string {
     "",
     "loop 已重置（错误指纹 + 无进展计数清零），请据此调整后继续推进。",
   ].join("\n");
+}
+
+function formatAcceptanceSource(run: AgentTeamRun): string {
+  const verification = run.verification;
+  if (!verification) {
+    return "未记录来源";
+  }
+  const sourceLabel =
+    verification.acceptanceSource === "test_case_file"
+      ? "测试案例文件"
+      : verification.acceptanceSource === "plan_file_generated"
+        ? "计划文件生成"
+        : "任务描述生成";
+  const filePath =
+    verification.testCaseFilePath ??
+    verification.generatedTestCaseFilePath ??
+    verification.planFilePath ??
+    "unknown";
+  return `${sourceLabel} ${filePath}`;
+}
+
+function formatAcceptancePromptLine(
+  item: AgentTeamAcceptanceCase,
+  index: number,
+): string {
+  const source = item.sourceFilePath
+    ? ` 来源：${item.sourceFilePath}${item.sourceHeading ? ` / ${item.sourceHeading}` : ""}`
+    : "";
+  return `${index + 1}. [${item.sourceCaseId ?? item.caseId}] ${item.text}${source}`;
 }

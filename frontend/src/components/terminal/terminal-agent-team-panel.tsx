@@ -51,6 +51,8 @@ export function TerminalAgentTeamPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [task, setTask] = useState("");
+  const [planFilePath, setPlanFilePath] = useState("");
+  const [testCaseFilePath, setTestCaseFilePath] = useState("");
   const [workerDrafts, setWorkerDrafts] = useState<WorkerDraft[] | null>(null);
   const [resumeNote, setResumeNote] = useState("");
 
@@ -185,6 +187,8 @@ export function TerminalAgentTeamPanel({
         projectId,
         terminalSessionId,
         task: trimmedTask,
+        planFilePath: normalizeOptionalPath(planFilePath),
+        testCaseFilePath: normalizeOptionalPath(testCaseFilePath),
         options: { autoApproveSplit: true },
       }).then((next) => {
         if (next.phase === "executing") {
@@ -315,8 +319,12 @@ export function TerminalAgentTeamPanel({
         ) : !run ? (
           <StartFlowSection
             task={task}
+            planFilePath={planFilePath}
+            testCaseFilePath={testCaseFilePath}
             busy={busy}
             onTaskChange={setTask}
+            onPlanFilePathChange={setPlanFilePath}
+            onTestCaseFilePathChange={setTestCaseFilePath}
             onStart={startFlow}
           />
         ) : run.phase === "proposal" && workerDrafts ? (
@@ -343,4 +351,9 @@ export function TerminalAgentTeamPanel({
       </div>
     </div>
   );
+}
+
+function normalizeOptionalPath(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
