@@ -97,7 +97,10 @@ export async function ensureTmuxPanelWorkspace(
   for (const pane of panes) {
     const existingPanel = panelsByPaneId.get(pane.paneId);
     if (existingPanel) {
-      const effectiveActiveCommand = resolveEffectivePanelActiveCommand(pane);
+      const effectiveActiveCommand = resolveEffectivePanelActiveCommand(
+        pane,
+        existingPanel.activeCommand,
+      );
       const nextTerminalState = getPanelTerminalStateForActiveCommand(
         effectiveActiveCommand,
         existingPanel.terminalState,
@@ -163,7 +166,10 @@ export async function ensureTmuxPanelWorkspace(
             agentTeamRunId: null,
             agentTeamWorkerId: null,
             cwd: pane.cwd || session.cwd,
-            activeCommand: pane.activeCommand,
+            activeCommand: resolveEffectivePanelActiveCommand(
+              pane,
+              session.activeCommand,
+            ),
           });
     await terminalSessionManager.upsertPanel(panel);
     livePanelIds.push(panel.id);

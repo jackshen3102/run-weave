@@ -178,6 +178,24 @@ async function verifyIsolationAndFallbackKeys(context) {
   await postEvent(
     context,
     hookEvent("UserPromptSubmit", {
+      correlationId: "thread-claude-source-codex-command",
+      payload: {
+        source: "claude",
+        commandName: "codex",
+        stateHookEvent: "UserPromptSubmit",
+      },
+    }),
+  );
+  const codexCommandThread = await getThread(
+    context,
+    "thread-claude-source-codex-command",
+  );
+  assert.equal(codexCommandThread.thread.agent, "codex");
+  assert.equal(codexCommandThread.thread.status, "running");
+
+  await postEvent(
+    context,
+    hookEvent("UserPromptSubmit", {
       correlationId: "thread-panel-a",
       scope: { terminalPanelId: "panel-a" },
     }),

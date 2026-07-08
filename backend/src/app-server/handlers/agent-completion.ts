@@ -6,8 +6,10 @@ import type { TerminalStateService } from "../../terminal/terminal-state-service
 import {
   isAppServerStopCompletion,
   readAppServerAgent,
+  readAppServerHookSource,
   readAppServerPayloadString,
 } from "./agent-event-payload";
+import { resolveAppServerTerminalAgent } from "./terminal-agent-context";
 
 const agentCompletionLogger = logger.child({
   component: "app-server-agent-completion",
@@ -21,7 +23,25 @@ export async function handleAgentCompletionEvent(
   },
 ): Promise<void> {
   const terminalSessionId = event.scope?.terminalSessionId;
-  const agent = readAppServerAgent(event.payload);
+  const panelId =
+    event.scope?.terminalPanelId ??
+    readAppServerPayloadString(event.payload, "panelId");
+  const tmuxPaneId =
+    event.scope?.terminalTmuxPaneId ??
+    readAppServerPayloadString(event.payload, "tmuxPaneId");
+  const commandName = readAppServerPayloadString(event.payload, "commandName");
+  const agent =
+    readAppServerAgent(event.payload) ??
+    (terminalSessionId
+      ? resolveAppServerTerminalAgent({
+          terminalSessionManager: options.terminalSessionManager,
+          terminalSessionId,
+          reportedSource: readAppServerHookSource(event.payload),
+          panelId,
+          tmuxPaneId,
+          commandName,
+        })
+      : null);
   agentCompletionLogger.info("app-server.agent-completion.received", {
     message: "App-server agent completion event received",
     eventId: event.id,
@@ -53,13 +73,9 @@ export async function handleAgentCompletionEvent(
     agent,
     hookEvent: "Stop",
     threadId: event.correlationId,
-    panelId:
-      event.scope?.terminalPanelId ??
-      readAppServerPayloadString(event.payload, "panelId"),
-    tmuxPaneId:
-      event.scope?.terminalTmuxPaneId ??
-      readAppServerPayloadString(event.payload, "tmuxPaneId"),
-    commandName: readAppServerPayloadString(event.payload, "commandName"),
+    panelId,
+    tmuxPaneId,
+    commandName,
   });
   if (result.status === "not_found" || result.status === "exited") {
     return;

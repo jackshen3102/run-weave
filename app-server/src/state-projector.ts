@@ -169,10 +169,32 @@ function readCompletionReason(
 }
 
 function readAgent(payload: Record<string, unknown>): AppServerAgentKind {
+  const commandAgent = readAgentFromCommand(readString(payload, "commandName"));
+  if (commandAgent) {
+    return commandAgent;
+  }
   const raw = readString(payload, "source") ?? readString(payload, "agent");
   return raw && AGENT_KINDS.has(raw as AppServerAgentKind)
     ? (raw as AppServerAgentKind)
     : "unknown";
+}
+
+function readAgentFromCommand(command: string | null): AppServerAgentKind | null {
+  const basename = command
+    ?.trim()
+    .replace(/\\+/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .at(-1);
+  if (
+    basename === "codex" ||
+    basename === "trae" ||
+    basename === "traecli" ||
+    basename === "traex"
+  ) {
+    return basename;
+  }
+  return null;
 }
 
 function readPayloadRecord(payload: unknown): Record<string, unknown> {

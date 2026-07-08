@@ -1,6 +1,18 @@
-import type { AgentHookStateEvent, TerminalAgentKind } from "@runweave/shared";
+import type {
+  AgentHookStateEvent,
+  TerminalAgentKind,
+  TerminalCompletionEvent,
+} from "@runweave/shared";
 
 const AGENT_SOURCES = new Set(["codex", "trae", "traecli", "traex"]);
+const HOOK_SOURCES = new Set([
+  "claude",
+  "codex",
+  "trae",
+  "traecli",
+  "traex",
+  "unknown",
+]);
 const STOP_EVENTS = new Set(["stop", "subagent_stop", "subagentstop"]);
 
 export function readAppServerAgent(
@@ -9,6 +21,15 @@ export function readAppServerAgent(
   const source = readAppServerPayloadString(payload, "source");
   return source && AGENT_SOURCES.has(source)
     ? (source as TerminalAgentKind)
+    : null;
+}
+
+export function readAppServerHookSource(
+  payload: unknown,
+): TerminalCompletionEvent["source"] | null {
+  const source = readAppServerPayloadString(payload, "source");
+  return source && HOOK_SOURCES.has(source)
+    ? (source as TerminalCompletionEvent["source"])
     : null;
 }
 
