@@ -113,18 +113,18 @@ Playwright / E2E / benchmark 使用固定端口和固定临时存储路径，不
 - 前端：`VITE_TERMINAL_PERF_LOGS=true` 或 localStorage `viewer.terminal.perfLogs=true`
 - 后端：`TERMINAL_PERF_LOGS=true`
 
-### 2. active terminal 保留完整 surface，inactive terminal 改为 headless watcher
+### 2. active terminal 保留完整 surface，inactive terminal 改为有限 headless watcher
 
 优化前，Terminal 工作台会为每个 session 挂载一个完整 `TerminalSurface`。当前代码中具体承载这一布局的是 `TerminalWorkspaceShell`。inactive terminal 虽然被移动到屏幕外，但仍然有完整 xterm 实例、renderer addon、WebSocket、输出写入和相关事件处理。
 
 优化后：
 
-- active terminal 才挂载完整 `TerminalSurface`。
-- inactive terminal 使用轻量 `TerminalHeadlessConnection`。
-- headless watcher 仍然保留 WS 连接，用于 activity、bell、metadata 通知。
+- active terminal 优先挂载完整 `TerminalSurface`；已访问过的 terminal 继续使用完整 surface cache，避免切换终端或项目时重建 xterm 造成闪烁。
+- inactive terminal 的 `TerminalHeadlessConnection` 延迟启动，并只覆盖最近活跃的 running sessions。
+- headless watcher 仍然用于 activity、bell、metadata 通知，但不能随 session 数量无上限增长。
 - 切回 active 时通过 live scrollback 恢复画面。
 
-这个方案减少了 inactive xterm renderer 对主线程的占用，同时保留后台活动提醒语义。
+这个方案减少了 inactive xterm renderer 对主线程的占用，也避免桌面端启动时为几十个历史 session 同时建立 terminal WebSocket。
 
 ### 3. 丢弃过期 HTTP snapshot，避免覆盖 live WS 输出
 

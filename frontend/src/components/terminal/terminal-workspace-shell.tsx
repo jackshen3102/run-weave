@@ -128,6 +128,17 @@ const TerminalPreviewPanel = lazy(() =>
   })),
 );
 
+const HEADLESS_TERMINAL_CONNECTION_DELAY_MS = 1_500;
+const MAX_HEADLESS_TERMINAL_CONNECTIONS = 4;
+
+function parseTerminalActivityTime(value: string | undefined): number {
+  if (!value) {
+    return 0;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
 function getTerminalStateLabel(
   session: TerminalSessionListItem,
   terminalState?: TerminalState,
@@ -688,6 +699,8 @@ export function TerminalWorkspaceShell({
   const [pendingAgentTeamSessionId, setPendingAgentTeamSessionId] = useState<
     string | null
   >(null);
+  const [headlessConnectionsEnabled, setHeadlessConnectionsEnabled] =
+    useState(false);
   const autoOpenedAgentTeamSessionIdRef = useRef<string | null>(null);
   const isMobileMonitor = clientMode === "mobile";
   const projects = useTerminalWorkspaceStore((state) => state.projects);
@@ -814,6 +827,23 @@ export function TerminalWorkspaceShell({
       new Set(surfaceSessions.map((session) => session.terminalSessionId)),
     [surfaceSessions],
   );
+  const headlessSessions = useMemo(() => {
+    if (!headlessConnectionsEnabled) {
+      return [];
+    }
+    return visibleSessions
+      .filter(
+        (session) =>
+          session.status === "running" &&
+          !surfaceSessionIdSet.has(session.terminalSessionId),
+      )
+      .sort(
+        (a, b) =>
+          parseTerminalActivityTime(b.lastActivityAt) -
+          parseTerminalActivityTime(a.lastActivityAt),
+      )
+      .slice(0, MAX_HEADLESS_TERMINAL_CONNECTIONS);
+  }, [headlessConnectionsEnabled, surfaceSessionIdSet, visibleSessions]);
   const activePanelWorkspace = activeSession
     ? panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null
     : null;
@@ -971,6 +1001,17 @@ export function TerminalWorkspaceShell({
         pendingAgentTeamSessionId === activeSession.terminalSessionId ||
         (panelSplitEnabled && activeAgentTeamAvailable)),
   );
+
+  useEffect(() => {
+    setHeadlessConnectionsEnabled(false);
+    if (!activeProjectId || visibleSessions.length <= 1) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setHeadlessConnectionsEnabled(true);
+    }, HEADLESS_TERMINAL_CONNECTION_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [activeProjectId, apiBase, visibleSessions.length]);
 
   const requestAgentTeam = useMemoizedFn((terminalSessionId: string): void => {
     onSelectSession(terminalSessionId);
@@ -1418,13 +1459,9 @@ export function TerminalWorkspaceShell({
               />
             ) : null}
             <div className="relative min-h-0 flex-1">
-            {visibleSessions.length > 0 ? (
-              <>
-                {visibleSessions.map((session) => {
-                  if (surfaceSessionIdSet.has(session.terminalSessionId)) {
-                    return null;
-                  }
-                  return (
+              {visibleSessions.length > 0 ? (
+                <>
+                  {headlessSessions.map((session) => (
                     <TerminalHeadlessConnection
                       apiBase={apiBase}
                       key={`${apiBase}:${session.terminalSessionId}:headless`}
@@ -1438,86 +1475,85 @@ export function TerminalWorkspaceShell({
                         onSessionMetadata(session.terminalSessionId, metadata);
                       }}
                     />
-                  );
-                })}
-                {surfaceSessions.map((session) => {
-                  const isActive =
-                    session.terminalSessionId ===
-                    activeSession?.terminalSessionId;
+                  ))}
+                  {surfaceSessions.map((session) => {
+                    const isActive =
+                      session.terminalSessionId ===
+                      activeSession?.terminalSessionId;
 
-                  return (
-                    <div
-                      aria-hidden={!isActive}
-                      className={[
-                        "absolute top-0 h-full w-full",
-                        isActive
-                          ? "left-0"
-                          : "-left-[9999em] pointer-events-none",
-                      ].join(" ")}
-                      key={`${apiBase}:${session.terminalSessionId}:surface`}
-                    >
-                      <TerminalSurface
-                        active={isActive}
-                        activeCommand={session.activeCommand}
-                        apiBase={apiBase}
-                        clientMode={clientMode}
-                        layoutVersion={terminalLayoutVersion}
-                        sessionStatus={session.status}
-                        terminalSessionId={session.terminalSessionId}
-                        terminalState={
-                          terminalStateBySessionId[
-                            session.terminalSessionId
-                          ] ?? session.terminalState
-                        }
-                        token={token}
-                        paneWorkspace={
-                          session.panelSplitEnabled
-                            ? panelWorkspaceBySessionId[
-                                session.terminalSessionId
-                              ] ?? null
-                            : null
-                        }
-                        onResizePane={
-                          !isMobileMonitor && session.panelSplitEnabled
-                            ? (panelId, direction, cells) => {
-                                void resizePanel(
-                                  session.terminalSessionId,
-                                  panelId,
-                                  direction,
-                                  cells,
-                                );
-                              }
-                            : undefined
-                        }
-                        onAuthExpired={onAuthExpired}
-                        onBell={() => {
-                          onSessionBell(session.terminalSessionId);
-                        }}
-                        onViewportResize={
-                          session.panelSplitEnabled
-                            ? () => {
-                                void refreshPanelWorkspace(
-                                  session.terminalSessionId,
-                                );
-                              }
-                            : undefined
-                        }
-                        onMetadata={(metadata) => {
-                          onSessionMetadata(
-                            session.terminalSessionId,
-                            metadata,
-                          );
-                        }}
-                      />
-                    </div>
-                  );
-                })}
-              </>
-            ) : (
-              <div className="flex h-full items-center justify-center px-6 text-sm text-slate-400">
-                No terminal tab yet. Create one to start.
-              </div>
-            )}
+                    return (
+                      <div
+                        aria-hidden={!isActive}
+                        className={[
+                          "absolute top-0 h-full w-full",
+                          isActive
+                            ? "left-0"
+                            : "-left-[9999em] pointer-events-none",
+                        ].join(" ")}
+                        key={`${apiBase}:${session.terminalSessionId}:surface`}
+                      >
+                        <TerminalSurface
+                          active={isActive}
+                          activeCommand={session.activeCommand}
+                          apiBase={apiBase}
+                          clientMode={clientMode}
+                          layoutVersion={terminalLayoutVersion}
+                          sessionStatus={session.status}
+                          terminalSessionId={session.terminalSessionId}
+                          terminalState={
+                            terminalStateBySessionId[
+                              session.terminalSessionId
+                            ] ?? session.terminalState
+                          }
+                          token={token}
+                          paneWorkspace={
+                            session.panelSplitEnabled
+                              ? panelWorkspaceBySessionId[
+                                  session.terminalSessionId
+                                ] ?? null
+                              : null
+                          }
+                          onResizePane={
+                            !isMobileMonitor && session.panelSplitEnabled
+                              ? (panelId, direction, cells) => {
+                                  void resizePanel(
+                                    session.terminalSessionId,
+                                    panelId,
+                                    direction,
+                                    cells,
+                                  );
+                                }
+                              : undefined
+                          }
+                          onAuthExpired={onAuthExpired}
+                          onBell={() => {
+                            onSessionBell(session.terminalSessionId);
+                          }}
+                          onViewportResize={
+                            session.panelSplitEnabled
+                              ? () => {
+                                  void refreshPanelWorkspace(
+                                    session.terminalSessionId,
+                                  );
+                                }
+                              : undefined
+                          }
+                          onMetadata={(metadata) => {
+                            onSessionMetadata(
+                              session.terminalSessionId,
+                              metadata,
+                            );
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </>
+              ) : (
+                <div className="flex h-full items-center justify-center px-6 text-sm text-slate-400">
+                  No terminal tab yet. Create one to start.
+                </div>
+              )}
             </div>
           </div>
           {previewOpen && !previewExpanded && !isMobileMonitor ? (

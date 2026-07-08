@@ -248,7 +248,12 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   if (resolveTerminalTmuxScanOrphansOnStartEnabled(process.env)) {
     await logOrphanedTmuxSessions(terminalSessionManager, tmuxService);
   }
-  await tmuxOutputWatcher.watchExistingSessions();
+  void tmuxOutputWatcher.watchExistingSessions().catch((error) => {
+    logger.warn("terminal.tmux.output-watch.startup.failed", {
+      message: "Failed to recover tmux output watchers during startup",
+      error,
+    });
+  });
   const agentTeamService = new AgentTeamService({
     terminalSessionManager,
     terminalEventService,
