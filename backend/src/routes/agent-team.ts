@@ -25,8 +25,21 @@ const workerRoleEnum = z.enum([
 const workerDraftSchema = z
   .object({ role: workerRoleEnum, intent: z.string().trim().min(1) })
   .strict();
+const optionalPathSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? null : value,
+  z.string().trim().min(1).nullable().optional(),
+);
 const acceptanceDraftSchema = z
-  .object({ text: z.string().trim().min(1) })
+  .object({
+    caseId: z.string().trim().min(1).nullable().optional(),
+    text: z.string().trim().min(1),
+    sourceCaseId: z.string().trim().min(1).nullable().optional(),
+    sourceFilePath: z.string().trim().min(1).nullable().optional(),
+    sourceHeading: z.string().trim().min(1).nullable().optional(),
+    tags: z.array(z.string().trim().min(1)).optional(),
+    dependsOn: z.array(z.string().trim().min(1)).optional(),
+  })
   .strict();
 const terminalSchema = z
   .object({
@@ -42,6 +55,8 @@ const createRunSchema = z
     projectId: z.string().trim().min(1),
     terminalSessionId: z.string().trim().min(1),
     task: z.string().trim().optional(),
+    planFilePath: optionalPathSchema,
+    testCaseFilePath: optionalPathSchema,
     options: z
       .object({ autoApproveSplit: z.boolean().optional() })
       .strict()
@@ -56,6 +71,9 @@ const proposeSchema = z
     summary: z.string().trim().min(1).optional(),
     workers: z.array(workerDraftSchema).optional(),
     acceptance: z.array(acceptanceDraftSchema).optional(),
+    planFilePath: optionalPathSchema,
+    testCaseFilePath: optionalPathSchema,
+    generatedTestCaseFilePath: optionalPathSchema,
   })
   .strict();
 
@@ -64,13 +82,17 @@ const splitGateSchema = z
     verdict: z.enum(["confirmed", "rejected"]),
     workers: z.array(workerDraftSchema).optional(),
     acceptance: z.array(acceptanceDraftSchema).optional(),
+    planFilePath: optionalPathSchema,
+    testCaseFilePath: optionalPathSchema,
+    generatedTestCaseFilePath: optionalPathSchema,
   })
   .strict();
 
 const acceptanceResultSchema = z
   .object({
     caseId: z.string().trim().min(1),
-    status: z.enum(["pass", "fail"]),
+    status: z.enum(["pass", "fail", "skipped"]),
+    skipReason: z.string().trim().min(1).nullable().optional(),
     evidence: z
       .array(
         z

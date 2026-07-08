@@ -68,10 +68,20 @@ export function foldRound(
     if (!result) {
       return acceptanceCase;
     }
+    if (result.status === "skipped") {
+      return {
+        ...acceptanceCase,
+        lastRunStatus: "skipped" as const,
+        skipReason: result.skipReason ?? "复验范围未命中，保持上一轮状态",
+        evidence: result.evidence.length > 0 ? result.evidence : acceptanceCase.evidence,
+      };
+    }
     if (result.status === "pass") {
       return {
         ...acceptanceCase,
         status: "pass" as const,
+        lastRunStatus: "pass" as const,
+        skipReason: null,
         consecutiveFail: 0,
         evidence: result.evidence,
         bouncedToPanelId: null,
@@ -86,6 +96,8 @@ export function foldRound(
     const nextCase: AgentTeamAcceptanceCase = {
       ...acceptanceCase,
       status: "fail",
+      lastRunStatus: "fail",
+      skipReason: null,
       consecutiveFail,
       evidence: result.evidence,
       recheckRequestedAt: null,

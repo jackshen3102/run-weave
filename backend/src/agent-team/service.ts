@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import type {
   AgentTeamAcceptanceCase,
+  AgentTeamAcceptanceSource,
   AgentTeamExportHistoryMode,
   AgentTeamExportOutbox,
   AgentTeamExportPanel,
@@ -9,6 +10,7 @@ import type {
   AgentTeamRun,
   AgentTeamStatus,
   AgentTeamTerminal,
+  AgentTeamVerificationConfig,
   AgentTeamWorker,
   AgentTeamWorkerOutbox,
   AgentTeamWorkerRole,
@@ -51,6 +53,7 @@ import { createAgentTeamRunId } from "./run-id";
 import {
   buildBounceBackPrompt,
   buildHumanNotePrompt,
+  buildMainTestCaseGenerationPrompt,
   buildWorkerRecheckPrompt,
   buildWorkerStartupPrompt,
 } from "./prompt-builders";
@@ -61,6 +64,10 @@ import {
   shouldEscalate,
 } from "./loop";
 import { AgentTeamAgentReadinessService } from "./agent-readiness";
+import {
+  loadAcceptanceCasesFromMarkdown,
+  resolveAgentTeamProjectFile,
+} from "./acceptance-case-loader";
 
 const agentTeamLogger = logger.child({ component: "agent-team-service" });
 const DEFAULT_AGENT_TEAM_AGENT_COMMAND = "codex";
@@ -87,6 +94,12 @@ export interface ExportAgentTeamRunOptions {
   tailLines?: number;
   includeSessionOther?: boolean;
   includeOutboxes?: boolean;
+}
+
+interface PreparedAgentTeamAcceptance {
+  verification: AgentTeamVerificationConfig;
+  acceptance: AgentTeamAcceptanceCase[];
+  startLog: string;
 }
 
 let workerCounter = 0;
@@ -286,6 +299,11 @@ export class AgentTeamService {
     const terminal = resolveAgentTeamTerminal(input.terminal);
     this.requireAgentTeamTerminalAvailable(session, terminal);
     const task = requireRunnableTask(input.task);
+    const projectRoot = this.resolveRequiredProjectRoot(
+      input.projectId,
+      session.cwd,
+    );
+    const prepared = await this.prepareInitialAcceptance(input, projectRoot);
 
     // Ensure the panel workspace so worker split is possible later.
     let mainPanelId: string | null = null;
@@ -322,6 +340,7 @@ export class AgentTeamService {
       options: { autoApproveSplit: input.options?.autoApproveSplit ?? false },
       terminal,
       task,
+      verification: prepared.verification,
       activeWorkerRole: null,
       clarify: [],
       proposal: null,
@@ -329,14 +348,44 @@ export class AgentTeamService {
       acceptance: [],
       loop: createInitialLoop(),
       humanNotes: [],
-      logs: ["Agent Team 任务已提交，生成 worker 拆分提案"],
+      logs: [prepared.startLog],
       createdAt: now,
       updatedAt: now,
     };
     const workers = normalizeWorkers(undefined);
-    const acceptance = normalizeAcceptance(undefined);
+    const acceptance = prepared.acceptance;
+    if (acceptance.length === 0) {
+      await this.runStore.writeRun(run);
+      try {
+        await this.agentReadiness.ensureAgentReady(
+          session,
+          terminal,
+          mainPanelId
+            ? { panelId: mainPanelId, publishSessionState: true }
+            : undefined,
+        );
+        await this.promptSender.sendPromptToPane(
+          session,
+          buildMainTestCaseGenerationPrompt({
+            run,
+            planFilePath: prepared.verification.planFilePath ?? null,
+          }),
+          mainPanelId ? { panelId: mainPanelId } : undefined,
+        );
+      } catch (error) {
+        await this.updateRun(run, {
+          status: "failed",
+          logs: [
+            ...run.logs,
+            `主 Agent 测试案例生成指令注入失败：${formatErrorMessage(error)}`,
+          ],
+        });
+        throw error;
+      }
+      return this.requireRun(run.runId);
+    }
     const proposal = {
-      summary: "任务已提交。建议拆以下 worker，可增删/调整后确认：",
+      summary: `任务已提交。${formatVerificationSource(prepared.verification)}，建议拆以下 worker：`,
       workers,
       acceptance,
       source: "agent" as const,
@@ -370,16 +419,21 @@ export class AgentTeamService {
     requireRunnableTask(run.task);
     const source = input.source ?? "user";
     const workers = normalizeWorkers(input.workers);
-    const acceptance = normalizeAcceptance(input.acceptance);
+    const prepared = await this.prepareSplitAcceptance(run, input);
+    const acceptance = prepared.acceptance;
     const summary =
       input.summary?.trim() ||
       (source === "agent"
-        ? "主 Agent 建议拆以下 worker，可增删/调整后确认："
-        : "任务已提交。建议拆以下 worker，可增删/调整后确认：");
+        ? `主 Agent 建议拆以下 worker。${formatVerificationSource(prepared.verification)}`
+        : `任务已提交。${formatVerificationSource(prepared.verification)}，建议拆以下 worker：`);
+    const runWithVerification = {
+      ...run,
+      verification: prepared.verification,
+    };
 
     // Auto-approve short circuit: skip the human gate, go straight to executing.
     if (run.options.autoApproveSplit) {
-      return this.applySplit(run, workers, acceptance, {
+      return this.applySplit(runWithVerification, workers, acceptance, {
         source,
         log:
           source === "agent"
@@ -391,6 +445,7 @@ export class AgentTeamService {
     return this.updateRun(run, {
       phase: "proposal",
       status: "need_human",
+      verification: prepared.verification,
       proposal: { summary, workers, acceptance, source },
       logs: [
         ...run.logs,
@@ -420,14 +475,22 @@ export class AgentTeamService {
     const workers = input.workers
       ? normalizeWorkers(input.workers)
       : run.proposal.workers;
-    const acceptance = input.acceptance
-      ? normalizeAcceptance(input.acceptance)
-      : run.proposal.acceptance;
+    const prepared =
+      input.acceptance ||
+      input.testCaseFilePath ||
+      input.generatedTestCaseFilePath ||
+      input.planFilePath
+        ? await this.prepareSplitAcceptance(run, input)
+        : {
+            acceptance: run.proposal.acceptance,
+            verification: requireVerificationConfig(run.verification),
+          };
+    const acceptance = prepared.acceptance;
     if (workers.length === 0) {
       throw new AgentTeamError(400, "At least one worker is required");
     }
     requireRunnableTask(run.task);
-    return this.applySplit(run, workers, acceptance, {
+    return this.applySplit({ ...run, verification: prepared.verification }, workers, acceptance, {
       source: run.proposal.source,
       log: `人工确认拆分（${workers.length} worker），split pane`,
     });
@@ -778,6 +841,148 @@ export class AgentTeamService {
     return this.terminalSessionManager.getProject(projectId)?.path ?? cwd ?? null;
   }
 
+  private resolveRequiredProjectRoot(projectId: string, cwd: string): string {
+    const projectRoot = this.resolveProjectRoot(projectId, cwd);
+    if (!projectRoot) {
+      throw new AgentTeamError(409, "当前项目目录不可用，无法解析验收来源文件");
+    }
+    return projectRoot;
+  }
+
+  private async prepareInitialAcceptance(
+    input: CreateAgentTeamRunRequest,
+    projectRoot: string,
+  ): Promise<PreparedAgentTeamAcceptance> {
+    const planFilePath = await this.resolveOptionalProjectFilePath(
+      projectRoot,
+      input.planFilePath,
+      "计划文件",
+    );
+    if (input.testCaseFilePath) {
+      const loaded = await loadAcceptanceCasesFromMarkdown({
+        projectRoot,
+        requestedPath: input.testCaseFilePath,
+      });
+      const verification: AgentTeamVerificationConfig = {
+        planFilePath,
+        testCaseFilePath: loaded.sourceFilePath,
+        generatedTestCaseFilePath: null,
+        acceptanceSource: "test_case_file",
+      };
+      return {
+        verification,
+        acceptance: loaded.cases,
+        startLog: `Agent Team 任务已提交，${formatVerificationSource(verification)}，生成 worker 拆分提案`,
+      };
+    }
+
+    const acceptanceSource: AgentTeamAcceptanceSource = planFilePath
+      ? "plan_file_generated"
+      : "task_generated";
+    const verification: AgentTeamVerificationConfig = {
+      planFilePath,
+      testCaseFilePath: null,
+      generatedTestCaseFilePath: null,
+      acceptanceSource,
+    };
+    return {
+      verification,
+      acceptance: [],
+      startLog:
+        acceptanceSource === "plan_file_generated"
+          ? `缺少测试案例文件，已要求主 Agent 基于计划文件 ${planFilePath} 生成 docs/testing 用例`
+          : "缺少测试案例文件，已要求主 Agent 基于任务描述生成 docs/testing 用例",
+    };
+  }
+
+  private async prepareSplitAcceptance(
+    run: AgentTeamRun,
+    input: Pick<
+      ProposeAgentTeamSplitRequest,
+      | "acceptance"
+      | "planFilePath"
+      | "testCaseFilePath"
+      | "generatedTestCaseFilePath"
+    >,
+  ): Promise<PreparedAgentTeamAcceptance> {
+    const session = this.requireSession(run.terminalSessionId);
+    const projectRoot = this.resolveRequiredProjectRoot(run.projectId, session.cwd);
+    const planFilePath =
+      (await this.resolveOptionalProjectFilePath(
+        projectRoot,
+        input.planFilePath,
+        "计划文件",
+      )) ??
+      run.verification?.planFilePath ??
+      null;
+
+    if (input.testCaseFilePath) {
+      const loaded = await loadAcceptanceCasesFromMarkdown({
+        projectRoot,
+        requestedPath: input.testCaseFilePath,
+      });
+      const verification: AgentTeamVerificationConfig = {
+        planFilePath,
+        testCaseFilePath: loaded.sourceFilePath,
+        generatedTestCaseFilePath: null,
+        acceptanceSource: "test_case_file",
+      };
+      return {
+        verification,
+        acceptance: loaded.cases,
+        startLog: `使用测试案例文件 ${loaded.sourceFilePath} 生成验收用例`,
+      };
+    }
+
+    if (input.generatedTestCaseFilePath) {
+      const loaded = await loadAcceptanceCasesFromMarkdown({
+        projectRoot,
+        requestedPath: input.generatedTestCaseFilePath,
+      });
+      assertGeneratedTestCaseFilePath(loaded.sourceFilePath);
+      const acceptanceSource =
+        run.verification?.acceptanceSource === "plan_file_generated"
+          ? "plan_file_generated"
+          : run.verification?.acceptanceSource === "task_generated"
+            ? "task_generated"
+            : planFilePath
+              ? "plan_file_generated"
+              : "task_generated";
+      const verification: AgentTeamVerificationConfig = {
+        planFilePath,
+        testCaseFilePath: null,
+        generatedTestCaseFilePath: loaded.sourceFilePath,
+        acceptanceSource,
+      };
+      return {
+        verification,
+        acceptance: loaded.cases,
+        startLog: `使用生成的测试案例文件 ${loaded.sourceFilePath} 生成验收用例`,
+      };
+    }
+
+    throw new AgentTeamError(
+      400,
+      "缺少可追溯测试案例文件：请提供 testCaseFilePath 或 generatedTestCaseFilePath",
+    );
+  }
+
+  private async resolveOptionalProjectFilePath(
+    projectRoot: string,
+    requestedPath: string | null | undefined,
+    label: string,
+  ): Promise<string | null> {
+    if (!requestedPath?.trim()) {
+      return null;
+    }
+    const resolved = await resolveAgentTeamProjectFile(
+      projectRoot,
+      requestedPath,
+      label,
+    );
+    return resolved.relativePath;
+  }
+
   // --- internal helpers ---
 
   private async applySplit(
@@ -799,6 +1004,7 @@ export class AgentTeamService {
       workers,
       acceptance,
     );
+    assertTraceableBehaviorAcceptance(workers, executionAcceptance);
     const boundWorkers: AgentTeamWorker[] = [];
     for (const worker of workers) {
       let panelId: string | null = null;
@@ -916,6 +1122,7 @@ export class AgentTeamService {
       hadDiff?: boolean;
       forceBounceCaseIds?: string[];
       completedWorkerRole?: AgentTeamWorkerRole | null;
+      completedWorkerSummary?: string | null;
     },
   ): Promise<AgentTeamRun> {
     if (run.phase !== "executing") {
@@ -993,8 +1200,9 @@ export class AgentTeamService {
       hasRolePassed(nextRun, "code_review")
     ) {
       return this.dispatchSerialWorker(nextRun, "behavior_verify", {
-        cases: acceptanceCasesForRole(nextRun, "behavior_verify"),
+        cases: behaviorVerificationCasesForDispatch(nextRun),
         log: "code_review 通过，启动 behavior_verify",
+        triggerSummary: params.completedWorkerSummary ?? null,
       });
     }
     return nextRun;
@@ -1105,6 +1313,7 @@ export class AgentTeamService {
           acceptanceResults: round.acceptanceResults,
           forceBounceCaseIds: round.forceBounceCaseIds,
           completedWorkerRole: parseWorkerRole(outbox.role),
+          completedWorkerSummary: outbox.summary,
         });
       } finally {
         this.decrementPendingCompletionRound(run.runId);
@@ -1136,8 +1345,8 @@ export class AgentTeamService {
     run: AgentTeamRun,
     outbox: AgentTeamWorkerOutbox,
   ): Promise<AgentTeamRun> {
-    const cases = this.findBouncedCasesForWorker(run, outbox);
-    if (cases.length === 0) {
+    const bouncedCases = this.findBouncedCasesForWorker(run, outbox);
+    if (bouncedCases.length === 0) {
       return run;
     }
     const session = this.terminalSessionManager.getSession(
@@ -1149,7 +1358,10 @@ export class AgentTeamService {
 
     let didUpdateRun = false;
     let latestRun = run;
-    const dispatches = resolveRecheckDispatches(run, cases);
+    const dispatches = resolveRecheckDispatches(
+      run,
+      expandRecheckCasesForFailures(run, bouncedCases),
+    );
     for (const dispatch of dispatches) {
       if (!dispatch.worker.panelId) {
         continue;
@@ -1160,7 +1372,11 @@ export class AgentTeamService {
           session,
           dispatch.worker,
           dispatch.cases,
-          { attempt: 1, sourcePanelId: outbox.panelId ?? null },
+          {
+            attempt: 1,
+            sourcePanelId: outbox.panelId ?? null,
+            triggerSummary: outbox.summary,
+          },
         );
         didUpdateRun = true;
       } catch (error) {
@@ -1200,6 +1416,7 @@ export class AgentTeamService {
       await this.dispatchSerialWorker(run, "code_review", {
         cases: acceptanceCasesForRole(run, "code_review"),
         log: "code 完成，启动 code_review",
+        triggerSummary: outbox.summary,
       });
       return true;
     }
@@ -1209,7 +1426,11 @@ export class AgentTeamService {
   private async dispatchSerialWorker(
     run: AgentTeamRun,
     role: AgentTeamWorkerRole,
-    options: { cases: AgentTeamAcceptanceCase[]; log: string },
+    options: {
+      cases: AgentTeamAcceptanceCase[];
+      log: string;
+      triggerSummary?: string | null;
+    },
   ): Promise<AgentTeamRun> {
     const session = this.terminalSessionManager.getSession(
       run.terminalSessionId,
@@ -1237,6 +1458,7 @@ export class AgentTeamService {
         worker,
         cases: options.cases,
         outboxPath,
+        triggerSummary: options.triggerSummary ?? null,
       }),
       { panelId: worker.panelId },
     );
@@ -1277,6 +1499,7 @@ export class AgentTeamService {
       attempt: number;
       sourcePanelId?: string | null;
       reason?: "timeout_retry";
+      triggerSummary?: string | null;
     },
   ): Promise<AgentTeamRun> {
     if (!worker.panelId) {
@@ -1301,6 +1524,7 @@ export class AgentTeamService {
         worker,
         cases,
         outboxPath,
+        triggerSummary: options.triggerSummary ?? null,
       }),
       { panelId: worker.panelId },
     );
@@ -1398,6 +1622,7 @@ export class AgentTeamService {
           acceptanceResults: round.acceptanceResults,
           forceBounceCaseIds: round.forceBounceCaseIds,
           completedWorkerRole: parseWorkerRole(completedOutbox.role),
+          completedWorkerSummary: completedOutbox.summary,
         });
       }
     }
@@ -1821,6 +2046,7 @@ export class AgentTeamService {
         | "options"
         | "terminal"
         | "task"
+        | "verification"
         | "activeWorkerRole"
         | "clarify"
         | "proposal"
@@ -2049,6 +2275,37 @@ function hasRolePassed(
   return cases.length > 0 && cases.every((item) => item.status === "pass");
 }
 
+function behaviorVerificationCasesForDispatch(
+  run: AgentTeamRun,
+): AgentTeamAcceptanceCase[] {
+  return expandRecheckCasesForFailures(
+    run,
+    acceptanceCasesForRole(run, "behavior_verify").filter(
+      (item) => item.status === "fail" || item.status === "pending",
+    ),
+  );
+}
+
+function expandRecheckCasesForFailures(
+  run: AgentTeamRun,
+  seedCases: AgentTeamAcceptanceCase[],
+): AgentTeamAcceptanceCase[] {
+  const behaviorCases = acceptanceCasesForRole(run, "behavior_verify");
+  if (seedCases.every(isReviewGateAcceptanceCase)) {
+    return seedCases;
+  }
+  const selectedIds = new Set(seedCases.map((item) => item.caseId));
+  for (const item of behaviorCases) {
+    if (item.status === "pending") {
+      selectedIds.add(item.caseId);
+    }
+    if ((item.dependsOn ?? []).some((caseId) => selectedIds.has(caseId))) {
+      selectedIds.add(item.caseId);
+    }
+  }
+  return behaviorCases.filter((item) => selectedIds.has(item.caseId));
+}
+
 function findStableFailCaseIdsNeedingBounce(run: AgentTeamRun): string[] {
   return run.acceptance
     .filter(
@@ -2097,8 +2354,35 @@ function ensureWorkerGateAcceptance(
       recheckWorkerRole: null,
       recheckOutboxMtimeMs: null,
       recheckAttempt: 0,
+      lastRunStatus: "pending",
+      skipReason: null,
     },
   ];
+}
+
+function assertTraceableBehaviorAcceptance(
+  workers: AgentTeamWorker[],
+  acceptance: AgentTeamAcceptanceCase[],
+): void {
+  if (!workers.some((worker) => worker.role === "behavior_verify")) {
+    return;
+  }
+  const behaviorCases = acceptance.filter((item) => !isReviewGateAcceptanceCase(item));
+  if (behaviorCases.length === 0) {
+    throw new AgentTeamError(
+      400,
+      "缺少可追溯测试案例文件：behavior_verify 没有可执行验收用例",
+    );
+  }
+  const untraceable = behaviorCases.find(
+    (item) => !item.sourceCaseId || !item.sourceFilePath,
+  );
+  if (untraceable) {
+    throw new AgentTeamError(
+      400,
+      `缺少可追溯测试案例文件：${untraceable.caseId} 没有来源 case 或来源文件`,
+    );
+  }
 }
 
 function isReviewGateAcceptanceCase(item: AgentTeamAcceptanceCase): boolean {
@@ -2500,29 +2784,45 @@ function normalizeWorkers(
   });
 }
 
-function normalizeAcceptance(
-  acceptance: Array<Pick<AgentTeamAcceptanceCase, "text">> | undefined,
-): AgentTeamAcceptanceCase[] {
-  const source =
-    acceptance && acceptance.length > 0
-      ? acceptance
-      : [
-          { text: "核心改动按任务目标落地，页面/行为符合预期" },
-          { text: "关键回归用例通过，无明显破坏" },
-        ];
-  return source.map((item, index) => ({
-    caseId: `case_${index + 1}`,
-    text: item.text?.trim() || `验收用例 ${index + 1}`,
-    status: "pending" as const,
-    consecutiveFail: 0,
-    evidence: [],
-    bouncedToPanelId: null,
-    recheckRequestedAt: null,
-    recheckWorkerPanelId: null,
-    recheckWorkerRole: null,
-    recheckOutboxMtimeMs: null,
-    recheckAttempt: 0,
-  }));
+function requireVerificationConfig(
+  verification: AgentTeamVerificationConfig | null | undefined,
+): AgentTeamVerificationConfig {
+  if (!verification) {
+    throw new AgentTeamError(
+      400,
+      "缺少验收来源配置，无法进入 Agent Team worker split",
+    );
+  }
+  return verification;
+}
+
+function formatVerificationSource(
+  verification: AgentTeamVerificationConfig,
+): string {
+  const sourceLabel =
+    verification.acceptanceSource === "test_case_file"
+      ? "来源：测试案例文件"
+      : verification.acceptanceSource === "plan_file_generated"
+        ? "来源：计划文件生成"
+        : "来源：任务描述生成";
+  const sourcePath =
+    verification.testCaseFilePath ??
+    verification.generatedTestCaseFilePath ??
+    verification.planFilePath ??
+    "等待生成 docs/testing 测试案例文件";
+  return `${sourceLabel} ${sourcePath}`;
+}
+
+function assertGeneratedTestCaseFilePath(relativePath: string): void {
+  if (
+    !relativePath.startsWith("docs/testing/") ||
+    !relativePath.endsWith("-test-cases.md")
+  ) {
+    throw new AgentTeamError(
+      400,
+      `生成的测试案例文件必须位于 docs/testing/ 且以 -test-cases.md 结尾：${relativePath}`,
+    );
+  }
 }
 
 function createAgentTeamPanelError(

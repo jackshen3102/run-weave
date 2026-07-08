@@ -15,13 +15,21 @@ import {
 
 export function StartFlowSection({
   task,
+  planFilePath,
+  testCaseFilePath,
   busy,
   onTaskChange,
+  onPlanFilePathChange,
+  onTestCaseFilePathChange,
   onStart,
 }: {
   task: string;
+  planFilePath: string;
+  testCaseFilePath: string;
   busy: boolean;
   onTaskChange: (value: string) => void;
+  onPlanFilePathChange: (value: string) => void;
+  onTestCaseFilePathChange: (value: string) => void;
   onStart: () => void;
 }) {
   return (
@@ -41,6 +49,24 @@ export function StartFlowSection({
       <div className="rounded border border-slate-800 bg-slate-900/50 px-2 py-1.5 text-[11px] leading-relaxed text-slate-400">
         拆分策略：服务端自动拆分。右侧面板只展示状态与日志，不需要手动点击“拆分”。
       </div>
+      <label className="block space-y-1 text-[11px] text-slate-400">
+        <span>计划文件</span>
+        <input
+          className="h-8 w-full rounded border border-slate-800 bg-slate-950 px-2 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
+          value={planFilePath}
+          onChange={(event) => onPlanFilePathChange(event.target.value)}
+          placeholder="docs/plans/example.md"
+        />
+      </label>
+      <label className="block space-y-1 text-[11px] text-slate-400">
+        <span>测试案例文件</span>
+        <input
+          className="h-8 w-full rounded border border-slate-800 bg-slate-950 px-2 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
+          value={testCaseFilePath}
+          onChange={(event) => onTestCaseFilePathChange(event.target.value)}
+          placeholder="docs/testing/example-test-cases.md"
+        />
+      </label>
       <textarea
         className="min-h-20 w-full resize-y rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
         value={task}
@@ -140,13 +166,23 @@ export function ProposalSection({
           <div className="mb-1 text-[11px] font-semibold text-slate-300">
             验收用例草案
           </div>
+          <div className="mb-1 text-[10px] text-sky-300">
+            {formatVerificationSource(run)}
+          </div>
           <p className="mb-1 text-[10px] text-slate-500">
             Agent Team 把任务目标落成可观测验收用例，由 behavior_verify worker
             跑。{splitManagedByServer ? "由服务端随拆分自动确认。" : "与拆分一并确认。"}
           </p>
           <ol className="space-y-0.5 pl-4 text-[11px] text-slate-400 [list-style:decimal]">
             {run.proposal.acceptance.map((item) => (
-              <li key={item.caseId}>{item.text}</li>
+              <li key={item.caseId}>
+                <span className="font-mono text-slate-300">
+                  {item.sourceCaseId ?? item.caseId}
+                </span>
+                <span className="ml-1 whitespace-pre-wrap break-words">
+                  {item.text}
+                </span>
+              </li>
             ))}
           </ol>
         </div>
@@ -349,6 +385,9 @@ export function ExecutingSection({
             {passed}✓{failed > 0 ? ` ${failed}✗` : ""}
           </span>
         </div>
+        <div className="mb-1 text-[10px] text-sky-300">
+          {formatVerificationSource(run)}
+        </div>
         <div className="space-y-1.5">
           {acceptance.map((item) => (
             <div
@@ -379,7 +418,22 @@ export function ExecutingSection({
                       : "•"}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-slate-300">{item.text}</div>
+                  <div className="font-mono text-[10px] text-slate-500">
+                    {item.sourceCaseId ?? item.caseId}
+                  </div>
+                  <div className="whitespace-pre-wrap break-words text-slate-300">
+                    {item.text}
+                  </div>
+                  {item.sourceFilePath ? (
+                    <div className="mt-0.5 text-[10px] text-slate-500">
+                      来源：{item.sourceFilePath}
+                    </div>
+                  ) : null}
+                  {item.skipReason ? (
+                    <div className="mt-0.5 text-[10px] text-slate-500">
+                      跳过：{item.skipReason}
+                    </div>
+                  ) : null}
                   <AcceptanceEvidenceDetails
                     status={item.status}
                     evidence={item.evidence}
@@ -409,4 +463,23 @@ export function ExecutingSection({
       </div>
     </div>
   );
+}
+
+function formatVerificationSource(run: AgentTeamRun): string {
+  const verification = run.verification;
+  if (!verification) {
+    return "来源：未记录";
+  }
+  const source =
+    verification.acceptanceSource === "test_case_file"
+      ? "测试案例文件"
+      : verification.acceptanceSource === "plan_file_generated"
+        ? "计划文件生成"
+        : "任务描述生成";
+  const filePath =
+    verification.testCaseFilePath ??
+    verification.generatedTestCaseFilePath ??
+    verification.planFilePath ??
+    "等待生成 docs/testing 测试案例文件";
+  return `来源：${source} ${filePath}`;
 }
