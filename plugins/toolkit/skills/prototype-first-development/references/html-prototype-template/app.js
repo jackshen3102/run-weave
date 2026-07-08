@@ -1,14 +1,12 @@
-/* global document, fetch */
+/* global URLSearchParams, document, fetch, window */
 
 const app = document.querySelector("#app");
 
-function eventLine(message) {
-  const time = new Date().toLocaleTimeString();
-  return `${time} ${message}`;
-}
-
 function render(state) {
-  const activeStep = state.steps.find((step) => step.id === state.activeStepId);
+  const activeView = state.views.find((view) => view.id === state.activeViewId);
+  const showPrototypeControls = new URLSearchParams(window.location.search).has(
+    "prototypeControls",
+  );
 
   app.innerHTML = `
     <header class="topbar">
@@ -17,33 +15,42 @@ function render(state) {
         <span>${state.subtitle}</span>
       </div>
       <div class="toolbar">
-        <button class="button" data-action="previous">上一步</button>
-        <button class="button primary" data-action="next">下一步</button>
+        ${state.actions
+          .map(
+            (action) => `
+              <button class="button ${action.primary ? "primary" : ""}" data-action-id="${action.id}">
+                ${action.label}
+              </button>
+            `,
+          )
+          .join("")}
       </div>
     </header>
-    <section class="workspace">
-      <div class="main-panel">
-        <nav class="step-row" aria-label="原型步骤">
-          ${state.steps
+    <section class="product-shell">
+      <aside class="sidebar">
+        <nav class="nav-list" aria-label="${state.navigationLabel}">
+          ${state.views
             .map(
-              (step) => `
+              (view) => `
                 <button
-                  class="step ${step.id === state.activeStepId ? "active" : ""}"
-                  data-step-id="${step.id}"
+                  class="nav-item ${view.id === state.activeViewId ? "active" : ""}"
+                  data-view-id="${view.id}"
                 >
-                  ${step.label}
+                  ${view.label}
                 </button>
               `,
             )
             .join("")}
         </nav>
+      </aside>
+      <div class="main-panel">
         <section class="stage">
           <div class="stage-header">
-            <strong>${activeStep.title}</strong>
-            <span>${activeStep.status}</span>
+            <strong>${activeView.title}</strong>
+            <span>${activeView.status}</span>
           </div>
           <div class="stage-body">
-            ${activeStep.items
+            ${activeView.items
               .map(
                 (item) => `
                   <article class="item">
@@ -56,25 +63,28 @@ function render(state) {
           </div>
         </section>
       </div>
-      <aside class="sidecar">
-        <h2>事件流</h2>
-        <div class="event-list">
-          ${state.events.map((event) => `<div class="event">${event}</div>`).join("")}
-        </div>
-      </aside>
     </section>
+    <aside
+      class="prototype-controls ${showPrototypeControls ? "visible" : ""}"
+      data-prototype-helper="true"
+      aria-hidden="${showPrototypeControls ? "false" : "true"}"
+    >
+      <div class="prototype-controls-inner">
+        <span>Prototype helper, not product UI</span>
+        <div>
+          ${state.views
+            .map(
+              (view) => `
+                <button class="button" data-view-id="${view.id}">
+                  ${view.label}
+                </button>
+              `,
+            )
+            .join("")}
+        </div>
+      </div>
+    </aside>
   `;
-}
-
-function moveStep(state, direction) {
-  const index = state.steps.findIndex((step) => step.id === state.activeStepId);
-  const nextIndex = Math.max(0, Math.min(state.steps.length - 1, index + direction));
-  const nextStep = state.steps[nextIndex];
-  return {
-    ...state,
-    activeStepId: nextStep.id,
-    events: [eventLine(`聚焦步骤 ${nextStep.id}`), ...state.events].slice(0, 8),
-  };
 }
 
 function bindInteractions(initialState) {
@@ -85,23 +95,19 @@ function bindInteractions(initialState) {
     const target = event.target.closest("button");
     if (!target) return;
 
-    if (target.dataset.action === "previous") {
-      state = moveStep(state, -1);
-      render(state);
-      return;
-    }
-
-    if (target.dataset.action === "next") {
-      state = moveStep(state, 1);
-      render(state);
-      return;
-    }
-
-    if (target.dataset.stepId) {
+    if (target.dataset.actionId) {
       state = {
         ...state,
-        activeStepId: target.dataset.stepId,
-        events: [eventLine(`选择步骤 ${target.dataset.stepId}`), ...state.events].slice(0, 8),
+        lastActionId: target.dataset.actionId,
+      };
+      render(state);
+      return;
+    }
+
+    if (target.dataset.viewId) {
+      state = {
+        ...state,
+        activeViewId: target.dataset.viewId,
       };
       render(state);
     }

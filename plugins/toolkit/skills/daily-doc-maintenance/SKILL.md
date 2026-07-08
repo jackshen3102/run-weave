@@ -1,6 +1,6 @@
 ---
 name: daily-doc-maintenance
-description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调度器触发“每日文档整理/文档保鲜/文档保持最新”流程时使用；用于根据最新文档与代码变更更新或删除 Runweave 文档，禁止修改代码、配置和测试；验证通过后调用 toolkit:github-pr 提交并合并 PR。
+description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调度器触发“每日文档整理/文档保鲜/文档保持最新”流程时使用；用于根据最新文档与代码变更更新或删除 Runweave 文档，并强制清理 docs/plans 与 docs/review 过程材料；禁止修改代码、配置和测试；验证通过后调用 toolkit:github-pr 提交并合并 PR。
 ---
 
 # 每日文档整理
@@ -16,6 +16,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 - 不新增前端单测、Vitest、coverage 配置；文档整理不触发前端 TDD。
 - 不因为文档发现代码问题就顺手修代码；只在最终报告里列出“代码侧待处理”。
 - 不创建长期新文档，除非用户明确要求。默认把新增或零散文档合并进已有权威文档，然后删除冗余文档。
+- `docs/plans/**` 和 `docs/review/**` 是过程材料，不上车做长期维护；每日文档整理必须清空这两个目录下的文档和资产，不能把它们作为可长期保留的例外。
 
 ## 文档原则
 
@@ -32,6 +33,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 
 - 文件逐行说明、函数调用流水账、临时调试过程。
 - 已完成计划中的中间步骤、commit 过程、个人执行记录。
+- `docs/plans/`、`docs/review/` 下的计划、评审、复盘、草图和截图等过程产物。
 - 与当前代码不一致的旧路径、旧命名、旧截图说明。
 - 可从代码直接读出的低价值细节，例如私有函数名、大段代码片段、局部变量解释。
 
@@ -49,6 +51,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 - 范围内的文档变更必须逐一检查：新增文档是否需要沉淀进权威文档，旧文档是否过时，文档入口是否需要调整。
 - 范围内的代码变更只用于判断文档是否需要更新；即使发现代码问题，本 skill 也只记录待处理项，不修改代码。
 - 如果调用方显式提供 Git range，以调用方 range 为准，但仍必须先确认目标 base branch 与远端状态一致。
+- 不管 range 是否覆盖，`docs/plans/**` 和 `docs/review/**` 都是本轮固定清理目标：有效结论先迁移到权威文档，随后删除这些目录下的文件。
 
 ## 默认输入
 
@@ -56,7 +59,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 
 - `base_branch`，默认 `main`。
 - `before_ref` 和 `after_ref`，或等价的 `before_ref..after_ref`。
-- 本次是否允许删除文档，默认允许删除已合并且确认冗余的文档。
+- 本次是否允许删除文档，默认允许删除已合并且确认冗余的文档；`docs/plans/**` 和 `docs/review/**` 不受该开关影响，始终按必删过程材料处理。
 
 如果没有明确 range：
 
@@ -78,7 +81,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 3. 建立文档地图。
    - 先读 `docs/README.md`，确认权威入口。
    - 按主题映射到现有文档：架构、终端、Preview、AI 协作、质量、测试、部署。
-   - `docs/plans/` 默认视为计划/过程材料，不作为当前功能权威来源；其中仍有效的结论应沉淀到 `docs/architecture/`、`docs/quality/`、`docs/testing/` 或 `docs/deployment/`。
+   - `docs/plans/` 和 `docs/review/` 默认视为计划/评审过程材料，不作为当前功能权威来源；其中仍有效的结论应沉淀到 `docs/architecture/`、`docs/quality/`、`docs/testing/`、`docs/deployment/` 或其他现有权威文档。
 
 4. 判断是否需要更新。
    - 用户可见功能、协议、路由、状态模型、验证命令、部署方式发生变化：更新权威文档。
@@ -89,6 +92,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 5. 执行文档整理。
    - 优先更新已有权威文档，不新建长期文档。
    - 更新 `docs/README.md` 的路由表，确保入口能找到当前权威文档。
+   - 清理 `docs/plans/**` 和 `docs/review/**`：先迁移仍有效的结论、验收入口、架构边界或风险判断，再删除原文件及其仅被这些文件引用的资产。
    - 删除文档前必须确认：核心内容已合并、没有被 `docs/README.md` 或其他文档继续引用、不是仍有价值的历史决策记录。
    - 删除图片/草图前必须确认没有文档引用。
 
@@ -100,6 +104,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 7. 验证。
    - 运行 `git diff --check`。
    - 运行 `git diff --name-only`，确认只有允许的文档范围变化。
+   - 运行 `find docs/plans docs/review -type f` 或等价命令，确认两个目录下不再有文件；如果目录不存在，记录为已清理。
    - 删除文档或资产后，用 `rg` 检查仓库内没有残留链接或过期引用。
    - 不为纯文档整理运行前端单测；只有用户要求或文档工具链需要时才补充更重验证。
 
@@ -119,6 +124,7 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 
 可以删除：
 
+- `docs/plans/**` 和 `docs/review/**` 的全部文件；这些目录只承载阶段性计划、评审、草图、截图和执行记录，不作为长期文档。
 - 已被权威文档吸收的重复文档。
 - 只记录一次性执行过程、临时方案或已过期计划的文档。
 - 指向旧架构、旧路径、旧命令且没有长期参考价值的文档。
@@ -130,6 +136,8 @@ description: 仅当用户明确要求使用 daily-doc-maintenance skill，或调
 - 仍在解释当前功能边界、协议或验证路径的文档。
 - 明确作为历史决策、复盘或设计依据保留的文档，除非用户要求清理。
 - 不确定是否仍被外部引用的公开文档；这种情况先在报告里标记。
+
+例外说明：以上“不要删除”不适用于 `docs/plans/**` 和 `docs/review/**`。如果其中内容仍有长期价值，先迁移到权威文档，再删除原过程文件；不要因为引用未迁移或价值未判断而把它们留在主线。
 
 ## 最终报告格式
 
