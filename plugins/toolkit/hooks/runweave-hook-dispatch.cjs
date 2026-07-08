@@ -20,19 +20,22 @@ function inferSource() {
     return explicit;
   }
 
-  if (process.env.CODEX_PLUGIN_ROOT) {
-    return "codex";
-  }
-  if (process.env.CLAUDE_PLUGIN_ROOT) {
-    return "claude";
-  }
-
   const pluginRoot = path.resolve(__dirname, "..");
   if (pluginRoot.includes(`${path.sep}.codex${path.sep}`)) {
     return "codex";
   }
   if (pluginRoot.includes(`${path.sep}.trae${path.sep}`)) {
     return "trae";
+  }
+  if (pluginRoot.includes(`${path.sep}.claude${path.sep}`)) {
+    return "claude";
+  }
+
+  if (process.env.CODEX_PLUGIN_ROOT) {
+    return "codex";
+  }
+  if (process.env.CLAUDE_PLUGIN_ROOT) {
+    return "claude";
   }
 
   return "unknown";

@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import {
   chmod,
+  copyFile,
   mkdtemp,
   mkdir,
   readFile,
@@ -35,7 +36,7 @@ const toolkitHookEvents = [
   "UserPromptSubmit",
 ];
 const toolkitHookCommand =
-  'sh -c \'for root in "${RUNWEAVE_TOOLKIT_PLUGIN_ROOT:-}" "${CODEX_PLUGIN_ROOT:-}" "${CLAUDE_PLUGIN_ROOT:-}" . "__PLUGIN_DIR__" "$HOME/.codex/plugins/cache/runweave/toolkit/latest" "$HOME/.codex/plugins/cache/runweave/toolkit"/*; do if [ -n "$root" ] && [ -f "$root/hooks/runweave-hook-dispatch.cjs" ]; then exec node "$root/hooks/runweave-hook-dispatch.cjs"; fi; done; exit 0\'';
+  'sh -c \'for root in "${RUNWEAVE_TOOLKIT_PLUGIN_ROOT:-}" "__PLUGIN_DIR__" . "${CODEX_PLUGIN_ROOT:-}" "$HOME/.codex/plugins/cache/runweave/toolkit/latest" "$HOME/.codex/plugins/cache/runweave/toolkit"/* "${CLAUDE_PLUGIN_ROOT:-}"; do if [ -n "$root" ] && [ -f "$root/hooks/runweave-hook-dispatch.cjs" ]; then exec node "$root/hooks/runweave-hook-dispatch.cjs"; fi; done; exit 0\'';
 
 const toolkitHooksConfig = JSON.parse(
   await readFile(toolkitHooksConfigPath, "utf8"),
@@ -69,6 +70,22 @@ const homeDir = await mkdtemp(path.join(os.tmpdir(), "runweave-hook-home-"));
 try {
   await mkdir(path.join(homeDir, ".codex"), { recursive: true });
   await mkdir(path.join(homeDir, ".trae"), { recursive: true });
+  const codexToolkitDir = path.join(
+    homeDir,
+    ".codex",
+    "plugins",
+    "cache",
+    "runweave",
+    "toolkit",
+    "current",
+  );
+  await mkdir(path.join(codexToolkitDir, "hooks"), { recursive: true });
+  for (const asset of hookAssets) {
+    await copyFile(
+      path.join(toolkitHooksDir, asset),
+      path.join(codexToolkitDir, "hooks", asset),
+    );
+  }
 
   await writeFile(
     path.join(homeDir, ".codex", "hooks.json"),
@@ -439,6 +456,42 @@ try {
 
     await runToolkitHookCommand(
       getToolkitHookCommand(toolkitHooksConfig, "Stop"),
+      "codex",
+      {
+        HOME: homeDir,
+        CLAUDE_PLUGIN_ROOT: toolkitDir,
+        RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
+        RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
+        RUNWEAVE_HOOK_ENDPOINT: endpoint,
+        RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
+        RUNWEAVE_HOOK_TOKEN: "token-2c",
+        RUNWEAVE_TERMINAL_SESSION_ID: "terminal-2c",
+        RUNWEAVE_PROJECT_ID: "project-2c",
+        RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+      },
+      {},
+      {
+        pluginDirPlaceholder: codexToolkitDir,
+        setHookSource: false,
+      },
+    );
+
+    assert.equal(requests.length, 7);
+    assert.equal(appServerRequests.length, 7);
+    assert.equal(appServerRequests[5].kind, "agent.hook");
+    assert.equal(appServerRequests[5].payload.source, "codex");
+    assert.equal(appServerRequests[6].kind, "agent.completion");
+    assert.equal(appServerRequests[6].payload.source, "codex");
+    assert.equal(requests[5].url, "/internal/terminal/agent-hook");
+    assert.equal(requests[5].token, "token-2c");
+    assert.equal(requests[5].body.agent, "codex");
+    assert.equal(requests[6].url, "/internal/terminal-completion");
+    assert.equal(requests[6].token, "token-2c");
+    assert.equal(requests[6].body.terminalSessionId, "terminal-2c");
+    assert.equal(requests[6].body.source, "codex");
+
+    await runToolkitHookCommand(
+      getToolkitHookCommand(toolkitHooksConfig, "Stop"),
       "trae",
       {
         HOME: homeDir,
@@ -453,15 +506,15 @@ try {
       },
     );
 
-    assert.equal(requests.length, 7);
-    assert.equal(appServerRequests.length, 7);
-    assert.equal(appServerRequests[5].kind, "agent.hook");
-    assert.equal(appServerRequests[5].payload.source, "trae");
-    assert.equal(appServerRequests[6].kind, "agent.completion");
-    assert.equal(appServerRequests[6].payload.source, "trae");
-    assert.equal(requests[5].url, "/internal/terminal/agent-hook");
-    assert.equal(requests[5].token, "token-3");
-    assert.deepEqual(requests[5].body, {
+    assert.equal(requests.length, 9);
+    assert.equal(appServerRequests.length, 9);
+    assert.equal(appServerRequests[7].kind, "agent.hook");
+    assert.equal(appServerRequests[7].payload.source, "trae");
+    assert.equal(appServerRequests[8].kind, "agent.completion");
+    assert.equal(appServerRequests[8].payload.source, "trae");
+    assert.equal(requests[7].url, "/internal/terminal/agent-hook");
+    assert.equal(requests[7].token, "token-3");
+    assert.deepEqual(requests[7].body, {
       terminalSessionId: "terminal-3",
       projectId: "project-3",
       tmuxPaneId: "%13",
@@ -469,12 +522,12 @@ try {
       hookEvent: "Stop",
       commandName: null,
     });
-    assert.equal(requests[6].url, "/internal/terminal-completion");
-    assert.equal(requests[6].token, "token-3");
-    assert.equal(requests[6].body.terminalSessionId, "terminal-3");
-    assert.equal(requests[6].body.source, "trae");
-    assert.equal(requests[6].body.rawHookEvent, "Stop");
-    assert.equal(requests[6].body.summary, "done");
+    assert.equal(requests[8].url, "/internal/terminal-completion");
+    assert.equal(requests[8].token, "token-3");
+    assert.equal(requests[8].body.terminalSessionId, "terminal-3");
+    assert.equal(requests[8].body.source, "trae");
+    assert.equal(requests[8].body.rawHookEvent, "Stop");
+    assert.equal(requests[8].body.summary, "done");
 
     await runLauncher(launcherPath, {
       HOME: homeDir,
@@ -488,14 +541,14 @@ try {
       RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
     });
 
-    assert.equal(requests.length, 9);
+    assert.equal(requests.length, 11);
     assert.equal(
       appServerRequests.length,
-      7,
+      9,
       "app-server 401 must not prevent backend hook fallback",
     );
-    assert.equal(requests[7].url, "/internal/terminal/agent-hook");
-    assert.equal(requests[8].url, "/internal/terminal-completion");
+    assert.equal(requests[9].url, "/internal/terminal/agent-hook");
+    assert.equal(requests[10].url, "/internal/terminal-completion");
 
     await runLauncher(launcherPath, {
       HOME: homeDir,
@@ -508,12 +561,12 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(
       requests.length,
-      9,
+      11,
       "launcher without Runweave identity must not post any request",
     );
     assert.equal(
       appServerRequests.length,
-      7,
+      9,
       "launcher without Runweave identity must not post app-server events",
     );
   } finally {
@@ -614,7 +667,10 @@ function runToolkitHookCommand(
   const runnableCommand =
     options.replacePluginDirPlaceholder === false
       ? command
-      : command.replaceAll("__PLUGIN_DIR__", toolkitDir);
+      : command.replaceAll(
+          "__PLUGIN_DIR__",
+          options.pluginDirPlaceholder ?? toolkitDir,
+        );
 
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
@@ -630,7 +686,9 @@ function runToolkitHookCommand(
         ...env,
         TMUX_PANE: "%13",
         ...extraEnv,
-        RUNWEAVE_HOOK_SOURCE: source,
+        ...(options.setHookSource === false
+          ? {}
+          : { RUNWEAVE_HOOK_SOURCE: source }),
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
