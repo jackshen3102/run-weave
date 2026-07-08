@@ -69,8 +69,6 @@ export function SortableTabs<T>({
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 8,
-        delay: 150,
-        tolerance: 5,
       },
     }),
   );
@@ -97,6 +95,9 @@ export function SortableTabs<T>({
 
     onReorder(fromIndex, toIndex);
   });
+  const handleDragCancel = useMemoizedFn(() => {
+    setActiveIndex(null);
+  });
 
   const activeItem =
     activeIndex !== null && activeIndex >= 0 && activeIndex < items.length
@@ -109,6 +110,7 @@ export function SortableTabs<T>({
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
       modifiers={[restrictToHorizontalAxis]}
     >
       <SortableContext items={ids} strategy={horizontalListSortingStrategy}>
