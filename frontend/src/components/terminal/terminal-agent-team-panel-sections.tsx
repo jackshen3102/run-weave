@@ -11,7 +11,6 @@ import {
 import {
   AcceptanceEvidenceDetails,
   PaneFocusList,
-  ScopeSnapshotDetails,
 } from "./terminal-agent-team-panel-details";
 
 export function StartFlowSection({
@@ -269,7 +268,6 @@ export function ExecutingSection({
           ))}
         </div>
       </div>
-      <ScopeSnapshotDetails run={run} />
 
       {loop.escalated ? (
         <div className="space-y-2 rounded border border-rose-800 bg-rose-950/40 p-2">

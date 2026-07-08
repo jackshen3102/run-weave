@@ -108,34 +108,6 @@ export function AcceptanceEvidenceDetails({
   );
 }
 
-export function ScopeSnapshotDetails({ run }: { run: AgentTeamRun }) {
-  const snapshot = run.scopeSnapshot;
-  if (!snapshot) {
-    return null;
-  }
-  const lines = snapshot.gitStatusShort;
-  return (
-    <details className="group rounded border border-slate-800 bg-slate-900/40 p-2">
-      <summary className="cursor-pointer select-none text-[10px] font-medium uppercase text-slate-500 hover:text-slate-300">
-        Scope Snapshot · {lines.length} dirty paths
-      </summary>
-      <div className="mt-2 space-y-1 text-[10px] text-slate-400">
-        <div>capturedAt: {snapshot.capturedAt}</div>
-        {snapshot.error ? (
-          <div className="text-amber-300">capture error: {snapshot.error}</div>
-        ) : null}
-        {lines.length > 0 ? (
-          <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded bg-slate-950/70 p-2 font-mono text-[10px] text-slate-300">
-            {lines.join("\n")}
-          </pre>
-        ) : (
-          <div className="text-slate-500">git status clean at run start</div>
-        )}
-      </div>
-    </details>
-  );
-}
-
 export function PaneFocusList({
   run,
   onFocusPane,

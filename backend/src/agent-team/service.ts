@@ -1,6 +1,4 @@
-import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
-import { promisify } from "node:util";
 import type {
   AgentTeamAcceptanceCase,
   AgentTeamExportHistoryMode,
@@ -65,7 +63,6 @@ import {
 import { AgentTeamAgentReadinessService } from "./agent-readiness";
 
 const agentTeamLogger = logger.child({ component: "agent-team-service" });
-const execFileAsync = promisify(execFile);
 const DEFAULT_AGENT_TEAM_AGENT_COMMAND = "codex";
 const MANUAL_FEEDBACK_COMPLETION_GRACE_MS = 200;
 const RECHECK_WATCHDOG_INTERVAL_MS = 10_000;
@@ -315,7 +312,6 @@ export class AgentTeamService {
       }
     }
     const now = new Date().toISOString();
-    const scopeSnapshot = await this.captureScopeSnapshot(session.cwd);
     const run: AgentTeamRun = {
       runId: createAgentTeamRunId(input.terminalSessionId),
       projectId: input.projectId,
@@ -333,7 +329,6 @@ export class AgentTeamService {
       acceptance: [],
       loop: createInitialLoop(),
       humanNotes: [],
-      scopeSnapshot,
       logs: ["Agent Team 任务已提交，生成 worker 拆分提案"],
       createdAt: now,
       updatedAt: now,
@@ -777,32 +772,6 @@ export class AgentTeamService {
         }
       }),
     );
-  }
-
-  private async captureScopeSnapshot(
-    cwd: string,
-  ): Promise<AgentTeamRun["scopeSnapshot"]> {
-    const capturedAt = new Date().toISOString();
-    try {
-      const { stdout } = await execFileAsync("git", ["status", "--short"], {
-        cwd,
-        timeout: 5_000,
-        maxBuffer: 1024 * 1024,
-      });
-      return {
-        capturedAt,
-        gitStatusShort: stdout
-          .split("\n")
-          .map((line) => line.trimEnd())
-          .filter(Boolean),
-      };
-    } catch (error) {
-      return {
-        capturedAt,
-        gitStatusShort: [],
-        error: formatErrorMessage(error),
-      };
-    }
   }
 
   private resolveProjectRoot(projectId: string, cwd: string): string | null {
@@ -1859,7 +1828,6 @@ export class AgentTeamService {
         | "acceptance"
         | "loop"
 	        | "humanNotes"
-	        | "scopeSnapshot"
 	        | "logs"
 	        | "mainPanelId"
 	      >

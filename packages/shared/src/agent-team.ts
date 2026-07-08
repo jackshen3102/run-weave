@@ -109,13 +109,6 @@ export interface HumanInterventionNote {
   clearedFingerprints: string[];
 }
 
-export interface AgentTeamRunScopeSnapshot {
-  capturedAt: string;
-  gitStatusShort: string[];
-  allowedPaths?: string[];
-  error?: string;
-}
-
 export interface AgentTeamRunOptions {
   autoApproveSplit: boolean;
 }
@@ -141,7 +134,6 @@ export interface AgentTeamRun {
   acceptance: AgentTeamAcceptanceCase[];
   loop: AgentTeamLoop;
   humanNotes: HumanInterventionNote[];
-  scopeSnapshot?: AgentTeamRunScopeSnapshot;
   /** Observation log for the executing sidecar. */
   logs: string[];
   createdAt: string;
