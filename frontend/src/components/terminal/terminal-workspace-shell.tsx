@@ -800,11 +800,11 @@ export function TerminalWorkspaceShell({
     visibleProjects.find((project) => project.projectId === activeProjectId) ??
     null;
   const activeSession =
-    visibleSessions.find(
-      (session) => session.terminalSessionId === activeSessionId,
-    ) ??
-    visibleSessions[0] ??
-    null;
+    activeSessionId
+      ? visibleSessions.find(
+          (session) => session.terminalSessionId === activeSessionId,
+        ) ?? null
+      : null;
   const activeAgentTeamRunPresent = Boolean(
     activeSession &&
       activeAgentTeamRunSessionId === activeSession.terminalSessionId,

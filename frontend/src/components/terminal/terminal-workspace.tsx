@@ -1,6 +1,6 @@
 import { useMemoizedFn } from "ahooks";
-import { useEffect, useMemo, useRef } from "react";
-import type { TerminalState } from "@runweave/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { TerminalSessionListItem, TerminalState } from "@runweave/shared";
 import type { ConnectionConfig } from "../../features/connection/types";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
@@ -12,6 +12,7 @@ import {
   listTerminalSessions,
 } from "../../services/terminal";
 import {
+  resolvePreferredProjectId,
   resolvePreferredSessionId,
   usePersistRecentSelection,
   useSessionMarkerCleanup,
@@ -22,6 +23,26 @@ import { useTerminalWorkspaceEvents } from "./terminal-workspace-events";
 import { TerminalWorkspaceShell } from "./terminal-workspace-shell";
 
 const SESSION_RETRY_DELAY_MS = 2_000;
+
+function hasValidProjectSessionSelection(
+  projects: Array<{ projectId: string }>,
+  sessions: TerminalSessionListItem[],
+  projectId: string | null,
+  terminalSessionId: string | null,
+): boolean {
+  if (!projectId || !terminalSessionId) {
+    return false;
+  }
+
+  return (
+    projects.some((project) => project.projectId === projectId) &&
+    sessions.some(
+      (session) =>
+        session.projectId === projectId &&
+        session.terminalSessionId === terminalSessionId,
+    )
+  );
+}
 
 interface TerminalWorkspaceProps {
   apiBase: string;
@@ -122,6 +143,9 @@ export function TerminalWorkspace({
   const loadSessionsRequestIdRef = useRef(0);
   const currentApiBaseRef = useRef(apiBase);
   const initialTerminalSessionIdRef = useRef(initialTerminalSessionId);
+  const [sessionsLoadedApiBase, setSessionsLoadedApiBase] = useState<
+    string | null
+  >(null);
   const removeProjectPreview = useTerminalPreviewStore(
     (state) => state.removeProjectPreview,
   );
@@ -129,19 +153,20 @@ export function TerminalWorkspace({
   const selectActiveProject = useMemoizedFn((projectId: string) => {
     setActiveProjectId(projectId);
     const currentState = useTerminalWorkspaceStore.getState();
+    const projectSessions = currentState.sessions.filter(
+      (session) => session.projectId === projectId,
+    );
     const currentSessionId = currentState.activeSessionId;
     if (
       currentSessionId &&
-      currentState.sessions.some(
-        (session) =>
-          session.terminalSessionId === currentSessionId &&
-          session.projectId === projectId,
+      projectSessions.some(
+        (session) => session.terminalSessionId === currentSessionId,
       )
     ) {
       return;
     }
     selectActiveSession(
-      resolvePreferredSessionId(apiBase, projectId, currentState.sessions),
+      resolvePreferredSessionId(apiBase, projectId, projectSessions),
     );
   });
   const visibleProjects = useMemo(() => {
@@ -160,11 +185,11 @@ export function TerminalWorkspace({
     [sessions],
   );
   const activeSession =
-    visibleSessions.find(
-      (session) => session.terminalSessionId === activeSessionId,
-    ) ??
-    visibleSessions[0] ??
-    null;
+    activeSessionId
+      ? visibleSessions.find(
+          (session) => session.terminalSessionId === activeSessionId,
+        ) ?? null
+      : null;
   const loadSessions = useMemoizedFn(async (): Promise<void> => {
     const requestId = loadSessionsRequestIdRef.current + 1;
     loadSessionsRequestIdRef.current = requestId;
@@ -212,18 +237,45 @@ export function TerminalWorkspace({
         }
         return changed ? next : current;
       });
-      setActiveProjectId((currentProjectId) => {
-        if (
-          currentProjectId &&
-          nextProjects.some((project) => project.projectId === currentProjectId)
-        ) {
-          return currentProjectId;
-        }
-        const initialSessionProjectId = nextSessions.find(
-          (session) => session.terminalSessionId === initialTerminalSessionId,
-        )?.projectId;
-        return initialSessionProjectId ?? nextProjects[0]?.projectId ?? null;
-      });
+      const currentState = useTerminalWorkspaceStore.getState();
+      const currentSelectionIsValid = hasValidProjectSessionSelection(
+        nextProjects,
+        nextSessions,
+        currentState.activeProjectId,
+        currentState.activeSessionId,
+      );
+      const nextActiveProjectId = resolvePreferredProjectId(
+        apiBase,
+        nextProjects,
+        nextSessions,
+        currentState.activeProjectId,
+        currentSelectionIsValid ? null : initialTerminalSessionId,
+      );
+      setActiveProjectId(nextActiveProjectId);
+      if (!nextActiveProjectId) {
+        selectActiveSession(null);
+      } else {
+        const nextProjectSessions = nextSessions.filter(
+          (session) => session.projectId === nextActiveProjectId,
+        );
+        const currentActiveSessionId = currentState.activeSessionId;
+        const currentSessionStillValid =
+          currentActiveSessionId &&
+          nextProjectSessions.some(
+            (session) => session.terminalSessionId === currentActiveSessionId,
+          );
+        selectActiveSession(
+          currentSessionStillValid
+            ? currentActiveSessionId
+            : resolvePreferredSessionId(
+                apiBase,
+                nextActiveProjectId,
+                nextProjectSessions,
+                initialTerminalSessionId,
+              ),
+        );
+      }
+      setSessionsLoadedApiBase(requestApiBase);
       setRequestError(null);
     } catch (error) {
       if (!isCurrentRequest()) {
@@ -254,6 +306,7 @@ export function TerminalWorkspace({
   useEffect(() => {
     loadSessionsRequestIdRef.current += 1;
     currentApiBaseRef.current = apiBase;
+    setSessionsLoadedApiBase(null);
     resetWorkspaceForConnection(initialTerminalSessionIdRef.current);
     resetTerminalEventCursor();
   }, [apiBase, resetTerminalEventCursor, resetWorkspaceForConnection]);
@@ -279,20 +332,28 @@ export function TerminalWorkspace({
     if (visibleProjects.length === 0) {
       return;
     }
-    const initialSessionProjectId = sessions.find(
-      (session) => session.terminalSessionId === initialTerminalSessionId,
-    )?.projectId;
-    const desiredProjectId = activeProjectId ?? initialSessionProjectId;
-    if (
-      desiredProjectId &&
-      visibleProjects.some((project) => project.projectId === desiredProjectId)
-    ) {
+    const activeSelectionIsValid = hasValidProjectSessionSelection(
+      visibleProjects,
+      sessions,
+      activeProjectId,
+      activeSessionId,
+    );
+    const desiredProjectId = resolvePreferredProjectId(
+      apiBase,
+      visibleProjects,
+      sessions,
+      activeProjectId,
+      activeSelectionIsValid ? null : initialTerminalSessionId,
+    );
+    if (desiredProjectId) {
       setActiveProjectId(desiredProjectId);
       return;
     }
-    setActiveProjectId(visibleProjects[0]?.projectId ?? null);
+    setActiveProjectId(null);
   }, [
     activeProjectId,
+    activeSessionId,
+    apiBase,
     initialTerminalSessionId,
     sessions,
     setActiveProjectId,
@@ -319,6 +380,7 @@ export function TerminalWorkspace({
         apiBase,
         activeProjectId ?? visibleSessions[0]!.projectId,
         visibleSessions,
+        initialTerminalSessionId,
       ),
     );
   }, [
@@ -326,6 +388,7 @@ export function TerminalWorkspace({
     activeSessionId,
     apiBase,
     hasLoadedSessions,
+    initialTerminalSessionId,
     selectActiveSession,
     visibleSessions,
   ]);
@@ -355,11 +418,21 @@ export function TerminalWorkspace({
     sessionIds,
     setCachedSurfaceSessionIds,
   ]);
+  const activeProjectLoaded = Boolean(
+    activeProjectId &&
+      projects.some((project) => project.projectId === activeProjectId),
+  );
+  const canPersistRecentSelection =
+    sessionsLoadedApiBase === apiBase &&
+    hasLoadedSessions &&
+    !requestError &&
+    activeProjectLoaded &&
+    (visibleSessions.length === 0 || activeSession !== null);
   usePersistRecentSelection({
     apiBase,
     activeProjectId,
     activeSessionId: activeSession?.terminalSessionId ?? null,
-    hasLoadedSessions,
+    canPersist: canPersistRecentSelection,
     requestError,
   });
   useSessionSelectionShortcuts({
