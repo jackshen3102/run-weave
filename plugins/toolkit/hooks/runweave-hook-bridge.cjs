@@ -117,6 +117,48 @@ function readTmuxSessionEnv() {
   };
 }
 
+function getCommandBasename(command) {
+  const normalized = String(command || "").trim().replace(/\\+/g, "/");
+  if (!normalized) {
+    return null;
+  }
+  const basename = normalized.split("/").filter(Boolean).at(-1) || normalized;
+  return basename || null;
+}
+
+function readTmuxPaneCommandName() {
+  const socketPath = parseTmuxSocketPath(process.env.TMUX);
+  const tmuxPaneId = process.env.TMUX_PANE;
+  if (!socketPath || !tmuxPaneId) {
+    return null;
+  }
+  const separator = "__RUNWEAVE_METADATA_FIELD__";
+  const result = spawnSync(
+    "tmux",
+    [
+      "-S",
+      socketPath,
+      "display-message",
+      "-p",
+      "-t",
+      tmuxPaneId,
+      ["#{@runweave_command}", "#{pane_current_command}"].join(separator),
+    ],
+    {
+      encoding: "utf8",
+      timeout: 2000,
+      maxBuffer: 32 * 1024,
+    },
+  );
+  if (result.error || result.status !== 0) {
+    return null;
+  }
+  const [runweaveCommand = "", paneCommand = ""] = String(result.stdout || "")
+    .replace(/\r?\n$/, "")
+    .split(separator);
+  return getCommandBasename(runweaveCommand) || getCommandBasename(paneCommand);
+}
+
 function notifyDesktop(source) {
   if (process.env.RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY === "1") {
     return;
@@ -261,6 +303,7 @@ async function main() {
   const rawEvent = readHookEvent(payload);
   const normalizedEvent = normalizeEventName(rawEvent);
   const source = normalizeSource(args.source);
+  const commandName = args.commandName || readTmuxPaneCommandName();
   const completionReason = normalizeReason(args.reason);
   const threadId = source === "codex" ? readThreadId(payload) : null;
   const stateHookEvent =
@@ -293,6 +336,7 @@ async function main() {
     completionEndpoint: redactEndpoint(completionEndpoint),
     threadId,
     stateHookEvent,
+    commandName,
     shouldRecordCompletion,
     tmuxEnvRefresh,
   });
@@ -328,7 +372,7 @@ async function main() {
         source,
         terminalSessionId,
         threadId,
-        commandName: args.commandName,
+        commandName,
         dedupePrefix: "hook",
       }),
     );
@@ -355,7 +399,7 @@ async function main() {
       threadId,
       panelId: terminalPanelId,
       tmuxPaneId,
-      commandName: args.commandName,
+      commandName,
     });
     appendDebugLog("hook bridge posted agent hook", {
       terminalSessionId,
@@ -375,7 +419,7 @@ async function main() {
         source,
         completionReason,
         rawEvent,
-        commandName: args.commandName,
+        commandName,
       });
       const completionEvent = buildAppServerBaseEvent({
         kind: "agent.completion",
@@ -386,7 +430,7 @@ async function main() {
           source,
           terminalSessionId,
           threadId,
-          commandName: args.commandName,
+          commandName,
           dedupePrefix: "completion",
         });
       completionEvent.payload = {
@@ -419,7 +463,7 @@ async function main() {
       source,
       completionReason,
       rawEvent,
-      commandName: args.commandName,
+      commandName,
     });
     appendDebugLog("hook bridge posted completion hook", {
       terminalSessionId,

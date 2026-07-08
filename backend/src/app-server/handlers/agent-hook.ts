@@ -5,9 +5,11 @@ import type { TerminalSessionManager } from "../../terminal/manager";
 import type { TerminalStateService } from "../../terminal/terminal-state-service";
 import {
   readAppServerAgent,
+  readAppServerHookSource,
   readAppServerHookEvent,
   readAppServerPayloadString,
 } from "./agent-event-payload";
+import { resolveAppServerTerminalAgent } from "./terminal-agent-context";
 
 const agentHookLogger = logger.child({
   component: "app-server-agent-hook",
@@ -21,7 +23,25 @@ export async function handleAgentHookEvent(
   },
 ): Promise<void> {
   const terminalSessionId = event.scope?.terminalSessionId;
-  const agent = readAppServerAgent(event.payload);
+  const panelId =
+    event.scope?.terminalPanelId ??
+    readAppServerPayloadString(event.payload, "panelId");
+  const tmuxPaneId =
+    event.scope?.terminalTmuxPaneId ??
+    readAppServerPayloadString(event.payload, "tmuxPaneId");
+  const commandName = readAppServerPayloadString(event.payload, "commandName");
+  const agent =
+    readAppServerAgent(event.payload) ??
+    (terminalSessionId
+      ? resolveAppServerTerminalAgent({
+          terminalSessionManager: options.terminalSessionManager,
+          terminalSessionId,
+          reportedSource: readAppServerHookSource(event.payload),
+          panelId,
+          tmuxPaneId,
+          commandName,
+        })
+      : null);
   const hookEvent = readAppServerHookEvent(event.payload);
   if (!terminalSessionId || !agent || !hookEvent) {
     agentHookLogger.debug("app-server.agent-hook.ignored", {
@@ -39,13 +59,9 @@ export async function handleAgentHookEvent(
     agent,
     hookEvent,
     threadId: event.correlationId,
-    panelId:
-      event.scope?.terminalPanelId ??
-      readAppServerPayloadString(event.payload, "panelId"),
-    tmuxPaneId:
-      event.scope?.terminalTmuxPaneId ??
-      readAppServerPayloadString(event.payload, "tmuxPaneId"),
-    commandName: readAppServerPayloadString(event.payload, "commandName"),
+    panelId,
+    tmuxPaneId,
+    commandName,
   });
   if (result.status === "not_found" || result.status === "exited") {
     return;

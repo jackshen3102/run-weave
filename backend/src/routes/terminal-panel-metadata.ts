@@ -19,7 +19,11 @@ export function buildDefaultPanel(
   pane: TmuxPaneInfo,
 ): TerminalPanelRecord {
   const now = new Date();
-  const terminalState = getPanelTerminalStateForActiveCommand(pane.activeCommand);
+  const activeCommand = resolveEffectivePanelActiveCommand(
+    pane,
+    session.activeCommand,
+  );
+  const terminalState = getPanelTerminalStateForActiveCommand(activeCommand);
   const sessionMetadata = getSessionAgentMetadataForMainPanel(
     session,
     terminalState,
@@ -33,7 +37,7 @@ export function buildDefaultPanel(
     agentTeamRunId: null,
     agentTeamWorkerId: null,
     cwd: pane.cwd || session.cwd,
-    activeCommand: pane.activeCommand,
+    activeCommand,
     terminalState: sessionMetadata.terminalState ?? terminalState,
     status: "running",
     createdAt: now,
@@ -178,9 +182,33 @@ function getCommandBasename(activeCommand: string | null): string | null {
   return normalized.split(/[\\/]/).at(-1) ?? normalized;
 }
 
+const NODE_WRAPPED_ACTIVE_COMMANDS = new Set([
+  "codex",
+  "npm",
+  "npx",
+  "pnpm",
+  "trae",
+  "traecli",
+  "traex",
+  "yarn",
+]);
+
 function isInteractiveShellActiveCommand(activeCommand: string | null): boolean {
   const basename = getCommandBasename(activeCommand);
   return Boolean(basename && ["bash", "zsh", "sh", "fish"].includes(basename));
+}
+
+function shouldKeepNodeWrappedActiveCommand(
+  existingActiveCommand: string | null,
+  pane: TmuxPaneInfo,
+): boolean {
+  return (
+    pane.activeCommandSource === "pane_current_command" &&
+    getCommandBasename(pane.activeCommand) === "node" &&
+    NODE_WRAPPED_ACTIVE_COMMANDS.has(
+      getCommandBasename(existingActiveCommand) ?? "",
+    )
+  );
 }
 
 function terminalStatesEqual(
@@ -190,12 +218,18 @@ function terminalStatesEqual(
   return left?.state === right?.state && left?.agent === right?.agent;
 }
 
-export function resolveEffectivePanelActiveCommand(pane: TmuxPaneInfo): string | null {
+export function resolveEffectivePanelActiveCommand(
+  pane: TmuxPaneInfo,
+  existingActiveCommand?: string | null,
+): string | null {
   if (
     pane.activeCommandSource === "runweave_command" &&
     isInteractiveShellActiveCommand(pane.paneCommand)
   ) {
     return pane.paneCommand;
+  }
+  if (shouldKeepNodeWrappedActiveCommand(existingActiveCommand ?? null, pane)) {
+    return existingActiveCommand ?? null;
   }
   return pane.activeCommand;
 }
