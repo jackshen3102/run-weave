@@ -1,6 +1,6 @@
 # Terminal Floating Composer 测试用例
 
-本文档覆盖 `docs/plans/2026-07-07-terminal-floating-composer.md` 的验收范围。验证真实浏览器页面时必须使用 `$playwright-cli`；`typecheck` / `lint` 只是前置门禁，不能作为 UI 行为通过证据。
+本文档覆盖 Web desktop terminal floating composer 的验收范围。当前产品边界见 `docs/architecture/terminal-state.md#web-floating-composer`。验证真实浏览器页面时必须使用 `$playwright-cli`；`typecheck` / `lint` 只是前置门禁，不能作为 UI 行为通过证据。
 
 ## 范围
 
@@ -90,7 +90,7 @@ Then：
 - 普通 shell 出现 floating composer。
 - 普通 shell 的右下角 scroll button 消失或位置被改成 composer 上方。
 
-### TFC-002 supported TUI 离底显示 floating composer
+### TFC-002 supported TUI 离底显示 floating composer 入口并可展开
 
 Given：
 
@@ -101,17 +101,20 @@ Given：
 When：
 
 - 使用 `$playwright-cli` 滚轮向上滚动，离底超过 8 行。
+- 点击 `Open floating composer` 按钮。
 
 Then：
 
+- DOM 中先出现 floating composer 打开按钮。
 - DOM 中出现 floating composer textarea。
-- Composer 右侧只有发送 icon 按钮。
+- Composer 右侧只有发送 icon 按钮，左侧可有关闭 icon 按钮。
 - Composer 内没有 `away from bottom` 或其它状态文案。
 - 回到底部按钮显示在 Composer 上方水平居中。
 
 失败判断：
 
-- `floatingComposerEligible=true` 且离底超过阈值后 Composer 不出现。
+- `floatingComposerEligible=true` 且离底后没有打开入口。
+- 点击打开入口后 Composer 不出现。
 - Composer 中出现状态文案、demo 控件或 `Send` 文字按钮。
 - 回到底部按钮仍位于右下角。
 
@@ -119,7 +122,7 @@ Then：
 
 Given：
 
-- 已处于 TFC-002 的离底状态。
+- 已处于 TFC-002 的 Composer 展开状态。
 
 When：
 
@@ -130,12 +133,12 @@ Then：
 - terminal 滚到底部。
 - floating composer 隐藏。
 - Composer 上方回到底部按钮同步隐藏。
+- floating composer 打开按钮同步隐藏。
 - xterm/TUI 输入区重新成为主要输入入口。
 
 失败判断：
 
-- Composer 隐藏但回到底部按钮仍显示。
-- 回到底部按钮隐藏但 Composer 仍显示。
+- Composer 或打开按钮隐藏状态与回到底部按钮不一致。
 - 点击后 terminal 没有回到底部。
 
 When：
@@ -146,12 +149,12 @@ When：
 Then：
 
 - terminal 回到底部。
-- floating composer 隐藏。
+- floating composer 或打开按钮隐藏。
 - Composer 上方回到底部按钮同步隐藏。
 
 失败判断：
 
-- 视觉已经回到底部，但 `composerVisible=true` 或 DOM 中仍存在 floating composer textarea。
+- 视觉已经回到底部，但 `composerVisible=true` 或 DOM 中仍存在 floating composer textarea / 打开按钮。
 - `tmuxScrollbackActive=true` 持续保留，导致 composer 卡住不隐藏。
 
 ### TFC-004 native TUI 输入同步到 floating composer
@@ -166,6 +169,7 @@ When：
 
 - 在真实 TUI 输入行输入 `echo from native prompt`，但不按 Enter。
 - 使用 `$playwright-cli` 滚轮向上滚动超过显示阈值。
+- 点击 `Open floating composer` 按钮。
 
 Then：
 

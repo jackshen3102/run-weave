@@ -135,7 +135,7 @@
     "runId": "run_agentteam_204",
     "project": "browser-viewer",
     "target": "local:rw:vite%1",
-    "useCase": "docs/plans/2026-07-03-agent-team-loop-engineer.md · 用例3 终端热更验收",
+    "useCase": "docs/architecture/multi-agent-orchestrator.md · 终端热更验收",
     "steps": [
       {
         "id": "s1",

@@ -27,6 +27,19 @@ Agent Team 让当前终端里的主 Agent 调度同一 tmux session 内的 worke
 
 worker 角色定义在 `packages/shared/src/agent-team.ts`；prompt 构造在 `backend/src/agent-team/prompt-builders.ts`。Agent Team 不再使用旧 `coder`、`reviewer`、`tester` 默认集合。
 
+## 验收来源
+
+Agent Team 的 `behavior_verify` 不再把后端泛化默认句子当作可执行验收合同。启动 run 时可以传入 `planFilePath` 和 `testCaseFilePath`；测试案例文件优先级最高，计划文件只作为主 Agent 生成测试案例的输入。
+
+测试案例文件必须位于当前 project path 内，支持项目内相对路径或解析后仍在项目内的绝对路径。后端会读取 Markdown 中形如 `### AGT-VERIFY-001 标题` 的三级标题 case，并要求每个 case 至少包含 `步骤`、`期望` 和 `失败判定`。解析后的 acceptance 保留 `sourceCaseId`、`sourceFilePath`、`sourceHeading`、`tags` 和 `dependsOn`，因此 UI、run JSON、worker prompt 和 outbox 都能追溯到同一个测试案例来源。
+
+没有 `testCaseFilePath` 时，run 会先进入需要主 Agent 生成验收文件的状态：
+
+- 有 `planFilePath`：主 Agent 应基于计划文件生成 `docs/testing/*-test-cases.md`，再用 `generatedTestCaseFilePath` 提交拆分提案。
+- 没有 `planFilePath`：主 Agent 应基于任务描述生成 `docs/testing/*-test-cases.md`，再提交拆分提案。
+
+如果拆分提案没有提供可解析的测试案例文件，后端会拒绝进入 worker split，而不是回退到旧的“核心改动按任务目标落地 / 关键回归用例通过”默认 acceptance。`behavior_verify` prompt 会逐条带上来源文件和 case ID；修复后的复验范围由 Loop Engine 根据失败、未执行、依赖和影响面收敛，不默认把所有已通过 case 全量重跑。
+
 ## 生命周期
 
 一个 terminal session 同一时间最多绑定一个 active Agent Team run。run 的主状态为：
@@ -64,8 +77,8 @@ Agent Team 的 Loop Engine 由 `backend/src/agent-team/loop.ts` 维护：
 
 - `GET /runs?projectId=...&terminalSessionId=...`：读取项目或当前 terminal session 的 run。
 - `GET /runs/:runId`：读取单个 run。
-- `POST /runs`：在指定 terminal session 上创建 run。
-- `POST /runs/:runId/propose-split`：提交主 Agent 或用户产出的拆分提案。
+- `POST /runs`：在指定 terminal session 上创建 run，可携带 `planFilePath` / `testCaseFilePath`。
+- `POST /runs/:runId/propose-split`：提交主 Agent 或用户产出的拆分提案，可携带 `testCaseFilePath` / `generatedTestCaseFilePath` 生成可追溯 acceptance。
 - `POST /runs/:runId/split-gate`：确认或驳回拆分提案。
 - `POST /runs/:runId/round`：记录一轮验收结果或进展信号。
 - `POST /runs/:runId/resume`：人工 note 介入并恢复 loop。

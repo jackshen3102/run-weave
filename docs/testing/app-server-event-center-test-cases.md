@@ -2,8 +2,8 @@
 
 ## Scope
 
-These cases cover the first implemented Event Center slice from
-`docs/plans/2026-06-25-app-server-event-center.md`.
+These cases cover the implemented Event Center slice described by
+`docs/architecture/app-server-event-center.md`.
 
 The implementation uses an append-only JSONL event log at
 `~/.runweave/app-server/app-server-events.jsonl` with a default 7-day retention

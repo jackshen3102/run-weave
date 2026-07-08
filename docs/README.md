@@ -5,7 +5,7 @@
 文档分两类：
 
 - **活文档**：描述系统当前事实，需要保鲜（architecture / cli / deployment / quality / testing）。
-- **历史归档**：一次性产物，写完即冻结，不代表当前事实（plans / review / prototypes）。各目录内 `README.md` 说明其生命周期。
+- **历史归档**：一次性产物，写完即冻结，不代表当前事实（prototypes）。计划、评审和执行记录不再作为长期文档保留。
 
 ---
 
@@ -64,8 +64,11 @@
 | app-server 状态同步测试                  | testing/app-server-state-sync-test-cases.md                                        |
 | Runweave Agent CLI 控制面测试            | testing/runweave-cli-control-plane-test-cases.md                                   |
 | Agent Team / Loop Engineer 测试          | testing/agent-team-loop-engineer-test-cases.md                                     |
+| Agent Team 验收来源测试                  | testing/agent-team-verification-case-source-test-cases.md                          |
 | App Server ThreadRef fixture             | testing/app-server-threadref-fixture.md                                            |
 | Terminal Panel Split 测试                | testing/terminal-panel-split-test-cases.md                                         |
+| 桌面端重启项目/终端恢复测试              | testing/desktop-restart-terminal-selection-test-cases.md                           |
+| Terminal Floating Composer 测试          | testing/terminal-floating-composer-test-cases.md                                   |
 | 本地客户端更新测试                       | testing/runweave-local-client-update-test-cases.md                                 |
 | Terminal Browser CDP/MCP 测试            | testing/terminal-browser-cdp-mcp-test-cases.md                                     |
 | Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md                              |
@@ -77,16 +80,14 @@
 
 | 目录        | 内容                                               |
 | ----------- | -------------------------------------------------- |
-| plans/      | 按日期沉淀的设计计划稿（见 plans/README.md）       |
-| review/     | 计划与代码评审记录（见 review/README.md）          |
 | prototypes/ | 可运行 HTML/JS 交互原型（见 prototypes/README.md） |
 
-> 注：`quality/2026-05-03-terminal-preview-panel-review.md` 是一次性评审记录（性质同 review/），历史原因留在 quality/ 目录，不属于活的质量文档。
+`docs/plans/` 和 `docs/review/` 只允许作为临时过程目录；有效结论应迁入上面的活文档，目录内文件不得长期保留。
 
 ---
 
 ## 维护边界
 
 - **本文件是唯一完整索引。** root `README.md` 只保留面向用户的精选链接，`AGENTS.md` 不再维护路由表。新增/移动活文档时，只在这里同步。
-- 文档整理只维护当前事实、稳定边界和验证入口。一次性计划、执行记录、临时排障过程应沉淀进上表的活文档；核心结论被吸收后，冗余材料可归档或删除。
+- 文档整理只维护当前事实、稳定边界和验证入口。一次性计划、评审、执行记录、临时排障过程应沉淀进上表的活文档；核心结论被吸收后，冗余材料应删除。
 - 纯文档保鲜不修改代码、配置或 lockfile。发现代码侧问题时，先在整理报告里列为待处理项，不顺手修代码。
