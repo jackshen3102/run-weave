@@ -8,7 +8,7 @@ Agent Team 让当前终端里的主 Agent 调度同一 tmux session 内的 worke
 
 核心组成：
 
-- 主 Agent pane：绑定当前 terminal session 的主 pane，持有本次 run 的上下文，并通过 Agent Team sidecar 推进澄清、拆分和执行。
+- 主 Agent pane：绑定当前 terminal session 的主 pane，持有本次 run 的上下文，并通过 Agent Team sidecar 推进拆分和执行。
 - Worker pane：按角色运行在同一 tmux session 的额外 pane 中，完成后通过 completion hook 和 outbox 回传 summary 或验收结果。
 - 后端结果路由器：消费 terminal completion 事件，按 run/worker/pane 匹配 outbox，把结果折叠回 Agent Team run。
 - 任务包：保存在项目 `.runweave/agent-team/<runId>.json`，是 UI、后端恢复和人工介入的共享状态源。
@@ -19,12 +19,10 @@ Agent Team 让当前终端里的主 Agent 调度同一 tmux session 内的 worke
 
 当前角色集合面向 Loop Engineering：
 
-| roleId            | 职责                                           |
-| ----------------- | ---------------------------------------------- |
-| `plan`            | 产出或细化实施计划。                           |
-| `plan_review`     | 复核计划，指出缺口和风险。                     |
-| `code`            | 执行代码或文档改动。                           |
-| `code_review`     | 复核改动，输出可执行的审查结论。               |
+| roleId            | 职责                                               |
+| ----------------- | -------------------------------------------------- |
+| `code`            | 执行代码或文档改动。                               |
+| `code_review`     | 复核改动，输出可执行的审查结论。                   |
 | `behavior_verify` | 跑浏览器/行为验收，把通过、失败和证据写回 outbox。 |
 
 worker 角色定义在 `packages/shared/src/agent-team.ts`；prompt 构造在 `backend/src/agent-team/prompt-builders.ts`。Agent Team 不再使用旧 `coder`、`reviewer`、`tester` 默认集合。
@@ -34,16 +32,15 @@ worker 角色定义在 `packages/shared/src/agent-team.ts`；prompt 构造在 `b
 一个 terminal session 同一时间最多绑定一个 active Agent Team run。run 的主状态为：
 
 ```text
-clarify
+intake
 → proposal
 → executing
 ```
 
 稳定规则：
 
-- 创建 run 后进入 `clarify`，状态为 `clarifying`，主 pane 会先确保默认 agent command（当前为 `codex`）ready，再注入启动 prompt。
-- 主 Agent 或用户产出拆分提案后进入 `proposal`，状态为 `need_human`。
-- `options.autoApproveSplit=true` 时跳过人工拆分门禁，直接 split worker pane 并进入 `executing`。
+- 创建 run 后进入 `proposal`，状态为 `need_human`；`options.autoApproveSplit=true` 时直接进入 `executing`。
+- 主 Agent 或用户仍可通过提案接口调整拆分提案。
 - 人工确认拆分后创建或复用 worker pane，绑定 worker role、alias、`panelId` 和 `tmuxPaneId`，再向 worker pane 注入启动 prompt。
 - `executing` 状态下，`behavior_verify` 的验收结果和代码 diff 作为 loop 进展信号。
 - 连续无进展达到 `maxNoProgress`（默认 3）时触发熔断，run 进入 `need_human`，worker 冻结。

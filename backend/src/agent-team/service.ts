@@ -53,7 +53,6 @@ import { createAgentTeamRunId } from "./run-id";
 import {
   buildBounceBackPrompt,
   buildHumanNotePrompt,
-  buildPlanFixPrompt,
   buildWorkerRecheckPrompt,
   buildWorkerStartupPrompt,
 } from "./prompt-builders";
@@ -290,7 +289,6 @@ export class AgentTeamService {
     const terminal = resolveAgentTeamTerminal(input.terminal);
     this.requireAgentTeamTerminalAvailable(session, terminal);
     const task = requireRunnableTask(input.task);
-    const planFile = input.planFile?.trim() ?? null;
 
     // Ensure the panel workspace so worker split is possible later.
     let mainPanelId: string | null = null;
@@ -328,7 +326,6 @@ export class AgentTeamService {
       options: { autoApproveSplit: input.options?.autoApproveSplit ?? false },
       terminal,
       task,
-      planFile,
       activeWorkerRole: null,
       clarify: [],
       proposal: null,
@@ -337,17 +334,10 @@ export class AgentTeamService {
       loop: createInitialLoop(),
       humanNotes: [],
       scopeSnapshot,
-      logs: [
-        planFile
-          ? `Agent Team 任务已提交，进入计划审查：${planFile}`
-          : "Agent Team 任务已提交，生成 worker 拆分提案",
-      ],
+      logs: ["Agent Team 任务已提交，生成 worker 拆分提案"],
       createdAt: now,
       updatedAt: now,
     };
-    if (planFile) {
-      return this.startPlanReview(run);
-    }
     const workers = normalizeWorkers(undefined);
     const acceptance = normalizeAcceptance(undefined);
     const proposal = {
@@ -372,7 +362,7 @@ export class AgentTeamService {
     return (await this.requireRun(run.runId));
   }
 
-  // --- Phase 2: intake/plan review -> proposal (+ split gate) ---
+  // --- Phase 2: intake -> proposal (+ split gate) ---
 
   async proposeSplit(
     runId: string,
@@ -381,9 +371,6 @@ export class AgentTeamService {
     const run = await this.requireRun(runId);
     if (run.phase === "executing") {
       throw new AgentTeamError(409, "Run is already executing");
-    }
-    if (run.phase === "plan_review") {
-      throw new AgentTeamError(409, "Run is still reviewing its plan file");
     }
     requireRunnableTask(run.task);
     const source = input.source ?? "user";
@@ -824,124 +811,6 @@ export class AgentTeamService {
 
   // --- internal helpers ---
 
-  private async startPlanReview(run: AgentTeamRun): Promise<AgentTeamRun> {
-    const session = this.requireSession(run.terminalSessionId);
-    const terminal = resolveAgentTeamTerminal(run.terminal);
-    const workers = normalizeWorkers([
-      {
-        role: "plan" as const,
-        intent: `根据 plan_review 审查意见修改计划文件 ${run.planFile ?? ""}`,
-      },
-      {
-        role: "plan_review" as const,
-        intent: `审查计划文件 ${run.planFile ?? ""} 是否可执行并具备验收闭环`,
-      },
-    ]);
-    const acceptance = normalizePlanReviewAcceptance(run.planFile ?? "");
-    if (this.tmuxService) {
-      await this.terminalSessionManager.updateSessionPanelSplitEnabled(
-        session.id,
-        true,
-      );
-    }
-
-    const boundWorkers: AgentTeamWorker[] = [];
-    const activeWorkerRole: AgentTeamWorkerRole = "plan_review";
-    for (const worker of workers) {
-      let panelId: string | null = null;
-      let tmuxPaneId: string | null = null;
-      const panelAlias = this.resolveWorkerPanelAlias(
-        session.id,
-        `${worker.role}-${boundWorkers.length + 1}`,
-        run.runId,
-        worker.role,
-      );
-      const panelRole = buildAgentTeamPanelRole(run.runId, worker.role);
-      if (this.tmuxService) {
-        try {
-          const { panel } = await createTerminalPanelSplit(
-            this.terminalSessionManager,
-            session,
-            {
-              ptyService: this.ptyService,
-              runtimeRegistry: this.runtimeRegistry,
-              tmuxService: this.tmuxService,
-              tmuxOutputWatcher: this.tmuxOutputWatcher,
-              terminalEventService: this.terminalEventService,
-            },
-            {
-              direction: boundWorkers.length % 2 === 0 ? "right" : "down",
-              role: panelRole,
-              alias: panelAlias,
-              agentTeamRunId: run.runId,
-              agentTeamWorkerId: worker.id,
-              cwd: terminal.cwd ?? undefined,
-              focus: false,
-            },
-          );
-          panelId = panel.id;
-          tmuxPaneId = panel.tmuxPaneId;
-        } catch (error) {
-          throw createAgentTeamPanelError(run.runId, worker.role, error);
-        }
-      }
-      const boundWorker: AgentTeamWorker = {
-        ...worker,
-        panelId,
-        tmuxPaneId,
-        frozen: worker.role !== activeWorkerRole,
-      };
-      boundWorkers.push(boundWorker);
-      if (panelId) {
-        await this.agentReadiness.ensureAgentReady(session, terminal, {
-          panelId,
-        });
-        if (boundWorker.role === activeWorkerRole) {
-          await this.promptSender.sendPromptToPane(
-            session,
-            buildWorkerStartupPrompt({
-              run,
-              worker: boundWorker,
-              acceptance,
-              outboxPath: this.paths.workerOutboxRelativePath(
-                run.terminalSessionId,
-                boundWorker,
-              ),
-            }),
-            { panelId },
-          );
-        }
-      }
-    }
-    if (this.tmuxService && boundWorkers.some((worker) => worker.panelId)) {
-      try {
-        await this.tmuxService.applyMainVerticalLayout(
-          this.tmuxService.buildTarget(session.id),
-          50,
-        );
-      } catch (error) {
-        agentTeamLogger.warn("agent-team.apply_plan_layout.failed", {
-          message: "Could not normalize pane layout after plan review split",
-          terminalSessionId: session.id,
-          error,
-        });
-      }
-    }
-    await this.restoreMainPaneFocus(session, run.mainPanelId);
-    return this.updateRun(run, {
-      phase: "plan_review",
-      status: "running",
-      terminal,
-      activeWorkerRole,
-      workers: boundWorkers,
-      acceptance,
-      logs: [
-        ...run.logs,
-        `启动计划审查 worker：${activeWorkerRole}`,
-      ],
-    });
-  }
-
   private async applySplit(
     run: AgentTeamRun,
     workers: AgentTeamWorker[],
@@ -1080,7 +949,7 @@ export class AgentTeamService {
       completedWorkerRole?: AgentTeamWorkerRole | null;
     },
   ): Promise<AgentTeamRun> {
-    if (run.phase !== "executing" && run.phase !== "plan_review") {
+    if (run.phase !== "executing") {
       throw new AgentTeamError(409, "Run is not running a loop");
     }
     if (run.status === "need_human") {
@@ -1111,41 +980,13 @@ export class AgentTeamService {
     const allAcceptancePassed =
       folded.acceptance.length > 0 &&
       folded.acceptance.every((item) => item.status === "pass");
-    if (allAcceptancePassed && run.phase === "plan_review") {
-      const proposalWorkers = normalizeWorkers(undefined);
-      const proposalAcceptance = normalizeAcceptance(undefined);
-      status = "need_human";
-      workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
-      activeWorkerRole = null;
-      loop = createInitialLoop();
-      logs.push("✅ 计划审查通过，进入 worker 拆分提案");
-      const nextRun = await this.updateRun(run, {
-        phase: "proposal",
-        status,
-        loop,
-        acceptance: folded.acceptance,
-        workers,
-        activeWorkerRole,
-        proposal: {
-          summary: `计划文件 ${run.planFile ?? ""} 已通过审查。建议拆以下执行 worker，可增删/调整后确认：`,
-          workers: proposalWorkers,
-          acceptance: proposalAcceptance,
-          source: "agent",
-        },
-        logs,
-      });
-      return nextRun;
-    }
     if (allAcceptancePassed) {
       status = "done";
       workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
       activeWorkerRole = null;
       logs.push(`✅ 所有验收用例通过，run 完成`);
     } else if (shouldEscalate(folded.loop)) {
-      const reason =
-        run.phase === "plan_review"
-          ? buildPlanReviewEscalationReason(folded.loop.noProgressCount)
-          : buildEscalationReason(folded.loop, folded.acceptance);
+      const reason = buildEscalationReason(folded.loop, folded.acceptance);
       loop = { ...folded.loop, escalated: true, lastReason: reason };
       status = "need_human";
       // Freeze all worker panes: stop injecting further rounds.
@@ -1174,9 +1015,7 @@ export class AgentTeamService {
           ).filter((caseId) => isUnbouncedFailCase(nextRun, caseId))
         : [];
     if (caseIdsNeedingBounce.length > 0) {
-      return nextRun.phase === "plan_review"
-        ? this.bounceFailuresToPlan(nextRun, caseIdsNeedingBounce)
-        : this.bounceFailuresToCode(nextRun, caseIdsNeedingBounce);
+      return this.bounceFailuresToCode(nextRun, caseIdsNeedingBounce);
     }
     if (
       status === "running" &&
@@ -1190,55 +1029,6 @@ export class AgentTeamService {
       });
     }
     return nextRun;
-  }
-
-  private async bounceFailuresToPlan(
-    run: AgentTeamRun,
-    caseIds: string[],
-  ): Promise<AgentTeamRun> {
-    const planWorker = run.workers.find(
-      (worker) => worker.role === "plan" && worker.panelId,
-    );
-    if (!planWorker?.panelId) {
-      return run;
-    }
-    const failedCases = run.acceptance.filter((item) =>
-      caseIds.includes(item.caseId),
-    );
-    const session = this.terminalSessionManager.getSession(
-      run.terminalSessionId,
-    );
-    if (!session) {
-      return run;
-    }
-    try {
-      await this.promptSender.sendPromptToPane(
-        session,
-        buildPlanFixPrompt({ run, failedCases }),
-        { panelId: planWorker.panelId },
-      );
-      const bouncedAcceptance = run.acceptance.map((item) =>
-        caseIds.includes(item.caseId)
-          ? { ...item, bouncedToPanelId: planWorker.panelId }
-          : item,
-      );
-      return this.updateRun(run, {
-        acceptance: bouncedAcceptance,
-        activeWorkerRole: "plan",
-        workers: setActiveWorker(run.workers, "plan"),
-        logs: [
-          ...run.logs,
-          `计划审查用例 ${caseIds.join(", ")} 稳定失败，抛回 plan pane ${planWorker.panelId}`,
-        ],
-      });
-    } catch (error) {
-      agentTeamLogger.warn("agent-team.plan_bounce.failed", {
-        message: "Could not bounce plan failure back to plan pane",
-        runId: run.runId,
-        error,
-      });
-      return run;
-    }
   }
 
   private async bounceFailuresToCode(
@@ -1305,7 +1095,7 @@ export class AgentTeamService {
     );
     if (
       !run ||
-      (run.phase !== "executing" && run.phase !== "plan_review") ||
+      run.phase !== "executing" ||
       run.status !== "running"
     ) {
       return;
@@ -1328,10 +1118,7 @@ export class AgentTeamService {
     await this.enqueue(run.runId, async () => {
       try {
         const latest = await this.getRun(run.runId);
-        if (
-          !latest ||
-          (latest.phase !== "executing" && latest.phase !== "plan_review")
-        ) {
+        if (!latest || latest.phase !== "executing") {
           return;
         }
         if (!isActiveWorkerOutbox(latest, outbox)) {
@@ -1439,13 +1226,6 @@ export class AgentTeamService {
     const role = parseWorkerRole(outbox.role);
     if (!role) {
       return false;
-    }
-    if (run.phase === "plan_review" && role === "plan") {
-      await this.dispatchSerialWorker(run, "plan_review", {
-        cases: run.acceptance,
-        log: "plan 修复完成，启动 plan_review",
-      });
-      return true;
     }
     if (run.phase === "executing" && role === "code") {
       await this.dispatchSerialWorker(run, "code_review", {
@@ -1609,7 +1389,7 @@ export class AgentTeamService {
       const runs = await this.runStore.listRuns(project.id);
       for (const run of runs) {
         if (
-          (run.phase !== "executing" && run.phase !== "plan_review") ||
+          run.phase !== "executing" ||
           run.status !== "running"
         ) {
           continue;
@@ -1621,7 +1401,7 @@ export class AgentTeamService {
           const latest = await this.getRun(run.runId);
           if (
             !latest ||
-            (latest.phase !== "executing" && latest.phase !== "plan_review") ||
+            latest.phase !== "executing" ||
             latest.status !== "running"
           ) {
             return;
@@ -2072,7 +1852,6 @@ export class AgentTeamService {
         | "options"
         | "terminal"
         | "task"
-        | "planFile"
         | "activeWorkerRole"
         | "clarify"
         | "proposal"
@@ -2192,8 +1971,6 @@ const VALID_WORKER_ROLES: AgentTeamWorkerRole[] = [
   "code",
   "code_review",
   "behavior_verify",
-  "plan",
-  "plan_review",
 ];
 const EXECUTION_WORKER_ORDER: AgentTeamWorkerRole[] = [
   "code",
@@ -2268,10 +2045,7 @@ function shouldDispatchNextSerialWorker(
     return false;
   }
   const role = parseWorkerRole(outbox.role);
-  return (
-    (run.phase === "plan_review" && role === "plan") ||
-    (run.phase === "executing" && role === "code")
-  );
+  return run.phase === "executing" && role === "code";
 }
 
 function isActiveWorkerOutbox(
@@ -2359,33 +2133,6 @@ function ensureWorkerGateAcceptance(
   ];
 }
 
-function normalizePlanReviewAcceptance(planFile: string): AgentTeamAcceptanceCase[] {
-  return [
-    {
-      text: `计划文件 ${planFile} 范围清晰、可执行，且每个步骤都有明确验收方式`,
-    },
-    {
-      text: "计划未引入无关改动、人工 gate 或与当前仓库约束冲突的测试方式",
-    },
-  ].map((item, index) => ({
-    caseId: `plan_case_${index + 1}`,
-    text: item.text,
-    status: "pending" as const,
-    consecutiveFail: 0,
-    evidence: [],
-    bouncedToPanelId: null,
-    recheckRequestedAt: null,
-    recheckWorkerPanelId: null,
-    recheckWorkerRole: null,
-    recheckOutboxMtimeMs: null,
-    recheckAttempt: 0,
-  }));
-}
-
-function buildPlanReviewEscalationReason(noProgressCount: number): string {
-  return `计划修复无进展，连续 ${noProgressCount} 轮未通过 plan_review，自动熔断升级人工。`;
-}
-
 function isReviewGateAcceptanceCase(item: AgentTeamAcceptanceCase): boolean {
   return /code review|代码审查|code_review/i.test(item.text);
 }
@@ -2421,7 +2168,7 @@ function synthesizeBlockingReviewResult(
 }
 
 function isReviewWorkerOutbox(outbox: AgentTeamWorkerOutbox): boolean {
-  return outbox.role === "code_review" || outbox.role === "plan_review";
+  return outbox.role === "code_review";
 }
 
 function isGateWorkerOutbox(outbox: AgentTeamWorkerOutbox): boolean {
@@ -2429,7 +2176,7 @@ function isGateWorkerOutbox(outbox: AgentTeamWorkerOutbox): boolean {
 }
 
 function isImplementationWorkerOutbox(outbox: AgentTeamWorkerOutbox): boolean {
-  return outbox.role === "code" || outbox.role === "plan";
+  return outbox.role === "code";
 }
 
 function resolveRecheckDispatches(
@@ -2440,22 +2187,12 @@ function resolveRecheckDispatches(
     worker: AgentTeamWorker;
     cases: AgentTeamAcceptanceCase[];
   }> = [];
-  if (run.phase === "plan_review") {
-    const planReviewWorker =
-      run.workers.find(
-        (worker) =>
-          worker.role === "plan_review" && worker.panelId && !worker.frozen,
-      ) ?? null;
-    return planReviewWorker ? [{ worker: planReviewWorker, cases }] : [];
-  }
   const reviewCases = cases.filter(isReviewGateAcceptanceCase);
   const behaviorCases = cases.filter((item) => !isReviewGateAcceptanceCase(item));
   const reviewWorker =
     run.workers.find(
       (worker) =>
-        (worker.role === "code_review" || worker.role === "plan_review") &&
-        worker.panelId &&
-        !worker.frozen,
+        worker.role === "code_review" && worker.panelId && !worker.frozen,
     ) ?? null;
   const behaviorWorker =
     run.workers.find(
