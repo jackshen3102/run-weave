@@ -46,7 +46,7 @@
       "status": "running",
       "tmuxPaneId": "%11",
       "lines": [
-        "> @runweave/backend@0.1.0 dev /Users/bytedance/Code/browser-hub/browser-viewer/backend",
+        "> @runweave/backend@0.1.0 dev /workspace/runweave/backend",
         "> tsx watch src/index.ts -- --port 5002 --host 0.0.0.0",
         "backend | [tsx] watch mode",
         "backend | [server] listening on http://0.0.0.0:5002",
@@ -65,9 +65,9 @@
       "status": "running",
       "tmuxPaneId": "%12",
       "lines": [
-        "> @runweave/frontend@0.1.0 test /Users/bytedance/Code/browser-hub/browser-viewer/frontend",
+        "> @runweave/frontend@0.1.0 test /workspace/runweave/frontend",
         "> vitest run",
-        "RUN v1.6.0 /Users/bytedance/Code/browser-hub/browser-viewer/frontend",
+        "RUN v1.6.0 /workspace/runweave/frontend",
         "ok  src/components/terminal/terminal-workspace.test.ts (14)",
         "ok  src/features/terminal/use-terminal-connection.test.ts (8)",
         "ok  src/services/terminal.test.ts (11)",

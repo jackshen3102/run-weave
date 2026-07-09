@@ -16,12 +16,15 @@ function getAutoUpdater() {
 export function initAutoUpdater(win: BrowserWindow): void {
   mainWindow = win;
   const updateBaseUrl = getCustomUpdateBaseUrl(
-    process.env.BROWSER_VIEWER_LOCAL_UPDATES_URL,
+    process.env.RUNWEAVE_LOCAL_UPDATES_URL ??
+      process.env.BROWSER_VIEWER_LOCAL_UPDATES_URL,
   );
   const packagedUpdateBaseUrl = getPackagedUpdateBaseUrl(process.resourcesPath);
   const activeUpdateBaseUrl = updateBaseUrl ?? packagedUpdateBaseUrl;
   const autoInstallLocalUpdates = shouldAutoInstallLocalUpdates({
-    explicitValue: process.env.BROWSER_VIEWER_AUTO_INSTALL_LOCAL_UPDATES,
+    explicitValue:
+      process.env.RUNWEAVE_AUTO_INSTALL_LOCAL_UPDATES ??
+      process.env.BROWSER_VIEWER_AUTO_INSTALL_LOCAL_UPDATES,
     updateBaseUrl: activeUpdateBaseUrl,
   });
 

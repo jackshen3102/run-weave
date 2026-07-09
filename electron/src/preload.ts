@@ -15,8 +15,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
   isElectron: true,
   managesPackagedBackend:
-    process.env.BROWSER_VIEWER_MANAGES_PACKAGED_BACKEND === "true",
-  backendUrl: process.env.BROWSER_VIEWER_BACKEND_URL ?? "",
+    (process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND ??
+      process.env.BROWSER_VIEWER_MANAGES_PACKAGED_BACKEND) === "true",
+  backendUrl:
+    process.env.RUNWEAVE_BACKEND_URL ??
+    process.env.BROWSER_VIEWER_BACKEND_URL ??
+    "",
   getPackagedBackendState: () =>
     ipcRenderer.invoke(
       "viewer:get-packaged-backend-state",

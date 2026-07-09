@@ -51,7 +51,7 @@ RW_BIN=(rw)
 
 ```bash
 "${RW_BIN[@]}" project list --json
-"${RW_BIN[@]}" project ensure --name browser-viewer --path "$PWD" --json
+"${RW_BIN[@]}" project ensure --name runweave --path "$PWD" --json
 ```
 
 ## Terminals

@@ -18,7 +18,8 @@ const releaseAppPath =
     `${appName}.app`,
   );
 const feedUrl = withTrailingSlash(
-  process.env.BROWSER_VIEWER_LOCAL_UPDATES_URL ??
+  process.env.RUNWEAVE_LOCAL_UPDATES_URL ??
+    process.env.BROWSER_VIEWER_LOCAL_UPDATES_URL ??
     "http://127.0.0.1:5500/updates/mac/",
 );
 const feedCheckUrl = new URL("latest-mac.yml", feedUrl).toString();

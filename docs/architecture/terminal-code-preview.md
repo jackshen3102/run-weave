@@ -62,7 +62,7 @@ Terminal Browser 工具当前边界：
 - Web/PWA 模式不提供本地 Electron Browser，也不展示 CDP endpoint。
 - Browser tab 只允许 `http:`、`https:` 和 `about:blank` 导航；页面发起的新窗口会被收口成 Browser 工具内的新 tab 或被拒绝。
 - CDP Proxy 只监听 `127.0.0.1`，默认从 `9224` 开始找可用端口，并通过 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 传给 Runweave terminal 里的子进程。
-- 如果显式设置 `BROWSER_VIEWER_TERMINAL_BROWSER_CDP_PROXY_PORT`，端口必须是合法端口且不自动漂移；非法值会让 Electron 启动失败并给出明确错误。
+- 如果显式设置 `RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT`，端口必须是合法端口且不自动漂移；非法值会让 Electron 启动失败并给出明确错误。
 - CDP Proxy 暴露的是自研 browser-level endpoint，不开启 Electron 全局 `remote-debugging-port`，也不暴露 Runweave 主窗口 renderer 或 DevTools target。
 - Playwright MCP / Playwright CLI 通过 `chromium.connectOverCDP(...)` 连接 Proxy 后，只能发现和操作 Terminal Browser tab。全局 endpoint 会把当前激活 Browser tab 排在 target 列表第一位，避免无显式 page 选择的客户端落到历史第一个 tab。
 - 当前 tab 的 CDP/AI 按钮返回 Agent Control Group scoped WebSocket endpoint（`groupId=...`）；使用该 endpoint 连接时，`Target.getTargets` / discovery / auto-attach 只暴露该 group 内的 Terminal Browser tabs。手动新建 tab 默认新建 group；页面或 Agent 派生的新 tab 继承 opener group，使“Agent 打开的 tab 由同一个 Agent 控制”成为协议语义，而不依赖 UI 当前选择。
@@ -457,7 +457,7 @@ No preview for this project
 
 ```text
 Preview: File
-project: browser-viewer
+project: runweave
 root: /repo
 terminal: codex-agent
 ```
@@ -523,7 +523,7 @@ Pin preview to this terminal
 Pin 后 Header 必须明确显示：
 
 ```text
-Pinned to project browser-viewer
+Pinned to project runweave
 root: /repo
 [Follow active terminal]
 ```
@@ -1177,7 +1177,7 @@ GET /api/terminal/project
 ```json
 {
   "projectId": "project-1",
-  "name": "browser-viewer",
+  "name": "runweave",
   "path": "/workspace/runweave",
   "createdAt": "2026-04-17T00:00:00.000Z",
   "isDefault": false
@@ -1210,7 +1210,7 @@ Authorization: Bearer <accessToken>
 {
   "kind": "file-search",
   "projectId": "project-1",
-  "projectPath": "/Users/.../browser-viewer",
+  "projectPath": "/workspace/runweave",
   "query": "term work",
   "absoluteInput": false,
   "items": [
@@ -1232,7 +1232,7 @@ Authorization: Bearer <accessToken>
 {
   "kind": "file-search",
   "projectId": "project-1",
-  "projectPath": "/Users/.../browser-viewer",
+  "projectPath": "/workspace/runweave",
   "query": "/Users/me/repo/README.md",
   "absoluteInput": true,
   "items": []
@@ -1264,9 +1264,9 @@ Authorization: Bearer <accessToken>
   "kind": "file",
   "projectId": "project-1",
   "path": "docs/architecture/network-topology.md",
-  "absolutePath": "/Users/.../docs/architecture/network-topology.md",
+  "absolutePath": "/workspace/runweave/docs/architecture/network-topology.md",
   "base": "project",
-  "projectPath": "/Users/.../browser-viewer",
+  "projectPath": "/workspace/runweave",
   "language": "markdown",
   "content": "...",
   "sizeBytes": 12345,
@@ -1384,8 +1384,8 @@ Authorization: Bearer <accessToken>
 {
   "kind": "git-changes",
   "projectId": "project-1",
-  "projectPath": "/Users/.../browser-viewer",
-  "repoRoot": "/Users/.../browser-viewer",
+  "projectPath": "/workspace/runweave",
+  "repoRoot": "/workspace/runweave",
   "staged": [
     {
       "path": "docs/architecture/terminal-code-preview.md",
@@ -1422,8 +1422,8 @@ Authorization: Bearer <accessToken>
 {
   "kind": "file-diff",
   "projectId": "project-1",
-  "projectPath": "/Users/.../browser-viewer",
-  "repoRoot": "/Users/.../browser-viewer",
+  "projectPath": "/workspace/runweave",
+  "repoRoot": "/workspace/runweave",
   "changeKind": "working",
   "path": "docs/README.md",
   "status": "modified",

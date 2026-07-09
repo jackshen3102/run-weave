@@ -43,7 +43,7 @@ rw health --json
 rw app overview --json
 
 PROJECT_ID=$(
-  rw project ensure --name browser-viewer --path "$PWD" --json \
+  rw project ensure --name runweave --path "$PWD" --json \
     | jq -r '.projectId'
 )
 

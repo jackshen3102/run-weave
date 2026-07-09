@@ -10,14 +10,18 @@ export function resolveCdpProxyPort(env: NodeJS.ProcessEnv): {
   port: number;
   strict: boolean;
 } {
-  const raw = env.BROWSER_VIEWER_TERMINAL_BROWSER_CDP_PROXY_PORT;
+  const envName =
+    env.RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT !== undefined
+      ? "RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT"
+      : "BROWSER_VIEWER_TERMINAL_BROWSER_CDP_PROXY_PORT";
+  const raw = env[envName];
   if (raw === undefined || raw === "") {
     return { port: DEFAULT_CDP_PROXY_PORT, strict: false };
   }
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
     throw new Error(
-      `[cdp-proxy] invalid BROWSER_VIEWER_TERMINAL_BROWSER_CDP_PROXY_PORT: ${raw}`,
+      `[cdp-proxy] invalid ${envName}: ${raw}`,
     );
   }
   return { port: parsed, strict: true };

@@ -21,8 +21,8 @@
   "projects": [
     {
       "id": "proj_bv",
-      "name": "browser-viewer",
-      "path": "~/Code/browser-hub/browser-viewer"
+      "name": "runweave",
+      "path": "~/Code/browser-hub/runweave"
     },
     {
       "id": "proj_space",
@@ -48,7 +48,7 @@
             "command": "zsh",
             "tmuxPaneId": "%0",
             "lines": [
-              "browser-viewer · zsh",
+              "runweave · zsh",
               "$ git status",
               "On branch main · nothing to commit, working tree clean",
               "$ _"
@@ -99,7 +99,7 @@
             "command": "codex",
             "tmuxPaneId": "%30",
             "lines": [
-              "browser-viewer · codex (main agent)",
+              "runweave · codex (main agent)",
               "> 正在与人澄清需求，未拆分 worker",
               "> 澄清足够后会产出 worker 拆分提案",
               "main$ _"
@@ -168,7 +168,7 @@
             "command": "codex",
             "tmuxPaneId": "%20",
             "lines": [
-              "browser-viewer · codex (main agent)",
+              "runweave · codex (main agent)",
               "> 需求已澄清，已产出 worker 拆分提案",
               "> 等待人工确认后再 split pane",
               "main$ _"
@@ -226,7 +226,7 @@
             "command": "codex",
             "tmuxPaneId": "%10",
             "lines": [
-              "browser-viewer · codex (main agent)",
+              "runweave · codex (main agent)",
               "> 自动确认拆分已开启，跳过人工门，直接 split",
               "> dispatch code / code_review",
               "main$ _"

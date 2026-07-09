@@ -39,7 +39,7 @@ description: 仅当用户显式指定此 skill 时使用；在当前项目内更
 
 4. 使用 `computer-use` 检查桌面 App：
    - 当选择 App 更新时，确认 App 已重新启动。
-   - 启动或重启 `/Applications/Runweave.app` 时，不要从当前 Codex/Runweave 终端直接普通 `open`，因为终端环境可能带有 `ELECTRON_RUN_AS_NODE`、`FRONTEND_DIST_DIR`、`RUNWEAVE_RUNTIME_RELEASE_ID`、`BROWSER_VIEWER_NODE_PTY_DIR` 等打包/runtime 变量，导致 Electron 以 Node 模式启动后立即退出，或加载旧 runtime。优先使用干净环境启动：
+   - 启动或重启 `/Applications/Runweave.app` 时，不要从当前 Codex/Runweave 终端直接普通 `open`，因为终端环境可能带有 `ELECTRON_RUN_AS_NODE`、`FRONTEND_DIST_DIR`、`RUNWEAVE_RUNTIME_RELEASE_ID`、`RUNWEAVE_NODE_PTY_DIR` 等打包/runtime 变量，导致 Electron 以 Node 模式启动后立即退出，或加载旧 runtime。优先使用干净环境启动：
      `env -i HOME="$HOME" USER="$USER" LOGNAME="$LOGNAME" PATH="/usr/bin:/bin:/usr/sbin:/sbin" TMPDIR="${TMPDIR:-/tmp}" /usr/bin/open -n /Applications/Runweave.app`
    - 如果干净环境 `open` 后仍需模拟真实用户启动，可先正常退出 Runweave，再用 Finder 打开：`osascript -e 'tell application "Finder" to open POSIX file "/Applications/Runweave.app"'`。
    - runtime 更新重启后，确认桌面端可见状态符合预期。

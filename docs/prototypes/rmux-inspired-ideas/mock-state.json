@@ -45,7 +45,7 @@
       {
         "id": "t-runweave",
         "backend": "local",
-        "project": "browser-viewer",
+        "project": "runweave",
         "session": "rw:vite",
         "agent": "bash",
         "task": "pnpm dev 热更调试",
@@ -133,7 +133,7 @@
 
   "verify": {
     "runId": "run_agentteam_204",
-    "project": "browser-viewer",
+    "project": "runweave",
     "target": "local:rw:vite%1",
     "useCase": "docs/architecture/multi-agent-orchestrator.md · 终端热更验收",
     "steps": [
@@ -264,7 +264,7 @@
         "cat": "layout",
         "args": "-h | -v [-p 30] [-c cwd]",
         "desc": "在当前 pane 原生 split（tmux splitPane 真实存在）",
-        "example": "split-window -h -p 40 -c ~/Code/browser-hub/browser-viewer"
+        "example": "split-window -h -p 40 -c ~/Code/browser-hub/runweave"
       },
       {
         "name": "select-pane",
@@ -299,7 +299,7 @@
         "cat": "session",
         "args": "-n name [-c cwd]",
         "desc": "在当前 session 新建 window（= 一套新 run）",
-        "example": "new-window -n verify -c ~/Code/browser-hub/browser-viewer"
+        "example": "new-window -n verify -c ~/Code/browser-hub/runweave"
       },
       {
         "name": "list-panes",

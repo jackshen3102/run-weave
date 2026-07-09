@@ -44,7 +44,7 @@ function buildClipboardImageFileName(
 ): string {
   const date = now.toISOString().slice(0, 10).replaceAll("-", "");
   const time = now.toISOString().slice(11, 19).replaceAll(":", "");
-  return `browser-viewer-terminal-image-${date}-${time}-${randomHex}.${extension}`;
+  return `runweave-terminal-image-${date}-${time}-${randomHex}.${extension}`;
 }
 
 export function registerTerminalClipboardImageRoutes(
@@ -74,7 +74,7 @@ export function registerTerminalClipboardImageRoutes(
       const fileName = buildClipboardImageFileName(new Date(), extension);
       const terminalTempDir = path.join(
         os.tmpdir(),
-        "browser-viewer-terminal-images",
+        "runweave-terminal-images",
       );
       const filePath = path.join(terminalTempDir, fileName);
       const imageBuffer = Buffer.from(parsed.data.dataBase64, "base64");
