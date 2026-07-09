@@ -317,7 +317,7 @@ export function buildPackagedBackendEnv(options: {
           RUNWEAVE_APP_SERVER_TOKEN: options.appServerConnection.token,
         }
       : {}),
-    BROWSER_VIEWER_NODE_PTY_DIR: options.backendPaths.nodePtyDir,
+    RUNWEAVE_NODE_PTY_DIR: options.backendPaths.nodePtyDir,
   };
 }
 

@@ -13,9 +13,9 @@ Runweave is useful when your real work is happening inside terminals: an AI CLI
 is editing code, a dev server is running, a command is waiting for input, or a
 teammate/agent needs a stable way to continue from the current terminal context.
 
-> Note: workspace-level storage keys, persisted data, and some internal identifiers may still use
-> `browser-viewer`. Published package names now use the `@runweave/*` scope; treat remaining
-> `browser-viewer` strings as technical identifiers until a dedicated storage migration is completed.
+> Note: Runweave keeps legacy protocol, environment-variable, and hook-cleanup
+> fallbacks for existing local installations, but new identifiers use the
+> Runweave name.
 
 ## What Runweave Does
 
@@ -26,7 +26,7 @@ teammate/agent needs a stable way to continue from the current terminal context.
   commands, and project scripts.
 - Watch live terminal output, switch between terminals, and send follow-up input
   to an existing session.
-- Keep terminal work separate from browser viewer sessions, so agent work can be
+- Keep terminal work separate from the built-in Browser tool, so agent work can be
   managed as its own workflow.
 
 ### Loop Engineering Engine

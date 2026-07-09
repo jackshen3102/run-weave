@@ -54,7 +54,10 @@ function rejectUnsafeStrictAuthDefaults(
   if (username === "admin" && password === "admin") {
     throw new Error("[viewer-be] refusing default admin/admin credentials");
   }
-  if (jwtSecret === "browser-viewer-local-jwt-secret") {
+  if (
+    jwtSecret === "runweave-local-jwt-secret" ||
+    jwtSecret === "browser-viewer-local-jwt-secret"
+  ) {
     throw new Error("[viewer-be] refusing default packaged JWT secret");
   }
 }

@@ -82,10 +82,12 @@ import {
 import { installHooksIfNeeded } from "./hooks/hook-installer.js";
 
 const isDev = !app.isPackaged;
-process.env.BROWSER_VIEWER_MANAGES_PACKAGED_BACKEND = isDev ? "false" : "true";
+process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND = isDev ? "false" : "true";
 
 const DEV_SERVER_URL =
-  process.env.BROWSER_VIEWER_DEV_URL ?? "http://127.0.0.1:5173";
+  process.env.RUNWEAVE_DEV_URL ??
+  process.env.BROWSER_VIEWER_DEV_URL ??
+  "http://127.0.0.1:5173";
 
 const DEV_RENDERER_DIST = path.join(__dirname, "../../frontend/dist");
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
@@ -94,11 +96,12 @@ const DEV_DOCK_ICON_PATH = path.join(
   "../resources/icons/icon-preview.png",
 );
 
-const CUSTOM_PROTOCOL = "browser-viewer";
+const CUSTOM_PROTOCOL = "runweave";
+const LEGACY_CUSTOM_PROTOCOL = "browser-viewer";
 
 protocol.registerSchemesAsPrivileged([
-  {
-    scheme: CUSTOM_PROTOCOL,
+  ...[CUSTOM_PROTOCOL, LEGACY_CUSTOM_PROTOCOL].map((scheme) => ({
+    scheme,
     privileges: {
       standard: true,
       secure: true,
@@ -106,11 +109,11 @@ protocol.registerSchemesAsPrivileged([
       corsEnabled: true,
       stream: true,
     },
-  },
+  })),
 ]);
 
 function registerCustomProtocol(getFrontendDistDir: () => string) {
-  protocol.handle(CUSTOM_PROTOCOL, (request) => {
+  const handleAppProtocol = (request: Request) => {
     const resolved = resolveProtocolFilePath(request.url, getFrontendDistDir());
 
     if (resolved.status === "forbidden") {
@@ -118,7 +121,10 @@ function registerCustomProtocol(getFrontendDistDir: () => string) {
     }
 
     return net.fetch(`file://${resolved.filePath}`);
-  });
+  };
+
+  protocol.handle(CUSTOM_PROTOCOL, handleAppProtocol);
+  protocol.handle(LEGACY_CUSTOM_PROTOCOL, handleAppProtocol);
 }
 
 function registerOpenExternalHandler(): void {
@@ -207,7 +213,10 @@ function isSystemMonitorSenderAllowed(senderUrl: string): boolean {
       if (parsed.origin !== devUrl.origin) {
         return false;
       }
-    } else if (parsed.protocol !== `${CUSTOM_PROTOCOL}:`) {
+    } else if (
+      parsed.protocol !== `${CUSTOM_PROTOCOL}:` &&
+      parsed.protocol !== `${LEGACY_CUSTOM_PROTOCOL}:`
+    ) {
       return false;
     }
 
@@ -366,7 +375,10 @@ let activeRuntimeRelease: RuntimeRelease | null = null;
 let packagedBackendState: PackagedBackendConnectionState = {
   kind: "packaged-local",
   available: false,
-  backendUrl: process.env.BROWSER_VIEWER_BACKEND_URL ?? "",
+  backendUrl:
+    process.env.RUNWEAVE_BACKEND_URL ??
+    process.env.BROWSER_VIEWER_BACKEND_URL ??
+    "",
   statusMessage: null,
   canReconnect: true,
   runtimeSource: null,
@@ -668,7 +680,7 @@ function setPackagedBackendState(
   state: PackagedBackendConnectionState,
 ): PackagedBackendConnectionState {
   packagedBackendState = state;
-  process.env.BROWSER_VIEWER_BACKEND_URL = state.backendUrl;
+  process.env.RUNWEAVE_BACKEND_URL = state.backendUrl;
   broadcastPackagedBackendState();
   return packagedBackendState;
 }
@@ -1006,7 +1018,9 @@ if (hasSingleInstanceLock) {
       if (isDev) {
         // In dev mode, backend is an independent process started before Electron.
         // Notify it of the CDP proxy endpoint so PTY terminals inherit the env var.
-        const backendUrl = process.env.BROWSER_VIEWER_BACKEND_URL;
+        const backendUrl =
+          process.env.RUNWEAVE_BACKEND_URL ??
+          process.env.BROWSER_VIEWER_BACKEND_URL;
         if (backendUrl) {
           try {
             const resp = await net.fetch(

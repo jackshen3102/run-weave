@@ -6,7 +6,7 @@
   "projects": [
     { "id": "coze-space", "label": "coze-space-web", "backendId": "local" },
     { "id": "claw", "label": "coze-claw", "backendId": "local" },
-    { "id": "runweave", "label": "browser-viewer", "backendId": "devbox" }
+    { "id": "runweave", "label": "runweave", "backendId": "devbox" }
   ],
 
   "fleet": {
@@ -134,7 +134,7 @@
       },
       {
         "id": "s-runweave",
-        "label": "browser-viewer",
+        "label": "runweave",
         "kind": "project",
         "usd": 61.4,
         "hardCapUsd": 60,

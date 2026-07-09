@@ -3,6 +3,7 @@ import net from "node:net";
 import os from "node:os";
 
 const ALWAYS_ALLOWED_APP_ORIGINS = new Set([
+  "runweave://app",
   "browser-viewer://app",
   "capacitor://localhost",
   "ionic://localhost",

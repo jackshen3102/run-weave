@@ -73,9 +73,9 @@ async function run() {
   const electronBin = resolveElectronBin(electronDir);
   const electronEnv = {
     ...process.env,
-    BROWSER_VIEWER_DEV_URL: `http://127.0.0.1:${frontendPort}`,
-    BROWSER_VIEWER_BACKEND_URL: backendUrl,
-    BROWSER_VIEWER_MANAGES_PACKAGED_BACKEND: "false",
+    RUNWEAVE_DEV_URL: `http://127.0.0.1:${frontendPort}`,
+    RUNWEAVE_BACKEND_URL: backendUrl,
+    RUNWEAVE_MANAGES_PACKAGED_BACKEND: "false",
   };
   delete electronEnv.ELECTRON_RUN_AS_NODE;
 

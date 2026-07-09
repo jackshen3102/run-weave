@@ -50,7 +50,7 @@ http://127.0.0.1:6190/
 
 - 切换左侧 1~5，每个视图头部显示「借鉴自哪个 Paperclip 能力 + 为什么 Runweave 需要」。
 - Fleet：顶部关注计数；过滤条切状态；阻塞/等待输入的卡片排在前面；点卡片弹深链 toast。
-- Budget：三个项目卡按 ok/warn/stopped 三态；`browser-viewer` 超限显示「已硬停」+ 恢复按钮；按 agent 拆分条。
+- Budget：三个项目卡按 ok/warn/stopped 三态；`runweave` 超限显示「已硬停」+ 恢复按钮；按 agent 拆分条。
 - Routines：toggle 启用/停用；触发方式 cron/webhook。
 - Approvals：批准/驳回后进历史；待批准计数变化。
 - Activity：按事件类型过滤。

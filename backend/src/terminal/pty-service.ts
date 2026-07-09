@@ -65,11 +65,11 @@ interface PtyServiceDependencies {
 }
 
 const QUICK_EXIT_FALLBACK_THRESHOLD_MS = 1_000;
-const TERMINAL_PROGRAM_NAME = "browser-viewer";
+const TERMINAL_PROGRAM_NAME = "runweave";
 const ptyLogger = logger.child({ component: "terminal" });
 
 const require = createRequire(
-  path.join(process.cwd(), "__browser_viewer_node_pty_loader__.cjs"),
+  path.join(process.cwd(), "__runweave_node_pty_loader__.cjs"),
 );
 
 function loadNodePtyModule(): typeof import("node-pty") {

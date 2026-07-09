@@ -33,6 +33,12 @@ import {
 const BROWSER_ID = "runweave-terminal-browser";
 const MAX_AI_TABS = 10;
 const MAX_CDP_CONNECTIONS = 8;
+// Ping each CDP client periodically so that a connection dropped without a
+// clean close frame (client process killed, network cut) is detected and torn
+// down. Without this, `sessionManager.cleanup()` never runs and the target's
+// `cdpProxyAttached` flag stays stuck, leaving the browser tab unable to open
+// page-initiated windows.
+const CDP_HEARTBEAT_INTERVAL_MS = 30_000;
 
 export interface CdpProxyOptions {
   host: string;
@@ -54,6 +60,7 @@ interface ConnectionState {
   discoveryEnabled: boolean;
   autoAttachEnabled: boolean;
   waitForDebuggerOnStart: boolean;
+  isAlive: boolean;
 }
 
 function getFirstWindowId(): number | null {
@@ -254,10 +261,15 @@ export async function startCdpProxy(
       discoveryEnabled: false,
       autoAttachEnabled: false,
       waitForDebuggerOnStart: false,
+      isAlive: true,
     };
     connections.add(conn);
 
     sessionManager.setMessageRelay((data) => sendJson(ws, data));
+
+    ws.on("pong", () => {
+      conn.isAlive = true;
+    });
 
     ws.on("message", (raw) => {
       let msg: { id?: number; method?: string; params?: Record<string, unknown>; sessionId?: string };
@@ -286,6 +298,25 @@ export async function startCdpProxy(
       connections.delete(conn);
     });
   });
+
+  const heartbeatTimer = setInterval(() => {
+    for (const conn of connections) {
+      if (!conn.isAlive) {
+        // Missed the previous ping's pong — treat the connection as dead. The
+        // resulting "close" event runs sessionManager.cleanup(), which resets
+        // cdpProxyAttached on any target this client was holding.
+        conn.ws.terminate();
+        continue;
+      }
+      conn.isAlive = false;
+      try {
+        conn.ws.ping();
+      } catch {
+        // Ping on an already-broken socket will surface via "close"/"error".
+      }
+    }
+  }, CDP_HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref?.();
 
   const onTabClosed = ({
     targetId,
@@ -331,6 +362,7 @@ export async function startCdpProxy(
     port,
     host,
     stop: async () => {
+      clearInterval(heartbeatTimer);
       terminalBrowserEvents.off("tab-closed", onTabClosed);
       for (const conn of connections) {
         conn.sessionManager.cleanup();

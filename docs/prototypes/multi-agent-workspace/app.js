@@ -206,7 +206,7 @@ function App() {
                 alias: "main",
                 role: "main",
                 command: "codex",
-                lines: ["browser-viewer · codex (main agent)", "> 需求澄清中，未拆分 worker", "main$ _"],
+                lines: ["runweave · codex (main agent)", "> 需求澄清中，未拆分 worker", "main$ _"],
               },
             ],
             layout: { type: "panel", panelId: mainPanelId },

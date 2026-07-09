@@ -577,11 +577,6 @@ function getOrCreateTerminalBrowserView(
     },
   });
   view.webContents.setWindowOpenHandler(({ url, disposition }) => {
-    // When CDP proxy is attached, deny without opening externally —
-    // Playwright controls navigation via CDP commands.
-    if (entry.cdpProxyAttached) {
-      return { action: "deny" };
-    }
     const safeUrl = validateTerminalBrowserUrl(url);
     if (!safeUrl) {
       openTerminalBrowserExternalUrl(url);
@@ -593,6 +588,12 @@ function getOrCreateTerminalBrowserView(
     // `target="_blank"` / tab-style opens report `foreground-tab` /
     // `background-tab` — surface those as a new tab in the right-side panel
     // instead of spawning a separate window.
+    //
+    // This holds even when the CDP proxy is attached: the page-opened tab
+    // inherits the opener's `browserGroupId`, so it stays within the same
+    // proxy control group and a connected client still discovers it via
+    // `Target.targetCreated`. A human clicking a link must always be able to
+    // open it, regardless of whether an agent is driving this tab.
     if (disposition === "new-window") {
       return {
         action: "allow",

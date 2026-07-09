@@ -21,7 +21,7 @@ Playwright / E2E / benchmark 使用固定端口和固定临时存储路径，不
 
 - 单个 E2E 命令完成后，再启动下一个 E2E。
 - 5 次性能基准由 runner 内部串行执行。
-- 不在多个 worktree 同时跑 Playwright，避免端口和 `/tmp/browser-viewer-e2e-*.json` 冲突。
+- 不在多个 worktree 同时跑 Playwright，避免端口和 `/tmp/runweave-e2e-*.json` 冲突。
 
 ### 3. 先修正测量口径
 

@@ -15,7 +15,7 @@
   - `GET /api/terminal/session/:terminalSessionId/history`
   - `GET /api/app/home/overview`
   - `/ws/terminal` 的 `metadata` 消息
-  - Web terminal tab 标题，例如 `browser-viewer(node)`
+  - Web terminal tab 标题，例如 `runweave(node)`
   - App Home / App terminal detail 的标题、状态和 `terminalState` 展示
   - 后端持久化 session metadata，刷新页面后不恢复过期旧值
 - `activeCommand` 对 `TerminalState` 的间接影响最终不应被旧值误导：`activeCommand=codex` 可以推动 Codex idle 状态，`activeCommand=null` 或非 Codex 不能长期让 `/ws/terminal-events` 发布或消费成 Codex 状态。
@@ -23,7 +23,7 @@
 
 ## 当前代码事实
 
-- shell integration 通过 OSC marker 上报命令：`OSC 633;BrowserViewerCommand=<command>`。
+- shell integration 通过 OSC marker 上报命令：`OSC 633;RunweaveCommand=<command>`。
 - zsh 使用 `preexec` 设置命令、`precmd` 清空命令；bash 使用 `DEBUG` trap 设置命令、`PROMPT_COMMAND` 清空命令。
 - tmux-backed session 会优先读取 pane option `@runweave_command`，没有值时再读取 `pane_current_command`。
 - 后端收到 metadata 后通过 `TerminalSessionManager.updateSessionMetadata()` 更新内存和 lowdb。
@@ -42,7 +42,7 @@
 | ----------------------------------- | ------------------------------------------ | -------------------- | ---------------------------------------------------------- |
 | `sleep 5`                           | `sleep`                                    | `(sleep)`            | 只取前台命令名，不包含参数                                 |
 | `/bin/sleep 5`                      | `/bin/sleep` 或规范化后 `sleep`            | `(sleep)`            | API 可保留路径；UI 应展示 basename                         |
-| `node -e "setTimeout(()=>{}, 5e3)"` | `node`                                     | `(node)`             | 当前截图里的 `browser-viewer(node)` 属于这类命令           |
+| `node -e "setTimeout(()=>{}, 5e3)"` | `node`                                     | `(node)`             | 当前截图里的 `runweave(node)` 属于这类命令                 |
 | `npm run dev`                       | `npm`                                      | `(npm)`              | 不应被 tmux `pane_current_command=node` 覆盖成 `node`      |
 | `pnpm dev`                          | `pnpm`                                     | `(pnpm)`             | 同上                                                       |
 | `yarn dev`                          | `yarn`                                     | `(yarn)`             | 同上                                                       |
@@ -215,9 +215,9 @@ python3 -c "import time; time.sleep(5)"
 shell：zsh / bash
 profile：临时 / 复用
 
-| Case ID    | 命令    | Detail API    | List API      | History       | App Home        | WS metadata   | terminal-events | UI                                      | 等待窗口 | tmux 诊断                 | 结果 | 备注 |
-| ---------- | ------- | ------------- | ------------- | ------------- | --------------- | ------------- | --------------- | --------------------------------------- | -------- | ------------------------- | ---- | ---- |
-| AC-SYS-003 | sleep 5 | sleep -> null | sleep -> null | sleep -> null | Running -> Idle | sleep -> null | shell_idle only | browser-viewer(sleep) -> browser-viewer | 3s       | @runweave_command cleared | PASS |      |
+| Case ID    | 命令    | Detail API    | List API      | History       | App Home        | WS metadata   | terminal-events | UI                          | 等待窗口 | tmux 诊断                 | 结果 | 备注 |
+| ---------- | ------- | ------------- | ------------- | ------------- | --------------- | ------------- | --------------- | --------------------------- | -------- | ------------------------- | ---- | ---- |
+| AC-SYS-003 | sleep 5 | sleep -> null | sleep -> null | sleep -> null | Running -> Idle | sleep -> null | shell_idle only | runweave(sleep) -> runweave | 3s       | @runweave_command cleared | PASS |      |
 
 失败结论：
 
