@@ -267,13 +267,13 @@
     <div class="wrap">
       <h1>Agent Team / Loop Engine 流程<span class="tag">runweave</span></h1>
       <p class="lede">
-        代码源: <code>backend/src/agent-team/{service,loop,prompt-builders}.ts</code> ·
+        代码源: <code>backend/src/agent-team/{service,loop,prompt-builders,acceptance-case-loader}.ts</code> ·
         模型 <code>packages/shared/src/agent-team.ts</code> ·
         完成事件 <code>docs/architecture/terminal-completion-hooks.md</code>
       </p>
       <p class="lede">
         一句话: <b>一个终端 = 一个 run</b>；主 Agent pane 调度，worker 是同 tmux session 里的额外 pane；
-        后端只做<b>薄路由</b>（状态守卫 / 建 pane / 注入 prompt / 消费 outbox），不替 agent 做智能决策。
+        后端只做<b>薄路由</b>（状态守卫 / 定验收来源 / 建 pane / 注入 prompt / 消费 outbox），不替 agent 做智能决策。
       </p>
 
       <!-- ============ 1. 阶段状态机 ============ -->
@@ -281,7 +281,7 @@
         <h2>1 · 生命周期状态机</h2>
         <p class="sub">一个 terminal session 同时最多绑定一个 active run。<code style="color:var(--cyan)">phase</code> 是主轴，<code style="color:var(--cyan)">status</code> 是当前是否卡住。</p>
         <div class="phase-track">
-          <div class="pill"><span class="dot d-blue"></span>intake<span class="st">status: running</span></div>
+          <div class="pill"><span class="dot d-blue"></span>intake<span class="st">status: running（可停在此生成用例）</span></div>
           <span class="sep">→</span>
           <div class="pill" style="opacity:0.72;border-style:dashed"><span class="dot d-amber"></span>proposal<span class="st">仅 autoApproveSplit=false（非默认）</span></div>
           <span class="sep">→</span>
@@ -290,17 +290,19 @@
           <div class="pill"><span class="dot d-green"></span>done<span class="st">全部验收 pass</span></div>
         </div>
         <p class="sub" style="margin-top:14px;text-align:center;padding:0">
-          <b style="color:var(--green)">默认（前端）：autoApproveSplit=true，intake 后跳过 proposal 直达 executing，无需人工确认。</b><br />
+          <b style="color:var(--amber)">验收来源前置门：startRun 先解析 verification（planFilePath / testCaseFilePath）。没有可追溯测试案例文件时，run 停在 <code>intake</code>，向主 Agent 注入生成指令，等它写 <code>docs/testing/*-test-cases.md</code> 后回调 propose-split，才继续。</b><br />
+          <b style="color:var(--green)">默认（前端）：autoApproveSplit=true。一旦有可追溯用例，intake 后跳过 proposal 直达 executing，无需人工确认。</b><br />
           proposal / need_human 这道拆分人工门只在 <code style="color:var(--amber)">autoApproveSplit=false</code>（API 直连 / CLI / 测试）时才出现。<br />
-          旁路：<code style="color:var(--amber)">executing</code> 中 loop 熔断或复验超时 → <b style="color:var(--amber)">need_human</b>（冻结 worker，保留现场）→ <code style="color:var(--cyan)">resume(note)</code> 清零后继续；复验彻底耗尽或初始化失败 → <b style="color:var(--red)">failed</b>。
+          旁路：<code style="color:var(--amber)">executing</code> 中 loop 熔断或复验超时 → <b style="color:var(--amber)">need_human</b>（冻结 worker，保留现场）→ <code style="color:var(--cyan)">resume(note)</code> 清零后继续；用例生成指令注入失败或复验彻底耗尽 → <b style="color:var(--red)">failed</b>。
         </p>
       </section>
 
       <!-- ============ 2. 起手：从提交到 split ============ -->
       <section>
-        <h2>2 · 起手流程：提交任务 → split → 建 pane</h2>
+        <h2>2 · 起手流程：提交任务 → 定验收来源 → split → 建 pane</h2>
         <p class="sub">
-          <b>前端默认路径</b>：<code>startFlow</code> 硬编码 <code style="color:var(--green)">autoApproveSplit: true</code>，<b>跳过人工门直达 executing</b>（见 <code>terminal-agent-team-panel.tsx:188</code>）。
+          <b>前端默认路径</b>：<code>startFlow</code> 提交 <code>task</code> + 可选 <code>planFilePath</code> / <code>testCaseFilePath</code>，硬编码 <code style="color:var(--green)">autoApproveSplit: true</code>（见 <code>terminal-agent-team-panel.tsx:192</code>）。
+          <b style="color:var(--amber)">startRun 先解析验收来源</b>：验收用例必须可追溯到 <code>docs/testing/*-test-cases.md</code>，不再用泛化默认用例。
           人工 split gate 只在 <code style="color:var(--amber)">autoApproveSplit=false</code>（API 直连 / CLI / 测试）时才走。
         </p>
         <div class="flow">
@@ -308,7 +310,20 @@
             <div class="node n-blue">
               <div class="kicker">POST /runs</div>
               <div class="title">startRun</div>
-              <div class="desc">建主 pane workspace，生成拆分提案。<br /><b style="color:var(--green)">默认 autoApproveSplit=true → 直接 applySplit</b>。</div>
+              <div class="desc">建主 pane workspace，<code>prepareInitialAcceptance</code> 解析 verification（<code>acceptanceSource</code> = test_case_file / plan_file_generated / task_generated）。</div>
+            </div>
+          </div>
+          <div class="arrow">↓<small>按有没有「可追溯测试案例文件」分两条路</small></div>
+          <div class="row">
+            <div class="node n-amber">
+              <div class="kicker">分支 A · 无测试案例文件（前端默认）</div>
+              <div class="title"><span class="dot d-amber"></span>停在 intake，让主 Agent 生成用例</div>
+              <div class="desc"><code>acceptance=[]</code> → 注入 <code>buildMainTestCaseGenerationPrompt</code>，要求跑 <code>$toolkit:write-test-cases</code> 写 <code>docs/testing/*-test-cases.md</code>，再回调 <code>propose-split</code>（带 <code>generatedTestCaseFilePath</code>）。注入失败 → <b style="color:var(--red)">failed</b>。</div>
+            </div>
+            <div class="node n-cyan">
+              <div class="kicker">分支 B · 已给 testCaseFilePath</div>
+              <div class="title"><span class="dot d-cyan"></span>解析 markdown 用例 → 直接拆分</div>
+              <div class="desc"><code>loadAcceptanceCasesFromMarkdown</code> 按 <code>### CASE-000</code> 三级标题解析步骤/期望/失败判定，生成带 <code>sourceCaseId</code>/<code>sourceFilePath</code> 的用例。</div>
             </div>
           </div>
           <div class="arrow">↓<small style="color:var(--amber)">仅当 autoApproveSplit=false 才有下面这道人工门（可选旁路）</small></div>
@@ -319,7 +334,7 @@
               <div class="desc">进入 <b>proposal / need_human</b>，等人确认：<b>confirmed</b> → 确认 worker &amp; 验收用例；<b>rejected</b> → 退回 intake。主 Agent 或用户可先 <code>propose-split</code> 调整提案。</div>
             </div>
           </div>
-          <div class="arrow">↓<small>applySplit：为每个 worker split 一个 tmux pane（默认路径与人工门在此汇合）</small></div>
+          <div class="arrow">↓<small>applySplit：assertTraceableBehaviorAcceptance 校验用例可追溯后，为每个 worker split 一个 tmux pane（默认路径与人工门在此汇合）</small></div>
           <div class="row">
             <div class="node n-cyan">
               <div class="kicker">worker pane</div>
@@ -334,7 +349,7 @@
             <div class="node n-green">
               <div class="kicker">worker pane</div>
               <div class="title"><span class="dot d-green"></span>behavior_verify</div>
-              <div class="desc">跑 Playwright 行为验收，写 pass/fail + 证据</div>
+              <div class="desc">按可追溯用例跑 Playwright，写 pass/fail/skipped + 证据</div>
             </div>
           </div>
           <div class="arrow">↓<small>ensureAgentReady + 注入 startup prompt（只给 active worker，串行）</small></div>
@@ -376,7 +391,7 @@
               <span class="go">→</span>
               <div class="chip"><b>outboxResolver</b><span>按 pane 解析结构化 outbox</span></div>
               <span class="go">→</span>
-              <div class="chip"><b>acceptanceResults[]</b><span>{caseId, pass|fail, evidence}</span></div>
+              <div class="chip"><b>acceptanceResults[]</b><span>{caseId, pass|fail|skipped, evidence}</span></div>
             </div>
           </div>
 
@@ -389,7 +404,7 @@
               <span class="go">→</span>
               <div class="chip"><b>review 通过</b><span></span></div>
               <span class="go">→</span>
-              <div class="chip"><b>dispatch behavior_verify</b><span></span></div>
+              <div class="chip"><b>dispatch behavior_verify</b><span>默认只重跑失败/未执行/依赖 case</span></div>
               <span class="go">→</span>
               <div class="chip" style="border-color:var(--red)"><b>任一门禁 fail</b><span style="color:var(--red)">bounce 回 code pane</span></div>
             </div>
@@ -401,6 +416,8 @@
               <div class="chip"><b>pass</b><span>consecutiveFail=0</span></div>
               <span class="go">·</span>
               <div class="chip"><b>fail</b><span>consecutiveFail++（debounce=2）</span></div>
+              <span class="go">·</span>
+              <div class="chip"><b>skipped</b><span>保留上轮状态 + skipReason</span></div>
               <span class="go">·</span>
               <div class="chip"><b>hadProgress?</b><span>passCount↑ 或 hadDiff</span></div>
               <span class="go">→</span>
@@ -477,11 +494,12 @@
             </dl>
           </div>
           <div class="card">
-            <h3>三个设计取舍（数字化）</h3>
+            <h3>四个设计取舍（数字化）</h3>
             <ul class="clean">
+              <li><b>验收用例必须可追溯</b>：只认 <code class="inl">docs/testing/*-test-cases.md</code> 里 <code class="inl">### CASE-000</code> 解析出的用例（带 sourceCaseId/sourceFilePath），没有就停在 intake 让主 Agent 先写，杜绝“泛化默认用例假装验收”。</li>
               <li><b>debounce=2</b>：一次偶发 fail 不反弹 code，避免抖动打断改动。</li>
               <li><b>熔断=3 轮无进展</b>：只有 <i>pass 数上升</i> 或 <i>有 diff</i> 才算进展，防“改了但没效果”的死循环。</li>
-              <li><b>串行 code→review→verify</b>：保证每次验收针对的都是最新代码，而非并行错位。</li>
+              <li><b>串行 code→review→verify + 局部重跑</b>：保证每次验收针对最新代码；behavior_verify 默认只重跑失败/未执行/依赖 case，全量重跑要在 outbox 写明原因。</li>
               <li><b>熔断不删 pane/outbox</b>：冻结只停止注入，现场留给人；符合“可见流程 + 人工验收”边界。</li>
             </ul>
           </div>
