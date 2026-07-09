@@ -15,6 +15,12 @@ Agent Team 让当前终端里的主 Agent 调度同一 tmux session 内的 worke
 
 后端只负责状态守卫、pane 创建、prompt 注入和 completion/outbox 路由，不替主 Agent 做智能决策。worker 完成结果先进入结构化 outbox，再由 Agent Team 服务按当前 phase 和 loop 状态处理。
 
+Loop 的完成信号来自 backend terminal completion feed：AI CLI hook 通过
+`/internal/terminal-completion` 记录 `kind="completion"` terminal event，后端结果路由器再按
+run、worker、pane 和 outbox 匹配。app-server Event Center 中的 `agent.completion` 当前只用于
+ThreadRef 投影和受限 TerminalState Stop fallback，不会写入 completion feed，也不会直接推进
+Agent Team loop。
+
 ## 默认角色
 
 当前角色集合面向 Loop Engineering：

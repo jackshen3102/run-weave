@@ -263,6 +263,19 @@ backend 启动时通过环境变量或 `~/.runweave/app-server` 下的 lock/toke
 
 当前 backend cursor 保存在 backend 存储目录下的 `app-server-event-cursors.json`。
 
+`agent.hook` 与 `agent.completion` 在 backend 里的职责不同。`agent.hook` 会被规范化为
+TerminalState hook 事件；`agent.completion` 只作为受限 Stop fallback：当它明确表示
+`completionReason="hook_stop"` 且 raw hook event 是 `Stop` / `SubagentStop` 时，backend
+可以复用 agent hook processor 更新 `TerminalState`。当前 backend consumer 不把
+app-server `agent.completion` 写入 `TerminalCompletionEventService`，因此它不产生
+`kind="completion"` 的 terminal event，也不驱动 Agent Team loop。Agent Team loop 的
+completion 输入仍来自 backend 直连 `/internal/terminal-completion`。
+
+app-server 自身的 `dedupeKey` 只保证 Event Center event log 幂等。由于当前没有把
+app-server completion 桥接进 backend completion feed，也不存在跨 app-server / backend
+直连的 completion feed 去重；后续若要让 app-server completion 也驱动 loop，必须先补齐
+跨通道共同去重键和 completion feed 入口去重。
+
 ## Hook 接入
 
 hook bridge 会自动发现 app-server，并把 Stop 等 hook 事件双写到 Event Center：
