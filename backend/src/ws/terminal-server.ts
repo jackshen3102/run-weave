@@ -544,6 +544,10 @@ export function attachTerminalWebSocketServer(
             session.scrollback,
             tmuxService,
           ),
+          modes: {
+            bracketedPasteMode:
+              runtimeRegistry.getBracketedPasteMode(terminalSessionId),
+          },
         });
       }
       snapshotDelivered = true;
@@ -552,6 +556,9 @@ export function attachTerminalWebSocketServer(
       sendEvent(socket, {
         type: "snapshot",
         data: "",
+        modes: {
+          bracketedPasteMode: null,
+        },
       });
       snapshotDelivered = true;
     }

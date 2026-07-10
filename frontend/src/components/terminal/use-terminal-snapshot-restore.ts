@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import type { TerminalModeState } from "@runweave/shared";
 import { HttpError } from "../../services/http";
 import { getTerminalSession } from "../../services/terminal";
 
@@ -7,11 +8,14 @@ type MutableRef<T> = { current: T };
 interface UseTerminalSnapshotRestoreArgs {
   active: boolean;
   apiBase: string;
-  deferredSnapshotRef: MutableRef<string | null>;
+  deferredSnapshotRef: MutableRef<{
+    data: string;
+    modes?: TerminalModeState;
+  } | null>;
   hasDeferredOutputRef: MutableRef<boolean>;
   hasRenderedSnapshotRef: MutableRef<boolean>;
   onAuthExpiredRef: MutableRef<(() => void) | undefined>;
-  renderTerminalSnapshot: (data: string) => void;
+  renderTerminalSnapshot: (data: string, modes?: TerminalModeState) => void;
   replayDeferredOutput: () => boolean;
   requiresSnapshotRestoreRef: MutableRef<boolean>;
   restoreSnapshotRequestRef: MutableRef<number>;
