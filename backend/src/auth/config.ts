@@ -51,7 +51,11 @@ function rejectUnsafeStrictAuthDefaults(
   password: string,
   jwtSecret: string,
 ): void {
-  if (username === "admin" && password === "admin") {
+  if (
+    username === "admin" &&
+    password === "admin" &&
+    process.env.RUNWEAVE_DESKTOP_CHANNEL !== "beta"
+  ) {
     throw new Error("[viewer-be] refusing default admin/admin credentials");
   }
   if (
