@@ -25,13 +25,14 @@ function resolveIcon(): Electron.NativeImage {
 export function createTray(
   mainWindow: BrowserWindow,
   options: {
+    enableUpdates?: boolean;
     onOpenSystemMonitor?: () => void;
     onReloadLocalRuntime?: () => void;
   } = {},
 ): Tray {
   const icon = resolveIcon();
   tray = new Tray(icon);
-  tray.setToolTip("Runweave");
+  tray.setToolTip(app.getName());
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -52,12 +53,16 @@ export function createTray(
         ]
       : []),
     { type: "separator" },
-    {
-      label: "检查更新",
-      click: () => {
-        checkForUpdates();
-      },
-    },
+    ...(options.enableUpdates === false
+      ? []
+      : [
+          {
+            label: "检查更新",
+            click: () => {
+              checkForUpdates();
+            },
+          },
+        ]),
     ...(options.onReloadLocalRuntime
       ? [
           {

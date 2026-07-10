@@ -9,6 +9,15 @@ const shared = {
   target: "node20",
 };
 
+const desktopBuildDefines = {
+  __RUNWEAVE_DESKTOP_CHANNEL__: JSON.stringify(
+    process.env.RUNWEAVE_DESKTOP_CHANNEL === "beta" ? "beta" : "stable",
+  ),
+  __RUNWEAVE_DESKTOP_SOURCE_REVISION__: JSON.stringify(
+    process.env.RUNWEAVE_DESKTOP_SOURCE_REVISION ?? "unknown",
+  ),
+};
+
 // Map ESM `import.meta.url` to a CJS-safe equivalent so modules that read it
 // (e.g. hook-installer resource resolution) work in the bundled CJS output.
 // `define` values must be an identifier or JS literal, so point it at a
@@ -25,6 +34,10 @@ const importMetaUrlShim = {
 await build({
   ...shared,
   ...importMetaUrlShim,
+  define: {
+    ...importMetaUrlShim.define,
+    ...desktopBuildDefines,
+  },
   entryPoints: ["src/main.ts"],
   outdir: "dist",
   format: "cjs",
@@ -64,4 +77,6 @@ await build({
   outExtension: { ".js": ".cjs" },
 });
 
-console.log("[bundle] electron main + preload + backend/cli runtime built successfully");
+console.log(
+  "[bundle] electron main + preload + backend/cli runtime built successfully",
+);

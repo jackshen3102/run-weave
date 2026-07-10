@@ -9,6 +9,7 @@ import {
   APP_UPDATE_REASON_NO_STATE,
   APP_UPDATE_REASON_SHELL_VERSION,
   compareVersions,
+  filterChangedFilesAgainstSnapshot,
   incrementMinorVersion,
   isAppServerSensitivePath,
   isAppSensitivePath,
@@ -22,6 +23,47 @@ import {
 } from "./runweave-update-core.mjs";
 
 const cases = [
+  {
+    name: "deployed dirty files are excluded until their content changes",
+    run() {
+      const previousSnapshot = {
+        "electron/src/main.ts": "file:420:deployed-shell",
+        "frontend/src/App.tsx": "file:420:deployed-runtime",
+      };
+      assert.deepEqual(
+        filterChangedFilesAgainstSnapshot({
+          candidateFiles: [
+            "electron/src/main.ts",
+            "frontend/src/App.tsx",
+            "backend/src/index.ts",
+          ],
+          currentSnapshot: {
+            ...previousSnapshot,
+            "backend/src/index.ts": "file:420:new-backend",
+          },
+          previousSnapshot,
+        }),
+        ["backend/src/index.ts"],
+      );
+    },
+  },
+  {
+    name: "deployed dirty files re-enter the plan when content changes",
+    run() {
+      assert.deepEqual(
+        filterChangedFilesAgainstSnapshot({
+          candidateFiles: ["electron/src/main.ts"],
+          currentSnapshot: {
+            "electron/src/main.ts": "file:420:next-shell",
+          },
+          previousSnapshot: {
+            "electron/src/main.ts": "file:420:deployed-shell",
+          },
+        }),
+        ["electron/src/main.ts"],
+      );
+    },
+  },
   {
     name: "auto uses full app update when no previous state exists",
     run() {
@@ -106,7 +148,10 @@ const cases = [
       });
       assert.equal(forcedSkip.mode, "runtime");
       assert.equal(forcedSkip.appServer.action, "skip");
-      assert.equal(forcedSkip.appServer.reason, APP_SERVER_SKIP_REASON_EXPLICIT);
+      assert.equal(
+        forcedSkip.appServer.reason,
+        APP_SERVER_SKIP_REASON_EXPLICIT,
+      );
     },
   },
   {

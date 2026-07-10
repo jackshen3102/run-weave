@@ -138,6 +138,7 @@ function buildAcceptanceCase(
       `缺少可追溯测试案例文件：${sourceFilePath} 的 ${item.id} 缺少${missingSections.join("、")}`,
     );
   }
+  const preconditions = summarizeLines(sections.preconditions);
   const steps = summarizeLines(sections.steps);
   const expectations = summarizeLines(sections.expectations);
   const failures = summarizeLines(sections.failures);
@@ -151,6 +152,7 @@ function buildAcceptanceCase(
     dependsOn,
     text: [
       `标题：${item.title}`,
+      ...(preconditions ? [`前置条件：${preconditions}`] : []),
       `步骤：${steps || "未填写"}`,
       `期望：${expectations || "未填写"}`,
       `失败判定：${failures || "未填写"}`,
@@ -170,6 +172,7 @@ function buildAcceptanceCase(
 }
 
 function extractSections(lines: string[]): {
+  preconditions: string[];
   steps: string[];
   expectations: string[];
   failures: string[];
@@ -177,6 +180,7 @@ function extractSections(lines: string[]): {
   tags: string[];
 } {
   const sections = {
+    preconditions: [] as string[],
     steps: [] as string[],
     expectations: [] as string[],
     failures: [] as string[],
@@ -198,6 +202,7 @@ function extractSections(lines: string[]): {
     }
   }
   return {
+    preconditions: cleanMarkdownLines(sections.preconditions),
     steps: cleanMarkdownLines(sections.steps),
     expectations: cleanMarkdownLines(sections.expectations),
     failures: cleanMarkdownLines(sections.failures),
@@ -208,20 +213,45 @@ function extractSections(lines: string[]): {
 
 function parseSectionLabel(
   line: string,
-): { key: "steps" | "expectations" | "failures" | "dependencies" | "tags"; rest: string } | null {
-  const trimmed = line.trim();
-  const match = /^(步骤|操作|期望|预期结果|失败判定|失败判断|依赖|标签)\s*[:：]?\s*(.*)$/.exec(
-    trimmed,
-  );
+): {
+  key:
+    | "preconditions"
+    | "steps"
+    | "expectations"
+    | "failures"
+    | "dependencies"
+    | "tags";
+  rest: string;
+} | null {
+  const trimmed = line.trim().replace(/^[-*+]\s+/, "");
+  const match =
+    /^(前置条件|前提|步骤|操作|期望|预期结果|失败判定|失败判断|依赖|标签)\s*[:：]?\s*(.*)$/.exec(trimmed) ??
+    /^(Given(?:[(（]前置[)）])?|When(?:[(（]操作[)）])?|Then(?:[(（]预期(?:[,，]\s*可取证)?[)）])?)\s*[:：]\s*(.*)$/i.exec(trimmed);
   if (!match) {
     return null;
   }
   const label = match[1]!;
   const rest = match[2]?.trim() ?? "";
-  if (label === "步骤" || label === "操作") {
+  const normalizedLabel = label.toLowerCase();
+  if (
+    label === "前置条件" ||
+    label === "前提" ||
+    normalizedLabel.startsWith("given")
+  ) {
+    return { key: "preconditions", rest };
+  }
+  if (
+    label === "步骤" ||
+    label === "操作" ||
+    normalizedLabel.startsWith("when")
+  ) {
     return { key: "steps", rest };
   }
-  if (label === "期望" || label === "预期结果") {
+  if (
+    label === "期望" ||
+    label === "预期结果" ||
+    normalizedLabel.startsWith("then")
+  ) {
     return { key: "expectations", rest };
   }
   if (label === "失败判定" || label === "失败判断") {

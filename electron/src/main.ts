@@ -15,6 +15,8 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { randomBytes } from "node:crypto";
@@ -80,6 +82,51 @@ import {
   getTerminalBrowserCdpTargets,
 } from "./terminal-browser-view.js";
 import { installHooksIfNeeded } from "./hooks/hook-installer.js";
+
+declare const __RUNWEAVE_DESKTOP_CHANNEL__: "stable" | "beta";
+declare const __RUNWEAVE_DESKTOP_SOURCE_REVISION__: string;
+
+const desktopChannel = __RUNWEAVE_DESKTOP_CHANNEL__;
+const desktopSourceRevision = __RUNWEAVE_DESKTOP_SOURCE_REVISION__;
+const isBetaChannel = desktopChannel === "beta";
+const BETA_DESKTOP_CDP_PORT = 9335;
+const betaDesktopCdpEndpoint = isBetaChannel
+  ? `http://127.0.0.1:${BETA_DESKTOP_CDP_PORT}`
+  : null;
+
+if (isBetaChannel) {
+  app.setName("Runweave Beta");
+  app.setPath("userData", path.join(app.getPath("appData"), "Runweave Beta"));
+  app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
+  app.commandLine.appendSwitch(
+    "remote-debugging-port",
+    String(BETA_DESKTOP_CDP_PORT),
+  );
+  process.env.RUNWEAVE_DESKTOP_CHANNEL = "beta";
+  process.env.BROWSER_PROFILE_DIR = path.join(
+    app.getPath("userData"),
+    "browser-profile",
+  );
+  process.env.AUTH_STORE_FILE = path.join(
+    process.env.BROWSER_PROFILE_DIR,
+    "auth-store.json",
+  );
+  process.env.RUNWEAVE_CONFIG_FILE = path.join(
+    app.getPath("userData"),
+    "cli",
+    "config.json",
+  );
+  delete process.env.RUNWEAVE_ACCESS_TOKEN;
+  process.env.RUNWEAVE_APP_SERVER_HOME = path.join(
+    os.homedir(),
+    ".runweave",
+    "app-server-beta",
+  );
+  process.env.RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR = path.join(
+    process.env.RUNWEAVE_APP_SERVER_HOME,
+    "cloud-sync",
+  );
+}
 
 const isDev = !app.isPackaged;
 process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND = isDev ? "false" : "true";
@@ -243,6 +290,7 @@ function createWindow(options?: {
     },
     titleBarStyle: "default",
     show: false,
+    title: isBetaChannel ? "Runweave Beta" : "Runweave",
   });
 
   win.once("ready-to-show", () => {
@@ -394,11 +442,85 @@ let stoppingPackagedBackendsForQuit = false;
 let desktopIncidentLogger: DesktopIncidentLogger | null = null;
 let appServerUnavailableDialogShown = false;
 
+function writeBetaDesktopStatus(stoppedAt: string | null = null): void {
+  if (!isBetaChannel) {
+    return;
+  }
+
+  try {
+    const userDataPath = app.getPath("userData");
+    const statusPath = path.join(userDataPath, "beta-desktop-status.json");
+    const tempPath = `${statusPath}.tmp`;
+    const backendPid = packagedBackendRuntime?.child.pid ?? null;
+    const appPath = app.isPackaged
+      ? path.resolve(path.dirname(process.execPath), "../..")
+      : null;
+    mkdirSync(userDataPath, { recursive: true });
+    writeFileSync(
+      tempPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          channel: desktopChannel,
+          sourceRevision: desktopSourceRevision,
+          app: {
+            path: appPath,
+            pid: process.pid,
+            userDataPath,
+            version: app.getVersion(),
+          },
+          backend: {
+            available: stoppedAt ? false : packagedBackendState.available,
+            baseUrl: packagedBackendState.backendUrl || null,
+            pid: stoppedAt ? null : backendPid,
+            profileDir: resolvePackagedBackendProfileDir(),
+            runtimeReleaseId: packagedBackendState.runtimeReleaseId,
+            runtimeSource: packagedBackendState.runtimeSource,
+          },
+          cli: {
+            configPath: process.env.RUNWEAVE_CONFIG_FILE ?? null,
+          },
+          cdp: {
+            endpoint: stoppedAt ? null : betaDesktopCdpEndpoint,
+            pid: stoppedAt ? null : process.pid,
+          },
+          stoppedAt,
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      )}\n`,
+      { mode: 0o600 },
+    );
+    renameSync(tempPath, statusPath);
+  } catch (error) {
+    console.warn("[electron] failed to write Beta desktop status", error);
+  }
+}
+
 interface PackagedBackendAuthConfig {
   username: string;
   password: string;
   jwtSecret: string;
   createdAt: string;
+}
+
+interface BetaPersistedAuthRecord {
+  username: string;
+  password: string;
+  jwtSecret: string;
+  updatedAt: string;
+  refreshSessions?: unknown[];
+}
+
+interface BetaAuthStoreData {
+  auth: BetaPersistedAuthRecord | null;
+}
+
+interface BetaCliAuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
 }
 
 const PACKAGED_BACKEND_AUTH_FILE_NAME = "backend-auth.json";
@@ -409,6 +531,10 @@ function resolvePackagedBackendProfileDir(): string {
 
 function resolvePackagedBackendAuthFile(): string {
   return path.join(app.getPath("userData"), PACKAGED_BACKEND_AUTH_FILE_NAME);
+}
+
+function resolveBetaAuthStoreFile(): string {
+  return path.join(resolvePackagedBackendProfileDir(), "auth-store.json");
 }
 
 function createRandomCredential(bytes = 32): string {
@@ -473,6 +599,232 @@ function loadOrCreatePackagedBackendAuthConfig(): PackagedBackendAuthConfig {
   return config;
 }
 
+function isBetaPersistedAuthRecord(
+  value: unknown,
+): value is BetaPersistedAuthRecord {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.username === "string" &&
+    record.username.trim().length > 0 &&
+    typeof record.password === "string" &&
+    record.password.trim().length > 0 &&
+    typeof record.jwtSecret === "string" &&
+    record.jwtSecret.trim().length > 0 &&
+    typeof record.updatedAt === "string" &&
+    record.updatedAt.trim().length > 0
+  );
+}
+
+function readBetaAuthStore(): {
+  data: BetaAuthStoreData;
+  record: BetaPersistedAuthRecord;
+} | null {
+  const filePath = resolveBetaAuthStoreFile();
+  if (!existsSync(filePath)) {
+    return null;
+  }
+  try {
+    const data = JSON.parse(readFileSync(filePath, "utf8")) as BetaAuthStoreData;
+    if (!isBetaPersistedAuthRecord(data.auth)) {
+      return null;
+    }
+    return {
+      data,
+      record: {
+        ...data.auth,
+        refreshSessions: Array.isArray(data.auth.refreshSessions)
+          ? data.auth.refreshSessions
+          : [],
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function toPackagedBackendAuthConfig(
+  record: BetaPersistedAuthRecord,
+): PackagedBackendAuthConfig {
+  return {
+    username: record.username,
+    password: record.password,
+    jwtSecret: record.jwtSecret,
+    createdAt: record.updatedAt,
+  };
+}
+
+function hasMatchingAuthCredentials(
+  left: Pick<PackagedBackendAuthConfig, "username" | "password" | "jwtSecret">,
+  right: Pick<PackagedBackendAuthConfig, "username" | "password" | "jwtSecret">,
+): boolean {
+  return (
+    left.username === right.username &&
+    left.password === right.password &&
+    left.jwtSecret === right.jwtSecret
+  );
+}
+
+function writeMigratedBetaAuthStore(
+  data: BetaAuthStoreData,
+  record: BetaPersistedAuthRecord,
+  bootstrap: PackagedBackendAuthConfig,
+): void {
+  const filePath = resolveBetaAuthStoreFile();
+  const tempPath = `${filePath}.tmp`;
+  writeFileSync(
+    tempPath,
+    `${JSON.stringify(
+      {
+        ...data,
+        auth: {
+          ...record,
+          username: bootstrap.username,
+          password: bootstrap.password,
+          jwtSecret: bootstrap.jwtSecret,
+          updatedAt: new Date().toISOString(),
+          refreshSessions: [],
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    { mode: 0o600 },
+  );
+  chmodSync(tempPath, 0o600);
+  renameSync(tempPath, filePath);
+}
+
+function resolveBetaPackagedBackendAuthConfig(): PackagedBackendAuthConfig {
+  const persisted = readBetaAuthStore();
+  if (!persisted) {
+    return loadOrCreatePackagedBackendAuthConfig();
+  }
+
+  const bootstrapPath = resolvePackagedBackendAuthFile();
+  if (!existsSync(bootstrapPath)) {
+    return toPackagedBackendAuthConfig(persisted.record);
+  }
+  const bootstrap = loadOrCreatePackagedBackendAuthConfig();
+  if (hasMatchingAuthCredentials(persisted.record, bootstrap)) {
+    return toPackagedBackendAuthConfig(persisted.record);
+  }
+
+  const persistedUpdatedAt = Date.parse(persisted.record.updatedAt);
+  const bootstrapCreatedAt = Date.parse(bootstrap.createdAt);
+  if (
+    Number.isFinite(persistedUpdatedAt) &&
+    Number.isFinite(bootstrapCreatedAt) &&
+    persistedUpdatedAt <= bootstrapCreatedAt
+  ) {
+    writeMigratedBetaAuthStore(persisted.data, persisted.record, bootstrap);
+    return bootstrap;
+  }
+
+  return toPackagedBackendAuthConfig(persisted.record);
+}
+
+function readBetaCliRefreshToken(): string | null {
+  const configPath = process.env.RUNWEAVE_CONFIG_FILE;
+  if (!configPath || !existsSync(configPath)) {
+    return null;
+  }
+  try {
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+      profiles?: { beta?: { refreshToken?: unknown } };
+    };
+    const refreshToken = config.profiles?.beta?.refreshToken;
+    return typeof refreshToken === "string" && refreshToken.trim()
+      ? refreshToken
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function requestBetaCliAuth(
+  baseUrl: string,
+  authConfig: PackagedBackendAuthConfig,
+): Promise<BetaCliAuthResponse> {
+  const refreshToken = readBetaCliRefreshToken();
+  if (refreshToken) {
+    const refreshResponse = await net.fetch(`${baseUrl}/api/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-auth-client": "electron",
+      },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (refreshResponse.ok) {
+      return (await refreshResponse.json()) as BetaCliAuthResponse;
+    }
+  }
+
+  const loginResponse = await net.fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-auth-client": "electron",
+    },
+    body: JSON.stringify({
+      username: authConfig.username,
+      password: authConfig.password,
+    }),
+  });
+  if (!loginResponse.ok) {
+    throw new Error(
+      `Beta CLI login failed with status ${loginResponse.status}`,
+    );
+  }
+  return (await loginResponse.json()) as BetaCliAuthResponse;
+}
+
+async function ensureBetaCliProfile(baseUrl: string): Promise<void> {
+  if (!isBetaChannel) {
+    return;
+  }
+  const configPath = process.env.RUNWEAVE_CONFIG_FILE;
+  if (!configPath) {
+    throw new Error("Beta CLI config path is unavailable");
+  }
+  const auth = await requestBetaCliAuth(
+    baseUrl,
+    resolveBetaPackagedBackendAuthConfig(),
+  );
+  if (!auth.accessToken || !auth.refreshToken || !auth.expiresIn) {
+    throw new Error("Beta CLI login returned an incomplete auth response");
+  }
+  mkdirSync(path.dirname(configPath), { recursive: true });
+  const tempConfigPath = `${configPath}.tmp`;
+  writeFileSync(
+    tempConfigPath,
+    `${JSON.stringify(
+      {
+        activeProfile: "beta",
+        profiles: {
+          beta: {
+            baseUrl,
+            accessToken: auth.accessToken,
+            refreshToken: auth.refreshToken,
+            expiresAt: new Date(
+              Date.now() + auth.expiresIn * 1000,
+            ).toISOString(),
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    { mode: 0o600 },
+  );
+  chmodSync(tempConfigPath, 0o600);
+  renameSync(tempConfigPath, configPath);
+  rmSync(resolvePackagedBackendAuthFile(), { force: true });
+}
+
 function hasCompleteAuthEnv(env: NodeJS.ProcessEnv): boolean {
   return Boolean(
     env.AUTH_USERNAME?.trim() &&
@@ -487,7 +839,7 @@ function resolvePackagedBackendAuthEnv(
   NodeJS.ProcessEnv,
   "AUTH_USERNAME" | "AUTH_PASSWORD" | "AUTH_JWT_SECRET"
 > {
-  if (hasCompleteAuthEnv(env)) {
+  if (!isBetaChannel && hasCompleteAuthEnv(env)) {
     return {
       AUTH_USERNAME: env.AUTH_USERNAME,
       AUTH_PASSWORD: env.AUTH_PASSWORD,
@@ -495,7 +847,9 @@ function resolvePackagedBackendAuthEnv(
     };
   }
 
-  const config = loadOrCreatePackagedBackendAuthConfig();
+  const config = isBetaChannel
+    ? resolveBetaPackagedBackendAuthConfig()
+    : loadOrCreatePackagedBackendAuthConfig();
   return {
     AUTH_USERNAME: config.username,
     AUTH_PASSWORD: config.password,
@@ -683,6 +1037,7 @@ function setPackagedBackendState(
 ): PackagedBackendConnectionState {
   packagedBackendState = state;
   process.env.RUNWEAVE_BACKEND_URL = state.backendUrl;
+  writeBetaDesktopStatus();
   broadcastPackagedBackendState();
   return packagedBackendState;
 }
@@ -766,7 +1121,9 @@ async function checkAndNotifyAppServerAvailability(
   return null;
 }
 
-function showAppServerUnavailableDialog(parentWindow?: BrowserWindow | null): void {
+function showAppServerUnavailableDialog(
+  parentWindow?: BrowserWindow | null,
+): void {
   appServerUnavailableDialogShown = true;
   const options: Electron.MessageBoxOptions = {
     type: "warning",
@@ -805,6 +1162,13 @@ async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionS
       resourcesPath: process.resourcesPath,
       shellVersion: app.getVersion(),
     });
+
+    try {
+      await ensureBetaCliProfile(runtime.backendUrl);
+    } catch (error) {
+      await runtime.stop();
+      throw error;
+    }
 
     packagedBackendRuntime = runtime;
     activeRuntimeRelease = runtime.runtimeRelease;
@@ -914,10 +1278,8 @@ function registerPackagedBackendHandlers(): void {
   ipcMain.handle("viewer:check-app-server", async (event): Promise<boolean> => {
     const parentWindow = BrowserWindow.fromWebContents(event.sender);
     return (
-      (await checkAndNotifyAppServerAvailability(
-        process.env,
-        parentWindow,
-      )) !== null
+      (await checkAndNotifyAppServerAvailability(process.env, parentWindow)) !==
+      null
     );
   });
 }
@@ -1029,6 +1391,7 @@ if (hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     try {
       initializeDesktopIncidentLogger();
+      writeBetaDesktopStatus();
       setApplicationIcon();
       registerOpenExternalHandler();
       registerPackagedBackendHandlers();
@@ -1036,9 +1399,11 @@ if (hasSingleInstanceLock) {
       registerSystemMonitorHandler(() => packagedBackendRuntime);
       registerTerminalBrowserHandlers();
       registerCdpProxyHandlers();
-      await installHooksIfNeeded({
-        resourcesDir: path.join(__dirname, "..", "resources"),
-      });
+      if (!isBetaChannel) {
+        await installHooksIfNeeded({
+          resourcesDir: path.join(__dirname, "..", "resources"),
+        });
+      }
 
       const portConfig = resolveCdpProxyPort(process.env);
       const cdpProxyPort = portConfig.strict
@@ -1049,6 +1414,7 @@ if (hasSingleInstanceLock) {
         port: cdpProxyPort,
       });
       process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT = cdpProxyRuntime.endpoint;
+      writeBetaDesktopStatus();
 
       if (isDev) {
         // In dev mode, backend is an independent process started before Electron.
@@ -1129,11 +1495,13 @@ if (hasSingleInstanceLock) {
       });
 
       createTray(mainWindow, {
+        enableUpdates: !isBetaChannel,
         onOpenSystemMonitor: openSystemMonitor,
         onReloadLocalRuntime: reloadLocalRuntime,
       });
 
       if (
+        !isBetaChannel &&
         shouldEnableAutoUpdates({
           isPackaged: app.isPackaged,
           platform: process.platform,
@@ -1147,6 +1515,7 @@ if (hasSingleInstanceLock) {
         if (!mainWindow || mainWindow.isDestroyed()) {
           mainWindow = createWindow({ hideOnClose: true });
           createTray(mainWindow, {
+            enableUpdates: !isBetaChannel,
             onOpenSystemMonitor: openSystemMonitor,
             onReloadLocalRuntime: reloadLocalRuntime,
           });
@@ -1165,6 +1534,7 @@ if (hasSingleInstanceLock) {
 
 app.on("before-quit", (event) => {
   setIsQuitting(true);
+  writeBetaDesktopStatus(new Date().toISOString());
 
   if (packagedBackendsStoppedForQuit) {
     return;
