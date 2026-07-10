@@ -3,8 +3,12 @@ import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  BETA_UPDATE_APP_NAME,
+  resolveBetaUpdateTargets,
+} from "./runweave-update-core.mjs";
 
-const BETA_APP_NAME = "Runweave Beta";
+const BETA_APP_NAME = BETA_UPDATE_APP_NAME;
 const BETA_CHANNEL = "beta";
 const STATUS_WAIT_MS = 45_000;
 
@@ -17,17 +21,13 @@ class BetaHealthError extends Error {
 }
 
 function resolveBetaPaths(sourceRoot = process.cwd(), homeDir = os.homedir()) {
-  const userData = path.join(
-    homeDir,
-    "Library",
-    "Application Support",
-    BETA_APP_NAME,
-  );
+  const targets = resolveBetaUpdateTargets(homeDir);
+  const userData = targets.userData;
   const updateDir = path.join(userData, "update");
-  const appServerHome = path.join(homeDir, ".runweave", "app-server-beta");
+  const appServerHome = targets.appServerHome;
   return {
     sourceRoot: path.resolve(sourceRoot),
-    appPath: path.join("/Applications", `${BETA_APP_NAME}.app`),
+    appPath: targets.appPath,
     appBackupPath: path.join("/Applications", `.${BETA_APP_NAME}.app.previous`),
     appServerHome,
     appServerCloudSyncDir: path.join(appServerHome, "cloud-sync"),
@@ -40,9 +40,9 @@ function resolveBetaPaths(sourceRoot = process.cwd(), homeDir = os.homedir()) {
     logDir: path.join(updateDir, "logs"),
     pendingPath: path.join(updateDir, "pending.json"),
     profileDir: path.join(userData, "browser-profile"),
-    runtimeHome: path.join(userData, "runtime"),
+    runtimeHome: targets.runtimeHome,
     runtimeCurrentPath: path.join(userData, "runtime", "current.json"),
-    statePath: path.join(updateDir, "state.json"),
+    statePath: targets.statePath,
     userData,
   };
 }

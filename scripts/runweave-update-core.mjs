@@ -28,6 +28,8 @@ export const APP_SERVER_SKIP_REASON_EXPLICIT =
 export const APP_SERVER_SKIP_REASON_NO_CHANGE =
   "No app-server files changed since the last local update.";
 export const RUNWEAVE_CODESIGN_IDENTITY_ENV = "RUNWEAVE_CODESIGN_IDENTITY";
+export const BETA_UPDATE_APP_NAME = "Runweave Beta";
+export const BETA_UPDATE_BUILDER_CONFIG = "electron-builder.beta.yml";
 
 export const APP_SENSITIVE_PATH_PREFIXES = [
   "electron/src/",
@@ -94,6 +96,86 @@ export function resolveDefaultUpdateStatePath(homeDir = os.homedir()) {
     "RunweaveLocalUpdate",
     "state.json",
   );
+}
+
+export function resolveBetaUpdateTargets(homeDir = os.homedir()) {
+  if (!homeDir) {
+    throw new Error("Cannot resolve user home directory");
+  }
+
+  const userData = path.join(
+    homeDir,
+    "Library",
+    "Application Support",
+    BETA_UPDATE_APP_NAME,
+  );
+  return {
+    appPath: path.join("/Applications", `${BETA_UPDATE_APP_NAME}.app`),
+    appServerHome: path.join(homeDir, ".runweave", "app-server-beta"),
+    runtimeHome: path.join(userData, "runtime"),
+    statePath: path.join(userData, "update", "state.json"),
+    userData,
+  };
+}
+
+export function validateUpdateTargetIsolation({
+  appBackupPath,
+  appName,
+  appPath,
+  appServerHome,
+  channel,
+  electronBuilderConfig,
+  homeDir = os.homedir(),
+  runtimeHome,
+  statePath,
+}) {
+  if (channel !== "beta") {
+    return;
+  }
+
+  const expected = resolveBetaUpdateTargets(homeDir);
+  const checks = [
+    ["app name", appName, BETA_UPDATE_APP_NAME],
+    ["app path", path.resolve(appPath), path.resolve(expected.appPath)],
+    [
+      "runtime home",
+      path.resolve(runtimeHome),
+      path.resolve(expected.runtimeHome),
+    ],
+    [
+      "App Server home",
+      path.resolve(appServerHome),
+      path.resolve(expected.appServerHome),
+    ],
+    ["state path", path.resolve(statePath), path.resolve(expected.statePath)],
+    [
+      "Electron builder config",
+      electronBuilderConfig,
+      BETA_UPDATE_BUILDER_CONFIG,
+    ],
+  ];
+  for (const [label, actual, expectedValue] of checks) {
+    if (actual !== expectedValue) {
+      throw new Error(
+        `Refusing Beta update: ${label} must be ${expectedValue}; received ${actual}`,
+      );
+    }
+  }
+  if (appBackupPath) {
+    const backupPrefix = path.join(
+      "/Applications",
+      `.${BETA_UPDATE_APP_NAME}.app.previous`,
+    );
+    const resolvedBackupPath = path.resolve(appBackupPath);
+    if (
+      resolvedBackupPath !== backupPrefix &&
+      !resolvedBackupPath.startsWith(`${backupPrefix}-`)
+    ) {
+      throw new Error(
+        `Refusing Beta update: app backup path must be ${backupPrefix} or a timestamped child; received ${resolvedBackupPath}`,
+      );
+    }
+  }
 }
 
 export function isAppSensitivePath(filePath) {
