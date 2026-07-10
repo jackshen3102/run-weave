@@ -46,7 +46,6 @@ interface TerminalPreviewPanelShellProps {
   token: string;
   activeTerminalSessionId: string | null;
   body: ReactNode;
-  prototypeBody: ReactNode;
   showAgentTeamTool: boolean;
   agentTeamBody?: ReactNode;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -98,7 +97,6 @@ export function TerminalPreviewPanelShell({
   token,
   activeTerminalSessionId,
   body,
-  prototypeBody,
   showAgentTeamTool,
   agentTeamBody,
   onStartResize,
@@ -114,8 +112,8 @@ export function TerminalPreviewPanelShell({
   onSetChangesViewMode,
 }: TerminalPreviewPanelShellProps) {
   const tools: TerminalSidecarTool[] = showAgentTeamTool
-    ? ["preview", "prototypes", "browser", "agent-team"]
-    : ["preview", "prototypes", "browser"];
+    ? ["preview", "browser", "agent-team"]
+    : ["preview", "browser"];
   const saveStatusLabel =
     saveStatus === "conflict"
       ? "Conflict"
@@ -171,9 +169,7 @@ export function TerminalPreviewPanelShell({
                   >
                     {tool === "preview"
                       ? "Preview"
-                      : tool === "prototypes"
-                        ? "Prototypes"
-                        : tool === "browser"
+                      : tool === "browser"
                           ? "Browser"
                           : "Agent Team"}
                   </button>
@@ -373,14 +369,6 @@ export function TerminalPreviewPanelShell({
           </div>
         ) : null}
         <div className="relative min-h-0 flex-1">
-          <div
-            className={[
-              "absolute inset-0 min-h-0",
-              activeTool === "prototypes" ? "" : "pointer-events-none hidden",
-            ].join(" ")}
-          >
-            {activeTool === "prototypes" ? prototypeBody : null}
-          </div>
           <div
             className={[
               "absolute inset-0 min-h-0",

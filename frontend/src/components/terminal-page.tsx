@@ -6,7 +6,10 @@ import {
   isTerminalAutoResponse,
   shouldThrottleTmuxScroll,
 } from "@runweave/common/terminal";
-import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared";
+import {
+  TERMINAL_CLIENT_SCROLLBACK_LINES,
+  type TerminalModeState,
+} from "@runweave/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -49,22 +52,25 @@ export function TerminalPage({
   const terminalRef = useRef<Terminal | null>(null);
   const runtimeKindRef = useRef<"tmux" | "pty" | null>(null);
 
-  const onSnapshot = useMemoizedFn((data: string) => {
-    const nextChunk = filterBrowserHandledTerminalOutput(data);
-    const terminal = terminalRef.current;
-    if (!terminal) {
-      return;
-    }
+  const onSnapshot = useMemoizedFn(
+    (data: string, modes?: TerminalModeState) => {
+      const nextChunk = filterBrowserHandledTerminalOutput(data);
+      const terminal = terminalRef.current;
+      if (!terminal) {
+        return;
+      }
 
-    terminal.reset();
-    if (!nextChunk) {
-      return;
-    }
-
-    terminal.write(nextChunk, () => {
-      terminal.scrollToBottom();
-    });
-  });
+      const bracketedPasteMode =
+        modes?.bracketedPasteMode ?? terminal.modes.bracketedPasteMode;
+      terminal.reset();
+      terminal.write(
+        `${nextChunk}${bracketedPasteMode ? "\u001b[?2004h" : "\u001b[?2004l"}`,
+        () => {
+          terminal.scrollToBottom();
+        },
+      );
+    },
+  );
 
   const onOutput = useMemoizedFn((data: string) => {
     const nextChunk = filterBrowserHandledTerminalOutput(data);

@@ -6,7 +6,11 @@ import {
   scrollTerminalToBottom,
   type TerminalBottomState,
 } from "@runweave/common/terminal";
-import type { TerminalPanelWorkspace, TerminalState } from "@runweave/shared";
+import type {
+  TerminalModeState,
+  TerminalPanelWorkspace,
+  TerminalState,
+} from "@runweave/shared";
 import type { ClientMode } from "../../features/client-mode";
 import {
   applyTerminalDraftInput,
@@ -94,7 +98,10 @@ export function TerminalSurface({
   const imeCompositionEndedAtRef = useRef<number | null>(null);
   const hasDeferredOutputRef = useRef(false);
   const deferredOutputRef = useRef("");
-  const deferredSnapshotRef = useRef<string | null>(null);
+  const deferredSnapshotRef = useRef<{
+    data: string;
+    modes?: TerminalModeState;
+  } | null>(null);
   const terminalFrameRef = useRef<HTMLElement | null>(null);
   const requiresSnapshotRestoreRef = useRef(false);
   const hasRenderedSnapshotRef = useRef(false);

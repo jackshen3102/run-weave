@@ -806,6 +806,10 @@ export type TerminalEventServerMessage =
 
 export type TerminalSignal = "SIGINT" | "SIGTERM" | "SIGKILL";
 
+export interface TerminalModeState {
+  bracketedPasteMode: boolean | null;
+}
+
 export type TerminalClientMessage =
   | {
       type: "input";
@@ -833,6 +837,7 @@ export type TerminalServerMessage =
   | {
       type: "snapshot";
       data: string;
+      modes?: TerminalModeState;
     }
   | {
       type: "metadata";

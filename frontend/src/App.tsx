@@ -20,6 +20,7 @@ import { LoginPage } from "./pages/login-page";
 import { ConnectionsPage } from "./pages/connections-page";
 import { SystemMonitorPage } from "./pages/system-monitor-page";
 import { TerminalRoutePage } from "./pages/terminal-page";
+import { PrototypesPage } from "./pages/prototypes-page";
 
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
@@ -356,6 +357,42 @@ export default function App() {
               onOpenConnectionManager={
                 isElectron ? openConnectionManager : undefined
               }
+              onAuthExpired={clearToken}
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/prototypes"
+        element={
+          needsConnection ? (
+            <Navigate to="/connections" replace />
+          ) : isAuthChecking ? (
+            authPendingView
+          ) : token ? (
+            <PrototypesPage
+              apiBase={apiBase}
+              token={token}
+              onAuthExpired={clearToken}
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/prototypes/:projectId/:prototypeSlug"
+        element={
+          needsConnection ? (
+            <Navigate to="/connections" replace />
+          ) : isAuthChecking ? (
+            authPendingView
+          ) : token ? (
+            <PrototypesPage
+              apiBase={apiBase}
+              token={token}
               onAuthExpired={clearToken}
             />
           ) : (

@@ -1,5 +1,12 @@
 import type { PtyRuntime } from "./pty-service";
 
+const ESCAPE = "\u001b";
+const BRACKETED_PASTE_MODE_PATTERN = new RegExp(
+  `${ESCAPE}\\[\\?2004([hl])`,
+  "g",
+);
+const TERMINAL_MODE_SEQUENCE_TAIL_LENGTH = 7;
+
 interface RuntimeSubscriber {
   onData(data: string): void;
   onExit(event: { exitCode: number; signal?: number }): void;
@@ -9,6 +16,8 @@ interface RuntimeEntry {
   runtime: PtyRuntime;
   attachedClients: Set<string>;
   bufferedOutput: string;
+  bracketedPasteMode: boolean | null;
+  terminalModeSequenceTail: string;
   subscribers: Set<RuntimeSubscriber>;
   recorderAttached: boolean;
 }
@@ -22,11 +31,23 @@ export class TerminalRuntimeRegistry {
       runtime,
       attachedClients: new Set<string>(),
       bufferedOutput: "",
+      bracketedPasteMode: null,
+      terminalModeSequenceTail: "",
       subscribers: new Set<RuntimeSubscriber>(),
       recorderAttached: false,
     };
 
     runtime.onData((data) => {
+      const modeData = `${entry.terminalModeSequenceTail}${data}`;
+      BRACKETED_PASTE_MODE_PATTERN.lastIndex = 0;
+      let modeMatch = BRACKETED_PASTE_MODE_PATTERN.exec(modeData);
+      while (modeMatch) {
+        entry.bracketedPasteMode = modeMatch[1] === "h";
+        modeMatch = BRACKETED_PASTE_MODE_PATTERN.exec(modeData);
+      }
+      entry.terminalModeSequenceTail = modeData.slice(
+        -TERMINAL_MODE_SEQUENCE_TAIL_LENGTH,
+      );
       entry.bufferedOutput = `${entry.bufferedOutput}${data}`.slice(
         -TerminalRuntimeRegistry.MAX_BUFFERED_OUTPUT_LENGTH,
       );
@@ -60,6 +81,10 @@ export class TerminalRuntimeRegistry {
 
   getBufferedOutput(terminalSessionId: string): string {
     return this.runtimes.get(terminalSessionId)?.bufferedOutput ?? "";
+  }
+
+  getBracketedPasteMode(terminalSessionId: string): boolean | null {
+    return this.runtimes.get(terminalSessionId)?.bracketedPasteMode ?? null;
   }
 
   subscribe(

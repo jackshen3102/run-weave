@@ -17,10 +17,13 @@ interface PrototypeSelection {
   slug: string;
 }
 
-interface TerminalPrototypeGalleryProps {
+interface PrototypeGalleryProps {
   apiBase: string;
   token: string;
   activeProjectId: string | null;
+  selectedProjectId?: string;
+  selectedPrototypeSlug?: string;
+  onSelectionChange?: (selection: PrototypeSelection) => void;
   onAuthExpired?: () => void;
 }
 
@@ -92,10 +95,8 @@ function chooseGallerySelection(params: {
   stored: PrototypeSelection | null;
   activeProjectId: string | null;
 }): PrototypeSelection | null {
-  for (const candidate of [params.current, params.stored]) {
-    if (findGalleryItem(params.gallery, candidate)) {
-      return candidate;
-    }
+  if (findGalleryItem(params.gallery, params.current)) {
+    return params.current;
   }
   const activeProject = params.gallery.projects.find(
     (project) => project.projectId === params.activeProjectId,
@@ -106,6 +107,9 @@ function chooseGallerySelection(params: {
       projectId: activeProject.projectId,
       slug: activePrototype.slug,
     };
+  }
+  if (findGalleryItem(params.gallery, params.stored)) {
+    return params.stored;
   }
   for (const project of params.gallery.projects) {
     const prototype = project.prototypes[0];
@@ -133,17 +137,26 @@ function buildPreviewUrl(apiBase: string, previewPath: string): string {
   return `${apiBase.replace(/\/$/, "")}${previewPath}`;
 }
 
-export function TerminalPrototypeGallery({
+export function PrototypeGallery({
   apiBase,
   token,
   activeProjectId,
+  selectedProjectId,
+  selectedPrototypeSlug,
+  onSelectionChange,
   onAuthExpired,
-}: TerminalPrototypeGalleryProps) {
+}: PrototypeGalleryProps) {
   const [gallery, setGallery] =
     useState<TerminalPrototypeGalleryResponse | null>(null);
-  const [selection, setSelection] = useState<PrototypeSelection | null>(() =>
-    readStoredSelection(apiBase),
-  );
+  const [selection, setSelection] = useState<PrototypeSelection | null>(() => {
+    if (selectedProjectId && selectedPrototypeSlug) {
+      return {
+        projectId: selectedProjectId,
+        slug: selectedPrototypeSlug,
+      };
+    }
+    return activeProjectId ? null : readStoredSelection(apiBase);
+  });
   const [galleryLoading, setGalleryLoading] = useState(true);
   const [galleryError, setGalleryError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -164,6 +177,12 @@ export function TerminalPrototypeGallery({
     return error instanceof Error ? error.message : String(error);
   });
 
+  const selectPrototype = useMemoizedFn((next: PrototypeSelection): void => {
+    persistSelection(apiBase, next);
+    setSelection((current) => (sameSelection(current, next) ? current : next));
+    onSelectionChange?.(next);
+  });
+
   const loadGallery = useMemoizedFn(async (): Promise<void> => {
     const requestId = galleryRequestRef.current + 1;
     galleryRequestRef.current = requestId;
@@ -174,19 +193,16 @@ export function TerminalPrototypeGallery({
       if (galleryRequestRef.current !== requestId) {
         return;
       }
-      setGallery(payload);
-      setSelection((current) => {
-        const next = chooseGallerySelection({
-          gallery: payload,
-          current,
-          stored: readStoredSelection(apiBase),
-          activeProjectId,
-        });
-        if (next) {
-          persistSelection(apiBase, next);
-        }
-        return next;
+      const next = chooseGallerySelection({
+        gallery: payload,
+        current: selection,
+        stored: readStoredSelection(apiBase),
+        activeProjectId,
       });
+      setGallery(payload);
+      if (next) {
+        selectPrototype(next);
+      }
     } catch (error) {
       if (galleryRequestRef.current === requestId) {
         setGalleryError(handleRequestError(error));
@@ -229,10 +245,19 @@ export function TerminalPrototypeGallery({
     }
   });
 
-  const selectPrototype = useMemoizedFn((next: PrototypeSelection): void => {
-    persistSelection(apiBase, next);
-    setSelection((current) => (sameSelection(current, next) ? current : next));
-  });
+
+  useEffect(() => {
+    if (!selectedProjectId || !selectedPrototypeSlug) {
+      return;
+    }
+    setSelection((current) => {
+      const next = {
+        projectId: selectedProjectId,
+        slug: selectedPrototypeSlug,
+      };
+      return sameSelection(current, next) ? current : next;
+    });
+  }, [selectedProjectId, selectedPrototypeSlug]);
 
   useEffect(() => {
     void loadGallery();
@@ -248,7 +273,7 @@ export function TerminalPrototypeGallery({
   ]);
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[minmax(190px,28%)_minmax(0,1fr)] bg-slate-950">
+    <div className="grid h-full min-h-0 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] bg-slate-950">
       <aside className="flex min-h-0 flex-col border-r border-slate-800">
         <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-800 px-3">
           <div className="flex min-w-0 items-center gap-2">

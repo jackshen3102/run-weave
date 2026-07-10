@@ -2,6 +2,7 @@ import { useMemoizedFn } from "ahooks";
 import type { Dispatch, SetStateAction } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { isTerminalAtBottom } from "@runweave/common/terminal";
+import type { TerminalModeState } from "@runweave/shared";
 import {
   logTerminalPerf,
   summarizeTerminalChunk,
@@ -18,6 +19,13 @@ type MutableRef<T> = {
 
 const SYNCHRONIZED_OUTPUT_START = "\u001b[?2026h";
 const SYNCHRONIZED_OUTPUT_END = "\u001b[?2026l";
+const BRACKETED_PASTE_MODE_ENABLE = "\u001b[?2004h";
+const BRACKETED_PASTE_MODE_DISABLE = "\u001b[?2004l";
+
+interface DeferredTerminalSnapshot {
+  data: string;
+  modes?: TerminalModeState;
+}
 
 function wrapSynchronizedOutput(data: string): string {
   return `${SYNCHRONIZED_OUTPUT_START}${data}${SYNCHRONIZED_OUTPUT_END}`;
@@ -78,7 +86,7 @@ function releaseTerminalFrameAfterPaint(release: () => void): void {
 interface UseTerminalOutputStreamOptions {
   activeRef: MutableRef<boolean>;
   deferredOutputRef: MutableRef<string>;
-  deferredSnapshotRef: MutableRef<string | null>;
+  deferredSnapshotRef: MutableRef<DeferredTerminalSnapshot | null>;
   hasDeferredOutputRef: MutableRef<boolean>;
   hasRenderedSnapshotRef: MutableRef<boolean>;
   lastInputSentAtRef: MutableRef<number | null>;
@@ -112,50 +120,61 @@ export function useTerminalOutputStream({
   terminalSessionId,
   websocketContentVersionRef,
 }: UseTerminalOutputStreamOptions) {
-  const renderTerminalSnapshot = useMemoizedFn((data: string) => {
-    const nextChunk = filterBrowserHandledTerminalOutput(data);
-    const terminal = terminalRef.current;
-    if (!terminal) {
-      return;
-    }
-    setTerminalAtBottom(true);
-    setHasNewOutputBelow(false);
-    setTmuxScrollbackActive(false);
-
-    logTerminalPerf("terminal.snapshot.received", {
-      terminalSessionId,
-      ...summarizeTerminalChunk(nextChunk),
-    });
-
-    hasRenderedSnapshotRef.current = true;
-    hasDeferredOutputRef.current = false;
-    deferredOutputRef.current = "";
-    deferredSnapshotRef.current = null;
-    requiresSnapshotRestoreRef.current = false;
-
-    const releaseTerminalFrame = preserveTerminalFrame(
-      terminal,
-      terminalSessionId,
-      terminalFrameRef,
-    );
-    terminal.reset();
-    const renderStartedAt = performance.now();
-    terminal.write(wrapSynchronizedOutput(nextChunk), () => {
-      logTerminalPerf("terminal.snapshot.rendered", {
-        terminalSessionId,
-        renderDurationMs: Number(
-          (performance.now() - renderStartedAt).toFixed(2),
-        ),
-        ...summarizeTerminalChunk(nextChunk),
-      });
-      terminal.scrollToBottom();
+  const renderTerminalSnapshot = useMemoizedFn(
+    (data: string, modes?: TerminalModeState) => {
+      const nextChunk = filterBrowserHandledTerminalOutput(data);
+      const terminal = terminalRef.current;
+      if (!terminal) {
+        return;
+      }
       setTerminalAtBottom(true);
       setHasNewOutputBelow(false);
       setTmuxScrollbackActive(false);
-      refreshTerminalViewportRef.current?.();
-      releaseTerminalFrameAfterPaint(releaseTerminalFrame);
-    });
-  });
+
+      logTerminalPerf("terminal.snapshot.received", {
+        terminalSessionId,
+        ...summarizeTerminalChunk(nextChunk),
+      });
+
+      hasRenderedSnapshotRef.current = true;
+      hasDeferredOutputRef.current = false;
+      deferredOutputRef.current = "";
+      deferredSnapshotRef.current = null;
+      requiresSnapshotRestoreRef.current = false;
+
+      const releaseTerminalFrame = preserveTerminalFrame(
+        terminal,
+        terminalSessionId,
+        terminalFrameRef,
+      );
+      const bracketedPasteMode =
+        modes?.bracketedPasteMode ?? terminal.modes.bracketedPasteMode;
+      terminal.reset();
+      const renderStartedAt = performance.now();
+      terminal.write(
+        `${wrapSynchronizedOutput(nextChunk)}${
+          bracketedPasteMode
+            ? BRACKETED_PASTE_MODE_ENABLE
+            : BRACKETED_PASTE_MODE_DISABLE
+        }`,
+        () => {
+          logTerminalPerf("terminal.snapshot.rendered", {
+            terminalSessionId,
+            renderDurationMs: Number(
+              (performance.now() - renderStartedAt).toFixed(2),
+            ),
+            ...summarizeTerminalChunk(nextChunk),
+          });
+          terminal.scrollToBottom();
+          setTerminalAtBottom(true);
+          setHasNewOutputBelow(false);
+          setTmuxScrollbackActive(false);
+          refreshTerminalViewportRef.current?.();
+          releaseTerminalFrameAfterPaint(releaseTerminalFrame);
+        },
+      );
+    },
+  );
 
   const markDeferredOutput = useMemoizedFn((data: string) => {
     hasDeferredOutputRef.current = true;
@@ -193,7 +212,7 @@ export function useTerminalOutputStream({
     hasDeferredOutputRef.current = false;
 
     if (deferredSnapshot !== null) {
-      renderTerminalSnapshot(deferredSnapshot);
+      renderTerminalSnapshot(deferredSnapshot.data, deferredSnapshot.modes);
     }
 
     if (!deferredOutput) {
@@ -221,18 +240,20 @@ export function useTerminalOutputStream({
     return true;
   });
 
-  const onSnapshot = useMemoizedFn((data: string) => {
-    websocketContentVersionRef.current += 1;
-    if (!activeRef.current) {
-      deferredSnapshotRef.current = data;
-      deferredOutputRef.current = "";
-      hasDeferredOutputRef.current = true;
-      requiresSnapshotRestoreRef.current = false;
-      return;
-    }
+  const onSnapshot = useMemoizedFn(
+    (data: string, modes?: TerminalModeState) => {
+      websocketContentVersionRef.current += 1;
+      if (!activeRef.current) {
+        deferredSnapshotRef.current = { data, modes };
+        deferredOutputRef.current = "";
+        hasDeferredOutputRef.current = true;
+        requiresSnapshotRestoreRef.current = false;
+        return;
+      }
 
-    renderTerminalSnapshot(data);
-  });
+      renderTerminalSnapshot(data, modes);
+    },
+  );
 
   const onOutput = useMemoizedFn((data: string) => {
     const nextChunk = filterBrowserHandledTerminalOutput(data);

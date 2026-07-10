@@ -5,8 +5,8 @@ import type {
 import {
   Activity,
   ClipboardList,
+  ExternalLink,
   Eye,
-  GalleryVerticalEnd,
   History,
   Home,
   MoreHorizontal,
@@ -151,13 +151,28 @@ export function TerminalWorkspaceHeader({
               Preview
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={loading}
               onSelect={() => {
-                useTerminalPreviewStore.getState().openPrototypes();
+                const browserBaseUrl = ["http:", "https:"].includes(
+                  window.location.protocol,
+                )
+                  ? window.location.origin
+                  : apiBase;
+                const url = new URL(
+                  "/prototypes",
+                  browserBaseUrl || window.location.origin,
+                );
+                if (activeProjectId) {
+                  url.searchParams.set("project", activeProjectId);
+                }
+                if (window.electronAPI?.openExternal) {
+                  void window.electronAPI.openExternal(url.toString());
+                  return;
+                }
+                window.open(url.toString(), "_blank", "noopener,noreferrer");
               }}
             >
-              <GalleryVerticalEnd className="h-4 w-4" />
-              Prototypes
+              <ExternalLink className="h-4 w-4" />
+              Open Prototypes
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={!activeSession?.terminalSessionId}

@@ -2,6 +2,7 @@ import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import type {
   TerminalClientMessage,
+  TerminalModeState,
   TerminalServerMessage,
 } from "@runweave/shared";
 import { HttpError } from "../../services/http";
@@ -51,7 +52,7 @@ export function useTerminalConnection(params: {
   terminalSessionId: string;
   token: string;
   onAuthExpired?: () => void;
-  onSnapshot?: (data: string) => void;
+  onSnapshot?: (data: string, modes?: TerminalModeState) => void;
   onOutput?: (data: string) => void;
   includeSnapshot?: boolean;
 }) {
@@ -293,7 +294,7 @@ export function useTerminalConnection(params: {
                 seq: inboundSequenceRef.current,
                 ...summarizeTerminalChunk(parsed.data),
               });
-              onSnapshotRef.current?.(parsed.data);
+              onSnapshotRef.current?.(parsed.data, parsed.modes);
               return;
             }
             if (parsed.type === "output") {
