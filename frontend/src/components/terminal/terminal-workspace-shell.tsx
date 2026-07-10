@@ -176,7 +176,6 @@ export function TerminalWorkspaceShell({
   const previewReservedWidth = previewWidthPx
     ? `${previewWidthPx}px`
     : DEFAULT_TERMINAL_SIDECAR_WIDTH;
-  const visibleProjects = projects;
   const visibleSessions = useMemo(() => {
     if (!activeProjectId) {
       return [];
@@ -186,7 +185,7 @@ export function TerminalWorkspaceShell({
     );
   }, [activeProjectId, sessions]);
   const activeProject =
-    visibleProjects.find((project) => project.projectId === activeProjectId) ??
+    projects.find((project) => project.projectId === activeProjectId) ??
     null;
   const activeSession =
     activeSessionId
@@ -267,23 +266,27 @@ export function TerminalWorkspaceShell({
         .filter(Boolean)
         .join(" / ")
     : undefined;
-  const requestCreateProject = () => {
+  const requestCreateProject = useMemoizedFn(() => {
     setPreviewActiveTool("preview");
     setProjectDialogError(null);
     setProjectDialogMode("create");
-  };
-  const requestEditProject = (projectId?: string) => {
+  });
+  const requestEditProject = useMemoizedFn((projectId?: string) => {
     setPreviewActiveTool("preview");
     if (projectId) {
       setActiveProjectId(projectId);
     }
     setProjectDialogError(null);
     setProjectDialogMode("edit");
-  };
-  const requestDeleteProject = (project: TerminalProjectListItem) => {
-    setPreviewActiveTool("preview");
-    setProjectPendingDeletion(project);
-  };
+  });
+  const requestDeleteProject = useMemoizedFn(
+    (project: TerminalProjectListItem) => {
+      setPreviewActiveTool("preview");
+      setProjectPendingDeletion(project);
+    },
+  );
+  const selectProjectFromTabBar = useMemoizedFn(onSelectProject);
+  const reorderProjectsFromTabBar = useMemoizedFn(onReorderProjects);
   const openHistoryDrawer = (
     terminalSessionId: string,
     terminalPanelId?: string | null,
@@ -461,14 +464,9 @@ export function TerminalWorkspaceShell({
         onSelectConnection={onSelectConnection}
         onOpenConnectionManager={onOpenConnectionManager}
         onNavigateHome={onNavigateHome}
-        visibleProjects={visibleProjects}
         activeProjectId={activeProjectId}
-        sessions={sessions}
-        completionMarkers={completionMarkers}
-        bellMarkers={bellMarkers}
-        terminalStateBySessionId={terminalStateBySessionId}
-        onReorderProjects={onReorderProjects}
-        onSelectProject={onSelectProject}
+        onReorderProjects={reorderProjectsFromTabBar}
+        onSelectProject={selectProjectFromTabBar}
         requestEditProject={requestEditProject}
         requestDeleteProject={requestDeleteProject}
         requestCreateProject={requestCreateProject}

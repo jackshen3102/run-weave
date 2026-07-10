@@ -94,6 +94,15 @@ interface TerminalBrowserEntry {
   onDeviceDebuggerDetach: ((event: Electron.Event, reason: string) => void) | null;
   lastActiveAt: number;
   lastKnownUrl: string;
+  lastSentUpdateKey: string | null;
+  lastSentUpdateAt: number;
+  pendingUpdate: PendingTerminalBrowserUpdate | null;
+  pendingUpdateTimer: NodeJS.Timeout | null;
+}
+
+interface PendingTerminalBrowserUpdate {
+  update: TerminalBrowserUpdate;
+  updateKey: string;
 }
 
 export interface TerminalBrowserCdpTarget {
@@ -119,6 +128,7 @@ const TERMINAL_BROWSER_PROXY_PORT = 8899;
 const TERMINAL_BROWSER_PROXY_RULES =
   `http=${TERMINAL_BROWSER_PROXY_HOST}:${TERMINAL_BROWSER_PROXY_PORT};https=${TERMINAL_BROWSER_PROXY_HOST}:${TERMINAL_BROWSER_PROXY_PORT}`;
 const TERMINAL_BROWSER_PROXY_BYPASS_RULES = "<local>";
+const TERMINAL_BROWSER_TAB_UPDATE_THROTTLE_MS = 50;
 
 let terminalBrowserProxyEnabled = false;
 let terminalBrowserHeaderRules: TerminalBrowserHeaderRule[] = [];
@@ -473,6 +483,113 @@ function isNavigationAbortError(error: unknown): boolean {
   return message.includes("ERR_ABORTED") || message.includes("(-3)");
 }
 
+function getTerminalBrowserDeviceStateUpdateKey(
+  deviceState: TerminalBrowserDeviceState,
+): string {
+  const viewport = deviceState.viewport;
+  return [
+    deviceState.presetId,
+    deviceState.label,
+    deviceState.mobile ? "1" : "0",
+    viewport?.width ?? "",
+    viewport?.height ?? "",
+    viewport?.deviceScaleFactor ?? "",
+  ].join(":");
+}
+
+function getTerminalBrowserUpdateKey(update: TerminalBrowserUpdate): string {
+  return [
+    update.tabId,
+    update.browserGroupId,
+    update.url,
+    update.title,
+    update.canGoBack ? "1" : "0",
+    update.canGoForward ? "1" : "0",
+    update.loading ? "1" : "0",
+    update.cdpProxyAttached ? "1" : "0",
+    update.mcpActivityUntil ?? "",
+    update.devtoolsOpen ? "1" : "0",
+    getTerminalBrowserDeviceStateUpdateKey(update.deviceState),
+  ].join("\u001f");
+}
+
+function clearPendingTerminalBrowserTabUpdate(entry: TerminalBrowserEntry): void {
+  if (entry.pendingUpdateTimer) {
+    clearTimeout(entry.pendingUpdateTimer);
+    entry.pendingUpdateTimer = null;
+  }
+  entry.pendingUpdate = null;
+}
+
+function commitTerminalBrowserTabUpdate(
+  win: BrowserWindow,
+  entry: TerminalBrowserEntry,
+  update: TerminalBrowserUpdate,
+  updateKey: string,
+): void {
+  if (entry.lastSentUpdateKey === updateKey) {
+    clearPendingTerminalBrowserTabUpdate(entry);
+    return;
+  }
+  if (win.isDestroyed() || win.webContents.isDestroyed()) {
+    return;
+  }
+  if (entry.view.webContents.isDestroyed()) {
+    return;
+  }
+  entry.lastSentUpdateKey = updateKey;
+  entry.lastSentUpdateAt = Date.now();
+  win.webContents.send("terminal-browser:tab-updated", update);
+  scheduleTerminalBrowserTabsSave();
+}
+
+function queueTerminalBrowserTabUpdate(
+  win: BrowserWindow,
+  entry: TerminalBrowserEntry,
+  update: TerminalBrowserUpdate,
+  updateKey: string,
+): void {
+  if (entry.lastSentUpdateKey === updateKey) {
+    clearPendingTerminalBrowserTabUpdate(entry);
+    return;
+  }
+
+  const now = Date.now();
+  const elapsed = now - entry.lastSentUpdateAt;
+  const delay = Math.max(
+    0,
+    TERMINAL_BROWSER_TAB_UPDATE_THROTTLE_MS - elapsed,
+  );
+
+  if (delay === 0) {
+    clearPendingTerminalBrowserTabUpdate(entry);
+    commitTerminalBrowserTabUpdate(win, entry, update, updateKey);
+    return;
+  }
+
+  if (entry.pendingUpdate?.updateKey === updateKey) {
+    return;
+  }
+  entry.pendingUpdate = { update, updateKey };
+  if (entry.pendingUpdateTimer) {
+    return;
+  }
+  entry.pendingUpdateTimer = setTimeout(() => {
+    entry.pendingUpdateTimer = null;
+    const pendingUpdate = entry.pendingUpdate;
+    entry.pendingUpdate = null;
+    if (!pendingUpdate) {
+      return;
+    }
+    commitTerminalBrowserTabUpdate(
+      win,
+      entry,
+      pendingUpdate.update,
+      pendingUpdate.updateKey,
+    );
+  }, delay);
+}
+
 function sendTerminalBrowserTabUpdate(
   win: BrowserWindow,
   tabId: string,
@@ -499,8 +616,12 @@ function sendTerminalBrowserTabUpdate(
     devtoolsOpen: entry.devtoolsOpen,
     deviceState: getTerminalBrowserDeviceState(entry),
   };
-  win.webContents.send("terminal-browser:tab-updated", update);
-  scheduleTerminalBrowserTabsSave();
+  queueTerminalBrowserTabUpdate(
+    win,
+    entry,
+    update,
+    getTerminalBrowserUpdateKey(update),
+  );
 }
 
 function sendTerminalBrowserTabActivatedFromProxy(
@@ -601,7 +722,12 @@ function getOrCreateTerminalBrowserView(
           createTerminalBrowserPopupWindowOptions(win),
       };
     }
-    createTerminalBrowserTabFromPageOpen(win, safeUrl, entry.browserGroupId);
+    createTerminalBrowserTabFromPageOpen(
+      win,
+      safeUrl,
+      entry.browserGroupId,
+      tabId,
+    );
     return { action: "deny" };
   });
   view.webContents.on("did-create-window", (popupWindow) => {
@@ -625,6 +751,10 @@ function getOrCreateTerminalBrowserView(
     onDeviceDebuggerDetach: null,
     lastActiveAt: Date.now(),
     lastKnownUrl: "",
+    lastSentUpdateKey: null,
+    lastSentUpdateAt: 0,
+    pendingUpdate: null,
+    pendingUpdateTimer: null,
   };
 
   view.webContents.on("devtools-opened", () => {
@@ -661,6 +791,7 @@ function createTerminalBrowserTabFromPageOpen(
   win: BrowserWindow,
   url: string,
   browserGroupId: string,
+  openerTabId?: string,
 ): void {
   const tabId = `browser-tab-${randomUUID().slice(0, 8)}`;
   const view = getOrCreateTerminalBrowserView(win, tabId, { browserGroupId });
@@ -671,12 +802,15 @@ function createTerminalBrowserTabFromPageOpen(
 
   attachTerminalBrowser(win, tabId, view);
   entry.lastKnownUrl = url;
-  // Notify the renderer so the frontend tab bar picks up the new tab.
+  // Notify the renderer so the frontend tab bar picks up the new tab. Include
+  // the opener tab id so the panel can insert it to the right of the tab that
+  // spawned it, matching browser tab behavior.
   win.webContents.send("terminal-browser:tab-created-from-proxy", {
     tabId,
     browserGroupId: entry.browserGroupId,
     url,
     title: "",
+    openerTabId,
   });
   void view.webContents.loadURL(url).catch(() => {
     sendTerminalBrowserTabUpdate(win, tabId, entry, false);
@@ -764,6 +898,7 @@ function closeTerminalBrowserEntry(
   if (entry.attached) {
     win.contentView.removeChildView(entry.view);
   }
+  clearPendingTerminalBrowserTabUpdate(entry);
   detachTerminalBrowserDeviceDebugger(entry);
   terminalBrowserEntries.delete(key);
   clearTerminalBrowserAnnotation(key);
@@ -793,6 +928,7 @@ export function closeTerminalBrowsersForWindow(windowId: number): void {
       targetId: entry.targetId,
       browserGroupId: entry.browserGroupId,
     });
+    clearPendingTerminalBrowserTabUpdate(entry);
     detachTerminalBrowserDeviceDebugger(entry);
     entry.view.webContents.close();
   }

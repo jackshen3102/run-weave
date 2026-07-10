@@ -17,9 +17,69 @@ type MutableRef<T> = {
   current: T;
 };
 
+const SYNCHRONIZED_OUTPUT_START = "\u001b[?2026h";
+const SYNCHRONIZED_OUTPUT_END = "\u001b[?2026l";
+
+function wrapSynchronizedOutput(data: string): string {
+  return `${SYNCHRONIZED_OUTPUT_START}${data}${SYNCHRONIZED_OUTPUT_END}`;
+}
+
+function preserveTerminalFrame(
+  terminal: Terminal,
+  terminalSessionId: string,
+  terminalFrameRef: MutableRef<HTMLElement | null>,
+): () => void {
+  const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+  const rows = screen?.querySelector<HTMLElement>(
+    ".xterm-rows:not([data-terminal-frame-overlay])",
+  );
+  if (rows?.textContent) {
+    terminalFrameRef.current = rows.cloneNode(true) as HTMLElement;
+  }
+  const sourceRows = rows?.textContent ? rows : terminalFrameRef.current;
+  if (!screen || !sourceRows?.textContent) {
+    logTerminalPerf("terminal.frame.preserve.skipped", {
+      terminalSessionId,
+      hasScreen: Boolean(screen),
+      rowTextLength: rows?.textContent?.length ?? 0,
+    });
+    return () => undefined;
+  }
+
+  const overlay = sourceRows.cloneNode(true) as HTMLElement;
+  overlay.dataset.terminalFrameOverlay = "true";
+  overlay.setAttribute("aria-hidden", "true");
+  Object.assign(overlay.style, {
+    position: "absolute",
+    inset: "0",
+    zIndex: "4",
+    width: "100%",
+    height: "100%",
+    overflow: "hidden",
+    pointerEvents: "none",
+    backgroundColor: terminal.options.theme?.background ?? "#0b1220",
+  });
+  screen.appendChild(overlay);
+  logTerminalPerf("terminal.frame.preserved", {
+    terminalSessionId,
+    rowTextLength: sourceRows.textContent.length,
+  });
+
+  return () => {
+    overlay.remove();
+  };
+}
+
+function releaseTerminalFrameAfterPaint(release: () => void): void {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(release);
+  });
+}
+
 interface UseTerminalOutputStreamOptions {
   activeRef: MutableRef<boolean>;
   deferredOutputRef: MutableRef<string>;
+  deferredSnapshotRef: MutableRef<string | null>;
   hasDeferredOutputRef: MutableRef<boolean>;
   hasRenderedSnapshotRef: MutableRef<boolean>;
   lastInputSentAtRef: MutableRef<number | null>;
@@ -31,6 +91,7 @@ interface UseTerminalOutputStreamOptions {
   setTerminalAtBottom: Dispatch<SetStateAction<boolean>>;
   setTmuxScrollbackActive: Dispatch<SetStateAction<boolean>>;
   terminalRef: MutableRef<Terminal | null>;
+  terminalFrameRef: MutableRef<HTMLElement | null>;
   terminalSessionId: string;
   websocketContentVersionRef: MutableRef<number>;
 }
@@ -38,6 +99,7 @@ interface UseTerminalOutputStreamOptions {
 export function useTerminalOutputStream({
   activeRef,
   deferredOutputRef,
+  deferredSnapshotRef,
   hasDeferredOutputRef,
   hasRenderedSnapshotRef,
   lastInputSentAtRef,
@@ -49,6 +111,7 @@ export function useTerminalOutputStream({
   setTerminalAtBottom,
   setTmuxScrollbackActive,
   terminalRef,
+  terminalFrameRef,
   terminalSessionId,
   websocketContentVersionRef,
 }: UseTerminalOutputStreamOptions) {
@@ -70,15 +133,17 @@ export function useTerminalOutputStream({
     hasRenderedSnapshotRef.current = true;
     hasDeferredOutputRef.current = false;
     deferredOutputRef.current = "";
+    deferredSnapshotRef.current = null;
     requiresSnapshotRestoreRef.current = false;
-    terminal.reset();
-    if (!nextChunk) {
-      refreshTerminalViewportRef.current?.();
-      return;
-    }
 
+    const releaseTerminalFrame = preserveTerminalFrame(
+      terminal,
+      terminalSessionId,
+      terminalFrameRef,
+    );
+    terminal.reset();
     const renderStartedAt = performance.now();
-    terminal.write(nextChunk, () => {
+    terminal.write(wrapSynchronizedOutput(nextChunk), () => {
       logTerminalPerf("terminal.snapshot.rendered", {
         terminalSessionId,
         renderDurationMs: Number(
@@ -91,6 +156,7 @@ export function useTerminalOutputStream({
       setHasNewOutputBelow(false);
       setTmuxScrollbackActive(false);
       refreshTerminalViewportRef.current?.();
+      releaseTerminalFrameAfterPaint(releaseTerminalFrame);
     });
   });
 
@@ -106,6 +172,7 @@ export function useTerminalOutputStream({
       DEFERRED_OUTPUT_REPLAY_MAX_CHARS
     ) {
       deferredOutputRef.current = "";
+      deferredSnapshotRef.current = null;
       requiresSnapshotRestoreRef.current = true;
       return;
     }
@@ -115,16 +182,34 @@ export function useTerminalOutputStream({
 
   const replayDeferredOutput = useMemoizedFn(() => {
     const terminal = terminalRef.current;
+    const deferredSnapshot = deferredSnapshotRef.current;
     const deferredOutput = deferredOutputRef.current;
-    if (!terminal || !deferredOutput) {
+    if (
+      !terminal ||
+      (deferredSnapshot === null && deferredOutput.length === 0)
+    ) {
       return false;
     }
 
     deferredOutputRef.current = "";
+    deferredSnapshotRef.current = null;
     hasDeferredOutputRef.current = false;
 
+    if (deferredSnapshot !== null) {
+      renderTerminalSnapshot(deferredSnapshot);
+    }
+
+    if (!deferredOutput) {
+      return true;
+    }
+
+    const releaseTerminalFrame = preserveTerminalFrame(
+      terminal,
+      terminalSessionId,
+      terminalFrameRef,
+    );
     const renderStartedAt = performance.now();
-    terminal.write(deferredOutput, () => {
+    terminal.write(wrapSynchronizedOutput(deferredOutput), () => {
       logTerminalPerf("terminal.deferred-output.rendered", {
         terminalSessionId,
         renderDurationMs: Number(
@@ -133,6 +218,7 @@ export function useTerminalOutputStream({
         ...summarizeTerminalChunk(deferredOutput),
       });
       refreshTerminalViewportRef.current?.();
+      releaseTerminalFrameAfterPaint(releaseTerminalFrame);
     });
 
     return true;
@@ -141,15 +227,10 @@ export function useTerminalOutputStream({
   const onSnapshot = useMemoizedFn((data: string) => {
     websocketContentVersionRef.current += 1;
     if (!activeRef.current) {
-      if (terminalRef.current) {
-        renderTerminalSnapshot(data);
-        return;
-      }
-      if (data.length > 0) {
-        hasDeferredOutputRef.current = true;
-        deferredOutputRef.current = "";
-        requiresSnapshotRestoreRef.current = true;
-      }
+      deferredSnapshotRef.current = data;
+      deferredOutputRef.current = "";
+      hasDeferredOutputRef.current = true;
+      requiresSnapshotRestoreRef.current = false;
       return;
     }
 
@@ -189,31 +270,12 @@ export function useTerminalOutputStream({
       ...summarizeTerminalChunk(nextChunk),
     });
 
-    const terminal = terminalRef.current;
     if (!activeRef.current) {
-      if (
-        terminal &&
-        hasRenderedSnapshotRef.current &&
-        !hasDeferredOutputRef.current &&
-        !requiresSnapshotRestoreRef.current
-      ) {
-        const renderStartedAt = performance.now();
-        terminal.write(nextChunk, () => {
-          logTerminalPerf("terminal.background-output.rendered", {
-            terminalSessionId,
-            seq: outputSequence,
-            renderDurationMs: Number(
-              (performance.now() - renderStartedAt).toFixed(2),
-            ),
-            ...summarizeTerminalChunk(nextChunk),
-          });
-        });
-        return;
-      }
       markDeferredOutput(nextChunk);
       return;
     }
 
+    const terminal = terminalRef.current;
     if (!terminal) {
       return;
     }

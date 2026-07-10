@@ -1,0 +1,201 @@
+{
+  "workspace": {
+    "name": "browser-viewer",
+    "branch": "main",
+    "cwd": "~/Code/browser-hub/browser-viewer"
+  },
+  "terminalLines": [
+    { "tone": "muted", "text": "$ pnpm dev" },
+    { "tone": "accent", "text": "backend ready at http://127.0.0.1:5002" },
+    { "tone": "accent", "text": "frontend ready at http://127.0.0.1:5173" },
+    { "tone": "muted", "text": "" },
+    { "tone": "", "text": "Runweave Terminal Browser connected" },
+    { "tone": "success", "text": "✓ CDP proxy listening on 127.0.0.1:9225" },
+    { "tone": "", "text": "✓ 10 browser tabs restored" },
+    { "tone": "", "text": "✓ browser group scopes synchronized" },
+    { "tone": "muted", "text": "" },
+    { "tone": "muted", "text": "Waiting for terminal input…" }
+  ],
+  "tabs": [
+    {
+      "id": "docs",
+      "title": "Chrome tab strip research",
+      "url": "https://chromium.googlesource.com/chromium/src",
+      "groupColor": "#38bdf8",
+      "groupLabel": "research",
+      "mcp": true,
+      "loading": false
+    },
+    {
+      "id": "app",
+      "title": "Runweave local app",
+      "url": "http://127.0.0.1:5173/terminal/f77ed419",
+      "groupColor": "#34d399",
+      "groupLabel": "local",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "github",
+      "title": "browser-viewer pull requests",
+      "url": "https://github.com/runweave/browser-viewer/pulls",
+      "groupColor": "#a78bfa",
+      "groupLabel": "project",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "playwright",
+      "title": "Playwright documentation",
+      "url": "https://playwright.dev/docs/intro",
+      "groupColor": "#f59e0b",
+      "groupLabel": "research",
+      "mcp": false,
+      "loading": true
+    },
+    {
+      "id": "example",
+      "title": "Example Domain",
+      "url": "https://example.com",
+      "groupColor": "#fb7185",
+      "groupLabel": "manual",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "chromium",
+      "title": "Chromium tab layout source",
+      "url": "https://chromium.googlesource.com/chromium/src/+/main/chrome/browser/ui/views/tabs",
+      "groupColor": "#06b6d4",
+      "groupLabel": "research",
+      "mcp": true,
+      "loading": false
+    },
+    {
+      "id": "metrics",
+      "title": "Performance metrics dashboard",
+      "url": "https://example.com/metrics",
+      "groupColor": "#84cc16",
+      "groupLabel": "project",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "design",
+      "title": "Terminal Browser design notes",
+      "url": "https://example.com/design",
+      "groupColor": "#f472b6",
+      "groupLabel": "project",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "logs",
+      "title": "App Server event logs",
+      "url": "http://127.0.0.1:5002/system-monitor",
+      "groupColor": "#2dd4bf",
+      "groupLabel": "local",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "blank",
+      "title": "New Tab",
+      "url": "about:blank",
+      "groupColor": "#64748b",
+      "groupLabel": "manual",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "help",
+      "title": "Chrome Help — Manage tabs",
+      "url": "https://support.google.com/chrome/answer/2391819",
+      "groupColor": "#60a5fa",
+      "groupLabel": "research",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "issues",
+      "title": "Terminal Browser issues",
+      "url": "https://github.com/runweave/browser-viewer/issues",
+      "groupColor": "#ef4444",
+      "groupLabel": "project",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "cdp",
+      "title": "CDP target list",
+      "url": "http://127.0.0.1:9225/json/list",
+      "groupColor": "#10b981",
+      "groupLabel": "agent",
+      "mcp": true,
+      "loading": false
+    },
+    {
+      "id": "trace",
+      "title": "Playwright trace viewer",
+      "url": "http://127.0.0.1:9323",
+      "groupColor": "#e879f9",
+      "groupLabel": "agent",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "spec",
+      "title": "Terminal Browser test cases",
+      "url": "https://example.com/testing",
+      "groupColor": "#0ea5e9",
+      "groupLabel": "project",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "event",
+      "title": "Event Center architecture",
+      "url": "https://example.com/event-center",
+      "groupColor": "#f97316",
+      "groupLabel": "project",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "profile",
+      "title": "Browser profile state",
+      "url": "https://example.com/profile",
+      "groupColor": "#c084fc",
+      "groupLabel": "local",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "network",
+      "title": "Network topology",
+      "url": "https://example.com/network",
+      "groupColor": "#14b8a6",
+      "groupLabel": "project",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "release",
+      "title": "Runtime release notes",
+      "url": "https://example.com/releases",
+      "groupColor": "#eab308",
+      "groupLabel": "project",
+      "mcp": false,
+      "loading": false
+    },
+    {
+      "id": "status",
+      "title": "Backend status",
+      "url": "http://127.0.0.1:5002/health",
+      "groupColor": "#22c55e",
+      "groupLabel": "local",
+      "mcp": false,
+      "loading": false
+    }
+  ]
+}

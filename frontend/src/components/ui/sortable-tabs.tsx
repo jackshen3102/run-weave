@@ -18,6 +18,12 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
 
+const POINTER_SENSOR_OPTIONS = {
+  activationConstraint: {
+    distance: 8,
+  },
+} as const;
+
 export interface SortableTabRenderProps {
   isDragging: boolean;
 }
@@ -65,13 +71,7 @@ export function SortableTabs<T>({
     [items, getItemId],
   );
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, POINTER_SENSOR_OPTIONS));
 
   const handleDragStart = useMemoizedFn((event: DragStartEvent) => {
     const index = ids.indexOf(String(event.active.id));

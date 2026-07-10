@@ -75,6 +75,10 @@ export async function createTerminalSession(
   token: string,
   payload: CreateTerminalSessionRequest,
 ): Promise<CreateTerminalSessionResponse> {
+  void window.electronAPI?.checkAppServer?.().catch(() => {
+    // Health prompts are advisory; terminal creation must continue.
+  });
+
   return requestJson<CreateTerminalSessionResponse>(
     apiBase,
     "/api/terminal/session",
