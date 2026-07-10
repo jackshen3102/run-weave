@@ -1,5 +1,5 @@
 import { useMemoizedFn } from "ahooks";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal } from "@xterm/xterm";
 import {
@@ -105,6 +105,8 @@ export function TerminalSurface({
   const imeCompositionEndedAtRef = useRef<number | null>(null);
   const hasDeferredOutputRef = useRef(false);
   const deferredOutputRef = useRef("");
+  const deferredSnapshotRef = useRef<string | null>(null);
+  const terminalFrameRef = useRef<HTMLElement | null>(null);
   const requiresSnapshotRestoreRef = useRef(false);
   const hasRenderedSnapshotRef = useRef(false);
   const restoreSnapshotRequestRef = useRef(0);
@@ -146,6 +148,7 @@ export function TerminalSurface({
   } = useTerminalOutputStream({
     activeRef,
     deferredOutputRef,
+    deferredSnapshotRef,
     hasDeferredOutputRef,
     hasRenderedSnapshotRef,
     lastInputSentAtRef,
@@ -157,6 +160,7 @@ export function TerminalSurface({
     setTerminalAtBottom,
     setTmuxScrollbackActive,
     terminalRef,
+    terminalFrameRef,
     terminalSessionId,
     websocketContentVersionRef,
   });
@@ -383,8 +387,14 @@ export function TerminalSurface({
     },
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     activeRef.current = active;
+    const rows = terminalRef.current?.element?.querySelector<HTMLElement>(
+      ".xterm-rows:not([data-terminal-frame-overlay])",
+    );
+    if (rows?.textContent) {
+      terminalFrameRef.current = rows.cloneNode(true) as HTMLElement;
+    }
   }, [active]);
 
   useEffect(() => {
@@ -482,6 +492,7 @@ export function TerminalSurface({
   useTerminalSnapshotRestore({
     active,
     apiBase,
+    deferredSnapshotRef,
     hasDeferredOutputRef,
     hasRenderedSnapshotRef,
     onAuthExpiredRef,

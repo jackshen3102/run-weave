@@ -69,6 +69,37 @@ interface TerminalWorkspaceActions {
 export type TerminalWorkspaceStore = TerminalWorkspaceState &
   TerminalWorkspaceActions;
 
+export const TERMINAL_PROJECT_HAS_BELL = 1 << 0;
+export const TERMINAL_PROJECT_HAS_COMPLETION = 1 << 1;
+export const TERMINAL_PROJECT_IS_WORKING = 1 << 2;
+
+export function selectTerminalProjectStatusById(
+  state: TerminalWorkspaceStore,
+): Record<string, number> {
+  const statusByProjectId: Record<string, number> = {};
+
+  for (const session of state.sessions) {
+    let status = statusByProjectId[session.projectId] ?? 0;
+    if (state.bellMarkers[session.terminalSessionId]) {
+      status |= TERMINAL_PROJECT_HAS_BELL;
+    }
+    if (state.completionMarkers[session.terminalSessionId]) {
+      status |= TERMINAL_PROJECT_HAS_COMPLETION;
+    }
+    if (
+      state.terminalStateBySessionId[session.terminalSessionId]?.state ===
+      "agent_running"
+    ) {
+      status |= TERMINAL_PROJECT_IS_WORKING;
+    }
+    if (status !== 0) {
+      statusByProjectId[session.projectId] = status;
+    }
+  }
+
+  return statusByProjectId;
+}
+
 function resolveNext<T>(next: StateUpdater<T>, current: T): T {
   return typeof next === "function"
     ? (next as (current: T) => T)(current)

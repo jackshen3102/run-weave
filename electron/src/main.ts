@@ -229,6 +229,7 @@ function isSystemMonitorSenderAllowed(senderUrl: string): boolean {
 function createWindow(options?: {
   hideOnClose?: boolean;
   initialPath?: string;
+  onReadyToShow?: (win: BrowserWindow) => void;
 }): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
@@ -246,6 +247,7 @@ function createWindow(options?: {
 
   win.once("ready-to-show", () => {
     win.show();
+    options?.onReadyToShow?.(win);
   });
   win.once("closed", () => {
     closeTerminalBrowsersForWindow(win.id);
@@ -741,6 +743,13 @@ async function stopPackagedBackendRuntimeForRestart(): Promise<void> {
 async function checkAppServerForPackagedBackend(
   env: NodeJS.ProcessEnv,
 ): Promise<Awaited<ReturnType<typeof checkAppServerAvailability>>> {
+  return await checkAndNotifyAppServerAvailability(env);
+}
+
+async function checkAndNotifyAppServerAvailability(
+  env: NodeJS.ProcessEnv,
+  parentWindow?: BrowserWindow | null,
+): Promise<Awaited<ReturnType<typeof checkAppServerAvailability>>> {
   const connection = await checkAppServerAvailability({
     env,
     logger: desktopIncidentLogger ?? undefined,
@@ -751,16 +760,32 @@ async function checkAppServerForPackagedBackend(
   }
 
   if (!appServerUnavailableDialogShown) {
-    appServerUnavailableDialogShown = true;
-    void dialog.showMessageBox({
-      type: "warning",
-      title: "App Server",
-      message: "App Server 没有启动",
-      detail: "Runweave 不会自动安装、启动或重启 App Server。",
-    });
+    showAppServerUnavailableDialog(parentWindow);
   }
 
   return null;
+}
+
+function showAppServerUnavailableDialog(parentWindow?: BrowserWindow | null): void {
+  appServerUnavailableDialogShown = true;
+  const options: Electron.MessageBoxOptions = {
+    type: "warning",
+    buttons: ["OK"],
+    title: "App Server",
+    message: "App Server 没有启动",
+    detail: "Runweave 不会自动安装、启动或重启 App Server。",
+  };
+  if (parentWindow && !parentWindow.isDestroyed()) {
+    parentWindow.show();
+    parentWindow.focus();
+    setTimeout(() => {
+      if (!parentWindow.isDestroyed()) {
+        void dialog.showMessageBox(parentWindow, options);
+      }
+    }, 100);
+    return;
+  }
+  void dialog.showMessageBox(options);
 }
 
 async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionState> {
@@ -885,6 +910,16 @@ function registerPackagedBackendHandlers(): void {
       return await reloadLocalRuntime();
     },
   );
+
+  ipcMain.handle("viewer:check-app-server", async (event): Promise<boolean> => {
+    const parentWindow = BrowserWindow.fromWebContents(event.sender);
+    return (
+      (await checkAndNotifyAppServerAvailability(
+        process.env,
+        parentWindow,
+      )) !== null
+    );
+  });
 }
 
 function registerCdpProxyHandlers(): void {
@@ -1086,7 +1121,12 @@ if (hasSingleInstanceLock) {
         ),
       );
 
-      mainWindow = createWindow({ hideOnClose: true });
+      mainWindow = createWindow({
+        hideOnClose: true,
+        onReadyToShow: (win) => {
+          void checkAndNotifyAppServerAvailability(process.env, win);
+        },
+      });
 
       createTray(mainWindow, {
         onOpenSystemMonitor: openSystemMonitor,

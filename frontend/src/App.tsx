@@ -66,6 +66,7 @@ declare global {
       ) => (() => void) | void;
       restartPackagedBackend?: () => Promise<PackagedBackendConnectionState>;
       reloadRuntime?: () => Promise<PackagedBackendConnectionState>;
+      checkAppServer?: () => Promise<boolean>;
       openExternal?: (url: string) => Promise<void>;
       getRuntimeStats?: () => Promise<RuntimeStatsSnapshot>;
       getSystemMonitorSnapshot?: () => Promise<SystemMonitorSnapshot>;
@@ -129,6 +130,7 @@ declare global {
           browserGroupId: string;
           url: string;
           title: string;
+          openerTabId?: string;
         }) => void,
       ) => () => void;
       onTerminalBrowserTabUpdated?: (

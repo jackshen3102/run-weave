@@ -7,6 +7,7 @@ type MutableRef<T> = { current: T };
 interface UseTerminalSnapshotRestoreArgs {
   active: boolean;
   apiBase: string;
+  deferredSnapshotRef: MutableRef<string | null>;
   hasDeferredOutputRef: MutableRef<boolean>;
   hasRenderedSnapshotRef: MutableRef<boolean>;
   onAuthExpiredRef: MutableRef<(() => void) | undefined>;
@@ -27,6 +28,7 @@ interface UseTerminalSnapshotRestoreArgs {
 export function useTerminalSnapshotRestore({
   active,
   apiBase,
+  deferredSnapshotRef,
   hasDeferredOutputRef,
   hasRenderedSnapshotRef,
   onAuthExpiredRef,
@@ -48,28 +50,6 @@ export function useTerminalSnapshotRestore({
     let cancelled = false;
     const requestId = restoreSnapshotRequestRef.current + 1;
     restoreSnapshotRequestRef.current = requestId;
-
-    if (
-      hasRenderedSnapshotRef.current &&
-      !hasDeferredOutputRef.current &&
-      !requiresSnapshotRestoreRef.current
-    ) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (hasRenderedSnapshotRef.current && !requiresSnapshotRestoreRef.current) {
-      if (replayDeferredOutput()) {
-        return () => {
-          cancelled = true;
-        };
-      }
-      hasDeferredOutputRef.current = false;
-      return () => {
-        cancelled = true;
-      };
-    }
 
     const restoreSnapshot = async (attempt: number): Promise<void> => {
       const websocketContentVersionAtRequest =
@@ -114,6 +94,31 @@ export function useTerminalSnapshotRestore({
       }
     };
 
+    if (
+      hasRenderedSnapshotRef.current &&
+      !hasDeferredOutputRef.current &&
+      !requiresSnapshotRestoreRef.current
+    ) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (
+      !requiresSnapshotRestoreRef.current &&
+      (hasRenderedSnapshotRef.current || deferredSnapshotRef.current !== null)
+    ) {
+      if (replayDeferredOutput()) {
+        return () => {
+          cancelled = true;
+        };
+      }
+      hasDeferredOutputRef.current = false;
+      return () => {
+        cancelled = true;
+      };
+    }
+
     void restoreSnapshot(0);
 
     return () => {
@@ -122,6 +127,7 @@ export function useTerminalSnapshotRestore({
   }, [
     active,
     apiBase,
+    deferredSnapshotRef,
     hasDeferredOutputRef,
     hasRenderedSnapshotRef,
     onAuthExpiredRef,

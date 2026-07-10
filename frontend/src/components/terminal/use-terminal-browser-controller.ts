@@ -425,9 +425,9 @@ export function useTerminalBrowserController({
     }
     void syncElectronTabs();
     return window.electronAPI?.onTerminalBrowserTabCreatedFromProxy?.(
-      ({ tabId, browserGroupId, url, title }) => {
+      ({ tabId, browserGroupId, url, title, openerTabId }) => {
         loadedUrlByTabRef.current[tabId] = url;
-        addProxyBrowserTab(tabId, browserGroupId, url, title);
+        addProxyBrowserTab(tabId, browserGroupId, url, title, openerTabId);
       },
     );
   }, [isElectron, addProxyBrowserTab, syncElectronTabs]);

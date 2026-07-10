@@ -1,8 +1,6 @@
-import type { CSSProperties } from "react";
 import type {
   TerminalProjectListItem,
   TerminalSessionListItem,
-  TerminalState,
 } from "@runweave/shared";
 import {
   Activity,
@@ -11,31 +9,18 @@ import {
   History,
   Home,
   MoreHorizontal,
-  Pencil,
-  Plus,
-  Trash2,
 } from "lucide-react";
 import type { ConnectionConfig } from "../../features/connection/types";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { Button } from "../ui/button";
-import { ShimmerText } from "../ui/shimmer-text";
-import {
-  SortableTabs,
-  type SortableTabRenderProps,
-} from "../ui/sortable-tabs";
 import { ConnectionSwitcher } from "../connection-switcher";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "../ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { TerminalProjectTabBar } from "./terminal-project-tab-bar";
 import { TerminalQuickInputPopover } from "./terminal-quick-input-popover";
 
 interface TerminalWorkspaceHeaderProps {
@@ -49,12 +34,7 @@ interface TerminalWorkspaceHeaderProps {
   onSelectConnection?: (connectionId: string) => void;
   onOpenConnectionManager?: () => void;
   onNavigateHome?: () => void;
-  visibleProjects: TerminalProjectListItem[];
   activeProjectId: string | null;
-  sessions: TerminalSessionListItem[];
-  completionMarkers: Record<string, boolean | undefined>;
-  bellMarkers: Record<string, boolean | undefined>;
-  terminalStateBySessionId: Record<string, TerminalState | undefined>;
   onReorderProjects: (fromIndex: number, toIndex: number) => void;
   onSelectProject: (projectId: string) => void;
   requestEditProject: (projectId?: string) => void;
@@ -82,12 +62,7 @@ export function TerminalWorkspaceHeader({
   onSelectConnection,
   onOpenConnectionManager,
   onNavigateHome,
-  visibleProjects,
   activeProjectId,
-  sessions,
-  completionMarkers,
-  bellMarkers,
-  terminalStateBySessionId,
   onReorderProjects,
   onSelectProject,
   requestEditProject,
@@ -128,122 +103,15 @@ export function TerminalWorkspaceHeader({
           className="h-6 shrink-0 rounded-md border border-slate-800 bg-slate-900 px-2 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-slate-100"
         />
       ) : null}
-      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <SortableTabs
-          items={visibleProjects}
-          getItemId={(project) => project.projectId}
-          onReorder={onReorderProjects}
-          className="flex min-w-0 items-center gap-1"
-          renderTab={(
-            project: TerminalProjectListItem,
-            sortProps: SortableTabRenderProps,
-          ) => {
-            const isActive = project.projectId === activeProjectId;
-            const hasBell = sessions.some(
-              (s) =>
-                s.projectId === project.projectId &&
-                bellMarkers[s.terminalSessionId],
-            );
-            const hasCompletion = sessions.some(
-              (s) =>
-                s.projectId === project.projectId &&
-                completionMarkers[s.terminalSessionId],
-            );
-            const isWorking = sessions.some(
-              (s) =>
-                s.projectId === project.projectId &&
-                terminalStateBySessionId[s.terminalSessionId]?.state ===
-                  "agent_running",
-            );
-            return (
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-pressed={isActive}
-                    className={[
-                      "inline-flex h-6 shrink-0 items-center gap-2 rounded-md border px-3 text-xs transition-colors",
-                      sortProps.isDragging
-                        ? "border-sky-500/60 bg-sky-500/20 text-slate-50 opacity-90"
-                        : isActive
-                          ? "border-sky-700/70 bg-slate-800 text-slate-50 shadow-[inset_0_1px_0_rgba(148,163,184,0.18)]"
-                          : "border-slate-800 bg-slate-900/90 text-slate-200 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-100",
-                    ].join(" ")}
-                    onClick={() => {
-                      onSelectProject(project.projectId);
-                    }}
-                    title={project.name}
-                  >
-                    {isWorking ? (
-                      <ShimmerText
-                        className="max-w-[160px] truncate shimmer-invert"
-                        style={{
-                          "--shimmer-duration": "4000",
-                          "--shimmer-repeat-delay": "300",
-                        } as CSSProperties}
-                      >
-                        {project.name}
-                      </ShimmerText>
-                    ) : (
-                      <span className="max-w-[160px] truncate">
-                        {project.name}
-                      </span>
-                    )}
-                    <span
-                      aria-hidden="true"
-                      className={[
-                        "h-1.5 w-1.5 shrink-0 rounded-full",
-                        hasBell
-                          ? "bg-amber-400"
-                          : hasCompletion
-                            ? "bg-emerald-400"
-                            : "bg-transparent",
-                      ].join(" ")}
-                    />
-                  </button>
-                </ContextMenuTrigger>
-                {!isMobileMonitor ? (
-                  <ContextMenuContent className="w-44">
-                    <ContextMenuItem
-                      onSelect={() => {
-                        onSelectProject(project.projectId);
-                        requestEditProject(project.projectId);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                      Edit
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={() => {
-                        onSelectProject(project.projectId);
-                        requestDeleteProject(project);
-                      }}
-                      className="text-rose-400 focus:text-rose-400"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                ) : null}
-              </ContextMenu>
-            );
-          }}
-        />
-        {!isMobileMonitor ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={loading}
-            aria-label="New Project"
-            title="New Project"
-            className="h-6 w-8 shrink-0 rounded-md border border-slate-800 bg-slate-900/90 px-0 text-slate-300 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-100"
-            onClick={requestCreateProject}
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        ) : null}
-      </div>
+      <TerminalProjectTabBar
+        isMobileMonitor={isMobileMonitor}
+        loading={loading}
+        onReorderProjects={onReorderProjects}
+        onRequestCreateProject={requestCreateProject}
+        onRequestDeleteProject={requestDeleteProject}
+        onRequestEditProject={requestEditProject}
+        onSelectProject={onSelectProject}
+      />
       {!isMobileMonitor ? (
         <TerminalQuickInputPopover
           apiBase={apiBase}

@@ -102,6 +102,7 @@ interface TerminalPreviewStore {
     browserGroupId: string | undefined,
     url: string,
     title: string,
+    openerTabId?: string,
   ) => void;
   replaceBrowserTabs: (
     tabs: TerminalBrowserTabState[],
@@ -203,6 +204,26 @@ function createUniqueBrowserTabState(
   return nextTab;
 }
 
+// Insert a new tab immediately to the right of the anchor tab, matching browser
+// behavior where an opened tab appears next to the one that spawned it. Falls
+// back to appending at the end when the anchor is missing (e.g. agent-created
+// tabs with no DOM opener).
+function insertTabAfter(
+  tabs: TerminalBrowserTabState[],
+  anchorId: string | undefined,
+  newTab: TerminalBrowserTabState,
+): TerminalBrowserTabState[] {
+  const anchorIndex = anchorId
+    ? tabs.findIndex((tab) => tab.id === anchorId)
+    : -1;
+  if (anchorIndex === -1) {
+    return [...tabs, newTab];
+  }
+  const nextTabs = [...tabs];
+  nextTabs.splice(anchorIndex + 1, 0, newTab);
+  return nextTabs;
+}
+
 function labelBrowserUrl(url: string): string {
   if (!url || url === "about:blank") {
     return DEFAULT_BROWSER_TAB_TITLE;
@@ -223,6 +244,52 @@ function labelBrowserUrl(url: string): string {
 
 function normalizeBrowserTabUrl(url: string): string {
   return url === "about:blank" ? "" : url;
+}
+
+function sameBrowserDeviceState(
+  current: TerminalBrowserDeviceState,
+  next: TerminalBrowserDeviceState,
+): boolean {
+  const currentViewport = current.viewport;
+  const nextViewport = next.viewport;
+  const sameViewport =
+    currentViewport === nextViewport ||
+    (currentViewport !== null &&
+      nextViewport !== null &&
+      currentViewport.width === nextViewport.width &&
+      currentViewport.height === nextViewport.height &&
+      currentViewport.deviceScaleFactor === nextViewport.deviceScaleFactor);
+  return (
+    current.presetId === next.presetId &&
+    current.label === next.label &&
+    current.mobile === next.mobile &&
+    sameViewport
+  );
+}
+
+function hasBrowserTabChanges(
+  tab: TerminalBrowserTabState,
+  updates: Partial<TerminalBrowserTabState>,
+): boolean {
+  for (const key of Object.keys(updates) as Array<
+    keyof TerminalBrowserTabState
+  >) {
+    if (key === "deviceState") {
+      const nextDeviceState = updates.deviceState;
+      if (
+        nextDeviceState === undefined ||
+        !sameBrowserDeviceState(tab.deviceState, nextDeviceState)
+      ) {
+        return true;
+      }
+      continue;
+    }
+    const nextValue = updates[key];
+    if (!Object.is(tab[key], nextValue)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const DEFAULT_BROWSER_TAB = createBrowserTabState();
@@ -432,7 +499,11 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
       const nextTab = createUniqueBrowserTabState(state.browser.tabs, url);
       return {
         browser: {
-          tabs: [...state.browser.tabs, nextTab],
+          tabs: insertTabAfter(
+            state.browser.tabs,
+            state.browser.activeTabId,
+            nextTab,
+          ),
           activeTabId: nextTab.id,
         },
       };
@@ -443,6 +514,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
     browserGroupId: string | undefined,
     url: string,
     title: string,
+    openerTabId?: string,
   ) => {
     set((state: TerminalPreviewStore) => {
       if (state.browser.tabs.some((tab) => tab.id === tabId)) {
@@ -472,7 +544,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
       };
       return {
         browser: {
-          tabs: [...state.browser.tabs, nextTab],
+          tabs: insertTabAfter(state.browser.tabs, openerTabId, nextTab),
           activeTabId: nextTab.id,
         },
       };
@@ -560,14 +632,28 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
     tabId: string,
     updates: Partial<TerminalBrowserTabState>,
   ) => {
-    set((state: TerminalPreviewStore) => ({
-      browser: {
-        ...state.browser,
-        tabs: state.browser.tabs.map((tab) =>
-          tab.id === tabId ? { ...tab, ...updates } : tab,
-        ),
-      },
-    }));
+    set((state: TerminalPreviewStore) => {
+      let changed = false;
+      const tabs = state.browser.tabs.map((tab) => {
+        if (tab.id !== tabId) {
+          return tab;
+        }
+        if (!hasBrowserTabChanges(tab, updates)) {
+          return tab;
+        }
+        changed = true;
+        return { ...tab, ...updates };
+      });
+      if (!changed) {
+        return state;
+      }
+      return {
+        browser: {
+          ...state.browser,
+          tabs,
+        },
+      };
+    });
   },
 });
 

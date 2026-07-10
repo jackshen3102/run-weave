@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke(
       "viewer:reload-runtime",
     ) as Promise<PackagedBackendConnectionState>,
+  checkAppServer: () =>
+    ipcRenderer.invoke("viewer:check-app-server") as Promise<boolean>,
   openExternal: (url: string) =>
     ipcRenderer.invoke("viewer:open-external", url),
   getRuntimeStats: () =>
@@ -166,6 +168,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       browserGroupId: string;
       url: string;
       title: string;
+      openerTabId?: string;
     }) => void,
   ) => {
     const wrapped = (
@@ -175,6 +178,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
         browserGroupId: string;
         url: string;
         title: string;
+        openerTabId?: string;
       },
     ) => {
       listener(data);
