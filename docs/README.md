@@ -72,6 +72,7 @@
 | 本地客户端更新测试                       | testing/runweave-local-client-update-test-cases.md                                 |
 | Terminal Browser CDP/MCP 测试            | testing/terminal-browser-cdp-mcp-test-cases.md                                     |
 | Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md                              |
+| Terminal Browser 自适应多 Tab 测试       | testing/terminal-browser-adaptive-tabs-test-cases.md                               |
 | 终端回归（Vim）                          | testing/runbooks/terminal-vim.md                                                   |
 | Explorer Quick Search 回归               | testing/runbooks/explorer-quick-search.md                                          |
 | Web Terminal 状态查询回归                | testing/runbooks/status-lookup-ui.md                                               |

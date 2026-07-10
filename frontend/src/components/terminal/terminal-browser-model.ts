@@ -1,5 +1,5 @@
 import type { TerminalBrowserDeviceState } from "@runweave/shared";
-import { browserTabLabel } from "./terminal-browser-tabs";
+import { browserTabLabel } from "./terminal-browser-tab-utils";
 
 export interface ElectronBrowserSnapshot {
   url: string;

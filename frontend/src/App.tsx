@@ -76,6 +76,7 @@ declare global {
         url: string,
       ) => Promise<TerminalBrowserSnapshot>;
       terminalBrowserListTabs?: () => Promise<TerminalBrowserTabSnapshot[]>;
+      terminalBrowserReorderTabs?: (orderedTabIds: string[]) => Promise<void>;
       terminalBrowserReload?: (tabId: string) => Promise<TerminalBrowserSnapshot>;
       terminalBrowserStop?: (tabId: string) => Promise<void>;
       terminalBrowserGoBack?: (tabId: string) => Promise<TerminalBrowserSnapshot>;
