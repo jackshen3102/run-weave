@@ -93,12 +93,12 @@ http://127.0.0.1:6188/?tabs=10&width=420&active=4&prototypeControls=1
 
 ## 冻结记录
 
-- 最终采用的交互：用户于 2026-07-10 初步确认原型方向；按本 README 的 active 保真、inactive 分级降噪、minimum 后 overflow、Overview 全量找回和关闭布局稳定进入实施计划。
+- 最终采用的交互：用户于 2026-07-10 初步确认原型方向；按本 README 的 active 保真、inactive 分级降噪、minimum 后 overflow、Overview 全量找回和关闭布局稳定进入产品实现。
 - 放弃的方向：当前 equal-shrink + hidden overflow；只恢复 76px minimum + 横向滚动；只做尾部隐藏但不提供 overview。
 - 产品核心功能清单是否已确认：已确认并进入产品；真实产品验收固定为 preferred 180px、active minimum 80px、inactive minimum 44px、gap 4px 和 touch / pen 1.8 秒解冻。
 - 原型辅助功能清单是否已确认：已明确不进入产品。
 - 最终截图：`prototype-preview.png`（Playwright，1440 × 900，420px sidecar + 10 tabs）。
-- 对应实施计划：`docs/plans/2026-07-10-terminal-browser-adaptive-tabs.md`。
+- 对应权威文档：`docs/architecture/terminal-code-preview.md` 与 `docs/testing/terminal-browser-adaptive-tabs-test-cases.md`。
 - 实施结果：Renderer 自适应布局、Overview、关闭冻结、键盘与拖拽，以及 Electron 顺序持久化已于 2026-07-10 完成。
 - 冻结时间：2026-07-10。
 
@@ -106,14 +106,14 @@ http://127.0.0.1:6188/?tabs=10&width=420&active=4&prototypeControls=1
 
 - 这个原型不连接真实后端 API、Electron IPC、CDP Proxy 或 WebContentsView。
 - 这个原型不导入生产源码，不能证明生产状态/持久化契约已经存在。
-- URL 参数和 prototype helper 只用于演示，不进入实施计划。
+- URL 参数和 prototype helper 只用于演示，不进入产品实现。
 - 原型中的 width token 与 touch timer 已由真实产品 Playwright / Electron 行为验收固定；原型仍只保留为历史决策资产。
 - 原型阶段只调整 `docs/prototypes/terminal-browser-adaptive-tabs/`，不修改产品 tab UI。
 
-## 实施计划衔接
+## 产品文档衔接
 
 - 原型表达的产品行为：active 保真、inactive 分级降噪、minimum 后 overflow、overview 全量找回、关闭布局稳定。
-- 需要进入产品实现的核心功能：README“产品核心功能”表中的全部条目。
+- 已进入产品实现的核心功能：README“产品核心功能”表中的全部条目。
 - 不进入产品实现的原型辅助功能：URL 参数、helper、mock terminal、mock page。
 - 需要检查的现有代码：`terminal-browser-tabs.tsx`、`sortable-tabs.tsx`、`use-terminal-browser-controller.ts`、`preview-store.ts`、`electron/src/terminal-browser-view.ts`。
 - 可能涉及的数据结构：前端无需新增 tab 主模型字段；实现 close freeze/overflow 可使用局部 UI 状态；reorder 持久化可能需要 Electron IPC。

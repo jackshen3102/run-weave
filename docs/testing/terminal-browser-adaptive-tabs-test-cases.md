@@ -1,6 +1,6 @@
 # Terminal Browser 自适应多 Tab 测试案例
 
-本文档是 `docs/plans/2026-07-10-terminal-browser-adaptive-tabs.md` 的 Agent Team 可追溯验收来源。浏览器行为必须使用 `$playwright-cli` 取证；桌面应用启动、重启和窗口操作使用 `$computer-use`。typecheck/lint 只是前置门禁，不能替代行为验收。
+本文档是 Terminal Browser 自适应多 Tab 行为的 Agent Team 可追溯验收来源，稳定事实以 `docs/architecture/terminal-code-preview.md` 为准。浏览器行为必须使用 `$playwright-cli` 取证；桌面应用启动、重启和窗口操作使用 `$computer-use`。typecheck/lint 只是前置门禁，不能替代行为验收。
 
 ## Agent Team 解析格式
 
