@@ -53,10 +53,6 @@ export function useTerminalConnection(params: {
   onAuthExpired?: () => void;
   onSnapshot?: (data: string) => void;
   onOutput?: (data: string) => void;
-  onMetadata?: (metadata: {
-    cwd: string;
-    activeCommand: string | null;
-  }) => void;
   includeSnapshot?: boolean;
 }) {
   const {
@@ -66,7 +62,6 @@ export function useTerminalConnection(params: {
     onAuthExpired,
     onSnapshot,
     onOutput,
-    onMetadata,
     includeSnapshot = true,
   } = params;
   const socketRef = useRef<WebSocket | null>(null);
@@ -85,7 +80,6 @@ export function useTerminalConnection(params: {
   // Keep onOutput in a ref so it never needs to be in the effect's dep array.
   const onSnapshotRef = useRef(onSnapshot);
   const onOutputRef = useRef(onOutput);
-  const onMetadataRef = useRef(onMetadata);
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
@@ -95,10 +89,6 @@ export function useTerminalConnection(params: {
   useEffect(() => {
     onOutputRef.current = onOutput;
   }, [onOutput]);
-  useEffect(() => {
-    onMetadataRef.current = onMetadata;
-  }, [onMetadata]);
-
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("connecting");
   const [terminalStatus, setTerminalStatus] =
@@ -319,10 +309,6 @@ export function useTerminalConnection(params: {
               logTerminalPerf("ws.message.metadata", {
                 terminalSessionId,
                 seq: inboundSequenceRef.current,
-                cwd: parsed.cwd,
-                activeCommand: parsed.activeCommand,
-              });
-              onMetadataRef.current?.({
                 cwd: parsed.cwd,
                 activeCommand: parsed.activeCommand,
               });

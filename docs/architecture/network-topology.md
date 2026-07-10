@@ -21,8 +21,8 @@ Runweave 当前由三条并行链路组成：
 ## 核心链路（概念级）
 
 - **登录与终端会话**：HTTP 登录 -> 创建/查询/删除终端 session。
-- **终端实时交互**：`/ws/terminal` 负责输入、输出、状态回执与历史补齐。
-- **全局终端事件**：`/ws/terminal-events` 负责跨页面同步终端状态事件。
+- **终端实时交互**：`/ws/terminal` 按 `terminalSessionId` 服务已挂载 xterm 的输入、输出、连接状态回执与历史补齐。
+- **全局终端事件**：每个客户端通过一条 `/ws/terminal-events` 接收 Project、Session、Panel、TerminalState、completion、bell 与 session metadata 事件，再按 `projectId` / `terminalSessionId` 分发到对应界面。
 
 ## 关键边界
 

@@ -1,0 +1,982 @@
+{
+  "meta": {
+    "title": "Project · Terminal · xterm 统一事件架构",
+    "subtitle": "Web / Electron · App · Backend · PTY / tmux · Event Center",
+    "baseline": "main@41e2923",
+    "date": "2026-07-11",
+    "scope": "描述统一事件实现后的现状，不做后续建议或性能结论"
+  },
+  "views": [
+    {
+      "id": "overview",
+      "label": "总览",
+      "eyebrow": "CURRENT ARCHITECTURE",
+      "title": "同一组 Project / Terminal Session，两个客户端视图，三条运行通道",
+      "description": "Web/Electron 与 App 共享 backend 的 Project / Terminal Session 主数据；xterm、Runtime 与 App Server ThreadRef 分别处在渲染、进程和状态投影层。"
+    },
+    {
+      "id": "input",
+      "label": "输入链路",
+      "eyebrow": "INPUT → OUTPUT",
+      "title": "输入法、xterm 与 composer 的文本如何进入同一个 shell / Agent",
+      "description": "输入法预编辑停留在浏览器；最终提交文本进入 terminal WebSocket，composer 则使用 input REST。进入 runtime 后，输出都回到 session 专属 terminal WebSocket。"
+    },
+    {
+      "id": "events",
+      "label": "事件",
+      "eyebrow": "THREE EVENT PLANES",
+      "title": "xterm 字节流、全局工作区事件与 Agent 事件是三套通道",
+      "description": "bell 与 session metadata 已归入每个客户端唯一的全局 terminal-events 连接；xterm 的 session 连接只服务终端交互。"
+    },
+    {
+      "id": "objects",
+      "label": "对象与数量",
+      "eyebrow": "IDENTITY & LIFETIME",
+      "title": "谁拥有谁，谁只是引用，当前会挂载多少实例",
+      "description": "Project / Session / Panel 是 backend 领域对象；xterm、runtime client 与 ThreadRef 都通过 ID 关联。"
+    },
+    {
+      "id": "interfaces",
+      "label": "接口",
+      "eyebrow": "CONTRACT MAP",
+      "title": "本链路涉及的 REST、WebSocket 与内部事件接口",
+      "description": "按用途列出入口、方向、主要载荷与当前消费者。"
+    }
+  ],
+  "overview": {
+    "facts": [
+      {
+        "label": "主数据",
+        "value": "TerminalSessionManager",
+        "detail": "Project、Session、Panel 在 backend manager + store 中持有与持久化"
+      },
+      {
+        "label": "渲染键",
+        "value": "terminalSessionId",
+        "detail": "路由、terminal WS、surface cache 与 App detail 都围绕同一个 session id"
+      },
+      {
+        "label": "Agent 投影",
+        "value": "ThreadRef",
+        "detail": "App Server 引用 project/session/panel id，不拥有终端主数据"
+      }
+    ],
+    "lanes": [
+      {
+        "id": "client",
+        "label": "客户端视图",
+        "tone": "blue",
+        "nodes": [
+          {
+            "id": "web-workspace",
+            "kind": "Web / Electron",
+            "title": "TerminalWorkspace",
+            "summary": "Project tabs → Session tabs → TerminalSurface",
+            "details": [
+              "并行 GET Project 与 Session 列表后写入 Zustand store",
+              "activeProjectId 过滤 visibleSessions；activeSessionId 决定当前 route 与 surface",
+              "最近使用的 surface 最多保留 10 个；inactive surface 移到屏幕外",
+              "TerminalSurface 内的 composition 预编辑不出浏览器；每次 composition 的提交文本最多发送一次"
+            ],
+            "interfaces": [
+              "GET /api/terminal/project",
+              "GET /api/terminal/session",
+              "browser compositionstart / beforeinput / compositionend",
+              "WS /ws/terminal",
+              "WS /ws/terminal-events"
+            ],
+            "sources": [
+              "frontend/src/components/terminal/terminal-workspace.tsx",
+              "frontend/src/components/terminal/terminal-workspace-shell.tsx",
+              "frontend/src/components/terminal/terminal-workspace-stage.tsx",
+              "frontend/src/components/terminal/use-terminal-emulator.ts",
+              "frontend/src/components/terminal/terminal-surface.tsx"
+            ]
+          },
+          {
+            "id": "app-home-detail",
+            "kind": "Ionic App",
+            "title": "Home → AppTerminalPage",
+            "summary": "Connection → Project groups → Session → TerminalRenderer",
+            "details": [
+              "首页由 App-only overview 聚合返回相同 Project / Session id",
+              "点击 session 进入 /terminal/:terminalSessionId",
+              "终端详情使用 @runweave/terminal-renderer 创建一个 xterm 实例"
+            ],
+            "interfaces": [
+              "GET /api/app/home/overview",
+              "GET /api/terminal/session/:id",
+              "WS /ws/terminal",
+              "WS /ws/terminal-events"
+            ],
+            "sources": [
+              "app/src/routes/AppRoutes.tsx",
+              "app/src/hooks/use-app-session.ts",
+              "app/src/pages/AppTerminalPage.tsx",
+              "packages/terminal-renderer/src/TerminalRenderer.tsx"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "transport",
+        "label": "Backend 接口层",
+        "tone": "cyan",
+        "nodes": [
+          {
+            "id": "terminal-rest",
+            "kind": "REST",
+            "title": "/api/terminal · /api/app",
+            "summary": "对象 CRUD、聚合读取、input / interrupt、WS ticket",
+            "details": [
+              "Project / Session / Panel 路由最终调用 TerminalSessionManager",
+              "input REST 先确保 runtime，再按 pty 或 tmux 目标分发",
+              "App overview 读取相同 manager，并叠加 TerminalState 与展示字段"
+            ],
+            "interfaces": [
+              "POST /api/terminal/session/:id/input",
+              "POST /api/terminal/session/:id/interrupt",
+              "GET /api/app/home/overview"
+            ],
+            "sources": [
+              "backend/src/routes/terminal.ts",
+              "backend/src/routes/terminal-input-dispatcher.ts",
+              "backend/src/routes/app-home-overview.ts"
+            ]
+          },
+          {
+            "id": "terminal-ws-server",
+            "kind": "WebSocket",
+            "title": "/ws/terminal",
+            "summary": "每个 client 绑定一个 terminalSessionId",
+            "details": [
+              "握手校验 ticket 与 terminalSessionId",
+              "必要时 ensureTerminalRuntime；向 xterm 客户端发送 connected、snapshot、output、status、exit，并保留 metadata 兼容帧",
+              "接收已提交 input、resize、signal 并调用 activeRuntime；composition 预编辑从不进入该协议"
+            ],
+            "interfaces": [
+              "client: input | resize | signal | request-status",
+              "server: connected | snapshot | metadata | output | status | exit | error"
+            ],
+            "sources": [
+              "backend/src/ws/terminal-server.ts",
+              "packages/shared/src/terminal-protocol.ts"
+            ]
+          },
+          {
+            "id": "terminal-events-server",
+            "kind": "WebSocket",
+            "title": "/ws/terminal-events",
+            "summary": "每个客户端到当前 backend 的唯一工作区级事件广播",
+            "details": [
+              "连接以 after cursor 读取 catchup，再订阅 live event",
+              "Project / Session 结构事件触发列表重新加载",
+              "TerminalState、Panel、completion、bell 与 session metadata 事件更新前端局部状态",
+              "不承载 xterm input、output 或浏览器 composition 事件"
+            ],
+            "interfaces": [
+              "catchup: terminal-events[]",
+              "live: terminal-event"
+            ],
+            "sources": [
+              "backend/src/ws/terminal-events-server.ts",
+              "backend/src/terminal/terminal-event-service.ts"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "domain",
+        "label": "领域与持久化",
+        "tone": "violet",
+        "nodes": [
+          {
+            "id": "session-manager",
+            "kind": "Backend owner",
+            "title": "TerminalSessionManager",
+            "summary": "Project 1 → N Session；tmux Session 1 → N Panel",
+            "details": [
+              "内存 Map 保存 Project、Session、Panel、PanelWorkspace",
+              "初始化时从 TerminalSessionStore 恢复；修改时同步 store",
+              "appendOutput 识别 bell；updateSessionMetadata 发布 previous / next metadata"
+            ],
+            "interfaces": [
+              "list/create/update/delete Project",
+              "list/create/update/destroy Session",
+              "list/upsert/focus/remove Panel"
+            ],
+            "sources": [
+              "backend/src/terminal/manager.ts",
+              "backend/src/terminal/manager-records.ts",
+              "backend/src/terminal/store.ts"
+            ]
+          },
+          {
+            "id": "terminal-state",
+            "kind": "State projection",
+            "title": "TerminalStateService",
+            "summary": "shell_idle / agent_starting / agent_idle / agent_running",
+            "details": [
+              "activeCommand、Agent hook、interrupt 与 exit 驱动状态",
+              "状态变化写回 session store，并记录 terminal_state_changed",
+              "有 Panel 时，Session list 状态可以从 running panels 聚合"
+            ],
+            "interfaces": [
+              "GET /api/terminal/session/:id/state",
+              "terminal_state_changed"
+            ],
+            "sources": [
+              "backend/src/terminal/terminal-state-service.ts",
+              "backend/src/index.ts"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "runtime",
+        "label": "进程与终端运行时",
+        "tone": "green",
+        "nodes": [
+          {
+            "id": "runtime-registry",
+            "kind": "In-memory runtime",
+            "title": "TerminalRuntimeRegistry",
+            "summary": "terminalSessionId → PtyRuntime + clients + subscribers",
+            "details": [
+              "一个 terminalSessionId 对应一个 runtime entry",
+              "entry 跟踪 attached client set、64 KiB buffered output 与 subscribers",
+              "terminal WS、REST input 都通过 ensureTerminalRuntime 取得 runtime"
+            ],
+            "interfaces": [
+              "createRuntime / getRuntime / subscribe",
+              "attachClient / detachClient / disposeRuntime"
+            ],
+            "sources": [
+              "backend/src/terminal/runtime-registry.ts",
+              "backend/src/terminal/runtime-launcher.ts"
+            ]
+          },
+          {
+            "id": "pty-runtime",
+            "kind": "runtimeKind = pty",
+            "title": "node-pty → shell / Agent",
+            "summary": "session runtime 直接承载命令进程",
+            "details": [
+              "创建或恢复 runtime 时 PtyService.spawnSession",
+              "terminal WS input 调用 activeRuntime.write",
+              "进程 exit 会把 Terminal Session 标记为 exited"
+            ],
+            "interfaces": ["write / resize / signal", "onData / onExit"],
+            "sources": [
+              "backend/src/terminal/pty-service.ts",
+              "backend/src/terminal/runtime-launcher.ts"
+            ]
+          },
+          {
+            "id": "tmux-runtime",
+            "kind": "runtimeKind = tmux",
+            "title": "node-pty attach → tmux session → pane(s)",
+            "summary": "tmux session 持有 shell / Agent；attach runtime 是观看与输入通道",
+            "details": [
+              "tmux session name 默认 runweave-<terminalSessionId>",
+              "Terminal Panel 映射 tmuxPaneId；PanelWorkspace 保存 activePanelId",
+              "最后一个 terminal WS client 断开时 dispose attach runtime，不 kill tmux session"
+            ],
+            "interfaces": [
+              "tmux attach / capture-pane / send-keys",
+              "list/split/focus/resize/kill pane"
+            ],
+            "sources": [
+              "backend/src/terminal/tmux-service.ts",
+              "backend/src/terminal/runtime-launcher.ts",
+              "backend/src/routes/terminal-panel-routes.ts"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "global",
+        "label": "全局 Agent 事件投影",
+        "tone": "amber",
+        "nodes": [
+          {
+            "id": "app-server",
+            "kind": "Separate process",
+            "title": "App Server Event Center",
+            "summary": "agent.hook / agent.completion → ThreadRef",
+            "details": [
+              "Event envelope scope 可携带 projectId、terminalSessionId、terminalPanelId、runId、cwd",
+              "StateProjector 以 threadId 生成 ThreadRef，并保留对 terminal 对象的引用",
+              "backend 只消费属于自身 Project / Session 的 Agent 事件"
+            ],
+            "interfaces": ["POST /events", "WS /events/stream", "GET /threads"],
+            "sources": [
+              "app-server/src/event-center.ts",
+              "app-server/src/state-projector.ts",
+              "packages/shared/src/app-server-events.ts"
+            ]
+          }
+        ]
+      }
+    ],
+    "relations": [
+      "Web/Electron 与 App 都把 apiBase 指向一个 backend 实例",
+      "两个客户端读取同一个 TerminalSessionManager 中的 Project / Session id",
+      "terminalSessionId 同时是 route、terminal WS handshake、runtime registry 与 tmux session 映射键",
+      "App Server ThreadRef 通过 scope 引用这些 id；Project / Session 列表仍来自 backend manager"
+    ]
+  },
+  "input": {
+    "sample": "继续",
+    "scenarios": [
+      {
+        "id": "web-ime",
+        "label": "macOS 拼音 IME",
+        "sample": "建议",
+        "transport": "browser-local → terminal WebSocket",
+        "note": "真实输入法先产生本地 composition 预编辑；只有候选提交文本进入 session 专属 terminal WebSocket。",
+        "steps": [
+          {
+            "id": "web-ime-1",
+            "actor": "macOS 输入法",
+            "title": "逐键输入 jianyi",
+            "detail": "xterm helper textarea 依次收到 compositionupdate 与 insertCompositionText(isComposing=true)。",
+            "payload": "j → ji → jia → jian → jian'y → jian'yi",
+            "source": "browser composition events"
+          },
+          {
+            "id": "web-ime-2",
+            "actor": "useTerminalEmulator",
+            "title": "预编辑停留在浏览器",
+            "detail": "mobile beforeinput fallback 遇到 isComposing 或 insertCompositionText 直接返回，不调 sendTerminalInput。",
+            "payload": "terminal input frames: []",
+            "source": "frontend/src/components/terminal/use-terminal-emulator.ts"
+          },
+          {
+            "id": "web-ime-3",
+            "actor": "compositionend",
+            "title": "记录本轮候选提交",
+            "detail": "compositionend(建议) 创建当前 TerminalImeCommit；新的 compositionstart 会重置上一轮状态。",
+            "payload": "{ data: 建议, at, forwarded: false }",
+            "source": "frontend/src/components/terminal/terminal-surface-utils.ts"
+          },
+          {
+            "id": "web-ime-4",
+            "actor": "TerminalSurface",
+            "title": "同一轮只转发一次",
+            "detail": "xterm onData 与浏览器 commit 事件即使都到达，也只让本轮候选第一次通过；下一轮相同候选仍可发送。",
+            "payload": "{ type: input, data: 建议 } × 1",
+            "source": "frontend/src/components/terminal/terminal-surface.tsx"
+          },
+          {
+            "id": "web-ime-5",
+            "actor": "Backend → Codex",
+            "title": "写入 runtime 并回显",
+            "detail": "terminal WS 将最终文本写入 pty/tmux；output 仍经同一 session 的 terminal WS 返回 xterm。",
+            "payload": "Codex prompt: 建议",
+            "source": "backend/src/ws/terminal-server.ts"
+          }
+        ]
+      },
+      {
+        "id": "web-xterm",
+        "label": "桌面 xterm",
+        "transport": "terminal WebSocket",
+        "note": "TerminalSurface 中的真实键盘输入；逐段原始字节发送。",
+        "steps": [
+          {
+            "id": "web-xterm-1",
+            "actor": "用户 / xterm.js",
+            "title": "在 TerminalSurface 输入“继续”",
+            "detail": "xterm Terminal.onData(data)；过滤 auto response 后调用 sendTerminalInput(data)。",
+            "payload": "raw data: 继续",
+            "source": "frontend/src/components/terminal/use-terminal-emulator.ts"
+          },
+          {
+            "id": "web-xterm-2",
+            "actor": "Web client",
+            "title": "useTerminalConnection.sendInput",
+            "detail": "WebSocket open 时发送 TerminalClientMessage；断线时最多保留 8 KiB pending input 并触发重连。",
+            "payload": "{ type: input, data: 继续 }",
+            "source": "frontend/src/features/terminal/use-terminal-connection.ts"
+          },
+          {
+            "id": "web-xterm-3",
+            "actor": "Backend terminal WS",
+            "title": "activeRuntime.write(data)",
+            "detail": "握手已经把连接绑定到 terminalSessionId；input 消息直接写当前 runtime。",
+            "payload": "WS /ws/terminal?terminalSessionId=<id>",
+            "source": "backend/src/ws/terminal-server.ts"
+          },
+          {
+            "id": "web-xterm-4",
+            "actor": "PTY / tmux",
+            "title": "shell / Agent 收到原始输入",
+            "detail": "pty runtime 直接承载进程；tmux runtime 是 node-pty attach 到 tmux client。",
+            "payload": "PtyRuntime.write(继续)",
+            "source": "backend/src/terminal/runtime-launcher.ts"
+          },
+          {
+            "id": "web-xterm-5",
+            "actor": "Backend → xterm",
+            "title": "output 回写并绘制",
+            "detail": "runtime onData → output batcher → WS output → useTerminalOutputStream → terminal.write。",
+            "payload": "{ type: output, data: ... }",
+            "source": "frontend/src/components/terminal/use-terminal-output-stream.ts"
+          }
+        ]
+      },
+      {
+        "id": "web-composer",
+        "label": "桌面浮动 composer",
+        "transport": "input REST",
+        "note": "离底部时出现的 Web composer；不是 xterm onData。",
+        "steps": [
+          {
+            "id": "web-composer-1",
+            "actor": "用户 / Floating composer",
+            "title": "点击发送“继续”",
+            "detail": "TerminalSurface 将当前 draft 作为 prompt_replace，并标记 submit=true。",
+            "payload": "{ data: 继续, mode: prompt_replace, submit: true }",
+            "source": "frontend/src/components/terminal/terminal-surface.tsx"
+          },
+          {
+            "id": "web-composer-2",
+            "actor": "Web service",
+            "title": "POST session input",
+            "detail": "HTTP 请求携带 terminalSessionId；若 panel split 开启，还会携带 activePanelId。",
+            "payload": "POST /api/terminal/session/:id/input",
+            "source": "frontend/src/services/terminal.ts"
+          },
+          {
+            "id": "web-composer-3",
+            "actor": "Backend dispatcher",
+            "title": "sendInputToSession",
+            "detail": "先 ensure runtime。tmux 走 C-u + literal + C-m key sequence；pty 依次清空、写文本并回车。",
+            "payload": "mode = prompt_replace",
+            "source": "backend/src/routes/terminal-input-dispatcher.ts"
+          },
+          {
+            "id": "web-composer-4",
+            "actor": "Runtime → terminal WS",
+            "title": "结果仍从 /ws/terminal 返回",
+            "detail": "REST 只负责输入；实时 output 继续经 terminal WebSocket 回到已挂载的 TerminalSurface。",
+            "payload": "server output → terminal.write",
+            "source": "backend/src/ws/terminal-server.ts"
+          }
+        ]
+      },
+      {
+        "id": "app-composer",
+        "label": "App composer",
+        "transport": "input REST",
+        "note": "App 底部 IonTextarea 的发送按钮；普通文本以 line mode 提交。",
+        "steps": [
+          {
+            "id": "app-composer-1",
+            "actor": "用户 / App composer",
+            "title": "在 IonTextarea 输入并点击发送",
+            "detail": "handleSubmit 读取 trimEnd 后的文本，调用 onSendInput；成功后清空输入框。",
+            "payload": "text = 继续",
+            "source": "app/src/components/TerminalCommandComposer.tsx"
+          },
+          {
+            "id": "app-composer-2",
+            "actor": "App action",
+            "title": "选择 line 或 codex_slash_command",
+            "detail": "以 / 开头且当前 agent=codex 才是 slash command；“继续”使用 line。",
+            "payload": "{ data: 继续, mode: line }",
+            "source": "app/src/hooks/use-app-terminal-actions.ts"
+          },
+          {
+            "id": "app-composer-3",
+            "actor": "Backend dispatcher",
+            "title": "REST 输入分发",
+            "detail": "pty 写入 继续\\r；tmux 使用 literal + C-m 序列，并可定向 active panel。",
+            "payload": "POST /api/terminal/session/:id/input",
+            "source": "backend/src/routes/terminal-input-dispatcher.ts"
+          },
+          {
+            "id": "app-composer-4",
+            "actor": "App terminal WS",
+            "title": "output 写入 TerminalRenderer",
+            "detail": "useAppTerminalConnection 收到 snapshot/output 后调用 renderer.resetAndWrite / write。",
+            "payload": "WS output → @runweave/terminal-renderer",
+            "source": "app/src/hooks/use-app-terminal-connection.ts"
+          }
+        ]
+      },
+      {
+        "id": "app-raw",
+        "label": "App 快捷 / raw",
+        "transport": "terminal WebSocket",
+        "note": "App 快捷键条、终端 touch 行为或 TerminalRenderer onInput 的原始控制输入。",
+        "steps": [
+          {
+            "id": "app-raw-1",
+            "actor": "App TerminalRenderer",
+            "title": "onInput(data) 或快捷键",
+            "detail": "TerminalRenderer.onData 过滤 auto response 后回调；快捷键条也直接调用 sendInput。",
+            "payload": "raw data / control sequence",
+            "source": "packages/terminal-renderer/src/TerminalRenderer.tsx"
+          },
+          {
+            "id": "app-raw-2",
+            "actor": "useAppTerminalConnection",
+            "title": "sendInput → terminal WS",
+            "detail": "连接可用时发送 input；连接中可排队，offline/disabled 时清空并拒绝排队。",
+            "payload": "{ type: input, data }",
+            "source": "app/src/hooks/use-app-terminal-connection.ts"
+          },
+          {
+            "id": "app-raw-3",
+            "actor": "Backend runtime",
+            "title": "activeRuntime.write",
+            "detail": "与桌面 xterm 的 raw input 进入同一个 terminal WS handler。",
+            "payload": "PtyRuntime.write(data)",
+            "source": "backend/src/ws/terminal-server.ts"
+          },
+          {
+            "id": "app-raw-4",
+            "actor": "Backend → App xterm",
+            "title": "snapshot / output 回写",
+            "detail": "TerminalRenderer 是渲染终点；Project / Session 状态仍由 overview 与 terminal-events 更新。",
+            "payload": "snapshot | output",
+            "source": "app/src/hooks/use-app-terminal-connection.ts"
+          }
+        ]
+      }
+    ]
+  },
+  "events": {
+    "channels": [
+      {
+        "id": "terminal-data",
+        "tone": "green",
+        "name": "Terminal data plane",
+        "endpoint": "WS /ws/terminal",
+        "scope": "一个连接绑定一个 terminalSessionId",
+        "retention": "runtime buffer 64 KiB；snapshot 另从 session/tmux capture 获取",
+        "producer": "PtyRuntime / tmux attach runtime",
+        "consumers": "TerminalSurface、AppTerminalPage",
+        "messages": [
+          "browser-local preedit → no WebSocket frame",
+          "client → committed input / resize / signal / request-status",
+          "server → connected / snapshot / metadata / output / status / exit / error"
+        ],
+        "sources": [
+          "backend/src/ws/terminal-server.ts",
+          "frontend/src/features/terminal/use-terminal-connection.ts",
+          "app/src/hooks/use-app-terminal-connection.ts"
+        ]
+      },
+      {
+        "id": "workspace-events",
+        "tone": "cyan",
+        "name": "Terminal workspace event plane",
+        "endpoint": "WS /ws/terminal-events",
+        "scope": "一个 backend 的全局 Project / Session / Panel / bell / metadata 事件",
+        "retention": "TerminalEventService 内存最近 500 条；after cursor 支持本进程 catchup",
+        "producer": "Terminal routes、TerminalSessionManager、TerminalStateService、completion service、panel routes",
+        "consumers": "Web TerminalWorkspace、App useAppSession",
+        "messages": [
+          "project_created / project_deleted",
+          "terminal_session_created / terminal_session_deleted",
+          "terminal_state_changed / terminal_session_metadata_changed",
+          "terminal_bell / terminal_notification / completion",
+          "terminal_panel_created / updated / deleted / focused / input_sent",
+          "never carries xterm input / output / composition"
+        ],
+        "sources": [
+          "backend/src/terminal/terminal-event-service.ts",
+          "backend/src/ws/terminal-events-server.ts",
+          "frontend/src/components/terminal/terminal-workspace-events.ts",
+          "app/src/hooks/use-app-session.ts"
+        ]
+      },
+      {
+        "id": "agent-events",
+        "tone": "amber",
+        "name": "App Server agent event plane",
+        "endpoint": "WS /events/stream",
+        "scope": "跨进程 Agent hook / completion；scope 引用 terminal 对象",
+        "retention": "App Server event store + cursor；StateProjector 持久化 ThreadRef",
+        "producer": "hook / CLI / backend / electron",
+        "consumers": "AppServerStateProjector、backend AppServerEventConsumer",
+        "messages": [
+          "agent.hook → SessionStart / UserPromptSubmit / Stop",
+          "agent.completion → hook_stop / ai_process_exit",
+          "derived thread.state.changed → AppServerThreadRef"
+        ],
+        "sources": [
+          "app-server/src/event-center.ts",
+          "app-server/src/state-projector.ts",
+          "backend/src/app-server/event-consumer.ts"
+        ]
+      }
+    ],
+    "reactions": [
+      {
+        "event": "project/session created or deleted",
+        "web": "调用 loadSessions()，重新 GET Project + Session",
+        "app": "调用 loadOverview()，重新 GET App overview",
+        "backend": "路由在 manager/store 修改完成后 record event"
+      },
+      {
+        "event": "terminal_state_changed",
+        "web": "按 terminalSessionId 更新 terminalStateBySessionId",
+        "app": "按 terminalSessionId 更新 overview session 与 displayStatus",
+        "backend": "TerminalStateService 写 store + record event"
+      },
+      {
+        "event": "terminal_session_metadata_changed",
+        "web": "按 terminalSessionId 更新 session cwd 与 activeCommand",
+        "app": "按 terminalSessionId 更新 overview session metadata",
+        "backend": "TerminalSessionManager.updateSessionMetadata 持久化后 record event"
+      },
+      {
+        "event": "terminal_bell",
+        "web": "live 事件且不是 active session 时设置 2 秒 bell marker",
+        "app": "当前不展示 bell marker",
+        "backend": "TerminalSessionManager.appendOutput 按 chunk 统计 BEL 并 record event"
+      },
+      {
+        "event": "terminal panel event",
+        "web": "更新 panelWorkspaceBySessionId 与 activePanelId",
+        "app": "App overview 不消费 panel workspace；终端字节画面仍来自 terminal WS",
+        "backend": "panel routes / tmux metadata 生成 workspace payload"
+      },
+      {
+        "event": "completion",
+        "web": "设置 completion marker；Electron live delivery 播放 bell",
+        "app": "首页状态主要依赖 terminal_state_changed，不用 completion marker",
+        "backend": "completion service 同时落入 TerminalEventService"
+      },
+      {
+        "event": "App Server agent.hook / completion",
+        "web": "不直接连接 App Server",
+        "app": "不直接连接 App Server",
+        "backend": "过滤 ownership 后更新 TerminalState，再广播 terminal_state_changed"
+      }
+    ]
+  },
+  "objects": {
+    "relations": [
+      {
+        "from": "Connection / apiBase",
+        "cardinality": "1 → 1",
+        "to": "Backend instance",
+        "meaning": "客户端本地选择；决定所有 HTTP/WS 请求发往哪里"
+      },
+      {
+        "from": "Backend instance",
+        "cardinality": "1 → N",
+        "to": "Project",
+        "meaning": "TerminalSessionManager + TerminalSessionStore 持有"
+      },
+      {
+        "from": "Project",
+        "cardinality": "1 → N",
+        "to": "Terminal Session",
+        "meaning": "Session.projectId 是归属键；Session.cwd 可独立变化"
+      },
+      {
+        "from": "Terminal Session",
+        "cardinality": "1 → 1",
+        "to": "Runtime entry",
+        "meaning": "TerminalRuntimeRegistry 以 terminalSessionId 为 key"
+      },
+      {
+        "from": "tmux Terminal Session",
+        "cardinality": "1 → N",
+        "to": "Panel / tmux pane",
+        "meaning": "Panel.terminalSessionId + tmuxPaneId；Workspace 记录 activePanelId"
+      },
+      {
+        "from": "Terminal Session",
+        "cardinality": "1 → 0..N",
+        "to": "xterm / WS client",
+        "meaning": "只有已挂载 xterm 的 Web cache、App 或其它浏览器会连接该 session"
+      },
+      {
+        "from": "Web xterm composition",
+        "cardinality": "1 → 0..1",
+        "to": "TerminalImeCommit",
+        "meaning": "预编辑为 0 个 terminal frame；每轮候选提交最多形成 1 个 terminal input frame"
+      },
+      {
+        "from": "Agent ThreadRef",
+        "cardinality": "N → 0..1",
+        "to": "Project / Session / Panel",
+        "meaning": "App Server scope 引用；不是终端对象的父级"
+      }
+    ],
+    "identity": [
+      {
+        "object": "Connection",
+        "key": "connectionId / apiBase",
+        "owner": "客户端本地 store",
+        "persisted": "是，客户端本地",
+        "endsWhen": "用户删除连接或切换 active connection",
+        "source": "frontend/src/features/connection/use-connections.ts · app/src/store/use-app-connection-store.ts"
+      },
+      {
+        "object": "Project",
+        "key": "projectId",
+        "owner": "TerminalSessionManager",
+        "persisted": "TerminalSessionStore",
+        "endsWhen": "DELETE project；子 session 一并销毁；至少会补一个 Default Project",
+        "source": "backend/src/terminal/manager.ts"
+      },
+      {
+        "object": "Terminal Session",
+        "key": "terminalSessionId",
+        "owner": "TerminalSessionManager",
+        "persisted": "TerminalSessionStore",
+        "endsWhen": "DELETE session；process exit 只把 status 标为 exited，不删除记录",
+        "source": "backend/src/terminal/manager.ts"
+      },
+      {
+        "object": "Panel",
+        "key": "panelId + tmuxPaneId",
+        "owner": "TerminalSessionManager / tmux",
+        "persisted": "TerminalSessionStore",
+        "endsWhen": "kill/remove pane 或删除 session",
+        "source": "backend/src/terminal/manager-records.ts"
+      },
+      {
+        "object": "xterm Terminal",
+        "key": "React mount + terminalSessionId",
+        "owner": "TerminalSurface / TerminalRenderer",
+        "persisted": "否",
+        "endsWhen": "组件 unmount；surface cache 内 inactive 组件仍保持 mounted",
+        "source": "frontend/src/components/terminal/use-terminal-emulator.ts · packages/terminal-renderer/src/TerminalRenderer.tsx"
+      },
+      {
+        "object": "TerminalImeCommit",
+        "key": "当前 composition",
+        "owner": "Web TerminalSurface",
+        "persisted": "否，React ref",
+        "endsWhen": "新的 compositionstart、普通键盘输入、paste 或 250 ms 提交窗口结束",
+        "source": "frontend/src/components/terminal/terminal-surface-utils.ts · frontend/src/components/terminal/use-terminal-emulator.ts"
+      },
+      {
+        "object": "Runtime entry",
+        "key": "terminalSessionId",
+        "owner": "TerminalRuntimeRegistry",
+        "persisted": "否；runtime metadata 在 session 中持久化",
+        "endsWhen": "disposeRuntime；tmux attach runtime 与 tmux session 生命周期分离",
+        "source": "backend/src/terminal/runtime-registry.ts"
+      },
+      {
+        "object": "ThreadRef",
+        "key": "threadId",
+        "owner": "AppServerStateStore",
+        "persisted": "App Server state store",
+        "endsWhen": "由后续 Agent event 持续更新；与 terminal delete 没有直接级联代码",
+        "source": "packages/shared/src/app-server-events.ts · app-server/src/state-store.ts"
+      }
+    ],
+    "counts": [
+      {
+        "metric": "Web cached TerminalSurface",
+        "value": "≤ 10",
+        "unit": "跨当前 backend 的最近 session",
+        "contains": "每个含 xterm + terminal WS；inactive surface 屏幕外挂载",
+        "source": "frontend/src/features/terminal/surface-cache.ts"
+      },
+      {
+        "metric": "Web global terminal-events connection",
+        "value": "1",
+        "unit": "每个 Terminal Workspace / backend 连接",
+        "contains": "统一接收 Project、Session、Panel、state、completion、bell 与 metadata",
+        "source": "frontend/src/features/terminal/use-terminal-events-connection.ts"
+      },
+      {
+        "metric": "App live TerminalRenderer",
+        "value": "1",
+        "unit": "当前 terminal detail route",
+        "contains": "一个 xterm + 一个 terminal WS；history modal 是独立只读 renderer",
+        "source": "app/src/pages/AppTerminalPage.tsx"
+      },
+      {
+        "metric": "Backend runtime entry",
+        "value": "≤ 1",
+        "unit": "每个 terminalSessionId",
+        "contains": "一个 PtyRuntime、attached client set、subscribers、64 KiB buffered output",
+        "source": "backend/src/terminal/runtime-registry.ts"
+      },
+      {
+        "metric": "TerminalEvent backlog",
+        "value": "500",
+        "unit": "每个 backend 进程",
+        "contains": "内存事件；after cursor 只覆盖当前服务保留窗口",
+        "source": "backend/src/terminal/terminal-event-service.ts"
+      }
+    ]
+  },
+  "interfaces": [
+    {
+      "type": "REST",
+      "method": "GET",
+      "path": "/api/terminal/project",
+      "purpose": "列出 backend Project 主数据",
+      "payload": "TerminalProjectListItem[]",
+      "consumers": "Web TerminalWorkspace",
+      "source": "backend/src/routes/terminal-project-routes.ts"
+    },
+    {
+      "type": "REST",
+      "method": "GET",
+      "path": "/api/terminal/session",
+      "purpose": "列出全部 Terminal Session 与折叠状态",
+      "payload": "TerminalSessionListItem[]",
+      "consumers": "Web TerminalWorkspace",
+      "source": "backend/src/routes/terminal.ts"
+    },
+    {
+      "type": "REST",
+      "method": "GET",
+      "path": "/api/app/home/overview",
+      "purpose": "App-only Project + Session 聚合列表",
+      "payload": "AppHomeOverviewResponse",
+      "consumers": "App useAppSession",
+      "source": "backend/src/routes/app-home-overview.ts"
+    },
+    {
+      "type": "REST",
+      "method": "POST",
+      "path": "/api/terminal/project",
+      "purpose": "创建 Project",
+      "payload": "name, path? → TerminalProjectListItem",
+      "consumers": "Web / App",
+      "source": "backend/src/routes/terminal-project-routes.ts"
+    },
+    {
+      "type": "REST",
+      "method": "POST",
+      "path": "/api/terminal/session",
+      "purpose": "创建 Session 并初始化 runtime / default panel",
+      "payload": "projectId?, cwd?, inherit?, runtimePreference? → terminalSessionId",
+      "consumers": "Web / App / CLI",
+      "source": "backend/src/routes/terminal.ts"
+    },
+    {
+      "type": "REST",
+      "method": "GET",
+      "path": "/api/terminal/session/:id",
+      "purpose": "读取 session metadata + live scrollback",
+      "payload": "TerminalSessionStatusResponse",
+      "consumers": "Web snapshot restore / App detail",
+      "source": "backend/src/routes/terminal.ts"
+    },
+    {
+      "type": "REST",
+      "method": "POST",
+      "path": "/api/terminal/session/:id/input",
+      "purpose": "按 raw/line/slash/paste/replace/copy-mode 分发输入",
+      "payload": "SendTerminalInputRequest → accepted operation",
+      "consumers": "Web floating composer / App composer / tools",
+      "source": "backend/src/routes/terminal-input-dispatcher.ts"
+    },
+    {
+      "type": "REST",
+      "method": "POST",
+      "path": "/api/terminal/session/:id/interrupt",
+      "purpose": "发送 escape interrupt 并更新 Agent state",
+      "payload": "panel selector? → SendTerminalInterruptResponse",
+      "consumers": "App Stop / Web controls / CLI",
+      "source": "backend/src/routes/terminal.ts"
+    },
+    {
+      "type": "REST",
+      "method": "GET",
+      "path": "/api/terminal/session/:id/state",
+      "purpose": "读取 TerminalState 权威视图",
+      "payload": "{ terminalState }",
+      "consumers": "App detail / control plane",
+      "source": "backend/src/routes/terminal-state.ts"
+    },
+    {
+      "type": "REST",
+      "method": "GET/POST/PATCH/DELETE",
+      "path": "/api/terminal/session/:id/panels[...]",
+      "purpose": "列出、拆分、更新、删除、resize、input、interrupt Panel",
+      "payload": "TerminalPanelWorkspace / panel operation",
+      "consumers": "Web panel split / Agent Team / CLI",
+      "source": "backend/src/routes/terminal-panel-routes.ts"
+    },
+    {
+      "type": "REST",
+      "method": "POST",
+      "path": "/api/terminal/session/:id/ws-ticket",
+      "purpose": "签发绑定 terminalSessionId 的短期 terminal WS ticket",
+      "payload": "{ ticket }",
+      "consumers": "Web / App terminal connection",
+      "source": "backend/src/routes/terminal-ticket-routes.ts"
+    },
+    {
+      "type": "REST",
+      "method": "POST",
+      "path": "/api/terminal/events/ws-ticket",
+      "purpose": "签发 terminal-events WS ticket + baselineEventId",
+      "payload": "{ ticket, baselineEventId }",
+      "consumers": "Web workspace / App session",
+      "source": "backend/src/routes/terminal-ticket-routes.ts"
+    },
+    {
+      "type": "WebSocket",
+      "method": "WS",
+      "path": "/ws/terminal?terminalSessionId=:id&token=:ticket",
+      "purpose": "xterm 已提交 input、resize、snapshot、output 与连接级 status；IME preedit 不进入协议，metadata 帧仅作兼容",
+      "payload": "committed TerminalClientMessage ↔ TerminalServerMessage",
+      "consumers": "TerminalSurface / App terminal",
+      "source": "backend/src/ws/terminal-server.ts"
+    },
+    {
+      "type": "WebSocket",
+      "method": "WS",
+      "path": "/ws/terminal-events?after=:cursor&token=:ticket",
+      "purpose": "Project / Session / Panel / state / completion / bell / metadata 的全局 catchup + live 广播；不承载 terminal input/output",
+      "payload": "TerminalEventServerMessage",
+      "consumers": "Web workspace / App session",
+      "source": "backend/src/ws/terminal-events-server.ts"
+    },
+    {
+      "type": "Internal",
+      "method": "POST",
+      "path": "App Server /events",
+      "purpose": "记录 agent.hook / agent.completion 等跨进程事件",
+      "payload": "CreateAppServerEventRequest",
+      "consumers": "AppServerEventCenter",
+      "source": "app-server/src/http-server.ts"
+    },
+    {
+      "type": "Internal",
+      "method": "WS",
+      "path": "App Server /events/stream?kind=agent.hook&kind=agent.completion",
+      "purpose": "backend 以持久 cursor 消费属于自己的 Agent 事件",
+      "payload": "AppServerEventStreamMessage",
+      "consumers": "AppServerEventConsumer",
+      "source": "backend/src/app-server/event-consumer.ts"
+    },
+    {
+      "type": "Internal",
+      "method": "in-process",
+      "path": "TerminalEventService.record / subscribe",
+      "purpose": "把 route/session manager/state/completion/panel 变化转换成 workspace event",
+      "payload": "TerminalEventEnvelope",
+      "consumers": "terminal-events WS / Agent Team service",
+      "source": "backend/src/terminal/terminal-event-service.ts"
+    },
+    {
+      "type": "Internal",
+      "method": "in-process",
+      "path": "TerminalRuntimeRegistry",
+      "purpose": "按 session 共享 runtime、client 集合与 output subscribers",
+      "payload": "PtyRuntime / RuntimeSubscriber",
+      "consumers": "terminal WS / REST input / recorder",
+      "source": "backend/src/terminal/runtime-registry.ts"
+    }
+  ]
+}

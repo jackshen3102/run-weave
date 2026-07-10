@@ -10,7 +10,11 @@ export type TerminalPreviewMode = "file" | "changes" | "explorer";
 export type TerminalMarkdownViewMode = "source" | "split" | "preview";
 export type TerminalSvgViewMode = "preview" | "source";
 export type TerminalChangesViewMode = "diff" | "preview";
-export type TerminalSidecarTool = "preview" | "browser" | "agent-team";
+export type TerminalSidecarTool =
+  | "preview"
+  | "prototypes"
+  | "browser"
+  | "agent-team";
 
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
 const TERMINAL_SIDECAR_WIDTH_STORAGE_KEY =
@@ -62,6 +66,7 @@ interface TerminalPreviewStore {
     activeTabId: string;
   };
   openPreview: (projectId: string, mode?: TerminalPreviewMode) => void;
+  openPrototypes: () => void;
   openBrowser: () => void;
   openAgentTeam: () => void;
   closePreview: () => void;
@@ -325,6 +330,11 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
   openBrowser: () => {
     set((state: TerminalPreviewStore) => ({
       ui: { ...state.ui, open: true, activeTool: "browser" },
+    }));
+  },
+  openPrototypes: () => {
+    set((state: TerminalPreviewStore) => ({
+      ui: { ...state.ui, open: true, activeTool: "prototypes" },
     }));
   },
   openAgentTeam: () => {

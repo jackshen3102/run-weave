@@ -22,9 +22,6 @@ import { TerminalWorkspaceOverlays } from "./terminal-workspace-overlays";
 import { useTerminalWorkspaceAgentTeam } from "./use-terminal-workspace-agent-team";
 import {
   formatHistoryPanelLabel,
-  HEADLESS_TERMINAL_CONNECTION_DELAY_MS,
-  MAX_HEADLESS_TERMINAL_CONNECTIONS,
-  parseTerminalActivityTime,
   resolveHistoryPanelId,
 } from "./terminal-workspace-utils";
 
@@ -53,11 +50,6 @@ interface TerminalWorkspaceShellProps {
   onConfirmDeleteProject: () => void;
   onReorderProjects: (fromIndex: number, toIndex: number) => void;
   onReorderSessions: (fromIndex: number, toIndex: number) => void;
-  onSessionBell: (terminalSessionId: string) => void;
-  onSessionMetadata: (
-    terminalSessionId: string,
-    metadata: { cwd: string; activeCommand: string | null },
-  ) => void;
 }
 
 export function TerminalWorkspaceShell({
@@ -82,15 +74,11 @@ export function TerminalWorkspaceShell({
   onConfirmDeleteProject,
   onReorderProjects,
   onReorderSessions,
-  onSessionBell,
-  onSessionMetadata,
 }: TerminalWorkspaceShellProps) {
   const [aliasTarget, setAliasTarget] =
     useState<TerminalSessionListItem | null>(null);
   const [diagnosticLogOpen, setDiagnosticLogOpen] = useState(false);
   const [statusLookupOpen, setStatusLookupOpen] = useState(false);
-  const [headlessConnectionsEnabled, setHeadlessConnectionsEnabled] =
-    useState(false);
   const isMobileMonitor = clientMode === "mobile";
   const projects = useTerminalWorkspaceStore((state) => state.projects);
   const sessions = useTerminalWorkspaceStore((state) => state.sessions);
@@ -206,28 +194,6 @@ export function TerminalWorkspaceShell({
       surfaceSessionIds.has(session.terminalSessionId),
     );
   }, [activeSession?.terminalSessionId, cachedSurfaceSessionIds, sessions]);
-  const surfaceSessionIdSet = useMemo(
-    () =>
-      new Set(surfaceSessions.map((session) => session.terminalSessionId)),
-    [surfaceSessions],
-  );
-  const headlessSessions = useMemo(() => {
-    if (!headlessConnectionsEnabled) {
-      return [];
-    }
-    return visibleSessions
-      .filter(
-        (session) =>
-          session.status === "running" &&
-          !surfaceSessionIdSet.has(session.terminalSessionId),
-      )
-      .sort(
-        (a, b) =>
-          parseTerminalActivityTime(b.lastActivityAt) -
-          parseTerminalActivityTime(a.lastActivityAt),
-      )
-      .slice(0, MAX_HEADLESS_TERMINAL_CONNECTIONS);
-  }, [headlessConnectionsEnabled, surfaceSessionIdSet, visibleSessions]);
   const activePanelWorkspace = activeSession
     ? panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null
     : null;
@@ -396,17 +362,6 @@ export function TerminalWorkspaceShell({
   });
 
   useEffect(() => {
-    setHeadlessConnectionsEnabled(false);
-    if (!activeProjectId || visibleSessions.length <= 1) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setHeadlessConnectionsEnabled(true);
-    }, HEADLESS_TERMINAL_CONNECTION_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [activeProjectId, apiBase, visibleSessions.length]);
-
-  useEffect(() => {
     if (
       !activeSession?.terminalSessionId ||
       isMobileMonitor ||
@@ -505,7 +460,6 @@ export function TerminalWorkspaceShell({
         requestError={requestError}
         activeSession={activeSession}
         visibleSessions={visibleSessions}
-        headlessSessions={headlessSessions}
         surfaceSessions={surfaceSessions}
         panelSplitEnabled={panelSplitEnabled}
         activePanelWorkspace={activePanelWorkspace}
@@ -536,8 +490,6 @@ export function TerminalWorkspaceShell({
         onRefreshPanelWorkspace={(terminalSessionId) => {
           void refreshPanelWorkspace(terminalSessionId);
         }}
-        onSessionBell={onSessionBell}
-        onSessionMetadata={onSessionMetadata}
         onSelectSession={onSelectSession}
         onPanelSplitEnabledChange={(enabled) => {
           if (activeSession) {

@@ -5,6 +5,8 @@ import { createTerminalBellPlayer } from "../../features/terminal/bell";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import { useTerminalEventsConnection } from "../../features/terminal/use-terminal-events-connection";
 
+const BELL_MARKER_DURATION_MS = 2_000;
+
 interface UseTerminalWorkspaceEventsArgs {
   apiBase: string;
   token: string;
@@ -57,6 +59,10 @@ export function useTerminalWorkspaceEvents({
   );
   const setActiveProjectId = useTerminalWorkspaceStore(
     (state) => state.setActiveProjectId,
+  );
+  const setSessions = useTerminalWorkspaceStore((state) => state.setSessions);
+  const setBellMarkers = useTerminalWorkspaceStore(
+    (state) => state.setBellMarkers,
   );
   const terminalEventCursorRef = useRef<string | null>(null);
   const completionBellPlayerRef = useRef<ReturnType<
@@ -142,6 +148,40 @@ export function useTerminalWorkspaceEvents({
         });
       }
 
+      const metadataBySessionId = new Map<
+        string,
+        { cwd: string; activeCommand: string | null }
+      >();
+      for (const event of events) {
+        if (event.kind === "terminal_session_metadata_changed") {
+          metadataBySessionId.set(event.terminalSessionId, event.payload.next);
+        }
+      }
+      if (metadataBySessionId.size > 0) {
+        setSessions((currentSessions) => {
+          let changed = false;
+          const nextSessions = currentSessions.map((session) => {
+            const metadata = metadataBySessionId.get(
+              session.terminalSessionId,
+            );
+            if (
+              !metadata ||
+              (session.cwd === metadata.cwd &&
+                session.activeCommand === metadata.activeCommand)
+            ) {
+              return session;
+            }
+            changed = true;
+            return {
+              ...session,
+              cwd: metadata.cwd,
+              activeCommand: metadata.activeCommand,
+            };
+          });
+          return changed ? nextSessions : currentSessions;
+        });
+      }
+
       if (events.some(isTerminalListInvalidationEvent)) {
         const latestCreatedSession = getLatestCreatedSessionEvent(events);
         void loadSessions().then(() => {
@@ -161,6 +201,45 @@ export function useTerminalWorkspaceEvents({
           .getState()
           .sessions.map((session) => session.terminalSessionId),
       );
+      if (delivery === "live") {
+        const activeSessionId =
+          useTerminalWorkspaceStore.getState().activeSessionId;
+        const bellSessionIds = new Set(
+          events
+            .filter((event) => event.kind === "terminal_bell")
+            .map((event) => event.terminalSessionId)
+            .filter(
+              (terminalSessionId) =>
+                terminalSessionId !== activeSessionId &&
+                knownSessionIds.has(terminalSessionId),
+            ),
+        );
+        if (bellSessionIds.size > 0) {
+          setBellMarkers((current) => {
+            let changed = false;
+            const next = { ...current };
+            for (const terminalSessionId of bellSessionIds) {
+              if (!next[terminalSessionId]) {
+                next[terminalSessionId] = true;
+                changed = true;
+              }
+            }
+            return changed ? next : current;
+          });
+          for (const terminalSessionId of bellSessionIds) {
+            window.setTimeout(() => {
+              setBellMarkers((current) => {
+                if (!current[terminalSessionId]) {
+                  return current;
+                }
+                const next = { ...current };
+                delete next[terminalSessionId];
+                return next;
+              });
+            }, BELL_MARKER_DURATION_MS);
+          }
+        }
+      }
       const markerSessionIds = events
         .filter((event) => event.kind === "completion")
         .map((event) => event.terminalSessionId)

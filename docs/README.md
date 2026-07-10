@@ -22,6 +22,7 @@
 | App 终端输入与快捷键            | architecture/app-mobile.md#app-终端详情                         |
 | 终端状态模型                    | architecture/terminal-state.md                                  |
 | 终端代码预览 / Terminal Browser | architecture/terminal-code-preview.md                           |
+| 多项目原型轮巡库                | architecture/terminal-code-preview.md#多项目原型轮巡库          |
 | Web Terminal 快捷指令           | architecture/terminal-code-preview.md#快捷指令入口              |
 | Terminal Browser 注释模式       | architecture/terminal-code-preview.md#terminal-browser-注释模式 |
 | 终端 tmux 恢复                  | architecture/terminal-tmux-recovery.md                          |
@@ -70,11 +71,13 @@
 | Terminal Panel Split 测试                | testing/terminal-panel-split-test-cases.md                                         |
 | 桌面端重启项目/终端恢复测试              | testing/desktop-restart-terminal-selection-test-cases.md                           |
 | Terminal Floating Composer 测试          | testing/terminal-floating-composer-test-cases.md                                   |
+| Terminal IME 输入测试                    | testing/terminal-ime-input-test-cases.md                                           |
 | 本地客户端更新测试                       | testing/runweave-local-client-update-test-cases.md                                 |
 | Runweave Beta 自举开发通道测试           | testing/runweave-beta-self-hosting-test-cases.md                                   |
 | Terminal Browser CDP/MCP 测试            | testing/terminal-browser-cdp-mcp-test-cases.md                                     |
 | Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md                              |
 | Terminal Browser 自适应多 Tab 测试       | testing/terminal-browser-adaptive-tabs-test-cases.md                               |
+| 多项目原型轮巡库测试                     | testing/prototype-gallery-preview-test-cases.md                                    |
 | 终端回归（Vim）                          | testing/runbooks/terminal-vim.md                                                   |
 | Explorer Quick Search 回归               | testing/runbooks/explorer-quick-search.md                                          |
 | Web Terminal 状态查询回归                | testing/runbooks/status-lookup-ui.md                                               |

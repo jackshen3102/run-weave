@@ -226,7 +226,12 @@ export class AuthService {
   ): { token: string; expiresIn: number };
   issueTemporaryToken(params: {
     sessionId: string;
-    tokenType: "viewer-ws" | "terminal-ws" | "terminal-events-ws" | "devtools";
+    tokenType:
+      | "viewer-ws"
+      | "terminal-ws"
+      | "terminal-events-ws"
+      | "devtools"
+      | "prototype-preview";
     resource: TokenResource;
     ttlMs: number;
   }): { token: string; expiresIn: number };
@@ -239,7 +244,8 @@ export class AuthService {
             | "viewer-ws"
             | "terminal-ws"
             | "terminal-events-ws"
-            | "devtools";
+            | "devtools"
+            | "prototype-preview";
           resource: TokenResource;
           ttlMs: number;
         },
@@ -284,7 +290,8 @@ export class AuthService {
         | "viewer-ws"
         | "terminal-ws"
         | "terminal-events-ws"
-        | "devtools";
+        | "devtools"
+        | "prototype-preview";
       resource: TokenResource;
     },
   ): TemporaryTokenVerification | null {
@@ -305,7 +312,9 @@ export class AuthService {
     if (
       actual.sessionId !== params.resource.sessionId ||
       actual.terminalSessionId !== params.resource.terminalSessionId ||
-      actual.tabId !== params.resource.tabId
+      actual.tabId !== params.resource.tabId ||
+      actual.projectId !== params.resource.projectId ||
+      actual.prototypeSlug !== params.resource.prototypeSlug
     ) {
       return null;
     }

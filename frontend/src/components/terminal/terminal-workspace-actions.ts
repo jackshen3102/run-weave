@@ -14,8 +14,6 @@ import {
 } from "../../services/terminal";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 
-const BELL_MARKER_DURATION_MS = 2_000;
-
 interface UseTerminalWorkspaceActionsArgs {
   apiBase: string;
   token: string;
@@ -84,9 +82,6 @@ export function useTerminalWorkspaceActions({
   );
   const setHistoryTerminalPanelId = useTerminalWorkspaceStore(
     (state) => state.setHistoryTerminalPanelId,
-  );
-  const setBellMarkers = useTerminalWorkspaceStore(
-    (state) => state.setBellMarkers,
   );
   const setActiveProjectId = useTerminalWorkspaceStore(
     (state) => state.setActiveProjectId,
@@ -270,52 +265,6 @@ export function useTerminalWorkspaceActions({
     }
   });
 
-  const handleSessionMetadata = useMemoizedFn(
-    (
-      terminalSessionId: string,
-      metadata: { cwd: string; activeCommand: string | null },
-    ) => {
-      setSessions((currentSessions) => {
-        let changed = false;
-        const nextSessions = currentSessions.map((session) => {
-          if (session.terminalSessionId !== terminalSessionId) {
-            return session;
-          }
-          if (
-            session.cwd === metadata.cwd &&
-            session.activeCommand === metadata.activeCommand
-          ) {
-            return session;
-          }
-          changed = true;
-          return {
-            ...session,
-            cwd: metadata.cwd,
-            activeCommand: metadata.activeCommand,
-          };
-        });
-        return changed ? nextSessions : currentSessions;
-      });
-    },
-  );
-
-  const handleSessionBell = useMemoizedFn((terminalSessionId: string) => {
-    setBellMarkers((current) => ({
-      ...current,
-      [terminalSessionId]: true,
-    }));
-    window.setTimeout(() => {
-      setBellMarkers((current) => {
-        if (!current[terminalSessionId]) {
-          return current;
-        }
-        const next = { ...current };
-        delete next[terminalSessionId];
-        return next;
-      });
-    }, BELL_MARKER_DURATION_MS);
-  });
-
   const handleProjectReorder = useMemoizedFn(
     (fromIndex: number, toIndex: number) => {
       setProjects((current) => {
@@ -377,8 +326,6 @@ export function useTerminalWorkspaceActions({
     closeProjectDialog,
     submitProjectDialog,
     removeProject,
-    handleSessionMetadata,
-    handleSessionBell,
     handleProjectReorder,
     handleSessionReorder,
     openHistoryDrawer,

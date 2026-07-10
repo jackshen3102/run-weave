@@ -8,7 +8,6 @@ import {
 } from "../../features/terminal/perf-logging";
 import { filterBrowserHandledTerminalOutput } from "../../features/terminal/output-filter";
 import {
-  BELL_CHARACTER,
   DEFERRED_OUTPUT_REPLAY_MAX_CHARS,
   recordTerminalPerfProbeEvent,
 } from "./terminal-surface-utils";
@@ -83,7 +82,6 @@ interface UseTerminalOutputStreamOptions {
   hasDeferredOutputRef: MutableRef<boolean>;
   hasRenderedSnapshotRef: MutableRef<boolean>;
   lastInputSentAtRef: MutableRef<number | null>;
-  onBellRef: MutableRef<(() => void) | undefined>;
   outputSequenceRef: MutableRef<number>;
   refreshTerminalViewportRef: MutableRef<(() => void) | null>;
   requiresSnapshotRestoreRef: MutableRef<boolean>;
@@ -103,7 +101,6 @@ export function useTerminalOutputStream({
   hasDeferredOutputRef,
   hasRenderedSnapshotRef,
   lastInputSentAtRef,
-  onBellRef,
   outputSequenceRef,
   refreshTerminalViewportRef,
   requiresSnapshotRestoreRef,
@@ -245,10 +242,6 @@ export function useTerminalOutputStream({
     websocketContentVersionRef.current += 1;
 
     const now = Date.now();
-    if (!activeRef.current && nextChunk.includes(BELL_CHARACTER)) {
-      onBellRef.current?.();
-    }
-
     outputSequenceRef.current += 1;
     const outputSequence = outputSequenceRef.current;
     logTerminalPerf("terminal.output.received", {

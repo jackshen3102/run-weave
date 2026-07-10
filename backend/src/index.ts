@@ -37,6 +37,7 @@ import {
 import { createInternalTerminalCompletionRouter } from "./routes/terminal-completion";
 import { createTerminalRouter } from "./routes/terminal";
 import { createTestRouter } from "./routes/test";
+import { createPrototypePreviewRouter } from "./routes/prototype-preview";
 import { createVoiceRouter } from "./routes/voice";
 import { createCorsMiddleware } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
@@ -188,10 +189,43 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
   const terminalQuickInputService = new TerminalQuickInputService(
     terminalQuickInputStore,
   );
+  const terminalEventService = new TerminalEventService();
+  let terminalStateService: TerminalStateService | null = null;
   const terminalSessionManager = new TerminalSessionManager(
     terminalSessionStore,
+    {
+      onBell: ({ terminalSessionId, projectId, count }) => {
+        terminalEventService.record({
+          kind: "terminal_bell",
+          terminalSessionId,
+          projectId,
+          payload: { count },
+        });
+      },
+      onMetadataChanged: ({
+        terminalSessionId,
+        projectId,
+        session,
+        previous,
+        next,
+      }) => {
+        terminalEventService.record({
+          kind: "terminal_session_metadata_changed",
+          terminalSessionId,
+          projectId,
+          payload: { previous, next },
+        });
+        terminalStateService?.setShellActiveCommand(
+          terminalSessionId,
+          session,
+          {
+            projectId,
+            reason: session.status === "exited" ? "exit" : "metadata",
+          },
+        );
+      },
+    },
   );
-  const terminalEventService = new TerminalEventService();
   const terminalCompletionEventService = new TerminalCompletionEventService(
     terminalEventService,
   );
@@ -227,7 +261,7 @@ async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxLifecycleCoordinator,
   });
   await terminalSessionManager.initialize();
-  const terminalStateService = new TerminalStateService(
+  terminalStateService = new TerminalStateService(
     new TerminalStateStore(
       terminalSessionManager
         .listSessions()
@@ -393,6 +427,15 @@ function createHttpApp(
     createCorsMiddleware(parseConfiguredOrigins(process.env.FRONTEND_ORIGIN)),
   );
   app.use(createTunnelTokenBootstrapMiddleware(tunnelAuthConfig));
+
+  app.use(
+    "/prototype-preview",
+    requireTunnelAuth,
+    createPrototypePreviewRouter(
+      services.terminalSessionManager,
+      services.authService,
+    ),
+  );
 
   app.get("/health", requireTunnelAuth, (_req, res) => {
     res.json(buildHealthPayload(process.env));

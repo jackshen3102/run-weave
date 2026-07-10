@@ -52,6 +52,10 @@ export {
   searchTerminalProjectPreviewFiles,
   searchTerminalProjectPreviewFolders,
 } from "./terminal-preview";
+export {
+  createTerminalPrototypePreviewTicket,
+  listTerminalPrototypeGallery,
+} from "./terminal-prototype-gallery";
 
 export async function createTerminalProject(
   apiBase: string,

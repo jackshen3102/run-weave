@@ -32,6 +32,7 @@ import {
   TERMINAL_RESIZE_DEBOUNCE_MS,
   resolveMobileBeforeInputData,
   type PastedImageReference,
+  type TerminalImeCommit,
   type TerminalSearchResults,
 } from "./terminal-surface-utils";
 
@@ -43,12 +44,11 @@ interface UseTerminalEmulatorArgs {
   activeRef: MutableRef<boolean>;
   apiBase: string;
   clientMode: ClientMode;
-  imeCommitRef: MutableRef<{ data: string; at: number } | null>;
+  imeCommitRef: MutableRef<TerminalImeCommit | null>;
   imeCompositionEndedAtRef: MutableRef<number | null>;
   lastResizedAtRef: MutableRef<number | null>;
   lastSentResizeRef: MutableRef<{ cols: number; rows: number } | null>;
   onAuthExpired?: () => void;
-  onBellRef: MutableRef<(() => void) | undefined>;
   onBottomStateChange: (state: TerminalBottomState) => void;
   onBufferTypeChange: (type: "normal" | "alternate" | undefined) => void;
   onTmuxScrollbackActiveChange: (active: boolean) => void;
@@ -79,7 +79,6 @@ export function useTerminalEmulator({
   lastResizedAtRef,
   lastSentResizeRef,
   onAuthExpired,
-  onBellRef,
   onBottomStateChange,
   onBufferTypeChange,
   onTmuxScrollbackActiveChange,
@@ -342,6 +341,10 @@ export function useTerminalEmulator({
     });
 
     terminal.attachCustomKeyEventHandler((event) => {
+      if (!event.isComposing && event.keyCode !== 229) {
+        imeCommitRef.current = null;
+        imeCompositionEndedAtRef.current = null;
+      }
       if (
         event.shiftKey &&
         !event.altKey &&
@@ -372,11 +375,6 @@ export function useTerminalEmulator({
       xtermUserInputSequenceRef.current += 1;
       onUserInputData?.(data);
       sendTerminalInput(data);
-    });
-    const bellDisposable = terminal.onBell(() => {
-      if (!activeRef.current) {
-        onBellRef.current?.();
-      }
     });
     const scrollDisposable = terminal.onScroll(() => {
       emitBufferType();
@@ -489,6 +487,8 @@ export function useTerminalEmulator({
       ".xterm-helper-textarea",
     );
     const handlePasteEvent: EventListener = (event) => {
+      imeCommitRef.current = null;
+      imeCompositionEndedAtRef.current = null;
       handlePaste(event as ClipboardEvent);
     };
     const handleMobileBeforeInput: EventListener = (event) => {
@@ -497,6 +497,12 @@ export function useTerminalEmulator({
       }
 
       const inputEvent = event as InputEvent;
+      if (
+        inputEvent.isComposing ||
+        inputEvent.inputType === "insertCompositionText"
+      ) {
+        return;
+      }
       const data = resolveMobileBeforeInputData(inputEvent, helperTextarea);
       if (!data) {
         return;
@@ -514,6 +520,10 @@ export function useTerminalEmulator({
         sendTerminalInput(data);
       }, 20);
     };
+    const handleCompositionStart: EventListener = () => {
+      imeCommitRef.current = null;
+      imeCompositionEndedAtRef.current = null;
+    };
     const handleCompositionEnd: EventListener = (event) => {
       const compositionEvent = event as CompositionEvent;
       imeCompositionEndedAtRef.current = performance.now();
@@ -521,6 +531,7 @@ export function useTerminalEmulator({
         imeCommitRef.current = {
           data: compositionEvent.data,
           at: imeCompositionEndedAtRef.current,
+          forwarded: false,
         };
       }
     };
@@ -536,12 +547,21 @@ export function useTerminalEmulator({
         return;
       }
 
-      imeCommitRef.current = {
-        data: inputEvent.data,
-        at: performance.now(),
-      };
+      const currentCommit = imeCommitRef.current;
+      if (currentCommit?.data !== inputEvent.data) {
+        imeCommitRef.current = {
+          data: inputEvent.data,
+          at: performance.now(),
+          forwarded: false,
+        };
+      }
     };
     helperTextarea?.addEventListener("paste", handlePasteEvent, true);
+    helperTextarea?.addEventListener(
+      "compositionstart",
+      handleCompositionStart,
+      true,
+    );
     helperTextarea?.addEventListener(
       "compositionend",
       handleCompositionEnd,
@@ -571,6 +591,11 @@ export function useTerminalEmulator({
       window.removeEventListener("focus", refreshTerminalViewport);
       helperTextarea?.removeEventListener("paste", handlePasteEvent, true);
       helperTextarea?.removeEventListener(
+        "compositionstart",
+        handleCompositionStart,
+        true,
+      );
+      helperTextarea?.removeEventListener(
         "compositionend",
         handleCompositionEnd,
         true,
@@ -587,7 +612,6 @@ export function useTerminalEmulator({
       );
       searchResultsDisposable.dispose();
       dataDisposable.dispose();
-      bellDisposable.dispose();
       scrollDisposable.dispose();
       renderDisposable.dispose();
       selectionDisposable.dispose();
@@ -608,7 +632,6 @@ export function useTerminalEmulator({
     lastResizedAtRef,
     lastSentResizeRef,
     onAuthExpired,
-    onBellRef,
     onBottomStateChange,
     onBufferTypeChange,
     onTmuxScrollbackActiveChange,
