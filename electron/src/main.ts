@@ -524,6 +524,8 @@ interface BetaCliAuthResponse {
 }
 
 const PACKAGED_BACKEND_AUTH_FILE_NAME = "backend-auth.json";
+const BETA_AUTH_USERNAME = "admin";
+const BETA_AUTH_PASSWORD = "admin";
 
 function resolvePackagedBackendProfileDir(): string {
   return resolveBrowserProfileDir(process.env, os.homedir(), "/");
@@ -627,7 +629,9 @@ function readBetaAuthStore(): {
     return null;
   }
   try {
-    const data = JSON.parse(readFileSync(filePath, "utf8")) as BetaAuthStoreData;
+    const data = JSON.parse(
+      readFileSync(filePath, "utf8"),
+    ) as BetaAuthStoreData;
     if (!isBetaPersistedAuthRecord(data.auth)) {
       return null;
     }
@@ -654,17 +658,6 @@ function toPackagedBackendAuthConfig(
     jwtSecret: record.jwtSecret,
     createdAt: record.updatedAt,
   };
-}
-
-function hasMatchingAuthCredentials(
-  left: Pick<PackagedBackendAuthConfig, "username" | "password" | "jwtSecret">,
-  right: Pick<PackagedBackendAuthConfig, "username" | "password" | "jwtSecret">,
-): boolean {
-  return (
-    left.username === right.username &&
-    left.password === right.password &&
-    left.jwtSecret === right.jwtSecret
-  );
 }
 
 function writeMigratedBetaAuthStore(
@@ -700,30 +693,25 @@ function writeMigratedBetaAuthStore(
 function resolveBetaPackagedBackendAuthConfig(): PackagedBackendAuthConfig {
   const persisted = readBetaAuthStore();
   if (!persisted) {
-    return loadOrCreatePackagedBackendAuthConfig();
+    return {
+      ...loadOrCreatePackagedBackendAuthConfig(),
+      username: BETA_AUTH_USERNAME,
+      password: BETA_AUTH_PASSWORD,
+    };
   }
 
-  const bootstrapPath = resolvePackagedBackendAuthFile();
-  if (!existsSync(bootstrapPath)) {
-    return toPackagedBackendAuthConfig(persisted.record);
-  }
-  const bootstrap = loadOrCreatePackagedBackendAuthConfig();
-  if (hasMatchingAuthCredentials(persisted.record, bootstrap)) {
-    return toPackagedBackendAuthConfig(persisted.record);
-  }
-
-  const persistedUpdatedAt = Date.parse(persisted.record.updatedAt);
-  const bootstrapCreatedAt = Date.parse(bootstrap.createdAt);
+  const config = {
+    ...toPackagedBackendAuthConfig(persisted.record),
+    username: BETA_AUTH_USERNAME,
+    password: BETA_AUTH_PASSWORD,
+  };
   if (
-    Number.isFinite(persistedUpdatedAt) &&
-    Number.isFinite(bootstrapCreatedAt) &&
-    persistedUpdatedAt <= bootstrapCreatedAt
+    persisted.record.username !== BETA_AUTH_USERNAME ||
+    persisted.record.password !== BETA_AUTH_PASSWORD
   ) {
-    writeMigratedBetaAuthStore(persisted.data, persisted.record, bootstrap);
-    return bootstrap;
+    writeMigratedBetaAuthStore(persisted.data, persisted.record, config);
   }
-
-  return toPackagedBackendAuthConfig(persisted.record);
+  return config;
 }
 
 function readBetaCliRefreshToken(): string | null {
