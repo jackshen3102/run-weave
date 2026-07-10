@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
+  BETA_UPDATE_APP_NAME,
+  BETA_UPDATE_BUILDER_CONFIG,
   APP_SERVER_SKIP_REASON_EXPLICIT,
   APP_SERVER_SKIP_REASON_NO_CHANGE,
   APP_SERVER_UPDATE_REASON_CHANGE,
@@ -16,10 +19,12 @@ import {
   parseRunweaveUpdateArgs,
   readDotenvValue,
   resolveAppBuildVersion,
+  resolveBetaUpdateTargets,
   resolveUpdatePlan,
   RUNWEAVE_CODESIGN_IDENTITY_ENV,
   upsertDotenvValue,
   validateResolvedUpdateOptions,
+  validateUpdateTargetIsolation,
 } from "./runweave-update-core.mjs";
 
 const cases = [
@@ -301,6 +306,108 @@ const cases = [
             mode: "runtime",
           },
         }),
+      );
+    },
+  },
+  {
+    name: "beta update target isolation rejects every mismatched identity and path",
+    run() {
+      const homeDir = "/tmp/runweave-test-home";
+      const targets = resolveBetaUpdateTargets(homeDir);
+      const valid = {
+        appBackupPath: "/Applications/.Runweave Beta.app.previous-123",
+        appName: BETA_UPDATE_APP_NAME,
+        appPath: targets.appPath,
+        appServerHome: targets.appServerHome,
+        channel: "beta",
+        electronBuilderConfig: BETA_UPDATE_BUILDER_CONFIG,
+        homeDir,
+        runtimeHome: targets.runtimeHome,
+        statePath: targets.statePath,
+      };
+      assert.doesNotThrow(() => validateUpdateTargetIsolation(valid));
+      assert.doesNotThrow(() =>
+        validateUpdateTargetIsolation({
+          ...valid,
+          appName: "Custom Stable Test App",
+          appPath: "/tmp/stable-test.app",
+          appServerHome: "/tmp/app-server-test",
+          channel: "stable",
+          electronBuilderConfig: "custom-builder.yml",
+          runtimeHome: "/tmp/runtime-test",
+          statePath: "/tmp/state-test.json",
+        }),
+      );
+
+      const mismatches = [
+        ["appName", "Runweave", /app name must be Runweave Beta/],
+        [
+          "appPath",
+          "/Applications/Runweave.app",
+          /app path must be \/Applications\/Runweave Beta\.app/,
+        ],
+        [
+          "runtimeHome",
+          "/tmp/runweave-test-home/Library/Application Support/@runweave/electron/runtime",
+          /runtime home must be .*Runweave Beta\/runtime/,
+        ],
+        [
+          "appServerHome",
+          "/tmp/runweave-test-home/.runweave/app-server",
+          /App Server home must be .*app-server-beta/,
+        ],
+        [
+          "statePath",
+          "/tmp/runweave-test-home/Library/Application Support/RunweaveLocalUpdate/state.json",
+          /state path must be .*Runweave Beta\/update\/state\.json/,
+        ],
+        [
+          "electronBuilderConfig",
+          "electron-builder.local-updates.yml",
+          /Electron builder config must be electron-builder\.beta\.yml/,
+        ],
+        [
+          "appBackupPath",
+          "/Applications/Runweave.app",
+          /app backup path must be \/Applications\/\.Runweave Beta\.app\.previous/,
+        ],
+      ];
+      for (const [key, value, message] of mismatches) {
+        assert.throws(
+          () => validateUpdateTargetIsolation({ ...valid, [key]: value }),
+          message,
+        );
+      }
+
+      const directEnv = {
+        ...process.env,
+        HOME: homeDir,
+        RUNWEAVE_UPDATE_TARGET: "beta",
+      };
+      for (const name of [
+        "RUNWEAVE_APP_BACKUP_PATH",
+        "RUNWEAVE_APP_SERVER_HOME",
+        "RUNWEAVE_ELECTRON_BUILDER_CONFIG",
+        "RUNWEAVE_LOCAL_UPDATE_APP_NAME",
+        "RUNWEAVE_RUNTIME_HOME",
+        "RUNWEAVE_UPDATE_STATE_PATH",
+      ]) {
+        delete directEnv[name];
+      }
+      const directInvocation = spawnSync(
+        process.execPath,
+        ["./scripts/runweave-update.mjs", "--dry-run"],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: directEnv,
+        },
+      );
+      assert.equal(directInvocation.status, 1);
+      assert.equal(directInvocation.stdout, "");
+      assert.match(
+        directInvocation.stderr,
+        /Refusing Beta update: runtime home must be/,
       );
     },
   },

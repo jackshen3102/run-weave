@@ -16,6 +16,7 @@ import {
   RUNWEAVE_CODESIGN_IDENTITY_ENV,
   upsertDotenvValue,
   validateResolvedUpdateOptions,
+  validateUpdateTargetIsolation,
 } from "./runweave-update-core.mjs";
 
 const updateTarget =
@@ -663,6 +664,16 @@ async function main() {
     isBetaTarget && process.env.RUNWEAVE_APP_BACKUP_PATH
       ? path.resolve(process.env.RUNWEAVE_APP_BACKUP_PATH)
       : null;
+  validateUpdateTargetIsolation({
+    appBackupPath,
+    appName,
+    appPath,
+    appServerHome,
+    channel,
+    electronBuilderConfig,
+    runtimeHome,
+    statePath,
+  });
   const state = readJsonFile(statePath);
   const sourceShellVersion = readPackageVersion(
     path.join(sourceRoot, "electron", "package.json"),
