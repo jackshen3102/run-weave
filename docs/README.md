@@ -32,12 +32,13 @@
 
 ## 操作指南（活文档）
 
-| 需求                  | 阅读                                 |
-| --------------------- | ------------------------------------ |
-| Terminal CLI          | cli/terminal-cli.md                  |
-| Agent Team CLI        | cli/agent-team-cli.md                |
-| 部署 / 环境概览       | deployment/overview.md               |
-| Electron 本地自动更新 | deployment/electron-local-updates.md |
+| 需求                   | 阅读                                 |
+| ---------------------- | ------------------------------------ |
+| Terminal CLI           | cli/terminal-cli.md                  |
+| Agent Team CLI         | cli/agent-team-cli.md                |
+| 部署 / 环境概览        | deployment/overview.md               |
+| Electron 本地自动更新  | deployment/electron-local-updates.md |
+| Runweave Beta 自举通道 | deployment/runweave-beta.md          |
 
 ## 质量与可观测（活文档）
 
@@ -70,6 +71,7 @@
 | 桌面端重启项目/终端恢复测试              | testing/desktop-restart-terminal-selection-test-cases.md                           |
 | Terminal Floating Composer 测试          | testing/terminal-floating-composer-test-cases.md                                   |
 | 本地客户端更新测试                       | testing/runweave-local-client-update-test-cases.md                                 |
+| Runweave Beta 自举开发通道测试           | testing/runweave-beta-self-hosting-test-cases.md                                   |
 | Terminal Browser CDP/MCP 测试            | testing/terminal-browser-cdp-mcp-test-cases.md                                     |
 | Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md                              |
 | Terminal Browser 自适应多 Tab 测试       | testing/terminal-browser-adaptive-tabs-test-cases.md                               |

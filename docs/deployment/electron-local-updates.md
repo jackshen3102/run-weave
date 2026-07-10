@@ -11,6 +11,10 @@
 
 ## 项目能力
 
+本文所有命令和路径均属于正式（Stable）通道。开发中的独立 Beta 通道使用 `pnpm runweave:beta:update`，不会替换或重启 `/Applications/Runweave.app`；详见 [Runweave Beta 本机自举通道](./runweave-beta.md)。
+
+即使从 Beta terminal 执行 `pnpm runweave:update`，正式入口也会忽略 Beta-scoped runtime、App Server、CLI 和更新状态环境，继续使用 Stable 默认路径。
+
 项目侧推荐使用一个统一入口：
 
 ```bash

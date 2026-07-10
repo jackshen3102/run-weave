@@ -131,6 +131,16 @@ export interface AgentTeamRunOptions {
   autoApproveSplit: boolean;
 }
 
+/** Persisted freshness boundary for the worker currently allowed to complete. */
+export interface AgentTeamActiveWorkerDispatch {
+  role: AgentTeamWorkerRole;
+  panelId: string | null;
+  tmuxPaneId: string | null;
+  requestedAt: string;
+  /** null means the pane-scoped outbox did not exist when work was dispatched. */
+  outboxMtimeMs: number | null;
+}
+
 export interface AgentTeamRun {
   runId: string;
   projectId: string;
@@ -147,6 +157,8 @@ export interface AgentTeamRun {
   verification?: AgentTeamVerificationConfig | null;
   /** The only worker role currently allowed to do work in the serial flow. */
   activeWorkerRole?: AgentTeamWorkerRole | null;
+  /** Identifies the current dispatch and separates its result from stale outboxes. */
+  activeWorkerDispatch?: AgentTeamActiveWorkerDispatch | null;
   clarify: AgentTeamClarifyMessage[];
   proposal: AgentTeamProposal | null;
   workers: AgentTeamWorker[];

@@ -15,13 +15,21 @@ const agentCompletionLogger = logger.child({
   component: "app-server-agent-completion",
 });
 
+export interface AppServerAgentCompletionContext {
+  projectId: string;
+  terminalSessionId: string;
+  panelId: string | null;
+  tmuxPaneId: string | null;
+  cwd: string;
+}
+
 export async function handleAgentCompletionEvent(
   event: AppServerEventEnvelope,
   options: {
     terminalSessionManager: TerminalSessionManager;
     terminalStateService: TerminalStateService;
   },
-): Promise<void> {
+): Promise<AppServerAgentCompletionContext | null> {
   const terminalSessionId = event.scope?.terminalSessionId;
   const panelId =
     event.scope?.terminalPanelId ??
@@ -53,11 +61,12 @@ export async function handleAgentCompletionEvent(
       "completionReason",
     ),
   });
-  if (!terminalSessionId || !agent || !isAppServerStopCompletion(event.payload)) {
-    return;
+  if (!terminalSessionId || !isAppServerStopCompletion(event.payload)) {
+    return null;
   }
 
-  if (!options.terminalSessionManager.getSession(terminalSessionId)) {
+  const session = options.terminalSessionManager.getSession(terminalSessionId);
+  if (!session) {
     agentCompletionLogger.info("app-server.agent-completion.fallback.skipped", {
       message: "App-server agent completion fallback skipped",
       eventId: event.id,
@@ -65,7 +74,23 @@ export async function handleAgentCompletionEvent(
       agent,
       reason: "session_not_found",
     });
-    return;
+    return null;
+  }
+  const completionContext: AppServerAgentCompletionContext = {
+    projectId: session.projectId,
+    terminalSessionId,
+    panelId: panelId ?? null,
+    tmuxPaneId: tmuxPaneId ?? null,
+    cwd: session.cwd,
+  };
+  if (!agent) {
+    agentCompletionLogger.info("app-server.agent-completion.fallback.skipped", {
+      message: "App-server agent completion fallback skipped",
+      eventId: event.id,
+      terminalSessionId,
+      reason: "agent_not_resolved",
+    });
+    return completionContext;
   }
 
   const result = await processTerminalAgentHook(options, {
@@ -78,7 +103,7 @@ export async function handleAgentCompletionEvent(
     commandName,
   });
   if (result.status === "not_found" || result.status === "exited") {
-    return;
+    return completionContext;
   }
   if (result.status === "ignored") {
     agentCompletionLogger.info("app-server.agent-completion.fallback.ignored", {
@@ -90,7 +115,7 @@ export async function handleAgentCompletionEvent(
       panelId: result.panelId,
       state: result.terminalState.state,
     });
-    return;
+    return completionContext;
   }
 
   agentCompletionLogger.info("app-server.agent-completion.fallback.recorded", {
@@ -101,4 +126,5 @@ export async function handleAgentCompletionEvent(
     state: result.terminalState.state,
     panelId: result.panelId,
   });
+  return completionContext;
 }

@@ -34,6 +34,7 @@ export const APP_SENSITIVE_PATH_PREFIXES = [
   "electron/resources/",
   "electron/scripts/",
   "electron/electron-builder.yml",
+  "electron/electron-builder.beta.yml",
   "electron/electron-builder.local-updates.yml",
   "electron/package.json",
   "electron/tsconfig.json",
@@ -43,6 +44,7 @@ export const APP_SENSITIVE_PATH_PREFIXES = [
   "scripts/runweave-update.mjs",
   "scripts/runweave-update-core.mjs",
   "scripts/runweave-update-test-cases.mjs",
+  "scripts/runweave-beta.mjs",
   "scripts/serve-local-updates.mjs",
 ];
 
@@ -110,6 +112,24 @@ export function isAppServerSensitivePath(filePath) {
 
 export function uniqueSorted(values) {
   return Array.from(new Set(values.filter(Boolean))).sort();
+}
+
+export function filterChangedFilesAgainstSnapshot({
+  candidateFiles,
+  currentSnapshot,
+  previousSnapshot,
+}) {
+  const files = uniqueSorted(candidateFiles ?? []);
+  if (!previousSnapshot || typeof previousSnapshot !== "object") {
+    return files;
+  }
+
+  return files.filter((filePath) => {
+    if (!Object.hasOwn(previousSnapshot, filePath)) {
+      return true;
+    }
+    return currentSnapshot?.[filePath] !== previousSnapshot[filePath];
+  });
 }
 
 function unquoteEnvValue(value) {
@@ -229,8 +249,7 @@ export function resolveUpdatePlan({
   const appServer = resolveAppServerUpdatePlan({
     appServerFiles,
     appServerMode,
-    hasPreviousAppServerState:
-      hasPreviousAppServerState ?? hasPreviousState,
+    hasPreviousAppServerState: hasPreviousAppServerState ?? hasPreviousState,
   });
 
   if (forceMode === "app") {
@@ -343,7 +362,7 @@ function resolveAppServerUpdatePlan({
 export function validateResolvedUpdateOptions({ noRestart, plan }) {
   if (noRestart && plan.mode === "app") {
     throw new Error(
-      "--no-restart is only supported for runtime updates. App updates must quit and relaunch Runweave to replace /Applications/Runweave.app.",
+      "--no-restart is only supported for runtime updates. App updates must quit and relaunch the target desktop app.",
     );
   }
   if (noRestart && plan.appServer?.action === "update") {

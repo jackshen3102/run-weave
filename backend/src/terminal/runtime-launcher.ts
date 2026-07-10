@@ -218,6 +218,8 @@ export async function ensureTerminalRuntime(
               RUNWEAVE_HOOK_TOKEN: process.env.RUNWEAVE_HOOK_TOKEN,
               RUNWEAVE_BASE_URL: process.env.RUNWEAVE_BASE_URL,
               RUNWEAVE_BACKEND_PORT: process.env.RUNWEAVE_BACKEND_PORT,
+              RUNWEAVE_CONFIG_FILE: process.env.RUNWEAVE_CONFIG_FILE,
+              RUNWEAVE_DESKTOP_CHANNEL: process.env.RUNWEAVE_DESKTOP_CHANNEL,
             },
           },
         );
@@ -279,6 +281,8 @@ export async function ensureTerminalRuntime(
       RUNWEAVE_HOOK_TOKEN: process.env.RUNWEAVE_HOOK_TOKEN,
       RUNWEAVE_BASE_URL: process.env.RUNWEAVE_BASE_URL,
       RUNWEAVE_BACKEND_PORT: process.env.RUNWEAVE_BACKEND_PORT,
+      RUNWEAVE_CONFIG_FILE: process.env.RUNWEAVE_CONFIG_FILE,
+      RUNWEAVE_DESKTOP_CHANNEL: process.env.RUNWEAVE_DESKTOP_CHANNEL,
     },
     fallback: resolveTerminalFallbackLaunchConfig({
       command: options.session.command,

@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import type {
+  AgentTeamActiveWorkerDispatch,
   AgentTeamAcceptanceCase,
   AgentTeamAcceptanceSource,
   AgentTeamExportHistoryMode,
@@ -89,6 +90,22 @@ interface AgentTeamServiceOptions {
   cwd?: string;
 }
 
+export type AgentTeamCompletionSignalSource =
+  | "terminal_event"
+  | "app_server"
+  | "startup"
+  | "watchdog";
+
+export interface AgentTeamCompletionSignal {
+  projectId: string;
+  terminalSessionId: string;
+  panelId?: string | null;
+  tmuxPaneId?: string | null;
+  cwd?: string | null;
+  outboxPath?: string | null;
+  source: AgentTeamCompletionSignalSource;
+}
+
 export interface ExportAgentTeamRunOptions {
   history?: AgentTeamExportHistoryMode;
   tailLines?: number;
@@ -168,6 +185,12 @@ export class AgentTeamService {
       });
     });
     this.startRecheckWatchdog();
+    void this.runRecheckWatchdog("startup").catch((error) => {
+      agentTeamLogger.warn("agent-team.completion_recovery.startup_failed", {
+        message: "Could not scan active worker outboxes during startup",
+        error,
+      });
+    });
   }
 
   async listRuns(projectId: string): Promise<AgentTeamRun[]> {
@@ -342,6 +365,7 @@ export class AgentTeamService {
       task,
       verification: prepared.verification,
       activeWorkerRole: null,
+      activeWorkerDispatch: null,
       clarify: [],
       proposal: null,
       workers: [],
@@ -556,6 +580,7 @@ export class AgentTeamService {
     const nextRun = await this.updateRun(run, {
       status: "running",
       activeWorkerRole,
+      activeWorkerDispatch: null,
       workers: setActiveWorker(run.workers, activeWorkerRole),
       loop: {
         ...run.loop,
@@ -597,6 +622,7 @@ export class AgentTeamService {
       status: "done",
       workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
       activeWorkerRole: null,
+      activeWorkerDispatch: null,
       loop: {
         ...run.loop,
         escalated: false,
@@ -1073,7 +1099,13 @@ export class AgentTeamService {
     const activeWorker = activeWorkerRole
       ? findWorkerByRole(activeWorkers, activeWorkerRole)
       : null;
+    let activeWorkerDispatch: AgentTeamActiveWorkerDispatch | null = null;
     if (activeWorker?.panelId) {
+      const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(
+        session,
+        activeWorker,
+      );
+      const requestedAt = new Date().toISOString();
       await this.promptSender.sendPromptToPane(
         session,
         buildWorkerStartupPrompt({
@@ -1086,6 +1118,11 @@ export class AgentTeamService {
           ),
         }),
         { panelId: activeWorker.panelId },
+      );
+      activeWorkerDispatch = createActiveWorkerDispatch(
+        activeWorker,
+        requestedAt,
+        outboxMtimeMs,
       );
     }
     if (this.tmuxService && activeWorkers.some((worker) => worker.panelId)) {
@@ -1109,6 +1146,7 @@ export class AgentTeamService {
       terminal,
       proposal: null,
       activeWorkerRole,
+      activeWorkerDispatch,
       workers: activeWorkers,
       acceptance: executionAcceptance,
       logs: [...run.logs, context.log],
@@ -1153,6 +1191,9 @@ export class AgentTeamService {
     let loop = folded.loop;
     let workers = run.workers;
     let activeWorkerRole = run.activeWorkerRole ?? null;
+    // This completion consumed the current dispatch. A follow-up bounce or
+    // serial worker dispatch will install a new boundary below.
+    let activeWorkerDispatch: AgentTeamActiveWorkerDispatch | null = null;
     const allAcceptancePassed =
       folded.acceptance.length > 0 &&
       folded.acceptance.every((item) => item.status === "pass");
@@ -1160,6 +1201,7 @@ export class AgentTeamService {
       status = "done";
       workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
       activeWorkerRole = null;
+      activeWorkerDispatch = null;
       logs.push(`✅ 所有验收用例通过，run 完成`);
     } else if (shouldEscalate(folded.loop)) {
       const reason = buildEscalationReason(folded.loop, folded.acceptance);
@@ -1168,6 +1210,7 @@ export class AgentTeamService {
       // Freeze all worker panes: stop injecting further rounds.
       workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
       activeWorkerRole = null;
+      activeWorkerDispatch = null;
       logs.push(`⏸ ${reason}`);
     }
 
@@ -1177,6 +1220,7 @@ export class AgentTeamService {
       acceptance: folded.acceptance,
       workers,
       activeWorkerRole,
+      activeWorkerDispatch,
       logs,
     });
 
@@ -1228,6 +1272,11 @@ export class AgentTeamService {
       return run;
     }
     try {
+      const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(
+        session,
+        codeWorker,
+      );
+      const requestedAt = new Date().toISOString();
       await this.promptSender.sendPromptToPane(
         session,
         buildBounceBackPrompt({ run, failedCases }),
@@ -1241,6 +1290,11 @@ export class AgentTeamService {
       return this.updateRun(run, {
         acceptance: bouncedAcceptance,
         activeWorkerRole: "code",
+        activeWorkerDispatch: createActiveWorkerDispatch(
+          codeWorker,
+          requestedAt,
+          outboxMtimeMs,
+        ),
         workers: setActiveWorker(run.workers, "code"),
         logs: [
           ...run.logs,
@@ -1263,51 +1317,142 @@ export class AgentTeamService {
     if (event.kind !== "completion") {
       return;
     }
+    await this.reconcileCompletionEvent(event, "terminal_event");
+  }
+
+  async reconcileCompletionSignal(
+    signal: AgentTeamCompletionSignal,
+  ): Promise<boolean> {
+    const run = await this.runStore.getRunByTerminalSession(
+      signal.projectId,
+      signal.terminalSessionId,
+    );
+    if (!run || run.phase !== "executing" || run.status !== "running") {
+      return false;
+    }
+    const session = this.terminalSessionManager.getSession(
+      run.terminalSessionId,
+    );
+    const activeWorker = run.activeWorkerRole
+      ? findWorkerByRole(run.workers, run.activeWorkerRole)
+      : null;
+    if (!session || !activeWorker) {
+      return false;
+    }
+    return this.reconcileCompletionEvent(
+      createSyntheticCompletionEvent(run, session, activeWorker, signal),
+      signal.source,
+    );
+  }
+
+  private async reconcileCompletionEvent(
+    event: Extract<TerminalEventEnvelope, { kind: "completion" }>,
+    source: AgentTeamCompletionSignalSource,
+  ): Promise<boolean> {
     if (!event.projectId) {
-      return;
+      return false;
     }
     const run = await this.runStore.getRunByTerminalSession(
       event.projectId,
       event.terminalSessionId,
     );
-    if (
-      !run ||
-      run.phase !== "executing" ||
-      run.status !== "running"
-    ) {
-      return;
-    }
-    const outbox = await this.outboxResolver.resolveOutbox(event);
-    if (!outbox) {
-      return;
-    }
-    const initialRound = this.resolveOutboxRound(run, outbox);
-    const shouldDispatchRecheck = this.hasBouncedCasesForWorker(run, outbox);
-    const shouldDispatchSerial = shouldDispatchNextSerialWorker(run, outbox);
-    if (
-      !initialRound.acceptanceResults.length &&
-      !shouldDispatchRecheck &&
-      !shouldDispatchSerial
-    ) {
-      return;
+    if (!run || run.phase !== "executing" || run.status !== "running") {
+      return false;
     }
     this.incrementPendingCompletionRound(run.runId);
-    await this.enqueue(run.runId, async () => {
+    return this.enqueue(run.runId, async () => {
       try {
         const latest = await this.getRun(run.runId);
-        if (!latest || latest.phase !== "executing") {
-          return;
+        if (
+          !latest ||
+          latest.phase !== "executing" ||
+          latest.status !== "running" ||
+          !latest.activeWorkerRole
+        ) {
+          return false;
         }
-        if (!isActiveWorkerOutbox(latest, outbox)) {
-          return;
+        const activeWorker = findWorkerByRole(
+          latest.workers,
+          latest.activeWorkerRole,
+        );
+        if (!activeWorker) {
+          return false;
+        }
+        const signalMismatch = completionSignalWorkerMismatch(
+          event,
+          activeWorker,
+        );
+        if (signalMismatch) {
+          this.logStaleCompletion(source, latest, activeWorker, signalMismatch);
+          return false;
+        }
+        const resolvedOutbox =
+          await this.outboxResolver.resolveOutboxWithMetadata(event);
+        if (!resolvedOutbox) {
+          return false;
+        }
+        const { outbox, mtimeMs: outboxMtimeMs } = resolvedOutbox;
+        const identityMismatch = completionOutboxIdentityMismatch(
+          latest,
+          activeWorker,
+          outbox,
+          source !== "terminal_event",
+        );
+        if (identityMismatch) {
+          this.logStaleCompletion(source, latest, activeWorker, identityMismatch);
+          return false;
+        }
+        const dispatch = resolveActiveWorkerDispatch(latest, activeWorker);
+        const freshnessMismatch = workerOutboxFreshnessMismatch(
+          dispatch,
+          outboxMtimeMs,
+        );
+        if (freshnessMismatch) {
+          this.logStaleCompletion(
+            source,
+            latest,
+            activeWorker,
+            freshnessMismatch,
+          );
+          return false;
+        }
+        const initialRound = this.resolveOutboxRound(latest, outbox);
+        const shouldDispatchRecheck = this.hasBouncedCasesForWorker(
+          latest,
+          outbox,
+        );
+        const shouldDispatchSerial = shouldDispatchNextSerialWorker(
+          latest,
+          outbox,
+        );
+        if (
+          !initialRound.acceptanceResults.length &&
+          !shouldDispatchRecheck &&
+          !shouldDispatchSerial
+        ) {
+          return false;
         }
         if (await this.dispatchNextSerialWorkerFromCompletion(latest, outbox)) {
-          return;
+          this.logReconciledCompletion(
+            source,
+            latest,
+            activeWorker,
+            outboxMtimeMs,
+            initialRound.acceptanceResults.length,
+          );
+          return true;
         }
         const round = this.resolveOutboxRound(latest, outbox);
         if (!round.acceptanceResults.length) {
           await this.dispatchBouncedCasesForRecheck(latest, outbox);
-          return;
+          this.logReconciledCompletion(
+            source,
+            latest,
+            activeWorker,
+            outboxMtimeMs,
+            0,
+          );
+          return true;
         }
         await this.applyRound(latest, {
           acceptanceResults: round.acceptanceResults,
@@ -1315,9 +1460,56 @@ export class AgentTeamService {
           completedWorkerRole: parseWorkerRole(outbox.role),
           completedWorkerSummary: outbox.summary,
         });
+        this.logReconciledCompletion(
+          source,
+          latest,
+          activeWorker,
+          outboxMtimeMs,
+          round.acceptanceResults.length,
+        );
+        return true;
       } finally {
         this.decrementPendingCompletionRound(run.runId);
       }
+    });
+  }
+
+  private logStaleCompletion(
+    source: AgentTeamCompletionSignalSource,
+    run: AgentTeamRun,
+    worker: AgentTeamWorker,
+    reason: string,
+  ): void {
+    const fields = {
+      message: "Agent-team completion did not match the active dispatch",
+      source,
+      runId: run.runId,
+      role: worker.role,
+      panelId: worker.panelId ?? null,
+      reason,
+    };
+    if (source === "watchdog") {
+      agentTeamLogger.debug("agent-team.completion.stale", fields);
+      return;
+    }
+    agentTeamLogger.info("agent-team.completion.stale", fields);
+  }
+
+  private logReconciledCompletion(
+    source: AgentTeamCompletionSignalSource,
+    run: AgentTeamRun,
+    worker: AgentTeamWorker,
+    outboxMtimeMs: number | null,
+    resultCount: number,
+  ): void {
+    agentTeamLogger.info("agent-team.completion.reconciled", {
+      message: "Agent-team completion reconciled from worker outbox",
+      source,
+      runId: run.runId,
+      role: worker.role,
+      panelId: worker.panelId ?? null,
+      outboxMtimeMs,
+      resultCount,
     });
   }
 
@@ -1451,6 +1643,7 @@ export class AgentTeamService {
       worker,
     );
     const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(session, worker);
+    const now = new Date().toISOString();
     await this.promptSender.sendPromptToPane(
       session,
       buildWorkerRecheckPrompt({
@@ -1463,10 +1656,14 @@ export class AgentTeamService {
       { panelId: worker.panelId },
     );
 
-    const now = new Date().toISOString();
     const caseIds = new Set(options.cases.map((item) => item.caseId));
     return this.updateRun(run, {
       activeWorkerRole: role,
+      activeWorkerDispatch: createActiveWorkerDispatch(
+        worker,
+        now,
+        outboxMtimeMs,
+      ),
       workers: setActiveWorker(run.workers, role),
       acceptance: run.acceptance.map((item) =>
         caseIds.has(item.caseId)
@@ -1517,6 +1714,7 @@ export class AgentTeamService {
       session,
       worker,
     );
+    const now = new Date().toISOString();
     await this.promptSender.sendPromptToPane(
       session,
       buildWorkerRecheckPrompt({
@@ -1529,7 +1727,6 @@ export class AgentTeamService {
       { panelId: worker.panelId },
     );
 
-    const now = new Date().toISOString();
     const caseIds = new Set(cases.map((item) => item.caseId));
     const logPrefix =
       options.reason === "timeout_retry"
@@ -1537,6 +1734,11 @@ export class AgentTeamService {
         : `code pane ${options.sourcePanelId ?? ""} 已完成，重新触发用例`;
     return this.updateRun(run, {
       activeWorkerRole: worker.role,
+      activeWorkerDispatch: createActiveWorkerDispatch(
+        worker,
+        now,
+        outboxMtimeMs,
+      ),
       workers: setActiveWorker(run.workers, worker.role),
       acceptance: ensureWorkerGateAcceptance(run.workers, run.acceptance).map(
         (item) =>
@@ -1566,7 +1768,7 @@ export class AgentTeamService {
       return;
     }
     this.recheckWatchdogTimer = setInterval(() => {
-      void this.runRecheckWatchdog().catch((error) => {
+      void this.runRecheckWatchdog("watchdog").catch((error) => {
         agentTeamLogger.warn("agent-team.recheck_watchdog.failed", {
           message: "Could not scan pending rechecks",
           error,
@@ -1576,7 +1778,9 @@ export class AgentTeamService {
     this.recheckWatchdogTimer.unref?.();
   }
 
-  private async runRecheckWatchdog(): Promise<void> {
+  private async runRecheckWatchdog(
+    source: "startup" | "watchdog",
+  ): Promise<void> {
     const projects = this.terminalSessionManager.listProjects();
     for (const project of projects) {
       const runs = await this.runStore.listRuns(project.id);
@@ -1587,7 +1791,24 @@ export class AgentTeamService {
         ) {
           continue;
         }
-        if (findRecheckWatchdogCases(run).length === 0) {
+        const session = this.terminalSessionManager.getSession(
+          run.terminalSessionId,
+        );
+        const activeWorker = run.activeWorkerRole
+          ? findWorkerByRole(run.workers, run.activeWorkerRole)
+          : null;
+        if (!session || !activeWorker) {
+          continue;
+        }
+        const reconciled = await this.reconcileCompletionSignal({
+          projectId: run.projectId,
+          terminalSessionId: run.terminalSessionId,
+          panelId: activeWorker.panelId ?? null,
+          tmuxPaneId: activeWorker.tmuxPaneId ?? null,
+          cwd: session.cwd,
+          source,
+        });
+        if (reconciled) {
           continue;
         }
         await this.enqueue(run.runId, async () => {
@@ -1599,7 +1820,9 @@ export class AgentTeamService {
           ) {
             return;
           }
-          await this.handleTimedOutRechecks(latest);
+          if (findRecheckWatchdogCases(latest).length > 0) {
+            await this.handleTimedOutRechecks(latest);
+          }
         });
       }
     }
@@ -1609,22 +1832,6 @@ export class AgentTeamService {
     const overdueCases = findRecheckWatchdogCases(run);
     if (overdueCases.length === 0) {
       return run;
-    }
-
-    const completedOutbox = await this.resolveUpdatedRecheckOutbox(
-      run,
-      overdueCases,
-    );
-    if (completedOutbox) {
-      const round = this.resolveOutboxRound(run, completedOutbox);
-      if (round.acceptanceResults.length > 0) {
-        return this.applyRound(run, {
-          acceptanceResults: round.acceptanceResults,
-          forceBounceCaseIds: round.forceBounceCaseIds,
-          completedWorkerRole: parseWorkerRole(completedOutbox.role),
-          completedWorkerSummary: completedOutbox.summary,
-        });
-      }
     }
 
     const exhaustedCases = overdueCases.filter(
@@ -1644,6 +1851,7 @@ export class AgentTeamService {
     return this.updateRun(latestRun, {
       status: "need_human",
       activeWorkerRole: null,
+      activeWorkerDispatch: null,
       workers: latestRun.workers.map((worker) => ({ ...worker, frozen: true })),
       acceptance: latestRun.acceptance.map((item) =>
         exhaustedCases.some((exhausted) => exhausted.caseId === item.caseId)
@@ -1676,48 +1884,6 @@ export class AgentTeamService {
         `⏸ 复验 worker 连续 ${MAX_RECHECK_ATTEMPTS} 次未产出 outbox，升级人工：${exhaustedCases.map((item) => item.caseId).join(", ")}`,
       ],
     });
-  }
-
-  private async resolveUpdatedRecheckOutbox(
-    run: AgentTeamRun,
-    cases: AgentTeamAcceptanceCase[],
-  ): Promise<AgentTeamWorkerOutbox | null> {
-    const session = this.terminalSessionManager.getSession(
-      run.terminalSessionId,
-    );
-    if (!session) {
-      return null;
-    }
-    for (const item of cases) {
-      if (item.recheckOutboxMtimeMs === null || item.recheckOutboxMtimeMs === undefined) {
-        continue;
-      }
-      const worker =
-        this.findRecheckWorker(run, item) ??
-        resolveRecheckDispatches(run, [item])[0]?.worker ??
-        null;
-      if (!worker?.panelId) {
-        continue;
-      }
-      const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(session, worker);
-      if (
-        outboxMtimeMs === null ||
-        outboxMtimeMs <= item.recheckOutboxMtimeMs
-      ) {
-        continue;
-      }
-      const outbox = await this.outboxResolver.resolveOutbox(
-        createSyntheticCompletionEvent(run, session, worker),
-      );
-      if (!outbox) {
-        continue;
-      }
-      const round = this.resolveOutboxRound(run, outbox);
-      if (round.acceptanceResults.some((result) => result.caseId === item.caseId)) {
-        return outbox;
-      }
-    }
-    return null;
   }
 
   private async retryTimedOutRechecks(
@@ -1789,6 +1955,13 @@ export class AgentTeamService {
     const caseIds = new Set(cases.map((item) => item.caseId));
     const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(session, worker);
     return this.updateRun(run, {
+      activeWorkerRole: worker.role,
+      activeWorkerDispatch: createActiveWorkerDispatch(
+        worker,
+        now,
+        outboxMtimeMs,
+      ),
+      workers: setActiveWorker(run.workers, worker.role),
       acceptance: run.acceptance.map((item) =>
         caseIds.has(item.caseId)
           ? {
@@ -2048,6 +2221,7 @@ export class AgentTeamService {
         | "task"
         | "verification"
         | "activeWorkerRole"
+        | "activeWorkerDispatch"
         | "clarify"
         | "proposal"
         | "workers"
@@ -2242,15 +2416,131 @@ function shouldDispatchNextSerialWorker(
   return run.phase === "executing" && role === "code";
 }
 
-function isActiveWorkerOutbox(
+function createActiveWorkerDispatch(
+  worker: Pick<AgentTeamWorker, "role" | "panelId" | "tmuxPaneId">,
+  requestedAt: string,
+  outboxMtimeMs: number | null,
+): AgentTeamActiveWorkerDispatch {
+  return {
+    role: worker.role,
+    panelId: worker.panelId ?? null,
+    tmuxPaneId: worker.tmuxPaneId ?? null,
+    requestedAt,
+    outboxMtimeMs,
+  };
+}
+
+function resolveActiveWorkerDispatch(
   run: AgentTeamRun,
-  outbox: AgentTeamWorkerOutbox,
-): boolean {
-  const role = parseWorkerRole(outbox.role);
-  if (!role || !run.activeWorkerRole) {
-    return true;
+  worker: AgentTeamWorker,
+): AgentTeamActiveWorkerDispatch {
+  const persisted = run.activeWorkerDispatch;
+  if (
+    persisted &&
+    persisted.role === worker.role &&
+    (!persisted.panelId || persisted.panelId === worker.panelId) &&
+    (!persisted.tmuxPaneId || persisted.tmuxPaneId === worker.tmuxPaneId)
+  ) {
+    return persisted;
   }
-  return role === run.activeWorkerRole;
+  const recheckCase = run.acceptance
+    .filter(
+      (item) =>
+        item.status === "pending" &&
+        item.recheckRequestedAt &&
+        item.recheckWorkerRole === worker.role &&
+        (!item.recheckWorkerPanelId ||
+          item.recheckWorkerPanelId === worker.panelId),
+    )
+    .sort(
+      (left, right) =>
+        Date.parse(right.recheckRequestedAt!) -
+        Date.parse(left.recheckRequestedAt!),
+    )[0];
+  if (recheckCase?.recheckRequestedAt) {
+    return createActiveWorkerDispatch(
+      worker,
+      recheckCase.recheckRequestedAt,
+      recheckCase.recheckOutboxMtimeMs ?? null,
+    );
+  }
+  return createActiveWorkerDispatch(worker, run.updatedAt, null);
+}
+
+function completionSignalWorkerMismatch(
+  event: Extract<TerminalEventEnvelope, { kind: "completion" }>,
+  worker: AgentTeamWorker,
+): string | null {
+  if (event.payload.panelId && event.payload.panelId !== worker.panelId) {
+    return "signal_panel_mismatch";
+  }
+  if (
+    event.payload.tmuxPaneId &&
+    event.payload.tmuxPaneId !== worker.tmuxPaneId
+  ) {
+    return "signal_tmux_pane_mismatch";
+  }
+  return null;
+}
+
+function completionOutboxIdentityMismatch(
+  run: AgentTeamRun,
+  worker: AgentTeamWorker,
+  outbox: AgentTeamWorkerOutbox,
+  requireRunId: boolean,
+): string | null {
+  if (requireRunId && !outbox.runId) {
+    return "outbox_run_id_missing";
+  }
+  if (outbox.runId && outbox.runId !== run.runId) {
+    return "outbox_run_id_mismatch";
+  }
+  if (outbox.sessionId !== run.terminalSessionId) {
+    return "outbox_session_mismatch";
+  }
+  if (outbox.projectId && outbox.projectId !== run.projectId) {
+    return "outbox_project_mismatch";
+  }
+  if (parseWorkerRole(outbox.role) !== run.activeWorkerRole) {
+    return "outbox_role_mismatch";
+  }
+  if (outbox.panelId && outbox.panelId !== worker.panelId) {
+    return "outbox_panel_mismatch";
+  }
+  if (outbox.tmuxPaneId && outbox.tmuxPaneId !== worker.tmuxPaneId) {
+    return "outbox_tmux_pane_mismatch";
+  }
+  const matchesPanel = Boolean(
+    worker.panelId && outbox.panelId === worker.panelId,
+  );
+  const matchesTmuxPane = Boolean(
+    worker.tmuxPaneId && outbox.tmuxPaneId === worker.tmuxPaneId,
+  );
+  if (!matchesPanel && !matchesTmuxPane) {
+    return "outbox_pane_identity_missing";
+  }
+  return null;
+}
+
+function workerOutboxFreshnessMismatch(
+  dispatch: AgentTeamActiveWorkerDispatch,
+  outboxMtimeMs: number | null,
+): string | null {
+  if (outboxMtimeMs === null) {
+    return "outbox_mtime_unavailable";
+  }
+  if (dispatch.outboxMtimeMs !== null) {
+    return outboxMtimeMs > dispatch.outboxMtimeMs
+      ? null
+      : "outbox_not_newer_than_dispatch_baseline";
+  }
+  const requestedAtMs = Date.parse(dispatch.requestedAt);
+  if (!Number.isFinite(requestedAtMs)) {
+    return "dispatch_requested_at_invalid";
+  }
+  return outboxMtimeMs > requestedAtMs
+    ? null
+    : "outbox_not_newer_than_dispatch";
 }
 
 function acceptanceCasesForRole(
@@ -2525,10 +2815,11 @@ function createSyntheticCompletionEvent(
   run: AgentTeamRun,
   session: TerminalSessionRecord,
   worker: Pick<AgentTeamWorker, "panelId" | "tmuxPaneId">,
+  signal: AgentTeamCompletionSignal,
 ): Extract<TerminalEventEnvelope, { kind: "completion" }> {
   const now = new Date().toISOString();
   return {
-    id: `agent-team-recheck-watchdog-${run.runId}-${Date.now()}`,
+    id: `agent-team-${signal.source}-${run.runId}-${Date.now()}`,
     kind: "completion",
     terminalSessionId: run.terminalSessionId,
     projectId: run.projectId,
@@ -2539,11 +2830,11 @@ function createSyntheticCompletionEvent(
       commandName: run.terminal.command ?? null,
       rawHookEvent: null,
       hookEvent: "",
-      cwd: session.cwd,
-      outboxPath: null,
+      cwd: signal.cwd ?? session.cwd,
+      outboxPath: signal.outboxPath ?? null,
       summary: null,
-      panelId: worker.panelId ?? null,
-      tmuxPaneId: worker.tmuxPaneId ?? null,
+      panelId: signal.panelId ?? worker.panelId ?? null,
+      tmuxPaneId: signal.tmuxPaneId ?? worker.tmuxPaneId ?? null,
     },
   };
 }

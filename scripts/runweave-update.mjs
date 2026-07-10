@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
   commandName,
+  filterChangedFilesAgainstSnapshot,
   parseRunweaveUpdateArgs,
   readDotenvValue,
   resolveAppBuildVersion,
@@ -16,8 +18,45 @@ import {
   validateResolvedUpdateOptions,
 } from "./runweave-update-core.mjs";
 
-const appName = process.env.RUNWEAVE_LOCAL_UPDATE_APP_NAME ?? "Runweave";
+const updateTarget =
+  process.env.RUNWEAVE_UPDATE_TARGET === "beta" ? "beta" : "stable";
+const isBetaTarget = updateTarget === "beta";
+const isBetaTerminal =
+  !isBetaTarget && process.env.RUNWEAVE_DESKTOP_CHANNEL === "beta";
+const appName = isBetaTarget
+  ? (process.env.RUNWEAVE_LOCAL_UPDATE_APP_NAME ?? "Runweave Beta")
+  : "Runweave";
+const channel = updateTarget;
+const electronBuilderConfig =
+  (isBetaTarget ? process.env.RUNWEAVE_ELECTRON_BUILDER_CONFIG : null) ??
+  (isBetaTarget
+    ? "electron-builder.beta.yml"
+    : "electron-builder.local-updates.yml");
 const codesignEnvFileRelativePath = path.join("backend", ".env");
+
+if (isBetaTerminal) {
+  for (const name of [
+    "BROWSER_PROFILE_DIR",
+    "RUNWEAVE_ACCESS_TOKEN",
+    "RUNWEAVE_APP_BACKUP_PATH",
+    "RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR",
+    "RUNWEAVE_APP_SERVER_HOME",
+    "RUNWEAVE_APP_SERVER_RUNTIME_ROOT",
+    "RUNWEAVE_APP_SERVER_STATE_DIR",
+    "RUNWEAVE_APP_SERVER_URL",
+    "RUNWEAVE_APP_SERVER_TOKEN",
+    "RUNWEAVE_BACKEND_PORT",
+    "RUNWEAVE_BASE_URL",
+    "RUNWEAVE_CONFIG_FILE",
+    "RUNWEAVE_DESKTOP_CHANNEL",
+    "RUNWEAVE_ELECTRON_BUILDER_CONFIG",
+    "RUNWEAVE_LOCAL_UPDATE_APP_NAME",
+    "RUNWEAVE_RUNTIME_HOME",
+    "RUNWEAVE_UPDATE_STATE_PATH",
+  ]) {
+    delete process.env[name];
+  }
+}
 
 function wait(delayMs) {
   return new Promise((resolve) => {
@@ -244,6 +283,7 @@ async function getGitChangedFilesSinceState(sourceRoot, state) {
     }
   }
 
+  const worktreeFiles = [];
   for (const args of [
     ["diff", "--name-only"],
     ["diff", "--cached", "--name-only"],
@@ -251,11 +291,63 @@ async function getGitChangedFilesSinceState(sourceRoot, state) {
   ]) {
     const result = await runCapture("git", args, { cwd: sourceRoot });
     if (result.ok) {
-      changed.push(...result.stdout.split(/\r?\n/));
+      worktreeFiles.push(...result.stdout.split(/\r?\n/));
     }
   }
+  changed.push(...worktreeFiles, ...Object.keys(state?.worktreeSnapshot ?? {}));
+  const candidateFiles = changed.map((file) => file.trim()).filter(Boolean);
+  const currentSnapshot = await createFileSnapshot(sourceRoot, candidateFiles);
+  return filterChangedFilesAgainstSnapshot({
+    candidateFiles,
+    currentSnapshot,
+    previousSnapshot: state?.worktreeSnapshot,
+  });
+}
 
-  return changed.map((file) => file.trim()).filter(Boolean);
+async function createWorktreeSnapshot(sourceRoot) {
+  const files = [];
+  for (const args of [
+    ["diff", "--name-only"],
+    ["diff", "--cached", "--name-only"],
+    ["ls-files", "--others", "--exclude-standard"],
+  ]) {
+    const result = await runCapture("git", args, { cwd: sourceRoot });
+    if (result.ok) {
+      files.push(...result.stdout.split(/\r?\n/));
+    }
+  }
+  return await createFileSnapshot(
+    sourceRoot,
+    files.map((file) => file.trim()).filter(Boolean),
+  );
+}
+
+async function createFileSnapshot(sourceRoot, filePaths) {
+  const snapshot = {};
+  for (const filePath of Array.from(new Set(filePaths)).sort()) {
+    const absolutePath = path.join(sourceRoot, filePath);
+    try {
+      const stat = await fs.lstat(absolutePath);
+      if (stat.isSymbolicLink()) {
+        snapshot[filePath] = `link:${await fs.readlink(absolutePath)}`;
+        continue;
+      }
+      if (!stat.isFile()) {
+        snapshot[filePath] = `other:${stat.mode & 0o777}`;
+        continue;
+      }
+      const digest = createHash("sha256")
+        .update(await fs.readFile(absolutePath))
+        .digest("hex");
+      snapshot[filePath] = `file:${stat.mode & 0o777}:${digest}`;
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        throw error;
+      }
+      snapshot[filePath] = "missing";
+    }
+  }
+  return snapshot;
 }
 
 async function getRunningAppLines() {
@@ -343,7 +435,7 @@ async function restartApp(appPath) {
   await openApp(appPath);
 }
 
-async function installBuiltApp({ appPath, releaseAppPath }) {
+async function installBuiltApp({ appBackupPath, appPath, releaseAppPath }) {
   if (process.platform !== "darwin") {
     return;
   }
@@ -360,8 +452,28 @@ async function installBuiltApp({ appPath, releaseAppPath }) {
   await fs.rm(tempAppPath, { force: true, recursive: true });
   await runChecked("ditto", [releaseAppPath, tempAppPath]);
   await run("xattr", ["-dr", "com.apple.quarantine", tempAppPath]);
-  await fs.rm(appPath, { force: true, recursive: true });
-  await fs.rename(tempAppPath, appPath);
+  if (!appBackupPath) {
+    await fs.rm(appPath, { force: true, recursive: true });
+    await fs.rename(tempAppPath, appPath);
+    return;
+  }
+
+  const hadInstalledApp = existsSync(appPath);
+  if (hadInstalledApp) {
+    if (existsSync(appBackupPath)) {
+      await fs.rm(appPath, { force: true, recursive: true });
+    } else {
+      await fs.rename(appPath, appBackupPath);
+    }
+  }
+  try {
+    await fs.rename(tempAppPath, appPath);
+  } catch (error) {
+    if (hadInstalledApp && existsSync(appBackupPath)) {
+      await fs.rename(appBackupPath, appPath);
+    }
+    throw error;
+  }
 }
 
 async function findLatestRuntimeManifest(sourceRoot) {
@@ -390,6 +502,8 @@ async function findLatestRuntimeManifest(sourceRoot) {
 }
 
 async function runRuntimeUpdate({
+  channel,
+  gitHead,
   installedAppVersion,
   runtimeHome,
   sourceRoot,
@@ -402,7 +516,15 @@ async function runRuntimeUpdate({
   await runChecked(
     commandName("pnpm"),
     ["runtime:build", "--", `--release-id=${releaseId}`, ...shellVersionArg],
-    { cwd: sourceRoot },
+    {
+      cwd: sourceRoot,
+      env: {
+        ...process.env,
+        VITE_RUNWEAVE_CHANNEL: channel,
+        VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
+        VITE_RUNWEAVE_VERSION: installedAppVersion ?? "unknown",
+      },
+    },
   );
   await runChecked(
     commandName("pnpm"),
@@ -459,9 +581,13 @@ async function runAppServerUpdate({ appServerHome, sourceRoot }) {
 }
 
 async function runAppUpdate({
+  appBackupPath,
   appBuildVersion,
   appPath,
+  channel,
   codesignIdentity,
+  gitHead,
+  launchAfterInstall,
   sourceRoot,
 }) {
   const releaseAppPath = path.join(
@@ -476,7 +602,7 @@ async function runAppUpdate({
     [
       "./scripts/electron-dist-retry.mjs",
       "--config",
-      "electron-builder.local-updates.yml",
+      electronBuilderConfig,
       "--mac",
       "--arm64",
     ],
@@ -484,7 +610,12 @@ async function runAppUpdate({
       cwd: sourceRoot,
       env: {
         ...process.env,
+        RUNWEAVE_DESKTOP_CHANNEL: channel,
+        RUNWEAVE_DESKTOP_SOURCE_REVISION: gitHead ?? "unknown",
         RUNWEAVE_ELECTRON_BUILD_VERSION: appBuildVersion,
+        VITE_RUNWEAVE_CHANNEL: channel,
+        VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
+        VITE_RUNWEAVE_VERSION: appBuildVersion,
         ...(codesignIdentity
           ? { RUNWEAVE_CODESIGN_IDENTITY: codesignIdentity }
           : {}),
@@ -493,8 +624,10 @@ async function runAppUpdate({
     },
   );
   await quitApp();
-  await installBuiltApp({ appPath, releaseAppPath });
-  await openApp(appPath);
+  await installBuiltApp({ appBackupPath, appPath, releaseAppPath });
+  if (launchAfterInstall) {
+    await openApp(appPath);
+  }
 }
 
 async function writeUpdateState(statePath, state) {
@@ -506,21 +639,30 @@ async function main() {
   const args = parseRunweaveUpdateArgs(process.argv.slice(2));
   const sourceRoot = path.resolve(args.sourceRoot);
   const appPath = path.resolve(args.appPath ?? `/Applications/${appName}.app`);
+  const ambientRuntimeHome = isBetaTerminal
+    ? null
+    : process.env.RUNWEAVE_RUNTIME_HOME;
+  const ambientAppServerHome = isBetaTerminal
+    ? null
+    : process.env.RUNWEAVE_APP_SERVER_HOME;
+  const ambientStatePath = isBetaTerminal
+    ? null
+    : process.env.RUNWEAVE_UPDATE_STATE_PATH;
   const runtimeHome = path.resolve(
-    args.runtimeHome ??
-      process.env.RUNWEAVE_RUNTIME_HOME ??
-      resolveDefaultRuntimeHome(),
+    args.runtimeHome ?? ambientRuntimeHome ?? resolveDefaultRuntimeHome(),
   );
   const appServerHome = path.resolve(
     args.appServerHome ??
-      process.env.RUNWEAVE_APP_SERVER_HOME ??
+      ambientAppServerHome ??
       path.join(os.homedir(), ".runweave", "app-server"),
   );
   const statePath = path.resolve(
-    args.statePath ??
-      process.env.RUNWEAVE_UPDATE_STATE_PATH ??
-      resolveDefaultUpdateStatePath(),
+    args.statePath ?? ambientStatePath ?? resolveDefaultUpdateStatePath(),
   );
+  const appBackupPath =
+    isBetaTarget && process.env.RUNWEAVE_APP_BACKUP_PATH
+      ? path.resolve(process.env.RUNWEAVE_APP_BACKUP_PATH)
+      : null;
   const state = readJsonFile(statePath);
   const sourceShellVersion = readPackageVersion(
     path.join(sourceRoot, "electron", "package.json"),
@@ -533,8 +675,8 @@ async function main() {
     forceMode: args.mode,
     hasPreviousAppServerState: Boolean(
       state?.appServerReleaseId ??
-        state?.appServer?.releaseId ??
-        state?.appServer?.action,
+      state?.appServer?.releaseId ??
+      state?.appServer?.action,
     ),
     hasPreviousState: Boolean(state?.gitHead),
     installedAppVersion,
@@ -543,6 +685,7 @@ async function main() {
   validateResolvedUpdateOptions({ noRestart: args.noRestart, plan });
   const gitHead = await getGitHead(sourceRoot);
   const gitDirty = await getGitStatusDirty(sourceRoot);
+  const worktreeSnapshot = await createWorktreeSnapshot(sourceRoot);
   let codesignIdentity = await resolveCodesignIdentity(sourceRoot, {
     persistConfig: !args.dryRun,
   });
@@ -551,8 +694,11 @@ async function main() {
     sourceShellVersion,
   });
 
+  console.log(`[runweave-update] channel: ${channel}`);
   console.log(`[runweave-update] source: ${sourceRoot}`);
   console.log(`[runweave-update] installed app: ${appPath}`);
+  console.log(`[runweave-update] runtime home: ${runtimeHome}`);
+  console.log(`[runweave-update] update state: ${statePath}`);
   console.log(
     `[runweave-update] installed version: ${installedAppVersion ?? "unknown"}`,
   );
@@ -591,21 +737,29 @@ async function main() {
   let appServerRelease = null;
   const previousAppServerReleaseId =
     state?.appServerReleaseId ?? state?.appServer?.releaseId ?? null;
+  const deferBetaRestartUntilAppServer =
+    isBetaTarget && plan.appServer.action === "update" && !args.noRestart;
   if (plan.mode === "runtime") {
     runtimeRelease = await runRuntimeUpdate({
+      channel,
+      gitHead,
       installedAppVersion,
       runtimeHome,
       sourceRoot,
     });
-    if (!args.noRestart) {
+    if (!args.noRestart && !deferBetaRestartUntilAppServer) {
       await restartApp(appPath);
     }
   } else {
     try {
       await runAppUpdate({
+        appBackupPath,
         appBuildVersion,
         appPath,
+        channel,
         codesignIdentity: codesignIdentity.identity,
+        gitHead,
+        launchAfterInstall: !deferBetaRestartUntilAppServer,
         sourceRoot,
       });
     } catch (error) {
@@ -622,9 +776,13 @@ async function main() {
         throw error;
       }
       await runAppUpdate({
+        appBackupPath,
         appBuildVersion,
         appPath,
+        channel,
         codesignIdentity: codesignIdentity.identity,
+        gitHead,
+        launchAfterInstall: !deferBetaRestartUntilAppServer,
         sourceRoot,
       });
     }
@@ -635,9 +793,16 @@ async function main() {
       sourceRoot,
     });
   }
-
+  if (deferBetaRestartUntilAppServer) {
+    if (plan.mode === "runtime") {
+      await restartApp(appPath);
+    } else {
+      await openApp(appPath);
+    }
+  }
   const nextInstalledVersion = await readInstalledMacAppVersion(appPath);
   await writeUpdateState(statePath, {
+    channel,
     appServer: {
       action: plan.appServer.action,
       changedFiles: plan.appServer.changedFiles,
@@ -649,7 +814,8 @@ async function main() {
     appServerAction: plan.appServer.action,
     appServerHome,
     appServerReason: plan.appServer.reason,
-    appServerReleaseId: appServerRelease?.releaseId ?? previousAppServerReleaseId,
+    appServerReleaseId:
+      appServerRelease?.releaseId ?? previousAppServerReleaseId,
     appPath,
     appVersion: nextInstalledVersion ?? installedAppVersion,
     gitDirty,
@@ -664,6 +830,7 @@ async function main() {
     runtimeReleaseId: runtimeRelease?.releaseId ?? null,
     sourceRoot,
     updatedAt: new Date().toISOString(),
+    worktreeSnapshot,
   });
 
   console.log("[runweave-update] done");

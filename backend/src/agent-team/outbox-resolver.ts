@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import type {
   AgentTeamAcceptanceEvidence,
   AgentTeamFindingSeverity,
@@ -15,6 +16,11 @@ type OutboxCandidate = {
   path: string;
   allowMissingPaneIdentity: boolean;
 };
+export interface AgentTeamResolvedOutbox {
+  outbox: AgentTeamWorkerOutbox;
+  path: string;
+  mtimeMs: number | null;
+}
 export interface NormalizeAgentTeamWorkerOutboxOptions {
   terminalSessionId?: string;
   projectId?: string | null;
@@ -57,6 +63,12 @@ export class AgentTeamOutboxResolver {
   async resolveOutbox(
     event: CompletionEvent,
   ): Promise<AgentTeamWorkerOutbox | null> {
+    return (await this.resolveOutboxWithMetadata(event))?.outbox ?? null;
+  }
+
+  async resolveOutboxWithMetadata(
+    event: CompletionEvent,
+  ): Promise<AgentTeamResolvedOutbox | null> {
     for (const candidate of this.outboxCandidates(event)) {
       const outbox = await readJsonFile<AgentTeamWorkerOutbox>(candidate.path);
       if (!outbox) {
@@ -80,7 +92,7 @@ export class AgentTeamOutboxResolver {
       if (!normalized) {
         continue;
       }
-      return {
+      const resolvedOutbox = {
         ...normalized,
         sessionId: normalized.sessionId || event.terminalSessionId,
         projectId: normalized.projectId ?? event.projectId,
@@ -90,6 +102,13 @@ export class AgentTeamOutboxResolver {
           normalized.completionReason ?? event.payload.completionReason,
         finishedAt: normalized.finishedAt ?? event.createdAt,
       };
+      let mtimeMs: number | null = null;
+      try {
+        mtimeMs = (await stat(candidate.path)).mtimeMs;
+      } catch {
+        // The next signal can retry if the file changed during resolution.
+      }
+      return { outbox: resolvedOutbox, path: candidate.path, mtimeMs };
     }
     return null;
   }
