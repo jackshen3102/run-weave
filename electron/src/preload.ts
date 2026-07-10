@@ -76,6 +76,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
         deviceState: TerminalBrowserDeviceState;
       }>
     >,
+  terminalBrowserReorderTabs: (orderedTabIds: string[]) =>
+    ipcRenderer.invoke("terminal-browser:reorder-tabs", orderedTabIds) as Promise<void>,
   terminalBrowserReload: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:reload", tabId),
   terminalBrowserStop: (tabId: string) =>

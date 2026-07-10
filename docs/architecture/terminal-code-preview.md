@@ -73,7 +73,13 @@ Terminal Browser 工具当前边界：
 - `Page.enable`、`Runtime.enable`、`Target.setAutoAttach`、`Target.getTargetInfo`、`Page.getFrameTree`、`Network.enable` 等初始化、发现或静默同步命令不触发 `MCP` 活动标志；导航、点击、输入、evaluate、截图等真实操作才短暂高亮对应 tab。
 - Browser 工具的 CDP 能力是桌面端本机自动化边界，不是远端协作协议；不要把 endpoint 持久化到项目数据或对公网暴露。
 - Browser tab 状态会持久化到 Electron `userData` 下的 `terminal-browser-tabs.json`。重启客户端时会恢复合法的 `http:`、`https:`、`about:blank` tab，并丢弃不合法或空 URL。
-- Browser tab 支持在右侧工具内部拖拽排序；排序只改变当前 Browser 工具的 tab 顺序和 active tab 组织方式，不影响网页会话、CDP target 身份或项目 / terminal session 顺序。
+- Browser tab strip 只让 tab viewport 横向滚动，`Search all browser tabs` 与 New Tab 固定在 viewport 外。单 tab preferred width 为 180px；空间不足时 active 最小 80px、inactive 最小 44px，间距 4px，达到 minimum 后才产生横向 overflow。
+- Tab 内容按宽度分为 comfortable（`>95px`）、compact（`64～95px`）和 icon-only（`44～63px`）三档。active close 始终保留；inactive close 在非 icon-only 档通过 hover / focus 显示。Overview 可按 title、URL、完整 browser group id 和可见 group label 搜索、选择或关闭全部 tab。
+- active tab 会在初始化、选择、新建、关闭、排序和 sidecar resize 后进入 tab viewport。Left / Right 循环切换相邻 tab，Home / End 切换首尾，并使用 active tab `tabIndex=0` 的 roving focus。
+- 鼠标从 tab strip 连续关闭时，剩余 tab 按 tab id 保留关闭前像素宽度，pointer 离开整个 tab bar 后重新分配；touch / pen 在最后一次关闭 1.8 秒后解除。resize、拖拽、Overview 选择或外部 tab replace 会丢弃过期冻结宽度。
+- Browser tab 支持在右侧工具内部拖拽排序；Renderer 先乐观更新，再通过 `terminal-browser:reorder-tabs` 把当前窗口全部 live tab id 的无重复全排列交给 Electron。主进程的 window-scoped order 同时驱动 IPC list 和 `terminal-browser-tabs.json` 数组顺序；非法或竞态 payload 会 reject，Renderer 随后用 Electron live list 收敛。排序不影响网页会话、CDP target 身份或项目 / terminal session 顺序。
+- 普通用户 / AI tab 在 Electron 顺序末尾追加；页面 `window.open` 形成的 tab 会在 opener 右侧插入并继承 browser group。持久化 schema 仍为 version 1，重启最多恢复 5 个 tab，数组顺序就是恢复顺序。
+- Browser 工具切到后台时只隐藏当前 WebContentsView，不清除该窗口的 selected tab；关闭 selected tab 或关闭窗口时才删除对应 active 映射，因此隐藏、重启和恢复不会把 active 身份回退到数组首项。
 - 工具栏提供本地代理开关与 `Headers` 面板。代理开关使用同一个 `persist:runweave-terminal-browser` session 的 `setProxy`，当前固定走 `127.0.0.1:8899`，绕过 `<local>`。
 - `Headers` 面板只影响右侧 Terminal Browser 的网页请求，不影响 Runweave 主窗口、登录/API 请求或 Electron 更新请求。
 - Header 规则保存在前端 `localStorage` 的 `terminal.browser.headerRules`，Terminal Browser Tool 挂载时会同步到 Electron 主进程；保存失败会回滚本地存储并展示错误。

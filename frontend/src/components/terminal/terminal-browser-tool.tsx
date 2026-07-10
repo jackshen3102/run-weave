@@ -52,7 +52,7 @@ export function TerminalBrowserTool({
     proxyState,
     proxySwitching,
     reload,
-    reorderBrowserTabs,
+    reorderTabs,
     saveHeaderRules,
     selectDevicePreset,
     setActiveBrowserTab,
@@ -76,7 +76,7 @@ export function TerminalBrowserTool({
         onCreateTab={() => createBrowserTab()}
         onSelectTab={setActiveBrowserTab}
         onCloseTab={closeTab}
-        onReorder={reorderBrowserTabs}
+        onReorder={reorderTabs}
       />
       <TerminalBrowserNavigationBar
         activeTab={activeTab}

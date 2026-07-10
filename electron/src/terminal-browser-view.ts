@@ -119,6 +119,7 @@ export interface TerminalBrowserCdpTarget {
 
 const terminalBrowserEntries = new Map<string, TerminalBrowserEntry>();
 const attachedTerminalBrowserByWindowId = new Map<number, string>();
+const terminalBrowserTabOrderByWindowId = new Map<number, string[]>();
 
 export const terminalBrowserEvents = new EventEmitter();
 
@@ -146,33 +147,96 @@ function getTerminalBrowserSession(): Electron.Session {
   return electronSession.fromPartition(TERMINAL_BROWSER_SESSION_PARTITION);
 }
 
+function getLiveTerminalBrowserTabIds(windowId: number): string[] {
+  const prefix = `${windowId}:`;
+  const liveTabIds: string[] = [];
+  for (const [key, entry] of terminalBrowserEntries) {
+    if (
+      entry.windowId === windowId &&
+      key.startsWith(prefix) &&
+      !entry.view.webContents.isDestroyed()
+    ) {
+      liveTabIds.push(key.slice(prefix.length));
+    }
+  }
+  return liveTabIds;
+}
+
+function reconcileTerminalBrowserTabOrder(windowId: number): string[] {
+  const liveTabIds = getLiveTerminalBrowserTabIds(windowId);
+  const liveTabIdSet = new Set(liveTabIds);
+  const nextOrder = (terminalBrowserTabOrderByWindowId.get(windowId) ?? []).filter(
+    (tabId) => liveTabIdSet.has(tabId),
+  );
+  const orderedTabIdSet = new Set(nextOrder);
+  for (const tabId of liveTabIds) {
+    if (!orderedTabIdSet.has(tabId)) {
+      nextOrder.push(tabId);
+      orderedTabIdSet.add(tabId);
+    }
+  }
+  terminalBrowserTabOrderByWindowId.set(windowId, nextOrder);
+  return nextOrder;
+}
+
+function insertTerminalBrowserTabOrder(
+  windowId: number,
+  tabId: string,
+  openerTabId?: string,
+): void {
+  const nextOrder = reconcileTerminalBrowserTabOrder(windowId).filter(
+    (orderedTabId) => orderedTabId !== tabId,
+  );
+  const openerIndex = openerTabId ? nextOrder.indexOf(openerTabId) : -1;
+  if (openerIndex >= 0) {
+    nextOrder.splice(openerIndex + 1, 0, tabId);
+  } else {
+    nextOrder.push(tabId);
+  }
+  terminalBrowserTabOrderByWindowId.set(windowId, nextOrder);
+}
+
+function removeTerminalBrowserTabOrder(windowId: number, tabId: string): void {
+  const nextOrder = (terminalBrowserTabOrderByWindowId.get(windowId) ?? []).filter(
+    (orderedTabId) => orderedTabId !== tabId,
+  );
+  terminalBrowserTabOrderByWindowId.set(windowId, nextOrder);
+}
+
 function getTerminalBrowserTabRecords(): TerminalBrowserPersistedTabRecord[] {
   const rawRecords: Array<TerminalBrowserPersistedTabRecord & { windowId: number }> =
     [];
   const idCounts = new Map<string, number>();
 
-  for (const [key, entry] of terminalBrowserEntries) {
-    const webContents = entry.view.webContents;
-    if (!webContents || webContents.isDestroyed()) {
-      continue;
+  const windowIds = new Set<number>();
+  for (const entry of terminalBrowserEntries.values()) {
+    windowIds.add(entry.windowId);
+  }
+  for (const windowId of windowIds) {
+    for (const id of reconcileTerminalBrowserTabOrder(windowId)) {
+      const entry = terminalBrowserEntries.get(
+        makeKeyFromWindowIdAndTabId(windowId, id),
+      );
+      const webContents = entry?.view.webContents;
+      if (!entry || !webContents || webContents.isDestroyed()) {
+        continue;
+      }
+      const url = normalizeTerminalBrowserUrlForStorage(
+        webContents.getURL() || entry.lastKnownUrl,
+      );
+      if (!url) {
+        continue;
+      }
+      idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+      rawRecords.push({
+        id,
+        windowId,
+        url,
+        title: webContents.getTitle(),
+        lastActiveAt: entry.lastActiveAt,
+        browserGroupId: entry.browserGroupId,
+      });
     }
-    const url = normalizeTerminalBrowserUrlForStorage(
-      webContents.getURL() || entry.lastKnownUrl,
-    );
-    if (!url) {
-      continue;
-    }
-    const prefix = `${entry.windowId}:`;
-    const id = key.startsWith(prefix) ? key.slice(prefix.length) : key;
-    idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
-    rawRecords.push({
-      id,
-      windowId: entry.windowId,
-      url,
-      title: webContents.getTitle(),
-      lastActiveAt: entry.lastActiveAt,
-      browserGroupId: entry.browserGroupId,
-    });
   }
 
   return rawRecords.map(({ windowId, ...record }) => ({
@@ -681,7 +745,7 @@ function getExistingTerminalBrowserEntry(
 function getOrCreateTerminalBrowserView(
   win: BrowserWindow,
   tabId: string,
-  options: { browserGroupId?: string } = {},
+  options: { browserGroupId?: string; openerTabId?: string } = {},
 ): WebContentsView {
   const key = getTerminalBrowserKey(win, tabId);
   const existing = terminalBrowserEntries.get(key);
@@ -784,6 +848,7 @@ function getOrCreateTerminalBrowserView(
   });
 
   terminalBrowserEntries.set(key, entry);
+  insertTerminalBrowserTabOrder(win.id, tabId, options.openerTabId);
   return view;
 }
 
@@ -794,7 +859,10 @@ function createTerminalBrowserTabFromPageOpen(
   openerTabId?: string,
 ): void {
   const tabId = `browser-tab-${randomUUID().slice(0, 8)}`;
-  const view = getOrCreateTerminalBrowserView(win, tabId, { browserGroupId });
+  const view = getOrCreateTerminalBrowserView(win, tabId, {
+    browserGroupId,
+    openerTabId,
+  });
   const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, tabId));
   if (!entry) {
     return;
@@ -851,7 +919,6 @@ function detachTerminalBrowser(win: BrowserWindow, tabId?: string): void {
   }
   const entry = terminalBrowserEntries.get(getTerminalBrowserKey(win, attachedTabId));
   entry?.view.setVisible(false);
-  attachedTerminalBrowserByWindowId.delete(win.id);
 }
 
 function attachTerminalBrowser(
@@ -889,7 +956,11 @@ function closeTerminalBrowserEntry(
   tabId: string,
   options: { persist?: boolean } = {},
 ): void {
+  const wasActive = attachedTerminalBrowserByWindowId.get(win.id) === tabId;
   detachTerminalBrowser(win, tabId);
+  if (wasActive) {
+    attachedTerminalBrowserByWindowId.delete(win.id);
+  }
   const key = getTerminalBrowserKey(win, tabId);
   const entry = terminalBrowserEntries.get(key);
   if (!entry) {
@@ -901,6 +972,7 @@ function closeTerminalBrowserEntry(
   clearPendingTerminalBrowserTabUpdate(entry);
   detachTerminalBrowserDeviceDebugger(entry);
   terminalBrowserEntries.delete(key);
+  removeTerminalBrowserTabOrder(win.id, tabId);
   clearTerminalBrowserAnnotation(key);
   terminalBrowserEvents.emit("tab-closed", {
     targetId: entry.targetId,
@@ -917,6 +989,7 @@ function closeTerminalBrowserEntry(
 
 export function closeTerminalBrowsersForWindow(windowId: number): void {
   attachedTerminalBrowserByWindowId.delete(windowId);
+  terminalBrowserTabOrderByWindowId.delete(windowId);
   clearTerminalBrowserAnnotationsForWindow(windowId);
   for (const [key, entry] of terminalBrowserEntries) {
     if (entry.windowId !== windowId) {
@@ -1002,16 +1075,14 @@ export function getTerminalBrowserTabsForWindow(
   windowId: number,
 ): TerminalBrowserTabSnapshot[] {
   const activeTabId = attachedTerminalBrowserByWindowId.get(windowId) ?? null;
-  const prefix = `${windowId}:`;
   const tabs: TerminalBrowserTabSnapshot[] = [];
-  for (const [key, entry] of terminalBrowserEntries) {
-    if (entry.windowId !== windowId || !key.startsWith(prefix)) {
+  for (const tabId of reconcileTerminalBrowserTabOrder(windowId)) {
+    const entry = terminalBrowserEntries.get(
+      makeKeyFromWindowIdAndTabId(windowId, tabId),
+    );
+    if (!entry || entry.view.webContents.isDestroyed()) {
       continue;
     }
-    if (entry.view.webContents.isDestroyed()) {
-      continue;
-    }
-    const tabId = key.slice(prefix.length);
     tabs.push({
       tabId,
       browserGroupId: entry.browserGroupId,
@@ -1182,6 +1253,32 @@ export function registerTerminalBrowserHandlers(): void {
     await restoreTerminalBrowserTabsForWindow(win);
     return getTerminalBrowserTabsForWindow(win.id);
   });
+
+  ipcMain.handle(
+    "terminal-browser:reorder-tabs",
+    (event, orderedTabIds: unknown): void => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || !Array.isArray(orderedTabIds)) {
+        throw new Error("Invalid terminal browser tab order");
+      }
+      const liveTabIds = getLiveTerminalBrowserTabIds(win.id);
+      const candidateTabIds = orderedTabIds.filter(
+        (tabId): tabId is string => typeof tabId === "string",
+      );
+      const candidateTabIdSet = new Set(candidateTabIds);
+      const liveTabIdSet = new Set(liveTabIds);
+      const valid =
+        candidateTabIds.length === orderedTabIds.length &&
+        candidateTabIds.length === liveTabIds.length &&
+        candidateTabIdSet.size === candidateTabIds.length &&
+        candidateTabIds.every((tabId) => liveTabIdSet.has(tabId));
+      if (!valid) {
+        throw new Error("Invalid terminal browser tab order");
+      }
+      terminalBrowserTabOrderByWindowId.set(win.id, [...candidateTabIds]);
+      scheduleTerminalBrowserTabsSave();
+    },
+  );
 
   ipcMain.handle("terminal-browser:show", (event, tabId: string) => {
     const win = BrowserWindow.fromWebContents(event.sender);

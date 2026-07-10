@@ -1,7 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import {
   type FormEvent,
-  type PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
   useRef,
@@ -209,19 +208,19 @@ export function useTerminalBrowserController({
       if (!snapshots) {
         return;
       }
-      const navigatedSnapshots = snapshots.filter((snapshot) => snapshot.url);
-      if (navigatedSnapshots.length > 0) {
-        for (const snapshot of navigatedSnapshots) {
+      if (snapshots.length > 0) {
+        for (const snapshot of snapshots) {
           loadedUrlByTabRef.current[snapshot.tabId] = snapshot.url;
         }
-        const activeSnapshot = navigatedSnapshots.find(
+        const activeSnapshot = snapshots.find(
           (snapshot) => snapshot.active,
         );
         replaceBrowserTabs(
-          navigatedSnapshots.map(buildTabStateFromElectronSnapshot),
+          snapshots.map(buildTabStateFromElectronSnapshot),
           activeSnapshot?.tabId,
         );
-        if (activeSnapshot) {
+        if (activeSnapshot && active) {
+          await window.electronAPI?.terminalBrowserShow?.(activeSnapshot.tabId);
           syncActiveTabBounds(activeSnapshot.tabId);
         }
       }
@@ -358,7 +357,7 @@ export function useTerminalBrowserController({
   }, [active, activeTabId, isElectron, updateBrowserTab]);
 
   useEffect(() => {
-    if (!isElectron || !activeTabId) {
+    if (!isElectron || !electronTabsSynced || !activeTabId) {
       return;
     }
     if (!active) {
@@ -366,6 +365,7 @@ export function useTerminalBrowserController({
       clearTabBounds(activeTabId);
       return;
     }
+    void window.electronAPI?.terminalBrowserShow?.(activeTabId);
     const element = surfaceContainerRef.current;
     if (!element) {
       return;
@@ -386,6 +386,7 @@ export function useTerminalBrowserController({
     activeTabId,
     cancelPendingBoundsSync,
     clearTabBounds,
+    electronTabsSynced,
     isElectron,
     syncBounds,
   ]);
@@ -579,6 +580,34 @@ export function useTerminalBrowserController({
     };
   }, [annotationState.active, annotationTabId, isElectron, submitAnnotationTab]);
 
+  const reorderTabs = useMemoizedFn((fromIndex: number, toIndex: number): void => {
+    const currentTabs = useTerminalPreviewStore.getState().browser.tabs;
+    if (
+      fromIndex < 0 ||
+      fromIndex >= currentTabs.length ||
+      toIndex < 0 ||
+      toIndex >= currentTabs.length ||
+      fromIndex === toIndex
+    ) {
+      return;
+    }
+    const nextTabs = [...currentTabs];
+    const [movedTab] = nextTabs.splice(fromIndex, 1);
+    if (!movedTab) {
+      return;
+    }
+    nextTabs.splice(toIndex, 0, movedTab);
+    reorderBrowserTabs(fromIndex, toIndex);
+    if (!isElectron || !window.electronAPI?.terminalBrowserReorderTabs) {
+      return;
+    }
+    void window.electronAPI
+      .terminalBrowserReorderTabs(nextTabs.map((tab) => tab.id))
+      .catch(() => {
+        void syncElectronTabs().catch(() => undefined);
+      });
+  });
+
   if (!activeTab) {
     return null;
   }
@@ -765,7 +794,7 @@ export function useTerminalBrowserController({
     }
   };
 
-  const closeTab = (event: ReactPointerEvent, tabId: string): void => {
+  const closeTab = (event: { stopPropagation: () => void }, tabId: string): void => {
     event.stopPropagation();
     void window.electronAPI?.terminalBrowserCloseTab?.(tabId);
     delete loadedUrlByTabRef.current[tabId];
@@ -797,7 +826,7 @@ export function useTerminalBrowserController({
     proxyState,
     proxySwitching,
     reload,
-    reorderBrowserTabs,
+    reorderTabs,
     saveHeaderRules,
     selectDevicePreset,
     setActiveBrowserTab,
