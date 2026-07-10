@@ -307,11 +307,12 @@ rw app-server start
 `runtime/current.json` 启动 app-server。输出包含 `baseUrl`、`pid`、`hasToken`、
 lock 路径、runtime root、current runtime 和 health 信息，但不会打印 token 明文。
 
-Electron 只做 app-server 可用性诊断。应用窗口创建后会检查一次；Web 前端创建终端
-会话前也会通过 Electron IPC 触发一次检查。若服务未启动，Electron 弹出提示但不阻断
-应用或终端创建，也不会自动启动、重启或安装 app-server。若服务已启动，则 packaged
-backend 启动路径会把发现到的连接信息传给 backend。Electron 退出时不停止 app-server；
-app-server 视为本机全局服务，而不是 Electron 或 backend 子进程。
+Electron 只做 app-server 可用性诊断。dev 与 packaged Electron 在应用窗口创建后都会
+检查一次；Web 前端创建终端会话前也会通过 Electron IPC 触发一次 fire-and-forget
+检查。若服务未启动，Electron 弹出提示但不阻断应用启动、终端创建或 backend 启动，
+也不会自动启动、重启或安装 app-server。若服务已启动，则 packaged backend 启动路径
+会把发现到的连接信息传给 backend。Electron 退出时不停止 app-server；app-server 视为
+本机全局服务，而不是 Electron 或 backend 子进程。
 
 ## 本地更新流程
 
