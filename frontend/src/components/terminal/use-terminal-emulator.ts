@@ -304,6 +304,9 @@ export function useTerminalEmulator({
     applyRendererPreference(initialPreferences.renderer);
 
     const syncSize = () => {
+      if (!activeRef.current) {
+        return;
+      }
       fitAddon.fit();
       const dimensions = fitAddon.proposeDimensions();
       if (!dimensions) {
@@ -407,7 +410,11 @@ export function useTerminalEmulator({
     );
 
     const refreshTerminalViewport = () => {
-      if (!terminalRef.current || document.visibilityState !== "visible") {
+      if (
+        !activeRef.current ||
+        !terminalRef.current ||
+        document.visibilityState !== "visible"
+      ) {
         return;
       }
       syncSize();
