@@ -437,10 +437,13 @@ export function useAppSession(): AppSessionController {
       const stateEvents = events.filter(
         (event) => event.kind === "terminal_state_changed",
       );
+      const metadataEvents = events.filter(
+        (event) => event.kind === "terminal_session_metadata_changed",
+      );
       if (events.some(isOverviewInvalidationEvent)) {
         void loadOverview();
       }
-      if (stateEvents.length === 0) {
+      if (stateEvents.length === 0 && metadataEvents.length === 0) {
         return;
       }
 
@@ -456,23 +459,36 @@ export function useAppSession(): AppSessionController {
             event.payload.next,
           ]),
         );
+        const nextMetadataBySessionId = new Map(
+          metadataEvents.map((event) => [
+            event.terminalSessionId,
+            event.payload,
+          ]),
+        );
         const nextSessions = currentOverview.sessions.map((session) => {
           const terminalState = nextStateBySessionId.get(
             session.terminalSessionId,
           );
-          if (!terminalState) {
+          const metadata = nextMetadataBySessionId.get(
+            session.terminalSessionId,
+          );
+          if (!terminalState && !metadata) {
             return session;
           }
 
-          const displayStatus = resolveSessionDisplayStatus(
-            session,
-            terminalState,
-          );
+          const displayStatus = terminalState
+            ? resolveSessionDisplayStatus(session, terminalState)
+            : null;
           if (
-            session.terminalState.state === terminalState.state &&
-            session.terminalState.agent === terminalState.agent &&
-            session.displayStatus === displayStatus.displayStatus &&
-            session.displayStatusLabel === displayStatus.displayStatusLabel
+            (!terminalState ||
+              (session.terminalState.state === terminalState.state &&
+                session.terminalState.agent === terminalState.agent &&
+                session.displayStatus === displayStatus?.displayStatus &&
+                session.displayStatusLabel ===
+                  displayStatus?.displayStatusLabel)) &&
+            (!metadata ||
+              (session.cwd === metadata.next.cwd &&
+                session.activeCommand === metadata.next.activeCommand))
           ) {
             return session;
           }
@@ -480,8 +496,18 @@ export function useAppSession(): AppSessionController {
           changed = true;
           return {
             ...session,
-            ...displayStatus,
-            terminalState,
+            ...(metadata
+              ? {
+                  cwd: metadata.next.cwd,
+                  activeCommand: metadata.next.activeCommand,
+                  subtitle:
+                    session.subtitle === metadata.previous.cwd
+                      ? metadata.next.cwd
+                      : session.subtitle,
+                }
+              : {}),
+            ...(displayStatus ?? {}),
+            ...(terminalState ? { terminalState } : {}),
           };
         });
 

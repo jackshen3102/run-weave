@@ -7,12 +7,15 @@ export type SignedTokenType =
   | "terminal-ws"
   | "terminal-events-ws"
   | "devtools"
+  | "prototype-preview"
   | "legacy-temp";
 
 export interface TokenResource {
   sessionId?: string;
   terminalSessionId?: string;
   tabId?: string;
+  projectId?: string;
+  prototypeSlug?: string;
 }
 
 interface BaseTokenPayload {
@@ -67,6 +70,14 @@ function decodePayload(encodedPayload: string): BaseTokenPayload | null {
               tabId:
                 typeof parsed.resource.tabId === "string"
                   ? parsed.resource.tabId
+                  : undefined,
+              projectId:
+                typeof parsed.resource.projectId === "string"
+                  ? parsed.resource.projectId
+                  : undefined,
+              prototypeSlug:
+                typeof parsed.resource.prototypeSlug === "string"
+                  ? parsed.resource.prototypeSlug
                   : undefined,
             }
           : undefined,

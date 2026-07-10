@@ -10,18 +10,17 @@ import {
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { TerminalBrowserTool } from "./terminal-browser-tool";
+import type { TerminalSidecarTool } from "../../features/terminal/preview-store";
 
 interface ActiveProjectLike {
   name?: string;
   path?: string | null;
 }
 
-type TerminalSidecarPanelTool = "preview" | "browser" | "agent-team";
-
 interface TerminalPreviewPanelShellProps {
   panelWidth: string;
   expanded: boolean;
-  activeTool: TerminalSidecarPanelTool;
+  activeTool: TerminalSidecarTool;
   mode: string | null;
   fileKind: string;
   fileLoading: boolean;
@@ -47,10 +46,11 @@ interface TerminalPreviewPanelShellProps {
   token: string;
   activeTerminalSessionId: string | null;
   body: ReactNode;
+  prototypeBody: ReactNode;
   showAgentTeamTool: boolean;
   agentTeamBody?: ReactNode;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onSetActiveTool: (tool: TerminalSidecarPanelTool) => void;
+  onSetActiveTool: (tool: TerminalSidecarTool) => void;
   onSetPreviewMode: (mode: "changes" | "file" | "explorer") => void;
   onToggleExpanded: () => void;
   onRefresh: () => void;
@@ -98,6 +98,7 @@ export function TerminalPreviewPanelShell({
   token,
   activeTerminalSessionId,
   body,
+  prototypeBody,
   showAgentTeamTool,
   agentTeamBody,
   onStartResize,
@@ -112,9 +113,9 @@ export function TerminalPreviewPanelShell({
   onSetSvgViewMode,
   onSetChangesViewMode,
 }: TerminalPreviewPanelShellProps) {
-  const tools: TerminalSidecarPanelTool[] = showAgentTeamTool
-    ? ["preview", "browser", "agent-team"]
-    : ["preview", "browser"];
+  const tools: TerminalSidecarTool[] = showAgentTeamTool
+    ? ["preview", "prototypes", "browser", "agent-team"]
+    : ["preview", "prototypes", "browser"];
   const saveStatusLabel =
     saveStatus === "conflict"
       ? "Conflict"
@@ -170,9 +171,11 @@ export function TerminalPreviewPanelShell({
                   >
                     {tool === "preview"
                       ? "Preview"
-                      : tool === "browser"
-                        ? "Browser"
-                        : "Agent Team"}
+                      : tool === "prototypes"
+                        ? "Prototypes"
+                        : tool === "browser"
+                          ? "Browser"
+                          : "Agent Team"}
                   </button>
                 ))}
               </div>
@@ -200,7 +203,7 @@ export function TerminalPreviewPanelShell({
                   <Maximize2 className="h-4 w-4" />
                 )}
               </Button>
-              {canSave ? (
+              {activeTool === "preview" && canSave ? (
                 <Button
                   type="button"
                   size="sm"
@@ -216,38 +219,37 @@ export function TerminalPreviewPanelShell({
                   <Save className="h-4 w-4" />
                 </Button>
               ) : null}
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 rounded-md px-0"
-                disabled={
-                  activeTool !== "preview" ||
-                  !mode ||
-                  fileLoading ||
-                  changesLoading
-                }
-                onClick={onRefresh}
-                aria-label="Refresh preview"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 rounded-md px-0"
-                disabled={activeTool !== "preview" || !selectedPath}
-                onClick={onCopyPath}
-                aria-label={pathCopied ? "Path copied" : "Copy path"}
-                title={pathCopied ? "Path copied" : "Copy path"}
-              >
-                {pathCopied ? (
-                  <Check className="h-4 w-4 text-emerald-400" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
+              {activeTool === "preview" ? (
+                <>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 rounded-md px-0"
+                    disabled={!mode || fileLoading || changesLoading}
+                    onClick={onRefresh}
+                    aria-label="Refresh preview"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 rounded-md px-0"
+                    disabled={!selectedPath}
+                    onClick={onCopyPath}
+                    aria-label={pathCopied ? "Path copied" : "Copy path"}
+                    title={pathCopied ? "Path copied" : "Copy path"}
+                  >
+                    {pathCopied ? (
+                      <Check className="h-4 w-4 text-emerald-400" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </>
+              ) : null}
               <Button
                 type="button"
                 size="sm"
@@ -371,6 +373,14 @@ export function TerminalPreviewPanelShell({
           </div>
         ) : null}
         <div className="relative min-h-0 flex-1">
+          <div
+            className={[
+              "absolute inset-0 min-h-0",
+              activeTool === "prototypes" ? "" : "pointer-events-none hidden",
+            ].join(" ")}
+          >
+            {activeTool === "prototypes" ? prototypeBody : null}
+          </div>
           <div
             className={[
               "absolute inset-0 min-h-0",

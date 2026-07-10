@@ -11,10 +11,6 @@ interface UseTerminalSnapshotRestoreArgs {
   hasDeferredOutputRef: MutableRef<boolean>;
   hasRenderedSnapshotRef: MutableRef<boolean>;
   onAuthExpiredRef: MutableRef<(() => void) | undefined>;
-  onMetadataRef: MutableRef<
-    | ((metadata: { cwd: string; activeCommand: string | null }) => void)
-    | undefined
-  >;
   renderTerminalSnapshot: (data: string) => void;
   replayDeferredOutput: () => boolean;
   requiresSnapshotRestoreRef: MutableRef<boolean>;
@@ -32,7 +28,6 @@ export function useTerminalSnapshotRestore({
   hasDeferredOutputRef,
   hasRenderedSnapshotRef,
   onAuthExpiredRef,
-  onMetadataRef,
   renderTerminalSnapshot,
   replayDeferredOutput,
   requiresSnapshotRestoreRef,
@@ -77,10 +72,6 @@ export function useTerminalSnapshotRestore({
           }
         }
 
-        onMetadataRef.current?.({
-          cwd: session.cwd,
-          activeCommand: session.activeCommand,
-        });
         renderTerminalSnapshot(session.scrollback);
       } catch (error: unknown) {
         if (cancelled) {
@@ -131,7 +122,6 @@ export function useTerminalSnapshotRestore({
     hasDeferredOutputRef,
     hasRenderedSnapshotRef,
     onAuthExpiredRef,
-    onMetadataRef,
     renderTerminalSnapshot,
     replayDeferredOutput,
     requiresSnapshotRestoreRef,

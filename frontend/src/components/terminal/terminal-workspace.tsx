@@ -521,8 +521,6 @@ export function TerminalWorkspace({
     closeProjectDialog,
     submitProjectDialog,
     removeProject,
-    handleSessionMetadata,
-    handleSessionBell,
     handleProjectReorder,
     handleSessionReorder,
   } = useTerminalWorkspaceActions({
@@ -563,8 +561,6 @@ export function TerminalWorkspace({
       }}
       onReorderProjects={handleProjectReorder}
       onReorderSessions={handleSessionReorder}
-      onSessionBell={handleSessionBell}
-      onSessionMetadata={handleSessionMetadata}
     />
   );
 }

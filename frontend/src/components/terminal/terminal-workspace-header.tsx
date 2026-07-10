@@ -6,6 +6,7 @@ import {
   Activity,
   ClipboardList,
   Eye,
+  GalleryVerticalEnd,
   History,
   Home,
   MoreHorizontal,
@@ -148,6 +149,15 @@ export function TerminalWorkspaceHeader({
             >
               <Eye className="h-4 w-4" />
               Preview
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={loading}
+              onSelect={() => {
+                useTerminalPreviewStore.getState().openPrototypes();
+              }}
+            >
+              <GalleryVerticalEnd className="h-4 w-4" />
+              Prototypes
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={!activeSession?.terminalSessionId}

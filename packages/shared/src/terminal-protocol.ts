@@ -95,6 +95,37 @@ export interface TerminalPreviewDirectoryResponse {
   truncated: boolean;
 }
 
+export type TerminalPrototypeGalleryProjectStatus =
+  | "available"
+  | "project-path-missing"
+  | "prototype-root-missing"
+  | "prototype-root-unavailable";
+
+export interface TerminalPrototypeGalleryItem {
+  projectId: string;
+  slug: string;
+  title: string;
+  entry: "index.html" | null;
+  files: string[];
+}
+
+export interface TerminalPrototypeGalleryProject {
+  projectId: string;
+  name: string;
+  path: string | null;
+  status: TerminalPrototypeGalleryProjectStatus;
+  prototypes: TerminalPrototypeGalleryItem[];
+}
+
+export interface TerminalPrototypeGalleryResponse {
+  projects: TerminalPrototypeGalleryProject[];
+}
+
+export interface CreateTerminalPrototypePreviewTicketResponse {
+  path: string;
+  expiresIn: number;
+}
+
 export interface TerminalPreviewFileSearchResponse {
   kind: "file-search";
   projectId: string;
@@ -550,6 +581,20 @@ export interface TerminalStateChangedEventPayload {
   reason: TerminalStateChangeReason;
 }
 
+export interface TerminalBellEventPayload {
+  count: number;
+}
+
+export interface TerminalSessionMetadataSnapshot {
+  cwd: string;
+  activeCommand: string | null;
+}
+
+export interface TerminalSessionMetadataChangedEventPayload {
+  previous: TerminalSessionMetadataSnapshot;
+  next: TerminalSessionMetadataSnapshot;
+}
+
 export interface TerminalNotificationEventPayload {
   level: "info" | "success" | "warning" | "error";
   title: string;
@@ -621,6 +666,8 @@ export type TerminalEventKind =
   | "terminal_session_created"
   | "terminal_session_deleted"
   | "terminal_state_changed"
+  | "terminal_bell"
+  | "terminal_session_metadata_changed"
   | "terminal_notification"
   | "terminal_panel_created"
   | "terminal_panel_updated"
@@ -645,6 +692,18 @@ export type TerminalEventEnvelope =
       kind: "terminal_state_changed";
       terminalSessionId: string;
       payload: TerminalStateChangedEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_bell";
+      terminalSessionId: string;
+      projectId: string;
+      payload: TerminalBellEventPayload;
+    })
+  | (TerminalEventEnvelopeBase & {
+      kind: "terminal_session_metadata_changed";
+      terminalSessionId: string;
+      projectId: string;
+      payload: TerminalSessionMetadataChangedEventPayload;
     })
   | (TerminalEventEnvelopeBase & {
       kind: "terminal_notification";

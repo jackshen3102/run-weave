@@ -23,6 +23,7 @@ import { TerminalPreviewQuickSearch } from "./terminal-preview-quick-search";
 import { useTerminalPreviewQuickSearch } from "./use-terminal-preview-quick-search";
 import type { TerminalPreviewLineTarget } from "./terminal-preview-file-view";
 import { TerminalAgentTeamPanel } from "./terminal-agent-team-panel";
+import { TerminalPrototypeGallery } from "./terminal-prototype-gallery";
 import { useTerminalFileTree } from "./use-terminal-file-tree";
 
 interface TerminalPreviewPanelProps {
@@ -637,6 +638,14 @@ export function TerminalPreviewPanel({
       onAuthExpired={onAuthExpired}
     />
   );
+  const prototypeBody = (
+    <TerminalPrototypeGallery
+      apiBase={apiBase}
+      token={token}
+      activeProjectId={activeProject?.projectId ?? null}
+      onAuthExpired={onAuthExpired}
+    />
+  );
 
   return (
     <>
@@ -679,6 +688,7 @@ export function TerminalPreviewPanel({
         token={token}
         activeTerminalSessionId={activeSession?.terminalSessionId ?? null}
         body={previewBody}
+        prototypeBody={prototypeBody}
         showAgentTeamTool={showAgentTeamTool}
         agentTeamBody={agentTeamBody}
         onStartResize={startResize}

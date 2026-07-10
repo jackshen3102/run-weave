@@ -7,7 +7,6 @@ import type {
 } from "@runweave/shared";
 import type { ClientMode } from "../../features/client-mode";
 import { DEFAULT_TERMINAL_SIDECAR_WIDTH } from "../../features/terminal/preview-store";
-import { TerminalHeadlessConnection } from "./terminal-headless-connection";
 import { TerminalPanelTargetBar } from "./terminal-panel-target-bar";
 import { TerminalSurface } from "./terminal-surface";
 
@@ -25,7 +24,6 @@ interface TerminalWorkspaceStageProps {
   requestError: string | null;
   activeSession: TerminalSessionListItem | null;
   visibleSessions: TerminalSessionListItem[];
-  headlessSessions: TerminalSessionListItem[];
   surfaceSessions: TerminalSessionListItem[];
   panelSplitEnabled: boolean;
   activePanelWorkspace: TerminalPanelWorkspace | null;
@@ -51,11 +49,6 @@ interface TerminalWorkspaceStageProps {
     cells: number,
   ) => void;
   onRefreshPanelWorkspace: (terminalSessionId: string) => void;
-  onSessionBell: (terminalSessionId: string) => void;
-  onSessionMetadata: (
-    terminalSessionId: string,
-    metadata: { cwd: string; activeCommand: string | null },
-  ) => void;
   onSelectSession: (terminalSessionId: string) => void;
   onPanelSplitEnabledChange: (enabled: boolean) => void;
   onActiveAgentTeamRunChange: (active: boolean) => void;
@@ -70,7 +63,6 @@ export function TerminalWorkspaceStage({
   requestError,
   activeSession,
   visibleSessions,
-  headlessSessions,
   surfaceSessions,
   panelSplitEnabled,
   activePanelWorkspace,
@@ -88,8 +80,6 @@ export function TerminalWorkspaceStage({
   onPanelWorkspaceChange,
   onResizePanel,
   onRefreshPanelWorkspace,
-  onSessionBell,
-  onSessionMetadata,
   onSelectSession,
   onPanelSplitEnabledChange,
   onActiveAgentTeamRunChange,
@@ -116,21 +106,6 @@ export function TerminalWorkspaceStage({
           <div className="relative min-h-0 flex-1">
             {visibleSessions.length > 0 ? (
               <>
-                {headlessSessions.map((session) => (
-                  <TerminalHeadlessConnection
-                    apiBase={apiBase}
-                    key={`${apiBase}:${session.terminalSessionId}:headless`}
-                    terminalSessionId={session.terminalSessionId}
-                    token={token}
-                    onAuthExpired={onAuthExpired}
-                    onBell={() => {
-                      onSessionBell(session.terminalSessionId);
-                    }}
-                    onMetadata={(metadata) => {
-                      onSessionMetadata(session.terminalSessionId, metadata);
-                    }}
-                  />
-                ))}
                 {surfaceSessions.map((session) => {
                   const isActive =
                     session.terminalSessionId ===
@@ -181,9 +156,6 @@ export function TerminalWorkspaceStage({
                             : undefined
                         }
                         onAuthExpired={onAuthExpired}
-                        onBell={() => {
-                          onSessionBell(session.terminalSessionId);
-                        }}
                         onViewportResize={
                           session.panelSplitEnabled
                             ? () => {
@@ -193,9 +165,6 @@ export function TerminalWorkspaceStage({
                               }
                             : undefined
                         }
-                        onMetadata={(metadata) => {
-                          onSessionMetadata(session.terminalSessionId, metadata);
-                        }}
                       />
                     </div>
                   );

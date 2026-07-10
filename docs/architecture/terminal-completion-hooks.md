@@ -115,7 +115,7 @@ Content-Type: application/json
 
 写入层不是 source-only 信任模型。除 hook token 和 terminal id 外，还要求 `source` 与当前 AI active command 匹配；如果 Stop hook 晚到，当前 `activeCommand` 已清空，则接受 30 秒 grace window 内最近一次匹配的 AI active command。若用户已经切到其他命令、最近 AI command 超时或 source 不匹配，事件会被忽略，避免旧进程或误继承环境的进程伪造完成提醒。
 
-成功写入后，`CompletionEventService` 会把 completion payload 包装成 `kind="completion"` 的全局 `TerminalEventEnvelope`，写入 `TerminalEventService` 的内存短队列，并广播给在线 `/ws/terminal-events` 订阅者。短队列保留最近 200 条全局 terminal events，用于重连 catch-up 和兼容 HTTP 读取。
+成功写入后，`CompletionEventService` 会把 completion payload 包装成 `kind="completion"` 的全局 `TerminalEventEnvelope`，写入 `TerminalEventService` 的内存短队列，并广播给在线 `/ws/terminal-events` 订阅者。短队列保留最近 500 条全局 terminal events，用于重连 catch-up 和兼容 HTTP 读取。
 
 ## 前端实时消费
 
@@ -143,6 +143,8 @@ Authorization: Bearer <token>
 - 当前 active terminal 收到 completion event 不点亮，因为用户已经在看它。
 - 非当前 terminal 设置 completion marker；用户切到对应 terminal 后清除 marker。
 - `terminal_state_changed` 事件用于 Web/App 共享状态同步，App 不再依赖 2 秒 HTTP 轮询作为主路径。
+- `terminal_session_metadata_changed` 事件按 session 同步 `cwd` 与 `activeCommand`；Web 不再从单 terminal WebSocket 更新工作区 session metadata。
+- `terminal_bell` 事件由 backend output recorder 识别 BEL 后发布；Web 仅对 live、非当前 session 设置 bell marker。
 - session 删除或列表刷新后，由 marker cleanup 清理不存在 session 的 marker。
 
 `GET /api/terminal/completion-events?after=<last-event-id>` 仍保留给 CLI、调试和兼容读取，但 Terminal Workspace 不再定时调用它。
@@ -166,21 +168,36 @@ Authorization: Bearer <token>
 ```ts
 export type TerminalEventKind =
   | "completion"
+  | "project_created"
+  | "project_deleted"
+  | "terminal_session_created"
+  | "terminal_session_deleted"
   | "terminal_state_changed"
-  | "terminal_notification";
+  | "terminal_bell"
+  | "terminal_session_metadata_changed"
+  | "terminal_notification"
+  | "terminal_panel_created"
+  | "terminal_panel_updated"
+  | "terminal_panel_deleted"
+  | "terminal_panel_focused"
+  | "terminal_panel_input_sent";
 
 export interface TerminalEventEnvelopeBase {
   id: string;
-  terminalSessionId: string;
+  terminalSessionId: string | null;
   projectId: string | null;
   createdAt: string;
 }
 ```
 
-三类 payload 的边界：
+主要 payload 的边界：
 
 - `completion`：AI CLI 完成提醒，用于非当前终端的小绿点和完成音。
 - `terminal_state_changed`：Codex `TerminalState` 变化，用于 App/Web 同步 Stop、handoff 和列表状态。
+- `terminal_bell`：terminal output 中出现 BEL 的次数；由客户端按 `terminalSessionId` 路由，不携带 raw output。
+- `terminal_session_metadata_changed`：session 的 `{ cwd, activeCommand }` previous / next 快照，用于 Web/App 列表同步。
+- `project_*` / `terminal_session_*`：Project 与 Session 生命周期变化，用于列表失效与重新读取。
+- `terminal_panel_*`：Panel workspace 变化，用于按 session 更新 pane 投影。
 - `terminal_notification`：后续系统级终端通知的预留 envelope，不改变 `/ws/terminal` 的单 terminal I/O 职责。
 
 `TerminalEventService` 给所有 kind 使用同一个递增 cursor 空间。`listAfter(after)` 和 WebSocket catch-up 都按这个全局 cursor 返回事件，避免 completion 与 state 使用不同 baseline 导致 reconnect 漏事件。

@@ -26,10 +26,9 @@ import { useTerminalEmulator } from "./use-terminal-emulator";
 import { useTerminalOutputStream } from "./use-terminal-output-stream";
 import { useTerminalSnapshotRestore } from "./use-terminal-snapshot-restore";
 import {
-  IME_COMMIT_DUPLICATE_WINDOW_MS,
   IME_COMMIT_WINDOW_MS,
   TERMINAL_RESIZE_DEBOUNCE_MS,
-  hasNonAsciiInput,
+  type TerminalImeCommit,
   type PastedImageReference,
   type SearchDirection,
   type TerminalSearchOptions,
@@ -48,11 +47,6 @@ interface TerminalSurfaceProps {
   sessionStatus?: "running" | "exited";
   terminalState?: TerminalState;
   onAuthExpired?: () => void;
-  onBell?: () => void;
-  onMetadata?: (metadata: {
-    cwd: string;
-    activeCommand: string | null;
-  }) => void;
   onResizePane?: (
     panelId: string,
     direction: "left" | "right" | "up" | "down",
@@ -73,8 +67,6 @@ export function TerminalSurface({
   sessionStatus = "running",
   terminalState,
   onAuthExpired,
-  onBell,
-  onMetadata,
   onResizePane,
   onViewportResize,
 }: TerminalSurfaceProps) {
@@ -88,11 +80,9 @@ export function TerminalSurface({
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeRef = useRef(active);
-  const onBellRef = useRef(onBell);
   const onViewportResizeRef = useRef(onViewportResize);
   const onAuthExpiredRef = useRef(onAuthExpired);
   const openTerminalLinkRef = useRef<(uri: string) => void>(() => undefined);
-  const onMetadataRef = useRef(onMetadata);
   const tokenRef = useRef(token);
   const runtimeKindRef = useRef<"tmux" | "pty" | null>(null);
   const lastResizedAtRef = useRef<number | null>(null);
@@ -100,8 +90,7 @@ export function TerminalSurface({
   const outputSequenceRef = useRef(0);
   const xtermUserInputSequenceRef = useRef(0);
   const lastInputSentAtRef = useRef<number | null>(null);
-  const lastInputDataRef = useRef<{ data: string; at: number } | null>(null);
-  const imeCommitRef = useRef<{ data: string; at: number } | null>(null);
+  const imeCommitRef = useRef<TerminalImeCommit | null>(null);
   const imeCompositionEndedAtRef = useRef<number | null>(null);
   const hasDeferredOutputRef = useRef(false);
   const deferredOutputRef = useRef("");
@@ -152,7 +141,6 @@ export function TerminalSurface({
     hasDeferredOutputRef,
     hasRenderedSnapshotRef,
     lastInputSentAtRef,
-    onBellRef,
     outputSequenceRef,
     refreshTerminalViewportRef,
     requiresSnapshotRestoreRef,
@@ -172,26 +160,22 @@ export function TerminalSurface({
     onAuthExpired,
     onSnapshot,
     onOutput,
-    onMetadata,
   });
 
   const sendTerminalInput = useMemoizedFn((data: string): void => {
     const now = performance.now();
-    const lastInput = lastInputDataRef.current;
     const imeCommit = imeCommitRef.current;
     if (
-      lastInput &&
       imeCommit &&
-      hasNonAsciiInput(data) &&
-      data === lastInput.data &&
       data === imeCommit.data &&
-      now - lastInput.at <= IME_COMMIT_DUPLICATE_WINDOW_MS &&
       now - imeCommit.at <= IME_COMMIT_WINDOW_MS
     ) {
-      return;
+      if (imeCommit.forwarded) {
+        return;
+      }
+      imeCommit.forwarded = true;
     }
 
-    lastInputDataRef.current = { data, at: now };
     inputSequenceRef.current += 1;
     lastInputSentAtRef.current = Date.now();
     logTerminalPerf("terminal.input.captured", {
@@ -402,10 +386,6 @@ export function TerminalSurface({
   }, [floatingDraft]);
 
   useEffect(() => {
-    onBellRef.current = onBell;
-  }, [onBell]);
-
-  useEffect(() => {
     onViewportResizeRef.current = onViewportResize;
   }, [onViewportResize]);
 
@@ -430,10 +410,6 @@ export function TerminalSurface({
   }, [createBrowserTab, openBrowser]);
 
   useEffect(() => {
-    onMetadataRef.current = onMetadata;
-  }, [onMetadata]);
-
-  useEffect(() => {
     tokenRef.current = token;
   }, [token]);
   useEffect(() => {
@@ -449,7 +425,6 @@ export function TerminalSurface({
     lastResizedAtRef,
     lastSentResizeRef,
     onAuthExpired,
-    onBellRef,
     onBufferTypeChange: setBufferType,
     onViewportResizeRef,
     onUserInputData: handleUserInputData,
@@ -496,7 +471,6 @@ export function TerminalSurface({
     hasDeferredOutputRef,
     hasRenderedSnapshotRef,
     onAuthExpiredRef,
-    onMetadataRef,
     renderTerminalSnapshot,
     replayDeferredOutput,
     requiresSnapshotRestoreRef,

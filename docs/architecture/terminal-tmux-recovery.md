@@ -459,23 +459,22 @@ new backend attaches tmux session on demand
 
 - `frontend/src/features/terminal/use-terminal-connection.ts`
 - `frontend/src/components/terminal/terminal-surface.tsx`
-- `frontend/src/components/terminal/terminal-headless-connection.tsx`
 
 ## 性能与前端交互边界
 
 tmux 不替代现有终端性能优化。tmux 解决的是 backend 或客户端重启时用户任务不死；现有性能优化解决的是浏览器渲染、WebSocket 输出处理、快照竞态和高频日志开销。这些层级不同，首期应全部保留。
 
-首期明确不改变 inactive terminal 的前端交互：
+当前 inactive terminal 的前端交互边界：
 
 - `TerminalSurface` 仍只承担 active 或缓存 surface 的完整 xterm 渲染。
-- `TerminalHeadlessConnection` 仍用于 inactive terminal 的 activity、bell、metadata 监听。
-- terminal tab 的活动点、响铃提示、metadata 更新语义保持现状。
+- 未挂载 xterm 的 inactive terminal 不建立 `/ws/terminal`；bell 与 metadata 由 backend recorder / manager 生成并通过全局 `/ws/terminal-events` 分发。
+- terminal tab 的活动点、响铃提示、metadata 更新按 `terminalSessionId` 消费全局事件。
 - `useTerminalConnection` 的自动重连、pending input、resize 发送逻辑保持现状。
 - stale snapshot 防护继续保留；snapshot 来源从 Runweave scrollback 变为 `tmux capture-pane` 后，仍可能与 live WS output 并发。
 - 后端 output batching 和高频 perf log gating 继续保留。
 - `tmux capture-pane -p -J -S -5000` 必须纳入性能基线。它是 tmux-backed WebSocket 初始 snapshot 的关键路径，不能只验证功能正确性。
 
-因此，首期只调整后端 runtime、恢复、删除和 scrollback 读取逻辑，不把 inactive terminal 改成 detached-on-inactive，也不移除现有前端性能优化。当前策略是在最后一个 WebSocket 客户端断开后释放 tmux attach runtime，让无人观看的 terminal 不继续占用后端 node-pty attach；这不会结束 tmux session，后续重连仍走恢复链路并生成 fresh repaint。等 tmux-backed 恢复链路稳定后，再用现有 terminal performance benchmark 评估是否有必要进一步减少 inactive terminal 的 WebSocket/node-pty attach。
+tmux attach runtime 仍在最后一个 xterm WebSocket 客户端断开后释放；这不会结束 tmux session。后台输出与 metadata 由 `TmuxOutputWatcher` 继续写入 `TerminalSessionManager`，从而进入全局 terminal event bus；后续 xterm 重连仍走恢复链路并生成 fresh repaint。
 
 ## 体验风险
 
@@ -515,7 +514,7 @@ Runweave 专用 tmux 配置首期统一设置 `history-limit 5000`，和现有 R
 - 删除终端时 kill 对应 tmux session。
 - tmux-backed session 的 snapshot/history 改为读取 `tmux capture-pane`。
 - 删除终端时不保存 final scrollback。
-- 保留现有 inactive terminal 交互和前端性能优化，只改后端 runtime、恢复、删除和 scrollback 读取逻辑。
+- inactive terminal 的 bell / metadata 使用全局 terminal-events；xterm output、恢复和 scrollback 仍走 session 专属 terminal WS。
 - 暂不改 UI，只通过环境变量验证本地 backend、Electron packaged、同机服务端 backend restart 三种入口。
 
 成功标准：
@@ -537,7 +536,7 @@ Runweave 专用 tmux 配置首期统一设置 `history-limit 5000`，和现有 R
 - 处理 tmux attach client exit 不误标记 exited。
 - 继续完善 attach runtime 生命周期观测，区分“无客户端所以释放 attach runtime”和“用户明确删除 terminal session”。
 - history drawer 对 tmux-backed session 读取 tmux pane history；session 删除后不再可读。
-- 不改变 `TerminalHeadlessConnection` 的 inactive activity/bell/metadata 行为。
+- 保持全局 terminal-events 对 inactive session 的 bell / metadata 分发行为。
 
 ### 阶段 3：产品化
 

@@ -59,6 +59,7 @@ import {
   sendInputToSession,
 } from "./terminal-input-dispatcher";
 import { registerTerminalTicketRoutes } from "./terminal-ticket-routes";
+import { registerTerminalPrototypeGalleryRoutes } from "./terminal-prototype-gallery-routes";
 import { registerTerminalQuickInputRoutes } from "./terminal-quick-input-routes";
 import {
   ensureTerminalPanelWorkspace,
@@ -176,6 +177,11 @@ export function createTerminalRouter(
     authService: options?.authService,
     terminalEventService: options?.terminalEventService,
   });
+  registerTerminalPrototypeGalleryRoutes(
+    router,
+    terminalSessionManager,
+    options?.authService,
+  );
   if (options?.quickInputService) {
     registerTerminalQuickInputRoutes(router, options.quickInputService);
   }

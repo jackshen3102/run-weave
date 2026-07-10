@@ -3,6 +3,7 @@ import {
   TERMINAL_CLIENT_SCROLLBACK_LINES,
   TERMINAL_LIVE_SCROLLBACK_BYTES,
   type TerminalLastThreadStatus,
+  type TerminalSessionMetadataSnapshot,
   type TerminalState,
 } from "@runweave/shared";
 import type {
@@ -57,6 +58,21 @@ import { getAgentForCommand } from "./terminal-state-service";
 const SCROLLBACK_FLUSH_DELAY_MS = 250;
 const ACTIVITY_FLUSH_DELAY_MS = 10_000;
 
+export interface TerminalSessionManagerObserver {
+  onBell?: (input: {
+    terminalSessionId: string;
+    projectId: string;
+    count: number;
+  }) => void;
+  onMetadataChanged?: (input: {
+    terminalSessionId: string;
+    projectId: string;
+    session: TerminalSessionRecord;
+    previous: TerminalSessionMetadataSnapshot;
+    next: TerminalSessionMetadataSnapshot;
+  }) => void;
+}
+
 export class TerminalSessionManager {
   private readonly projects = new Map<string, TerminalProjectRecord>();
   private readonly sessions = new Map<string, RuntimeTerminalSessionRecord>();
@@ -74,7 +90,10 @@ export class TerminalSessionManager {
   private readonly activityFlushTimers = new Map<string, NodeJS.Timeout>();
   private readonly pendingActivityUpdates = new Map<string, Date>();
 
-  constructor(private readonly sessionStore: TerminalSessionStore) {}
+  constructor(
+    private readonly sessionStore: TerminalSessionStore,
+    private readonly observer: TerminalSessionManagerObserver = {},
+  ) {}
 
   async initialize(): Promise<void> {
     await this.sessionStore.initialize();
@@ -321,6 +340,20 @@ export class TerminalSessionManager {
     const session = this.sessions.get(terminalSessionId);
     if (!session) {
       return;
+    }
+
+    let bellCount = 0;
+    let bellIndex = chunk.indexOf("\u0007");
+    while (bellIndex >= 0) {
+      bellCount += 1;
+      bellIndex = chunk.indexOf("\u0007", bellIndex + 1);
+    }
+    if (bellCount !== 0) {
+      this.observer.onBell?.({
+        terminalSessionId,
+        projectId: session.projectId,
+        count: bellCount,
+      });
     }
 
     appendToScrollbackBuffer(session.scrollbackBuffer, chunk);
@@ -627,6 +660,11 @@ export class TerminalSessionManager {
       return session;
     }
 
+    const previous = {
+      cwd: session.cwd,
+      activeCommand: session.activeCommand,
+    };
+
     this.observeActiveCommand(terminalSessionId, nextActiveCommand);
     session.cwd = metadata.cwd;
     session.activeCommand = nextActiveCommand;
@@ -656,6 +694,16 @@ export class TerminalSessionManager {
       }
       await this.persistClearedCodexThreadMetadata(terminalSessionId);
     }
+    this.observer.onMetadataChanged?.({
+      terminalSessionId,
+      projectId: session.projectId,
+      session,
+      previous,
+      next: {
+        cwd: session.cwd,
+        activeCommand: session.activeCommand,
+      },
+    });
     return session;
   }
 

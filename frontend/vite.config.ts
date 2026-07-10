@@ -53,6 +53,10 @@ export default defineConfig({
         target: backendTarget,
         changeOrigin: true,
       },
+      "/prototype-preview": {
+        target: backendTarget,
+        changeOrigin: true,
+      },
     },
   },
 });
