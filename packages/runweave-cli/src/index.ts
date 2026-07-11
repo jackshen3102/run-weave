@@ -5,6 +5,7 @@ import { runAppCommand } from "./commands/app.js";
 import { runAgentTeamCommand } from "./commands/agent-team.js";
 import { runAuthCommand } from "./commands/auth.js";
 import { runHealthCommand } from "./commands/health.js";
+import { runFeishuCommand } from "./commands/feishu.js";
 import { runProjectCommand } from "./commands/project.js";
 import { runTerminalCommand } from "./commands/terminal.js";
 import { toCliError } from "./errors.js";
@@ -45,6 +46,10 @@ export async function runCli(
       );
       return 0;
     }
+    if (group === "feishu") {
+      await runFeishuCommand(subcommand, args, io);
+      return 0;
+    }
     if (group === "app") {
       await runAppCommand(subcommand, args, io);
       return 0;
@@ -66,7 +71,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw <agent-team|app|app-server|auth|project|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw <agent-team|app|app-server|auth|feishu|project|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

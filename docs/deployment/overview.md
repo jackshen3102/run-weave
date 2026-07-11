@@ -40,6 +40,8 @@
 - `deploy/nginx/nginx.conf.example`
 - `deploy/nginx/openssl-san.cnf.example`
 - `deploy/whistle/proxy.md`
+  飞书企业自建应用的通知、引用回复、Linux systemd 与 macOS LaunchAgent 配置见
+  [`feishu-app-integration.md`](./feishu-app-integration.md)。
 
 ## Electron 桌面客户端
 

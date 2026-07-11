@@ -6,6 +6,10 @@ CONFIG_FILE="${FEISHU_NOTIFY_ENV:-${HOME}/.runweave/feishu_notify.env}"
 LOG_FILE="${FEISHU_NOTIFY_LOG:-${HOME}/.runweave/feishu_notify.log}"
 OPENSSL_BIN="${OPENSSL_BIN:-/opt/homebrew/bin/openssl}"
 
+if [[ ! -f "$CONFIG_FILE" && -f /etc/runweave/feishu.env ]]; then
+  CONFIG_FILE=/etc/runweave/feishu.env
+fi
+
 log() {
   local message="$1"
   printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$message" >>"$LOG_FILE" 2>/dev/null || true
@@ -190,6 +194,34 @@ send_webhook_message() {
   return 0
 }
 
+send_app_message() {
+  local text="$1"
+  export FEISHU_APP_ID FEISHU_APP_SECRET FEISHU_TARGET_CHAT_ID
+  export FEISHU_ALLOWED_OPEN_IDS FEISHU_BINDING_TTL_HOURS
+  export RUNWEAVE_FEISHU_STATE_DIR
+  local rw_bin
+  local -a rw_command
+  rw_bin="${RUNWEAVE_CLI_BIN:-$(command -v rw || true)}"
+  if [[ -n "$rw_bin" && -x "$rw_bin" ]]; then
+    rw_command=("$rw_bin")
+  elif [[ -n "$rw_bin" && -f "$rw_bin" ]] && command -v node >/dev/null 2>&1; then
+    rw_command=(node "$rw_bin")
+  else
+    log "app notify failed: rw CLI not found"
+    return 0
+  fi
+
+  local notify_payload
+  notify_payload="$(printf '%s' "$PAYLOAD" | jq -c --arg text "$text" '. + {notificationText:$text}' 2>/dev/null || true)"
+  if [[ -z "$notify_payload" ]]; then
+    log "app notify failed: invalid payload"
+    return 0
+  fi
+  if ! printf '%s' "$notify_payload" | "${rw_command[@]}" feishu notify --stdin --json >/dev/null 2>>"$LOG_FILE"; then
+    log "app notify failed: rw feishu notify returned non-zero"
+  fi
+}
+
 main() {
   PAYLOAD="$(cat || true)"
 
@@ -236,7 +268,11 @@ main() {
     printf '%s\n' "$PAYLOAD" >>"${HOME}/.runweave/feishu_notify_payload.log" 2>/dev/null || true
   fi
 
-  send_webhook_message "$text"
+  case "${FEISHU_NOTIFY_TRANSPORT:-app}" in
+    app) send_app_message "$text" ;;
+    webhook) send_webhook_message "$text" ;;
+    *) log "invalid FEISHU_NOTIFY_TRANSPORT" ;;
+  esac
   return 0
 }
 
