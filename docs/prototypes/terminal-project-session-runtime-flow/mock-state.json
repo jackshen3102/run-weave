@@ -1,18 +1,18 @@
 {
   "meta": {
-    "title": "Project · Terminal · xterm 统一事件架构",
-    "subtitle": "Web / Electron · App · Backend · PTY / tmux · Event Center",
-    "baseline": "main@41e2923",
+    "title": "Project · Terminal · xterm 架构诊断图",
+    "subtitle": "数据面 · 事件面 · 权威快照 · 问题边界",
+    "baseline": "working tree · verified",
     "date": "2026-07-11",
-    "scope": "描述统一事件实现后的现状，不做后续建议或性能结论"
+    "scope": "先复现再处理：P1/P2/P4 已修复，P3/P5 保持现状"
   },
   "views": [
     {
       "id": "overview",
-      "label": "总览",
-      "eyebrow": "CURRENT ARCHITECTURE",
-      "title": "同一组 Project / Terminal Session，两个客户端视图，三条运行通道",
-      "description": "Web/Electron 与 App 共享 backend 的 Project / Terminal Session 主数据；xterm、Runtime 与 App Server ThreadRef 分别处在渲染、进程和状态投影层。"
+      "label": "诊断主图",
+      "eyebrow": "SYSTEM DIAGNOSIS",
+      "title": "三条状态通路，以及每个问题的当前结论",
+      "description": "主图只保留 session 数据面、全局事件增量和 REST 权威快照。P1/P2/P4 已修复，P3/P5 因未复现用户可见故障而保持现状。"
     },
     {
       "id": "input",
@@ -43,6 +43,239 @@
       "description": "按用途列出入口、方向、主要载荷与当前消费者。"
     }
   ],
+  "diagnosis": {
+    "facts": [
+      {
+        "label": "连接并不是只有 1 条",
+        "value": "1 global + ≤10 session WS",
+        "detail": "全局事件只有一条；最近缓存的每个 TerminalSurface 仍各自保持 xterm 与 /ws/terminal。"
+      },
+      {
+        "label": "客户端状态来源",
+        "value": "REST snapshot + event delta",
+        "detail": "Project/Session 初始与重载来自 REST；state、metadata、bell 等变化依赖 terminal-events 增量。"
+      },
+      {
+        "label": "验证结论",
+        "value": "3 已修 · 2 保持现状",
+        "detail": "P1/P2/P4 已复现并修复；P3 只确认资源乘数，P5 未复现双写 UI。"
+      }
+    ],
+    "lanes": [
+      {
+        "id": "session-data",
+        "label": "Session 数据面",
+        "scope": "每个已挂载 terminalSessionId 一条连接",
+        "invariant": "input / output 只走 /ws/terminal",
+        "tone": "green",
+        "nodes": [
+          {
+            "id": "terminal-surface",
+            "kind": "Web client",
+            "title": "TerminalSurface cache",
+            "detail": "active surface + 最近 inactive surface 都保持 mounted；inactive output 进入 deferred buffer。",
+            "quantity": "≤10 xterm · ≤10 terminal WS · 128 KiB deferred/session",
+            "issueIds": ["surface-multiplier", "pending-input"]
+          },
+          {
+            "id": "terminal-ws",
+            "kind": "Session transport",
+            "title": "/ws/terminal",
+            "detail": "发送已提交 input、resize、signal；接收 snapshot、output、status、exit 与 metadata 兼容帧。",
+            "quantity": "1 socket / mounted session",
+            "issueIds": ["pending-input", "metadata-overlap"]
+          },
+          {
+            "id": "runtime-registry",
+            "kind": "Backend memory",
+            "title": "TerminalRuntimeRegistry",
+            "detail": "按 terminalSessionId 持有 runtime、attached clients、subscribers 与输出缓冲。",
+            "quantity": "≤1 runtime entry / session · 64 KiB output buffer",
+            "issueIds": ["surface-multiplier"]
+          },
+          {
+            "id": "pty-tmux",
+            "kind": "Process",
+            "title": "PTY / tmux pane",
+            "detail": "最终命令执行位置；output 同时供 terminal client、scrollback recorder 与 bell 检测消费。",
+            "quantity": "session 1→1 runtime · tmux session 1→N pane",
+            "issueIds": []
+          }
+        ]
+      },
+      {
+        "id": "workspace-events",
+        "label": "Workspace 事件增量",
+        "scope": "每个 client / backend 一条全局连接",
+        "invariant": "结构、state、metadata、bell 走 /ws/terminal-events",
+        "tone": "cyan",
+        "nodes": [
+          {
+            "id": "event-producers",
+            "kind": "Backend producers",
+            "title": "Routes / Manager / State",
+            "detail": "Project、Session、Panel、metadata、bell、completion 与 TerminalState 变化被 record。",
+            "quantity": "多生产者 → 统一 TerminalEventEnvelope",
+            "issueIds": []
+          },
+          {
+            "id": "event-service",
+            "kind": "In-memory queue",
+            "title": "TerminalEventService",
+            "detail": "事件 ID 仍从 1 递增并保留最近 500 条；每次 backend 启动生成 streamId，并对过旧/超前 cursor 返回 gap。",
+            "quantity": "streamId per backend start · backlog 500",
+            "issueIds": ["event-cursor"]
+          },
+          {
+            "id": "global-event-ws",
+            "kind": "Global transport",
+            "title": "/ws/terminal-events",
+            "detail": "connected 先返回 streamId 与 cursor gap，再发送 listAfter(cursor) catchup；live event 逐条发送。",
+            "quantity": "1 socket / client / backend",
+            "issueIds": ["event-cursor", "reload-amplification"]
+          },
+          {
+            "id": "event-reducers",
+            "kind": "Web + App",
+            "title": "Workspace / overview reducers",
+            "detail": "按 stream 内 ID 去重；stream 变化或 gap 时清空旧 cursor 并重拉权威快照；结构事件在 50 ms 窗口合并刷新。",
+            "quantity": "streamId + cursor + seenEventIds",
+            "issueIds": ["event-cursor", "reload-amplification"]
+          }
+        ]
+      },
+      {
+        "id": "authoritative-snapshot",
+        "label": "权威快照与重新收敛",
+        "scope": "页面初始化、结构变化或手动刷新",
+        "invariant": "REST 返回 Project / Session / App overview 当前值",
+        "tone": "violet",
+        "nodes": [
+          {
+            "id": "manager-store",
+            "kind": "Backend owner",
+            "title": "Manager + LowDB store",
+            "detail": "持有 Project、Session、cwd、activeCommand、panel workspace 与持久 TerminalState。",
+            "quantity": "authoritative state",
+            "issueIds": []
+          },
+          {
+            "id": "snapshot-rest",
+            "kind": "REST snapshot",
+            "title": "Project / Session / overview API",
+            "detail": "Web 重新 GET Project + Session；App 重新 GET home overview。没有统一 snapshot version。",
+            "quantity": "Web 2 requests · App 1 aggregate request",
+            "issueIds": ["reload-amplification"]
+          },
+          {
+            "id": "client-store",
+            "kind": "Client state",
+            "title": "Workspace store / App overview",
+            "detail": "初始快照之后依赖 event delta；stream 变化或 cursor gap 会触发 Project / Session / overview 权威重拉。",
+            "quantity": "snapshot + incremental merge",
+            "issueIds": ["event-cursor"]
+          },
+          {
+            "id": "rendered-ui",
+            "kind": "Visible result",
+            "title": "Project tabs / session tabs / App cards",
+            "detail": "最终显示选择、cwd、active command、Agent state、marker 与 panel 状态。",
+            "quantity": "symptom surface",
+            "issueIds": ["metadata-overlap"]
+          }
+        ]
+      }
+    ],
+    "issues": [
+      {
+        "id": "event-cursor",
+        "number": "P1",
+        "classification": "已复现并修复",
+        "confidence": "真实 WS + Web backend restart 通过",
+        "title": "事件 cursor 已绑定 backend stream，并显式报告 gap",
+        "trigger": "backend 重启、事件超过 500 条保留窗口，或客户端长时间离线后重连。",
+        "mechanism": "TerminalEventService 每次启动生成 streamId；ticket 与 connected 都携带该值。connected 同时返回 cursor-too-old / cursor-ahead。Web/App 遇到 stream 变化或 gap 时清空旧 cursor/seen set，并重拉权威快照。",
+        "symptom": "修复前可稳定复现低 ID 事件被去重、保留窗口外事件静默缺失；修复后新 stream 的 ID=1 事件正常显示，gap 会触发 resync。",
+        "boundary": "已覆盖 restart、502 条溢出、窗口边界、cursor ahead 与正常重连；事件本身仍是 500 条内存 backlog，不改为持久事件存储。",
+        "sources": [
+          "packages/shared/src/terminal-protocol.ts",
+          "backend/src/terminal/terminal-event-service.ts",
+          "backend/src/routes/terminal-ticket-routes.ts",
+          "backend/src/ws/terminal-events-server.ts",
+          "frontend/src/features/terminal/use-terminal-events-connection.ts",
+          "app/src/hooks/use-app-terminal-events-connection.ts"
+        ]
+      },
+      {
+        "id": "reload-amplification",
+        "number": "P2",
+        "classification": "已复现并修复",
+        "confidence": "Web + App 浏览器网络记录通过",
+        "title": "突发结构事件已合并为一次权威刷新",
+        "trigger": "连续创建、删除 Project / Session，或一个操作产生多个结构事件。",
+        "mechanism": "terminal-events server 仍逐条发送 live event；Web/App 消费端用 50 ms trailing window 合并权威刷新，Web 保留批次内最后一个 created session 选择语义。",
+        "symptom": "修复前 3 个连续 project_created 触发 3 组 Web GET；修复后 Web 只发 1 组 Project + Session GET，App 只发 1 次 overview。",
+        "boundary": "只合并权威列表请求，不批处理 bell/state/metadata 等需要即时应用的增量事件。",
+        "sources": [
+          "backend/src/ws/terminal-events-server.ts",
+          "frontend/src/components/terminal/terminal-workspace-events.ts",
+          "frontend/src/components/terminal/terminal-workspace.tsx",
+          "app/src/hooks/use-app-session.ts"
+        ]
+      },
+      {
+        "id": "surface-multiplier",
+        "number": "P3",
+        "classification": "未复现性能故障",
+        "confidence": "已测数量，未见用户可见故障",
+        "title": "一条全局事件 WS 不等于前端只有一条 WebSocket",
+        "trigger": "用户依次访问多个 terminal，surface cache 增长到上限 10。",
+        "mechanism": "每个 cached TerminalSurface 保持 xterm 与 /ws/terminal；inactive output 继续接收并缓冲，超过 128 KiB 后改走 snapshot restore。Backend runtime entry 另保留 64 KiB 输出缓冲。",
+        "symptom": "真实浏览器从 1 个 surface 增至 3 个时保留 3 个 xterm、捕获 2 条新增 session WS，JS heap 约增加 4.2 MB；未出现卡顿或错误。",
+        "boundary": "只复现资源乘数，没有复现用户可见性能问题；按本轮门槛不修改 cache 上限或 surface 生命周期。",
+        "sources": [
+          "frontend/src/features/terminal/surface-cache.ts",
+          "frontend/src/components/terminal/terminal-workspace-stage.tsx",
+          "frontend/src/components/terminal/use-terminal-output-stream.ts",
+          "frontend/src/components/terminal/terminal-surface-utils.ts",
+          "backend/src/terminal/runtime-registry.ts"
+        ]
+      },
+      {
+        "id": "pending-input",
+        "number": "P4",
+        "classification": "已复现并修复",
+        "confidence": "Playwright offline / online 回归通过",
+        "title": "离线输入不再跨连接延迟执行",
+        "trigger": "用户在 terminal WS connecting / closed 状态继续输入。",
+        "mechanism": "useTerminalConnection 不再保存 pending input；发送前同时检查 navigator.onLine 与 WebSocket.readyState，离线时不调用 socket.send，并展示 Input was not sent。",
+        "symptom": "修复前离线输入在网络恢复后自动执行；修复后相同唯一标记未进入终端历史，恢复后仍显示未发送提示。",
+        "boundary": "resize 仍可保留最新值并在重连后同步；只有用户输入禁止跨连接重放。",
+        "sources": [
+          "frontend/src/features/terminal/use-terminal-connection.ts",
+          "frontend/src/components/terminal/terminal-surface.tsx"
+        ]
+      },
+      {
+        "id": "metadata-overlap",
+        "number": "P5",
+        "classification": "未复现双写错误",
+        "confidence": "已抓双出口，未复现双写 UI",
+        "title": "metadata 已迁到全局事件，但 session WS 仍保留兼容帧",
+        "trigger": "cwd 或 activeCommand 变化，由 terminal WS 的 shell/tmux metadata reader 发现。",
+        "mechanism": "Backend 更新 Manager 后记录 terminal_session_metadata_changed，同时仍向当前 session socket 发送 metadata。Web useTerminalConnection 只记录该兼容帧，Workspace store 由 global event 更新。",
+        "symptom": "同一事实存在两个协议出口，阅读代码时难以判断 source of truth；未来消费者若重新接入 session metadata，可能再次形成竞态。",
+        "boundary": "Playwright 同时抓到 session metadata 和 global metadata，UI 只收敛到一个 cwd；没有复现错误，因此本轮不删除兼容帧。",
+        "sources": [
+          "backend/src/ws/terminal-server.ts",
+          "backend/src/terminal/manager.ts",
+          "backend/src/index.ts",
+          "frontend/src/features/terminal/use-terminal-connection.ts",
+          "frontend/src/components/terminal/terminal-workspace-events.ts"
+        ]
+      }
+    ]
+  },
   "overview": {
     "facts": [
       {
@@ -396,7 +629,7 @@
             "id": "web-xterm-2",
             "actor": "Web client",
             "title": "useTerminalConnection.sendInput",
-            "detail": "WebSocket open 时发送 TerminalClientMessage；断线时最多保留 8 KiB pending input 并触发重连。",
+            "detail": "仅在浏览器在线且 WebSocket open 时发送 TerminalClientMessage；离线输入不排队，并明确提示未发送。",
             "payload": "{ type: input, data: 继续 }",
             "source": "frontend/src/features/terminal/use-terminal-connection.ts"
           },
@@ -576,10 +809,11 @@
         "name": "Terminal workspace event plane",
         "endpoint": "WS /ws/terminal-events",
         "scope": "一个 backend 的全局 Project / Session / Panel / bell / metadata 事件",
-        "retention": "TerminalEventService 内存最近 500 条；after cursor 支持本进程 catchup",
+        "retention": "TerminalEventService 内存最近 500 条；streamId 区分 backend 启动代际，gap 标识不可连续 catchup",
         "producer": "Terminal routes、TerminalSessionManager、TerminalStateService、completion service、panel routes",
         "consumers": "Web TerminalWorkspace、App useAppSession",
         "messages": [
+          "connected → streamId / acceptedAfter / cursor gap",
           "project_created / project_deleted",
           "terminal_session_created / terminal_session_deleted",
           "terminal_state_changed / terminal_session_metadata_changed",
@@ -617,9 +851,15 @@
     ],
     "reactions": [
       {
+        "event": "streamId changed / cursor gap",
+        "web": "清空旧 cursor 与 seen ids，重新 GET Project + Session",
+        "app": "清空旧 cursor 与 seen ids，重新 GET App overview",
+        "backend": "ticket + connected 返回 streamId；connected 返回 cursor-too-old / cursor-ahead"
+      },
+      {
         "event": "project/session created or deleted",
-        "web": "调用 loadSessions()，重新 GET Project + Session",
-        "app": "调用 loadOverview()，重新 GET App overview",
+        "web": "50 ms 窗口合并后调用 loadSessions()，重新 GET Project + Session",
+        "app": "50 ms 窗口合并后调用 loadOverview()，重新 GET App overview",
         "backend": "路由在 manager/store 修改完成后 record event"
       },
       {
@@ -810,7 +1050,7 @@
         "metric": "TerminalEvent backlog",
         "value": "500",
         "unit": "每个 backend 进程",
-        "contains": "内存事件；after cursor 只覆盖当前服务保留窗口",
+        "contains": "内存事件；streamId + gap 让客户端在超出窗口时回到权威快照",
         "source": "backend/src/terminal/terminal-event-service.ts"
       }
     ]
@@ -919,8 +1159,8 @@
       "type": "REST",
       "method": "POST",
       "path": "/api/terminal/events/ws-ticket",
-      "purpose": "签发 terminal-events WS ticket + baselineEventId",
-      "payload": "{ ticket, baselineEventId }",
+      "purpose": "签发 terminal-events WS ticket + baselineEventId + streamId",
+      "payload": "{ ticket, baselineEventId, streamId }",
       "consumers": "Web workspace / App session",
       "source": "backend/src/routes/terminal-ticket-routes.ts"
     },
@@ -937,8 +1177,8 @@
       "type": "WebSocket",
       "method": "WS",
       "path": "/ws/terminal-events?after=:cursor&token=:ticket",
-      "purpose": "Project / Session / Panel / state / completion / bell / metadata 的全局 catchup + live 广播；不承载 terminal input/output",
-      "payload": "TerminalEventServerMessage",
+      "purpose": "Project / Session / Panel / state / completion / bell / metadata 的全局 catchup + live 广播；connected 携带 streamId / cursor gap",
+      "payload": "TerminalEventServerMessage { connected.streamId, connected.gap, ... }",
       "consumers": "Web workspace / App session",
       "source": "backend/src/ws/terminal-events-server.ts"
     },

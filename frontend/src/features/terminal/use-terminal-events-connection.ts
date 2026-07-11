@@ -38,8 +38,9 @@ export function useTerminalEventsConnection(params: {
   apiBase: string;
   token: string;
   getCursor: () => string | null;
-  setCursor: (cursor: string) => void;
+  setCursor: (cursor: string | null) => void;
   onAuthExpired?: () => void;
+  onResyncRequired: () => void;
   onTerminalEvents: (
     events: TerminalEventEnvelope[],
     delivery: TerminalEventDelivery,
@@ -51,6 +52,7 @@ export function useTerminalEventsConnection(params: {
     getCursor,
     setCursor,
     onAuthExpired,
+    onResyncRequired,
     onTerminalEvents,
   } = params;
   const socketRef = useRef<WebSocket | null>(null);
@@ -60,8 +62,10 @@ export function useTerminalEventsConnection(params: {
   const seenEventIdsRef = useRef<Set<string>>(new Set());
   const closeReasonRef = useRef<string | null>(null);
   const lastConnectionCursorRef = useRef<string | null>(null);
+  const streamIdRef = useRef<string | null>(null);
   const getCursorRef = useRef(getCursor);
   const setCursorRef = useRef(setCursor);
+  const onResyncRequiredRef = useRef(onResyncRequired);
   const onTerminalEventsRef = useRef(onTerminalEvents);
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("connecting");
@@ -77,8 +81,14 @@ export function useTerminalEventsConnection(params: {
     setCursorRef.current = setCursor;
   }, [setCursor]);
   useEffect(() => {
+    onResyncRequiredRef.current = onResyncRequired;
+  }, [onResyncRequired]);
+  useEffect(() => {
     onTerminalEventsRef.current = onTerminalEvents;
   }, [onTerminalEvents]);
+  useEffect(() => {
+    streamIdRef.current = null;
+  }, [apiBase]);
 
   const handleEvents = useMemoizedFn(
     (
@@ -104,6 +114,13 @@ export function useTerminalEventsConnection(params: {
       }
     },
   );
+
+  const resetEventStream = useMemoizedFn((): void => {
+    seenEventIdsRef.current = new Set();
+    lastConnectionCursorRef.current = null;
+    setCursorRef.current(null);
+    onResyncRequiredRef.current();
+  });
 
   useEffect(() => {
     setConnectionStatus("connecting");
@@ -138,10 +155,18 @@ export function useTerminalEventsConnection(params: {
           return;
         }
 
-        const after =
+        let after =
           getCursorRef.current() ??
           lastConnectionCursorRef.current ??
           ticketPayload.baselineEventId;
+        if (
+          streamIdRef.current !== null &&
+          streamIdRef.current !== ticketPayload.streamId
+        ) {
+          resetEventStream();
+          after = null;
+        }
+        streamIdRef.current = ticketPayload.streamId;
         lastConnectionCursorRef.current = after;
         const socket = new WebSocket(
           buildTerminalEventsWsUrl(apiBase, ticketPayload.ticket, after),
@@ -200,6 +225,15 @@ export function useTerminalEventsConnection(params: {
               String(event.data),
             ) as TerminalEventServerMessage;
             if (parsed.type === "connected") {
+              if (parsed.streamId !== streamIdRef.current) {
+                streamIdRef.current = parsed.streamId;
+                resetEventStream();
+                socket.close(1012, "Terminal event stream changed");
+                return;
+              }
+              if (parsed.gap) {
+                resetEventStream();
+              }
               return;
             }
             if (parsed.type === "terminal-events") {
@@ -255,7 +289,7 @@ export function useTerminalEventsConnection(params: {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [apiBase, handleEvents, onAuthExpired]);
+  }, [apiBase, handleEvents, onAuthExpired, resetEventStream]);
 
   return {
     connectionStatus,

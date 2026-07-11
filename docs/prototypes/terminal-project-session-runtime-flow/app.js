@@ -5,7 +5,7 @@ const app = document.querySelector("#app");
 let model = null;
 let activeViewId = "overview";
 let activeScenarioId = "web-ime";
-let selectedNodeId = "web-workspace";
+let selectedIssueId = "event-cursor";
 let interfaceFilter = "All";
 
 function escapeHtml(value) {
@@ -66,7 +66,7 @@ function renderSidebar() {
           .join("")}
       </nav>
       <p class="sidebar-note">
-        读图边界：这里展示的是统一事件实现后的当前代码。图中不包含后续重构建议或性能判断。
+        红色编号连接复现结论与代码边界。P1/P2/P4 展示修复后的当前行为；P3/P5 展示保持现状的验证依据。
       </p>
     </aside>
   `;
@@ -96,100 +96,122 @@ function renderCodeLines(lines) {
   `;
 }
 
-function findOverviewNode(nodeId) {
-  for (const lane of model.overview.lanes) {
-    const node = lane.nodes.find((candidate) => candidate.id === nodeId);
-    if (node) {
-      return { ...node, tone: lane.tone, laneLabel: lane.label };
-    }
-  }
-  const firstLane = model.overview.lanes[0];
-  return firstLane?.nodes[0]
-    ? { ...firstLane.nodes[0], tone: firstLane.tone, laneLabel: firstLane.label }
-    : null;
+function findDiagnosisIssue(issueId) {
+  return (
+    model.diagnosis.issues.find((issue) => issue.id === issueId) ??
+    model.diagnosis.issues[0]
+  );
 }
 
-function renderNodeDrawer() {
-  const node = findOverviewNode(selectedNodeId);
-  if (!node) {
-    return "";
-  }
+function renderIssueMarker(issueId) {
+  const issue = findDiagnosisIssue(issueId);
+  if (!issue) return "";
+  return `
+    <button
+      type="button"
+      class="issue-marker ${issue.id === selectedIssueId ? "active" : ""}"
+      data-issue-id="${escapeHtml(issue.id)}"
+      aria-label="查看 ${escapeHtml(issue.number)} ${escapeHtml(issue.title)}"
+      title="${escapeHtml(issue.title)}"
+    >${escapeHtml(issue.number)}</button>
+  `;
+}
+
+function renderDiagnosisIssueDetail() {
+  const issue = findDiagnosisIssue(selectedIssueId);
+  if (!issue) return "";
+  selectedIssueId = issue.id;
 
   return `
-    <aside class="detail-drawer" aria-label="Selected architecture node details">
-      <div class="detail-header">
-        <strong>${escapeHtml(node.title)}</strong>
-        <span>${escapeHtml(node.laneLabel)} · ${escapeHtml(node.kind)}</span>
+    <aside class="issue-detail-panel" aria-live="polite" aria-label="问题详情">
+      <div class="issue-detail-heading">
+        <span class="issue-number">${escapeHtml(issue.number)}</span>
+        <div>
+          <div class="issue-classification">${escapeHtml(issue.classification)} · ${escapeHtml(issue.confidence)}</div>
+          <h2>${escapeHtml(issue.title)}</h2>
+        </div>
       </div>
-      <div class="detail-grid">
-        <section class="detail-section">
-          <p class="mini-heading">Current responsibilities</p>
-          <ul class="clean-list">
-            ${node.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("")}
-          </ul>
-          <p class="mini-heading" style="margin-top:16px">Interfaces / calls</p>
-          ${renderCodeLines(node.interfaces)}
-        </section>
-        <section class="detail-section">
-          <p class="mini-heading">Code evidence</p>
-          ${renderCodeLines(node.sources)}
-        </section>
-      </div>
+      <dl class="issue-cause-chain">
+        <div><dt>触发条件</dt><dd>${escapeHtml(issue.trigger)}</dd></div>
+        <div><dt>代码机制</dt><dd>${escapeHtml(issue.mechanism)}</dd></div>
+        <div><dt>可见症状</dt><dd>${escapeHtml(issue.symptom)}</dd></div>
+        <div><dt>判断边界</dt><dd>${escapeHtml(issue.boundary)}</dd></div>
+      </dl>
+      <p class="mini-heading">Code evidence</p>
+      ${renderCodeLines(issue.sources)}
     </aside>
   `;
 }
 
 function renderOverview() {
   return `
-    <section aria-label="架构总览">
-      <div class="facts-grid">
-        ${model.overview.facts
+    <section aria-label="架构诊断主图">
+      <div class="diagnosis-facts">
+        ${model.diagnosis.facts
           .map(
             (fact) => `
-              <article class="fact">
-                <div class="fact-label">${escapeHtml(fact.label)}</div>
-                <div class="fact-value">${escapeHtml(fact.value)}</div>
-                <div class="fact-detail">${escapeHtml(fact.detail)}</div>
+              <article class="diagnosis-fact">
+                <span>${escapeHtml(fact.label)}</span>
+                <strong>${escapeHtml(fact.value)}</strong>
+                <p>${escapeHtml(fact.detail)}</p>
               </article>
             `,
           )
           .join("")}
       </div>
-      <div class="architecture">
-        ${model.overview.lanes
-          .map(
-            (lane) => `
-              <section class="lane">
-                <div class="lane-label">${escapeHtml(lane.label)}</div>
-                <div class="lane-nodes" style="--columns:${Math.min(lane.nodes.length, 3)}">
-                  ${lane.nodes
-                    .map(
-                      (node) => `
-                        <button
-                          type="button"
-                          class="node ${toneClass(lane.tone)} ${node.id === selectedNodeId ? "selected" : ""}"
-                          data-node-id="${escapeHtml(node.id)}"
-                          aria-pressed="${node.id === selectedNodeId}"
-                        >
-                          <span class="node-kind">${escapeHtml(node.kind)}</span>
-                          <h3>${escapeHtml(node.title)}</h3>
-                          <p>${escapeHtml(node.summary)}</p>
-                        </button>
-                      `,
-                    )
-                    .join("")}
-                </div>
-              </section>
-            `,
-          )
-          .join("")}
+      <div class="diagnosis-layout">
+        <div class="diagnosis-map">
+          ${model.diagnosis.lanes
+            .map(
+              (lane, laneIndex) => `
+                <section class="diagnosis-lane tone-${escapeHtml(lane.tone)}">
+                  <header class="diagnosis-lane-header">
+                    <span>0${laneIndex + 1}</span>
+                    <div><strong>${escapeHtml(lane.label)}</strong><p>${escapeHtml(lane.scope)}</p></div>
+                    <code>${escapeHtml(lane.invariant)}</code>
+                  </header>
+                  <div class="diagnosis-flow">
+                    ${lane.nodes
+                      .map(
+                        (node) => `
+                          <article class="diagnosis-node">
+                            <div class="diagnosis-node-topline">
+                              <span>${escapeHtml(node.kind)}</span>
+                              <div class="issue-markers">${(node.issueIds ?? []).map(renderIssueMarker).join("")}</div>
+                            </div>
+                            <h3>${escapeHtml(node.title)}</h3>
+                            <p>${escapeHtml(node.detail)}</p>
+                            <code>${escapeHtml(node.quantity)}</code>
+                          </article>
+                        `,
+                      )
+                      .join("")}
+                  </div>
+                </section>
+              `,
+            )
+            .join("")}
+        </div>
+        <nav class="issue-index" aria-label="问题索引">
+          <p class="mini-heading">Problem index</p>
+          ${model.diagnosis.issues
+            .map(
+              (issue) => `
+                <button
+                  type="button"
+                  class="issue-index-item ${issue.id === selectedIssueId ? "active" : ""}"
+                  data-issue-id="${escapeHtml(issue.id)}"
+                  aria-pressed="${issue.id === selectedIssueId}"
+                >
+                  <span>${escapeHtml(issue.number)}</span>
+                  <div><strong>${escapeHtml(issue.title)}</strong><small>${escapeHtml(issue.classification)}</small></div>
+                </button>
+              `,
+            )
+            .join("")}
+        </nav>
       </div>
-      ${renderNodeDrawer()}
-      <div class="relation-strip" aria-label="总览关系">
-        ${model.overview.relations
-          .map((relation) => `<div>${escapeHtml(relation)}</div>`)
-          .join("")}
-      </div>
+      ${renderDiagnosisIssueDetail()}
     </section>
   `;
 }
@@ -434,7 +456,7 @@ function renderActiveContent() {
 function renderFooter() {
   return `
     <footer class="footer">
-      <span>统一事件实现现状原型 · 不连接 backend · 不推导后续方案</span>
+      <span>真实复现诊断图 · P1/P2/P4 已修复 · P3/P5 未达到修改门槛</span>
       <code>docs/prototypes/terminal-project-session-runtime-flow/README.md</code>
     </footer>
   `;
@@ -480,8 +502,8 @@ function bindInteractions() {
       return;
     }
 
-    if (target.dataset.nodeId) {
-      selectedNodeId = target.dataset.nodeId;
+    if (target.dataset.issueId) {
+      selectedIssueId = target.dataset.issueId;
       render();
       return;
     }

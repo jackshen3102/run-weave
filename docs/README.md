@@ -60,6 +60,7 @@
 | 测试层级与命名                           | testing/layers.md                                                                  |
 | 测试命令选择                             | testing/command-matrix.md                                                          |
 | TerminalState 测试                       | testing/terminal-state-test-cases.md                                               |
+| Terminal 事件恢复与架构问题测试          | testing/terminal-event-recovery-test-cases.md                                      |
 | Terminal activeCommand 一致性测试        | testing/terminal-active-command-consistency-test-cases.md                          |
 | App 设备在线测试                         | testing/app-device-online-test-cases.md                                            |
 | app-server CLI 启动测试                  | testing/app-server-event-center-test-cases.md#as-ec-008-cli-owned-app-server-start |

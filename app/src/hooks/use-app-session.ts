@@ -1,4 +1,4 @@
-import { useMemoizedFn } from "ahooks";
+import { useDebounceFn, useMemoizedFn } from "ahooks";
 import type {
   AppHomeOverviewResponse,
   AppHomeOverviewSession,
@@ -25,6 +25,7 @@ import type { AppDeviceConnectionSnapshot } from "./use-app-device-connection";
 import { useAppTerminalEventsConnection } from "./use-app-terminal-events-connection";
 
 export type StartupState = "checking" | "ready";
+const OVERVIEW_REFRESH_DEBOUNCE_MS = 50;
 
 export interface AppLoginParams {
   username: string;
@@ -133,15 +134,12 @@ export function useAppSession(): AppSessionController {
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const {
-    deviceConnection,
-    markDeviceOnline,
-    refreshDeviceConnection,
-  } = useAppDeviceConnection({
-    apiBase,
-    connectionId: activeConnectionId,
-    enabled: Boolean(activeConnectionId),
-  });
+  const { deviceConnection, markDeviceOnline, refreshDeviceConnection } =
+    useAppDeviceConnection({
+      apiBase,
+      connectionId: activeConnectionId,
+      enabled: Boolean(activeConnectionId),
+    });
 
   useEffect(() => {
     activeConnectionIdRef.current = activeConnectionId;
@@ -432,6 +430,18 @@ export function useAppSession(): AppSessionController {
     void resetSession();
   });
 
+  const { run: scheduleOverviewRefresh, cancel: cancelOverviewRefresh } =
+    useDebounceFn(() => void loadOverview(), {
+      wait: OVERVIEW_REFRESH_DEBOUNCE_MS,
+    });
+
+  useEffect(
+    () => () => {
+      cancelOverviewRefresh();
+    },
+    [cancelOverviewRefresh],
+  );
+
   const handleTerminalEvents = useMemoizedFn(
     (events: TerminalEventEnvelope[]) => {
       const stateEvents = events.filter(
@@ -441,7 +451,7 @@ export function useAppSession(): AppSessionController {
         (event) => event.kind === "terminal_session_metadata_changed",
       );
       if (events.some(isOverviewInvalidationEvent)) {
-        void loadOverview();
+        scheduleOverviewRefresh();
       }
       if (stateEvents.length === 0 && metadataEvents.length === 0) {
         return;
@@ -538,6 +548,7 @@ export function useAppSession(): AppSessionController {
     onConnectionClose: handleTerminalEventsTransportFailure,
     onConnectionError: handleTerminalEventsTransportFailure,
     onServerConnected: () => markDeviceOnline("terminal-events-connected"),
+    onResyncRequired: () => void loadOverview(),
     onTerminalEvents: handleTerminalEvents,
   });
 
