@@ -1,0 +1,986 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Runweave 本地开发、Electron Dev、Beta 与多 Beta 的服务隔离和环境选择架构"
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>"
+    />
+    <title>Runweave Dev Session</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #071018;
+        --panel: #0d1823;
+        --panel-2: #111f2d;
+        --line: #24384a;
+        --text: #e9f1f7;
+        --muted: #91a4b4;
+        --faint: #607487;
+        --cyan: #54d6c7;
+        --blue: #69a9ff;
+        --green: #66d38e;
+        --amber: #f5bd62;
+        --red: #ff7883;
+        --purple: #b59cff;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "SF Pro Display",
+          "PingFang SC",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        color: var(--text);
+        background:
+          radial-gradient(
+            circle at 10% 0%,
+            rgba(84, 214, 199, 0.11),
+            transparent 28%
+          ),
+          radial-gradient(
+            circle at 90% 8%,
+            rgba(105, 169, 255, 0.1),
+            transparent 26%
+          ),
+          var(--bg);
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .topbar {
+        position: sticky;
+        z-index: 10;
+        top: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 58px;
+        padding: 0 28px;
+        border-bottom: 1px solid rgba(145, 164, 180, 0.16);
+        background: rgba(7, 16, 24, 0.9);
+        backdrop-filter: blur(16px);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        border: 1px solid rgba(84, 214, 199, 0.45);
+        border-radius: 9px;
+        color: var(--cyan);
+        background: rgba(84, 214, 199, 0.08);
+        font:
+          700 12px/1 ui-monospace,
+          monospace;
+      }
+
+      .top-meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      main {
+        width: min(1440px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 40px 0 80px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 430px);
+        gap: 38px;
+        align-items: end;
+        margin-bottom: 30px;
+      }
+
+      .eyebrow {
+        margin: 0 0 12px;
+        color: var(--cyan);
+        font:
+          700 11px/1.2 ui-monospace,
+          monospace;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        max-width: 900px;
+        margin: 0;
+        font-size: clamp(34px, 5vw, 64px);
+        line-height: 1.02;
+        letter-spacing: -0.045em;
+      }
+
+      .hero p {
+        max-width: 820px;
+        margin: 20px 0 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.75;
+      }
+
+      .principle {
+        padding: 20px;
+        border: 1px solid rgba(84, 214, 199, 0.24);
+        border-radius: 16px;
+        background: rgba(84, 214, 199, 0.06);
+      }
+
+      .principle strong {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--cyan);
+        font-size: 13px;
+      }
+
+      .principle p {
+        margin: 0;
+        color: var(--text);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      section {
+        margin-top: 28px;
+        padding: 24px;
+        border: 1px solid rgba(145, 164, 180, 0.14);
+        border-radius: 18px;
+        background: rgba(13, 24, 35, 0.82);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+      }
+
+      .section-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+
+      .section-head h2 {
+        margin: 0;
+        font-size: 21px;
+        letter-spacing: -0.02em;
+      }
+
+      .section-head p {
+        max-width: 700px;
+        margin: 7px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .mode-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .mode-tab,
+      .risk-filter {
+        cursor: pointer;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 8px 13px;
+        color: var(--muted);
+        background: var(--panel-2);
+        font-size: 12px;
+      }
+
+      .mode-tab[aria-pressed="true"] {
+        border-color: rgba(105, 169, 255, 0.65);
+        color: #dcecff;
+        background: rgba(105, 169, 255, 0.14);
+      }
+
+      .mode-summary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 22px;
+        align-items: start;
+        margin: 18px 0;
+        padding: 18px;
+        border: 1px solid rgba(105, 169, 255, 0.2);
+        border-radius: 14px;
+        background: rgba(105, 169, 255, 0.055);
+      }
+
+      .mode-summary h3 {
+        margin: 0 0 7px;
+        font-size: 16px;
+      }
+
+      .mode-summary p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.65;
+      }
+
+      .mode-trigger {
+        max-width: 420px;
+        padding: 10px 12px;
+        border-radius: 9px;
+        color: var(--cyan);
+        background: #07121b;
+        font:
+          12px/1.5 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        overflow-wrap: anywhere;
+      }
+
+      .service-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .service-card {
+        min-height: 190px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel-2);
+      }
+
+      .service-icon {
+        display: grid;
+        width: 32px;
+        height: 32px;
+        place-items: center;
+        margin-bottom: 14px;
+        border-radius: 9px;
+        color: var(--blue);
+        background: rgba(105, 169, 255, 0.1);
+        font:
+          700 11px/1 ui-monospace,
+          monospace;
+      }
+
+      .service-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .service-title h3 {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .ownership {
+        border-radius: 999px;
+        padding: 4px 7px;
+        font:
+          700 9px/1 ui-monospace,
+          monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .ownership.dedicated {
+        color: var(--green);
+        background: rgba(102, 211, 142, 0.1);
+      }
+
+      .ownership.shared {
+        color: var(--amber);
+        background: rgba(245, 189, 98, 0.11);
+      }
+
+      .ownership.disabled {
+        color: var(--faint);
+        background: rgba(96, 116, 135, 0.12);
+      }
+
+      .service-card p {
+        margin: 14px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .capsule-grid {
+        display: grid;
+        grid-template-columns: 0.85fr 1.15fr;
+        gap: 18px;
+      }
+
+      .manifest {
+        margin: 0;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        color: #bcd1df;
+        background: #07121b;
+        font:
+          12px/1.65 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        white-space: pre-wrap;
+      }
+
+      .identity-flow {
+        display: grid;
+        gap: 10px;
+      }
+
+      .flow-step {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel-2);
+      }
+
+      .step-no {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border-radius: 8px;
+        color: var(--cyan);
+        background: rgba(84, 214, 199, 0.09);
+        font:
+          700 11px/1 ui-monospace,
+          monospace;
+      }
+
+      .flow-step strong {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 13px;
+      }
+
+      .flow-step span {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .risk-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .risk-filter[aria-pressed="true"] {
+        border-color: rgba(181, 156, 255, 0.55);
+        color: #e8e0ff;
+        background: rgba(181, 156, 255, 0.13);
+      }
+
+      .risk-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .risk-item {
+        padding: 15px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel-2);
+      }
+
+      .risk-item[hidden] {
+        display: none;
+      }
+
+      .risk-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+
+      .risk-id {
+        color: var(--purple);
+        font:
+          700 11px/1 ui-monospace,
+          monospace;
+      }
+
+      .risk-level {
+        color: var(--faint);
+        font-size: 10px;
+      }
+
+      .risk-item h3 {
+        margin: 0 0 7px;
+        font-size: 14px;
+      }
+
+      .risk-item p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .tier-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      .tier-table th,
+      .tier-table td {
+        padding: 12px 10px;
+        border-bottom: 1px solid rgba(145, 164, 180, 0.12);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .tier-table th {
+        color: var(--faint);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .tier-table td {
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .tier-table td:first-child {
+        color: var(--text);
+        font-weight: 700;
+      }
+
+      .target-note {
+        margin-top: 18px;
+        padding: 16px;
+        border-left: 3px solid var(--amber);
+        border-radius: 0 10px 10px 0;
+        color: var(--muted);
+        background: rgba(245, 189, 98, 0.055);
+        font-size: 12px;
+        line-height: 1.65;
+      }
+
+      @media (max-width: 1050px) {
+        .hero,
+        .capsule-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .service-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 680px) {
+        .topbar {
+          padding: 0 16px;
+        }
+
+        main {
+          width: min(100% - 24px, 1440px);
+          padding-top: 26px;
+        }
+
+        section {
+          padding: 17px;
+        }
+
+        .service-grid,
+        .risk-list {
+          grid-template-columns: 1fr;
+        }
+
+        .mode-summary {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">RW</span>
+        <span>Runweave Dev Session</span>
+      </div>
+      <span class="top-meta">事实基线 2026-07-11 · 技术架构说明</span>
+    </header>
+
+    <main>
+      <div class="hero">
+        <div>
+          <p class="eyebrow">Runweave local development isolation</p>
+          <h1>用一个 Dev Session，完成从改动范围到真实验收</h1>
+          <p>
+            最好的开发方式不是手工选择一堆端口，也不是每次部署 Beta。源码侧
+            Planner 先推荐最小 profile，Dev Session
+            再明确引用默认服务或拥有独立服务，最后打开准确的 Web、Desktop 或
+            Terminal Browser surface。
+          </p>
+        </div>
+        <aside class="principle">
+          <strong>核心不变量</strong>
+          <p>
+            Dev Session 是任务事实源，serviceInstanceId
+            是运行服务事实源。未受影响的服务可以复用；受影响的服务才独占。共享不等于隐式发现。
+          </p>
+        </aside>
+      </div>
+
+      <section id="recommended-workflow">
+        <div class="section-head">
+          <div>
+            <h2>推荐开发工作流：一个源码侧入口</h2>
+            <p>
+              以下是目标交互，当前尚未实现。自动判断只做推荐；用户目标和显式
+              profile 始终优先。
+            </p>
+          </div>
+        </div>
+        <div class="capsule-grid">
+          <pre class="manifest" aria-label="推荐 Dev Session 命令">
+pnpm dev
+  └─ recommend profile + print service plan
+
+pnpm dev --profile frontend
+pnpm dev --profile fullstack
+pnpm dev --profile app-server
+pnpm dev --profile electron
+pnpm dev --profile beta --instance agent-a
+
+pnpm dev:status --json
+pnpm dev:open --surface &lt;web|desktop|terminal-browser&gt;
+pnpm dev:stop</pre
+          >
+          <div class="identity-flow">
+            <div class="flow-step">
+              <span class="step-no">01</span>
+              <div>
+                <strong>Plan</strong
+                ><span
+                  >changed paths + 用户意图 + 验收 surface → 推荐最小
+                  profile。</span
+                >
+              </div>
+            </div>
+            <div class="flow-step">
+              <span class="step-no">02</span>
+              <div>
+                <strong>Resolve</strong
+                ><span
+                  >四项服务分别判为 dedicated、shared-declared 或
+                  disabled。</span
+                >
+              </div>
+            </div>
+            <div class="flow-step">
+              <span class="step-no">03</span>
+              <div>
+                <strong>Start</strong
+                ><span
+                  >只启动 dedicated 服务；共享默认 Backend/App Server
+                  只记录引用。</span
+                >
+              </div>
+            </div>
+            <div class="flow-step">
+              <span class="step-no">04</span>
+              <div>
+                <strong>Handshake</strong
+                ><span
+                  >核对 serviceInstanceId、capability、revision 和 resource
+                  namespace。</span
+                >
+              </div>
+            </div>
+            <div class="flow-step">
+              <span class="step-no">05</span>
+              <div>
+                <strong>Open &amp; Verify</strong
+                ><span>返回准确 URL/CDP surface，用真实浏览器或桌面验收。</span>
+              </div>
+            </div>
+            <div class="flow-step">
+              <span class="step-no">06</span>
+              <div>
+                <strong>Stop</strong
+                ><span
+                  >只清理 Session 拥有的进程；共享服务和其他 Session
+                  不受影响。</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+        <table class="tier-table" style="margin-top: 18px">
+          <thead>
+            <tr>
+              <th>候选方式</th>
+              <th>优点</th>
+              <th>为什么不是主方案</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>手工命令/文档约定</td>
+              <td>零基础设施成本</td>
+              <td>无法稳定管理身份、复用和清理</td>
+            </tr>
+            <tr>
+              <td>纯 diff 自动启动</td>
+              <td>操作最少</td>
+              <td>不知道用户意图、状态写入和验收目标</td>
+            </tr>
+            <tr>
+              <td>每次全量 Beta/沙箱</td>
+              <td>隔离最强</td>
+              <td>Frontend/Electron 日常开发反馈过慢、资源过重</td>
+            </tr>
+            <tr>
+              <td>Dev Session：推荐 + 覆盖</td>
+              <td>最小环境、允许共享、身份可诊断</td>
+              <td>推荐：需要统一 manifest/status/open/stop</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="layering">
+        <div class="section-head">
+          <div>
+            <h2>分层判定：逐项决定服务 ownership</h2>
+            <p>
+              全局服务不是问题；未经范围判断的隐式复用才是问题。“代码未改”允许共享，但还要继续检查契约、状态和生命周期。
+            </p>
+          </div>
+        </div>
+        <div class="identity-flow">
+          <div class="flow-step">
+            <span class="step-no">A</span>
+            <div>
+              <strong>服务代码或配置改了吗？</strong
+              ><span>是 → dedicated。否 → 继续检查影响闭包。</span>
+            </div>
+          </div>
+          <div class="flow-step">
+            <span class="step-no">B</span>
+            <div>
+              <strong>接口、事件、认证或启动契约受影响吗？</strong
+              ><span>是 → provider 与关键 consumer 进入同一独立验证闭环。</span>
+            </div>
+          </div>
+          <div class="flow-step">
+            <span class="step-no">C</span>
+            <div>
+              <strong>测试会写入可能冲突的共享状态吗？</strong
+              ><span
+                >是 → dedicated 或显式 namespace；不能因为代码没改就共享
+                profile、event log、browser session。</span
+              >
+            </div>
+          </div>
+          <div class="flow-step">
+            <span class="step-no">D</span>
+            <div>
+              <strong>启动、停止、重连、更新或回滚是验收对象吗？</strong
+              ><span
+                >是 → 本次 Dev Session 必须拥有该服务生命周期；四项都否才使用
+                shared-declared 默认服务。</span
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="environment-modes">
+        <div class="section-head">
+          <div>
+            <h2>按改动范围选环境</h2>
+            <p>
+              切换场景，观察四项服务的最小
+              ownership。先解决开发目标，再决定是否需要 Beta。
+            </p>
+          </div>
+        </div>
+        <div class="mode-tabs" role="group" aria-label="开发环境模式">
+          <button
+            class="mode-tab"
+            type="button"
+            data-mode="frontend"
+            aria-pressed="true"
+          >
+            Frontend only
+          </button>
+          <button
+            class="mode-tab"
+            type="button"
+            data-mode="fullstack"
+            aria-pressed="false"
+          >
+            Web full-stack
+          </button>
+          <button
+            class="mode-tab"
+            type="button"
+            data-mode="appserver"
+            aria-pressed="false"
+          >
+            App Server / hooks
+          </button>
+          <button
+            class="mode-tab"
+            type="button"
+            data-mode="electron"
+            aria-pressed="false"
+          >
+            Electron Dev
+          </button>
+          <button
+            class="mode-tab"
+            type="button"
+            data-mode="beta"
+            aria-pressed="false"
+          >
+            Beta / Multi-Beta
+          </button>
+        </div>
+        <div class="mode-summary" aria-live="polite">
+          <div>
+            <h3 id="mode-title"></h3>
+            <p id="mode-description"></p>
+          </div>
+          <code class="mode-trigger" id="mode-trigger"></code>
+        </div>
+        <div class="service-grid" id="service-grid"></div>
+      </section>
+
+      <section id="capsule">
+        <div class="section-head">
+          <div>
+            <h2>Dev Session Capsule：任务与服务身份分离</h2>
+            <p>
+              devSessionId 表示一次工作，serviceInstanceId
+              表示真实服务。端口、PID、profile 路径只是 transport/resource
+              字段。
+            </p>
+          </div>
+        </div>
+        <div class="capsule-grid">
+          <pre class="manifest" aria-label="Dev Session manifest 示例">
+devSessionId: dev-agent-a
+profile: electron
+source: worktree + revision
+
+frontend: dedicated
+  serviceInstanceId: frontend:dev-agent-a
+  ownerDevSessionId: dev-agent-a
+backend: shared-declared
+  serviceInstanceId: backend:stable-default
+  resourceNamespace: stable-default-profile
+appServer: shared-declared
+  serviceInstanceId: app-server:stable-default
+cdp.desktop: dedicated
+  serviceInstanceId: cdp:dev-agent-a:desktop
+cdp.terminalBrowser: dedicated</pre
+          >
+          <div class="identity-flow">
+            <div class="flow-step">
+              <span class="step-no">01</span>
+              <div>
+                <strong>先决策模式</strong
+                ><span
+                  >根据 changed paths 和验收目标选择
+                  frontend、full-stack、app-server、electron 或 beta。</span
+                >
+              </div>
+            </div>
+            <div class="flow-step">
+              <span class="step-no">02</span>
+              <div>
+                <strong>生成 manifest</strong
+                ><span
+                  >记录 devSessionId、profile、revision、每项
+                  serviceInstanceId、ownership 和资源边界。</span
+                >
+              </div>
+            </div>
+            <div class="flow-step">
+              <span class="step-no">03</span>
+              <div>
+                <strong>启动或声明复用</strong
+                ><span
+                  >dedicated 由本 Session 启动；shared-declared
+                  可以是默认服务，但必须记录解析后的 serviceInstanceId
+                  和允许共享的理由。</span
+                >
+              </div>
+            </div>
+            <div class="flow-step">
+              <span class="step-no">04</span>
+              <div>
+                <strong>逐边握手</strong
+                ><span
+                  >Frontend↔Backend、Backend↔App Server、Agent↔CDP 校验 service
+                  instance、capability、revision 和 namespace。</span
+                >
+              </div>
+            </div>
+            <div class="flow-step">
+              <span class="step-no">05</span>
+              <div>
+                <strong>统一清理</strong
+                ><span
+                  >只停止 manifest 拥有的 PID/lock/home；stale
+                  资源进入诊断，不按端口盲杀。</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="risks">
+        <div class="section-head">
+          <div>
+            <h2>当前串线风险</h2>
+            <p>
+              事实、结构性风险和历史问题分开展示。结构性风险不等于已确认用户故障。
+            </p>
+          </div>
+        </div>
+        <div class="risk-toolbar" role="group" aria-label="风险过滤">
+          <button
+            class="risk-filter"
+            type="button"
+            data-filter="all"
+            aria-pressed="true"
+          >
+            全部
+          </button>
+          <button
+            class="risk-filter"
+            type="button"
+            data-filter="fact"
+            aria-pressed="false"
+          >
+            当前事实
+          </button>
+          <button
+            class="risk-filter"
+            type="button"
+            data-filter="risk"
+            aria-pressed="false"
+          >
+            结构性风险
+          </button>
+        </div>
+        <div class="risk-list" id="risk-list"></div>
+      </section>
+
+      <section id="tiers">
+        <div class="section-head">
+          <div>
+            <h2>渐进式落地</h2>
+            <p>
+              先消灭隐式发现，再扩展多 Beta；避免用最昂贵环境验证最小前端改动。
+            </p>
+          </div>
+        </div>
+        <table class="tier-table">
+          <thead>
+            <tr>
+              <th>阶段</th>
+              <th>交付</th>
+              <th>解决的问题</th>
+              <th>暂不解决</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1. Dev Session Planner</td>
+              <td>changed paths + intent + surface → 推荐 profile</td>
+              <td>避免所有任务默认 Beta</td>
+              <td>服务身份握手</td>
+            </tr>
+            <tr>
+              <td>2. Manifest/status/open/stop</td>
+              <td>devSessionId + serviceInstanceId + ownership</td>
+              <td>统一事实源、可诊断</td>
+              <td>阻断错误连接</td>
+            </tr>
+            <tr>
+              <td>3. 禁止 ambient discovery</td>
+              <td>dedicated/shared-declared/disabled 显式策略</td>
+              <td>允许有意复用默认服务，阻止无意串入</td>
+              <td>多 bundle</td>
+            </tr>
+            <tr>
+              <td>4. Identity handshake</td>
+              <td>每条服务边 fail closed</td>
+              <td>端口正确但实例错误</td>
+              <td>跨 revision 并行</td>
+            </tr>
+            <tr>
+              <td>5. 生命周期编排</td>
+              <td>统一 start/status/stop/cleanup</td>
+              <td>orphan、stale lock、盲杀</td>
+              <td>动态 macOS App identity</td>
+            </tr>
+            <tr>
+              <td>6. Multi-Beta</td>
+              <td>per-instance bundle/userData/App Server/CDP</td>
+              <td>两个 revision 同时验证</td>
+              <td>远程共享环境</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="target-note">
+          上一份 Beta 多实例/CDP 计划属于第 6 阶段。更稳妥的顺序是先完成 1–5
+          的通用 Dev Session，再让 Beta 复用同一套 Planner、service
+          identity、open 和 stop 协议。
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

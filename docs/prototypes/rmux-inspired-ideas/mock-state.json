@@ -200,7 +200,7 @@
       { "op": "wait_ms", "hint": "ms: number —— 固定等待" },
       {
         "op": "assert_dom",
-        "hint": "selector, expect —— 结合 $playwright-cli 断言浏览器 DOM"
+        "hint": "selector, expect —— 结合 $toolkit:playwright-cli 断言浏览器 DOM"
       }
     ]
   },

@@ -1,6 +1,6 @@
 # Terminal IME 输入测试用例
 
-本文档验证 Web Terminal 在真实 Codex TUI 与普通 shell 中处理输入法 composition 时，只把用户最终提交的文本发送到 terminal WebSocket。验证必须使用 `$playwright-cli` 操作真实页面并记录浏览器发出的 `TerminalClientMessage(type="input")`；macOS 输入法端到端用例还必须使用 `$computer-use` 产生真实键盘与候选提交事件。`typecheck` / `lint` 不能替代行为证据。
+本文档验证 Web Terminal 在真实 Codex TUI 与普通 shell 中处理输入法 composition 时，只把用户最终提交的文本发送到 terminal WebSocket。验证必须使用 `$toolkit:playwright-cli` 操作真实页面并记录浏览器发出的 `TerminalClientMessage(type="input")`；macOS 输入法端到端用例还必须使用 `$computer-use` 产生真实键盘与候选提交事件。`typecheck` / `lint` 不能替代行为证据。
 
 ## 范围
 
@@ -26,7 +26,7 @@
 - 输入法预编辑阶段的 `InputEvent.inputType="insertCompositionText"`、`isComposing=true` 不代表用户已提交文本，不能写入 terminal WebSocket。
 - 一次 composition 在部分浏览器中会同时出现 `compositionend` 与随后 `insertText`，两者只能形成一个 terminal input。
 - 两次独立的 `compositionstart → compositionend` 即使文本相同且间隔小于 250ms，也代表两次合法输入，不能被时间窗口误吞。
-- 仓库不新增 Playwright spec 或单元测试文件；协议边界通过 `$playwright-cli run-code` 在真实 Codex/shell 页面派发浏览器原生 composition/input 事件，操作系统边界通过 `$computer-use` 在 macOS 拼音输入源下逐键输入，两者都由 Playwright 捕获 WebSocket input frame。
+- 仓库不新增 Playwright spec 或单元测试文件；协议边界通过 `$toolkit:playwright-cli run-code` 在真实 Codex/shell 页面派发浏览器原生 composition/input 事件，操作系统边界通过 `$computer-use` 在 macOS 拼音输入源下逐键输入，两者都由 Playwright 捕获 WebSocket input frame。
 
 ## 输入等价类与时序边界
 
@@ -189,7 +189,7 @@ Given：
 
 When：
 
-- 使用 `$playwright-cli` 聚焦 `Terminal emulator` 并输入 `ime_ascii_probe`，不按 Enter。
+- 使用 `$toolkit:playwright-cli` 聚焦 `Terminal emulator` 并输入 `ime_ascii_probe`，不按 Enter。
 
 Then：
 
@@ -225,7 +225,7 @@ Given：
 - 使用 Runweave Electron 桌面端中的真实 Web Terminal 页面，自动窄窗口宽度为 700px，不传 `clientMode` 覆盖参数。
 - terminal 内运行真实 Codex TUI。
 - macOS 已启用 ABC 与简体拼音输入源；使用 `$computer-use` 切换到简体拼音并聚焦 xterm 输入框。
-- 使用 `$playwright-cli` 捕获 composition 事件和 terminal WebSocket input frame。
+- 使用 `$toolkit:playwright-cli` 捕获 composition 事件和 terminal WebSocket input frame。
 
 When：
 

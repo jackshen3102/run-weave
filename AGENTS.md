@@ -27,7 +27,7 @@
 ### 验收与改动约束
 
 - 本仓库不写单测/TDD，不新增单元测试文件。验证靠 `pnpm typecheck`、`pnpm lint`、`frontend/tests/*.spec.ts` 的 Playwright E2E，以及实际行为核对。
-- 若计划或验收里承诺了 Playwright/浏览器验证，完成前必须实际执行 `$playwright-cli` 并给出命令或关键证据；未执行则明确写「未执行 + 阻塞原因」，禁止用静态检查/代码阅读/截图冒充。
+- 若计划或验收里承诺了 Playwright/浏览器验证，完成前必须实际执行 `$toolkit:playwright-cli` 并给出命令或关键证据；未执行则明确写「未执行 + 阻塞原因」，禁止用静态检查/代码阅读/截图冒充。
 - 每一行改动都必须能追溯到本次需求来源；不顺手「优化」相邻代码、格式、注释，只清理自己改动产生的孤儿。
 
 ### 包边界（详情）
@@ -50,9 +50,9 @@
 
 ### 操作与验证技能
 
-- `$computer-use` 和 `$playwright-cli` 都是本项目高价值技能；遇到真实桌面端、浏览器页面、终端页面联动的场景时，优先把两者结合使用，而不是停留在代码阅读或命令行猜测。
-- 分工：`$computer-use` 管本机桌面端、系统弹窗、应用启动/重启、菜单、安装器，以及进入 Runweave 桌面端具体页面；`$playwright-cli` 管打开 Web/App 页面、点击、输入、截图、读 DOM 和浏览器自动化验收。
-- 涉及浏览器页面复现、修复或验收时，必须用 `$playwright-cli`，不要用 `$computer-use` 或其它方案替代。两端都涉及时，先用 `$computer-use` 把环境准备到目标状态，再用 `$playwright-cli` 做页面级验证与取证。
+- `$computer-use` 和 `$toolkit:playwright-cli` 都是本项目高价值技能；遇到真实桌面端、浏览器页面、终端页面联动的场景时，优先把两者结合使用，而不是停留在代码阅读或命令行猜测。
+- 分工：`$computer-use` 管本机桌面端、系统弹窗、应用启动/重启、菜单、安装器，以及进入 Runweave 桌面端具体页面；`$toolkit:playwright-cli` 管打开 Web/App 页面、点击、输入、截图、读 DOM 和浏览器自动化验收。
+- 涉及浏览器页面复现、修复或验收时，必须用 `$toolkit:playwright-cli`，不要用 `$computer-use` 或其它方案替代。两端都涉及时，先用 `$computer-use` 把环境准备到目标状态，再用 `$toolkit:playwright-cli` 做页面级验证与取证。
 
 ## 编码约定
 

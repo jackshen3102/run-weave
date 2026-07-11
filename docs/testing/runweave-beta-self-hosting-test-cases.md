@@ -16,7 +16,7 @@
 - runtime、完整 App、App Server 三类更新选择；
 - 更新失败、进程崩溃和连续迭代；
 - 全局 hook、`rw` 和更新源不被 Beta 污染；
-- `$computer-use` 桌面证据与 `$playwright-cli` Beta 页面证据。
+- `$computer-use` 桌面证据与 `$toolkit:playwright-cli` Beta 页面证据。
 
 不覆盖：
 
@@ -33,7 +33,7 @@
 - 现有更新器能够区分 Desktop Runtime、完整 Desktop App 和 App Server 动作；Beta 必须复用这一组件语义。
 - App Server 已支持不同 home 并存；Beta 目标 home 是 `~/.runweave/app-server-beta`。
 - 目标 Beta App 路径是 `/Applications/Runweave Beta.app`，且必须使用独立 bundle、userData、profile、runtime、update state、日志与 CDP endpoint。
-- 浏览器页面验收必须使用 `$playwright-cli`；桌面 App 启停、并存、弹窗和 Dock/窗口验证必须使用 `$computer-use`。
+- 浏览器页面验收必须使用 `$toolkit:playwright-cli`；桌面 App 启停、并存、弹窗和 Dock/窗口验证必须使用 `$computer-use`。
 - 本仓库不新增单元测试文件；静态检查不能替代本文件的真实行为验收。
 
 ## 测试设计方法
@@ -74,7 +74,7 @@ git diff --check
 
 ### RWB-001 首次初始化 Beta 时保持 Stable 完整运行
 
-验证方式：CLI + `$computer-use` + `$playwright-cli`
+验证方式：CLI + `$computer-use` + `$toolkit:playwright-cli`
 
 Given：
 
@@ -87,7 +87,7 @@ When：
 1. 在 Stable 终端执行 `pnpm runweave:beta:update`。
 2. 使用 `$computer-use` 等待 `Runweave Beta` 窗口出现，同时观察 Stable 窗口。
 3. 执行 `pnpm runweave:beta:status --json`。
-4. 使用 `$playwright-cli` 连接 status 返回的 Beta CDP endpoint，读取页面标题、Beta 标识、版本和 source revision。
+4. 使用 `$toolkit:playwright-cli` 连接 status 返回的 Beta CDP endpoint，读取页面标题、Beta 标识、版本和 source revision。
 
 Then：
 
@@ -128,7 +128,7 @@ Then：
 
 ### RWB-003 Runtime 改动只更新并重启 Beta Runtime
 
-验证方式：CLI + `$computer-use` + `$playwright-cli`
+验证方式：CLI + `$computer-use` + `$toolkit:playwright-cli`
 
 Given：
 
@@ -139,7 +139,7 @@ When：
 
 1. 执行 `pnpm runweave:beta:update --dry-run`，保存动作输出。
 2. 执行 `pnpm runweave:beta:update`。
-3. 读取 Beta status，并用 `$playwright-cli` 验证 Beta 页面加载当前 source revision。
+3. 读取 Beta status，并用 `$toolkit:playwright-cli` 验证 Beta 页面加载当前 source revision。
 
 Then：
 
@@ -155,7 +155,7 @@ Then：
 
 ### RWB-004 Electron 改动只替换和重启 Beta App
 
-验证方式：CLI + `$computer-use` + `$playwright-cli`
+验证方式：CLI + `$computer-use` + `$toolkit:playwright-cli`
 
 Given：
 
@@ -168,7 +168,7 @@ When：
 1. 执行 Beta dry-run，确认完整 App 动作。
 2. 执行 Beta update。
 3. 用 `$computer-use` 观察 Beta 退出并重新打开，同时保持 Stable 窗口可交互。
-4. 用 `$playwright-cli` 验证新 Beta 页面和 source revision。
+4. 用 `$toolkit:playwright-cli` 验证新 Beta 页面和 source revision。
 
 Then：
 
@@ -235,7 +235,7 @@ Then：
 
 ### RWB-007 Beta 更新失败后恢复上一可用版本且不影响 Stable
 
-验证方式：CLI + `$computer-use` + `$playwright-cli`
+验证方式：CLI + `$computer-use` + `$toolkit:playwright-cli`
 
 Given：
 
@@ -247,7 +247,7 @@ When：
 
 1. 执行 Beta update，记录非零退出码和失败输出。
 2. 若更新器未自动恢复，执行 `pnpm runweave:beta:rollback`。
-3. 用 `$computer-use` 和 `$playwright-cli` 验证恢复后的 Beta。
+3. 用 `$computer-use` 和 `$toolkit:playwright-cli` 验证恢复后的 Beta。
 
 Then：
 
@@ -264,7 +264,7 @@ Then：
 
 ### RWB-008 Beta status 完整、可取证且不泄露敏感信息
 
-验证方式：CLI + JSON 校验 + `$playwright-cli`
+验证方式：CLI + JSON 校验 + `$toolkit:playwright-cli`
 
 Given：Stable 与 Beta 均健康。
 
@@ -272,7 +272,7 @@ When：
 
 1. 执行 `pnpm runweave:beta:status --json` 并解析 JSON。
 2. 使用返回的 base URL、PID、路径和 CDP endpoint 与真实进程/文件进行交叉核对。
-3. 用 `$playwright-cli` 连接返回的 CDP endpoint 并读取 Beta 标识。
+3. 用 `$toolkit:playwright-cli` 连接返回的 CDP endpoint 并读取 Beta 标识。
 4. 扫描 status 输出中的敏感字段名和值模式。
 
 Then：
@@ -342,7 +342,7 @@ Then：
 
 ### RWB-011 连续五次 Beta 迭代保持 Stable 零中断
 
-验证方式：端到端循环 + `$computer-use` + `$playwright-cli`
+验证方式：端到端循环 + `$computer-use` + `$toolkit:playwright-cli`
 
 Given：
 
@@ -353,7 +353,7 @@ Given：
 When：
 
 1. 连续执行 5 次 Beta update，循环中至少覆盖一次 Runtime、一次完整 App、一次 App Server 更新。
-2. 每次更新后读取 Beta status，并用 `$playwright-cli` 验证 Beta 页面达到目标 revision。
+2. 每次更新后读取 Beta status，并用 `$toolkit:playwright-cli` 验证 Beta 页面达到目标 revision。
 3. 每轮都用 `$computer-use` 确认 Stable 开发终端仍可交互，并记录 Stable 关键状态。
 
 Then：
@@ -380,7 +380,7 @@ Then：
 - 幂等与去重：RWB-002 重复打开验证单实例归属；RWB-011 验证重复更新不产生跨通道副作用。
 - 回归与兼容：RWB-003 至 RWB-006 均守护 Stable 零变化；RWB-009 守护现有 `rw`、hook 和正式更新行为。
 - 容量与极值：不覆盖大量 channel，因为第一阶段只支持 Stable/Beta；不覆盖超大 runtime 包，包体与性能基线另行制定。
-- 可取证性：所有桌面动作使用 `$computer-use`；所有 Beta 页面/CDP 断言使用 `$playwright-cli`；CLI/状态用真实输出和进程/文件交叉核对。
+- 可取证性：所有桌面动作使用 `$computer-use`；所有 Beta 页面/CDP 断言使用 `$toolkit:playwright-cli`；CLI/状态用真实输出和进程/文件交叉核对。
 
 ## 验收通过标准
 
@@ -393,4 +393,4 @@ Then：
 - Beta 失败和崩溃不影响 Stable，且上一可用 Beta 可以恢复。
 - 连续 5 次更新循环中 Stable Desktop、backend、正式 App Server 和开发终端零中断。
 - status JSON 足以让 agent 定位和验证 Beta，且不泄露敏感信息。
-- 未执行 `$computer-use` 或 `$playwright-cli` 时，不得将静态检查或代码阅读写成验收通过。
+- 未执行 `$computer-use` 或 `$toolkit:playwright-cli` 时，不得将静态检查或代码阅读写成验收通过。

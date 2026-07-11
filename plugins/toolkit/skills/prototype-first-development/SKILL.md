@@ -64,7 +64,7 @@ docs/prototypes/<feature-slug>/
 4. 原型冻结：
    - 在 README 中更新启动命令、验证点、边界和非目标
    - 浏览器验证重要时，保存 `prototype-preview.png`
-   - 在 Runweave 仓库中，浏览器页面复现、修复或验收必须使用 `$playwright-cli` 完成打开页面、交互、截图或 DOM 检查
+   - 在 Runweave 仓库中，浏览器页面复现、修复或验收必须使用 `$toolkit:playwright-cli` 完成打开页面、交互、截图或 DOM 检查
    - 冻结前确保 README 记录了最后采用的交互方案和被放弃的方向
 
 5. 实施计划：

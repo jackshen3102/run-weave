@@ -22,7 +22,7 @@ Stable Runweave 中修改代码
 - 在目标源码 worktree 中执行本文命令；更新状态会记录该 worktree 的路径和源码 revision。
 - 推荐保持 `/Applications/Runweave.app` 正常运行，并在 Stable terminal 中执行 Beta 更新，以免被测 Beta 重启时中断开发控制面。
 - 仓库固定使用 `pnpm@10.6.2`。首次构建前执行 `corepack enable && pnpm install`，并确认当前 worktree 能正常执行项目构建命令。
-- 需要页面级验收时，先用 `command -v playwright-cli` 确认 `$playwright-cli` 已安装。
+- 需要页面级验收时，先用 `command -v playwright-cli` 确认 CLI 命令可用，并使用 `$toolkit:playwright-cli` skill 执行验收。
 
 ## 快速开始
 
@@ -211,7 +211,7 @@ git diff --check
 
 ### 页面与 CDP 验证
 
-先执行 `pnpm runweave:beta:status --json`，复制 `cdp.endpoint` 的实际值，再使用 `$playwright-cli` 连接目标页面：
+先执行 `pnpm runweave:beta:status --json`，复制 `cdp.endpoint` 的实际值，再使用 `$toolkit:playwright-cli` 连接目标页面：
 
 ```bash
 playwright-cli -s=runweave-beta attach --cdp="<status.cdp.endpoint>"

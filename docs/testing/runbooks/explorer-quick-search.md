@@ -129,7 +129,7 @@
 
 ## 手工浏览器验收
 
-使用 `$playwright-cli` 执行以下最小现场验收：
+使用 `$toolkit:playwright-cli` 执行以下最小现场验收：
 
 1. `playwright-cli open http://127.0.0.1:<port>/terminal/<session-id>`。
 2. 通过 snapshot 定位 `Search project files`。

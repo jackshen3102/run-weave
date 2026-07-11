@@ -1,6 +1,6 @@
 # Terminal Browser 自适应多 Tab 测试案例
 
-本文档是 Terminal Browser 自适应多 Tab 行为的 Agent Team 可追溯验收来源，稳定事实以 `docs/architecture/terminal-code-preview.md` 为准。浏览器行为必须使用 `$playwright-cli` 取证；桌面应用启动、重启和窗口操作使用 `$computer-use`。typecheck/lint 只是前置门禁，不能替代行为验收。
+本文档是 Terminal Browser 自适应多 Tab 行为的 Agent Team 可追溯验收来源，稳定事实以 `docs/architecture/terminal-code-preview.md` 为准。浏览器行为必须使用 `$toolkit:playwright-cli` 取证；桌面应用启动、重启和窗口操作使用 `$computer-use`。typecheck/lint 只是前置门禁，不能替代行为验收。
 
 ## Agent Team 解析格式
 
@@ -49,7 +49,7 @@ pnpm --filter ./electron lint
 git diff --check
 ```
 
-浏览器场景启动 `pnpm dev`；真实桌面场景启动 `pnpm dev:electron`。先用 `$computer-use` 将桌面端准备到 Terminal → Browser，再用 `$playwright-cli` 对页面 DOM、交互和截图取证。
+浏览器场景启动 `pnpm dev`；真实桌面场景启动 `pnpm dev:electron`。先用 `$computer-use` 将桌面端准备到 Terminal → Browser，再用 `$toolkit:playwright-cli` 对页面 DOM、交互和截图取证。
 
 ## 测试案例
 
@@ -59,7 +59,7 @@ git diff --check
 
 步骤：
 
-1. 启动 frontend，用 `$playwright-cli` 加载 Browser tab React harness。
+1. 启动 frontend，用 `$toolkit:playwright-cli` 加载 Browser tab React harness。
 2. 设置 host width=800，渲染 1 个 active tab。
 3. 读取 tab、close、Overview 和 New Tab 的 bounding box，并保存 DOM snapshot。
 
@@ -81,7 +81,7 @@ git diff --check
 步骤：
 
 1. 用 harness 设置 host width=480，渲染 3 个 tab，最后一个为 active。
-2. 使用 `$playwright-cli` 读取三个 slot、viewport 的 `clientWidth/scrollWidth` 和 fixed actions 位置。
+2. 使用 `$toolkit:playwright-cli` 读取三个 slot、viewport 的 `clientWidth/scrollWidth` 和 fixed actions 位置。
 3. 保存几何数据和 DOM snapshot。
 
 期望：
@@ -165,7 +165,7 @@ git diff --check
 步骤：
 
 1. 在真实页面或 harness 中设置 width=800、10 tabs、尾 tab active。
-2. 用 `$playwright-cli` 依次缩到 480、320，再扩回 800。
+2. 用 `$toolkit:playwright-cli` 依次缩到 480、320，再扩回 800。
 3. 每次 resize 后读取 active/viewport bounding box、slot width 和 frozen 状态，并保存截图。
 
 期望：
@@ -186,7 +186,7 @@ git diff --check
 步骤：
 
 1. 用 harness 分别构造 120px、80px、44px slot，包含普通、MCP active、loading tab。
-2. 用 `$playwright-cli` 读取 title、MCP badge/dot、favicon/spinner、inactive close 的可见性。
+2. 用 `$toolkit:playwright-cli` 读取 title、MCP badge/dot、favicon/spinner、inactive close 的可见性。
 3. 保存三个阈值场景的截图和 DOM 摘要。
 
 期望：
@@ -207,7 +207,7 @@ git diff --check
 步骤：
 
 1. 设置 width=800、6 tabs，记录一个非 icon-only inactive tab 的宽度和相邻 tab x 坐标。
-2. 用 `$playwright-cli` hover 该 tab，再用键盘 focus 其选择按钮。
+2. 用 `$toolkit:playwright-cli` hover 该 tab，再用键盘 focus 其选择按钮。
 3. 分别读取 close 可见性、slot width 和相邻 tab x 坐标。
 
 期望：
@@ -290,7 +290,7 @@ git diff --check
 
 步骤：
 
-1. 独立渲染 width=800、6 tabs，通过 `$playwright-cli` 触发 `pointerType=touch` 的 close。
+1. 独立渲染 width=800、6 tabs，通过 `$toolkit:playwright-cli` 触发 `pointerType=touch` 的 close。
 2. 在 1.6 秒读取 slot width，再在 2.1 秒读取 slot width。
 3. 重新渲染场景，连续触发两次 touch close，确认第二次操作重置 timer。
 
@@ -333,7 +333,7 @@ git diff --check
 步骤：
 
 1. 渲染 6 tabs，第三个 active，记录初始 id 顺序和 active id。
-2. 用 `$playwright-cli` 将第一个 tab 拖到第五个位置。
+2. 用 `$toolkit:playwright-cli` 将第一个 tab 拖到第五个位置。
 3. 读取 drop 后顺序、id 集合、active id、DragOverlay/目标几何数据。
 
 期望：
@@ -354,7 +354,7 @@ git diff --check
 步骤：
 
 1. 用 `$computer-use` 启动真实 Electron，在 Terminal Browser 准备 5 个合法 http/https/about:blank tab，记录 id、active 和初始顺序。
-2. 用 `$playwright-cli` 拖拽形成新顺序，读取 UI 和 `terminalBrowserListTabs()`。
+2. 用 `$toolkit:playwright-cli` 拖拽形成新顺序，读取 UI 和 `terminalBrowserListTabs()`。
 3. 读取 Electron userData 下 `terminal-browser-tabs.json` 的 `tabs[]` 顺序。
 4. 用 `$computer-use` 正常重启客户端，再读取恢复后的 UI、active 和顺序。
 
@@ -419,7 +419,7 @@ git diff --check
 
 1. 在真实 Electron 复制 group-scoped CDP endpoint，并用 Playwright/CDP 连接。
 2. 通过 CDP 创建 tab、导航/点击触发 MCP activity、激活另一 tab、关闭新 tab。
-3. 用 `$playwright-cli` 记录 tab bar 增删/active/MCP 状态，用页面截图确认 WebContentsView 内容。
+3. 用 `$toolkit:playwright-cli` 记录 tab bar 增删/active/MCP 状态，用页面截图确认 WebContentsView 内容。
 4. 对比操作前后的 target id 和 browserGroupId。
 
 期望：

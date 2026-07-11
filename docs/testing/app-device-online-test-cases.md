@@ -2,7 +2,7 @@
 
 本文档用于验证 App “设备在线”能力。这里的“设备在线”指手机当前配置的本地电脑后端可达、后端进程可响应、并且 App 可以继续使用该电脑上的项目和终端能力；它不是 terminal session 的 `running/exited`，也不是 `TerminalState` 的 `agent_running/agent_idle`。
 
-涉及打开页面、点击、输入、下拉刷新、截图或浏览器自动化时，必须使用 `$playwright-cli`，不要使用其它浏览器操作方案。
+涉及打开页面、点击、输入、下拉刷新、截图或浏览器自动化时，必须使用 `$toolkit:playwright-cli`，不要使用其它浏览器操作方案。
 
 ## 目标契约
 
@@ -43,7 +43,7 @@ export BROWSER_PROFILE_DIR="$(mktemp -d)"
 pnpm app:dev
 ```
 
-浏览器验收时使用 `$playwright-cli` 打开 App 页面。测试过程中如果需要停止或恢复 backend，优先停止 `pnpm app:dev` 中的 backend 子进程；如果脚本不方便单独停止 backend，可以重启整个 `pnpm app:dev`，但测试记录里必须写清楚停止的是整个 dev 环境还是仅 backend。
+浏览器验收时使用 `$toolkit:playwright-cli` 打开 App 页面。测试过程中如果需要停止或恢复 backend，优先停止 `pnpm app:dev` 中的 backend 子进程；如果脚本不方便单独停止 backend，可以重启整个 `pnpm app:dev`，但测试记录里必须写清楚停止的是整个 dev 环境还是仅 backend。
 
 ## 观测点
 
@@ -85,15 +85,15 @@ pnpm app:dev
 
 ## 首页设备在线测试
 
-| ID          | 场景                    | 步骤                                                                                      | 预期                                                                                              |
-| ----------- | ----------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| DO-HOME-001 | 初始在线                | 启动 `pnpm app:dev`；用 `$playwright-cli` 打开 App 首页；登录或使用已有登录态进入 `/home` | 首页 header 显示 `Online`；列表正常；`lastSeenAt` 有值                                            |
-| DO-HOME-002 | 后端不可达不登出        | 已登录停留首页；停止本地 backend；等待 `/health` 超时窗口                                 | 首页显示 `Offline`；不跳 `/login`；auth store 保留；已有 overview 不被清空                        |
-| DO-HOME-003 | Offline 时下拉刷新失败  | 后端保持停止；在首页下拉刷新                                                              | 立即发起一次 `/health` probe；probe 失败后仍为 `Offline`；不请求 `/api/app/home/overview`；不登出 |
-| DO-HOME-004 | Offline 时下拉刷新恢复  | 后端停止后进入 Offline；恢复 backend；首页下拉刷新                                        | 立即 `/health` 成功，状态变 `Online`；随后请求 `/api/app/home/overview` 并刷新列表                |
-| DO-HOME-005 | Offline 禁止新建终端    | 后端停止并进入 Offline；点击项目的新建终端入口                                            | 按钮禁用或操作被阻止；不发送 `POST /api/terminal/session`                                         |
-| DO-HOME-006 | 长期 offline 不高频轮询 | 后端保持停止 5 分钟；记录 network                                                         | `/health` 退避为 `5s -> 15s -> 30s -> 60s -> 120s`，封顶后约 120s 一次；没有固定 3s 请求          |
-| DO-HOME-007 | 后台停止退避            | 后端停止并进入 Offline；让 App 页面不可见或切后台                                         | 离线退避 timer 停止；回前台立即 probe 一次，并重新安排退避                                        |
+| ID          | 场景                    | 步骤                                                                                              | 预期                                                                                              |
+| ----------- | ----------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| DO-HOME-001 | 初始在线                | 启动 `pnpm app:dev`；用 `$toolkit:playwright-cli` 打开 App 首页；登录或使用已有登录态进入 `/home` | 首页 header 显示 `Online`；列表正常；`lastSeenAt` 有值                                            |
+| DO-HOME-002 | 后端不可达不登出        | 已登录停留首页；停止本地 backend；等待 `/health` 超时窗口                                         | 首页显示 `Offline`；不跳 `/login`；auth store 保留；已有 overview 不被清空                        |
+| DO-HOME-003 | Offline 时下拉刷新失败  | 后端保持停止；在首页下拉刷新                                                                      | 立即发起一次 `/health` probe；probe 失败后仍为 `Offline`；不请求 `/api/app/home/overview`；不登出 |
+| DO-HOME-004 | Offline 时下拉刷新恢复  | 后端停止后进入 Offline；恢复 backend；首页下拉刷新                                                | 立即 `/health` 成功，状态变 `Online`；随后请求 `/api/app/home/overview` 并刷新列表                |
+| DO-HOME-005 | Offline 禁止新建终端    | 后端停止并进入 Offline；点击项目的新建终端入口                                                    | 按钮禁用或操作被阻止；不发送 `POST /api/terminal/session`                                         |
+| DO-HOME-006 | 长期 offline 不高频轮询 | 后端保持停止 5 分钟；记录 network                                                                 | `/health` 退避为 `5s -> 15s -> 30s -> 60s -> 120s`，封顶后约 120s 一次；没有固定 3s 请求          |
+| DO-HOME-007 | 后台停止退避            | 后端停止并进入 Offline；让 App 页面不可见或切后台                                                 | 离线退避 timer 停止；回前台立即 probe 一次，并重新安排退避                                        |
 
 DO-HOME-007 判定补充：
 
@@ -115,16 +115,16 @@ DO-HOME-007 判定补充：
 
 ## 详情页设备在线测试
 
-| ID            | 场景                     | 步骤                                                   | 预期                                                                                       |
-| ------------- | ------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| DO-DETAIL-001 | 初始在线进入详情         | 在线状态下从首页打开一个 terminal                      | header 显示 `Connected` 或 `Connecting`；terminal 输出正常；打开详情时读取一次 session 元数据 |
-| DO-DETAIL-002 | 详情页离线展示           | 停留详情页；停止 backend；等待设备进入 Offline         | header 显示 `Computer Offline`；body 显示离线 overlay；不清空已渲染终端内容                |
-| DO-DETAIL-003 | Offline 暂停 terminal WS | 详情页进入 Offline 后观察 network                      | 不再每 1200 ms 重连 `/ws/terminal`                                                         |
-| DO-DETAIL-004 | Offline 暂停详情元数据   | 详情页进入 Offline 后观察 network                      | 不继续重试 `/api/terminal/session/:id` 详情元数据读取                                      |
-| DO-DETAIL-005 | Offline 阻止发送         | 详情页 Offline；尝试点击发送或触发发送 handler         | 不发送 `/input`；UI 不显示已发送；support log 记录 disabled/rejected                       |
-| DO-DETAIL-006 | Offline 阻止 Stop        | 详情页 Offline；点击 Stop                              | 不发送 `/interrupt`；不做本地乐观状态修改                                                  |
-| DO-DETAIL-007 | Offline 阻止图片上传     | 详情页 Offline；选择图片                               | 不发送 `/clipboard-image`；保留输入框内容；显示或记录设备离线                              |
-| DO-DETAIL-008 | Offline 阻止删除         | 详情页 Offline；尝试删除终端                           | 不发送 `DELETE /api/terminal/session/:id`；不导航丢失当前页                                |
+| ID            | 场景                     | 步骤                                                   | 预期                                                                                                       |
+| ------------- | ------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| DO-DETAIL-001 | 初始在线进入详情         | 在线状态下从首页打开一个 terminal                      | header 显示 `Connected` 或 `Connecting`；terminal 输出正常；打开详情时读取一次 session 元数据              |
+| DO-DETAIL-002 | 详情页离线展示           | 停留详情页；停止 backend；等待设备进入 Offline         | header 显示 `Computer Offline`；body 显示离线 overlay；不清空已渲染终端内容                                |
+| DO-DETAIL-003 | Offline 暂停 terminal WS | 详情页进入 Offline 后观察 network                      | 不再每 1200 ms 重连 `/ws/terminal`                                                                         |
+| DO-DETAIL-004 | Offline 暂停详情元数据   | 详情页进入 Offline 后观察 network                      | 不继续重试 `/api/terminal/session/:id` 详情元数据读取                                                      |
+| DO-DETAIL-005 | Offline 阻止发送         | 详情页 Offline；尝试点击发送或触发发送 handler         | 不发送 `/input`；UI 不显示已发送；support log 记录 disabled/rejected                                       |
+| DO-DETAIL-006 | Offline 阻止 Stop        | 详情页 Offline；点击 Stop                              | 不发送 `/interrupt`；不做本地乐观状态修改                                                                  |
+| DO-DETAIL-007 | Offline 阻止图片上传     | 详情页 Offline；选择图片                               | 不发送 `/clipboard-image`；保留输入框内容；显示或记录设备离线                                              |
+| DO-DETAIL-008 | Offline 阻止删除         | 详情页 Offline；尝试删除终端                           | 不发送 `DELETE /api/terminal/session/:id`；不导航丢失当前页                                                |
 | DO-DETAIL-009 | 详情页重试恢复           | 详情页 Offline；恢复 backend；点击 overlay/header 重试 | 立即 `/health` 成功；状态变 Online；重新启用 terminal WS，并通过 session 元数据与 terminal-events 收敛展示 |
 
 ## Pending Input 队列测试

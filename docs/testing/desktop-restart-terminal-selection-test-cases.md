@@ -16,7 +16,7 @@
 - 终端 tab 按钮带 `data-terminal-session-id`；项目按钮可通过可见项目名和 `aria-pressed` 取证。
 - 后端项目/终端列表来自 `backend/src/routes/terminal-project-routes.ts` 与 `backend/src/routes/terminal.ts`；`TerminalSessionManager.listProjects/listSessions` 按 `order` 优先、否则按 `createdAt` 排序，因此“第一个项目/第一个终端”是有序回退，不应覆盖有效的最近选择。
 - 本机持久化文件名包含 `terminal-session-store.json`，由 browser profile 目录保存项目、终端、排序、状态等数据。
-- 本地更新脚本 `scripts/runweave-update.mjs` 会在需要时退出并重启 `/Applications/Runweave.app`；桌面端页面验证必须使用 `$computer-use` 操作桌面 App，并使用 `$playwright-cli` 对页面 URL、DOM、localStorage 和 API 响应取证。
+- 本地更新脚本 `scripts/runweave-update.mjs` 会在需要时退出并重启 `/Applications/Runweave.app`；桌面端页面验证必须使用 `$computer-use` 操作桌面 App，并使用 `$toolkit:playwright-cli` 对页面 URL、DOM、localStorage 和 API 响应取证。
 
 ## 必跑命令
 
@@ -35,8 +35,8 @@ git diff --check
 行为验收必须额外执行真实环境验证：
 
 - 使用 `$computer-use` 打开本机 Runweave 桌面端，准备至少 2 个项目，且目标项目至少有 2 个终端。
-- 使用 `$playwright-cli` 连接桌面端对应页面或等价的 Electron dev 页面，读取 URL、`localStorage["viewer.terminal.recent.<apiBase>"]`、项目按钮 `aria-pressed`、终端 tab 的 `data-terminal-session-id`。
-- 需要覆盖真实更新重启时，执行 `pnpm runweave:update`，等待 `/Applications/Runweave.app` 重启完成后再用 `$computer-use` + `$playwright-cli` 取证。
+- 使用 `$toolkit:playwright-cli` 连接桌面端对应页面或等价的 Electron dev 页面，读取 URL、`localStorage["viewer.terminal.recent.<apiBase>"]`、项目按钮 `aria-pressed`、终端 tab 的 `data-terminal-session-id`。
+- 需要覆盖真实更新重启时，执行 `pnpm runweave:update`，等待 `/Applications/Runweave.app` 重启完成后再用 `$computer-use` + `$toolkit:playwright-cli` 取证。
 
 ## 测试设计方法
 
@@ -55,9 +55,9 @@ git diff --check
 
 1. 使用已登录桌面端，准备项目 A、项目 B，且后端 `GET /api/terminal/project` 中 A 排在 B 前。
 2. 在项目 B 下准备终端 B1、B2，且后端 `GET /api/terminal/session` 中 B1 排在 B2 前。
-3. 用 `$playwright-cli` 选择项目 B 的终端 B2，确认 URL 为 `/terminal/<B2>`，并确认 `localStorage["viewer.terminal.recent.<apiBase>"]` 中 `projectId=B`、`terminalSessionId=B2`、`projectSessionIds[B]=B2`。
+3. 用 `$toolkit:playwright-cli` 选择项目 B 的终端 B2，确认 URL 为 `/terminal/<B2>`，并确认 `localStorage["viewer.terminal.recent.<apiBase>"]` 中 `projectId=B`、`terminalSessionId=B2`、`projectSessionIds[B]=B2`。
 4. 执行 `pnpm runweave:update`，用 `$computer-use` 等待 Runweave 桌面端退出并重新显示终端工作台。
-5. 用 `$playwright-cli` 读取重启后的 URL、项目按钮 `aria-pressed`、终端 tab `data-terminal-session-id`、localStorage、`/api/terminal/project` 和 `/api/terminal/session`。
+5. 用 `$toolkit:playwright-cli` 读取重启后的 URL、项目按钮 `aria-pressed`、终端 tab `data-terminal-session-id`、localStorage、`/api/terminal/project` 和 `/api/terminal/session`。
    期望：
 6. 页面 URL 最终为 `/terminal/<B2>`。
 7. 项目 B 按钮为 `aria-pressed="true"`。
@@ -75,9 +75,9 @@ git diff --check
 
 1. 使用已登录桌面端，准备项目 A、项目 B，且项目 A 排在项目 B 前。
 2. 在项目 B 下准备终端 B1、B2，且 B1 排在 B2 前。
-3. 用 `$playwright-cli` 选择项目 B 的终端 B2，确认 URL 为 `/terminal/<B2>`，并确认 recent selection 有效。
+3. 用 `$toolkit:playwright-cli` 选择项目 B 的终端 B2，确认 URL 为 `/terminal/<B2>`，并确认 recent selection 有效。
 4. 使用系统菜单或 `osascript` 退出 Runweave，再用 `$computer-use` 重新打开 `/Applications/Runweave.app`，本用例不执行更新。
-5. 用 `$playwright-cli` 读取重新打开后的 URL、项目按钮、终端 tab 和 localStorage。
+5. 用 `$toolkit:playwright-cli` 读取重新打开后的 URL、项目按钮、终端 tab 和 localStorage。
    期望：
 6. 桌面端重新打开后仍进入 `/terminal/<B2>`。
 7. 项目 B 为当前项目，终端 B2 为当前 active session。
@@ -95,7 +95,7 @@ git diff --check
 2. 写入或保留有效 `localStorage["viewer.terminal.recent.<apiBase>"]`，使其指向项目 B 的终端 B2。
 3. 确认项目 A、项目 B、终端 B1、终端 B2 都仍存在，且项目 A/B、终端 B1/B2 的排序能暴露“第一个”回退。
 4. 刷新页面或重新加载 Electron 窗口，等待项目和终端列表加载完成。
-5. 用 `$playwright-cli` 读取 URL、项目按钮、终端 tab 和 API 响应。
+5. 用 `$toolkit:playwright-cli` 读取 URL、项目按钮、终端 tab 和 API 响应。
    期望：
 6. 页面自动选择项目 B 的终端 B2。
 7. URL 使用 replace 导航到 `/terminal/<B2>`。
@@ -113,7 +113,7 @@ git diff --check
 1. 准备 recent selection，使其指向项目 B 的终端 B2。
 2. 直接打开 `/terminal/<A1>`，其中终端 A1 属于项目 A 并仍存在。
 3. 等待页面加载项目和终端列表。
-4. 用 `$playwright-cli` 读取 URL、项目按钮、终端 tab 和 localStorage。
+4. 用 `$toolkit:playwright-cli` 读取 URL、项目按钮、终端 tab 和 localStorage。
    期望：
 5. 页面保持或修正为 `/terminal/<A1>`。
 6. 项目 A 被选中，active session 为 A1。
@@ -129,7 +129,7 @@ git diff --check
 步骤：
 
 1. 准备项目 A 下终端 A1/A2，项目 B 下终端 B1/B2。
-2. 用 `$playwright-cli` 依次选择 A2、B2。
+2. 用 `$toolkit:playwright-cli` 依次选择 A2、B2。
 3. 确认 recent selection 的 `projectSessionIds` 同时包含 `{ A: A2, B: B2 }`。
 4. 点击项目 A，再点击项目 B。
 5. 每次点击后读取 URL、active tab 和 localStorage。
@@ -151,7 +151,7 @@ git diff --check
 2. 删除 B2，或确认后端 `GET /api/terminal/session` 不再返回 B2。
 3. 保持项目 B 仍存在且有终端 B1，同时项目 A 排在项目 B 前。
 4. 打开 `/terminal` 或通过桌面端重启加载终端工作台。
-5. 用 `$playwright-cli` 读取 URL、项目按钮、终端 tab、API 响应和 localStorage。
+5. 用 `$toolkit:playwright-cli` 读取 URL、项目按钮、终端 tab、API 响应和 localStorage。
    期望：
 6. 项目 B 仍被选中。
 7. active session 回退到 B1。
@@ -171,7 +171,7 @@ git diff --check
 2. 删除项目 B，或确认后端 `GET /api/terminal/project` 不再返回项目 B。
 3. 保持后端项目列表只剩项目 A，且项目 A 至少有终端 A1。
 4. 打开 `/terminal` 或通过桌面端重启加载终端工作台。
-5. 用 `$playwright-cli` 读取 URL、项目按钮、终端 tab、API 响应和 localStorage。
+5. 用 `$toolkit:playwright-cli` 读取 URL、项目按钮、终端 tab、API 响应和 localStorage。
    期望：
 6. 页面选择项目 A 和终端 A1。
 7. URL replace 为 `/terminal/<A1>`。
@@ -189,7 +189,7 @@ git diff --check
 1. 删除 `localStorage["viewer.terminal.recent.<apiBase>"]`，或写入非法 JSON，或写入缺少字符串 `projectId` 的 JSON。
 2. 准备项目 A、项目 B，且项目 A 排在项目 B 前；项目 A 下 A1 排在 A2 前。
 3. 打开 `/terminal`，等待列表加载完成。
-4. 用 `$playwright-cli` 读取 console、URL、项目按钮、终端 tab 和 localStorage。
+4. 用 `$toolkit:playwright-cli` 读取 console、URL、项目按钮、终端 tab 和 localStorage。
    期望：
 5. 页面选择项目 A 和终端 A1。
 6. 页面写入新的 recent selection。
@@ -208,7 +208,7 @@ git diff --check
 2. 在 C1 中让 recent selection 指向项目 B/B2。
 3. 在 C2 中确认不存在项目 B/B2，且 C2 有自己的项目 X/X1。
 4. 用 `$computer-use` 切换到 C2 并打开 `/terminal`，再切回 C1。
-5. 用 `$playwright-cli` 读取不同 apiBase 对应 localStorage key、URL、DOM 和 API 响应。
+5. 用 `$toolkit:playwright-cli` 读取不同 apiBase 对应 localStorage key、URL、DOM 和 API 响应。
    期望：
 6. C2 不读取 C1 的 `viewer.terminal.recent.<apiBase>`。
 7. C2 只选择 C2 内有效项目/终端。
@@ -226,7 +226,7 @@ git diff --check
 1. 准备 recent selection，使其指向项目 B/B2。
 2. 执行桌面端更新重启，让前端经历 loading 或短暂请求失败状态。
 3. 等待后端随后恢复，确认项目 B/B2 仍存在。
-4. 用 `$playwright-cli` 从 App 重启开始监听 network、console、localStorage 变化和最终 URL。
+4. 用 `$toolkit:playwright-cli` 从 App 重启开始监听 network、console、localStorage 变化和最终 URL。
 5. 用 `$computer-use` 确认桌面 App 最终回到终端工作台。
    期望：
 6. 终端列表加载完成后仍恢复到 B/B2。
@@ -247,7 +247,7 @@ git diff --check
 - 并发：不覆盖多窗口同时写 recent selection。原因：桌面端当前主窗口为本需求目标；多窗口一致性需要单独定义产品契约。
 - 幂等与去重：DRTS-001、DRTS-002 多次重启应得到同一结果；不要求新增 dedupeKey。
 - 回归与兼容：DRTS-008 明确保留无 recent selection 时回退到第一个项目/终端的兼容行为。
-- 可取证性：每条浏览器页面路径均要求 `$playwright-cli` 读取 URL、DOM、localStorage/API；桌面更新/退出/打开均要求 `$computer-use` 取证。
+- 可取证性：每条浏览器页面路径均要求 `$toolkit:playwright-cli` 读取 URL、DOM、localStorage/API；桌面更新/退出/打开均要求 `$computer-use` 取证。
 
 ## 验收通过标准
 
