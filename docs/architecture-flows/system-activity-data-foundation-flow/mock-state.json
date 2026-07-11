@@ -1,13 +1,17 @@
 {
   "meta": {
     "title": "System Activity Data Foundation",
-    "subtitle": "Independent facts first · model-generated learning later",
-    "baseline": "feature@2c4572c",
+    "subtitle": "Existing Backends · one shared SQLite · model-generated learning later",
+    "baseline": "docs/activity-data-foundation-contracts@74f1151",
     "date": "2026-07-11",
     "nature": "target architecture"
   },
   "stats": [
-    { "value": "1", "label": "per-user Activity Hub", "tone": "blue" },
+    {
+      "value": "1",
+      "label": "profile-independent activity.sqlite",
+      "tone": "blue"
+    },
     { "value": "14", "label": "P0 semantic event families", "tone": "cyan" },
     {
       "value": "7 / 30d",
@@ -28,9 +32,9 @@
       "subtitle": "typed · async · replayable"
     },
     {
-      "id": "hub",
-      "title": "Activity Hub",
-      "subtitle": "validate · redact · dedupe"
+      "id": "backend-store",
+      "title": "Backend ActivityStore",
+      "subtitle": "in-process · shared SQLite"
     },
     {
       "id": "storage",
@@ -45,22 +49,22 @@
   ],
   "nodes": [
     {
-      "id": "runtime-producers",
+      "id": "backend-producers",
       "lane": "producers",
-      "eyebrow": "RUNTIME",
-      "title": "Stable / Beta / Dev",
-      "body": "Backend、Electron、Web/App 在业务动作边界主动记录；控制面继续相互隔离。",
-      "detail": "Runtime channel 是事实字段，不决定 Activity Hub home。Beta 不能写自己的独立行为仓。",
-      "tags": ["runtimeChannel", "version", "profile"]
+      "eyebrow": "IN PROCESS",
+      "title": "Backend 内部采集",
+      "body": "Stable、Beta、Dev 各自 Backend 在业务动作边界调用同进程 recorder，不绕行 HTTP。",
+      "detail": "Runtime channel 仍是事实字段；三个现有 Backend 的 ActivityStore 都指向 profile 外固定数据库路径。",
+      "tags": ["runtimeChannel", "in-process", "recorder"]
     },
     {
-      "id": "agent-producers",
+      "id": "client-producers",
       "lane": "producers",
-      "eyebrow": "AGENT + TTY",
-      "title": "Hook / CLI / Shell",
-      "body": "Query submit request、thread start/resume、observed response、command 与 tool Hook；外部 TTY 只在安装 adapter 时覆盖。",
-      "detail": "当前 Hook 的 Runweave Terminal gate 不能直接满足 external TTY。目标链路使用独立 Activity client。",
-      "tags": ["threadId", "interactionId", "external"]
+      "eyebrow": "CURRENT BACKEND",
+      "title": "Electron / Hook / CLI / TTY",
+      "body": "Electron、Hook 与 CLI 只把 typed event 送到各自当前连接的 Backend；不直接打开 SQLite。",
+      "detail": "其它 TTY 的 Agent Query/Reply 需显式 record agent-hook，shell command 需受控 zsh record terminal-command-*；都要选定 Backend，不提供任意 event JSON。",
+      "tags": ["current backend", "explicit TTY", "no direct DB"]
     },
     {
       "id": "workflow-producers",
@@ -84,46 +88,55 @@
       "id": "typed-sdk",
       "lane": "delivery",
       "eyebrow": "CONTRACT",
-      "title": "Typed Activity SDK",
-      "body": "Producer 生成 UUIDv7 eventId、bootId 与 sequence；schema 在编译期约束。",
-      "detail": "Retry 必须重发同一 eventId；CLI 是 surface，不是 runtime。",
-      "tags": ["eventId", "sequence", "schemaVersion"]
+      "title": "Typed recorder adapter",
+      "body": "Producer 生成 UUIDv7 eventId、bootId 与 sequence；Backend 内部走函数调用，外部调用方复用当前 Backend transport。",
+      "detail": "Retry 必须重发同一 eventId；CLI 是 API client，不是数据库 client，也不是 Runtime。",
+      "tags": ["eventId", "sequence", "current backend"]
     },
     {
-      "id": "producer-spool",
+      "id": "explicit-failure",
       "lane": "delivery",
-      "eyebrow": "DURABILITY",
-      "title": "Per-producer SQLite spool",
-      "body": "spool_events 加密落盘，spool_loss_ranges 记录明确丢弃；ACK 后删除。",
-      "detail": "离线 bundle 最多 7 天；超过后包括 critical 在内都删除并报告 retention_expired，不伪装可永久补齐。",
-      "tags": ["fire-and-forget", "replay", "backpressure"]
+      "eyebrow": "SHORT OUTAGE",
+      "title": "Explicit unavailable result",
+      "body": "当前 Backend 不可达时，进程外调用方明确返回未记录；不打开共享 DB，也不创建隐藏 spool。",
+      "detail": "调用方可在 Backend 恢复后显式重试同一 eventId；没有成功 ACK 就不能声称已经落库。",
+      "tags": ["non-zero", "same eventId", "no fake ACK"]
     },
     {
-      "id": "hub-ingress",
-      "lane": "hub",
-      "eyebrow": "LOCAL SINGLETON",
-      "title": "Authenticated ingest",
-      "body": "一个 OS 用户一个 Hub；不同 producer 使用 namespace-scoped append token。",
-      "detail": "Hub 不拥有 Backend、Electron 或 App Server 生命周期，也不能反向控制 Runtime。",
-      "tags": ["per-user", "capability", "batch"]
+      "id": "backend-entry",
+      "lane": "backend-store",
+      "eyebrow": "EXISTING PROCESS",
+      "title": "Current Backend write entry",
+      "body": "Backend 内部调用 in-process recorder；Electron/Hook/CLI 复用当前 Backend 的既有 HTTP/CLI command surface。",
+      "detail": "没有独立服务、独立端口、独立凭据或 owner 发现；每个 Runtime 只使用它已连接的 Backend。",
+      "tags": ["in-process", "existing transport", "no service"]
     },
     {
-      "id": "hub-policy",
-      "lane": "hub",
+      "id": "backend-policy",
+      "lane": "backend-store",
       "eyebrow": "TRUTH GATE",
       "title": "Schema + privacy gate",
-      "body": "验证 event name/version、字段、大小、producer allowlist，并做二次 secret scan。",
-      "detail": "未知 Beta schema 进入 quarantine；token、cookie、header、env secret 禁止入库。",
-      "tags": ["registry", "redaction", "quarantine"]
+      "body": "ActivityStore 验证 event name/version、字段、大小与 producer allowlist，并做二次 secret scan。",
+      "detail": "未知 Beta schema 或 DLP 拒绝写 ingest_rejections；凭据、cookie、header 与 env secret 不保存原文。",
+      "tags": ["registry", "redaction", "rejection"]
     },
     {
-      "id": "hub-append",
-      "lane": "hub",
-      "eyebrow": "ACK BOUNDARY",
-      "title": "Dedupe + durable append",
-      "body": "同一 SQLite transaction 完成去重、Fact、Content/Ref link、cursor/gap；COMMIT 后才 ACK。",
-      "detail": "activity.sqlite 是唯一事实源；只保证 producer 内 sequence，occurredAt 与 ingestedAt 分离。",
-      "tags": ["transaction", "hubOffset", "WAL"]
+      "id": "sqlite-write",
+      "lane": "backend-store",
+      "eyebrow": "COMMIT BOUNDARY",
+      "title": "Shared SQLite transaction",
+      "body": "各 Backend ActivityStore 使用 WAL、busy_timeout 与短 BEGIN IMMEDIATE；同事务写 Fact、Content/Ref link、cursor/gap。",
+      "detail": "COMMIT 后才响应成功；event_id 与 producer epoch/sequence 是 UNIQUE，冲突时再比较 ingest_fingerprint_sha256，activity.sqlite 是唯一事实源。",
+      "tags": ["BEGIN IMMEDIATE", "UNIQUE", "WAL"]
+    },
+    {
+      "id": "db-lease",
+      "lane": "backend-store",
+      "eyebrow": "MAINTENANCE",
+      "title": "Database lease",
+      "body": "retention 与 durable delete runner 通过 owner + fencing token 协调；schema migration 使用 BEGIN EXCLUSIVE。",
+      "detail": "每个 ≤1000 Facts/8 MiB 删除 batch 重校验 owner/token；旧 owner 恢复后不能越过新 token。passive checkpoint 由 SQLite lock 保证安全。",
+      "tags": ["fencing token", "chunked delete", "checkpoint lock"]
     },
     {
       "id": "fact-store",
@@ -131,7 +144,7 @@
       "eyebrow": "30 DAYS",
       "title": "activity.sqlite · Behavior Facts",
       "body": "behavior_facts 是 30 天 canonical rows；显式关系、结果、privacy 与 payload 同库事务写入。",
-      "detail": "没有 JSONL/segment 第二份事实源；Fact 不提供 update API，只由 retention/delete 审计删除。",
+      "detail": "固定路径 ~/.runweave/activity/activity.sqlite，不随 profile 改变；没有 JSONL/segment 第二份事实源。",
       "tags": ["canonical", "SQLite", "30d"]
     },
     {
@@ -157,27 +170,27 @@
       "lane": "storage",
       "eyebrow": "SAME DATABASE",
       "title": "SQLite indexes + computed views",
-      "body": "同一 activity.sqlite 为 timeline、thread、terminal、run 和 source-health 建索引。",
-      "detail": "索引可重建，但 behavior_facts rows 就是事实本体；不能删除数据库后从其它文件恢复。",
+      "body": "同一 activity.sqlite 为 timeline selectors、project/runtime 查询及 project/thread delete cursor 建复合索引。",
+      "detail": "3M fixture 必须用 EXPLAIN 证明 cursor 无 temp B-tree；索引可重建，但 behavior_facts rows 不能从其它文件恢复。",
       "tags": ["keyset cursor", "commit", "checkpoint"]
     },
     {
-      "id": "facts-ui",
+      "id": "backend-query-api",
       "lane": "consumers",
-      "eyebrow": "RECORDED + COMPUTED",
-      "title": "Facts / Timeline",
-      "body": "按显式 ID 展开 actor → action → result；unlinked、gap、expired 均可见。",
-      "detail": "Duration 可以计算；Goal、Outcome、Learning 不能伪装成 Recorded Fact。",
-      "tags": ["interaction", "filters", "evidence"]
+      "eyebrow": "EXISTING BACKEND API",
+      "title": "Backend query API",
+      "body": "任一现有 Backend 通过自己的 ActivityStore 查询共享 activity.sqlite，并返回 keyset page 与详情。",
+      "detail": "UI、CLI、Agent 与 Learning preparation 都走 Backend API；confirm 带 canonical scope、独立 token domain、expectedAction 与同 session 票据。",
+      "tags": ["read API", "audit", "preview → confirm/job"]
     },
     {
-      "id": "sources-ui",
+      "id": "activity-ui",
       "lane": "consumers",
-      "eyebrow": "COVERAGE",
-      "title": "Sources health",
-      "body": "显示 produced/acked sequence、gap ranges、dropped/rejected、heartbeat、commit latency 与 WAL 状态。",
-      "detail": "不展示没有分母的 82%/98% coverage。",
-      "tags": ["watermark", "gap", "loss"]
+      "eyebrow": "UI",
+      "title": "Facts / Timeline / Sources / Data Policy",
+      "body": "UI 只消费当前 Backend API；Data Policy 先冻结 scope/digest/cutoff，delete confirm 后立即隐藏并展示分批 job 进度。",
+      "detail": "Duration 可以计算；Goal、Outcome、Learning 不能伪装成 Recorded Fact，也不展示无分母 coverage。",
+      "tags": ["interaction", "source health", "durable delete job"]
     },
     {
       "id": "context-pack",
@@ -185,7 +198,7 @@
       "eyebrow": "MODEL INPUT",
       "title": "Frozen Context Pack",
       "body": "确定性选择 Facts，解析允许的最小 excerpt，二次脱敏，冻结 hash 与 coverage。",
-      "detail": "模型只看 Pack；不能持有全库 token，也不能按 locator 任意读本机文件。",
+      "detail": "模型只看 Pack；不能绕过 Backend query API 扫全库，也不能按 locator 任意读本机文件。",
       "tags": ["sealed", "redacted", "reproducible"]
     },
     {
@@ -194,7 +207,7 @@
       "eyebrow": "DERIVED ASSET",
       "title": "learning.sqlite · Candidate → Learning",
       "body": "模型生成 claim；系统校验证据和数字；人工审核后发布不可变版本。",
-      "detail": "learning.sqlite 是派生资产库，不属于 activity.sqlite canonical truth；模型永远不能修改事实。",
+      "detail": "learning.sqlite 是同一 Backend 管理的独立派生库，不属于 activity.sqlite canonical truth；模型永远不能修改事实。",
       "tags": ["review", "version", "support capsule"]
     }
   ],
@@ -205,16 +218,16 @@
       "tone": "blue",
       "summary": "Hook 观察到 Query submit request 后，显式 interactionId 串起 observed response、tool、terminal 与结果事实。",
       "path": [
-        "runtime-producers",
-        "agent-producers",
+        "client-producers",
         "typed-sdk",
-        "hub-ingress",
-        "hub-policy",
-        "hub-append",
+        "backend-entry",
+        "backend-policy",
+        "sqlite-write",
         "fact-store",
         "content-vault",
         "query-index",
-        "facts-ui"
+        "backend-query-api",
+        "activity-ui"
       ],
       "steps": [
         "UserPromptSubmit 边界生成 interactionId 与稳定 eventId，只表示请求发送，不声称 Agent 已接受。",
@@ -234,16 +247,17 @@
       "tone": "purple",
       "summary": "每个 run/worker/round/case transition 主动写 Fact，完整 run/outbox/evidence 只保留引用。",
       "path": [
+        "backend-producers",
         "workflow-producers",
         "typed-sdk",
-        "producer-spool",
-        "hub-ingress",
-        "hub-policy",
-        "hub-append",
+        "backend-entry",
+        "backend-policy",
+        "sqlite-write",
         "fact-store",
         "external-refs",
         "query-index",
-        "facts-ui"
+        "backend-query-api",
+        "activity-ui"
       ],
       "steps": [
         "Run 创建/state change、worker dispatch/result、case dispatch/result 在结构化边界发事件。",
@@ -266,13 +280,14 @@
         "browser-producers",
         "workflow-producers",
         "typed-sdk",
-        "hub-ingress",
-        "hub-policy",
-        "hub-append",
+        "backend-entry",
+        "backend-policy",
+        "sqlite-write",
         "fact-store",
         "external-refs",
         "query-index",
-        "facts-ui"
+        "backend-query-api",
+        "activity-ui"
       ],
       "steps": [
         "记录 tab lifecycle 与 main-frame navigation；不把 CDP command 猜成高层动作。",
@@ -288,30 +303,30 @@
     },
     {
       "id": "outage",
-      "label": "Hub 下线重放",
+      "label": "当前 Backend 暂时不可达",
       "tone": "amber",
-      "summary": "业务路径不等待 Hub；producer spool 保留 critical events，恢复后按 sequence replay。",
+      "summary": "进程外调用方不直接打开共享 DB；当前 Backend 不可达时明确报告未记录，恢复后只能显式重试。",
       "path": [
-        "runtime-producers",
-        "agent-producers",
+        "client-producers",
         "typed-sdk",
-        "producer-spool",
-        "hub-ingress",
-        "hub-policy",
-        "hub-append",
+        "explicit-failure",
+        "backend-entry",
+        "backend-policy",
+        "sqlite-write",
         "fact-store",
-        "sources-ui"
+        "backend-query-api",
+        "activity-ui"
       ],
       "steps": [
-        "Hub 不可达时 SDK 快速返回并写 per-producer SQLite spool。",
-        "Critical Query/response/result 不先丢；已知 sampled 丢失写 source.events_dropped。",
-        "恢复后重发原 eventId，Hub 去重并 ACK 最高连续 accounted sequence。",
-        "缺失区间在 Sources 和 Context Pack 中持续可见。"
+        "Electron/Hook/CLI 调用当前 Backend 失败时，客户端快速返回明确的未记录结果。",
+        "客户端不直接打开共享 DB，也不创建本地 SQLite/JSONL spool；数据库竞争只在 Backend 内处理。",
+        "当前 Backend 恢复后，调用方可显式重发原 eventId；只有 COMMIT 后才确认成功。",
+        "Sources 只显示最后 seen 与已知 gap，不把不可达期间伪装成完整 coverage。"
       ],
       "metrics": [
-        { "value": "<5ms", "label": "target enqueue p95" },
+        { "value": "non-zero", "label": "client result" },
         { "value": "same ID", "label": "retry" },
-        { "value": "visible", "label": "loss/gap" }
+        { "value": "no fake", "label": "coverage" }
       ]
     },
     {
@@ -324,11 +339,12 @@
         "content-vault",
         "external-refs",
         "query-index",
+        "backend-query-api",
         "context-pack",
         "learning-store"
       ],
       "steps": [
-        "确定性系统按 filter/watermark 选择 Facts，解析允许的最小证据。",
+        "确定性系统通过 Backend query API 按 filter/watermark 选择 Facts，解析允许的最小证据。",
         "Pack 固化 fact IDs/hash、coverage gap、schema、脱敏报告和 model policy。",
         "模型 Extractor/Consolidator 生成 claim 与反例引用。",
         "系统校验证据/数字，人工 review 后发布不可变 LearningVersion。"
@@ -351,7 +367,7 @@
       "label": "Computed",
       "tone": "cyan",
       "title": "确定性计算",
-      "body": "Duration、显式 retry 数、事件数、阶段序列和 coverage gap。"
+      "body": "Duration、事件数、阶段序列和 coverage gap。"
     },
     {
       "label": "Model-generated",
@@ -377,12 +393,12 @@
       "status": "record"
     },
     {
-      "source": "Terminal command",
-      "capture": "controlled interactive zsh preexec/precmd",
+      "source": "Terminal command / explicit TTY record",
+      "capture": "controlled zsh preexec/precmd → rw activity record terminal-command-*",
       "direct": "command、cwd、exit/result；duration computed",
       "content": "command text（7d）",
       "external": "无，不把 output 归因到单命令",
-      "coverage": "首期仅 zsh；bash/fish inactive",
+      "coverage": "zsh 可自动；其它 TTY 仅显式 --profile/--backend-port",
       "status": "record"
     },
     {
@@ -431,12 +447,12 @@
       "status": "reference"
     },
     {
-      "source": "Hidden reasoning / arbitrary external TTY",
+      "source": "Hidden reasoning / unrecorded external TTY",
       "capture": "无可靠接口",
       "direct": "不记录",
       "content": "不记录",
       "external": "无",
-      "coverage": "明确不承诺",
+      "coverage": "未显式配置 Agent Hook 或受控 zsh adapter 就不承诺",
       "status": "unsupported"
     }
   ],
@@ -454,8 +470,8 @@
       "tone": "cyan"
     },
     {
-      "id": "hub",
-      "label": "Hub",
+      "id": "backend-store",
+      "label": "Backend Store",
       "description": "transaction-owned",
       "tone": "green"
     },
@@ -475,14 +491,14 @@
   "schemaTables": [
     {
       "name": "behavior_facts",
-      "purpose": "唯一 canonical event table；COMMIT 后才 ACK，payload 已按 eventName + schemaVersion 验证。",
+      "purpose": "唯一 canonical event table；各 Backend 以短事务并发写，COMMIT 后才响应，payload 已按 eventName + schemaVersion 验证。",
       "retention": "30 days",
       "wide": true,
       "columns": [
         {
-          "name": "hub_offset",
+          "name": "activity_offset",
           "type": "INTEGER PK AUTOINCREMENT",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "SQLite transaction 分配的接收顺序"
         },
         {
@@ -501,13 +517,13 @@
           "name": "occurred_at_ms",
           "type": "INTEGER",
           "source": "producer",
-          "origin": "业务记录权威时间，或 adapter 在动作边界取时；Hub 不重写"
+          "origin": "业务记录权威时间，或 adapter 在动作边界取时；ActivityStore 不重写"
         },
         {
-          "name": "ingested_at · ingest_fingerprint",
+          "name": "ingested_at_ms · ingest_fingerprint_sha256",
           "type": "INTEGER · TEXT",
-          "source": "hub",
-          "origin": "transaction 接收时间 + normalized input SHA-256"
+          "source": "backend-store",
+          "origin": "当前 Backend ActivityStore 接收时间 + normalized input SHA-256"
         },
         {
           "name": "producer_* · sequence",
@@ -526,12 +542,6 @@
           "type": "TEXT nullable",
           "source": "sdk",
           "origin": "runtime/adapter manifest；敏感 profile path 不入库"
-        },
-        {
-          "name": "device_id",
-          "type": "TEXT",
-          "source": "hub",
-          "origin": "identity/device.json；Producer input 不允许提交"
         },
         {
           "name": "scope IDs · cwd",
@@ -558,6 +568,12 @@
           "origin": "逐事件 schema allowlist；不是 generic unknown"
         },
         {
+          "name": "owned_mutation_bytes",
+          "type": "INTEGER 0..8MiB",
+          "source": "backend-store",
+          "origin": "payload/BLOB/link + major固定64KiB Fact envelope + 8KiB/descriptor；不可更新"
+        },
+        {
           "name": "privacy_class · local_only · retention · priority",
           "type": "TEXT",
           "source": "registry",
@@ -566,7 +582,7 @@
         {
           "name": "redaction_version · retention_anchor · expires_at",
           "type": "TEXT · INTEGER",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "最终 DLP 版本；min(occurred, ingested) + policy TTL"
         }
       ]
@@ -580,13 +596,13 @@
           "name": "content_id",
           "type": "TEXT PK",
           "source": "sdk",
-          "origin": "首次组 batch 生成 UUIDv7；spool/retry 复用"
+          "origin": "首次组 batch 生成 UUIDv7；只允许同一 owner 的显式 HTTP retry 复用"
         },
         {
-          "name": "owner_namespace",
-          "type": "TEXT",
-          "source": "hub",
-          "origin": "认证 capability 注入；禁止跨 namespace 引用"
+          "name": "owner_event_id · owner_role · owner_ordinal",
+          "type": "TEXT FK · INTEGER",
+          "source": "backend-store",
+          "origin": "当前 Fact 的唯一 link 四元组；跨 Fact/Project/Thread 禁止复用 Content row"
         },
         {
           "name": "kind",
@@ -603,13 +619,13 @@
         {
           "name": "sha256 · byte_length",
           "type": "TEXT · INTEGER",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "脱敏后实际存储 bytes"
         },
         {
           "name": "ciphertext · nonce · auth_tag · key id/version",
           "type": "BLOB · TEXT",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "AES-256-GCM；key 在 Keychain"
         },
         {
@@ -621,19 +637,19 @@
         {
           "name": "created_at · retention_anchor · expires_at",
           "type": "INTEGER",
-          "source": "hub",
-          "origin": "Hub time；min(occurred, ingested) + Registry/Project TTL"
+          "source": "backend-store",
+          "origin": "ActivityStore transaction time；min(occurred, ingested) + Registry/Project TTL"
         },
         {
           "name": "redaction_version",
           "type": "TEXT",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "最终实际执行的 DLP/redactor 版本"
         },
         {
           "name": "current_availability · deleted_at",
           "type": "TEXT · INTEGER",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "retention/delete transaction 清空密文时更新"
         }
       ]
@@ -646,8 +662,8 @@
         {
           "name": "event_id · content_id",
           "type": "TEXT FK",
-          "source": "hub",
-          "origin": "当前 Fact + 同 batch/既有且同 owner 的 Content"
+          "source": "backend-store",
+          "origin": "必须与 activity_contents owner 四元组完全一致；content ID 只能 link 一次"
         },
         {
           "name": "role",
@@ -658,13 +674,13 @@
         {
           "name": "ordinal",
           "type": "INTEGER",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "同 role 输入的稳定顺序，从 0 分配"
         },
         {
           "name": "sha256/size/expected_expiry snapshot",
           "type": "TEXT · INTEGER",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "从 activity_contents row 复制；Producer 不可伪造"
         }
       ]
@@ -678,24 +694,24 @@
           "name": "ref_id",
           "type": "TEXT PK",
           "source": "sdk",
-          "origin": "首次组 batch 生成 UUIDv7；spool/retry 复用"
+          "origin": "首次组 batch 生成 UUIDv7；只允许同一 owner 的显式 HTTP retry 复用"
         },
         {
-          "name": "owner_namespace",
-          "type": "TEXT",
-          "source": "hub",
-          "origin": "认证 capability 注入；跨 namespace locator 拒绝"
+          "name": "owner_event_id · owner_role · owner_ordinal",
+          "type": "TEXT FK · INTEGER",
+          "source": "backend-store",
+          "origin": "当前 Fact 的唯一 link 四元组；同一源 locator 在其它 Fact 使用独立 descriptor"
         },
         {
           "name": "authority",
           "type": "TEXT",
           "source": "registry",
-          "origin": "capability 对应的注册 resolver 常量"
+          "origin": "Registry 中注册的 resolver 常量"
         },
         {
           "name": "locator ciphertext/nonce/tag · key id/version",
           "type": "BLOB · TEXT",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "locator 经 AES-256-GCM 加密后存 SQLite"
         },
         {
@@ -717,10 +733,16 @@
           "origin": "权威源/Resolver 明确暴露才写；否则 NULL"
         },
         {
-          "name": "current_availability · last_checked_at",
+          "name": "current_availability · last_checked_at · deleted_at",
           "type": "TEXT · INTEGER",
-          "source": "hub",
-          "origin": "显式 resolver check + retention/delete transaction"
+          "source": "backend-store",
+          "origin": "显式 resolver/retention 结果；expired/deleted 清空 locator"
+        },
+        {
+          "name": "retention_anchor · expires_at",
+          "type": "INTEGER",
+          "source": "backend-store",
+          "origin": "复制唯一 owner Fact 的 anchor/TTL；其它 Fact 使用独立 descriptor"
         }
       ]
     },
@@ -732,8 +754,8 @@
         {
           "name": "event_id · ref_id",
           "type": "TEXT FK",
-          "source": "hub",
-          "origin": "当前 Fact + 同 batch/既有且同 owner 的 External Ref"
+          "source": "backend-store",
+          "origin": "必须与 external_refs owner 四元组完全一致；ref ID 只能 link 一次"
         },
         {
           "name": "role",
@@ -744,27 +766,27 @@
         {
           "name": "ordinal",
           "type": "INTEGER",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "同 role 输入的稳定顺序，从 0 分配"
         },
         {
           "name": "availability_at_capture",
           "type": "TEXT",
-          "source": "hub",
-          "origin": "Fact transaction 当时 resolver 的 available/missing 快照"
+          "source": "backend-store",
+          "origin": "ActivityStore transaction 当时 resolver 的 available/missing 快照"
         }
       ]
     },
     {
       "name": "producer_instances",
-      "purpose": "每个 Producer boot epoch 的 identity 与 ingest cursor；不是 Producer 自报的健康百分比。",
+      "purpose": "每个 Producer boot epoch 的 identity 与 write cursor；不是 Producer 自报的健康百分比。",
       "retention": "30 days",
       "columns": [
         {
           "name": "instance/boot ID · name/version · runtime",
           "type": "TEXT",
           "source": "sdk",
-          "origin": "capability 校验后的 SDK identity/manifest"
+          "origin": "当前 Backend 校验后的 SDK identity/manifest"
         },
         {
           "name": "boot_started_at",
@@ -775,14 +797,20 @@
         {
           "name": "started_event_id · first/last_seen_at",
           "type": "TEXT nullable · INTEGER",
-          "source": "hub",
-          "origin": "started Fact 可空；Hub 首次/最近 COMMIT time"
+          "source": "backend-store",
+          "origin": "started Fact 可空；ActivityStore 首次/最近 COMMIT time"
         },
         {
           "name": "highest_seen/contiguous_accounted_sequence",
           "type": "INTEGER",
-          "source": "hub",
-          "origin": "committed Fact + validated loss + terminal receipt"
+          "source": "backend-store",
+          "origin": "committed Fact + validated source.events_dropped"
+        },
+        {
+          "name": "last_commit_latency · last_error_code · expires_at",
+          "type": "INTEGER · TEXT nullable",
+          "source": "backend-store",
+          "origin": "最近一次 SQLite commit/失败；source 状态保留到 last seen 后 30 天"
         }
       ]
     },
@@ -794,75 +822,63 @@
         {
           "name": "gap_id · producer instance/boot",
           "type": "TEXT PK/FK",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "比较 committed sequence 与 epoch cursor 后创建"
         },
         {
           "name": "first_sequence · last_sequence",
           "type": "INTEGER",
-          "source": "hub",
-          "origin": "连续缺口区间；Hub 校验 first <= last"
+          "source": "backend-store",
+          "origin": "连续缺口区间；ActivityStore 校验 first <= last"
         },
         {
           "name": "status · detected/closed at",
           "type": "TEXT · INTEGER",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "gap 状态机与 transaction time"
         },
         {
           "name": "reason_code · source_event_id",
           "type": "TEXT nullable",
-          "source": "hub",
-          "origin": "validated loss Fact 或 Hub-known retention reject；否则 NULL"
-        },
-        {
-          "name": "terminal_event_id · ingest_fingerprint",
-          "type": "TEXT nullable",
-          "source": "hub",
-          "origin": "仅超过 30 天的单 sequence terminal receipt；用于 ACK 重放"
+          "source": "backend-store",
+          "origin": "validated source.events_dropped；未知原因保持 NULL"
         },
         {
           "name": "retention_anchor · expires_at",
           "type": "INTEGER",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "detected time + 30 天；独立 expiry index"
         }
       ]
     },
     {
-      "name": "ingest_quarantine",
-      "purpose": "坏 schema 的有界隔离；secret-blocked 请求只留 hash/脱敏错误，不保存原文。",
-      "retention": "7d quarantine",
+      "name": "ingest_rejections",
+      "purpose": "只记录 Backend 已收到但被 schema/DLP 拒绝的请求；只留 hash/脱敏错误，不保存 secret 原文。",
+      "retention": "7d rejection metadata",
       "columns": [
         {
-          "name": "quarantine_id · received/expires at",
+          "name": "rejection_id · received/expires at",
           "type": "TEXT · INTEGER",
-          "source": "hub",
-          "origin": "Hub UUID/接收时间 + Registry TTL"
+          "source": "backend-store",
+          "origin": "ActivityStore UUID/接收时间 + Registry TTL"
         },
         {
           "name": "producer/event/schema identity",
           "type": "TEXT · INTEGER nullable",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "从未信任 envelope 提取；未通过基础格式则 NULL"
         },
         {
-          "name": "payload_sha256 · reason_code",
+          "name": "request_sha256 · reason_code",
           "type": "TEXT",
-          "source": "hub",
-          "origin": "ingress reject 分类"
+          "source": "backend-store",
+          "origin": "write reject 分类"
         },
         {
           "name": "sanitized_error_json",
           "type": "TEXT JSON",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "脱敏错误，不含被拒 secret"
-        },
-        {
-          "name": "ciphertext/nonce/tag · key id/version",
-          "type": "BLOB · TEXT nullable",
-          "source": "hub",
-          "origin": "仅通过 size + pre-ingest secret scan 才保存"
         }
       ]
     },
@@ -880,14 +896,113 @@
         {
           "name": "last_started · last_completed",
           "type": "INTEGER nullable",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "有界 sweep 的实际开始/提交时间"
         },
         {
           "name": "last_deleted_count · last_error_code",
           "type": "INTEGER · TEXT nullable",
-          "source": "hub",
+          "source": "backend-store",
           "origin": "最近一次 sweep 的结构化结果"
+        }
+      ]
+    },
+    {
+      "name": "maintenance_leases",
+      "purpose": "协调 retention、WAL checkpoint 与全局 activity-delete runner；schema migration 使用 BEGIN EXCLUSIVE。",
+      "retention": "operational state",
+      "columns": [
+        {
+          "name": "lease_name",
+          "type": "TEXT PK",
+          "source": "registry",
+          "origin": "retention | checkpoint | activity-delete 固定闭集"
+        },
+        {
+          "name": "owner_backend_instance_id",
+          "type": "TEXT",
+          "source": "backend-store",
+          "origin": "条件 UPSERT 成功取得 lease 的 Backend instance"
+        },
+        {
+          "name": "fencing_token",
+          "type": "INTEGER >= 1",
+          "source": "backend-store",
+          "origin": "固定 row 永不删除；每次 acquire/takeover 原子递增，防止 owner/token ABA"
+        },
+        {
+          "name": "acquired_at · expires_at",
+          "type": "INTEGER",
+          "source": "backend-store",
+          "origin": "数据库时间窗；过期后允许其它 Backend 接管"
+        }
+      ]
+    },
+    {
+      "name": "activity_delete_jobs",
+      "purpose": "用户确认后立即成为查询 fail-closed tombstone；全局最多一个 active job，由任一现有 Backend 可恢复地分批物理删除。",
+      "retention": "until completed + 30d",
+      "columns": [
+        {
+          "name": "delete_job_id · request_id · auth HMAC/version",
+          "type": "TEXT PK/UNIQUE · INTEGER",
+          "source": "backend-store",
+          "origin": "确认事务生成；completion audit 可复制主体 HMAC，不依赖原 session 仍存活"
+        },
+        {
+          "name": "scope_type/id · as_of_activity_offset",
+          "type": "TEXT · INTEGER",
+          "source": "confirmed-ticket",
+          "origin": "重新 canonicalize scope 并匹配 ticket digest；confirmation trigger 禁止后续改 scope/cutoff"
+        },
+        {
+          "name": "membership version/hash · count hash/fact count",
+          "type": "INTEGER · TEXT",
+          "source": "preview-snapshot",
+          "origin": "保留用户确认时看到的冻结分母；delete 实际集合只能单调缩小"
+        },
+        {
+          "name": "status · cursor · deleted count · last error",
+          "type": "TEXT · INTEGER",
+          "source": "backend-store",
+          "origin": "pending|running|blocked|completed；每个 fenced batch 同事务推进"
+        },
+        {
+          "name": "created/updated/completed/expires_at",
+          "type": "INTEGER nullable",
+          "source": "backend-store",
+          "origin": "未完成不按 TTL 清除；完成后保留 30 天"
+        }
+      ]
+    },
+    {
+      "name": "activity_access_audit",
+      "purpose": "Content read、export、delete_requested/delete_completed 的最小安全审计；不存正文或 token。",
+      "retention": "30 days",
+      "columns": [
+        {
+          "name": "audit_offset · request_id",
+          "type": "INTEGER PK · TEXT UNIQUE",
+          "source": "backend-store",
+          "origin": "SQLite commit order + Backend request context"
+        },
+        {
+          "name": "occurred_at · backend_instance_id",
+          "type": "INTEGER · TEXT",
+          "source": "backend-store",
+          "origin": "敏感操作执行时间与当前 Backend identity"
+        },
+        {
+          "name": "auth_subject_hmac_sha256 · auth_hmac_key_version · action",
+          "type": "TEXT",
+          "source": "backend-store",
+          "origin": "HKDF context 派生的版本化 audit HMAC subkey；content_read|export|delete_requested|delete_completed"
+        },
+        {
+          "name": "scope_json · result_status/code · expires_at",
+          "type": "TEXT JSON · INTEGER",
+          "source": "backend-store",
+          "origin": "最小 Project/Thread/Content IDs、真实结果与 30 天 TTL"
         }
       ]
     },
@@ -904,16 +1019,16 @@
           "origin": "同 operationId 的 started/completed 时间或同源 monotonic duration"
         },
         {
-          "name": "explicit_retry_count",
+          "name": "event_count",
           "type": "INTEGER",
           "source": "computed",
-          "origin": "同一结构化 operation/attempt 的已记录事件数"
+          "origin": "当前查询范围内已提交 behavior_facts 的确定性计数"
         },
         {
           "name": "coverage_gap_ranges",
           "type": "ARRAY",
           "source": "computed",
-          "origin": "producer_instances + source_gaps + query asOfHubOffset"
+          "origin": "producer_instances + source_gaps + query asOfActivityOffset"
         },
         {
           "name": "current_ref_availability",
@@ -1004,20 +1119,20 @@
   ],
   "failureScenarios": [
     {
-      "id": "hub-down",
+      "id": "backend-down",
       "severity": "resilience",
-      "title": "Activity Hub 不可用",
-      "trigger": "连接失败、429 或 Hub restart",
-      "mechanism": "SDK 快速入本地 spool_events；7 天内 replay，超过 7 天转成无正文 spool_loss_ranges。",
-      "observable": "Sources 显示 oldest unacked、queue bytes 与 lag。",
-      "resolution": "同 eventId 重放；过期 bundle 发送 source.events_dropped(reason=retention_expired)。"
+      "title": "当前 Backend 暂时不可达",
+      "trigger": "Electron/Hook/CLI 到当前 Backend 的既有连接失败",
+      "mechanism": "进程外调用方返回明确的未记录错误；不改连其它 profile、不直接打开共享 DB，也不创建隐藏 spool。全部 Backend 停止时 delete job 暂停。",
+      "observable": "CLI/adapter 返回非零；Sources 停留在最后 seen；durable delete job 不会被误报 completed。",
+      "resolution": "Backend 恢复后调用方显式重发 event；任一 Backend 启动也会从 delete cursor 继续。只有 SQLite COMMIT 后才确认。"
     },
     {
       "id": "sequence-gap",
       "severity": "integrity",
       "title": "Producer sequence 出现缺口",
-      "trigger": "收到 1、2、4，或 spool quota 丢失",
-      "mechanism": "Hub 持久化 gap interval，不用 hubOffset 掩盖缺失。",
+      "trigger": "收到 1、2、4，或 Backend recorder 明确报告 policy/queue drop",
+      "mechanism": "共享 SQLite 持久化 gap interval，不用 activityOffset 掩盖缺失。",
       "observable": "Timeline、Sources、Context Pack 都携带 gap。",
       "resolution": "迟到 3 可关闭 gap；不可恢复区间保留 loss report。"
     },
@@ -1026,9 +1141,9 @@
       "severity": "compatibility",
       "title": "Beta 发送未来 schema",
       "trigger": "未知 major version 或 payload 不兼容",
-      "mechanism": "Registry validation 失败，事件进入有界 quarantine。",
+      "mechanism": "Registry validation 失败，Backend 只向 ingest_rejections 写入脱敏拒绝元数据。",
       "observable": "Beta source rejected + gap；Stable Facts 不受污染。",
-      "resolution": "发布 Hub schema/upcaster 后由原 eventId 重放。"
+      "resolution": "发布兼容 schema/upcaster 后，由仍持有原输入的调用方显式重发相同 eventId。"
     },
     {
       "id": "content-expired",
@@ -1043,19 +1158,23 @@
       "id": "user-delete",
       "severity": "privacy",
       "title": "用户删除 Project/Thread 数据",
-      "trigger": "显式 delete/tombstone 请求",
-      "mechanism": "删除权优先于 retention 和 Learning support。",
-      "observable": "Refs/Capsule tombstone；Learning needs_revalidation/deprecated。",
-      "resolution": "不保留隐藏副本，不用经验资产阻止删除。"
+      "trigger": "preview 后由同一 Bearer session 从 body/内存提交 canonical scope、5 分钟票据和固定 expectedAction",
+      "mechanism": "短事务提交 query tombstone + delete_requested audit；现有 Backend runner 用 fencing 分批删除并持久化 cursor，完成时写 completion audit。",
+      "observable": "确认后目标立即不可查；新 Fact 与另一 Project 不变；页面显示 pending/running/blocked/completed，Backend crash 后可接管。",
+      "resolution": "每批 ≤1000 Facts/8 MiB，不长占 writer lock；完成后 job/audit 保留 30 天，不保留可查询正文副本。"
     }
   ],
   "decisions": [
-    "独立 per-user Activity Hub，不扩展 App Server 成行为仓。",
-    "activity.sqlite 是唯一 canonical truth，不维护 JSONL/segment 第二份事实源。",
-    "主动记录为主；完整 Thread、scrollback、run、截图等少量大对象才引用。",
-    "7 天内容、30 天事实；没有永久原始行为 archive。",
-    "显式 ID 关联，不做时间邻近 Task 推断。",
-    "第一阶段只做 Facts / Timeline / Sources。",
-    "Learning 由模型基于冻结 Context Pack 生成，默认审核后发布。"
+    "不新增服务或 daemon；Stable/Beta/Dev 使用各自现有 Backend 内的 ActivityStore。",
+    "所有 ActivityStore 共同读写 profile 外固定的 ~/.runweave/activity/activity.sqlite。",
+    "SQLite 以 WAL、busy_timeout、短 BEGIN IMMEDIATE、event/producer UNIQUE 和 fingerprint 冲突校验收敛跨 Backend 写入；retention lease 使用 fencing token。",
+    "CLI/Hook/Electron 只调用当前 Backend，不直接打开 DB，也不做 owner 发现。",
+    "Content 与 ExternalRef descriptor 按 Fact+role+ordinal 独占，跨 Project/Thread 不复用 row；scoped delete 只级联本 scope owner。",
+    "大范围 delete 由 activity_delete_jobs 立即做查询 tombstone，再由现有 Backend 内部 runner 以 fenced 小事务可恢复删除；不新增进程。",
+    "packaged/external runtime 都必须从构建产物 manifest 全量校验 worker 与 JS/native runtime 文件树、ABI 和逐文件/tree hash 后才能启动 Activity worker。",
+    "Content read 先 audit；export/delete confirm 带 canonical scope、独立 token type/audience、expectedAction 和同 session 票据，票据不进 argv。",
+    "外部 TTY 仅在显式配置 record agent-hook 或受控 zsh record terminal-command-* 时记录。",
+    "7 天内容、30 天事实；完整 Thread、scrollback、run、截图等大对象只引用。",
+    "Learning 基于冻结 Context Pack 生成并写独立 learning.sqlite，默认审核后发布。"
   ]
 }

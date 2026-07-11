@@ -81,6 +81,7 @@
 | Runweave Beta 自举开发通道测试           | testing/runweave-beta-self-hosting-test-cases.md                                   |
 | Runweave Dev Session 分层开发环境测试    | testing/runweave-dev-session-test-cases.md                                         |
 | Runweave Beta 多实例与 CDP 路由测试      | testing/runweave-beta-instance-cdp-routing-test-cases.md                           |
+| Backend 内嵌行为数据底座测试             | testing/system-activity-data-foundation-test-cases.md                              |
 | Terminal Browser CDP/MCP 测试            | testing/terminal-browser-cdp-mcp-test-cases.md                                     |
 | Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md                              |
 | Terminal Browser 自适应多 Tab 测试       | testing/terminal-browser-adaptive-tabs-test-cases.md                               |

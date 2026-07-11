@@ -1265,36 +1265,42 @@
   <body>
     <header class="topbar">
       <div class="brand">
-        <div class="brand-mark">AH</div>
+        <div class="brand-mark">AF</div>
         <div class="brand-copy">
           <strong>Runweave Activity Foundation</strong>
-          <span>system architecture · feature@2c4572c</span>
+          <span
+            >system architecture ·
+            docs/activity-data-foundation-contracts@74f1151</span
+          >
         </div>
       </div>
       <div class="top-meta">
         <span class="target-pill">TARGET ARCHITECTURE</span>
         <span>2026-07-11</span>
-        <span>local-first · per-user</span>
+        <span>local-first · backend-owned</span>
       </div>
     </header>
 
     <main class="page">
       <section class="hero">
         <div class="hero-copy">
-          <p class="kicker">Independent activity data plane</p>
+          <p class="kicker">Backend-owned activity storage</p>
           <h1>先把真实行为独立沉淀，再让模型从证据中生成经验</h1>
           <p>
-            Stable、Beta、Dev 与 external producer 在行为发生时主动写入同一个
-            Activity Hub。 Facts 是系统记录，Learning
-            是模型派生；两者分开存储、分开审计、分开过期。
+            Stable、Beta、Dev 复用各自现有 Backend 内的 ActivityStore，共同写入
+            profile 外固定的 activity.sqlite。Facts 是系统记录，Learning
+            是模型派生；两者分库、分开审计、分开过期。
           </p>
         </div>
         <aside class="correction-card">
           <span>ARCHITECTURE BOUNDARY</span>
-          <strong>不是从现有 Thread、日志或 Agent Team 文件临时汇总。</strong>
+          <strong
+            >不新增服务或 daemon，也不让 CLI、Hook、Electron 直接打开
+            DB。</strong
+          >
           <p>
-            大多数数据写入 Activity Hub 自己的结构；只有完整
-            Thread、scrollback、run、截图等少量大对象保存引用。
+            Backend 内部走 in-process recorder；进程外调用方只使用当前 Backend。
+            完整 Thread、scrollback、run、截图等大对象只保存引用。
           </p>
         </aside>
       </section>
@@ -1354,8 +1360,8 @@
             <div>
               <h2>哪些直接存、哪些引用、哪些不承诺</h2>
               <p>
-                Direct Fact 与 Hub-owned Content 都属于独立行为存储；External
-                Ref 只占小支路。
+                Direct Fact 与 Backend-owned Content
+                都属于独立行为存储；External Ref 只占小支路。
               </p>
             </div>
           </header>
@@ -1397,10 +1403,10 @@
             <div>
               <h2>activity.sqlite 是唯一事实源</h2>
               <p>
-                表、字段类型和来源在同一视图展开；Hub/Registry 字段不能由
-                Producer 伪造，Computed 字段不覆盖事实行。Producer 侧另有 SQLite
-                spool_events / spool_loss_ranges，仅用于最多 7 天离线交付， 不是
-                canonical Fact。
+                表、字段类型和来源在同一视图展开；Backend Store/Registry
+                字段不能由 Producer 伪造，Computed
+                字段不覆盖事实行。进程外客户端不打开共享数据库，也不创建
+                SQLite/JSONL spool；当前 Backend 不可达时必须明确返回未记录。
               </p>
             </div>
             <div class="legend">
@@ -1450,7 +1456,7 @@
             <div>
               <h2>系统不隐藏缺口，也不伪造完整性</h2>
               <p>
-                Collector、schema、sequence、retention
+                当前 Backend、schema、sequence、retention
                 与删除都有明确、可查询的失败语义。
               </p>
             </div>
@@ -1468,8 +1474,8 @@
         aria-label="Frozen decisions"
       ></section>
       <p class="footer-note">
-        这是目标架构说明，不代表 Activity Hub、Facts 页面或 Learning Pipeline
-        已经实现；页面中的 14
+        这是目标架构说明，不代表 Backend ActivityStore、Facts 页面或 Learning
+        Pipeline 已经实现；页面中的 14
         个事件族与容量数字是实施范围和验收预算，不是生产观测值。
       </p>
     </main>
