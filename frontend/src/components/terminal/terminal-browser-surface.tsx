@@ -3,8 +3,8 @@ import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import {
   type TerminalBrowserDevicePresetId,
   type TerminalBrowserDeviceState,
-  type TerminalBrowserHeaderRule,
-} from "@runweave/shared";
+} from "@runweave/shared/terminal-browser-device";
+import { type TerminalBrowserHeaderRule } from "@runweave/shared/terminal-browser-headers";
 import { aiDiagnosticLog } from "../../features/diagnostic-logs/recorder";
 import { TerminalBrowserDevicePanel } from "./terminal-browser-device-panel";
 import { TerminalBrowserHeadersPanel } from "./terminal-browser-headers-panel";
@@ -20,43 +20,65 @@ interface MobileDisplaySize {
   height: number;
 }
 
-interface TerminalBrowserSurfaceProps {
+interface BrowserSurfaceRefs {
   containerRef: RefObject<HTMLDivElement | null>;
   browserViewRef: RefObject<HTMLDivElement | null>;
+}
+
+interface BrowserHeaderPanel {
+  open: boolean;
+  rules: TerminalBrowserHeaderRule[];
+  saving: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSave: (rules: TerminalBrowserHeaderRule[]) => Promise<boolean>;
+}
+
+interface BrowserDevicePanel {
+  open: boolean;
+  state: TerminalBrowserDeviceState;
+  switching: boolean;
+  disabledReason: string | null;
+  onClose: () => void;
+  onSelectPreset: (presetId: TerminalBrowserDevicePresetId) => void;
+}
+
+interface BrowserSurfaceEnvironment {
   isElectron: boolean;
-  headerRulesPanelOpen: boolean;
-  headerRules: TerminalBrowserHeaderRule[];
-  devicePanelOpen: boolean;
-  deviceState: TerminalBrowserDeviceState;
-  deviceSwitching: boolean;
-  mobileDisabledReason: string | null;
-  headerSaving: boolean;
-  headerError: string | null;
-  onCloseHeaderRulesPanel: () => void;
-  onCloseDevicePanel: () => void;
-  onSelectDevicePreset: (presetId: TerminalBrowserDevicePresetId) => void;
-  onSaveHeaderRules: (rules: TerminalBrowserHeaderRule[]) => Promise<boolean>;
   onOpenExternal: () => void;
 }
 
+interface TerminalBrowserSurfaceProps {
+  device: BrowserDevicePanel;
+  environment: BrowserSurfaceEnvironment;
+  headers: BrowserHeaderPanel;
+  refs: BrowserSurfaceRefs;
+}
+
 export function TerminalBrowserSurface({
-  containerRef,
-  browserViewRef,
-  isElectron,
-  headerRulesPanelOpen,
-  headerRules,
-  devicePanelOpen,
-  deviceState,
-  deviceSwitching,
-  mobileDisabledReason,
-  headerSaving,
-  headerError,
-  onCloseHeaderRulesPanel,
-  onCloseDevicePanel,
-  onSelectDevicePreset,
-  onSaveHeaderRules,
-  onOpenExternal,
+  device,
+  environment,
+  headers,
+  refs,
 }: TerminalBrowserSurfaceProps) {
+  const { browserViewRef, containerRef } = refs;
+  const {
+    disabledReason: mobileDisabledReason,
+    onClose: onCloseDevicePanel,
+    onSelectPreset: onSelectDevicePreset,
+    open: devicePanelOpen,
+    state: deviceState,
+    switching: deviceSwitching,
+  } = device;
+  const { isElectron, onOpenExternal } = environment;
+  const {
+    error: headerError,
+    onClose: onCloseHeaderRulesPanel,
+    onSave: onSaveHeaderRules,
+    open: headerRulesPanelOpen,
+    rules: headerRules,
+    saving: headerSaving,
+  } = headers;
   const [mobileDisplaySize, setMobileDisplaySize] =
     useState<MobileDisplaySize | null>(null);
   const sidePanelOpen = headerRulesPanelOpen || devicePanelOpen;

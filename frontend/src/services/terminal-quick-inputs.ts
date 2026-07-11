@@ -1,10 +1,4 @@
-import type {
-  CreateTerminalQuickInputRequest,
-  ListTerminalQuickInputsResponse,
-  TerminalQuickInputItem,
-  TerminalQuickInputListKind,
-  UpdateTerminalQuickInputRequest,
-} from "@runweave/shared";
+import type { CreateTerminalQuickInputRequest, ListTerminalQuickInputsResponse, TerminalQuickInputItem, TerminalQuickInputListKind, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
 import { requestJson, requestVoid } from "./http";
 
 export async function listTerminalQuickInputs(

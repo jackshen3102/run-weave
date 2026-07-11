@@ -1,9 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useRef, useState } from "react";
-import type {
-  TerminalPreviewDirectoryResponse,
-  TerminalPreviewTreeEntry,
-} from "@runweave/shared";
+import type { TerminalPreviewDirectoryResponse, TerminalPreviewTreeEntry } from "@runweave/shared/terminal/preview";
 import type { TreeItem, TreeItemIndex } from "react-complex-tree";
 import { listTerminalProjectPreviewDirectory } from "../../services/terminal";
 

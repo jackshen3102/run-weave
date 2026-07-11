@@ -1,22 +1,9 @@
-import type {
-  AgentTeamExportHistoryMode,
-  AgentTeamExportResponse,
-  AgentTeamRunsResponse,
-  CreateTerminalProjectRequest,
-  CreateTerminalSessionRequest,
-  CreateTerminalSessionResponse,
-  CreateTerminalPanelRequest,
-  SendTerminalInterruptRequest,
-  SendTerminalInterruptResponse,
-  SendTerminalInputRequest,
-  SendTerminalInputResponse,
-  TerminalPanelWorkspace,
-  TerminalProjectListItem,
-  TerminalSessionHistoryResponse,
-  TerminalSessionListItem,
-  TerminalSessionStatusResponse,
-  TerminalStateResponse,
-} from "@runweave/shared";
+import type { AgentTeamExportHistoryMode, AgentTeamExportResponse, AgentTeamRunsResponse } from "@runweave/shared/agent-team";
+import type { TerminalStateResponse } from "@runweave/shared/terminal/events";
+import type { SendTerminalInterruptRequest, SendTerminalInterruptResponse, SendTerminalInputRequest, SendTerminalInputResponse } from "@runweave/shared/terminal/input";
+import type { CreateTerminalPanelRequest, TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
+import type { CreateTerminalProjectRequest, TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import type { CreateTerminalSessionRequest, CreateTerminalSessionResponse, TerminalSessionHistoryResponse, TerminalSessionListItem, TerminalSessionStatusResponse } from "@runweave/shared/terminal/session";
 import type { AuthContext } from "./auth-context.js";
 
 export class TerminalHttpClient {

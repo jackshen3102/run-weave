@@ -17,14 +17,11 @@ import {
   sendWithConfirmation,
 } from "./terminal-agent.js";
 import { tailLines, writeOutput } from "../output/format.js";
-import type {
-  TerminalProjectListItem,
-  TerminalInputMode,
-  TerminalPanelWorkspace,
-  TerminalSessionListItem,
-  TerminalSessionStatusResponse,
-  TerminalState,
-} from "@runweave/shared";
+import type { TerminalInputMode } from "@runweave/shared/terminal/input";
+import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import type { TerminalSessionListItem, TerminalSessionStatusResponse } from "@runweave/shared/terminal/session";
+import type { TerminalState } from "@runweave/shared/terminal/state";
 
 const DEFAULT_TAIL_LINES = 120;
 const MAX_STDIN_BYTES = 256 * 1024;

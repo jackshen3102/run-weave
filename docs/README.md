@@ -79,6 +79,7 @@
 | Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md                              |
 | Terminal Browser 自适应多 Tab 测试       | testing/terminal-browser-adaptive-tabs-test-cases.md                               |
 | 多项目原型轮巡库测试                     | testing/prototype-gallery-preview-test-cases.md                                    |
+| 系统性架构重构验收                       | testing/runweave-systematic-architecture-refactor-test-cases.md                    |
 | 终端回归（Vim）                          | testing/runbooks/terminal-vim.md                                                   |
 | Explorer Quick Search 回归               | testing/runbooks/explorer-quick-search.md                                          |
 | Web Terminal 状态查询回归                | testing/runbooks/status-lookup-ui.md                                               |

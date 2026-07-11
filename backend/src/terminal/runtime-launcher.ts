@@ -492,8 +492,17 @@ export async function readTerminalScrollbackCapture(
   tmuxHistoryLines?: number,
 ): Promise<TerminalScrollbackCapture> {
   if (isTmuxBackedSession(session) && tmuxService) {
+    const readPersistedFallback = async () => ({
+      data:
+        mode === "history"
+          ? await terminalSessionManager.readScrollback(session.id)
+          : await terminalSessionManager.readLiveScrollback(session.id),
+    });
+    const target = resolveTmuxTarget(session, tmuxService);
+    if (!(await tmuxService.hasSession(target).catch(() => false))) {
+      return readPersistedFallback();
+    }
     try {
-      const target = resolveTmuxTarget(session, tmuxService);
       const captured =
         tmuxHistoryLines === undefined
           ? await tmuxService.capturePane(target)
@@ -510,7 +519,7 @@ export async function readTerminalScrollbackCapture(
         tmuxSocketPath: session.tmuxSocketPath,
         error,
       });
-      return { data: "" };
+      return readPersistedFallback();
     }
   }
 

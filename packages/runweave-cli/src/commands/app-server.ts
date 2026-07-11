@@ -5,15 +5,21 @@ import path from "node:path";
 import {
   discoverAppServer,
   getAppServerStatus,
-  installAppServerRuntimeRelease,
   removeStaleAppServerLock,
+} from "@runweave/shared/app-server/discovery";
+import {
   resolveAppServerHomeDir,
   resolveAppServerStatePaths,
+} from "@runweave/shared/app-server/paths";
+import {
+  installAppServerRuntimeRelease,
   resolveCurrentAppServerRuntimeRelease,
-  type AppServerConnectionInfo,
-  type AppServerRuntimeRelease,
-  type AppServerStatus,
-} from "@runweave/shared/src/app-server-node";
+} from "@runweave/shared/app-server/runtime-release";
+import type {
+  AppServerConnectionInfo,
+  AppServerRuntimeRelease,
+  AppServerStatus,
+} from "@runweave/shared/app-server/types";
 import { CliError } from "../errors.js";
 
 const START_TIMEOUT_MS = 3_000;

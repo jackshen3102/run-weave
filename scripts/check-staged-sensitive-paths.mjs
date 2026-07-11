@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 
 const MAX_FINDINGS = 20;
+const MAX_GIT_OUTPUT_BYTES = 128 * 1024 * 1024;
 const blockedKeyword = ["byte", "dance"].join("");
 const macHomePrefix = "/" + "Users" + "/";
 const linuxHomePrefix = "/" + "home" + "/";
@@ -169,6 +170,7 @@ function matchingRules(value) {
 function runGit(args) {
   const result = spawnSync("git", args, {
     encoding: "utf8",
+    maxBuffer: MAX_GIT_OUTPUT_BYTES,
     stdio: "pipe",
   });
 

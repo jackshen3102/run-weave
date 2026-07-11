@@ -20,9 +20,7 @@ export function resolveCdpProxyPort(env: NodeJS.ProcessEnv): {
   }
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-    throw new Error(
-      `[cdp-proxy] invalid ${envName}: ${raw}`,
-    );
+    throw new Error(`[cdp-proxy] invalid ${envName}: ${raw}`);
   }
   return { port: parsed, strict: true };
 }

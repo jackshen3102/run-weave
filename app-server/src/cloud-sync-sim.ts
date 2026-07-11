@@ -4,7 +4,7 @@ import type {
   AppServerEventEnvelope,
   AppServerSyncStatusResponse,
   AppServerThreadRef,
-} from "@runweave/shared";
+} from "@runweave/shared/app-server-events";
 
 export interface AppServerCloudSyncSimOptions {
   syncDir: string;
@@ -140,7 +140,11 @@ export class AppServerCloudSyncSim {
   }
 
   private get latestThreadsPath(): string {
-    return path.join(this.options.syncDir, "projections", "latest-threads.json");
+    return path.join(
+      this.options.syncDir,
+      "projections",
+      "latest-threads.json",
+    );
   }
 
   private get cursorPath(): string {

@@ -11,10 +11,8 @@ import {
   isTmuxBackedSession,
   resolveTmuxTarget,
 } from "../terminal/runtime-launcher";
-import {
-  resolvePanelTarget,
-  TerminalPanelRouteError,
-} from "../routes/terminal-panel-routes";
+import { TerminalPanelError } from "../terminal/application/panel-common";
+import { resolvePanelTarget } from "../terminal/application/panel-targets";
 import { AgentTeamError } from "./errors";
 
 const BRACKETED_PASTE_START = "\u001b[200~";
@@ -74,7 +72,7 @@ export class AgentTeamPromptSender {
             )
           ).paneTarget;
         } catch (error) {
-          if (error instanceof TerminalPanelRouteError) {
+          if (error instanceof TerminalPanelError) {
             throw new AgentTeamError(
               error.statusCode,
               error.message,

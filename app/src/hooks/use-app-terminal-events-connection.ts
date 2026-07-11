@@ -1,9 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef } from "react";
-import type {
-  TerminalEventEnvelope,
-  TerminalEventServerMessage,
-} from "@runweave/shared";
+import type { TerminalEventEnvelope, TerminalEventServerMessage } from "@runweave/shared/terminal/events";
 
 import { classifyApiFailure } from "../services/api-failure";
 import { createTerminalEventsWsTicket } from "../services/terminal";

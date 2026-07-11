@@ -2,11 +2,7 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import type {
-  TerminalPreviewContentSearchItem,
-  TerminalPreviewContentSearchRange,
-  TerminalPreviewContentSearchResponse,
-} from "@runweave/shared";
+import type { TerminalPreviewContentSearchItem, TerminalPreviewContentSearchRange, TerminalPreviewContentSearchResponse } from "@runweave/shared/terminal/preview";
 import { ensureProjectPath, TerminalPreviewError } from "./preview-paths";
 import {
   buildRgSearchExclusionArgs,

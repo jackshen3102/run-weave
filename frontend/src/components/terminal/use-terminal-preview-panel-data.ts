@@ -1,19 +1,17 @@
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
-import { useRef, useEffect, useMemo, useState } from "react";
 import type {
   TerminalPreviewChangeKind,
-  TerminalPreviewFileDiffResponse,
   TerminalPreviewFileResponse,
-  TerminalPreviewFileSearchItem,
-  TerminalPreviewGitChangesResponse,
-  TerminalProjectListItem,
-} from "@runweave/shared";
-import { createTerminalPreviewRequestSequencer } from "@runweave/shared";
+} from "@runweave/shared/terminal/preview";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import {
-  useTerminalPreviewStore,
   DEFAULT_MARKDOWN_VIEW_MODE,
   DEFAULT_TERMINAL_SIDECAR_WIDTH,
+  useTerminalPreviewStore,
 } from "../../features/terminal/preview-store";
+import { useTerminalPreviewQueries } from "../../features/terminal/queries/terminal-preview-queries";
+import { terminalQueryKeys } from "../../features/terminal/queries/terminal-query-keys";
 import {
   getTerminalPreviewFileKind,
   isSupportedTerminalImagePreviewPath,
@@ -23,9 +21,7 @@ import {
   getTerminalProjectPreviewFile,
   getTerminalProjectPreviewFileDiff,
   getTerminalProjectPreviewGitChanges,
-  saveTerminalProjectPreviewFile,
-  searchTerminalProjectPreviewFiles,
-} from "../../services/terminal";
+} from "../../services/terminal-preview";
 import {
   resolveSelectedPreviewChange,
   useTerminalPreviewPanelKeyboardEffects,
@@ -34,6 +30,7 @@ import {
   getSelectedTerminalPreviewPath,
   getTerminalPreviewCopyPath,
 } from "./terminal-preview-panel-paths";
+import { useTerminalPreviewFileEditor } from "./use-terminal-preview-file-editor";
 
 interface PreviewFileMutationTarget {
   path: string;
@@ -52,6 +49,8 @@ interface UseTerminalPreviewPanelDataArgs {
   widthPx?: number;
   onAuthExpired?: () => void;
 }
+
+const EMPTY_SEARCH_ITEMS: never[] = [];
 
 export function useTerminalPreviewPanelData({
   apiBase,
@@ -106,46 +105,56 @@ export function useTerminalPreviewPanelData({
     projectState?.markdownSplitSourceWidthPct ?? 50;
   const svgViewMode = projectState?.svgViewMode ?? "preview";
   const changesViewMode = projectState?.changesViewMode ?? "diff";
-  const [searchItems, setSearchItems] = useState<
-    TerminalPreviewFileSearchItem[]
-  >([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [filePreview, setFilePreview] =
-    useState<TerminalPreviewFileResponse | null>(null);
-  const [editorContent, setEditorContent] = useState("");
-  const [loadedContent, setLoadedContent] = useState("");
-  const [loadedMtimeMs, setLoadedMtimeMs] = useState<number | undefined>(
-    undefined,
+  const projectId = activeProject?.projectId ?? null;
+  const hasProjectPath = Boolean(activeProject?.path);
+  const absoluteInput = query.trim().startsWith("/");
+  const panelWidth = expanded
+    ? "100%"
+    : widthPx
+      ? `${widthPx}px`
+      : DEFAULT_TERMINAL_SIDECAR_WIDTH;
+
+  const previewQueries = useTerminalPreviewQueries({
+    projectId,
+    hasProjectPath,
+    mode,
+    query,
+    selectedFilePath,
+    selectedChangePath,
+    selectedChangeKind,
+  });
+  const filePreview = previewQueries.file.data ?? null;
+  const changes = previewQueries.changes.data ?? null;
+  const fileDiff = previewQueries.diff.data ?? null;
+  const fileKind = selectedFilePath
+    ? getTerminalPreviewFileKind(selectedFilePath, filePreview?.language)
+    : "text";
+  const isFileEditable =
+    (mode === "file" || mode === "explorer") &&
+    Boolean(filePreview) &&
+    filePreview?.readonly === false &&
+    fileKind !== "image";
+
+  const setCachedFile = useMemoizedFn(
+    (file: TerminalPreviewFileResponse | null) => {
+      const path = file?.path ?? selectedFilePath;
+      if (!path) {
+        return;
+      }
+      previewQueries.setFile(path, file ?? undefined);
+    },
   );
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveConflict, setSaveConflict] = useState(false);
-  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
-  const [fileLoading, setFileLoading] = useState(false);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const [changes, setChanges] =
-    useState<TerminalPreviewGitChangesResponse | null>(null);
-  const [changesLoading, setChangesLoading] = useState(false);
-  const [changesError, setChangesError] = useState<string | null>(null);
-  const [fileDiff, setFileDiff] =
-    useState<TerminalPreviewFileDiffResponse | null>(null);
-  const [diffLoading, setDiffLoading] = useState(false);
-  const [diffError, setDiffError] = useState<string | null>(null);
-  const fileRequestSequencer = useMemo(
-    () => createTerminalPreviewRequestSequencer(),
-    [],
-  );
-  const changesRequestSequencer = useMemo(
-    () => createTerminalPreviewRequestSequencer(),
-    [],
-  );
-  const diffRequestSequencer = useMemo(
-    () => createTerminalPreviewRequestSequencer(),
-    [],
-  );
-  const selectedChangePathRef = useRef(selectedChangePath);
-  const selectedChangeKindRef = useRef(selectedChangeKind);
+  const editor = useTerminalPreviewFileEditor({
+    apiBase,
+    token,
+    projectId,
+    selectedFilePath,
+    filePreview,
+    editable: isFileEditable,
+    onAuthExpired,
+    onFileSaved: setCachedFile,
+  });
+
   const [assetRefreshKey, setAssetRefreshKey] = useState(0);
   const [markdownScrollRatio, setMarkdownScrollRatio] = useState(0);
   const [pathCopied, setPathCopied] = useState(false);
@@ -162,31 +171,11 @@ export function useTerminalPreviewPanelData({
   >(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
-  const projectId = activeProject?.projectId ?? null;
-  const hasProjectPath = Boolean(activeProject?.path);
-  const absoluteInput = query.trim().startsWith("/");
-  const panelWidth = expanded
-    ? "100%"
-    : widthPx
-      ? `${widthPx}px`
-      : DEFAULT_TERMINAL_SIDECAR_WIDTH;
-  const fileKind = selectedFilePath
-    ? getTerminalPreviewFileKind(selectedFilePath, filePreview?.language)
-    : "text";
-  const isFileEditable =
-    (mode === "file" || mode === "explorer") &&
-    Boolean(filePreview) &&
-    filePreview?.readonly === false &&
-    fileKind !== "image";
-  const isDirty = isFileEditable && editorContent !== loadedContent;
-
   const confirmDiscardDraft = useMemoizedFn((): boolean => {
-    if (!isDirty) {
-      return true;
-    }
-    return window.confirm("Discard unsaved Preview changes?");
+    return (
+      !editor.isDirty || window.confirm("Discard unsaved Preview changes?")
+    );
   });
-
   const handleRequestError = useMemoizedFn((error: unknown): string => {
     if (error instanceof HttpError && error.status === 401) {
       onAuthExpired?.();
@@ -195,41 +184,19 @@ export function useTerminalPreviewPanelData({
   });
 
   const loadFile = useMemoizedFn(async (filePath: string): Promise<void> => {
-    if (!projectId) {
+    if (!projectId || isSupportedTerminalImagePreviewPath(filePath)) {
       return;
     }
-    const requestId = fileRequestSequencer.next();
-    setFileLoading(true);
-    setFileError(null);
-    setFilePreview(null);
-    try {
-      const payload = await getTerminalProjectPreviewFile(
-        apiBase,
-        token,
+    await previewQueries.queryClient.fetchQuery({
+      queryKey: terminalQueryKeys.previewFile({
+        scope: previewQueries.scope,
         projectId,
-        filePath,
-      );
-      if (!fileRequestSequencer.isCurrent(requestId)) {
-        return;
-      }
-      setFilePreview(payload);
-      setEditorContent(payload.content);
-      setLoadedContent(payload.content);
-      setLoadedMtimeMs(payload.mtimeMs);
-      setSaveError(null);
-      setSaveConflict(false);
-      setLastSavedAt(null);
-    } catch (error) {
-      if (!fileRequestSequencer.isCurrent(requestId)) {
-        return;
-      }
-      setFilePreview(null);
-      setFileError(handleRequestError(error));
-    } finally {
-      if (fileRequestSequencer.isCurrent(requestId)) {
-        setFileLoading(false);
-      }
-    }
+        path: filePath,
+      }),
+      queryFn: () =>
+        getTerminalProjectPreviewFile(apiBase, token, projectId, filePath),
+      staleTime: 0,
+    });
   });
 
   const loadDiff = useMemoizedFn(
@@ -240,129 +207,91 @@ export function useTerminalPreviewPanelData({
       if (!projectId) {
         return;
       }
-      const requestId = diffRequestSequencer.next();
-      setDiffLoading(true);
-      setDiffError(null);
-      try {
-        const payload = await getTerminalProjectPreviewFileDiff(
-          apiBase,
-          token,
+      await previewQueries.queryClient.fetchQuery({
+        queryKey: terminalQueryKeys.previewDiff({
+          scope: previewQueries.scope,
           projectId,
-          { path: filePath, kind },
-        );
-        if (!diffRequestSequencer.isCurrent(requestId)) {
-          return;
-        }
-        setFileDiff(payload);
-      } catch (error) {
-        if (!diffRequestSequencer.isCurrent(requestId)) {
-          return;
-        }
-        setFileDiff(null);
-        setDiffError(handleRequestError(error));
-      } finally {
-        if (diffRequestSequencer.isCurrent(requestId)) {
-          setDiffLoading(false);
-        }
-      }
+          path: filePath,
+          kind,
+        }),
+        queryFn: () =>
+          getTerminalProjectPreviewFileDiff(apiBase, token, projectId, {
+            path: filePath,
+            kind,
+          }),
+        staleTime: 0,
+      });
     },
   );
 
   const loadChanges = useMemoizedFn(
-    async (options?: {
-      reloadDiff?: boolean;
-      preserveMode?: boolean;
-    }): Promise<void> => {
+    async (options?: { preserveMode?: boolean }): Promise<void> => {
       if (!projectId) {
         return;
       }
-      const reloadDiff = options?.reloadDiff ?? true;
-      const preserveMode = options?.preserveMode ?? false;
-      const requestId = changesRequestSequencer.next();
-      setChangesLoading(true);
-      setChangesError(null);
-      try {
-        const payload = await getTerminalProjectPreviewGitChanges(
-          apiBase,
-          token,
+      const payload = await previewQueries.queryClient.fetchQuery({
+        queryKey: terminalQueryKeys.previewChanges(
+          previewQueries.scope,
           projectId,
-        );
-        if (!changesRequestSequencer.isCurrent(requestId)) {
-          return;
+        ),
+        queryFn: () =>
+          getTerminalProjectPreviewGitChanges(apiBase, token, projectId),
+        staleTime: 0,
+      });
+      const selected = resolveSelectedPreviewChange({
+        changes: payload,
+        selectedChangePath,
+        selectedChangeKind,
+      });
+      if (!selected) {
+        if (!options?.preserveMode) {
+          setProjectPreviewMode(projectId, "changes");
+          clearSelectedChange(projectId);
         }
-        setChanges(payload);
-        const selected = resolveSelectedPreviewChange({
-          changes: payload,
-          selectedChangePath: selectedChangePathRef.current,
-          selectedChangeKind: selectedChangeKindRef.current,
-        });
-        if (!selected) {
-          diffRequestSequencer.invalidate();
-          setFileDiff(null);
-          setDiffError(null);
-          setDiffLoading(false);
-          if (!preserveMode) {
-            setProjectPreviewMode(projectId, "changes");
-            clearSelectedChange(projectId);
-          }
-          return;
-        }
-
-        const selectedChanged =
-          selected.path !== selectedChangePathRef.current ||
-          selected.kind !== selectedChangeKindRef.current;
-        if (selectedChanged) {
-          if (!preserveMode) {
-            selectChange(projectId, selected.path, selected.kind);
-          }
-          return;
-        }
-        if (reloadDiff && !preserveMode) {
-          void loadDiff(selected.path, selected.kind);
-        }
-      } catch (error) {
-        if (!changesRequestSequencer.isCurrent(requestId)) {
-          return;
-        }
-        setChangesError(handleRequestError(error));
-      } finally {
-        if (changesRequestSequencer.isCurrent(requestId)) {
-          setChangesLoading(false);
-        }
+        return;
+      }
+      if (
+        !options?.preserveMode &&
+        (selected.path !== selectedChangePath ||
+          selected.kind !== selectedChangeKind)
+      ) {
+        selectChange(projectId, selected.path, selected.kind);
       }
     },
   );
 
-  useEffect(() => {
-    fileRequestSequencer.invalidate();
-    changesRequestSequencer.invalidate();
-    diffRequestSequencer.invalidate();
-    setSearchItems([]);
-    setSearchError(null);
-    setFilePreview(null);
-    setEditorContent("");
-    setLoadedContent("");
-    setLoadedMtimeMs(undefined);
-    setSaveLoading(false);
-    setSaveError(null);
-    setSaveConflict(false);
-    setLastSavedAt(null);
-    setFileError(null);
-    setChanges(null);
-    setChangesError(null);
-    setFileDiff(null);
-    setDiffError(null);
-  }, [
-    changesRequestSequencer,
-    diffRequestSequencer,
-    fileRequestSequencer,
-    projectId,
-  ]);
-
-  useEffect(() => {
-    selectedChangePathRef.current = selectedChangePath;
-    selectedChangeKindRef.current = selectedChangeKind;
-  }, [selectedChangeKind, selectedChangePath]);
+  const clearFilePreview = useMemoizedFn((filePath?: string) => {
+    const path = filePath ?? selectedFilePath;
+    if (!projectId || !path) {
+      return;
+    }
+    previewQueries.queryClient.removeQueries({
+      queryKey: terminalQueryKeys.previewFile({
+        scope: previewQueries.scope,
+        projectId,
+        path,
+      }),
+      exact: true,
+    });
+  });
+  const clearFileDiff = useMemoizedFn(
+    (filePath?: string, kind?: TerminalPreviewChangeKind) => {
+      const path = filePath ?? selectedChangePath;
+      const changeKind = kind ?? selectedChangeKind;
+      if (!projectId || !path || !changeKind) {
+        return;
+      }
+      previewQueries.queryClient.removeQueries({
+        queryKey: terminalQueryKeys.previewDiff({
+          scope: previewQueries.scope,
+          projectId,
+          path,
+          kind: changeKind,
+        }),
+        exact: true,
+      });
+    },
+  );
 
   useEffect(() => {
     if (!projectId || !hasProjectPath || mode) {
@@ -371,131 +300,12 @@ export function useTerminalPreviewPanelData({
     setProjectPreviewMode(projectId, "changes");
   }, [hasProjectPath, mode, projectId, setProjectPreviewMode]);
 
-  useEffect(() => {
-    if ((mode !== "file" && mode !== "explorer") || !selectedFilePath) {
-      return;
-    }
-    if (isSupportedTerminalImagePreviewPath(selectedFilePath)) {
-      fileRequestSequencer.invalidate();
-      setFilePreview(null);
-      setFileError(null);
-      setFileLoading(false);
-      return;
-    }
-    void loadFile(selectedFilePath);
-  }, [fileRequestSequencer, loadFile, mode, selectedFilePath]);
-
-  useEffect(() => {
-    if (mode !== "changes" || !hasProjectPath || !projectId) {
-      return;
-    }
-    void loadChanges({
-      reloadDiff:
-        !selectedChangePathRef.current || !selectedChangeKindRef.current,
-    });
-  }, [hasProjectPath, loadChanges, mode, projectId]);
-
-  useEffect(() => {
-    if (mode !== "changes" || !selectedChangePath || !selectedChangeKind) {
-      return;
-    }
-    void loadDiff(selectedChangePath, selectedChangeKind);
-  }, [loadDiff, mode, selectedChangeKind, selectedChangePath]);
-
-  useEffect(() => {
-    if (mode !== "file" || !projectId || absoluteInput) {
-      setSearchItems([]);
-      setSearchLoading(false);
-      return;
-    }
-    const abort = new AbortController();
-    setSearchItems([]);
-    const timeoutId = window.setTimeout(() => {
-      setSearchLoading(true);
-      setSearchError(null);
-      searchTerminalProjectPreviewFiles(apiBase, token, projectId, {
-        query,
-        limit: 50,
-      })
-        .then((payload) => {
-          if (!abort.signal.aborted) {
-            setSearchItems(payload.items);
-          }
-        })
-        .catch((error: unknown) => {
-          if (!abort.signal.aborted) {
-            setSearchError(handleRequestError(error));
-          }
-        })
-        .finally(() => {
-          if (!abort.signal.aborted) {
-            setSearchLoading(false);
-          }
-        });
-    }, 250);
-
-    return () => {
-      abort.abort();
-      window.clearTimeout(timeoutId);
-    };
-  }, [
-    absoluteInput,
-    apiBase,
-    handleRequestError,
-    mode,
-    projectId,
-    query,
-    token,
-  ]);
-
-  const saveFile = useMemoizedFn(
-    async (options?: { overwrite?: boolean }): Promise<void> => {
-      if (
-        !projectId ||
-        !filePreview ||
-        !isFileEditable ||
-        saveLoading ||
-        loadedMtimeMs === undefined
-      ) {
-        return;
-      }
-      setSaveLoading(true);
-      setSaveError(null);
-      setSaveConflict(false);
-      try {
-        const payload = await saveTerminalProjectPreviewFile(
-          apiBase,
-          token,
-          projectId,
-          {
-            path: filePreview.path,
-            content: editorContent,
-            expectedMtimeMs: loadedMtimeMs,
-            overwrite: options?.overwrite,
-          },
-        );
-        setFilePreview(payload);
-        setEditorContent(payload.content);
-        setLoadedContent(payload.content);
-        setLoadedMtimeMs(payload.mtimeMs);
-        setLastSavedAt(Date.now());
-      } catch (error) {
-        if (error instanceof HttpError && error.status === 409) {
-          setSaveConflict(true);
-        }
-        setSaveError(handleRequestError(error));
-      } finally {
-        setSaveLoading(false);
-      }
-    },
-  );
-
   useTerminalPreviewPanelKeyboardEffects({
     expanded,
     setExpanded,
     isFileEditable,
-    saveFile: () => void saveFile(),
-    isDirty,
+    saveFile: () => void editor.saveFile(),
+    isDirty: editor.isDirty,
     pathCopiedTimeoutRef,
   });
 
@@ -510,7 +320,6 @@ export function useTerminalPreviewPanelData({
       }),
     [fileDiff, filePreview, mode, selectedChangePath, selectedFilePath],
   );
-
   const copyPath = useMemo(
     () =>
       getTerminalPreviewCopyPath({
@@ -522,33 +331,12 @@ export function useTerminalPreviewPanelData({
       }),
     [activeProject, fileDiff, filePreview, mode, selectedPath],
   );
-
   useEffect(() => {
     setPathCopied(false);
   }, [copyPath]);
 
   const refreshFileSearch = useMemoizedFn(async (): Promise<void> => {
-    if (!projectId || absoluteInput) {
-      return;
-    }
-    setSearchLoading(true);
-    setSearchError(null);
-    try {
-      const payload = await searchTerminalProjectPreviewFiles(
-        apiBase,
-        token,
-        projectId,
-        {
-          query,
-          limit: 50,
-        },
-      );
-      setSearchItems(payload.items);
-    } catch (error) {
-      setSearchError(handleRequestError(error));
-    } finally {
-      setSearchLoading(false);
-    }
+    await previewQueries.search.refetch();
   });
 
   return {
@@ -563,7 +351,6 @@ export function useTerminalPreviewPanelData({
     setOpenFileQuery,
     openFileInStore,
     selectChange,
-    clearSelectedChange,
     setMarkdownViewModeInStore,
     setMarkdownSplitSourceWidthPct,
     setSvgViewModeInStore,
@@ -577,42 +364,35 @@ export function useTerminalPreviewPanelData({
     markdownSplitSourceWidthPct,
     svgViewMode,
     changesViewMode,
-    searchItems,
-    searchLoading,
-    searchError,
+    searchItems: previewQueries.search.data?.items ?? EMPTY_SEARCH_ITEMS,
+    searchLoading:
+      previewQueries.search.isFetching || previewQueries.searchPending,
+    searchError: previewQueries.search.error
+      ? handleRequestError(previewQueries.search.error)
+      : null,
     filePreview,
-    setFilePreview,
-    editorContent,
-    setEditorContent,
-    loadedContent,
-    setLoadedContent,
-    loadedMtimeMs,
-    setLoadedMtimeMs,
-    saveLoading,
-    setSaveLoading,
-    saveError,
-    setSaveError,
-    saveConflict,
-    setSaveConflict,
-    lastSavedAt,
-    setLastSavedAt,
-    fileLoading,
-    setFileLoading,
-    fileError,
-    setFileError,
+    setFilePreview: setCachedFile,
+    editorContent: editor.editorContent,
+    setEditorContent: editor.setEditorContent,
+    loadedMtimeMs: editor.loadedMtimeMs,
+    saveLoading: editor.savePending,
+    saveError: editor.saveError,
+    saveConflict: editor.saveConflict,
+    lastSavedAt: editor.lastSavedAt,
+    fileLoading: previewQueries.file.isFetching,
+    fileError: previewQueries.file.error
+      ? handleRequestError(previewQueries.file.error)
+      : null,
     changes,
-    changesLoading,
-    changesError,
+    changesLoading: previewQueries.changes.isFetching,
+    changesError: previewQueries.changes.error
+      ? handleRequestError(previewQueries.changes.error)
+      : null,
     fileDiff,
-    setFileDiff,
-    diffLoading,
-    setDiffLoading,
-    diffError,
-    setDiffError,
-    fileRequestSequencer,
-    diffRequestSequencer,
-    selectedChangePathRef,
-    selectedChangeKindRef,
+    diffLoading: previewQueries.diff.isFetching,
+    diffError: previewQueries.diff.error
+      ? handleRequestError(previewQueries.diff.error)
+      : null,
     assetRefreshKey,
     setAssetRefreshKey,
     markdownScrollRatio,
@@ -638,13 +418,17 @@ export function useTerminalPreviewPanelData({
     panelWidth,
     fileKind,
     isFileEditable,
-    isDirty,
+    isDirty: editor.isDirty,
     confirmDiscardDraft,
     handleRequestError,
     loadFile,
     loadDiff,
     loadChanges,
-    saveFile,
+    saveFile: editor.saveFile,
+    replaceLoadedFile: editor.replaceLoadedFile,
+    clearEditor: editor.clearEditor,
+    clearFilePreview,
+    clearFileDiff,
     selectedPath,
     copyPath,
     refreshFileSearch,

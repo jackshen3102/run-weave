@@ -1,16 +1,13 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal } from "@xterm/xterm";
 import {
   scrollTerminalToBottom,
   type TerminalBottomState,
 } from "@runweave/common/terminal";
-import type {
-  TerminalModeState,
-  TerminalPanelWorkspace,
-  TerminalState,
-} from "@runweave/shared";
+import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
+import type { TerminalState } from "@runweave/shared/terminal/state";
+import type { TerminalModeState } from "@runweave/shared/terminal/websocket";
 import type { ClientMode } from "../../features/client-mode";
 import {
   applyTerminalDraftInput,
@@ -23,8 +20,13 @@ import {
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { useTerminalConnection } from "../../features/terminal/use-terminal-connection";
+import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
 import { scheduleTerminalViewportRefresh } from "../../features/terminal/viewport-refresh";
 import { sendTerminalInput as sendTerminalInputRequest } from "../../services/terminal";
+import { useTerminalSearch } from "./surface/use-terminal-search";
+import { TerminalFloatingComposer } from "./terminal-floating-composer";
+import { TerminalMobileControls } from "./terminal-mobile-controls";
+import { TerminalSearchToolbar } from "./terminal-search-toolbar";
 import { TerminalSurfaceLayout } from "./terminal-surface-layout";
 import { useTerminalEmulator } from "./use-terminal-emulator";
 import { useTerminalOutputStream } from "./use-terminal-output-stream";
@@ -34,23 +36,17 @@ import {
   TERMINAL_RESIZE_DEBOUNCE_MS,
   type TerminalImeCommit,
   type PastedImageReference,
-  type SearchDirection,
-  type TerminalSearchOptions,
-  type TerminalSearchResults,
 } from "./terminal-surface-utils";
 
 interface TerminalSurfaceProps {
   active: boolean;
-  apiBase: string;
   terminalSessionId: string;
-  token: string;
   activeCommand?: string | null;
   clientMode?: ClientMode;
   layoutVersion?: string;
   paneWorkspace?: TerminalPanelWorkspace | null;
   sessionStatus?: "running" | "exited";
   terminalState?: TerminalState;
-  onAuthExpired?: () => void;
   onResizePane?: (
     panelId: string,
     direction: "left" | "right" | "up" | "down",
@@ -61,19 +57,17 @@ interface TerminalSurfaceProps {
 
 export function TerminalSurface({
   active,
-  apiBase,
   terminalSessionId,
-  token,
   activeCommand = null,
   clientMode = "desktop",
   layoutVersion = "default",
   paneWorkspace = null,
   sessionStatus = "running",
   terminalState,
-  onAuthExpired,
   onResizePane,
   onViewportResize,
 }: TerminalSurfaceProps) {
+  const { apiBase, onAuthExpired, token } = useTerminalRuntime();
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const createBrowserTab = useTerminalPreviewStore(
@@ -81,8 +75,6 @@ export function TerminalSurface({
   );
   const openBrowser = useTerminalPreviewStore((state) => state.openBrowser);
   const refreshTerminalViewportRef = useRef<(() => void) | null>(null);
-  const searchAddonRef = useRef<SearchAddon | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeRef = useRef(active);
   const onViewportResizeRef = useRef(onViewportResize);
   const onAuthExpiredRef = useRef(onAuthExpired);
@@ -123,42 +115,30 @@ export function TerminalSurface({
   const [floatingDraft, setFloatingDraft] = useState("");
   const [draftMirrorSupported, setDraftMirrorSupported] = useState(true);
   const [mobileKeybarOpen, setMobileKeybarOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] =
-    useState<TerminalSearchResults | null>(null);
   const [terminalAtBottom, setTerminalAtBottom] = useState(true);
   const [hasNewOutputBelow, setHasNewOutputBelow] = useState(false);
   const [tmuxScrollbackActive, setTmuxScrollbackActive] = useState(false);
-  const [searchOptions, setSearchOptions] = useState<TerminalSearchOptions>({
-    caseSensitive: false,
-    wholeWord: false,
-    regex: false,
-  });
+  const search = useTerminalSearch({ active, clientMode, terminalRef });
 
-  const {
-    onOutput,
-    onSnapshot,
-    renderTerminalSnapshot,
-    replayDeferredOutput,
-  } = useTerminalOutputStream({
-    activeRef,
-    deferredOutputRef,
-    deferredSnapshotRef,
-    hasDeferredOutputRef,
-    hasRenderedSnapshotRef,
-    lastInputSentAtRef,
-    outputSequenceRef,
-    refreshTerminalViewportRef,
-    requiresSnapshotRestoreRef,
-    setHasNewOutputBelow,
-    setTerminalAtBottom,
-    setTmuxScrollbackActive,
-    terminalRef,
-    terminalFrameRef,
-    terminalSessionId,
-    websocketContentVersionRef,
-  });
+  const { onOutput, onSnapshot, renderTerminalSnapshot, replayDeferredOutput } =
+    useTerminalOutputStream({
+      activeRef,
+      deferredOutputRef,
+      deferredSnapshotRef,
+      hasDeferredOutputRef,
+      hasRenderedSnapshotRef,
+      lastInputSentAtRef,
+      outputSequenceRef,
+      refreshTerminalViewportRef,
+      requiresSnapshotRestoreRef,
+      setHasNewOutputBelow,
+      setTerminalAtBottom,
+      setTmuxScrollbackActive,
+      terminalRef,
+      terminalFrameRef,
+      terminalSessionId,
+      websocketContentVersionRef,
+    });
 
   const { error, sendInput, sendResize, runtimeKind } = useTerminalConnection({
     apiBase,
@@ -197,7 +177,7 @@ export function TerminalSurface({
     activeCommand,
     bufferType,
     clientMode,
-    searchOpen,
+    searchOpen: search.open,
     sessionRunning: sessionStatus === "running",
     terminalState,
   });
@@ -252,22 +232,18 @@ export function TerminalSurface({
       const draftToReplay = floatingDraft;
       const sendSequence = () => {
         floatingDraftSyncPendingRef.current = true;
-        void sendTerminalInputRequest(
-          apiBase,
-          token,
-          terminalSessionId,
-          {
-            data: draftToReplay,
-            mode: "prompt_replace",
-            submit: shouldSubmit,
-            ...(paneWorkspace?.activePanelId
-              ? { panelId: paneWorkspace.activePanelId }
-              : {}),
-          },
-        )
+        void sendTerminalInputRequest(apiBase, token, terminalSessionId, {
+          data: draftToReplay,
+          mode: "prompt_replace",
+          submit: shouldSubmit,
+          ...(paneWorkspace?.activePanelId
+            ? { panelId: paneWorkspace.activePanelId }
+            : {}),
+        })
           .then(() => {
             floatingDraftSyncPendingRef.current = false;
-            const draftStillCurrent = floatingDraftRef.current === draftToReplay;
+            const draftStillCurrent =
+              floatingDraftRef.current === draftToReplay;
             if (!draftStillCurrent) {
               return;
             }
@@ -300,12 +276,10 @@ export function TerminalSurface({
 
   const requestTmuxExitCopyMode = useMemoizedFn(() => {
     const sendExitRequest = () => {
-      void sendTerminalInputRequest(
-        apiBase,
-        token,
-        terminalSessionId,
-        { data: "", mode: "tmux_exit_copy_mode" },
-      );
+      void sendTerminalInputRequest(apiBase, token, terminalSessionId, {
+        data: "",
+        mode: "tmux_exit_copy_mode",
+      });
     };
 
     sendExitRequest();
@@ -350,33 +324,6 @@ export function TerminalSurface({
 
     handleScrollToBottom();
   });
-
-  const clearSearch = useMemoizedFn(() => {
-    setSearchResults(null);
-    searchAddonRef.current?.clearDecorations();
-    searchAddonRef.current?.clearActiveDecoration();
-  });
-
-  const runSearch = useMemoizedFn(
-    (direction: SearchDirection, query = searchQuery) => {
-      if (!query) {
-        clearSearch();
-        return;
-      }
-
-      const searchAddon = searchAddonRef.current;
-      if (!searchAddon) {
-        return;
-      }
-
-      if (direction === "previous") {
-        searchAddon.findPrevious(query, searchOptions);
-        return;
-      }
-
-      searchAddon.findNext(query, searchOptions);
-    },
-  );
 
   useLayoutEffect(() => {
     activeRef.current = active;
@@ -438,12 +385,12 @@ export function TerminalSurface({
     openTerminalLinkRef,
     refreshTerminalViewportRef,
     runtimeKindRef,
-    searchAddonRef,
+    searchAddonRef: search.addonRef,
     sendResize,
     sendTerminalInput,
     setPasteError,
     setPastedImages,
-    setSearchResults,
+    setSearchResults: search.setResults,
     terminalContainerRef,
     terminalRef,
     terminalSessionId,
@@ -489,69 +436,6 @@ export function TerminalSurface({
   });
 
   useEffect(() => {
-    if (!searchOpen) {
-      return;
-    }
-
-    const frameId = requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-      searchInputRef.current?.select();
-    });
-
-    return () => {
-      cancelAnimationFrame(frameId);
-    };
-  }, [searchOpen]);
-
-  useEffect(() => {
-    if (!searchOpen) {
-      clearSearch();
-      return;
-    }
-
-    runSearch("next");
-  }, [clearSearch, runSearch, searchOpen, searchOptions, searchQuery]);
-
-  useEffect(() => {
-    if (!active) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (clientMode === "mobile") {
-        return;
-      }
-
-      const openSearch =
-        (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f";
-      if (openSearch) {
-        event.preventDefault();
-        setSearchOpen(true);
-        return;
-      }
-
-      if (event.key === "Escape" && searchOpen) {
-        event.preventDefault();
-        setSearchOpen(false);
-        terminalRef.current?.focus();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [active, clientMode, searchOpen]);
-
-  useEffect(() => {
-    if (clientMode !== "mobile") {
-      return;
-    }
-
-    setSearchOpen(false);
-  }, [clientMode]);
-
-  useEffect(() => {
     if (active && clientMode === "mobile") {
       return;
     }
@@ -565,7 +449,8 @@ export function TerminalSurface({
     floatingComposerEligible &&
     draftMirrorSupported &&
     showScrollToBottomControl;
-  const floatingComposerVisible = floatingComposerAvailable && floatingComposerOpen;
+  const floatingComposerVisible =
+    floatingComposerAvailable && floatingComposerOpen;
   const showFloatingComposerTrigger =
     floatingComposerAvailable && !floatingComposerOpen;
 
@@ -622,65 +507,78 @@ export function TerminalSurface({
     active && clientMode !== "mobile" && Boolean(onResizePane);
   const showFloatingComposerScrollButton =
     floatingComposerVisible && (!terminalAtBottom || tmuxScrollbackActive);
+  const scrollButtonMode = showFloatingComposerScrollButton
+    ? "floating"
+    : showScrollToBottomControl && !floatingComposerVisible
+      ? "legacy"
+      : "none";
 
   return (
     <TerminalSurfaceLayout
       active={active}
-      clientMode={clientMode}
-      error={error}
-      mobileKeybarOpen={mobileKeybarOpen}
-      pasteError={pasteError}
+      error={error ?? pasteError}
       pastedImages={pastedImages}
       paneWorkspace={showPaneResizeHandle ? paneWorkspace : null}
-      searchInputRef={searchInputRef}
-      searchOpen={searchOpen}
-      searchOptions={searchOptions}
-      searchQuery={searchQuery}
-      searchResults={searchResults}
-      floatingComposerDraft={floatingDraft}
-      floatingComposerDiagnostics={{
-        activeCommand,
-        bottomOffsetRows,
-        bufferType,
-        draftMirrorSupported,
-        floatingComposerEligible,
-        sessionStatus,
-        terminalAgent: terminalState?.agent ?? null,
-        terminalAtBottom,
-        terminalState: terminalState?.state ?? null,
-        tmuxScrollbackActive,
-      }}
-      showFloatingComposerTrigger={showFloatingComposerTrigger}
-      floatingComposerVisible={floatingComposerVisible}
-      showMobileKeybarToggle={showMobileKeybarToggle}
-      showScrollToBottomButton={
-        showScrollToBottomControl && !floatingComposerVisible
+      toolbar={
+        showTerminalToolbar ? (
+          <TerminalSearchToolbar
+            inputRef={search.inputRef}
+            open={search.open}
+            query={search.query}
+            results={search.results}
+            options={search.options}
+            onQueryChange={search.setQuery}
+            onOptionsChange={search.setOptions}
+            onRunSearch={search.run}
+            onOpenChange={search.setOpen}
+            onCloseFocus={() => terminalRef.current?.focus()}
+          />
+        ) : null
       }
-      showFloatingComposerScrollButton={showFloatingComposerScrollButton}
-      showTerminalToolbar={showTerminalToolbar}
+      mobileControls={
+        showMobileKeybarToggle ? (
+          <TerminalMobileControls
+            active={active}
+            open={mobileKeybarOpen}
+            terminalRef={terminalRef}
+            onOpenChange={setMobileKeybarOpen}
+            onSendInput={sendTerminalInput}
+          />
+        ) : null
+      }
+      controls={
+        <TerminalFloatingComposer
+          diagnostics={{
+            activeCommand,
+            bottomOffsetRows,
+            bufferType,
+            draftMirrorSupported,
+            eligible: floatingComposerEligible,
+            sessionStatus,
+            terminalAgent: terminalState?.agent ?? null,
+            terminalAtBottom,
+            terminalState: terminalState?.state ?? null,
+            tmuxScrollbackActive,
+          }}
+          draft={floatingDraft}
+          hasNewOutputBelow={hasNewOutputBelow}
+          scrollButtonMode={scrollButtonMode}
+          showTrigger={showFloatingComposerTrigger}
+          terminalRef={terminalRef}
+          visible={floatingComposerVisible}
+          onClose={() => {
+            setFloatingComposerOpen(false);
+            requestAnimationFrame(() => terminalRef.current?.focus());
+          }}
+          onDraftChange={handleFloatingDraftChange}
+          onOpen={() => setFloatingComposerOpen(true)}
+          onScrollToBottom={handleFloatingComposerScrollToBottom}
+          onSend={handleFloatingComposerSend}
+        />
+      }
       terminalContainerRef={terminalContainerRef}
       terminalRef={terminalRef}
-      hasNewOutputBelow={hasNewOutputBelow}
-      onRunSearch={runSearch}
       onResizePane={onResizePane}
-      onSearchOpenChange={setSearchOpen}
-      onSearchOptionsChange={setSearchOptions}
-      onSearchQueryChange={setSearchQuery}
-      onFloatingComposerClose={() => {
-        setFloatingComposerOpen(false);
-        requestAnimationFrame(() => {
-          terminalRef.current?.focus();
-        });
-      }}
-      onSendInput={sendTerminalInput}
-      onFloatingComposerDraftChange={handleFloatingDraftChange}
-      onFloatingComposerOpen={() => {
-        setFloatingComposerOpen(true);
-      }}
-      onFloatingComposerScrollToBottom={handleFloatingComposerScrollToBottom}
-      onFloatingComposerSend={handleFloatingComposerSend}
-      onMobileKeybarOpenChange={setMobileKeybarOpen}
-      onScrollToBottom={handleScrollToBottom}
     />
   );
 }

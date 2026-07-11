@@ -2,12 +2,7 @@ import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type {
-  DiagnosticLogRecord,
-  DiagnosticLogRedactionReport,
-  DiagnosticLogResult,
-  DiagnosticLogStatus,
-} from "@runweave/shared";
+import type { DiagnosticLogRecord, DiagnosticLogRedactionReport, DiagnosticLogResult, DiagnosticLogStatus } from "@runweave/shared/diagnostic-logs";
 
 interface DiagnosticLogRecorderOptions {
   tempRoot?: string;

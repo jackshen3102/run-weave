@@ -1,10 +1,4 @@
-import type {
-  ChangePasswordRequest,
-  LoginRequest,
-  LoginResponse,
-  RefreshSessionRequest,
-  RefreshSessionResponse,
-} from "@runweave/shared";
+import type { ChangePasswordRequest, LoginRequest, LoginResponse, RefreshSessionRequest, RefreshSessionResponse } from "@runweave/shared/protocol";
 import { requestJson, requestVoid } from "./http";
 
 export async function login(

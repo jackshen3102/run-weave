@@ -1,4 +1,4 @@
-import type { AgentTeamRun, AgentTeamWorkerRole } from "@runweave/shared";
+import type { AgentTeamRun, AgentTeamWorkerRole } from "@runweave/shared/agent-team";
 
 export const AGENT_TEAM_POLL_INTERVAL_MS = 4000;
 

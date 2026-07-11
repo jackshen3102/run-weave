@@ -11,37 +11,48 @@ import { TerminalFileTreeItem } from "./terminal-file-tree-item";
 
 interface TerminalFileTreeProps {
   items: Record<string, TreeItem<FileTreeData>>;
-  expandedItems: Array<string | number>;
-  focusedItem: string | number | undefined;
-  selectedItems: Array<string | number>;
-  onExpandItem: (item: TreeItem<FileTreeData>) => void;
-  onCollapseItem: (item: TreeItem<FileTreeData>) => void;
-  onFocusItem: (item: TreeItem<FileTreeData>) => void;
-  onSelectItems: (items: Array<string | number>) => void;
-  onPrimaryAction: (item: TreeItem<FileTreeData>) => void;
-  onMissingItems: (itemIds: Array<string | number>) => void;
-  onFileClick: (relativePath: string) => void;
-  onDirectoryClick: (item: TreeItem<FileTreeData>) => void;
-  onRequestRenameFile: (relativePath: string) => void;
-  onRequestDeleteFile: (relativePath: string) => void;
+  view: {
+    expandedItems: Array<string | number>;
+    focusedItem: string | number | undefined;
+    selectedItems: Array<string | number>;
+  };
+  treeEvents: {
+    onExpandItem: (item: TreeItem<FileTreeData>) => void;
+    onCollapseItem: (item: TreeItem<FileTreeData>) => void;
+    onFocusItem: (item: TreeItem<FileTreeData>) => void;
+    onSelectItems: (items: Array<string | number>) => void;
+    onPrimaryAction: (item: TreeItem<FileTreeData>) => void;
+    onMissingItems: (itemIds: Array<string | number>) => void;
+  };
+  itemActions: {
+    onFileClick: (relativePath: string) => void;
+    onDirectoryClick: (item: TreeItem<FileTreeData>) => void;
+    onRequestRenameFile: (relativePath: string) => void;
+    onRequestDeleteFile: (relativePath: string) => void;
+  };
 }
 
 export function TerminalFileTree({
   items,
-  expandedItems,
-  focusedItem,
-  selectedItems,
-  onExpandItem,
-  onCollapseItem,
-  onFocusItem,
-  onSelectItems,
-  onPrimaryAction,
-  onMissingItems,
-  onFileClick,
-  onDirectoryClick,
-  onRequestRenameFile,
-  onRequestDeleteFile,
+  itemActions,
+  treeEvents,
+  view,
 }: TerminalFileTreeProps) {
+  const { expandedItems, focusedItem, selectedItems } = view;
+  const {
+    onCollapseItem,
+    onExpandItem,
+    onFocusItem,
+    onMissingItems,
+    onPrimaryAction,
+    onSelectItems,
+  } = treeEvents;
+  const {
+    onDirectoryClick,
+    onFileClick,
+    onRequestDeleteFile,
+    onRequestRenameFile,
+  } = itemActions;
   const [loadingDirs] = useState<Set<string>>(() => new Set());
 
   const viewState = useMemo(

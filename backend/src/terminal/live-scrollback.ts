@@ -1,7 +1,4 @@
-import {
-  TERMINAL_CLIENT_SCROLLBACK_LINES,
-  TERMINAL_LIVE_SCROLLBACK_BYTES,
-} from "@runweave/shared";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES, TERMINAL_LIVE_SCROLLBACK_BYTES } from "@runweave/shared/terminal-limits";
 import {
   createScrollbackBuffer,
   readScrollbackBuffer,

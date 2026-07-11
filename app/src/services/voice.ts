@@ -1,7 +1,4 @@
-import type {
-  TranscribeVoiceRequest,
-  TranscribeVoiceResponse,
-} from "@runweave/shared";
+import type { TranscribeVoiceRequest, TranscribeVoiceResponse } from "@runweave/shared/voice";
 
 import { requestJson } from "./http";
 

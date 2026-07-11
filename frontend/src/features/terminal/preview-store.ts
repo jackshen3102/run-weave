@@ -1,131 +1,37 @@
 import { create } from "zustand";
 import type { StateCreator } from "zustand";
+import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
 import {
-  createTerminalBrowserDeviceState,
-  type TerminalBrowserDeviceState,
-  type TerminalPreviewChangeKind,
-} from "@runweave/shared";
+  createInitialTerminalBrowserState,
+  createTerminalPreviewBrowserActions,
+} from "./preview-browser-slice";
+import type {
+  TerminalChangesViewMode,
+  TerminalMarkdownViewMode,
+  TerminalPreviewMode,
+  TerminalPreviewProjectState,
+  TerminalPreviewStore,
+  TerminalSidecarTool,
+  TerminalSvgViewMode,
+} from "./preview-store-types";
 
-export type TerminalPreviewMode = "file" | "changes" | "explorer";
-export type TerminalMarkdownViewMode = "source" | "split" | "preview";
-export type TerminalSvgViewMode = "preview" | "source";
-export type TerminalChangesViewMode = "diff" | "preview";
-export type TerminalSidecarTool =
-  | "preview"
-  | "browser"
-  | "agent-team";
+export type {
+  TerminalBrowserTabState,
+  TerminalChangesViewMode,
+  TerminalMarkdownViewMode,
+  TerminalPreviewMode,
+  TerminalPreviewProjectState,
+  TerminalSidecarTool,
+  TerminalSvgViewMode,
+} from "./preview-store-types";
 
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
-const TERMINAL_SIDECAR_WIDTH_STORAGE_KEY =
-  "runweave.terminal.sidecar.width.v1";
-
-export interface TerminalBrowserTabState {
-  id: string;
-  browserGroupId?: string;
-  url: string;
-  addressInput: string;
-  title: string;
-  loading: boolean;
-  canGoBack: boolean;
-  canGoForward: boolean;
-  error?: string;
-  cdpProxyAttached?: boolean;
-  mcpActivityUntil?: number | null;
-  devtoolsOpen?: boolean;
-  deviceState: TerminalBrowserDeviceState;
-}
-
+const TERMINAL_SIDECAR_WIDTH_STORAGE_KEY = "runweave.terminal.sidecar.width.v1";
 export const DEFAULT_MARKDOWN_VIEW_MODE: TerminalMarkdownViewMode = "preview";
-
-interface TerminalPreviewUiState {
-  open: boolean;
-  widthPx?: number;
-  expanded: boolean;
-  activeTool: TerminalSidecarTool;
-}
-
-export interface TerminalPreviewProjectState {
-  mode: TerminalPreviewMode | null;
-  path?: string;
-  openFileQuery?: string;
-  selectedFilePath?: string;
-  selectedChangePath?: string;
-  selectedChangeKind?: TerminalPreviewChangeKind;
-  markdownViewMode?: TerminalMarkdownViewMode;
-  markdownSplitSourceWidthPct?: number;
-  svgViewMode?: TerminalSvgViewMode;
-  changesViewMode?: TerminalChangesViewMode;
-}
-
-interface TerminalPreviewStore {
-  ui: TerminalPreviewUiState;
-  projects: Record<string, TerminalPreviewProjectState>;
-  browser: {
-    tabs: TerminalBrowserTabState[];
-    activeTabId: string;
-  };
-  openPreview: (projectId: string, mode?: TerminalPreviewMode) => void;
-  openBrowser: () => void;
-  openAgentTeam: () => void;
-  closePreview: () => void;
-  setActiveTool: (tool: TerminalSidecarTool) => void;
-  setWidth: (widthPx: number) => void;
-  setExpanded: (expanded: boolean) => void;
-  updateProjectPreview: (
-    projectId: string,
-    updates: Partial<TerminalPreviewProjectState>,
-  ) => void;
-  setProjectPreviewMode: (
-    projectId: string,
-    mode: TerminalPreviewMode,
-  ) => void;
-  setOpenFileQuery: (projectId: string, query: string) => void;
-  openFile: (
-    projectId: string,
-    filePath: string,
-    mode?: Extract<TerminalPreviewMode, "file" | "explorer">,
-  ) => void;
-  selectChange: (
-    projectId: string,
-    filePath: string,
-    kind: TerminalPreviewChangeKind,
-  ) => void;
-  clearSelectedChange: (projectId: string) => void;
-  setMarkdownViewMode: (
-    projectId: string,
-    mode: TerminalMarkdownViewMode,
-  ) => void;
-  setMarkdownSplitSourceWidthPct: (projectId: string, widthPct: number) => void;
-  setSvgViewMode: (projectId: string, mode: TerminalSvgViewMode) => void;
-  setChangesViewMode: (projectId: string, mode: TerminalChangesViewMode) => void;
-  removeProjectPreview: (projectId: string) => void;
-  createBrowserTab: (url?: string) => void;
-  addProxyBrowserTab: (
-    tabId: string,
-    browserGroupId: string | undefined,
-    url: string,
-    title: string,
-    openerTabId?: string,
-  ) => void;
-  replaceBrowserTabs: (
-    tabs: TerminalBrowserTabState[],
-    activeTabId?: string,
-  ) => void;
-  closeBrowserTab: (tabId: string) => void;
-  setActiveBrowserTab: (tabId: string) => void;
-  reorderBrowserTabs: (fromIndex: number, toIndex: number) => void;
-  updateBrowserTab: (
-    tabId: string,
-    updates: Partial<TerminalBrowserTabState>,
-  ) => void;
-}
 
 const DEFAULT_PROJECT_STATE: TerminalPreviewProjectState = {
   mode: null,
 };
-const DEFAULT_BROWSER_URL = "";
-const DEFAULT_BROWSER_TAB_TITLE = "New Tab";
-let browserTabSequence = 1;
 
 function getMaxSidecarWidth(): number | null {
   if (typeof window === "undefined") {
@@ -180,124 +86,9 @@ function persistSidecarWidth(widthPx: number): void {
   }
 }
 
-function createBrowserTabState(url = DEFAULT_BROWSER_URL): TerminalBrowserTabState {
-  const id = `browser-tab-${browserTabSequence}`;
-  browserTabSequence += 1;
-  const browserUrl = normalizeBrowserTabUrl(url);
-  return {
-    id,
-    url: browserUrl,
-    addressInput: browserUrl,
-    title: labelBrowserUrl(browserUrl),
-    loading: false,
-    canGoBack: false,
-    canGoForward: false,
-    deviceState: createTerminalBrowserDeviceState("desktop"),
-  };
-}
-
-function createUniqueBrowserTabState(
-  existingTabs: TerminalBrowserTabState[],
-  url?: string,
-): TerminalBrowserTabState {
-  let nextTab = createBrowserTabState(url);
-  while (existingTabs.some((tab) => tab.id === nextTab.id)) {
-    nextTab = createBrowserTabState(url);
-  }
-  return nextTab;
-}
-
-// Insert a new tab immediately to the right of the anchor tab, matching browser
-// behavior where an opened tab appears next to the one that spawned it. Falls
-// back to appending at the end when the anchor is missing (e.g. agent-created
-// tabs with no DOM opener).
-function insertTabAfter(
-  tabs: TerminalBrowserTabState[],
-  anchorId: string | undefined,
-  newTab: TerminalBrowserTabState,
-): TerminalBrowserTabState[] {
-  const anchorIndex = anchorId
-    ? tabs.findIndex((tab) => tab.id === anchorId)
-    : -1;
-  if (anchorIndex === -1) {
-    return [...tabs, newTab];
-  }
-  const nextTabs = [...tabs];
-  nextTabs.splice(anchorIndex + 1, 0, newTab);
-  return nextTabs;
-}
-
-function labelBrowserUrl(url: string): string {
-  if (!url || url === "about:blank") {
-    return DEFAULT_BROWSER_TAB_TITLE;
-  }
-  try {
-    const parsed = new URL(url);
-    if (
-      parsed.hostname === "127.0.0.1" ||
-      parsed.hostname === "localhost"
-    ) {
-      return `Local ${parsed.port || parsed.protocol.replace(":", "")}`;
-    }
-    return parsed.hostname || url;
-  } catch {
-    return url || DEFAULT_BROWSER_TAB_TITLE;
-  }
-}
-
-function normalizeBrowserTabUrl(url: string): string {
-  return url === "about:blank" ? "" : url;
-}
-
-function sameBrowserDeviceState(
-  current: TerminalBrowserDeviceState,
-  next: TerminalBrowserDeviceState,
-): boolean {
-  const currentViewport = current.viewport;
-  const nextViewport = next.viewport;
-  const sameViewport =
-    currentViewport === nextViewport ||
-    (currentViewport !== null &&
-      nextViewport !== null &&
-      currentViewport.width === nextViewport.width &&
-      currentViewport.height === nextViewport.height &&
-      currentViewport.deviceScaleFactor === nextViewport.deviceScaleFactor);
-  return (
-    current.presetId === next.presetId &&
-    current.label === next.label &&
-    current.mobile === next.mobile &&
-    sameViewport
-  );
-}
-
-function hasBrowserTabChanges(
-  tab: TerminalBrowserTabState,
-  updates: Partial<TerminalBrowserTabState>,
-): boolean {
-  for (const key of Object.keys(updates) as Array<
-    keyof TerminalBrowserTabState
-  >) {
-    if (key === "deviceState") {
-      const nextDeviceState = updates.deviceState;
-      if (
-        nextDeviceState === undefined ||
-        !sameBrowserDeviceState(tab.deviceState, nextDeviceState)
-      ) {
-        return true;
-      }
-      continue;
-    }
-    const nextValue = updates[key];
-    if (!Object.is(tab[key], nextValue)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-const DEFAULT_BROWSER_TAB = createBrowserTabState();
-
-const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => ({
+const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
+  set,
+) => ({
   ui: {
     open: true,
     widthPx: readStoredSidecarWidth(),
@@ -305,10 +96,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
     activeTool: "preview",
   },
   projects: {},
-  browser: {
-    tabs: [DEFAULT_BROWSER_TAB],
-    activeTabId: DEFAULT_BROWSER_TAB.id,
-  },
+  browser: createInitialTerminalBrowserState(),
   openPreview: (projectId: string, mode?: TerminalPreviewMode) => {
     set((state: TerminalPreviewStore) => {
       const currentProject = state.projects[projectId] ?? DEFAULT_PROJECT_STATE;
@@ -497,167 +285,7 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (set) => 
       return { projects: nextProjects };
     });
   },
-  createBrowserTab: (url?: string) => {
-    set((state: TerminalPreviewStore) => {
-      const nextTab = createUniqueBrowserTabState(state.browser.tabs, url);
-      return {
-        browser: {
-          tabs: insertTabAfter(
-            state.browser.tabs,
-            state.browser.activeTabId,
-            nextTab,
-          ),
-          activeTabId: nextTab.id,
-        },
-      };
-    });
-  },
-  addProxyBrowserTab: (
-    tabId: string,
-    browserGroupId: string | undefined,
-    url: string,
-    title: string,
-    openerTabId?: string,
-  ) => {
-    set((state: TerminalPreviewStore) => {
-      if (state.browser.tabs.some((tab) => tab.id === tabId)) {
-        return {
-          browser: {
-            ...state.browser,
-            tabs: state.browser.tabs.map((tab) =>
-              tab.id === tabId && browserGroupId
-                ? { ...tab, browserGroupId }
-                : tab,
-            ),
-          },
-        };
-      }
-      const browserUrl = normalizeBrowserTabUrl(url);
-      const browserTitle = title.trim() === "about:blank" ? "" : title;
-      const nextTab: TerminalBrowserTabState = {
-        id: tabId,
-        browserGroupId,
-        url: browserUrl,
-        addressInput: browserUrl,
-        title: browserTitle || labelBrowserUrl(browserUrl),
-        loading: false,
-        canGoBack: false,
-        canGoForward: false,
-        deviceState: createTerminalBrowserDeviceState("desktop"),
-      };
-      return {
-        browser: {
-          tabs: insertTabAfter(state.browser.tabs, openerTabId, nextTab),
-          activeTabId: nextTab.id,
-        },
-      };
-    });
-  },
-  replaceBrowserTabs: (
-    tabs: TerminalBrowserTabState[],
-    activeTabId?: string,
-  ) => {
-    set((state: TerminalPreviewStore) => {
-      if (tabs.length === 0) {
-        return state;
-      }
-      const nextActiveTab = activeTabId
-        ? tabs.find((tab) => tab.id === activeTabId)
-        : undefined;
-      return {
-        browser: {
-          tabs,
-          activeTabId: nextActiveTab?.id ?? tabs[0]!.id,
-        },
-      };
-    });
-  },
-  reorderBrowserTabs: (fromIndex: number, toIndex: number) => {
-    set((state: TerminalPreviewStore) => {
-      const tabs = [...state.browser.tabs];
-      if (
-        fromIndex < 0 ||
-        fromIndex >= tabs.length ||
-        toIndex < 0 ||
-        toIndex >= tabs.length ||
-        fromIndex === toIndex
-      ) {
-        return state;
-      }
-      const [moved] = tabs.splice(fromIndex, 1);
-      tabs.splice(toIndex, 0, moved!);
-      return {
-        browser: {
-          ...state.browser,
-          tabs,
-        },
-      };
-    });
-  },
-  closeBrowserTab: (tabId: string) => {
-    set((state: TerminalPreviewStore) => {
-      const currentTabs = state.browser.tabs;
-      const closingIndex = currentTabs.findIndex((tab) => tab.id === tabId);
-      if (closingIndex === -1) {
-        return state;
-      }
-      const remainingTabs = currentTabs.filter((tab) => tab.id !== tabId);
-      const tabs =
-        remainingTabs.length > 0
-          ? remainingTabs
-          : [createUniqueBrowserTabState(currentTabs)];
-      const closingActiveTab = state.browser.activeTabId === tabId;
-      const nextActiveTab = closingActiveTab
-        ? (tabs[Math.min(closingIndex, tabs.length - 1)] as TerminalBrowserTabState)
-        : currentTabs.find((tab) => tab.id === state.browser.activeTabId);
-      return {
-        browser: {
-          tabs,
-          activeTabId: nextActiveTab?.id ?? tabs[0]!.id,
-        },
-      };
-    });
-  },
-  setActiveBrowserTab: (tabId: string) => {
-    set((state: TerminalPreviewStore) => {
-      if (!state.browser.tabs.some((tab) => tab.id === tabId)) {
-        return state;
-      }
-      return {
-        browser: {
-          ...state.browser,
-          activeTabId: tabId,
-        },
-      };
-    });
-  },
-  updateBrowserTab: (
-    tabId: string,
-    updates: Partial<TerminalBrowserTabState>,
-  ) => {
-    set((state: TerminalPreviewStore) => {
-      let changed = false;
-      const tabs = state.browser.tabs.map((tab) => {
-        if (tab.id !== tabId) {
-          return tab;
-        }
-        if (!hasBrowserTabChanges(tab, updates)) {
-          return tab;
-        }
-        changed = true;
-        return { ...tab, ...updates };
-      });
-      if (!changed) {
-        return state;
-      }
-      return {
-        browser: {
-          ...state.browser,
-          tabs,
-        },
-      };
-    });
-  },
+  ...createTerminalPreviewBrowserActions(set),
 });
 
 export const useTerminalPreviewStore = create<TerminalPreviewStore>()(

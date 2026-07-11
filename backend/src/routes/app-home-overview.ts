@@ -1,8 +1,5 @@
-import type {
-  AppHomeOverviewResponse,
-  AppHomeOverviewSession,
-  TerminalState,
-} from "@runweave/shared";
+import type { AppHomeOverviewResponse, AppHomeOverviewSession } from "@runweave/shared/terminal/session";
+import type { TerminalState } from "@runweave/shared/terminal/state";
 import { Router } from "express";
 import path from "node:path";
 import { logger } from "../logging";
@@ -15,9 +12,14 @@ import {
   getTerminalSessionAgent,
   type TerminalStateService,
 } from "../terminal/terminal-state-service";
-import { toProjectPayload, toSessionListItem } from "./terminal-route-payloads";
+import {
+  toProjectPayload,
+  toSessionListItem,
+} from "../terminal/application/payloads";
 
-type TerminalSession = ReturnType<TerminalSessionManager["listSessions"]>[number];
+type TerminalSession = ReturnType<
+  TerminalSessionManager["listSessions"]
+>[number];
 type DisplayStatusPayload = Pick<
   AppHomeOverviewSession,
   "displayStatus" | "displayStatusLabel" | "terminalState"
@@ -69,7 +71,9 @@ function resolveEffectivePreview(
   return session.preview?.trim() || undefined;
 }
 
-function resolveEffectiveThreadId(session: TerminalSession): string | undefined {
+function resolveEffectiveThreadId(
+  session: TerminalSession,
+): string | undefined {
   return getTerminalSessionAgent(session) === "codex"
     ? session.threadId
     : undefined;
@@ -209,7 +213,8 @@ async function updateSessionPreviewFromCodexThread(
     await terminalSessionManager.updateSessionPreview(session.id, preview);
   } catch (error) {
     appHomeLogger.warn("app.home-overview.codex-thread-preview.update-failed", {
-      message: "Failed to update Codex thread preview while building app home overview",
+      message:
+        "Failed to update Codex thread preview while building app home overview",
       terminalSessionId: session.id,
       threadId: session.threadId ?? null,
       error,
@@ -223,7 +228,8 @@ export async function buildAppHomeOverviewPayload(
 ): Promise<AppHomeOverviewResponse> {
   const sessions = await Promise.all(
     terminalSessionManager.listSessions().map(async (session) => {
-      const codexThreadSnapshot = await readCodexThreadOverviewSnapshot(session);
+      const codexThreadSnapshot =
+        await readCodexThreadOverviewSnapshot(session);
       await updateSessionPreviewFromCodexThread(
         terminalSessionManager,
         session,

@@ -1,26 +1,13 @@
 import { useMemoizedFn } from "ahooks";
-import {
-  type FormEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  type TerminalBrowserAnnotationState,
-  type TerminalBrowserDevicePresetId,
-  type TerminalBrowserProxyState,
-} from "@runweave/shared";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type TerminalBrowserDevicePresetId } from "@runweave/shared/terminal-browser-device";
 import { aiDiagnosticLog } from "../../features/diagnostic-logs/recorder";
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
-import {
-  createTerminalSessionClipboardImage,
-  sendTerminalInput,
-} from "../../services/terminal";
 import { useTerminalBrowserBounds } from "./use-terminal-browser-bounds";
 import { useTerminalBrowserHeaderRules } from "./use-terminal-browser-header-rules";
-import { buildBrowserAnnotationPrompt } from "./terminal-browser-annotation-prompt";
+import { useTerminalBrowserAnnotations } from "./use-terminal-browser-annotations";
+import { useTerminalBrowserProxy } from "./use-terminal-browser-proxy";
 import {
   buildTabStateFromElectronSnapshot,
   buildTabUpdateFromElectronSnapshot,
@@ -74,32 +61,37 @@ export function useTerminalBrowserController({
   const loadedUrlByTabRef = useRef<Record<string, string>>({});
   const navigationSequenceByTabRef = useRef<Record<string, number>>({});
   const isElectron = window.electronAPI?.isElectron === true;
-  const [proxyState, setProxyState] =
-    useState<TerminalBrowserProxyState | null>(null);
-  const [proxySwitching, setProxySwitching] = useState(false);
-  const [proxyError, setProxyError] = useState<string | null>(null);
   const [electronTabsSynced, setElectronTabsSynced] = useState(!isElectron);
   const [deviceSwitching, setDeviceSwitching] = useState(false);
   const [headerRulesPanelOpen, setHeaderRulesPanelOpen] = useState(false);
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
-  const [annotationTabId, setAnnotationTabIdState] = useState<string | null>(null);
-  const annotationTabIdRef = useRef<string | null>(null);
-  const handledAnnotationSubmitRequestRef = useRef<string | null>(null);
-  const annotationSubmittingRef = useRef(false);
   const editingAddressTabIdRef = useRef<string | null>(null);
-  const [annotationState, setAnnotationState] =
-    useState<TerminalBrowserAnnotationState>({
-      active: false,
-      annotations: [],
-    });
-  const [annotationSubmitting, setAnnotationSubmitting] = useState(false);
-  const [annotationError, setAnnotationError] = useState<string | null>(null);
   const { headerError, headerRules, headerSaving, saveHeaderRules } =
     useTerminalBrowserHeaderRules(isElectron);
+  const {
+    error: proxyError,
+    state: proxyState,
+    switching: proxySwitching,
+    toggle: toggleProxy,
+  } = useTerminalBrowserProxy(isElectron);
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
     [activeTabId, tabs],
   );
+  const {
+    error: annotationError,
+    handleTabClosed: handleAnnotationTabClosed,
+    state: annotationState,
+    submit: submitAnnotations,
+    submitting: annotationSubmitting,
+    toggle: toggleAnnotations,
+  } = useTerminalBrowserAnnotations({
+    activeTabId: activeTab?.id ?? null,
+    apiBase,
+    isElectron,
+    terminalSessionId,
+    token,
+  });
   const activeTabUrl = activeTab?.url;
   const mobileDisabledReason = activeTab?.devtoolsOpen
     ? "Mobile mode unavailable while DevTools is open"
@@ -138,70 +130,6 @@ export function useTerminalBrowserController({
     },
   );
 
-  const setAnnotationTabId = (tabId: string | null): void => {
-    annotationTabIdRef.current = tabId;
-    setAnnotationTabIdState(tabId);
-  };
-
-  const submitAnnotationTab = useMemoizedFn(async (tabId: string): Promise<void> => {
-    setAnnotationSubmitting(true);
-    annotationSubmittingRef.current = true;
-    setAnnotationError(null);
-    try {
-      if (!terminalSessionId) {
-        setAnnotationError("Browser comments are ready, but no active terminal is available.");
-        return;
-      }
-      const submission =
-        await window.electronAPI?.terminalBrowserAnnotationSubmit?.(tabId);
-      if (!submission || submission.annotations.length === 0) {
-        setAnnotationError("No browser comments to submit.");
-        return;
-      }
-      let screenshotPath: string | null = null;
-      let submitWarning: string | null = null;
-      if (submission.screenshot) {
-        try {
-          const savedScreenshot = await createTerminalSessionClipboardImage(
-            apiBase,
-            token,
-            terminalSessionId,
-            submission.screenshot,
-          );
-          screenshotPath = savedScreenshot.filePath;
-        } catch (error) {
-          submitWarning =
-            error instanceof Error
-              ? `Browser comments were submitted, but saving the marker screenshot failed: ${error.message}`
-              : "Browser comments were submitted, but saving the marker screenshot failed.";
-        }
-      }
-      const prompt = buildBrowserAnnotationPrompt(submission, {
-        screenshotPath,
-      });
-      setAnnotationState({ active: false, annotations: [] });
-      setAnnotationTabId(null);
-      await sendTerminalInput(apiBase, token, terminalSessionId, {
-        data: prompt,
-        mode: "prompt_paste",
-        quickInputSource: "web_browser_annotation",
-      });
-      if (submitWarning) {
-        setAnnotationError(submitWarning);
-      }
-    } catch (error) {
-      setAnnotationError(
-        error instanceof Error
-          ? error.message
-          : "Failed to submit browser comments",
-      );
-    } finally {
-      handledAnnotationSubmitRequestRef.current = null;
-      annotationSubmittingRef.current = false;
-      setAnnotationSubmitting(false);
-    }
-  });
-
   const syncElectronTabs = useMemoizedFn(async (): Promise<void> => {
     try {
       const snapshots = await window.electronAPI?.terminalBrowserListTabs?.();
@@ -212,9 +140,7 @@ export function useTerminalBrowserController({
         for (const snapshot of snapshots) {
           loadedUrlByTabRef.current[snapshot.tabId] = snapshot.url;
         }
-        const activeSnapshot = snapshots.find(
-          (snapshot) => snapshot.active,
-        );
+        const activeSnapshot = snapshots.find((snapshot) => snapshot.active);
         replaceBrowserTabs(
           snapshots.map(buildTabStateFromElectronSnapshot),
           activeSnapshot?.tabId,
@@ -395,35 +321,6 @@ export function useTerminalBrowserController({
     if (!isElectron) {
       return;
     }
-    let cancelled = false;
-    const loadProxyState = async (): Promise<void> => {
-      try {
-        const state =
-          await window.electronAPI?.terminalBrowserGetProxyState?.();
-        if (!cancelled && state) {
-          setProxyState(state);
-          setProxyError(null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setProxyError(
-            error instanceof Error
-              ? error.message
-              : "Failed to load proxy state",
-          );
-        }
-      }
-    };
-    void loadProxyState();
-    return () => {
-      cancelled = true;
-    };
-  }, [isElectron]);
-
-  useEffect(() => {
-    if (!isElectron) {
-      return;
-    }
     void syncElectronTabs();
     return window.electronAPI?.onTerminalBrowserTabCreatedFromProxy?.(
       ({ tabId, browserGroupId, url, title, openerTabId }) => {
@@ -455,12 +352,9 @@ export function useTerminalBrowserController({
       delete navigationSequenceByTabRef.current[tabId];
       clearTabBounds(tabId);
       closeBrowserTab(tabId);
-      if (annotationTabIdRef.current === tabId) {
-        setAnnotationTabId(null);
-        setAnnotationState({ active: false, annotations: [] });
-      }
+      handleAnnotationTabClosed(tabId);
     });
-  }, [isElectron, closeBrowserTab, clearTabBounds]);
+  }, [handleAnnotationTabClosed, isElectron, closeBrowserTab, clearTabBounds]);
 
   useEffect(() => {
     if (!isElectron) {
@@ -488,124 +382,42 @@ export function useTerminalBrowserController({
     syncActiveTabBounds,
   ]);
 
-  useEffect(() => {
-    if (!isElectron) {
-      return;
-    }
-    return window.electronAPI?.onTerminalBrowserAnnotationUpdated?.(
-      ({ tabId, state }) => {
-        if (annotationTabIdRef.current === tabId || state.active) {
-          setAnnotationTabId(state.active ? tabId : null);
-          setAnnotationState(state);
-        }
-      },
-    );
-  }, [isElectron]);
-
-  useEffect(() => {
-    if (
-      !isElectron ||
-      !annotationState.active ||
-      !annotationTabId ||
-      !activeTabId ||
-      annotationTabId === activeTabId
-    ) {
-      return;
-    }
-    let cancelled = false;
-    void window.electronAPI
-      ?.terminalBrowserAnnotationStop?.(annotationTabId)
-      .then((state) => {
-        if (cancelled) {
-          return;
-        }
-        setAnnotationState(state ?? { active: false, annotations: [] });
-        setAnnotationTabId(null);
-        handledAnnotationSubmitRequestRef.current = null;
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setAnnotationError(
-            error instanceof Error
-              ? error.message
-              : "Failed to stop browser comments",
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTabId, annotationState.active, annotationTabId, isElectron]);
-
-  useEffect(() => {
-    if (!isElectron || !annotationState.active || !annotationTabId) {
-      return;
-    }
-    let cancelled = false;
-    const intervalId = window.setInterval(() => {
+  const reorderTabs = useMemoizedFn(
+    (fromIndex: number, toIndex: number): void => {
+      const currentTabs = useTerminalPreviewStore.getState().browser.tabs;
+      if (
+        fromIndex < 0 ||
+        fromIndex >= currentTabs.length ||
+        toIndex < 0 ||
+        toIndex >= currentTabs.length ||
+        fromIndex === toIndex
+      ) {
+        return;
+      }
+      const nextTabs = [...currentTabs];
+      const [movedTab] = nextTabs.splice(fromIndex, 1);
+      if (!movedTab) {
+        return;
+      }
+      nextTabs.splice(toIndex, 0, movedTab);
+      reorderBrowserTabs(fromIndex, toIndex);
+      if (!isElectron || !window.electronAPI?.terminalBrowserReorderTabs) {
+        return;
+      }
       void window.electronAPI
-        ?.terminalBrowserAnnotationList?.(annotationTabId)
-        .then((state) => {
-          if (cancelled) {
-            return;
-          }
-          setAnnotationState(state);
-          if (!state.active) {
-            setAnnotationTabId(null);
-            return;
-          }
-          const requestId = state.pendingSubmitRequestId;
-          if (
-            requestId &&
-            handledAnnotationSubmitRequestRef.current !== requestId &&
-            !annotationSubmittingRef.current
-          ) {
-            handledAnnotationSubmitRequestRef.current = requestId;
-            void submitAnnotationTab(annotationTabId);
-          }
-        })
-        .catch((error) => {
-          if (!cancelled) {
-            setAnnotationError(
-              error instanceof Error
-                ? error.message
-                : "Failed to refresh browser comments",
-            );
-          }
+        .terminalBrowserReorderTabs(nextTabs.map((tab) => tab.id))
+        .catch(() => {
+          void syncElectronTabs().catch(() => undefined);
         });
-    }, 500);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [annotationState.active, annotationTabId, isElectron, submitAnnotationTab]);
+    },
+  );
 
-  const reorderTabs = useMemoizedFn((fromIndex: number, toIndex: number): void => {
-    const currentTabs = useTerminalPreviewStore.getState().browser.tabs;
-    if (
-      fromIndex < 0 ||
-      fromIndex >= currentTabs.length ||
-      toIndex < 0 ||
-      toIndex >= currentTabs.length ||
-      fromIndex === toIndex
-    ) {
-      return;
+  const toggleAnnotation = useMemoizedFn(async (): Promise<void> => {
+    if (!annotationState.active) {
+      setHeaderRulesPanelOpen(false);
+      setDevicePanelOpen(false);
     }
-    const nextTabs = [...currentTabs];
-    const [movedTab] = nextTabs.splice(fromIndex, 1);
-    if (!movedTab) {
-      return;
-    }
-    nextTabs.splice(toIndex, 0, movedTab);
-    reorderBrowserTabs(fromIndex, toIndex);
-    if (!isElectron || !window.electronAPI?.terminalBrowserReorderTabs) {
-      return;
-    }
-    void window.electronAPI
-      .terminalBrowserReorderTabs(nextTabs.map((tab) => tab.id))
-      .catch(() => {
-        void syncElectronTabs().catch(() => undefined);
-      });
+    await toggleAnnotations();
   });
 
   if (!activeTab) {
@@ -648,28 +460,6 @@ export function useTerminalBrowserController({
     }
   };
 
-  const toggleProxy = async (): Promise<void> => {
-    if (!isElectron || proxySwitching) {
-      return;
-    }
-    const nextEnabled = !(proxyState?.enabled ?? false);
-    setProxySwitching(true);
-    setProxyError(null);
-    try {
-      const nextState =
-        await window.electronAPI?.terminalBrowserSetProxyEnabled?.(nextEnabled);
-      if (nextState) {
-        setProxyState(nextState);
-      }
-    } catch (error) {
-      setProxyError(
-        error instanceof Error ? error.message : "Failed to switch proxy",
-      );
-    } finally {
-      setProxySwitching(false);
-    }
-  };
-
   const go = async (direction: "back" | "forward"): Promise<void> => {
     try {
       const snapshot =
@@ -703,52 +493,6 @@ export function useTerminalBrowserController({
     if (open) {
       setHeaderRulesPanelOpen(false);
     }
-  };
-
-  const stopAnnotation = async (): Promise<void> => {
-    const tabId = annotationTabId ?? activeTab.id;
-    setAnnotationError(null);
-    try {
-      const state = await window.electronAPI?.terminalBrowserAnnotationStop?.(tabId);
-      setAnnotationState(state ?? { active: false, annotations: [] });
-      setAnnotationTabId(null);
-      handledAnnotationSubmitRequestRef.current = null;
-    } catch (error) {
-      setAnnotationError(
-        error instanceof Error ? error.message : "Failed to stop browser comments",
-      );
-    }
-  };
-
-  const toggleAnnotation = async (): Promise<void> => {
-    if (!isElectron) {
-      return;
-    }
-    if (annotationState.active) {
-      await stopAnnotation();
-      return;
-    }
-    setAnnotationError(null);
-    handledAnnotationSubmitRequestRef.current = null;
-    setHeaderRulesPanelOpen(false);
-    setDevicePanelOpen(false);
-    try {
-      const state =
-        await window.electronAPI?.terminalBrowserAnnotationStart?.(activeTab.id);
-      setAnnotationTabId(activeTab.id);
-      setAnnotationState(state ?? { active: true, annotations: [] });
-    } catch (error) {
-      setAnnotationError(
-        error instanceof Error
-          ? error.message
-          : "Failed to start browser comments",
-      );
-    }
-  };
-
-  const submitAnnotations = async (): Promise<void> => {
-    const tabId = annotationTabId ?? activeTab.id;
-    await submitAnnotationTab(tabId);
   };
 
   const selectDevicePreset = async (
@@ -794,7 +538,10 @@ export function useTerminalBrowserController({
     }
   };
 
-  const closeTab = (event: { stopPropagation: () => void }, tabId: string): void => {
+  const closeTab = (
+    event: { stopPropagation: () => void },
+    tabId: string,
+  ): void => {
     event.stopPropagation();
     void window.electronAPI?.terminalBrowserCloseTab?.(tabId);
     delete loadedUrlByTabRef.current[tabId];

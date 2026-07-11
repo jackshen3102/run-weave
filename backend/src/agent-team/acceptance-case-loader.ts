@@ -1,6 +1,6 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
-import type { AgentTeamAcceptanceCase } from "@runweave/shared";
+import type { AgentTeamAcceptanceCase } from "@runweave/shared/agent-team";
 import { AgentTeamError } from "./errors";
 
 const CASE_HEADING_PATTERN = /^###\s+([A-Z][A-Z0-9-]*-\d{3})\b\s*(.*)$/;

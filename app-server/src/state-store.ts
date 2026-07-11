@@ -5,7 +5,7 @@ import type {
   AppServerAgentRunStatus,
   AppServerCompletionReason,
   AppServerThreadRef,
-} from "@runweave/shared";
+} from "@runweave/shared/app-server-events";
 
 export interface AppServerStateStoreSnapshot {
   threads: AppServerThreadRef[];
@@ -73,7 +73,10 @@ export class AppServerStateStore {
   }
 
   async persist(): Promise<void> {
-    await writeJsonFile(this.threadStatePath, this.listThreads({ limit: 10_000 }));
+    await writeJsonFile(
+      this.threadStatePath,
+      this.listThreads({ limit: 10_000 }),
+    );
   }
 
   getSnapshot(): AppServerStateStoreSnapshot {
@@ -120,7 +123,9 @@ export class AppServerStateStore {
     };
   }
 
-  private deleteFallbackThreadIfRealThreadArrived(update: StateRefUpdate): void {
+  private deleteFallbackThreadIfRealThreadArrived(
+    update: StateRefUpdate,
+  ): void {
     if (isFallbackThreadId(update.threadId)) {
       return;
     }
@@ -154,7 +159,9 @@ function filterStateRefs<
 >(items: T[], options: Partial<StateListOptions>): T[] {
   const after = options.after ? Number(options.after) : 0;
   return items
-    .filter((item) => !options.projectId || item.projectId === options.projectId)
+    .filter(
+      (item) => !options.projectId || item.projectId === options.projectId,
+    )
     .filter(
       (item) =>
         !options.terminalSessionId ||

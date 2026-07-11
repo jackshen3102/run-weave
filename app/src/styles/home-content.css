@@ -1,0 +1,265 @@
+.support-log-sheet {
+  --border-radius: 16px 16px 0 0;
+}
+
+.support-log-sheet__content {
+  --background: var(--rw-app-bg);
+  color: var(--rw-app-text);
+}
+
+.support-log-sheet__intro {
+  padding: 14px 18px 4px;
+}
+
+.support-log-sheet__intro p,
+.support-log-sheet__message {
+  margin: 0;
+  color: var(--rw-app-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.support-log-sheet ion-list {
+  background: transparent;
+}
+
+.support-log-sheet ion-item {
+  --background: var(--rw-app-surface);
+  --border-color: var(--rw-app-border);
+  --color: var(--rw-app-text);
+}
+
+.support-log-sheet ion-note {
+  max-width: 52vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.support-log-sheet__message {
+  padding: 2px 18px 0;
+}
+
+.support-log-sheet__server-dir {
+  margin: 4px 0 0;
+  color: var(--rw-app-text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.support-log-sheet__actions {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px calc(env(safe-area-inset-bottom) + 18px);
+}
+
+.support-log-sheet__actions ion-button {
+  --border-radius: 8px;
+  min-height: 44px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.home-search {
+  --background: var(--rw-app-surface);
+  --border-radius: 8px;
+  --box-shadow: none;
+  --color: var(--rw-app-text);
+  --placeholder-color: var(--rw-app-subtle);
+  padding: 0 0 12px;
+}
+
+.home-state {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+}
+
+.project-list {
+  display: grid;
+  gap: 10px;
+}
+
+.project-group {
+  border-top: 1px solid var(--rw-app-border);
+}
+
+.project-group__header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.project-group__toggle {
+  --color: var(--rw-app-text);
+  --padding-end: 0;
+  --padding-start: 0;
+  flex: 1;
+  min-width: 0;
+  min-height: 54px;
+  margin: 0;
+  text-transform: none;
+}
+
+.project-group__toggle::part(native) {
+  justify-content: flex-start;
+}
+
+.project-group__chevron {
+  width: 22px;
+  flex: 0 0 22px;
+  color: var(--rw-app-subtle);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.project-group__identity {
+  min-width: 0;
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  text-align: left;
+}
+
+.project-group__name,
+.terminal-row h3 {
+  overflow: hidden;
+  color: var(--rw-app-text);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-group__path,
+.terminal-row p {
+  overflow: hidden;
+  color: var(--rw-app-subtle);
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-group__count {
+  min-width: 28px;
+  color: var(--rw-app-muted);
+  font-size: 13px;
+  text-align: right;
+}
+
+.project-group__create {
+  --color: var(--rw-app-muted);
+  --padding-end: 0;
+  --padding-start: 0;
+  flex: 0 0 36px;
+  width: 36px;
+  min-height: 36px;
+  margin: 0;
+}
+
+.project-group__create::part(native) {
+  border-radius: 8px;
+}
+
+.project-group__create ion-icon {
+  font-size: 22px;
+}
+
+.project-group__sessions {
+  display: grid;
+  gap: 2px;
+  padding: 0 0 10px 22px;
+}
+
+.project-group__empty {
+  color: var(--rw-app-subtle);
+  padding: 10px 0;
+}
+
+.terminal-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 8px 0;
+}
+
+.terminal-row + .terminal-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.terminal-row__main {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.terminal-row__title-line {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-row h3,
+.terminal-row p {
+  margin: 0;
+}
+
+.terminal-row__status {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.terminal-row__status.is-running {
+  background: rgba(43, 214, 128, 0.16);
+  color: #48e59c;
+}
+
+.terminal-row__status.is-idle {
+  background: rgba(255, 196, 87, 0.14);
+  color: #ffd176;
+}
+
+.terminal-row__status.is-agent-idle {
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+}
+
+.terminal-row__status.is-agent-starting {
+  background: rgba(251, 191, 36, 0.16);
+  color: #facc15;
+}
+
+.terminal-row__status.is-exited {
+  background: rgba(148, 163, 184, 0.14);
+  color: #a8b3c2;
+}
+
+.terminal-row time {
+  color: var(--rw-app-muted);
+  font-size: 12px;
+}
+
+.terminal-row {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.terminal-row:active {
+  background: rgba(255, 255, 255, 0.04);
+}

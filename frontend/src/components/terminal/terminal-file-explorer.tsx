@@ -85,19 +85,21 @@ export function TerminalFileExplorer({
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <TerminalFileTree
         items={items}
-        expandedItems={expandedItems}
-        focusedItem={focusedItem}
-        selectedItems={selectedItems}
-        onExpandItem={handleExpandItem}
-        onCollapseItem={handleCollapseItem}
-        onFocusItem={handleFocusItem}
-        onSelectItems={handleSelectItems}
-        onPrimaryAction={handlePrimaryAction}
-        onMissingItems={handleMissingItems}
-        onFileClick={handleFileClick}
-        onDirectoryClick={handleDirectoryClick}
-        onRequestRenameFile={onRequestRenameFile}
-        onRequestDeleteFile={onRequestDeleteFile}
+        view={{ expandedItems, focusedItem, selectedItems }}
+        treeEvents={{
+          onCollapseItem: handleCollapseItem,
+          onExpandItem: handleExpandItem,
+          onFocusItem: handleFocusItem,
+          onMissingItems: handleMissingItems,
+          onPrimaryAction: handlePrimaryAction,
+          onSelectItems: handleSelectItems,
+        }}
+        itemActions={{
+          onDirectoryClick: handleDirectoryClick,
+          onFileClick: handleFileClick,
+          onRequestDeleteFile,
+          onRequestRenameFile,
+        }}
       />
     </div>
   );

@@ -1,7 +1,5 @@
-import type {
-  TerminalAgentKind,
-  TerminalCompletionEvent,
-} from "@runweave/shared";
+import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
+import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import { getCompletionSourceForCommand } from "../../terminal/completion-source-gate";
 import type {
   TerminalPanelRecord,

@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
-import type {
-  TerminalProjectListItem,
-  TerminalSessionListItem,
-} from "@runweave/shared";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { getAgentTeamRunForTerminal } from "../../services/terminal";
 import { canOpenAgentTeamForSession } from "./terminal-session-tab";

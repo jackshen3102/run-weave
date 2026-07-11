@@ -69,9 +69,7 @@ export class TmuxOutputWatcher {
     const sessions = this.terminalSessionManager
       .listSessions()
       .filter((session) => shouldWatchSession(session))
-      .sort(
-        (a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime(),
-      );
+      .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
     const selectedSessions = sessions.slice(0, this.startupMaxSessions);
     const skippedCount = Math.max(0, sessions.length - selectedSessions.length);
     if (skippedCount > 0) {
@@ -94,14 +92,11 @@ export class TmuxOutputWatcher {
           .map((session) => this.watchSession(session)),
       );
     }
-    tmuxOutputLogger.info(
-      "terminal.tmux.output-watch.startup.recovered",
-      {
-        message: "Recovered tmux output watchers for existing sessions",
-        selectedCount: selectedSessions.length,
-        totalCount: sessions.length,
-      },
-    );
+    tmuxOutputLogger.info("terminal.tmux.output-watch.startup.recovered", {
+      message: "Recovered tmux output watchers for existing sessions",
+      selectedCount: selectedSessions.length,
+      totalCount: sessions.length,
+    });
   }
 
   async watchSession(session: TerminalSessionRecord): Promise<void> {
@@ -110,6 +105,30 @@ export class TmuxOutputWatcher {
     }
 
     const target = resolveTmuxTarget(session, this.tmuxService);
+    if (
+      !isInteractiveShellLaunch(session.command, session.args) &&
+      !(await this.tmuxService.hasSession(target).catch(() => false))
+    ) {
+      await this.terminalSessionManager.updateSessionMetadata(session.id, {
+        cwd: session.cwd,
+        activeCommand: null,
+      });
+      const shouldFinalizeExit =
+        this.tmuxLifecycleCoordinator?.shouldFinalizeNonInteractiveExit(
+          session.id,
+        ) ?? true;
+      if (shouldFinalizeExit) {
+        this.terminalSessionManager.markExited(session.id);
+      }
+      tmuxOutputLogger.info("terminal.tmux.output-watch.session-missing", {
+        message: "Finalized missing non-interactive tmux session",
+        terminalSessionId: session.id,
+        sessionName: target.sessionName,
+        socketPath: target.socketPath,
+        finalized: shouldFinalizeExit,
+      });
+      return;
+    }
     const filePath = this.resolveOutputPath(session.id);
     const existing = this.watchedSessions.get(session.id);
     if (

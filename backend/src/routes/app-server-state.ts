@@ -1,9 +1,6 @@
 import { Router } from "express";
-import type {
-  AppServerThreadListResponse,
-  AppServerThreadResponse,
-} from "@runweave/shared";
-import { discoverAppServer } from "@runweave/shared/src/app-server-node";
+import type { AppServerThreadListResponse, AppServerThreadResponse } from "@runweave/shared/app-server-events";
+import { discoverAppServer } from "@runweave/shared/app-server/discovery";
 
 const MAX_LIMIT = 100;
 const AGENT_VALUES = new Set([

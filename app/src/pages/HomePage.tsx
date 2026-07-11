@@ -1,8 +1,5 @@
-import type {
-  AppHomeOverviewResponse,
-  CreateTerminalProjectRequest,
-  TerminalProjectListItem,
-} from "@runweave/shared";
+import type { CreateTerminalProjectRequest, TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import type { AppHomeOverviewResponse } from "@runweave/shared/terminal/session";
 import {
   IonButton,
   IonContent,

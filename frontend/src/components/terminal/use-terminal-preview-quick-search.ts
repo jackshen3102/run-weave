@@ -1,11 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
-import type {
-  TerminalPreviewContentSearchItem,
-  TerminalPreviewFileSearchItem,
-  TerminalPreviewFolderSearchItem,
-  TerminalPreviewQuickSearchMode,
-} from "@runweave/shared";
+import type { TerminalPreviewContentSearchItem, TerminalPreviewFileSearchItem, TerminalPreviewFolderSearchItem, TerminalPreviewQuickSearchMode } from "@runweave/shared/terminal/preview";
 import {
   searchTerminalProjectPreviewContent,
   searchTerminalProjectPreviewFiles,

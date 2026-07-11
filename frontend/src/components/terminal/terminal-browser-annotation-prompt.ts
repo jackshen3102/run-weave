@@ -1,7 +1,4 @@
-import type {
-  TerminalBrowserAnnotationDraft,
-  TerminalBrowserAnnotationSubmission,
-} from "@runweave/shared";
+import type { TerminalBrowserAnnotationDraft, TerminalBrowserAnnotationSubmission } from "@runweave/shared/terminal-browser-annotation";
 
 interface BrowserAnnotationPromptOptions {
   screenshotPath?: string | null;

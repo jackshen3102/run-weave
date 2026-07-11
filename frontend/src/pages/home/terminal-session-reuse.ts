@@ -1,4 +1,4 @@
-import type { TerminalSessionListItem } from "@runweave/shared";
+import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import { loadRecentTerminalSelection } from "../../features/terminal/recent-selection";
 
 export function resolveReusableTerminalSession(

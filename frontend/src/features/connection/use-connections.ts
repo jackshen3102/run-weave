@@ -1,6 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PackagedBackendConnectionState } from "@runweave/shared";
+import type { PackagedBackendConnectionState } from "@runweave/shared/runtime-monitor";
 import type { ConnectionConfig, ConnectionStore } from "./types";
 import {
   buildLocalDevelopmentConnection,

@@ -1,4 +1,4 @@
-import type { AuthClientType } from "@runweave/shared";
+import type { AuthClientType } from "@runweave/shared/protocol";
 
 export interface PersistedRefreshSessionRecord {
   id: string;

@@ -1,20 +1,4 @@
-import type {
-  TerminalPreviewChangeKind,
-  TerminalPreviewDeleteFileRequest,
-  TerminalPreviewDeleteFileResponse,
-  TerminalPreviewDirectoryResponse,
-  TerminalPreviewContentSearchResponse,
-  TerminalPreviewFileDiffResponse,
-  TerminalPreviewFileResponse,
-  TerminalPreviewFileSearchResponse,
-  TerminalPreviewFolderSearchResponse,
-  TerminalPreviewGitChangesResponse,
-  TerminalPreviewRenameFileRequest,
-  TerminalPreviewResetChangeRequest,
-  TerminalPreviewResetChangeResponse,
-  TerminalPreviewSaveFileRequest,
-  TerminalPreviewSaveFileResponse,
-} from "@runweave/shared";
+import type { TerminalPreviewChangeKind, TerminalPreviewDeleteFileRequest, TerminalPreviewDeleteFileResponse, TerminalPreviewDirectoryResponse, TerminalPreviewContentSearchResponse, TerminalPreviewFileDiffResponse, TerminalPreviewFileResponse, TerminalPreviewFileSearchResponse, TerminalPreviewFolderSearchResponse, TerminalPreviewGitChangesResponse, TerminalPreviewRenameFileRequest, TerminalPreviewResetChangeRequest, TerminalPreviewResetChangeResponse, TerminalPreviewSaveFileRequest, TerminalPreviewSaveFileResponse } from "@runweave/shared/terminal/preview";
 import { requestBlob, requestJson } from "./http";
 
 export async function searchTerminalProjectPreviewFiles(

@@ -1,12 +1,6 @@
 import { Braces, Check, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import {
-  TERMINAL_BROWSER_DEFAULT_HEADER_URL_PATTERN,
-  TERMINAL_BROWSER_HEADER_RULE_LIMIT,
-  type TerminalBrowserHeaderRule,
-  type TerminalBrowserHeaderRuleField,
-  validateTerminalBrowserHeaderRule,
-} from "@runweave/shared";
+import { TERMINAL_BROWSER_DEFAULT_HEADER_URL_PATTERN, TERMINAL_BROWSER_HEADER_RULE_LIMIT, type TerminalBrowserHeaderRule, type TerminalBrowserHeaderRuleField, validateTerminalBrowserHeaderRule } from "@runweave/shared/terminal-browser-headers";
 import { Button } from "../ui/button";
 
 type HeaderRuleErrors = Partial<Record<TerminalBrowserHeaderRuleField, string>>;

@@ -1,20 +1,19 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import type {
-  PackagedBackendConnectionState,
-  RuntimeStatsSnapshot,
-  SystemMonitorSnapshot,
-  TerminalBrowserAnnotationState,
-  TerminalBrowserAnnotationSubmission,
-  TerminalBrowserCdpProxyInfo,
-  TerminalBrowserDevicePresetId,
-  TerminalBrowserDeviceState,
-  TerminalBrowserHeaderState,
-  TerminalBrowserProxyState,
-} from "@runweave/shared";
+import type { PackagedBackendConnectionState, RuntimeStatsSnapshot } from "@runweave/shared/runtime-monitor";
+import type { SystemMonitorSnapshot } from "@runweave/shared/system-monitor";
+import type { TerminalBrowserAnnotationState, TerminalBrowserAnnotationSubmission } from "@runweave/shared/terminal-browser-annotation";
+import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared/terminal-browser-cdp-proxy";
+import type { TerminalBrowserDevicePresetId, TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import type { TerminalBrowserHeaderState } from "@runweave/shared/terminal-browser-headers";
+import type { TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
 import { resolveNeedsConnection } from "./features/connection/system-connection";
 import { useConnections } from "./features/connection/use-connections";
 import { useScopedAuth } from "./features/auth/use-scoped-auth";
 import { useClientMode } from "./features/use-client-mode";
+import {
+  buildConnectionQueryScope,
+  ConnectionQueryProvider,
+} from "./features/query/connection-query-provider";
 import { HomePage } from "./pages/home-page";
 import { LoginPage } from "./pages/login-page";
 import { ConnectionsPage } from "./pages/connections-page";
@@ -199,6 +198,10 @@ export default function App() {
 
   const needsConnection = resolveNeedsConnection(isElectron, activeConnection);
   const isAuthChecking = !needsConnection && authStatus === "checking";
+  const queryScope = buildConnectionQueryScope({
+    apiBase,
+    connectionId: activeConnectionId,
+  });
 
   const handleSelectConnection = (id: string) => {
     setActive(id);
@@ -215,7 +218,10 @@ export default function App() {
   const authPendingView = <main className="min-h-screen bg-background" />;
 
   return (
-    <>
+    <ConnectionQueryProvider
+      scope={queryScope}
+      onUnauthorized={clearToken}
+    >
       <Routes>
       <Route
         path="/system-monitor"
@@ -416,6 +422,6 @@ export default function App() {
         }
       />
       </Routes>
-    </>
+    </ConnectionQueryProvider>
   );
 }

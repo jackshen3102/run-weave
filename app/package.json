@@ -23,6 +23,7 @@
     "@runweave/common": "workspace:*",
     "@runweave/shared": "workspace:*",
     "@runweave/terminal-renderer": "workspace:*",
+    "@tanstack/react-query": "^5.101.2",
     "ahooks": "^3.9.7",
     "ionicons": "8.0.13",
     "react": "^19.0.0",

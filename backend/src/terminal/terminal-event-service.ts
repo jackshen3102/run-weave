@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
   TerminalEventCursorGap,
   TerminalEventEnvelope,
-} from "@runweave/shared";
+} from "@runweave/shared/terminal/events";
 import { logger } from "../logging";
 
 const MAX_TERMINAL_EVENTS = 500;

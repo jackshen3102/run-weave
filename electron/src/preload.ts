@@ -1,15 +1,11 @@
 import { contextBridge, ipcRenderer, shell } from "electron";
-import type {
-  PackagedBackendConnectionState,
-  RuntimeStatsSnapshot,
-  SystemMonitorSnapshot,
-  TerminalBrowserAnnotationState,
-  TerminalBrowserAnnotationSubmission,
-  TerminalBrowserCdpProxyInfo,
-  TerminalBrowserDeviceState,
-  TerminalBrowserHeaderState,
-  TerminalBrowserProxyState,
-} from "@runweave/shared";
+import type { PackagedBackendConnectionState, RuntimeStatsSnapshot } from "@runweave/shared/runtime-monitor";
+import type { SystemMonitorSnapshot } from "@runweave/shared/system-monitor";
+import type { TerminalBrowserAnnotationState, TerminalBrowserAnnotationSubmission } from "@runweave/shared/terminal-browser-annotation";
+import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared/terminal-browser-cdp-proxy";
+import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import type { TerminalBrowserHeaderState } from "@runweave/shared/terminal-browser-headers";
+import type { TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
 
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,

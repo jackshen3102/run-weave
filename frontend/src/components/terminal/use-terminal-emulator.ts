@@ -2,26 +2,20 @@ import { useEffect, type Dispatch, type SetStateAction } from "react";
 import {
   buildTmuxScrollInput,
   fileToBase64,
-  getTerminalBottomState,
   type TerminalBottomState,
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
   shellQuote,
   shouldThrottleTmuxScroll,
 } from "@runweave/common/terminal";
-import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared/terminal-limits";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
-import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
 import type { ClientMode } from "../../features/client-mode";
-import {
-  DEFAULT_TERMINAL_PREFERENCES,
-  type TerminalRendererPreference,
-} from "../../features/terminal/preferences";
+import { DEFAULT_TERMINAL_PREFERENCES } from "../../features/terminal/preferences";
 import { createResizeScheduler } from "../../features/terminal/resize-scheduler";
 import { createTerminalWrappedWebLinkProvider } from "../../features/terminal/web-link-provider";
 import { shouldSuppressWheelInput } from "../../features/terminal/wheel-input";
@@ -35,8 +29,8 @@ import {
   type TerminalImeCommit,
   type TerminalSearchResults,
 } from "./terminal-surface-utils";
-
-const TMUX_SCROLLBACK_BOTTOM_TOLERANCE_ROWS = 2;
+import { installTerminalRenderer } from "./emulator/renderer";
+import { createTerminalViewportState } from "./emulator/viewport-state";
 
 type MutableRef<T> = { current: T };
 
@@ -128,60 +122,10 @@ export function useTerminalEmulator({
 
     terminalRef.current = terminal;
     searchAddonRef.current = searchAddon;
-    let lastBottomState: TerminalBottomState | null = null;
-    const emitBottomState = () => {
-      const nextBottomState = getTerminalBottomState(terminal);
-      if (
-        lastBottomState?.isAtBottom === nextBottomState.isAtBottom &&
-        lastBottomState.bottomOffsetRows === nextBottomState.bottomOffsetRows
-      ) {
-        return;
-      }
-      lastBottomState = nextBottomState;
-      onBottomStateChange(nextBottomState);
-    };
-    const markAwayFromBottom = () => {
-      const bottomOffsetRows = Math.max(
-        (lastBottomState?.bottomOffsetRows ?? 0) + 1,
-        8,
-      );
-      if (
-        lastBottomState?.isAtBottom === false &&
-        lastBottomState.bottomOffsetRows === bottomOffsetRows
-      ) {
-        return;
-      }
-      lastBottomState = { isAtBottom: false, bottomOffsetRows };
-      onBottomStateChange(lastBottomState);
-    };
-    const markTowardBottom = () => {
-      const bottomOffsetRows = Math.max(
-        0,
-        (lastBottomState?.bottomOffsetRows ?? 0) - 1,
-      );
-      const nextBottomState = {
-        isAtBottom: bottomOffsetRows <= TMUX_SCROLLBACK_BOTTOM_TOLERANCE_ROWS,
-        bottomOffsetRows,
-      };
-      if (
-        lastBottomState?.isAtBottom === nextBottomState.isAtBottom &&
-        lastBottomState.bottomOffsetRows === nextBottomState.bottomOffsetRows
-      ) {
-        return nextBottomState;
-      }
-      lastBottomState = nextBottomState;
-      onBottomStateChange(nextBottomState);
-      return nextBottomState;
-    };
-    let lastBufferType: "normal" | "alternate" | undefined;
-    const emitBufferType = () => {
-      const nextBufferType = terminal.buffer.active.type;
-      if (lastBufferType === nextBufferType) {
-        return;
-      }
-      lastBufferType = nextBufferType;
-      onBufferTypeChange(nextBufferType);
-    };
+    const viewportState = createTerminalViewportState(terminal, {
+      onBottomStateChange,
+      onBufferTypeChange,
+    });
 
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);
@@ -213,7 +157,7 @@ export function useTerminalEmulator({
         event.deltaY !== 0 &&
         !event.shiftKey
       ) {
-        if (event.deltaY > 0 && lastBottomState?.isAtBottom === true) {
+        if (event.deltaY > 0 && viewportState.isAtBottom()) {
           onTmuxScrollbackActiveChange(false);
           event.preventDefault();
           event.stopPropagation();
@@ -229,10 +173,10 @@ export function useTerminalEmulator({
           if (input) {
             sendTerminalInput(input);
             if (event.deltaY < 0) {
-              markAwayFromBottom();
+              viewportState.markAwayFromBottom();
               onTmuxScrollbackActiveChange(true);
             } else {
-              const nextBottomState = markTowardBottom();
+              const nextBottomState = viewportState.markTowardBottom();
               if (nextBottomState.isAtBottom) {
                 onTmuxScrollbackActiveChange(false);
               }
@@ -246,62 +190,10 @@ export function useTerminalEmulator({
       return false;
     });
 
-    let rendererAddon: { dispose(): void } | null = null;
-    const applyRendererPreference = (
-      preference: TerminalRendererPreference,
-    ) => {
-      rendererAddon?.dispose();
-      rendererAddon = null;
-
-      const loadCanvas = (): boolean => {
-        try {
-          const canvas = new CanvasAddon();
-          terminal.loadAddon(canvas);
-          rendererAddon = canvas;
-          return true;
-        } catch {
-          return false;
-        }
-      };
-
-      const loadWebgl = (allowCanvasFallback: boolean): boolean => {
-        try {
-          const webgl = new WebglAddon();
-          webgl.onContextLoss(() => {
-            webgl.dispose();
-            if (allowCanvasFallback) {
-              loadCanvas();
-              return;
-            }
-          });
-          terminal.loadAddon(webgl);
-          rendererAddon = webgl;
-          return true;
-        } catch {
-          if (allowCanvasFallback) {
-            return loadCanvas();
-          }
-          return loadCanvas();
-        }
-      };
-
-      if (preference === "dom") {
-        return;
-      }
-
-      if (preference === "canvas") {
-        loadCanvas();
-        return;
-      }
-
-      if (preference === "webgl") {
-        loadWebgl(false);
-        return;
-      }
-
-      loadWebgl(true);
-    };
-    applyRendererPreference(initialPreferences.renderer);
+    const rendererAddon = installTerminalRenderer(
+      terminal,
+      initialPreferences.renderer,
+    );
 
     const syncSize = () => {
       if (!activeRef.current) {
@@ -357,8 +249,8 @@ export function useTerminalEmulator({
       ) {
         event.preventDefault();
         terminal.scrollPages(event.key === "PageUp" ? -1 : 1);
-        emitBufferType();
-        emitBottomState();
+        viewportState.emitBufferType();
+        viewportState.emitBottomState();
         return false;
       }
 
@@ -380,21 +272,21 @@ export function useTerminalEmulator({
       sendTerminalInput(data);
     });
     const scrollDisposable = terminal.onScroll(() => {
-      emitBufferType();
-      emitBottomState();
+      viewportState.emitBufferType();
+      viewportState.emitBottomState();
     });
     const renderDisposable = terminal.onRender(() => {
-      emitBufferType();
+      viewportState.emitBufferType();
     });
 
     syncSize();
-    emitBufferType();
+    viewportState.emitBufferType();
 
     let mountFitFrameId: number | null = null;
     mountFitFrameId = requestAnimationFrame(() => {
       mountFitFrameId = null;
       syncSize();
-      emitBottomState();
+      viewportState.emitBottomState();
     });
     const searchResultsDisposable = searchAddon.onDidChangeResults(
       (results) => {

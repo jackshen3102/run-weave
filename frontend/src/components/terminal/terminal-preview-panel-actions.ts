@@ -35,8 +35,7 @@ interface TerminalPreviewPanelActionsArgs {
     projectId: string,
     mode: TerminalChangesViewMode,
   ) => void;
-  setFilePreview: (value: null) => void;
-  setFileError: (value: string | null) => void;
+  clearFilePreview: (filePath?: string) => void;
   setMarkdownScrollRatio: (value: number) => void;
   confirmDiscardDraft: () => boolean;
 }
@@ -57,8 +56,7 @@ export function useTerminalPreviewPanelActions({
   setMarkdownSplitSourceWidthPct,
   setSvgViewModeInStore,
   setChangesViewModeInStore,
-  setFilePreview,
-  setFileError,
+  clearFilePreview,
   setMarkdownScrollRatio,
   confirmDiscardDraft,
 }: TerminalPreviewPanelActionsArgs) {
@@ -122,8 +120,7 @@ export function useTerminalPreviewPanelActions({
     }
     const targetMode = mode === "explorer" ? "explorer" : "file";
     openFile(projectId, filePath, targetMode);
-    setFilePreview(null);
-    setFileError(null);
+    clearFilePreview(filePath);
     setMarkdownScrollRatio(0);
   };
 

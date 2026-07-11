@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { randomUUID } from "node:crypto";
-import type { AuthClientType } from "@runweave/shared";
+import type { AuthClientType } from "@runweave/shared/protocol";
 import type { AuthConfig } from "./config";
 import type { AuthStore, PersistedRefreshSessionRecord } from "./store";
 import {

@@ -1,8 +1,5 @@
 import type { IncomingMessage } from "node:http";
-import type {
-  TerminalClientMessage,
-  TerminalServerMessage,
-} from "@runweave/shared";
+import type { TerminalClientMessage, TerminalServerMessage } from "@runweave/shared/terminal/websocket";
 import type { WebSocket } from "ws";
 import { logger } from "../logging";
 import { getLiveTerminalScrollback } from "../terminal/live-scrollback";

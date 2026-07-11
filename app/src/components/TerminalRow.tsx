@@ -1,4 +1,4 @@
-import type { AppHomeOverviewSession } from "@runweave/shared";
+import type { AppHomeOverviewSession } from "@runweave/shared/terminal/session";
 
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 

@@ -1,4 +1,4 @@
-import { TERMINAL_PERSISTED_SCROLLBACK_BYTES } from "@runweave/shared";
+import { TERMINAL_PERSISTED_SCROLLBACK_BYTES } from "@runweave/shared/terminal-limits";
 
 interface ScrollbackChunk {
   text: string;

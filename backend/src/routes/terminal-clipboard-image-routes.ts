@@ -4,10 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import type {
-  CreateTerminalClipboardImageRequest,
-  CreateTerminalClipboardImageResponse,
-} from "@runweave/shared";
+import type { CreateTerminalClipboardImageRequest, CreateTerminalClipboardImageResponse } from "@runweave/shared/terminal/input";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {

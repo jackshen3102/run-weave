@@ -1,17 +1,8 @@
-import type {
-  TerminalPanelWorkspace,
-  TerminalSessionListItem,
-  TerminalState,
-} from "@runweave/shared";
+import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import { Plus } from "lucide-react";
-import {
-  SortableTabs,
-  type SortableTabRenderProps,
-} from "../ui/sortable-tabs";
-import {
-  canOpenAgentTeamForSession,
-  TerminalSessionTab,
-} from "./terminal-session-tab";
+import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
+import { SortableTabs, type SortableTabRenderProps } from "../ui/sortable-tabs";
+import { TerminalSessionTab } from "./terminal-session-tab";
 
 function getWorkspacePanelCount(
   workspace: { panels?: unknown[] } | null | undefined,
@@ -21,16 +12,8 @@ function getWorkspacePanelCount(
 
 interface TerminalSessionTabStripProps {
   visibleSessions: TerminalSessionListItem[];
-  activeSession: TerminalSessionListItem | null;
   isMobileMonitor: boolean;
   loading: boolean;
-  bellMarkers: Record<string, boolean | undefined>;
-  completionMarkers: Record<string, boolean | undefined>;
-  terminalStateBySessionId: Record<string, TerminalState | undefined>;
-  panelWorkspaceBySessionId: Record<
-    string,
-    TerminalPanelWorkspace | null | undefined
-  >;
   onReorderSessions: (fromIndex: number, toIndex: number) => void;
   onSelectSession: (terminalSessionId: string) => void;
   onRequestCloseSession: (terminalSessionId: string) => void;
@@ -45,13 +28,8 @@ interface TerminalSessionTabStripProps {
 
 export function TerminalSessionTabStrip({
   visibleSessions,
-  activeSession,
   isMobileMonitor,
   loading,
-  bellMarkers,
-  completionMarkers,
-  terminalStateBySessionId,
-  panelWorkspaceBySessionId,
   onReorderSessions,
   onSelectSession,
   onRequestCloseSession,
@@ -60,6 +38,9 @@ export function TerminalSessionTabStrip({
   onRequestAgentTeam,
   onRequestCreateSession,
 }: TerminalSessionTabStripProps) {
+  const panelWorkspaceBySessionId = useTerminalWorkspaceStore(
+    (state) => state.panelWorkspaceBySessionId,
+  );
   return (
     <div className="flex h-[26px] items-stretch border-b border-slate-800">
       <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -72,23 +53,11 @@ export function TerminalSessionTabStrip({
             session: TerminalSessionListItem,
             sortProps: SortableTabRenderProps,
           ) => {
-            const isActive =
-              session.terminalSessionId === activeSession?.terminalSessionId;
-            const hasBell =
-              !isActive && Boolean(bellMarkers[session.terminalSessionId]);
-            const hasCompletion = Boolean(
-              completionMarkers[session.terminalSessionId],
-            );
             return (
               <TerminalSessionTab
                 session={session}
-                isActive={isActive}
                 isDragging={sortProps.isDragging}
                 isMobileMonitor={isMobileMonitor}
-                hasBell={hasBell}
-                hasCompletion={hasCompletion}
-                terminalState={terminalStateBySessionId[session.terminalSessionId]}
-                panelSplitEnabled={session.panelSplitEnabled}
                 panelCount={
                   getWorkspacePanelCount(
                     panelWorkspaceBySessionId[session.terminalSessionId],
@@ -102,7 +71,6 @@ export function TerminalSessionTabStrip({
                 onPanelSplitEnabledChange={(enabled) => {
                   onPanelSplitEnabledChange(session.terminalSessionId, enabled);
                 }}
-                agentTeamAvailable={canOpenAgentTeamForSession(session)}
                 onRequestAgentTeam={onRequestAgentTeam}
               />
             );

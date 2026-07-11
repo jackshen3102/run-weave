@@ -14,7 +14,7 @@ import {
   IonToolbar,
 } from "@ionic/react";
 import { useEffect, useState } from "react";
-import type { DiagnosticLogStatus } from "@runweave/shared";
+import type { DiagnosticLogStatus } from "@runweave/shared/diagnostic-logs";
 
 import { APP_BUILD_ID, APP_VERSION } from "../../config/app-build-info";
 import {

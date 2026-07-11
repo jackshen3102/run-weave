@@ -9,6 +9,7 @@ import {
 } from "./features/support-logs";
 import { useAppSession } from "./hooks/use-app-session";
 import { AppRoutes } from "./routes/AppRoutes";
+import { AppQueryProvider } from "./features/query/app-query-provider";
 
 function AppContent() {
   const session = useAppSession();
@@ -54,7 +55,9 @@ function AppContent() {
 function App() {
   return (
     <SupportLogProvider>
-      <AppContent />
+      <AppQueryProvider>
+        <AppContent />
+      </AppQueryProvider>
     </SupportLogProvider>
   );
 }

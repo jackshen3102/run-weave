@@ -1,20 +1,15 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { IonIcon } from "@ionic/react";
 import { checkmarkOutline, copyOutline } from "ionicons/icons";
 import type {
   TerminalPreviewChangeKind,
   TerminalPreviewFileResponse,
   TerminalPreviewGitStatus,
-} from "@runweave/shared";
-import {
-  createTerminalPreviewRequestSequencer,
-  resolveMarkdownPreviewHref,
-} from "@runweave/shared";
+} from "@runweave/shared/terminal/preview";
+import { resolveMarkdownPreviewHref } from "@runweave/shared/terminal-preview-core";
 
-import {
-  basenameOf,
-  fileKindOf,
-} from "../lib/terminal-file-format";
+import { basenameOf, fileKindOf } from "../lib/terminal-file-format";
 import { ApiError } from "../services/http";
 import {
   getTerminalProjectPreviewAsset,
@@ -23,6 +18,8 @@ import {
 import type { SelectedTerminalChange } from "./TerminalChangesTab";
 import { TerminalZoomableImage } from "./TerminalZoomableImage";
 import { useCopyFeedback } from "../hooks/use-copy-feedback";
+import { appQueryKeys } from "../features/query/app-query-provider";
+import { useAppTerminalRuntime } from "../features/terminal/app-terminal-runtime";
 
 export interface FileChangeInfo {
   kind: TerminalPreviewChangeKind;
@@ -233,98 +230,70 @@ function MarkdownPreview({ content, path }: { content: string; path: string }) {
 }
 
 export function TerminalFilePreviewDrawer({
-  accessToken,
-  apiBase,
   changeInfo,
   filePath,
-  projectId,
-  onAuthExpired,
   onClose,
   onShowChanges,
 }: {
-  accessToken: string;
-  apiBase: string;
   changeInfo: FileChangeInfo | null;
   filePath: string;
-  projectId: string;
-  onAuthExpired: () => void;
   onClose: () => void;
   onShowChanges: (change: SelectedTerminalChange) => void;
 }) {
-  const [file, setFile] = useState<TerminalPreviewFileResponse | null>(null);
+  const { accessToken, apiBase, onAuthExpired, projectId, scope } =
+    useAppTerminalRuntime();
   const [assetUrl, setAssetUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const image = fileKindOf(filePath, null) === "image";
+  const fileQuery = useQuery({
+    queryKey: projectId
+      ? appQueryKeys.terminalFile(scope, projectId, filePath)
+      : [...appQueryKeys.all(scope), "terminal-preview", "no-file"],
+    queryFn: () =>
+      getTerminalProjectPreviewFile(apiBase, accessToken, projectId!, filePath),
+    enabled: Boolean(projectId) && !image,
+  });
+  const assetQuery = useQuery({
+    queryKey: projectId
+      ? appQueryKeys.terminalAsset(scope, projectId, filePath)
+      : [...appQueryKeys.all(scope), "terminal-preview", "no-asset"],
+    queryFn: () =>
+      getTerminalProjectPreviewAsset(
+        apiBase,
+        accessToken,
+        projectId!,
+        filePath,
+      ),
+    enabled: Boolean(projectId) && image,
+  });
+  const file =
+    (fileQuery.data as TerminalPreviewFileResponse | undefined) ?? null;
+  const loading = image ? assetQuery.isFetching : fileQuery.isFetching;
+  const requestError = image ? assetQuery.error : fileQuery.error;
+  const error = requestError
+    ? requestError instanceof ApiError
+      ? fileErrorMessage(requestError.status)
+      : requestError instanceof Error
+        ? requestError.message
+        : "Load failed"
+    : null;
   const fileKind = fileKindOf(filePath, file?.language);
   const { copied: pathCopied, copyText: copyPath } = useCopyFeedback();
-  const previewRequests = useMemo(
-    () => createTerminalPreviewRequestSequencer(),
-    [],
-  );
 
   useEffect(() => {
-    const requestId = previewRequests.next();
-    let nextUrl: string | null = null;
+    if (!assetQuery.data) {
+      setAssetUrl(null);
+      return;
+    }
+    const nextUrl = URL.createObjectURL(assetQuery.data);
+    setAssetUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [assetQuery.data]);
 
-    setFile(null);
-    setAssetUrl(null);
-    setLoading(true);
-    setError(null);
-
-    const load = async () => {
-      try {
-        if (fileKindOf(filePath, null) === "image") {
-          const blob = await getTerminalProjectPreviewAsset(
-            apiBase,
-            accessToken,
-            projectId,
-            filePath,
-          );
-          if (!previewRequests.isCurrent(requestId)) {
-            return;
-          }
-          nextUrl = URL.createObjectURL(blob);
-          setAssetUrl(nextUrl);
-          return;
-        }
-
-        const payload = await getTerminalProjectPreviewFile(
-          apiBase,
-          accessToken,
-          projectId,
-          filePath,
-        );
-        if (previewRequests.isCurrent(requestId)) {
-          setFile(payload);
-        }
-      } catch (nextError: unknown) {
-        if (!previewRequests.isCurrent(requestId)) {
-          return;
-        }
-        if (nextError instanceof ApiError && nextError.status === 401) {
-          onAuthExpired();
-          return;
-        }
-        if (nextError instanceof ApiError) {
-          setError(fileErrorMessage(nextError.status));
-          return;
-        }
-        setError(nextError instanceof Error ? nextError.message : "Load failed");
-      } finally {
-        if (previewRequests.isCurrent(requestId)) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void load();
-    return () => {
-      previewRequests.invalidate();
-      if (nextUrl) {
-        URL.revokeObjectURL(nextUrl);
-      }
-    };
-  }, [accessToken, apiBase, filePath, onAuthExpired, previewRequests, projectId]);
+  useEffect(() => {
+    if (requestError instanceof ApiError && requestError.status === 401) {
+      onAuthExpired();
+    }
+  }, [onAuthExpired, requestError]);
 
   return (
     <section

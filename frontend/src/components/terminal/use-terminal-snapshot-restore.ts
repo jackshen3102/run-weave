@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { TerminalModeState } from "@runweave/shared";
+import type { TerminalModeState } from "@runweave/shared/terminal/websocket";
 import { HttpError } from "../../services/http";
 import { getTerminalSession } from "../../services/terminal";
 

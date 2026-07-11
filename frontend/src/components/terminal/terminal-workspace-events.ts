@@ -1,9 +1,15 @@
 import { useDebounceFn, useMemoizedFn } from "ahooks";
 import { useEffect, useRef } from "react";
-import type { TerminalEventEnvelope } from "@runweave/shared";
+import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import { createTerminalBellPlayer } from "../../features/terminal/bell";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import { useTerminalEventsConnection } from "../../features/terminal/use-terminal-events-connection";
+import {
+  EMPTY_TERMINAL_SESSIONS,
+  updateTerminalSessions,
+  useTerminalSessionsQuery,
+  useTerminalWorkspaceQueryClient,
+} from "../../features/terminal/queries/terminal-workspace-queries";
 
 const BELL_MARKER_DURATION_MS = 2_000;
 const TERMINAL_LIST_REFRESH_DEBOUNCE_MS = 50;
@@ -46,6 +52,8 @@ export function useTerminalWorkspaceEvents({
   loadSessions,
   selectActiveSession,
 }: UseTerminalWorkspaceEventsArgs) {
+  const sessions = useTerminalSessionsQuery().data ?? EMPTY_TERMINAL_SESSIONS;
+  const { queryClient, scope } = useTerminalWorkspaceQueryClient();
   const setTerminalStateBySessionId = useTerminalWorkspaceStore(
     (state) => state.setTerminalStateBySessionId,
   );
@@ -61,7 +69,6 @@ export function useTerminalWorkspaceEvents({
   const setActiveProjectId = useTerminalWorkspaceStore(
     (state) => state.setActiveProjectId,
   );
-  const setSessions = useTerminalWorkspaceStore((state) => state.setSessions);
   const setBellMarkers = useTerminalWorkspaceStore(
     (state) => state.setBellMarkers,
   );
@@ -191,7 +198,7 @@ export function useTerminalWorkspaceEvents({
         }
       }
       if (metadataBySessionId.size > 0) {
-        setSessions((currentSessions) => {
+        updateTerminalSessions(queryClient, scope, (currentSessions) => {
           let changed = false;
           const nextSessions = currentSessions.map((session) => {
             const metadata = metadataBySessionId.get(session.terminalSessionId);
@@ -222,9 +229,7 @@ export function useTerminalWorkspaceEvents({
       }
 
       const knownSessionIds = new Set(
-        useTerminalWorkspaceStore
-          .getState()
-          .sessions.map((session) => session.terminalSessionId),
+        sessions.map((session) => session.terminalSessionId),
       );
       if (delivery === "live") {
         const activeSessionId =

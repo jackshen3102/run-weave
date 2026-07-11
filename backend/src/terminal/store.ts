@@ -1,4 +1,5 @@
-import type { TerminalLastThreadStatus, TerminalState } from "@runweave/shared";
+import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
+import type { TerminalState } from "@runweave/shared/terminal/state";
 
 export interface PersistedTerminalProjectRecord {
   id: string;

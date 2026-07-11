@@ -1,8 +1,6 @@
-import type {
-  AgentHookStateEvent,
-  TerminalAgentKind,
-  TerminalCompletionEvent,
-} from "@runweave/shared";
+import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
+import type { AgentHookStateEvent } from "@runweave/shared/terminal/events";
+import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 
 const AGENT_SOURCES = new Set(["codex", "trae", "traecli", "traex"]);
 const HOOK_SOURCES = new Set([

@@ -1,8 +1,14 @@
 import { useMemoizedFn } from "ahooks";
-import { memo, type CSSProperties } from "react";
-import type { TerminalProjectListItem } from "@runweave/shared";
+import { memo, useMemo, type CSSProperties } from "react";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
+import {
+  EMPTY_TERMINAL_PROJECTS,
+  EMPTY_TERMINAL_SESSIONS,
+  useTerminalProjectsQuery,
+  useTerminalSessionsQuery,
+} from "../../features/terminal/queries/terminal-workspace-queries";
 import {
   selectTerminalProjectStatusById,
   TERMINAL_PROJECT_HAS_BELL,
@@ -43,12 +49,21 @@ export const TerminalProjectTabBar = memo(function TerminalProjectTabBar({
   onRequestEditProject,
   onSelectProject,
 }: TerminalProjectTabBarProps) {
-  const projects = useTerminalWorkspaceStore((state) => state.projects);
+  const projects = useTerminalProjectsQuery().data ?? EMPTY_TERMINAL_PROJECTS;
+  const sessions = useTerminalSessionsQuery().data ?? EMPTY_TERMINAL_SESSIONS;
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeProjectId,
   );
-  const statusByProjectId = useTerminalWorkspaceStore(
-    useShallow(selectTerminalProjectStatusById),
+  const projectStatusState = useTerminalWorkspaceStore(
+    useShallow((state) => ({
+      bellMarkers: state.bellMarkers,
+      completionMarkers: state.completionMarkers,
+      terminalStateBySessionId: state.terminalStateBySessionId,
+    })),
+  );
+  const statusByProjectId = useMemo(
+    () => selectTerminalProjectStatusById(projectStatusState, sessions),
+    [projectStatusState, sessions],
   );
 
   const renderProjectTab = useMemoizedFn(

@@ -1,5 +1,5 @@
 import type { Server as HttpServer } from "node:http";
-import type { TerminalEventServerMessage } from "@runweave/shared";
+import type { TerminalEventServerMessage } from "@runweave/shared/terminal/events";
 import { WebSocket, WebSocketServer } from "ws";
 import type { AuthService } from "../auth/service";
 import { logger } from "../logging";

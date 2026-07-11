@@ -1,26 +1,8 @@
-import type {
-  AppHomeOverviewResponse,
-  CreateTerminalProjectRequest,
-  TerminalProjectListItem,
-  CreateTerminalSessionRequest,
-  CreateTerminalSessionResponse,
-  CreateTerminalClipboardImageRequest,
-  CreateTerminalClipboardImageResponse,
-  CreateTerminalEventsWsTicketResponse,
-  CreateTerminalWsTicketResponse,
-  SendTerminalInterruptResponse,
-  SendTerminalInputResponse,
-  TerminalInputMode,
-  TerminalPreviewChangeKind,
-  TerminalPreviewDirectoryResponse,
-  TerminalPreviewFileDiffResponse,
-  TerminalPreviewFileResponse,
-  TerminalPreviewFileSearchResponse,
-  TerminalPreviewGitChangesResponse,
-  TerminalSessionHistoryResponse,
-  TerminalSessionStatusResponse,
-  TerminalStateResponse,
-} from "@runweave/shared";
+import type { TerminalStateResponse } from "@runweave/shared/terminal/events";
+import type { CreateTerminalClipboardImageRequest, CreateTerminalClipboardImageResponse, SendTerminalInterruptResponse, SendTerminalInputResponse, TerminalInputMode } from "@runweave/shared/terminal/input";
+import type { TerminalPreviewChangeKind, TerminalPreviewDirectoryResponse, TerminalPreviewFileDiffResponse, TerminalPreviewFileResponse, TerminalPreviewFileSearchResponse, TerminalPreviewGitChangesResponse } from "@runweave/shared/terminal/preview";
+import type { CreateTerminalProjectRequest, TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import type { AppHomeOverviewResponse, CreateTerminalSessionRequest, CreateTerminalSessionResponse, CreateTerminalEventsWsTicketResponse, CreateTerminalWsTicketResponse, TerminalSessionHistoryResponse, TerminalSessionStatusResponse } from "@runweave/shared/terminal/session";
 
 import { requestBlob, requestJson, requestVoid } from "./http";
 

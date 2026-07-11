@@ -11,55 +11,89 @@ import {
 import { Button } from "../ui/button";
 import { TerminalBrowserTool } from "./terminal-browser-tool";
 import type { TerminalSidecarTool } from "../../features/terminal/preview-store";
+import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
 
 interface ActiveProjectLike {
   name?: string;
   path?: string | null;
 }
 
-interface TerminalPreviewPanelShellProps {
+interface SidecarLayout {
   panelWidth: string;
   expanded: boolean;
+  onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onToggleExpanded: () => void;
+  onClose: () => void;
+}
+
+interface SidecarToolNavigation {
   activeTool: TerminalSidecarTool;
+  showAgentTeamTool: boolean;
+  onSetActiveTool: (tool: TerminalSidecarTool) => void;
+}
+
+interface PreviewActions {
   mode: string | null;
-  fileKind: string;
   fileLoading: boolean;
   changesLoading: boolean;
-  saveLoading: boolean;
-  saveDisabled: boolean;
-  saveStatus:
-    | "readonly"
-    | "editable"
-    | "unsaved"
-    | "saving"
-    | "saved"
-    | "conflict";
-  canSave: boolean;
+  save: {
+    loading: boolean;
+    disabled: boolean;
+    status:
+      | "readonly"
+      | "editable"
+      | "unsaved"
+      | "saving"
+      | "saved"
+      | "conflict";
+    available: boolean;
+    run: () => void;
+  };
+  copy: {
+    path: string | null;
+    copied: boolean;
+    run: () => void;
+  };
+  onRefresh: () => void;
+}
+
+interface PreviewNavigation {
+  activeProject: ActiveProjectLike | null;
+  mode: string | null;
+  onSetMode: (mode: "changes" | "file" | "explorer") => void;
+}
+
+interface PreviewViewOptions {
+  mode: string | null;
+  fileKind: string;
   selectedPath: string | null;
-  pathCopied: boolean;
+  selectedChangePath?: string;
   markdownViewMode: "source" | "split" | "preview";
   svgViewMode: "preview" | "source";
   changesViewMode: "diff" | "preview";
-  selectedChangePath?: string;
-  activeProject: ActiveProjectLike | null;
-  apiBase: string;
-  token: string;
-  activeTerminalSessionId: string | null;
-  body: ReactNode;
-  showAgentTeamTool: boolean;
-  agentTeamBody?: ReactNode;
-  onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onSetActiveTool: (tool: TerminalSidecarTool) => void;
-  onSetPreviewMode: (mode: "changes" | "file" | "explorer") => void;
-  onToggleExpanded: () => void;
-  onRefresh: () => void;
-  onSave: () => void;
-  onCopyPath: () => void;
-  onClosePreview: () => void;
-  onSetMarkdownViewMode: (nextMode: "source" | "split" | "preview") => void;
-  onSetSvgViewMode: (nextMode: "preview" | "source") => void;
-  onSetChangesViewMode: (nextMode: "diff" | "preview") => void;
+  onSetMarkdown: (nextMode: "source" | "split" | "preview") => void;
+  onSetSvg: (nextMode: "preview" | "source") => void;
+  onSetChanges: (nextMode: "diff" | "preview") => void;
 }
+
+interface TerminalPreviewPanelShellProps {
+  actions: PreviewActions;
+  activeTerminalSessionId: string | null;
+  agentTeamBody?: ReactNode;
+  body: ReactNode;
+  layout: SidecarLayout;
+  navigation: PreviewNavigation;
+  tools: SidecarToolNavigation;
+  view: PreviewViewOptions;
+}
+
+type SaveStatus =
+  | "readonly"
+  | "editable"
+  | "unsaved"
+  | "saving"
+  | "saved"
+  | "conflict";
 
 function describeMode(mode: string | null | undefined): string {
   if (mode === "file") {
@@ -75,43 +109,38 @@ function describeMode(mode: string | null | undefined): string {
 }
 
 export function TerminalPreviewPanelShell({
-  panelWidth,
-  expanded,
-  activeTool,
-  mode,
-  fileKind,
-  fileLoading,
-  changesLoading,
-  saveLoading,
-  saveDisabled,
-  saveStatus,
-  canSave,
-  selectedPath,
-  pathCopied,
-  markdownViewMode,
-  svgViewMode,
-  changesViewMode,
-  selectedChangePath,
-  activeProject,
-  apiBase,
-  token,
+  actions,
   activeTerminalSessionId,
-  body,
-  showAgentTeamTool,
   agentTeamBody,
-  onStartResize,
-  onSetActiveTool,
-  onSetPreviewMode,
-  onToggleExpanded,
-  onRefresh,
-  onSave,
-  onCopyPath,
-  onClosePreview,
-  onSetMarkdownViewMode,
-  onSetSvgViewMode,
-  onSetChangesViewMode,
+  body,
+  layout,
+  navigation,
+  tools,
+  view,
 }: TerminalPreviewPanelShellProps) {
-  const tools: TerminalSidecarTool[] = showAgentTeamTool
+  const { apiBase, token } = useTerminalRuntime();
+  const { activeTool, onSetActiveTool, showAgentTeamTool } = tools;
+  const { expanded, onClose, onStartResize, onToggleExpanded, panelWidth } =
+    layout;
+  const { activeProject, mode, onSetMode } = navigation;
+  const { changesLoading, copy, fileLoading, onRefresh, save } = actions;
+  const {
+    changesViewMode,
+    fileKind,
+    markdownViewMode,
+    selectedChangePath,
+    selectedPath,
+    svgViewMode,
+    onSetChanges,
+    onSetMarkdown,
+    onSetSvg,
+  } = view;
+  const saveLoading = save.loading;
+  const saveDisabled = save.disabled;
+  const saveStatus: SaveStatus = save.status;
+  const canSave = save.available;
+  const pathCopied = copy.copied;
+  const availableTools: TerminalSidecarTool[] = showAgentTeamTool
     ? ["preview", "browser", "agent-team"]
     : ["preview", "browser"];
   const saveStatusLabel =
@@ -153,7 +182,7 @@ export function TerminalPreviewPanelShell({
                 role="tablist"
                 aria-label="Sidecar tools"
               >
-                {tools.map((tool) => (
+                {availableTools.map((tool) => (
                   <button
                     type="button"
                     role="tab"
@@ -170,8 +199,8 @@ export function TerminalPreviewPanelShell({
                     {tool === "preview"
                       ? "Preview"
                       : tool === "browser"
-                          ? "Browser"
-                          : "Agent Team"}
+                        ? "Browser"
+                        : "Agent Team"}
                   </button>
                 ))}
               </div>
@@ -209,7 +238,7 @@ export function TerminalPreviewPanelShell({
                     saveStatus === "unsaved" ? "text-amber-300" : "",
                   ].join(" ")}
                   disabled={saveDisabled || saveLoading}
-                  onClick={onSave}
+                  onClick={save.run}
                   aria-label="Save preview file"
                 >
                   <Save className="h-4 w-4" />
@@ -234,7 +263,7 @@ export function TerminalPreviewPanelShell({
                     variant="ghost"
                     className="h-7 w-7 rounded-md px-0"
                     disabled={!selectedPath}
-                    onClick={onCopyPath}
+                    onClick={copy.run}
                     aria-label={pathCopied ? "Path copied" : "Copy path"}
                     title={pathCopied ? "Path copied" : "Copy path"}
                   >
@@ -251,7 +280,7 @@ export function TerminalPreviewPanelShell({
                 size="sm"
                 variant="ghost"
                 className="h-7 w-7 rounded-md px-0"
-                onClick={onClosePreview}
+                onClick={onClose}
                 aria-label="Close sidecar"
               >
                 <X className="h-4 w-4" />
@@ -278,7 +307,7 @@ export function TerminalPreviewPanelShell({
                       ? "bg-slate-700 text-slate-50"
                       : "text-slate-400 hover:text-slate-100",
                   ].join(" ")}
-                  onClick={() => onSetPreviewMode(previewMode)}
+                  onClick={() => onSetMode(previewMode)}
                 >
                   {describeMode(previewMode)}
                 </button>
@@ -307,7 +336,8 @@ export function TerminalPreviewPanelShell({
         {activeTool === "preview" && selectedPath ? (
           <div className="flex items-center gap-2 border-b border-slate-800 px-2 py-1.5 text-[11px] text-slate-400">
             <span className="min-w-0 flex-1 truncate">{selectedPath}</span>
-            {(mode === "file" || mode === "explorer") && fileKind === "markdown" ? (
+            {(mode === "file" || mode === "explorer") &&
+            fileKind === "markdown" ? (
               <div className="flex shrink-0 rounded-md border border-slate-800 p-0.5">
                 {(["source", "split", "preview"] as const).map((viewMode) => (
                   <button
@@ -319,7 +349,7 @@ export function TerminalPreviewPanelShell({
                         ? "bg-slate-800 text-slate-100"
                         : "text-slate-400 hover:text-slate-200",
                     ].join(" ")}
-                    onClick={() => onSetMarkdownViewMode(viewMode)}
+                    onClick={() => onSetMarkdown(viewMode)}
                   >
                     {viewMode}
                   </button>
@@ -338,7 +368,7 @@ export function TerminalPreviewPanelShell({
                         ? "bg-slate-800 text-slate-100"
                         : "text-slate-400 hover:text-slate-200",
                     ].join(" ")}
-                    onClick={() => onSetSvgViewMode(viewMode)}
+                    onClick={() => onSetSvg(viewMode)}
                   >
                     {viewMode}
                   </button>
@@ -359,7 +389,7 @@ export function TerminalPreviewPanelShell({
                         ? "bg-slate-800 text-slate-100"
                         : "text-slate-400 hover:text-slate-200",
                     ].join(" ")}
-                    onClick={() => onSetChangesViewMode(viewMode)}
+                    onClick={() => onSetChanges(viewMode)}
                   >
                     {viewMode}
                   </button>

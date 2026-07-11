@@ -1,8 +1,5 @@
 import type { Router } from "express";
-import type {
-  CreateTerminalEventsWsTicketResponse,
-  CreateTerminalWsTicketResponse,
-} from "@runweave/shared";
+import type { CreateTerminalEventsWsTicketResponse, CreateTerminalWsTicketResponse } from "@runweave/shared/terminal/session";
 import type { AuthService } from "../auth/service";
 import { readBearerToken } from "../auth/middleware";
 import type { TerminalSessionManager } from "../terminal/manager";

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { AppAuthSession } from "../services/auth";
+import type { AppAuthSession } from "../features/auth/types";
 import { getAppAuthCredentialStore } from "./app-auth-credential-store";
 
 type AuthState = AppAuthSession & {

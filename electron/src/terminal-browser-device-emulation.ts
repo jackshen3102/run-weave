@@ -1,10 +1,5 @@
 import type { WebContentsView } from "electron";
-import {
-  createTerminalBrowserDeviceState,
-  getTerminalBrowserDevicePreset,
-  type TerminalBrowserDevicePresetId,
-  type TerminalBrowserDeviceState,
-} from "@runweave/shared";
+import { createTerminalBrowserDeviceState, getTerminalBrowserDevicePreset, type TerminalBrowserDevicePresetId, type TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 
 export interface TerminalBrowserDeviceEmulationEntry {
   view: WebContentsView;

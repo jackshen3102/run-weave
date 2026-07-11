@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { RuntimeStatsSnapshot } from "@runweave/shared";
+import type { RuntimeStatsSnapshot } from "@runweave/shared/runtime-monitor";
 
 const POLL_INTERVAL_MS = 2_000;
 

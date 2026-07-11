@@ -7,7 +7,7 @@ import {
   readBackendProfileLockOwner,
   serializeBackendProfileLockOwner,
   type BackendProfileLockOwner,
-} from "@runweave/shared/src/browser-profile-node";
+} from "@runweave/shared/browser-profile-node";
 
 const UNKNOWN_LOCK_STALE_AFTER_MS = 10_000;
 

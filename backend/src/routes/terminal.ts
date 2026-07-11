@@ -1,23 +1,17 @@
 import { Router } from "express";
 import { z } from "zod";
+import type { TerminalCompletionEventListResponse } from "@runweave/shared/terminal/events";
 import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
-  SendTerminalInterruptRequest,
-  SendTerminalInterruptResponse,
-  SendTerminalInputRequest,
-  TerminalState,
-  TerminalInputMode,
-  TerminalCompletionEventListResponse,
   UpdateTerminalSessionRequest,
-} from "@runweave/shared";
+} from "@runweave/shared/terminal/session";
+import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { AuthService } from "../auth/service";
 import { logger } from "../logging";
-import { aiDiagnosticLog } from "../diagnostic-logs/recorder";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { registerTerminalPreviewRoutes } from "./terminal-preview-routes";
 import { registerTerminalProjectRoutes } from "./terminal-project-routes";
-import { registerTerminalClipboardImageRoutes } from "./terminal-clipboard-image-routes";
 import { registerTerminalTmuxOrphanRoutes } from "./terminal-tmux-orphan-routes";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
@@ -25,7 +19,6 @@ import type { TerminalCompletionEventService } from "../terminal/completion-even
 import type { TerminalEventService } from "../terminal/terminal-event-service";
 import {
   aggregatePanelTerminalState,
-  getTerminalSessionAgent,
   type TerminalStateService,
 } from "../terminal/terminal-state-service";
 import {
@@ -43,29 +36,21 @@ import {
   toPanelWorkspacePayload,
   toSessionListItem,
   toStatusPayload,
-} from "./terminal-route-payloads";
+} from "../terminal/application/payloads";
 import {
   createTerminalSessionSchema,
   resolveTerminalCreateDefaults,
   sanitizeTerminalError,
-  sendTerminalInputSchema,
-  sendTerminalInterruptSchema,
   TerminalCreateDefaultsError,
-  TERMINAL_INTERRUPT_ESCAPE_INPUT,
 } from "./terminal-session-route-helpers";
-import {
-  isMissingTerminalRuntimeError,
-  normalizeCodexSlashCommand,
-  sendInputToSession,
-} from "./terminal-input-dispatcher";
 import { registerTerminalTicketRoutes } from "./terminal-ticket-routes";
 import { registerTerminalPrototypeGalleryRoutes } from "./terminal-prototype-gallery-routes";
 import { registerTerminalQuickInputRoutes } from "./terminal-quick-input-routes";
+import { registerTerminalInputRoutes } from "./terminal-input-routes";
 import {
   ensureTerminalPanelWorkspace,
   registerTerminalPanelRoutes,
   resolvePanelTarget,
-  sendTerminalPanelRouteError,
 } from "./terminal-panel-routes";
 
 const terminalLogger = logger.child({ component: "terminal" });
@@ -82,6 +67,45 @@ function resolveTerminalStateFromPanels(
     return aggregatePanelTerminalState(runningPanels);
   }
   return terminalStateService?.getCurrent(session.id, session);
+}
+
+async function readTerminalHistory(
+  session: NonNullable<ReturnType<TerminalSessionManager["getSession"]>>,
+  terminalSessionManager: TerminalSessionManager,
+  tmuxService: TmuxService | undefined,
+  terminalEventService: TerminalEventService | undefined,
+) {
+  if (!tmuxService || !isTmuxBackedSession(session)) {
+    return readTerminalScrollbackCapture(
+      session,
+      terminalSessionManager,
+      tmuxService,
+      "history",
+    );
+  }
+
+  const target = tmuxService.buildTarget(session.id);
+  try {
+    if (!(await tmuxService.hasSession(target))) {
+      return { data: await terminalSessionManager.readScrollback(session.id) };
+    }
+    const { paneTarget } = await resolvePanelTarget(
+      terminalSessionManager,
+      session,
+      { tmuxService, terminalEventService },
+      {},
+      "default-history",
+    );
+    const capture = await tmuxService.capturePane(paneTarget);
+    return { data: capture.data, sourceCols: capture.sourceCols };
+  } catch (error) {
+    terminalLogger.warn("terminal.session.history.tmux-fallback", {
+      message: "Terminal history fell back to persisted scrollback",
+      terminalSessionId: session.id,
+      error,
+    });
+    return { data: await terminalSessionManager.readScrollback(session.id) };
+  }
 }
 
 export function createTerminalRouter(
@@ -403,31 +427,12 @@ export function createTerminalRouter(
       return;
     }
 
-    const historyScrollback =
-      options?.tmuxService && isTmuxBackedSession(session)
-        ? await (async () => {
-            const { paneTarget } = await resolvePanelTarget(
-              terminalSessionManager,
-              session,
-              {
-                tmuxService: options.tmuxService,
-                terminalEventService: options.terminalEventService,
-              },
-              {},
-              "default-history",
-            );
-            const capture = await options.tmuxService!.capturePane(paneTarget);
-            return {
-              data: capture.data,
-              sourceCols: capture.sourceCols,
-            };
-          })()
-        : await readTerminalScrollbackCapture(
-            session,
-            terminalSessionManager,
-            options?.tmuxService,
-            "history",
-          );
+    const historyScrollback = await readTerminalHistory(
+      session,
+      terminalSessionManager,
+      options?.tmuxService,
+      options?.terminalEventService,
+    );
 
     res.json(
       toHistoryPayload(
@@ -515,248 +520,7 @@ export function createTerminalRouter(
       });
     }
   });
-  router.post("/session/:id/input", async (req, res) => {
-    const parsed = sendTerminalInputSchema.safeParse(
-      req.body as SendTerminalInputRequest,
-    );
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    const session = terminalSessionManager.getSession(req.params.id);
-    if (!session) {
-      res.status(404).json({ message: "Terminal session not found" });
-      return;
-    }
-    if (session.status !== "running") {
-      res.status(409).json({ message: "Terminal session is not running" });
-      return;
-    }
-    if (!options?.runtimeRegistry || !options.ptyService) {
-      res.status(503).json({ message: "Terminal runtime service unavailable" });
-      return;
-    }
-    if (isTmuxBackedSession(session) && !options.tmuxService) {
-      res.status(503).json({ message: "Terminal tmux service unavailable" });
-      return;
-    }
-    if (
-      parsed.data.mode === "codex_slash_command" &&
-      !normalizeCodexSlashCommand(parsed.data.data)
-    ) {
-      res.status(400).json({ message: "Invalid Codex slash command input" });
-      return;
-    }
-
-    try {
-      const inputMode = parsed.data.mode as TerminalInputMode | undefined;
-      const paneTarget =
-        isTmuxBackedSession(session) && options.tmuxService
-          ? (
-              await resolvePanelTarget(
-                terminalSessionManager,
-                session,
-                {
-                  tmuxService: options.tmuxService,
-                  terminalEventService: options.terminalEventService,
-                },
-                {
-                  panelId: parsed.data.panelId,
-                  panelAlias: parsed.data.panelAlias,
-                  role: parsed.data.role,
-                },
-                "explicit-or-active",
-              )
-            ).paneTarget
-          : undefined;
-      const payload = await sendInputToSession(
-        terminalSessionManager,
-        options,
-        session,
-        parsed.data.data,
-        inputMode,
-        parsed.data.operationId,
-        paneTarget,
-        parsed.data.submit,
-      );
-      if (options?.quickInputService && payload.inputAccepted) {
-        try {
-          await options.quickInputService.recordRecentInput({
-            data: parsed.data.data,
-            mode: inputMode,
-            projectId: session.projectId,
-            terminalSessionId: session.id,
-            cwd: session.cwd,
-            source: parsed.data.quickInputSource ?? "api_terminal_input",
-            acceptedAt: payload.acceptedAt,
-          });
-        } catch (error) {
-          terminalLogger.warn("terminal.quick-input.record.failed", {
-            message: "Terminal quick input record failed",
-            terminalSessionId: session.id,
-            projectId: session.projectId,
-            inputMode: inputMode ?? "raw",
-            error,
-          });
-        }
-      }
-      res.status(200).json(payload);
-    } catch (error) {
-      if (sendTerminalPanelRouteError(res, error)) {
-        return;
-      }
-      if (isMissingTerminalRuntimeError(error)) {
-        terminalSessionManager.markExited(session.id, session.exitCode);
-        res.status(409).json({
-          message: "Terminal session is not running",
-          error: String(error),
-        });
-        return;
-      }
-      terminalLogger.error("terminal.input.failed", {
-        message: "Terminal input failed",
-        terminalSessionId: session.id,
-        inputLength: parsed.data.data.length,
-        hasNewline: parsed.data.data.includes("\n"),
-        operationId: parsed.data.operationId,
-        error,
-      });
-      res.status(500).json({
-        message: "Terminal input failed",
-        error: String(error),
-      });
-    }
-  });
-
-  router.post("/session/:id/interrupt", async (req, res) => {
-    const parsed = sendTerminalInterruptSchema.safeParse(
-      req.body as SendTerminalInterruptRequest | undefined,
-    );
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-
-    const session = terminalSessionManager.getSession(req.params.id);
-    if (!session) {
-      res.status(404).json({ message: "Terminal session not found" });
-      return;
-    }
-    if (session.status !== "running") {
-      res.status(409).json({ message: "Terminal session is not running" });
-      return;
-    }
-    if (!options?.runtimeRegistry || !options.ptyService) {
-      res.status(503).json({ message: "Terminal runtime service unavailable" });
-      return;
-    }
-    if (isTmuxBackedSession(session) && !options.tmuxService) {
-      res.status(503).json({ message: "Terminal tmux service unavailable" });
-      return;
-    }
-
-    try {
-      aiDiagnosticLog("terminal interrupt requested", {
-        terminalSessionId: session.id,
-        operationId: parsed.data.operationId ?? null,
-        runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
-        interruptSequence: "escape",
-      });
-      const paneTarget =
-        isTmuxBackedSession(session) && options.tmuxService
-          ? (
-              await resolvePanelTarget(
-                terminalSessionManager,
-                session,
-                {
-                  tmuxService: options.tmuxService,
-                  terminalEventService: options.terminalEventService,
-                },
-                {
-                  panelId: parsed.data.panelId,
-                  panelAlias: parsed.data.panelAlias,
-                  role: parsed.data.role,
-                },
-                "explicit-or-active",
-              )
-            ).paneTarget
-          : undefined;
-      const inputPayload = await sendInputToSession(
-        terminalSessionManager,
-        options,
-        session,
-        TERMINAL_INTERRUPT_ESCAPE_INPUT,
-        undefined,
-        parsed.data.operationId,
-        paneTarget,
-      );
-      const payload: SendTerminalInterruptResponse = {
-        ...inputPayload,
-        interruptAccepted: true,
-        interruptSequence: "escape",
-      };
-      const agent = getTerminalSessionAgent(session);
-      if (options.terminalStateService && agent) {
-        const terminalState = options.terminalStateService.handleAgentHook(
-          session.id,
-          agent,
-          "Stop",
-          {
-            projectId: session.projectId,
-            reason: "interrupt",
-          },
-        );
-        aiDiagnosticLog("terminal interrupt updated agent state", {
-          terminalSessionId: session.id,
-          operationId: parsed.data.operationId ?? null,
-          state: terminalState.state,
-          agent: terminalState.agent,
-        });
-        terminalLogger.info("terminal.interrupt.agent-state-updated", {
-          message: "Terminal interrupt updated agent state",
-          terminalSessionId: session.id,
-          state: terminalState.state,
-          agent: terminalState.agent,
-        });
-      }
-      aiDiagnosticLog("terminal interrupt accepted", {
-        terminalSessionId: session.id,
-        operationId: parsed.data.operationId ?? null,
-        runtimeKind: payload.runtimeKind,
-        interruptSequence: payload.interruptSequence,
-      });
-      res.status(200).json(payload);
-    } catch (error) {
-      if (sendTerminalPanelRouteError(res, error)) {
-        return;
-      }
-      aiDiagnosticLog("terminal interrupt failed", {
-        terminalSessionId: session.id,
-        operationId: parsed.data.operationId ?? null,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      terminalLogger.error("terminal.interrupt.failed", {
-        message: "Terminal interrupt failed",
-        terminalSessionId: session.id,
-        operationId: parsed.data.operationId,
-        error,
-      });
-      res.status(500).json({
-        message: "Terminal interrupt failed",
-        error: error instanceof Error ? error.message : String(error),
-        operationId: parsed.data.operationId,
-      });
-    }
-  });
-
-  registerTerminalClipboardImageRoutes(router, terminalSessionManager);
+  registerTerminalInputRoutes(router, terminalSessionManager, options);
 
   router.delete("/session/:id", async (req, res) => {
     const session = terminalSessionManager.getSession(req.params.id);

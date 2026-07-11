@@ -13,6 +13,15 @@ import {
   updateTerminalProject,
 } from "../../services/terminal";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
+import {
+  EMPTY_TERMINAL_PROJECTS,
+  EMPTY_TERMINAL_SESSIONS,
+  updateTerminalProjects,
+  updateTerminalSessions,
+  useTerminalProjectsQuery,
+  useTerminalSessionsQuery,
+  useTerminalWorkspaceQueryClient,
+} from "../../features/terminal/queries/terminal-workspace-queries";
 
 interface UseTerminalWorkspaceActionsArgs {
   apiBase: string;
@@ -33,34 +42,33 @@ export function useTerminalWorkspaceActions({
   loadSessions,
   onAuthExpired,
 }: UseTerminalWorkspaceActionsArgs) {
+  const projects = useTerminalProjectsQuery().data ?? EMPTY_TERMINAL_PROJECTS;
+  const sessions = useTerminalSessionsQuery().data ?? EMPTY_TERMINAL_SESSIONS;
+  const { queryClient, scope } = useTerminalWorkspaceQueryClient();
   const loading = useTerminalWorkspaceStore((state) => state.loading);
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeProjectId,
   );
-  const activeProject = useTerminalWorkspaceStore((state) =>
-    state.projects.find((project) => project.projectId === state.activeProjectId) ??
-    null,
+  const activeSessionId = useTerminalWorkspaceStore(
+    (state) => state.activeSessionId,
   );
-  const activeSession = useTerminalWorkspaceStore((state) => {
-    const visibleSessions = state.sessions.filter((session) =>
-      state.activeProjectId ? session.projectId === state.activeProjectId : true,
-    );
-    return (
-      visibleSessions.find(
-        (session) => session.terminalSessionId === state.activeSessionId,
-      ) ??
-      visibleSessions[0] ??
-      null
-    );
-  });
+  const activeProject =
+    projects.find((project) => project.projectId === activeProjectId) ?? null;
+  const visibleSessions = activeProjectId
+    ? sessions.filter((session) => session.projectId === activeProjectId)
+    : sessions;
+  const activeSession =
+    visibleSessions.find(
+      (session) => session.terminalSessionId === activeSessionId,
+    ) ??
+    visibleSessions[0] ??
+    null;
   const projectDialogMode = useTerminalWorkspaceStore(
     (state) => state.projectDialogMode,
   );
   const projectPendingDeletion = useTerminalWorkspaceStore(
     (state) => state.projectPendingDeletion,
   );
-  const setProjects = useTerminalWorkspaceStore((state) => state.setProjects);
-  const setSessions = useTerminalWorkspaceStore((state) => state.setSessions);
   const setLoading = useTerminalWorkspaceStore((state) => state.setLoading);
   const setRequestError = useTerminalWorkspaceStore(
     (state) => state.setRequestError,
@@ -140,7 +148,7 @@ export function useTerminalWorkspaceActions({
           terminalSessionId,
           { alias: alias.trim() || null },
         );
-        setSessions((currentSessions) =>
+        updateTerminalSessions(queryClient, scope, (currentSessions) =>
           currentSessions.map((session) =>
             session.terminalSessionId === updatedSession.terminalSessionId
               ? updatedSession
@@ -186,7 +194,7 @@ export function useTerminalWorkspaceActions({
             activeProject.projectId,
             { name: trimmedName, path: trimmedPath || null },
           );
-          setProjects((currentProjects) =>
+          updateTerminalProjects(queryClient, scope, (currentProjects) =>
             currentProjects.map((project) =>
               project.projectId === updatedProject.projectId
                 ? updatedProject
@@ -202,15 +210,20 @@ export function useTerminalWorkspaceActions({
             projectId: createdProject.projectId,
             runtimePreference: resolveNewTerminalRuntimePreference(clientMode),
           });
-          setProjects((currentProjects) => [
-            ...currentProjects,
+          updateTerminalProjects(queryClient, scope, (currentProjects) => [
+            ...currentProjects.filter(
+              (project) => project.projectId !== createdProject.projectId,
+            ),
             createdProject,
           ]);
           setActiveProjectId(createdProject.projectId);
           selectActiveSession(createdSession.terminalSessionId);
           const createdAt = new Date().toISOString();
-          setSessions((currentSessions) => [
-            ...currentSessions,
+          updateTerminalSessions(queryClient, scope, (currentSessions) => [
+            ...currentSessions.filter(
+              (session) =>
+                session.terminalSessionId !== createdSession.terminalSessionId,
+            ),
             {
               terminalSessionId: createdSession.terminalSessionId,
               projectId: createdProject.projectId,
@@ -267,7 +280,7 @@ export function useTerminalWorkspaceActions({
 
   const handleProjectReorder = useMemoizedFn(
     (fromIndex: number, toIndex: number) => {
-      setProjects((current) => {
+      updateTerminalProjects(queryClient, scope, (current) => {
         const reordered = [...current];
         const [moved] = reordered.splice(fromIndex, 1);
         if (moved) {
@@ -287,7 +300,7 @@ export function useTerminalWorkspaceActions({
       if (!activeProjectId) {
         return;
       }
-      setSessions((current) => {
+      updateTerminalSessions(queryClient, scope, (current) => {
         const projectSessions = current.filter(
           (s) => s.projectId === activeProjectId,
         );

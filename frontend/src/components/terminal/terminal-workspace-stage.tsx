@@ -1,12 +1,18 @@
-import { lazy, Suspense } from "react";
-import type {
-  TerminalPanelWorkspace,
-  TerminalProjectListItem,
-  TerminalSessionListItem,
-  TerminalState,
-} from "@runweave/shared";
+import { lazy, Suspense, useMemo } from "react";
+import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { ClientMode } from "../../features/client-mode";
-import { DEFAULT_TERMINAL_SIDECAR_WIDTH } from "../../features/terminal/preview-store";
+import {
+  DEFAULT_TERMINAL_SIDECAR_WIDTH,
+  useTerminalPreviewStore,
+} from "../../features/terminal/preview-store";
+import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
+import {
+  EMPTY_TERMINAL_PROJECTS,
+  EMPTY_TERMINAL_SESSIONS,
+  useTerminalProjectsQuery,
+  useTerminalSessionsQuery,
+} from "../../features/terminal/queries/terminal-workspace-queries";
+import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
 import { TerminalPanelTargetBar } from "./terminal-panel-target-bar";
 import { TerminalSurface } from "./terminal-surface";
 
@@ -16,31 +22,7 @@ const TerminalPreviewPanel = lazy(() =>
   })),
 );
 
-interface TerminalWorkspaceStageProps {
-  apiBase: string;
-  token: string;
-  clientMode: ClientMode;
-  isMobileMonitor: boolean;
-  requestError: string | null;
-  activeSession: TerminalSessionListItem | null;
-  visibleSessions: TerminalSessionListItem[];
-  surfaceSessions: TerminalSessionListItem[];
-  panelSplitEnabled: boolean;
-  activePanelWorkspace: TerminalPanelWorkspace | null;
-  terminalLayoutVersion: string;
-  terminalStateBySessionId: Record<string, TerminalState | undefined>;
-  panelWorkspaceBySessionId: Record<
-    string,
-    TerminalPanelWorkspace | null | undefined
-  >;
-  previewOpen: boolean;
-  previewExpanded: boolean;
-  previewWidthPx: number | undefined;
-  previewReservedWidth: string;
-  activeProject: TerminalProjectListItem | null;
-  showAgentTeamTool: boolean;
-  sessions: TerminalSessionListItem[];
-  onAuthExpired?: () => void;
+interface StagePanelCommands {
   onPanelWorkspaceChange: (workspace: TerminalPanelWorkspace) => void;
   onResizePanel: (
     terminalSessionId: string,
@@ -49,47 +31,93 @@ interface TerminalWorkspaceStageProps {
     cells: number,
   ) => void;
   onRefreshPanelWorkspace: (terminalSessionId: string) => void;
-  onSelectSession: (terminalSessionId: string) => void;
   onPanelSplitEnabledChange: (enabled: boolean) => void;
   onActiveAgentTeamRunChange: (active: boolean) => void;
+}
+
+interface TerminalWorkspaceStageProps {
+  clientMode: ClientMode;
+  panels: StagePanelCommands;
+  showAgentTeamTool: boolean;
   onEditProject: () => void;
 }
 
 export function TerminalWorkspaceStage({
-  apiBase,
-  token,
   clientMode,
-  isMobileMonitor,
-  requestError,
-  activeSession,
-  visibleSessions,
-  surfaceSessions,
-  panelSplitEnabled,
-  activePanelWorkspace,
-  terminalLayoutVersion,
-  terminalStateBySessionId,
-  panelWorkspaceBySessionId,
-  previewOpen,
-  previewExpanded,
-  previewWidthPx,
-  previewReservedWidth,
-  activeProject,
+  panels,
   showAgentTeamTool,
-  sessions,
-  onAuthExpired,
-  onPanelWorkspaceChange,
-  onResizePanel,
-  onRefreshPanelWorkspace,
-  onSelectSession,
-  onPanelSplitEnabledChange,
-  onActiveAgentTeamRunChange,
   onEditProject,
 }: TerminalWorkspaceStageProps) {
+  const { apiBase, token } = useTerminalRuntime();
+  const projectsQuery = useTerminalProjectsQuery();
+  const sessionsQuery = useTerminalSessionsQuery();
+  const projects = projectsQuery.data ?? EMPTY_TERMINAL_PROJECTS;
+  const sessions = sessionsQuery.data ?? EMPTY_TERMINAL_SESSIONS;
+  const activeProjectId = useTerminalWorkspaceStore(
+    (state) => state.activeProjectId,
+  );
+  const activeSessionId = useTerminalWorkspaceStore(
+    (state) => state.activeSessionId,
+  );
+  const requestError = useTerminalWorkspaceStore((state) => state.requestError);
+  const cachedSurfaceSessionIds = useTerminalWorkspaceStore(
+    (state) => state.cachedSurfaceSessionIds,
+  );
+  const terminalStateBySessionId = useTerminalWorkspaceStore(
+    (state) => state.terminalStateBySessionId,
+  );
+  const panelWorkspaceBySessionId = useTerminalWorkspaceStore(
+    (state) => state.panelWorkspaceBySessionId,
+  );
+  const previewOpen = useTerminalPreviewStore((state) => state.ui.open);
+  const previewWidthPx = useTerminalPreviewStore((state) => state.ui.widthPx);
+  const previewExpanded = useTerminalPreviewStore((state) => state.ui.expanded);
+  const isMobileMonitor = clientMode === "mobile";
+  const visibleSessions = useMemo(
+    () =>
+      activeProjectId
+        ? sessions.filter((session) => session.projectId === activeProjectId)
+        : [],
+    [activeProjectId, sessions],
+  );
+  const activeSession =
+    visibleSessions.find(
+      (session) => session.terminalSessionId === activeSessionId,
+    ) ?? null;
+  const surfaceSessions = useMemo(() => {
+    const ids = new Set(cachedSurfaceSessionIds);
+    if (activeSession) ids.add(activeSession.terminalSessionId);
+    return sessions.filter((session) => ids.has(session.terminalSessionId));
+  }, [activeSession, cachedSurfaceSessionIds, sessions]);
+  const activeProject =
+    projects.find((project) => project.projectId === activeProjectId) ?? null;
+  const panelSplitEnabled = activeSession?.panelSplitEnabled ?? false;
+  const activePanelWorkspace = activeSession
+    ? (panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null)
+    : null;
+  const previewReservedWidth = previewWidthPx
+    ? `${previewWidthPx}px`
+    : DEFAULT_TERMINAL_SIDECAR_WIDTH;
+  const terminalLayoutVersion = isMobileMonitor
+    ? "mobile"
+    : `desktop:${previewOpen ? previewReservedWidth : "full"}:${panelSplitEnabled ? "panel-split" : "single"}`;
+  const effectiveRequestError =
+    requestError ??
+    ((projectsQuery.error ?? sessionsQuery.error)
+      ? String(projectsQuery.error ?? sessionsQuery.error)
+      : null);
+  const {
+    onActiveAgentTeamRunChange,
+    onPanelSplitEnabledChange,
+    onPanelWorkspaceChange,
+    onRefreshPanelWorkspace,
+    onResizePanel,
+  } = panels;
   return (
     <div className="min-h-0 flex-1">
-      {requestError ? (
+      {effectiveRequestError ? (
         <p className="border-b border-rose-900/60 bg-rose-950/30 px-3 py-1.5 text-xs text-rose-300">
-          {requestError}
+          {effectiveRequestError}
         </p>
       ) : null}
       <div className="relative flex h-full min-h-0">
@@ -125,22 +153,19 @@ export function TerminalWorkspaceStage({
                       <TerminalSurface
                         active={isActive}
                         activeCommand={session.activeCommand}
-                        apiBase={apiBase}
                         clientMode={clientMode}
                         layoutVersion={terminalLayoutVersion}
                         sessionStatus={session.status}
                         terminalSessionId={session.terminalSessionId}
                         terminalState={
-                          terminalStateBySessionId[
-                            session.terminalSessionId
-                          ] ?? session.terminalState
+                          terminalStateBySessionId[session.terminalSessionId] ??
+                          session.terminalState
                         }
-                        token={token}
                         paneWorkspace={
                           session.panelSplitEnabled
-                            ? panelWorkspaceBySessionId[
+                            ? (panelWorkspaceBySessionId[
                                 session.terminalSessionId
-                              ] ?? null
+                              ] ?? null)
                             : null
                         }
                         onResizePane={
@@ -155,7 +180,6 @@ export function TerminalWorkspaceStage({
                               }
                             : undefined
                         }
-                        onAuthExpired={onAuthExpired}
                         onViewportResize={
                           session.panelSplitEnabled
                             ? () => {
@@ -189,15 +213,10 @@ export function TerminalWorkspaceStage({
             }
           >
             <TerminalPreviewPanel
-              apiBase={apiBase}
-              token={token}
               activeProject={activeProject}
               activeSession={activeSession}
               showAgentTeamTool={showAgentTeamTool}
               widthPx={previewWidthPx}
-              onAuthExpired={onAuthExpired}
-              sessions={sessions}
-              onSelectSession={onSelectSession}
               onPanelSplitEnabledChange={onPanelSplitEnabledChange}
               onActiveAgentTeamRunChange={onActiveAgentTeamRunChange}
               onEditProject={onEditProject}
@@ -220,15 +239,10 @@ export function TerminalWorkspaceStage({
                 }
               >
                 <TerminalPreviewPanel
-                  apiBase={apiBase}
-                  token={token}
                   activeProject={activeProject}
                   activeSession={activeSession}
                   showAgentTeamTool={showAgentTeamTool}
                   widthPx={previewWidthPx}
-                  onAuthExpired={onAuthExpired}
-                  sessions={sessions}
-                  onSelectSession={onSelectSession}
                   onPanelSplitEnabledChange={onPanelSplitEnabledChange}
                   onActiveAgentTeamRunChange={onActiveAgentTeamRunChange}
                   onEditProject={onEditProject}

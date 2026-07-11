@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  normalizeTerminalBrowserHeaderRules,
-  type TerminalBrowserHeaderRule,
-} from "@runweave/shared";
+import { normalizeTerminalBrowserHeaderRules, type TerminalBrowserHeaderRule } from "@runweave/shared/terminal-browser-headers";
 
 const HEADER_RULES_STORAGE_KEY = "terminal.browser.headerRules";
 

@@ -1,4 +1,4 @@
-import type { RuntimeStatsSnapshot } from "@runweave/shared";
+import type { RuntimeStatsSnapshot } from "@runweave/shared/runtime-monitor";
 
 function formatCpu(value: number): string {
   return `${Number(value.toFixed(2))}%`;

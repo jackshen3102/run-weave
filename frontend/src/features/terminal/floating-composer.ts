@@ -1,4 +1,4 @@
-import type { TerminalState, TerminalStateValue } from "@runweave/shared";
+import type { TerminalState, TerminalStateValue } from "@runweave/shared/terminal/state";
 import type { ClientMode } from "../client-mode";
 
 export const TERMINAL_FLOATING_COMPOSER_SHOW_ROWS = 8;

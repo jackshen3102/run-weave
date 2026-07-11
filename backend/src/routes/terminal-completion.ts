@@ -1,9 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
-import type {
-  TerminalCompletionEvent,
-  TerminalEventEnvelope,
-} from "@runweave/shared";
+import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
+import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import { logger } from "../logging";
 import type { TerminalCompletionEventService } from "../terminal/completion-event-service";
 import {

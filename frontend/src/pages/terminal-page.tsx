@@ -35,11 +35,13 @@ export function TerminalRoutePage({
         apiBase={apiBase}
         token={token}
         clientMode={clientMode}
-        connections={connections}
-        activeConnectionId={activeConnectionId}
-        connectionName={connectionName}
-        onSelectConnection={onSelectConnection}
-        onOpenConnectionManager={onOpenConnectionManager}
+        connection={{
+          activeConnectionId,
+          connectionName,
+          connections,
+          onOpenConnectionManager,
+          onSelectConnection,
+        }}
         initialTerminalSessionId={terminalSessionId}
         onActiveSessionChange={(activeTerminalSessionId) => {
           if (activeTerminalSessionId === terminalSessionId) {

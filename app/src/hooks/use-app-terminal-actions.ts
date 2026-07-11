@@ -1,5 +1,6 @@
 import { useMemoizedFn } from "ahooks";
-import type { TerminalInputMode, TerminalState } from "@runweave/shared";
+import type { TerminalInputMode } from "@runweave/shared/terminal/input";
+import type { TerminalState } from "@runweave/shared/terminal/state";
 import { fileToBase64, shellQuote } from "@runweave/common/terminal";
 import { useState, type RefObject } from "react";
 

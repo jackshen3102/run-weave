@@ -1,7 +1,7 @@
 import { useMemoizedFn } from "ahooks";
 import { Cable, Check, Copy } from "lucide-react";
 import { useState } from "react";
-import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared";
+import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared/terminal-browser-cdp-proxy";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";

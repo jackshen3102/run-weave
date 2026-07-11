@@ -1,12 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type {
-  CreateTerminalQuickInputRequest,
-  TerminalQuickInputItem,
-  TerminalQuickInputListKind,
-  TerminalQuickInputMode,
-  TerminalQuickInputSource,
-  UpdateTerminalQuickInputRequest,
-} from "@runweave/shared";
+import type { CreateTerminalQuickInputRequest, TerminalQuickInputItem, TerminalQuickInputListKind, TerminalQuickInputMode, TerminalQuickInputSource, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
 import { logger } from "../logging";
 import type {
   PersistedTerminalQuickInputRecord,

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import type { TerminalPanelWorkspace, TerminalSessionListItem } from "@runweave/shared";
+import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
+import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import { PanelBottom, PanelRight, X } from "lucide-react";
 import { Button } from "../ui/button";
 import {

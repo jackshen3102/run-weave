@@ -1,8 +1,4 @@
-import type {
-  DiagnosticLogRecord,
-  DiagnosticLogResult,
-  DiagnosticLogStatusResponse,
-} from "@runweave/shared";
+import type { DiagnosticLogRecord, DiagnosticLogResult, DiagnosticLogStatusResponse } from "@runweave/shared/diagnostic-logs";
 import { requestBlob, requestJson } from "./http";
 
 function authHeaders(token: string): { Authorization: string } {

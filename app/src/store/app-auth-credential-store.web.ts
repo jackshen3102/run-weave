@@ -1,4 +1,4 @@
-import type { AppAuthSession } from "../services/auth";
+import type { AppAuthSession } from "../features/auth/types";
 
 export const LEGACY_APP_AUTH_SESSION_KEY = "runweave-app-auth-session";
 export const APP_AUTH_SESSION_INDEX_KEY = "runweave-app-auth-session-index";
@@ -127,7 +127,8 @@ export const webAppAuthCredentialStore: AppAuthCredentialStore = {
 
   async clearSession(connectionId) {
     const index = readIndex();
-    const storageKey = index[connectionId]?.storageKey ?? storageKeyForConnection(connectionId);
+    const storageKey =
+      index[connectionId]?.storageKey ?? storageKeyForConnection(connectionId);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(storageKey);
     }

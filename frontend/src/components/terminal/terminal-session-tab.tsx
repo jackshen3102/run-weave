@@ -6,9 +6,11 @@ import {
   type FocusEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import type { TerminalSessionListItem, TerminalState } from "@runweave/shared";
+import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
+import type { TerminalState } from "@runweave/shared/terminal/state";
 import { PanelsTopLeft, Pencil, Workflow, X } from "lucide-react";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
+import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import { Button } from "../ui/button";
 import { ShimmerText } from "../ui/shimmer-text";
 import {
@@ -55,10 +57,10 @@ export function canOpenAgentTeamForSession(
 ): boolean {
   return Boolean(
     session &&
-      session.status === "running" &&
-      (session.tmuxSessionName ||
-        session.activePanelId ||
-        (session.panelCount ?? 0) > 0),
+    session.status === "running" &&
+    (session.tmuxSessionName ||
+      session.activePanelId ||
+      (session.panelCount ?? 0) > 0),
   );
 }
 
@@ -205,37 +207,41 @@ function TerminalTabStateCard({
 
 export function TerminalSessionTab({
   session,
-  isActive,
   isDragging,
   isMobileMonitor,
-  hasBell,
-  hasCompletion,
-  terminalState,
-  panelSplitEnabled,
   panelCount,
   onSelectSession,
   onRequestCloseSession,
   onRequestEditAlias,
   onPanelSplitEnabledChange,
-  agentTeamAvailable,
   onRequestAgentTeam,
 }: {
   session: TerminalSessionListItem;
-  isActive: boolean;
   isDragging: boolean;
   isMobileMonitor: boolean;
-  hasBell: boolean;
-  hasCompletion: boolean;
-  terminalState?: TerminalState;
-  panelSplitEnabled: boolean;
   panelCount: number;
   onSelectSession: (terminalSessionId: string) => void;
   onRequestCloseSession: (terminalSessionId: string) => void;
   onRequestEditAlias: (session: TerminalSessionListItem) => void;
   onPanelSplitEnabledChange: (enabled: boolean) => void;
-  agentTeamAvailable: boolean;
   onRequestAgentTeam: (terminalSessionId: string) => void;
 }) {
+  const activeSessionId = useTerminalWorkspaceStore(
+    (state) => state.activeSessionId,
+  );
+  const hasBellMarker = useTerminalWorkspaceStore(
+    (state) => state.bellMarkers[session.terminalSessionId],
+  );
+  const hasCompletion = useTerminalWorkspaceStore(
+    (state) => state.completionMarkers[session.terminalSessionId],
+  );
+  const terminalState = useTerminalWorkspaceStore(
+    (state) => state.terminalStateBySessionId[session.terminalSessionId],
+  );
+  const isActive = session.terminalSessionId === activeSessionId;
+  const hasBell = !isActive && Boolean(hasBellMarker);
+  const panelSplitEnabled = session.panelSplitEnabled;
+  const agentTeamAvailable = canOpenAgentTeamForSession(session);
   const tabRef = useRef<HTMLDivElement | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsPosition, setDetailsPosition] = useState<{
@@ -314,10 +320,12 @@ export function TerminalSessionTab({
         {isWorking ? (
           <ShimmerText
             className="truncate shimmer-invert"
-            style={{
-              "--shimmer-duration": "4000",
-              "--shimmer-repeat-delay": "300",
-            } as CSSProperties}
+            style={
+              {
+                "--shimmer-duration": "4000",
+                "--shimmer-repeat-delay": "300",
+              } as CSSProperties
+            }
           >
             {displayName}
           </ShimmerText>

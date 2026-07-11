@@ -1,4 +1,4 @@
-import type { AppServerThreadRef } from "@runweave/shared";
+import type { AppServerThreadRef } from "@runweave/shared/app-server-events";
 import type { AppServerEventCenter } from "./event-center.js";
 import type {
   CodexThreadStatusReader,
@@ -124,9 +124,7 @@ export class CodexThreadStatusCompensator {
       .filter((thread) => !thread.threadId.startsWith("unknown-thread:"))
       .filter((thread) => {
         const lastActivityAtMs = Date.parse(thread.lastActivityAt);
-        return (
-          !Number.isFinite(lastActivityAtMs) || lastActivityAtMs >= cutoff
-        );
+        return !Number.isFinite(lastActivityAtMs) || lastActivityAtMs >= cutoff;
       })
       .sort(
         (left, right) =>
@@ -209,7 +207,9 @@ function mapCodexThreadStatus(
   return null;
 }
 
-export function parseOptionalPositiveInteger(value: string | undefined): number | undefined {
+export function parseOptionalPositiveInteger(
+  value: string | undefined,
+): number | undefined {
   if (!value?.trim()) {
     return undefined;
   }

@@ -1,7 +1,4 @@
-import type {
-  AppServerThreadListResponse,
-  AppServerThreadResponse,
-} from "@runweave/shared";
+import type { AppServerThreadListResponse, AppServerThreadResponse } from "@runweave/shared/app-server-events";
 import { requestJson } from "./http";
 
 interface ListAppServerThreadsFilters {

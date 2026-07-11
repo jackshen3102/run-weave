@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { createTerminalBrowserDeviceState } from "@runweave/shared";
+import { createTerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 import { TerminalBrowserTabs } from "../components/terminal/terminal-browser-tabs";
 import type { TerminalBrowserTabState } from "../features/terminal/preview-store";
 

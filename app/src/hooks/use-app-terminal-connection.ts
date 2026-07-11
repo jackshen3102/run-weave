@@ -1,11 +1,7 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
-import type {
-  TerminalClientMessage,
-  TerminalServerMessage,
-  TerminalSignal,
-  TerminalSessionStatusResponse,
-} from "@runweave/shared";
+import type { TerminalSessionStatusResponse } from "@runweave/shared/terminal/session";
+import type { TerminalClientMessage, TerminalServerMessage, TerminalSignal } from "@runweave/shared/terminal/websocket";
 import type { TerminalRendererHandle } from "@runweave/terminal-renderer";
 
 import { classifyApiFailure } from "../services/api-failure";

@@ -1,9 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { Router } from "express";
-import type {
-  DiagnosticLogRecord,
-  DiagnosticLogStopRequest,
-} from "@runweave/shared";
+import type { DiagnosticLogRecord, DiagnosticLogStopRequest } from "@runweave/shared/diagnostic-logs";
 import {
   DiagnosticLogRecorder,
   createAiDiagnosticLog,

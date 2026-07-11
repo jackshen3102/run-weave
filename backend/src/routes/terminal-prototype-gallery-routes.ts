@@ -1,5 +1,5 @@
 import type { Response, Router } from "express";
-import type { CreateTerminalPrototypePreviewTicketResponse } from "@runweave/shared";
+import type { CreateTerminalPrototypePreviewTicketResponse } from "@runweave/shared/terminal/preview";
 import type { AuthService } from "../auth/service";
 import { readBearerToken } from "../auth/middleware";
 import type { TerminalSessionManager } from "../terminal/manager";

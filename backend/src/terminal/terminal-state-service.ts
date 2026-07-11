@@ -1,12 +1,8 @@
-import type {
-  AgentHookStateEvent,
-  TerminalAgentKind,
-  TerminalState,
-  TerminalStateChangeReason,
-} from "@runweave/shared";
-import { hasCodexReadyPrompt } from "@runweave/shared";
+import type { AgentHookStateEvent } from "@runweave/shared/terminal/events";
+import type { TerminalAgentKind, TerminalState, TerminalStateChangeReason } from "@runweave/shared/terminal/state";
+import { hasCodexReadyPrompt } from "@runweave/shared/terminal-agent-readiness";
 import { getExecutableCommandName } from "./completion-source-gate";
-import type { TerminalSessionRecord } from "./manager";
+import type { TerminalSessionRecord } from "./manager-records";
 import type { TerminalEventService } from "./terminal-event-service";
 import type { TerminalStateStore } from "./terminal-state-store";
 

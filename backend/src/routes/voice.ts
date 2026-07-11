@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import type { TranscribeVoiceRequest } from "@runweave/shared";
+import type { TranscribeVoiceRequest } from "@runweave/shared/voice";
 import { logger } from "../logging";
 import {
   transcribeVoice,

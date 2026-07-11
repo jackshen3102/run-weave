@@ -1,10 +1,7 @@
 import { useMemoizedFn } from "ahooks";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState } from "react";
-import type {
-  DiagnosticLogResult,
-  DiagnosticLogStatus,
-} from "@runweave/shared";
+import type { DiagnosticLogResult, DiagnosticLogStatus } from "@runweave/shared/diagnostic-logs";
 import {
   aiDiagnosticLog,
   frontendDiagnosticLogRecorder,

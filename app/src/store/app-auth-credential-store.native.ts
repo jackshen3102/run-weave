@@ -1,4 +1,4 @@
-import type { AppAuthSession } from "../services/auth";
+import type { AppAuthSession } from "../features/auth/types";
 import type { AppAuthCredentialStore } from "./app-auth-credential-store.web";
 import {
   APP_AUTH_SESSION_INDEX_KEY,

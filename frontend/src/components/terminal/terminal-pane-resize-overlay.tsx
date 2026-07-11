@@ -1,7 +1,7 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { Terminal } from "@xterm/xterm";
-import type { TerminalPanelWorkspace } from "@runweave/shared";
+import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 
 // Matches the `pl-2 pt-1.5` padding on the xterm mount div in
 // terminal-surface-layout.tsx. Handle positions are relative to that content

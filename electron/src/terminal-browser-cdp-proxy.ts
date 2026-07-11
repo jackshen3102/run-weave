@@ -1,166 +1,31 @@
 import http from "node:http";
-import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
-import { BrowserWindow } from "electron";
 import { CdpSessionManager } from "./terminal-browser-cdp-proxy-session.js";
 import {
-  buildVersionResponse,
-  buildTargetInfo,
   buildJsonTargetList,
-  buildCdpResult,
-  buildCdpError,
-  buildCdpSessionResult,
-  buildCdpSessionError,
-  isBlockedCommand,
-  classifyCdpCommand,
-  validateNavigateParams,
-  validateSetContentParams,
-  validateKeyEvent,
-  resolveCreateTargetWindowId,
+  buildVersionResponse,
   isCdpConnectionLimitReached,
-  shouldSendTargetCreatedEvent,
-  type CdpTargetInfo,
 } from "./terminal-browser-cdp-proxy-handler.js";
+import { terminalBrowserEvents } from "./terminal-browser-view.js";
+import { handleMessage } from "./terminal-browser-cdp-proxy-messages.js";
+import type {
+  CdpProxyConnectionState,
+  CdpProxyOptions,
+  CdpProxyRuntime,
+} from "./terminal-browser-cdp-proxy-types.js";
 import {
-  getTerminalBrowserCdpTargets,
-  getTerminalBrowserEntryByTargetId,
-  createTerminalBrowserTabFromProxy,
-  closeTerminalBrowserTabFromProxy,
-  activateTerminalBrowserTabFromProxy,
-  terminalBrowserEvents,
-} from "./terminal-browser-view.js";
+  getScopedTargets,
+  sendJson,
+} from "./terminal-browser-cdp-proxy-utils.js";
+
+export type {
+  CdpProxyOptions,
+  CdpProxyRuntime,
+} from "./terminal-browser-cdp-proxy-types.js";
 
 const BROWSER_ID = "runweave-terminal-browser";
-const MAX_AI_TABS = 10;
 const MAX_CDP_CONNECTIONS = 8;
-// Ping each CDP client periodically so that a connection dropped without a
-// clean close frame (client process killed, network cut) is detected and torn
-// down. Without this, `sessionManager.cleanup()` never runs and the target's
-// `cdpProxyAttached` flag stays stuck, leaving the browser tab unable to open
-// page-initiated windows.
 const CDP_HEARTBEAT_INTERVAL_MS = 30_000;
-
-export interface CdpProxyOptions {
-  host: string;
-  port: number;
-}
-
-export interface CdpProxyRuntime {
-  endpoint: string;
-  port: number;
-  host: string;
-  stop(): Promise<void>;
-}
-
-interface ConnectionState {
-  ws: WebSocket;
-  sessionManager: CdpSessionManager;
-  scopedGroupId: string | null;
-  browserSessionIds: Set<string>;
-  discoveryEnabled: boolean;
-  autoAttachEnabled: boolean;
-  waitForDebuggerOnStart: boolean;
-  isAlive: boolean;
-}
-
-function getFirstWindowId(): number | null {
-  const windows = BrowserWindow.getAllWindows();
-  return windows.length > 0 ? windows[0]!.id : null;
-}
-
-function canUseTarget(conn: ConnectionState, targetId: string): boolean {
-  if (!conn.scopedGroupId) {
-    return true;
-  }
-  return getTerminalBrowserCdpTargets().some(
-    (target) =>
-      target.targetId === targetId &&
-      target.browserGroupId === conn.scopedGroupId,
-  );
-}
-
-function getScopedTargets(scopedGroupId: string | null) {
-  return getTerminalBrowserCdpTargets().filter(
-    (target) => !scopedGroupId || target.browserGroupId === scopedGroupId,
-  );
-}
-
-function sendJson(ws: WebSocket, data: object): void {
-  if (ws.readyState === WebSocket.OPEN) {
-    const payload = data as Record<string, unknown>;
-    console.info("[cdp-proxy] >>", {
-      id: payload.id ?? null,
-      method: payload.method ?? null,
-      sessionId: payload.sessionId ?? null,
-    });
-    ws.send(JSON.stringify(data));
-  }
-}
-
-function getCurrentTargetInfos(
-  sessionManager: CdpSessionManager,
-  scopedGroupId: string | null,
-): CdpTargetInfo[] {
-  return getScopedTargets(scopedGroupId)
-    .map((t) =>
-      buildTargetInfo({
-        targetId: t.targetId,
-        url: t.url,
-        title: t.title,
-        browserContextId: t.browserGroupId,
-        attached: sessionManager.isTargetAttached(t.targetId),
-      }),
-    );
-}
-
-function getTargetInfoForRequest(
-  sessionManager: CdpSessionManager,
-  scopedGroupId: string | null,
-  params: Record<string, unknown>,
-  sessionId?: string,
-): CdpTargetInfo | null {
-  const requestedTargetId =
-    typeof params.targetId === "string" ? params.targetId : null;
-  const sessionTargetId = sessionId
-    ? sessionManager.getTargetIdForSession(sessionId)
-    : null;
-  const targetId = requestedTargetId ?? sessionTargetId;
-  const targets = getCurrentTargetInfos(sessionManager, scopedGroupId);
-
-  if (targetId) {
-    return targets.find((target) => target.targetId === targetId) ?? null;
-  }
-  return targets.find((target) => target.attached) ?? targets[0] ?? null;
-}
-
-function broadcastTargetCreated(
-  connections: Set<ConnectionState>,
-  initiator: ConnectionState,
-  target: { targetId: string; browserGroupId: string; url: string; title: string },
-): void {
-  for (const conn of connections) {
-    if (conn.scopedGroupId && conn.scopedGroupId !== target.browserGroupId) {
-      continue;
-    }
-    if (
-      !shouldSendTargetCreatedEvent(conn.discoveryEnabled, conn === initiator)
-    ) {
-      continue;
-    }
-    sendJson(conn.ws, {
-      method: "Target.targetCreated",
-      params: {
-        targetInfo: buildTargetInfo({
-          targetId: target.targetId,
-          url: target.url,
-          title: target.title,
-          browserContextId: target.browserGroupId,
-          attached: false,
-        }),
-      },
-    });
-  }
-}
 
 export async function startCdpProxy(
   options: CdpProxyOptions,
@@ -169,7 +34,7 @@ export async function startCdpProxy(
   const endpoint = `http://${host}:${port}`;
   const wsUrl = `ws://${host}:${port}/devtools/browser/${BROWSER_ID}`;
 
-  const connections = new Set<ConnectionState>();
+  const connections = new Set<CdpProxyConnectionState>();
   const buildScopedWsUrl = (groupId: string | null): string => {
     if (!groupId) {
       return wsUrl;
@@ -253,7 +118,7 @@ export async function startCdpProxy(
 
   wss.on("connection", (ws: WebSocket, req) => {
     const sessionManager = new CdpSessionManager();
-    const conn: ConnectionState = {
+    const conn: CdpProxyConnectionState = {
       ws,
       sessionManager,
       scopedGroupId: resolveScopedGroupId(req.url ?? ""),
@@ -272,7 +137,12 @@ export async function startCdpProxy(
     });
 
     ws.on("message", (raw) => {
-      let msg: { id?: number; method?: string; params?: Record<string, unknown>; sessionId?: string };
+      let msg: {
+        id?: number;
+        method?: string;
+        params?: Record<string, unknown>;
+        sessionId?: string;
+      };
       try {
         msg = JSON.parse(String(raw));
       } catch {
@@ -284,8 +154,19 @@ export async function startCdpProxy(
         return;
       }
 
-      console.info("[cdp-proxy] <<", { id, method, sessionId: sessionId ?? null });
-      void handleMessage(connections, conn, id, method, params ?? {}, sessionId);
+      console.info("[cdp-proxy] <<", {
+        id,
+        method,
+        sessionId: sessionId ?? null,
+      });
+      void handleMessage(
+        connections,
+        conn,
+        id,
+        method,
+        params ?? {},
+        sessionId,
+      );
     });
 
     ws.on("close", () => {
@@ -374,595 +255,4 @@ export async function startCdpProxy(
       });
     },
   };
-}
-
-async function handleMessage(
-  connections: Set<ConnectionState>,
-  conn: ConnectionState,
-  id: number,
-  method: string,
-  params: Record<string, unknown>,
-  sessionId: string | undefined,
-): Promise<void> {
-  const { ws, sessionManager } = conn;
-
-  if (sessionId) {
-    if (conn.browserSessionIds.has(sessionId)) {
-      await handleBrowserSessionMessage(conn, id, method, params, sessionId);
-      return;
-    }
-    await handleSessionMessage(conn, id, method, params, sessionId);
-    return;
-  }
-
-  if (isBlockedCommand(method)) {
-    sendJson(ws, buildCdpError(id, -32601, `${method} is blocked by CDP proxy`));
-    return;
-  }
-
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpResult(id, {}));
-    return;
-  }
-
-  const cls = classifyCdpCommand(method);
-
-  try {
-    switch (method) {
-      case "Browser.getVersion":
-        sendJson(
-          ws,
-          buildCdpResult(id, {
-            protocolVersion: "1.3",
-            product: "Runweave/CDP-Proxy",
-            revision: "",
-            userAgent: "Runweave/CDP-Proxy",
-            jsVersion: "",
-          }),
-        );
-        return;
-
-      case "Target.getTargets": {
-        const targets = getCurrentTargetInfos(
-          sessionManager,
-          conn.scopedGroupId,
-        );
-        sendJson(ws, buildCdpResult(id, { targetInfos: targets }));
-        return;
-      }
-
-      case "Target.getTargetInfo": {
-        const targetInfo = getTargetInfoForRequest(
-          sessionManager,
-          conn.scopedGroupId,
-          params,
-        );
-        if (!targetInfo) {
-          sendJson(
-            ws,
-            buildCdpError(id, -32000, "No terminal browser target available"),
-          );
-          return;
-        }
-        sendJson(ws, buildCdpResult(id, { targetInfo }));
-        return;
-      }
-
-      case "Target.setDiscoverTargets": {
-        const discover = params.discover === true;
-        conn.discoveryEnabled = discover;
-        sendJson(ws, buildCdpResult(id, {}));
-
-        if (discover) {
-          const targets = getCurrentTargetInfos(
-            sessionManager,
-            conn.scopedGroupId,
-          );
-          for (const info of targets) {
-            sendJson(ws, {
-              method: "Target.targetCreated",
-              params: { targetInfo: info },
-            });
-          }
-        }
-        return;
-      }
-
-      case "Target.setAutoAttach": {
-        const autoAttach = params.autoAttach === true;
-        const waitForDebuggerOnStart = params.waitForDebuggerOnStart === true;
-        conn.autoAttachEnabled = autoAttach;
-        conn.waitForDebuggerOnStart = waitForDebuggerOnStart;
-        sendJson(ws, buildCdpResult(id, {}));
-
-        if (autoAttach) {
-          const targets = getScopedTargets(conn.scopedGroupId);
-          for (const t of targets) {
-            try {
-              const { proxySessionId } = sessionManager.attachDebugger(
-                t.targetId,
-                t.webContents,
-              );
-              const targetInfo = buildTargetInfo({
-                targetId: t.targetId,
-                url: t.url,
-                title: t.title,
-                browserContextId: t.browserGroupId,
-                attached: true,
-              });
-              sendJson(ws, {
-                method: "Target.attachedToTarget",
-                params: {
-                  sessionId: proxySessionId,
-                  targetInfo,
-                  waitingForDebugger: waitForDebuggerOnStart,
-                },
-              });
-            } catch (error) {
-              console.warn("[cdp-proxy] auto-attach failed", {
-                targetId: t.targetId,
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
-          }
-        }
-        return;
-      }
-
-      case "Target.attachToBrowserTarget": {
-        const browserSessionId = randomUUID();
-        conn.browserSessionIds.add(browserSessionId);
-        sendJson(ws, buildCdpResult(id, { sessionId: browserSessionId }));
-        return;
-      }
-
-      case "Target.attachToTarget": {
-        const targetId = params.targetId as string;
-        if (!targetId) {
-          sendJson(ws, buildCdpError(id, -32602, "targetId required"));
-          return;
-        }
-        const found = getTerminalBrowserEntryByTargetId(targetId);
-        if (!found) {
-          sendJson(ws, buildCdpError(id, -32602, `Unknown target: ${targetId}`));
-          return;
-        }
-        try {
-          const target = getTerminalBrowserCdpTargets().find(
-            (t) =>
-              t.targetId === targetId &&
-              (!conn.scopedGroupId || t.browserGroupId === conn.scopedGroupId),
-          );
-          if (!target) {
-            sendJson(ws, buildCdpError(id, -32602, `Target not found: ${targetId}`));
-            return;
-          }
-          const { proxySessionId } = sessionManager.attachDebugger(
-            targetId,
-            target.webContents,
-          );
-          sendJson(ws, buildCdpResult(id, { sessionId: proxySessionId }));
-        } catch (error) {
-          sendJson(
-            ws,
-            buildCdpError(
-              id,
-              -32000,
-              error instanceof Error ? error.message : String(error),
-            ),
-          );
-        }
-        return;
-      }
-
-      case "Target.detachFromTarget": {
-        const detachSessionId =
-          typeof params.sessionId === "string" ? params.sessionId : null;
-        if (detachSessionId && conn.browserSessionIds.delete(detachSessionId)) {
-          sendJson(ws, buildCdpResult(id, {}));
-          return;
-        }
-        const targetId =
-          (typeof params.targetId === "string" ? params.targetId : null) ??
-          (detachSessionId
-            ? sessionManager.getTargetIdForSession(detachSessionId)
-            : null);
-        if (targetId && canUseTarget(conn, targetId)) {
-          sessionManager.detachDebugger(targetId);
-        }
-        sendJson(ws, buildCdpResult(id, {}));
-        return;
-      }
-
-      case "Target.activateTarget": {
-        const targetId = params.targetId as string;
-        if (!targetId) {
-          sendJson(ws, buildCdpError(id, -32602, "targetId required"));
-          return;
-        }
-        if (!canUseTarget(conn, targetId)) {
-          sendJson(ws, buildCdpError(id, -32602, `Unknown target: ${targetId}`));
-          return;
-        }
-        activateTerminalBrowserTabFromProxy(targetId);
-        sendJson(ws, buildCdpResult(id, {}));
-        return;
-      }
-
-      case "Target.createTarget": {
-        const url = (params.url as string) || "about:blank";
-        const navCheck = validateNavigateParams({ url });
-        if (!navCheck.ok) {
-          sendJson(ws, buildCdpError(id, -32602, navCheck.error));
-          return;
-        }
-
-        const allTargets = getTerminalBrowserCdpTargets();
-        const currentTargets = getScopedTargets(conn.scopedGroupId);
-        if (conn.scopedGroupId && currentTargets.length === 0) {
-          sendJson(
-            ws,
-            buildCdpError(id, -32602, `Unknown group: ${conn.scopedGroupId}`),
-          );
-          return;
-        }
-        if (allTargets.length >= MAX_AI_TABS) {
-          sendJson(
-            ws,
-            buildCdpError(id, -32000, `Maximum AI tab limit (${MAX_AI_TABS}) reached`),
-          );
-          return;
-        }
-
-        const windowId = resolveCreateTargetWindowId(
-          currentTargets,
-          sessionManager.getAttachedTargetIds(),
-          getFirstWindowId(),
-        );
-        if (windowId === null) {
-          sendJson(ws, buildCdpError(id, -32000, "No Electron window available"));
-          return;
-        }
-
-        const created = await createTerminalBrowserTabFromProxy(
-          windowId,
-          url,
-          conn.scopedGroupId ?? undefined,
-        );
-        if (!created) {
-          sendJson(ws, buildCdpError(id, -32000, "Failed to create tab"));
-          return;
-        }
-
-        broadcastTargetCreated(
-          connections,
-          conn,
-          {
-            targetId: created.targetId,
-            browserGroupId: created.browserGroupId,
-            url,
-            title: "",
-          },
-        );
-
-        if (conn.autoAttachEnabled) {
-          try {
-            const { proxySessionId } = sessionManager.attachDebugger(
-              created.targetId,
-              created.webContents,
-            );
-            sendJson(ws, {
-              method: "Target.attachedToTarget",
-              params: {
-                sessionId: proxySessionId,
-                targetInfo: buildTargetInfo({
-                  targetId: created.targetId,
-                  url,
-                  title: "",
-                  browserContextId: created.browserGroupId,
-                  attached: true,
-                }),
-                waitingForDebugger: conn.waitForDebuggerOnStart,
-              },
-            });
-          } catch (error) {
-            console.warn("[cdp-proxy] auto-attach to new target failed", {
-              targetId: created.targetId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
-
-        sendJson(ws, buildCdpResult(id, { targetId: created.targetId }));
-        return;
-      }
-
-      case "Target.closeTarget": {
-        const targetId = params.targetId as string;
-        if (!targetId) {
-          sendJson(ws, buildCdpError(id, -32602, "targetId required"));
-          return;
-        }
-        if (!canUseTarget(conn, targetId)) {
-          sendJson(ws, buildCdpError(id, -32602, `Unknown target: ${targetId}`));
-          return;
-        }
-        const success = closeTerminalBrowserTabFromProxy(targetId);
-        if (!success) {
-          sessionManager.detachDebugger(targetId);
-        }
-        sendJson(ws, buildCdpResult(id, { success }));
-        return;
-      }
-
-      case "Storage.getCookies":
-        sendJson(ws, buildCdpResult(id, { cookies: [] }));
-        return;
-
-      case "Storage.setCookies":
-        sendJson(ws, buildCdpResult(id, {}));
-        return;
-
-      default:
-        if (cls === "session") {
-          sendJson(
-            ws,
-            buildCdpError(id, -32601, `${method} requires a sessionId`),
-          );
-        } else {
-          // For unhandled browser-level commands (e.g. Browser.setDownloadBehavior),
-          // return an empty success so Playwright's init sequence doesn't break.
-          console.info("[cdp-proxy] stub OK for unhandled browser command", { id, method });
-          sendJson(ws, buildCdpResult(id, {}));
-        }
-        return;
-    }
-  } catch (error) {
-    sendJson(
-      ws,
-      buildCdpError(
-        id,
-        -32000,
-        error instanceof Error ? error.message : String(error),
-      ),
-    );
-  }
-}
-
-async function handleBrowserSessionMessage(
-  conn: ConnectionState,
-  id: number,
-  method: string,
-  params: Record<string, unknown>,
-  sessionId: string,
-): Promise<void> {
-  const { ws } = conn;
-
-  if (method === "Target.detachFromTarget") {
-    const detachSessionId =
-      typeof params.sessionId === "string" ? params.sessionId : sessionId;
-    conn.browserSessionIds.delete(detachSessionId);
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    return;
-  }
-
-  if (method === "Browser.getVersion") {
-    sendJson(
-      ws,
-      buildCdpSessionResult(id, sessionId, {
-        protocolVersion: "1.3",
-        product: "Runweave/CDP-Proxy",
-        revision: "",
-        userAgent: "Runweave/CDP-Proxy",
-        jsVersion: "",
-      }),
-    );
-    return;
-  }
-
-  if (method === "Target.getTargets") {
-    const targets = getCurrentTargetInfos(
-      conn.sessionManager,
-      conn.scopedGroupId,
-    );
-    sendJson(ws, buildCdpSessionResult(id, sessionId, { targetInfos: targets }));
-    return;
-  }
-
-  if (method === "Target.getTargetInfo") {
-    const targetInfo = getTargetInfoForRequest(
-      conn.sessionManager,
-      conn.scopedGroupId,
-      params,
-    );
-    if (!targetInfo) {
-      sendJson(
-        ws,
-        buildCdpSessionError(
-          id,
-          sessionId,
-          -32000,
-          "No terminal browser target available",
-        ),
-      );
-      return;
-    }
-    sendJson(ws, buildCdpSessionResult(id, sessionId, { targetInfo }));
-    return;
-  }
-
-  if (method === "Storage.getCookies") {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, { cookies: [] }));
-    return;
-  }
-
-  if (method === "Storage.setCookies") {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    return;
-  }
-
-  if (isBlockedCommand(method)) {
-    sendJson(
-      ws,
-      buildCdpSessionError(id, sessionId, -32601, `${method} is blocked by CDP proxy`),
-    );
-    return;
-  }
-
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    return;
-  }
-
-  const cls = classifyCdpCommand(method);
-  if (cls === "browser" || cls === "target") {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    return;
-  }
-
-  sendJson(
-    ws,
-    buildCdpSessionError(id, sessionId, -32601, `${method} requires a target sessionId`),
-  );
-}
-
-/**
- * Session-level Target.* commands that must NOT be forwarded to Electron's
- * internal CDP. Forwarding Target.createTarget would create a new Electron
- * BrowserWindow; forwarding Target.setAutoAttach would expose non-terminal-
- * browser targets. We handle these locally with stub/no-op responses.
- */
-const SESSION_TARGET_INTERCEPTS = new Set([
-  "Target.setAutoAttach",
-  "Target.getTargets",
-  "Target.setDiscoverTargets",
-  "Target.getTargetInfo",
-  "Target.createTarget",
-  "Target.closeTarget",
-  "Target.activateTarget",
-  "Target.attachToTarget",
-  "Target.detachFromTarget",
-]);
-
-async function handleSessionMessage(
-  conn: ConnectionState,
-  id: number,
-  method: string,
-  params: Record<string, unknown>,
-  sessionId: string,
-): Promise<void> {
-  const { ws, sessionManager } = conn;
-
-  if (isBlockedCommand(method)) {
-    sendJson(
-      ws,
-      buildCdpSessionError(id, sessionId, -32601, `${method} is blocked by CDP proxy`),
-    );
-    return;
-  }
-
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    return;
-  }
-
-  // Intercept session-level Target.* commands — never forward these to
-  // Electron's internal CDP as they would create new windows or expose
-  // targets outside the Terminal Browser sandbox.
-  if (method === "Target.getTargetInfo") {
-    const targetInfo = getTargetInfoForRequest(
-      sessionManager,
-      conn.scopedGroupId,
-      params,
-      sessionId,
-    );
-    if (!targetInfo) {
-      sendJson(
-        ws,
-        buildCdpSessionError(
-          id,
-          sessionId,
-          -32000,
-          "No terminal browser target available",
-        ),
-      );
-      return;
-    }
-    sendJson(ws, buildCdpSessionResult(id, sessionId, { targetInfo }));
-    return;
-  }
-
-  if (SESSION_TARGET_INTERCEPTS.has(method)) {
-    console.info("[cdp-proxy] intercepted session-level Target command", { id, method, sessionId });
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    return;
-  }
-
-  if (method === "Page.navigate") {
-    const navCheck = validateNavigateParams(params as { url?: string });
-    if (!navCheck.ok) {
-      sendJson(ws, buildCdpSessionError(id, sessionId, -32602, navCheck.error));
-      return;
-    }
-  }
-
-  if (method === "Page.setDocumentContent") {
-    const contentCheck = validateSetContentParams(params as { html?: string });
-    if (!contentCheck.ok) {
-      sendJson(ws, buildCdpSessionError(id, sessionId, -32602, contentCheck.error));
-      return;
-    }
-  }
-
-  if (method === "Input.dispatchKeyEvent") {
-    const keyCheck = validateKeyEvent(
-      params as { type?: string; modifiers?: number; key?: string },
-    );
-    if (!keyCheck.ok) {
-      sendJson(ws, buildCdpSessionError(id, sessionId, -32602, keyCheck.error));
-      return;
-    }
-  }
-
-  if (method === "Page.close") {
-    const targetId = sessionManager.getTargetIdForSession(sessionId);
-    if (targetId) {
-      closeTerminalBrowserTabFromProxy(targetId);
-    }
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    return;
-  }
-
-  if (method === "Runtime.runIfWaitingForDebugger") {
-    try {
-      const result = await sessionManager.sendCommand(sessionId, method, params);
-      sendJson(ws, buildCdpSessionResult(id, sessionId, result));
-    } catch {
-      sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    }
-    return;
-  }
-
-  try {
-    const result = await sessionManager.sendCommand(sessionId, method, params);
-    sendJson(ws, buildCdpSessionResult(id, sessionId, result));
-  } catch (error) {
-    sendJson(
-      ws,
-      buildCdpSessionError(
-        id,
-        sessionId,
-        -32000,
-        error instanceof Error ? error.message : String(error),
-      ),
-    );
-  }
-}
-
-function isSafeNoopCommand(method: string): boolean {
-  return (
-    method === "Network.clearBrowserCache" ||
-    method === "Network.clearBrowserCookies" ||
-    method === "Storage.clearDataForOrigin"
-  );
 }

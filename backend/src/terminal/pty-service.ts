@@ -2,7 +2,7 @@ import { chmodSync, statSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import type { IPty } from "node-pty";
-import type { TerminalSignal } from "@runweave/shared";
+import type { TerminalSignal } from "@runweave/shared/terminal/websocket";
 import { logger } from "../logging";
 import type { TerminalLaunchConfig } from "./default-shell";
 import { resolveNodePtyDirectory } from "./node-pty-path";
@@ -47,6 +47,7 @@ interface PtySpawnResult {
   write(data: string): void;
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
+  destroy?(): void;
   pid: number;
 }
 
@@ -288,6 +289,10 @@ export class PtyService {
           ptyProcess.kill(toTerminalSignal(signal));
         },
         dispose() {
+          if (ptyProcess.destroy) {
+            ptyProcess.destroy();
+            return;
+          }
           ptyProcess.kill();
         },
       };

@@ -1,0 +1,170 @@
+import type {
+  PersistedTerminalPanelRecord,
+  PersistedTerminalPanelWorkspaceRecord,
+  UpdateTerminalPanelLastThreadParams,
+  UpdateTerminalPanelPreviewParams,
+  UpdateTerminalPanelStatusParams,
+  UpdateTerminalPanelTerminalStateParams,
+  UpdateTerminalPanelThreadIdParams,
+  UpdateTerminalPanelWorkspaceParams,
+  UpsertTerminalPanelParams,
+} from "./store";
+import { LowDbScrollbackStore } from "./lowdb-scrollback-store";
+
+export class LowDbPanelStore extends LowDbScrollbackStore {
+  async listPanels(): Promise<PersistedTerminalPanelRecord[]> {
+    return this.getPanels();
+  }
+
+  async listPanelWorkspaces(): Promise<
+    PersistedTerminalPanelWorkspaceRecord[]
+  > {
+    return this.getPanelWorkspaces();
+  }
+
+  async upsertPanel(params: UpsertTerminalPanelParams): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = structuredClone(params.panel);
+      const index = database.data.panels.findIndex(
+        (candidate) => candidate.id === panel.id,
+      );
+      if (index >= 0) {
+        database.data.panels[index] = panel;
+      } else {
+        database.data.panels.push(panel);
+      }
+      await database.write();
+    });
+  }
+
+  async updatePanelThreadId(
+    params: UpdateTerminalPanelThreadIdParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = database.data.panels.find(
+        (candidate) => candidate.id === params.panelId,
+      );
+      if (!panel) {
+        return;
+      }
+      if (params.threadId) {
+        panel.threadId = params.threadId;
+      } else {
+        delete panel.threadId;
+      }
+      await database.write();
+    });
+  }
+
+  async updatePanelPreview(
+    params: UpdateTerminalPanelPreviewParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = database.data.panels.find(
+        (candidate) => candidate.id === params.panelId,
+      );
+      if (!panel) {
+        return;
+      }
+      if (params.preview) {
+        panel.preview = params.preview;
+      } else {
+        delete panel.preview;
+      }
+      await database.write();
+    });
+  }
+
+  async updatePanelLastThread(
+    params: UpdateTerminalPanelLastThreadParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = database.data.panels.find(
+        (candidate) => candidate.id === params.panelId,
+      );
+      if (!panel) {
+        return;
+      }
+      panel.lastThreadId = params.threadId;
+      panel.lastThreadStatus = params.status;
+      panel.lastThreadUpdatedAt = params.updatedAt;
+      await database.write();
+    });
+  }
+
+  async updatePanelTerminalState(
+    params: UpdateTerminalPanelTerminalStateParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = database.data.panels.find(
+        (candidate) => candidate.id === params.panelId,
+      );
+      if (!panel) {
+        return;
+      }
+      panel.terminalState = params.terminalState;
+      await database.write();
+    });
+  }
+
+  async updatePanelStatus(
+    params: UpdateTerminalPanelStatusParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = database.data.panels.find(
+        (candidate) => candidate.id === params.panelId,
+      );
+      if (!panel) {
+        return;
+      }
+      panel.status = params.status;
+      if (params.lastActivityAt !== undefined) {
+        panel.lastActivityAt = params.lastActivityAt;
+      }
+      if (params.exitCode !== undefined) {
+        panel.exitCode = params.exitCode;
+      } else {
+        delete panel.exitCode;
+      }
+      await database.write();
+    });
+  }
+
+  async updatePanelWorkspace(
+    params: UpdateTerminalPanelWorkspaceParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const workspace = structuredClone(params.workspace);
+      const index = database.data.panelWorkspaces.findIndex(
+        (candidate) =>
+          candidate.terminalSessionId === workspace.terminalSessionId,
+      );
+      if (index >= 0) {
+        database.data.panelWorkspaces[index] = workspace;
+      } else {
+        database.data.panelWorkspaces.push(workspace);
+      }
+      await database.write();
+    });
+  }
+
+  async deletePanelsForSession(terminalSessionId: string): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      database.data.panels = database.data.panels.filter(
+        (panel) => panel.terminalSessionId !== terminalSessionId,
+      );
+      database.data.panelWorkspaces = database.data.panelWorkspaces.filter(
+        (workspace) => workspace.terminalSessionId !== terminalSessionId,
+      );
+      await database.write();
+    });
+  }
+}

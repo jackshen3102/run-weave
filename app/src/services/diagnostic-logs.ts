@@ -1,11 +1,7 @@
-import type {
-  DiagnosticLogRecord,
-  DiagnosticLogResult,
-  DiagnosticLogStatusResponse,
-} from "@runweave/shared";
+import type { DiagnosticLogRecord, DiagnosticLogResult, DiagnosticLogStatusResponse } from "@runweave/shared/diagnostic-logs";
 
 import { requestJson } from "./http";
-import type { SupportLogRecord } from "../features/support-logs";
+import type { SupportLogRecord } from "../features/support-logs/support-log-types";
 
 function authHeaders(accessToken: string): { Authorization: string } {
   return {

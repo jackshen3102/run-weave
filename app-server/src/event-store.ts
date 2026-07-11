@@ -3,7 +3,7 @@ import path from "node:path";
 import type {
   AppServerEventEnvelope,
   CreateAppServerEventRequest,
-} from "@runweave/shared";
+} from "@runweave/shared/app-server-events";
 
 const DEFAULT_EVENT_RETENTION_DAYS = 7;
 const DEFAULT_RETENTION_PRUNE_INTERVAL_MS = 60 * 60 * 1000;

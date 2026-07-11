@@ -2,14 +2,7 @@ import { execFile } from "node:child_process";
 import { lstat, readFile, realpath, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import type {
-  TerminalPreviewChangeFile,
-  TerminalPreviewChangeKind,
-  TerminalPreviewFileDiffResponse,
-  TerminalPreviewGitChangesResponse,
-  TerminalPreviewGitStatus,
-  TerminalPreviewResetChangeResponse,
-} from "@runweave/shared";
+import type { TerminalPreviewChangeFile, TerminalPreviewChangeKind, TerminalPreviewFileDiffResponse, TerminalPreviewGitChangesResponse, TerminalPreviewGitStatus, TerminalPreviewResetChangeResponse } from "@runweave/shared/terminal/preview";
 import {
   TerminalPreviewError,
   ensureProjectPath,

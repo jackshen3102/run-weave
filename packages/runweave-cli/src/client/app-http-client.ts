@@ -1,4 +1,4 @@
-import type { AppHomeOverviewResponse } from "@runweave/shared";
+import type { AppHomeOverviewResponse } from "@runweave/shared/terminal/session";
 import { requestJson } from "./http.js";
 
 export class AppHttpClient {
