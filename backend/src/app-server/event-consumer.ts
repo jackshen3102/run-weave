@@ -126,10 +126,9 @@ export class AppServerEventConsumer implements AppServerEventConsumerHandle {
   }
 
   private async handleEvent(event: AppServerEventEnvelope): Promise<void> {
-    if (!this.options.isRelevant(event)) {
-      return;
+    if (this.options.isRelevant(event)) {
+      await this.options.handler(event);
     }
-    await this.options.handler(event);
     await this.options.cursorStore.write(this.options.consumerId, event.id);
   }
 }

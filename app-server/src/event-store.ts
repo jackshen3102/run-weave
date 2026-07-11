@@ -23,6 +23,7 @@ export interface AppServerEventStoreOptions {
 export class AppServerEventStore {
   private events: AppServerEventEnvelope[] = [];
   private nextId = 1;
+  private appendQueue: Promise<void> = Promise.resolve();
   private lastPrunedAtMs = 0;
   private readonly retentionMs: number;
   private readonly pruneIntervalMs: number;
@@ -68,7 +69,18 @@ export class AppServerEventStore {
     this.lastPrunedAtMs = Date.now();
   }
 
-  async append(
+  append(
+    input: CreateAppServerEventRequest,
+  ): Promise<{ event: AppServerEventEnvelope; created: boolean }> {
+    const operation = this.appendQueue.then(() => this.appendSerial(input));
+    this.appendQueue = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation;
+  }
+
+  private async appendSerial(
     input: CreateAppServerEventRequest,
   ): Promise<{ event: AppServerEventEnvelope; created: boolean }> {
     await this.pruneExpiredEventsIfDue();

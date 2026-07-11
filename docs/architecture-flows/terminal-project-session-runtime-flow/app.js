@@ -457,7 +457,7 @@ function renderFooter() {
   return `
     <footer class="footer">
       <span>真实复现诊断图 · P1/P2/P4 已修复 · P3/P5 未达到修改门槛</span>
-      <code>docs/prototypes/terminal-project-session-runtime-flow/README.md</code>
+      <code>docs/architecture-flows/terminal-project-session-runtime-flow/README.md</code>
     </footer>
   `;
 }
@@ -537,7 +537,7 @@ function renderLoadError(error) {
         String(error),
         "",
         "请通过 HTTP server 打开：",
-        "python3 -m http.server 6188 --directory docs/prototypes/terminal-project-session-runtime-flow",
+        "python3 -m http.server 6188 --directory docs/architecture-flows/terminal-project-session-runtime-flow",
       ].join("\n"),
     )}</pre>
   `;
