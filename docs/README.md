@@ -68,7 +68,9 @@
 | app-server 状态同步测试                  | testing/app-server-state-sync-test-cases.md                                        |
 | Runweave Agent CLI 控制面测试            | testing/runweave-cli-control-plane-test-cases.md                                   |
 | Agent Team / Loop Engineer 测试          | testing/agent-team-loop-engineer-test-cases.md                                     |
+| Agent Team completion 恢复测试           | testing/agent-team-completion-recovery-test-cases.md                               |
 | Agent Team 验收来源测试                  | testing/agent-team-verification-case-source-test-cases.md                          |
+| 飞书一次性终端投递测试                   | testing/feishu-one-shot-terminal-delivery-test-cases.md                            |
 | App Server ThreadRef fixture             | testing/app-server-threadref-fixture.md                                            |
 | Terminal Panel Split 测试                | testing/terminal-panel-split-test-cases.md                                         |
 | 桌面端重启项目/终端恢复测试              | testing/desktop-restart-terminal-selection-test-cases.md                           |
@@ -82,6 +84,7 @@
 | Terminal Browser 自适应多 Tab 测试       | testing/terminal-browser-adaptive-tabs-test-cases.md                               |
 | 多项目原型轮巡库测试                     | testing/prototype-gallery-preview-test-cases.md                                    |
 | 系统性架构重构验收                       | testing/runweave-systematic-architecture-refactor-test-cases.md                    |
+| 独立行为数据底座目标架构验收             | testing/system-activity-data-foundation-test-cases.md                              |
 | 终端回归（Vim）                          | testing/runbooks/terminal-vim.md                                                   |
 | Explorer Quick Search 回归               | testing/runbooks/explorer-quick-search.md                                          |
 | Web Terminal 状态查询回归                | testing/runbooks/status-lookup-ui.md                                               |

@@ -178,10 +178,7 @@ Preview 工具内部再区分两个稳定任务：
 
 静态路由只接受 GET/HEAD，并对 project root、prototype root、prototype dir 和最终文件执行 realpath containment。响应禁用缓存，允许 opaque-origin iframe 读取本地资源，但不授予 iframe `allow-same-origin`。选择状态按 `{projectId, slug}` 保存到当前 `apiBase` 对应的 localStorage key；切换工具或重开 Sidecar 后恢复，列表刷新时再对磁盘事实做校验。
 
-详细实施与验收分别见：
-
-- `docs/plans/2026-07-11-prototype-gallery-preview.md`
-- `docs/testing/prototype-gallery-preview-test-cases.md`
+验收入口见 `docs/testing/prototype-gallery-preview-test-cases.md`。
 
 选择 `Explorer` 后，左侧显示受限目录树。目录优先排序，默认过滤 `node_modules`、`.git`、`dist`、`build`、`.next`、`.turbo`、`coverage` 等重目录和敏感环境文件；每层返回数量受 limit 约束，超限时后端标记 `truncated`。选择 `Files` 后，右侧显示 Spotlight / Cmd+P 风格的文件搜索面板。用户可以按文件名或相对路径模糊搜索当前项目路径内文件，选中后进入文件预览。project 内已存在的普通文本/代码文件可以编辑；绝对路径只能手动完整输入并打开，不参与模糊搜索，返回 `base: "filesystem"` 时始终只读。
 

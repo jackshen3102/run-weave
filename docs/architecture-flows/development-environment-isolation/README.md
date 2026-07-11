@@ -207,7 +207,7 @@ dedicated 服务记录 `ownerDevSessionId`；shared 服务保留自己的稳定 
 
 ## 与现有计划的关系
 
-`docs/plans/2026-07-11-runweave-beta-instance-cdp-routing.md` 应视为 Dev Session 的 `beta` profile 子计划，不应成为所有开发任务的默认环境。若继续实施，建议先写上层 Dev Session 计划，再让多 Beta 复用同一套 Planner、manifest、service identity、open 和 stop 协议。
+多 Beta / 多 CDP 实例应视为 Dev Session 的 `beta` profile 子问题，不应成为所有开发任务的默认环境。若继续实施，建议先写上层 Dev Session 方案，再让多 Beta 复用同一套 Planner、manifest、service identity、open 和 stop 协议。
 
 ## 代码源
 

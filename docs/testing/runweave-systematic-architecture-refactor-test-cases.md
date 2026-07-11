@@ -1,7 +1,7 @@
 # Runweave 系统性架构重构测试案例
 
 > 状态：执行中；SAR-001 至 SAR-027 的自动化与真实环境部分均已完成，SAR-012 中 IME-009 等待物理键盘提交。
-> 对应计划：`docs/plans/2026-07-11-runweave-systematic-architecture-refactor.md`
+> 对应结构门禁：`scripts/architecture/` 与 `pnpm architecture:check`
 
 ## 范围
 

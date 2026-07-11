@@ -1,6 +1,6 @@
 # 多项目原型轮巡库测试案例
 
-本文档验证 `docs/plans/2026-07-11-prototype-gallery-preview.md`。浏览器行为必须使用 `$toolkit:playwright-cli` 在真实 Chromium 中执行；静态检查、代码阅读或截图不能替代交互验收。
+本文档验证 `docs/architecture/terminal-code-preview.md#多项目原型轮巡库`。浏览器行为必须使用 `$toolkit:playwright-cli` 在真实 Chromium 中执行；静态检查、代码阅读或截图不能替代交互验收。
 
 ## 范围与前提
 

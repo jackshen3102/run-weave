@@ -1,6 +1,6 @@
 # Activity & Insights Hub Prototype
 
-> **状态：已被系统级方案取代，不作为实施依据。** 本原型的“从现有 Facts 通过确定性规则生成 Candidate Learning”不符合最新边界；当前依据改为 `docs/plans/2026-07-11-system-activity-data-foundation.md` 和 `docs/architecture-flows/system-activity-data-foundation-flow/`。本目录仅保留为此前产品方向的历史对照。
+> **状态：已被系统级目标架构取代，不作为实施依据。** 本原型的“从现有 Facts 通过确定性规则生成 Candidate Learning”不符合最新边界；当前依据改为 `docs/architecture-flows/system-activity-data-foundation-flow/`。本目录仅保留为此前产品方向的历史对照。
 
 一次性产品原型，用于验证 Runweave 第一阶段的「事实与经验」页面：先集中展示可追溯的事实记录，再从多条事实中生成待人工确认的 Learning。
 
