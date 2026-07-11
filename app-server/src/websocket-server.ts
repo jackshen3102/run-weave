@@ -44,11 +44,7 @@ export function attachEventStreamWebSocketServer(options: {
     }
 
     send(ws, { type: "connected", acceptedAfter: query.value.after });
-    send(ws, {
-      type: "events",
-      delivery: "catchup",
-      events: options.eventCenter.listAfter(query.value),
-    });
+    sendCatchup(ws, options.eventCenter, query.value);
 
     const kindFilter = new Set(query.value.kinds);
     const unsubscribe = options.eventCenter.subscribe((event) => {
@@ -71,6 +67,22 @@ export function attachEventStreamWebSocketServer(options: {
   });
 
   return wss;
+}
+
+function sendCatchup(
+  ws: WebSocket,
+  eventCenter: AppServerEventCenter,
+  query: { after: string | null; kinds: string[]; limit: number },
+): void {
+  let after = query.after;
+  while (true) {
+    const events = eventCenter.listAfter({ ...query, after });
+    send(ws, { type: "events", delivery: "catchup", events });
+    if (events.length < query.limit) {
+      return;
+    }
+    after = events.at(-1)?.id ?? after;
+  }
 }
 
 function send(ws: WebSocket, message: AppServerEventStreamMessage): void {

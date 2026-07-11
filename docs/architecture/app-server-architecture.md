@@ -88,8 +88,8 @@ flowchart LR
 | singleton/runtime helpers | `packages/shared/src/app-server-node.ts`                  | 解析 home/runtime、发现 owner、校验 health、安装 runtime release、兼容旧 lock  | 不包含 HTTP 业务逻辑            |
 | event schema              | `packages/shared/src/app-server-events.ts`                | 定义事件 envelope、状态 ref、source、scope、stream message 类型                | 不决定 handler 语义             |
 | HTTP API                  | `app-server/src/http-server.ts`                           | 鉴权、Origin 校验、事件写入、事件查询、状态查询、sync status                   | 不保存 consumer cursor          |
-| WebSocket API             | `app-server/src/websocket-server.ts`                      | catchup + live 事件投递                                                        | 不做 ack，不保证 exactly-once   |
-| event store               | `app-server/src/event-store.ts`                           | append-only JSONL 持久化、7 天保留窗口、dedupe、按 id 查询                     | 不做跨机器同步                  |
+| WebSocket API             | `app-server/src/websocket-server.ts`                      | 分批完整 catchup + live 事件投递                                               | 不做 ack，不保证 exactly-once   |
+| event store               | `app-server/src/event-store.ts`                           | 串行 append-only JSONL 持久化、7 天保留窗口、dedupe、按 id 查询                | 不做跨机器同步                  |
 | state store/projector     | `app-server/src/state-store.ts`、`state-projector.ts`     | 从 `agent.hook` / `agent.completion` 投影 ThreadRef，使用 `agent` 字段区分类型 | 不保存完整 thread 内容          |
 | local sync sim            | `app-server/src/cloud-sync-sim.ts`                        | 镜像事件、latest projection、cursor、manifest                                  | 不上传真实云端                  |
 | CLI lifecycle             | `packages/runweave-cli/src/commands/app-server.ts`        | 安装、启动、停止、重启、状态查询                                               | 不编译源码，不决定更新策略      |
@@ -122,6 +122,10 @@ app-server home
 日志，而是 app-server 当前保留窗口内的事件存储；默认只保留最近 7 天事件。启动时会清理
 超过保留窗口的旧事件并重写 JSONL 文件，运行中也会周期性清理。event id 仍按历史最大 id
 继续递增，避免 consumer 已保存的 cursor 因旧事件被清理后错过新事件。
+
+EventCenter 使用 record queue 串行执行 `append -> projection -> sync -> notify`，EventStore
+使用独立 append queue 保护 id 分配、dedupe 与 JSONL 追加。并发 HTTP producer 不会在主日志
+或本地同步镜像中生成重复 id/重复行。
 
 状态文件保存的是从事件投影出来的 latest view，而不是新的事实源。启动时 app-server 会从
 event log 重建 ThreadRef，然后写回 latest state JSON。ThreadRef 的 `threadId` 是唯一键，
@@ -331,13 +335,17 @@ sequenceDiagram
   Consumer->>CursorStore: read lastEventId
   Consumer->>AppServer: connect stream after lastEventId
   AppServer-->>Consumer: connected
-  AppServer-->>Consumer: catchup events
+  AppServer-->>Consumer: catchup events (one or more batches)
   loop each event
-    Consumer->>Handler: handle event
-    alt handler succeeds
+    alt owned by this backend
+      Consumer->>Handler: handle event
+      alt handler succeeds
+        Consumer->>CursorStore: write event.id
+      else handler fails
+        Consumer-->>Consumer: keep old cursor
+      end
+    else not owned by this backend
       Consumer->>CursorStore: write event.id
-    else handler fails
-      Consumer-->>Consumer: keep old cursor
     end
   end
   AppServer-->>Consumer: live event
@@ -345,7 +353,7 @@ sequenceDiagram
 
 这个模型故意选择 at-least-once：
 
-- handler 成功后再推进 cursor。
+- 相关事件在 handler 成功后推进 cursor；无 ownership 事件跳过 handler 后直接推进 cursor。
 - handler 失败、进程退出或 cursor 写入失败时，事件会在下次连接后重放。
 - handler 必须幂等。
 - consumer 应先做 ownership 过滤，再执行业务副作用。

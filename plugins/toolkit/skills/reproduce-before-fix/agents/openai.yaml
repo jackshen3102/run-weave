@@ -1,0 +1,6 @@
+interface:
+  display_name: "真实复现后修复"
+  short_description: "要求先在真实业务场景复现问题，再决定是否进入修复与优化"
+
+policy:
+  allow_implicit_invocation: false

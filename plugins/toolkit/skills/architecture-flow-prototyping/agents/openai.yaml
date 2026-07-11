@@ -1,0 +1,4 @@
+interface:
+  display_name: "Architecture Flow Prototyping"
+  short_description: "用可运行 HTML 技术说明讲清系统流程并发现潜在问题"
+  default_prompt: "使用 $toolkit:architecture-flow-prototyping 将这个系统流程整理成基于真实代码、可运行的 HTML 架构说明，并从流程中发现潜在问题。"

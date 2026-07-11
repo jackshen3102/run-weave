@@ -1,0 +1,486 @@
+{
+  "meta": {
+    "title": "App Server Event Architecture",
+    "subtitle": "事件从哪里来、在哪里持久化、如何投影、怎样到达 backend",
+    "baseline": "main · 2026-07-11",
+    "scope": "App Server 事件中心 / backend 消费 / TerminalState",
+    "principle": "只修改已稳定复现且不是保留期边界的问题"
+  },
+  "stats": [
+    { "value": "1", "label": "本机 App Server 单例" },
+    { "value": "2", "label": "Hook 到 backend 的语义入口" },
+    { "value": "7d", "label": "事件日志默认保留期" },
+    { "value": "100", "label": "WS catchup 默认批大小" }
+  ],
+  "scenarios": [
+    {
+      "id": "normal",
+      "label": "正常事件",
+      "tone": "ok",
+      "summary": "单个 hook 事件写入 JSONL，生成 ThreadRef 投影，经全局事件流交给所属 backend。",
+      "path": [
+        "producer-hook",
+        "ingress-http",
+        "event-store",
+        "projection",
+        "cloud-sync",
+        "ws-stream",
+        "backend-consumer",
+        "terminal-state"
+      ],
+      "metrics": [
+        { "label": "原始事件", "value": "1" },
+        { "label": "可能派生", "value": "0–1" },
+        { "label": "全局 WS", "value": "1" }
+      ],
+      "steps": [
+        "Hook Bridge 发现本机 App Server，并 POST /events。",
+        "EventStore 分配 id，将 envelope 追加到 app-server-events.jsonl。",
+        "StateProjector 将可识别的 agent.hook / agent.completion 投影为 ThreadRef。",
+        "状态变化时再追加 thread.state.changed，并持久化 ThreadRef 快照。",
+        "Cloud Sync Sim 完成后，EventCenter 才向 /events/stream listener 推送。",
+        "backend 按 Terminal Session / Project ownership 过滤，再更新 TerminalState。"
+      ]
+    },
+    {
+      "id": "concurrent",
+      "label": "并发写入",
+      "tone": "critical",
+      "summary": "修复前 40 个并发 append 只有 1 个唯一 id；现在 record 事务和 EventStore append 都串行，主日志与 sync mirror 均为 40 个唯一 id。",
+      "path": ["producer-many", "ingress-http", "event-store", "jsonl"],
+      "issueId": "P0",
+      "metrics": [
+        { "label": "并发写入", "value": "40" },
+        { "label": "JSONL 行数", "value": "40" },
+        { "label": "唯一 event id", "value": "40" }
+      ],
+      "steps": [
+        "多个 POST /events 同时进入 EventCenter.record。",
+        "EventCenter recordQueue 串行执行 append、projection、sync 和 notify。",
+        "EventStore appendQueue 独立保护 id 分配、dedupe 检查和 JSONL 追加。",
+        "40 个并发 HTTP 事件在主日志与 Cloud Sync mirror 中都保持 40 个唯一 id。"
+      ]
+    },
+    {
+      "id": "backlog",
+      "label": "积压恢复",
+      "tone": "critical",
+      "summary": "修复前 120 条积压只交付 100 条；现在服务端按 batch size 循环读取，分批完整交付后再进入 live。",
+      "path": [
+        "jsonl",
+        "ws-catchup",
+        "ws-stream",
+        "backend-consumer",
+        "cursor-store"
+      ],
+      "issueId": "P1",
+      "metrics": [
+        { "label": "待恢复", "value": "120" },
+        { "label": "catchup", "value": "120" },
+        { "label": "未交付历史", "value": "0" }
+      ],
+      "steps": [
+        "backend 用持久化 cursor 连接 /events/stream，没有传 limit。",
+        "服务端以默认 limit=100 作为单批大小循环 listAfter。",
+        "每批最后一个 event id 成为下一批 after，直到批数量小于 limit。",
+        "120 条积压按 100 + 20 两批完整交付，然后才进入 live。"
+      ]
+    },
+    {
+      "id": "multi-backend",
+      "label": "多 backend",
+      "tone": "warning",
+      "summary": "全局流仍包含其它 backend 的事件；consumer 只跳过业务 handler，但会对每个已交付事件推进 cursor。",
+      "path": [
+        "ws-stream",
+        "ownership-filter",
+        "backend-consumer",
+        "cursor-store"
+      ],
+      "issueId": "P2",
+      "metrics": [
+        { "label": "全局流", "value": "共享" },
+        { "label": "ownership", "value": "backend 本地" },
+        { "label": "忽略事件 cursor", "value": "推进" }
+      ],
+      "steps": [
+        "App Server 按 kind 过滤，不知道哪个 backend 拥有某个 terminalSessionId。",
+        "每个 backend 都收到 agent.hook / agent.completion。",
+        "isRelevant=false 时不执行业务 handler，但仍写入该 event id。",
+        "断线重连从最后已交付事件继续，不再重复无 ownership 的旧事件。"
+      ]
+    },
+    {
+      "id": "restart",
+      "label": "保留期 / 重启",
+      "tone": "warning",
+      "summary": "事件只保留 7 天；启动时 ThreadRef 快照会先清空，再仅用保留期内事件重放。WS 不报告 epoch 或 gap。",
+      "path": [
+        "jsonl",
+        "startup-replay",
+        "thread-state",
+        "ws-catchup",
+        "backend-consumer"
+      ],
+      "issueId": "P4",
+      "metrics": [
+        { "label": "日志保留", "value": "7 天" },
+        { "label": "投影来源", "value": "保留日志" },
+        { "label": "gap 信号", "value": "无" }
+      ],
+      "steps": [
+        "EventStore initialize 会删除 createdAt 早于保留线的事件。",
+        "App Server initialize 加载 state JSON 后立即 clear。",
+        "ThreadRef 只从 store.listAll() 重放并覆盖持久快照。",
+        "旧 cursor 连接 WS 时只得到当前可用事件，但协议不说明中间是否有缺口。"
+      ]
+    },
+    {
+      "id": "write-path",
+      "label": "写入关键路径",
+      "tone": "info",
+      "summary": "POST /events 的响应和 live 通知会等待文件同步，但实测 1200 条普通事件 p95=1.03ms、300 条投影事件 p95=1.87ms，未形成性能问题。",
+      "path": [
+        "ingress-http",
+        "event-store",
+        "projection",
+        "cloud-sync",
+        "ws-stream"
+      ],
+      "issueId": "P5",
+      "metrics": [
+        { "label": "notify 时点", "value": "sync 之后" },
+        { "label": "sync 输入", "value": "全量 events" },
+        { "label": "投影事件 p95", "value": "1.87ms" }
+      ],
+      "steps": [
+        "record 先 append 原始事件。",
+        "可能 append 派生事件并 write ThreadRef JSON。",
+        "syncCloud 传入 store.listAll() 和完整 ThreadRef snapshot。",
+        "Cloud Sync Sim 写 mirror、latest threads、cursor、manifest。",
+        "上述 await 完成后才 notify WebSocket listener，HTTP 才能返回。"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "producer-hook",
+      "lane": "producer",
+      "title": "Hook Bridge",
+      "eyebrow": "producer",
+      "body": "Claude / Codex / Trae hooks",
+      "tags": ["agent.hook", "agent.completion"],
+      "detail": "发现 App Server 后写全局事件；同时仍向 backend 内部 hook / completion 接口发送同一语义。"
+    },
+    {
+      "id": "producer-many",
+      "lane": "producer",
+      "title": "并发 Producers",
+      "eyebrow": "producer set",
+      "body": "Hook · backend · Electron · CLI",
+      "tags": ["N concurrent POST"],
+      "detail": "所有 producer 共享一个本机 App Server；HTTP 请求可并发进入，但 record 事务按到达顺序串行执行。"
+    },
+    {
+      "id": "ingress-http",
+      "lane": "app-server",
+      "title": "POST /events",
+      "eyebrow": "ingress",
+      "body": "Bearer + loopback origin + Zod schema",
+      "tags": ["CreateAppServerEventRequest"],
+      "detail": "验证事件 envelope 后进入 EventCenter recordQueue，串行完成 append、projection、sync、notify，再返回 201/200。"
+    },
+    {
+      "id": "event-store",
+      "lane": "app-server",
+      "title": "EventStore.append",
+      "eyebrow": "ordered log",
+      "body": "id · dedupeKey · createdAt",
+      "tags": ["in-memory", "append JSONL"],
+      "detail": "事件 id 是十进制字符串。appendQueue 串行保护 id 分配、dedupe 检查和 JSONL 追加。"
+    },
+    {
+      "id": "projection",
+      "lane": "app-server",
+      "title": "StateProjector",
+      "eyebrow": "projection",
+      "body": "agent event → ThreadRef",
+      "tags": ["thread.state.changed"],
+      "detail": "只识别 agent.hook / agent.completion 中有限状态；变化时再生成一条派生事件。"
+    },
+    {
+      "id": "cloud-sync",
+      "lane": "storage",
+      "title": "Cloud Sync Sim",
+      "eyebrow": "local mirror",
+      "body": "events · projections · cursor · manifest",
+      "tags": ["file I/O"],
+      "detail": "当前是本地云同步模拟。每次 record 都接收完整事件与完整 ThreadRef snapshot。"
+    },
+    {
+      "id": "jsonl",
+      "lane": "storage",
+      "title": "app-server-events.jsonl",
+      "eyebrow": "source log",
+      "body": "append-only · default retention 7d",
+      "tags": ["event log"],
+      "detail": "启动时加载并裁剪；nextId 取原文件最大 id + 1，内存只保留保留期内事件。"
+    },
+    {
+      "id": "thread-state",
+      "lane": "storage",
+      "title": "app-server-thread-state.json",
+      "eyebrow": "materialized view",
+      "body": "ThreadRef snapshot",
+      "tags": ["key: threadId"],
+      "detail": "运行时查询使用的轻量状态投影；启动时不会直接信任旧快照，而是从保留事件重建。"
+    },
+    {
+      "id": "startup-replay",
+      "lane": "app-server",
+      "title": "Startup Replay",
+      "eyebrow": "rebuild",
+      "body": "clear state → replay retained log",
+      "tags": ["restart"],
+      "detail": "加载 state 文件后 clear，再按当前 EventStore.listAll() 重放，最后覆盖 state 文件。"
+    },
+    {
+      "id": "ws-catchup",
+      "lane": "app-server",
+      "title": "Catchup Batch",
+      "eyebrow": "recovery",
+      "body": "after + kind + limit(default 100)",
+      "tags": ["paged batches"],
+      "detail": "连接时按 limit 作为批大小循环 listAfter，完整发送所有 catchup 后才进入 live。"
+    },
+    {
+      "id": "ws-stream",
+      "lane": "transport",
+      "title": "WS /events/stream",
+      "eyebrow": "global event stream",
+      "body": "connected → catchup → live",
+      "tags": ["one global WS / backend"],
+      "detail": "服务端同步发送全部 catchup batches 后注册 live listener；该同步区间没有 await，100 轮并发实验未丢事件。"
+    },
+    {
+      "id": "ownership-filter",
+      "lane": "backend",
+      "title": "Ownership Filter",
+      "eyebrow": "backend local truth",
+      "body": "terminalSessionId / projectId exists here?",
+      "tags": ["isRelevant"],
+      "detail": "App Server 不维护 backend ownership，消费端根据本地 SessionManager 决定是否处理。"
+    },
+    {
+      "id": "backend-consumer",
+      "lane": "backend",
+      "title": "EventConsumer",
+      "eyebrow": "sequential consumer",
+      "body": "kind filter · reconnect · handler",
+      "tags": ["agent.hook", "agent.completion"],
+      "detail": "消息通过 Promise queue 串行处理。相关事件先执行 handler；所有已交付事件随后都会写 cursor。"
+    },
+    {
+      "id": "cursor-store",
+      "lane": "storage",
+      "title": "backend cursor JSON",
+      "eyebrow": "consumer checkpoint",
+      "body": "backend:agent-events → lastEventId",
+      "tags": ["local per backend"],
+      "detail": "断线重连从这里读 after；文件没有 App Server instance/epoch 信息。"
+    },
+    {
+      "id": "terminal-state",
+      "lane": "backend",
+      "title": "TerminalStateService",
+      "eyebrow": "business projection",
+      "body": "starting · running · idle",
+      "tags": ["terminal event bus"],
+      "detail": "App Server consumer 与 backend 直接 hook 路由最终都调用 processTerminalAgentHook。"
+    }
+  ],
+  "issues": [
+    {
+      "id": "P0",
+      "severity": "critical",
+      "status": "已复现并修复",
+      "title": "并发事件事务已恢复唯一、有序写入",
+      "trigger": "同一个 App Server EventStore 同时收到多个 POST /events。",
+      "mechanism": "EventStore appendQueue 串行保护 id 与日志；EventCenter recordQueue 串行覆盖 append、projection、sync 和 notify，避免 mirror 并发重复。",
+      "consequence": "主 JSONL、latestEventId、cursor、投影顺序与 Cloud Sync mirror 重新共享同一单调事件序列。",
+      "evidence": "修复前 40 次并发 append 只有 1 个唯一 id，mirror 40 个唯一事件写出 53 行；修复后主日志和 mirror 都是 40 行、40 个唯一 id、末尾 id=40。",
+      "source": [
+        "app-server/src/event-store.ts:71",
+        "app-server/src/event-store.ts:85",
+        "app-server/src/event-store.ts:96"
+      ]
+    },
+    {
+      "id": "P1",
+      "severity": "critical",
+      "status": "已复现并修复",
+      "title": "catchup 已按批完整交付全部积压",
+      "trigger": "consumer cursor 之后积压超过默认 100 条相关事件。",
+      "mechanism": "WS 将 limit 解释为 batch size，循环 listAfter 并用每批最后 id 推进 after，最后一批不足 limit 时再订阅 live。",
+      "consequence": "积压不再被首批窗口截断，consumer 可以按既有 events message 顺序处理全部历史事件。",
+      "evidence": "修复前真实 WS 120 条只交付 100 条；修复后使用默认 batch size 收到 100/20 两批，共 120 条且 id 全部唯一。",
+      "source": [
+        "app-server/src/http-server.ts:202",
+        "app-server/src/websocket-server.ts:46",
+        "packages/shared/src/app-server-events.ts:54"
+      ]
+    },
+    {
+      "id": "P2",
+      "severity": "high",
+      "status": "已复现并修复",
+      "title": "无 ownership 事件也会推进交付 cursor",
+      "trigger": "全局流中先出现属于其它 backend 的 agent 事件。",
+      "mechanism": "isRelevant 只控制业务 handler；cursorStore.write 对每个成功交付到 consumer 的事件执行。",
+      "consequence": "其它 backend 的事件不会触发本地业务，但断线后也不会重复占据 catchup。",
+      "evidence": "修复前交付 id=1 且 isRelevant=false 后 cursorWrites=[]；修复后同一实验 cursorWrites=[1]、reconnectAfter=1。",
+      "source": [
+        "backend/src/app-server/event-consumer.ts:128",
+        "backend/src/index.ts:365"
+      ]
+    },
+    {
+      "id": "P3",
+      "severity": "high",
+      "status": "无法复现 · 不处理",
+      "title": "同步 catchup 与 subscribe 未形成事件空窗",
+      "trigger": "事件恰好在服务端完成 listAfter 后、subscribe listener 前被 record/notify。",
+      "mechanism": "连接处理中的 connected、全部 catchup 与 subscribe 是同一个同步回调，中间没有 await，Node 事件循环不会插入另一个 record 回调。",
+      "consequence": "此前推测的漏事件条件没有成立，不增加 epoch、水位或二次检查代码。",
+      "evidence": "100 轮连接握手与并发 POST 压力实验共 400 条事件，missing=0；代码同步执行模型与实验一致。",
+      "source": ["app-server/src/websocket-server.ts:46"]
+    },
+    {
+      "id": "P4",
+      "severity": "high",
+      "status": "7 天保留边界 · 不处理",
+      "title": "保留期重建与旧 cursor 之间没有 gap 语义",
+      "trigger": "backend cursor 早于当前 7 天保留窗口，或 App Server 日志被替换/重建。",
+      "mechanism": "WS connected 只有 acceptedAfter；没有 streamId/epoch、oldestAvailableId 或 gap。ThreadRef 又只从保留事件重建。",
+      "consequence": "consumer 无法区分“从 cursor 后完整恢复”与“日志开头已经丢失”；重启后旧 ThreadRef 也可能不在重建结果中。",
+      "evidence": "8 天旧 ThreadRef 实验得到 snapshotBeforeClear=1、retainedEvents=0、threadsAfterReplay=0；它落在明确保留边界，未复现当前业务状态错误。",
+      "source": [
+        "packages/shared/src/app-server-events.ts:54",
+        "app-server/src/index.ts:41",
+        "app-server/src/event-store.ts:64"
+      ]
+    },
+    {
+      "id": "P5",
+      "severity": "medium",
+      "status": "未复现性能问题 · 不处理",
+      "title": "事件交付等待整条文件同步关键路径",
+      "trigger": "任何成功创建的新事件，尤其是会改变 ThreadRef 的 agent 事件。",
+      "mechanism": "record 在 notify 前依次等待原始 JSONL、派生 JSONL、ThreadRef JSON、sync mirror/latest/cursor/manifest；sync 输入还复制完整事件数组。",
+      "consequence": "文件操作仍在关键路径，但当前规模下没有达到修改门槛。",
+      "evidence": "1200 条普通事件 total=821ms、p95=1.03ms；300 条持续改变 ThreadRef 的事件 total=330ms、p95=1.87ms、max=4.71ms。",
+      "source": [
+        "app-server/src/event-center.ts:28",
+        "app-server/src/cloud-sync-sim.ts:49"
+      ]
+    },
+    {
+      "id": "P6",
+      "severity": "medium",
+      "status": "未复现重复状态 · 不处理",
+      "title": "同一 hook 语义同时走 App Server 与 backend 直达接口",
+      "trigger": "Hook Bridge 同时发现 App Server 且存在 RUNWEAVE backend state/completion endpoint。",
+      "mechanism": "bridge 成功 POST App Server 后仍继续 POST backend /internal/terminal/agent-hook；completion 也同时写两边。",
+      "consequence": "两条到达路径仍存在，但相同状态不会重复发布 terminal_state_changed。",
+      "evidence": "同一 UserPromptSubmit 连续送达 2 次，TerminalStateService 只发布 1 条状态事件，最终状态保持 agent_running/codex。",
+      "source": [
+        "plugins/toolkit/hooks/runweave-hook-bridge.cjs:358",
+        "backend/src/terminal/agent-hook-processor.ts:67"
+      ]
+    }
+  ],
+  "contracts": [
+    {
+      "group": "App Server ingress",
+      "method": "POST",
+      "path": "/events",
+      "direction": "producer → App Server",
+      "payload": "CreateAppServerEventRequest",
+      "effect": "append → project → sync → notify"
+    },
+    {
+      "group": "App Server query",
+      "method": "GET",
+      "path": "/events?after=&kind=&limit=",
+      "direction": "reader → App Server",
+      "payload": "events[] + latestEventId",
+      "effect": "默认 100，最大 500"
+    },
+    {
+      "group": "App Server stream",
+      "method": "WS",
+      "path": "/events/stream?after=&kind=&limit=",
+      "direction": "App Server → consumer",
+      "payload": "connected / events(catchup) / event(live)",
+      "effect": "分批完整 catchup 后订阅 live"
+    },
+    {
+      "group": "App Server projection",
+      "method": "GET",
+      "path": "/threads?projectId=&terminalSessionId=",
+      "direction": "reader → App Server",
+      "payload": "ThreadRef[] + latestEventId",
+      "effect": "查询轻量状态投影"
+    },
+    {
+      "group": "Backend direct",
+      "method": "POST",
+      "path": "/internal/terminal/agent-hook",
+      "direction": "Hook Bridge → backend",
+      "payload": "terminalSessionId + hookEvent + threadId",
+      "effect": "直接调用 processTerminalAgentHook"
+    },
+    {
+      "group": "Backend direct",
+      "method": "POST",
+      "path": "/internal/terminal-completion",
+      "direction": "Hook Bridge → backend",
+      "payload": "completionReason + source + hookEvent",
+      "effect": "completion / Agent Team / notification path"
+    },
+    {
+      "group": "Backend workspace",
+      "method": "WS",
+      "path": "/ws/terminal-events",
+      "direction": "backend → Web/App clients",
+      "payload": "TerminalState / bell / metadata / structure",
+      "effect": "这是 backend 事件总线，不是 App Server stream"
+    }
+  ],
+  "eventKinds": [
+    {
+      "kind": "agent.hook",
+      "producer": "Hook Bridge / compensator",
+      "projection": "SessionStart→starting · Prompt→running · Stop→idle",
+      "backendEffect": "processTerminalAgentHook"
+    },
+    {
+      "kind": "agent.completion",
+      "producer": "Hook Bridge / backend",
+      "projection": "hook_stop→idle · ai_process_exit→completed",
+      "backendEffect": "Stop fallback + Agent Team completion reconciliation"
+    },
+    {
+      "kind": "thread.state.changed",
+      "producer": "AppServerStateProjector",
+      "projection": "自身不再投影",
+      "backendEffect": "当前 agent consumer 未订阅"
+    },
+    {
+      "kind": "backend.started",
+      "producer": "backend startup",
+      "projection": "无",
+      "backendEffect": "当前 agent consumer 未订阅"
+    }
+  ]
+}

@@ -17,6 +17,7 @@ const cloudSyncDir = path.join(stateDir, "app-server-cloud-sync-sim");
 let appServer = null;
 try {
   await run("pnpm", ["--filter", "@runweave/app-server", "build"]);
+  await verifyConcurrentEventAppend();
   await verifyEventLogRetention();
   appServer = await startAppServer();
   const lock = await readLock();
@@ -101,6 +102,8 @@ try {
   assert.equal(afterRestart.events.length, 2);
   assert.equal(afterRestart.latestEventId, "2");
   await verifyAuthOriginQueryAndPayloadValidation(restartedBaseUrl, token);
+  await verifyWebSocketCatchupPagination(restartedBaseUrl, token);
+  await verifyConcurrentHttpAppend(restartedBaseUrl, token);
 
   console.log("app-server event center verification passed");
 } finally {
@@ -205,6 +208,107 @@ async function readLock() {
   return JSON.parse(
     await readFile(path.join(stateDir, "app-server.lock.json"), "utf8"),
   );
+}
+
+async function verifyConcurrentEventAppend() {
+  const concurrentStateDir = await mkdtemp(
+    path.join(os.tmpdir(), "runweave-app-server-concurrent-append-"),
+  );
+  try {
+    const { AppServerEventStore } =
+      await import("../app-server/dist/event-store.js");
+    const eventLogPath = path.join(concurrentStateDir, "events.jsonl");
+    const store = new AppServerEventStore(eventLogPath);
+    await store.initialize();
+    const results = await Promise.all(
+      Array.from({ length: 40 }, (_, index) =>
+        store.append({
+          kind: "diagnostic.concurrent",
+          source: {
+            app: "cli",
+            instanceId: "concurrent-append-verify",
+            pid: process.pid,
+          },
+          payload: { index },
+        }),
+      ),
+    );
+    const ids = results.map((result) => result.event.id);
+    assert.equal(new Set(ids).size, 40);
+    assert.deepEqual(
+      ids,
+      Array.from({ length: 40 }, (_, index) => String(index + 1)),
+    );
+  } finally {
+    await rm(concurrentStateDir, { recursive: true, force: true });
+  }
+}
+
+async function verifyWebSocketCatchupPagination(baseUrl, token) {
+  for (let index = 0; index < 120; index += 1) {
+    const response = await postEvent(baseUrl, token, {
+      kind: "diagnostic.catchup",
+      source: {
+        app: "cli",
+        instanceId: "catchup-pagination-verify",
+        pid: process.pid,
+      },
+      payload: { index },
+    });
+    assert.equal(response.status, 201);
+  }
+
+  const stream = await connectCatchupStream(
+    `${baseUrl.replace(/^http/, "ws")}/events/stream?after=0&kind=diagnostic.catchup`,
+    token,
+    120,
+  );
+  const catchupMessages = stream.messages.filter(
+    (message) => message.type === "events",
+  );
+  assert.deepEqual(
+    catchupMessages.map((message) => message.events.length),
+    [100, 20],
+  );
+  const events = catchupMessages.flatMap((message) => message.events);
+  assert.equal(events.length, 120);
+  assert.equal(new Set(events.map((event) => event.id)).size, 120);
+  stream.close();
+}
+
+async function verifyConcurrentHttpAppend(baseUrl, token) {
+  const responses = await Promise.all(
+    Array.from({ length: 40 }, (_, index) =>
+      postEvent(baseUrl, token, {
+        kind: "diagnostic.concurrent-http",
+        source: {
+          app: "cli",
+          instanceId: "concurrent-http-verify",
+          pid: process.pid,
+        },
+        payload: { index },
+      }),
+    ),
+  );
+  assert.equal(
+    responses.every((response) => response.status === 201),
+    true,
+  );
+  const ids = responses.map((response) => response.body.event.id);
+  assert.equal(new Set(ids).size, 40);
+
+  const mirrorEvents = (
+    await readFile(
+      path.join(cloudSyncDir, "events", "app-server-events.jsonl"),
+      "utf8",
+    )
+  )
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+    .filter((event) => event.kind === "diagnostic.concurrent-http");
+  assert.equal(mirrorEvents.length, 40);
+  assert.equal(new Set(mirrorEvents.map((event) => event.id)).size, 40);
 }
 
 async function verifyEventLogRetention() {
@@ -515,6 +619,36 @@ function connectStream(url, token) {
       }
     });
     socket.on("error", reject);
+  });
+}
+
+function connectCatchupStream(url, token, expectedEventCount) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const messages = [];
+    const timer = setTimeout(() => {
+      socket.close();
+      reject(new Error("Timed out waiting for paged catchup events"));
+    }, 10_000);
+    socket.on("message", (raw) => {
+      messages.push(JSON.parse(String(raw)));
+      const eventCount = messages
+        .filter((message) => message.type === "events")
+        .reduce((total, message) => total + message.events.length, 0);
+      if (eventCount >= expectedEventCount) {
+        clearTimeout(timer);
+        resolve({
+          messages,
+          close: () => socket.close(),
+        });
+      }
+    });
+    socket.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
   });
 }
 

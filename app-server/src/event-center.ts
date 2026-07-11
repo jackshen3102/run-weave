@@ -19,18 +19,32 @@ export interface AppServerEventCenterOptions {
 
 export class AppServerEventCenter {
   private readonly listeners = new Set<AppServerEventListener>();
+  private recordQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly store: AppServerEventStore,
     private readonly options: AppServerEventCenterOptions,
   ) {}
 
-  async record(
+  record(
+    input: CreateAppServerEventRequest,
+  ): Promise<{ event: AppServerEventEnvelope; created: boolean }> {
+    const operation = this.recordQueue.then(() => this.recordSerial(input));
+    this.recordQueue = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation;
+  }
+
+  private async recordSerial(
     input: CreateAppServerEventRequest,
   ): Promise<{ event: AppServerEventEnvelope; created: boolean }> {
     const result = await this.store.append(input);
     if (result.created) {
-      const derivedEvents = await this.projectAndRecordDerivedEvents(result.event);
+      const derivedEvents = await this.projectAndRecordDerivedEvents(
+        result.event,
+      );
       await this.syncCloud(
         derivedEvents
           .filter((event) => event.kind === "thread.state.changed")
