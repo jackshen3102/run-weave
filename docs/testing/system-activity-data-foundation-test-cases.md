@@ -65,7 +65,7 @@ git diff --check
 
 操作：从 Stable 与 Beta 各发送一条测试 Query，完成一次 Agent turn；列出 Activity Hub、两个 App Server、Backend profile 和 Project `.runweave` 中本次产生的文件；用 `file`、`sqlite3 .tables`、`PRAGMA journal_mode` 和主键查询检查 `activity.sqlite`。
 
-预期：`activity.sqlite` 是 SQLite 3 数据库且启用 WAL；`behavior_facts`、`activity_contents`、link、External Ref、source/quarantine/retention 表都在该库；规范化 `user.query.submit_requested`、`agent.thread.*` 与 `agent.response.observed` 只以这些 SQLite row/BLOB 存在；两个 App Server 的 operational event/state 仍各自隔离；Activity Hub 不创建 Fact JSONL/segment，也不写 Backend LowDB 或项目 run 文件。
+预期：`activity.sqlite` 是 SQLite 3 数据库且启用 WAL；9 个 canonical behavior/content/ref/source/quarantine/retention 表都在该库；每个 Producer spool 也是 SQLite 且只有 `spool_events/spool_loss_ranges` transient 表；规范化 `user.query.submit_requested`、`agent.thread.*` 与 `agent.response.observed` 只以 Hub SQLite row/BLOB 存在；两个 App Server 的 operational event/state 仍各自隔离；Activity Hub 不创建 Fact JSONL/segment，也不写 Backend LowDB 或项目 run 文件。
 
 失败：Activity Fact 复用 App Server JSONL、依赖项目 `.runweave` 才可查询，或 Stable/Beta 各自形成无法统一查询的行为库。
 
@@ -85,7 +85,7 @@ git diff --check
 
 方法：判定表。
 
-操作：分别从 Stable Desktop、Beta Desktop、Dev Web、Backend、CLI、Hook、Shell 写合法事件；再提交 CLI 被标成 runtime、缺 `eventId`、未知 major schema、超限 payload、未授权 event name，以及 Producer 伪造 `deviceId/ingestedAt/hubOffset/privacy/retention` 的请求。
+操作：分别从 Stable Desktop、Beta Desktop、Dev Web、Backend、CLI、Hook、Shell 写合法事件；再提交 CLI 被标成 runtime、缺 `eventId`、未知 major schema、超限 payload、未授权 event name、Query 伪装成 Agent actor、Agent Team 伪装成 User actor，以及 Producer 伪造 `deviceId/ingestedAt/hubOffset/privacy/retention` 的请求。
 
 预期：合法组合保留 `runtime.channel` 与 `runtime.surface`；Hub-owned/Registry-owned 字段只能由 Hub/Registry 写；非法事件被拒或进入 SQLite quarantine，不能混进 Facts；Sources 显示 reject 数和原因。
 
@@ -135,9 +135,9 @@ git diff --check
 
 方法：时序、边界。
 
-操作：两个 producer 交错提交事件，并让其中一个 occurredAt 偏移 5 分钟、网络延迟后到；检查 sequence、hubOffset 和 timeline。
+操作：两个 producer 交错提交事件，并让其中一个 occurredAt 偏移 5 分钟、网络延迟后到；先保存 change-feed hubOffset，再提交迟到事件；检查 sequence、hubOffset、timeline snapshot 分页和 change feed。
 
-预期：每个 producer sequence 单调；hubOffset 只表示接收顺序；timeline 同时呈现 occurred/ingested 时间和 clock skew，不伪造全局严格顺序。
+预期：每个 producer sequence 单调；hubOffset 只表示接收顺序；timeline 同时呈现 occurred/ingested 时间和 clock skew，不伪造全局严格顺序；迟到事件通过 `afterHubOffset` 增量流出现，冻结 `asOfHubOffset` 的旧分页不漂移，刷新后可按 occurredAt 插回正确位置。
 
 失败：Hub 重写 occurredAt、跨 producer 用单一自增 ID声称发生顺序，或迟到事件覆盖已有记录。
 
@@ -145,9 +145,9 @@ git diff --check
 
 方法：依赖不可用、恢复。
 
-操作：停止 Hub；连续执行 critical Query/response/result 和 sampled UI events；重启 Hub并等待 ACK；测量业务路径耗时与 spool。
+操作：分别使用两个新 Producer boot：第一组停止 Hub 后执行 critical Query/response/result 与 sampled UI events，并在 7 天内恢复；第二组在 Hub 已停止时启动且保持同一进程/boot，直到包含 `producer.instance.started` 的 encrypted spool bundle 超过 7 天并生成 loss range；随后重启并升级 Producer，再重启 Hub 等待旧 loss report ACK；测量业务路径耗时，检查 `spool_events/spool_loss_ranges/producer_instances`。
 
-预期：业务继续；producer enqueue p95 符合预算；spool 按 sequence 重放；critical 事件完整；producer 已知的 sampled 丢弃产生 `source.events_dropped`；未知原因的 sequence gap 只显示 gap，不伪造 reason。
+预期：业务继续；producer enqueue p95 符合预算；7 天内 spool 按 sequence 完整重放 critical Fact；超过 7 天的整个 bundle 被删除且不复活，先留下带 affected name/version/runtime/bootStartedAt 的无正文 loss range；Reporter 重启/升级后仍用旧 manifest 创建 `producer_instances(started_event_id=NULL)` 并产生 `source.events_dropped(reason=retention_expired)`，不得写入新版本/runtime；sampled 丢弃也产生对应 loss event；未知原因的 sequence gap 只显示 gap，不伪造 reason。
 
 失败：用户动作等待 Hub、spool 丢 critical、恢复后乱序/静默丢失，或丢弃没有 gap。
 
@@ -155,9 +155,9 @@ git diff --check
 
 方法：at-least-once。
 
-操作：同一 eventId 重发 10 次，包含跨连接、跨进程 retry；再用相同 payload 但新 eventId 发送一次。
+操作：同一 eventId/producer sequence/Content ID/Ref ID 重发 10 次，包含跨连接、跨进程和 ACK 丢失后的 retry；再分别发送“同 eventId 但 payload/content 不同”“同 sequence 但 eventId 不同”“同 contentId 换不兼容 role/kind”“跨 owner namespace 复用 content/ref ID”和“相同 payload 但新 eventId/sequence”五组。
 
-预期：前者只有一条 Fact，ACK 一致；后者是新事实。去重不依赖 `Date.now()` 或 payload 文本。
+预期：完全相同的 retry 只有一条 Fact/Content/Ref/link 并返回原 hubOffset；前两组 fingerprint 冲突以 `idempotency_conflict` 拒绝；不兼容 role/kind 以 `content_identity_conflict` 拒绝；跨 namespace 以 ownership error 拒绝；冲突留下脱敏 quarantine 记录；最后一组是新事实。去重不依赖 `Date.now()` 或模糊文本相似度。
 
 失败：出现重复行、不同真实动作被错误合并，或 retry 生成新 ID。
 
@@ -185,29 +185,29 @@ git diff --check
 
 方法：故障注入。
 
-操作：分别在 `BEGIN IMMEDIATE` 前、Fact insert 后、Content/link insert 后、COMMIT 前、COMMIT 后但 ACK 前强制结束 Hub；重启后执行 `PRAGMA integrity_check`、`foreign_key_check`，并让 Producer 以相同 eventId/sequence 重放。
+操作：分别在 `BEGIN IMMEDIATE` 前、Fact insert 后、Content/link insert 后、COMMIT 前、COMMIT 后但 ACK 前强制结束 Hub；重启后执行 `PRAGMA integrity_check`、`foreign_key_check`，并让 Producer 以相同 eventId/sequence 重放；通过 storage adapter 尝试写负 byte length、expiry 早于 anchor、反向 gap range 和 contiguous sequence 大于 seen 的 fixture。
 
-预期：未 COMMIT 的 batch 整体不存在；已 COMMIT 的 Fact/Content/Ref/cursor/gap 全部存在；ACK 前崩溃的重放被幂等去重；已分配的 hubOffset 唯一且严格递增（允许 rollback/retention 后有空洞，禁止复用）；WAL recovery 后查询正确。
+预期：未 COMMIT 的 batch 整体不存在；已 COMMIT 的 Fact/Content/Ref/cursor/gap 全部存在；ACK 前崩溃的重放被幂等去重；所有已 COMMIT 的 hubOffset 唯一、严格递增且永不复用（未 COMMIT 的临时 rowid 不可见且允许被 SQLite 复用，retention 可留下空洞）；非法跨字段 fixture 被 SQLite CHECK 拒绝；WAL recovery 后查询正确。
 
 失败：出现半事务、ACK 后丢失、相同 eventId 重复、foreign key 断裂、损坏被静默忽略，或同一 offset 两个事件。
 
-### ADF-014 SQLite canonical backup、restore 与索引重建
+### ADF-014 SQLite canonical 唯一性、完整性与索引重建
 
-方法：灾备、派生索引恢复。
+方法：存储唯一性、派生索引恢复。
 
-操作：写入包含 Fact、Content ciphertext、External Ref、gap 的基准数据并记录查询结果；通过 SQLite online backup 创建备份；在测试副本删除并重建 secondary indexes；再从备份恢复到新的隔离 home 并重查。
+操作：写入包含 Fact、Content ciphertext、External Ref、gap 的基准数据并记录查询结果；执行 `integrity_check/foreign_key_check`；删除并按 Registry migration 重建 secondary indexes；最后在一次性隔离副本中显式删除 `activity.sqlite`、WAL 与 SHM 后重启 Hub。
 
-预期：索引重建前后 Fact rows 与内容 hash 不变；恢复库的 event count、filters、correlation、Sources gap、Content/Ref 状态与备份时一致；恢复后 integrity/foreign-key check 通过。
+预期：索引重建前后 Fact rows、内容 hash、event count、filters、correlation、Sources gap 与 Content/Ref 状态不变，完整性检查通过；显式删库后旧 Facts 不会从 App Server JSONL、业务库或 shadow files 自动重建；首期目录没有自动 backup/replica。
 
-失败：恢复依赖 JSONL/业务库、备份缺 Content/Ref、索引重建改写 Fact、在线备份包含半事务，或恢复后不能继续分配唯一 hubOffset。
+失败：存在可查询的第二份 Fact store、删库后旧事实静默复活、索引重建改写 Fact、完整性失败被忽略，或把业务对象扫描结果伪装成恢复数据。
 
 ### ADF-015 7 天内容与 30 天事实分别过期
 
 方法：边界值、时间迁移。
 
-操作：用受控时钟构造 6d23h59m、7d、29d23h59m、30d 的 content/fact；执行 retention；查询事实、内容、ref 和 watermark。
+操作：用受控时钟构造 retention anchor 为 6d23h59m、7d、29d23h59m、30d 的 content/fact；再构造“occurred 6 天前、今天才从 spool replay”“occurred 在未来、今天 ingest”和已过 30 天才到达的请求；同时给仍在持续写新 Fact 的同一 boot 建普通 gap、loss gap、terminal receipt 三类 29d/30d fixture；执行 retention；查询事实、内容、ref、source gap 和 sweep state。
 
-预期：7 天前 SQLite ciphertext 被清空/删除，Fact link 的 digest/length/status 保留到 30 天；30 天 Fact/link rows 删除；边界语义一致且可审计；没有永久 raw archive。
+预期：anchor 永远是 `min(occurredAt, ingestedAt)`，replay 不重置 TTL；7 天前 SQLite ciphertext 被清空，Fact link 保留 digest/length，所关联 `activity_contents` tombstone 保留 kind/expired 状态到 30 天；30 天 Fact/link/tombstone rows 删除；已过 30 天才到达的请求不写 Fact，而以带 eventId/fingerprint 的 terminal receipt 推进 accounted cursor；三类 source gap 都按自身 expires index 在 30 天删除，不被同 boot 新 Fact 延长；迟到 row 仍会被 sweep 命中；没有永久 raw archive。
 
 失败：删除 Fact 时才删内容、内容过期导致 Fact 404、超过 30 天仍静默保存，或清理重写全部历史造成不可接受停顿。
 
@@ -217,7 +217,7 @@ git diff --check
 
 操作：在小 quota fixture 中写大量 Blob、sampled UI、normal tool 和 critical Query/response；触发 80/95/100% 水位。
 
-预期：先清过期 Content/quarantine、checkpoint 并 incremental vacuum，再采样低优先级；critical 保留或可靠 SQLite spool；Sources 显示 quota、dropped 和 gap；业务收到可退避的 429。
+预期：先清过期 Content/quarantine、checkpoint 并 incremental vacuum，再采样低优先级；7 天内 critical 保留或进入可靠 `spool_events`；任何 spool 删除先在预留 quota 的 `spool_loss_ranges` durable；Sources 显示 quota、dropped 和 gap；业务收到可退避的 429。
 
 失败：无序删除、先丢 Query、磁盘填满导致运行时崩溃，或 loss 不可见。
 
@@ -225,11 +225,11 @@ git diff --check
 
 方法：安全等价类。
 
-操作：在 Query、command、tool args/result、URL、header、`.env` 路径和 evidence excerpt 中放测试 token/cookie/password/private key/high-entropy secret；检查 Producer spool SQLite、`activity.sqlite`、WAL/SHM、online backup、export 和 API。
+操作：在 Query、command、tool args/result、URL、header、`.env` 路径和 evidence excerpt 中放测试 token/cookie/password/private key/high-entropy secret；检查 Producer spool SQLite、`activity.sqlite`、WAL/SHM、export 和 API；轮换一次 Keychain content key 后重读旧/新 row；尝试把两行完整 ciphertext/nonce/tag 互换并解密。
 
-预期：禁止字段不落盘；允许内容被一致替换并报告 redaction；Content/locator 列只含 AES-GCM ciphertext，key 不在目录；database/WAL/SHM/backup 权限为 0600、根目录为 0700；搜索测试 secret 0 命中。
+预期：禁止字段不落盘；允许内容被一致替换并报告 redaction；Content/locator 列只含 AES-GCM ciphertext 与非敏感 key ID/version，key bytes 不在目录；同 key nonce 不重复；轮换后旧/新 row 均可按版本读取；跨行置换因 AAD 不匹配而认证失败；database/WAL/SHM 权限为 0600、根目录为 0700；搜索测试 secret 0 命中。
 
-失败：任一 SQLite page/WAL/spool/backup、日志或导出泄漏，只有 UI 打码，key 与 ciphertext 同目录，或 redaction 破坏 event schema。
+失败：任一 SQLite page/WAL/spool、日志或导出泄漏，只有 UI 打码，key 与 ciphertext 同目录，或 redaction 破坏 event schema。
 
 ### ADF-018 Capability 权限与审计
 
@@ -287,7 +287,7 @@ git diff --check
 
 操作：创建 Pack 后继续写新 Facts、补齐 gap、让一个 raw content 过期；使用相同 Pack hash 重跑模型。
 
-预期：Pack 中 fact IDs/hash、resolved excerpts、schema、redaction、watermarks、gap 和 truncated 状态不变；新事件不进入旧 Pack；重跑输入字节一致。
+预期：Pack 中 fact IDs/hash、resolved excerpts、schema、redaction、hubOffset/source watermarks、gap 和 truncated 状态不变；Learning 增量只按 hubOffset 取数，不因迟到 occurredAt 漏事件；新事件不进入旧 Pack；重跑输入字节一致。
 
 失败：模型运行时动态扫库、过期后 Pack 内容漂移、缺少来源缺口，或同 hash 对应不同输入。
 

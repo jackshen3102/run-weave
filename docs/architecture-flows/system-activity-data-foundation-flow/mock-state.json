@@ -94,8 +94,8 @@
       "lane": "delivery",
       "eyebrow": "DURABILITY",
       "title": "Per-producer SQLite spool",
-      "body": "业务路径只入队；Hub 下线或 429 时落盘，收到最高连续 ACK 后删除。",
-      "detail": "Critical Query/response/result 优先保留；已知低优先级丢弃必须生成 source.events_dropped。",
+      "body": "spool_events 加密落盘，spool_loss_ranges 记录明确丢弃；ACK 后删除。",
+      "detail": "离线 bundle 最多 7 天；超过后包括 critical 在内都删除并报告 retention_expired，不伪装可永久补齐。",
       "tags": ["fire-and-forget", "replay", "backpressure"]
     },
     {
@@ -192,9 +192,9 @@
       "id": "learning-store",
       "lane": "consumers",
       "eyebrow": "DERIVED ASSET",
-      "title": "Candidate → Learning",
+      "title": "learning.sqlite · Candidate → Learning",
       "body": "模型生成 claim；系统校验证据和数字；人工审核后发布不可变版本。",
-      "detail": "Learning 与 Fact 分库/命名空间，模型永远不能修改事实。",
+      "detail": "learning.sqlite 是派生资产库，不属于 activity.sqlite canonical truth；模型永远不能修改事实。",
       "tags": ["review", "version", "support capsule"]
     }
   ],
@@ -305,7 +305,7 @@
       "steps": [
         "Hub 不可达时 SDK 快速返回并写 per-producer SQLite spool。",
         "Critical Query/response/result 不先丢；已知 sampled 丢失写 source.events_dropped。",
-        "恢复后重发原 eventId，Hub 去重并 ACK 最高连续 sequence。",
+        "恢复后重发原 eventId，Hub 去重并 ACK 最高连续 accounted sequence。",
         "缺失区间在 Sources 和 Context Pack 中持续可见。"
       ],
       "metrics": [
@@ -398,7 +398,7 @@
       "source": "Agent Team",
       "capture": "run state + dispatch/validated result boundary",
       "direct": "run、role、phase、round、case、reported result",
-      "content": "最小 note excerpt",
+      "content": "无",
       "external": "run JSON / outbox / evidence",
       "coverage": "结构化程度高",
       "status": "record"
@@ -407,7 +407,7 @@
       "source": "Terminal Browser / Verification",
       "capture": "Electron main-frame events + identity runner",
       "direct": "tab、navigation、target identity、case/result",
-      "content": "验证报告中的最小说明 excerpt",
+      "content": "无（report 只保存 External Ref）",
       "external": "screenshot / DOM / trace",
       "coverage": "不从 CDP 或测试标题推断高层动作/Case",
       "status": "record"
@@ -424,10 +424,10 @@
     {
       "source": "Raw logs / output / screenshots",
       "capture": "注册的 artifact resolver",
-      "direct": "kind、digest、size、availability",
-      "content": "仅最小短期 excerpt",
-      "external": "权威大对象",
-      "coverage": "不是主事实来源",
+      "direct": "不单独生成行为 Fact",
+      "content": "仅由上游事件选择最小短期 excerpt",
+      "external": "descriptor 含 kind/digest/size/availability",
+      "coverage": "大对象只引用，不扫描成主事实",
       "status": "reference"
     },
     {
@@ -495,7 +495,7 @@
           "name": "event_name · schema_version",
           "type": "TEXT · INTEGER",
           "source": "registry",
-          "origin": "typed builder 常量；producer 不能传任意 event"
+          "origin": "Registry 生成的 typed builder 常量；producer 不能传任意 event"
         },
         {
           "name": "occurred_at_ms",
@@ -504,10 +504,10 @@
           "origin": "业务记录权威时间，或 adapter 在动作边界取时；Hub 不重写"
         },
         {
-          "name": "ingested_at_ms",
-          "type": "INTEGER",
+          "name": "ingested_at · ingest_fingerprint",
+          "type": "INTEGER · TEXT",
           "source": "hub",
-          "origin": "canonical transaction 接收时间"
+          "origin": "transaction 接收时间 + normalized input SHA-256"
         },
         {
           "name": "producer_* · sequence",
@@ -564,23 +564,29 @@
           "origin": "event schema policy；Producer 不可覆盖"
         },
         {
-          "name": "redaction_version",
-          "type": "TEXT",
+          "name": "redaction_version · retention_anchor · expires_at",
+          "type": "TEXT · INTEGER",
           "source": "hub",
-          "origin": "本次最终执行的 Hub DLP/redactor 版本"
+          "origin": "最终 DLP 版本；min(occurred, ingested) + policy TTL"
         }
       ]
     },
     {
-      "name": "activity_contents + fact_content_links",
-      "purpose": "Query/reply/command/tool excerpt 的 7 天加密正文；Fact link 保留 digest/size 快照。",
-      "retention": "7d bytes · 30d links",
+      "name": "activity_contents",
+      "purpose": "Query/reply/command/tool excerpt 的 7 天加密正文；不把正文放进 payload_json。",
+      "retention": "7d ciphertext",
       "columns": [
         {
           "name": "content_id",
           "type": "TEXT PK",
+          "source": "sdk",
+          "origin": "首次组 batch 生成 UUIDv7；spool/retry 复用"
+        },
+        {
+          "name": "owner_namespace",
+          "type": "TEXT",
           "source": "hub",
-          "origin": "Content ingest transaction 生成 UUID；retry 复用"
+          "origin": "认证 capability 注入；禁止跨 namespace 引用"
         },
         {
           "name": "kind",
@@ -601,8 +607,8 @@
           "origin": "脱敏后实际存储 bytes"
         },
         {
-          "name": "ciphertext · nonce · auth_tag",
-          "type": "BLOB",
+          "name": "ciphertext · nonce · auth_tag · key id/version",
+          "type": "BLOB · TEXT",
           "source": "hub",
           "origin": "AES-256-GCM；key 在 Keychain"
         },
@@ -613,10 +619,10 @@
           "origin": "none|gzip 与 aes-256-gcm policy"
         },
         {
-          "name": "created_at · expires_at",
+          "name": "created_at · retention_anchor · expires_at",
           "type": "INTEGER",
           "source": "hub",
-          "origin": "Hub transaction time + Registry/Project TTL"
+          "origin": "Hub time；min(occurred, ingested) + Registry/Project TTL"
         },
         {
           "name": "redaction_version",
@@ -629,47 +635,66 @@
           "type": "TEXT · INTEGER",
           "source": "hub",
           "origin": "retention/delete transaction 清空密文时更新"
-        },
+        }
+      ]
+    },
+    {
+      "name": "fact_content_links",
+      "purpose": "把 Fact 与 Content 分开规范化；Content 删除后，30 天 link 仍保留 digest/size/expiry 快照。",
+      "retention": "with fact · 30d",
+      "columns": [
         {
-          "name": "link event/content IDs · ordinal",
-          "type": "TEXT · INTEGER",
+          "name": "event_id · content_id",
+          "type": "TEXT FK",
           "source": "hub",
-          "origin": "当前 Fact、已验证 Content 与同 role 稳定顺序"
+          "origin": "当前 Fact + 同 batch/既有且同 owner 的 Content"
         },
         {
-          "name": "link role",
+          "name": "role",
           "type": "TEXT",
           "source": "registry",
           "origin": "event schema content role allowlist"
         },
         {
-          "name": "link digest · size · expected expiry",
+          "name": "ordinal",
+          "type": "INTEGER",
+          "source": "hub",
+          "origin": "同 role 输入的稳定顺序，从 0 分配"
+        },
+        {
+          "name": "sha256/size/expected_expiry snapshot",
           "type": "TEXT · INTEGER",
           "source": "hub",
-          "origin": "从 activity_contents row 复制；正文删除后仍保留"
+          "origin": "从 activity_contents row 复制；Producer 不可伪造"
         }
       ]
     },
     {
-      "name": "external_refs + fact_external_ref_links",
+      "name": "external_refs",
       "purpose": "只存大对象/权威对象的 descriptor；不把 Thread、scrollback、截图或 trace 塞入 SQLite BLOB。",
       "retention": "with fact",
       "columns": [
         {
           "name": "ref_id",
           "type": "TEXT PK",
-          "source": "hub",
-          "origin": "Resolver registration transaction 生成 UUID；retry 复用"
+          "source": "sdk",
+          "origin": "首次组 batch 生成 UUIDv7；spool/retry 复用"
         },
         {
-          "name": "authority · link role",
+          "name": "owner_namespace",
+          "type": "TEXT",
+          "source": "hub",
+          "origin": "认证 capability 注入；跨 namespace locator 拒绝"
+        },
+        {
+          "name": "authority",
           "type": "TEXT",
           "source": "registry",
-          "origin": "注册 resolver 与 event schema"
+          "origin": "capability 对应的注册 resolver 常量"
         },
         {
-          "name": "locator_ciphertext · nonce · auth_tag",
-          "type": "BLOB · BLOB · BLOB",
+          "name": "locator ciphertext/nonce/tag · key id/version",
+          "type": "BLOB · TEXT",
           "source": "hub",
           "origin": "locator 经 AES-256-GCM 加密后存 SQLite"
         },
@@ -682,8 +707,8 @@
         {
           "name": "captured_at",
           "type": "INTEGER",
-          "source": "hub",
-          "origin": "Resolver 成功确认对象与版本的时间"
+          "source": "producer",
+          "origin": "source resolver 成功确认对象与版本的结构化时间"
         },
         {
           "name": "expected_expires_at",
@@ -696,24 +721,43 @@
           "type": "TEXT · INTEGER",
           "source": "hub",
           "origin": "显式 resolver check + retention/delete transaction"
+        }
+      ]
+    },
+    {
+      "name": "fact_external_ref_links",
+      "purpose": "记录 Fact 当时引用了哪个权威对象，以及 capture 时是否可用；后续 resolver 状态不改历史快照。",
+      "retention": "with fact · 30d",
+      "columns": [
+        {
+          "name": "event_id · ref_id",
+          "type": "TEXT FK",
+          "source": "hub",
+          "origin": "当前 Fact + 同 batch/既有且同 owner 的 External Ref"
         },
         {
-          "name": "link event/ref IDs · ordinal",
-          "type": "TEXT · INTEGER",
+          "name": "role",
+          "type": "TEXT",
+          "source": "registry",
+          "origin": "event schema external ref role allowlist"
+        },
+        {
+          "name": "ordinal",
+          "type": "INTEGER",
           "source": "hub",
-          "origin": "当前 Fact、已注册 Ref 与同 role 稳定顺序"
+          "origin": "同 role 输入的稳定顺序，从 0 分配"
         },
         {
           "name": "availability_at_capture",
           "type": "TEXT",
           "source": "hub",
-          "origin": "Fact transaction 当时的 resolver 快照；以后不改"
+          "origin": "Fact transaction 当时 resolver 的 available/missing 快照"
         }
       ]
     },
     {
-      "name": "producer_instances + source_gaps",
-      "purpose": "ingest cursor、watermark 与缺口状态；同库事务更新，不伪造未知 loss 原因。",
+      "name": "producer_instances",
+      "purpose": "每个 Producer boot epoch 的 identity 与 ingest cursor；不是 Producer 自报的健康百分比。",
       "retention": "30 days",
       "columns": [
         {
@@ -723,31 +767,44 @@
           "origin": "capability 校验后的 SDK identity/manifest"
         },
         {
-          "name": "started_event_id · started_at",
-          "type": "TEXT · INTEGER",
-          "source": "hub",
-          "origin": "epoch 首个合法 producer.instance.started Fact"
+          "name": "boot_started_at",
+          "type": "INTEGER",
+          "source": "sdk",
+          "origin": "boot identity durable metadata；started Fact 丢失时仍存在"
         },
         {
-          "name": "last_seen_at",
+          "name": "started_event_id · first/last_seen_at",
+          "type": "TEXT nullable · INTEGER",
+          "source": "hub",
+          "origin": "started Fact 可空；Hub 首次/最近 COMMIT time"
+        },
+        {
+          "name": "highest_seen/contiguous_accounted_sequence",
           "type": "INTEGER",
           "source": "hub",
-          "origin": "该 epoch 最近成功 COMMIT 的 ingest time"
+          "origin": "committed Fact + validated loss + terminal receipt"
+        }
+      ]
+    },
+    {
+      "name": "source_gaps",
+      "purpose": "显式保存 sequence 缺口；迟到可关闭，未知原因保持 NULL，不生成伪事件补洞。",
+      "retention": "30 days",
+      "columns": [
+        {
+          "name": "gap_id · producer instance/boot",
+          "type": "TEXT PK/FK",
+          "source": "hub",
+          "origin": "比较 committed sequence 与 epoch cursor 后创建"
         },
         {
-          "name": "highest_seen/contiguous_sequence",
+          "name": "first_sequence · last_sequence",
           "type": "INTEGER",
           "source": "hub",
-          "origin": "事务校验本 batch sequence"
+          "origin": "连续缺口区间；Hub 校验 first <= last"
         },
         {
-          "name": "gap_id · first/last sequence",
-          "type": "TEXT · INTEGER",
-          "source": "hub",
-          "origin": "比较 committed sequence 与 cursor 后创建/调整"
-        },
-        {
-          "name": "gap status · detected/closed at",
+          "name": "status · detected/closed at",
           "type": "TEXT · INTEGER",
           "source": "hub",
           "origin": "gap 状态机与 transaction time"
@@ -756,13 +813,25 @@
           "name": "reason_code · source_event_id",
           "type": "TEXT nullable",
           "source": "hub",
-          "origin": "仅从已验证 source.events_dropped Fact 映射；否则 NULL"
+          "origin": "validated loss Fact 或 Hub-known retention reject；否则 NULL"
+        },
+        {
+          "name": "terminal_event_id · ingest_fingerprint",
+          "type": "TEXT nullable",
+          "source": "hub",
+          "origin": "仅超过 30 天的单 sequence terminal receipt；用于 ACK 重放"
+        },
+        {
+          "name": "retention_anchor · expires_at",
+          "type": "INTEGER",
+          "source": "hub",
+          "origin": "detected time + 30 天；独立 expiry index"
         }
       ]
     },
     {
-      "name": "ingest_quarantine + retention_watermarks",
-      "purpose": "坏 schema 的有界隔离与 7/30 天删除水位；secret-blocked 请求不保存原文。",
+      "name": "ingest_quarantine",
+      "purpose": "坏 schema 的有界隔离；secret-blocked 请求只留 hash/脱敏错误，不保存原文。",
       "retention": "7d quarantine",
       "columns": [
         {
@@ -790,22 +859,67 @@
           "origin": "脱敏错误，不含被拒 secret"
         },
         {
-          "name": "ciphertext · nonce · auth_tag",
-          "type": "BLOB nullable",
+          "name": "ciphertext/nonce/tag · key id/version",
+          "type": "BLOB · TEXT nullable",
           "source": "hub",
           "origin": "仅通过 size + pre-ingest secret scan 才保存"
-        },
+        }
+      ]
+    },
+    {
+      "name": "retention_sweeps",
+      "purpose": "只记录清理作业 telemetry；实际删除永远按 expires_at 索引，不能用水位跳过迟到 row。",
+      "retention": "operational state",
+      "columns": [
         {
-          "name": "watermark data_class",
-          "type": "TEXT",
+          "name": "data_class",
+          "type": "TEXT PK",
           "source": "registry",
           "origin": "固定 retention class；Producer 不可写"
         },
         {
-          "name": "watermark deleted_through · last_sweep",
-          "type": "INTEGER",
+          "name": "last_started · last_completed",
+          "type": "INTEGER nullable",
           "source": "hub",
-          "origin": "有界 retention transaction"
+          "origin": "有界 sweep 的实际开始/提交时间"
+        },
+        {
+          "name": "last_deleted_count · last_error_code",
+          "type": "INTEGER · TEXT nullable",
+          "source": "hub",
+          "origin": "最近一次 sweep 的结构化结果"
+        }
+      ]
+    },
+    {
+      "name": "computed query outputs · NOT A TABLE",
+      "purpose": "从 canonical rows 确定性计算；不回写 behavior_facts，也不是第二份事实源。",
+      "retention": "query only",
+      "wide": true,
+      "columns": [
+        {
+          "name": "duration_ms",
+          "type": "INTEGER",
+          "source": "computed",
+          "origin": "同 operationId 的 started/completed 时间或同源 monotonic duration"
+        },
+        {
+          "name": "explicit_retry_count",
+          "type": "INTEGER",
+          "source": "computed",
+          "origin": "同一结构化 operation/attempt 的已记录事件数"
+        },
+        {
+          "name": "coverage_gap_ranges",
+          "type": "ARRAY",
+          "source": "computed",
+          "origin": "producer_instances + source_gaps + query asOfHubOffset"
+        },
+        {
+          "name": "current_ref_availability",
+          "type": "TEXT",
+          "source": "computed",
+          "origin": "capture snapshot + latest resolver/retention state"
         }
       ]
     }
@@ -894,9 +1008,9 @@
       "severity": "resilience",
       "title": "Activity Hub 不可用",
       "trigger": "连接失败、429 或 Hub restart",
-      "mechanism": "SDK 快速入本地 SQLite spool；critical 事件保留；恢复后按 producer seq replay。",
+      "mechanism": "SDK 快速入本地 spool_events；7 天内 replay，超过 7 天转成无正文 spool_loss_ranges。",
       "observable": "Sources 显示 oldest unacked、queue bytes 与 lag。",
-      "resolution": "同 eventId 重放，ACK 最高连续 sequence；业务不等待。"
+      "resolution": "同 eventId 重放；过期 bundle 发送 source.events_dropped(reason=retention_expired)。"
     },
     {
       "id": "sequence-gap",
@@ -921,7 +1035,7 @@
       "severity": "retention",
       "title": "7 天 Content 已过期",
       "trigger": "Query/reply/blob 到达 expiresAt",
-      "mechanism": "SQLite 事务清空 ciphertext；30 天 Fact link 保留 digest、length、kind 和 expired 状态。",
+      "mechanism": "SQLite 事务清空 ciphertext；link 保留 digest/length，Content tombstone 保留 kind/expired 状态。",
       "observable": "详情显示 expired，不显示空白正文。",
       "resolution": "不恢复原文；已发布 Learning 仅用最小 Support Capsule。"
     },

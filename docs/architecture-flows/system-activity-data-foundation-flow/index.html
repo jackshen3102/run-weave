@@ -931,10 +931,9 @@
       .schema-column-head,
       .schema-column {
         display: grid;
-        grid-template-columns: minmax(140px, 1.2fr) minmax(
-            105px,
-            0.8fr
-          ) 82px minmax(180px, 1.7fr);
+        grid-template-columns:
+          minmax(140px, 1.2fr) minmax(105px, 0.8fr)
+          82px minmax(180px, 1.7fr);
         gap: 10px;
         align-items: start;
         padding: 9px 14px;
@@ -1399,7 +1398,9 @@
               <h2>activity.sqlite 是唯一事实源</h2>
               <p>
                 表、字段类型和来源在同一视图展开；Hub/Registry 字段不能由
-                Producer 伪造，Computed 字段不覆盖事实行。
+                Producer 伪造，Computed 字段不覆盖事实行。Producer 侧另有 SQLite
+                spool_events / spool_loss_ranges，仅用于最多 7 天离线交付， 不是
+                canonical Fact。
               </p>
             </div>
             <div class="legend">
@@ -1419,7 +1420,8 @@
               <h2>确定性准备数据，模型负责生成经验</h2>
               <p>
                 UI、CLI 或 Agent 只创建 AnalysisJob；所有入口共用同一个 Context
-                Pack 与审核管线。
+                Pack 与审核管线。派生对象写入独立 learning.sqlite，不属于
+                activity.sqlite canonical truth。
               </p>
             </div>
             <div class="legend">
@@ -1432,7 +1434,10 @@
             <div class="learning-flow" id="learning-flow"></div>
             <aside class="learning-aside">
               <h3>独立派生对象</h3>
-              <p>模型运行、Candidate 和已发布经验不会混进 Behavior Fact。</p>
+              <p>
+                模型运行、Candidate 和已发布经验写入 learning.sqlite，不会混进
+                Behavior Fact。
+              </p>
               <div class="object-list" id="learning-objects"></div>
             </aside>
           </div>
