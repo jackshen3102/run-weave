@@ -842,6 +842,128 @@
         line-height: 1.6;
       }
 
+      .schema-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      .source-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 7px;
+        border: 1px solid
+          color-mix(in srgb, var(--source-tone) 34%, transparent);
+        border-radius: 999px;
+        color: var(--source-tone);
+        background: color-mix(in srgb, var(--source-tone) 7%, transparent);
+        font:
+          700 8px/1 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .schema-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        padding: 20px;
+      }
+
+      .schema-card {
+        overflow: hidden;
+        border: 1px solid var(--line-soft);
+        border-radius: 14px;
+        background: rgba(11, 18, 29, 0.72);
+      }
+
+      .schema-card[data-wide="true"] {
+        grid-column: 1 / -1;
+      }
+
+      .schema-card-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 15px 16px;
+        border-bottom: 1px solid var(--line-soft);
+        background: rgba(16, 26, 40, 0.5);
+      }
+
+      .schema-card-head h3,
+      .schema-card-head p {
+        margin: 0;
+      }
+
+      .schema-card-head h3 {
+        font:
+          700 13px/1.2 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+
+      .schema-card-head p {
+        max-width: 520px;
+        color: var(--muted);
+        font-size: 9px;
+        line-height: 1.5;
+      }
+
+      .schema-retention {
+        flex: 0 0 auto;
+        color: var(--amber);
+        font:
+          700 9px/1 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        text-transform: uppercase;
+      }
+
+      .schema-column-head,
+      .schema-column {
+        display: grid;
+        grid-template-columns: minmax(140px, 1.2fr) minmax(
+            105px,
+            0.8fr
+          ) 82px minmax(180px, 1.7fr);
+        gap: 10px;
+        align-items: start;
+        padding: 9px 14px;
+      }
+
+      .schema-column-head {
+        color: var(--faint);
+        background: rgba(16, 26, 40, 0.28);
+        font:
+          700 8px/1.2 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+
+      .schema-column {
+        border-top: 1px solid rgba(148, 163, 184, 0.08);
+        color: var(--muted);
+        font-size: 9px;
+        line-height: 1.45;
+      }
+
+      .schema-column code {
+        color: var(--text);
+        font-size: 9px;
+      }
+
       .learning-layout {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 340px;
@@ -1196,6 +1318,9 @@
         <button class="view-tab" data-view="boundary" aria-selected="false">
           数据边界
         </button>
+        <button class="view-tab" data-view="schema" aria-selected="false">
+          数据结构
+        </button>
         <button class="view-tab" data-view="learning" aria-selected="false">
           经验生成
         </button>
@@ -1245,25 +1370,45 @@
             <article class="boundary-card">
               <strong>7 天 · Content</strong>
               <p>
-                Query、可见回复、command、最小 excerpt 与 Hub 自有
-                Blob；加密、可删除、到期不恢复。
+                Query、可见回复、command、最小 excerpt 以 SQLite 加密 BLOB
+                保存；可删除、到期不恢复。
               </p>
             </article>
             <article class="boundary-card">
               <strong>30 天 · Facts</strong>
               <p>
-                事件 envelope、显式关系、结果、digest、source gap
-                与查询投影；不是永久 archive。
+                事件 envelope、显式关系、结果、digest、source gap 与索引都在
+                activity.sqlite；不是永久 archive。
               </p>
             </article>
             <article class="boundary-card">
               <strong>少量 · External Ref</strong>
               <p>
-                完整 Thread、scrollback、run/outbox、截图/trace、Git
-                object；必须有 authority 和 availability。
+                完整 Thread、scrollback、run/outbox、截图/trace；必须有
+                authority 和 availability。
               </p>
             </article>
           </div>
+        </div>
+      </section>
+
+      <section class="view-panel" data-view-panel="schema" hidden>
+        <div class="panel-shell">
+          <header class="panel-head">
+            <div>
+              <h2>activity.sqlite 是唯一事实源</h2>
+              <p>
+                表、字段类型和来源在同一视图展开；Hub/Registry 字段不能由
+                Producer 伪造，Computed 字段不覆盖事实行。
+              </p>
+            </div>
+            <div class="legend">
+              <span class="tone-green"><i></i>canonical SQLite</span>
+              <span class="tone-amber"><i></i>7 / 30d retention</span>
+            </div>
+          </header>
+          <div class="schema-legend" id="schema-legend"></div>
+          <div class="schema-grid" id="schema-grid"></div>
         </div>
       </section>
 
@@ -1319,7 +1464,7 @@
       ></section>
       <p class="footer-note">
         这是目标架构说明，不代表 Activity Hub、Facts 页面或 Learning Pipeline
-        已经实现；页面中的 24
+        已经实现；页面中的 14
         个事件族与容量数字是实施范围和验收预算，不是生产观测值。
       </p>
     </main>

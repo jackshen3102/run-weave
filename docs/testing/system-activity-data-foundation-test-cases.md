@@ -22,7 +22,7 @@ P0–P2 实施时执行 ADF-001 至 ADF-021；P3 执行 ADF-022 至 ADF-028；P4
 - 一个隔离 Activity Hub home，例如 `/tmp/runweave-activity-hub-acceptance`。
 - Stable、Beta、Dev 三个可区分 Runtime；至少两个 Backend profile。
 - 一个 Runweave Terminal、一个安装全局 Agent Hook 的外部 TTY，以及一个未安装 Shell Integration 的外部 TTY。
-- 一个包含文本、Git change、Browser tab 和 Agent Team acceptance case 的隔离 Project。
+- 一个包含 Browser tab 和 Agent Team acceptance case 的隔离 Project。
 - 可控制时钟或 retention fixture；不能修改真实用户数据时间戳。
 - 所有内容使用测试 secret 和测试正文，不使用真实 token、cookie 或私有代码。
 
@@ -63,9 +63,9 @@ git diff --check
 
 前置：Stable App Server、Beta App Server、Backend 和 Activity Hub 分别使用隔离 home。
 
-操作：从 Stable 与 Beta 各发送一条测试 Query，完成一次 Agent turn；列出 Activity Hub、两个 App Server、Backend profile 和 Project `.runweave` 中本次产生的文件。
+操作：从 Stable 与 Beta 各发送一条测试 Query，完成一次 Agent turn；列出 Activity Hub、两个 App Server、Backend profile 和 Project `.runweave` 中本次产生的文件；用 `file`、`sqlite3 .tables`、`PRAGMA journal_mode` 和主键查询检查 `activity.sqlite`。
 
-预期：规范化 `user.query.submitted/agent.turn.*` 只出现在 Activity Hub fact/content；两个 App Server 的 operational event/state 仍各自隔离；Activity Hub 不写 Backend LowDB 或项目 run 文件。
+预期：`activity.sqlite` 是 SQLite 3 数据库且启用 WAL；`behavior_facts`、`activity_contents`、link、External Ref、source/quarantine/retention 表都在该库；规范化 `user.query.submit_requested`、`agent.thread.*` 与 `agent.response.observed` 只以这些 SQLite row/BLOB 存在；两个 App Server 的 operational event/state 仍各自隔离；Activity Hub 不创建 Fact JSONL/segment，也不写 Backend LowDB 或项目 run 文件。
 
 失败：Activity Fact 复用 App Server JSONL、依赖项目 `.runweave` 才可查询，或 Stable/Beta 各自形成无法统一查询的行为库。
 
@@ -73,7 +73,7 @@ git diff --check
 
 方法：因果验证、依赖删除。
 
-前置：已产生一组 Query、command、file save 和 Agent Team phase 事实。
+前置：已产生一组 Query、command 和 Agent Team phase 事实。
 
 操作：停止 producer；复制并隔离删除相应测试 Thread snapshot、scrollback、Agent Team run 和 Backend profile；仅启动 Activity Hub 查询事实。
 
@@ -85,17 +85,17 @@ git diff --check
 
 方法：判定表。
 
-操作：分别从 Stable Desktop、Beta Desktop、Dev Web、CLI、Hook、Shell 写合法事件；再提交 CLI 被标成 runtime、缺 `eventId`、未知 major schema、超限 payload 和未授权 event name 的请求。
+操作：分别从 Stable Desktop、Beta Desktop、Dev Web、Backend、CLI、Hook、Shell 写合法事件；再提交 CLI 被标成 runtime、缺 `eventId`、未知 major schema、超限 payload、未授权 event name，以及 Producer 伪造 `deviceId/ingestedAt/hubOffset/privacy/retention` 的请求。
 
-预期：合法组合保留 `runtime.channel` 与 `runtime.surface`；非法事件被拒或 quarantine，不能混进 Facts；Sources 显示 reject 数和原因。
+预期：合法组合保留 `runtime.channel` 与 `runtime.surface`；Hub-owned/Registry-owned 字段只能由 Hub/Registry 写；非法事件被拒或进入 SQLite quarantine，不能混进 Facts；Sources 显示 reject 数和原因。
 
-失败：CLI 被当成 Runtime、unknown payload 直接入库、坏 Beta schema 影响 Stable 查询，或 reject 没有可见记录。
+失败：CLI 被当成 Runtime、Backend 被猜成 Web/Desktop、Producer 能覆盖 Hub 字段、unknown payload 直接入库、坏 Beta schema 影响 Stable 查询，或 reject 没有可见记录。
 
 ### ADF-004 Stable/Beta/Dev 集中展示且控制面保持隔离
 
 方法：多运行时端到端。
 
-操作：三套 Runtime 各执行项目切换、Query、Agent completion 和 verification；在其中一套停止/重启 App Server；用 `$playwright-cli` 打开 Facts 与 Sources。
+操作：三套 Runtime 在各自固定的 Project scope 下执行 Query、Agent completion 和 verification；在其中一套停止/重启 App Server；用 `$playwright-cli` 打开 Facts 与 Sources。
 
 预期：一个页面能按 Runtime 筛选全部事实；每条记录版本/profile/source 正确；停止一套 App Server 不影响其他 Runtime 或 Activity Hub；Activity Hub 不能控制任一 Runtime。
 
@@ -107,7 +107,7 @@ git diff --check
 
 操作：在没有 `RUNWEAVE_TERMINAL_SESSION_ID`、但已安装 Activity Hook 的外部 TTY 启动受支持 Agent，发送 Query 并完成；再在未安装 Hook 的 TTY 重复。
 
-预期：第一组以 `runtime=external/surface=hook` 写 Query、Thread/Turn、visible reply/completion；未知 Terminal ID 保留为空；第二组不产生伪记录，Sources/文档明确未覆盖。
+预期：第一组以 `runtime=external/surface=hook` 写 `user.query.submit_requested`、对应的 `agent.thread.started/resumed` 与主 Agent `agent.response.observed`；Query 事件只表示 Hook 观察到发送请求，不声称 Agent 已接受；SubagentStop 不混入用户回复；未知 Terminal ID 保留为空；第二组不产生伪记录，Sources/文档明确未覆盖；系统不从 UserPromptSubmit/Stop 猜造 `agent.turn.*` 生命周期。
 
 失败：仍因 Runweave Terminal gate 跳过第一组、给外部 TTY 猜造 Session ID，或声称第二组已覆盖。
 
@@ -115,9 +115,9 @@ git diff --check
 
 方法：正反例。
 
-操作：在启用 zsh/bash/fish integration 的隔离 shell 执行成功、失败、Ctrl-C、含管道和多行命令；在未启用 integration 的 shell 重复。
+操作：在启用受控 interactive zsh integration 的隔离 shell 执行成功、失败、Ctrl-C、含管道和多行命令；再在未启用 integration 的 zsh、当前 bash DEBUG trap 与无 adapter 的 fish 中重复。
 
-预期：启用组产生 command started/completed/cancelled，exit/duration/cwd 正确；正文按 7 天内容策略；未启用组不通过 scrollback 反推命令，Sources 标 coverage inactive。
+预期：受控 zsh 组产生 `terminal.command.started/completed`，成功、失败与 Ctrl-C 的 exit/result、duration、cwd 正确（Ctrl-C 不另造 cancelled variant）；正文按 7 天内容策略；其它组不通过 DEBUG trap 或 scrollback 拼装用户命令，Sources 标 coverage inactive。
 
 失败：按键流被当作最终命令、IME/编辑内容错误、未启用组被猜测记录，或命令 secret 明文入库。
 
@@ -145,9 +145,9 @@ git diff --check
 
 方法：依赖不可用、恢复。
 
-操作：停止 Hub；连续执行 critical Query/completion/result 和 sampled UI events；重启 Hub并等待 ACK；测量业务路径耗时与 spool。
+操作：停止 Hub；连续执行 critical Query/response/result 和 sampled UI events；重启 Hub并等待 ACK；测量业务路径耗时与 spool。
 
-预期：业务继续；producer enqueue p95 符合预算；spool 按 sequence 重放；critical 事件完整；sampled 若被丢弃有 `source.loss.reported`。
+预期：业务继续；producer enqueue p95 符合预算；spool 按 sequence 重放；critical 事件完整；producer 已知的 sampled 丢弃产生 `source.events_dropped`；未知原因的 sequence gap 只显示 gap，不伪造 reason。
 
 失败：用户动作等待 Hub、spool 丢 critical、恢复后乱序/静默丢失，或丢弃没有 gap。
 
@@ -179,27 +179,27 @@ git diff --check
 
 预期：事件进入有界 7 天 quarantine 或明确拒绝；Facts count 不变；Sources 显示分类计数；合法 producer 后续仍可写。
 
-失败：Hub crash、坏 payload 混入投影、quarantine 无上限，或 Beta schema 阻塞 Stable。
+失败：Hub crash、坏 payload 混入 SQLite Facts、quarantine 无上限，或 Beta schema 阻塞 Stable。
 
-### ADF-013 Canonical segment 崩溃恢复与 manifest 校验
+### ADF-013 SQLite transaction 与 WAL 崩溃恢复
 
 方法：故障注入。
 
-操作：在 append、segment rotation、manifest write、gzip 和 projection update 各阶段强制结束 Hub；重启并校验 segment、checksum、offset 和重复。
+操作：分别在 `BEGIN IMMEDIATE` 前、Fact insert 后、Content/link insert 后、COMMIT 前、COMMIT 后但 ACK 前强制结束 Hub；重启后执行 `PRAGMA integrity_check`、`foreign_key_check`，并让 Producer 以相同 eventId/sequence 重放。
 
-预期：已 ACK 事件不丢；未 ACK 可重放；损坏尾部被隔离且形成 gap；closed segment checksum 一致；没有半条 JSON 被当事实。
+预期：未 COMMIT 的 batch 整体不存在；已 COMMIT 的 Fact/Content/Ref/cursor/gap 全部存在；ACK 前崩溃的重放被幂等去重；已分配的 hubOffset 唯一且严格递增（允许 rollback/retention 后有空洞，禁止复用）；WAL recovery 后查询正确。
 
-失败：ACK 后丢失、重启全文件读入/重写造成长停顿、损坏被静默忽略，或同一 offset 两个事件。
+失败：出现半事务、ACK 后丢失、相同 eventId 重复、foreign key 断裂、损坏被静默忽略，或同一 offset 两个事件。
 
-### ADF-014 SQLite projection 可重建
+### ADF-014 SQLite canonical backup、restore 与索引重建
 
-方法：派生状态恢复。
+方法：灾备、派生索引恢复。
 
-操作：记录基准查询结果；停止 Hub，删除隔离测试 SQLite projection，仅保留 canonical 30 天 facts；执行 rebuild 并重查。
+操作：写入包含 Fact、Content ciphertext、External Ref、gap 的基准数据并记录查询结果；通过 SQLite online backup 创建备份；在测试副本删除并重建 secondary indexes；再从备份恢复到新的隔离 home 并重查。
 
-预期：event count、filters、correlation、Sources gap 和 content/ref 状态等价；rebuild 不修改 canonical segment；过程有进度和 lag。
+预期：索引重建前后 Fact rows 与内容 hash 不变；恢复库的 event count、filters、correlation、Sources gap、Content/Ref 状态与备份时一致；恢复后 integrity/foreign-key check 通过。
 
-失败：SQLite 是唯一事实副本、重建丢关系、依赖业务库，或 rebuild 阻塞新 append 且无策略。
+失败：恢复依赖 JSONL/业务库、备份缺 Content/Ref、索引重建改写 Fact、在线备份包含半事务，或恢复后不能继续分配唯一 hubOffset。
 
 ### ADF-015 7 天内容与 30 天事实分别过期
 
@@ -207,7 +207,7 @@ git diff --check
 
 操作：用受控时钟构造 6d23h59m、7d、29d23h59m、30d 的 content/fact；执行 retention；查询事实、内容、ref 和 watermark。
 
-预期：7 天前正文删除，Fact 的 digest/length/status 保留到 30 天；30 天 Fact 删除；边界语义一致且可审计；没有永久 raw archive。
+预期：7 天前 SQLite ciphertext 被清空/删除，Fact link 的 digest/length/status 保留到 30 天；30 天 Fact/link rows 删除；边界语义一致且可审计；没有永久 raw archive。
 
 失败：删除 Fact 时才删内容、内容过期导致 Fact 404、超过 30 天仍静默保存，或清理重写全部历史造成不可接受停顿。
 
@@ -215,9 +215,9 @@ git diff --check
 
 方法：容量、backpressure。
 
-操作：在小 quota fixture 中写大量 Blob、sampled UI、normal tool 和 critical Query/completion；触发 80/95/100% 水位。
+操作：在小 quota fixture 中写大量 Blob、sampled UI、normal tool 和 critical Query/response；触发 80/95/100% 水位。
 
-预期：先清过期/可重建数据，再采样低优先级；critical 保留或可靠 spool；Sources 显示 quota、dropped 和 gap；业务收到可退避的 429。
+预期：先清过期 Content/quarantine、checkpoint 并 incremental vacuum，再采样低优先级；critical 保留或可靠 SQLite spool；Sources 显示 quota、dropped 和 gap；业务收到可退避的 429。
 
 失败：无序删除、先丢 Query、磁盘填满导致运行时崩溃，或 loss 不可见。
 
@@ -225,11 +225,11 @@ git diff --check
 
 方法：安全等价类。
 
-操作：在 Query、command、tool args/result、URL、header、`.env` 路径和 evidence excerpt 中放测试 token/cookie/password/private key/high-entropy secret；检查 producer spool、Fact segment、SQLite、Blob、export 和 API。
+操作：在 Query、command、tool args/result、URL、header、`.env` 路径和 evidence excerpt 中放测试 token/cookie/password/private key/high-entropy secret；检查 Producer spool SQLite、`activity.sqlite`、WAL/SHM、online backup、export 和 API。
 
-预期：禁止字段不落盘；允许内容被一致替换并报告 redaction；Blob 非明文且 key 不在目录；文件权限为 0700/0600；搜索测试 secret 0 命中。
+预期：禁止字段不落盘；允许内容被一致替换并报告 redaction；Content/locator 列只含 AES-GCM ciphertext，key 不在目录；database/WAL/SHM/backup 权限为 0600、根目录为 0700；搜索测试 secret 0 命中。
 
-失败：任一存储层/日志/导出泄漏、只有 UI 打码、key 与 ciphertext 同目录，或 redaction 破坏 event schema。
+失败：任一 SQLite page/WAL/spool/backup、日志或导出泄漏，只有 UI 打码，key 与 ciphertext 同目录，或 redaction 破坏 event schema。
 
 ### ADF-018 Capability 权限与审计
 
@@ -255,19 +255,19 @@ git diff --check
 
 方法：真实浏览器、端到端。
 
-操作：完成一次包含 Query、Agent message、tool、terminal command、browser、file、verification 和 completion 的交互；制造一个 gap 和一个 expired content；用 `$playwright-cli` 展开/折叠、打开详情/ref。
+操作：完成一次包含 Query、Agent message、tool、terminal command、browser、verification 和 completion 的交互；制造一个 gap 和一个 expired content；用 `$playwright-cli` 展开/折叠、打开详情/ref。
 
 预期：actor/action/result 顺序和 ID 正确；高频事件可折叠但仍存在；gap、unlinked、expired/missing ref 明确；不存在的证据不能显示“已验证”。
 
-失败：时间线只剩摘要、隐藏失败/缺口、跳错 Thread/Run，或大内容直接 inline 导致页面/接口失控。
+失败：时间线只剩摘要、隐藏失败/缺口、跳错 Thread/Run，或正文直接进入 `payload_json` 导致页面/接口失控。
 
 ### ADF-021 Sources 页面证明覆盖而不是声称覆盖率
 
 方法：真实浏览器、数据对账。
 
-操作：让一个 producer 正常、一个 lag、一个 gap、一个 invalid、一个 inactive；对照 producer spool、Hub cursor 和 API；用 `$playwright-cli` 查看 Sources。
+操作：让一个 producer 正常、一个 produced>acked、一个 gap、一个 invalid、一个 inactive，并制造高 commit latency/WAL backlog；对照 producer spool SQLite、Hub cursor、SQLite 状态和 API；用 `$playwright-cli` 查看 Sources。
 
-预期：显示 latest produced/acked、gap range、dropped/rejected、heartbeat、runtime/surface/version、projection lag；没有无分母的 82%/98% 数字。
+预期：显示 latest produced/acked、gap range、dropped/rejected、heartbeat、runtime/surface/version、SQLite commit latency 与 WAL/checkpoint 状态；没有无分母的 82%/98% 数字。
 
 失败：所有来源默认绿色、Beta/external 混淆、gap 只在后台日志，或状态不能与 cursor 对账。
 
@@ -335,7 +335,7 @@ git diff --check
 
 方法：故障隔离。
 
-操作：模拟 provider timeout、输出非法 JSON、token 超限、费用限制、进程崩溃和取消；比较前后 Fact segment/hash、projection 与 Learning store。
+操作：模拟 provider timeout、输出非法 JSON、token 超限、费用限制、进程崩溃和取消；比较前后 `activity.sqlite` Fact row count/content hash 与独立 `learning.sqlite`。
 
 预期：Facts 完全不变；LearningRun 记录失败；可基于相同 Pack 重试；不存在部分发布。
 
