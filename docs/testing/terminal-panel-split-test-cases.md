@@ -2,7 +2,7 @@
 
 本文档覆盖 tmux 原生 split 方案从协议、后端、CLI、事件同步到 Web 验收的测试范围。Agent Team 对 worker pane 的当前使用边界见 `docs/architecture/multi-agent-orchestrator.md`。
 
-涉及打开页面、点击、输入、截图或浏览器自动化验证时，必须使用 `$playwright-cli`。本计划不要求新增前端 Vitest、React unit test、Node test 或其它非 E2E 测试文件；浏览器自动化只放在 `frontend/tests/*.spec.ts`。
+涉及打开页面、点击、输入、截图或浏览器自动化验证时，必须使用 `$toolkit:playwright-cli`。本计划不要求新增前端 Vitest、React unit test、Node test 或其它非 E2E 测试文件；浏览器自动化只放在 `frontend/tests/*.spec.ts`。
 
 ## 目标契约
 
@@ -94,22 +94,22 @@ $RW_BIN auth login --base-url "$RUNWEAVE_BASE_URL" --username admin
 
 ## 后端 Panel API
 
-| ID          | 场景                | 请求/步骤                                                 | 预期                                                           |
-| ----------- | ------------------- | --------------------------------------------------------- | -------------------------------------------------------------- |
-| TPS-API-001 | list panels         | `GET /api/terminal/session/:id/panels`                    | 200，返回 workspace、activePanelId、panels                     |
-| TPS-API-002 | session 不存在      | 对 missing session 调用 panel list/create                 | 404                                                            |
-| TPS-API-003 | create right        | `POST /panels { "direction": "right", "alias": "tests" }` | 201/200，返回新 panel 和 workspace                             |
-| TPS-API-004 | create down         | `POST /panels { "direction": "down", "role": "server" }`  | 新 panel role 为 server                                        |
-| TPS-API-005 | alias 唯一          | 同一 session 内创建重复 alias                             | 409，错误可读                                                  |
-| TPS-API-006 | role 唯一            | 同一 session 内创建重复 role                              | 409，错误可读                                                  |
-| TPS-API-007 | focus panel         | `PATCH /panels/:panelId { "focus": true }`                | activePanelId 更新；tmux selected pane 同步                    |
-| TPS-API-008 | close panel         | `DELETE /panels/:panelId`                                 | panel 删除；active panel 被删时切到 workspace 新 activePanelId |
-| TPS-API-009 | panel input         | `POST /panels/:panelId/input`                             | 输入只进入目标 pane                                            |
-| TPS-API-010 | panel interrupt     | 目标 pane 运行长命令；`POST /panels/:panelId/interrupt`   | 只中断目标 pane                                                |
-| TPS-API-011 | panel history       | `GET /panels/:panelId/history?tail=120`                   | 只读取目标 pane capture                                        |
-| TPS-API-012 | pty split           | pty runtime 调用 create panel                             | 409，message 包含 `Panel split requires tmux runtime`          |
-| TPS-API-013 | tmux 操作失败       | 模拟 send/capture/kill 失败                               | 返回 500；错误不伪装成功                                       |
-| TPS-API-014 | invalid payload     | direction 缺失/非法、alias 空字符串、未知字段             | 400 或按 schema 明确处理；不得写入状态                         |
+| ID          | 场景            | 请求/步骤                                                 | 预期                                                           |
+| ----------- | --------------- | --------------------------------------------------------- | -------------------------------------------------------------- |
+| TPS-API-001 | list panels     | `GET /api/terminal/session/:id/panels`                    | 200，返回 workspace、activePanelId、panels                     |
+| TPS-API-002 | session 不存在  | 对 missing session 调用 panel list/create                 | 404                                                            |
+| TPS-API-003 | create right    | `POST /panels { "direction": "right", "alias": "tests" }` | 201/200，返回新 panel 和 workspace                             |
+| TPS-API-004 | create down     | `POST /panels { "direction": "down", "role": "server" }`  | 新 panel role 为 server                                        |
+| TPS-API-005 | alias 唯一      | 同一 session 内创建重复 alias                             | 409，错误可读                                                  |
+| TPS-API-006 | role 唯一       | 同一 session 内创建重复 role                              | 409，错误可读                                                  |
+| TPS-API-007 | focus panel     | `PATCH /panels/:panelId { "focus": true }`                | activePanelId 更新；tmux selected pane 同步                    |
+| TPS-API-008 | close panel     | `DELETE /panels/:panelId`                                 | panel 删除；active panel 被删时切到 workspace 新 activePanelId |
+| TPS-API-009 | panel input     | `POST /panels/:panelId/input`                             | 输入只进入目标 pane                                            |
+| TPS-API-010 | panel interrupt | 目标 pane 运行长命令；`POST /panels/:panelId/interrupt`   | 只中断目标 pane                                                |
+| TPS-API-011 | panel history   | `GET /panels/:panelId/history?tail=120`                   | 只读取目标 pane capture                                        |
+| TPS-API-012 | pty split       | pty runtime 调用 create panel                             | 409，message 包含 `Panel split requires tmux runtime`          |
+| TPS-API-013 | tmux 操作失败   | 模拟 send/capture/kill 失败                               | 返回 500；错误不伪装成功                                       |
+| TPS-API-014 | invalid payload | direction 缺失/非法、alias 空字符串、未知字段             | 400 或按 schema 明确处理；不得写入状态                         |
 
 ## 默认路由与旧接口兼容
 
@@ -154,7 +154,7 @@ $RW_BIN auth login --base-url "$RUNWEAVE_BASE_URL" --username admin
 | TPS-CLI-006 | send panel alias    | `$RW_BIN terminal send "$TERMINAL_ID" --panel tests --text "echo tests" --enter --json`                       | 只进入 tests pane                                        |
 | TPS-CLI-007 | send role           | `$RW_BIN terminal send "$TERMINAL_ID" --role server --text "echo server" --enter --json`                      | 只进入 server role pane                                  |
 | TPS-CLI-008 | panel 优先 role     | 同时传 `--panel tests --role server`                                                                          | 发送到 tests                                             |
-| TPS-CLI-009 | role 重复           | 已存在 worker role；再次 split `--role worker`                                                                | exit code 4，stderr 保留 409 role 重复错误                |
+| TPS-CLI-009 | role 重复           | 已存在 worker role；再次 split `--role worker`                                                                | exit code 4，stderr 保留 409 role 重复错误               |
 | TPS-CLI-010 | snapshot panel      | `$RW_BIN terminal snapshot "$TERMINAL_ID" --panel tests --tail 120 --plain`                                   | 只返回 tests pane 内容                                   |
 | TPS-CLI-011 | interrupt panel     | `$RW_BIN terminal interrupt "$TERMINAL_ID" --panel tests --json`                                              | 只中断 tests pane                                        |
 | TPS-CLI-012 | handoff panel 信息  | `$RW_BIN terminal handoff "$TERMINAL_ID" --json`                                                              | 输出 `panels`、`activePanelId`、`suggestedPanelCommands` |
@@ -164,36 +164,36 @@ $RW_BIN auth login --base-url "$RUNWEAVE_BASE_URL" --username admin
 
 ## Agent Team pane 路由
 
-| ID         | 场景                         | 步骤                                                       | 预期                                                                |
-| ---------- | ---------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------- |
-| TPS-AT-001 | 开启 Agent Team 创建 main pane | 在 tmux terminal 上通过右键打开 Agent Team 并创建 run       | run 绑定当前 `terminalSessionId` 和 `mainPanelId`                    |
-| TPS-AT-002 | split worker pane            | 确认或自动确认拆分，创建 `code` / `behavior_verify` worker | worker 绑定 `panelId`、`tmuxPaneId`、role 和稳定 alias               |
-| TPS-AT-003 | worker pane 复用             | 同一 run 恢复或重试 split                                  | 已属于该 run 的 worker pane 可复用，不重复创建冲突 role             |
-| TPS-AT-004 | focus pane                   | 调用 `/api/agent-team/runs/:runId/focus-pane`              | 只能聚焦该 run 的 main/worker pane；缺失或外部 pane 返回明确错误    |
-| TPS-AT-005 | completion pane 归属          | worker pane 触发 completion 并写 outbox                    | Agent Team 按 `runId`、`panelId`、worker role 折叠结果               |
-| TPS-AT-006 | route 下线回归               | 观察 Agent Team 操作请求路径                               | 请求走 `/api/agent-team/*`；不再依赖 `/api/orchestrator/*`           |
-| TPS-AT-007 | role 已占用                   | 同一 session 重复创建相同 worker role panel                | 返回明确冲突；需要复用时必须命中已属于该 run 的 pane                |
+| ID         | 场景                           | 步骤                                                       | 预期                                                             |
+| ---------- | ------------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| TPS-AT-001 | 开启 Agent Team 创建 main pane | 在 tmux terminal 上通过右键打开 Agent Team 并创建 run      | run 绑定当前 `terminalSessionId` 和 `mainPanelId`                |
+| TPS-AT-002 | split worker pane              | 确认或自动确认拆分，创建 `code` / `behavior_verify` worker | worker 绑定 `panelId`、`tmuxPaneId`、role 和稳定 alias           |
+| TPS-AT-003 | worker pane 复用               | 同一 run 恢复或重试 split                                  | 已属于该 run 的 worker pane 可复用，不重复创建冲突 role          |
+| TPS-AT-004 | focus pane                     | 调用 `/api/agent-team/runs/:runId/focus-pane`              | 只能聚焦该 run 的 main/worker pane；缺失或外部 pane 返回明确错误 |
+| TPS-AT-005 | completion pane 归属           | worker pane 触发 completion 并写 outbox                    | Agent Team 按 `runId`、`panelId`、worker role 折叠结果           |
+| TPS-AT-006 | route 下线回归                 | 观察 Agent Team 操作请求路径                               | 请求走 `/api/agent-team/*`；不再依赖 `/api/orchestrator/*`       |
+| TPS-AT-007 | role 已占用                    | 同一 session 重复创建相同 worker role panel                | 返回明确冲突；需要复用时必须命中已属于该 run 的 pane             |
 
-## Web UI 与 `$playwright-cli` 验收
+## Web UI 与 `$toolkit:playwright-cli` 验收
 
 建议新增或扩展 Playwright E2E：`frontend/tests/terminal-panels.spec.ts`。只覆盖用户可见 split、focus、CLI/API event sync、单 surface 约束和 preview resize，不新增前端 unit test。
 
-| ID          | 场景                             | 步骤                                                        | 预期                                                                      |
-| ----------- | -------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------- |
-| TPS-WEB-001 | 单 TerminalSurface               | 使用 `$playwright-cli` 打开 `/terminal` 并创建 tmux session | DOM/截图中只有一个 terminal surface；没有多个 React terminal frame/header |
-| TPS-WEB-002 | UI split right                   | 点击 Split Right                                            | 同一个 xterm 内出现 tmux 原生 split；panel chips 增加新目标               |
-| TPS-WEB-003 | UI split down                    | 点击 Split Down                                             | 同一个 xterm 内出现第三个 tmux pane                                       |
-| TPS-WEB-004 | chip focus                       | 点击 tests chip                                             | active target breadcrumb 更新；tmux selected pane 同步到 tests            |
-| TPS-WEB-005 | xterm 输入                       | focus tests pane 后在 xterm 输入 marker                     | marker 出现在当前 selected pane                                           |
-| TPS-WEB-006 | CLI split live sync              | 浏览器保持打开；CLI 执行 panel split                        | UI 无刷新增加 chip；xterm 内出现新 pane                                   |
-| TPS-WEB-007 | CLI focus live sync              | CLI focus server panel                                      | active target 更新，但不切换浏览器当前 session tab                        |
-| TPS-WEB-008 | CLI close live sync              | CLI close tests panel                                       | chip 移除；active target 按 workspace 更新                                |
-| TPS-WEB-009 | selected pane sync               | 在 tmux 内切换 pane；执行无 `--panel` CLI send              | 输出进入当前 selected pane；UI 收到 sync event 后更新 active target       |
-| TPS-WEB-010 | default snapshot 不跟随 selected | selected 为 tests；执行无 panel snapshot/history            | 结果仍来自 default panel                                                  |
-| TPS-WEB-011 | preview sidecar resize           | 打开/关闭 preview sidecar                                   | 仍是单 terminal surface resize；tmux layout 不重叠、不出现空白 terminal   |
-| TPS-WEB-012 | session notification             | panel 内触发 completion                                     | terminal session 级 notification 正常展示；chip 不承担独立 readiness 状态 |
-| TPS-WEB-013 | reconnect catchup                | 断开/刷新页面前执行 split/focus                             | 页面恢复后 chips、active target 和 backend workspace 一致                 |
-| TPS-WEB-014 | mobile/App 非目标                | 检查首期 Web 实现范围                                       | 不要求 Ionic App 提供 panel split UI；不破坏现有 App terminal 页面        |
+| ID          | 场景                             | 步骤                                                                | 预期                                                                      |
+| ----------- | -------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| TPS-WEB-001 | 单 TerminalSurface               | 使用 `$toolkit:playwright-cli` 打开 `/terminal` 并创建 tmux session | DOM/截图中只有一个 terminal surface；没有多个 React terminal frame/header |
+| TPS-WEB-002 | UI split right                   | 点击 Split Right                                                    | 同一个 xterm 内出现 tmux 原生 split；panel chips 增加新目标               |
+| TPS-WEB-003 | UI split down                    | 点击 Split Down                                                     | 同一个 xterm 内出现第三个 tmux pane                                       |
+| TPS-WEB-004 | chip focus                       | 点击 tests chip                                                     | active target breadcrumb 更新；tmux selected pane 同步到 tests            |
+| TPS-WEB-005 | xterm 输入                       | focus tests pane 后在 xterm 输入 marker                             | marker 出现在当前 selected pane                                           |
+| TPS-WEB-006 | CLI split live sync              | 浏览器保持打开；CLI 执行 panel split                                | UI 无刷新增加 chip；xterm 内出现新 pane                                   |
+| TPS-WEB-007 | CLI focus live sync              | CLI focus server panel                                              | active target 更新，但不切换浏览器当前 session tab                        |
+| TPS-WEB-008 | CLI close live sync              | CLI close tests panel                                               | chip 移除；active target 按 workspace 更新                                |
+| TPS-WEB-009 | selected pane sync               | 在 tmux 内切换 pane；执行无 `--panel` CLI send                      | 输出进入当前 selected pane；UI 收到 sync event 后更新 active target       |
+| TPS-WEB-010 | default snapshot 不跟随 selected | selected 为 tests；执行无 panel snapshot/history                    | 结果仍来自 default panel                                                  |
+| TPS-WEB-011 | preview sidecar resize           | 打开/关闭 preview sidecar                                           | 仍是单 terminal surface resize；tmux layout 不重叠、不出现空白 terminal   |
+| TPS-WEB-012 | session notification             | panel 内触发 completion                                             | terminal session 级 notification 正常展示；chip 不承担独立 readiness 状态 |
+| TPS-WEB-013 | reconnect catchup                | 断开/刷新页面前执行 split/focus                                     | 页面恢复后 chips、active target 和 backend workspace 一致                 |
+| TPS-WEB-014 | mobile/App 非目标                | 检查首期 Web 实现范围                                               | 不要求 Ionic App 提供 panel split UI；不破坏现有 App terminal 页面        |
 
 ## 原型验证
 
@@ -229,7 +229,7 @@ python3 -m http.server 6188 --directory docs/prototypes/terminal-panel-split
 
 1. 跑完静态验证命令。
 2. 手动或脚本化完成 tmux API、存储恢复、CLI 控制面用例中的 P0 路径：create/list/split/focus/send/snapshot/close/restart。
-3. 使用 `$playwright-cli` 完成 Web 主路径验收：UI split、CLI live sync、selected pane sync、preview resize。
+3. 使用 `$toolkit:playwright-cli` 完成 Web 主路径验收：UI split、CLI live sync、selected pane sync、preview resize。
 4. 确认代码搜索中不存在 panel-level terminal WebSocket 主路径、多个 React `TerminalSurface` cache、pane index 作为业务 target。
 5. 确认旧 session-level input/history/snapshot/ws-ticket 路径仍可用。
 6. 确认 Hook/Agent notification 仍按 terminal session 级展示，panel metadata 缺失时可降级。

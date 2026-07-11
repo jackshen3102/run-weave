@@ -2,7 +2,7 @@
 
 本文档定义 `activeCommand` 的系统级测试用例。目标是验证 Runweave 展示和暴露的 `activeCommand` 与当前终端正在执行的前台命令一致，覆盖 Codex、Trae/Traex、npm/pnpm/yarn、node、sleep 等常见命令，以及命令结束、切换、Ctrl-C、刷新和 tmux 恢复场景。
 
-涉及打开页面、点击、输入、截图或浏览器自动化时，必须使用 `$playwright-cli`，不要使用其它浏览器操作方案。
+涉及打开页面、点击、输入、截图或浏览器自动化时，必须使用 `$toolkit:playwright-cli`，不要使用其它浏览器操作方案。
 
 ## 测试目标
 
@@ -96,7 +96,7 @@ export BROWSER_PROFILE_DIR="$(mktemp -d)"
 ```
 
 - 分别覆盖 zsh 和 bash。fish/sh 可作为扩展矩阵，不作为首批阻塞项。
-- 若测试 UI，必须使用 `$playwright-cli` 打开 Web 页面并输入命令。
+- 若测试 UI，必须使用 `$toolkit:playwright-cli` 打开 Web 页面并输入命令。
 - 若测试 API/WS，可通过后端测试工具或 CLI 创建 terminal，但仍应复用真实后端、真实 pty/tmux、真实 shell hook。
 - `codex`、`traex` 等本机可能未安装的命令需要先探测 `command -v`。未安装时标记 skipped，并记录原因；不要用 alias 或其它命令冒充。
 
@@ -150,12 +150,12 @@ export BROWSER_PROFILE_DIR="$(mktemp -d)"
 
 ## 验证落点
 
-| 层级             | 入口                                                                | 覆盖重点                                                                                                                            |
-| ---------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Web E2E          | `frontend/tests/terminal.spec.ts`                                   | UI tab、workspace list、history drawer 与 API activeCommand 一致；输入命令、刷新、结束、Ctrl-C；必须通过 `$playwright-cli` 验收路径 |
-| App 验收         | App dev/simulator + `$playwright-cli` 或手工回归                    | App Home / terminal detail 不被 stale activeCommand 或 stale terminal_state_changed 误导                                            |
-| backend 静态检查 | `pnpm --filter ./backend typecheck && pnpm --filter ./backend lint` | activeCommand / terminal state 相关代码无 TS 或 lint 错误                                                                           |
-| shared 静态检查  | `pnpm --filter ./packages/shared typecheck`                         | 协议类型变更可被跨端消费                                                                                                            |
+| 层级             | 入口                                                                | 覆盖重点                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web E2E          | `frontend/tests/terminal.spec.ts`                                   | UI tab、workspace list、history drawer 与 API activeCommand 一致；输入命令、刷新、结束、Ctrl-C；必须通过 `$toolkit:playwright-cli` 验收路径 |
+| App 验收         | App dev/simulator + `$toolkit:playwright-cli` 或手工回归            | App Home / terminal detail 不被 stale activeCommand 或 stale terminal_state_changed 误导                                                    |
+| backend 静态检查 | `pnpm --filter ./backend typecheck && pnpm --filter ./backend lint` | activeCommand / terminal state 相关代码无 TS 或 lint 错误                                                                                   |
+| shared 静态检查  | `pnpm --filter ./packages/shared typecheck`                         | 协议类型变更可被跨端消费                                                                                                                    |
 
 本仓库不新增或维护 backend/shared/Electron/CLI 单测；UI 行为通过 E2E 或手工回归覆盖。
 

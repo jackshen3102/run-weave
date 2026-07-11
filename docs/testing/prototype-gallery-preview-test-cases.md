@@ -1,6 +1,6 @@
 # 多项目原型轮巡库测试案例
 
-本文档验证 `docs/plans/2026-07-11-prototype-gallery-preview.md`。浏览器行为必须使用 `$playwright-cli` 在真实 Chromium 中执行；静态检查、代码阅读或截图不能替代交互验收。
+本文档验证 `docs/plans/2026-07-11-prototype-gallery-preview.md`。浏览器行为必须使用 `$toolkit:playwright-cli` 在真实 Chromium 中执行；静态检查、代码阅读或截图不能替代交互验收。
 
 ## 范围与前提
 
@@ -78,7 +78,7 @@ git diff --check
 
 步骤：
 
-1. 使用 `$playwright-cli` 登录并打开 Terminal。
+1. 使用 `$toolkit:playwright-cli` 登录并打开 Terminal。
 2. 点击顶部 `...`，选择 `Prototypes`。
 3. 读取 Sidecar 顶部工具、左侧项目分组和右侧内容区 DOM。
 
@@ -119,7 +119,7 @@ git diff --check
 
 步骤：
 
-1. 使用 `$playwright-cli` 等待 iframe 主文档加载并读取其 DOM。
+1. 使用 `$toolkit:playwright-cli` 等待 iframe 主文档加载并读取其 DOM。
 2. 请求同一票据路径下的入口、JS、JSON、图片和 HEAD。
 3. 读取 status、Content-Type、Content-Length 与安全响应头。
 4. 检查 iframe 的 `sandbox` 和 `referrerpolicy` 属性。
@@ -161,7 +161,7 @@ git diff --check
 
 步骤：
 
-1. 用 `$playwright-cli` 查看异常项目分组。
+1. 用 `$toolkit:playwright-cli` 查看异常项目分组。
 2. 如有无入口原型，点击该项并读取右侧内容。
 3. 确认其它正常项目仍可点击和预览。
 
@@ -204,7 +204,7 @@ git diff --check
 
 1. 无 token 和无效 token 请求 gallery 与 ticket API；有效 token 重试。
 2. 执行本文“必跑门禁”全部命令。
-3. 用新的 `$playwright-cli` session 重复 PGP-003 至 PGP-005 的核心路径并检查 console error。
+3. 用新的 `$toolkit:playwright-cli` session 重复 PGP-003 至 PGP-005 的核心路径并检查 console error。
 
 期望：
 

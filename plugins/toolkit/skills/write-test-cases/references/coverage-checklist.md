@@ -55,5 +55,5 @@
 
 - 预期结果具体到可对照的文件内容 / 接口响应 / UI 状态，不是「功能正常」。
 - 失败判断写清「出现什么现象即判失败」。
-- 浏览器路径用 `$playwright-cli` 取真实证据；桌面联动用 `$computer-use`；后端/协议用 verify 脚本或临时 Node 脚本。
+- 浏览器路径用 `$toolkit:playwright-cli` 取真实证据；桌面联动用 `$computer-use`；后端/协议用 verify 脚本或临时 Node 脚本。
 - 禁止用静态检查（typecheck/lint）或代码阅读冒充 UI/行为验证。

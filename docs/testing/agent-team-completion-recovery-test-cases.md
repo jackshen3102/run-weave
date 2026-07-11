@@ -12,7 +12,7 @@
 - run 真相位于 `.runweave/agent-team/<runId>.json`。
 - 正常 Stop 会同时尝试 App Server `agent.completion` 和 backend `/internal/terminal-completion`。
 - Agent Team 串行顺序为 `code -> code_review -> behavior_verify`；review/verify fail 应立即回弹 code。
-- browser 页面验收必须使用 `$playwright-cli`；CLI、日志和 JSON 只能作为辅助证据。
+- browser 页面验收必须使用 `$toolkit:playwright-cli`；CLI、日志和 JSON 只能作为辅助证据。
 
 ## 环境与证据
 
@@ -22,7 +22,7 @@
 - 执行前后的 run JSON；
 - 对应 pane-scoped outbox；
 - hook bridge、App Server event、backend 日志时间线；
-- `$playwright-cli` 读取到的 Agent Team sidecar 状态和截图。
+- `$toolkit:playwright-cli` 读取到的 Agent Team sidecar 状态和截图。
 
 ## 必跑命令
 
@@ -43,7 +43,7 @@ git diff --check
 
 前置条件：backend 与 App Server 均健康；run 正在等待 `code_review`；review outbox 尚不存在。
 
-操作：让 review worker 写入 `case_12=fail` outbox 并正常结束；保留 App Server 和 `/internal/terminal-completion` 两条上报；用 `$playwright-cli` 观察 sidecar，保存 run/outbox/日志。
+操作：让 review worker 写入 `case_12=fail` outbox 并正常结束；保留 App Server 和 `/internal/terminal-completion` 两条上报；用 `$toolkit:playwright-cli` 观察 sidecar，保存 run/outbox/日志。
 
 预期：run 只记录一次 `case_12` fail，只向 code pane 回弹一次；`loop.round`、`noProgressCount` 不因重复 signal 多增长；active role 变为 `code`。
 
@@ -53,7 +53,7 @@ git diff --check
 
 前置条件：run 正在等待 `code_review`；App Server 健康；可独立停止和启动 backend。
 
-操作：review 写完 fail outbox 后、Stop 上报前停止 backend；确认 hook 日志中 App Server post 成功且直连 completion 失败；重新启动 backend；用 `$playwright-cli` 观察 sidecar。
+操作：review 写完 fail outbox 后、Stop 上报前停止 backend；确认 hook 日志中 App Server post 成功且直连 completion 失败；重新启动 backend；用 `$toolkit:playwright-cli` 观察 sidecar。
 
 预期：backend 恢复后 10 秒内读取已有 review outbox，`case_12` 变为 fail并回弹 code；无需再次操作 review pane。
 
@@ -63,7 +63,7 @@ git diff --check
 
 前置条件：run 的 active role 为 `code`；code outbox 尚不存在。
 
-操作：code worker 写入 completed outbox时停止 backend，并让直连 completion 失败；随后恢复 backend；使用 `$playwright-cli` 观察 worker 状态。
+操作：code worker 写入 completed outbox时停止 backend，并让直连 completion 失败；随后恢复 backend；使用 `$toolkit:playwright-cli` 观察 worker 状态。
 
 预期：恢复扫描识别精确 runId/role/panel 的 code outbox，只启动一次 `code_review`，run 记录对应日志并冻结 code。
 
@@ -73,7 +73,7 @@ git diff --check
 
 前置条件：准备两个相互独立的 run，active role 均为 `behavior_verify`；一个 outbox 全部 pass，另一个包含 fail。
 
-操作：分别在 worker Stop 前停止 backend，写入对应 outbox并恢复 backend；用 `$playwright-cli` 观察两个 run。
+操作：分别在 worker Stop 前停止 backend，写入对应 outbox并恢复 backend；用 `$toolkit:playwright-cli` 观察两个 run。
 
 预期：pass run 进入 `done`；fail run 只回弹一次 code；两个 run 的 session/panel/outbox 不串扰。
 
@@ -83,7 +83,7 @@ git diff --check
 
 前置条件：run 正在等待 review；临时停止 backend 和 App Server；review pane 和项目文件系统仍可写。
 
-操作：写入合法 fail outbox并结束 worker，确认两条网络上报均未成功；只恢复 backend，不人工重发 completion；用 `$playwright-cli` 观察 sidecar。
+操作：写入合法 fail outbox并结束 worker，确认两条网络上报均未成功；只恢复 backend，不人工重发 completion；用 `$toolkit:playwright-cli` 观察 sidecar。
 
 预期：backend 启动扫描或 10 秒周期扫描消费 outbox并回弹 code；恢复不依赖 App Server 历史事件。
 
@@ -93,7 +93,7 @@ git diff --check
 
 前置条件：派发 review 时目标 outbox 不存在，run 中 `recheckOutboxMtimeMs=null` 且有有效 `recheckRequestedAt`。
 
-操作：在 requestedAt 之后创建合法 review outbox，不发送 completion；等待一次周期扫描并用 `$playwright-cli` 观察 sidecar。
+操作：在 requestedAt 之后创建合法 review outbox，不发送 completion；等待一次周期扫描并用 `$toolkit:playwright-cli` 观察 sidecar。
 
 预期：outbox mtime 晚于 requestedAt 即被消费，run 进入对应 fail/pass 后续状态。
 
@@ -113,7 +113,7 @@ git diff --check
 
 前置条件：backend 健康，App Server 停止；run 正在等待 review。
 
-操作：worker 写入 pass outbox并正常 Stop；确认直连 `/internal/terminal-completion` 成功；用 `$playwright-cli` 观察 sidecar。
+操作：worker 写入 pass outbox并正常 Stop；确认直连 `/internal/terminal-completion` 成功；用 `$toolkit:playwright-cli` 观察 sidecar。
 
 预期：review pass 后只启动一次 behavior_verify；App Server 不可用不阻断现有实时路径。
 
@@ -133,7 +133,7 @@ git diff --check
 
 前置条件：隔离 run 正在等待 review，目标 outbox 始终不存在；把隔离 run 的 `recheckRequestedAt` 设置为超过一小时的过去时间，不修改生产 run。
 
-操作：等待 watchdog 扫描；第一次检查重试派发；再次构造超过一小时且达到最大 attempt 的状态并扫描；用 `$playwright-cli` 观察 sidecar。
+操作：等待 watchdog 扫描；第一次检查重试派发；再次构造超过一小时且达到最大 attempt 的状态并扫描；用 `$toolkit:playwright-cli` 观察 sidecar。
 
 预期：有结果时走即时 reconciliation；无结果时才进入原有 retry，达到上限后进入 `need_human`，证据明确是 outbox 缺失而非有效结果被忽略。
 
@@ -167,7 +167,7 @@ git diff --check
 - stale runId：当前 run 等待 `code_review`，pane outbox 使用错误 runId；启动扫描记录 `reason=outbox_run_id_mismatch`，run 保持 running、round 1、pending，Playwright sidecar 显示 `code_review` 和 `0✓`。覆盖 ATCR-007 的 runId 变体。
 - App Server completion：合法 `agent.completion`（`completionReason=hook_stop`、`rawHookEvent=Stop`）在 outbox 落盘后进入 consumer；日志同毫秒记录 `source=app_server`、`reconciled=true`，run 进入 done。覆盖 ATCR-002 的重放接线核心路径。
 - 重复 completion：run done 后再次投递同 pane completion，日志记录 `reconciled=false`；run 仍为 round 2，log 数量未变化。覆盖 ATCR-009。
-- `$playwright-cli`：真实页面 sidecar 显示“已完成”、`round 2`、`2✓`，并展示 App Server 证据 `agent.completion woke unified reconciliation`。
+- `$toolkit:playwright-cli`：真实页面 sidecar 显示“已完成”、`round 2`、`2✓`，并展示 App Server 证据 `agent.completion woke unified reconciliation`。
 - 静态门禁：`pnpm typecheck`、`pnpm lint`、`git diff --check` 全部通过。
 
 本次未逐条执行 ATCR-001、ATCR-003、ATCR-004 fail 分支、ATCR-007 的 session/pane/role 三个变体、ATCR-008、ATCR-010；这些用例涉及真实 worker prompt、网络故障窗口或一小时重试构造，保留为完整回归集，不能标记为已通过。

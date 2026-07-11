@@ -1,6 +1,6 @@
 # Terminal Floating Composer 测试用例
 
-本文档覆盖 Web desktop terminal floating composer 的验收范围。当前产品边界见 `docs/architecture/terminal-state.md#web-floating-composer`。验证真实浏览器页面时必须使用 `$playwright-cli`；`typecheck` / `lint` 只是前置门禁，不能作为 UI 行为通过证据。
+本文档覆盖 Web desktop terminal floating composer 的验收范围。当前产品边界见 `docs/architecture/terminal-state.md#web-floating-composer`。验证真实浏览器页面时必须使用 `$toolkit:playwright-cli`；`typecheck` / `lint` 只是前置门禁，不能作为 UI 行为通过证据。
 
 ## 范围
 
@@ -49,7 +49,7 @@ git diff --check
 pnpm dev
 ```
 
-打开真实 Web Terminal 页面时，必须使用 `$playwright-cli`，并保存关键 snapshot 或截图作为证据。
+打开真实 Web Terminal 页面时，必须使用 `$toolkit:playwright-cli`，并保存关键 snapshot 或截图作为证据。
 
 行为失败必须先记录 eligibility 诊断证据，避免把用例前提不成立误判为产品失败。TFC-002 到 TFC-006 的 DOM 证据必须至少包含：
 
@@ -77,7 +77,7 @@ Given：
 
 When：
 
-- 使用 `$playwright-cli` 在 terminal 区域滚轮向上滚动，离底超过 8 行。
+- 使用 `$toolkit:playwright-cli` 在 terminal 区域滚轮向上滚动，离底超过 8 行。
 
 Then：
 
@@ -100,7 +100,7 @@ Given：
 
 When：
 
-- 使用 `$playwright-cli` 滚轮向上滚动，离底超过 8 行。
+- 使用 `$toolkit:playwright-cli` 滚轮向上滚动，离底超过 8 行。
 - 点击 `Open floating composer` 按钮。
 
 Then：
@@ -168,7 +168,7 @@ Given：
 When：
 
 - 在真实 TUI 输入行输入 `echo from native prompt`，但不按 Enter。
-- 使用 `$playwright-cli` 滚轮向上滚动超过显示阈值。
+- 使用 `$toolkit:playwright-cli` 滚轮向上滚动超过显示阈值。
 - 点击 `Open floating composer` 按钮。
 
 Then：
@@ -288,7 +288,7 @@ Given：
 
 When：
 
-- 使用 `$playwright-cli` 触发 terminal search，例如 `Meta+F` / `Ctrl+F`。
+- 使用 `$toolkit:playwright-cli` 触发 terminal search，例如 `Meta+F` / `Ctrl+F`。
 - 向上滚动 terminal。
 
 Then：
@@ -354,7 +354,7 @@ Given：
 
 When：
 
-- 使用 `$playwright-cli` 或真实滚轮触发 tmux scrollback。
+- 使用 `$toolkit:playwright-cli` 或真实滚轮触发 tmux scrollback。
 
 Then：
 

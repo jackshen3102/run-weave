@@ -232,7 +232,7 @@ function VerifyView({ data, toast }) {
 
       <div class="note-box">
         <b>真实映射：</b>Runweave agent-team 的 behavior_verify（packages/shared/src/agent-team.ts）已产出结构化结论；把「终端侧断言」升级成这条 typed 链后，pass 数/耗时/失败快照就是 loop-engineer 的客观「无进展」信号，不用叠 LLM 判官。
-        <b>落地缺口：</b>① backend 需暴露 expect_visible_text 式阻塞等待（现在是裸 PTY 输出流）；② capture_pane 快照落库以便回放；③ assert_dom 需与 $playwright-cli 桥接（browser pane 场景）。
+        <b>落地缺口：</b>① backend 需暴露 expect_visible_text 式阻塞等待（现在是裸 PTY 输出流）；② capture_pane 快照落库以便回放；③ assert_dom 需与 $toolkit:playwright-cli 桥接（browser pane 场景）。
       </div>
     </div>`;
 }

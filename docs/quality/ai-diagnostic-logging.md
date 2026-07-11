@@ -431,7 +431,7 @@ diagnostic-logs-<timestamp>/
 - 结果弹窗展示本轮日志数量和服务端 `logs.jsonl` 路径；无服务端路径时，复制路径按钮不可用并提示原因。
 - 结果弹窗提供复制服务端路径和下载入口。
 - 开始新一轮记录时清空上一轮结果和临时文件。
-- Web 端交互必须通过 `$playwright-cli` 覆盖；App 端交互用 App 手工冒烟或平台 E2E 覆盖。
+- Web 端交互必须通过 `$toolkit:playwright-cli` 覆盖；App 端交互用 App 手工冒烟或平台 E2E 覆盖。
 
 ### 阶段 3：排障工作流
 
@@ -444,7 +444,7 @@ diagnostic-logs-<timestamp>/
 - 新问题不需要先临时设计日志收集方式。
 - AI 能稳定拿到同一种诊断日志结果。
 - 导出格式变化可被测试捕获。
-- 最终交付前必须用 `$playwright-cli` 验证 Web Terminal 日志上报入口、开始记录、结束并上报、服务端路径展示和复制入口。
+- 最终交付前必须用 `$toolkit:playwright-cli` 验证 Web Terminal 日志上报入口、开始记录、结束并上报、服务端路径展示和复制入口。
 
 ## 实现约束
 
@@ -458,4 +458,4 @@ diagnostic-logs-<timestamp>/
 - 不为本地导出包设置默认大小上限。
 - 前端记录入口组件必须保持在诊断日志控制器边界内，不能采集普通控制台或业务日志。
 - Web Terminal 入口可以绑定 Terminal 工作区工具栏，但诊断日志 recorder/service 逻辑不能复制到多个组件。
-- 涉及 Web 前端交互的实现完成后，必须使用 `$playwright-cli` 验证，不只依赖代码检查。
+- 涉及 Web 前端交互的实现完成后，必须使用 `$toolkit:playwright-cli` 验证，不只依赖代码检查。

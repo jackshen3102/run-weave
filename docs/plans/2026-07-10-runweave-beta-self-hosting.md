@@ -20,7 +20,7 @@
 4. 更新或回滚 Beta 时，不退出正式版，不重启正式 backend，不更新正式 App Server，不覆盖正式运行数据。
 5. 执行者可以通过机器可读状态唯一定位 Beta 的版本、源码提交、PID、端口、runtime、App Server 和 CDP endpoint。
 6. Beta 更新失败时返回非零状态和明确证据路径，并保留或恢复上一可用 Beta；正式版开发过程继续运行。
-7. `docs/testing/runweave-beta-self-hosting-test-cases.md` 中所有用例实际执行通过，桌面与页面行为有 `$computer-use` 和 `$playwright-cli` 证据。
+7. `docs/testing/runweave-beta-self-hosting-test-cases.md` 中所有用例实际执行通过，桌面与页面行为有 `$computer-use` 和 `$toolkit:playwright-cli` 证据。
 
 ## 目标
 
@@ -200,7 +200,7 @@ pnpm runweave:beta:rollback
 
 - 只依赖 status JSON 即可定位 Beta desktop、backend、App Server 和 CDP。
 - 状态和日志不泄露敏感信息。
-- `$playwright-cli` 能连接 Beta 并读取终端页面，不会误连 Stable。
+- `$toolkit:playwright-cli` 能连接 Beta 并读取终端页面，不会误连 Stable。
 
 ### 阶段 6：守住全局集成与正式版兼容
 
@@ -228,7 +228,7 @@ pnpm runweave:beta:rollback
 - 执行 `docs/testing/runweave-beta-self-hosting-test-cases.md` 全部用例。
 - 连续执行 5 次包含 runtime、完整 App 和 App Server 的 Beta 更新循环。
 - 使用 `$computer-use` 验证两个桌面 App 的并存、重启和故障隔离。
-- 使用 `$playwright-cli` 验证 Beta 终端页面、Beta 标识、source revision 和目标 CDP。
+- 使用 `$toolkit:playwright-cli` 验证 Beta 终端页面、Beta 标识、source revision 和目标 CDP。
 - 新增 Beta 部署活文档，并更新 `docs/README.md` 索引；同步现有本地更新文档中的 Stable/Beta 边界。
 
 阶段验收：
@@ -268,7 +268,7 @@ pnpm runweave:beta:verify
 git diff --check
 ```
 
-这些命令只构成前置门禁，不能代替真实行为验收。桌面流程必须用 `$computer-use`，Beta 页面与 CDP 必须用 `$playwright-cli`。
+这些命令只构成前置门禁，不能代替真实行为验收。桌面流程必须用 `$computer-use`，Beta 页面与 CDP 必须用 `$toolkit:playwright-cli`。
 
 ## 兼容、迁移与回滚
 

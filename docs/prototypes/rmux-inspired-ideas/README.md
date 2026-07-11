@@ -61,6 +61,6 @@ http://127.0.0.1:6191/
 ## 落地缺口（汇总，供后续写实施计划）
 
 1. **终端 pane 浏览器分享**：复用现有终端 WS 通道多播输出帧，加链接鉴权/TTL/PIN、Operator/Spectator 两级写权限（扩 `TerminalInputMode` 只读态）；公网分享才需 E2EE + tunnel。
-2. **typed 断言链**：backend 需暴露 `expect_visible_text` 式阻塞等待（现在是裸 PTY 流）、`capture_pane` 快照落库回放、`assert_dom` 与 `$playwright-cli` 桥接。
+2. **typed 断言链**：backend 需暴露 `expect_visible_text` 式阻塞等待（现在是裸 PTY 流）、`capture_pane` 快照落库回放、`assert_dom` 与 `$toolkit:playwright-cli` 桥接。
 3. **capabilities 协商**：backend 侧吐能力描述（tmux/node/协议版本），前端建终端按能力矩阵灰掉不支持入口，协议差异做字段降级。
 4. **typed 命令注册表**：把散在各处的终端动作收敛成一份 typed 命令表，绑定 pane 句柄 + 执行前预览，复用 `terminal-quick-input-popover.tsx` 呼出。

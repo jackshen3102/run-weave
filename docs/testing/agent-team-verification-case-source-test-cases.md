@@ -12,7 +12,7 @@
 - 无法解析测试案例时阻止 worker split，不生成默认 acceptance。
 - `behavior_verify` prompt、run JSON、UI 对来源文件和 case ID 的表达一致。
 - 修复后按失败点、未执行项、依赖和影响面决定复验范围。
-- 至少一个真实 Runweave UI + 真实 worker pane + `$playwright-cli` 的闭环验收。
+- 至少一个真实 Runweave UI + 真实 worker pane + `$toolkit:playwright-cli` 的闭环验收。
 
 不覆盖：
 
@@ -45,7 +45,7 @@ pnpm --filter ./frontend lint
 git diff --check
 ```
 
-浏览器行为验证必须使用 `$playwright-cli` 打开真实 Web terminal 页面取证；静态检查不能替代 UI、worker pane、run JSON 或 outbox 证据。
+浏览器行为验证必须使用 `$toolkit:playwright-cli` 打开真实 Web terminal 页面取证；静态检查不能替代 UI、worker pane、run JSON 或 outbox 证据。
 
 ## 覆盖清单
 
@@ -69,7 +69,7 @@ git diff --check
 
 步骤：
 
-1. 使用 `$playwright-cli` 打开真实 terminal 页面。
+1. 使用 `$toolkit:playwright-cli` 打开真实 terminal 页面。
 2. 打开 Agent Team sidecar。
 3. 查看开启流程区域。
 4. 分别向 `计划文件` 和 `测试案例文件` 输入项目内相对路径后清空。
@@ -89,7 +89,7 @@ git diff --check
 
 证据：
 
-- `$playwright-cli` 截图或 DOM 摘要，包含两个输入字段。
+- `$toolkit:playwright-cli` 截图或 DOM 摘要，包含两个输入字段。
 
 ### AGT-VERIFY-002 提供测试案例文件时 acceptance 来自该文件
 
@@ -332,7 +332,7 @@ git diff --check
 
 步骤：
 
-1. 使用 `$playwright-cli` 打开 Agent Team sidecar。
+1. 使用 `$toolkit:playwright-cli` 打开 Agent Team sidecar。
 2. 查看 proposal / executing 面板中的 acceptance 区域。
 3. 读取 `.runweave/agent-team/<runId>.json`。
 
@@ -351,7 +351,7 @@ git diff --check
 
 证据：
 
-- `$playwright-cli` 截图或 DOM 摘要。
+- `$toolkit:playwright-cli` 截图或 DOM 摘要。
 - run JSON `verification` 和单条 acceptance 片段。
 
 ### AGT-VERIFY-010 behavior_verify prompt 包含来源、case ID、证据 schema 和 outbox 路径
@@ -371,7 +371,7 @@ git diff --check
 
 - prompt 包含 acceptance 来源文件路径。
 - prompt 列出每条原始 case ID。
-- prompt 要求使用 `$playwright-cli` 对浏览器路径取证。
+- prompt 要求使用 `$toolkit:playwright-cli` 对浏览器路径取证。
 - prompt 要求把结果写入 pane-scoped outbox 的 `acceptanceResults`。
 - prompt 说明 evidence schema：`type`、`label`、`summary`、`ref`、可选 `detail`。
 
@@ -379,7 +379,7 @@ git diff --check
 
 - prompt 未说明来源文件。
 - prompt 未列原始 case ID。
-- prompt 未要求 `$playwright-cli` 或 pane-scoped outbox。
+- prompt 未要求 `$toolkit:playwright-cli` 或 pane-scoped outbox。
 - `acceptanceResults` schema 缺失，导致结果不可折叠。
 
 证据：
@@ -441,7 +441,7 @@ git diff --check
 6. 启动 Agent Team，等待真实 `code -> code_review -> behavior_verify` 流程。
 7. 让 code worker 真实修改文件。
 8. 让 code_review worker 真实审查。
-9. 让 behavior_verify worker 使用 `$playwright-cli` 打开真实页面取证。
+9. 让 behavior_verify worker 使用 `$toolkit:playwright-cli` 打开真实页面取证。
 10. 如果首轮失败，修复后观察 recheck 范围。
 
 期望：
@@ -449,7 +449,7 @@ git diff --check
 - run JSON 显示 acceptance 来源为测试案例文件或生成文件。
 - code、code_review、behavior_verify 三类 worker pane 均有真实 prompt 和输出。
 - worktree 或临时项目产生真实 git diff。
-- behavior_verify outbox 由 worker pane 产出，包含 `$playwright-cli` 截图、DOM、API 或命令证据。
+- behavior_verify outbox 由 worker pane 产出，包含 `$toolkit:playwright-cli` 截图、DOM、API 或命令证据。
 - 修复后 recheck 不默认全量重跑；跳过已通过 case 时给出理由。
 - Agent Team UI、run JSON、worker pane、outbox 和 git diff 能互相对应。
 
@@ -458,7 +458,7 @@ git diff --check
 - 使用 mock worker、手写 outbox、伪造 completion 或直接调用 `/round` 代替真实闭环。
 - code worker 没有真实修改文件。
 - code_review worker 没有真实审查。
-- behavior_verify 没有使用 `$playwright-cli` 验证真实页面。
+- behavior_verify 没有使用 `$toolkit:playwright-cli` 验证真实页面。
 - recheck 范围无理由全量重跑。
 
 证据：
@@ -467,12 +467,12 @@ git diff --check
 - Agent Team UI 截图或 DOM。
 - code / code_review / behavior_verify pane capture。
 - git diff。
-- pane-scoped outbox 和 `$playwright-cli` 证据。
+- pane-scoped outbox 和 `$toolkit:playwright-cli` 证据。
 
 ## 验收通过标准
 
 - `AGT-VERIFY-001` 到 `AGT-VERIFY-012` 全部通过，或对明确不适用项写出阻塞原因和替代路径。
-- 所有浏览器路径均有 `$playwright-cli` 证据。
+- 所有浏览器路径均有 `$toolkit:playwright-cli` 证据。
 - `pnpm --filter ./packages/shared typecheck`、`pnpm --filter ./backend typecheck`、`pnpm --filter ./frontend typecheck`、`pnpm --filter ./frontend lint`、`git diff --check` 全部通过。
 - run JSON、UI、worker prompt 对 acceptance 来源和原始 case ID 的表达一致。
 - 缺少可追溯测试案例文件时必须阻断 worker split，不得回退到默认泛化 acceptance。

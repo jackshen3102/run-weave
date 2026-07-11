@@ -20,8 +20,8 @@ description: 当需要执行/跑一遍测试用例文档（docs/testing 里的 *
 ## 铁律（两种模式都遵守）
 
 1. **真实取证，禁止用静态检查冒充。** `pnpm typecheck` / `pnpm lint` 只是前置门禁，**不能**作为 UI / 浏览器 / 行为用例的通过证据。
-   - 浏览器页面路径：**必须**用 `$playwright-cli` 真实操作并取证（DOM / 截图 / 控制台 / 网络），不许用代码阅读、静态检查或想象代替。
-   - 桌面端联动：用 `$computer-use` 把环境准备到目标状态，再用 `$playwright-cli` 做页面级验收。
+   - 浏览器页面路径：**必须**用 `$toolkit:playwright-cli` 真实操作并取证（DOM / 截图 / 控制台 / 网络），不许用代码阅读、静态检查或想象代替。
+   - 桌面端联动：用 `$computer-use` 把环境准备到目标状态，再用 `$toolkit:playwright-cli` 做页面级验收。
    - 后端 / 协议 / CLI：跑用例文档里的 verify 脚本或临时 Node 脚本，给出命令和关键输出。
 2. **不许偷改用例。** 严禁为了让测试通过而静默修改测试用例。要改用例，必须先停下、说明理由、由人工确认（判据见下）。
 3. **不许跳步。** 用例文档写「任一失败即停」就必须停，不许跑完全部再汇总。
@@ -61,7 +61,7 @@ description: 当需要执行/跑一遍测试用例文档（docs/testing 里的 *
 1. 读用例文档，确认「必跑命令」和用例映射；确认执行模式。
 2. 先跑前置门禁（typecheck / lint / verify 脚本），按文档顺序，任一失败即停。
 3. 逐条执行用例，按模式规则处理失败。
-4. 浏览器 / 桌面用例按铁律用 `$playwright-cli` / `$computer-use` 真实取证。
+4. 浏览器 / 桌面用例按铁律用 `$toolkit:playwright-cli` / `$computer-use` 真实取证。
 5. 需要可回放视频证据时，衔接 `recorded-browser-mcp-verification`。
 6. 汇报：逐条结果、证据、停下点或已修项。
 

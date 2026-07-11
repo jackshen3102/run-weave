@@ -168,7 +168,7 @@ pnpm lint
 git diff --check
 ```
 
-随后逐条执行 `docs/testing/agent-team-completion-recovery-test-cases.md`。涉及 Agent Team 页面状态必须使用 `$playwright-cli`；后台结论必须同时保留 run JSON、pane-scoped outbox、hook/App Server/backend 日志证据。
+随后逐条执行 `docs/testing/agent-team-completion-recovery-test-cases.md`。涉及 Agent Team 页面状态必须使用 `$toolkit:playwright-cli`；后台结论必须同时保留 run JSON、pane-scoped outbox、hook/App Server/backend 日志证据。
 
 ## 完成定义
 

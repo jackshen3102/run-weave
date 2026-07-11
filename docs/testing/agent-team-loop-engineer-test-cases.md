@@ -5,7 +5,7 @@
 ## 测试原则
 
 - 只验证真实场景：必须启动真实 Runweave Web 或 Electron 桌面端，经过项目、终端、sidecar、tmux pane、hook/outbox、浏览器验收等用户可见链路完成验证。
-- 浏览器页面验证必须使用 `$playwright-cli`；桌面端、系统弹窗、安装器、Electron 页面和终端页面联动可以使用 `$computer-use`，必要时两者组合。
+- 浏览器页面验证必须使用 `$toolkit:playwright-cli`；桌面端、系统弹窗、安装器、Electron 页面和终端页面联动可以使用 `$computer-use`，必要时两者组合。
 - 禁止新增或依赖单测、Vitest、Node test、纯函数脚本、`tsx` 冒烟、mock service 单测或任何只验证内部函数的测试逻辑。
 - CLI、HTTP、文件修改只能作为环境布置或辅助观测；最终通过依据必须来自浏览器或 Computer Use 看到的 UI、DOM、截图、终端画面、真实 hook 事件和真实 outbox 结果。
 - 每个用例都要留下证据：截图或 DOM 摘要、关键终端画面、run 状态 JSON 片段、outbox 文件片段、事件日志片段。证据应能说明用户是否真的完成了该场景。
@@ -79,7 +79,7 @@ git diff --check
 - 被测 URL 或 Electron 页面位置。
 - 项目名、项目路径、`projectId`、`terminalSessionId`。
 - Agent Team 当前 `runId`、`phase`、`status`、`loop.round`、`loop.noProgressCount`。
-- `$playwright-cli` 截图或 DOM 摘要；桌面端流程则记录 `$computer-use` 截图。
+- `$toolkit:playwright-cli` 截图或 DOM 摘要；桌面端流程则记录 `$computer-use` 截图。
 - tmux pane 画面：main pane、code pane、behavior_verify pane 的可见 prompt 或 marker。
 - 若涉及 completion/outbox：`.runweave/outbox/*.json` 内容片段、completion 事件片段、右侧面板对应 UI 变化。
 
@@ -96,7 +96,7 @@ git diff --check
 
 步骤：
 
-1. 用 `$playwright-cli` 打开 Web terminal workspace。
+1. 用 `$toolkit:playwright-cli` 打开 Web terminal workspace。
 2. 创建或选择一个新 tmux terminal session。
 3. 确认该 session 的 `panelSplitEnabled=false`。
 4. 打开右侧 sidecar。
@@ -383,7 +383,7 @@ git diff --check
 步骤：
 
 1. 完成一次普通提案确认。
-2. 用 `$playwright-cli` 截图左侧 terminal surface。
+2. 用 `$toolkit:playwright-cli` 截图左侧 terminal surface。
 3. 观察每个 split pane 的首屏内容和 active command。
 
 期望：
@@ -471,7 +471,7 @@ git diff --check
 1. 进入 executing，确认存在至少两个 worker pane。
 2. 使用 CLI 作为环境动作执行：
    `rw terminal send "$TERMINAL_ID" --panel <code-pane-alias-or-id> --agent codex --text "继续" --json`
-3. 用 `$playwright-cli` 观察左侧 terminal surface。
+3. 用 `$toolkit:playwright-cli` 观察左侧 terminal surface。
 4. 再用 `--role behavior_verify` 执行一次定向发送并观察。
 
 期望：
@@ -595,7 +595,7 @@ git diff --check
 1. 进入 executing，并确认存在 behavior_verify pane。
 2. 在 behavior_verify pane 中按 worker 启动提示写出 `.runweave/outbox/<terminalSessionId>.panel-<panelId>.json`（或该提示给出的等价 pane 级路径），内容包含 `acceptanceResults`。
 3. 在同一 pane 触发真实 Codex/agent Stop hook，或用真实 hook 命令路径触发 `/internal/terminal-completion`。
-4. 用 `$playwright-cli` 观察右侧面板更新。
+4. 用 `$toolkit:playwright-cli` 观察右侧面板更新。
 
 期望：
 
@@ -724,7 +724,7 @@ git diff --check
 
 1. 让 run 进入 proposal 或 executing。
 2. 重启 backend。
-3. 用 `$playwright-cli` 刷新页面并重新进入同一终端。
+3. 用 `$toolkit:playwright-cli` 刷新页面并重新进入同一终端。
 
 期望：
 
@@ -815,7 +815,7 @@ git diff --check
 步骤：
 
 1. 用 `$computer-use` 启动或切换桌面端 backend/runtime。
-2. 用 `$playwright-cli` 打开对应 Web terminal。
+2. 用 `$toolkit:playwright-cli` 打开对应 Web terminal。
 3. 完成 AGT 主链路任一用例。
 
 期望：

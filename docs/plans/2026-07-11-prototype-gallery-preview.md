@@ -38,7 +38,7 @@ Runweave 已登记项目
 - 原型约定已稳定为 `<project>/docs/prototypes/<slug>/index.html`，多数原型通过相对路径加载脚本和 mock 数据。
 - 浏览器不能可靠地用 `file://` 运行 ES Module 和相对 `fetch()`，因此仍需要 HTTP 响应，但可以复用 Runweave 已运行的 backend，而不是新增端口。
 - Terminal Sidecar 已有 `Preview`、`Browser`、`Agent Team` 工具，原型库属于并列的运行预览能力，不应塞进源码文件渲染分支。
-- 本仓库不新增单元测试；行为验收使用真实 Chromium 和 `$playwright-cli`。
+- 本仓库不新增单元测试；行为验收使用真实 Chromium 和 `$toolkit:playwright-cli`。
 
 ## 用户行为
 
@@ -130,7 +130,7 @@ Runweave 已登记项目
 2. 执行 `pnpm build` 与 `git diff --check`。
 3. 启动隔离的 Runweave 开发环境，登记至少两个都含 `docs/prototypes` 的项目，以及一个无 project path 的项目。
 4. 通过 API 对照项目状态、原型数量、HTML/JS/JSON/图片 MIME、GET/HEAD、404/405、票据资源绑定和响应安全头。
-5. 使用 `$playwright-cli` 从 Terminal 菜单打开 `Prototypes`，验证左右布局、跨项目点击、同 slug 隔离、iframe 内容、选择恢复和无关工具按钮隐藏。
+5. 使用 `$toolkit:playwright-cli` 从 Terminal 菜单打开 `Prototypes`，验证左右布局、跨项目点击、同 slug 隔离、iframe 内容、选择恢复和无关工具按钮隐藏。
 
 详细验收见 `docs/testing/prototype-gallery-preview-test-cases.md`。
 
