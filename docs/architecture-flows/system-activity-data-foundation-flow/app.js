@@ -243,6 +243,51 @@ function renderDataMatrix() {
     </table>`;
 }
 
+function renderSchema() {
+  const sourceById = new Map(
+    state.data.schemaSources.map((source) => [source.id, source]),
+  );
+
+  byId("schema-legend").innerHTML = state.data.schemaSources
+    .map(
+      (source) => `
+        <span class="source-badge" style="--source-tone:${tone(source.tone)}">
+          ${escapeHtml(source.label)} · ${escapeHtml(source.description)}
+        </span>`,
+    )
+    .join("");
+
+  byId("schema-grid").innerHTML = state.data.schemaTables
+    .map(
+      (table) => `
+        <article class="schema-card" data-wide="${table.wide === true}">
+          <header class="schema-card-head">
+            <div>
+              <h3>${escapeHtml(table.name)}</h3>
+              <p>${escapeHtml(table.purpose)}</p>
+            </div>
+            <span class="schema-retention">${escapeHtml(table.retention)}</span>
+          </header>
+          <div class="schema-column-head">
+            <span>field</span><span>type</span><span>source</span><span>origin / rule</span>
+          </div>
+          ${table.columns
+            .map((column) => {
+              const source = sourceById.get(column.source);
+              return `
+                <div class="schema-column">
+                  <code>${escapeHtml(column.name)}</code>
+                  <span>${escapeHtml(column.type)}</span>
+                  <span class="source-badge" style="--source-tone:${tone(source?.tone)}">${escapeHtml(source?.label ?? column.source)}</span>
+                  <span>${escapeHtml(column.origin)}</span>
+                </div>`;
+            })
+            .join("")}
+        </article>`,
+    )
+    .join("");
+}
+
 function renderLearning() {
   const stepTone = {
     deterministic: TONES.cyan,
@@ -339,6 +384,7 @@ function renderAll() {
   renderFlow();
   renderScenarioDetail();
   renderDataMatrix();
+  renderSchema();
   renderLearning();
   renderFailureList();
   renderFailureDetail();
