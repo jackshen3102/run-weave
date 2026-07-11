@@ -78,6 +78,7 @@
 | Terminal IME 输入测试                    | testing/terminal-ime-input-test-cases.md                                           |
 | 本地客户端更新测试                       | testing/runweave-local-client-update-test-cases.md                                 |
 | Runweave Beta 自举开发通道测试           | testing/runweave-beta-self-hosting-test-cases.md                                   |
+| Runweave Dev Session 分层开发环境测试    | testing/runweave-dev-session-test-cases.md                                         |
 | Runweave Beta 多实例与 CDP 路由测试      | testing/runweave-beta-instance-cdp-routing-test-cases.md                           |
 | Terminal Browser CDP/MCP 测试            | testing/terminal-browser-cdp-mcp-test-cases.md                                     |
 | Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md                              |

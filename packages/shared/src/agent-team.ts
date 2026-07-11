@@ -65,6 +65,8 @@ export interface AgentTeamAcceptanceCase {
   dependsOn?: string[];
   lastRunStatus?: "pass" | "fail" | "skipped" | "pending";
   skipReason?: string | null;
+  /** Latest per-case conclusion supplied by the verification worker. */
+  resultSummary?: string | null;
   /** Latest observed status from the behavior_verify worker. */
   status: AgentTeamAcceptanceStatus;
   /** Consecutive stable-fail rounds (debounce state); reset on pass/flip. */
@@ -216,6 +218,7 @@ export interface AgentTeamWorkerOutbox {
   acceptanceResults?: Array<{
     caseId: string;
     status: "pass" | "fail" | "skipped";
+    summary?: string | null;
     skipReason?: string | null;
     evidence: AgentTeamAcceptanceEvidence[];
   }>;

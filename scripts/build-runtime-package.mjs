@@ -13,7 +13,10 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const repoRoot = process.cwd();
-const artifactsRoot = path.join(repoRoot, ".runtime-artifacts");
+const artifactsRoot = path.resolve(
+  process.env.RUNWEAVE_RUNTIME_ARTIFACTS_ROOT ??
+    path.join(repoRoot, ".runtime-artifacts"),
+);
 const runtimeApiVersion = 1;
 
 function readPackageVersion(packagePath) {
@@ -74,22 +77,44 @@ const shellVersion =
   process.argv.find((arg) => arg.startsWith("--shell-version="))?.slice(16) ??
   readPackageVersion(path.join(repoRoot, "electron", "package.json"));
 
-run("pnpm", ["--filter", "./frontend", "build"]);
-run("pnpm", ["--filter", "./electron", "build"]);
+const isolatedBuildRoot = process.env.RUNWEAVE_RUNTIME_BUILD_ROOT?.trim();
+const frontendDist = isolatedBuildRoot
+  ? path.join(path.resolve(isolatedBuildRoot), "frontend", "dist")
+  : path.join(repoRoot, "frontend", "dist");
+const electronDist = isolatedBuildRoot
+  ? path.join(path.resolve(isolatedBuildRoot), "electron", "dist")
+  : path.join(repoRoot, "electron", "dist");
+if (isolatedBuildRoot) {
+  rmSync(path.resolve(isolatedBuildRoot), { recursive: true, force: true });
+  run("pnpm", [
+    "-C",
+    "frontend",
+    "exec",
+    "vite",
+    "build",
+    "--outDir",
+    frontendDist,
+  ]);
+  run("node", ["scripts/bundle.mjs"], {
+    cwd: path.join(repoRoot, "electron"),
+    env: {
+      ...process.env,
+      RUNWEAVE_ELECTRON_BUNDLE_OUTDIR: electronDist,
+    },
+  });
+} else {
+  run("pnpm", ["--filter", "./frontend", "build"]);
+  run("pnpm", ["--filter", "./electron", "build"]);
+}
 
 const releaseDir = path.join(artifactsRoot, releaseId);
-const frontendDist = path.join(repoRoot, "frontend", "dist");
 const backendEntry = path.join(
-  repoRoot,
-  "electron",
-  "dist",
+  electronDist,
   "backend",
   "index.cjs",
 );
 const cliEntry = path.join(
-  repoRoot,
-  "electron",
-  "dist",
+  electronDist,
   "cli",
   "index.cjs",
 );

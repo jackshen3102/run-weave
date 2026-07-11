@@ -1,6 +1,8 @@
 import { rmSync } from "node:fs";
 import { build } from "esbuild";
 
+const outputDir = process.env.RUNWEAVE_ELECTRON_BUNDLE_OUTDIR ?? "dist";
+
 const shared = {
   bundle: true,
   platform: "node",
@@ -15,6 +17,27 @@ const desktopBuildDefines = {
   ),
   __RUNWEAVE_DESKTOP_SOURCE_REVISION__: JSON.stringify(
     process.env.RUNWEAVE_DESKTOP_SOURCE_REVISION ?? "unknown",
+  ),
+  __RUNWEAVE_DESKTOP_INSTANCE_ID__: JSON.stringify(
+    process.env.RUNWEAVE_DESKTOP_INSTANCE_ID ?? null,
+  ),
+  __RUNWEAVE_DEV_SESSION_ID__: JSON.stringify(
+    process.env.RUNWEAVE_DEV_SESSION_ID ?? null,
+  ),
+  __RUNWEAVE_DESKTOP_USER_DATA_DIR__: JSON.stringify(
+    process.env.RUNWEAVE_DESKTOP_USER_DATA_DIR ?? null,
+  ),
+  __RUNWEAVE_DESKTOP_STATUS_PATH__: JSON.stringify(
+    process.env.RUNWEAVE_DESKTOP_STATUS_PATH ?? null,
+  ),
+  __RUNWEAVE_DESKTOP_CDP_PORT__: JSON.stringify(
+    process.env.RUNWEAVE_DESKTOP_CDP_PORT ?? null,
+  ),
+  __RUNWEAVE_TERMINAL_BROWSER_CDP_PORT__: JSON.stringify(
+    process.env.RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT ?? null,
+  ),
+  __RUNWEAVE_APP_SERVER_HOME__: JSON.stringify(
+    process.env.RUNWEAVE_APP_SERVER_HOME ?? null,
   ),
 };
 
@@ -39,7 +62,7 @@ await build({
     ...desktopBuildDefines,
   },
   entryPoints: ["src/main.ts"],
-  outdir: "dist",
+  outdir: outputDir,
   format: "cjs",
   outExtension: { ".js": ".cjs" },
 });
@@ -47,22 +70,22 @@ await build({
 await build({
   ...shared,
   entryPoints: ["src/preload.ts"],
-  outdir: "dist",
+  outdir: outputDir,
   platform: "browser",
   external: ["electron"],
   format: "cjs",
   outExtension: { ".js": ".cjs" },
 });
 
-rmSync("dist/backend", { recursive: true, force: true });
-rmSync("dist/app-server", { recursive: true, force: true });
-rmSync("dist/cli", { recursive: true, force: true });
+rmSync(`${outputDir}/backend`, { recursive: true, force: true });
+rmSync(`${outputDir}/app-server`, { recursive: true, force: true });
+rmSync(`${outputDir}/cli`, { recursive: true, force: true });
 
 await build({
   ...shared,
   ...importMetaUrlShim,
   entryPoints: ["../backend/src/index.ts"],
-  outdir: "dist/backend",
+  outdir: `${outputDir}/backend`,
   format: "cjs",
   external: ["node-pty"],
   outExtension: { ".js": ".cjs" },
@@ -72,7 +95,7 @@ await build({
   ...shared,
   ...importMetaUrlShim,
   entryPoints: ["../packages/runweave-cli/src/index.ts"],
-  outdir: "dist/cli",
+  outdir: `${outputDir}/cli`,
   format: "cjs",
   outExtension: { ".js": ".cjs" },
 });

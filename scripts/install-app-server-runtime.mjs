@@ -38,9 +38,20 @@ await build({
   target: "node20",
 });
 
-run("pnpm", ["--filter", "@runweave/cli", "build"]);
+const isolatedCliEntry = process.env.RUNWEAVE_CLI_BUNDLE_OUTFILE?.trim();
+const cliEntry = isolatedCliEntry
+  ? path.resolve(isolatedCliEntry)
+  : path.join(repoRoot, "packages", "runweave-cli", "dist", "index.js");
+if (isolatedCliEntry) {
+  run("node", ["scripts/bundle.mjs"], {
+    cwd: path.join(repoRoot, "packages", "runweave-cli"),
+    env: { ...process.env, RUNWEAVE_CLI_BUNDLE_OUTFILE: cliEntry },
+  });
+} else {
+  run("pnpm", ["--filter", "@runweave/cli", "build"]);
+}
 run("node", [
-  "packages/runweave-cli/dist/index.js",
+  cliEntry,
   "app-server",
   "install",
   "--entry",
@@ -63,9 +74,10 @@ function createReleaseId() {
   ].join("-");
 }
 
-function run(command, args) {
+function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
-    cwd: repoRoot,
+    cwd: options.cwd ?? repoRoot,
+    env: options.env ?? process.env,
     stdio: "inherit",
   });
   if (result.status !== 0) {

@@ -70,6 +70,7 @@ async function main() {
     appServerHome,
     channel,
     electronBuilderConfig,
+    instanceId: process.env.RUNWEAVE_DESKTOP_INSTANCE_ID ?? "default",
     runtimeHome,
     statePath,
   });
@@ -200,6 +201,8 @@ async function main() {
   if (plan.appServer.action === "update") {
     appServerRelease = await runAppServerUpdate({
       appServerHome,
+      controlCliPath:
+        process.env.RUNWEAVE_CLI_BUNDLE_OUTFILE?.trim() || null,
       sourceRoot,
     });
   }

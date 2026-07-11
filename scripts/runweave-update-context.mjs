@@ -1,4 +1,5 @@
 import path from "node:path";
+import { resolveBetaAppName } from "./runweave-update-core.mjs";
 
 export const updateTarget =
   process.env.RUNWEAVE_UPDATE_TARGET === "beta" ? "beta" : "stable";
@@ -6,7 +7,10 @@ export const isBetaTarget = updateTarget === "beta";
 export const isBetaTerminal =
   !isBetaTarget && process.env.RUNWEAVE_DESKTOP_CHANNEL === "beta";
 export const appName = isBetaTarget
-  ? (process.env.RUNWEAVE_LOCAL_UPDATE_APP_NAME ?? "Runweave Beta")
+  ? (process.env.RUNWEAVE_LOCAL_UPDATE_APP_NAME ??
+    resolveBetaAppName(
+      process.env.RUNWEAVE_DESKTOP_INSTANCE_ID ?? "default",
+    ))
   : "Runweave";
 export const channel = updateTarget;
 export const electronBuilderConfig =

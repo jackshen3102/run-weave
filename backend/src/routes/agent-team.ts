@@ -92,6 +92,7 @@ const acceptanceResultSchema = z
   .object({
     caseId: z.string().trim().min(1),
     status: z.enum(["pass", "fail", "skipped"]),
+    summary: z.string().trim().min(1).nullable().optional(),
     skipReason: z.string().trim().min(1).nullable().optional(),
     evidence: z
       .array(

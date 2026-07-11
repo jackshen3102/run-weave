@@ -159,6 +159,7 @@ function buildAcceptanceCase(
     ].join("\n"),
     status: "pending",
     consecutiveFail: 0,
+    resultSummary: null,
     evidence: [],
     bouncedToPanelId: null,
     recheckRequestedAt: null,

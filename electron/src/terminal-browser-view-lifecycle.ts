@@ -233,7 +233,7 @@ export function getOrCreateTerminalBrowserView(
     deviceDebuggerAttached: false,
     onDeviceDebuggerDetach: null,
     lastActiveAt: Date.now(),
-    lastKnownUrl: "",
+    lastKnownUrl: "about:blank",
     lastSentUpdateKey: null,
     lastSentUpdateAt: 0,
     pendingUpdate: null,
@@ -268,6 +268,7 @@ export function getOrCreateTerminalBrowserView(
 
   terminalBrowserRuntime.entries.set(key, entry);
   insertTerminalBrowserTabOrder(win.id, tabId, options.openerTabId);
+  void view.webContents.loadURL("about:blank").catch(() => undefined);
   return view;
 }
 

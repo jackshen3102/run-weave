@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = process.cwd();
 const ELECTRON_DIR = path.join(ROOT, "electron");
-const ELECTRON_RELEASE_DIR = path.join(ELECTRON_DIR, "release");
 const DEFAULT_WAIT_MS = 5_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
 
@@ -114,22 +113,117 @@ async function runCheckedCommand(command, args, options = {}) {
   }
 }
 
-async function cleanElectronReleaseDir() {
-  await rm(ELECTRON_RELEASE_DIR, { force: true, recursive: true });
+function takeBuilderConfig(builderArgs) {
+  const remaining = [];
+  let config = "electron-builder.yml";
+  for (let index = 0; index < builderArgs.length; index += 1) {
+    const arg = builderArgs[index];
+    if (arg === "--config") {
+      config = builderArgs[index + 1] ?? config;
+      index += 1;
+    } else if (arg.startsWith("--config=")) {
+      config = arg.slice("--config=".length);
+    } else {
+      remaining.push(arg);
+    }
+  }
+  return { config, remaining };
+}
+
+async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
+  const frontendDist = path.join(buildRoot, "frontend", "dist");
+  const electronAppDir = path.join(buildRoot, "electron");
+  const electronDist = path.join(electronAppDir, "dist");
+  const releaseDir = path.join(buildRoot, "release");
+  await rm(buildRoot, { force: true, recursive: true });
+  await mkdir(buildRoot, { recursive: true, mode: 0o700 });
+  await runCheckedCommand(
+    commandName("pnpm"),
+    ["-C", "frontend", "exec", "vite", "build", "--outDir", frontendDist],
+    { cwd: ROOT, env },
+  );
+  await runCheckedCommand("node", ["scripts/bundle.mjs"], {
+    cwd: ELECTRON_DIR,
+    env: { ...env, RUNWEAVE_ELECTRON_BUNDLE_OUTDIR: electronDist },
+  });
+  const appPackage = JSON.parse(
+    await readFile(path.join(ELECTRON_DIR, "package.json"), "utf8"),
+  );
+  appPackage.dependencies = {};
+  delete appPackage.devDependencies;
+  await writeFile(
+    path.join(electronAppDir, "package.json"),
+    `${JSON.stringify(appPackage, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+  const configPath = path.join(buildRoot, "electron-builder.json");
+  await writeFile(
+    configPath,
+    `${JSON.stringify(
+      {
+        afterPack: path.join(ELECTRON_DIR, "scripts", "adhoc-sign-mac.js"),
+        extends: path.resolve(ELECTRON_DIR, baseBuilderConfig),
+        directories: {
+          app: electronAppDir,
+          buildResources: path.join(ELECTRON_DIR, "resources"),
+          output: releaseDir,
+        },
+        files: [
+          {
+            from: electronAppDir,
+            to: ".",
+            filter: ["package.json", "dist/**/*"],
+          },
+          {
+            from: path.join(ELECTRON_DIR, "resources"),
+            to: "resources",
+            filter: ["**/*", "!icons/raw/**/*"],
+          },
+        ],
+        extraResources: [
+          { from: frontendDist, to: "frontend/dist", filter: ["**/*"] },
+          {
+            from: path.join(
+              ROOT,
+              "backend",
+              "node_modules",
+              "node-pty",
+            ),
+            to: "backend/node_modules/node-pty",
+            filter: [
+              "lib/**/*",
+              "prebuilds/darwin-arm64/**/*",
+              "package.json",
+              "LICENSE",
+            ],
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+    { mode: 0o600 },
+  );
+  return { configPath, releaseDir };
 }
 
 async function main() {
-  const builderArgs = process.argv.slice(2);
+  const parsedBuilder = takeBuilderConfig(process.argv.slice(2));
+  const builderArgs = parsedBuilder.remaining;
   if (process.env.RUNWEAVE_ELECTRON_BUILD_VERSION) {
     builderArgs.push(
       `--config.extraMetadata.version=${process.env.RUNWEAVE_ELECTRON_BUILD_VERSION}`,
       `--config.extraMetadata.buildVersion=${process.env.RUNWEAVE_ELECTRON_BUILD_VERSION}`,
     );
   }
-  const distArgs =
-    builderArgs.length > 0
-      ? ["dist", ...builderArgs]
-      : ["dist", "--mac", "--arm64"];
+  if (process.env.RUNWEAVE_LOCAL_UPDATE_APP_NAME) {
+    builderArgs.push(
+      `--config.productName=${process.env.RUNWEAVE_LOCAL_UPDATE_APP_NAME}`,
+    );
+  }
+  if (process.env.RUNWEAVE_ELECTRON_APP_ID) {
+    builderArgs.push(`--config.appId=${process.env.RUNWEAVE_ELECTRON_APP_ID}`);
+  }
   const defaultCacheRoot = resolveDefaultCacheRoot();
   const electronEnv = {
     ...process.env,
@@ -141,11 +235,25 @@ async function main() {
       process.env.ELECTRON_BUILDER_CACHE ??
       path.join(defaultCacheRoot, "electron-builder"),
   };
+  const isolatedBuildRoot = process.env.RUNWEAVE_ELECTRON_BUILD_ROOT?.trim();
+  let releaseDir = path.join(ELECTRON_DIR, "release");
 
   if (process.env.RUNWEAVE_SKIP_ELECTRON_VERSION_BUMP !== "true") {
     await runCheckedCommand("node", ["./scripts/bump-electron-version.mjs"]);
   }
-  await runCheckedCommand(commandName("pnpm"), ["build"]);
+  if (isolatedBuildRoot) {
+    const isolated = await prepareIsolatedBuild(
+      path.resolve(isolatedBuildRoot),
+      parsedBuilder.config,
+      electronEnv,
+    );
+    releaseDir = isolated.releaseDir;
+    builderArgs.unshift("--config", isolated.configPath);
+  } else {
+    await runCheckedCommand(commandName("pnpm"), ["build"]);
+    builderArgs.unshift("--config", parsedBuilder.config);
+  }
+  const distArgs = ["dist", ...builderArgs];
 
   const result = await runWithRetries({
     maxAttempts: DEFAULT_MAX_ATTEMPTS,
@@ -160,7 +268,7 @@ async function main() {
       }
     },
     run: async () => {
-      await cleanElectronReleaseDir();
+      await rm(releaseDir, { force: true, recursive: true });
       return runStreamingCommand(commandName("pnpm"), distArgs, {
         cwd: ELECTRON_DIR,
         env: electronEnv,

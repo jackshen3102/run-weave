@@ -1,5 +1,7 @@
 # Runweave Beta 多实例与 CDP 路由测试用例
 
+> 上层测试：本组用例是 `runweave-dev-session-test-cases.md` 中 DVS-020 的 Beta 专项展开。Dev Session 的通用 Planner、manifest、ownership、恢复和 resolver 用例不在本文重复；Backend/App Server 未受影响时允许 `shared-declared`，不能再以“每个 Beta 必须复制全部服务”作为通过条件。
+
 ## 范围
 
 本文档验证两个或更多 Beta 实例并行运行时的身份、状态、生命周期和 CDP 路由隔离，覆盖：
@@ -35,7 +37,7 @@ git diff --check
 ## 用例映射
 
 - `BIC-001`：合法、非法和边界 instanceId。
-- `BIC-002`：两个实例的全部可写路径互斥。
+- `BIC-002`：两个实例拥有的 Beta 可写路径互斥。
 - `BIC-003`：两个不同 revision 同时运行。
 - `BIC-004`：同一实例并发更新被实例 lock 拒绝。
 - `BIC-005`：不同实例可并发更新且不串扰。
@@ -46,7 +48,7 @@ git diff --check
 - `BIC-010`：动态端口占用时重新分配且不串实例。
 - `BIC-011`：stale registry 和失效 PID fail closed。
 - `BIC-012`：多个实例存在但未指定实例时拒绝猜测。
-- `BIC-013`：Beta terminal 环境只指向所属实例的 Terminal Browser Proxy。
+- `BIC-013`：Stable terminal 可显式附着 Beta Terminal Browser，无需 Beta terminal/env。
 - `BIC-014`：group-scoped endpoint 不暴露其他实例或 group。
 - `BIC-015`：旧单 Beta 迁移为 default 后可继续使用和回滚。
 - `BIC-016`：删除一个实例只清理其拥有资源。
@@ -64,14 +66,14 @@ git diff --check
 - Then：合法值稳定解析；非法值返回非零状态和具体规则；测试根目录没有产生 App、状态、lock 或 registry 文件。
 - 失败判断：非法 ID 被截断/改写后继续，或失败前产生任何实例文件。
 
-### BIC-002 两个实例的全部可写路径互斥
+### BIC-002 两个实例拥有的 Beta 可写路径互斥
 
 - 设计技术：判定表。
 - 验证方式：自动化脚本。
 - Given：解析 `agent-a`、`agent-b` 的实例目标。
 - When：导出两份路径和身份 JSON。
-- Then：app path、appId、userData、profile、runtime、update state、backup、App Server home、status 和 lock 均不同，且都不等于 Stable 路径。
-- 失败判断：任一可写路径、bundle identity 或 lock 被共享。
+- Then：app path、appId、userData、runtime、update state、backup、status 和 lock 均不同且不等于 Stable；Backend/App Server 为 dedicated 时路径不同，为 shared-declared 时只记录同一真实实例引用、namespace 和共享原因。
+- 失败判断：任一 Beta-owned 路径、bundle identity 或 lock 被共享；或 shared 服务被错误标记为 Beta-owned。
 
 ### BIC-003 两个不同 revision 的 Beta 可同时运行
 
@@ -79,8 +81,8 @@ git diff --check
 - 验证方式：自动化脚本 + `$computer-use`。
 - Given：`<worktree-a>`、`<worktree-b>` 位于不同 revision，Stable 正常运行。
 - When：分别更新并启动 `agent-a`、`agent-b`，读取 list/status。
-- Then：两个 Desktop、backend、App Server 均 healthy；source root/revision 正确；两个窗口标题能区分实例和 revision；Stable 未退出或重启。
-- 失败判断：后启动实例替换前一 App、复用 PID/profile，或 Stable 出现中断。
+- Then：两个 Desktop 均 healthy；各自 manifest 中声明的 Backend/App Server（shared 或 dedicated）完成握手；source root/revision 正确；窗口能区分实例和 revision；Stable 未退出或重启。
+- 失败判断：后启动实例替换前一 App、复用 Beta-owned 状态，shared 服务身份未校验，或 Stable 出现中断。
 
 ### BIC-004 同一实例并发更新被实例 lock 拒绝
 
@@ -163,14 +165,14 @@ git diff --check
 - Then：命令返回非零状态，列出 A/B 的 ID、revision、健康状态；不产生副作用。
 - 失败判断：按最近启动、端口顺序或固定 `default` 静默选择。
 
-### BIC-013 Beta terminal 只继承所属实例的 Terminal Browser endpoint
+### BIC-013 Stable terminal 显式附着 Beta Terminal Browser
 
 - 设计技术：隔离、并发。
 - 验证方式：自动化脚本 + `$toolkit:playwright-cli`。
-- Given：A/B 各创建新 terminal。
-- When：读取两个 pane 的 `RUNWEAVE_BETA_INSTANCE`、`RUNWEAVE_DESKTOP_CHANNEL`、`PLAYWRIGHT_MCP_CDP_ENDPOINT` 并连接。
-- Then：instance/channel 正确；endpoint 分别属于 A/B Terminal Browser Proxy；不能看到对方 targets。
-- 失败判断：继承 Stable endpoint、Desktop endpoint或另一实例 Proxy。
+- Given：Agent 位于 Stable 主应用 terminal，该 shell 的 channel/CDP env 均属于 Stable；A/B Beta 各有一个被测 Terminal Browser tab。
+- When：只从 Stable terminal 分别执行 A/B 的 `cdp --surface terminal-browser`，再用返回的显式 endpoint 附着。
+- Then：无需创建或进入 Beta terminal；两个 resolver 结果分别属于 A/B Terminal Browser Proxy，target channel/instance 正确且不能看到对方 targets。
+- 失败判断：要求 Beta terminal/env、使用 Stable ambient endpoint、Desktop endpoint或另一实例 Proxy。
 
 ### BIC-014 group-scoped endpoint 只暴露指定实例与 group
 
@@ -196,7 +198,7 @@ git diff --check
 - 验证方式：自动化脚本 + `$computer-use`。
 - Given：A/B 均存在并停止 A。
 - When：显式删除 A。
-- Then：A 的 App、userData、App Server home、registry 被删除；B 与 Stable 的身份、PID、文件和窗口不变。
+- Then：A 的 App、userData、registry 及其 dedicated App Server home 被删除；shared-declared App Server 不被删除；B 与 Stable 的身份、PID、文件和窗口不变。
 - 失败判断：路径越界删除、仍有 A live 进程却继续删除，或影响 B/Stable。
 
 ### BIC-017 状态、日志和 registry 不泄露秘密
@@ -212,8 +214,8 @@ git diff --check
 
 - 设计技术：重启恢复。
 - 验证方式：自动化脚本 + `$toolkit:playwright-cli`。
-- Given：Agent A 已使用实例 `agent-a`，记录实例状态后关闭 Playwright/Agent session。
-- When：从 Stable 的另一个新 terminal 按 instanceId 重新查询并附着 A Desktop。
+- Given：Agent A 已从 Stable terminal 使用实例 `agent-a`，记录实例状态后关闭 Playwright/Agent session。
+- When：从 Stable 主应用的另一个新 terminal 按 instanceId 重新查询并附着 A Desktop。
 - Then：解析到同一 instanceId/revision/PID，读取到原页面；不依赖旧 terminal env 或 Playwright session。
 - 失败判断：新 Agent 无法发现实例、选择最近实例，或必须复制旧端口才能连接。
 

@@ -6,7 +6,7 @@ const ROLE_LABEL: Record<string, string> = {
   behavior_verify: "behavior_verifier（按验收用例跑 Playwright）",
 };
 const EVIDENCE_SCHEMA =
-  'acceptanceResults[].evidence[] 必须使用 { type, label, summary, ref, detail? }；type 可用 "text"、"dom"、"screenshot"、"command"、"event"、"json"、"log"、"code"。label 是短标题，summary 是给人看的单句结论，ref 保留原始证据路径、文本或标识。';
+  'acceptanceResults[] 必须包含每条 case 独立的 summary 结论；evidence[] 使用 { type, label, summary, ref, detail? }。type 可用 "text"、"dom"、"screenshot"、"command"、"event"、"json"、"log"、"code"；label 是短标题，evidence summary 是单条证据说明，ref 保留原始证据路径、文本或标识。';
 const FINDING_SCHEMA =
   '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings；字段为 { severity: "P0"|"P1"|"P2"|"P3", status?: "open"|"resolved"|"informational", title, summary, ref? }。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
 
@@ -66,8 +66,8 @@ export function buildWorkerStartupPrompt(params: {
       ...acceptance.map(formatAcceptancePromptLine),
       "",
       outboxPath
-        ? `把每条用例的结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, skipReason?, evidence[] }]。`
-        : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, skipReason?, evidence[] }]。",
+        ? `把每条用例的结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skipReason?, evidence[] }]。`
+        : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skipReason?, evidence[] }]。",
       "首轮按测试案例顺序执行；遇到阻断失败可以停止，但必须在 outbox 写清失败 case、失败步骤和证据。",
     );
   } else if (worker.role === "code_review") {
@@ -173,8 +173,8 @@ export function buildWorkerRecheckPrompt(params: {
       : []),
     "",
     outboxPath
-      ? `把结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, skipReason?, evidence[] }]。`
-      : "把结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, skipReason?, evidence[] }]。",
+      ? `把结果写进 ${outboxPath} 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skipReason?, evidence[] }]。`
+      : "把结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skipReason?, evidence[] }]。",
     ...(outboxPath
       ? [
           `outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,

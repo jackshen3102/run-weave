@@ -24,6 +24,13 @@ export interface RuntimeStatsSnapshot {
 
 export interface BackendHealthPayload {
   status: "ok";
+  service?: "runweave-backend";
+  serviceInstanceId?: string;
+  devSessionId?: string;
+  sourceRevision?: string;
+  resourceNamespace?: string;
+  protocolVersion?: number;
+  capabilities?: string[];
   runtimeReleaseId?: string;
 }
 
