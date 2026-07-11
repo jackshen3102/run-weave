@@ -1,0 +1,376 @@
+{
+  "navigation": [
+    { "id": "overview", "label": "Overview", "icon": "◫" },
+    { "id": "facts", "label": "Facts", "icon": "≋" },
+    { "id": "learnings", "label": "Learnings", "icon": "◇" },
+    { "id": "sources", "label": "Sources", "icon": "⌁" }
+  ],
+  "metrics": [
+    {
+      "label": "Facts retained",
+      "value": "4,250",
+      "change": "7-day local window",
+      "tone": ""
+    },
+    {
+      "label": "Linked Threads",
+      "value": "92",
+      "change": "ThreadRef correlation",
+      "tone": "positive"
+    },
+    {
+      "label": "Completion facts",
+      "value": "47",
+      "change": "Hook and process completion",
+      "tone": ""
+    },
+    {
+      "label": "Sources current",
+      "value": "3 / 4",
+      "change": "Beta cursor delayed",
+      "tone": "negative"
+    }
+  ],
+  "facts": [
+    {
+      "id": "fact-source-cursor-delayed",
+      "type": "fact",
+      "eventId": "source:beta:cursor:4821",
+      "kind": "source.cursor.delayed",
+      "title": "Beta event cursor has not advanced for 17 minutes",
+      "description": "The last acknowledged event remains 4821 and the heartbeat threshold has been exceeded.",
+      "status": "delayed",
+      "channel": ["beta"],
+      "source": "Activity Hub cursor",
+      "project": "runweave-beta",
+      "terminal": "Beta App Server",
+      "threadId": null,
+      "createdAt": "Today · 10:31",
+      "result": "Beta fact coverage is incomplete after event 4821.",
+      "evidence": [
+        {
+          "time": "10:14",
+          "title": "Cursor acknowledged",
+          "detail": "Beta source acknowledged event 4821."
+        },
+        {
+          "time": "10:31",
+          "title": "Heartbeat threshold exceeded",
+          "detail": "No producer heartbeat arrived within 15 minutes."
+        }
+      ]
+    },
+    {
+      "id": "fact-turn-completed",
+      "type": "fact",
+      "eventId": "12847",
+      "kind": "agent.completion",
+      "title": "Codex response completed",
+      "description": "A Stop completion was recorded with a summary and Thread correlation.",
+      "status": "completed",
+      "channel": ["dev"],
+      "source": "Hook · Codex CLI",
+      "project": "browser-hub/feature",
+      "terminal": "feature / codex",
+      "threadId": "019f4ac9-b5ab-7580-9ee4-05220dd23b32",
+      "createdAt": "Today · 10:22",
+      "result": "completionReason=hook_stop · summary present",
+      "evidence": [
+        {
+          "time": "10:22",
+          "title": "Completion envelope persisted",
+          "detail": "Event 12847 contains source, completionReason, cwd, summary, and correlationId."
+        }
+      ]
+    },
+    {
+      "id": "fact-agent-team-run-completed",
+      "type": "fact",
+      "eventId": "run:019f4113:completed",
+      "kind": "agent-team.run.completed",
+      "title": "Behavior verification run completed",
+      "description": "The run reached its terminal state with a test-case file and recorded acceptance results.",
+      "status": "completed",
+      "channel": ["stable"],
+      "source": "Agent Team run store",
+      "project": "browser-viewer",
+      "terminal": "agent-team / behavior-verify",
+      "threadId": "019f4113-f0e7-7640-9c91-e1148e0832d9",
+      "createdAt": "Jul 8 · 19:27",
+      "result": "status=completed · testCaseFilePath present",
+      "evidence": [
+        {
+          "time": "19:27",
+          "title": "Run state persisted",
+          "detail": "The run record includes its source case file and acceptance result entries."
+        }
+      ]
+    },
+    {
+      "id": "fact-verification-aligned",
+      "type": "fact",
+      "eventId": "verification:cdp:1902",
+      "kind": "verification.result",
+      "title": "Browser verification passed with matching runtime identity",
+      "description": "Target and observed build revision, backend profile, and route matched.",
+      "status": "completed",
+      "channel": ["beta"],
+      "source": "Playwright verification",
+      "project": "browser-hub/feature",
+      "terminal": "Runweave Beta / terminal",
+      "threadId": "019f4ac9-b5ab-7580-9ee4-05220dd23b32",
+      "createdAt": "Jul 10 · 15:11",
+      "result": "result=passed · identityMatch=true",
+      "evidence": [
+        {
+          "time": "15:11",
+          "title": "Verification result recorded",
+          "detail": "Observed revision and profile matched the requested Beta target."
+        }
+      ]
+    },
+    {
+      "id": "fact-verification-profile-mismatch",
+      "type": "fact",
+      "eventId": "verification:cdp:1898",
+      "kind": "verification.result",
+      "title": "Browser verification invalidated by backend profile mismatch",
+      "description": "The active CDP target belonged to a backend profile different from the requested target.",
+      "status": "recorded",
+      "channel": ["beta"],
+      "source": "Playwright verification",
+      "project": "browser-hub/feature",
+      "terminal": "Runweave Beta / terminal",
+      "threadId": "019f4ac9-b5ab-7580-9ee4-05220dd23b32",
+      "createdAt": "Jul 10 · 15:06",
+      "result": "result=invalidated · reason=backend_profile_mismatch",
+      "evidence": [
+        {
+          "time": "15:06",
+          "title": "Identity comparison failed",
+          "detail": "Target and observed backend profile identifiers differed."
+        }
+      ]
+    },
+    {
+      "id": "fact-verification-revision-mismatch",
+      "type": "fact",
+      "eventId": "verification:cdp:1894",
+      "kind": "verification.result",
+      "title": "Browser verification invalidated by build revision mismatch",
+      "description": "The visible page did not contain the requested feature revision.",
+      "status": "recorded",
+      "channel": ["dev"],
+      "source": "Playwright verification",
+      "project": "browser-hub/feature",
+      "terminal": "feature / codex",
+      "threadId": "019f3c24-e0ac-7153-a59c-16328899f57b",
+      "createdAt": "Jul 7 · 19:42",
+      "result": "result=invalidated · reason=build_revision_mismatch",
+      "evidence": [
+        {
+          "time": "19:42",
+          "title": "Identity comparison failed",
+          "detail": "Target and observed build revisions differed."
+        }
+      ]
+    },
+    {
+      "id": "fact-case-source-missing",
+      "type": "fact",
+      "eventId": "agent-team:run:4401",
+      "kind": "agent-team.source-gate.rejected",
+      "title": "Behavior verification rejected without a case-file reference",
+      "description": "generatedTestCaseFilePath was empty when the run attempted to enter behavior verification.",
+      "status": "recorded",
+      "channel": ["dev"],
+      "source": "Agent Team run store",
+      "project": "browser-viewer",
+      "terminal": "agent-team / behavior-verify",
+      "threadId": "019f4113-f0e7-7640-9c91-e1148e0832d9",
+      "createdAt": "Jul 8 · 18:03",
+      "result": "gate=rejected · generatedTestCaseFilePath=null",
+      "evidence": [
+        {
+          "time": "18:03",
+          "title": "Source gate rejected run",
+          "detail": "No test-case file path was present in the run metadata."
+        }
+      ]
+    },
+    {
+      "id": "fact-case-source-present",
+      "type": "fact",
+      "eventId": "agent-team:run:4410",
+      "kind": "agent-team.source-gate.accepted",
+      "title": "Behavior verification accepted with a case-file reference",
+      "description": "The run carried a project-local generated test-case file before execution.",
+      "status": "completed",
+      "channel": ["stable"],
+      "source": "Agent Team run store",
+      "project": "browser-viewer",
+      "terminal": "agent-team / behavior-verify",
+      "threadId": "019f4113-f0e7-7640-9c91-e1148e0832d9",
+      "createdAt": "Jul 8 · 18:21",
+      "result": "gate=accepted · source=test_case_file",
+      "evidence": [
+        {
+          "time": "18:21",
+          "title": "Source gate accepted run",
+          "detail": "generatedTestCaseFilePath resolved to a valid project-local Markdown file."
+        }
+      ]
+    },
+    {
+      "id": "fact-turn-started",
+      "type": "fact",
+      "eventId": "12841",
+      "kind": "agent.hook",
+      "title": "Codex user prompt submitted",
+      "description": "UserPromptSubmit moved the linked Thread into running state.",
+      "status": "recorded",
+      "channel": ["dev"],
+      "source": "Hook · Codex CLI",
+      "project": "browser-hub/feature",
+      "terminal": "feature / codex",
+      "threadId": "019f4ac9-b5ab-7580-9ee4-05220dd23b32",
+      "createdAt": "Today · 10:14",
+      "result": "stateHookEvent=UserPromptSubmit",
+      "evidence": [
+        {
+          "time": "10:14",
+          "title": "Hook envelope persisted",
+          "detail": "Event 12841 contains Thread, terminal, project, source, cwd, and timestamp context."
+        }
+      ]
+    },
+    {
+      "id": "fact-thread-state-idle",
+      "type": "fact",
+      "eventId": "12848",
+      "kind": "thread.state.changed",
+      "title": "Thread state changed from running to idle",
+      "description": "The ThreadRef projection recorded the latest status after completion.",
+      "status": "recorded",
+      "channel": ["dev"],
+      "source": "App Server projector",
+      "project": "browser-hub/feature",
+      "terminal": "feature / codex",
+      "threadId": "019f4ac9-b5ab-7580-9ee4-05220dd23b32",
+      "createdAt": "Today · 10:22",
+      "result": "previous=running · current=idle",
+      "evidence": [
+        {
+          "time": "10:22",
+          "title": "Projection change persisted",
+          "detail": "ThreadRef lastEventId advanced to the completion event."
+        }
+      ]
+    }
+  ],
+  "learnings": [
+    {
+      "id": "learning-runtime-preflight",
+      "type": "learning",
+      "title": "Align runtime identity before browser verification",
+      "description": "Check route, backend profile, and build revision before accepting a browser result.",
+      "status": "candidate",
+      "channel": ["stable", "beta", "dev"],
+      "source": "Verification fact rule",
+      "project": "cross-project",
+      "threadId": "019f4ac9-b5ab-7580-9ee4-05220dd23b32",
+      "observed": "3 verification facts",
+      "result": "Two invalidated identities followed by one aligned result.",
+      "factRefs": [
+        "fact-verification-revision-mismatch",
+        "fact-verification-profile-mismatch",
+        "fact-verification-aligned"
+      ],
+      "evidence": [
+        {
+          "time": "Jul 7",
+          "title": "verification:cdp:1894",
+          "detail": "Build revision mismatch invalidated the result."
+        },
+        {
+          "time": "Jul 10",
+          "title": "verification:cdp:1898",
+          "detail": "Backend profile mismatch invalidated the result."
+        },
+        {
+          "time": "Jul 10",
+          "title": "verification:cdp:1902",
+          "detail": "Matching runtime identity produced a passing result."
+        }
+      ]
+    },
+    {
+      "id": "learning-case-source",
+      "type": "learning",
+      "title": "Behavior verification needs a traceable case source",
+      "description": "Require a case-file reference before behavior verification executes.",
+      "status": "candidate",
+      "channel": ["stable", "dev"],
+      "source": "Agent Team fact rule",
+      "project": "agent-team",
+      "threadId": "019f4113-f0e7-7640-9c91-e1148e0832d9",
+      "observed": "2 source-gate facts",
+      "result": "One rejected run and one accepted run preserve the gate boundary.",
+      "factRefs": ["fact-case-source-missing", "fact-case-source-present"],
+      "evidence": [
+        {
+          "time": "Jul 8 · 18:03",
+          "title": "agent-team:run:4401",
+          "detail": "Missing case-file reference caused rejection."
+        },
+        {
+          "time": "Jul 8 · 18:21",
+          "title": "agent-team:run:4410",
+          "detail": "A valid case-file reference allowed execution."
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "stable",
+      "name": "Runweave Stable",
+      "kind": "App Server",
+      "status": "healthy",
+      "lastSeen": "8 sec ago",
+      "events": "1,284",
+      "cursor": "12,804",
+      "coverage": "100%"
+    },
+    {
+      "id": "beta",
+      "name": "Runweave Beta",
+      "kind": "Isolated App Server",
+      "status": "delayed",
+      "lastSeen": "17 min ago",
+      "events": "468",
+      "cursor": "4,821",
+      "coverage": "82%"
+    },
+    {
+      "id": "dev",
+      "name": "Dev Backends",
+      "kind": "3 registered instances",
+      "status": "healthy",
+      "lastSeen": "14 sec ago",
+      "events": "2,106",
+      "cursor": "9,112",
+      "coverage": "98%"
+    },
+    {
+      "id": "cli",
+      "name": "Runweave CLI",
+      "kind": "Registered event producer",
+      "status": "healthy",
+      "lastSeen": "1 min ago",
+      "events": "392",
+      "cursor": "2,337",
+      "coverage": "100%"
+    }
+  ]
+}

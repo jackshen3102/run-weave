@@ -5,6 +5,7 @@ import type { AuthService } from "../auth/service";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
   resolveTerminalPrototypePreviewFile,
+  parseTerminalPrototypeGallerySource,
   TerminalPrototypeGalleryError,
 } from "../terminal/prototype-gallery";
 
@@ -34,7 +35,11 @@ export function createPrototypePreviewRouter(
       typeof req.params.prototypeSlug === "string"
         ? req.params.prototypeSlug
         : null;
-    if (!ticket || !projectId || !prototypeSlug) {
+    const prototypeSource =
+      typeof req.params.prototypeSource === "string"
+        ? parseTerminalPrototypeGallerySource(req.params.prototypeSource)
+        : null;
+    if (!ticket || !projectId || !prototypeSource || !prototypeSlug) {
       res.status(400).type("text").send("Invalid prototype preview path");
       return;
     }
@@ -47,6 +52,7 @@ export function createPrototypePreviewRouter(
       tokenType: "prototype-preview",
       resource: {
         projectId: project.id,
+        prototypeSource,
         prototypeSlug,
       },
     });
@@ -57,6 +63,7 @@ export function createPrototypePreviewRouter(
     try {
       const preview = await resolveTerminalPrototypePreviewFile({
         projectPath: project.path,
+        prototypeSource,
         prototypeSlug,
         requestedPath: typeof req.params[0] === "string" ? req.params[0] : "",
       });
@@ -89,7 +96,13 @@ export function createPrototypePreviewRouter(
     }
   };
 
-  router.all("/:ticket/:projectId/:prototypeSlug", handlePreview);
-  router.all("/:ticket/:projectId/:prototypeSlug/*", handlePreview);
+  router.all(
+    "/:ticket/:projectId/:prototypeSource/:prototypeSlug",
+    handlePreview,
+  );
+  router.all(
+    "/:ticket/:projectId/:prototypeSource/:prototypeSlug/*",
+    handlePreview,
+  );
   return router;
 }

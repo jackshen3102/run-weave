@@ -1,4 +1,5 @@
 import { useMemoizedFn } from "ahooks";
+import type { TerminalPrototypeGallerySource } from "@runweave/shared/terminal/preview";
 import { ArrowLeft, PanelsTopLeft } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { PrototypeGallery } from "../components/prototypes/prototype-gallery";
@@ -15,18 +16,28 @@ export function PrototypesPage({
   onAuthExpired,
 }: PrototypesPageProps) {
   const navigate = useNavigate();
-  const { projectId, prototypeSlug } = useParams<{
+  const { projectId, prototypeSource, prototypeSlug } = useParams<{
     projectId?: string;
+    prototypeSource?: string;
     prototypeSlug?: string;
   }>();
   const [searchParams] = useSearchParams();
   const preferredProjectId = projectId ?? searchParams.get("project");
+  const selectedPrototypeSource: TerminalPrototypeGallerySource | undefined =
+    prototypeSource === "prototypes" || prototypeSource === "architecture-flows"
+      ? prototypeSource
+      : undefined;
 
   const handleSelectionChange = useMemoizedFn(
-    (selection: { projectId: string; slug: string }): void => {
-      const nextPath = `/prototypes/${encodeURIComponent(selection.projectId)}/${encodeURIComponent(selection.slug)}`;
+    (selection: {
+      projectId: string;
+      source: TerminalPrototypeGallerySource;
+      slug: string;
+    }): void => {
+      const nextPath = `/prototypes/${encodeURIComponent(selection.projectId)}/${encodeURIComponent(selection.source)}/${encodeURIComponent(selection.slug)}`;
       if (
         selection.projectId === projectId &&
+        selection.source === selectedPrototypeSource &&
         selection.slug === prototypeSlug
       ) {
         return;
@@ -63,6 +74,7 @@ export function PrototypesPage({
           token={token}
           activeProjectId={preferredProjectId}
           selectedProjectId={projectId}
+          selectedPrototypeSource={selectedPrototypeSource}
           selectedPrototypeSlug={prototypeSlug}
           onSelectionChange={handleSelectionChange}
           onAuthExpired={onAuthExpired}
