@@ -1,11 +1,12 @@
-import { useMemoizedFn } from "ahooks";
-import { useRef } from "react";
+import { useDebounceFn, useMemoizedFn } from "ahooks";
+import { useEffect, useRef } from "react";
 import type { TerminalEventEnvelope } from "@runweave/shared";
 import { createTerminalBellPlayer } from "../../features/terminal/bell";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import { useTerminalEventsConnection } from "../../features/terminal/use-terminal-events-connection";
 
 const BELL_MARKER_DURATION_MS = 2_000;
+const TERMINAL_LIST_REFRESH_DEBOUNCE_MS = 50;
 
 interface UseTerminalWorkspaceEventsArgs {
   apiBase: string;
@@ -65,6 +66,10 @@ export function useTerminalWorkspaceEvents({
     (state) => state.setBellMarkers,
   );
   const terminalEventCursorRef = useRef<string | null>(null);
+  const pendingCreatedSessionRef = useRef<Extract<
+    TerminalEventEnvelope,
+    { kind: "terminal_session_created" }
+  > | null>(null);
   const completionBellPlayerRef = useRef<ReturnType<
     typeof createTerminalBellPlayer
   > | null>(null);
@@ -72,6 +77,34 @@ export function useTerminalWorkspaceEvents({
   const resetTerminalEventCursor = useMemoizedFn(() => {
     terminalEventCursorRef.current = null;
   });
+
+  const {
+    run: scheduleTerminalListRefresh,
+    cancel: cancelTerminalListRefresh,
+  } = useDebounceFn(
+    () => {
+      const latestCreatedSession = pendingCreatedSessionRef.current;
+      pendingCreatedSessionRef.current = null;
+      void loadSessions().then(() => {
+        if (
+          !latestCreatedSession ||
+          useTerminalWorkspaceStore.getState().activeSessionId
+        ) {
+          return;
+        }
+        setActiveProjectId(latestCreatedSession.projectId);
+        selectActiveSession(latestCreatedSession.terminalSessionId);
+      });
+    },
+    { wait: TERMINAL_LIST_REFRESH_DEBOUNCE_MS },
+  );
+
+  useEffect(
+    () => () => {
+      cancelTerminalListRefresh();
+    },
+    [cancelTerminalListRefresh],
+  );
 
   const applyTerminalEvents = useMemoizedFn(
     (events: TerminalEventEnvelope[], delivery: "catchup" | "live"): void => {
@@ -161,9 +194,7 @@ export function useTerminalWorkspaceEvents({
         setSessions((currentSessions) => {
           let changed = false;
           const nextSessions = currentSessions.map((session) => {
-            const metadata = metadataBySessionId.get(
-              session.terminalSessionId,
-            );
+            const metadata = metadataBySessionId.get(session.terminalSessionId);
             if (
               !metadata ||
               (session.cwd === metadata.cwd &&
@@ -184,16 +215,10 @@ export function useTerminalWorkspaceEvents({
 
       if (events.some(isTerminalListInvalidationEvent)) {
         const latestCreatedSession = getLatestCreatedSessionEvent(events);
-        void loadSessions().then(() => {
-          if (
-            !latestCreatedSession ||
-            useTerminalWorkspaceStore.getState().activeSessionId
-          ) {
-            return;
-          }
-          setActiveProjectId(latestCreatedSession.projectId);
-          selectActiveSession(latestCreatedSession.terminalSessionId);
-        });
+        if (latestCreatedSession) {
+          pendingCreatedSessionRef.current = latestCreatedSession;
+        }
+        scheduleTerminalListRefresh();
       }
 
       const knownSessionIds = new Set(
@@ -270,8 +295,12 @@ export function useTerminalWorkspaceEvents({
   const getCompletionEventCursor = useMemoizedFn(
     () => terminalEventCursorRef.current,
   );
-  const setCompletionEventCursor = useMemoizedFn((cursor: string) => {
+  const setCompletionEventCursor = useMemoizedFn((cursor: string | null) => {
     terminalEventCursorRef.current = cursor;
+  });
+
+  const resyncTerminalWorkspace = useMemoizedFn(() => {
+    void loadSessions();
   });
 
   useTerminalEventsConnection({
@@ -280,6 +309,7 @@ export function useTerminalWorkspaceEvents({
     getCursor: getCompletionEventCursor,
     setCursor: setCompletionEventCursor,
     onAuthExpired,
+    onResyncRequired: resyncTerminalWorkspace,
     onTerminalEvents: applyTerminalEvents,
   });
 

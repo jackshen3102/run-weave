@@ -18,7 +18,6 @@ import { toWebSocketBase } from "./url";
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type TerminalRuntimeStatus = "running" | "exited" | null;
 type TerminalRuntimeKind = "tmux" | "pty" | null;
-const MAX_PENDING_INPUT_CHARS = 8 * 1024;
 
 function buildTerminalWsUrl(
   apiBase: string,
@@ -76,7 +75,6 @@ export function useTerminalConnection(params: {
   const terminalStatusRef = useRef<TerminalRuntimeStatus>(null);
   const outboundSequenceRef = useRef(0);
   const inboundSequenceRef = useRef(0);
-  const pendingInputRef = useRef<string[]>([]);
   const connectionStatusRef = useRef<ConnectionStatus>("connecting");
   // Keep onOutput in a ref so it never needs to be in the effect's dep array.
   const onSnapshotRef = useRef(onSnapshot);
@@ -97,6 +95,7 @@ export function useTerminalConnection(params: {
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [runtimeKind, setRuntimeKind] = useState<TerminalRuntimeKind>(null);
   const [error, setError] = useState<string | null>(null);
+  const [inputError, setInputError] = useState<string | null>(null);
   const [manualReconnectNonce, setManualReconnectNonce] = useState(0);
 
   const setNextConnectionStatus = useMemoizedFn(
@@ -117,6 +116,7 @@ export function useTerminalConnection(params: {
     setNextTerminalStatus(null);
     setExitCode(null);
     setError(null);
+    setInputError(null);
     let cancelled = false;
 
     const clearReconnectTimer = () => {
@@ -135,23 +135,6 @@ export function useTerminalConnection(params: {
 
       window.clearTimeout(stableConnectionTimerRef.current);
       stableConnectionTimerRef.current = null;
-    };
-
-    const flushPendingInput = (socket: WebSocket): void => {
-      if (
-        socket.readyState !== WebSocket.OPEN ||
-        pendingInputRef.current.length === 0
-      ) {
-        return;
-      }
-
-      const pendingInput = pendingInputRef.current.splice(0);
-      for (const data of pendingInput) {
-        sendMessage(socket, {
-          type: "input",
-          data,
-        });
-      }
     };
 
     const connect = async (): Promise<void> => {
@@ -214,7 +197,6 @@ export function useTerminalConnection(params: {
               rows: pendingResizeRef.current.rows,
             });
           }
-          flushPendingInput(socket);
         });
         socket.addEventListener("close", (event) => {
           if (socketRef.current !== socket) {
@@ -398,19 +380,9 @@ export function useTerminalConnection(params: {
     terminalSessionId,
   ]);
 
-  const queuePendingInput = useMemoizedFn(
-    (data: string, socketReadyState: number | null): void => {
-      pendingInputRef.current.push(data);
-      let totalLen = pendingInputRef.current.reduce(
-        (total, chunk) => total + chunk.length,
-        0,
-      );
-      while (
-        pendingInputRef.current.length > 0 &&
-        totalLen > MAX_PENDING_INPUT_CHARS
-      ) {
-        totalLen -= pendingInputRef.current.shift()?.length ?? 0;
-      }
+  const handleUnavailableInput = useMemoizedFn(
+    (socketReadyState: number | null): void => {
+      setInputError("Terminal is reconnecting. Input was not sent.");
       if (socketReadyState === null || socketReadyState === WebSocket.CLOSED) {
         if (connectionStatusRef.current !== "connecting") {
           setNextConnectionStatus("connecting");
@@ -425,21 +397,25 @@ export function useTerminalConnection(params: {
     terminalStatus,
     exitCode,
     runtimeKind,
-    error,
+    error: inputError ?? error,
     sendInput: useMemoizedFn((data: string) => {
       outboundSequenceRef.current += 1;
       const socket = socketRef.current;
+      const browserOffline =
+        typeof navigator !== "undefined" && navigator.onLine === false;
       logTerminalPerf("ws.send.input", {
         terminalSessionId,
         seq: outboundSequenceRef.current,
         socketReadyState: socket?.readyState ?? null,
+        browserOffline,
         ...summarizeTerminalChunk(data),
       });
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
-        queuePendingInput(data, socket?.readyState ?? null);
+      if (browserOffline || !socket || socket.readyState !== WebSocket.OPEN) {
+        handleUnavailableInput(socket?.readyState ?? null);
         return;
       }
 
+      setInputError(null);
       sendMessage(socket, {
         type: "input",
         data,

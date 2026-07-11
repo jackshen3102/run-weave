@@ -250,6 +250,7 @@ export interface CreateTerminalEventsWsTicketResponse {
   ticket: string;
   expiresIn: number;
   baselineEventId: string | null;
+  streamId: string;
 }
 
 export type TerminalInputMode =
@@ -335,8 +336,7 @@ export interface SendTerminalInterruptRequest {
   role?: TerminalPanelRole;
 }
 
-export interface SendTerminalInterruptResponse
-  extends SendTerminalInputResponse {
+export interface SendTerminalInterruptResponse extends SendTerminalInputResponse {
   interruptAccepted: true;
   interruptSequence: "escape";
 }
@@ -768,10 +768,7 @@ export interface TerminalStateResponse {
   terminalState: TerminalState;
 }
 
-export type AgentHookStateEvent =
-  | "SessionStart"
-  | "UserPromptSubmit"
-  | "Stop";
+export type AgentHookStateEvent = "SessionStart" | "UserPromptSubmit" | "Stop";
 
 export interface AgentHookStateRequest {
   terminalSessionId: string;
@@ -784,10 +781,19 @@ export interface AgentHookStateRequest {
   hookEvent: AgentHookStateEvent;
 }
 
+export interface TerminalEventCursorGap {
+  reason: "cursor-too-old" | "cursor-ahead";
+  requestedAfter: string;
+  oldestAvailableEventId: string | null;
+  latestEventId: string | null;
+}
+
 export type TerminalEventServerMessage =
   | {
       type: "connected";
       acceptedAfter: string | null;
+      streamId: string;
+      gap: TerminalEventCursorGap | null;
     }
   | {
       type: "terminal-events";

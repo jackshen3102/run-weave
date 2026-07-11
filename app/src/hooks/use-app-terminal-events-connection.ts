@@ -83,6 +83,7 @@ export function useAppTerminalEventsConnection({
   onConnectionError,
   onServerConnected,
   onTransportOpen,
+  onResyncRequired,
   onTerminalEvents,
 }: {
   apiBase: string;
@@ -93,6 +94,7 @@ export function useAppTerminalEventsConnection({
   onConnectionError?: () => ReconnectDecision;
   onServerConnected?: () => void;
   onTransportOpen?: () => void;
+  onResyncRequired: () => void;
   onTerminalEvents: (
     events: TerminalEventEnvelope[],
     delivery: TerminalEventDelivery,
@@ -103,8 +105,10 @@ export function useAppTerminalEventsConnection({
   const accessTokenRef = useRef(accessToken);
   const cursorRef = useRef<string | null>(null);
   const lastConnectionCursorRef = useRef<string | null>(null);
+  const streamIdRef = useRef<string | null>(null);
   const seenEventIdsRef = useRef<Set<string>>(new Set());
   const onTerminalEventsRef = useRef(onTerminalEvents);
+  const onResyncRequiredRef = useRef(onResyncRequired);
   // Keep callback identities out of the connection effect's dependency array.
   // Otherwise an inline/non-memoized callback (e.g. onConnectionClose) would
   // re-run the effect on every render, tearing down and re-opening the socket
@@ -120,6 +124,13 @@ export function useAppTerminalEventsConnection({
   }, [accessToken]);
 
   useEffect(() => {
+    cursorRef.current = null;
+    lastConnectionCursorRef.current = null;
+    seenEventIdsRef.current = new Set();
+    streamIdRef.current = null;
+  }, [apiBase]);
+
+  useEffect(() => {
     onTerminalEventsRef.current = onTerminalEvents;
   }, [onTerminalEvents]);
 
@@ -129,12 +140,14 @@ export function useAppTerminalEventsConnection({
     onConnectionErrorRef.current = onConnectionError;
     onServerConnectedRef.current = onServerConnected;
     onTransportOpenRef.current = onTransportOpen;
+    onResyncRequiredRef.current = onResyncRequired;
   }, [
     onAuthExpired,
     onConnectionClose,
     onConnectionError,
     onServerConnected,
     onTransportOpen,
+    onResyncRequired,
   ]);
 
   const handleEvents = useMemoizedFn(
@@ -160,6 +173,13 @@ export function useAppTerminalEventsConnection({
       }
     },
   );
+
+  const resetEventStream = useMemoizedFn((): void => {
+    seenEventIdsRef.current = new Set();
+    lastConnectionCursorRef.current = null;
+    cursorRef.current = null;
+    onResyncRequiredRef.current();
+  });
 
   useEffect(() => {
     seenEventIdsRef.current = new Set();
@@ -211,10 +231,18 @@ export function useAppTerminalEventsConnection({
           return;
         }
 
-        const after =
+        let after =
           cursorRef.current ??
           lastConnectionCursorRef.current ??
           ticketPayload.baselineEventId;
+        if (
+          streamIdRef.current !== null &&
+          streamIdRef.current !== ticketPayload.streamId
+        ) {
+          resetEventStream();
+          after = null;
+        }
+        streamIdRef.current = ticketPayload.streamId;
         lastConnectionCursorRef.current = after;
         const socket = new WebSocket(
           buildTerminalEventsWsUrl(apiBase, ticketPayload.ticket, after),
@@ -241,6 +269,15 @@ export function useAppTerminalEventsConnection({
             return;
           }
           if (message.type === "connected") {
+            if (message.streamId !== streamIdRef.current) {
+              streamIdRef.current = message.streamId;
+              resetEventStream();
+              socket.close(1012, "Terminal event stream changed");
+              return;
+            }
+            if (message.gap) {
+              resetEventStream();
+            }
             onServerConnectedRef.current?.();
             return;
           }
@@ -285,5 +322,5 @@ export function useAppTerminalEventsConnection({
       closeWebSocket(socketRef.current, 1000, "AppTerminalEvents unmounted");
       socketRef.current = null;
     };
-  }, [apiBase, enabled, handleEvents]);
+  }, [apiBase, enabled, handleEvents, resetEventStream]);
 }

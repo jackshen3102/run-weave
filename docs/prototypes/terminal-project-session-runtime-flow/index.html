@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Runweave Project、Terminal Session、xterm、PTY/tmux、App 与统一事件系统架构图"
+      content="Runweave Terminal 数据面、全局事件面、权威快照与问题边界诊断图"
     />
-    <title>Project · Terminal · xterm 现状架构</title>
+    <title>Project · Terminal · xterm 架构诊断</title>
     <style>
       :root {
         color-scheme: dark;
@@ -898,6 +898,344 @@
         line-height: 1.5;
       }
 
+      .diagnosis-facts {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        border: 1px solid var(--line-strong);
+        background: rgba(2, 6, 23, 0.55);
+      }
+
+      .diagnosis-fact {
+        min-width: 0;
+        padding: 14px 16px;
+      }
+
+      .diagnosis-fact + .diagnosis-fact {
+        border-left: 1px solid var(--line);
+      }
+
+      .diagnosis-fact span {
+        display: block;
+        color: var(--faint);
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .diagnosis-fact strong {
+        display: block;
+        margin-top: 6px;
+        color: var(--text);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 15px;
+      }
+
+      .diagnosis-fact p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.55;
+      }
+
+      .diagnosis-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 250px;
+        gap: 18px;
+        margin-top: 18px;
+        min-width: 0;
+      }
+
+      .diagnosis-map {
+        display: grid;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .diagnosis-lane {
+        min-width: 0;
+        border: 1px solid var(--line-strong);
+        border-left: 3px solid var(--lane-color, var(--cyan));
+        background: rgba(5, 10, 24, 0.82);
+      }
+
+      .diagnosis-lane.tone-green {
+        --lane-color: var(--green);
+      }
+
+      .diagnosis-lane.tone-cyan {
+        --lane-color: var(--cyan);
+      }
+
+      .diagnosis-lane.tone-violet {
+        --lane-color: var(--violet);
+      }
+
+      .diagnosis-lane-header {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        min-height: 52px;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .diagnosis-lane-header > span {
+        color: var(--lane-color);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .diagnosis-lane-header strong,
+      .diagnosis-lane-header p {
+        display: block;
+        margin: 0;
+      }
+
+      .diagnosis-lane-header strong {
+        font-size: 12px;
+      }
+
+      .diagnosis-lane-header p {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 9px;
+      }
+
+      .diagnosis-lane-header code {
+        max-width: 280px;
+        color: var(--lane-color);
+        font-size: 8.5px;
+        text-align: right;
+      }
+
+      .diagnosis-flow {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(145px, 1fr));
+        gap: 24px;
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: auto;
+        padding: 14px;
+      }
+
+      .diagnosis-node {
+        position: relative;
+        min-width: 145px;
+        min-height: 128px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        background: rgba(11, 21, 39, 0.72);
+      }
+
+      .diagnosis-node:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        right: -25px;
+        width: 24px;
+        border-top: 1px solid var(--lane-color);
+      }
+
+      .diagnosis-node:not(:last-child)::before {
+        content: "";
+        position: absolute;
+        z-index: 1;
+        top: calc(50% - 3px);
+        right: -25px;
+        border-top: 3px solid transparent;
+        border-bottom: 3px solid transparent;
+        border-left: 5px solid var(--lane-color);
+      }
+
+      .diagnosis-node-topline {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .diagnosis-node-topline > span {
+        color: var(--faint);
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .diagnosis-node h3 {
+        margin: 9px 0 6px;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .diagnosis-node p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 9px;
+        line-height: 1.5;
+      }
+
+      .diagnosis-node > code {
+        display: block;
+        margin-top: 10px;
+        color: var(--lane-color);
+        font-size: 8px;
+      }
+
+      .issue-markers {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 4px;
+      }
+
+      .issue-marker {
+        display: grid;
+        place-items: center;
+        min-width: 27px;
+        height: 20px;
+        padding: 0 4px;
+        border: 1px solid rgba(251, 113, 133, 0.55);
+        border-radius: 2px;
+        background: rgba(127, 29, 29, 0.22);
+        color: #fecdd3;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 8px;
+        font-weight: 800;
+      }
+
+      .issue-marker:hover,
+      .issue-marker.active {
+        border-color: var(--rose);
+        background: rgba(190, 24, 93, 0.28);
+        color: #fff1f2;
+      }
+
+      .issue-index {
+        align-self: start;
+        min-width: 0;
+        border: 1px solid var(--line-strong);
+        background: rgba(5, 10, 24, 0.82);
+      }
+
+      .issue-index > .mini-heading {
+        margin: 0;
+        padding: 11px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .issue-index-item {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        align-items: start;
+        gap: 8px;
+        width: 100%;
+        padding: 11px 10px;
+        border-bottom: 1px solid var(--line);
+        background: transparent;
+        text-align: left;
+      }
+
+      .issue-index-item:last-child {
+        border-bottom: 0;
+      }
+
+      .issue-index-item:hover,
+      .issue-index-item.active {
+        background: rgba(251, 113, 133, 0.08);
+      }
+
+      .issue-index-item > span {
+        color: var(--rose);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 10px;
+        font-weight: 800;
+      }
+
+      .issue-index-item strong,
+      .issue-index-item small {
+        display: block;
+      }
+
+      .issue-index-item strong {
+        font-size: 10px;
+        line-height: 1.4;
+      }
+
+      .issue-index-item small {
+        margin-top: 3px;
+        color: var(--faint);
+        font-size: 8px;
+      }
+
+      .issue-detail-panel {
+        margin-top: 18px;
+        border: 1px solid rgba(251, 113, 133, 0.4);
+        border-left: 3px solid var(--rose);
+        background: linear-gradient(135deg, rgba(76, 5, 25, 0.2), rgba(5, 10, 24, 0.82));
+        padding: 18px;
+      }
+
+      .issue-detail-heading {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .issue-number {
+        color: var(--rose);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 20px;
+        font-weight: 900;
+      }
+
+      .issue-classification {
+        color: #fda4af;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .issue-detail-heading h2 {
+        margin: 4px 0 0;
+        font-size: 18px;
+      }
+
+      .issue-cause-chain {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin: 16px 0;
+        border: 1px solid var(--line);
+      }
+
+      .issue-cause-chain > div {
+        padding: 12px;
+      }
+
+      .issue-cause-chain > div + div {
+        border-left: 1px solid var(--line);
+      }
+
+      .issue-cause-chain dt {
+        color: var(--faint);
+        font-size: 8px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .issue-cause-chain dd {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.55;
+      }
+
       .count-card .source {
         margin-top: 10px;
         color: var(--faint);
@@ -957,6 +1295,29 @@
         .channel-grid {
           grid-template-columns: 1fr;
         }
+        .diagnosis-layout {
+          grid-template-columns: 1fr;
+        }
+        .issue-index {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .issue-index > .mini-heading {
+          grid-column: 1 / -1;
+        }
+        .issue-index-item:nth-child(even) {
+          border-left: 1px solid var(--line);
+        }
+        .issue-cause-chain {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .issue-cause-chain > div:nth-child(3) {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+        .issue-cause-chain > div:nth-child(4) {
+          border-top: 1px solid var(--line);
+        }
       }
 
       @media (max-width: 760px) {
@@ -1006,10 +1367,38 @@
           display: none;
         }
         .facts-grid,
+        .diagnosis-facts,
         .detail-grid,
         .relation-strip,
         .count-grid {
           grid-template-columns: 1fr;
+        }
+        .diagnosis-fact + .diagnosis-fact {
+          border-top: 1px solid var(--line);
+          border-left: 0;
+        }
+        .diagnosis-lane-header {
+          grid-template-columns: 26px minmax(0, 1fr);
+        }
+        .diagnosis-lane-header code {
+          grid-column: 2;
+          max-width: none;
+          text-align: left;
+        }
+        .issue-index {
+          grid-template-columns: 1fr;
+        }
+        .issue-index-item:nth-child(even) {
+          border-left: 0;
+        }
+        .issue-cause-chain {
+          grid-template-columns: 1fr;
+        }
+        .issue-cause-chain > div + div,
+        .issue-cause-chain > div:nth-child(3),
+        .issue-cause-chain > div:nth-child(4) {
+          border-top: 1px solid var(--line);
+          border-left: 0;
         }
         .lane {
           grid-template-columns: 1fr;

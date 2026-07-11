@@ -73,6 +73,7 @@ export function attachTerminalEventsWebSocketServer(
     terminalEventsWsLogger.info("terminal-events-ws.connected", {
       message: "Terminal events websocket connected",
       acceptedAfter: handshake.after,
+      streamId: terminalEventService.getStreamId(),
     });
     const heartbeatState = {
       heartbeatTimer: null as NodeJS.Timeout | null,
@@ -85,6 +86,8 @@ export function attachTerminalEventsWebSocketServer(
     sendTerminalEvent(socket, {
       type: "connected",
       acceptedAfter: handshake.after,
+      streamId: terminalEventService.getStreamId(),
+      gap: terminalEventService.getCursorGap(handshake.after),
     });
 
     const unsubscribe = terminalEventService.subscribe((event) => {

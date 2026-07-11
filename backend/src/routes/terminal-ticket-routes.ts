@@ -35,8 +35,11 @@ export function registerTerminalTicketRoutes(
   options?: TerminalTicketRouteOptions,
 ): void {
   const handleTerminalEventsWsTicket = (authorizationHeader?: string) => {
-    if (!options?.authService) {
-      return { status: 503, payload: { message: "Terminal ticket service unavailable" } };
+    if (!options?.authService || !options.terminalEventService) {
+      return {
+        status: 503,
+        payload: { message: "Terminal ticket service unavailable" },
+      };
     }
     const authSessionId = resolveAuthenticatedSessionId(
       options.authService,
@@ -55,7 +58,8 @@ export function registerTerminalTicketRoutes(
     const payload: CreateTerminalEventsWsTicketResponse = {
       ticket: issued.token,
       expiresIn: issued.expiresIn,
-      baselineEventId: options.terminalEventService?.getLatestId() ?? null,
+      baselineEventId: options.terminalEventService.getLatestId(),
+      streamId: options.terminalEventService.getStreamId(),
     };
     return { status: 200, payload };
   };
