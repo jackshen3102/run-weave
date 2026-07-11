@@ -17,7 +17,8 @@
 
 ## 分层思路（概念级）
 
-- **E2E 层**：Playwright 关键路径闭环验证，是当前唯一正式自动化测试层。
+- **架构层**：`pnpm architecture:check` 检查 600 行 ratchet、循环依赖、反向依赖和共享根导入债务。
+- **E2E 层**：Playwright 覆盖登录和 Terminal Workspace 基线；更深的终端、App、Electron 行为按测试案例用 `$playwright-cli` / `$computer-use` 真实取证。
 - **静态/构建层**：backend、shared、electron、Runweave CLI、App 通过 typecheck、lint、build 或手工冒烟验证。
 
 具体命名与映射见：`docs/testing/layers.md`
@@ -26,7 +27,8 @@
 
 - `pnpm run test:e2e`：前端 Playwright 关键路径。
 - `pnpm test`：等同于 `pnpm run test:e2e`。
-- `pnpm run quality:gate`：按变更选择 Playwright smoke E2E；不再运行单测或 coverage。
+- `pnpm architecture:report`：生成 `artifacts/architecture-report.json`，报告当前结构债务。
+- `pnpm run quality:gate`：按变更选择 architecture、typecheck/lint 和 Playwright smoke E2E；不运行单测或 coverage。
 
 ## 按需录屏验收
 
@@ -34,13 +36,12 @@
 
 该能力是最终验收证据层，不替代 E2E 断言。详细设计见：`docs/quality/recorded-browser-mcp-verification.md`
 
-## 关键路径（高层）
+## 自动化基线（高层）
 
 - 登录成功
-- 创建会话
-- Runweave Viewer 连接与首帧
-- 输入回执
-- 导航往返
-- 重连恢复
+- 进入 Terminal Workspace
+- 默认 Project 与新建 Terminal / Project 入口可见
+
+创建会话、输入回执、重连恢复、Terminal Browser、App 和 Electron 仍必须执行对应 `docs/testing/*` 的真实环境用例，不能由 smoke E2E 代替。
 
 详细选择策略见：`docs/testing/command-matrix.md`

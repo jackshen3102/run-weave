@@ -1,11 +1,9 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import type {
-  AgentTeamRun,
-  TerminalProjectListItem,
-  TerminalSessionListItem,
-} from "@runweave/shared";
+import type { AgentTeamRun } from "@runweave/shared/agent-team";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import {
   completeAgentTeamRun,
   focusAgentTeamPane,

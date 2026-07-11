@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { TerminalPreviewFileDiffResponse } from "@runweave/shared";
+import type { TerminalPreviewFileDiffResponse } from "@runweave/shared/terminal/preview";
 
 import { buildMobileDiff } from "../lib/mobile-diff";
 

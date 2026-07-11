@@ -1,24 +1,14 @@
-import type {
-  LoginRequest,
-  LoginResponse,
-  RefreshSessionRequest,
-  RefreshSessionResponse,
-} from "@runweave/shared";
+import type { LoginRequest, LoginResponse, RefreshSessionRequest, RefreshSessionResponse } from "@runweave/shared/protocol";
 
 import { requestJson, requestVoid } from "./http";
+import type { AppAuthSession } from "../features/auth/types";
+
+export type { AppAuthSession } from "../features/auth/types";
 
 const APP_AUTH_HEADERS = {
   "Content-Type": "application/json",
   "X-Auth-Client": "app",
 };
-
-export interface AppAuthSession {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-  expiresAt: number;
-  sessionId: string;
-}
 
 function toAppAuthSession(
   response: LoginResponse | RefreshSessionResponse,

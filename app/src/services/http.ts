@@ -1,4 +1,4 @@
-import { recordSupportLog } from "../features/support-logs";
+import { recordSupportLog } from "../features/support-logs/support-log-recorder";
 
 export class ApiError extends Error {
   constructor(

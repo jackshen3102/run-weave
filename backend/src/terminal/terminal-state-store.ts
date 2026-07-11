@@ -1,4 +1,4 @@
-import type { TerminalState } from "@runweave/shared";
+import type { TerminalState } from "@runweave/shared/terminal/state";
 
 export class TerminalStateStore {
   private readonly states = new Map<string, TerminalState>();

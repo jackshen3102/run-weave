@@ -8,13 +8,14 @@ import { Search } from "lucide-react";
 import type {
   TerminalPreviewFileResponse,
   TerminalPreviewFileSearchItem,
-  TerminalProjectListItem,
-} from "@runweave/shared";
+} from "@runweave/shared/terminal/preview";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type {
   TerminalMarkdownViewMode,
   TerminalSvgViewMode,
 } from "../../features/terminal/preview-store";
 import { getTerminalPreviewMonacoLanguage } from "../../features/terminal/preview-file-types";
+import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
 import { Button } from "../ui/button";
 import { TerminalFileExplorer } from "./terminal-file-explorer";
 import { TerminalOpenFileCommand } from "./terminal-open-file-command";
@@ -51,7 +52,10 @@ const TerminalImagePreview = lazy(() =>
   })),
 );
 
-export function renderPreviewEmpty(title: string, action?: ReactNode): ReactNode {
+export function renderPreviewEmpty(
+  title: string,
+  action?: ReactNode,
+): ReactNode {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-xs text-slate-400">
       <p>{title}</p>
@@ -60,85 +64,107 @@ export function renderPreviewEmpty(title: string, action?: ReactNode): ReactNode
   );
 }
 
-interface TerminalPreviewFileViewProps {
-  activeProject: TerminalProjectListItem;
-  apiBase: string;
-  token: string;
+interface PreviewFileNavigation {
   mode: "explorer" | "file";
-  projectId: string | null;
   query: string;
   absoluteInput: boolean;
   selectedFilePath?: string;
-  fileKind: string;
-  markdownViewMode: TerminalMarkdownViewMode;
-  markdownSplitSourceWidthPct: number;
-  svgViewMode: TerminalSvgViewMode;
   searchItems: TerminalPreviewFileSearchItem[];
   searchLoading: boolean;
   searchError: string | null;
-  filePreview: TerminalPreviewFileResponse | null;
-  editorContent: string;
-  editable: boolean;
-  onEditorContentChange: (content: string) => void;
-  saveError: string | null;
-  saveConflict: boolean;
-  onReloadFile: () => void;
-  onOverwriteFile: () => void;
-  fileLoading: boolean;
-  fileError: string | null;
-  fileTree: UseTerminalFileTreeReturn;
-  assetRefreshKey: number;
-  markdownScrollRatio: number;
-  lineTarget: TerminalPreviewLineTarget | null;
-  onAuthExpired?: () => void;
   onQueryChange: (nextQuery: string) => void;
   onOpenFilePath: (filePath: string) => void;
   onOpenQuickSearch: () => void;
   onRequestRenameFile: (filePath: string) => void;
   onRequestDeleteFile: (filePath: string) => void;
+}
+
+interface PreviewFileResource {
+  data: TerminalPreviewFileResponse | null;
+  kind: string;
+  loading: boolean;
+  error: string | null;
+  assetRefreshKey: number;
+}
+
+interface PreviewFileEditor {
+  content: string;
+  editable: boolean;
+  saveError: string | null;
+  saveConflict: boolean;
+  onContentChange: (content: string) => void;
+  onReload: () => void;
+  onOverwrite: () => void;
+}
+
+interface PreviewFileDisplay {
+  markdownViewMode: TerminalMarkdownViewMode;
+  markdownSplitSourceWidthPct: number;
+  svgViewMode: TerminalSvgViewMode;
+  markdownScrollRatio: number;
+  lineTarget: TerminalPreviewLineTarget | null;
   onMarkdownScrollRatioChange: (ratio: number) => void;
   onStartMarkdownResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
 }
 
+interface TerminalPreviewFileViewProps {
+  activeProject: TerminalProjectListItem;
+  display: PreviewFileDisplay;
+  editor: PreviewFileEditor;
+  file: PreviewFileResource;
+  fileTree: UseTerminalFileTreeReturn;
+  navigation: PreviewFileNavigation;
+}
+
 export function TerminalPreviewFileView({
   activeProject,
-  apiBase,
-  token,
-  mode,
-  projectId,
-  query,
-  absoluteInput,
-  selectedFilePath,
-  fileKind,
-  markdownViewMode,
-  markdownSplitSourceWidthPct,
-  svgViewMode,
-  searchItems,
-  searchLoading,
-  searchError,
-  filePreview,
-  editorContent,
-  editable,
-  onEditorContentChange,
-  saveError,
-  saveConflict,
-  onReloadFile,
-  onOverwriteFile,
-  fileLoading,
-  fileError,
+  display,
+  editor,
+  file,
   fileTree,
-  assetRefreshKey,
-  markdownScrollRatio,
-  lineTarget,
-  onAuthExpired,
-  onQueryChange,
-  onOpenFilePath,
-  onOpenQuickSearch,
-  onRequestRenameFile,
-  onRequestDeleteFile,
-  onMarkdownScrollRatioChange,
-  onStartMarkdownResize,
+  navigation,
 }: TerminalPreviewFileViewProps) {
+  const { apiBase, onAuthExpired, token } = useTerminalRuntime();
+  const projectId = activeProject.projectId;
+  const {
+    absoluteInput,
+    mode,
+    query,
+    searchError,
+    searchItems,
+    searchLoading,
+    selectedFilePath,
+    onOpenFilePath,
+    onOpenQuickSearch,
+    onQueryChange,
+    onRequestDeleteFile,
+    onRequestRenameFile,
+  } = navigation;
+  const {
+    assetRefreshKey,
+    data: filePreview,
+    error: fileError,
+    kind: fileKind,
+    loading: fileLoading,
+  } = file;
+  const {
+    content: editorContent,
+    editable,
+    saveConflict,
+    saveError,
+    onContentChange: onEditorContentChange,
+    onOverwrite: onOverwriteFile,
+    onReload: onReloadFile,
+  } = editor;
+  const {
+    lineTarget,
+    markdownScrollRatio,
+    markdownSplitSourceWidthPct,
+    markdownViewMode,
+    svgViewMode,
+    onMarkdownScrollRatioChange,
+    onStartMarkdownResize,
+  } = display;
   const monacoLanguage = getTerminalPreviewMonacoLanguage(
     filePreview?.language,
   );

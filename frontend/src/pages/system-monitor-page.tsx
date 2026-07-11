@@ -13,11 +13,7 @@ import {
   Play,
   RefreshCw,
 } from "lucide-react";
-import type {
-  SystemMonitorAppGroup,
-  SystemMonitorProcess,
-  SystemMonitorSnapshot,
-} from "@runweave/shared";
+import type { SystemMonitorAppGroup, SystemMonitorProcess, SystemMonitorSnapshot } from "@runweave/shared/system-monitor";
 import { Button } from "../components/ui/button";
 import {
   DropdownMenu,

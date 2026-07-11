@@ -1,9 +1,6 @@
 import type { Response, Router } from "express";
 import { z } from "zod";
-import type {
-  CreateTerminalProjectRequest,
-  UpdateTerminalProjectRequest,
-} from "@runweave/shared";
+import type { CreateTerminalProjectRequest, UpdateTerminalProjectRequest } from "@runweave/shared/terminal/project";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
@@ -16,7 +13,7 @@ import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TmuxService } from "../terminal/tmux-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TerminalEventService } from "../terminal/terminal-event-service";
-import { toProjectPayload } from "./terminal-route-payloads";
+import { toProjectPayload } from "../terminal/application/payloads";
 
 const terminalProjectLogger = logger.child({ component: "terminal" });
 

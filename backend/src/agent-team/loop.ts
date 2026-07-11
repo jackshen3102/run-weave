@@ -1,9 +1,4 @@
-import type {
-  AgentTeamAcceptanceCase,
-  AgentTeamLoop,
-  AgentTeamRun,
-  AgentTeamWorkerOutbox,
-} from "@runweave/shared";
+import type { AgentTeamAcceptanceCase, AgentTeamLoop, AgentTeamRun, AgentTeamWorkerOutbox } from "@runweave/shared/agent-team";
 
 export const DEFAULT_MAX_NO_PROGRESS = 3;
 export const DEFAULT_STABLE_FAIL_THRESHOLD = 2;

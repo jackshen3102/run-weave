@@ -1,21 +1,10 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import {
-  chmod,
-  mkdtemp,
-  readFile,
-  rm,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  buildCompletionEvent,
-  buildHookEvent,
-} from "./lib/app-server-threadref-fixture.mjs";
+import { createStateSyncHarness } from "./lib/app-server-state-sync-harness.mjs";
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const requireFromAppServer = createRequire(
@@ -46,6 +35,32 @@ const syncDir = await mkdtemp(
 );
 const badSyncPath = path.join(os.tmpdir(), `runweave-sync-file-${process.pid}`);
 const fakeCodexBinPath = path.join(stateDir, "fake-codex-app-server.mjs");
+
+const {
+  assertStatus,
+  collectLiveEvents,
+  completionEvent,
+  connectStream,
+  contextTokenPattern,
+  getJson,
+  getThread,
+  hookEvent,
+  postEvent,
+  readContext,
+  readJson,
+  readJsonl,
+  run,
+  startAppServer,
+  stopAppServer,
+  waitFor,
+  writeFakeCodexBin,
+} = createStateSyncHarness({
+  WebSocket,
+  fakeCodexBinPath,
+  ids,
+  repoRoot,
+  source,
+});
 
 let appServer = null;
 try {
@@ -147,7 +162,10 @@ async function verifyCompletionSemantics(context) {
 
   await postEvent(context, hookEvent("UserPromptSubmit"));
   await postEvent(context, completionEvent("notify", "Notify"));
-  assert.equal((await getThread(context, ids.threadId)).thread.status, "running");
+  assert.equal(
+    (await getThread(context, ids.threadId)).thread.status,
+    "running",
+  );
 
   await postEvent(context, completionEvent("hook_stop", "Stop"));
   const idleThread = await getThread(context, ids.threadId);
@@ -214,7 +232,10 @@ async function verifyIsolationAndFallbackKeys(context) {
       scope: { terminalPanelId: "panel-a" },
     }),
   );
-  assert.equal((await getThread(context, "thread-panel-a")).thread.status, "idle");
+  assert.equal(
+    (await getThread(context, "thread-panel-a")).thread.status,
+    "idle",
+  );
   assert.equal(
     (await getThread(context, "thread-panel-b")).thread.status,
     "running",
@@ -286,8 +307,14 @@ async function verifyFilteringAndAuth(context) {
     context,
     `/threads?projectId=${ids.projectId}&terminalSessionId=${ids.terminalSessionId}&terminalPanelId=${ids.terminalPanelId}&agent=codex&limit=50`,
   );
-  assert.equal(filtered.threads.every((thread) => thread.projectId === ids.projectId), true);
-  assert.equal(filtered.threads.every((thread) => thread.agent === "codex"), true);
+  assert.equal(
+    filtered.threads.every((thread) => thread.projectId === ids.projectId),
+    true,
+  );
+  assert.equal(
+    filtered.threads.every((thread) => thread.agent === "codex"),
+    true,
+  );
 }
 
 async function verifyWebSocketStateEvents(context) {
@@ -302,7 +329,10 @@ async function verifyWebSocketStateEvents(context) {
   );
   const messages = await liveEvents;
   assert.equal(messages.length, 1);
-  assert.equal(messages.some((event) => event.kind === "thread.state.changed"), true);
+  assert.equal(
+    messages.some((event) => event.kind === "thread.state.changed"),
+    true,
+  );
   stream.close();
 }
 
@@ -329,8 +359,7 @@ async function verifyCodexThreadStatusCompensation(context) {
   );
   const compensationEvent = events.events.find(
     (event) =>
-      event.correlationId === threadId &&
-      event.payload?.compensation === true,
+      event.correlationId === threadId && event.payload?.compensation === true,
   );
   assert.ok(compensationEvent);
   assert.equal(compensationEvent.payload.source, "codex");
@@ -347,7 +376,10 @@ async function verifyCodexThreadStatusCompensation(context) {
       scope: { terminalPanelId: "panel-active-compensation" },
     }),
   );
-  assert.equal((await getThread(context, activeThreadId)).thread.status, "idle");
+  assert.equal(
+    (await getThread(context, activeThreadId)).thread.status,
+    "idle",
+  );
 
   await waitFor(async () => {
     const thread = await getThread(context, activeThreadId);
@@ -434,228 +466,10 @@ async function verifyProjectionRebuild(context, syncDir) {
 async function verifySyncDegrades(context) {
   const response = await postEvent(context, hookEvent("SessionStart"));
   assert.equal(response.status, 201);
-  assert.equal((await getThread(context, ids.threadId)).thread.status, "starting");
+  assert.equal(
+    (await getThread(context, ids.threadId)).thread.status,
+    "starting",
+  );
   const status = await getJson(context, "/sync/status");
   assert.ok(status.lastError);
-}
-
-function hookEvent(hookEventName, overrides = {}) {
-  return buildHookEvent(ids, hookEventName, { source, ...overrides });
-}
-
-function completionEvent(reason, rawHookEvent) {
-  return buildCompletionEvent(ids, reason, rawHookEvent, { source });
-}
-
-function startAppServer({ stateDir, syncDir }) {
-  const child = spawn(process.execPath, ["app-server/dist/index.js"], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      RUNWEAVE_APP_SERVER_STATE_DIR: stateDir,
-      RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: syncDir,
-      RUNWEAVE_APP_SERVER_PORT: "0",
-      RUNWEAVE_APP_SERVER_CODEX_STATUS_START_DELAY_MS: "100",
-      RUNWEAVE_APP_SERVER_CODEX_STATUS_INTERVAL_MS: "100",
-      CODEX_BIN: fakeCodexBinPath,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  return waitForReady(child, stateDir);
-}
-
-async function waitForReady(child, stateDir) {
-  let stderr = "";
-  child.stderr.setEncoding("utf8");
-  child.stderr.on("data", (chunk) => {
-    stderr += chunk;
-  });
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < 10_000) {
-    if (child.exitCode !== null) {
-      throw new Error(`app-server exited early: ${stderr}`);
-    }
-    try {
-      const context = await readContext(stateDir);
-      const response = await fetch(`${context.baseUrl}/healthz`);
-      if (response.ok) {
-        return child;
-      }
-    } catch {
-      // Keep polling until the server writes the lock and answers health.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(`app-server did not become ready: ${stderr}`);
-}
-
-async function readContext(stateDir) {
-  const lock = JSON.parse(
-    await readFile(path.join(stateDir, "app-server.lock.json"), "utf8"),
-  );
-  const token = (
-    await readFile(path.join(stateDir, "app-server-token"), "utf8")
-  ).trim();
-  return {
-    stateDir,
-    token,
-    baseUrl: `http://${lock.host}:${lock.port}`,
-  };
-}
-
-async function stopAppServer(child) {
-  if (child.exitCode !== null) {
-    return;
-  }
-  child.kill("SIGTERM");
-  await new Promise((resolve) => child.on("close", resolve));
-}
-
-async function postEvent(context, body) {
-  const response = await fetch(`${context.baseUrl}/events`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${context.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  return { status: response.status, body: await response.json() };
-}
-
-async function getThread(context, threadId) {
-  return getJson(context, `/threads/${encodeURIComponent(threadId)}`);
-}
-
-async function getJson(context, pathName) {
-  const response = await fetch(`${context.baseUrl}${pathName}`, {
-    headers: { Authorization: `Bearer ${context.token}` },
-  });
-  assert.equal(response.ok, true, `${pathName} returned ${response.status}`);
-  return response.json();
-}
-
-async function assertStatus(context, pathName, expectedStatus, token) {
-  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-  const response = await fetch(`${context.baseUrl}${pathName}`, { headers });
-  assert.equal(response.status, expectedStatus, pathName);
-}
-
-async function connectStream(url, token) {
-  const socket = new WebSocket(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const messages = [];
-  socket.on("message", (raw) => {
-    messages.push(JSON.parse(String(raw)));
-  });
-  await new Promise((resolve, reject) => {
-    socket.once("open", resolve);
-    socket.once("error", reject);
-  });
-  await waitFor(() => messages.some((message) => message.type === "events"));
-  return {
-    close: () => socket.close(),
-    messages,
-  };
-}
-
-function collectLiveEvents(stream, count) {
-  return waitFor(() => {
-    const events = stream.messages
-      .filter((message) => message.type === "event")
-      .map((message) => message.event);
-    return events.length >= count ? events.slice(0, count) : null;
-  });
-}
-
-function waitFor(predicate) {
-  const startedAt = Date.now();
-  return new Promise((resolve, reject) => {
-    const tick = async () => {
-      const value = await predicate();
-      if (value) {
-        resolve(value);
-        return;
-      }
-      if (Date.now() - startedAt > 10_000) {
-        reject(new Error("Timed out waiting for condition"));
-        return;
-      }
-      setTimeout(tick, 50);
-    };
-    tick();
-  });
-}
-
-async function readJson(filePath) {
-  return JSON.parse(await readFile(filePath, "utf8"));
-}
-
-async function readJsonl(filePath) {
-  const content = await readFile(filePath, "utf8");
-  return content
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
-}
-
-async function writeFakeCodexBin(filePath) {
-  await writeFile(
-    filePath,
-    `#!/usr/bin/env node
-import readline from "node:readline";
-
-const rl = readline.createInterface({ input: process.stdin });
-
-rl.on("line", (line) => {
-  const message = JSON.parse(line);
-  if (!message.id) {
-    return;
-  }
-  if (message.method === "initialize") {
-    process.stdout.write(JSON.stringify({ id: message.id, result: {} }) + "\\n");
-    return;
-  }
-  if (message.method === "thread/read" || message.method === "thread/resume") {
-    const threadId = message.params?.threadId;
-    const type =
-      threadId === "thread-compensation"
-        ? "idle"
-        : threadId === "thread-active-compensation"
-          ? "active"
-          : null;
-    process.stdout.write(
-      JSON.stringify({
-        id: message.id,
-        result: type ? { thread: { status: { type } } } : {},
-      }) + "\\n",
-    );
-  }
-});
-`,
-    "utf8",
-  );
-  await chmod(filePath, 0o755);
-}
-
-function run(command, args) {
-  const child = spawn(command, args, {
-    cwd: repoRoot,
-    stdio: "inherit",
-  });
-  return new Promise((resolve, reject) => {
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`${command} ${args.join(" ")} exited with ${code}`));
-    });
-  });
-}
-
-function contextTokenPattern() {
-  return "app-server-token";
 }

@@ -4,7 +4,7 @@ import {
   expandHomePath,
   resolveBrowserProfileDir,
   type BrowserProfileStorageEnv,
-} from "@runweave/shared/src/browser-profile-node";
+} from "@runweave/shared/browser-profile-node";
 
 export { expandHomePath };
 

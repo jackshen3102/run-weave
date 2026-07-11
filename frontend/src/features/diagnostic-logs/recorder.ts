@@ -1,8 +1,4 @@
-import type {
-  DiagnosticLogRecord,
-  DiagnosticLogResult,
-  DiagnosticLogStatus,
-} from "@runweave/shared";
+import type { DiagnosticLogRecord, DiagnosticLogResult, DiagnosticLogStatus } from "@runweave/shared/diagnostic-logs";
 
 interface CreateAiDiagnosticLogOptions {
   recorder: FrontendDiagnosticLogRecorder;

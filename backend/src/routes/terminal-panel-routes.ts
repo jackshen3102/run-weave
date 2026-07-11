@@ -1,16 +1,10 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
-import type {
-  CreateTerminalPanelRequest,
-  ResizeTerminalPanelRequest,
-  SendTerminalInterruptRequest,
-  SendTerminalInputRequest,
-  TerminalInputMode,
-  UpdateTerminalPanelRequest,
-} from "@runweave/shared";
+import type { SendTerminalInterruptRequest, SendTerminalInputRequest, TerminalInputMode } from "@runweave/shared/terminal/input";
+import type { CreateTerminalPanelRequest, ResizeTerminalPanelRequest, UpdateTerminalPanelRequest } from "@runweave/shared/terminal/panel";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { logger } from "../logging";
-import { sendInputToSession } from "./terminal-input-dispatcher";
+import { sendInputToSession } from "../terminal/application/input-dispatcher";
 import {
   buildTerminalInputOperationId,
   sendTerminalInputSchema,
@@ -27,14 +21,17 @@ import {
   backfillSessionAgentMetadataToPrimaryPanel,
   recordPanelEvent,
   syncSinglePanelMetadataToSession,
-} from "./terminal-panel-metadata";
-import { createTerminalPanelSplit } from "./terminal-panel-split";
+} from "../terminal/application/panel-metadata";
+import { createTerminalPanelSplit } from "../terminal/application/panel-split";
 import {
   ensureTerminalPanelWorkspace,
   withPaneGeometry,
-} from "./terminal-panel-workspace";
-import { resolvePanelTarget } from "./terminal-panel-targets";
-import { toHistoryPayload, toPanelWorkspacePayload } from "./terminal-route-payloads";
+} from "../terminal/application/panel-workspace";
+import { resolvePanelTarget } from "../terminal/application/panel-targets";
+import {
+  toHistoryPayload,
+  toPanelWorkspacePayload,
+} from "../terminal/application/payloads";
 
 export {
   getSessionOrThrow,
@@ -46,9 +43,9 @@ export {
 export {
   createTerminalPanelSplit,
   type CreateTerminalPanelSplitParams,
-} from "./terminal-panel-split";
-export { ensureTerminalPanelWorkspace } from "./terminal-panel-workspace";
-export { resolvePanelTarget } from "./terminal-panel-targets";
+} from "../terminal/application/panel-split";
+export { ensureTerminalPanelWorkspace } from "../terminal/application/panel-workspace";
+export { resolvePanelTarget } from "../terminal/application/panel-targets";
 
 const panelLogger = logger.child({ component: "terminal" });
 
@@ -111,9 +108,7 @@ export function registerTerminalPanelRoutes(
           terminalEventService: options.terminalEventService,
         },
       );
-      res.json(
-        await withPaneGeometry(session, options.tmuxService, workspace),
-      );
+      res.json(await withPaneGeometry(session, options.tmuxService, workspace));
     } catch (error) {
       sendRouteError(res, error);
     }
@@ -147,9 +142,9 @@ export function registerTerminalPanelRoutes(
           focus: parsed.data.focus,
         },
       );
-      res.status(201).json(
-        await withPaneGeometry(session, options.tmuxService, workspace),
-      );
+      res
+        .status(201)
+        .json(await withPaneGeometry(session, options.tmuxService, workspace));
     } catch (error) {
       sendRouteError(res, error);
     }
@@ -222,10 +217,11 @@ export function registerTerminalPanelRoutes(
       }
       await options.tmuxService!.killPane(paneTarget);
       await terminalSessionManager.markPanelExited(panel.id);
-      const nextWorkspace = await terminalSessionManager.removePanelFromWorkspace(
-        session.id,
-        panel.id,
-      );
+      const nextWorkspace =
+        await terminalSessionManager.removePanelFromWorkspace(
+          session.id,
+          panel.id,
+        );
       if (nextWorkspace?.panelIds.length === 1) {
         const remainingPanel = terminalSessionManager.getPanel(
           nextWorkspace.panelIds[0]!,
@@ -252,13 +248,15 @@ export function registerTerminalPanelRoutes(
         "terminal_panel_deleted",
         { panelId: panel.id },
       );
-      res.status(200).json(
-        await withPaneGeometry(
-          session,
-          options.tmuxService,
-          toPanelWorkspacePayload(terminalSessionManager, session.id),
-        ),
-      );
+      res
+        .status(200)
+        .json(
+          await withPaneGeometry(
+            session,
+            options.tmuxService,
+            toPanelWorkspacePayload(terminalSessionManager, session.id),
+          ),
+        );
     } catch (error) {
       sendRouteError(res, error);
     }
@@ -320,7 +318,8 @@ export function registerTerminalPanelRoutes(
         { panelId: req.params.panelId },
         "explicit-or-active",
       );
-      const operationId = parsed.data.operationId ?? buildTerminalInputOperationId();
+      const operationId =
+        parsed.data.operationId ?? buildTerminalInputOperationId();
       const payload = await sendInputToSession(
         terminalSessionManager,
         options,

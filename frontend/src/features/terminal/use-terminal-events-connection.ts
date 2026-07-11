@@ -1,9 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
-import type {
-  TerminalEventEnvelope,
-  TerminalEventServerMessage,
-} from "@runweave/shared";
+import type { TerminalEventEnvelope, TerminalEventServerMessage } from "@runweave/shared/terminal/events";
 import { HttpError } from "../../services/http";
 import { createTerminalEventsWsTicket } from "../../services/terminal";
 import { getTerminalReconnectDelay } from "./reconnect-policy";

@@ -2,14 +2,14 @@ import { useMemoizedFn } from "ahooks";
 import type { Dispatch, SetStateAction } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { isTerminalAtBottom } from "@runweave/common/terminal";
-import type { TerminalModeState } from "@runweave/shared";
+import type { TerminalModeState } from "@runweave/shared/terminal/websocket";
 import {
   logTerminalPerf,
   summarizeTerminalChunk,
 } from "../../features/terminal/perf-logging";
 import { filterBrowserHandledTerminalOutput } from "../../features/terminal/output-filter";
 import {
-  DEFERRED_OUTPUT_REPLAY_MAX_CHARS,
+  DEFERRED_OUTPUT_BACKGROUND_FLUSH_CHARS,
   recordTerminalPerfProbeEvent,
 } from "./terminal-surface-utils";
 
@@ -176,6 +176,35 @@ export function useTerminalOutputStream({
     },
   );
 
+  const flushDeferredOutputInBackground = useMemoizedFn((data: string) => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      deferredOutputRef.current += data;
+      return;
+    }
+
+    const deferredSnapshot = deferredSnapshotRef.current;
+    const deferredOutput = `${deferredOutputRef.current}${data}`;
+    deferredOutputRef.current = "";
+    deferredSnapshotRef.current = null;
+    hasDeferredOutputRef.current = false;
+
+    if (deferredSnapshot !== null) {
+      renderTerminalSnapshot(deferredSnapshot.data, deferredSnapshot.modes);
+    }
+
+    const renderStartedAt = performance.now();
+    terminal.write(wrapSynchronizedOutput(deferredOutput), () => {
+      logTerminalPerf("terminal.background-output.rendered", {
+        terminalSessionId,
+        renderDurationMs: Number(
+          (performance.now() - renderStartedAt).toFixed(2),
+        ),
+        ...summarizeTerminalChunk(deferredOutput),
+      });
+    });
+  });
+
   const markDeferredOutput = useMemoizedFn((data: string) => {
     hasDeferredOutputRef.current = true;
 
@@ -185,11 +214,9 @@ export function useTerminalOutputStream({
 
     if (
       deferredOutputRef.current.length + data.length >
-      DEFERRED_OUTPUT_REPLAY_MAX_CHARS
+      DEFERRED_OUTPUT_BACKGROUND_FLUSH_CHARS
     ) {
-      deferredOutputRef.current = "";
-      deferredSnapshotRef.current = null;
-      requiresSnapshotRestoreRef.current = true;
+      flushDeferredOutputInBackground(data);
       return;
     }
 

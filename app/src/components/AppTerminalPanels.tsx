@@ -20,6 +20,7 @@ import { sendTerminalInput as sendTerminalInputRequest } from "../services/termi
 import type { SelectedTerminalChange } from "./TerminalChangesTab";
 import { useAppTerminalUiStore } from "../store/use-app-terminal-ui-store";
 import { recordSupportLog } from "../features/support-logs";
+import { useAppTerminalRuntime } from "../features/terminal/app-terminal-runtime";
 
 const TMUX_SCROLL_BUTTON_REVEAL_THRESHOLD_ROWS = 4;
 const LazyTerminalChangesTab = lazy(async () => {
@@ -39,45 +40,50 @@ function TerminalTabLoading() {
   );
 }
 
-interface AppTerminalPanelsProps {
-  accessToken: string;
-  activeProjectId: string | null;
-  apiBase: string;
+interface AppTerminalConnectionState {
   connectionStatus: string;
   error: string | null;
   hasMetadata: boolean;
   isDeviceOffline: boolean;
   notFound: boolean;
+  onBack: () => void;
+  onRefresh: () => Promise<unknown>;
+}
+
+interface AppTerminalRendererController {
   rendererRef: RefObject<TerminalRendererHandle | null>;
   runtimeKind: "tmux" | "pty" | null;
   sendInput: (data: string) => void;
   sendResize: (cols: number, rows: number) => void;
-  terminalSessionId: string;
-  onAuthExpired: () => void;
-  onBack: () => void;
-  onTerminalReady: () => void;
-  onRefreshDeviceConnection: () => Promise<unknown>;
+  onReady: () => void;
+}
+
+interface AppTerminalPanelsProps {
+  connection: AppTerminalConnectionState;
+  renderer: AppTerminalRendererController;
 }
 
 export function AppTerminalPanels({
-  accessToken,
-  activeProjectId,
-  apiBase,
-  connectionStatus,
-  error,
-  hasMetadata,
-  isDeviceOffline,
-  notFound,
-  onAuthExpired,
-  onBack,
-  onTerminalReady,
-  onRefreshDeviceConnection,
-  rendererRef,
-  runtimeKind,
-  sendInput,
-  sendResize,
-  terminalSessionId,
+  connection,
+  renderer,
 }: AppTerminalPanelsProps) {
+  const {
+    connectionStatus,
+    error,
+    hasMetadata,
+    isDeviceOffline,
+    notFound,
+    onBack,
+    onRefresh: onRefreshDeviceConnection,
+  } = connection;
+  const {
+    onReady: onTerminalReady,
+    rendererRef,
+    runtimeKind,
+    sendInput,
+    sendResize,
+  } = renderer;
+  const { accessToken, apiBase, terminalSessionId } = useAppTerminalRuntime();
   const activeTab = useAppTerminalUiStore((state) => state.activeTab);
   const requestedChange = useAppTerminalUiStore(
     (state) => state.requestedChange,
@@ -113,16 +119,18 @@ export function AppTerminalPanels({
     setTmuxScrollbackActive(false);
   });
 
-  const handleTmuxScrollbackDistanceChange = useMemoizedFn((deltaRows: number) => {
-    const nextDistanceRows = Math.max(
-      0,
-      tmuxScrollbackDistanceRowsRef.current + deltaRows,
-    );
-    tmuxScrollbackDistanceRowsRef.current = nextDistanceRows;
-    setTmuxScrollbackActive(
-      nextDistanceRows >= TMUX_SCROLL_BUTTON_REVEAL_THRESHOLD_ROWS,
-    );
-  });
+  const handleTmuxScrollbackDistanceChange = useMemoizedFn(
+    (deltaRows: number) => {
+      const nextDistanceRows = Math.max(
+        0,
+        tmuxScrollbackDistanceRowsRef.current + deltaRows,
+      );
+      tmuxScrollbackDistanceRowsRef.current = nextDistanceRows;
+      setTmuxScrollbackActive(
+        nextDistanceRows >= TMUX_SCROLL_BUTTON_REVEAL_THRESHOLD_ROWS,
+      );
+    },
+  );
 
   const handleTerminalReady = useMemoizedFn(
     (context: TerminalRendererExtensionContext) => {
@@ -136,12 +144,14 @@ export function AppTerminalPanels({
     },
   );
 
-  const handleTerminalBottomStateChange = useMemoizedFn((isAtBottom: boolean) => {
-    setTerminalAtBottom(isAtBottom);
-    if (isAtBottom) {
-      resetTmuxScrollbackDistance();
-    }
-  });
+  const handleTerminalBottomStateChange = useMemoizedFn(
+    (isAtBottom: boolean) => {
+      setTerminalAtBottom(isAtBottom);
+      if (isAtBottom) {
+        resetTmuxScrollbackDistance();
+      }
+    },
+  );
 
   const requestTmuxExitCopyMode = useMemoizedFn(() => {
     const sendExitRequest = () => {
@@ -234,12 +244,8 @@ export function AppTerminalPanels({
             <div className="terminal-tab-panel is-active">
               <Suspense fallback={<TerminalTabLoading />}>
                 <LazyTerminalChangesTab
-                  accessToken={accessToken}
                   active
-                  apiBase={apiBase}
-                  projectId={activeProjectId}
                   requestedChange={requestedChange}
-                  onAuthExpired={onAuthExpired}
                   onChangesCount={setChangesCount}
                 />
               </Suspense>
@@ -249,11 +255,7 @@ export function AppTerminalPanels({
             <div className="terminal-tab-panel is-active">
               <Suspense fallback={<TerminalTabLoading />}>
                 <LazyTerminalFilesTab
-                  accessToken={accessToken}
                   active
-                  apiBase={apiBase}
-                  projectId={activeProjectId}
-                  onAuthExpired={onAuthExpired}
                   onShowChanges={handleShowChanges}
                 />
               </Suspense>

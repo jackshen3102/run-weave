@@ -1,0 +1,269 @@
+.terminal-composer-slot {
+  position: relative;
+  z-index: 3;
+  background: rgba(12, 17, 24, 0.94);
+}
+
+.terminal-composer {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(12, 17, 24, 0.94);
+  backdrop-filter: blur(18px);
+}
+
+.terminal-composer-error {
+  margin: 0;
+  padding: 7px 12px;
+  border-top: 1px solid rgba(255, 154, 168, 0.18);
+  background: rgba(12, 17, 24, 0.94);
+  color: #ff9aa8;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.terminal-shortcut-bar {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.terminal-shortcut-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-shortcut-bar__button {
+  flex: 0 0 auto;
+  min-width: 56px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #dce5ee;
+  margin: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.terminal-shortcut-bar__button:active {
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.terminal-shortcut-bar__button:disabled {
+  opacity: 0.42;
+}
+
+.terminal-composer__input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.terminal-composer__shortcut-row {
+  min-width: 0;
+}
+
+.terminal-composer__actions-row {
+  display: grid;
+  grid-template-columns: 44px 44px minmax(86px, 1fr) 44px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.terminal-composer__file-input {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.terminal-composer__icon-button,
+.terminal-composer__voice-button,
+.terminal-composer__shortcut-toggle,
+.terminal-composer__action {
+  --border-radius: 999px;
+  --padding-bottom: 0;
+  --padding-end: 0;
+  --padding-start: 0;
+  --padding-top: 0;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0;
+  overflow: hidden;
+  font-weight: 700;
+}
+
+.terminal-composer__icon-button {
+  --background: rgba(148, 163, 184, 0.14);
+  --color: #eef3f8;
+}
+
+.terminal-composer__voice-button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: rgba(148, 163, 184, 0.14);
+  color: #eef3f8;
+}
+
+.terminal-composer__shortcut-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.14);
+  color: #eef3f8;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.terminal-composer__shortcut-toggle[aria-expanded="true"] {
+  border-color: rgba(66, 217, 134, 0.38);
+  background: rgba(66, 217, 134, 0.14);
+  color: #a7f3d0;
+}
+
+.terminal-composer__voice-button:disabled {
+  opacity: 0.42;
+}
+
+.terminal-composer__shortcut-toggle:disabled {
+  opacity: 0.42;
+}
+
+.terminal-composer__voice-button.is-recording {
+  background: rgba(255, 154, 168, 0.14);
+  color: #ff8fa3;
+}
+
+.terminal-composer__icon-button ion-icon {
+  width: 21px;
+  height: 21px;
+}
+
+.terminal-composer__voice-button ion-icon {
+  width: 21px;
+  height: 21px;
+}
+
+.terminal-composer__input {
+  --background: rgba(21, 28, 39, 0.94);
+  --border-color: rgba(148, 163, 184, 0.2);
+  --border-radius: 22px;
+  --color: #eef3f8;
+  --highlight-color-focused: #42d986;
+  --padding-bottom: 10px;
+  --padding-end: 14px;
+  --padding-start: 14px;
+  --padding-top: 10px;
+  min-height: 44px;
+  max-height: 120px;
+  overflow-y: auto;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 22px;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.terminal-composer__action {
+  --background: #eef3f8;
+  --border-color: rgba(238, 243, 248, 0.86);
+  --color: #05070b;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(238, 243, 248, 0.86);
+  border-radius: 999px;
+  background: #eef3f8;
+  color: #05070b;
+}
+
+.terminal-composer__action.is-stop {
+  --background: rgba(255, 154, 168, 0.1);
+  --border-color: rgba(255, 154, 168, 0.9);
+  --color: #ff8fa3;
+  background: rgba(255, 154, 168, 0.1);
+  color: #ff8fa3;
+}
+
+.terminal-composer__action ion-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.terminal-composer__action.button-disabled,
+.terminal-composer__icon-button.button-disabled {
+  opacity: 0.42;
+}
+
+.terminal-detail-tabs {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 7px 10px calc(var(--rw-app-safe-area-bottom) + 7px);
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(8, 11, 16, 0.96);
+  backdrop-filter: blur(18px);
+}
+
+.terminal-detail-tab {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 46px;
+  place-items: center;
+  gap: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #7f8c99;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.terminal-detail-tab ion-icon {
+  width: 19px;
+  height: 19px;
+}
+
+.terminal-detail-tab.is-active {
+  background: rgba(66, 217, 134, 0.12);
+  color: #7be8aa;
+}
+
+.terminal-detail-tab strong {
+  position: absolute;
+  top: 4px;
+  right: calc(50% - 28px);
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #eef3f8;
+  color: #05070b;
+  font-size: 10px;
+  line-height: 1.25;
+}

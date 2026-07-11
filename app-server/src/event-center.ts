@@ -2,7 +2,7 @@ import type {
   AppServerEventEnvelope,
   AppServerThreadStateChangedPayload,
   CreateAppServerEventRequest,
-} from "@runweave/shared";
+} from "@runweave/shared/app-server-events";
 import type { AppServerCloudSyncSim } from "./cloud-sync-sim.js";
 import type { AppServerEventStore, ListEventsOptions } from "./event-store.js";
 import type { AppServerStateProjector } from "./state-projector.js";

@@ -1,14 +1,6 @@
-import {
-  getTerminalPreviewFileKind,
-  terminalPreviewBasename,
-  terminalPreviewDirname,
-  terminalPreviewExtensionOf,
-  terminalPreviewFormatBytes,
-  terminalPreviewLanguageBadgeFor,
-  terminalPreviewParentPath,
-} from "@runweave/shared";
+import { getTerminalPreviewFileKind, terminalPreviewBasename, terminalPreviewDirname, terminalPreviewExtensionOf, terminalPreviewFormatBytes, terminalPreviewLanguageBadgeFor, terminalPreviewParentPath } from "@runweave/shared/terminal-preview-core";
 
-export { type TerminalPreviewFileKind } from "@runweave/shared";
+export { type TerminalPreviewFileKind } from "@runweave/shared/terminal-preview-core";
 
 export const extensionOf = terminalPreviewExtensionOf;
 export const basenameOf = terminalPreviewBasename;

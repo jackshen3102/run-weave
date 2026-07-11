@@ -6,16 +6,14 @@ import {
   isTerminalAutoResponse,
   shouldThrottleTmuxScroll,
 } from "@runweave/common/terminal";
-import {
-  TERMINAL_CLIENT_SCROLLBACK_LINES,
-  type TerminalModeState,
-} from "@runweave/shared";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared/terminal-limits";
+import { type TerminalModeState } from "@runweave/shared/terminal/websocket";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import type { TerminalSessionStatusResponse } from "@runweave/shared";
+import type { TerminalSessionStatusResponse } from "@runweave/shared/terminal/session";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { RuntimeMonitorBadge } from "./runtime-monitor-badge";

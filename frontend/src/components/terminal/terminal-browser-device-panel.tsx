@@ -1,9 +1,5 @@
 import { Check, Monitor, Smartphone, X } from "lucide-react";
-import {
-  TERMINAL_BROWSER_DEVICE_PRESETS,
-  type TerminalBrowserDevicePresetId,
-  type TerminalBrowserDeviceState,
-} from "@runweave/shared";
+import { TERMINAL_BROWSER_DEVICE_PRESETS, type TerminalBrowserDevicePresetId, type TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 import { Button } from "../ui/button";
 
 interface TerminalBrowserDeviceButtonProps {

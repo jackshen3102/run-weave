@@ -1,6 +1,6 @@
 import type http from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import type { AppServerEventStreamMessage } from "@runweave/shared";
+import type { AppServerEventStreamMessage } from "@runweave/shared/app-server-events";
 import { isAuthorizedWebSocketRequest } from "./auth.js";
 import type { AppServerEventCenter } from "./event-center.js";
 import { parseEventsQuery } from "./http-server.js";

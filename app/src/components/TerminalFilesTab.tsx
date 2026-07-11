@@ -1,13 +1,11 @@
 import { useMemoizedFn } from "ahooks";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import type {
-  TerminalPreviewDirectoryResponse,
-  TerminalPreviewFileSearchItem,
   TerminalPreviewGitChangesResponse,
   TerminalPreviewGitStatus,
   TerminalPreviewTreeEntry,
-} from "@runweave/shared";
-import { createTerminalPreviewRequestSequencer } from "@runweave/shared";
+} from "@runweave/shared/terminal/preview";
 
 import {
   basenameOf,
@@ -26,6 +24,8 @@ import {
   type FileChangeInfo,
   TerminalFilePreviewDrawer,
 } from "./TerminalFilePreviewDrawer";
+import { appQueryKeys } from "../features/query/app-query-provider";
+import { useAppTerminalRuntime } from "../features/terminal/app-terminal-runtime";
 
 function previewMessage(status: number): string {
   if (status === 404) {
@@ -146,130 +146,81 @@ function ChangeBadge({ info }: { info: FileChangeInfo | null }) {
 }
 
 export function TerminalFilesTab({
-  accessToken,
-  apiBase,
   active,
-  projectId,
-  onAuthExpired,
   onShowChanges,
 }: {
-  accessToken: string;
-  apiBase: string;
   active: boolean;
-  projectId: string | null;
-  onAuthExpired: () => void;
   onShowChanges: (change: SelectedTerminalChange) => void;
 }) {
+  const { accessToken, apiBase, onAuthExpired, projectId, scope } =
+    useAppTerminalRuntime();
   const [path, setPath] = useState("");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [directory, setDirectory] =
-    useState<TerminalPreviewDirectoryResponse | null>(null);
-  const [searchItems, setSearchItems] = useState<
-    TerminalPreviewFileSearchItem[]
-  >([]);
-  const [changes, setChanges] =
-    useState<TerminalPreviewGitChangesResponse | null>(null);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [searchError, setSearchError] = useState<string | null>(null);
-
+  const directoryQuery = useQuery({
+    queryKey: projectId
+      ? appQueryKeys.terminalDirectory(scope, projectId, path)
+      : [...appQueryKeys.all(scope), "terminal-preview", "no-directory"],
+    queryFn: () =>
+      listTerminalProjectPreviewDirectory(apiBase, accessToken, projectId!, {
+        path,
+        limit: 400,
+      }),
+    enabled: active && Boolean(projectId),
+  });
+  const changesQuery = useQuery({
+    queryKey: projectId
+      ? appQueryKeys.terminalChanges(scope, projectId)
+      : [...appQueryKeys.all(scope), "terminal-preview", "no-project"],
+    queryFn: () =>
+      getTerminalProjectPreviewGitChanges(apiBase, accessToken, projectId!),
+    enabled: active && Boolean(projectId),
+  });
+  const searchQuery = useQuery({
+    queryKey:
+      projectId && debouncedQuery
+        ? appQueryKeys.terminalFileSearch(scope, projectId, debouncedQuery)
+        : [...appQueryKeys.all(scope), "terminal-preview", "no-search"],
+    queryFn: () =>
+      searchTerminalProjectPreviewFiles(apiBase, accessToken, projectId!, {
+        query: debouncedQuery,
+        limit: 50,
+      }),
+    enabled: active && Boolean(projectId && debouncedQuery),
+  });
+  const directory = directoryQuery.data ?? null;
+  const changes = changesQuery.data ?? null;
+  const searchItems = searchQuery.data?.items ?? [];
+  const loading = directoryQuery.isFetching;
+  const searchLoading = searchQuery.isFetching;
+  const error = directoryQuery.error
+    ? directoryQuery.error instanceof ApiError
+      ? previewMessage(directoryQuery.error.status)
+      : directoryQuery.error instanceof Error
+        ? directoryQuery.error.message
+        : "Load failed"
+    : null;
+  const searchError = searchQuery.error
+    ? searchQuery.error instanceof Error
+      ? searchQuery.error.message
+      : "Search failed"
+    : null;
   const changeMap = useMemo(() => buildChangeMap(changes), [changes]);
-  const changesRequests = useMemo(
-    () => createTerminalPreviewRequestSequencer(),
-    [],
-  );
-  const directoryRequests = useMemo(
-    () => createTerminalPreviewRequestSequencer(),
-    [],
-  );
-  const searchRequests = useMemo(
-    () => createTerminalPreviewRequestSequencer(),
-    [],
-  );
 
   useEffect(() => {
-    changesRequests.invalidate();
-    directoryRequests.invalidate();
-    searchRequests.invalidate();
     setPath("");
     setQuery("");
     setDebouncedQuery("");
-    setDirectory(null);
-    setSearchItems([]);
-    setChanges(null);
     setPreviewPath(null);
-    setLoading(false);
-    setSearchLoading(false);
-    setError(null);
-    setSearchError(null);
-  }, [changesRequests, directoryRequests, projectId, searchRequests]);
+  }, [projectId]);
 
   const loadChanges = useMemoizedFn(() => {
-    if (!projectId) {
-      changesRequests.invalidate();
-      setChanges(null);
-      return;
-    }
-    const requestId = changesRequests.next();
-    void getTerminalProjectPreviewGitChanges(apiBase, accessToken, projectId)
-      .then((payload) => {
-        if (changesRequests.isCurrent(requestId)) {
-          setChanges(payload);
-        }
-      })
-      .catch((nextError: unknown) => {
-        if (!changesRequests.isCurrent(requestId)) {
-          return;
-        }
-        if (nextError instanceof ApiError && nextError.status === 401) {
-          onAuthExpired();
-        }
-      });
+    if (projectId) void changesQuery.refetch();
   });
 
   const loadDirectory = useMemoizedFn(() => {
-    if (!projectId) {
-      directoryRequests.invalidate();
-      setDirectory(null);
-      setError(null);
-      return;
-    }
-    const requestId = directoryRequests.next();
-    setLoading(true);
-    setError(null);
-    void listTerminalProjectPreviewDirectory(apiBase, accessToken, projectId, {
-      path,
-      limit: 400,
-    })
-      .then((payload) => {
-        if (directoryRequests.isCurrent(requestId)) {
-          setDirectory(payload);
-        }
-      })
-      .catch((nextError: unknown) => {
-        if (!directoryRequests.isCurrent(requestId)) {
-          return;
-        }
-        if (nextError instanceof ApiError && nextError.status === 401) {
-          onAuthExpired();
-          return;
-        }
-        if (nextError instanceof ApiError) {
-          setError(previewMessage(nextError.status));
-          return;
-        }
-        setError(
-          nextError instanceof Error ? nextError.message : "Load failed",
-        );
-      })
-      .finally(() => {
-        if (directoryRequests.isCurrent(requestId)) {
-          setLoading(false);
-        }
-      });
+    if (projectId) void directoryQuery.refetch();
   });
 
   useEffect(() => {
@@ -280,58 +231,19 @@ export function TerminalFilesTab({
   }, [query]);
 
   useEffect(() => {
-    if (!active) {
-      return;
+    if (
+      [directoryQuery.error, changesQuery.error, searchQuery.error].some(
+        (nextError) =>
+          nextError instanceof ApiError && nextError.status === 401,
+      )
+    ) {
+      onAuthExpired();
     }
-    loadDirectory();
-    loadChanges();
-  }, [active, loadChanges, loadDirectory]);
-
-  useEffect(() => {
-    if (!active || !projectId || !debouncedQuery) {
-      searchRequests.invalidate();
-      setSearchItems([]);
-      setSearchError(null);
-      setSearchLoading(false);
-      return;
-    }
-    const requestId = searchRequests.next();
-    setSearchLoading(true);
-    setSearchError(null);
-    void searchTerminalProjectPreviewFiles(apiBase, accessToken, projectId, {
-      query: debouncedQuery,
-      limit: 50,
-    })
-      .then((payload) => {
-        if (searchRequests.isCurrent(requestId)) {
-          setSearchItems(payload.items);
-        }
-      })
-      .catch((nextError: unknown) => {
-        if (!searchRequests.isCurrent(requestId)) {
-          return;
-        }
-        if (nextError instanceof ApiError && nextError.status === 401) {
-          onAuthExpired();
-          return;
-        }
-        setSearchError(
-          nextError instanceof Error ? nextError.message : "Search failed",
-        );
-      })
-      .finally(() => {
-        if (searchRequests.isCurrent(requestId)) {
-          setSearchLoading(false);
-        }
-      });
   }, [
-    accessToken,
-    active,
-    apiBase,
-    debouncedQuery,
+    changesQuery.error,
+    directoryQuery.error,
     onAuthExpired,
-    projectId,
-    searchRequests,
+    searchQuery.error,
   ]);
 
   const entries = useMemo(
@@ -352,12 +264,8 @@ export function TerminalFilesTab({
   if (previewPath) {
     return (
       <TerminalFilePreviewDrawer
-        accessToken={accessToken}
-        apiBase={apiBase}
         changeInfo={changeMap.get(previewPath) ?? null}
         filePath={previewPath}
-        projectId={projectId}
-        onAuthExpired={onAuthExpired}
         onClose={() => setPreviewPath(null)}
         onShowChanges={(change) => {
           setPreviewPath(null);

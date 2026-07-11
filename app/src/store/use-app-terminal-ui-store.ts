@@ -1,7 +1,9 @@
 import { create } from "zustand";
 
-import type { AppTerminalDetailTab } from "../components/TerminalDetailTabBar";
-import type { SelectedTerminalChange } from "../components/TerminalChangesTab";
+import type {
+  AppTerminalDetailTab,
+  SelectedTerminalChange,
+} from "../features/terminal/types";
 
 interface AppTerminalUiState {
   activeTab: AppTerminalDetailTab;

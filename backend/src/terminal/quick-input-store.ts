@@ -1,4 +1,4 @@
-import type { TerminalQuickInputItem } from "@runweave/shared";
+import type { TerminalQuickInputItem } from "@runweave/shared/terminal/input";
 
 export type PersistedTerminalQuickInputRecord = TerminalQuickInputItem;
 

@@ -1,8 +1,6 @@
 import { useEffect } from "react";
-import type {
-  TerminalProjectListItem,
-  TerminalSessionListItem,
-} from "@runweave/shared";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import {
   loadRecentTerminalSelection,
   saveRecentTerminalSelection,

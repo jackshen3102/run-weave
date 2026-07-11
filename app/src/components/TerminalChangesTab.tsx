@@ -1,17 +1,17 @@
 import { useMemoizedFn } from "ahooks";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { IonIcon } from "@ionic/react";
 import { checkmarkOutline, copyOutline } from "ionicons/icons";
 import type {
   TerminalPreviewChangeFile,
   TerminalPreviewChangeKind,
-  TerminalPreviewFileDiffResponse,
   TerminalPreviewGitChangesResponse,
   TerminalPreviewGitStatus,
-} from "@runweave/shared";
-import { createTerminalPreviewRequestSequencer } from "@runweave/shared";
+} from "@runweave/shared/terminal/preview";
 
 import { MobileDiffView } from "./MobileDiffView";
+import type { SelectedTerminalChange } from "../features/terminal/types";
 import { useCopyFeedback } from "../hooks/use-copy-feedback";
 import { basenameOf, dirnameOf, fileKindOf } from "../lib/terminal-file-format";
 import { ApiError } from "../services/http";
@@ -21,14 +21,13 @@ import {
   getTerminalProjectPreviewGitChanges,
 } from "../services/terminal";
 import { TerminalZoomableImage } from "./TerminalZoomableImage";
+import { appQueryKeys } from "../features/query/app-query-provider";
+import { useAppTerminalRuntime } from "../features/terminal/app-terminal-runtime";
 
 type ChangeFilter = "all" | "staged" | "working";
 type ChangeViewMode = "diff" | "preview";
 
-export interface SelectedTerminalChange {
-  path: string;
-  kind: TerminalPreviewChangeKind;
-}
+export type { SelectedTerminalChange } from "../features/terminal/types";
 
 interface ChangeRow extends TerminalPreviewChangeFile {
   kind: TerminalPreviewChangeKind;
@@ -116,115 +115,96 @@ function ChangeFilterBar({
 }
 
 export function TerminalChangesTab({
-  accessToken,
-  apiBase,
   active,
-  projectId,
   requestedChange,
-  onAuthExpired,
   onChangesCount,
 }: {
-  accessToken: string;
-  apiBase: string;
   active: boolean;
-  projectId: string | null;
   requestedChange: SelectedTerminalChange | null;
-  onAuthExpired: () => void;
   onChangesCount: (count: number) => void;
 }) {
-  const [changes, setChanges] =
-    useState<TerminalPreviewGitChangesResponse | null>(null);
+  const { accessToken, apiBase, onAuthExpired, projectId, scope } =
+    useAppTerminalRuntime();
   const [filter, setFilter] = useState<ChangeFilter>("all");
   const [selectedChange, setSelectedChange] =
     useState<SelectedTerminalChange | null>(null);
   const [viewMode, setViewMode] = useState<ChangeViewMode>("diff");
-  const [diff, setDiff] = useState<TerminalPreviewFileDiffResponse | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(false);
-  const [diffLoading, setDiffLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [diffError, setDiffError] = useState<string | null>(null);
   const [viewedKeys, setViewedKeys] = useState<Set<string>>(() => new Set());
   const [assetUrl, setAssetUrl] = useState<string | null>(null);
   const { copied: pathCopied, copyText: copyPath } = useCopyFeedback();
-  const changesRequests = useMemo(
-    () => createTerminalPreviewRequestSequencer(),
-    [],
-  );
-  const diffRequests = useMemo(
-    () => createTerminalPreviewRequestSequencer(),
-    [],
-  );
-  const assetRequests = useMemo(
-    () => createTerminalPreviewRequestSequencer(),
-    [],
-  );
+  const changesQuery = useQuery({
+    queryKey: projectId
+      ? appQueryKeys.terminalChanges(scope, projectId)
+      : [...appQueryKeys.all(scope), "terminal-preview", "no-project"],
+    queryFn: () =>
+      getTerminalProjectPreviewGitChanges(apiBase, accessToken, projectId!),
+    enabled: active && Boolean(projectId),
+  });
+  const diffQuery = useQuery({
+    queryKey:
+      projectId && selectedChange
+        ? appQueryKeys.terminalDiff(
+            scope,
+            projectId,
+            selectedChange.path,
+            selectedChange.kind,
+          )
+        : [...appQueryKeys.all(scope), "terminal-preview", "no-diff"],
+    queryFn: () =>
+      getTerminalProjectPreviewFileDiff(apiBase, accessToken, projectId!, {
+        path: selectedChange!.path,
+        kind: selectedChange!.kind,
+      }),
+    enabled: active && Boolean(projectId && selectedChange),
+  });
+  const selectedFileKind = selectedChange
+    ? fileKindOf(selectedChange.path, null)
+    : "text";
+  const previewAvailable =
+    selectedFileKind === "markdown" ||
+    selectedFileKind === "svg" ||
+    selectedFileKind === "image";
+  const assetQuery = useQuery({
+    queryKey:
+      projectId && selectedChange
+        ? appQueryKeys.terminalAsset(scope, projectId, selectedChange.path)
+        : [...appQueryKeys.all(scope), "terminal-preview", "no-asset"],
+    queryFn: () =>
+      getTerminalProjectPreviewAsset(
+        apiBase,
+        accessToken,
+        projectId!,
+        selectedChange!.path,
+      ),
+    enabled:
+      active &&
+      Boolean(projectId && selectedChange) &&
+      viewMode === "preview" &&
+      selectedFileKind === "image",
+  });
+  const changes = changesQuery.data ?? null;
+  const diff = diffQuery.data ?? null;
+  const loading = changesQuery.isFetching;
+  const diffLoading = diffQuery.isFetching;
+  const error = changesQuery.error
+    ? changesQuery.error instanceof ApiError
+      ? previewMessage(changesQuery.error.status)
+      : changesQuery.error instanceof Error
+        ? changesQuery.error.message
+        : "Load failed"
+    : null;
+  const diffError = diffQuery.error
+    ? diffQuery.error instanceof ApiError && diffQuery.error.status === 404
+      ? "File not found"
+      : "Unable to load diff"
+    : null;
 
   useEffect(() => {
-    changesRequests.invalidate();
-    diffRequests.invalidate();
-    assetRequests.invalidate();
-    setChanges(null);
     setSelectedChange(null);
-    setDiff(null);
     setAssetUrl(null);
-    setError(null);
-    setDiffError(null);
-    setLoading(false);
-    setDiffLoading(false);
     setViewedKeys(new Set());
     onChangesCount(0);
-  }, [assetRequests, changesRequests, diffRequests, onChangesCount, projectId]);
-
-  const loadChanges = useMemoizedFn(() => {
-    if (!projectId) {
-      changesRequests.invalidate();
-      setChanges(null);
-      setError(null);
-      onChangesCount(0);
-      return;
-    }
-
-    const requestId = changesRequests.next();
-    setLoading(true);
-    setError(null);
-    void getTerminalProjectPreviewGitChanges(apiBase, accessToken, projectId)
-      .then((payload) => {
-        if (!changesRequests.isCurrent(requestId)) {
-          return;
-        }
-        setChanges(payload);
-        onChangesCount(payload.staged.length + payload.working.length);
-      })
-      .catch((nextError: unknown) => {
-        if (!changesRequests.isCurrent(requestId)) {
-          return;
-        }
-        if (nextError instanceof ApiError && nextError.status === 401) {
-          onAuthExpired();
-          return;
-        }
-        if (nextError instanceof ApiError) {
-          setError(previewMessage(nextError.status));
-          return;
-        }
-        setError(
-          nextError instanceof Error ? nextError.message : "Load failed",
-        );
-      })
-      .finally(() => {
-        if (changesRequests.isCurrent(requestId)) {
-          setLoading(false);
-        }
-      });
-  });
-
-  useEffect(() => {
-    if (active) {
-      loadChanges();
-    }
-  }, [active, loadChanges]);
+  }, [onChangesCount, projectId]);
 
   useEffect(() => {
     if (requestedChange) {
@@ -234,77 +214,46 @@ export function TerminalChangesTab({
   }, [requestedChange]);
 
   useEffect(() => {
-    if (!projectId || !selectedChange) {
-      diffRequests.invalidate();
-      setDiff(null);
-      setDiffError(null);
-      setDiffLoading(false);
+    if (changes) {
+      onChangesCount(changes.staged.length + changes.working.length);
+    }
+  }, [changes, onChangesCount]);
+
+  useEffect(() => {
+    if (
+      (changesQuery.error instanceof ApiError &&
+        changesQuery.error.status === 401) ||
+      (diffQuery.error instanceof ApiError && diffQuery.error.status === 401)
+    ) {
+      onAuthExpired();
+    }
+  }, [changesQuery.error, diffQuery.error, onAuthExpired]);
+
+  useEffect(() => {
+    if (!diff || !selectedChange) {
       return;
     }
+    setViewedKeys((current) => {
+      const key = changeKey(selectedChange);
+      if (current.has(key)) return current;
+      const next = new Set(current);
+      next.add(key);
+      return next;
+    });
+  }, [diff, selectedChange]);
 
-    const requestId = diffRequests.next();
-    const requested = selectedChange;
-    setDiffLoading(true);
-    setDiffError(null);
-    void getTerminalProjectPreviewFileDiff(apiBase, accessToken, projectId, {
-      path: requested.path,
-      kind: requested.kind,
-    })
-      .then((payload) => {
-        if (!diffRequests.isCurrent(requestId)) {
-          return;
-        }
-        setDiff(payload);
-        setViewedKeys((current) => {
-          const next = new Set(current);
-          next.add(changeKey(requested));
-          return next;
-        });
-      })
-      .catch((nextError: unknown) => {
-        if (!diffRequests.isCurrent(requestId)) {
-          return;
-        }
-        if (nextError instanceof ApiError && nextError.status === 401) {
-          onAuthExpired();
-          return;
-        }
-        if (nextError instanceof ApiError) {
-          setDiffError(
-            nextError.status === 404 ? "File not found" : "Unable to load diff",
-          );
-          return;
-        }
-        setDiffError(
-          nextError instanceof Error ? nextError.message : "Load failed",
-        );
-      })
-      .finally(() => {
-        if (diffRequests.isCurrent(requestId)) {
-          setDiffLoading(false);
-        }
-      });
-  }, [
-    accessToken,
-    apiBase,
-    diffRequests,
-    onAuthExpired,
-    projectId,
-    selectedChange,
-  ]);
+  const loadChanges = useMemoizedFn(() => {
+    if (!projectId) {
+      onChangesCount(0);
+      return;
+    }
+    void changesQuery.refetch();
+  });
 
   const rows = useMemo(
     () => flattenChanges(changes, filter),
     [changes, filter],
   );
-
-  const selectedFileKind = selectedChange
-    ? fileKindOf(selectedChange.path, null)
-    : "text";
-  const previewAvailable =
-    selectedFileKind === "markdown" ||
-    selectedFileKind === "svg" ||
-    selectedFileKind === "image";
 
   useEffect(() => {
     if (!previewAvailable && viewMode === "preview") {
@@ -313,53 +262,18 @@ export function TerminalChangesTab({
   }, [previewAvailable, viewMode]);
 
   useEffect(() => {
-    if (!projectId || !selectedChange || viewMode !== "preview") {
-      assetRequests.invalidate();
+    if (
+      viewMode !== "preview" ||
+      selectedFileKind !== "image" ||
+      !assetQuery.data
+    ) {
       setAssetUrl(null);
       return;
     }
-    if (fileKindOf(selectedChange.path, null) !== "image") {
-      assetRequests.invalidate();
-      setAssetUrl(null);
-      return;
-    }
-
-    const requestId = assetRequests.next();
-    let nextUrl: string | null = null;
-    setAssetUrl(null);
-    void getTerminalProjectPreviewAsset(
-      apiBase,
-      accessToken,
-      projectId,
-      selectedChange.path,
-    )
-      .then((blob) => {
-        if (!assetRequests.isCurrent(requestId)) {
-          return;
-        }
-        nextUrl = URL.createObjectURL(blob);
-        setAssetUrl(nextUrl);
-      })
-      .catch(() => {
-        if (assetRequests.isCurrent(requestId)) {
-          setAssetUrl(null);
-        }
-      });
-
-    return () => {
-      assetRequests.invalidate();
-      if (nextUrl) {
-        URL.revokeObjectURL(nextUrl);
-      }
-    };
-  }, [
-    accessToken,
-    apiBase,
-    assetRequests,
-    projectId,
-    selectedChange,
-    viewMode,
-  ]);
+    const nextUrl = URL.createObjectURL(assetQuery.data);
+    setAssetUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [assetQuery.data, selectedFileKind, viewMode]);
 
   if (!projectId) {
     return (
@@ -433,10 +347,7 @@ export function TerminalChangesTab({
         ) : diffError ? (
           <div className="terminal-preview-state">
             <p>{diffError}</p>
-            <button
-              onClick={() => setSelectedChange({ ...selectedChange })}
-              type="button"
-            >
+            <button onClick={() => void diffQuery.refetch()} type="button">
               Retry
             </button>
           </div>

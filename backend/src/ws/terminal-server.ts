@@ -2,11 +2,7 @@ import type { Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
 import type { AuthService } from "../auth/service";
 import { logger } from "../logging";
-import {
-  isTunnelRequestAuthorized,
-  rejectUnauthorizedTunnelUpgrade,
-  type TunnelAuthConfig,
-} from "../server/tunnel-auth";
+import type { TunnelAuthConfig } from "../server/tunnel-auth";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { TerminalOutputBatcher } from "../terminal/output-batcher";
 import {
@@ -31,8 +27,6 @@ import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
 import {
   delay,
   getTmuxPaneMetadataReader,
-  handleRuntimeActionError,
-  parseTerminalClientMessage,
   resolveInitialSnapshot,
   sendEvent,
   sendStatusEvent,
@@ -41,39 +35,16 @@ import {
   TMUX_INITIAL_REPAINT_SETTLE_MS,
   TMUX_METADATA_SYNC_DELAY_MS,
 } from "./terminal-server-connection-helpers";
+import { shouldKeepExistingActiveCommand } from "./terminal-metadata-policy";
+import { attachTerminalUpgradeHandler } from "./terminal-upgrade";
+import {
+  createTerminalInputHandler,
+  type TerminalClientInputState,
+} from "./terminal-input-handler";
+import { logTerminalConnectionOpened } from "./terminal-connection-logging";
 
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
 const TMUX_ACTIVE_COMMAND_RESYNC_DELAY_MS = 1_000;
-const NODE_WRAPPED_ACTIVE_COMMANDS = new Set([
-  "codex",
-  "npm",
-  "npx",
-  "pnpm",
-  "trae",
-  "traecli",
-  "traex",
-  "yarn",
-]);
-
-function commandBasename(command: string | null): string | null {
-  const normalized = command?.trim().replace(/\\+/g, "/");
-  if (!normalized) {
-    return null;
-  }
-  return normalized.split("/").filter(Boolean).at(-1) ?? normalized;
-}
-
-function shouldKeepExistingActiveCommand(
-  existingActiveCommand: string | null,
-  nextActiveCommand: string | null,
-  nextActiveCommandSource?: "runweave_command" | "pane_current_command" | null,
-): boolean {
-  return (
-    nextActiveCommandSource === "pane_current_command" &&
-    commandBasename(nextActiveCommand) === "node" &&
-    NODE_WRAPPED_ACTIVE_COMMANDS.has(commandBasename(existingActiveCommand) ?? "")
-  );
-}
 
 export function attachTerminalWebSocketServer(
   server: HttpServer,
@@ -91,20 +62,7 @@ export function attachTerminalWebSocketServer(
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
-  server.on("upgrade", (request, socket, head) => {
-    const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-    if (pathname !== "/ws/terminal") {
-      return;
-    }
-    if (!isTunnelRequestAuthorized(request, options?.tunnelAuthConfig)) {
-      rejectUnauthorizedTunnelUpgrade(socket);
-      return;
-    }
-
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit("connection", ws, request);
-    });
-  });
+  attachTerminalUpgradeHandler(server, wss, options?.tunnelAuthConfig);
 
   wss.on("connection", async (socket, request) => {
     const handshake = validateTerminalWebSocketHandshake({
@@ -225,10 +183,12 @@ export function attachTerminalWebSocketServer(
       isAlive: true,
     };
     const heartbeat = createHeartbeatController(socket, heartbeatState);
-    let inputSequence = 0;
+    const inputState: TerminalClientInputState = {
+      lastInputAt: null,
+      sequence: 0,
+    };
     let runtimeOutputSequence = 0;
     let flushedOutputSequence = 0;
-    let lastInputAt: number | null = null;
     const outputBatcher = new TerminalOutputBatcher((output) => {
       flushedOutputSequence += 1;
       logTerminalPerf("terminal.ws.output.flush", {
@@ -236,7 +196,9 @@ export function attachTerminalWebSocketServer(
         clientId,
         seq: flushedOutputSequence,
         sinceLastInputMs:
-          lastInputAt === null ? null : Date.now() - lastInputAt,
+          inputState.lastInputAt === null
+            ? null
+            : Date.now() - inputState.lastInputAt,
         ...summarizeTerminalChunk(output),
       });
       sendEvent(socket, { type: "output", data: output });
@@ -294,8 +256,7 @@ export function attachTerminalWebSocketServer(
             updatedSession,
             {
               projectId: updatedSession.projectId,
-              reason:
-                updatedSession.status === "exited" ? "exit" : "metadata",
+              reason: updatedSession.status === "exited" ? "exit" : "metadata",
             },
           );
         }
@@ -377,18 +338,12 @@ export function attachTerminalWebSocketServer(
       }, delayMs);
     };
 
-    logTerminalPerf("terminal.ws.connected", {
+    logTerminalConnectionOpened({
       terminalSessionId,
       clientId,
       runtimeExists: Boolean(runtime),
       sessionStatus: session?.status ?? null,
-    });
-    terminalWsLogger.info("terminal-ws.connected", {
-      message: "Terminal websocket connected",
-      terminalSessionId,
-      clientId,
       runtimeKind: session && isTmuxBackedSession(session) ? "tmux" : "pty",
-      sessionStatus: session?.status ?? null,
     });
     const releaseTmuxLifecycleClient =
       session && isTmuxBackedSession(session)
@@ -406,7 +361,9 @@ export function attachTerminalWebSocketServer(
           seq: runtimeOutputSequence,
           snapshotDelivered,
           sinceLastInputMs:
-            lastInputAt === null ? null : Date.now() - lastInputAt,
+            inputState.lastInputAt === null
+              ? null
+              : Date.now() - inputState.lastInputAt,
           ...summarizeTerminalChunk(data),
         });
         const metadata = shellPromptTracker.consume(data);
@@ -505,7 +462,8 @@ export function attachTerminalWebSocketServer(
           return;
         }
         terminalSessionManager.markExited(terminalSessionId, event.exitCode);
-        const exitedSession = terminalSessionManager.getSession(terminalSessionId);
+        const exitedSession =
+          terminalSessionManager.getSession(terminalSessionId);
         if (exitedSession) {
           options?.terminalStateService?.setShellActiveCommand(
             terminalSessionId,
@@ -571,71 +529,16 @@ export function attachTerminalWebSocketServer(
     }
     heartbeat.start();
 
-    handleClientMessage = (data, isBinary) => {
-      if (isBinary) {
-        return;
-      }
-
-      const parsed = parseTerminalClientMessage(data);
-      if (!parsed) {
-        terminalWsLogger.warn("terminal-ws.invalid-message", {
-          message: "Terminal websocket invalid message",
-          terminalSessionId,
-          messageLength: data.length,
-        });
-        sendEvent(socket, { type: "error", message: "Invalid message" });
-        return;
-      }
-
-      if (parsed.type === "input") {
-        try {
-          inputSequence += 1;
-          lastInputAt = Date.now();
-          logTerminalPerf("terminal.ws.input.received", {
-            terminalSessionId,
-            clientId,
-            seq: inputSequence,
-            ...summarizeTerminalChunk(parsed.data),
-          });
-          outputBatcher.markNextChunkInteractive();
-          const writeStartedAt = performance.now();
-          activeRuntime.write(parsed.data);
-          if (/[\r\n]/.test(parsed.data)) {
-            scheduleTmuxPaneMetadataSync();
-          }
-          logTerminalPerf("terminal.ws.input.written", {
-            terminalSessionId,
-            clientId,
-            seq: inputSequence,
-            runtimeWriteDurationMs: Number(
-              (performance.now() - writeStartedAt).toFixed(2),
-            ),
-            ...summarizeTerminalChunk(parsed.data),
-          });
-        } catch (error) {
-          handleRuntimeActionError(socket, terminalSessionId, "input", error);
-        }
-        return;
-      }
-      if (parsed.type === "resize") {
-        try {
-          activeRuntime.resize(parsed.cols, parsed.rows);
-        } catch (error) {
-          handleRuntimeActionError(socket, terminalSessionId, "resize", error);
-        }
-        return;
-      }
-      if (parsed.type === "signal") {
-        try {
-          activeRuntime.signal(parsed.signal);
-        } catch (error) {
-          handleRuntimeActionError(socket, terminalSessionId, "signal", error);
-        }
-        return;
-      }
-      const current = terminalSessionManager.getSession(terminalSessionId);
-      sendStatusEvent(socket, current?.status ?? "running", current?.exitCode);
-    };
+    handleClientMessage = createTerminalInputHandler({
+      clientId,
+      inputState,
+      outputBatcher,
+      runtime: activeRuntime,
+      scheduleMetadataSync: () => scheduleTmuxPaneMetadataSync(),
+      socket,
+      terminalSessionId,
+      terminalSessionManager,
+    });
     for (const pendingMessage of pendingClientMessages.splice(0)) {
       handleClientMessage(pendingMessage.data, pendingMessage.isBinary);
     }

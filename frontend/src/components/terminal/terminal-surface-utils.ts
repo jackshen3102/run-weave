@@ -1,5 +1,5 @@
 export const TERMINAL_RESIZE_DEBOUNCE_MS = 120;
-export const DEFERRED_OUTPUT_REPLAY_MAX_CHARS = 128 * 1024;
+export const DEFERRED_OUTPUT_BACKGROUND_FLUSH_CHARS = 128 * 1024;
 export const IME_COMMIT_WINDOW_MS = 250;
 
 export interface TerminalImeCommit {

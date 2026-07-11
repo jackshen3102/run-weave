@@ -1,18 +1,14 @@
 import { create } from "zustand";
-import type {
-  TerminalProjectListItem,
-  TerminalPanelWorkspace,
-  TerminalSessionListItem,
-  TerminalState,
-} from "@runweave/shared";
+import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
+import type { TerminalState } from "@runweave/shared/terminal/state";
 
 export type TerminalWorkspaceProjectDialogMode = "create" | "edit" | null;
 
 type StateUpdater<T> = T | ((current: T) => T);
 
 interface TerminalWorkspaceState {
-  projects: TerminalProjectListItem[];
-  sessions: TerminalSessionListItem[];
   activeProjectId: string | null;
   activeSessionId: string | null;
   hasLoadedSessions: boolean;
@@ -30,11 +26,12 @@ interface TerminalWorkspaceState {
   historyTerminalSessionId: string | null;
   historyTerminalPanelId: string | null;
   historyDrawerOpen: boolean;
+  aliasTargetSessionId: string | null;
+  diagnosticLogOpen: boolean;
+  statusLookupOpen: boolean;
 }
 
 interface TerminalWorkspaceActions {
-  setProjects: (next: StateUpdater<TerminalProjectListItem[]>) => void;
-  setSessions: (next: StateUpdater<TerminalSessionListItem[]>) => void;
   setActiveProjectId: (next: StateUpdater<string | null>) => void;
   setActiveSessionId: (next: StateUpdater<string | null>) => void;
   setHasLoadedSessions: (next: StateUpdater<boolean>) => void;
@@ -62,6 +59,10 @@ interface TerminalWorkspaceActions {
   setHistoryTerminalSessionId: (next: StateUpdater<string | null>) => void;
   setHistoryTerminalPanelId: (next: StateUpdater<string | null>) => void;
   setHistoryDrawerOpen: (next: StateUpdater<boolean>) => void;
+  openSessionAlias: (terminalSessionId: string) => void;
+  closeSessionAlias: () => void;
+  setDiagnosticLogOpen: (next: StateUpdater<boolean>) => void;
+  setStatusLookupOpen: (next: StateUpdater<boolean>) => void;
   selectActiveSession: (terminalSessionId: string | null) => void;
   resetForConnection: (initialTerminalSessionId?: string) => void;
 }
@@ -74,11 +75,15 @@ export const TERMINAL_PROJECT_HAS_COMPLETION = 1 << 1;
 export const TERMINAL_PROJECT_IS_WORKING = 1 << 2;
 
 export function selectTerminalProjectStatusById(
-  state: TerminalWorkspaceStore,
+  state: Pick<
+    TerminalWorkspaceStore,
+    "bellMarkers" | "completionMarkers" | "terminalStateBySessionId"
+  >,
+  sessions: TerminalSessionListItem[],
 ): Record<string, number> {
   const statusByProjectId: Record<string, number> = {};
 
-  for (const session of state.sessions) {
+  for (const session of sessions) {
     let status = statusByProjectId[session.projectId] ?? 0;
     if (state.bellMarkers[session.terminalSessionId]) {
       status |= TERMINAL_PROJECT_HAS_BELL;
@@ -107,8 +112,6 @@ function resolveNext<T>(next: StateUpdater<T>, current: T): T {
 }
 
 const initialState: TerminalWorkspaceState = {
-  projects: [],
-  sessions: [],
   activeProjectId: null,
   activeSessionId: null,
   hasLoadedSessions: false,
@@ -126,15 +129,14 @@ const initialState: TerminalWorkspaceState = {
   historyTerminalSessionId: null,
   historyTerminalPanelId: null,
   historyDrawerOpen: false,
+  aliasTargetSessionId: null,
+  diagnosticLogOpen: false,
+  statusLookupOpen: false,
 };
 
 export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
   (set) => ({
     ...initialState,
-    setProjects: (next) =>
-      set((state) => ({ projects: resolveNext(next, state.projects) })),
-    setSessions: (next) =>
-      set((state) => ({ sessions: resolveNext(next, state.sessions) })),
     setActiveProjectId: (next) =>
       set((state) => ({
         activeProjectId: resolveNext(next, state.activeProjectId),
@@ -199,10 +201,7 @@ export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
       })),
     setProjectPendingDeletion: (next) =>
       set((state) => ({
-        projectPendingDeletion: resolveNext(
-          next,
-          state.projectPendingDeletion,
-        ),
+        projectPendingDeletion: resolveNext(next, state.projectPendingDeletion),
       })),
     setHistoryTerminalSessionId: (next) =>
       set((state) => ({
@@ -218,6 +217,17 @@ export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
     setHistoryDrawerOpen: (next) =>
       set((state) => ({
         historyDrawerOpen: resolveNext(next, state.historyDrawerOpen),
+      })),
+    openSessionAlias: (terminalSessionId) =>
+      set({ aliasTargetSessionId: terminalSessionId }),
+    closeSessionAlias: () => set({ aliasTargetSessionId: null }),
+    setDiagnosticLogOpen: (next) =>
+      set((state) => ({
+        diagnosticLogOpen: resolveNext(next, state.diagnosticLogOpen),
+      })),
+    setStatusLookupOpen: (next) =>
+      set((state) => ({
+        statusLookupOpen: resolveNext(next, state.statusLookupOpen),
       })),
     selectActiveSession: (terminalSessionId) =>
       set({ activeSessionId: terminalSessionId }),

@@ -1,10 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  TerminalPrototypeGalleryItem,
-  TerminalPrototypeGalleryProject,
-  TerminalPrototypeGalleryResponse,
-} from "@runweave/shared";
+import type { TerminalPrototypeGalleryItem, TerminalPrototypeGalleryProject, TerminalPrototypeGalleryResponse } from "@runweave/shared/terminal/preview";
 import { AlertCircle, FileCode2, FolderKanban, RefreshCw } from "lucide-react";
 import { HttpError } from "../../services/http";
 import {

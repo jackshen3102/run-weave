@@ -1,9 +1,6 @@
-import type {
-  AgentHookStateEvent,
-  TerminalAgentKind,
-  TerminalLastThreadStatus,
-  TerminalState,
-} from "@runweave/shared";
+import type { AgentHookStateEvent } from "@runweave/shared/terminal/events";
+import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
+import type { TerminalAgentKind, TerminalState } from "@runweave/shared/terminal/state";
 import { logger } from "../logging";
 import {
   AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS,

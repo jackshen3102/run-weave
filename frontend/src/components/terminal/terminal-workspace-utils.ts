@@ -1,4 +1,4 @@
-import type { TerminalPanelWorkspace } from "@runweave/shared";
+import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 
 export function formatHistoryPanelLabel(
   panel: TerminalPanelWorkspace["panels"][number],

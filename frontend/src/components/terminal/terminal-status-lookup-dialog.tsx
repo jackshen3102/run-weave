@@ -1,6 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { AppServerThreadRef } from "@runweave/shared";
+import type { AppServerThreadRef } from "@runweave/shared/app-server-events";
 import { Search } from "lucide-react";
 import {
   getAppServerThread,

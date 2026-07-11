@@ -1,7 +1,4 @@
-import type {
-  CreateTerminalPrototypePreviewTicketResponse,
-  TerminalPrototypeGalleryResponse,
-} from "@runweave/shared";
+import type { CreateTerminalPrototypePreviewTicketResponse, TerminalPrototypeGalleryResponse } from "@runweave/shared/terminal/preview";
 import { requestJson } from "./http";
 
 export async function listTerminalPrototypeGallery(

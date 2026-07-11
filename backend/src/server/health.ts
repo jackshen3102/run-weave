@@ -1,4 +1,4 @@
-import type { BackendHealthPayload } from "@runweave/shared";
+import type { BackendHealthPayload } from "@runweave/shared/runtime-monitor";
 
 export function buildHealthPayload(
   env: NodeJS.ProcessEnv,

@@ -1,9 +1,5 @@
 import { Crosshair } from "lucide-react";
-import type {
-  AgentTeamAcceptanceEvidence,
-  AgentTeamAcceptanceStatus,
-  AgentTeamRun,
-} from "@runweave/shared";
+import type { AgentTeamAcceptanceEvidence, AgentTeamAcceptanceStatus, AgentTeamRun } from "@runweave/shared/agent-team";
 import { ROLE_LABEL } from "./terminal-agent-team-panel-model";
 
 const EVIDENCE_TYPE_LABEL: Record<AgentTeamAcceptanceEvidence["type"], string> =

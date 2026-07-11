@@ -4,4 +4,4 @@ export {
   getTerminalPreviewMonacoLanguage,
   isSupportedTerminalImagePreviewPath,
   type TerminalPreviewFileKind,
-} from "@runweave/shared";
+} from "@runweave/shared/terminal-preview-core";

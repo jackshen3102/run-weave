@@ -115,7 +115,10 @@ export class CodexAppServerClient implements CodexThreadStatusReader {
     }
   }
 
-  private async sendRequest(method: string, params?: unknown): Promise<unknown> {
+  private async sendRequest(
+    method: string,
+    params?: unknown,
+  ): Promise<unknown> {
     if (method !== "initialize" && method !== "initialized") {
       await this.ensureInitialized();
     }
@@ -289,8 +292,8 @@ export class CodexAppServerClient implements CodexThreadStatusReader {
     const success = parsed as CodexRpcSuccess;
     waiter.resolve(
       Object.prototype.hasOwnProperty.call(success, "result")
-        ? success.result ?? null
-        : success.payload ?? null,
+        ? (success.result ?? null)
+        : (success.payload ?? null),
     );
   }
 
@@ -365,7 +368,9 @@ function resolveCodexBinaryCandidates(env: NodeJS.ProcessEnv): string[] {
       path.join(homeDir, ".volta", "bin", "codex"),
       path.join(homeDir, ".local", "bin", "codex"),
       path.join(homeDir, ".npm-global", "bin", "codex"),
-      ...resolveNvmCodexCandidates(path.join(homeDir, ".nvm", "versions", "node")),
+      ...resolveNvmCodexCandidates(
+        path.join(homeDir, ".nvm", "versions", "node"),
+      ),
     ]),
   );
 }

@@ -14,70 +14,102 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import {
-  type TerminalBrowserHeaderRule,
-  type TerminalBrowserProxyState,
-} from "@runweave/shared";
+import { type TerminalBrowserHeaderRule } from "@runweave/shared/terminal-browser-headers";
+import { type TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
 import type { TerminalBrowserTabState } from "../../features/terminal/preview-store";
 import { TerminalBrowserDeviceButton } from "./terminal-browser-device-panel";
 import { TerminalBrowserHeadersButton } from "./terminal-browser-headers-panel";
 import { Button } from "../ui/button";
 
-interface TerminalBrowserNavigationBarProps {
-  activeTab: TerminalBrowserTabState;
-  isElectron: boolean;
-  proxyState: TerminalBrowserProxyState | null;
-  proxySwitching: boolean;
-  headerRulesPanelOpen: boolean;
-  headerRules: TerminalBrowserHeaderRule[];
-  devicePanelOpen: boolean;
-  deviceSwitching: boolean;
-  annotationActive: boolean;
-  annotationCount: number;
-  annotationSubmitting: boolean;
-  onSubmitAddress: (event: FormEvent<HTMLFormElement>) => void;
-  onAddressInputChange: (value: string) => void;
-  onAddressFocus: () => void;
-  onAddressBlur: () => void;
+interface BrowserAddressControls {
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onChange: (value: string) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+}
+
+interface BrowserNavigationControls {
   onGo: (direction: "back" | "forward") => void;
   onReload: () => void;
   onStop: () => void;
-  onToggleAnnotation: () => void;
-  onSubmitAnnotations: () => void;
-  onToggleProxy: () => void;
-  onDevicePanelOpenChange: (open: boolean) => void;
-  onHeaderRulesPanelOpenChange: (open: boolean) => void;
+}
+
+interface BrowserAnnotationControls {
+  active: boolean;
+  count: number;
+  submitting: boolean;
+  onToggle: () => void;
+  onSubmit: () => void;
+}
+
+interface BrowserProxyControls {
+  state: TerminalBrowserProxyState | null;
+  switching: boolean;
+  onToggle: () => void;
+}
+
+interface BrowserPanelControls {
+  headerRulesOpen: boolean;
+  headerRules: TerminalBrowserHeaderRule[];
+  deviceOpen: boolean;
+  deviceSwitching: boolean;
+  onDeviceOpenChange: (open: boolean) => void;
+  onHeaderRulesOpenChange: (open: boolean) => void;
+}
+
+interface BrowserUtilityControls {
+  isElectron: boolean;
   onOpenDevTools: () => void;
   onOpenExternal: () => void;
 }
 
+interface TerminalBrowserNavigationBarProps {
+  activeTab: TerminalBrowserTabState;
+  address: BrowserAddressControls;
+  annotation: BrowserAnnotationControls;
+  navigation: BrowserNavigationControls;
+  panels: BrowserPanelControls;
+  proxy: BrowserProxyControls;
+  utilities: BrowserUtilityControls;
+}
+
 export function TerminalBrowserNavigationBar({
   activeTab,
-  isElectron,
-  proxyState,
-  proxySwitching,
-  headerRulesPanelOpen,
-  headerRules,
-  devicePanelOpen,
-  deviceSwitching,
-  annotationActive,
-  annotationCount,
-  annotationSubmitting,
-  onSubmitAddress,
-  onAddressInputChange,
-  onAddressFocus,
-  onAddressBlur,
-  onGo,
-  onReload,
-  onStop,
-  onToggleAnnotation,
-  onSubmitAnnotations,
-  onToggleProxy,
-  onDevicePanelOpenChange,
-  onHeaderRulesPanelOpenChange,
-  onOpenDevTools,
-  onOpenExternal,
+  address,
+  annotation,
+  navigation,
+  panels,
+  proxy,
+  utilities,
 }: TerminalBrowserNavigationBarProps) {
+  const {
+    onBlur: onAddressBlur,
+    onChange: onAddressInputChange,
+    onFocus: onAddressFocus,
+    onSubmit: onSubmitAddress,
+  } = address;
+  const {
+    active: annotationActive,
+    count: annotationCount,
+    submitting: annotationSubmitting,
+    onSubmit: onSubmitAnnotations,
+    onToggle: onToggleAnnotation,
+  } = annotation;
+  const { onGo, onReload, onStop } = navigation;
+  const {
+    deviceOpen: devicePanelOpen,
+    deviceSwitching,
+    headerRules,
+    headerRulesOpen: headerRulesPanelOpen,
+    onDeviceOpenChange: onDevicePanelOpenChange,
+    onHeaderRulesOpenChange: onHeaderRulesPanelOpenChange,
+  } = panels;
+  const {
+    state: proxyState,
+    switching: proxySwitching,
+    onToggle: onToggleProxy,
+  } = proxy;
+  const { isElectron, onOpenDevTools, onOpenExternal } = utilities;
   const deviceState = activeTab.deviceState;
   const [addressCopied, setAddressCopied] = useState(false);
 
@@ -173,7 +205,9 @@ export function TerminalBrowserNavigationBar({
         aria-label={
           annotationActive ? "Stop browser comments" : "Add browser comments"
         }
-        title={annotationActive ? "Stop browser comments" : "Add browser comments"}
+        title={
+          annotationActive ? "Stop browser comments" : "Add browser comments"
+        }
       >
         <MessageSquarePlus className="h-4 w-4" />
         {annotationCount > 0 ? (

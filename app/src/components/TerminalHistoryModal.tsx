@@ -3,10 +3,8 @@ import {
   countTerminalLines,
   normalizeTerminalHistoryOutput,
 } from "@runweave/common/terminal";
-import {
-  TERMINAL_CLIENT_SCROLLBACK_LINES,
-  type TerminalSessionHistoryResponse,
-} from "@runweave/shared";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared/terminal-limits";
+import { type TerminalSessionHistoryResponse } from "@runweave/shared/terminal/session";
 import {
   TerminalRenderer,
   type TerminalRendererExtensionContext,

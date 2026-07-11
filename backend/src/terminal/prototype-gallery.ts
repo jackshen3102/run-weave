@@ -1,11 +1,7 @@
 import { createReadStream } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
-import type {
-  TerminalPrototypeGalleryItem,
-  TerminalPrototypeGalleryProject,
-  TerminalPrototypeGalleryResponse,
-} from "@runweave/shared";
+import type { TerminalPrototypeGalleryItem, TerminalPrototypeGalleryProject, TerminalPrototypeGalleryResponse } from "@runweave/shared/terminal/preview";
 import type { TerminalProjectRecord } from "./manager-records";
 
 const PROTOTYPE_ROOT_PARTS = ["docs", "prototypes"] as const;

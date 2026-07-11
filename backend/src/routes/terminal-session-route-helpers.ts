@@ -1,13 +1,16 @@
-import { randomBytes } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import os from "node:os";
 import { z } from "zod";
-import type { CreateTerminalSessionRequest } from "@runweave/shared";
+import type { CreateTerminalSessionRequest } from "@runweave/shared/terminal/session";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,
 } from "../terminal/default-shell";
+export {
+  buildTerminalInputOperationId,
+  TERMINAL_INTERRUPT_ESCAPE_INPUT,
+} from "../terminal/application/input-operation";
 
 export const createTerminalSessionSchema = z
   .object({
@@ -58,8 +61,6 @@ export const sendTerminalInterruptSchema = z
   })
   .strict();
 
-export const TERMINAL_INTERRUPT_ESCAPE_INPUT = "\x1b";
-
 export class TerminalCreateDefaultsError extends Error {
   constructor(
     message: string,
@@ -68,10 +69,6 @@ export class TerminalCreateDefaultsError extends Error {
     super(message);
     this.name = "TerminalCreateDefaultsError";
   }
-}
-
-export function buildTerminalInputOperationId(): string {
-  return `op_${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}_${randomBytes(4).toString("hex")}`;
 }
 
 export function resolveTerminalCreateDefaults(

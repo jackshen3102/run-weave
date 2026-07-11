@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--rw-app-bg);
+}
+
+ion-content::part(background) {
+  background: var(--rw-app-bg);
+}
+
+.app-loading {
+  background: var(--rw-app-bg);
+}
+
+.login-page,
+.home-page {
+  --background: var(--rw-app-bg);
+  color: var(--rw-app-text);
+}
+
+.login-shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 28px;
+  padding: calc(var(--rw-app-safe-area-top) + 28px) 20px
+    calc(var(--rw-app-safe-area-bottom) + 28px);
+}
+
+.login-brand p,
+.home-header p {
+  margin: 0 0 6px;
+  color: var(--rw-app-muted);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.login-brand h1 {
+  margin: 0;
+  color: var(--rw-app-text);
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.app-input {
+  --background: var(--rw-app-surface);
+  --border-color: var(--rw-app-border);
+  --border-radius: 8px;
+  --color: var(--rw-app-text);
+  --highlight-color-focused: var(--ion-color-primary);
+  --padding-bottom: 12px;
+  --padding-end: 14px;
+  --padding-start: 14px;
+  --padding-top: 12px;
+  min-height: 64px;
+}
+
+.login-error,
+.home-error,
+.home-empty,
+.project-group__empty {
+  margin: 0;
+  font-size: 14px;
+}
+
+.login-submit {
+  --border-radius: 8px;
+  min-height: 48px;
+  margin-top: 6px;
+  font-weight: 700;
+}

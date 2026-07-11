@@ -1,24 +1,8 @@
-import type {
-  CreateTerminalProjectRequest,
-  CreateTerminalClipboardImageRequest,
-  CreateTerminalClipboardImageResponse,
-  CreateTerminalSessionRequest,
-  CreateTerminalSessionResponse,
-  CreateTerminalPanelRequest,
-  CreateTerminalEventsWsTicketResponse,
-  CreateTerminalWsTicketResponse,
-  ResizeTerminalPanelRequest,
-  SendTerminalInputRequest,
-  SendTerminalInputResponse,
-  TerminalCompletionEventListResponse,
-  TerminalPanelWorkspace,
-  TerminalProjectListItem,
-  TerminalSessionHistoryResponse,
-  TerminalSessionListItem,
-  TerminalSessionStatusResponse,
-  UpdateTerminalProjectRequest,
-  UpdateTerminalSessionRequest,
-} from "@runweave/shared";
+import type { TerminalCompletionEventListResponse, TerminalStateResponse } from "@runweave/shared/terminal/events";
+import type { CreateTerminalClipboardImageRequest, CreateTerminalClipboardImageResponse, SendTerminalInputRequest, SendTerminalInputResponse } from "@runweave/shared/terminal/input";
+import type { CreateTerminalPanelRequest, ResizeTerminalPanelRequest, TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
+import type { CreateTerminalProjectRequest, TerminalProjectListItem, UpdateTerminalProjectRequest } from "@runweave/shared/terminal/project";
+import type { CreateTerminalSessionRequest, CreateTerminalSessionResponse, CreateTerminalEventsWsTicketResponse, CreateTerminalWsTicketResponse, TerminalSessionHistoryResponse, TerminalSessionListItem, TerminalSessionStatusResponse, UpdateTerminalSessionRequest } from "@runweave/shared/terminal/session";
 import { requestJson, requestVoid } from "./http";
 
 export {
@@ -306,6 +290,22 @@ export async function getTerminalSession(
   return requestJson<TerminalSessionStatusResponse>(
     apiBase,
     `/api/terminal/session/${encodeURIComponent(terminalSessionId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalState(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+): Promise<TerminalStateResponse> {
+  return requestJson<TerminalStateResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/state`,
     {
       headers: {
         Authorization: `Bearer ${token}`,

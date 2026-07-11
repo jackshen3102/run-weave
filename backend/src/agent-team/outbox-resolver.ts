@@ -1,13 +1,6 @@
 import { stat } from "node:fs/promises";
-import type {
-  AgentTeamAcceptanceEvidence,
-  AgentTeamFindingSeverity,
-  AgentTeamFindingStatus,
-  AgentTeamOutboxFinding,
-  AgentTeamOutboxRecommendation,
-  AgentTeamWorkerOutbox,
-  TerminalEventEnvelope,
-} from "@runweave/shared";
+import type { AgentTeamAcceptanceEvidence, AgentTeamFindingSeverity, AgentTeamFindingStatus, AgentTeamOutboxFinding, AgentTeamOutboxRecommendation, AgentTeamWorkerOutbox } from "@runweave/shared/agent-team";
+import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { AgentTeamPaths } from "./storage/agent-team-paths";
 import { readJsonFile } from "./storage/json-file";
 

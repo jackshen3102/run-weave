@@ -1,4 +1,4 @@
-import type { AppServerEventEnvelope } from "@runweave/shared";
+import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
 import { logger } from "../../logging";
 import { processTerminalAgentHook } from "../../terminal/agent-hook-processor";
 import type { TerminalSessionManager } from "../../terminal/manager";

@@ -1,13 +1,4 @@
-import type {
-  AgentTeamRun,
-  AgentTeamRunsResponse,
-  CompleteAgentTeamRunRequest,
-  CreateAgentTeamRunRequest,
-  ProposeAgentTeamSplitRequest,
-  RecordAgentTeamRoundRequest,
-  ResumeAgentTeamRunRequest,
-  SubmitAgentTeamSplitGateRequest,
-} from "@runweave/shared";
+import type { AgentTeamRun, AgentTeamRunsResponse, CompleteAgentTeamRunRequest, CreateAgentTeamRunRequest, ProposeAgentTeamSplitRequest, RecordAgentTeamRoundRequest, ResumeAgentTeamRunRequest, SubmitAgentTeamSplitGateRequest } from "@runweave/shared/agent-team";
 import { requestJson } from "./http";
 
 const AGENT_TEAM_JSON_HEADERS = (token: string) => ({

@@ -1,10 +1,6 @@
-import { useDebounceFn, useMemoizedFn } from "ahooks";
-import type {
-  AppHomeOverviewResponse,
-  AppHomeOverviewSession,
-  TerminalEventEnvelope,
-  TerminalState,
-} from "@runweave/shared";
+import { useMemoizedFn } from "ahooks";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AppHomeOverviewResponse } from "@runweave/shared/terminal/session";
 import { useEffect, useRef, useState } from "react";
 
 import type { AppConnectionConfig } from "../features/connections/types";
@@ -22,10 +18,13 @@ import { useAppConnectionStore } from "../store/use-app-connection-store";
 import { useAuthStore } from "../store/use-auth-store";
 import { useAppDeviceConnection } from "./use-app-device-connection";
 import type { AppDeviceConnectionSnapshot } from "./use-app-device-connection";
-import { useAppTerminalEventsConnection } from "./use-app-terminal-events-connection";
+import { useAppSessionEvents } from "./use-app-session-events";
+import {
+  appQueryKeys,
+  buildAppConnectionQueryScope,
+} from "../features/query/app-query-provider";
 
 export type StartupState = "checking" | "ready";
-const OVERVIEW_REFRESH_DEBOUNCE_MS = 50;
 
 export interface AppLoginParams {
   username: string;
@@ -48,53 +47,6 @@ export interface AppSessionController {
   refreshDeviceConnection: () => Promise<AppDeviceConnectionSnapshot>;
   refreshOverview: () => Promise<void>;
   startupState: StartupState;
-}
-
-function resolveSessionDisplayStatus(
-  session: AppHomeOverviewSession,
-  terminalState: TerminalState,
-): Pick<AppHomeOverviewSession, "displayStatus" | "displayStatusLabel"> {
-  if (session.status === "exited") {
-    return {
-      displayStatus: "exited",
-      displayStatusLabel: "Exited",
-    };
-  }
-
-  if (terminalState.state === "agent_running") {
-    return {
-      displayStatus: "running",
-      displayStatusLabel: "Agent Running",
-    };
-  }
-
-  if (terminalState.state === "agent_starting") {
-    return {
-      displayStatus: "agent-starting",
-      displayStatusLabel: "Agent Starting",
-    };
-  }
-
-  if (terminalState.state === "agent_idle") {
-    return {
-      displayStatus: "agent-idle",
-      displayStatusLabel: "Agent Idle",
-    };
-  }
-
-  return {
-    displayStatus: "idle",
-    displayStatusLabel: "Idle",
-  };
-}
-
-function isOverviewInvalidationEvent(event: TerminalEventEnvelope): boolean {
-  return (
-    event.kind === "project_created" ||
-    event.kind === "project_deleted" ||
-    event.kind === "terminal_session_created" ||
-    event.kind === "terminal_session_deleted"
-  );
 }
 
 function supportConnectionFields(connection: AppConnectionConfig | null) {
@@ -128,10 +80,18 @@ export function useAppSession(): AppSessionController {
     authConnectionId === activeConnectionId ? refreshToken : "";
   const scopedIsAuthenticated =
     authConnectionId === activeConnectionId && isAuthenticated;
+  const queryScope = buildAppConnectionQueryScope({
+    connectionId: activeConnectionId,
+    apiBase,
+  });
+  const queryClient = useQueryClient();
+  const overviewQuery = useQuery({
+    queryKey: appQueryKeys.overview(queryScope),
+    queryFn: () => getAppHomeOverview(apiBase, scopedAccessToken),
+    enabled: false,
+  });
+  const overview = overviewQuery.data ?? null;
   const [startupState, setStartupState] = useState<StartupState>("checking");
-  const [overview, setOverview] = useState<AppHomeOverviewResponse | null>(
-    null,
-  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { deviceConnection, markDeviceOnline, refreshDeviceConnection } =
@@ -140,6 +100,22 @@ export function useAppSession(): AppSessionController {
       connectionId: activeConnectionId,
       enabled: Boolean(activeConnectionId),
     });
+  const setOverview = useMemoizedFn(
+    (
+      next:
+        | AppHomeOverviewResponse
+        | null
+        | ((
+            current: AppHomeOverviewResponse | null,
+          ) => AppHomeOverviewResponse | null),
+    ) => {
+      queryClient.setQueryData<AppHomeOverviewResponse | null>(
+        appQueryKeys.overview(queryScope),
+        (current) =>
+          typeof next === "function" ? next(current ?? null) : next,
+      );
+    },
+  );
 
   useEffect(() => {
     activeConnectionIdRef.current = activeConnectionId;
@@ -148,7 +124,6 @@ export function useAppSession(): AppSessionController {
   useEffect(() => {
     let cancelled = false;
     setStartupState("checking");
-    setOverview(null);
     setError(null);
     setLoading(false);
     void loadSessionForConnection(activeConnectionId).finally(() => {
@@ -430,113 +405,15 @@ export function useAppSession(): AppSessionController {
     void resetSession();
   });
 
-  const { run: scheduleOverviewRefresh, cancel: cancelOverviewRefresh } =
-    useDebounceFn(() => void loadOverview(), {
-      wait: OVERVIEW_REFRESH_DEBOUNCE_MS,
-    });
-
-  useEffect(
-    () => () => {
-      cancelOverviewRefresh();
-    },
-    [cancelOverviewRefresh],
-  );
-
-  const handleTerminalEvents = useMemoizedFn(
-    (events: TerminalEventEnvelope[]) => {
-      const stateEvents = events.filter(
-        (event) => event.kind === "terminal_state_changed",
-      );
-      const metadataEvents = events.filter(
-        (event) => event.kind === "terminal_session_metadata_changed",
-      );
-      if (events.some(isOverviewInvalidationEvent)) {
-        scheduleOverviewRefresh();
-      }
-      if (stateEvents.length === 0 && metadataEvents.length === 0) {
-        return;
-      }
-
-      setOverview((currentOverview) => {
-        if (!currentOverview) {
-          return currentOverview;
-        }
-
-        let changed = false;
-        const nextStateBySessionId = new Map(
-          stateEvents.map((event) => [
-            event.terminalSessionId,
-            event.payload.next,
-          ]),
-        );
-        const nextMetadataBySessionId = new Map(
-          metadataEvents.map((event) => [
-            event.terminalSessionId,
-            event.payload,
-          ]),
-        );
-        const nextSessions = currentOverview.sessions.map((session) => {
-          const terminalState = nextStateBySessionId.get(
-            session.terminalSessionId,
-          );
-          const metadata = nextMetadataBySessionId.get(
-            session.terminalSessionId,
-          );
-          if (!terminalState && !metadata) {
-            return session;
-          }
-
-          const displayStatus = terminalState
-            ? resolveSessionDisplayStatus(session, terminalState)
-            : null;
-          if (
-            (!terminalState ||
-              (session.terminalState.state === terminalState.state &&
-                session.terminalState.agent === terminalState.agent &&
-                session.displayStatus === displayStatus?.displayStatus &&
-                session.displayStatusLabel ===
-                  displayStatus?.displayStatusLabel)) &&
-            (!metadata ||
-              (session.cwd === metadata.next.cwd &&
-                session.activeCommand === metadata.next.activeCommand))
-          ) {
-            return session;
-          }
-
-          changed = true;
-          return {
-            ...session,
-            ...(metadata
-              ? {
-                  cwd: metadata.next.cwd,
-                  activeCommand: metadata.next.activeCommand,
-                  subtitle:
-                    session.subtitle === metadata.previous.cwd
-                      ? metadata.next.cwd
-                      : session.subtitle,
-                }
-              : {}),
-            ...(displayStatus ?? {}),
-            ...(terminalState ? { terminalState } : {}),
-          };
-        });
-
-        return changed
-          ? {
-              ...currentOverview,
-              sessions: nextSessions,
-            }
-          : currentOverview;
-      });
-    },
-  );
-
   const handleTerminalEventsTransportFailure = useMemoizedFn(async () => {
     const snapshot = await refreshDeviceConnection();
     return snapshot.status !== "offline";
   });
+  const handleTerminalEventsConnected = useMemoizedFn(() => {
+    markDeviceOnline("terminal-events-connected");
+  });
 
-  useAppTerminalEventsConnection({
+  useAppSessionEvents({
     apiBase,
     accessToken: scopedAccessToken,
     enabled:
@@ -544,12 +421,11 @@ export function useAppSession(): AppSessionController {
       scopedIsAuthenticated &&
       Boolean(scopedAccessToken) &&
       deviceConnection.status === "online",
-    onAuthExpired: () => void resetSession(),
-    onConnectionClose: handleTerminalEventsTransportFailure,
-    onConnectionError: handleTerminalEventsTransportFailure,
-    onServerConnected: () => markDeviceOnline("terminal-events-connected"),
-    onResyncRequired: () => void loadOverview(),
-    onTerminalEvents: handleTerminalEvents,
+    queryScope,
+    onAuthExpired: handleAuthExpired,
+    onConnectionFailure: handleTerminalEventsTransportFailure,
+    onOverviewInvalidated: loadOverview,
+    onServerConnected: handleTerminalEventsConnected,
   });
 
   return {

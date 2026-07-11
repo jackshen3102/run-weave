@@ -1,27 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import {
-  accessSync,
-  chmodSync,
-  constants,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  rmSync,
-} from "node:fs";
 import net from "node:net";
-import path from "node:path";
-import type { AppServerConnectionInfo } from "@runweave/shared/src/app-server-node";
-import {
-  formatBackendProfileLockConflict,
-  getBrowserProfileLockFile,
-  isProcessLive,
-  killProcessIfLive,
-  readBackendProfileLockOwner,
-  readParentPid,
-  readProcessCommand,
-  resolveBrowserProfileDir,
-  waitForProcessExit,
-} from "@runweave/shared/src/browser-profile-node";
+import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
 import {
   recordLastKnownGoodRuntimeRelease,
   resolveActiveRuntimeRelease,
@@ -30,54 +9,31 @@ import {
   resolveLastKnownGoodRuntimeRelease,
   type RuntimeRelease,
 } from "./runtime-release.js";
+import type {
+  PackagedBackendPaths,
+  PackagedBackendRuntime,
+  PackagedBackendRuntimeCandidatePlan,
+  PackagedBackendRuntimeIncidentEvent,
+} from "./backend-runtime-types.js";
+import {
+  buildPackagedBackendPath,
+  preparePackagedNodePtyDir,
+  recoverOrphanedPackagedBackendLock,
+} from "./backend-runtime-preparation.js";
+
+export type {
+  PackagedBackendPaths,
+  PackagedBackendRuntime,
+  PackagedBackendRuntimeCandidatePlan,
+  PackagedBackendRuntimeIncidentEvent,
+} from "./backend-runtime-types.js";
 
 const DEFAULT_BACKEND_PORT = 5001;
 const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 30_000;
 const HEALTHCHECK_INTERVAL_MS = 200;
-const ORPHANED_BACKEND_EXIT_TIMEOUT_MS = 2_000;
 const LAN_BIND_HOST = "0.0.0.0";
 const LOCALHOST_V4 = "127.0.0.1";
 const LOCALHOST_V6 = "::1";
-const PACKAGED_BACKEND_CLI_PATHS = [
-  "/opt/homebrew/bin",
-  "/opt/homebrew/sbin",
-  "/usr/local/bin",
-  "/usr/local/sbin",
-  "/usr/bin",
-  "/bin",
-  "/usr/sbin",
-  "/sbin",
-] as const;
-
-export interface PackagedBackendPaths {
-  backendEntry: string;
-  frontendDistDir: string;
-  nodePtyDir: string;
-  releaseId: string;
-  source: "external" | "bundled";
-}
-
-export interface PackagedBackendRuntime {
-  backendUrl: string;
-  stop(): Promise<void>;
-  child: ChildProcess;
-  getOutputTail(): string[];
-  runtimeRelease: RuntimeRelease;
-  startupWarning: string | null;
-}
-
-export interface PackagedBackendRuntimeCandidatePlan {
-  activeRelease: RuntimeRelease;
-  candidates: RuntimeRelease[];
-  currentReleaseId: string | null;
-  currentReleaseInvalid: boolean;
-}
-
-export interface PackagedBackendRuntimeIncidentEvent {
-  event: string;
-  level?: "info" | "warn" | "error";
-  details?: Record<string, unknown>;
-}
 
 export function resolvePackagedBackendPaths(
   resourcesPath: string = process.resourcesPath,
@@ -131,169 +87,6 @@ export function resolvePackagedBackendRuntimeCandidates(options: {
     currentReleaseId,
     currentReleaseInvalid,
   };
-}
-
-function buildPackagedBackendPath(basePath: string | undefined): string {
-  const entries = [
-    ...(basePath?.split(path.delimiter) ?? []),
-    ...PACKAGED_BACKEND_CLI_PATHS,
-  ]
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
-  return Array.from(new Set(entries)).join(path.delimiter);
-}
-
-function getNodePtySpawnHelperPath(nodePtyDir: string): string {
-  return path.join(
-    nodePtyDir,
-    "prebuilds",
-    `darwin-${process.arch}`,
-    "spawn-helper",
-  );
-}
-
-function isExecutableFile(filePath: string): boolean {
-  try {
-    accessSync(filePath, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function preparePackagedNodePtyDir(options: {
-  nodePtyDir: string;
-  onIncidentEvent?: (event: PackagedBackendRuntimeIncidentEvent) => void;
-  release: RuntimeRelease;
-  runtimeRoot: string | null;
-}): string {
-  if (process.platform !== "darwin") {
-    return options.nodePtyDir;
-  }
-
-  const sourceHelper = getNodePtySpawnHelperPath(options.nodePtyDir);
-  if (isExecutableFile(sourceHelper)) {
-    return options.nodePtyDir;
-  }
-
-  if (!options.runtimeRoot) {
-    return options.nodePtyDir;
-  }
-
-  const targetNodePtyDir = path.join(
-    options.runtimeRoot,
-    "node-pty",
-    `${options.release.source}-${options.release.releaseId}-${process.arch}`,
-  );
-  const targetHelper = getNodePtySpawnHelperPath(targetNodePtyDir);
-
-  try {
-    rmSync(targetNodePtyDir, { recursive: true, force: true });
-    mkdirSync(path.dirname(targetNodePtyDir), { recursive: true });
-    cpSync(options.nodePtyDir, targetNodePtyDir, { recursive: true });
-    chmodSync(targetHelper, 0o755);
-    options.onIncidentEvent?.({
-      event: "packagedBackend.nodePty.migrated",
-      level: "warn",
-      details: {
-        releaseId: options.release.releaseId,
-        source: options.nodePtyDir,
-        target: targetNodePtyDir,
-      },
-    });
-    return targetNodePtyDir;
-  } catch (error) {
-    options.onIncidentEvent?.({
-      event: "packagedBackend.nodePty.migrationFailed",
-      level: "error",
-      details: {
-        releaseId: options.release.releaseId,
-        source: options.nodePtyDir,
-        target: targetNodePtyDir,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-    if (existsSync(sourceHelper)) {
-      try {
-        chmodSync(sourceHelper, 0o755);
-      } catch {
-        // Keep the original path so backend startup reports the real spawn error.
-      }
-    }
-    return options.nodePtyDir;
-  }
-}
-
-async function recoverOrphanedPackagedBackendLock(
-  env: NodeJS.ProcessEnv,
-  onIncidentEvent?: (event: PackagedBackendRuntimeIncidentEvent) => void,
-): Promise<void> {
-  const profileDir = resolveBrowserProfileDir(env);
-  const lockFile = getBrowserProfileLockFile(profileDir);
-  const owner = await readBackendProfileLockOwner(lockFile);
-  if (!owner || !isProcessLive(owner.pid)) {
-    return;
-  }
-
-  const parentPid = await readParentPid(owner.pid);
-  const command = await readProcessCommand(owner.pid);
-  const isOrphanedPackagedBackend =
-    parentPid === 1 &&
-    owner.runtimeReleaseId !== null &&
-    command?.includes("backend/index.cjs") === true;
-
-  if (!isOrphanedPackagedBackend) {
-    onIncidentEvent?.({
-      event: "packagedBackend.profileLock.liveOwner",
-      level: "warn",
-      details: {
-        profileDir,
-        owner,
-        parentPid,
-        command,
-      },
-    });
-    throw new Error(
-      formatBackendProfileLockConflict(profileDir, lockFile, owner, {
-        "parent pid": parentPid,
-        command,
-      }),
-    );
-  }
-
-  console.warn("[electron] stopping orphaned packaged backend", {
-    pid: owner.pid,
-    port: owner.port,
-    runtimeReleaseId: owner.runtimeReleaseId,
-    profileDir,
-  });
-  onIncidentEvent?.({
-    event: "packagedBackend.orphan.stop",
-    level: "warn",
-    details: {
-      profileDir,
-      owner,
-      parentPid,
-      command,
-    },
-  });
-
-  killProcessIfLive(owner.pid, "SIGTERM");
-  await waitForProcessExit(owner.pid, ORPHANED_BACKEND_EXIT_TIMEOUT_MS);
-  if (isProcessLive(owner.pid)) {
-    killProcessIfLive(owner.pid, "SIGKILL");
-    await waitForProcessExit(owner.pid, ORPHANED_BACKEND_EXIT_TIMEOUT_MS);
-  }
-  onIncidentEvent?.({
-    event: "packagedBackend.orphan.stopped",
-    level: "warn",
-    details: {
-      profileDir,
-      pid: owner.pid,
-      stillLive: isProcessLive(owner.pid),
-    },
-  });
 }
 
 export function buildPackagedBackendEnv(options: {

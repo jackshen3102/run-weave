@@ -1,7 +1,5 @@
 import { AlertTriangle, Play, Plus, X } from "lucide-react";
-import type {
-  AgentTeamRun,
-} from "@runweave/shared";
+import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import { Button } from "../ui/button";
 import {
   ROLE_CYCLE,

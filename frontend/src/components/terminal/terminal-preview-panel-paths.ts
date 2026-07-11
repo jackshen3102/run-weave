@@ -1,8 +1,5 @@
-import type {
-  TerminalPreviewFileDiffResponse,
-  TerminalPreviewFileResponse,
-  TerminalProjectListItem,
-} from "@runweave/shared";
+import type { TerminalPreviewFileDiffResponse, TerminalPreviewFileResponse } from "@runweave/shared/terminal/preview";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalPreviewMode } from "../../features/terminal/preview-store";
 
 interface SelectedPreviewPathArgs {

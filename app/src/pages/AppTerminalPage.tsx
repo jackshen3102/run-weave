@@ -1,5 +1,6 @@
 import { useMemoizedFn } from "ahooks";
-import type { AppHomeOverviewSession, TerminalState } from "@runweave/shared";
+import type { AppHomeOverviewSession } from "@runweave/shared/terminal/session";
+import type { TerminalState } from "@runweave/shared/terminal/state";
 import { type TerminalRendererHandle } from "@runweave/terminal-renderer";
 import { IonContent, IonPage } from "@ionic/react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +15,7 @@ import { AppTerminalPanels } from "../components/AppTerminalPanels";
 import { TerminalHistoryModal } from "../components/TerminalHistoryModal";
 import { TerminalCommandComposer } from "../components/TerminalCommandComposer";
 import type { AppConnectionConfig } from "../features/connections/types";
+import { AppTerminalRuntimeProvider } from "../features/terminal/app-terminal-runtime";
 import { recordSupportLog, useSupportLogs } from "../features/support-logs";
 import { basename, shortPath } from "../lib/app-terminal-path-labels";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
@@ -298,97 +300,104 @@ export function AppTerminalPage({
   });
 
   return (
-    <IonPage>
-      <IonContent
-        fullscreen
-        scrollY={false}
-        className="terminal-page bg-background text-foreground"
-      >
-        <main className="terminal-page-shell min-h-dvh bg-background">
-          <AppTerminalHeader
-            connectionStatus={statusClass}
-            formatRelativeTime={formatRelativeTime}
-            lastActivityAt={lastActivityAt}
-            moreMenuItems={moreMenuItems}
-            onBack={onBack}
-            onRefresh={() => {
-              if (isDeviceOffline) {
-                void onRefreshDeviceConnection();
-                return;
-              }
-              rendererRef.current?.refresh();
-            }}
-            statusLabel={statusLabel}
-            subtitle={subtitle}
-            terminalSessionId={terminalSessionId}
-            title={title}
-          />
-          <AppTerminalDeleteAlerts
-            confirmDeleteOpen={confirmDeleteOpen}
-            deleteError={deleteError}
-            isDeletingTerminal={isDeletingTerminal}
-            onConfirmDelete={() => void handleDeleteTerminal()}
-            onDismissConfirm={() => {
-              if (!isDeletingTerminal) {
-                setConfirmDeleteOpen(false);
-              }
-            }}
-            onDismissError={() => setDeleteError(null)}
-          />
-          <TerminalHistoryModal
-            accessToken={accessToken}
-            apiBase={apiBase}
-            isDeviceOffline={isDeviceOffline}
-            isOpen={historyModalOpen}
-            onAuthExpired={onAuthExpired}
-            onClose={() => setHistoryModalOpen(false)}
-            onConnectionFailure={refreshDeviceAfterFailure}
-            terminalName={title}
-            terminalSessionId={terminalSessionId}
-          />
-          <AppTerminalPanels
-            accessToken={accessToken}
-            activeProjectId={activeProjectId}
-            apiBase={apiBase}
-            connectionStatus={connectionStatus}
-            error={error}
-            hasMetadata={Boolean(metadata)}
-            isDeviceOffline={isDeviceOffline}
-            notFound={notFound}
-            onRefreshDeviceConnection={onRefreshDeviceConnection}
-            rendererRef={rendererRef}
-            runtimeKind={runtimeKind}
-            sendInput={sendInput}
-            sendResize={sendResize}
-            terminalSessionId={terminalSessionId}
-            onAuthExpired={onAuthExpired}
-            onBack={onBack}
-            onTerminalReady={onRendererReady}
-          />
-          {activeTab === "chat" ? (
-            <div className="terminal-composer-slot">
-              {imageError ? (
-                <p className="terminal-composer-error">{imageError}</p>
-              ) : null}
-              <TerminalCommandComposer
-                disabled={notFound || isDeviceOffline}
-                isPickingImage={isPickingImage}
-                isStopping={isCommandActive}
-                onPickImage={handlePickImage}
-                onSendInput={handleSendCommand}
-                onSendShortcutInput={handleSendShortcutInput}
-                onStop={handleStop}
-                onTranscribeVoice={handleTranscribeVoice}
-              />
-            </div>
-          ) : null}
-          <TerminalDetailTabBar
-            activeTab={activeTab}
-            changesCount={changesCount}
-            onTabChange={handleTabChange}
-          />
-        </main>
-      </IonContent>
-    </IonPage>
+    <AppTerminalRuntimeProvider
+      accessToken={accessToken}
+      apiBase={apiBase}
+      projectId={activeProjectId}
+      terminalSessionId={terminalSessionId}
+      onAuthExpired={onAuthExpired}
+    >
+      <IonPage>
+        <IonContent
+          fullscreen
+          scrollY={false}
+          className="terminal-page bg-background text-foreground"
+        >
+          <main className="terminal-page-shell min-h-dvh bg-background">
+            <AppTerminalHeader
+              connectionStatus={statusClass}
+              formatRelativeTime={formatRelativeTime}
+              lastActivityAt={lastActivityAt}
+              moreMenuItems={moreMenuItems}
+              onBack={onBack}
+              onRefresh={() => {
+                if (isDeviceOffline) {
+                  void onRefreshDeviceConnection();
+                  return;
+                }
+                rendererRef.current?.refresh();
+              }}
+              statusLabel={statusLabel}
+              subtitle={subtitle}
+              terminalSessionId={terminalSessionId}
+              title={title}
+            />
+            <AppTerminalDeleteAlerts
+              confirmDeleteOpen={confirmDeleteOpen}
+              deleteError={deleteError}
+              isDeletingTerminal={isDeletingTerminal}
+              onConfirmDelete={() => void handleDeleteTerminal()}
+              onDismissConfirm={() => {
+                if (!isDeletingTerminal) {
+                  setConfirmDeleteOpen(false);
+                }
+              }}
+              onDismissError={() => setDeleteError(null)}
+            />
+            <TerminalHistoryModal
+              accessToken={accessToken}
+              apiBase={apiBase}
+              isDeviceOffline={isDeviceOffline}
+              isOpen={historyModalOpen}
+              onAuthExpired={onAuthExpired}
+              onClose={() => setHistoryModalOpen(false)}
+              onConnectionFailure={refreshDeviceAfterFailure}
+              terminalName={title}
+              terminalSessionId={terminalSessionId}
+            />
+            <AppTerminalPanels
+              connection={{
+                connectionStatus,
+                error,
+                hasMetadata: Boolean(metadata),
+                isDeviceOffline,
+                notFound,
+                onBack,
+                onRefresh: onRefreshDeviceConnection,
+              }}
+              renderer={{
+                rendererRef,
+                runtimeKind,
+                sendInput,
+                sendResize,
+                onReady: onRendererReady,
+              }}
+            />
+            {activeTab === "chat" ? (
+              <div className="terminal-composer-slot">
+                {imageError ? (
+                  <p className="terminal-composer-error">{imageError}</p>
+                ) : null}
+                <TerminalCommandComposer
+                  disabled={notFound || isDeviceOffline}
+                  isPickingImage={isPickingImage}
+                  isStopping={isCommandActive}
+                  onPickImage={handlePickImage}
+                  onSendInput={handleSendCommand}
+                  onSendShortcutInput={handleSendShortcutInput}
+                  onStop={handleStop}
+                  onTranscribeVoice={handleTranscribeVoice}
+                />
+              </div>
+            ) : null}
+            <TerminalDetailTabBar
+              activeTab={activeTab}
+              changesCount={changesCount}
+              onTabChange={handleTabChange}
+            />
+          </main>
+        </IonContent>
+      </IonPage>
+    </AppTerminalRuntimeProvider>
   );
 }

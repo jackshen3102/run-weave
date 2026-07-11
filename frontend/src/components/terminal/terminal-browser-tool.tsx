@@ -80,55 +80,73 @@ export function TerminalBrowserTool({
       />
       <TerminalBrowserNavigationBar
         activeTab={activeTab}
-        isElectron={isElectron}
-        proxyState={proxyState}
-        proxySwitching={proxySwitching}
-        headerRulesPanelOpen={headerRulesPanelOpen}
-        headerRules={headerRules}
-        devicePanelOpen={devicePanelOpen}
-        deviceSwitching={deviceSwitching}
-        annotationActive={annotationState.active}
-        annotationCount={annotationState.annotations.length}
-        annotationSubmitting={annotationSubmitting}
-        onSubmitAddress={submitAddress}
-        onAddressInputChange={(addressInput) =>
-          updateBrowserTab(activeTab.id, { addressInput })
-        }
-        onAddressFocus={handleAddressFocus}
-        onAddressBlur={handleAddressBlur}
-        onGo={(direction) => void go(direction)}
-        onReload={() => void reload()}
-        onStop={stop}
-        onToggleAnnotation={() => void toggleAnnotation()}
-        onSubmitAnnotations={() => void submitAnnotations()}
-        onToggleProxy={() => void toggleProxy()}
-        onDevicePanelOpenChange={setDevicePanelOpenState}
-        onHeaderRulesPanelOpenChange={setHeaderPanelOpen}
-        onOpenDevTools={() => {
-          void window.electronAPI?.terminalBrowserOpenDevTools?.(activeTab.id);
+        address={{
+          onBlur: handleAddressBlur,
+          onChange: (addressInput) =>
+            updateBrowserTab(activeTab.id, { addressInput }),
+          onFocus: handleAddressFocus,
+          onSubmit: submitAddress,
         }}
-        onOpenExternal={() => openUrlExternally(activeTab.url)}
+        annotation={{
+          active: annotationState.active,
+          count: annotationState.annotations.length,
+          submitting: annotationSubmitting,
+          onSubmit: () => void submitAnnotations(),
+          onToggle: () => void toggleAnnotation(),
+        }}
+        navigation={{
+          onGo: (direction) => void go(direction),
+          onReload: () => void reload(),
+          onStop: stop,
+        }}
+        panels={{
+          deviceOpen: devicePanelOpen,
+          deviceSwitching,
+          headerRules,
+          headerRulesOpen: headerRulesPanelOpen,
+          onDeviceOpenChange: setDevicePanelOpenState,
+          onHeaderRulesOpenChange: setHeaderPanelOpen,
+        }}
+        proxy={{
+          state: proxyState,
+          switching: proxySwitching,
+          onToggle: () => void toggleProxy(),
+        }}
+        utilities={{
+          isElectron,
+          onOpenDevTools: () => {
+            void window.electronAPI?.terminalBrowserOpenDevTools?.(
+              activeTab.id,
+            );
+          },
+          onOpenExternal: () => openUrlExternally(activeTab.url),
+        }}
       />
       <TerminalBrowserErrorBanners
         errors={[proxyError, headerError, annotationError, activeTab.error]}
       />
       <TerminalBrowserSurface
-        containerRef={surfaceContainerRef}
-        browserViewRef={browserViewRef}
-        isElectron={isElectron}
-        headerRulesPanelOpen={headerRulesPanelOpen}
-        headerRules={headerRules}
-        devicePanelOpen={devicePanelOpen}
-        deviceState={activeTab.deviceState}
-        deviceSwitching={deviceSwitching}
-        mobileDisabledReason={mobileDisabledReason}
-        headerSaving={headerSaving}
-        headerError={headerError}
-        onCloseHeaderRulesPanel={() => setHeaderPanelOpen(false)}
-        onCloseDevicePanel={() => setDevicePanelOpenState(false)}
-        onSelectDevicePreset={(presetId) => void selectDevicePreset(presetId)}
-        onSaveHeaderRules={saveHeaderRules}
-        onOpenExternal={() => openUrlExternally(activeTab.url)}
+        refs={{ browserViewRef, containerRef: surfaceContainerRef }}
+        environment={{
+          isElectron,
+          onOpenExternal: () => openUrlExternally(activeTab.url),
+        }}
+        headers={{
+          error: headerError,
+          open: headerRulesPanelOpen,
+          rules: headerRules,
+          saving: headerSaving,
+          onClose: () => setHeaderPanelOpen(false),
+          onSave: saveHeaderRules,
+        }}
+        device={{
+          disabledReason: mobileDisabledReason,
+          open: devicePanelOpen,
+          state: activeTab.deviceState,
+          switching: deviceSwitching,
+          onClose: () => setDevicePanelOpenState(false),
+          onSelectPreset: (presetId) => void selectDevicePreset(presetId),
+        }}
       />
     </div>
   );

@@ -1,0 +1,434 @@
+import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
+import type { TerminalState } from "@runweave/shared/terminal/state";
+import type { TerminalRuntimeMetadata } from "./store";
+import type {
+  RuntimeTerminalSessionRecord,
+  TerminalSessionRecord,
+} from "./manager-records";
+import { isExistingDirectory } from "./manager-path";
+import {
+  getCompletionSourceForCommand,
+  type LastAiActiveCommandRecord,
+} from "./completion-source-gate";
+import { getAgentForCommand } from "./terminal-state-service";
+import { TerminalManagerBufferRuntime } from "./manager-buffer-runtime";
+
+export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime {
+  markExited(terminalSessionId: string, exitCode?: number): void {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return;
+    }
+
+    session.status = "exited";
+    session.exitCode = exitCode;
+    const lastActivityAt = this.touchSessionActivity(session, "immediate");
+    void this.sessionStore.updateSessionExit({
+      terminalSessionId,
+      status: "exited",
+      lastActivityAt: lastActivityAt.toISOString(),
+      exitCode,
+    });
+  }
+
+  markRunning(terminalSessionId: string): void {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return;
+    }
+
+    session.status = "running";
+    session.exitCode = undefined;
+    const lastActivityAt = this.touchSessionActivity(session, "immediate");
+    void this.sessionStore.updateSessionStatus({
+      terminalSessionId,
+      status: "running",
+      lastActivityAt: lastActivityAt.toISOString(),
+      exitCode: undefined,
+    });
+  }
+
+  async updateSessionMetadata(
+    terminalSessionId: string,
+    metadata: {
+      cwd: string;
+      activeCommand: string | null;
+    },
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    if (!isExistingDirectory(metadata.cwd)) {
+      return session;
+    }
+
+    const runningPanelCount = this.listPanels(terminalSessionId).filter(
+      (panel) => panel.status === "running",
+    ).length;
+    const nextActiveCommand =
+      runningPanelCount > 1 ? null : metadata.activeCommand;
+
+    if (
+      session.cwd === metadata.cwd &&
+      session.activeCommand === nextActiveCommand
+    ) {
+      return session;
+    }
+
+    const previous = {
+      cwd: session.cwd,
+      activeCommand: session.activeCommand,
+    };
+
+    this.observeActiveCommand(terminalSessionId, nextActiveCommand);
+    session.cwd = metadata.cwd;
+    session.activeCommand = nextActiveCommand;
+    const shouldClearCodexThreadMetadata =
+      Boolean(session.threadId || session.preview) &&
+      getAgentForCommand(nextActiveCommand) !== "codex";
+    const clearedThreadId = shouldClearCodexThreadMetadata
+      ? session.threadId
+      : undefined;
+    if (shouldClearCodexThreadMetadata) {
+      this.clearCodexThreadMetadata(session);
+    }
+    const lastActivityAt = this.touchSessionActivity(session, "immediate");
+    await this.sessionStore.updateSessionMetadata({
+      terminalSessionId,
+      cwd: metadata.cwd,
+      activeCommand: nextActiveCommand,
+      lastActivityAt: lastActivityAt.toISOString(),
+    });
+    if (shouldClearCodexThreadMetadata) {
+      if (clearedThreadId) {
+        await this.updateSessionLastThread(
+          terminalSessionId,
+          clearedThreadId,
+          "idle",
+        );
+      }
+      await this.persistClearedCodexThreadMetadata(terminalSessionId);
+    }
+    this.observer.onMetadataChanged?.({
+      terminalSessionId,
+      projectId: session.projectId,
+      session,
+      previous,
+      next: {
+        cwd: session.cwd,
+        activeCommand: session.activeCommand,
+      },
+    });
+    return session;
+  }
+
+  getLastAiActiveCommand(
+    terminalSessionId: string,
+  ): LastAiActiveCommandRecord | null {
+    return this.lastAiActiveCommands.get(terminalSessionId) ?? null;
+  }
+
+  async updateSessionLaunch(
+    terminalSessionId: string,
+    launch: {
+      command: string;
+      args: string[];
+    },
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const nextArgs = [...launch.args];
+    const commandUnchanged = session.command === launch.command;
+    const argsUnchanged =
+      session.args.length === nextArgs.length &&
+      session.args.every((arg, index) => arg === nextArgs[index]);
+    if (commandUnchanged && argsUnchanged) {
+      return session;
+    }
+
+    session.command = launch.command;
+    session.args = nextArgs;
+    const shouldClearCodexThreadMetadata =
+      Boolean(session.threadId || session.preview) &&
+      getAgentForCommand(launch.command) !== "codex";
+    const clearedThreadId = shouldClearCodexThreadMetadata
+      ? session.threadId
+      : undefined;
+    if (shouldClearCodexThreadMetadata) {
+      this.clearCodexThreadMetadata(session);
+    }
+    await this.sessionStore.updateSessionLaunch({
+      terminalSessionId,
+      command: launch.command,
+      args: nextArgs,
+    });
+    if (shouldClearCodexThreadMetadata) {
+      if (clearedThreadId) {
+        await this.updateSessionLastThread(
+          terminalSessionId,
+          clearedThreadId,
+          "idle",
+        );
+      }
+      await this.persistClearedCodexThreadMetadata(terminalSessionId);
+    }
+    return session;
+  }
+
+  private clearCodexThreadMetadata(
+    session: RuntimeTerminalSessionRecord,
+  ): void {
+    delete session.threadId;
+    delete session.preview;
+  }
+
+  private async persistClearedCodexThreadMetadata(
+    terminalSessionId: string,
+  ): Promise<void> {
+    await this.sessionStore.updateSessionThreadId({
+      terminalSessionId,
+      threadId: null,
+    });
+    await this.sessionStore.updateSessionPreview({
+      terminalSessionId,
+      preview: null,
+    });
+  }
+
+  async updateSessionAlias(
+    terminalSessionId: string,
+    alias: string | null,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const nextAlias = alias?.trim() || null;
+    if (session.alias === nextAlias) {
+      return session;
+    }
+
+    session.alias = nextAlias;
+    await this.sessionStore.updateSessionAlias({
+      terminalSessionId,
+      alias: nextAlias,
+    });
+    return session;
+  }
+
+  async updateSessionPanelSplitEnabled(
+    terminalSessionId: string,
+    panelSplitEnabled: boolean,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+    if (session.panelSplitEnabled === panelSplitEnabled) {
+      return session;
+    }
+    session.panelSplitEnabled = panelSplitEnabled;
+    await this.sessionStore.updateSessionPanelSplitEnabled({
+      terminalSessionId,
+      panelSplitEnabled,
+    });
+    return session;
+  }
+
+  async updateSessionThreadId(
+    terminalSessionId: string,
+    threadId: string | null,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const nextThreadId = threadId?.trim() || undefined;
+    if (session.threadId === nextThreadId) {
+      return session;
+    }
+
+    if (nextThreadId) {
+      session.threadId = nextThreadId;
+    } else {
+      delete session.threadId;
+    }
+    await this.sessionStore.updateSessionThreadId({
+      terminalSessionId,
+      threadId: nextThreadId ?? null,
+    });
+    return session;
+  }
+
+  async updateSessionPreview(
+    terminalSessionId: string,
+    preview: string | null,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const nextPreview = preview?.trim() || undefined;
+    if (session.preview === nextPreview) {
+      return session;
+    }
+
+    if (nextPreview) {
+      session.preview = nextPreview;
+    } else {
+      delete session.preview;
+    }
+    await this.sessionStore.updateSessionPreview({
+      terminalSessionId,
+      preview: nextPreview ?? null,
+    });
+    return session;
+  }
+
+  async updateSessionLastThread(
+    terminalSessionId: string,
+    threadId: string,
+    status: TerminalLastThreadStatus,
+    updatedAt = new Date(),
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const nextThreadId = threadId.trim();
+    if (!nextThreadId) {
+      return session;
+    }
+
+    if (
+      session.lastThreadId === nextThreadId &&
+      session.lastThreadStatus === status &&
+      session.lastThreadUpdatedAt?.getTime() === updatedAt.getTime()
+    ) {
+      return session;
+    }
+
+    session.lastThreadId = nextThreadId;
+    session.lastThreadStatus = status;
+    session.lastThreadUpdatedAt = updatedAt;
+    await this.sessionStore.updateSessionLastThread({
+      terminalSessionId,
+      threadId: nextThreadId,
+      status,
+      updatedAt: updatedAt.toISOString(),
+    });
+    return session;
+  }
+
+  async updateRuntimeMetadata(
+    terminalSessionId: string,
+    metadata: TerminalRuntimeMetadata,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    session.runtimeKind = metadata.runtimeKind;
+    session.tmuxSessionName = metadata.tmuxSessionName;
+    session.tmuxSocketPath = metadata.tmuxSocketPath;
+    session.tmuxUnavailableReason = metadata.tmuxUnavailableReason;
+    session.recoverable = metadata.recoverable;
+    await this.sessionStore.updateSessionRuntimeMetadata({
+      terminalSessionId,
+      runtimeKind: metadata.runtimeKind,
+      tmuxSessionName: metadata.tmuxSessionName,
+      tmuxSocketPath: metadata.tmuxSocketPath,
+      tmuxUnavailableReason: metadata.tmuxUnavailableReason,
+      recoverable: metadata.recoverable,
+    });
+    return session;
+  }
+
+  async updateSessionTerminalState(
+    terminalSessionId: string,
+    terminalState: TerminalState,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    if (
+      session.terminalState?.state === terminalState.state &&
+      session.terminalState.agent === terminalState.agent
+    ) {
+      return session;
+    }
+
+    session.terminalState = terminalState;
+    await this.sessionStore.updateSessionTerminalState({
+      terminalSessionId,
+      terminalState,
+    });
+    return session;
+  }
+
+  async destroySession(terminalSessionId: string): Promise<boolean> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return false;
+    }
+
+    this.clearPendingScrollbackFlush(terminalSessionId);
+    this.pendingScrollbackChunks.delete(terminalSessionId);
+    this.clearPendingActivityFlush(terminalSessionId);
+    this.pendingActivityUpdates.delete(terminalSessionId);
+    this.lastAiActiveCommands.delete(terminalSessionId);
+    this.sessions.delete(terminalSessionId);
+    for (const panel of this.panels.values()) {
+      if (panel.terminalSessionId === terminalSessionId) {
+        this.panels.delete(panel.id);
+      }
+    }
+    this.panelWorkspaces.delete(terminalSessionId);
+    await this.sessionStore.deletePanelsForSession(terminalSessionId);
+    await this.sessionStore.deleteSession(terminalSessionId);
+    return true;
+  }
+
+  protected observeActiveCommand(
+    terminalSessionId: string,
+    activeCommand: string | null,
+  ): void {
+    const now = Date.now();
+    const source = getCompletionSourceForCommand(activeCommand);
+    if (source && activeCommand) {
+      this.lastAiActiveCommands.set(terminalSessionId, {
+        command: activeCommand,
+        source,
+        observedAt: now,
+        clearedAt: null,
+      });
+      return;
+    }
+
+    if (activeCommand !== null) {
+      this.lastAiActiveCommands.delete(terminalSessionId);
+      return;
+    }
+
+    const previous = this.lastAiActiveCommands.get(terminalSessionId);
+    if (!previous || previous.clearedAt !== null) {
+      return;
+    }
+    this.lastAiActiveCommands.set(terminalSessionId, {
+      ...previous,
+      clearedAt: now,
+    });
+  }
+}

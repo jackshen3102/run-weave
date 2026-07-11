@@ -1,12 +1,6 @@
-import {
-  hasCodexRestartRequiredAfterUpdate,
-  hasPendingCodexTrustPrompt,
-  hasPendingCodexUpdatePrompt,
-  hasStartedCodexUi,
-  stripTerminalControlSequences,
-  type AgentTeamTerminal,
-  type TerminalAgentKind,
-} from "@runweave/shared";
+import { type AgentTeamTerminal } from "@runweave/shared/agent-team";
+import { hasCodexRestartRequiredAfterUpdate, hasPendingCodexTrustPrompt, hasPendingCodexUpdatePrompt, hasStartedCodexUi, stripTerminalControlSequences } from "@runweave/shared/terminal-agent-readiness";
+import { type TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type {
   TerminalSessionManager,
   TerminalSessionRecord,
@@ -20,11 +14,9 @@ import {
   getAgentForCommand,
   type TerminalStateService,
 } from "../terminal/terminal-state-service";
-import { sendInputToSession } from "../routes/terminal-input-dispatcher";
-import {
-  resolvePanelTarget,
-  TerminalPanelRouteError,
-} from "../routes/terminal-panel-routes";
+import { sendInputToSession } from "../terminal/application/input-dispatcher";
+import { TerminalPanelError } from "../terminal/application/panel-common";
+import { resolvePanelTarget } from "../terminal/application/panel-targets";
 import { AgentTeamError } from "./errors";
 
 const AGENT_TEAM_AGENT_START_TIMEOUT_MS = 15000;
@@ -330,7 +322,7 @@ export class AgentTeamAgentReadinessService {
         )
       ).paneTarget;
     } catch (error) {
-      if (error instanceof TerminalPanelRouteError) {
+      if (error instanceof TerminalPanelError) {
         throw new AgentTeamError(
           error.statusCode,
           error.message,

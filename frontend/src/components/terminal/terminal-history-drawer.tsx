@@ -4,8 +4,8 @@ import {
   syncTerminalHistorySize,
   writeTerminalHistoryOutput,
 } from "@runweave/common/terminal";
-import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared";
-import type { TerminalSessionHistoryResponse } from "@runweave/shared";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared/terminal-limits";
+import type { TerminalSessionHistoryResponse } from "@runweave/shared/terminal/session";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
@@ -14,6 +14,7 @@ import { Copy } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 import { formatTerminalSessionName } from "../../features/terminal/session-name";
 import { DEFAULT_TERMINAL_PREFERENCES } from "../../features/terminal/preferences";
+import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
 import { HttpError } from "../../services/http";
 import {
   getTerminalHistory,
@@ -27,47 +28,49 @@ import {
   SheetTitle,
 } from "../ui/sheet";
 
+interface TerminalHistoryTarget {
+  sessionId: string | null;
+  panelId?: string | null;
+  projectId?: string | null;
+  threadId?: string | null;
+  lastThreadId?: string | null;
+  lastThreadStatus?: TerminalSessionHistoryResponse["lastThreadStatus"] | null;
+  panelThreadId?: string | null;
+  panelLastThreadId?: string | null;
+  panelLastThreadStatus?:
+    | TerminalSessionHistoryResponse["lastThreadStatus"]
+    | null;
+}
+
 interface TerminalHistoryDrawerProps {
   open: boolean;
-  apiBase: string;
-  token: string;
-  terminalSessionId: string | null;
-  terminalPanelId?: string | null;
-  terminalProjectId?: string | null;
-  terminalThreadId?: string | null;
-  terminalLastThreadId?: string | null;
-  terminalLastThreadStatus?:
-    | TerminalSessionHistoryResponse["lastThreadStatus"]
-    | null;
-  terminalPanelThreadId?: string | null;
-  terminalPanelLastThreadId?: string | null;
-  terminalPanelLastThreadStatus?:
-    | TerminalSessionHistoryResponse["lastThreadStatus"]
-    | null;
-  terminalName?: string;
+  target: TerminalHistoryTarget;
+  title?: string;
   onOpenChange: (open: boolean) => void;
-  onAuthExpired?: () => void;
 }
 
 export function TerminalHistoryDrawer({
   open,
-  apiBase,
-  token,
-  terminalSessionId,
-  terminalPanelId,
-  terminalProjectId,
-  terminalThreadId,
-  terminalLastThreadId,
-  terminalLastThreadStatus,
-  terminalPanelThreadId,
-  terminalPanelLastThreadId,
-  terminalPanelLastThreadStatus,
-  terminalName,
+  target,
+  title,
   onOpenChange,
-  onAuthExpired,
 }: TerminalHistoryDrawerProps) {
+  const { apiBase, onAuthExpired, token } = useTerminalRuntime();
+  const {
+    lastThreadId: terminalLastThreadId,
+    lastThreadStatus: terminalLastThreadStatus,
+    panelId: terminalPanelId,
+    panelLastThreadId: terminalPanelLastThreadId,
+    panelLastThreadStatus: terminalPanelLastThreadStatus,
+    panelThreadId: terminalPanelThreadId,
+    projectId: terminalProjectId,
+    sessionId: terminalSessionId,
+    threadId: terminalThreadId,
+  } = target;
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
-  const [history, setHistory] = useState<TerminalSessionHistoryResponse | null>(null);
+  const [history, setHistory] = useState<TerminalSessionHistoryResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
 
@@ -82,7 +85,12 @@ export function TerminalHistoryDrawer({
     setRequestError(null);
 
     const request = terminalPanelId
-      ? getTerminalPanelHistory(apiBase, token, terminalSessionId, terminalPanelId)
+      ? getTerminalPanelHistory(
+          apiBase,
+          token,
+          terminalSessionId,
+          terminalPanelId,
+        )
       : getTerminalHistory(apiBase, token, terminalSessionId);
 
     void request
@@ -115,7 +123,7 @@ export function TerminalHistoryDrawer({
   }, [apiBase, onAuthExpired, open, terminalPanelId, terminalSessionId, token]);
 
   const renderedTitle =
-    terminalName ??
+    title ??
     (history
       ? formatTerminalSessionName({
           alias: history.alias,

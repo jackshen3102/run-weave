@@ -9,11 +9,7 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
-import type {
-  TerminalPreviewChangeFile,
-  TerminalPreviewChangeKind,
-  TerminalPreviewGitChangesResponse,
-} from "@runweave/shared";
+import type { TerminalPreviewChangeFile, TerminalPreviewChangeKind, TerminalPreviewGitChangesResponse } from "@runweave/shared/terminal/preview";
 import { Button } from "../ui/button";
 import {
   ContextMenu,

@@ -9,9 +9,7 @@ const BLOCKED_COMMANDS = new Set([
   "Storage.clearDataForOrigin",
 ]);
 
-const BROWSER_COMMANDS = new Set([
-  "Browser.getVersion",
-]);
+const BROWSER_COMMANDS = new Set(["Browser.getVersion"]);
 
 const TARGET_COMMANDS = new Set([
   "Target.getTargets",
@@ -129,7 +127,9 @@ export function resolveCreateTargetWindowId(
   fallbackWindowId: number | null,
 ): number | null {
   for (const targetId of attachedTargetIds) {
-    const attachedTarget = targets.find((target) => target.targetId === targetId);
+    const attachedTarget = targets.find(
+      (target) => target.targetId === targetId,
+    );
     if (attachedTarget) {
       return attachedTarget.windowId;
     }
@@ -168,7 +168,8 @@ export function validateSetContentParams(params: {
   if (dangerous.test(params.html)) {
     return {
       ok: false,
-      error: "Page.setDocumentContent cannot contain file:, chrome:, devtools:, or javascript: references",
+      error:
+        "Page.setDocumentContent cannot contain file:, chrome:, devtools:, or javascript: references",
     };
   }
   return { ok: true };

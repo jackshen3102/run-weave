@@ -1,8 +1,5 @@
-import type {
-  AppHomeOverviewResponse,
-  AppHomeOverviewSession,
-  TerminalProjectListItem,
-} from "@runweave/shared";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import type { AppHomeOverviewResponse, AppHomeOverviewSession } from "@runweave/shared/terminal/session";
 
 export interface TerminalHomeProjectGroup {
   project: TerminalProjectListItem;

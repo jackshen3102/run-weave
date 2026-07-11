@@ -1,14 +1,6 @@
 import { WebSocket } from "ws";
-import type {
-  AppServerEventEnvelope,
-  AppServerEventListResponse,
-  AppServerEventStreamMessage,
-  AppServerSyncStatusResponse,
-  AppServerThreadListResponse,
-  AppServerThreadResponse,
-  CreateAppServerEventRequest,
-} from "@runweave/shared";
-import type { AppServerConnectionInfo } from "@runweave/shared/src/app-server-node";
+import type { AppServerEventEnvelope, AppServerEventListResponse, AppServerEventStreamMessage, AppServerSyncStatusResponse, AppServerThreadListResponse, AppServerThreadResponse, CreateAppServerEventRequest } from "@runweave/shared/app-server-events";
+import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
 
 export class AppServerClient {
   constructor(private readonly connection: AppServerConnectionInfo) {}

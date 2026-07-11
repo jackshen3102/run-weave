@@ -1,4 +1,4 @@
-import type { AppServerEventEnvelope } from "@runweave/shared";
+import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
 import type { TerminalSessionManager } from "../terminal/manager";
 
 export function isEventOwnedByThisBackend(

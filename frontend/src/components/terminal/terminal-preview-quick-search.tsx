@@ -1,12 +1,7 @@
 import { Fragment, useEffect, useRef, type ReactNode } from "react";
 import { Command } from "cmdk";
 import { File, FileText, Folder, Search } from "lucide-react";
-import type {
-  TerminalPreviewContentSearchItem,
-  TerminalPreviewFileSearchItem,
-  TerminalPreviewFolderSearchItem,
-  TerminalPreviewQuickSearchMode,
-} from "@runweave/shared";
+import type { TerminalPreviewContentSearchItem, TerminalPreviewFileSearchItem, TerminalPreviewFolderSearchItem, TerminalPreviewQuickSearchMode } from "@runweave/shared/terminal/preview";
 import {
   Dialog,
   DialogContent,

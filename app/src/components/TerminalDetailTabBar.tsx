@@ -5,7 +5,9 @@ import {
   gitCompareOutline,
 } from "ionicons/icons";
 
-export type AppTerminalDetailTab = "chat" | "changes" | "files";
+import type { AppTerminalDetailTab } from "../features/terminal/types";
+
+export type { AppTerminalDetailTab } from "../features/terminal/types";
 
 const TABS: Array<{
   id: AppTerminalDetailTab;

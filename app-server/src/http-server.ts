@@ -8,15 +8,12 @@ import type {
   AppServerThreadListResponse,
   AppServerThreadResponse,
   CreateAppServerEventRequest,
-} from "@runweave/shared";
+} from "@runweave/shared/app-server-events";
 import {
   APP_SERVER_PROTOCOL_VERSION,
   APP_SERVER_SERVICE_NAME,
 } from "./singleton.js";
-import {
-  rejectNonLoopbackOrigin,
-  requireBearerToken,
-} from "./auth.js";
+import { rejectNonLoopbackOrigin, requireBearerToken } from "./auth.js";
 import type { AppServerEventCenter } from "./event-center.js";
 
 const MAX_EVENTS_LIMIT = 500;
@@ -24,7 +21,14 @@ const MAX_STATE_LIMIT = 500;
 
 const sourceSchema = z
   .object({
-    app: z.enum(["app-server", "backend", "electron", "cli", "hook", "unknown"]),
+    app: z.enum([
+      "app-server",
+      "backend",
+      "electron",
+      "cli",
+      "hook",
+      "unknown",
+    ]),
     instanceId: z.string().trim().min(1),
     pid: z.number().int().positive().optional(),
   })

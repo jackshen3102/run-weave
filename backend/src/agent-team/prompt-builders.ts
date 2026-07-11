@@ -1,8 +1,4 @@
-import type {
-  AgentTeamAcceptanceCase,
-  AgentTeamRun,
-  AgentTeamWorker,
-} from "@runweave/shared";
+import type { AgentTeamAcceptanceCase, AgentTeamRun, AgentTeamWorker } from "@runweave/shared/agent-team";
 
 const ROLE_LABEL: Record<string, string> = {
   code: "code_agent（写代码）",

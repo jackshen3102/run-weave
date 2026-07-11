@@ -1,10 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
-import type {
-  TerminalClientMessage,
-  TerminalModeState,
-  TerminalServerMessage,
-} from "@runweave/shared";
+import type { TerminalClientMessage, TerminalModeState, TerminalServerMessage } from "@runweave/shared/terminal/websocket";
 import { HttpError } from "../../services/http";
 import { createTerminalWsTicket } from "../../services/terminal";
 import {

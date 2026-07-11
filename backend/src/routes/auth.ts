@@ -1,10 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type {
-  AuthClientType,
-  ChangePasswordRequest,
-  LoginRequest,
-} from "@runweave/shared";
+import type { AuthClientType, ChangePasswordRequest, LoginRequest } from "@runweave/shared/protocol";
 import {
   LoginAttemptGuard,
   type LoginAttemptDecision,

@@ -1,48 +1,41 @@
 import { useMemoizedFn } from "ahooks";
-import { useEffect, useRef, useState } from "react";
-import type {
-  TerminalPreviewChangeKind,
-  TerminalProjectListItem,
-  TerminalSessionListItem,
-} from "@runweave/shared";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import {
   getTerminalPreviewFileKind,
   isSupportedTerminalImagePreviewPath,
 } from "../../features/terminal/preview-file-types";
-import {
-  deleteTerminalProjectPreviewFile,
-  renameTerminalProjectPreviewFile,
-  resetTerminalProjectPreviewChange,
-} from "../../services/terminal";
-import { TerminalPreviewPanelContent } from "./terminal-preview-panel-content";
+import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
+import { Button } from "../ui/button";
+import { TerminalPreviewChangesView } from "./terminal-preview-changes-view";
 import { useTerminalPreviewPanelActions } from "./terminal-preview-panel-actions";
 import { useTerminalPreviewPanelData } from "./use-terminal-preview-panel-data";
-import { TerminalPreviewPanelMutationDialogs } from "./terminal-preview-panel-mutation-dialogs";
+import {
+  TerminalPreviewDeleteDialog,
+  TerminalPreviewRenameDialog,
+  TerminalPreviewResetDialog,
+} from "./terminal-preview-panel-mutation-dialogs";
 import { TerminalPreviewPanelShell } from "./terminal-preview-panel-shell";
 import { TerminalPreviewQuickSearch } from "./terminal-preview-quick-search";
 import { useTerminalPreviewQuickSearch } from "./use-terminal-preview-quick-search";
-import type { TerminalPreviewLineTarget } from "./terminal-preview-file-view";
+import {
+  renderPreviewEmpty,
+  TerminalPreviewFileView,
+  type TerminalPreviewLineTarget,
+} from "./terminal-preview-file-view";
 import { TerminalAgentTeamPanel } from "./terminal-agent-team-panel";
 import { useTerminalFileTree } from "./use-terminal-file-tree";
+import { useTerminalPreviewFileMutations } from "./use-terminal-preview-file-mutations";
 
 interface TerminalPreviewPanelProps {
-  apiBase: string;
-  token: string;
   activeProject: TerminalProjectListItem | null;
   activeSession: TerminalSessionListItem | null;
-  sessions: TerminalSessionListItem[];
   showAgentTeamTool: boolean;
   widthPx?: number;
-  onAuthExpired?: () => void;
   onEditProject: () => void;
-  onSelectSession?: (terminalSessionId: string) => void;
   onPanelSplitEnabledChange?: (enabled: boolean) => void;
   onActiveAgentTeamRunChange?: (active: boolean) => void;
-}
-
-interface PreviewFileMutationTarget {
-  path: string;
-  expectedMtimeMs?: number;
 }
 
 function getPreviewParentDirectory(filePath: string): string {
@@ -66,17 +59,15 @@ function shouldIgnoreQuickSearchShortcut(target: EventTarget | null): boolean {
 }
 
 export function TerminalPreviewPanel({
-  apiBase,
-  token,
   activeProject,
   activeSession,
   showAgentTeamTool,
   widthPx,
-  onAuthExpired,
   onEditProject,
   onPanelSplitEnabledChange,
   onActiveAgentTeamRunChange,
 }: TerminalPreviewPanelProps) {
+  const { apiBase, onAuthExpired, token } = useTerminalRuntime();
   const [lineTarget, setLineTarget] =
     useState<TerminalPreviewLineTarget | null>(null);
   const lineTargetSequenceRef = useRef(0);
@@ -87,7 +78,6 @@ export function TerminalPreviewPanel({
     activeTool,
     setActiveTool,
     setExpanded,
-    updateProjectPreview,
     setProjectPreviewMode,
     setOpenFileQuery,
     openFileInStore,
@@ -112,33 +102,19 @@ export function TerminalPreviewPanel({
     setFilePreview,
     editorContent,
     setEditorContent,
-    setLoadedContent,
     loadedMtimeMs,
-    setLoadedMtimeMs,
     saveLoading,
     saveError,
-    setSaveError,
     saveConflict,
-    setSaveConflict,
     lastSavedAt,
-    setLastSavedAt,
     fileLoading,
-    setFileLoading,
     fileError,
-    setFileError,
     changes,
     changesLoading,
     changesError,
     fileDiff,
-    setFileDiff,
     diffLoading,
-    setDiffLoading,
     diffError,
-    setDiffError,
-    fileRequestSequencer,
-    diffRequestSequencer,
-    selectedChangePathRef,
-    selectedChangeKindRef,
     assetRefreshKey,
     setAssetRefreshKey,
     markdownScrollRatio,
@@ -153,24 +129,16 @@ export function TerminalPreviewPanel({
     fileKind,
     isFileEditable,
     isDirty,
-    deleteTarget,
-    setDeleteTarget,
-    renameTarget,
-    setRenameTarget,
-    resetTarget,
-    setResetTarget,
-    renamePath,
-    setRenamePath,
-    mutationPending,
-    setMutationPending,
-    mutationError,
-    setMutationError,
     confirmDiscardDraft,
     handleRequestError,
     loadFile,
     loadDiff,
     loadChanges,
     saveFile,
+    replaceLoadedFile,
+    clearEditor,
+    clearFilePreview,
+    clearFileDiff,
     selectedPath,
     copyPath,
     refreshFileSearch,
@@ -187,46 +155,6 @@ export function TerminalPreviewPanel({
       setActiveTool("preview");
     }
   }, [activeTool, setActiveTool, showAgentTeamTool]);
-
-  const getMutationTarget = useMemoizedFn(
-    (filePath: string): PreviewFileMutationTarget => ({
-      path: filePath,
-      expectedMtimeMs:
-        filePreview?.base === "project" &&
-        filePreview.path === filePath &&
-        loadedMtimeMs !== undefined
-          ? loadedMtimeMs
-          : undefined,
-    }),
-  );
-
-  const requestRenameFile = useMemoizedFn((filePath: string): void => {
-    if (!projectId || !confirmDiscardDraft()) {
-      return;
-    }
-    const target = getMutationTarget(filePath);
-    setMutationError(null);
-    setRenameTarget(target);
-    setRenamePath(target.path);
-  });
-
-  const requestDeleteFile = useMemoizedFn((filePath: string): void => {
-    if (!projectId || !confirmDiscardDraft()) {
-      return;
-    }
-    setMutationError(null);
-    setDeleteTarget(getMutationTarget(filePath));
-  });
-
-  const requestResetChange = useMemoizedFn(
-    (filePath: string, kind: TerminalPreviewChangeKind): void => {
-      if (!projectId || !confirmDiscardDraft()) {
-        return;
-      }
-      setMutationError(null);
-      setResetTarget({ path: filePath, kind });
-    },
-  );
 
   const {
     copyPath: copySelectedPath,
@@ -259,8 +187,7 @@ export function TerminalPreviewPanel({
     setMarkdownSplitSourceWidthPct,
     setSvgViewModeInStore,
     setChangesViewModeInStore,
-    setFilePreview: () => setFilePreview(null),
-    setFileError,
+    clearFilePreview,
     setMarkdownScrollRatio,
     confirmDiscardDraft,
   });
@@ -298,6 +225,28 @@ export function TerminalPreviewPanel({
     }
   });
 
+  const mutations = useTerminalPreviewFileMutations({
+    cache: {
+      clearDiff: clearFileDiff,
+      clearFile: clearFilePreview,
+      setFile: setFilePreview,
+    },
+    editor: {
+      clear: clearEditor,
+      confirmDiscard: confirmDiscardDraft,
+      loadedMtimeMs,
+      replaceFile: replaceLoadedFile,
+    },
+    filePreview,
+    handleRequestError,
+    projectId,
+    refresh: {
+      changes: loadChanges,
+      fileSearch: refreshFileSearch,
+      treeParents: invalidateFileTreeParents,
+    },
+  });
+
   const openQuickSearchFileResult = useMemoizedFn(
     (filePath: string, target?: { line: number; column: number }): void => {
       if (!projectId || !confirmDiscardDraft()) {
@@ -307,8 +256,7 @@ export function TerminalPreviewPanel({
       setActiveTool("preview");
       openFileInStore(projectId, filePath, "explorer");
       void fileTree.revealFile(filePath);
-      setFilePreview(null);
-      setFileError(null);
+      clearFilePreview(filePath);
       setMarkdownScrollRatio(0);
       if (target) {
         lineTargetSequenceRef.current += 1;
@@ -324,38 +272,42 @@ export function TerminalPreviewPanel({
     },
   );
 
-  const revealQuickSearchDirectory = useMemoizedFn((directoryPath: string): void => {
-    if (!projectId) {
-      return;
-    }
-    quickSearch.closeSearch();
-    setActiveTool("preview");
-    setProjectPreviewMode(projectId, "explorer");
-    void fileTree.revealDirectory(directoryPath);
-  });
+  const revealQuickSearchDirectory = useMemoizedFn(
+    (directoryPath: string): void => {
+      if (!projectId) {
+        return;
+      }
+      quickSearch.closeSearch();
+      setActiveTool("preview");
+      setProjectPreviewMode(projectId, "explorer");
+      void fileTree.revealDirectory(directoryPath);
+    },
+  );
 
-  const handleQuickSearchShortcut = useMemoizedFn((event: KeyboardEvent): void => {
-    if (
-      quickSearch.open ||
-      activeTool !== "preview" ||
-      !projectId ||
-      !hasProjectPath ||
-      !(event.metaKey || event.ctrlKey) ||
-      shouldIgnoreQuickSearchShortcut(event.target)
-    ) {
-      return;
-    }
-    const key = event.key.toLowerCase();
-    if (key === "p" && !event.shiftKey) {
-      event.preventDefault();
-      quickSearch.openSearch("files");
-      return;
-    }
-    if (key === "f" && event.shiftKey) {
-      event.preventDefault();
-      quickSearch.openSearch("content");
-    }
-  });
+  const handleQuickSearchShortcut = useMemoizedFn(
+    (event: KeyboardEvent): void => {
+      if (
+        quickSearch.open ||
+        activeTool !== "preview" ||
+        !projectId ||
+        !hasProjectPath ||
+        !(event.metaKey || event.ctrlKey) ||
+        shouldIgnoreQuickSearchShortcut(event.target)
+      ) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "p" && !event.shiftKey) {
+        event.preventDefault();
+        quickSearch.openSearch("files");
+        return;
+      }
+      if (key === "f" && event.shiftKey) {
+        event.preventDefault();
+        quickSearch.openSearch("content");
+      }
+    },
+  );
 
   useEffect(() => {
     window.addEventListener("keydown", handleQuickSearchShortcut);
@@ -364,268 +316,134 @@ export function TerminalPreviewPanel({
     };
   }, [handleQuickSearchShortcut]);
 
-  const submitRenameFile = useMemoizedFn(async (): Promise<void> => {
-    if (!projectId || !renameTarget || mutationPending) {
-      return;
+  const openFileMode = (): void => {
+    if (projectId) setProjectPreviewMode(projectId, "file");
+  };
+  const openChangesMode = (): void => {
+    if (projectId && confirmDiscardDraft()) {
+      setProjectPreviewMode(projectId, "changes");
     }
-    const nextPath = renamePath.trim();
-    if (!nextPath) {
-      setMutationError("New file path is required.");
-      return;
-    }
-    setMutationPending("rename");
-    setMutationError(null);
-    try {
-      const payload = await renameTerminalProjectPreviewFile(
-        apiBase,
-        token,
-        projectId,
-        {
-          path: renameTarget.path,
-          nextPath,
-          expectedMtimeMs: renameTarget.expectedMtimeMs,
-        },
-      );
-      fileRequestSequencer.invalidate();
-      diffRequestSequencer.invalidate();
-      selectedChangePathRef.current = undefined;
-      selectedChangeKindRef.current = undefined;
-      setFilePreview(payload);
-      setEditorContent(payload.content);
-      setLoadedContent(payload.content);
-      setLoadedMtimeMs(payload.mtimeMs);
-      setSaveError(null);
-      setSaveConflict(false);
-      setLastSavedAt(null);
-      setFileError(null);
-      setFileLoading(false);
-      setFileDiff(null);
-      setDiffError(null);
-      setDiffLoading(false);
-      invalidateFileTreeParents([renameTarget.path, payload.path]);
-      updateProjectPreview(projectId, {
-        mode: "file",
-        selectedFilePath: payload.path,
-        openFileQuery: payload.path,
-        selectedChangePath: undefined,
-        selectedChangeKind: undefined,
-      });
-      setRenameTarget(null);
-      setRenamePath("");
-      await refreshFileSearch();
-      void loadChanges({ reloadDiff: false, preserveMode: true });
-    } catch (error) {
-      setMutationError(handleRequestError(error));
-    } finally {
-      setMutationPending(null);
-    }
-  });
+  };
 
-  const submitDeleteFile = useMemoizedFn(async (): Promise<void> => {
-    if (!projectId || !deleteTarget || mutationPending) {
-      return;
-    }
-    setMutationPending("delete");
-    setMutationError(null);
-    try {
-      await deleteTerminalProjectPreviewFile(apiBase, token, projectId, {
-        path: deleteTarget.path,
-        expectedMtimeMs: deleteTarget.expectedMtimeMs,
-      });
-      const deletedSelectedFile =
-        selectedFilePath === deleteTarget.path ||
-        filePreview?.path === deleteTarget.path;
-      const deletedSelectedChange = selectedChangePath === deleteTarget.path;
-      if (deletedSelectedFile) {
-        fileRequestSequencer.invalidate();
-        setFilePreview(null);
-        setEditorContent("");
-        setLoadedContent("");
-        setLoadedMtimeMs(undefined);
-        setSaveError(null);
-        setSaveConflict(false);
-        setLastSavedAt(null);
-        setFileError(null);
-        setFileLoading(false);
-      }
-      if (deletedSelectedChange) {
-        diffRequestSequencer.invalidate();
-        selectedChangePathRef.current = undefined;
-        selectedChangeKindRef.current = undefined;
-        setFileDiff(null);
-        setDiffError(null);
-        setDiffLoading(false);
-      }
-      if (deletedSelectedFile || deletedSelectedChange) {
-        updateProjectPreview(projectId, {
-          selectedFilePath: deletedSelectedFile ? undefined : selectedFilePath,
-          selectedChangePath: deletedSelectedChange
-            ? undefined
-            : selectedChangePath,
-          selectedChangeKind: deletedSelectedChange
-            ? undefined
-            : selectedChangeKind,
-        });
-      }
-      setDeleteTarget(null);
-      invalidateFileTreeParents([deleteTarget.path]);
-      await refreshFileSearch();
-      void loadChanges({
-        reloadDiff: !deletedSelectedChange,
-        preserveMode: mode !== "changes",
-      });
-    } catch (error) {
-      setMutationError(handleRequestError(error));
-    } finally {
-      setMutationPending(null);
-    }
-  });
-
-  const submitResetChange = useMemoizedFn(async (): Promise<void> => {
-    if (!projectId || !resetTarget || mutationPending) {
-      return;
-    }
-    setMutationPending("reset");
-    setMutationError(null);
-    try {
-      await resetTerminalProjectPreviewChange(apiBase, token, projectId, {
-        path: resetTarget.path,
-        kind: resetTarget.kind,
-      });
-      const resetSelectedFile =
-        selectedFilePath === resetTarget.path ||
-        filePreview?.path === resetTarget.path;
-      const resetSelectedChange =
-        selectedChangePath === resetTarget.path &&
-        selectedChangeKind === resetTarget.kind;
-      if (resetSelectedFile) {
-        fileRequestSequencer.invalidate();
-        setFilePreview(null);
-        setEditorContent("");
-        setLoadedContent("");
-        setLoadedMtimeMs(undefined);
-        setSaveError(null);
-        setSaveConflict(false);
-        setLastSavedAt(null);
-        setFileError(null);
-        setFileLoading(false);
-      }
-      if (resetSelectedChange) {
-        diffRequestSequencer.invalidate();
-        selectedChangePathRef.current = undefined;
-        selectedChangeKindRef.current = undefined;
-        setFileDiff(null);
-        setDiffError(null);
-        setDiffLoading(false);
-      }
-      if (resetSelectedFile || resetSelectedChange) {
-        updateProjectPreview(projectId, {
-          selectedFilePath: resetSelectedFile ? undefined : selectedFilePath,
-          selectedChangePath: resetSelectedChange
-            ? undefined
-            : selectedChangePath,
-          selectedChangeKind: resetSelectedChange
-            ? undefined
-            : selectedChangeKind,
-        });
-      }
-      setResetTarget(null);
-      invalidateFileTreeParents([resetTarget.path]);
-      await refreshFileSearch();
-      void loadChanges({
-        reloadDiff: !resetSelectedChange,
-        preserveMode: mode !== "changes",
-      });
-    } catch (error) {
-      setMutationError(handleRequestError(error));
-    } finally {
-      setMutationPending(null);
-    }
-  });
-
-  const previewBody = (
-    <TerminalPreviewPanelContent
-      activeProject={activeProject}
-      apiBase={apiBase}
-      token={token}
-      mode={mode}
-      projectId={projectId}
-      hasProjectPath={hasProjectPath}
-      query={query}
-      absoluteInput={absoluteInput}
-      selectedFilePath={selectedFilePath}
-      selectedChangePath={selectedChangePath}
-      selectedChangeKind={selectedChangeKind}
-      markdownViewMode={markdownViewMode}
-      markdownSplitSourceWidthPct={markdownSplitSourceWidthPct}
-      svgViewMode={svgViewMode}
-      changesViewMode={changesViewMode}
-      searchItems={searchItems}
-      searchLoading={searchLoading}
-      searchError={searchError}
-      filePreview={filePreview}
-      editorContent={editorContent}
-      editable={isFileEditable}
-      onEditorContentChange={(content) => {
-        setEditorContent(content);
-        setSaveError(null);
-        setSaveConflict(false);
-      }}
-      saveError={saveError}
-      saveConflict={saveConflict}
-      onReloadFile={() => {
-        if (selectedFilePath && confirmDiscardDraft()) {
-          void loadFile(selectedFilePath);
-        }
-      }}
-      onOverwriteFile={() => void saveFile({ overwrite: true })}
-      fileLoading={fileLoading}
-      fileError={fileError}
-      changes={changes}
-      changesLoading={changesLoading}
-      changesError={changesError}
-      fileDiff={fileDiff}
-      diffLoading={diffLoading}
-      diffError={diffError}
-      fileTree={fileTree}
-      assetRefreshKey={assetRefreshKey}
-      markdownScrollRatio={markdownScrollRatio}
-      lineTarget={lineTarget}
-      onAuthExpired={onAuthExpired}
-      onEditProject={onEditProject}
-      onQueryChange={(nextQuery) => {
-        if (projectId) {
-          setOpenFileQuery(projectId, nextQuery);
-        }
-      }}
-      onOpenFilePath={openFilePath}
-      onOpenQuickSearch={() => quickSearch.openSearch("files")}
-      onRequestRenameFile={requestRenameFile}
-      onRequestDeleteFile={requestDeleteFile}
-      onRequestResetChange={requestResetChange}
-      onSelectChange={(filePath, kind) => {
-        if (!projectId) {
-          return;
-        }
-        selectChange(projectId, filePath, kind);
-      }}
-      onReloadDiff={(filePath, kind) => {
-        void loadDiff(filePath, kind);
-      }}
-      onMarkdownScrollRatioChange={setMarkdownScrollRatio}
-      onStartMarkdownResize={startMarkdownResize}
-      onOpenModeFile={() => {
-        if (projectId) {
-          setProjectPreviewMode(projectId, "file");
-        }
-      }}
-      onOpenModeChanges={() => {
-        if (projectId && confirmDiscardDraft()) {
-          setProjectPreviewMode(projectId, "changes");
-        }
-      }}
-    />
-  );
+  let previewBody: ReactNode;
+  if (!activeProject) {
+    previewBody = renderPreviewEmpty("No project selected");
+  } else if (!hasProjectPath) {
+    previewBody = renderPreviewEmpty(
+      "Set a project path to use Preview",
+      <Button
+        type="button"
+        size="sm"
+        className="rounded-lg"
+        onClick={onEditProject}
+      >
+        Set project path
+      </Button>,
+    );
+  } else if (mode === "explorer" || mode === "file") {
+    previewBody = (
+      <TerminalPreviewFileView
+        activeProject={activeProject}
+        fileTree={fileTree}
+        navigation={{
+          absoluteInput,
+          mode,
+          query,
+          searchError,
+          searchItems,
+          searchLoading,
+          selectedFilePath,
+          onOpenFilePath: openFilePath,
+          onOpenQuickSearch: () => quickSearch.openSearch("files"),
+          onQueryChange: (nextQuery) => {
+            if (projectId) setOpenFileQuery(projectId, nextQuery);
+          },
+          onRequestDeleteFile: mutations.requestDelete,
+          onRequestRenameFile: mutations.requestRename,
+        }}
+        file={{
+          assetRefreshKey,
+          data: filePreview,
+          error: fileError,
+          kind: fileKind,
+          loading: fileLoading,
+        }}
+        editor={{
+          content: editorContent,
+          editable: isFileEditable,
+          saveConflict,
+          saveError,
+          onContentChange: setEditorContent,
+          onOverwrite: () => void saveFile({ overwrite: true }),
+          onReload: () => {
+            if (selectedFilePath && confirmDiscardDraft()) {
+              void loadFile(selectedFilePath);
+            }
+          },
+        }}
+        display={{
+          lineTarget,
+          markdownScrollRatio,
+          markdownSplitSourceWidthPct,
+          markdownViewMode,
+          svgViewMode,
+          onMarkdownScrollRatioChange: setMarkdownScrollRatio,
+          onStartMarkdownResize: startMarkdownResize,
+        }}
+      />
+    );
+  } else if (mode === "changes") {
+    previewBody = (
+      <TerminalPreviewChangesView
+        activeProject={activeProject}
+        changes={{
+          data: changes,
+          error: changesError,
+          loading: changesLoading,
+        }}
+        diff={{ data: fileDiff, error: diffError, loading: diffLoading }}
+        selection={{
+          kind: selectedChangeKind,
+          path: selectedChangePath,
+          viewMode: changesViewMode,
+        }}
+        commands={{
+          openFile: openFilePath,
+          openFileMode,
+          reloadDiff: (filePath, kind) => void loadDiff(filePath, kind),
+          requestDelete: mutations.requestDelete,
+          requestRename: mutations.requestRename,
+          requestReset: mutations.requestReset,
+          select: (filePath, kind) => {
+            if (projectId) selectChange(projectId, filePath, kind);
+          },
+        }}
+      />
+    );
+  } else {
+    previewBody = renderPreviewEmpty(
+      "No preview for this project",
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          className="rounded-lg"
+          onClick={openFileMode}
+        >
+          Open file...
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="rounded-lg"
+          onClick={openChangesMode}
+        >
+          Changes
+        </Button>
+      </div>,
+    );
+  }
   const agentTeamBody = (
     <TerminalAgentTeamPanel
       apiBase={apiBase}
@@ -640,79 +458,87 @@ export function TerminalPreviewPanel({
   return (
     <>
       <TerminalPreviewPanelShell
-        panelWidth={panelWidth}
-        expanded={expanded}
-        activeTool={activeTool}
-        mode={mode}
-        fileKind={
-          mode === "changes" && selectedChangePath
-            ? getTerminalPreviewFileKind(selectedChangePath, null)
-            : fileKind
-        }
-        fileLoading={fileLoading}
-        changesLoading={changesLoading}
-        saveLoading={saveLoading}
-        saveDisabled={!isDirty || !isFileEditable || saveLoading}
-        saveStatus={
-          saveConflict
-            ? "conflict"
-            : saveLoading
-              ? "saving"
-              : isDirty
-                ? "unsaved"
-                : isFileEditable && lastSavedAt
-                  ? "saved"
-                  : isFileEditable
-                    ? "editable"
-                    : "readonly"
-        }
-        canSave={isFileEditable}
-        selectedPath={selectedPath}
-        pathCopied={pathCopied}
-        markdownViewMode={markdownViewMode}
-        svgViewMode={svgViewMode}
-        changesViewMode={changesViewMode}
-        selectedChangePath={selectedChangePath}
-        activeProject={activeProject}
-        apiBase={apiBase}
-        token={token}
+        layout={{
+          expanded,
+          panelWidth,
+          onClose: () => {
+            if (confirmDiscardDraft()) closePreview();
+          },
+          onStartResize: startResize,
+          onToggleExpanded: () => setExpanded(!expanded),
+        }}
+        tools={{
+          activeTool,
+          showAgentTeamTool,
+          onSetActiveTool: setActiveTool,
+        }}
+        navigation={{
+          activeProject,
+          mode,
+          onSetMode: (nextMode) => {
+            if (projectId && confirmDiscardDraft()) {
+              setProjectPreviewMode(projectId, nextMode);
+            }
+          },
+        }}
+        actions={{
+          changesLoading,
+          fileLoading,
+          mode,
+          onRefresh: refresh,
+          copy: {
+            copied: pathCopied,
+            path: selectedPath,
+            run: () => {
+              void copySelectedPath().then((copied) => {
+                if (!copied) return;
+                setPathCopied(true);
+                if (pathCopiedTimeoutRef.current !== null) {
+                  window.clearTimeout(pathCopiedTimeoutRef.current);
+                }
+                pathCopiedTimeoutRef.current = window.setTimeout(() => {
+                  setPathCopied(false);
+                  pathCopiedTimeoutRef.current = null;
+                }, 1500);
+              });
+            },
+          },
+          save: {
+            available: isFileEditable,
+            disabled: !isDirty || !isFileEditable || saveLoading,
+            loading: saveLoading,
+            run: () => void saveFile(),
+            status: saveConflict
+              ? "conflict"
+              : saveLoading
+                ? "saving"
+                : isDirty
+                  ? "unsaved"
+                  : isFileEditable && lastSavedAt
+                    ? "saved"
+                    : isFileEditable
+                      ? "editable"
+                      : "readonly",
+          },
+        }}
+        view={{
+          changesViewMode,
+          fileKind:
+            mode === "changes" && selectedChangePath
+              ? getTerminalPreviewFileKind(selectedChangePath, null)
+              : fileKind,
+          markdownViewMode,
+          mode,
+          selectedChangePath,
+          selectedPath,
+          svgViewMode,
+          onSetChanges: setChangesViewMode,
+          onSetMarkdown: setMarkdownViewMode,
+          onSetSvg: setSvgViewMode,
+        }}
         activeTerminalSessionId={activeSession?.terminalSessionId ?? null}
         body={previewBody}
-        showAgentTeamTool={showAgentTeamTool}
         agentTeamBody={agentTeamBody}
-        onStartResize={startResize}
-        onSetActiveTool={setActiveTool}
-        onSetPreviewMode={(nextMode) => {
-          if (projectId && confirmDiscardDraft()) {
-            setProjectPreviewMode(projectId, nextMode);
-          }
-        }}
-        onToggleExpanded={() => setExpanded(!expanded)}
-        onRefresh={refresh}
-        onSave={() => void saveFile()}
-        onCopyPath={() => {
-          void copySelectedPath().then((copied) => {
-            if (!copied) {
-              return;
-            }
-            setPathCopied(true);
-            if (pathCopiedTimeoutRef.current !== null) {
-              window.clearTimeout(pathCopiedTimeoutRef.current);
-            }
-            pathCopiedTimeoutRef.current = window.setTimeout(() => {
-              setPathCopied(false);
-              pathCopiedTimeoutRef.current = null;
-            }, 1500);
-          });
-        }}
-        onClosePreview={() => {
-          if (confirmDiscardDraft()) {
-            closePreview();
-          }
-        }}
-        onSetMarkdownViewMode={setMarkdownViewMode}
-        onSetSvgViewMode={setSvgViewMode}
-        onSetChangesViewMode={setChangesViewMode}
       />
 
       <TerminalPreviewQuickSearch
@@ -730,31 +556,29 @@ export function TerminalPreviewPanel({
         onRevealDirectory={revealQuickSearchDirectory}
       />
 
-      <TerminalPreviewPanelMutationDialogs
-        deleteTarget={deleteTarget}
-        renameTarget={renameTarget}
-        resetTarget={resetTarget}
-        renamePath={renamePath}
-        mutationPending={mutationPending}
-        mutationError={mutationError}
-        onRenamePathChange={setRenamePath}
-        onClearMutationError={() => setMutationError(null)}
-        onCloseRename={() => {
-          setRenameTarget(null);
-          setRenamePath("");
-          setMutationError(null);
-        }}
-        onCloseDelete={() => {
-          setDeleteTarget(null);
-          setMutationError(null);
-        }}
-        onCloseReset={() => {
-          setResetTarget(null);
-          setMutationError(null);
-        }}
-        onSubmitRename={() => void submitRenameFile()}
-        onSubmitDelete={() => void submitDeleteFile()}
-        onSubmitReset={() => void submitResetChange()}
+      <TerminalPreviewRenameDialog
+        error={mutations.error}
+        path={mutations.renamePath}
+        pending={mutations.pending === "rename"}
+        target={mutations.renameTarget}
+        onClearError={() => mutations.setError(null)}
+        onClose={mutations.closeRename}
+        onPathChange={mutations.setRenamePath}
+        onSubmit={() => void mutations.submitRename()}
+      />
+      <TerminalPreviewDeleteDialog
+        error={mutations.error}
+        pending={mutations.pending === "delete"}
+        target={mutations.deleteTarget}
+        onClose={mutations.closeDelete}
+        onSubmit={() => void mutations.submitDelete()}
+      />
+      <TerminalPreviewResetDialog
+        error={mutations.error}
+        pending={mutations.pending === "reset"}
+        target={mutations.resetTarget}
+        onClose={mutations.closeReset}
+        onSubmit={() => void mutations.submitReset()}
       />
     </>
   );

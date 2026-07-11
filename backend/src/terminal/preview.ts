@@ -1,13 +1,6 @@
 import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type {
-  TerminalPreviewFileResponse,
-  TerminalPreviewBase,
-  TerminalPreviewDeleteFileResponse,
-  TerminalPreviewResetChangeResponse,
-  TerminalPreviewSaveFileResponse,
-  TerminalPreviewChangeKind,
-} from "@runweave/shared";
+import type { TerminalPreviewFileResponse, TerminalPreviewBase, TerminalPreviewDeleteFileResponse, TerminalPreviewResetChangeResponse, TerminalPreviewSaveFileResponse, TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
 import { resetPreviewGitChange as resetPreviewGitChangeFromGit } from "./preview-git";
 import {
   TerminalPreviewError,

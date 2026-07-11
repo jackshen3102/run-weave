@@ -1,8 +1,3 @@
-import type {
-  TerminalPanelWorkspace,
-  TerminalProjectListItem,
-  TerminalSessionListItem,
-} from "@runweave/shared";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,81 +13,146 @@ import { TerminalHistoryDrawer } from "./terminal-history-drawer";
 import { TerminalProjectDialog } from "./terminal-project-dialog";
 import { TerminalSessionAliasDialog } from "./terminal-session-tab";
 import { TerminalStatusLookupDialog } from "./terminal-status-lookup-dialog";
+import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
+import {
+  EMPTY_TERMINAL_PROJECTS,
+  EMPTY_TERMINAL_SESSIONS,
+  useTerminalProjectsQuery,
+  useTerminalSessionsQuery,
+} from "../../features/terminal/queries/terminal-workspace-queries";
+import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
+import { formatTerminalSessionName } from "../../features/terminal/session-name";
+import {
+  formatHistoryPanelLabel,
+  resolveHistoryPanelId,
+} from "./terminal-workspace-utils";
 
 interface TerminalWorkspaceOverlaysProps {
-  apiBase: string;
-  token: string;
-  loading: boolean;
   isMobileMonitor: boolean;
-  activeProjectId: string | null;
-  activeProject: TerminalProjectListItem | null;
-  activeSession: TerminalSessionListItem | null;
-  activeStatusLookupPanelId: string | null;
-  projectDialogMode: "create" | "edit" | null;
-  projectDialogError: string | null;
-  projectPendingDeletion: TerminalProjectListItem | null;
-  historyDrawerOpen: boolean;
-  historyTerminalSessionId: string | null;
-  historyTerminalPanelId: string | null;
-  historySession: TerminalSessionListItem | null;
-  historyPanel: TerminalPanelWorkspace["panels"][number] | null;
-  historyTerminalName?: string;
-  aliasTarget: TerminalSessionListItem | null;
-  diagnosticLogOpen: boolean;
-  statusLookupOpen: boolean;
   onCloseProjectDialog: () => void;
   onSubmitProjectDialog: (name: string, projectPath: string) => Promise<void>;
   onConfirmDeleteProject: () => void;
-  onProjectPendingDeletionChange: (
-    project: TerminalProjectListItem | null,
-  ) => void;
-  onHistoryDrawerOpenChange: (open: boolean) => void;
-  onHistoryTerminalSessionIdChange: (terminalSessionId: string | null) => void;
-  onHistoryTerminalPanelIdChange: (terminalPanelId: string | null) => void;
-  onAliasTargetChange: (session: TerminalSessionListItem | null) => void;
   onSubmitSessionAlias: (
     terminalSessionId: string,
     alias: string,
   ) => Promise<void>;
-  onDiagnosticLogOpenChange: (open: boolean) => void;
-  onStatusLookupOpenChange: (open: boolean) => void;
-  onAuthExpired?: () => void;
 }
 
 export function TerminalWorkspaceOverlays({
-  apiBase,
-  token,
-  loading,
   isMobileMonitor,
-  activeProjectId,
-  activeProject,
-  activeSession,
-  activeStatusLookupPanelId,
-  projectDialogMode,
-  projectDialogError,
-  projectPendingDeletion,
-  historyDrawerOpen,
-  historyTerminalSessionId,
-  historyTerminalPanelId,
-  historySession,
-  historyPanel,
-  historyTerminalName,
-  aliasTarget,
-  diagnosticLogOpen,
-  statusLookupOpen,
   onCloseProjectDialog,
   onSubmitProjectDialog,
   onConfirmDeleteProject,
-  onProjectPendingDeletionChange,
-  onHistoryDrawerOpenChange,
-  onHistoryTerminalSessionIdChange,
-  onHistoryTerminalPanelIdChange,
-  onAliasTargetChange,
   onSubmitSessionAlias,
-  onDiagnosticLogOpenChange,
-  onStatusLookupOpenChange,
-  onAuthExpired,
 }: TerminalWorkspaceOverlaysProps) {
+  const { apiBase, token } = useTerminalRuntime();
+  const projectsQuery = useTerminalProjectsQuery();
+  const sessionsQuery = useTerminalSessionsQuery();
+  const projects = projectsQuery.data ?? EMPTY_TERMINAL_PROJECTS;
+  const sessions = sessionsQuery.data ?? EMPTY_TERMINAL_SESSIONS;
+  const activeProjectId = useTerminalWorkspaceStore(
+    (state) => state.activeProjectId,
+  );
+  const activeSessionId = useTerminalWorkspaceStore(
+    (state) => state.activeSessionId,
+  );
+  const mutationLoading = useTerminalWorkspaceStore((state) => state.loading);
+  const projectDialogMode = useTerminalWorkspaceStore(
+    (state) => state.projectDialogMode,
+  );
+  const projectDialogError = useTerminalWorkspaceStore(
+    (state) => state.projectDialogError,
+  );
+  const projectPendingDeletion = useTerminalWorkspaceStore(
+    (state) => state.projectPendingDeletion,
+  );
+  const historyDrawerOpen = useTerminalWorkspaceStore(
+    (state) => state.historyDrawerOpen,
+  );
+  const historyTerminalSessionId = useTerminalWorkspaceStore(
+    (state) => state.historyTerminalSessionId,
+  );
+  const historyTerminalPanelId = useTerminalWorkspaceStore(
+    (state) => state.historyTerminalPanelId,
+  );
+  const aliasTargetSessionId = useTerminalWorkspaceStore(
+    (state) => state.aliasTargetSessionId,
+  );
+  const diagnosticLogOpen = useTerminalWorkspaceStore(
+    (state) => state.diagnosticLogOpen,
+  );
+  const statusLookupOpen = useTerminalWorkspaceStore(
+    (state) => state.statusLookupOpen,
+  );
+  const panelWorkspaceBySessionId = useTerminalWorkspaceStore(
+    (state) => state.panelWorkspaceBySessionId,
+  );
+  const activePanelIdBySessionId = useTerminalWorkspaceStore(
+    (state) => state.activePanelIdBySessionId,
+  );
+  const setProjectPendingDeletion = useTerminalWorkspaceStore(
+    (state) => state.setProjectPendingDeletion,
+  );
+  const setHistoryDrawerOpen = useTerminalWorkspaceStore(
+    (state) => state.setHistoryDrawerOpen,
+  );
+  const setHistoryTerminalSessionId = useTerminalWorkspaceStore(
+    (state) => state.setHistoryTerminalSessionId,
+  );
+  const setHistoryTerminalPanelId = useTerminalWorkspaceStore(
+    (state) => state.setHistoryTerminalPanelId,
+  );
+  const closeSessionAlias = useTerminalWorkspaceStore(
+    (state) => state.closeSessionAlias,
+  );
+  const setDiagnosticLogOpen = useTerminalWorkspaceStore(
+    (state) => state.setDiagnosticLogOpen,
+  );
+  const setStatusLookupOpen = useTerminalWorkspaceStore(
+    (state) => state.setStatusLookupOpen,
+  );
+  const loading =
+    mutationLoading || projectsQuery.isPending || sessionsQuery.isPending;
+  const activeProject =
+    projects.find((project) => project.projectId === activeProjectId) ?? null;
+  const activeSession =
+    sessions.find((session) => session.terminalSessionId === activeSessionId) ??
+    null;
+  const activeWorkspace = activeSession
+    ? panelWorkspaceBySessionId[activeSession.terminalSessionId]
+    : null;
+  const activeStatusLookupPanelId =
+    activeSession && activeWorkspace
+      ? resolveHistoryPanelId(
+          activeWorkspace,
+          activePanelIdBySessionId[activeSession.terminalSessionId] ?? null,
+        )
+      : (activeSession?.activePanelId ?? null);
+  const historySession =
+    sessions.find(
+      (session) => session.terminalSessionId === historyTerminalSessionId,
+    ) ?? null;
+  const historyPanel = historyTerminalSessionId
+    ? (panelWorkspaceBySessionId[historyTerminalSessionId]?.panels.find(
+        (panel) => panel.panelId === historyTerminalPanelId,
+      ) ?? null)
+    : null;
+  const historyTerminalName = historySession
+    ? [
+        formatTerminalSessionName({
+          alias: historySession.alias,
+          cwd: historySession.cwd,
+          activeCommand: historySession.activeCommand,
+        }),
+        historyPanel ? formatHistoryPanelLabel(historyPanel) : null,
+      ]
+        .filter(Boolean)
+        .join(" / ")
+    : undefined;
+  const aliasTarget =
+    sessions.find(
+      (session) => session.terminalSessionId === aliasTargetSessionId,
+    ) ?? null;
   return (
     <>
       <TerminalProjectDialog
@@ -100,33 +160,36 @@ export function TerminalWorkspaceOverlays({
         mode={projectDialogMode ?? "create"}
         loading={loading}
         error={projectDialogError}
-        initialName={projectDialogMode === "edit" ? activeProject?.name ?? "" : ""}
-        initialPath={projectDialogMode === "edit" ? activeProject?.path ?? "" : ""}
+        initialName={
+          projectDialogMode === "edit" ? (activeProject?.name ?? "") : ""
+        }
+        initialPath={
+          projectDialogMode === "edit" ? (activeProject?.path ?? "") : ""
+        }
         onClose={onCloseProjectDialog}
         onSubmit={onSubmitProjectDialog}
       />
       <TerminalHistoryDrawer
         open={historyDrawerOpen}
-        apiBase={apiBase}
-        token={token}
-        terminalSessionId={historyTerminalSessionId}
-        terminalPanelId={historyTerminalPanelId}
-        terminalProjectId={historySession?.projectId ?? null}
-        terminalThreadId={historySession?.threadId ?? null}
-        terminalLastThreadId={historySession?.lastThreadId ?? null}
-        terminalLastThreadStatus={historySession?.lastThreadStatus ?? null}
-        terminalPanelThreadId={historyPanel?.threadId ?? null}
-        terminalPanelLastThreadId={historyPanel?.lastThreadId ?? null}
-        terminalPanelLastThreadStatus={historyPanel?.lastThreadStatus ?? null}
-        terminalName={historyTerminalName}
+        target={{
+          lastThreadId: historySession?.lastThreadId ?? null,
+          lastThreadStatus: historySession?.lastThreadStatus ?? null,
+          panelId: historyTerminalPanelId,
+          panelLastThreadId: historyPanel?.lastThreadId ?? null,
+          panelLastThreadStatus: historyPanel?.lastThreadStatus ?? null,
+          panelThreadId: historyPanel?.threadId ?? null,
+          projectId: historySession?.projectId ?? null,
+          sessionId: historyTerminalSessionId,
+          threadId: historySession?.threadId ?? null,
+        }}
+        title={historyTerminalName}
         onOpenChange={(open) => {
-          onHistoryDrawerOpenChange(open);
+          setHistoryDrawerOpen(open);
           if (!open) {
-            onHistoryTerminalSessionIdChange(null);
-            onHistoryTerminalPanelIdChange(null);
+            setHistoryTerminalSessionId(null);
+            setHistoryTerminalPanelId(null);
           }
         }}
-        onAuthExpired={onAuthExpired}
       />
       <TerminalSessionAliasDialog
         open={aliasTarget !== null}
@@ -134,7 +197,7 @@ export function TerminalWorkspaceOverlays({
         session={aliasTarget}
         onClose={() => {
           if (!loading) {
-            onAliasTargetChange(null);
+            closeSessionAlias();
           }
         }}
         onSubmit={async (alias) => {
@@ -142,7 +205,7 @@ export function TerminalWorkspaceOverlays({
             return;
           }
           await onSubmitSessionAlias(aliasTarget.terminalSessionId, alias);
-          onAliasTargetChange(null);
+          closeSessionAlias();
         }}
       />
       {!isMobileMonitor ? (
@@ -150,7 +213,7 @@ export function TerminalWorkspaceOverlays({
           apiBase={apiBase}
           token={token}
           open={diagnosticLogOpen}
-          onOpenChange={onDiagnosticLogOpenChange}
+          onOpenChange={setDiagnosticLogOpen}
         />
       ) : null}
       {!isMobileMonitor ? (
@@ -158,7 +221,7 @@ export function TerminalWorkspaceOverlays({
           apiBase={apiBase}
           token={token}
           open={statusLookupOpen}
-          onOpenChange={onStatusLookupOpenChange}
+          onOpenChange={setStatusLookupOpen}
           activeProjectId={activeProjectId}
           activeSessionId={activeSession?.terminalSessionId ?? null}
           activePanelId={activeStatusLookupPanelId}
@@ -168,7 +231,7 @@ export function TerminalWorkspaceOverlays({
         open={projectPendingDeletion !== null}
         onOpenChange={(open) => {
           if (!open && !loading) {
-            onProjectPendingDeletionChange(null);
+            setProjectPendingDeletion(null);
           }
         }}
       >
@@ -176,8 +239,8 @@ export function TerminalWorkspaceOverlays({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Project</AlertDialogTitle>
             <AlertDialogDescription>
-              Delete "{projectPendingDeletion?.name}" and all terminal tabs inside it.
-              This cannot be undone.
+              Delete "{projectPendingDeletion?.name}" and all terminal tabs
+              inside it. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

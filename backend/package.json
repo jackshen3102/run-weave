@@ -16,7 +16,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "lowdb": "^7.0.1",
-    "node-pty": "^1.1.0",
+    "node-pty": "1.2.0-beta.14",
     "uuid": "^11.1.0",
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0",

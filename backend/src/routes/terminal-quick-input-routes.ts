@@ -1,10 +1,6 @@
 import type { Router } from "express";
 import { z } from "zod";
-import type {
-  CreateTerminalQuickInputRequest,
-  ListTerminalQuickInputsResponse,
-  UpdateTerminalQuickInputRequest,
-} from "@runweave/shared";
+import type { CreateTerminalQuickInputRequest, ListTerminalQuickInputsResponse, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
 import {
   TerminalQuickInputValidationError,
   type TerminalQuickInputService,

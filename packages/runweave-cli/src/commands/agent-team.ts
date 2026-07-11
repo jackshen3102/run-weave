@@ -1,4 +1,4 @@
-import type { AgentTeamExportResponse } from "@runweave/shared";
+import type { AgentTeamExportResponse } from "@runweave/shared/agent-team";
 import { getStringOption, parseArgs, resolveOutputMode } from "../args.js";
 import { resolveAuthContext } from "../client/auth-context.js";
 import { TerminalHttpClient } from "../client/terminal-http-client.js";

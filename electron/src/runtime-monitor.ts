@@ -1,4 +1,4 @@
-import type { RuntimeStatsSnapshot } from "@runweave/shared";
+import type { RuntimeStatsSnapshot } from "@runweave/shared/runtime-monitor";
 
 export interface ElectronProcessMetric {
   pid: number;

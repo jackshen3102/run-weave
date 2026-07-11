@@ -4,7 +4,7 @@ import type {
   AppServerCompletionReason,
   AppServerEventEnvelope,
   AppServerThreadRef,
-} from "@runweave/shared";
+} from "@runweave/shared/app-server-events";
 import {
   AppServerStateStore,
   buildFallbackThreadId,
@@ -68,12 +68,9 @@ function buildProjection(event: AppServerEventEnvelope): StateRefUpdate | null {
       sourceInstanceId: event.source.instanceId,
       threadId: "",
     });
-  const hookEvent =
-    event.kind === "agent.hook" ? readHookEvent(payload) : null;
+  const hookEvent = event.kind === "agent.hook" ? readHookEvent(payload) : null;
   const completionReason =
-    event.kind === "agent.completion"
-      ? readCompletionReason(payload)
-      : null;
+    event.kind === "agent.completion" ? readCompletionReason(payload) : null;
 
   return {
     agent,
@@ -136,7 +133,8 @@ function readHookEvent(payload: Record<string, unknown>): string | null {
     return stateHookEvent;
   }
   const rawEvent =
-    readString(payload, "normalizedEvent") ?? readString(payload, "rawHookEvent");
+    readString(payload, "normalizedEvent") ??
+    readString(payload, "rawHookEvent");
   if (!rawEvent) {
     return null;
   }
@@ -179,7 +177,9 @@ function readAgent(payload: Record<string, unknown>): AppServerAgentKind {
     : "unknown";
 }
 
-function readAgentFromCommand(command: string | null): AppServerAgentKind | null {
+function readAgentFromCommand(
+  command: string | null,
+): AppServerAgentKind | null {
   const basename = command
     ?.trim()
     .replace(/\\+/g, "/")

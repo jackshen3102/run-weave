@@ -1,10 +1,6 @@
 import { readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
-import type {
-  TerminalPreviewDirectoryResponse,
-  TerminalPreviewTreeEntry,
-  TerminalPreviewTreeEntryKind,
-} from "@runweave/shared";
+import type { TerminalPreviewDirectoryResponse, TerminalPreviewTreeEntry, TerminalPreviewTreeEntryKind } from "@runweave/shared/terminal/preview";
 import {
   EXCLUDED_DIRECTORIES,
   EXCLUDED_FILE_BASENAMES,

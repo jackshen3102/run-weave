@@ -1,9 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import type {
-  AgentHookStateRequest,
-  TerminalStateResponse,
-} from "@runweave/shared";
+import type { AgentHookStateRequest, TerminalStateResponse } from "@runweave/shared/terminal/events";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { readTerminalScrollback } from "../terminal/runtime-launcher";

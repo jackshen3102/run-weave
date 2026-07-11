@@ -42,7 +42,10 @@ interface SharedDebuggerAttachment {
 
 const sharedDebuggerAttachments = new Map<string, SharedDebuggerAttachment>();
 
-function attachSharedDebugger(targetId: string, webContents: WebContents): void {
+function attachSharedDebugger(
+  targetId: string,
+  webContents: WebContents,
+): void {
   const existing = sharedDebuggerAttachments.get(targetId);
   if (existing) {
     existing.refCount += 1;
@@ -143,10 +146,7 @@ export class CdpSessionManager {
     ): void => {
       this.handleDebuggerMessage(targetId, method, params, sessionId);
     };
-    const onDebuggerDetach = (
-      _event: Electron.Event,
-      reason: string,
-    ): void => {
+    const onDebuggerDetach = (_event: Electron.Event, reason: string): void => {
       console.info("[cdp-proxy] debugger detached", { targetId, reason });
       this.handleDebuggerDetach(targetId);
     };
@@ -223,10 +223,7 @@ export class CdpSessionManager {
       markTerminalBrowserMcpActivity(targetId);
     }
 
-    const commandParams = this.rewriteCommandParamsForElectron(
-      target,
-      params,
-    );
+    const commandParams = this.rewriteCommandParamsForElectron(target, params);
     const result = await target.webContents.debugger.sendCommand(
       method,
       commandParams,
@@ -371,7 +368,10 @@ export class CdpSessionManager {
         context?: { id?: unknown; auxData?: { isDefault?: unknown } };
       }
     ).context;
-    if (context?.auxData?.isDefault !== true || typeof context.id !== "number") {
+    if (
+      context?.auxData?.isDefault !== true ||
+      typeof context.id !== "number"
+    ) {
       return;
     }
     target.defaultContextId = context.id;
@@ -419,7 +419,10 @@ export class CdpSessionManager {
     );
   }
 
-  private omitSyntheticDefaultContextId(value: object, contextId: number): object {
+  private omitSyntheticDefaultContextId(
+    value: object,
+    contextId: number,
+  ): object {
     const next: Record<string, unknown> = {};
     for (const [key, child] of Object.entries(value)) {
       if (
@@ -433,11 +436,19 @@ export class CdpSessionManager {
     return next;
   }
 
-  private rewriteStringValues(value: unknown, from: string, to: string): object {
+  private rewriteStringValues(
+    value: unknown,
+    from: string,
+    to: string,
+  ): object {
     return this.rewriteStringValue(value, from, to) as object;
   }
 
-  private rewriteStringValue(value: unknown, from: string, to: string): unknown {
+  private rewriteStringValue(
+    value: unknown,
+    from: string,
+    to: string,
+  ): unknown {
     if (typeof value === "string") {
       return value === from ? to : value;
     }

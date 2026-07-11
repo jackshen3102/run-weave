@@ -1,7 +1,4 @@
-import type {
-  TerminalProjectListItem,
-  TerminalSessionListItem,
-} from "@runweave/shared";
+import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import {
   Activity,
   ClipboardList,
@@ -13,6 +10,14 @@ import {
 } from "lucide-react";
 import type { ConnectionConfig } from "../../features/connection/types";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
+import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
+import {
+  EMPTY_TERMINAL_PROJECTS,
+  EMPTY_TERMINAL_SESSIONS,
+  useTerminalProjectsQuery,
+  useTerminalSessionsQuery,
+} from "../../features/terminal/queries/terminal-workspace-queries";
+import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
 import { Button } from "../ui/button";
 import { ConnectionSwitcher } from "../connection-switcher";
 import {
@@ -24,58 +29,93 @@ import {
 import { TerminalProjectTabBar } from "./terminal-project-tab-bar";
 import { TerminalQuickInputPopover } from "./terminal-quick-input-popover";
 
-interface TerminalWorkspaceHeaderProps {
-  apiBase: string;
-  token: string;
-  loading: boolean;
-  isMobileMonitor: boolean;
+interface HeaderConnectionNavigation {
   connections?: ConnectionConfig[];
   activeConnectionId?: string | null;
   connectionName?: string;
-  onSelectConnection?: (connectionId: string) => void;
-  onOpenConnectionManager?: () => void;
+  onSelect?: (connectionId: string) => void;
+  onOpenManager?: () => void;
   onNavigateHome?: () => void;
-  activeProjectId: string | null;
+}
+
+interface HeaderProjectCommands {
   onReorderProjects: (fromIndex: number, toIndex: number) => void;
   onSelectProject: (projectId: string) => void;
   requestEditProject: (projectId?: string) => void;
   requestDeleteProject: (project: TerminalProjectListItem) => void;
   requestCreateProject: () => void;
-  activeProject: TerminalProjectListItem | null;
-  activeSession: TerminalSessionListItem | null;
-  openHistoryDrawer: (
-    terminalSessionId: string,
-    terminalPanelId?: string | null,
-  ) => void;
-  activeHistoryPanelId: string | null;
-  setDiagnosticLogOpen: (open: boolean) => void;
-  setStatusLookupOpen: (open: boolean) => void;
+}
+
+interface TerminalWorkspaceHeaderProps {
+  connection: HeaderConnectionNavigation;
+  loading: boolean;
+  isMobileMonitor: boolean;
+  projects: HeaderProjectCommands;
 }
 
 export function TerminalWorkspaceHeader({
-  apiBase,
-  token,
+  connection,
   loading,
   isMobileMonitor,
-  connections,
-  activeConnectionId,
-  connectionName,
-  onSelectConnection,
-  onOpenConnectionManager,
-  onNavigateHome,
-  activeProjectId,
-  onReorderProjects,
-  onSelectProject,
-  requestEditProject,
-  requestDeleteProject,
-  requestCreateProject,
-  activeProject,
-  activeSession,
-  openHistoryDrawer,
-  activeHistoryPanelId,
-  setDiagnosticLogOpen,
-  setStatusLookupOpen,
+  projects: projectCommands,
 }: TerminalWorkspaceHeaderProps) {
+  const { apiBase, token } = useTerminalRuntime();
+  const {
+    activeConnectionId,
+    connectionName,
+    connections,
+    onNavigateHome,
+    onOpenManager: onOpenConnectionManager,
+    onSelect: onSelectConnection,
+  } = connection;
+  const {
+    onReorderProjects,
+    onSelectProject,
+    requestEditProject,
+    requestDeleteProject,
+    requestCreateProject,
+  } = projectCommands;
+  const projects = useTerminalProjectsQuery().data ?? EMPTY_TERMINAL_PROJECTS;
+  const sessions = useTerminalSessionsQuery().data ?? EMPTY_TERMINAL_SESSIONS;
+  const activeProjectId = useTerminalWorkspaceStore(
+    (state) => state.activeProjectId,
+  );
+  const activeSessionId = useTerminalWorkspaceStore(
+    (state) => state.activeSessionId,
+  );
+  const activePanelIdBySessionId = useTerminalWorkspaceStore(
+    (state) => state.activePanelIdBySessionId,
+  );
+  const setHistoryDrawerOpen = useTerminalWorkspaceStore(
+    (state) => state.setHistoryDrawerOpen,
+  );
+  const setHistoryTerminalSessionId = useTerminalWorkspaceStore(
+    (state) => state.setHistoryTerminalSessionId,
+  );
+  const setHistoryTerminalPanelId = useTerminalWorkspaceStore(
+    (state) => state.setHistoryTerminalPanelId,
+  );
+  const setDiagnosticLogOpen = useTerminalWorkspaceStore(
+    (state) => state.setDiagnosticLogOpen,
+  );
+  const setStatusLookupOpen = useTerminalWorkspaceStore(
+    (state) => state.setStatusLookupOpen,
+  );
+  const activeProject =
+    projects.find((project) => project.projectId === activeProjectId) ?? null;
+  const activeSession =
+    sessions.find((session) => session.terminalSessionId === activeSessionId) ??
+    null;
+  const openHistoryDrawer = (): void => {
+    if (!activeSession) return;
+    setHistoryTerminalSessionId(activeSession.terminalSessionId);
+    setHistoryTerminalPanelId(
+      activePanelIdBySessionId[activeSession.terminalSessionId] ??
+        activeSession.activePanelId ??
+        null,
+    );
+    setHistoryDrawerOpen(true);
+  };
   return (
     <div className="flex h-8 items-center gap-1.5 border-b border-slate-800 px-2">
       {onNavigateHome && (
@@ -178,10 +218,7 @@ export function TerminalWorkspaceHeader({
               disabled={!activeSession?.terminalSessionId}
               onSelect={() => {
                 if (activeSession?.terminalSessionId) {
-                  openHistoryDrawer(
-                    activeSession.terminalSessionId,
-                    activeHistoryPanelId,
-                  );
+                  openHistoryDrawer();
                 }
               }}
             >

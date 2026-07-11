@@ -5,7 +5,7 @@ import { Button } from "./ui/button";
 import { HttpError } from "../services/http";
 import { login as loginWithPassword } from "../services/auth";
 import { cleanupLegacyAuthStorage } from "../features/auth/storage";
-import type { LoginResponse } from "@runweave/shared";
+import type { LoginResponse } from "@runweave/shared/protocol";
 
 interface LoginPageProps {
   apiBase: string;

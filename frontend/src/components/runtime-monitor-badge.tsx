@@ -1,4 +1,4 @@
-import type { RuntimeStatsSnapshot } from "@runweave/shared";
+import type { RuntimeStatsSnapshot } from "@runweave/shared/runtime-monitor";
 import { Activity } from "lucide-react";
 import { formatRuntimeSummary } from "../features/electron.runtime-monitor-format";
 import { useElectronRuntimeStats } from "../features/use-electron-runtime-stats";

@@ -7,12 +7,20 @@ import { fileURLToPath } from "node:url";
 const ROOT = process.cwd();
 const ARTIFACT_DIR = path.join(ROOT, "artifacts");
 const REPORT_PATH = path.join(ARTIFACT_DIR, "quality-report.json");
-const LAYER_ORDER = ["static"];
+const LAYER_ORDER = ["architecture", "static", "e2e"];
 const LAYER_STEP_IDS = {
+  architecture: ["architecture"],
   static: ["typecheck", "lint"],
+  e2e: ["e2e"],
 };
 
 const ALL_STEPS = [
+  {
+    id: "architecture",
+    command: ["pnpm", "architecture:check"],
+    layers: ["architecture"],
+    critical: true,
+  },
   {
     id: "typecheck",
     command: ["pnpm", "typecheck"],
@@ -23,6 +31,12 @@ const ALL_STEPS = [
     id: "lint",
     command: ["pnpm", "lint"],
     layers: ["static"],
+    critical: true,
+  },
+  {
+    id: "e2e",
+    command: ["pnpm", "test:e2e"],
+    layers: ["e2e"],
     critical: true,
   },
 ];
@@ -37,16 +51,27 @@ function readChangedFiles() {
       .filter(Boolean);
   }
 
-  const result = spawnSync("git", ["diff", "--name-only"], {
+  const changed = readGitPathList(["diff", "--name-only", "HEAD"]);
+  const untracked = readGitPathList([
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+  ]);
+  if (!changed || !untracked) {
+    return [];
+  }
+  return [...new Set([...changed, ...untracked])].sort();
+}
+
+function readGitPathList(args) {
+  const result = spawnSync("git", args, {
     cwd: ROOT,
     encoding: "utf8",
     stdio: "pipe",
   });
-
   if (result.status !== 0) {
-    return [];
+    return null;
   }
-
   return result.stdout
     .split("\n")
     .map((value) => value.trim())
@@ -66,7 +91,38 @@ function isQualityGateFile(filePath) {
 }
 
 function isRootQualityInfraFile(filePath) {
-  return filePath === "package.json" || filePath === "pnpm-lock.yaml";
+  return [
+    "eslint.config.mjs",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+  ].includes(filePath);
+}
+
+function isArchitectureFile(filePath) {
+  return (
+    isRootQualityInfraFile(filePath) ||
+    filePath === ".husky/pre-push" ||
+    /^(?:app|app-server|backend|electron|frontend|packages|plugins|scripts)\//.test(
+      filePath,
+    )
+  );
+}
+
+function isStaticFile(filePath) {
+  return (
+    isRootQualityInfraFile(filePath) ||
+    /^(?:app|app-server|backend|electron|frontend|packages)\//.test(filePath)
+  );
+}
+
+function isE2eFile(filePath) {
+  return (
+    isRootQualityInfraFile(filePath) ||
+    /^(?:backend|frontend|packages\/(?:common|shared|terminal-renderer))\//.test(
+      filePath,
+    )
+  );
 }
 
 function expandStepsForLayers(layers) {
@@ -92,27 +148,20 @@ export function selectLayersForChangedFiles(changedFiles) {
   }
 
   const layers = new Set();
-  const touchesRootQualityInfra = changedFiles.some(isRootQualityInfraFile);
+  const touchesArchitecture = changedFiles.some(isArchitectureFile);
+  const touchesStatic = changedFiles.some(isStaticFile);
+  const touchesE2e = changedFiles.some(isE2eFile);
   const touchesCriticalJourney = changedFiles.some(isCriticalJourneyFile);
   const touchesQualityGate = changedFiles.some(isQualityGateFile);
-  const touchesFrontend = changedFiles.some((filePath) =>
-    filePath.startsWith("frontend/"),
-  );
 
-  if (touchesCriticalJourney) {
+  if (touchesArchitecture || touchesQualityGate) {
+    layers.add("architecture");
+  }
+  if (touchesStatic || touchesCriticalJourney || touchesQualityGate) {
     layers.add("static");
   }
-
-  if (touchesRootQualityInfra) {
-    layers.add("static");
-  }
-
-  if (touchesFrontend) {
-    layers.add("static");
-  }
-
-  if (touchesQualityGate) {
-    layers.add("static");
+  if (touchesE2e || touchesCriticalJourney || touchesQualityGate) {
+    layers.add("e2e");
   }
 
   return LAYER_ORDER.filter((layer) => layers.has(layer));
@@ -125,7 +174,8 @@ export function selectStepsForChangedFiles(changedFiles) {
     return {
       selectedLayers,
       selectedSteps: expandStepsForLayers(selectedLayers),
-      selectionReason: "No changed files detected; ran full static quality gate.",
+      selectionReason:
+        "No changed files detected; ran full architecture, static, and E2E gates.",
       riskLevel: "full",
     };
   }
@@ -146,7 +196,8 @@ export function selectStepsForChangedFiles(changedFiles) {
     selectedLayers,
     selectedSteps,
     selectionReason: `Selected layers: ${selectedLayers.join(", ")}.`,
-    riskLevel: selectedLayers.includes("static") ? "full" : "reduced",
+    riskLevel:
+      selectedLayers.length === LAYER_ORDER.length ? "full" : "reduced",
   };
 }
 

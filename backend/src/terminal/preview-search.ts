@@ -1,11 +1,5 @@
 import path from "node:path";
-import type {
-  TerminalPreviewChangeFile,
-  TerminalPreviewFileSearchItem,
-  TerminalPreviewFileSearchResponse,
-  TerminalPreviewFolderSearchItem,
-  TerminalPreviewFolderSearchResponse,
-} from "@runweave/shared";
+import type { TerminalPreviewChangeFile, TerminalPreviewFileSearchItem, TerminalPreviewFileSearchResponse, TerminalPreviewFolderSearchItem, TerminalPreviewFolderSearchResponse } from "@runweave/shared/terminal/preview";
 import { ensureProjectPath } from "./preview-paths";
 import { getPreviewGitChanges } from "./preview-git";
 import { collectCachedSearchCandidateFiles } from "./preview-search-candidates";

@@ -3,7 +3,7 @@ import { resolveCliBaseUrl } from "../client/cli-base-url.js";
 import { requestJson } from "../client/http.js";
 import { CliError, HttpError } from "../errors.js";
 import { writeOutput } from "../output/format.js";
-import type { BackendHealthPayload } from "@runweave/shared";
+import type { BackendHealthPayload } from "@runweave/shared/runtime-monitor";
 
 interface HealthOutput {
   reachable: boolean;

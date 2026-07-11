@@ -1,4 +1,4 @@
-import type { PackagedBackendConnectionState } from "@runweave/shared";
+import type { PackagedBackendConnectionState } from "@runweave/shared/runtime-monitor";
 import type { ConnectionConfig } from "./types";
 
 export const LOCAL_DEV_CONNECTION_ID = "system:local-development";
