@@ -267,6 +267,28 @@ export function getOrCreateTerminalBrowserView(
   });
 
   terminalBrowserRuntime.entries.set(key, entry);
+  view.webContents.once("destroyed", () => {
+    if (terminalBrowserRuntime.entries.get(key) !== entry) {
+      return;
+    }
+    terminalBrowserRuntime.entries.delete(key);
+    if (terminalBrowserRuntime.attachedByWindowId.get(win.id) === tabId) {
+      terminalBrowserRuntime.attachedByWindowId.delete(win.id);
+    }
+    removeTerminalBrowserTabOrder(win.id, tabId);
+    clearPendingTerminalBrowserTabUpdate(entry);
+    entry.deviceDebuggerAttached = false;
+    entry.onDeviceDebuggerDetach = null;
+    clearTerminalBrowserAnnotation(key);
+    terminalBrowserEvents.emit("tab-closed", {
+      targetId: entry.targetId,
+      browserGroupId: entry.browserGroupId,
+    });
+    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send("terminal-browser:tab-closed", { tabId });
+    }
+    scheduleTerminalBrowserTabsSave();
+  });
   insertTerminalBrowserTabOrder(win.id, tabId, options.openerTabId);
   void view.webContents.loadURL("about:blank").catch(() => undefined);
   return view;
