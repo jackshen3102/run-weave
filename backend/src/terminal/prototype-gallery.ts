@@ -1,10 +1,24 @@
 import { createReadStream } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
-import type { TerminalPrototypeGalleryItem, TerminalPrototypeGalleryProject, TerminalPrototypeGalleryResponse } from "@runweave/shared/terminal/preview";
+import type {
+  TerminalPrototypeGalleryItem,
+  TerminalPrototypeGalleryProject,
+  TerminalPrototypeGalleryResponse,
+  TerminalPrototypeGallerySource,
+} from "@runweave/shared/terminal/preview";
 import type { TerminalProjectRecord } from "./manager-records";
 
-const PROTOTYPE_ROOT_PARTS = ["docs", "prototypes"] as const;
+const PROTOTYPE_ROOTS: ReadonlyArray<{
+  source: TerminalPrototypeGallerySource;
+  parts: readonly [string, string];
+}> = [
+  { source: "prototypes", parts: ["docs", "prototypes"] },
+  {
+    source: "architecture-flows",
+    parts: ["docs", "architecture-flows"],
+  },
+];
 const INDEX_FILE = "index.html";
 const README_FILE = "README.md";
 
@@ -15,6 +29,14 @@ export class TerminalPrototypeGalleryError extends Error {
   ) {
     super(message);
   }
+}
+
+export function parseTerminalPrototypeGallerySource(
+  value: string,
+): TerminalPrototypeGallerySource | null {
+  return value === "prototypes" || value === "architecture-flows"
+    ? value
+    : null;
 }
 
 function isInsidePath(rootPath: string, targetPath: string): boolean {
@@ -73,6 +95,7 @@ async function readPrototypeTitle(
 async function scanPrototypeDirectory(params: {
   projectId: string;
   prototypeRootPath: string;
+  source: TerminalPrototypeGallerySource;
   slug: string;
 }): Promise<TerminalPrototypeGalleryItem | null> {
   const candidatePath = path.join(params.prototypeRootPath, params.slug);
@@ -97,6 +120,7 @@ async function scanPrototypeDirectory(params: {
   const entry = files.includes(INDEX_FILE) ? INDEX_FILE : null;
   return {
     projectId: params.projectId,
+    source: params.source,
     slug: params.slug,
     title: await readPrototypeTitle(prototypePath, files, params.slug),
     entry,
@@ -121,52 +145,68 @@ async function scanProject(
   if (!projectPath) {
     return { ...base, status: "prototype-root-unavailable" };
   }
-  const prototypeRootCandidate = path.join(
-    projectPath,
-    ...PROTOTYPE_ROOT_PARTS,
+  const scans = await Promise.all(
+    PROTOTYPE_ROOTS.map(async ({ source, parts }) => {
+      let prototypeRootPath: string;
+      try {
+        prototypeRootPath = await realpath(path.join(projectPath, ...parts));
+      } catch (error) {
+        return {
+          status: fileErrorCode(error) === "ENOENT" ? "missing" : "unavailable",
+          prototypes: [] as TerminalPrototypeGalleryItem[],
+        };
+      }
+      if (!isInsidePath(projectPath, prototypeRootPath)) {
+        return {
+          status: "unavailable",
+          prototypes: [] as TerminalPrototypeGalleryItem[],
+        };
+      }
+      const rootStat = await stat(prototypeRootPath).catch(() => null);
+      if (!rootStat?.isDirectory()) {
+        return {
+          status: "unavailable",
+          prototypes: [] as TerminalPrototypeGalleryItem[],
+        };
+      }
+      const rootEntries = await readdir(prototypeRootPath, {
+        withFileTypes: true,
+      }).catch(() => null);
+      if (!rootEntries) {
+        return {
+          status: "unavailable",
+          prototypes: [] as TerminalPrototypeGalleryItem[],
+        };
+      }
+      const slugs = rootEntries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort((left, right) => left.localeCompare(right));
+      const prototypes = (
+        await Promise.all(
+          slugs.map((slug) =>
+            scanPrototypeDirectory({
+              projectId: project.id,
+              prototypeRootPath,
+              source,
+              slug,
+            }),
+          ),
+        )
+      ).filter((item): item is TerminalPrototypeGalleryItem => item !== null);
+      return { status: "available", prototypes };
+    }),
   );
-  let prototypeRootPath: string;
-  try {
-    prototypeRootPath = await realpath(prototypeRootCandidate);
-  } catch (error) {
-    return {
-      ...base,
-      status:
-        fileErrorCode(error) === "ENOENT"
-          ? "prototype-root-missing"
-          : "prototype-root-unavailable",
-    };
+  const prototypes = scans.flatMap((scan) => scan.prototypes);
+  if (scans.some((scan) => scan.status === "available")) {
+    return { ...base, status: "available", prototypes };
   }
-  if (!isInsidePath(projectPath, prototypeRootPath)) {
-    return { ...base, status: "prototype-root-unavailable" };
-  }
-  const rootStat = await stat(prototypeRootPath).catch(() => null);
-  if (!rootStat?.isDirectory()) {
-    return { ...base, status: "prototype-root-unavailable" };
-  }
-
-  let rootEntries;
-  try {
-    rootEntries = await readdir(prototypeRootPath, { withFileTypes: true });
-  } catch {
-    return { ...base, status: "prototype-root-unavailable" };
-  }
-  const slugs = rootEntries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort((left, right) => left.localeCompare(right));
-  const prototypes = (
-    await Promise.all(
-      slugs.map((slug) =>
-        scanPrototypeDirectory({
-          projectId: project.id,
-          prototypeRootPath,
-          slug,
-        }),
-      ),
-    )
-  ).filter((item): item is TerminalPrototypeGalleryItem => item !== null);
-  return { ...base, status: "available", prototypes };
+  return {
+    ...base,
+    status: scans.every((scan) => scan.status === "missing")
+      ? "prototype-root-missing"
+      : "prototype-root-unavailable",
+  };
 }
 
 export async function listTerminalPrototypeGallery(
@@ -193,6 +233,7 @@ function validatePrototypeSlug(prototypeSlug: string): void {
 
 async function resolvePrototypeDirectory(params: {
   projectPath: string | null;
+  prototypeSource: TerminalPrototypeGallerySource;
   prototypeSlug: string;
 }): Promise<string> {
   validatePrototypeSlug(params.prototypeSlug);
@@ -204,7 +245,11 @@ async function resolvePrototypeDirectory(params: {
     throw new TerminalPrototypeGalleryError("Project path is unavailable", 409);
   }
   const prototypeRootPath = await realpath(
-    path.join(projectPath, ...PROTOTYPE_ROOT_PARTS),
+    path.join(
+      projectPath,
+      ...PROTOTYPE_ROOTS.find((root) => root.source === params.prototypeSource)!
+        .parts,
+    ),
   ).catch(() => null);
   if (!prototypeRootPath || !isInsidePath(projectPath, prototypeRootPath)) {
     throw new TerminalPrototypeGalleryError(
@@ -231,6 +276,7 @@ async function resolvePrototypeDirectory(params: {
 
 export async function assertTerminalPrototypePreviewEntry(params: {
   projectPath: string | null;
+  prototypeSource: TerminalPrototypeGallerySource;
   prototypeSlug: string;
 }): Promise<void> {
   const prototypePath = await resolvePrototypeDirectory(params);
@@ -248,6 +294,7 @@ export async function assertTerminalPrototypePreviewEntry(params: {
 
 export async function resolveTerminalPrototypePreviewFile(params: {
   projectPath: string | null;
+  prototypeSource: TerminalPrototypeGallerySource;
   prototypeSlug: string;
   requestedPath: string;
 }): Promise<{

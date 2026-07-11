@@ -1,0 +1,585 @@
+{
+  "meta": {
+    "title": "System Activity Data Foundation",
+    "subtitle": "Independent facts first · model-generated learning later",
+    "baseline": "feature@2c4572c",
+    "date": "2026-07-11",
+    "nature": "target architecture"
+  },
+  "stats": [
+    { "value": "1", "label": "per-user Activity Hub", "tone": "blue" },
+    { "value": "24", "label": "P0 semantic event families", "tone": "cyan" },
+    {
+      "value": "7 / 30d",
+      "label": "content / fact retention",
+      "tone": "amber"
+    },
+    { "value": "0", "label": "fuzzy Task associations", "tone": "green" }
+  ],
+  "lanes": [
+    {
+      "id": "producers",
+      "title": "行为源",
+      "subtitle": "stable · beta · dev · external"
+    },
+    {
+      "id": "delivery",
+      "title": "采集 SDK",
+      "subtitle": "typed · async · replayable"
+    },
+    {
+      "id": "hub",
+      "title": "Activity Hub",
+      "subtitle": "validate · redact · dedupe"
+    },
+    {
+      "id": "storage",
+      "title": "独立存储",
+      "subtitle": "facts · content · refs"
+    },
+    {
+      "id": "consumers",
+      "title": "消费面",
+      "subtitle": "timeline · sources · learning"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "runtime-producers",
+      "lane": "producers",
+      "eyebrow": "RUNTIME",
+      "title": "Stable / Beta / Dev",
+      "body": "Backend、Electron、Web/App 在业务动作边界主动记录；控制面继续相互隔离。",
+      "detail": "Runtime channel 是事实字段，不决定 Activity Hub home。Beta 不能写自己的独立行为仓。",
+      "tags": ["runtimeChannel", "version", "profile"]
+    },
+    {
+      "id": "agent-producers",
+      "lane": "producers",
+      "eyebrow": "AGENT + TTY",
+      "title": "Hook / CLI / Shell",
+      "body": "Query、visible reply、command、interrupt 与 tool lifecycle；外部 TTY 只在安装 adapter 时覆盖。",
+      "detail": "当前 Hook 的 Runweave Terminal gate 不能直接满足 external TTY。目标链路使用独立 Activity client。",
+      "tags": ["threadId", "interactionId", "external"]
+    },
+    {
+      "id": "workflow-producers",
+      "lane": "producers",
+      "eyebrow": "WORKFLOW",
+      "title": "Agent Team / Verification",
+      "body": "Run、worker、round、case、human review 与验证结果在状态迁移时发事件。",
+      "detail": "完整 run/outbox/evidence 仍由源系统拥有，只保存版本化引用。",
+      "tags": ["runId", "caseId", "evidenceRef"]
+    },
+    {
+      "id": "artifact-producers",
+      "lane": "producers",
+      "eyebrow": "ARTIFACT",
+      "title": "Browser / File / Git",
+      "body": "Tab、navigation、CDP action、annotation、file mutation、diff/reset 在明确命令边界记录。",
+      "detail": "不把完整 CDP payload、DOM、截图或 diff inline 到 Fact。",
+      "tags": ["tabId", "operationId", "digest"]
+    },
+    {
+      "id": "typed-sdk",
+      "lane": "delivery",
+      "eyebrow": "CONTRACT",
+      "title": "Typed Activity SDK",
+      "body": "Producer 生成 UUIDv7 eventId、bootId 与 sequence；schema 在编译期约束。",
+      "detail": "Retry 必须重发同一 eventId；CLI 是 surface，不是 runtime。",
+      "tags": ["eventId", "sequence", "schemaVersion"]
+    },
+    {
+      "id": "producer-spool",
+      "lane": "delivery",
+      "eyebrow": "DURABILITY",
+      "title": "Per-producer spool",
+      "body": "业务路径只入队；Hub 下线或 429 时落盘，收到最高连续 ACK 后删除。",
+      "detail": "Critical Query/completion/result 优先保留；低优先级采样必须生成 loss report。",
+      "tags": ["fire-and-forget", "replay", "backpressure"]
+    },
+    {
+      "id": "hub-ingress",
+      "lane": "hub",
+      "eyebrow": "LOCAL SINGLETON",
+      "title": "Authenticated ingest",
+      "body": "一个 OS 用户一个 Hub；不同 producer 使用 namespace-scoped append token。",
+      "detail": "Hub 不拥有 Backend、Electron 或 App Server 生命周期，也不能反向控制 Runtime。",
+      "tags": ["per-user", "capability", "batch"]
+    },
+    {
+      "id": "hub-policy",
+      "lane": "hub",
+      "eyebrow": "TRUTH GATE",
+      "title": "Schema + privacy gate",
+      "body": "验证 event name/version、字段、大小、producer allowlist，并做二次 secret scan。",
+      "detail": "未知 Beta schema 进入 quarantine；token、cookie、header、env secret 禁止入库。",
+      "tags": ["registry", "redaction", "quarantine"]
+    },
+    {
+      "id": "hub-append",
+      "lane": "hub",
+      "eyebrow": "ACK BOUNDARY",
+      "title": "Dedupe + durable append",
+      "body": "按 eventId 去重，写入独立 canonical segment 后才 ACK；Hub 分配接收 offset。",
+      "detail": "只保证 producer 内 sequence；occurredAt 与 ingestedAt 分离。",
+      "tags": ["at-least-once", "hubOffset", "fsync"]
+    },
+    {
+      "id": "fact-store",
+      "lane": "storage",
+      "eyebrow": "30 DAYS",
+      "title": "Behavior Fact segments",
+      "body": "规范化语义事件、显式关系、结果、privacy 与 source gaps；不是现有 App Server JSONL。",
+      "detail": "分段封口、checksum manifest、整段过期，避免单个大文件全量读写。",
+      "tags": ["immutable", "segmented", "30d"]
+    },
+    {
+      "id": "content-vault",
+      "lane": "storage",
+      "eyebrow": "7 DAYS",
+      "title": "Hub-owned Content Vault",
+      "body": "Query、可见回复、命令和最小 excerpt；压缩、加密、按 digest 寻址。",
+      "detail": "它属于独立行为存储，不是对业务库的临时读取。过期后 Fact 保留 digest 与 expired 状态。",
+      "tags": ["AES-GCM", "sha256", "7d"]
+    },
+    {
+      "id": "external-refs",
+      "lane": "storage",
+      "eyebrow": "SMALL BRANCH",
+      "title": "External references",
+      "body": "完整 Thread、scrollback、run/outbox、截图/trace、Git object 等少量大对象。",
+      "detail": "Ref 必须记录 authority、locator、digest/version 与 availability；不能静默失效。",
+      "tags": ["authority", "version", "availability"]
+    },
+    {
+      "id": "query-index",
+      "lane": "storage",
+      "eyebrow": "REBUILDABLE",
+      "title": "SQLite query projection",
+      "body": "为 timeline、thread、terminal、run、source-health 和安全字段搜索建立索引。",
+      "detail": "Projection 不是事实唯一副本；删除后可从 30 天 segments 重建。",
+      "tags": ["keyset cursor", "lag", "rebuild"]
+    },
+    {
+      "id": "facts-ui",
+      "lane": "consumers",
+      "eyebrow": "RECORDED + COMPUTED",
+      "title": "Facts / Timeline",
+      "body": "按显式 ID 展开 actor → action → result；unlinked、gap、expired 均可见。",
+      "detail": "Duration 可以计算；Goal、Outcome、Learning 不能伪装成 Recorded Fact。",
+      "tags": ["interaction", "filters", "evidence"]
+    },
+    {
+      "id": "sources-ui",
+      "lane": "consumers",
+      "eyebrow": "COVERAGE",
+      "title": "Sources health",
+      "body": "显示 produced/acked sequence、gap ranges、dropped/rejected、heartbeat 与 projection lag。",
+      "detail": "不展示没有分母的 82%/98% coverage。",
+      "tags": ["watermark", "gap", "loss"]
+    },
+    {
+      "id": "context-pack",
+      "lane": "consumers",
+      "eyebrow": "MODEL INPUT",
+      "title": "Frozen Context Pack",
+      "body": "确定性选择 Facts，解析允许的最小 excerpt，二次脱敏，冻结 hash 与 coverage。",
+      "detail": "模型只看 Pack；不能持有全库 token，也不能按 locator 任意读本机文件。",
+      "tags": ["sealed", "redacted", "reproducible"]
+    },
+    {
+      "id": "learning-store",
+      "lane": "consumers",
+      "eyebrow": "DERIVED ASSET",
+      "title": "Candidate → Learning",
+      "body": "模型生成 claim；系统校验证据和数字；人工审核后发布不可变版本。",
+      "detail": "Learning 与 Fact 分库/命名空间，模型永远不能修改事实。",
+      "tags": ["review", "version", "support capsule"]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "query",
+      "label": "一次 Query 轨迹",
+      "tone": "blue",
+      "summary": "用户提交 Query 后，显式 interactionId 串起 Agent、tool、terminal 与完成事件。",
+      "path": [
+        "runtime-producers",
+        "agent-producers",
+        "typed-sdk",
+        "hub-ingress",
+        "hub-policy",
+        "hub-append",
+        "fact-store",
+        "content-vault",
+        "query-index",
+        "facts-ui"
+      ],
+      "steps": [
+        "提交点生成 interactionId 与稳定 eventId，不记录每个按键。",
+        "Query 正文进入 Activity Hub 自有 7 天 Content；Fact 保存长度、digest、scope。",
+        "Agent turn/tool/command 继承显式 correlation/causation。",
+        "Timeline 显示真实事件与缺口，不根据时间猜 Task。"
+      ],
+      "metrics": [
+        { "value": "1", "label": "interactionId" },
+        { "value": "7d", "label": "content" },
+        { "value": "30d", "label": "facts" }
+      ]
+    },
+    {
+      "id": "agent-team",
+      "label": "Agent Team 运行",
+      "tone": "purple",
+      "summary": "每个 run/worker/round/case transition 主动写 Fact，完整 run/outbox/evidence 只保留引用。",
+      "path": [
+        "workflow-producers",
+        "typed-sdk",
+        "producer-spool",
+        "hub-ingress",
+        "hub-policy",
+        "hub-append",
+        "fact-store",
+        "external-refs",
+        "query-index",
+        "facts-ui"
+      ],
+      "steps": [
+        "Run 创建、phase、worker dispatch、case result 在状态 transition 处发事件。",
+        "Fact 保存 runId、role、round、caseId、result 与 evidence metadata。",
+        "完整 run JSON、pane history 和 outbox 保持源系统 authority。",
+        "agent-reported evidence 不自动升级成独立验证事实。"
+      ],
+      "metrics": [
+        { "value": "event", "label": "state transition" },
+        { "value": "ref", "label": "run/outbox" },
+        { "value": "explicit", "label": "evidence trust" }
+      ]
+    },
+    {
+      "id": "browser",
+      "label": "Browser + 验证",
+      "tone": "cyan",
+      "summary": "Electron/CDP/Playwright 在明确动作边界记录目标身份、动作与结果，大 artifact 只引用。",
+      "path": [
+        "artifact-producers",
+        "workflow-producers",
+        "typed-sdk",
+        "hub-ingress",
+        "hub-policy",
+        "hub-append",
+        "fact-store",
+        "external-refs",
+        "query-index",
+        "facts-ui"
+      ],
+      "steps": [
+        "记录 tab/navigation/CDP command family，不保存全部 protocol payload。",
+        "Verification 必须带 case、runner、target runtime/route/build 与 result。",
+        "Screenshot、DOM、trace 保存 digest/version ref。",
+        "没有 target identity 或 evidence 的通过不能展示为独立验证。"
+      ],
+      "metrics": [
+        { "value": "tab", "label": "target scope" },
+        { "value": "case", "label": "verification identity" },
+        { "value": "ref", "label": "large evidence" }
+      ]
+    },
+    {
+      "id": "outage",
+      "label": "Hub 下线重放",
+      "tone": "amber",
+      "summary": "业务路径不等待 Hub；producer spool 保留 critical events，恢复后按 sequence replay。",
+      "path": [
+        "runtime-producers",
+        "agent-producers",
+        "typed-sdk",
+        "producer-spool",
+        "hub-ingress",
+        "hub-policy",
+        "hub-append",
+        "fact-store",
+        "sources-ui"
+      ],
+      "steps": [
+        "Hub 不可达时 SDK 快速返回并写 per-producer disk spool。",
+        "Critical Query/completion/result 不先丢；sampled 丢失要写 loss report。",
+        "恢复后重发原 eventId，Hub 去重并 ACK 最高连续 sequence。",
+        "缺失区间在 Sources 和 Context Pack 中持续可见。"
+      ],
+      "metrics": [
+        { "value": "<5ms", "label": "target enqueue p95" },
+        { "value": "same ID", "label": "retry" },
+        { "value": "visible", "label": "loss/gap" }
+      ]
+    },
+    {
+      "id": "learning",
+      "label": "生成经验",
+      "tone": "green",
+      "summary": "UI 或 Agent 只负责创建 AnalysisJob；模型读取冻结 Pack，输出 Candidate，审核后才沉淀。",
+      "path": [
+        "fact-store",
+        "content-vault",
+        "external-refs",
+        "query-index",
+        "context-pack",
+        "learning-store"
+      ],
+      "steps": [
+        "确定性系统按 filter/watermark 选择 Facts，解析允许的最小证据。",
+        "Pack 固化 fact IDs/hash、coverage gap、schema、脱敏报告和 model policy。",
+        "模型 Extractor/Consolidator 生成 claim 与反例引用。",
+        "系统校验证据/数字，人工 review 后发布不可变 LearningVersion。"
+      ],
+      "metrics": [
+        { "value": "sealed", "label": "model input" },
+        { "value": "100%", "label": "claim refs required" },
+        { "value": "review", "label": "default gate" }
+      ]
+    }
+  ],
+  "truthRules": [
+    {
+      "label": "Recorded",
+      "tone": "blue",
+      "title": "源系统直接写入",
+      "body": "时间、actor、Runtime、ID、命令、退出码、状态与验证结果。"
+    },
+    {
+      "label": "Computed",
+      "tone": "cyan",
+      "title": "确定性投影",
+      "body": "Duration、显式 retry 数、事件数、阶段序列和 coverage gap。"
+    },
+    {
+      "label": "Model-generated",
+      "tone": "purple",
+      "title": "模型派生",
+      "body": "Goal、Outcome、模式、建议和 Learning，必须带 run 与 evidence。"
+    },
+    {
+      "label": "Never inferred",
+      "tone": "red",
+      "title": "禁止猜测",
+      "body": "没有 ID 不猜 Task；没有证据不声称完成；没有 Hook 不声称外部 TTY 覆盖。"
+    }
+  ],
+  "dataMatrix": [
+    {
+      "source": "User Query / visible reply",
+      "capture": "提交点 + Agent Hook/Thread adapter",
+      "direct": "interaction、thread/turn、actor、text/ref、length、digest、status",
+      "content": "Query 与 visible reply（7d）",
+      "external": "完整 Thread",
+      "coverage": "Runweave 直接；external 需全局 Hook",
+      "status": "record"
+    },
+    {
+      "source": "Terminal command",
+      "capture": "structured input + shell preexec/precmd",
+      "direct": "command、cwd、exit、duration、interrupt",
+      "content": "command text（7d）",
+      "external": "scrollback / large output",
+      "coverage": "外部 shell 需显式 integration",
+      "status": "record"
+    },
+    {
+      "source": "Agent tool / permission",
+      "capture": "typed tool lifecycle hook",
+      "direct": "tool、callId、status、duration、sanitized summary",
+      "content": "最小 args/result excerpt",
+      "external": "tool artifact",
+      "coverage": "仅受支持 Agent 暴露的数据",
+      "status": "record"
+    },
+    {
+      "source": "Agent Team",
+      "capture": "run/worker/round/case transition",
+      "direct": "run、role、phase、round、case、result、human decision",
+      "content": "最小 note excerpt",
+      "external": "run JSON / outbox / evidence",
+      "coverage": "结构化程度高",
+      "status": "record"
+    },
+    {
+      "source": "Terminal Browser / Playwright",
+      "capture": "Electron IPC/CDP + verification runner",
+      "direct": "tab、navigation、command family、target identity、case/result",
+      "content": "annotation comment/excerpt",
+      "external": "screenshot / DOM / trace",
+      "coverage": "不保存全部 CDP payload",
+      "status": "record"
+    },
+    {
+      "source": "Preview / File / Git",
+      "capture": "application command boundary",
+      "direct": "operation、path、digest、revision、result",
+      "content": "小型 diff excerpt",
+      "external": "Git blob/diff/PR object",
+      "coverage": "不从最终 working tree 反推过程",
+      "status": "record"
+    },
+    {
+      "source": "Runtime / incident",
+      "capture": "bootstrap、connection、crash、update/recovery",
+      "direct": "channel、surface、version、profile、incident、duration",
+      "content": "无",
+      "external": "diagnostic bundle",
+      "coverage": "只采语义状态，不采完整 process list",
+      "status": "record"
+    },
+    {
+      "source": "Raw logs / output / screenshots",
+      "capture": "注册的 artifact resolver",
+      "direct": "kind、digest、size、availability",
+      "content": "仅最小短期 excerpt",
+      "external": "权威大对象",
+      "coverage": "不是主事实来源",
+      "status": "reference"
+    },
+    {
+      "source": "Hidden reasoning / arbitrary external TTY",
+      "capture": "无可靠接口",
+      "direct": "不记录",
+      "content": "不记录",
+      "external": "无",
+      "coverage": "明确不承诺",
+      "status": "unsupported"
+    }
+  ],
+  "learningSteps": [
+    {
+      "id": "select",
+      "kind": "deterministic",
+      "title": "1 · Select facts",
+      "body": "按时间、Project、Runtime、kind、Thread/Run 和 source watermark 选择；不让模型扫全库。",
+      "output": "fact IDs + hashes + coverage"
+    },
+    {
+      "id": "resolve",
+      "kind": "deterministic",
+      "title": "2 · Resolve evidence",
+      "body": "只通过注册 resolver 读取最小 excerpt；再次 DLP、裁剪、记录 expired/missing。",
+      "output": "redacted excerpts"
+    },
+    {
+      "id": "seal",
+      "kind": "deterministic",
+      "title": "3 · Seal Context Pack",
+      "body": "冻结 schema、事实、证据、gap、truncation、policy 与 pack hash。",
+      "output": "immutable pack"
+    },
+    {
+      "id": "extract",
+      "kind": "model",
+      "title": "4 · Model Extractor",
+      "body": "从有界分片提取 observation candidate；所有 claim 引用 pack evidence。",
+      "output": "observations"
+    },
+    {
+      "id": "consolidate",
+      "kind": "model",
+      "title": "5 · Model Consolidator",
+      "body": "跨分片寻找模式、适用条件、反例和限制；不自行填写次数。",
+      "output": "candidate claims"
+    },
+    {
+      "id": "validate",
+      "kind": "deterministic",
+      "title": "6 · Evidence validator",
+      "body": "检查 ref 属于 Pack、数字一致、scope 未越界、blocked secret 为零。",
+      "output": "valid / rejected"
+    },
+    {
+      "id": "review",
+      "kind": "human",
+      "title": "7 · Review + version",
+      "body": "接受、编辑、缩小范围、拒绝、合并或冲突；发布不可变版本和最小证据胶囊。",
+      "output": "LearningVersion"
+    }
+  ],
+  "learningObjects": [
+    {
+      "name": "ContextPack",
+      "retention": "candidate 30d",
+      "purpose": "模型实际看到的冻结输入"
+    },
+    {
+      "name": "LearningRun",
+      "retention": "30d / audit policy",
+      "purpose": "model、prompt、token、cost、output hash"
+    },
+    {
+      "name": "LearningCandidate",
+      "retention": "30d",
+      "purpose": "待审核的模型产物"
+    },
+    {
+      "name": "LearningVersion",
+      "retention": "until delete/supersede",
+      "purpose": "版本化已发布经验"
+    },
+    {
+      "name": "SupportCapsule",
+      "retention": "with version",
+      "purpose": "最小脱敏事实片段与 provenance"
+    }
+  ],
+  "failureScenarios": [
+    {
+      "id": "hub-down",
+      "severity": "resilience",
+      "title": "Activity Hub 不可用",
+      "trigger": "连接失败、429 或 Hub restart",
+      "mechanism": "SDK 快速入本地 spool；critical 事件保留；恢复后按 producer seq replay。",
+      "observable": "Sources 显示 oldest unacked、queue bytes 与 lag。",
+      "resolution": "同 eventId 重放，ACK 最高连续 sequence；业务不等待。"
+    },
+    {
+      "id": "sequence-gap",
+      "severity": "integrity",
+      "title": "Producer sequence 出现缺口",
+      "trigger": "收到 1、2、4，或 spool quota 丢失",
+      "mechanism": "Hub 持久化 gap interval，不用 hubOffset 掩盖缺失。",
+      "observable": "Timeline、Sources、Context Pack 都携带 gap。",
+      "resolution": "迟到 3 可关闭 gap；不可恢复区间保留 loss report。"
+    },
+    {
+      "id": "beta-schema",
+      "severity": "compatibility",
+      "title": "Beta 发送未来 schema",
+      "trigger": "未知 major version 或 payload 不兼容",
+      "mechanism": "Registry validation 失败，事件进入有界 quarantine。",
+      "observable": "Beta source rejected + gap；Stable Facts 不受污染。",
+      "resolution": "发布 Hub schema/upcaster 后由原 eventId 重放。"
+    },
+    {
+      "id": "content-expired",
+      "severity": "retention",
+      "title": "7 天 Content 已过期",
+      "trigger": "Query/reply/blob 到达 expiresAt",
+      "mechanism": "删除内容；30 天 Fact 保留 digest、length、kind 和 expired 状态。",
+      "observable": "详情显示 expired，不显示空白正文。",
+      "resolution": "不恢复原文；已发布 Learning 仅用最小 Support Capsule。"
+    },
+    {
+      "id": "user-delete",
+      "severity": "privacy",
+      "title": "用户删除 Project/Thread 数据",
+      "trigger": "显式 delete/tombstone 请求",
+      "mechanism": "删除权优先于 retention 和 Learning support。",
+      "observable": "Refs/Capsule tombstone；Learning needs_revalidation/deprecated。",
+      "resolution": "不保留隐藏副本，不用经验资产阻止删除。"
+    }
+  ],
+  "decisions": [
+    "独立 per-user Activity Hub，不扩展 App Server 成行为仓。",
+    "主动记录为主；完整 Thread、scrollback、run、截图等少量大对象才引用。",
+    "7 天内容、30 天事实；没有永久原始行为 archive。",
+    "显式 ID 关联，不做时间邻近 Task 推断。",
+    "第一阶段只做 Facts / Timeline / Sources。",
+    "Learning 由模型基于冻结 Context Pack 生成，默认审核后发布。"
+  ]
+}

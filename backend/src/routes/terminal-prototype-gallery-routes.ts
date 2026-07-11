@@ -6,6 +6,7 @@ import type { TerminalSessionManager } from "../terminal/manager";
 import {
   assertTerminalPrototypePreviewEntry,
   listTerminalPrototypeGallery,
+  parseTerminalPrototypeGallerySource,
   TerminalPrototypeGalleryError,
 } from "../terminal/prototype-gallery";
 
@@ -37,7 +38,7 @@ export function registerTerminalPrototypeGalleryRoutes(
   });
 
   router.post(
-    "/project/:id/prototype/:slug/preview-ticket",
+    "/project/:id/prototype/:source/:slug/preview-ticket",
     async (req, res) => {
       const project = terminalSessionManager.getProject(req.params.id);
       if (!project) {
@@ -56,9 +57,17 @@ export function registerTerminalPrototypeGalleryRoutes(
         res.status(401).json({ message: "Unauthorized" });
         return;
       }
+      const prototypeSource = parseTerminalPrototypeGallerySource(
+        req.params.source,
+      );
+      if (!prototypeSource) {
+        res.status(400).json({ message: "Invalid prototype source" });
+        return;
+      }
       try {
         await assertTerminalPrototypePreviewEntry({
           projectPath: project.path,
+          prototypeSource,
           prototypeSlug: req.params.slug,
         });
         const ticket = authService.issueTemporaryToken({
@@ -66,12 +75,13 @@ export function registerTerminalPrototypeGalleryRoutes(
           tokenType: "prototype-preview",
           resource: {
             projectId: project.id,
+            prototypeSource,
             prototypeSlug: req.params.slug,
           },
           ttlMs: PROTOTYPE_PREVIEW_TICKET_TTL_MS,
         });
         const payload: CreateTerminalPrototypePreviewTicketResponse = {
-          path: `/prototype-preview/${encodeURIComponent(ticket.token)}/${encodeURIComponent(project.id)}/${encodeURIComponent(req.params.slug)}/`,
+          path: `/prototype-preview/${encodeURIComponent(ticket.token)}/${encodeURIComponent(project.id)}/${encodeURIComponent(prototypeSource)}/${encodeURIComponent(req.params.slug)}/`,
           expiresIn: ticket.expiresIn,
         };
         res.json(payload);

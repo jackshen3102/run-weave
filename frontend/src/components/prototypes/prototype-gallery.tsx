@@ -1,7 +1,19 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { TerminalPrototypeGalleryItem, TerminalPrototypeGalleryProject, TerminalPrototypeGalleryResponse } from "@runweave/shared/terminal/preview";
-import { AlertCircle, FileCode2, FolderKanban, RefreshCw } from "lucide-react";
+import type {
+  TerminalPrototypeGalleryItem,
+  TerminalPrototypeGalleryProject,
+  TerminalPrototypeGalleryResponse,
+  TerminalPrototypeGallerySource,
+} from "@runweave/shared/terminal/preview";
+import {
+  AlertCircle,
+  ChevronLeft,
+  FileCode2,
+  FolderKanban,
+  PanelLeftOpen,
+  RefreshCw,
+} from "lucide-react";
 import { HttpError } from "../../services/http";
 import {
   createTerminalPrototypePreviewTicket,
@@ -10,6 +22,7 @@ import {
 
 interface PrototypeSelection {
   projectId: string;
+  source: TerminalPrototypeGallerySource;
   slug: string;
 }
 
@@ -18,15 +31,22 @@ interface PrototypeGalleryProps {
   token: string;
   activeProjectId: string | null;
   selectedProjectId?: string;
+  selectedPrototypeSource?: TerminalPrototypeGallerySource;
   selectedPrototypeSlug?: string;
   onSelectionChange?: (selection: PrototypeSelection) => void;
   onAuthExpired?: () => void;
 }
 
 const SELECTION_STORAGE_PREFIX = "runweave.prototype-gallery.selection.v1";
+const SIDEBAR_COLLAPSED_STORAGE_PREFIX =
+  "runweave.prototype-gallery.sidebar-collapsed.v1";
 
 function selectionStorageKey(apiBase: string): string {
   return `${SELECTION_STORAGE_PREFIX}:${apiBase || "local"}`;
+}
+
+function sidebarCollapsedStorageKey(apiBase: string): string {
+  return `${SIDEBAR_COLLAPSED_STORAGE_PREFIX}:${apiBase || "local"}`;
 }
 
 function readStoredSelection(apiBase: string): PrototypeSelection | null {
@@ -36,12 +56,36 @@ function readStoredSelection(apiBase: string): PrototypeSelection | null {
       return null;
     }
     const parsed = JSON.parse(value) as Partial<PrototypeSelection>;
+    const source =
+      parsed.source === "architecture-flows" ? parsed.source : "prototypes";
     return typeof parsed.projectId === "string" &&
       typeof parsed.slug === "string"
-      ? { projectId: parsed.projectId, slug: parsed.slug }
+      ? { projectId: parsed.projectId, source, slug: parsed.slug }
       : null;
   } catch {
     return null;
+  }
+}
+
+function readStoredSidebarCollapsed(apiBase: string): boolean {
+  try {
+    return (
+      window.localStorage.getItem(sidebarCollapsedStorageKey(apiBase)) ===
+      "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function persistSidebarCollapsed(apiBase: string, collapsed: boolean): void {
+  try {
+    window.localStorage.setItem(
+      sidebarCollapsedStorageKey(apiBase),
+      String(collapsed),
+    );
+  } catch {
+    // The current in-memory state remains usable when storage is blocked.
   }
 }
 
@@ -63,7 +107,11 @@ function sameSelection(
   left: PrototypeSelection | null,
   right: PrototypeSelection,
 ): boolean {
-  return left?.projectId === right.projectId && left.slug === right.slug;
+  return (
+    left?.projectId === right.projectId &&
+    left.source === right.source &&
+    left.slug === right.slug
+  );
 }
 
 function findGalleryItem(
@@ -80,7 +128,7 @@ function findGalleryItem(
     (item) => item.projectId === selection.projectId,
   );
   const prototype = project?.prototypes.find(
-    (item) => item.slug === selection.slug,
+    (item) => item.source === selection.source && item.slug === selection.slug,
   );
   return project && prototype ? { project, prototype } : null;
 }
@@ -101,6 +149,7 @@ function chooseGallerySelection(params: {
   if (activeProject && activePrototype) {
     return {
       projectId: activeProject.projectId,
+      source: activePrototype.source,
       slug: activePrototype.slug,
     };
   }
@@ -110,7 +159,11 @@ function chooseGallerySelection(params: {
   for (const project of params.gallery.projects) {
     const prototype = project.prototypes[0];
     if (prototype) {
-      return { projectId: project.projectId, slug: prototype.slug };
+      return {
+        projectId: project.projectId,
+        source: prototype.source,
+        slug: prototype.slug,
+      };
     }
   }
   return null;
@@ -121,12 +174,18 @@ function projectEmptyMessage(project: TerminalPrototypeGalleryProject): string {
     return "Project path is not set";
   }
   if (project.status === "prototype-root-missing") {
-    return "No docs/prototypes directory";
+    return "No docs/prototypes or docs/architecture-flows directory";
   }
   if (project.status === "prototype-root-unavailable") {
     return "Prototype directory is unavailable";
   }
   return "No prototypes";
+}
+
+function prototypeSourcePath(source: TerminalPrototypeGallerySource): string {
+  return source === "prototypes"
+    ? "docs/prototypes"
+    : "docs/architecture-flows";
 }
 
 function buildPreviewUrl(apiBase: string, previewPath: string): string {
@@ -138,6 +197,7 @@ export function PrototypeGallery({
   token,
   activeProjectId,
   selectedProjectId,
+  selectedPrototypeSource,
   selectedPrototypeSlug,
   onSelectionChange,
   onAuthExpired,
@@ -145,9 +205,10 @@ export function PrototypeGallery({
   const [gallery, setGallery] =
     useState<TerminalPrototypeGalleryResponse | null>(null);
   const [selection, setSelection] = useState<PrototypeSelection | null>(() => {
-    if (selectedProjectId && selectedPrototypeSlug) {
+    if (selectedProjectId && selectedPrototypeSource && selectedPrototypeSlug) {
       return {
         projectId: selectedProjectId,
+        source: selectedPrototypeSource,
         slug: selectedPrototypeSlug,
       };
     }
@@ -158,6 +219,9 @@ export function PrototypeGallery({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    readStoredSidebarCollapsed(apiBase),
+  );
   const galleryRequestRef = useRef(0);
   const previewRequestRef = useRef(0);
 
@@ -177,6 +241,14 @@ export function PrototypeGallery({
     persistSelection(apiBase, next);
     setSelection((current) => (sameSelection(current, next) ? current : next));
     onSelectionChange?.(next);
+  });
+
+  const toggleSidebar = useMemoizedFn((): void => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      persistSidebarCollapsed(apiBase, next);
+      return next;
+    });
   });
 
   const loadGallery = useMemoizedFn(async (): Promise<void> => {
@@ -227,6 +299,7 @@ export function PrototypeGallery({
         apiBase,
         token,
         selected.project.projectId,
+        selected.prototype.source,
         selected.prototype.slug,
       );
       if (previewRequestRef.current !== requestId) {
@@ -241,23 +314,31 @@ export function PrototypeGallery({
     }
   });
 
-
   useEffect(() => {
-    if (!selectedProjectId || !selectedPrototypeSlug) {
+    if (
+      !selectedProjectId ||
+      !selectedPrototypeSource ||
+      !selectedPrototypeSlug
+    ) {
       return;
     }
     setSelection((current) => {
       const next = {
         projectId: selectedProjectId,
+        source: selectedPrototypeSource,
         slug: selectedPrototypeSlug,
       };
       return sameSelection(current, next) ? current : next;
     });
-  }, [selectedProjectId, selectedPrototypeSlug]);
+  }, [selectedProjectId, selectedPrototypeSlug, selectedPrototypeSource]);
 
   useEffect(() => {
     void loadGallery();
   }, [apiBase, loadGallery, token]);
+
+  useEffect(() => {
+    setSidebarCollapsed(readStoredSidebarCollapsed(apiBase));
+  }, [apiBase]);
 
   useEffect(() => {
     void loadPreview();
@@ -265,118 +346,157 @@ export function PrototypeGallery({
     loadPreview,
     selected?.project.projectId,
     selected?.prototype.entry,
+    selected?.prototype.source,
     selected?.prototype.slug,
   ]);
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] bg-slate-950">
+    <div
+      className={[
+        "grid h-full min-h-0 bg-slate-950",
+        sidebarCollapsed
+          ? "grid-cols-[32px_minmax(0,1fr)]"
+          : "grid-cols-[minmax(260px,320px)_minmax(0,1fr)]",
+      ].join(" ")}
+    >
       <aside className="flex min-h-0 flex-col border-r border-slate-800">
-        <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-800 px-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <FolderKanban className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <span className="truncate text-xs font-medium text-slate-200">
-              Project prototypes
-            </span>
-          </div>
+        {sidebarCollapsed ? (
           <button
             type="button"
-            aria-label="Refresh prototype library"
-            title="Refresh prototype library"
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-500"
-            onClick={() => void loadGallery()}
+            aria-label="Show prototype library"
+            title="Show prototype library"
+            className="flex h-full w-full flex-col items-center gap-2 pt-3 text-slate-600 transition hover:bg-slate-900 hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-slate-500"
+            onClick={toggleSidebar}
           >
-            <RefreshCw
-              className={[
-                "h-3.5 w-3.5",
-                galleryLoading ? "animate-spin" : "",
-              ].join(" ")}
-            />
+            <PanelLeftOpen className="h-3.5 w-3.5 shrink-0" />
+            <span className="text-[10px] uppercase tracking-[0.16em] [writing-mode:vertical-rl]">
+              Library
+            </span>
           </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          {galleryLoading && !gallery ? (
-            <p className="px-2 py-4 text-xs text-slate-500">
-              Loading prototypes...
-            </p>
-          ) : galleryError ? (
-            <div className="flex gap-2 rounded-md border border-rose-900/70 bg-rose-950/40 p-2 text-xs text-rose-200">
-              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{galleryError}</span>
+        ) : (
+          <>
+            <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-800 px-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <FolderKanban className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <span className="truncate text-xs font-medium text-slate-200">
+                  Project prototypes
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center">
+                <button
+                  type="button"
+                  aria-label="Hide prototype library"
+                  title="Hide prototype library"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                  onClick={toggleSidebar}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Refresh prototype library"
+                  title="Refresh prototype library"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                  onClick={() => void loadGallery()}
+                >
+                  <RefreshCw
+                    className={[
+                      "h-3.5 w-3.5",
+                      galleryLoading ? "animate-spin" : "",
+                    ].join(" ")}
+                  />
+                </button>
+              </div>
             </div>
-          ) : gallery ? (
-            <div className="space-y-3">
-              {gallery.projects.map((project) => (
-                <section key={project.projectId} aria-label={project.name}>
-                  <div className="flex items-center justify-between gap-2 px-2 pb-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                    <span
-                      className="truncate normal-case"
-                      title={project.path ?? undefined}
-                    >
-                      {project.name}
-                    </span>
-                    <span>{project.prototypes.length}</span>
-                  </div>
-                  {project.prototypes.length > 0 ? (
-                    <div className="space-y-0.5">
-                      {project.prototypes.map((prototype) => {
-                        const active = sameSelection(selection, {
-                          projectId: project.projectId,
-                          slug: prototype.slug,
-                        });
-                        return (
-                          <button
-                            type="button"
-                            key={prototype.slug}
-                            aria-current={active ? "page" : undefined}
-                            className={[
-                              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition focus:outline-none focus:ring-2 focus:ring-slate-500",
-                              active
-                                ? "bg-slate-800 text-slate-50"
-                                : "text-slate-400 hover:bg-slate-900 hover:text-slate-100",
-                            ].join(" ")}
-                            onClick={() =>
-                              selectPrototype({
-                                projectId: project.projectId,
-                                slug: prototype.slug,
-                              })
-                            }
-                          >
-                            <FileCode2 className="h-3.5 w-3.5 shrink-0" />
-                            <span className="min-w-0 flex-1">
-                              <span
-                                className="block truncate"
-                                title={prototype.title}
-                              >
-                                {prototype.title}
-                              </span>
-                              <span className="block truncate text-[10px] text-slate-600">
-                                {prototype.slug}
-                              </span>
-                            </span>
-                            {!prototype.entry ? (
-                              <span className="shrink-0 rounded border border-amber-900/80 px-1 py-0.5 text-[8px] uppercase text-amber-400">
-                                No entry
-                              </span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="px-2 py-1 text-[10px] text-slate-600">
-                      {projectEmptyMessage(project)}
-                    </p>
-                  )}
-                </section>
-              ))}
-              {gallery.projects.length === 0 ? (
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              {galleryLoading && !gallery ? (
                 <p className="px-2 py-4 text-xs text-slate-500">
-                  No Runweave projects
+                  Loading prototypes...
                 </p>
+              ) : galleryError ? (
+                <div className="flex gap-2 rounded-md border border-rose-900/70 bg-rose-950/40 p-2 text-xs text-rose-200">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{galleryError}</span>
+                </div>
+              ) : gallery ? (
+                <div className="space-y-3">
+                  {gallery.projects.map((project) => (
+                    <section key={project.projectId} aria-label={project.name}>
+                      <div className="flex items-center justify-between gap-2 px-2 pb-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                        <span
+                          className="truncate normal-case"
+                          title={project.path ?? undefined}
+                        >
+                          {project.name}
+                        </span>
+                        <span>{project.prototypes.length}</span>
+                      </div>
+                      {project.prototypes.length > 0 ? (
+                        <div className="space-y-0.5">
+                          {project.prototypes.map((prototype) => {
+                            const active = sameSelection(selection, {
+                              projectId: project.projectId,
+                              source: prototype.source,
+                              slug: prototype.slug,
+                            });
+                            return (
+                              <button
+                                type="button"
+                                key={`${prototype.source}:${prototype.slug}`}
+                                aria-current={active ? "page" : undefined}
+                                className={[
+                                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition focus:outline-none focus:ring-2 focus:ring-slate-500",
+                                  active
+                                    ? "bg-slate-800 text-slate-50"
+                                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-100",
+                                ].join(" ")}
+                                onClick={() =>
+                                  selectPrototype({
+                                    projectId: project.projectId,
+                                    source: prototype.source,
+                                    slug: prototype.slug,
+                                  })
+                                }
+                              >
+                                <FileCode2 className="h-3.5 w-3.5 shrink-0" />
+                                <span className="min-w-0 flex-1">
+                                  <span
+                                    className="block truncate"
+                                    title={prototype.title}
+                                  >
+                                    {prototype.title}
+                                  </span>
+                                  <span className="block truncate text-[10px] text-slate-600">
+                                    {prototypeSourcePath(prototype.source)} /{" "}
+                                    {prototype.slug}
+                                  </span>
+                                </span>
+                                {!prototype.entry ? (
+                                  <span className="shrink-0 rounded border border-amber-900/80 px-1 py-0.5 text-[8px] uppercase text-amber-400">
+                                    No entry
+                                  </span>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="px-2 py-1 text-[10px] text-slate-600">
+                          {projectEmptyMessage(project)}
+                        </p>
+                      )}
+                    </section>
+                  ))}
+                  {gallery.projects.length === 0 ? (
+                    <p className="px-2 py-4 text-xs text-slate-500">
+                      No Runweave projects
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
-          ) : null}
-        </div>
+          </>
+        )}
       </aside>
 
       <section className="flex min-h-0 min-w-0 flex-col">
@@ -387,7 +507,8 @@ export function PrototypeGallery({
             </p>
             {selected ? (
               <p className="truncate text-[10px] text-slate-600">
-                {selected.project.name} / docs/prototypes/
+                {selected.project.name} /{" "}
+                {prototypeSourcePath(selected.prototype.source)} /{" "}
                 {selected.prototype.slug}
               </p>
             ) : null}

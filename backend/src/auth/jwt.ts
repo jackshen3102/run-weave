@@ -15,6 +15,7 @@ export interface TokenResource {
   terminalSessionId?: string;
   tabId?: string;
   projectId?: string;
+  prototypeSource?: string;
   prototypeSlug?: string;
 }
 
@@ -74,6 +75,10 @@ function decodePayload(encodedPayload: string): BaseTokenPayload | null {
               projectId:
                 typeof parsed.resource.projectId === "string"
                   ? parsed.resource.projectId
+                  : undefined,
+              prototypeSource:
+                typeof parsed.resource.prototypeSource === "string"
+                  ? parsed.resource.prototypeSource
                   : undefined,
               prototypeSlug:
                 typeof parsed.resource.prototypeSlug === "string"

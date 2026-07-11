@@ -389,7 +389,7 @@ export default function App() {
         }
       />
       <Route
-        path="/prototypes/:projectId/:prototypeSlug"
+        path="/prototypes/:projectId/:prototypeSource/:prototypeSlug"
         element={
           needsConnection ? (
             <Navigate to="/connections" replace />

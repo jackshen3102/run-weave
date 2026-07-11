@@ -314,6 +314,7 @@ export class AuthService {
       actual.terminalSessionId !== params.resource.terminalSessionId ||
       actual.tabId !== params.resource.tabId ||
       actual.projectId !== params.resource.projectId ||
+      actual.prototypeSource !== params.resource.prototypeSource ||
       actual.prototypeSlug !== params.resource.prototypeSlug
     ) {
       return null;

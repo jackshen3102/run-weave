@@ -72,8 +72,13 @@ export type TerminalPrototypeGalleryProjectStatus =
   | "prototype-root-missing"
   | "prototype-root-unavailable";
 
+export type TerminalPrototypeGallerySource =
+  | "prototypes"
+  | "architecture-flows";
+
 export interface TerminalPrototypeGalleryItem {
   projectId: string;
+  source: TerminalPrototypeGallerySource;
   slug: string;
   title: string;
   entry: "index.html" | null;
