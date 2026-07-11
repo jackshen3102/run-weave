@@ -33,13 +33,14 @@
 
 ## 操作指南（活文档）
 
-| 需求                   | 阅读                                 |
-| ---------------------- | ------------------------------------ |
-| Terminal CLI           | cli/terminal-cli.md                  |
-| Agent Team CLI         | cli/agent-team-cli.md                |
-| 部署 / 环境概览        | deployment/overview.md               |
-| Electron 本地自动更新  | deployment/electron-local-updates.md |
-| Runweave Beta 自举通道 | deployment/runweave-beta.md          |
+| 需求                         | 阅读                                 |
+| ---------------------------- | ------------------------------------ |
+| Terminal CLI                 | cli/terminal-cli.md                  |
+| Agent Team CLI               | cli/agent-team-cli.md                |
+| 部署 / 环境概览              | deployment/overview.md               |
+| 飞书应用通知与 Terminal 回复 | deployment/feishu-app-integration.md |
+| Electron 本地自动更新        | deployment/electron-local-updates.md |
+| Runweave Beta 自举通道       | deployment/runweave-beta.md          |
 
 ## 质量与可观测（活文档）
 

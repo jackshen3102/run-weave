@@ -183,7 +183,7 @@ function notifyDesktop(source) {
   }
 }
 
-function notifyFeishu(payload, source, terminalSessionId) {
+function notifyFeishu(payload, source, terminalSessionId, terminalPanelId) {
   const script = `${os.homedir()}/.runweave/hooks/feishu_stop_notify.sh`;
   try {
     if (!fs.existsSync(script)) {
@@ -199,6 +199,7 @@ function notifyFeishu(payload, source, terminalSessionId) {
         ...payload,
         source,
         terminalSessionId,
+        terminalPanelId: terminalPanelId || undefined,
         projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
       }),
     );
@@ -411,7 +412,7 @@ async function main() {
 
   if (shouldRecordCompletion && completionEndpoint) {
     notifyDesktop(source);
-    notifyFeishu(payload, source, terminalSessionId);
+    notifyFeishu(payload, source, terminalSessionId, terminalPanelId);
     if (appServerClient) {
       const completionBody = buildCompletionHookBody({
         terminalSessionId,

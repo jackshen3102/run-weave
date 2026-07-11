@@ -19,5 +19,8 @@
     "@runweave/shared": "workspace:*",
     "@types/node": "^22.13.10",
     "esbuild": "^0.25.0"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.70.0"
   }
 }
