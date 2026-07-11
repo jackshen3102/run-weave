@@ -14,7 +14,6 @@ import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import {
   ensureTerminalRuntime,
   isTmuxBackedSession,
-  resolveTmuxTarget,
 } from "../terminal/runtime-launcher";
 import { createTerminalRuntimeRecorder } from "../terminal/runtime-recorder";
 import { createShellPromptTracker } from "../terminal/shell-integration";
@@ -26,25 +25,22 @@ import { createHeartbeatController } from "./heartbeat";
 import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
 import {
   delay,
-  getTmuxPaneMetadataReader,
   resolveInitialSnapshot,
   sendEvent,
   sendStatusEvent,
   shouldSendInitialSnapshot,
   shouldSettleInitialTmuxRepaint,
   TMUX_INITIAL_REPAINT_SETTLE_MS,
-  TMUX_METADATA_SYNC_DELAY_MS,
 } from "./terminal-server-connection-helpers";
-import { shouldKeepExistingActiveCommand } from "./terminal-metadata-policy";
 import { attachTerminalUpgradeHandler } from "./terminal-upgrade";
 import {
   createTerminalInputHandler,
   type TerminalClientInputState,
 } from "./terminal-input-handler";
 import { logTerminalConnectionOpened } from "./terminal-connection-logging";
+import { createTerminalMetadataSyncController } from "./terminal-metadata-sync";
 
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
-const TMUX_ACTIVE_COMMAND_RESYNC_DELAY_MS = 1_000;
 
 export function attachTerminalWebSocketServer(
   server: HttpServer,
@@ -209,134 +205,14 @@ export function attachTerminalWebSocketServer(
       cwd: session?.cwd ?? null,
       activeCommand: session?.activeCommand ?? null,
     });
-    const tmuxPaneMetadataReader = getTmuxPaneMetadataReader(tmuxService);
-    let tmuxMetadataSyncTimer: NodeJS.Timeout | null = null;
-    let tmuxMetadataSyncInFlight = false;
-    let shellPromptCommandActive = false;
-    let lastSentMetadata: {
-      cwd: string;
-      activeCommand: string | null;
-    } | null = null;
-
-    const publishMetadata = async (
-      metadata: {
-        cwd: string;
-        activeCommand: string | null;
-      },
-      publishOptions?: { forceSend?: boolean },
-    ): Promise<void> => {
-      const current = terminalSessionManager.getSession(terminalSessionId);
-      const metadataChanged =
-        current?.cwd !== metadata.cwd ||
-        current.activeCommand !== metadata.activeCommand;
-      const clientMetadataChanged =
-        !lastSentMetadata ||
-        lastSentMetadata.cwd !== metadata.cwd ||
-        lastSentMetadata.activeCommand !== metadata.activeCommand;
-      if (
-        !metadataChanged &&
-        !clientMetadataChanged &&
-        !publishOptions?.forceSend
-      ) {
-        return;
-      }
-
-      if (metadataChanged) {
-        const updatedSession =
-          await terminalSessionManager.updateSessionMetadata(
-            terminalSessionId,
-            {
-              cwd: metadata.cwd,
-              activeCommand: metadata.activeCommand,
-            },
-          );
-        if (updatedSession) {
-          options?.terminalStateService?.setShellActiveCommand(
-            terminalSessionId,
-            updatedSession,
-            {
-              projectId: updatedSession.projectId,
-              reason: updatedSession.status === "exited" ? "exit" : "metadata",
-            },
-          );
-        }
-      }
-      sendEvent(socket, {
-        type: "metadata",
-        cwd: metadata.cwd,
-        activeCommand: metadata.activeCommand,
-      });
-      lastSentMetadata = {
-        cwd: metadata.cwd,
-        activeCommand: metadata.activeCommand,
-      };
-    };
-
-    const syncTmuxPaneMetadata = async (): Promise<void> => {
-      if (
-        !session ||
-        !tmuxService ||
-        !tmuxPaneMetadataReader ||
-        !isTmuxBackedSession(session) ||
-        shellPromptCommandActive ||
-        tmuxMetadataSyncInFlight
-      ) {
-        return;
-      }
-
-      tmuxMetadataSyncInFlight = true;
-      try {
-        const metadata = await tmuxPaneMetadataReader(
-          resolveTmuxTarget(session, tmuxService),
-          session.command,
-        );
-        if (metadata) {
-          const currentSession =
-            terminalSessionManager.getSession(terminalSessionId);
-          const publishableMetadata = shouldKeepExistingActiveCommand(
-            currentSession?.activeCommand ?? null,
-            metadata.activeCommand,
-            metadata.activeCommandSource,
-          )
-            ? {
-                ...metadata,
-                activeCommand: currentSession?.activeCommand ?? null,
-              }
-            : metadata;
-          await publishMetadata(publishableMetadata);
-          if (publishableMetadata.activeCommand !== null) {
-            scheduleTmuxPaneMetadataSync(TMUX_ACTIVE_COMMAND_RESYNC_DELAY_MS);
-          }
-        }
-      } catch (error) {
-        terminalWsLogger.error("terminal.tmux.metadata-sync.failed", {
-          message: "Tmux pane metadata sync failed",
-          terminalSessionId,
-          error,
-        });
-      } finally {
-        tmuxMetadataSyncInFlight = false;
-      }
-    };
-
-    const scheduleTmuxPaneMetadataSync = (
-      delayMs = TMUX_METADATA_SYNC_DELAY_MS,
-    ): void => {
-      if (
-        !session ||
-        !isTmuxBackedSession(session) ||
-        !tmuxPaneMetadataReader
-      ) {
-        return;
-      }
-      if (tmuxMetadataSyncTimer) {
-        clearTimeout(tmuxMetadataSyncTimer);
-      }
-      tmuxMetadataSyncTimer = setTimeout(() => {
-        tmuxMetadataSyncTimer = null;
-        void syncTmuxPaneMetadata();
-      }, delayMs);
-    };
+    const metadataSync = createTerminalMetadataSyncController({
+      session,
+      socket,
+      terminalSessionId,
+      terminalSessionManager,
+      terminalStateService: options?.terminalStateService,
+      tmuxService,
+    });
 
     logTerminalConnectionOpened({
       terminalSessionId,
@@ -367,10 +243,12 @@ export function attachTerminalWebSocketServer(
           ...summarizeTerminalChunk(data),
         });
         const metadata = shellPromptTracker.consume(data);
-        shellPromptCommandActive = Boolean(metadata.activeCommand);
+        metadataSync.setShellPromptCommandActive(
+          Boolean(metadata.activeCommand),
+        );
 
         if (metadata.metadataChanged && metadata.cwd) {
-          void publishMetadata(
+          void metadataSync.publishMetadata(
             {
               cwd: metadata.cwd,
               activeCommand: metadata.activeCommand,
@@ -384,7 +262,7 @@ export function attachTerminalWebSocketServer(
             });
           });
         }
-        scheduleTmuxPaneMetadataSync();
+        metadataSync.scheduleTmuxPaneMetadataSync();
 
         if (!metadata.output) {
           return;
@@ -487,7 +365,7 @@ export function attachTerminalWebSocketServer(
       terminalSessionId,
       runtimeKind: session && isTmuxBackedSession(session) ? "tmux" : "pty",
     });
-    await syncTmuxPaneMetadata();
+    await metadataSync.syncTmuxPaneMetadata();
     if (session) {
       if (sendInitialSnapshot) {
         if (settleInitialTmuxRepaint) {
@@ -534,7 +412,7 @@ export function attachTerminalWebSocketServer(
       inputState,
       outputBatcher,
       runtime: activeRuntime,
-      scheduleMetadataSync: () => scheduleTmuxPaneMetadataSync(),
+      scheduleMetadataSync: () => metadataSync.scheduleTmuxPaneMetadataSync(),
       socket,
       terminalSessionId,
       terminalSessionManager,
@@ -553,10 +431,7 @@ export function attachTerminalWebSocketServer(
       unsubscribe();
       outputBatcher.dispose();
       releaseTmuxLifecycleClient?.();
-      if (tmuxMetadataSyncTimer) {
-        clearTimeout(tmuxMetadataSyncTimer);
-        tmuxMetadataSyncTimer = null;
-      }
+      metadataSync.clearTmuxPaneMetadataSync();
       runtimeRegistry.detachClient(terminalSessionId, clientId);
       if (
         session &&
