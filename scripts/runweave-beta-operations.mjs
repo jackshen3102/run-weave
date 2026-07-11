@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
-  BETA_APP_NAME,
   BETA_CHANNEL,
   STATUS_WAIT_MS,
   BetaHealthError,
@@ -11,9 +10,11 @@ import {
   getAppVersion,
   getGitHead,
   getPathIdentity,
+  inspectBetaDesktopProcessOwnership,
   isPidLive,
   readJson,
   readReleaseId,
+  readProcessSignature,
   runCapture,
   writeJson,
   writeReleaseId,
@@ -53,13 +54,29 @@ export function buildUpdateEnv(
     ...process.env,
     BROWSER_PROFILE_DIR: paths.profileDir,
     RUNWEAVE_CONFIG_FILE: paths.cliConfigPath,
+    RUNWEAVE_CLI_BUNDLE_OUTFILE: paths.controlCliPath,
     RUNWEAVE_APP_BACKUP_PATH: appBackupPath,
     RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: paths.appServerCloudSyncDir,
     RUNWEAVE_APP_SERVER_HOME: paths.appServerHome,
     RUNWEAVE_DESKTOP_CHANNEL: BETA_CHANNEL,
+    RUNWEAVE_DESKTOP_INSTANCE_ID: paths.instanceId,
+    RUNWEAVE_DESKTOP_CDP_PORT: String(paths.desktopCdpPort),
+    RUNWEAVE_DESKTOP_STATUS_PATH: paths.desktopStatusPath,
+    RUNWEAVE_DESKTOP_USER_DATA_DIR: paths.userData,
+    RUNWEAVE_TERMINAL_BROWSER_CDP_PROXY_PORT: String(
+      paths.terminalBrowserCdpPort,
+    ),
+    ...(paths.devSessionId
+      ? { RUNWEAVE_DEV_SESSION_ID: paths.devSessionId }
+      : {}),
+    RUNWEAVE_ELECTRON_APP_ID: paths.bundleId,
+    RUNWEAVE_ELECTRON_BUILD_ROOT: paths.buildRoot,
     RUNWEAVE_DESKTOP_SOURCE_REVISION: gitHead ?? "unknown",
+    RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
     RUNWEAVE_ELECTRON_BUILDER_CONFIG: "electron-builder.beta.yml",
-    RUNWEAVE_LOCAL_UPDATE_APP_NAME: BETA_APP_NAME,
+    RUNWEAVE_LOCAL_UPDATE_APP_NAME: paths.appName,
+    RUNWEAVE_RUNTIME_ARTIFACTS_ROOT: paths.runtimeArtifactsRoot,
+    RUNWEAVE_RUNTIME_BUILD_ROOT: paths.runtimeBuildRoot,
     RUNWEAVE_UPDATE_TARGET: BETA_CHANNEL,
     VITE_RUNWEAVE_CHANNEL: BETA_CHANNEL,
     VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
@@ -112,53 +129,81 @@ export async function runUpdateProcess(paths, args, env, logPath) {
 }
 
 export async function quitBeta(paths) {
-  const desktopState = await readJson(paths.desktopStatusPath);
-  const pid = desktopState?.app?.pid;
-  if (!isPidLive(pid)) {
+  const ownership = await inspectBetaDesktopProcessOwnership(paths);
+  if (!ownership.running) {
     return;
   }
+  if (!ownership.ok) {
+    throw new Error(`refusing to stop Beta: ${ownership.reason}`);
+  }
+  const { executable, pid, processSignature } = ownership;
   await runCapture("osascript", [
     "-e",
-    `tell application "${BETA_APP_NAME}" to quit`,
+    `tell application "${paths.appName}" to quit`,
   ]);
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline && isPidLive(pid)) {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   if (isPidLive(pid)) {
+    const currentSignature = await readProcessSignature(pid);
+    if (
+      currentSignature !== processSignature ||
+      !currentSignature.includes(executable)
+    ) {
+      throw new Error(
+        "refusing to signal Beta after quit timeout: process identity drifted",
+      );
+    }
     process.kill(pid, "SIGTERM");
   }
 }
 
-export async function openBeta(paths) {
+export async function openBeta(paths, explicitEnv = null) {
   if (!existsSync(paths.appPath)) {
     return;
   }
-  const result = await runCapture("open", ["-n", paths.appPath]);
-  if (!result.ok) {
-    throw new Error(`failed to open ${paths.appPath}: ${result.stderr}`);
-  }
+  const state = await readJson(paths.statePath);
+  const launchEnv =
+    explicitEnv ??
+    buildUpdateEnv(
+      paths,
+      state?.gitHead ?? (await getGitHead(paths.sourceRoot)),
+    );
+  const executable = path.join(
+    paths.appPath,
+    "Contents",
+    "MacOS",
+    paths.appName,
+  );
+  const child = spawn(executable, [], {
+    detached: true,
+    env: launchEnv,
+    stdio: "ignore",
+  });
+  child.unref();
 }
 
-export async function runAppServerCli(paths, command) {
-  const cliEntry = path.join(
-    paths.sourceRoot,
-    "packages",
-    "runweave-cli",
-    "dist",
-    "index.js",
-  );
+export async function runAppServerCli(paths, command, sourceRevision = null) {
+  const cliEntry = paths.controlCliPath;
   if (!existsSync(cliEntry)) {
     return { ok: false, code: 1, stderr: `missing CLI build: ${cliEntry}` };
   }
   return await runCapture(
     "node",
     [cliEntry, "app-server", command, "--home", paths.appServerHome],
-    { env: buildUpdateEnv(paths, await getGitHead(paths.sourceRoot)) },
+    {
+      env: buildUpdateEnv(
+        paths,
+        sourceRevision ?? (await getGitHead(paths.sourceRoot)),
+      ),
+    },
   );
 }
 
 export async function restoreBaseline(paths, baseline, options = {}) {
+  const baselineRevision =
+    baseline.source?.gitHead ?? (await getGitHead(paths.sourceRoot));
   const currentAppIdentity = await getPathIdentity(paths.appPath);
   const currentRuntimeReleaseId = await readReleaseId(paths.runtimeCurrentPath);
   const currentAppServerReleaseId = await readReleaseId(
@@ -185,7 +230,7 @@ export async function restoreBaseline(paths, baseline, options = {}) {
       baseline.appServerReleaseId,
     );
     if (baseline.appServerReleaseId) {
-      const restart = await runAppServerCli(paths, "restart");
+      const restart = await runAppServerCli(paths, "restart", baselineRevision);
       if (!restart.ok) {
         throw new Error(`failed to restore Beta App Server: ${restart.stderr}`);
       }
@@ -208,7 +253,7 @@ export async function restoreBaseline(paths, baseline, options = {}) {
     (appChanged || runtimeChanged || appServerChanged) &&
     baseline.app.exists
   ) {
-    await openBeta(paths);
+    await openBeta(paths, buildUpdateEnv(paths, baselineRevision));
   }
 
   return { appChanged, appServerChanged, runtimeChanged };

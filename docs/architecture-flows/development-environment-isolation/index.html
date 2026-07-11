@@ -554,14 +554,16 @@
             最好的开发方式不是手工选择一堆端口，也不是每次部署 Beta。源码侧
             Planner 先推荐最小 profile，Dev Session
             再明确引用默认服务或拥有独立服务，最后打开准确的 Web、Desktop 或
-            Terminal Browser surface。
+            Terminal Browser surface。代码、脚本和开发用 Agent/Team 始终留在
+            Stable 主应用 terminal；所有 profile 都只是被测目标。
           </p>
         </div>
         <aside class="principle">
           <strong>核心不变量</strong>
           <p>
-            Dev Session 是任务事实源，serviceInstanceId
-            是运行服务事实源。未受影响的服务可以复用；受影响的服务才独占。共享不等于隐式发现。
+            Dev Session 是任务事实源，serviceInstanceId 是运行服务事实源。Stable
+            terminal 是唯一控制面，Dev Server、Electron Dev 和 Beta
+            都是被测面。未受影响的服务可以复用；受影响的服务才独占。共享不等于隐式发现。
           </p>
         </aside>
       </div>
@@ -572,7 +574,8 @@
             <h2>推荐开发工作流：一个源码侧入口</h2>
             <p>
               以下是目标交互，当前尚未实现。自动判断只做推荐；用户目标和显式
-              profile 始终优先。
+              profile 始终优先。无论选择哪种 profile，以下命令和开发 Agent/Team
+              都留在 Stable 主应用 terminal 中。
             </p>
           </div>
         </div>

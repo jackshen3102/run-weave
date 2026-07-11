@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { commandName } from "./runweave-update-core.mjs";
 import { appName, electronBuilderConfig } from "./runweave-update-context.mjs";
@@ -84,7 +85,21 @@ export async function openApp(appPath) {
   }
 
   await fs.access(appPath);
-  await runChecked("open", ["-n", appPath]);
+  if (
+    process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND === "false" ||
+    process.env.RUNWEAVE_APP_SERVER_DISCOVERY === "explicit"
+  ) {
+    const executable = path.join(appPath, "Contents", "MacOS", appName);
+    await fs.access(executable);
+    const child = spawn(executable, [], {
+      detached: true,
+      env: process.env,
+      stdio: "ignore",
+    });
+    child.unref();
+  } else {
+    await runChecked("open", ["-n", appPath]);
+  }
   await waitForInstalledAppStart(appPath);
 }
 
@@ -142,31 +157,6 @@ export async function installBuiltApp({
   }
 }
 
-export async function findLatestRuntimeManifest(sourceRoot) {
-  const artifactsRoot = path.join(sourceRoot, ".runtime-artifacts");
-  const entries = await fs.readdir(artifactsRoot, { withFileTypes: true });
-  const candidates = entries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(artifactsRoot, entry.name, "manifest.json"))
-    .filter((filePath) => existsSync(filePath))
-    .map((filePath) => {
-      const manifest = readJsonFile(filePath);
-      return {
-        filePath,
-        manifest,
-        mtimeMs: existsSync(filePath) ? readFileSync(filePath).length : 0,
-      };
-    })
-    .filter((candidate) => candidate.manifest?.releaseId);
-
-  candidates.sort((a, b) =>
-    String(b.manifest.createdAt ?? "").localeCompare(
-      String(a.manifest.createdAt ?? ""),
-    ),
-  );
-  return candidates[0]?.manifest ?? null;
-}
-
 export async function runRuntimeUpdate({
   channel,
   gitHead,
@@ -179,6 +169,19 @@ export async function runRuntimeUpdate({
     ? [`--shell-version=${installedAppVersion}`]
     : [];
 
+  const artifactsRoot = path.resolve(
+    process.env.RUNWEAVE_RUNTIME_ARTIFACTS_ROOT ??
+      path.join(sourceRoot, ".runtime-artifacts"),
+  );
+  const runtimeZipPath = path.join(
+    artifactsRoot,
+    `runweave-runtime-${releaseId}.zip`,
+  );
+  const runtimeManifestPath = path.join(
+    artifactsRoot,
+    releaseId,
+    "manifest.json",
+  );
   await runChecked(
     commandName("pnpm"),
     ["runtime:build", "--", `--release-id=${releaseId}`, ...shellVersionArg],
@@ -197,18 +200,38 @@ export async function runRuntimeUpdate({
     [
       "runtime:install",
       "--",
-      "--latest",
+      runtimeZipPath,
       `--runtime-home=${runtimeHome}`,
       ...shellVersionArg,
     ],
     { cwd: sourceRoot },
   );
 
-  return await findLatestRuntimeManifest(sourceRoot);
+  const manifest = readJsonFile(runtimeManifestPath);
+  if (manifest?.releaseId !== releaseId) {
+    throw new Error(
+      `runtime manifest identity mismatch: expected ${releaseId}`,
+    );
+  }
+  return manifest;
 }
 
-export async function runAppServerUpdate({ appServerHome, sourceRoot }) {
-  const releaseId = `local-app-server-${Date.now()}`;
+export async function runAppServerUpdate({
+  appServerHome,
+  controlCliPath,
+  sourceRoot,
+}) {
+  const instanceKey = path.basename(path.resolve(appServerHome));
+  const releaseId = `local-app-server-${instanceKey}-${Date.now()}`;
+  const cliEntry =
+    controlCliPath ??
+    path.join(
+      sourceRoot,
+      "packages",
+      "runweave-cli",
+      "dist",
+      "index.js",
+    );
 
   await runChecked(
     "node",
@@ -219,11 +242,12 @@ export async function runAppServerUpdate({ appServerHome, sourceRoot }) {
     ],
     { cwd: sourceRoot },
   );
+  await fs.access(cliEntry);
 
   const restart = await runCaptureChecked(
     "node",
     [
-      "./packages/runweave-cli/dist/index.js",
+      cliEntry,
       "app-server",
       "restart",
       "--home",
@@ -257,8 +281,8 @@ export async function runAppUpdate({
   sourceRoot,
 }) {
   const releaseAppPath = path.join(
-    sourceRoot,
-    "electron",
+    process.env.RUNWEAVE_ELECTRON_BUILD_ROOT ??
+      path.join(sourceRoot, "electron"),
     "release",
     "mac-arm64",
     `${appName}.app`,

@@ -104,8 +104,9 @@ const modes = {
   beta: {
     title: "Beta / Multi-Beta：App 隔离，依赖仍按范围选择",
     description:
-      "只有 packaging、runtime、updater、安装态、迁移或并行 revision 场景需要 Beta。Beta instance 是 Dev Session 的一种 profile/resource。",
-    trigger: "pnpm dev --profile beta --instance <id>",
+      "只有 packaging、runtime、updater、安装态、迁移或并行 revision 场景需要 Beta。命令始终从 Stable 主应用 terminal 发起，Beta 只是被启动、发现和附着的目标。",
+    trigger:
+      "Stable terminal → pnpm dev --profile beta --instance <id> → dev:open 显式附着 Beta",
     services: {
       frontend: [
         "dedicated",

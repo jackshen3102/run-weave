@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { PackagedBackendConnectionState } from "@runweave/shared/runtime-monitor";
@@ -15,6 +16,7 @@ import {
 } from "./packaged-backend-state.js";
 import {
   betaDesktopCdpEndpoint,
+  desktopCdpEndpoint,
   desktopChannel,
   desktopSourceRevision,
   isBetaChannel,
@@ -32,16 +34,41 @@ import {
   resolvePackagedBackendProfileDir,
 } from "./packaged-backend-auth.js";
 
+const desktopProcessStartedAt = new Date().toISOString();
+
+function readDesktopProcessSignature(): string {
+  try {
+    return execFileSync(
+      "/bin/ps",
+      ["-p", String(process.pid), "-o", "lstart=", "-o", "command="],
+      { encoding: "utf8" },
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
 export function writeBetaDesktopStatus(stoppedAt: string | null = null): void {
-  if (!isBetaChannel) {
+  const explicitStatusPath =
+    process.env.RUNWEAVE_DESKTOP_STATUS_PATH?.trim() || null;
+  if (!isBetaChannel && !explicitStatusPath) {
     return;
   }
 
   try {
     const userDataPath = app.getPath("userData");
-    const statusPath = path.join(userDataPath, "beta-desktop-status.json");
+    const statusPath =
+      explicitStatusPath ?? path.join(userDataPath, "beta-desktop-status.json");
     const tempPath = `${statusPath}.tmp`;
-    const backendPid = desktopRuntime.packagedBackend?.child.pid ?? null;
+    const sharedBackendPid = Number(
+      process.env.RUNWEAVE_SHARED_BACKEND_PID ?? "",
+    );
+    const backendPid =
+      desktopRuntime.packagedBackend?.child.pid ??
+      (Number.isInteger(sharedBackendPid) ? sharedBackendPid : null);
+    const sharedAppServerPid = Number(
+      process.env.RUNWEAVE_SHARED_APP_SERVER_PID ?? "",
+    );
     const appPath = app.isPackaged
       ? path.resolve(path.dirname(process.execPath), "../..")
       : null;
@@ -52,10 +79,15 @@ export function writeBetaDesktopStatus(stoppedAt: string | null = null): void {
         {
           schemaVersion: 1,
           channel: desktopChannel,
+          instanceId: process.env.RUNWEAVE_DESKTOP_INSTANCE_ID?.trim() || null,
+          devSessionId: process.env.RUNWEAVE_DEV_SESSION_ID?.trim() || null,
           sourceRevision: desktopSourceRevision,
           app: {
+            executable: process.execPath,
             path: appPath,
             pid: process.pid,
+            processSignature: readDesktopProcessSignature(),
+            startedAt: desktopProcessStartedAt,
             userDataPath,
             version: app.getVersion(),
           },
@@ -65,17 +97,40 @@ export function writeBetaDesktopStatus(stoppedAt: string | null = null): void {
               : desktopRuntime.packagedBackendState.available,
             baseUrl: desktopRuntime.packagedBackendState.backendUrl || null,
             pid: stoppedAt ? null : backendPid,
-            profileDir: resolvePackagedBackendProfileDir(),
+            profileDir:
+              process.env.RUNWEAVE_SHARED_BACKEND_PROFILE_DIR ??
+              resolvePackagedBackendProfileDir(),
             runtimeReleaseId:
               desktopRuntime.packagedBackendState.runtimeReleaseId,
             runtimeSource: desktopRuntime.packagedBackendState.runtimeSource,
+          },
+          appServer: {
+            baseUrl: process.env.RUNWEAVE_APP_SERVER_URL ?? null,
+            home: process.env.RUNWEAVE_APP_SERVER_HOME ?? null,
+            lockPath: process.env.RUNWEAVE_SHARED_APP_SERVER_LOCK_PATH ?? null,
+            pid:
+              Number.isInteger(sharedAppServerPid) && sharedAppServerPid > 0
+                ? sharedAppServerPid
+                : null,
           },
           cli: {
             configPath: process.env.RUNWEAVE_CONFIG_FILE ?? null,
           },
           cdp: {
-            endpoint: stoppedAt ? null : betaDesktopCdpEndpoint,
+            endpoint: stoppedAt
+              ? null
+              : (desktopCdpEndpoint ?? betaDesktopCdpEndpoint),
             pid: stoppedAt ? null : process.pid,
+            desktop: {
+              endpoint: stoppedAt ? null : desktopCdpEndpoint,
+              pid: stoppedAt ? null : process.pid,
+            },
+            terminalBrowser: {
+              endpoint: stoppedAt
+                ? null
+                : (desktopRuntime.cdpProxy?.endpoint ?? null),
+              pid: stoppedAt ? null : process.pid,
+            },
           },
           stoppedAt,
           updatedAt: new Date().toISOString(),
@@ -271,6 +326,49 @@ export async function startPackagedBackendRuntime(): Promise<PackagedBackendConn
         desktopRuntime.packagedBackendState.backendUrl,
         error,
       ),
+    );
+  }
+}
+
+export async function connectExternalBackendRuntime(): Promise<PackagedBackendConnectionState> {
+  const backendUrl = process.env.RUNWEAVE_BACKEND_URL?.trim() || "";
+  try {
+    const parsed = new URL(backendUrl);
+    if (
+      parsed.protocol !== "http:" ||
+      !["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname)
+    ) {
+      throw new Error("external Backend URL must be loopback HTTP");
+    }
+    const response = await fetch(`${backendUrl.replace(/\/+$/, "")}/health`, {
+      signal: AbortSignal.timeout(2_000),
+    });
+    const health = (await response.json()) as {
+      service?: string;
+      serviceInstanceId?: string;
+      sourceRevision?: string;
+      status?: string;
+    };
+    const expectedId = process.env.RUNWEAVE_EXPECTED_BACKEND_ID?.trim();
+    const expectedRevision = process.env.RUNWEAVE_SOURCE_REVISION?.trim();
+    if (
+      !response.ok ||
+      health.status !== "ok" ||
+      health.service !== "runweave-backend" ||
+      (expectedId && health.serviceInstanceId !== expectedId) ||
+      (expectedRevision && health.sourceRevision !== expectedRevision)
+    ) {
+      throw new Error("external Backend identity handshake failed");
+    }
+    return setPackagedBackendState(
+      createAvailablePackagedBackendState(backendUrl, {
+        runtimeSource: "external",
+        statusMessage: "Using Dev Session shared Backend",
+      }),
+    );
+  } catch (error) {
+    return setPackagedBackendState(
+      createUnavailablePackagedBackendStateFromError(backendUrl, error),
     );
   }
 }

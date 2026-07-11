@@ -57,7 +57,15 @@ export function classifyCdpCommand(method: string): CdpCommandClass {
   return "session";
 }
 
-export function buildVersionResponse(wsUrl: string): object {
+export function buildVersionResponse(
+  wsUrl: string,
+  identity?: {
+    instanceId: string | null;
+    devSessionId: string | null;
+    sourceRevision: string;
+    pid: number;
+  },
+): object {
   return {
     Browser: "Runweave/CDP-Proxy",
     "Protocol-Version": "1.3",
@@ -65,6 +73,15 @@ export function buildVersionResponse(wsUrl: string): object {
     "V8-Version": "",
     "WebKit-Version": "",
     webSocketDebuggerUrl: wsUrl,
+    ...(identity
+      ? {
+          "Runweave-Surface": "terminal-browser",
+          "Runweave-Instance-Id": identity.instanceId,
+          "Runweave-Dev-Session-Id": identity.devSessionId,
+          "Runweave-Source-Revision": identity.sourceRevision,
+          "Runweave-Pid": identity.pid,
+        }
+      : {}),
   };
 }
 

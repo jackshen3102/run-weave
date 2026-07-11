@@ -14,6 +14,9 @@ export interface AppServerLock {
   releaseId: string | null;
   entry: string;
   runtimeRoot: string | null;
+  serviceInstanceId?: string;
+  devSessionId?: string;
+  sourceRevision?: string;
 }
 
 export interface AppServerConnectionInfo {
@@ -27,6 +30,10 @@ export interface AppServerHealth {
   protocolVersion: number;
   pid: number;
   version?: string;
+  serviceInstanceId?: string;
+  devSessionId?: string;
+  sourceRevision?: string;
+  capabilities?: string[];
 }
 
 export interface AppServerStatus {

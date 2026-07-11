@@ -434,6 +434,7 @@ export function ExecutingSection({
                   ) : null}
                   <AcceptanceEvidenceDetails
                     status={item.status}
+                    summary={item.resultSummary}
                     evidence={item.evidence}
                   />
                   {item.status === "fail" && item.bouncedToPanelId ? (

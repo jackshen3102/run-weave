@@ -17,12 +17,20 @@ export async function discoverAppServer(
     env?: NodeJS.ProcessEnv;
   } = {},
 ): Promise<AppServerConnectionInfo | null> {
-  const fromEnv = await discoverFromEnv(options.env ?? process.env);
+  const env = options.env ?? process.env;
+  const discoveryMode = env.RUNWEAVE_APP_SERVER_DISCOVERY?.trim();
+  if (discoveryMode === "disabled") {
+    return null;
+  }
+  const fromEnv = await discoverFromEnv(env);
   if (fromEnv) {
     return fromEnv;
   }
+  if (discoveryMode === "explicit") {
+    return null;
+  }
 
-  const status = await getAppServerStatus(options);
+  const status = await getAppServerStatus({ ...options, env });
   if (!status.available || !status.baseUrl || !status.hasToken) {
     return null;
   }
@@ -115,6 +123,21 @@ export async function fetchAppServerHealth(
       protocolVersion: APP_SERVER_PROTOCOL_VERSION,
       pid: body.pid,
       version: typeof body.version === "string" ? body.version : undefined,
+      serviceInstanceId:
+        typeof body.serviceInstanceId === "string"
+          ? body.serviceInstanceId
+          : undefined,
+      devSessionId:
+        typeof body.devSessionId === "string" ? body.devSessionId : undefined,
+      sourceRevision:
+        typeof body.sourceRevision === "string"
+          ? body.sourceRevision
+          : undefined,
+      capabilities: Array.isArray(body.capabilities)
+        ? body.capabilities.filter(
+            (value): value is string => typeof value === "string",
+          )
+        : undefined,
     };
   } catch {
     return null;
@@ -193,7 +216,13 @@ function isAppServerLock(value: unknown): value is AppServerLock {
     isAppServerRuntimeSource(record.source) &&
     (typeof record.releaseId === "string" || record.releaseId === null) &&
     typeof record.entry === "string" &&
-    (typeof record.runtimeRoot === "string" || record.runtimeRoot === null)
+    (typeof record.runtimeRoot === "string" || record.runtimeRoot === null) &&
+    (typeof record.serviceInstanceId === "string" ||
+      record.serviceInstanceId === undefined) &&
+    (typeof record.devSessionId === "string" ||
+      record.devSessionId === undefined) &&
+    (typeof record.sourceRevision === "string" ||
+      record.sourceRevision === undefined)
   );
 }
 

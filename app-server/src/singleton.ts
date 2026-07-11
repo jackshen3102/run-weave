@@ -14,6 +14,9 @@ export interface AppServerLock {
   releaseId: string | null;
   entry: string;
   runtimeRoot: string | null;
+  serviceInstanceId?: string;
+  devSessionId?: string;
+  sourceRevision?: string;
 }
 
 export type SingletonPreflightResult =
@@ -126,7 +129,13 @@ function isLock(value: unknown): value is AppServerLock {
       record.source === "bundled") &&
     (typeof record.releaseId === "string" || record.releaseId === null) &&
     typeof record.entry === "string" &&
-    (typeof record.runtimeRoot === "string" || record.runtimeRoot === null)
+    (typeof record.runtimeRoot === "string" || record.runtimeRoot === null) &&
+    (typeof record.serviceInstanceId === "string" ||
+      record.serviceInstanceId === undefined) &&
+    (typeof record.devSessionId === "string" ||
+      record.devSessionId === undefined) &&
+    (typeof record.sourceRevision === "string" ||
+      record.sourceRevision === undefined)
   );
 }
 

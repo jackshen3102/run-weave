@@ -15,7 +15,12 @@ import { buildApplicationMenuTemplate } from "./application-menu.js";
 import { registerTerminalBrowserHandlers } from "./terminal-browser-view.js";
 import { installHooksIfNeeded } from "./hooks/hook-installer.js";
 import { desktopRuntime } from "./desktop-runtime-state.js";
-import { isBetaChannel, isDev } from "./desktop-config.js";
+import {
+  desktopSourceRevision,
+  isBetaChannel,
+  isDev,
+  managesPackagedBackend,
+} from "./desktop-config.js";
 import {
   createWindow,
   navigateWindowToPath,
@@ -33,6 +38,7 @@ import {
 } from "./desktop-diagnostics.js";
 import {
   checkAndNotifyAppServerAvailability,
+  connectExternalBackendRuntime,
   registerPackagedBackendHandlers,
   reloadLocalRuntime,
   startPackagedBackendRuntime,
@@ -100,7 +106,9 @@ if (hasSingleInstanceLock) {
       registerCdpProxyHandlers();
       if (!isBetaChannel) {
         await installHooksIfNeeded({
-          resourcesDir: path.join(__dirname, "..", "resources"),
+          resourcesDir: process.env.RUNWEAVE_ELECTRON_RESOURCES_DIR
+            ? path.resolve(process.env.RUNWEAVE_ELECTRON_RESOURCES_DIR)
+            : path.join(__dirname, "..", "resources"),
         });
       }
 
@@ -111,12 +119,19 @@ if (hasSingleInstanceLock) {
       desktopRuntime.cdpProxy = await startCdpProxy({
         host: CDP_PROXY_HOST,
         port: cdpProxyPort,
+        identity: {
+          instanceId:
+            process.env.RUNWEAVE_DESKTOP_INSTANCE_ID?.trim() || null,
+          devSessionId: process.env.RUNWEAVE_DEV_SESSION_ID?.trim() || null,
+          sourceRevision: desktopSourceRevision,
+          pid: process.pid,
+        },
       });
       process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT =
         desktopRuntime.cdpProxy.endpoint;
       writeBetaDesktopStatus();
 
-      if (isDev) {
+      if (isDev || !managesPackagedBackend) {
         // In dev mode, backend is an independent process started before Electron.
         // Notify it of the CDP proxy endpoint so PTY terminals inherit the env var.
         const backendUrl =
@@ -156,7 +171,11 @@ if (hasSingleInstanceLock) {
       if (!isDev) {
         refreshActiveRuntimeRelease();
         registerCustomProtocol(getActiveFrontendDistDir);
-        await startPackagedBackendRuntime();
+        if (managesPackagedBackend) {
+          await startPackagedBackendRuntime();
+        } else {
+          await connectExternalBackendRuntime();
+        }
       }
 
       const openNewWindow = (): BrowserWindow => {

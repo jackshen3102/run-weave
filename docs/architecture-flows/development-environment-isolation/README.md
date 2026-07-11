@@ -6,6 +6,7 @@ Runweave 本地开发、Electron Dev、Beta 和多 Beta 并行验证时的服务
 - **梳理日期**：`2026-07-11`。
 - **核心问题**：开发者如何用一条稳定主线，从改动范围得到最小充分环境，并确保 Frontend、Backend、App Server、CDP 不串线。
 - **目标结论**：源码侧统一创建 Dev Session。Dev Session 自动推荐环境 profile，允许显式覆盖；未改动且不受契约、状态和生命周期影响的服务复用默认实例，其余服务由本次 Session 独占。
+- **运行前提**：代码编辑、脚本和开发用 Agent/Team 始终在 Stable 主应用 terminal 中执行；所有 profile 都只是测试/验证目标，不能要求进入目标 terminal。
 - **非目标**：不实现新的编排器，不修改现有服务，不把技术说明页面当作产品 UI。
 
 ## 启动
@@ -53,6 +54,14 @@ pnpm dev:stop
 ```
 
 `pnpm dev` 位于当前源码 worktree，因此不依赖可能较旧的 Stable App/CLI。自动判断只负责**推荐** profile；显式 `--profile`、验收目标和用户意图始终优先，避免纯 diff 推断误判。
+
+### 控制面与被测面
+
+Stable 主应用 terminal 是唯一控制面：代码编辑、开发 Agent/Team、构建脚本、启动、状态查询、Playwright 附着和停止都从这里发起。`frontend/fullstack/app-server/electron/beta` 只描述 System Under Test 的服务组合，而不是 Agent 要切换进去的执行环境。
+
+本地 Vite/Backend/App Server 负责暴露 URL 和 health；Electron/Beta 负责暴露实例身份、revision、Desktop CDP 和 Terminal Browser CDP。若被测功能本身是 Agent/Team，也由 Stable 控制面向目标服务发起隔离验收，不迁移当前开发 run 或 pane。
+
+Stable terminal 自带的 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 只指向 Stable Terminal Browser，不能表达 Beta 目标。`dev:open --session <id> --surface <surface>` 必须读取 manifest/Beta status，返回显式 Beta endpoint；`$toolkit:playwright-cli` 再从 Stable terminal 附着。Beta 内可以存在被测 Browser tab，但不需要也不允许把 Beta terminal 当作开发入口。
 
 ### 一次开发的完整闭环
 

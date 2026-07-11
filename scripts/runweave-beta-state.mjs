@@ -23,15 +23,29 @@ export class BetaHealthError extends Error {
 export function resolveBetaPaths(
   sourceRoot = process.cwd(),
   homeDir = os.homedir(),
+  instanceId = "default",
+  devSessionId = null,
+  ports = {},
 ) {
-  const targets = resolveBetaUpdateTargets(homeDir);
+  const targets = resolveBetaUpdateTargets(homeDir, instanceId);
   const userData = targets.userData;
   const updateDir = path.join(userData, "update");
   const appServerHome = targets.appServerHome;
   return {
     sourceRoot: path.resolve(sourceRoot),
+    appName: targets.appName,
     appPath: targets.appPath,
-    appBackupPath: path.join("/Applications", `.${BETA_APP_NAME}.app.previous`),
+    appBackupPath: path.join(
+      "/Applications",
+      `.${targets.appName}.app.previous`,
+    ),
+    bundleId: targets.bundleId,
+    buildRoot: path.join(targets.instanceRoot, "build"),
+    devSessionId,
+    desktopCdpPort: ports.desktopCdpPort ?? 9335,
+    instanceId: targets.instanceId,
+    instanceRoot: targets.instanceRoot,
+    terminalBrowserCdpPort: ports.terminalBrowserCdpPort ?? 9336,
     appServerHome,
     appServerCloudSyncDir: path.join(appServerHome, "cloud-sync"),
     appServerCurrentPath: path.join(appServerHome, "runtime", "current.json"),
@@ -39,11 +53,14 @@ export function resolveBetaPaths(
     appServerLogPath: path.join(appServerHome, "app-server.log"),
     appServerEventLogPath: path.join(appServerHome, "app-server-events.jsonl"),
     cliConfigPath: path.join(userData, "cli", "config.json"),
+    controlCliPath: path.join(targets.instanceRoot, "control", "cli", "index.js"),
     desktopStatusPath: path.join(userData, "beta-desktop-status.json"),
     logDir: path.join(updateDir, "logs"),
     pendingPath: path.join(updateDir, "pending.json"),
     profileDir: path.join(userData, "browser-profile"),
     runtimeHome: targets.runtimeHome,
+    runtimeArtifactsRoot: path.join(targets.instanceRoot, "runtime-artifacts"),
+    runtimeBuildRoot: path.join(targets.instanceRoot, "build", "runtime"),
     runtimeCurrentPath: path.join(userData, "runtime", "current.json"),
     statePath: targets.statePath,
     userData,
@@ -201,7 +218,7 @@ export async function isCdpEndpointOwnedByDesktop(endpoint, desktopPid) {
   );
 }
 
-export async function hasCdpPageTarget(endpoint) {
+export async function hasCdpPageTarget(endpoint, expectedUrlPrefix = null) {
   if (!endpoint) {
     return false;
   }
@@ -222,7 +239,8 @@ export async function hasCdpPageTarget(endpoint) {
         (target) =>
           target?.type === "page" &&
           typeof target.webSocketDebuggerUrl === "string" &&
-          target.webSocketDebuggerUrl.length > 0,
+          target.webSocketDebuggerUrl.length > 0 &&
+          (!expectedUrlPrefix || target?.url?.startsWith(expectedUrlPrefix)),
       )
     );
   } catch {
@@ -232,52 +250,207 @@ export async function hasCdpPageTarget(endpoint) {
   }
 }
 
-export async function buildBetaStatus(paths) {
-  const [
-    state,
+export async function readProcessSignature(pid) {
+  if (!isPidLive(pid)) {
+    return "";
+  }
+  const result = await runCapture(
+    "/bin/ps",
+    ["-p", String(pid), "-o", "lstart=", "-o", "command="],
+  );
+  return result.ok ? result.stdout.trim() : "";
+}
+
+export async function inspectBetaDesktopProcessOwnership(paths) {
+  const desktopState = await readJson(paths.desktopStatusPath);
+  const pid = desktopState?.app?.pid;
+  if (!isPidLive(pid)) {
+    return {
+      ok: false,
+      running: false,
+      reason: "Beta desktop is not running",
+      desktopState,
+    };
+  }
+  const executable = desktopState?.app?.executable;
+  const expectedExecutableRoot = path.join(paths.appPath, "Contents", "MacOS");
+  const currentProcessSignature = await readProcessSignature(pid);
+  if (
+    desktopState?.channel !== BETA_CHANNEL ||
+    desktopState?.instanceId !== paths.instanceId ||
+    (paths.devSessionId && desktopState?.devSessionId !== paths.devSessionId) ||
+    desktopState?.app?.path !== paths.appPath ||
+    desktopState?.app?.userDataPath !== paths.userData ||
+    typeof desktopState?.app?.startedAt !== "string" ||
+    typeof executable !== "string" ||
+    !path.resolve(executable).startsWith(`${expectedExecutableRoot}${path.sep}`) ||
+    !desktopState?.app?.processSignature ||
+    currentProcessSignature !== desktopState.app.processSignature ||
+    !currentProcessSignature.includes(executable)
+  ) {
+    return {
+      ok: false,
+      running: true,
+      reason: "Beta desktop process identity drifted",
+      desktopState,
+    };
+  }
+  return {
+    ok: true,
+    running: true,
+    reason: null,
     desktopState,
-    appServerLock,
-    runtimeReleaseId,
-    appServerReleaseId,
-  ] = await Promise.all([
-    readJson(paths.statePath),
-    readJson(paths.desktopStatusPath),
-    readJson(paths.appServerLockPath),
-    readReleaseId(paths.runtimeCurrentPath),
-    readReleaseId(paths.appServerCurrentPath),
-  ]);
+    executable,
+    pid,
+    processSignature: currentProcessSignature,
+  };
+}
+
+export async function inspectBetaDesktopOwnership(paths) {
+  const processOwnership = await inspectBetaDesktopProcessOwnership(paths);
+  if (!processOwnership.ok) {
+    return processOwnership;
+  }
+  const { desktopState, pid } = processOwnership;
+  const desktopEndpoint = desktopState?.cdp?.desktop?.endpoint;
+  const terminalBrowserEndpoint =
+    desktopState?.cdp?.terminalBrowser?.endpoint;
+  const [desktopOwned, desktopTarget, terminalOwned, terminalVersion] =
+    await Promise.all([
+      isCdpEndpointOwnedByDesktop(desktopEndpoint, pid),
+      hasCdpPageTarget(desktopEndpoint, "runweave://app"),
+      isCdpEndpointOwnedByDesktop(terminalBrowserEndpoint, pid),
+      readCdpVersion(terminalBrowserEndpoint),
+    ]);
+  if (
+    !desktopOwned ||
+    !desktopTarget ||
+    !terminalOwned ||
+    terminalVersion?.["Runweave-Surface"] !== "terminal-browser" ||
+    terminalVersion?.["Runweave-Instance-Id"] !== paths.instanceId ||
+    terminalVersion?.["Runweave-Dev-Session-Id"] !==
+      desktopState.devSessionId ||
+    terminalVersion?.["Runweave-Source-Revision"] !==
+      desktopState.sourceRevision ||
+    terminalVersion?.["Runweave-Pid"] !== pid
+  ) {
+    return {
+      ok: false,
+      running: true,
+      reason: "Beta desktop CDP identity drifted",
+      desktopState,
+    };
+  }
+  return {
+    ...processOwnership,
+    ok: true,
+    reason: null,
+  };
+}
+
+export async function readCdpVersion(endpoint) {
+  if (!endpoint) {
+    return null;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1_000);
+  try {
+    const response = await fetch(
+      `${String(endpoint).replace(/\/$/, "")}/json/version`,
+      { signal: controller.signal },
+    );
+    return response.ok ? await response.json() : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function buildBetaStatus(paths) {
+  const [state, desktopState, runtimeReleaseId, appServerReleaseId] =
+    await Promise.all([
+      readJson(paths.statePath),
+      readJson(paths.desktopStatusPath),
+      readReleaseId(paths.runtimeCurrentPath),
+      readReleaseId(paths.appServerCurrentPath),
+    ]);
+  const appServerLockPath =
+    desktopState?.appServer?.lockPath ?? paths.appServerLockPath;
+  const appServerLock = await readJson(appServerLockPath);
   const desktopPid = desktopState?.app?.pid ?? null;
   const desktopPath = desktopState?.app?.path ?? paths.appPath;
+  const desktopExecutable = desktopState?.app?.executable ?? null;
+  const desktopProcessSignature = await readProcessSignature(desktopPid);
+  const expectedExecutableRoot = path.join(paths.appPath, "Contents", "MacOS");
   const desktopLive =
     desktopState?.channel === BETA_CHANNEL &&
+    desktopState?.instanceId === paths.instanceId &&
     desktopPath === paths.appPath &&
-    isPidLive(desktopPid);
+    desktopState?.app?.userDataPath === paths.userData &&
+    typeof desktopExecutable === "string" &&
+    path
+      .resolve(desktopExecutable)
+      .startsWith(`${expectedExecutableRoot}${path.sep}`) &&
+    desktopState?.app?.processSignature === desktopProcessSignature &&
+    desktopProcessSignature.includes(desktopExecutable);
   const backendPid = desktopState?.backend?.pid ?? null;
   const backendLive =
     desktopLive &&
     desktopState?.backend?.available === true &&
     isPidLive(backendPid);
-  const appServerPid = appServerLock?.pid ?? null;
+  const desktopAppServerPid = desktopState?.appServer?.pid;
+  const appServerPid =
+    Number.isInteger(desktopAppServerPid) && desktopAppServerPid > 0
+      ? desktopAppServerPid
+      : (appServerLock?.pid ?? null);
   const appServerBaseUrl =
-    appServerLock?.host === "127.0.0.1" && Number.isInteger(appServerLock?.port)
+    desktopState?.appServer?.baseUrl ??
+    (appServerLock?.host === "127.0.0.1" && Number.isInteger(appServerLock?.port)
       ? `http://127.0.0.1:${appServerLock.port}`
-      : null;
-  const cdpEndpoint = desktopState?.cdp?.endpoint ?? null;
-  const [appServerHealthy, cdpHealthy] = await Promise.all([
+      : null);
+  const desktopCdpEndpoint =
+    desktopState?.cdp?.desktop?.endpoint ?? desktopState?.cdp?.endpoint ?? null;
+  const terminalBrowserCdpEndpoint =
+    desktopState?.cdp?.terminalBrowser?.endpoint ?? null;
+  const [
+    appServerHealthy,
+    desktopCdpHealthy,
+    terminalBrowserVersion,
+    terminalBrowserOwned,
+  ] = await Promise.all([
     isPidLive(appServerPid)
       ? isHttpHealthy(appServerBaseUrl ? `${appServerBaseUrl}/healthz` : null)
       : false,
-    desktopLive && cdpEndpoint
+    desktopLive && desktopCdpEndpoint
       ? Promise.all([
-          isCdpEndpointOwnedByDesktop(cdpEndpoint, desktopPid),
-          hasCdpPageTarget(cdpEndpoint),
+          isCdpEndpointOwnedByDesktop(desktopCdpEndpoint, desktopPid),
+          hasCdpPageTarget(desktopCdpEndpoint),
         ]).then((checks) => checks.every(Boolean))
       : false,
+    desktopLive && terminalBrowserCdpEndpoint
+      ? readCdpVersion(terminalBrowserCdpEndpoint)
+      : null,
+    desktopLive && terminalBrowserCdpEndpoint
+      ? isCdpEndpointOwnedByDesktop(terminalBrowserCdpEndpoint, desktopPid)
+      : false,
   ]);
+  const terminalBrowserCdpHealthy =
+    terminalBrowserOwned &&
+    terminalBrowserVersion?.["Runweave-Surface"] === "terminal-browser" &&
+    terminalBrowserVersion?.["Runweave-Instance-Id"] === paths.instanceId &&
+    terminalBrowserVersion?.["Runweave-Dev-Session-Id"] ===
+      (desktopState?.devSessionId ?? paths.devSessionId) &&
+    terminalBrowserVersion?.["Runweave-Source-Revision"] ===
+      desktopState?.sourceRevision &&
+    terminalBrowserVersion?.["Runweave-Pid"] === desktopPid;
+  const cdpHealthy = desktopCdpHealthy && terminalBrowserCdpHealthy;
 
   return {
     schemaVersion: 1,
     channel: BETA_CHANNEL,
+    instanceId: paths.instanceId,
+    devSessionId: desktopState?.devSessionId ?? paths.devSessionId,
     source: {
       root: state?.sourceRoot ?? paths.sourceRoot,
       gitHead: state?.gitHead ?? null,
@@ -297,9 +470,12 @@ export async function buildBetaStatus(paths) {
       baseUrl: backendLive ? desktopState.backend.baseUrl : null,
       healthy: backendLive,
       pid: backendLive ? backendPid : null,
-      profileDir: paths.profileDir,
+      profileDir: desktopState?.backend?.profileDir ?? paths.profileDir,
       cliConfigPath: paths.cliConfigPath,
-      profileLockPath: path.join(paths.profileDir, "backend.lock.json"),
+      profileLockPath: path.join(
+        desktopState?.backend?.profileDir ?? paths.profileDir,
+        "backend.lock.json",
+      ),
       runtimeHome: paths.runtimeHome,
       runtimeReleaseId:
         runtimeReleaseId ?? desktopState?.backend?.runtimeReleaseId ?? null,
@@ -309,16 +485,28 @@ export async function buildBetaStatus(paths) {
       cloudSyncDir: paths.appServerCloudSyncDir,
       eventLogPath: paths.appServerEventLogPath,
       healthy: appServerHealthy,
-      home: paths.appServerHome,
-      lockPath: paths.appServerLockPath,
+      home: desktopState?.appServer?.home ?? paths.appServerHome,
+      lockPath: appServerLockPath,
       logPath: paths.appServerLogPath,
       pid: appServerHealthy ? appServerPid : null,
       releaseId: appServerReleaseId ?? appServerLock?.releaseId ?? null,
       runtimeRoot: path.join(paths.appServerHome, "runtime"),
     },
     cdp: {
-      endpoint: cdpHealthy ? cdpEndpoint : null,
+      endpoint: desktopCdpHealthy ? desktopCdpEndpoint : null,
       healthy: cdpHealthy,
+      desktop: {
+        endpoint: desktopCdpHealthy ? desktopCdpEndpoint : null,
+        healthy: desktopCdpHealthy,
+        pid: desktopCdpHealthy ? desktopPid : null,
+      },
+      terminalBrowser: {
+        endpoint: terminalBrowserCdpHealthy
+          ? terminalBrowserCdpEndpoint
+          : null,
+        healthy: terminalBrowserCdpHealthy,
+        pid: terminalBrowserCdpHealthy ? desktopPid : null,
+      },
     },
     previous: state?.previous ?? null,
     lastFailure: state?.lastFailure ?? null,

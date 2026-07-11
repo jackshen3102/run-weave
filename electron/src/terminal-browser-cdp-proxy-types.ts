@@ -4,6 +4,12 @@ import type { CdpSessionManager } from "./terminal-browser-cdp-proxy-session.js"
 export interface CdpProxyOptions {
   host: string;
   port: number;
+  identity?: {
+    instanceId: string | null;
+    devSessionId: string | null;
+    sourceRevision: string;
+    pid: number;
+  };
 }
 
 export interface CdpProxyRuntime {

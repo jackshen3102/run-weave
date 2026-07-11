@@ -250,16 +250,23 @@ export function normalizeAgentTeamWorkerOutbox(
     resolvedFindings: normalizeFindings(record.resolvedFindings, "resolved"),
     remainingFindings: normalizeFindings(record.remainingFindings, "open"),
     recommendations: normalizeRecommendations(record.recommendations),
-    acceptanceResults: normalizeAcceptanceResults(record.acceptanceResults),
+    acceptanceResults: normalizeAcceptanceResults(
+      record.acceptanceResults,
+      typeof record.error === "string" ? record.error : null,
+    ),
   };
 }
 
 function normalizeAcceptanceResults(
   results: AgentTeamWorkerOutbox["acceptanceResults"],
+  singleFailureFallback: string | null,
 ): AgentTeamWorkerOutbox["acceptanceResults"] {
   if (!Array.isArray(results)) {
     return undefined;
   }
+  const failureCount = results.filter(
+    (result) => result.status === "fail",
+  ).length;
   return results
     .filter(
       (result) =>
@@ -271,6 +278,13 @@ function normalizeAcceptanceResults(
     .map((result) => ({
       caseId: result.caseId,
       status: result.status,
+      ...(typeof result.summary === "string" && result.summary.trim()
+        ? { summary: result.summary.trim() }
+        : result.status === "fail" &&
+            failureCount === 1 &&
+            singleFailureFallback?.trim()
+          ? { summary: singleFailureFallback.trim() }
+          : {}),
       ...(typeof result.skipReason === "string" && result.skipReason.trim()
         ? { skipReason: result.skipReason.trim() }
         : {}),

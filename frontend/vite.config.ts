@@ -6,6 +6,8 @@ import { fileURLToPath, URL } from "node:url";
 const frontendPort = Number(process.env.VITE_DEV_PORT ?? 5173);
 const frontendHost = process.env.VITE_DEV_HOST?.trim() || "0.0.0.0";
 const backendTarget = process.env.VITE_PROXY_TARGET ?? "http://localhost:5000";
+const expectedBackendId =
+  process.env.VITE_RUNWEAVE_EXPECTED_BACKEND_ID?.trim() || null;
 
 export default defineConfig({
   plugins: [
@@ -40,6 +42,14 @@ export default defineConfig({
     port: frontendPort,
     strictPort: true,
     proxy: {
+      ...(expectedBackendId
+        ? {
+            "/health": {
+              target: backendTarget,
+              changeOrigin: true,
+            },
+          }
+        : {}),
       "/api": {
         target: backendTarget,
         changeOrigin: true,

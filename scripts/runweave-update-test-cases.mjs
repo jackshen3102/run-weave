@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
-  BETA_UPDATE_APP_NAME,
   BETA_UPDATE_BUILDER_CONFIG,
   APP_SERVER_SKIP_REASON_EXPLICIT,
   APP_SERVER_SKIP_REASON_NO_CHANGE,
@@ -315,8 +314,9 @@ const cases = [
       const homeDir = "/tmp/runweave-test-home";
       const targets = resolveBetaUpdateTargets(homeDir);
       const valid = {
-        appBackupPath: "/Applications/.Runweave Beta.app.previous-123",
-        appName: BETA_UPDATE_APP_NAME,
+        appBackupPath:
+          "/Applications/.Runweave Beta default.app.previous-123",
+        appName: targets.appName,
         appPath: targets.appPath,
         appServerHome: targets.appServerHome,
         channel: "beta",
@@ -340,16 +340,16 @@ const cases = [
       );
 
       const mismatches = [
-        ["appName", "Runweave", /app name must be Runweave Beta/],
+        ["appName", "Runweave", /app name must be Runweave Beta default/],
         [
           "appPath",
           "/Applications/Runweave.app",
-          /app path must be \/Applications\/Runweave Beta\.app/,
+          /app path must be \/Applications\/Runweave Beta default\.app/,
         ],
         [
           "runtimeHome",
           "/tmp/runweave-test-home/Library/Application Support/@runweave/electron/runtime",
-          /runtime home must be .*Runweave Beta\/runtime/,
+          /runtime home must be .*Runweave Beta\/instances\/default\/user-data\/runtime/,
         ],
         [
           "appServerHome",
@@ -359,7 +359,7 @@ const cases = [
         [
           "statePath",
           "/tmp/runweave-test-home/Library/Application Support/RunweaveLocalUpdate/state.json",
-          /state path must be .*Runweave Beta\/update\/state\.json/,
+          /state path must be .*Runweave Beta\/instances\/default\/user-data\/update\/state\.json/,
         ],
         [
           "electronBuilderConfig",
@@ -369,7 +369,7 @@ const cases = [
         [
           "appBackupPath",
           "/Applications/Runweave.app",
-          /app backup path must be \/Applications\/\.Runweave Beta\.app\.previous/,
+          /app backup path must be \/Applications\/\.Runweave Beta default\.app\.previous/,
         ],
       ];
       for (const [key, value, message] of mismatches) {

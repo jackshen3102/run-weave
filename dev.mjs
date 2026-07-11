@@ -70,14 +70,33 @@ function resolveDevBrowserProfileDir(baseEnv) {
 
 export function createBackendEnv({ baseEnv, backendPort }) {
   const env = createDevChildBaseEnv(baseEnv);
+  const profileDir = resolveDevBrowserProfileDir(baseEnv);
+  const sourceRevision = resolveDevSourceRevision(baseEnv);
   return {
     ...env,
-    BROWSER_PROFILE_DIR: resolveDevBrowserProfileDir(baseEnv),
+    BROWSER_PROFILE_DIR: profileDir,
     BROWSER_DEVTOOLS_ENABLED: baseEnv.BROWSER_DEVTOOLS_ENABLED ?? "true",
     PORT: String(backendPort),
     PORT_STRICT: "true",
+    RUNWEAVE_RESOURCE_NAMESPACE: `profile:${createHash("sha256").update(profileDir).digest("hex").slice(0, 12)}`,
+    ...(sourceRevision ? { RUNWEAVE_SOURCE_REVISION: sourceRevision } : {}),
     SESSION_RESTORE_ENABLED: baseEnv.SESSION_RESTORE_ENABLED ?? "false",
   };
+}
+
+function resolveDevSourceRevision(baseEnv) {
+  const explicitRevision = baseEnv.RUNWEAVE_SOURCE_REVISION?.trim();
+  if (explicitRevision) {
+    return explicitRevision;
+  }
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return null;
+  }
 }
 
 export function resolveHealthcheckTimeoutMs(env = process.env) {
@@ -385,9 +404,10 @@ export function resolveElectronBin(electronDir) {
   ).trim();
 }
 
-export function bundleElectron(electronDir) {
+export function bundleElectron(electronDir, env = process.env) {
   execFileSync("node", ["scripts/bundle.mjs"], {
     cwd: electronDir,
+    env,
     stdio: "inherit",
   });
 }

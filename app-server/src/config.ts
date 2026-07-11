@@ -15,6 +15,9 @@ export interface AppServerConfig {
   releaseId: string | null;
   entry: string;
   runtimeRoot: string | null;
+  serviceInstanceId: string | null;
+  devSessionId: string | null;
+  sourceRevision: string | null;
 }
 
 export function resolveAppServerConfig(
@@ -41,6 +44,9 @@ export function resolveAppServerConfig(
     releaseId: env.RUNWEAVE_APP_SERVER_RELEASE_ID?.trim() || null,
     entry: env.RUNWEAVE_APP_SERVER_ENTRY?.trim() || process.argv[1] || "",
     runtimeRoot: env.RUNWEAVE_APP_SERVER_RUNTIME_ROOT?.trim() || null,
+    serviceInstanceId: env.RUNWEAVE_SERVICE_INSTANCE_ID?.trim() || null,
+    devSessionId: env.RUNWEAVE_DEV_SESSION_ID?.trim() || null,
+    sourceRevision: env.RUNWEAVE_SOURCE_REVISION?.trim() || null,
   };
 }
 

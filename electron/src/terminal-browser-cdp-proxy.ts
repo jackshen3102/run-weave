@@ -53,7 +53,12 @@ export async function startCdpProxy(
     if (url.startsWith("/json/version")) {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
-        JSON.stringify(buildVersionResponse(buildScopedWsUrl(scopedGroupId))),
+        JSON.stringify(
+          buildVersionResponse(
+            buildScopedWsUrl(scopedGroupId),
+            options.identity,
+          ),
+        ),
       );
       return;
     }

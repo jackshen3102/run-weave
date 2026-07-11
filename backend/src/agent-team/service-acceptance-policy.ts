@@ -109,6 +109,7 @@ export function ensureWorkerGateAcceptance(
       text: "Code Review 未发现阻断性问题（P0/P1），或阻断问题已修复",
       status: "pending",
       consecutiveFail: 0,
+      resultSummary: null,
       evidence: [],
       bouncedToPanelId: null,
       recheckRequestedAt: null,
@@ -174,6 +175,7 @@ export function synthesizeBlockingReviewResult(
   return {
     caseId: target.caseId,
     status: "fail",
+    summary,
     evidence: [
       {
         type: "text",

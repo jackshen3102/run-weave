@@ -28,15 +28,20 @@ const EVIDENCE_ATTACHMENT_LABEL: Partial<
 
 export function AcceptanceEvidenceDetails({
   status,
+  summary,
   evidence,
 }: {
   status: AgentTeamAcceptanceStatus;
+  summary?: string | null;
   evidence: AgentTeamAcceptanceEvidence[];
 }) {
-  const leadSummary = evidence[0]?.summary;
+  const leadSummary =
+    summary?.trim() || (status === "pass" ? evidence[0]?.summary : null);
   const conclusion = leadSummary
     ? `${getStatusPrefix(status)}：${leadSummary}`
-    : `${getStatusPrefix(status)}：尚未收到证据`;
+    : status === "fail"
+      ? `${getStatusPrefix(status)}：未提供失败结论，请查看证据`
+      : `${getStatusPrefix(status)}：尚未收到证据`;
   const groupedEvidence = groupEvidenceByType(evidence);
 
   return (

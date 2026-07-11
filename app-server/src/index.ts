@@ -1,4 +1,5 @@
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import type { WebSocketServer } from "ws";
 import { resolveAppServerConfig } from "./config.js";
@@ -24,6 +25,8 @@ import { attachEventStreamWebSocketServer } from "./websocket-server.js";
 
 async function main(): Promise<void> {
   const config = resolveAppServerConfig();
+  const serviceInstanceId =
+    config.serviceInstanceId ?? `app-server:${randomUUID()}`;
   await mkdir(config.stateDir, { recursive: true });
 
   const preflight = await preflightSingleton(config.lockPath);
@@ -46,7 +49,7 @@ async function main(): Promise<void> {
     stateProjector.project(event);
   }
   await stateStore.persist();
-  const sourceInstanceId = `app-server:${process.pid}`;
+  const sourceInstanceId = serviceInstanceId;
   const cloudSync = new AppServerCloudSyncSim({
     syncDir: config.cloudSyncDir,
     stateDir: config.stateDir,
@@ -80,6 +83,9 @@ async function main(): Promise<void> {
     eventCenter,
     token,
     version: config.version,
+    serviceInstanceId,
+    devSessionId: config.devSessionId,
+    sourceRevision: config.sourceRevision,
   });
   const server = http.createServer(app);
   const eventStreamServer = attachEventStreamWebSocketServer({
@@ -99,6 +105,9 @@ async function main(): Promise<void> {
     releaseId: config.releaseId,
     entry: config.entry,
     runtimeRoot: config.runtimeRoot,
+    serviceInstanceId,
+    ...(config.devSessionId ? { devSessionId: config.devSessionId } : {}),
+    ...(config.sourceRevision ? { sourceRevision: config.sourceRevision } : {}),
   };
   const acquire = await acquireSingletonLock(config.lockPath, lock);
   if (acquire.status === "owned") {
@@ -208,6 +217,9 @@ function buildLockLogFields(lock: AppServerLock): Record<string, unknown> {
     releaseId: lock.releaseId,
     entry: lock.entry,
     runtimeRoot: lock.runtimeRoot,
+    serviceInstanceId: lock.serviceInstanceId,
+    devSessionId: lock.devSessionId,
+    sourceRevision: lock.sourceRevision,
   };
 }
 

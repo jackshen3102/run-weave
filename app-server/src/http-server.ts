@@ -115,6 +115,9 @@ export function createHttpApp(options: {
   eventCenter: AppServerEventCenter;
   token: string;
   version: string;
+  serviceInstanceId: string;
+  devSessionId: string | null;
+  sourceRevision: string | null;
 }): express.Express {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
@@ -127,6 +130,12 @@ export function createHttpApp(options: {
       protocolVersion: APP_SERVER_PROTOCOL_VERSION,
       pid: process.pid,
       version: options.version,
+      serviceInstanceId: options.serviceInstanceId,
+      ...(options.devSessionId ? { devSessionId: options.devSessionId } : {}),
+      ...(options.sourceRevision
+        ? { sourceRevision: options.sourceRevision }
+        : {}),
+      capabilities: ["event-center-v1", "dev-session-identity-v1"],
     });
   });
 

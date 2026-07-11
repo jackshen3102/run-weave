@@ -30,9 +30,22 @@ export const APP_SERVER_SKIP_REASON_NO_CHANGE =
 export const RUNWEAVE_CODESIGN_IDENTITY_ENV = "RUNWEAVE_CODESIGN_IDENTITY";
 export const BETA_UPDATE_APP_NAME = "Runweave Beta";
 export const BETA_UPDATE_BUILDER_CONFIG = "electron-builder.beta.yml";
+const BETA_INSTANCE_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 
-export const APP_SENSITIVE_PATH_PREFIXES = [
-  "electron/src/",
+export function assertBetaInstanceId(value) {
+  if (typeof value !== "string" || !BETA_INSTANCE_ID_PATTERN.test(value)) {
+    throw new Error(
+      "Beta instance id must be 1-32 lowercase letters, numbers, or hyphens",
+    );
+  }
+  return value;
+}
+
+export function resolveBetaAppName(instanceId) {
+  return `${BETA_UPDATE_APP_NAME} ${assertBetaInstanceId(instanceId)}`;
+}
+
+export const INSTALLED_APP_CONTROL_PATH_PREFIXES = [
   "electron/resources/",
   "electron/scripts/",
   "electron/electron-builder.yml",
@@ -48,6 +61,11 @@ export const APP_SENSITIVE_PATH_PREFIXES = [
   "scripts/runweave-update-test-cases.mjs",
   "scripts/runweave-beta.mjs",
   "scripts/serve-local-updates.mjs",
+];
+
+export const APP_SENSITIVE_PATH_PREFIXES = [
+  "electron/src/",
+  ...INSTALLED_APP_CONTROL_PATH_PREFIXES,
 ];
 
 export const APP_SERVER_SENSITIVE_PATH_PREFIXES = [
@@ -98,20 +116,37 @@ export function resolveDefaultUpdateStatePath(homeDir = os.homedir()) {
   );
 }
 
-export function resolveBetaUpdateTargets(homeDir = os.homedir()) {
+export function resolveBetaUpdateTargets(
+  homeDir = os.homedir(),
+  instanceId = "default",
+) {
   if (!homeDir) {
     throw new Error("Cannot resolve user home directory");
   }
 
-  const userData = path.join(
+  const safeInstanceId = assertBetaInstanceId(instanceId);
+  const appName = resolveBetaAppName(safeInstanceId);
+  const instanceRoot = path.join(
     homeDir,
     "Library",
     "Application Support",
     BETA_UPDATE_APP_NAME,
+    "instances",
+    safeInstanceId,
   );
+  const userData = path.join(instanceRoot, "user-data");
   return {
-    appPath: path.join("/Applications", `${BETA_UPDATE_APP_NAME}.app`),
-    appServerHome: path.join(homeDir, ".runweave", "app-server-beta"),
+    appName,
+    appPath: path.join("/Applications", `${appName}.app`),
+    appServerHome: path.join(
+      homeDir,
+      ".runweave",
+      "app-server-beta",
+      safeInstanceId,
+    ),
+    bundleId: `com.runweave.desktop.beta.${safeInstanceId}`,
+    instanceId: safeInstanceId,
+    instanceRoot,
     runtimeHome: path.join(userData, "runtime"),
     statePath: path.join(userData, "update", "state.json"),
     userData,
@@ -126,6 +161,7 @@ export function validateUpdateTargetIsolation({
   channel,
   electronBuilderConfig,
   homeDir = os.homedir(),
+  instanceId = process.env.RUNWEAVE_DESKTOP_INSTANCE_ID ?? "default",
   runtimeHome,
   statePath,
 }) {
@@ -133,9 +169,9 @@ export function validateUpdateTargetIsolation({
     return;
   }
 
-  const expected = resolveBetaUpdateTargets(homeDir);
+  const expected = resolveBetaUpdateTargets(homeDir, instanceId);
   const checks = [
-    ["app name", appName, BETA_UPDATE_APP_NAME],
+    ["app name", appName, expected.appName],
     ["app path", path.resolve(appPath), path.resolve(expected.appPath)],
     [
       "runtime home",
@@ -164,7 +200,7 @@ export function validateUpdateTargetIsolation({
   if (appBackupPath) {
     const backupPrefix = path.join(
       "/Applications",
-      `.${BETA_UPDATE_APP_NAME}.app.previous`,
+      `.${expected.appName}.app.previous`,
     );
     const resolvedBackupPath = path.resolve(appBackupPath);
     if (
@@ -181,6 +217,13 @@ export function validateUpdateTargetIsolation({
 export function isAppSensitivePath(filePath) {
   const normalized = filePath.split(path.sep).join("/");
   return APP_SENSITIVE_PATH_PREFIXES.some((prefix) => {
+    return normalized === prefix || normalized.startsWith(prefix);
+  });
+}
+
+export function isInstalledAppControlPath(filePath) {
+  const normalized = filePath.split(path.sep).join("/");
+  return INSTALLED_APP_CONTROL_PATH_PREFIXES.some((prefix) => {
     return normalized === prefix || normalized.startsWith(prefix);
   });
 }

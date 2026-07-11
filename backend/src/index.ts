@@ -196,6 +196,7 @@ async function initializeAppServerEventIntegration(
 function createHttpApp(
   services: RuntimeServices,
   tunnelAuthConfig: TunnelAuthConfig | null,
+  backendIdentity?: { backendId: string },
 ): express.Express {
   const app = express();
   const requireAuth = createRequireAuth(services.authService);
@@ -218,7 +219,7 @@ function createHttpApp(
   );
 
   app.get("/health", requireTunnelAuth, (_req, res) => {
-    res.json(buildHealthPayload(process.env));
+    res.json(buildHealthPayload(process.env, backendIdentity));
   });
 
   // Internal endpoint for Electron to propagate CDP proxy endpoint in dev mode.
@@ -477,6 +478,7 @@ async function startRuntime(): Promise<void> {
     const storagePaths = resolveStoragePaths(process.env);
     stage = "profile-lock";
     profileLock = await acquireBackendProfileLock({
+      devSessionId: process.env.RUNWEAVE_DEV_SESSION_ID,
       profileDir: storagePaths.browserProfileDir,
       port: runtimeConfig.preferredPort,
       host: runtimeConfig.host,
@@ -487,7 +489,11 @@ async function startRuntime(): Promise<void> {
     stage = "runtime-services";
     const services = await createRuntimeServices();
     stage = "http-app";
-    const app = createHttpApp(services, tunnelAuthConfig);
+    const app = createHttpApp(
+      services,
+      tunnelAuthConfig,
+      profileLock.getOwner(),
+    );
     const server = http.createServer(app);
     const serverConnections = new Set<Socket>();
     server.on("connection", (connection) => {

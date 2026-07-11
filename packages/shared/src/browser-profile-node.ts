@@ -21,6 +21,7 @@ export interface BrowserProfileStorageEnv {
 
 export interface BackendProfileLockOwner {
   backendId: string;
+  devSessionId: string | null;
   pid: number;
   port: number | null;
   host: string | null;
@@ -30,6 +31,7 @@ export interface BackendProfileLockOwner {
 }
 
 export interface CreateBackendProfileLockOwnerOptions {
+  devSessionId?: string | undefined;
   port: number | null;
   host: string | undefined;
   cwd?: string;
@@ -184,6 +186,7 @@ export function createBackendProfileLockOwner(
 ): BackendProfileLockOwner {
   return {
     backendId: randomUUID(),
+    devSessionId: options.devSessionId?.trim() || null,
     pid: process.pid,
     port: options.port,
     host: options.host ?? null,
@@ -211,6 +214,8 @@ export function parseBackendProfileLockOwner(
 
   return {
     backendId: owner.backendId,
+    devSessionId:
+      typeof owner.devSessionId === "string" ? owner.devSessionId : null,
     pid: owner.pid,
     port:
       typeof owner.port === "number" && Number.isInteger(owner.port)
@@ -326,6 +331,7 @@ export function formatBackendProfileLockConflict(
 
   const parts = [
     `Browser profile is already in use: ${profileDir}`,
+    `devSessionId=${owner.devSessionId ?? "unknown"}`,
     `owner pid=${owner.pid}`,
     `port=${owner.port ?? "unknown"}`,
     `cwd=${owner.cwd || "unknown"}`,
