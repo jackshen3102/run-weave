@@ -4,7 +4,7 @@
 
 目标是在正式版 Runweave 中开发 Runweave，并把当前源码部署到独立 Beta。Beta 的更新、重启、故障和回滚不能中断正式版，也不能污染正式 Desktop、backend、App Server 或全局集成。
 
-对应计划：`docs/plans/2026-07-10-runweave-beta-self-hosting.md`。
+对应权威指南：`docs/deployment/runweave-beta.md`。
 
 ## 范围
 

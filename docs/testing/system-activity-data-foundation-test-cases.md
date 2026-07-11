@@ -1,7 +1,7 @@
 # Runweave 独立行为数据底座与经验生成系统测试用例
 
 > 状态：待实施后执行
-> 对应计划：`docs/plans/2026-07-11-system-activity-data-foundation.md`
+> 对应目标架构流程：`docs/architecture-flows/system-activity-data-foundation-flow/`
 > 原则：不新增单元测试；使用真实进程、API、文件、Playwright、CLI、Hook、Shell 和桌面运行时取证
 
 ## 验收范围
