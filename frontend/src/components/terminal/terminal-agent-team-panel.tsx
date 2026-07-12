@@ -51,6 +51,7 @@ export function TerminalAgentTeamPanel({
   const [task, setTask] = useState("");
   const [planFilePath, setPlanFilePath] = useState("");
   const [testCaseFilePath, setTestCaseFilePath] = useState("");
+  const [reviewCheckpointEnabled, setReviewCheckpointEnabled] = useState(false);
   const [workerDrafts, setWorkerDrafts] = useState<WorkerDraft[] | null>(null);
   const [resumeNote, setResumeNote] = useState("");
 
@@ -187,7 +188,12 @@ export function TerminalAgentTeamPanel({
         task: trimmedTask,
         planFilePath: normalizeOptionalPath(planFilePath),
         testCaseFilePath: normalizeOptionalPath(testCaseFilePath),
-        options: { autoApproveSplit: true },
+        options: {
+          autoApproveSplit: true,
+          reviewCheckpointMode: reviewCheckpointEnabled
+            ? "local_commit"
+            : "disabled",
+        },
       }).then((next) => {
         if (next.phase === "executing") {
           onPanelSplitEnabledChange?.(true);
@@ -319,10 +325,12 @@ export function TerminalAgentTeamPanel({
             task={task}
             planFilePath={planFilePath}
             testCaseFilePath={testCaseFilePath}
+            reviewCheckpointEnabled={reviewCheckpointEnabled}
             busy={busy}
             onTaskChange={setTask}
             onPlanFilePathChange={setPlanFilePath}
             onTestCaseFilePathChange={setTestCaseFilePath}
+            onReviewCheckpointEnabledChange={setReviewCheckpointEnabled}
             onStart={startFlow}
           />
         ) : run.phase === "proposal" && workerDrafts ? (

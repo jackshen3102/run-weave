@@ -224,6 +224,9 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
         worker,
         now,
         outboxMtimeMs,
+        worker.role === "code_review"
+          ? (run.reviewCheckpoint?.pendingReview ?? null)
+          : null,
       ),
       workers: setActiveWorker(run.workers, worker.role),
       acceptance: run.acceptance.map((item) =>

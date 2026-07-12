@@ -101,6 +101,9 @@ export class AppServerEventCenter {
           projectId: projection.threadChange.current.projectId,
           terminalSessionId: projection.threadChange.current.terminalSessionId,
           terminalPanelId: projection.threadChange.current.terminalPanelId,
+          terminalTmuxPaneId: this.options.stateStore.getThreadTmuxPaneId(
+            projection.threadChange.current.threadId,
+          ),
           runId: projection.threadChange.current.runId,
           cwd: projection.threadChange.current.cwd,
         },

@@ -3,13 +3,12 @@ import type {
   AgentTeamRun,
   AgentTeamWorker,
   AgentTeamWorkerOutbox,
-  AgentTeamWorkerRole,
 } from "@runweave/shared/agent-team";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { TerminalSessionRecord } from "../terminal/manager";
 import { buildWorkerRecheckPrompt } from "./prompt-builders";
-import { AgentTeamExecutionService } from "./service-execution";
 import { agentTeamLogger } from "./service-context";
+import { AgentTeamSerialDispatchService } from "./service-serial-dispatch";
 import type {
   AgentTeamCompletionSignal,
   AgentTeamCompletionSignalSource,
@@ -23,6 +22,7 @@ import {
 } from "./service-acceptance-policy";
 import {
   completionOutboxIdentityMismatch,
+  completionReviewTargetMismatch,
   completionSignalWorkerMismatch,
   createActiveWorkerDispatch,
   findWorkerByRole,
@@ -37,7 +37,7 @@ import {
   resolveAgentTeamTerminal,
 } from "./service-run-policy";
 
-export abstract class AgentTeamCompletionService extends AgentTeamExecutionService {
+export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatchService {
   protected abstract resolveOutboxRound(
     run: AgentTeamRun,
     outbox: AgentTeamWorkerOutbox,
@@ -164,6 +164,38 @@ export abstract class AgentTeamCompletionService extends AgentTeamExecutionServi
           );
           return false;
         }
+        const reviewTargetMismatch = completionReviewTargetMismatch(
+          latest,
+          outbox,
+        );
+        if (reviewTargetMismatch) {
+          await this.pauseForCheckpointError(latest, reviewTargetMismatch);
+          return true;
+        }
+        if (outbox.role === "behavior_verify" && latest.reviewCheckpoint) {
+          if (
+            outbox.verifiedCheckpointCommit !==
+            latest.reviewCheckpoint.lastReviewedCommit
+          ) {
+            await this.pauseForCheckpointError(
+              latest,
+              `behavior outbox checkpoint 不匹配：expected ${latest.reviewCheckpoint.lastReviewedCommit}，actual ${outbox.verifiedCheckpointCommit ?? "null"}`,
+            );
+            return true;
+          }
+          try {
+            await this.assertVerificationSourcesUnchanged(latest);
+            await this.reviewCheckpointGit.assertCheckpointHead(
+              latest.reviewCheckpoint,
+            );
+          } catch (error) {
+            await this.pauseForCheckpointError(
+              latest,
+              error instanceof Error ? error.message : String(error),
+            );
+            return true;
+          }
+        }
         const initialRound = this.resolveOutboxRound(latest, outbox);
         const shouldDispatchRecheck = this.hasBouncedCasesForWorker(
           latest,
@@ -190,7 +222,22 @@ export abstract class AgentTeamCompletionService extends AgentTeamExecutionServi
           );
           return true;
         }
-        const round = this.resolveOutboxRound(latest, outbox);
+        let roundRun = latest;
+        if (
+          outbox.role === "code_review" &&
+          latest.reviewCheckpoint &&
+          initialRound.acceptanceResults.length > 0 &&
+          initialRound.acceptanceResults.every(
+            (result) => result.status === "pass",
+          )
+        ) {
+          const finalized = await this.finalizeReviewCheckpoint(latest, outbox);
+          if (finalized.status !== "running") {
+            return true;
+          }
+          roundRun = finalized;
+        }
+        const round = this.resolveOutboxRound(roundRun, outbox);
         if (!round.acceptanceResults.length) {
           await this.dispatchBouncedCasesForRecheck(latest, outbox);
           this.logReconciledCompletion(
@@ -202,7 +249,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamExecutionServi
           );
           return true;
         }
-        await this.applyRound(latest, {
+        await this.applyRound(roundRun, {
           acceptanceResults: round.acceptanceResults,
           forceBounceCaseIds: round.forceBounceCaseIds,
           completedWorkerRole: parseWorkerRole(outbox.role),
@@ -363,76 +410,6 @@ export abstract class AgentTeamCompletionService extends AgentTeamExecutionServi
     return false;
   }
 
-  protected async dispatchSerialWorker(
-    run: AgentTeamRun,
-    role: AgentTeamWorkerRole,
-    options: {
-      cases: AgentTeamAcceptanceCase[];
-      log: string;
-      triggerSummary?: string | null;
-    },
-  ): Promise<AgentTeamRun> {
-    const session = this.terminalSessionManager.getSession(
-      run.terminalSessionId,
-    );
-    if (!session) {
-      return run;
-    }
-    const worker = findWorkerByRole(run.workers, role);
-    if (!worker?.panelId) {
-      return run;
-    }
-    const terminal = resolveAgentTeamTerminal(run.terminal);
-    await this.agentReadiness.ensureAgentReady(session, terminal, {
-      panelId: worker.panelId,
-    });
-    const outboxPath = this.paths.workerOutboxRelativePath(
-      run.terminalSessionId,
-      worker,
-    );
-    const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(session, worker);
-    const now = new Date().toISOString();
-    await this.promptSender.sendPromptToPane(
-      session,
-      buildWorkerRecheckPrompt({
-        run,
-        worker,
-        cases: options.cases,
-        outboxPath,
-        triggerSummary: options.triggerSummary ?? null,
-      }),
-      { panelId: worker.panelId },
-    );
-
-    const caseIds = new Set(options.cases.map((item) => item.caseId));
-    return this.updateRun(run, {
-      activeWorkerRole: role,
-      activeWorkerDispatch: createActiveWorkerDispatch(
-        worker,
-        now,
-        outboxMtimeMs,
-      ),
-      workers: setActiveWorker(run.workers, role),
-      acceptance: run.acceptance.map((item) =>
-        caseIds.has(item.caseId)
-          ? {
-              ...item,
-              status: "pending" as const,
-              consecutiveFail: 0,
-              resultSummary: null,
-              bouncedToPanelId: null,
-              recheckRequestedAt: now,
-              recheckWorkerPanelId: worker.panelId,
-              recheckWorkerRole: worker.role,
-              recheckOutboxMtimeMs: outboxMtimeMs,
-              recheckAttempt: 1,
-            }
-          : item,
-      ),
-      logs: [...run.logs, `${options.log}（${role} pane ${worker.panelId}）`],
-    });
-  }
-
   protected async sendRecheckToWorker(
     run: AgentTeamRun,
     session: TerminalSessionRecord,
@@ -481,6 +458,9 @@ export abstract class AgentTeamCompletionService extends AgentTeamExecutionServi
         worker,
         now,
         outboxMtimeMs,
+        worker.role === "code_review"
+          ? (run.reviewCheckpoint?.pendingReview ?? null)
+          : null,
       ),
       workers: setActiveWorker(run.workers, worker.role),
       acceptance: ensureWorkerGateAcceptance(run.workers, run.acceptance).map(

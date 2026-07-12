@@ -27,6 +27,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `react-best-practices`
 - `recorded-browser-mcp-verification`
 - `review-only`
+- `runweave-change-validation`
 - `run-test-cases`
 - `shadcn`
 - `sync-branch-hard-reset`

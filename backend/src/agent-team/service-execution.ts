@@ -18,6 +18,7 @@ import { buildEscalationReason, foldRound, shouldEscalate } from "./loop";
 import { agentTeamLogger } from "./service-context";
 import { AgentTeamServiceSupport } from "./service-support";
 import {
+  acceptanceCasesForRole,
   assertTraceableBehaviorAcceptance,
   behaviorVerificationCasesForDispatch,
   ensureWorkerGateAcceptance,
@@ -47,6 +48,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       cases: AgentTeamAcceptanceCase[];
       log: string;
       triggerSummary?: string | null;
+      reviewScope?: "full" | "incremental" | "final";
     },
   ): Promise<AgentTeamRun>;
 
@@ -235,7 +237,13 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     const allAcceptancePassed =
       folded.acceptance.length > 0 &&
       folded.acceptance.every((item) => item.status === "pass");
-    if (allAcceptancePassed) {
+    const needsFinalReview = Boolean(
+      allAcceptancePassed &&
+      run.reviewCheckpoint &&
+      run.reviewCheckpoint.finalReviewedCommit !==
+        run.reviewCheckpoint.lastReviewedCommit,
+    );
+    if (allAcceptancePassed && !needsFinalReview) {
       status = "done";
       workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
       activeWorkerRole = null;
@@ -261,6 +269,15 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       activeWorkerDispatch,
       logs,
     });
+
+    if (status === "running" && needsFinalReview) {
+      return this.dispatchSerialWorker(nextRun, "code_review", {
+        cases: acceptanceCasesForRole(nextRun, "code_review"),
+        log: "behavior_verify 全部通过，启动最终全量 code_review",
+        triggerSummary: params.completedWorkerSummary ?? null,
+        reviewScope: "final",
+      });
+    }
 
     // Bounce stable failing cases back to a code pane. Retry any stable fail
     // that has not been marked as bounced yet, so a transient prompt-send miss

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import os from "node:os";
 import path from "node:path";
 import type { AuthStore } from "../auth/store";
 import { LowDbAuthStore } from "../auth/lowdb-store";
@@ -56,6 +58,14 @@ function shouldScanTmuxOrphans(env: NodeJS.ProcessEnv): boolean {
     env.TERMINAL_TMUX_SCAN_ORPHANS_ON_START?.trim().toLowerCase() === "true" ||
     env.TERMINAL_TMUX_CLEANUP_ORPHANS?.trim().toLowerCase() === "true"
   );
+}
+
+function resolveDefaultTmuxSocketPath(browserProfileDir: string): string {
+  const profileId = createHash("sha256")
+    .update(browserProfileDir)
+    .digest("hex")
+    .slice(0, 12);
+  return path.join(os.tmpdir(), `rw-tmux-${profileId}`, "tmux.sock");
 }
 
 export async function createRuntimeServices(): Promise<RuntimeServices> {
@@ -144,11 +154,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
   const tmuxService = new TmuxService({
     socketPath:
       process.env.TERMINAL_TMUX_SOCKET_PATH ??
-      path.join(
-        path.dirname(storagePaths.terminalSessionStoreFile),
-        "tmux",
-        "runweave.tmux.sock",
-      ),
+      resolveDefaultTmuxSocketPath(storagePaths.browserProfileDir),
     env: process.env,
   });
   const tmuxOutputWatcher = new TmuxOutputWatcher({

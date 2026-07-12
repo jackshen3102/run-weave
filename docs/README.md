@@ -70,6 +70,7 @@
 | Agent Team / Loop Engineer 测试          | testing/agent-team-loop-engineer-test-cases.md                                     |
 | Agent Team completion 恢复测试           | testing/agent-team-completion-recovery-test-cases.md                               |
 | Agent Team 验收来源测试                  | testing/agent-team-verification-case-source-test-cases.md                          |
+| Agent Team Review Checkpoint 测试        | testing/agent-team-review-checkpoint-test-cases.md                                 |
 | 飞书一次性终端投递测试                   | testing/feishu-one-shot-terminal-delivery-test-cases.md                            |
 | App Server ThreadRef fixture             | testing/app-server-threadref-fixture.md                                            |
 | Terminal Panel Split 测试                | testing/terminal-panel-split-test-cases.md                                         |

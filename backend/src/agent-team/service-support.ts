@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import type {
   AgentTeamAcceptanceSource,
   AgentTeamRun,
@@ -54,12 +56,12 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
         projectRoot,
         requestedPath: input.testCaseFilePath,
       });
-      const verification: AgentTeamVerificationConfig = {
+      const verification = await this.withVerificationDigests(projectRoot, {
         planFilePath,
         testCaseFilePath: loaded.sourceFilePath,
         generatedTestCaseFilePath: null,
         acceptanceSource: "test_case_file",
-      };
+      });
       return {
         verification,
         acceptance: loaded.cases,
@@ -70,12 +72,12 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
     const acceptanceSource: AgentTeamAcceptanceSource = planFilePath
       ? "plan_file_generated"
       : "task_generated";
-    const verification: AgentTeamVerificationConfig = {
+    const verification = await this.withVerificationDigests(projectRoot, {
       planFilePath,
       testCaseFilePath: null,
       generatedTestCaseFilePath: null,
       acceptanceSource,
-    };
+    });
     return {
       verification,
       acceptance: [],
@@ -115,12 +117,12 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
         projectRoot,
         requestedPath: input.testCaseFilePath,
       });
-      const verification: AgentTeamVerificationConfig = {
+      const verification = await this.withVerificationDigests(projectRoot, {
         planFilePath,
         testCaseFilePath: loaded.sourceFilePath,
         generatedTestCaseFilePath: null,
         acceptanceSource: "test_case_file",
-      };
+      });
       return {
         verification,
         acceptance: loaded.cases,
@@ -142,12 +144,12 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
             : planFilePath
               ? "plan_file_generated"
               : "task_generated";
-      const verification: AgentTeamVerificationConfig = {
+      const verification = await this.withVerificationDigests(projectRoot, {
         planFilePath,
         testCaseFilePath: null,
         generatedTestCaseFilePath: loaded.sourceFilePath,
         acceptanceSource,
-      };
+      });
       return {
         verification,
         acceptance: loaded.cases,
@@ -175,6 +177,100 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
       label,
     );
     return resolved.relativePath;
+  }
+
+  protected async assertVerificationSourcesUnchanged(
+    run: AgentTeamRun,
+  ): Promise<void> {
+    if (!run.verification) {
+      return;
+    }
+    const session = this.requireSession(run.terminalSessionId);
+    const projectRoot = this.resolveRequiredProjectRoot(
+      run.projectId,
+      session.cwd,
+    );
+    const current = await this.withVerificationDigests(
+      projectRoot,
+      run.verification,
+    );
+    const fields = [
+      ["计划文件", run.verification.planSha256, current.planSha256],
+      ["测试案例文件", run.verification.testCaseSha256, current.testCaseSha256],
+      [
+        "生成测试案例文件",
+        run.verification.generatedTestCaseSha256,
+        current.generatedTestCaseSha256,
+      ],
+    ] as const;
+    const drift = fields.find(([, expected, actual]) => expected !== actual);
+    if (drift) {
+      throw new AgentTeamError(
+        409,
+        `${drift[0]}已变化，旧 review/acceptance 失效：expected ${drift[1] ?? "null"}，actual ${drift[2] ?? "null"}`,
+      );
+    }
+  }
+
+  protected effectiveTestCaseSha256(
+    verification: AgentTeamVerificationConfig | null | undefined,
+  ): string | null {
+    return (
+      verification?.testCaseSha256 ??
+      verification?.generatedTestCaseSha256 ??
+      null
+    );
+  }
+
+  protected async pauseForCheckpointError(
+    run: AgentTeamRun,
+    reason: string,
+  ): Promise<AgentTeamRun> {
+    return this.updateRun(run, {
+      status: "need_human",
+      activeWorkerRole: null,
+      activeWorkerDispatch: null,
+      workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+      loop: { ...run.loop, escalated: true, lastReason: reason },
+      logs: [...run.logs, `⏸ Review checkpoint 已暂停：${reason}`],
+    });
+  }
+
+  private async withVerificationDigests(
+    projectRoot: string,
+    verification: AgentTeamVerificationConfig,
+  ): Promise<AgentTeamVerificationConfig> {
+    return {
+      ...verification,
+      planSha256: await this.hashProjectFile(
+        projectRoot,
+        verification.planFilePath,
+      ),
+      testCaseSha256: await this.hashProjectFile(
+        projectRoot,
+        verification.testCaseFilePath,
+      ),
+      generatedTestCaseSha256: await this.hashProjectFile(
+        projectRoot,
+        verification.generatedTestCaseFilePath,
+      ),
+    };
+  }
+
+  private async hashProjectFile(
+    projectRoot: string,
+    relativePath: string | null | undefined,
+  ): Promise<string | null> {
+    if (!relativePath) {
+      return null;
+    }
+    const resolved = await resolveAgentTeamProjectFile(
+      projectRoot,
+      relativePath,
+      "验收来源文件",
+    );
+    const content = await readFile(resolved.absolutePath);
+    return createHash("sha256").update(content).digest("hex");
   }
 
   protected async enqueue<T>(
@@ -290,6 +386,7 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
         | "terminal"
         | "task"
         | "verification"
+        | "reviewCheckpoint"
         | "activeWorkerRole"
         | "activeWorkerDispatch"
         | "clarify"

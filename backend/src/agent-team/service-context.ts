@@ -9,6 +9,7 @@ import type { TmuxService } from "../terminal/tmux-service";
 import { logger } from "../logging";
 import { AgentTeamOutboxResolver } from "./outbox-resolver";
 import { AgentTeamPromptSender } from "./prompt-sender";
+import { AgentTeamReviewCheckpointGit } from "./review-checkpoint-git";
 import { AgentTeamPaths } from "./storage/agent-team-paths";
 import { AgentTeamRunStore } from "./storage/run-store";
 import { AgentTeamAgentReadinessService } from "./agent-readiness";
@@ -31,6 +32,7 @@ export class AgentTeamServiceContext {
   protected readonly promptSender: AgentTeamPromptSender;
   protected readonly agentReadiness: AgentTeamAgentReadinessService;
   protected readonly outboxResolver: AgentTeamOutboxResolver;
+  protected readonly reviewCheckpointGit: AgentTeamReviewCheckpointGit;
   protected readonly eventQueues = new Map<string, Promise<unknown>>();
   protected readonly pendingCompletionRounds = new Map<string, number>();
   protected recheckWatchdogTimer: ReturnType<typeof setInterval> | null = null;
@@ -67,6 +69,7 @@ export class AgentTeamServiceContext {
       tmuxOutputWatcher: this.tmuxOutputWatcher,
     });
     this.outboxResolver = new AgentTeamOutboxResolver(this.paths);
+    this.reviewCheckpointGit = new AgentTeamReviewCheckpointGit();
   }
 
   async listRuns(projectId: string): Promise<AgentTeamRun[]> {

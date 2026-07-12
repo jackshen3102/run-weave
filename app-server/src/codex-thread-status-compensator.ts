@@ -151,6 +151,9 @@ export class CodexThreadStatusCompensator {
         projectId: thread.projectId,
         terminalSessionId: thread.terminalSessionId,
         terminalPanelId: thread.terminalPanelId,
+        terminalTmuxPaneId: this.options.eventCenter
+          .getStateStore()
+          .getThreadTmuxPaneId(thread.threadId),
         runId: thread.runId,
         cwd: thread.cwd,
       },
@@ -168,7 +171,9 @@ export class CodexThreadStatusCompensator {
         normalizedEvent: hookEvent,
         stateHookEvent: hookEvent,
         panelId: thread.terminalPanelId,
-        tmuxPaneId: null,
+        tmuxPaneId: this.options.eventCenter
+          .getStateStore()
+          .getThreadTmuxPaneId(thread.threadId),
         commandName: "codex",
         compensation: true,
         compensationReason: "codex_thread_status_mismatch",

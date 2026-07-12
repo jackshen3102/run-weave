@@ -58,7 +58,10 @@ const createRunSchema = z
     planFilePath: optionalPathSchema,
     testCaseFilePath: optionalPathSchema,
     options: z
-      .object({ autoApproveSplit: z.boolean().optional() })
+      .object({
+        autoApproveSplit: z.boolean().optional(),
+        reviewCheckpointMode: z.enum(["disabled", "local_commit"]).optional(),
+      })
       .strict()
       .optional(),
     terminal: terminalSchema.optional(),

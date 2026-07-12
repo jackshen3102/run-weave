@@ -62,6 +62,7 @@ intake
 - 主 Agent 或用户仍可通过提案接口调整拆分提案。
 - 人工确认拆分后创建或复用 worker pane，绑定 worker role、alias、`panelId` 和 `tmuxPaneId`，再向 worker pane 注入启动 prompt。
 - `executing` 状态下，`behavior_verify` 的验收结果和代码 diff 作为 loop 进展信号。
+- 开启本地 review checkpoint 时，每轮 `code_review` 通过后先形成 checkpoint commit；所有行为用例通过后，还要对任务基线到最新 checkpoint 做一次 final full review，才能结束 run。
 - 连续无进展达到 `maxNoProgress`（默认 3）时触发熔断，run 进入 `need_human`，worker 冻结。
 - 人工 note 恢复后清空重复失败 fingerprint，重新计数，并把 note 注入主 Agent 上下文。
 
@@ -77,13 +78,27 @@ Agent Team 的 Loop Engine 由 `backend/src/agent-team/loop.ts` 维护：
 
 当 stable fail case 尚未反弹时，后端会通过 `buildBounceBackPrompt` 注入 code worker pane；当验收通过数提升或出现明确 diff 进展时，无进展计数会清零。熔断只冻结后续自动注入，不删除 pane 或 outbox，方便人工聚焦现场。
 
+## Review Checkpoint
+
+`options.reviewCheckpointMode="local_commit"` 是显式开启的本地 Git checkpoint 模式；默认 `disabled`，不会改变现有 run。开启时后端先要求项目处于 Git 分支且工作区干净，再从当前 HEAD 创建 run 专属分支 `runweave/agt-<runId>`。checkpoint 只保留在本地，不 push、不 squash，也不替代后续正式提交或 PR 门禁。
+
+review 范围由后端生成并写入 worker dispatch，reviewer 必须在 pane-scoped outbox 中原样回传：
+
+- `full`：第一次 review，范围为任务基线到当前暂存树。
+- `incremental`：后续修复 review，范围为上一 checkpoint 到当前暂存树。
+- `final`：行为用例全部通过后，复核任务基线到最新 checkpoint；不再生成新 commit。
+
+后端是唯一允许执行 Git 写操作的一方。它只用参数化 Git 命令暂存本次代码变化，排除 `.runweave/**` 和 `docs/review/**`，并拒绝敏感文件与超大未跟踪文件。review 通过后还会再次校验分支、HEAD、index tree 和未暂存漂移，再创建带 run/round/reviewer trailer 的 checkpoint commit。重启恢复时按 trailer 查找已经创建但尚未写回 run JSON 的 commit，避免重复提交。
+
+`behavior_verify` 只允许验证 prompt 指定的 checkpoint SHA，并在 outbox 中回传 `verifiedCheckpointCommit`。计划文件和测试案例文件在 run 启动时记录 SHA-256；来源变化、外部 HEAD 漂移、工作树出现 checkpoint 之外的代码，或 worker 回传范围/SHA 不一致时，run 都会 fail closed 到 `need_human`。
+
 ## API 边界
 
 主要 HTTP 入口位于 `/api/agent-team`：
 
 - `GET /runs?projectId=...&terminalSessionId=...`：读取项目或当前 terminal session 的 run。
 - `GET /runs/:runId`：读取单个 run。
-- `POST /runs`：在指定 terminal session 上创建 run，可携带 `planFilePath` / `testCaseFilePath`。
+- `POST /runs`：在指定 terminal session 上创建 run，可携带 `planFilePath` / `testCaseFilePath`，并可显式设置 `options.reviewCheckpointMode="local_commit"`。
 - `POST /runs/:runId/propose-split`：提交主 Agent 或用户产出的拆分提案，可携带 `testCaseFilePath` / `generatedTestCaseFilePath` 生成可追溯 acceptance。
 - `POST /runs/:runId/split-gate`：确认或驳回拆分提案。
 - `POST /runs/:runId/round`：记录一轮验收结果或进展信号。
@@ -109,4 +124,5 @@ rw agent-team export <runId> --plain
 - pty runtime 不支持 worker pane split；Agent Team 主流程应运行在可 split 的 tmux terminal session 上。
 - 结果路由器只按结构化 outbox、pane metadata 和任务包匹配，不判断 worker 输出质量。
 - active run 会保留 Agent Team tab；禁用 panel split 只能隐藏普通控制条，不能让 active run 从 UI 中消失。
-- 代码提交、push 或发布动作仍应由主 Agent 或指定终端在可见流程中完成，不能绕过人工验收或熔断恢复。
+- 同一项目同一时间最多运行一个启用 review checkpoint 的 active run，避免多个 run 争用分支和 index。
+- checkpoint commit 不是正式发布：push、PR、合并以及正式 hooks 仍应由主 Agent 或指定终端在可见流程中完成，不能绕过人工验收或熔断恢复。
