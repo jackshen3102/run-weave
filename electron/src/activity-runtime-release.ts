@@ -104,9 +104,8 @@ export function validateBundledActivityRuntime(resourcesPath: string): boolean {
     ) {
       return false;
     }
-    const verified = expectedPaths.map((filePath) => {
-      const file = expected.find((candidate) => candidate.path === filePath)!;
-      const absolute = path.join(root, filePath);
+    const verified = expected.map((file) => {
+      const absolute = path.join(root, file.path as string);
       if (statSync(absolute).size !== file.size || sha256(absolute) !== file.sha256) {
         throw new Error("activity_runtime_file_mismatch");
       }
