@@ -3,10 +3,13 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { validateBundledActivityRuntime } from "./activity-runtime-release";
 
 export type RuntimeReleaseSource = "external" | "bundled";
 
@@ -17,6 +20,10 @@ export interface RuntimeRelease {
   backendEntry: string;
   cliEntry: string;
   nodePtyDir: string;
+  activityWorkerEntry: string;
+  betterSqlitePackageDir: string;
+  betterSqliteNativeBinding: string;
+  activityAvailable: boolean;
   runtimeRoot: string | null;
   releaseDir: string | null;
 }
@@ -34,14 +41,19 @@ interface RuntimeManifest {
   };
   backend?: {
     entry?: unknown;
+    activityWorkerEntry?: unknown;
+    betterSqlitePackageDir?: unknown;
+    betterSqliteNativeBinding?: unknown;
   };
   cli?: {
     entry?: unknown;
   };
   files?: Array<{
     path?: unknown;
+    size?: unknown;
     sha256?: unknown;
   }>;
+  treeSha256?: unknown;
   runtimeApiVersion?: unknown;
   minimumShellVersion?: unknown;
   sharedProtocolVersion?: unknown;
@@ -59,14 +71,19 @@ interface ValidRuntimeManifest extends RuntimeManifest {
   };
   backend: {
     entry: string;
+    activityWorkerEntry: string;
+    betterSqlitePackageDir: string;
+    betterSqliteNativeBinding: string;
   };
   cli: {
     entry: string;
   };
   files: Array<{
     path: string;
+    size: number;
     sha256: string;
   }>;
+  treeSha256: string;
 }
 
 interface RuntimeReleaseOptions {
@@ -103,6 +120,18 @@ export function resolveBundledRuntimeRelease(
       "index.cjs",
     ),
     nodePtyDir: path.join(resourcesPath, "backend", "node_modules", "node-pty"),
+    activityWorkerEntry: path.join(resourcesPath, "backend", "activity-sqlite-worker.cjs"),
+    betterSqlitePackageDir: path.join(resourcesPath, "backend", "node_modules", "better-sqlite3"),
+    betterSqliteNativeBinding: path.join(
+      resourcesPath,
+      "backend",
+      "node_modules",
+      "better-sqlite3",
+      "build",
+      "Release",
+      "better_sqlite3.node",
+    ),
+    activityAvailable: validateBundledActivityRuntime(resourcesPath),
     runtimeRoot: null,
     releaseDir: null,
   };
@@ -205,6 +234,29 @@ function sha256(filePath: string): string {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
 
+function listReleaseFiles(root: string, directory = root): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
+    left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+  )) {
+    const absolute = path.join(directory, entry.name);
+    if (entry.isSymbolicLink()) {
+      throw new Error("runtime_release_symlink_not_allowed");
+    }
+    if (entry.isDirectory()) files.push(...listReleaseFiles(root, absolute));
+    else if (entry.isFile()) files.push(path.relative(root, absolute).split(path.sep).join("/"));
+  }
+  return files;
+}
+
+function runtimeTreeSha256(
+  files: Array<{ path: string; size: number; sha256: string }>,
+): string {
+  return createHash("sha256")
+    .update(files.map((file) => `${file.path}\0${file.size}\0${file.sha256}`).join("\n"))
+    .digest("hex");
+}
+
 function validateManifestPaths(
   manifest: RuntimeManifest,
   releaseId: string,
@@ -240,6 +292,9 @@ function validateManifestPaths(
     !isSafeRelativePath(manifest.frontend?.distDir) ||
     !isSafeRelativePath(manifest.frontend?.index) ||
     !isSafeRelativePath(manifest.backend?.entry) ||
+    !isSafeRelativePath(manifest.backend?.activityWorkerEntry) ||
+    !isSafeRelativePath(manifest.backend?.betterSqlitePackageDir) ||
+    !isSafeRelativePath(manifest.backend?.betterSqliteNativeBinding) ||
     !isSafeRelativePath(manifest.cli?.entry)
   ) {
     return false;
@@ -252,11 +307,21 @@ function validateManifestPaths(
   for (const file of manifest.files) {
     if (
       !isSafeRelativePath(file.path) ||
+      typeof file.size !== "number" ||
+      !Number.isSafeInteger(file.size) ||
+      file.size < 0 ||
       typeof file.sha256 !== "string" ||
       !/^[a-f0-9]{64}$/i.test(file.sha256)
     ) {
       return false;
     }
+  }
+
+  if (
+    typeof manifest.treeSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/i.test(manifest.treeSha256)
+  ) {
+    return false;
   }
 
   return true;
@@ -290,11 +355,26 @@ export function resolveExternalRuntimeRelease(options: {
     );
     const frontendIndex = resolveInside(releaseDir, manifest.frontend.index);
     const backendEntry = resolveInside(releaseDir, manifest.backend.entry);
+    const activityWorkerEntry = resolveInside(
+      releaseDir,
+      manifest.backend.activityWorkerEntry,
+    );
+    const betterSqlitePackageDir = resolveInside(
+      releaseDir,
+      manifest.backend.betterSqlitePackageDir,
+    );
+    const betterSqliteNativeBinding = resolveInside(
+      releaseDir,
+      manifest.backend.betterSqliteNativeBinding,
+    );
     const cliEntry = resolveInside(releaseDir, manifest.cli.entry);
     if (
       !frontendDistDir ||
       !frontendIndex ||
       !backendEntry ||
+      !activityWorkerEntry ||
+      !betterSqlitePackageDir ||
+      !betterSqliteNativeBinding ||
       !cliEntry
     ) {
       return null;
@@ -312,6 +392,9 @@ export function resolveExternalRuntimeRelease(options: {
     const filesToCheck = [
       frontendIndex,
       backendEntry,
+      activityWorkerEntry,
+      betterSqlitePackageDir,
+      betterSqliteNativeBinding,
       cliEntry,
       ...manifestFiles.map((file) => file.filePath),
     ];
@@ -320,10 +403,27 @@ export function resolveExternalRuntimeRelease(options: {
       return null;
     }
 
+    const actualPaths = listReleaseFiles(releaseDir)
+      .filter((filePath) => filePath !== "manifest.json");
+    const expectedPaths = manifest.files.map((file) => file.path);
+    if (
+      new Set(expectedPaths).size !== expectedPaths.length ||
+      actualPaths.length !== expectedPaths.length ||
+      actualPaths.some((filePath, index) => filePath !== expectedPaths[index])
+    ) {
+      return null;
+    }
+
     for (const file of manifestFiles) {
-      if (sha256(file.filePath) !== file.sha256.toLowerCase()) {
+      if (
+        statSync(file.filePath).size !== file.size ||
+        sha256(file.filePath) !== file.sha256.toLowerCase()
+      ) {
         return null;
       }
+    }
+    if (runtimeTreeSha256(manifest.files) !== manifest.treeSha256.toLowerCase()) {
+      return null;
     }
 
     return {
@@ -334,6 +434,10 @@ export function resolveExternalRuntimeRelease(options: {
       cliEntry,
       nodePtyDir: resolveBundledRuntimeRelease(options.resourcesPath)
         .nodePtyDir,
+      activityWorkerEntry,
+      betterSqlitePackageDir,
+      betterSqliteNativeBinding,
+      activityAvailable: true,
       runtimeRoot: options.runtimeRoot,
       releaseDir,
     };

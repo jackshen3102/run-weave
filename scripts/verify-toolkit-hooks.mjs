@@ -19,6 +19,8 @@ import {
   getToolkitHookCommand,
   runLauncher,
   runToolkitHookCommand,
+  verifyPreToolHook,
+  verifyToolkitHookCommands,
 } from "./verify-toolkit-hooks-helpers.mjs";
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -35,6 +37,7 @@ const hookAssets = [
   "feishu_stop_notify.sh",
 ];
 const toolkitHookEvents = [
+  "PreToolUse",
   "PostToolUse",
   "SessionStart",
   "Stop",
@@ -47,14 +50,7 @@ const toolkitHookCommand =
 const toolkitHooksConfig = JSON.parse(
   await readFile(toolkitHooksConfigPath, "utf8"),
 );
-for (const event of toolkitHookEvents) {
-  const command = getToolkitHookCommand(toolkitHooksConfig, event);
-  assert.equal(
-    command,
-    toolkitHookCommand,
-    `${event} must point at the toolkit hook dispatcher`,
-  );
-}
+verifyToolkitHookCommands(toolkitHooksConfig, toolkitHookEvents, toolkitHookCommand);
 
 for (const asset of hookAssets) {
   const toolkitAsset = await readFile(
@@ -359,11 +355,13 @@ try {
     assert.equal(appServerRequests[1].payload.summary, "done");
     assert.equal(requests[0].url, "/internal/terminal/agent-hook");
     assert.equal(requests[0].token, "token-1");
-    assert.deepEqual(requests[0].body, {
+    assert.deepEqual(requests[0].body, { activityEventId: requests[0].body.activityEventId,
       terminalSessionId: "terminal-1",
       projectId: "project-1",
       tmuxPaneId: "%13",
       threadId: "thread-1",
+      rawHookEvent: "Stop",
+      response: "done",
       agent: "codex",
       hookEvent: "Stop",
       commandName: null,
@@ -400,11 +398,13 @@ try {
     assert.equal(appServerRequests[3].payload.source, "codex");
     assert.equal(requests[2].url, "/internal/terminal/agent-hook");
     assert.equal(requests[2].token, "token-2");
-    assert.deepEqual(requests[2].body, {
+    assert.deepEqual(requests[2].body, { activityEventId: requests[2].body.activityEventId,
       terminalSessionId: "terminal-2",
       projectId: "project-2",
       tmuxPaneId: "%13",
       threadId: "thread-1",
+      rawHookEvent: "Stop",
+      response: "done",
       agent: "codex",
       hookEvent: "Stop",
       commandName: null,
@@ -450,11 +450,12 @@ try {
     assert.equal(appServerRequests[4].correlationId, "thread-2b");
     assert.equal(requests[4].url, "/internal/terminal/agent-hook");
     assert.equal(requests[4].token, "token-2b");
-    assert.deepEqual(requests[4].body, {
+    assert.deepEqual(requests[4].body, { activityEventId: requests[4].body.activityEventId,
       terminalSessionId: "terminal-2b",
       projectId: "project-2b",
       tmuxPaneId: "%13",
       threadId: "thread-2b",
+      rawHookEvent: "UserPromptSubmit",
       agent: "codex",
       hookEvent: "UserPromptSubmit",
       commandName: null,
@@ -520,10 +521,12 @@ try {
     assert.equal(appServerRequests[8].payload.source, "trae");
     assert.equal(requests[7].url, "/internal/terminal/agent-hook");
     assert.equal(requests[7].token, "token-3");
-    assert.deepEqual(requests[7].body, {
+    assert.deepEqual(requests[7].body, { activityEventId: requests[7].body.activityEventId,
       terminalSessionId: "terminal-3",
       projectId: "project-3",
       tmuxPaneId: "%13",
+      rawHookEvent: "Stop",
+      response: "done",
       agent: "trae",
       hookEvent: "Stop",
       commandName: null,
@@ -556,6 +559,15 @@ try {
     assert.equal(requests[9].url, "/internal/terminal/agent-hook");
     assert.equal(requests[10].url, "/internal/terminal-completion");
 
+    await verifyPreToolHook({
+      command: getToolkitHookCommand(toolkitHooksConfig, "PreToolUse"),
+      homeDir,
+      appServerUrl: `http://127.0.0.1:${appServerPort}`,
+      endpoint,
+      requests,
+      appServerRequests,
+    });
+
     await runLauncher(launcherPath, {
       HOME: homeDir,
       RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
@@ -567,12 +579,12 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(
       requests.length,
-      11,
+      12,
       "launcher without Runweave identity must not post any request",
     );
     assert.equal(
       appServerRequests.length,
-      9,
+      10,
       "launcher without Runweave identity must not post app-server events",
     );
   } finally {

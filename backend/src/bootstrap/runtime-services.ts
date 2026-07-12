@@ -1,12 +1,17 @@
 import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
 import type { AuthStore } from "../auth/store";
 import { LowDbAuthStore } from "../auth/lowdb-store";
 import { loadAuthConfig } from "../auth/config";
 import { AuthService } from "../auth/service";
 import type { AppServerEventConsumerHandle } from "../app-server/event-consumer";
 import { AgentTeamService } from "../agent-team/service";
+import { ActivityEventFactory } from "../activity/event-factory";
+import { ActivityQueryService } from "../activity/query-service";
+import { ActivityRecorder } from "../activity/activity-recorder";
+import { ActivityStore } from "../activity/activity-store";
 import { logger } from "../logging";
 import { LowDbTerminalQuickInputStore } from "../terminal/quick-input-lowdb-store";
 import { TerminalQuickInputService } from "../terminal/quick-input-service";
@@ -21,11 +26,21 @@ import { TerminalCompletionEventService } from "../terminal/completion-event-ser
 import { TerminalEventService } from "../terminal/terminal-event-service";
 import { TerminalStateService } from "../terminal/terminal-state-service";
 import { TerminalStateStore } from "../terminal/terminal-state-store";
+import type { TerminalActivityDependencies } from "../terminal/activity-events";
 import { LowDbTerminalSessionStore } from "../terminal/lowdb-store";
 import { logOrphanedTmuxSessions } from "../terminal/tmux-orphan-scan";
-import { resolveStoragePaths } from "../utils/path";
+import {
+  resolveActivityStoragePaths,
+  resolveStoragePaths,
+} from "../utils/path";
 
 export interface RuntimeServices {
+  activityStore: ActivityStore | null;
+  activityRecorder: ActivityRecorder;
+  activityQueryService: ActivityQueryService;
+  activityEventFactory: ActivityEventFactory;
+  activityMaintenanceTimer: NodeJS.Timeout | null;
+  terminalActivity: TerminalActivityDependencies;
   authStore: AuthStore;
   authService: AuthService;
   authCookieName: string;
@@ -70,6 +85,90 @@ function resolveDefaultTmuxSocketPath(browserProfileDir: string): string {
 
 export async function createRuntimeServices(): Promise<RuntimeServices> {
   const storagePaths = resolveStoragePaths(process.env);
+  const activityPaths = resolveActivityStoragePaths(process.env);
+  let activityStore: ActivityStore | null = null;
+  try {
+    activityStore = await ActivityStore.create({
+      databasePath: activityPaths.activityDatabaseFile,
+      env: process.env,
+    });
+  } catch (error) {
+    logger.warn("activity.initialize.failed", {
+      component: "activity",
+      message: "Activity is unavailable; Backend will continue without it",
+      error,
+    });
+  }
+  const runtimeChannel =
+    process.env.RUNWEAVE_DESKTOP_CHANNEL === "stable" ||
+    process.env.RUNWEAVE_DESKTOP_CHANNEL === "beta"
+      ? process.env.RUNWEAVE_DESKTOP_CHANNEL
+      : "dev";
+  const activityInstanceId =
+    process.env.RUNWEAVE_DESKTOP_INSTANCE_ID?.trim() ||
+    `backend:${process.pid}:${crypto
+      .createHash("sha256")
+      .update(storagePaths.browserProfileDir)
+      .digest("hex")
+      .slice(0, 12)}`;
+  const activityEventFactory = new ActivityEventFactory({
+    producerName: "runweave-backend",
+    producerVersion: process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || "builtin",
+    producerInstanceId: activityInstanceId,
+    runtimeChannel,
+    runtimeSurface: "backend",
+    sourceRevision: process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim(),
+    backendProfileId: path.basename(storagePaths.browserProfileDir),
+  });
+  const activityRecorder = new ActivityRecorder(activityStore);
+  const activityQueryService = new ActivityQueryService(activityStore);
+  const terminalActivity = {
+    recorder: activityRecorder,
+    eventFactory: activityEventFactory,
+  };
+  if (activityStore) {
+    await activityRecorder.recordBatch([
+      activityEventFactory.create({
+        eventName: "producer.instance.started",
+        payload: {
+          pid: process.pid,
+          releaseId: process.env.RUNWEAVE_RUNTIME_RELEASE_ID?.trim() || null,
+        },
+      }),
+    ]);
+  }
+  const activityMaintenanceOwnerId = `${activityInstanceId}:${crypto.randomUUID()}`;
+  let activityMaintenanceRunning = false;
+  const runActivityMaintenance = (): void => {
+    if (!activityStore || activityMaintenanceRunning) return;
+    activityMaintenanceRunning = true;
+    void (async () => {
+      try {
+        while (true) {
+          const job = await activityStore?.runDelete(activityMaintenanceOwnerId);
+          if (!job || job.status === "completed" || job.status === "blocked") break;
+          await new Promise<void>((resolve) => {
+            const timeout = setTimeout(resolve, 50);
+            timeout.unref();
+          });
+        }
+        await activityStore?.runRetention(activityMaintenanceOwnerId);
+      } catch (error) {
+        logger.warn("activity.maintenance.failed", {
+          component: "activity",
+          message: "Activity maintenance pass failed",
+          error,
+        });
+      } finally {
+        activityMaintenanceRunning = false;
+      }
+    })();
+  };
+  const activityMaintenanceTimer = activityStore
+    ? setInterval(runActivityMaintenance, 15 * 60 * 1000)
+    : null;
+  activityMaintenanceTimer?.unref();
+  runActivityMaintenance();
   const authConfig = loadAuthConfig();
   const authStore = new LowDbAuthStore(storagePaths.authStoreFile);
   const persistedAuth = await authStore.initialize({
@@ -202,10 +301,17 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalStateService,
     tmuxService,
     tmuxOutputWatcher,
+    activity: terminalActivity,
   });
   agentTeamService.initialize();
 
   return {
+    activityStore,
+    activityRecorder,
+    activityQueryService,
+    activityEventFactory,
+    activityMaintenanceTimer,
+    terminalActivity,
     authStore,
     authService,
     authCookieName: authConfig.refreshCookieName,

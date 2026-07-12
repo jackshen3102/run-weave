@@ -13,10 +13,12 @@ export function getLiveTerminalBrowserTabIds(windowId: number): string[] {
   const prefix = `${windowId}:`;
   const liveTabIds: string[] = [];
   for (const [key, entry] of terminalBrowserRuntime.entries) {
+    const webContents = entry.view.webContents;
     if (
       entry.windowId === windowId &&
       key.startsWith(prefix) &&
-      !entry.view.webContents.isDestroyed()
+      webContents &&
+      !webContents.isDestroyed()
     ) {
       liveTabIds.push(key.slice(prefix.length));
     }

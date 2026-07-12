@@ -1,4 +1,5 @@
 node_modules
+.native-artifacts/
 dist
 .DS_Store
 .env

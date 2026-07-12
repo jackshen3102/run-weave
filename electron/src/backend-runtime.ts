@@ -43,6 +43,10 @@ export function resolvePackagedBackendPaths(
     backendEntry: release.backendEntry,
     frontendDistDir: release.frontendDistDir,
     nodePtyDir: release.nodePtyDir,
+    activityWorkerEntry: release.activityWorkerEntry,
+    betterSqlitePackageDir: release.betterSqlitePackageDir,
+    betterSqliteNativeBinding: release.betterSqliteNativeBinding,
+    activityAvailable: release.activityAvailable,
     releaseId: release.releaseId,
     source: release.source,
   };
@@ -111,6 +115,14 @@ export function buildPackagedBackendEnv(options: {
         }
       : {}),
     RUNWEAVE_NODE_PTY_DIR: options.backendPaths.nodePtyDir,
+    ...(options.backendPaths.activityAvailable
+      ? {
+          RUNWEAVE_ACTIVITY_WORKER_ENTRY: options.backendPaths.activityWorkerEntry,
+          RUNWEAVE_BETTER_SQLITE3_PACKAGE_DIR: options.backendPaths.betterSqlitePackageDir,
+          RUNWEAVE_BETTER_SQLITE3_NATIVE_BINDING:
+            options.backendPaths.betterSqliteNativeBinding,
+        }
+      : {}),
   };
 }
 
@@ -313,6 +325,10 @@ async function startPackagedBackendForRelease(options: {
     backendEntry: release.backendEntry,
     frontendDistDir: release.frontendDistDir,
     nodePtyDir,
+    activityWorkerEntry: release.activityWorkerEntry,
+    betterSqlitePackageDir: release.betterSqlitePackageDir,
+    betterSqliteNativeBinding: release.betterSqliteNativeBinding,
+    activityAvailable: release.activityAvailable,
     releaseId: release.releaseId,
     source: release.source,
   };

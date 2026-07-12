@@ -63,6 +63,31 @@ function extractCompletionSummary(payload) {
   return null;
 }
 
+function extractUserPrompt(payload) {
+  for (const key of ["prompt", "query", "user_prompt", "userPrompt", "message"]) {
+    const normalized = normalizeSummaryText(payload?.[key]);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+function extractToolHook(payload) {
+  const toolUseId =
+    payload?.tool_use_id ?? payload?.toolUseId ?? payload?.tool_call_id;
+  const toolName = payload?.tool_name ?? payload?.toolName ?? payload?.name;
+  return {
+    toolUseId:
+      typeof toolUseId === "string" && toolUseId.trim()
+        ? toolUseId.trim()
+        : null,
+    toolName:
+      typeof toolName === "string" && toolName.trim() ? toolName.trim() : null,
+    toolInput: payload?.tool_input ?? payload?.input,
+    toolResult:
+      payload?.tool_response ?? payload?.tool_result ?? payload?.output,
+  };
+}
+
 function parseArgs(argv) {
   const args = { source: "unknown", reason: "hook_stop", commandName: null };
   for (let index = 0; index < argv.length; index += 1) {
@@ -178,6 +203,12 @@ function toAgentHookStateEvent(normalizedEvent) {
   if (STOP_EVENTS.has(normalizedEvent)) {
     return "Stop";
   }
+  if (normalizedEvent === "pretooluse" || normalizedEvent === "pre_tool_use") {
+    return "ToolRequested";
+  }
+  if (normalizedEvent === "posttooluse" || normalizedEvent === "post_tool_use") {
+    return "ToolCompleted";
+  }
   return null;
 }
 
@@ -259,6 +290,9 @@ module.exports = {
   buildCompletionHookBody,
   deriveAgentHookEndpoint,
   deriveCompletionEndpoint,
+  extractCompletionSummary,
+  extractToolHook,
+  extractUserPrompt,
   normalizeEventName,
   normalizeReason,
   normalizeSource,

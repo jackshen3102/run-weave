@@ -8,6 +8,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./activity": "./src/activity/index.ts",
+    "./activity/api": "./src/activity/api.ts",
+    "./activity/events": "./src/activity/events.ts",
     "./agent-team": "./src/agent-team.ts",
     "./app-server-events": "./src/app-server-events.ts",
     "./app-server-node": "./src/app-server-node.ts",

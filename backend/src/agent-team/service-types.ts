@@ -10,6 +10,7 @@ import type { TerminalEventService } from "../terminal/terminal-event-service";
 import type { TerminalStateService } from "../terminal/terminal-state-service";
 import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TmuxService } from "../terminal/tmux-service";
+import type { TerminalActivityDependencies } from "../terminal/activity-events";
 
 export interface AgentTeamServiceOptions {
   terminalSessionManager: TerminalSessionManager;
@@ -20,6 +21,7 @@ export interface AgentTeamServiceOptions {
   tmuxService?: TmuxService;
   tmuxOutputWatcher?: TmuxOutputWatcher;
   cwd?: string;
+  activity?: TerminalActivityDependencies;
 }
 
 export type AgentTeamCompletionSignalSource =

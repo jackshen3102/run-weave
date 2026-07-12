@@ -14,7 +14,7 @@ const state = {
   activeView: "system",
   activeScenario: "query",
   activeNode: null,
-  activeFailure: "hub-down",
+  activeFailure: "backend-down",
 };
 
 function escapeHtml(value) {
@@ -203,7 +203,7 @@ function renderDataMatrix() {
     ["Source", "17%"],
     ["Capture point", "17%"],
     ["Direct Fact · 30d", "23%"],
-    ["Hub Content · 7d", "15%"],
+    ["Backend Content · 7d", "15%"],
     ["External Ref", "14%"],
     ["Coverage boundary", "14%"],
   ];

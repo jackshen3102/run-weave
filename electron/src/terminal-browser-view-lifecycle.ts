@@ -34,6 +34,11 @@ import {
   clearTerminalBrowserAnnotationAndNotify,
   sendTerminalBrowserTabUpdate,
 } from "./terminal-browser-view-updates.js";
+import {
+  recordBrowserNavigationFinished,
+  recordBrowserNavigationStarted,
+  recordBrowserTabEvent,
+} from "./activity-emitter.js";
 
 export function isTerminalBrowserBounds(
   value: unknown,
@@ -251,13 +256,41 @@ export function getOrCreateTerminalBrowserView(
   view.webContents.on("did-start-loading", () => {
     sendTerminalBrowserTabUpdate(win, tabId, entry, true);
   });
+  view.webContents.on("did-start-navigation", (_event, url, _inPlace, isMainFrame) => {
+    if (isMainFrame) {
+      recordBrowserNavigationStarted({
+        tabId,
+        browserGroupId: entry.browserGroupId,
+        url,
+      });
+    }
+  });
   view.webContents.on("did-stop-loading", () => {
     sendTerminalBrowserTabUpdate(win, tabId, entry, false);
   });
-  view.webContents.on("did-navigate", () => {
+  view.webContents.on("did-navigate", (_event, url) => {
     clearTerminalBrowserAnnotationAndNotify(win, tabId);
     sendTerminalBrowserTabUpdate(win, tabId, entry);
+    recordBrowserNavigationFinished({
+      tabId,
+      browserGroupId: entry.browserGroupId,
+      url,
+      status: "completed",
+    });
   });
+  view.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) return;
+      recordBrowserNavigationFinished({
+        tabId,
+        browserGroupId: entry.browserGroupId,
+        url: validatedURL,
+        status: errorCode === -3 ? "cancelled" : "failed",
+        code: errorDescription || String(errorCode),
+      });
+    },
+  );
   view.webContents.on("did-navigate-in-page", () => {
     clearTerminalBrowserAnnotationAndNotify(win, tabId);
     sendTerminalBrowserTabUpdate(win, tabId, entry);
@@ -267,6 +300,40 @@ export function getOrCreateTerminalBrowserView(
   });
 
   terminalBrowserRuntime.entries.set(key, entry);
+  recordBrowserTabEvent({
+    eventName: "browser.tab.created",
+    tabId,
+    browserGroupId: entry.browserGroupId,
+    reason: options.openerTabId ? "page_open" : "user_or_restore",
+  });
+  view.webContents.once("destroyed", () => {
+    if (terminalBrowserRuntime.entries.get(key) !== entry) {
+      return;
+    }
+    recordBrowserTabEvent({
+      eventName: "browser.tab.closed",
+      tabId,
+      browserGroupId: entry.browserGroupId,
+      reason: "web_contents_destroyed",
+    });
+    terminalBrowserRuntime.entries.delete(key);
+    if (terminalBrowserRuntime.attachedByWindowId.get(win.id) === tabId) {
+      terminalBrowserRuntime.attachedByWindowId.delete(win.id);
+    }
+    removeTerminalBrowserTabOrder(win.id, tabId);
+    clearPendingTerminalBrowserTabUpdate(entry);
+    entry.deviceDebuggerAttached = false;
+    entry.onDeviceDebuggerDetach = null;
+    clearTerminalBrowserAnnotation(key);
+    terminalBrowserEvents.emit("tab-closed", {
+      targetId: entry.targetId,
+      browserGroupId: entry.browserGroupId,
+    });
+    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send("terminal-browser:tab-closed", { tabId });
+    }
+    scheduleTerminalBrowserTabsSave();
+  });
   insertTerminalBrowserTabOrder(win.id, tabId, options.openerTabId);
   void view.webContents.loadURL("about:blank").catch(() => undefined);
   return view;
@@ -374,6 +441,12 @@ export function attachTerminalBrowser(
   terminalBrowserRuntime.attachedByWindowId.set(win.id, tabId);
   if (entry) {
     entry.lastActiveAt = Date.now();
+    recordBrowserTabEvent({
+      eventName: "browser.tab.activated",
+      tabId,
+      browserGroupId: entry.browserGroupId,
+      reason: "selected",
+    });
   }
   if (!terminalBrowserRuntime.restoringWindows.has(win.id)) {
     scheduleTerminalBrowserTabsSave();
@@ -396,6 +469,12 @@ export function closeTerminalBrowserEntry(
   if (!entry) {
     return;
   }
+  recordBrowserTabEvent({
+    eventName: "browser.tab.closed",
+    tabId,
+    browserGroupId: entry.browserGroupId,
+    reason: "user",
+  });
   if (entry.attached) {
     win.contentView.removeChildView(entry.view);
   }

@@ -1,379 +1,351 @@
-# Runweave 独立行为数据底座与经验生成系统测试用例
+# Runweave Backend 内嵌行为数据底座测试用例
 
-> 状态：待实施后执行
-> 对应目标架构流程：`docs/architecture-flows/system-activity-data-foundation-flow/`
-> 原则：不新增单元测试；使用真实进程、API、文件、Playwright、CLI、Hook、Shell 和桌面运行时取证
+> 状态：功能已实施并完成代表性集成/CLI/浏览器/native runtime 验证；放量级与完整故障矩阵尚未全部执行。
+> 对应计划：`docs/plans/2026-07-11-system-activity-data-foundation.md`
+> 配套产品原型：`docs/prototypes/system-activity-data-foundation/`
+> 配套架构流程：`docs/architecture-flows/system-activity-data-foundation-flow/`
+> 验证原则：不新增单元测试文件；使用临时数据库、可执行集成脚本、真实 Stable/Beta/Dev、真实 CLI 与 `$playwright-cli` 取证。
 
 ## 验收范围
 
-本用例验证四件事：
+覆盖：
 
-1. 事实是在行为发生时主动写入独立 Activity Hub，不是运行时扫描现有业务库拼出来。
-2. Stable、Beta、Dev 与 external producer 能集中写入，同时保留真实来源、缺口、顺序和失败语义。
-3. 7 天内容 / 30 天事实、隐私、删除、引用和海量写入符合计划。
-4. Learning 只能由模型读取冻结 Context Pack 生成，且与事实隔离、可审计、可审核。
+- 不新增 Activity daemon/端口/发现/auth 生命周期。
+- Backend 内嵌 `ActivityRecorder/ActivityStore/ActivityQueryService`。
+- Stable、Beta、Dev 多 Backend 共同读写 `~/.runweave/activity/activity.sqlite`。
+- CLI/Electron/Hook/Shell 只经 Backend 写入，不直接打开 SQLite。
+- SQLite WAL、多进程并发、幂等、事务、schema version、retention lease、崩溃恢复。
+- P0 14 个可靠事件族、字段来源、显式关联和 coverage gap。
+- 7 天 Content / 30 天 Fact、DLP、加密、登录鉴权、删除与导出。
+- Facts、Interaction Timeline、Sources、Data Policy 四个页面视图。
 
-P0–P2 实施时执行 ADF-001 至 ADF-021；P3 执行 ADF-022 至 ADF-028；P4 执行 ADF-029 至 ADF-030。任一关键用例失败即停止该阶段发布。
+不覆盖：
+
+- 历史 backfill、任意外部 TTY 的透明全量捕获。
+- 模型调用、Learning Candidate、审核、发布、检索或反馈闭环。
+- OTLP、云端仓库、跨设备同步。
+- mousemove、按键、terminal byte、模型 token 或隐藏思维链。
+
+## 前提事实
+
+- Backend routes、Tunnel Auth、Bearer Auth 和 Hook Token 已存在于 `backend/src/index.ts`。
+- Backend 是 per-profile 生命周期；不同 profile 可同时运行，见 `backend/src/server/profile-lock.ts`。
+- Beta 使用独立 browser profile/CLI config/App Server home，见 `electron/src/desktop-config.ts`。
+- CLI 已通过 profile/baseUrl/accessToken 调 Backend，见 `packages/runweave-cli/src/client/auth-context.ts`。
+- packaged Backend 运行于 Electron 33/Node 20，不能把 `node:sqlite` 当可用前提。
+- 正式数据默认在 `~/.runweave/activity/`；所有自动化必须设置临时 `RUNWEAVE_ACTIVITY_HOME`，不得读取或修改用户正式数据。
 
 ## 环境与证据
 
-准备：
+每次执行创建独立目录：
 
-- 一个隔离 Activity Hub home，例如 `/tmp/runweave-activity-hub-acceptance`。
-- Stable、Beta、Dev 三个可区分 Runtime；至少两个 Backend profile。
-- 一个 Runweave Terminal、一个安装全局 Agent Hook 的外部 TTY，以及一个未安装 Shell Integration 的外部 TTY。
-- 一个包含 Browser tab 和 Agent Team acceptance case 的隔离 Project。
-- 可控制时钟或 retention fixture；不能修改真实用户数据时间戳。
-- 所有内容使用测试 secret 和测试正文，不使用真实 token、cookie 或私有代码。
-
-证据至少包含：
-
-```text
-artifacts/activity-data-foundation/<phase>/
-  environment.json
-  api/
-  storage/
-  browser/
-  desktop/
-  privacy/
-  retention/
-  learning/
-  command-results.json
+```bash
+export RUNWEAVE_ACTIVITY_TEST_MODE=true
+export RUNWEAVE_ACTIVITY_HOME="$(mktemp -d)/activity"
 ```
 
-`environment.json` 记录 Git SHA、Node、Activity Hub version/home、Runtime channel、surface、producer instance/boot、Project/Terminal/Thread/Run ID 和时间。证据不保存明文 secret。
+证据目录：
+
+```text
+artifacts/activity-data-foundation/<run-id>/
+  environment.json
+  processes/
+  api/
+  sqlite/
+  concurrency/
+  retention/
+  privacy/
+  cli/
+  browser/
+```
+
+`environment.json` 至少记录 Git SHA、Node/Electron/SQLite driver version、CPU arch、三个 Backend 的 PID/port/channel/profile、临时 DB path、开始/结束时间和退出码。证据不得包含 Query/回复/命令明文、token、cookie、Authorization、Keychain key 或完整环境变量。
 
 ## 必跑门禁
+
+按顺序执行，任一失败即停：
 
 ```bash
 pnpm architecture:check
 pnpm typecheck
 pnpm lint
 pnpm build
+node scripts/verify-activity-sqlite-runtime.mjs
 git diff --check
 ```
 
-涉及 Web/Activity 页面必须实际执行 `$playwright-cli`。涉及 Stable/Beta Electron 并行、系统 Hook 或 Keychain 时先用 `$computer-use` 准备环境，再使用 `$playwright-cli` 对页面状态取证。未执行必须写明阻塞原因，不能用源码阅读代替。
+功能实现后再执行本文件的真实环境用例。浏览器用例必须使用 `$playwright-cli`；Desktop Stable/Beta 并行准备使用 `$computer-use`。静态检查和源码阅读只作前置门禁，不算功能通过证据。
 
 ## 测试用例
 
-### ADF-001 行为数据写入独立根目录
+### ADF-001 未创建独立 Activity 服务
+
+- **Given**：构建并启动实现后的 Runweave，记录启动前后的监听端口、进程树和 `~/.runweave/` 新增文件。
+- **When**：分别启动 Stable、Beta、Dev 并打开 Activity 页面。
+- **Then**：没有 `activity-hub`/activity daemon 进程、独立监听端口、lock/discovery/token 文件或 start/stop/status 命令；Activity routes 只存在于各自 Backend 端口。
+- **失败判断**：出现独立 Activity PID/端口/服务发现/凭据，或页面依赖该进程才可用。
+- **验证方式**：进程/端口快照 + Backend route 请求 + 文件树 diff。
 
-方法：端到端、存储隔离。
+### ADF-002 数据库位于 profile 外的固定 OS 用户目录
+
+- **Given**：Stable、Beta、Dev 使用三个不同 browser profile，Activity home 指向同一个临时根目录。
+- **When**：三个 Backend 各写入一个带唯一 channel 的 Fact。
+- **Then**：只生成一个 `<RUNWEAVE_ACTIVITY_HOME>/activity.sqlite` 及其 WAL/SHM；任何 profile、App Server home、项目 `.runweave` 中都没有另一份 Activity DB。
+- **失败判断**：按 profile/channel 生成多库，或数据落入现有业务/日志文件。
+- **验证方式**：文件树、SQLite row 查询、profile 路径检查。
 
-前置：Stable App Server、Beta App Server、Backend 和 Activity Hub 分别使用隔离 home。
+### ADF-003 只有 Backend 进程持有数据库句柄
+
+- **Given**：一个 Backend、页面、CLI、Electron、Hook adapter 均处于活动状态。
+- **When**：执行写入、查询和导出并在过程中采集 `lsof`。
+- **Then**：数据库/WAL/SHM 只由 Backend PID 打开；CLI、Electron renderer、浏览器、Hook 和模型进程不持有句柄。
+- **失败判断**：任何非 Backend runtime 直接打开 SQLite，或共享 SQLite driver/migration 代码存在第二份运行入口。
+- **验证方式**：`lsof` 证据 + 进程树；停机后可用只读 `sqlite3` 取证，但它不是产品写入路径。
 
-操作：从 Stable 与 Beta 各发送一条测试 Query，完成一次 Agent turn；列出 Activity Hub、两个 App Server、Backend profile 和 Project `.runweave` 中本次产生的文件；用 `file`、`sqlite3 .tables`、`PRAGMA journal_mode` 和主键查询检查 `activity.sqlite`。
+### ADF-004 Stable/Beta/Dev 在同一数据库集中展示
+
+- **Given**：三个 Backend 同时连接一个临时 DB，各自 runtime channel/profile/revision 可区分。
+- **When**：每个 Backend 提交 100 个事件，再分别通过三个 Backend 查询 Facts。
+- **Then**：任一查询都看到 300 个事件；channel/profile 字段保留真实来源；App Server home 和 Backend 控制面仍彼此隔离。
+- **失败判断**：任一 Backend 只能看到自己的 facts、出现重复/缺失，或为集中化而共享 Backend profile/App Server home。
+- **验证方式**：三个 API 响应 + SQLite 聚合计数。
 
-预期：`activity.sqlite` 是 SQLite 3 数据库且启用 WAL；9 个 canonical behavior/content/ref/source/quarantine/retention 表都在该库；每个 Producer spool 也是 SQLite 且只有 `spool_events/spool_loss_ranges` transient 表；规范化 `user.query.submit_requested`、`agent.thread.*` 与 `agent.response.observed` 只以 Hub SQLite row/BLOB 存在；两个 App Server 的 operational event/state 仍各自隔离；Activity Hub 不创建 Fact JSONL/segment，也不写 Backend LowDB 或项目 run 文件。
+### ADF-005 CLI 通过所选 Backend 写入而非直写 SQLite
+
+- **Given**：两个 CLI profile 分别指向 Stable 与 Beta Backend；DB 初始为空。
+- **When**：使用 `--profile`、`--backend-port` 和 `RUNWEAVE_BASE_URL` 三种方式执行固定的 `rw activity record terminal-command-started/completed` 与真实业务命令，并尝试任意 event/payload 参数。
+- **Then**：请求命中所选 Backend，最终写入共享 DB；Fact 的 producer/runtime 来自 Backend/Registry context，CLI 不能覆盖；CLI PID 不打开 DB。
+- **失败判断**：CLI 绕过 Backend、target 解析错误、存在任意 `--event-name/--payload-json` 入口、允许伪造 verification/Agent Team identity，或存在本地 hidden DB/spool。
+- **验证方式**：Backend access log、CLI JSON 输出、`lsof`、SQLite row。
 
-失败：Activity Fact 复用 App Server JSONL、依赖项目 `.runweave` 才可查询，或 Stable/Beta 各自形成无法统一查询的行为库。
+### ADF-006 Backend 不可达时明确失败且不伪造补传
+
+- **Given**：CLI/外部 adapter 已配置一个 Backend profile，随后停止该 Backend。
+- **When**：尝试提交一个事件，等待超过所有客户端 retry 窗口后重启 Backend。
+- **Then**：命令以非零码明确报告“未记录”；DB 不出现该事件；重启后新事件可以正常写入；没有自动创建 daemon 或隐式 spool。
+- **失败判断**：命令返回成功但 DB 无 row、重启后凭空出现事件、或客户端自动启动新服务。
+- **验证方式**：CLI stdout/stderr/exit code、进程树、重启前后 SQLite 查询。
 
-### ADF-002 事实不是读时扫描现有业务数据生成
+### ADF-007 Activity 不依赖 App Server 生命周期
+
+- **Given**：App Server 未启动或显式停止，Backend 与 Activity DB 可用。
+- **When**：通过 Backend 内部 producer 和 CLI 写入并查询。
+- **Then**：写入和查询成功；没有读取 App Server lock/token/JSONL；启动或停止 App Server 不改变 Activity rows。
+- **失败判断**：App Server 不可达导致 Activity unavailable，或行为事实写入 `app-server-events.jsonl`。
+- **验证方式**：App Server status、Backend API、文件 hash/mtime、SQLite row。
 
-方法：因果验证、依赖删除。
+### ADF-008 Event schema、producer allowlist 与字段来源
+
+- **Given**：准备 managed Hook、external Hook、Electron、shell 四个专用 route 的有效事件，以及未知 event/version、超限 payload、伪造 actor/runtime/TTL/privacy、错 route namespace、generic batch route、Electron 无/过期 Bearer 请求，并构造 16/17 个 owned descriptor 与 `ownedMutationBytes` 恰好低于/超过 8 MiB 的边界。
+- **When**：分别通过 `/internal/activity/hook-events/batch`、`/api/activity/hook-events/batch`、`/api/activity/electron-events/batch`、`/api/activity/shell-command-events/batch` 提交；Electron 复用既有 login 在 401 后重新登录。
+- **Then**：只有匹配 route allowlist 且 ≤16 descriptors/≤8 MiB conservative budget 的事件 commit；`owned_mutation_bytes` 由 Store 根据最终 row/BLOB/link/index allowance 计算并写入不可变 Fact，Producer 不能自报；Electron token 只在内存；其它请求以闭集 reason 拒绝并写 `ingest_rejections` metadata；generic `/events/batch` 不存在。
+- **失败判断**：generic `payload:any` 落库、CLI/Hook 伪造 Electron/verification/Agent Team identity、Producer 延长 TTL/降低 privacy/自报 size、用多个 Content 绕过 8 MiB total、Tunnel Auth 被误当 Electron 身份，或拒绝原文被保存。
+- **验证方式**：API 状态/错误码、Facts query、`ingest_rejections` 行。
 
-前置：已产生一组 Query、command 和 Agent Team phase 事实。
+### ADF-009 重复投递幂等且冲突不可覆盖
+
+- **Given**：固定 eventId、producer instance/boot/sequence 和 canonical payload。
+- **When**：相同 batch 提交 10 次，再使用相同 ID/sequence 提交不同 payload，并尝试 UPDATE 已提交 Fact 的 project/thread/payload 及 Content/Ref owner 四元组。
+- **Then**：相同输入只存在 1 个 Fact/Content/link 并返回 duplicate；冲突输入返回 `idempotency_conflict`，原 row/fingerprint 不变；immutable triggers 拒绝 Fact UPDATE 和 Content/Ref owner 迁移。
+- **失败判断**：重复 row、Content orphan、冲突覆盖、Fact scope 可被更新、或把不同内容当成功 retry。
+- **验证方式**：API ACK、SQLite count/hash/link/FK 查询。
 
-操作：停止 producer；复制并隔离删除相应测试 Thread snapshot、scrollback、Agent Team run 和 Backend profile；仅启动 Activity Hub 查询事实。
+### ADF-010 Fact、Content、Ref 与 gap 更新事务原子
+
+- **Given**：一个包含 Fact、Content、ExternalRef 和 sequence advance 的 batch，并在各写阶段注入失败。
+- **When**：执行失败事务后再以相同 ID 重试完整事务。
+- **Then**：失败后四类 row 都未部分出现，producer cursor 未提前；重试后一次性完整 commit。
+- **失败判断**：Fact 有但 Content/link 缺失、cursor 跳过、orphan row 或重试冲突。
+- **验证方式**：fault-injection integration script + FK/count 查询。
 
-预期：30 天内结构化事实、关系、时间和结果仍可查询；External Ref 显示 missing/expired，但事实不会消失或在查询时重新生成。
+### ADF-011 三个 Backend 并发 WAL 写入无损
+
+- **Given**：三个独立 Backend process 各有一个 SQLite worker/connection，共享 DB；WAL、foreign keys、busy timeout 已启用。
+- **When**：每进程持续 50 events/s 写 10 分钟，同时页面执行 keyset query 和 passive checkpoint。
+- **Then**：总 row 数、每 producer sequence 和提交 ACK 完全一致；无 corruption/duplicate/unreported busy loss；reader 不阻塞 writer 超过预算。
+- **失败判断**：`database is locked` 泄漏给正常负载、row 丢失、FK 错误、WAL 损坏或查询长时间阻塞。
+- **验证方式**：多进程 harness、ACK manifest、`integrity_check`、`foreign_key_check`、延迟分位。
 
-失败：Facts API 必须访问 Backend/Thread/run 文件才能返回基本记录，或源文件删除后事件数量变化。
+### ADF-012 Schema migration 与版本错位 fail-closed
+
+- **Given**：`user_version=major*1000+minor` 的旧 minor、当前 minor、同 major 未来 minor、未来 major DB，以及两个 Backend 同时尝试 additive migration。
+- **When**：分别启动当前/前一 minor fixture Backend，并强制交错“旧 writer 尝试写”与“新 Backend 尝试 major migration”：覆盖 migration 先拿锁、writer 先拿锁两种顺序。
+- **Then**：minor migration 只由一个 `BEGIN EXCLUSIVE` 成功执行；普通 writer 先 `BEGIN IMMEDIATE`，在同一事务内 gate version 后再写；同 major 前一 minor 可继续写，未来 major 只禁用 Activity 并返回 `activity_schema_too_new`，不影响 Terminal；migration 不可能插入 gate/INSERT 之间。
+- **失败判断**：双迁移、部分 DDL、同 major 前一 writer被无故禁用、旧 writer 越过 major gate、出现 version-check TOCTOU，或整个 Backend 因 Activity version 退出。
+- **验证方式**：multi-process migration harness、schema dump、Backend health/API。
 
-### ADF-003 Event schema 与 runtime/surface 不混淆
+### ADF-013 Backend 崩溃后只恢复已 commit 事务
+
+- **Given**：一批已 commit 事件和一批事务中事件。
+- **When**：在事务中强杀 writer，再重启任一 Backend。
+- **Then**：SQLite WAL recovery 保留全部已 commit row，未 commit batch 完全不存在；新写入继续；integrity/FK check 通过。
+- **失败判断**：半事务、已 commit 丢失、未 commit 被误报成功、自动从 JSONL/业务库补造。
+- **验证方式**：kill harness、ACK manifest、SQLite checks、重启 API。
 
-方法：判定表。
+### ADF-014 Maintenance lease 用 fencing 阻止 stale owner 继续删除
+
+- **Given**：三个 Backend 的 retention timer 同时触发，lease 初始为空；owner A 取得 token 1 后暂停超过 TTL，owner B 接管取得 token 2，随后 lease 再过期并由原 owner A 重新取得。
+- **When**：B/A 分别执行 sweep，同时恢复最初持有 A/token1 的旧任务并让它 renew、删除和更新 sweep 状态；另并发触发 passive checkpoint 与 retention sweep。
+- **Then**：固定 lease row 永不物理删除；每次 acquire/takeover 原子递增，原 owner A 再取得时必须是 token 3 而不是重建 token 1；每个删除 batch 在同一 `BEGIN IMMEDIATE` 中校验 owner+token+未过期状态；所有 stale task 以 `activity_maintenance_lease_lost` 失败且 0 mutation，当前 owner 每批最多删除 1000 rows；SQLite checkpoint lock 不阻塞正常写入。
+- **失败判断**：过期 lease 被 sweep 删除、fencing token 重置/ABA、stale A/token1 继续删除、两个 owner 持有相同 token、误删未过期数据或 checkpoint 阻塞写入。
+- **验证方式**：pause/resume 多进程 harness、lease/fencing/sweep rows、process logs、删除计数、WAL size。
 
-操作：分别从 Stable Desktop、Beta Desktop、Dev Web、Backend、CLI、Hook、Shell 写合法事件；再提交 CLI 被标成 runtime、缺 `eventId`、未知 major schema、超限 payload、未授权 event name、Query 伪装成 Agent actor、Agent Team 伪装成 User actor，以及 Producer 伪造 `deviceId/ingestedAt/hubOffset/privacy/retention` 的请求。
+### ADF-015 P0 事件只从可靠业务边界产生
+
+- **Given**：为 14 个 P0 family 准备各自真实来源动作，并准备被排除的 focus/retry/connection/file/git/interrupt/turn/automation/review 动作。
+- **When**：逐一执行来源动作并查询 Facts。
+- **Then**：P0 family 的 event、scope、actor、result、payload/ref 均来自计划定义边界；被排除动作没有同名事实；不存在日志文本推断。
+- **失败判断**：不存在业务边界的事件被记录、reported result 升级为 verification，或来源字段和计划不一致。
+- **验证方式**：真实 Backend/Electron/Hook/Agent Team/runner 证据 + Facts rows。
 
-预期：合法组合保留 `runtime.channel` 与 `runtime.surface`；Hub-owned/Registry-owned 字段只能由 Hub/Registry 写；非法事件被拒或进入 SQLite quarantine，不能混进 Facts；Sources 显示 reject 数和原因。
+### ADF-016 外部 TTY 覆盖边界诚实
+
+- **Given**：一个未安装任何 integration 的外部 TTY、一个显式配置 `rw activity record agent-hook --profile ...` 的 Agent TTY、一个安装受控 zsh adapter 的 shell TTY。
+- **When**：分别执行同样的 Query/command。
+- **Then**：未集成 TTY 不产生伪事实；显式 Agent Hook 只记录真实 UserPromptSubmit/Stop/tool 事件，zsh adapter 只记录 command started/completed；Sources 清楚区分 active/inactive/last seen。
+- **失败判断**：从 scrollback 猜出命令、宣称未集成 TTY 已覆盖、或 Bash/fish 未验收却标 active。
+- **验证方式**：TTY transcript digest、Backend access log、Facts/Sources 页面。
 
-失败：CLI 被当成 Runtime、Backend 被猜成 Web/Desktop、Producer 能覆盖 Hub 字段、unknown payload 直接入库、坏 Beta schema 影响 Stable 查询，或 reject 没有可见记录。
+### ADF-017 关联只使用显式 ID 且高基数查询命中索引
+
+- **Given**：两个时间相近但 interaction/thread/run 不同的事件链、一组缺失 interactionId 的事件，以及含 3,000,000 Facts 的高基数 project/runtime/correlation fixture。
+- **When**：分别调用 `selector=interaction|correlation|thread|run&id=...`，执行 CLI 四个互斥 selector，并查询 project、runtime+surface 的最近 10,000 条 keyset page；采集 `EXPLAIN QUERY PLAN` 与 p95。
+- **Then**：四种 selector 都只返回精确 ID 范围；两条链不合并；缺 ID 事件显示 `unlinked`；duration/count 只对相同 operation/correlation 计算；零个或多个 selector 都返回 400/CLI exit 2；correlation/project/runtime+surface 查询命中对应复合索引且 p95 < 500 ms。
+- **失败判断**：API/CLI 只支持 correlation、按时间窗口归 Task、把相邻事件错误串联、UI 隐藏未关联事实、高基数查询全表 scan 或超预算。
+- **验证方式**：3M fixture + API/UI timeline + `EXPLAIN QUERY PLAN` + latency histogram。
 
-### ADF-004 Stable/Beta/Dev 集中展示且控制面保持隔离
-
-方法：多运行时端到端。
-
-操作：三套 Runtime 在各自固定的 Project scope 下执行 Query、Agent completion 和 verification；在其中一套停止/重启 App Server；用 `$playwright-cli` 打开 Facts 与 Sources。
-
-预期：一个页面能按 Runtime 筛选全部事实；每条记录版本/profile/source 正确；停止一套 App Server 不影响其他 Runtime 或 Activity Hub；Activity Hub 不能控制任一 Runtime。
-
-失败：channel 串标、事件写入不同 Hub、一个 Runtime 故障导致全局写入失败，或 Hub 获得运行时控制权限。
-
-### ADF-005 外部 TTY Agent Query/Reply 覆盖
-
-方法：等价类、能力边界。
-
-操作：在没有 `RUNWEAVE_TERMINAL_SESSION_ID`、但已安装 Activity Hook 的外部 TTY 启动受支持 Agent，发送 Query 并完成；再在未安装 Hook 的 TTY 重复。
-
-预期：第一组以 `runtime=external/surface=hook` 写 `user.query.submit_requested`、对应的 `agent.thread.started/resumed` 与主 Agent `agent.response.observed`；Query 事件只表示 Hook 观察到发送请求，不声称 Agent 已接受；SubagentStop 不混入用户回复；未知 Terminal ID 保留为空；第二组不产生伪记录，Sources/文档明确未覆盖；系统不从 UserPromptSubmit/Stop 猜造 `agent.turn.*` 生命周期。
-
-失败：仍因 Runweave Terminal gate 跳过第一组、给外部 TTY 猜造 Session ID，或声称第二组已覆盖。
-
-### ADF-006 外部任意 Shell command 仅由显式 Shell Integration 捕获
-
-方法：正反例。
-
-操作：在启用受控 interactive zsh integration 的隔离 shell 执行成功、失败、Ctrl-C、含管道和多行命令；再在未启用 integration 的 zsh、当前 bash DEBUG trap 与无 adapter 的 fish 中重复。
-
-预期：受控 zsh 组产生 `terminal.command.started/completed`，成功、失败与 Ctrl-C 的 exit/result、duration、cwd 正确（Ctrl-C 不另造 cancelled variant）；正文按 7 天内容策略；其它组不通过 DEBUG trap 或 scrollback 拼装用户命令，Sources 标 coverage inactive。
-
-失败：按键流被当作最终命令、IME/编辑内容错误、未启用组被猜测记录，或命令 secret 明文入库。
-
-### ADF-007 Query 主线只使用显式关联 ID
-
-方法：并发、错误猜测。
-
-操作：同一 Thread 连续发送两个 Query；并行执行 tool、command、browser 和 verification；故意让一个 producer 不带 interactionId，但时间落在同一窗口。
-
-预期：两个 interaction 不串联；带 ID 的动作沿 correlation/causation 展开；缺 ID 事件显示 unlinked/coverage gap，不按时间自动归入某个 Task。
-
-失败：Thread 被错误等同单一 Task、相邻事件被猜到错误 Query，或 UI 隐藏未关联事实。
-
-### ADF-008 Producer 顺序、Hub 接收顺序与跨源时钟偏差
-
-方法：时序、边界。
-
-操作：两个 producer 交错提交事件，并让其中一个 occurredAt 偏移 5 分钟、网络延迟后到；先保存 change-feed hubOffset，再提交迟到事件；检查 sequence、hubOffset、timeline snapshot 分页和 change feed。
-
-预期：每个 producer sequence 单调；hubOffset 只表示接收顺序；timeline 同时呈现 occurred/ingested 时间和 clock skew，不伪造全局严格顺序；迟到事件通过 `afterHubOffset` 增量流出现，冻结 `asOfHubOffset` 的旧分页不漂移，刷新后可按 occurredAt 插回正确位置。
-
-失败：Hub 重写 occurredAt、跨 producer 用单一自增 ID声称发生顺序，或迟到事件覆盖已有记录。
-
-### ADF-009 Hub 下线时业务不阻塞且恢复后重放
-
-方法：依赖不可用、恢复。
-
-操作：分别使用两个新 Producer boot：第一组停止 Hub 后执行 critical Query/response/result 与 sampled UI events，并在 7 天内恢复；第二组在 Hub 已停止时启动且保持同一进程/boot，直到包含 `producer.instance.started` 的 encrypted spool bundle 超过 7 天并生成 loss range；随后重启并升级 Producer，再重启 Hub 等待旧 loss report ACK；测量业务路径耗时，检查 `spool_events/spool_loss_ranges/producer_instances`。
-
-预期：业务继续；producer enqueue p95 符合预算；7 天内 spool 按 sequence 完整重放 critical Fact；超过 7 天的整个 bundle 被删除且不复活，先留下带 affected name/version/runtime/bootStartedAt 的无正文 loss range；Reporter 重启/升级后仍用旧 manifest 创建 `producer_instances(started_event_id=NULL)` 并产生 `source.events_dropped(reason=retention_expired)`，不得写入新版本/runtime；sampled 丢弃也产生对应 loss event；未知原因的 sequence gap 只显示 gap，不伪造 reason。
-
-失败：用户动作等待 Hub、spool 丢 critical、恢复后乱序/静默丢失，或丢弃没有 gap。
-
-### ADF-010 重复投递幂等
-
-方法：at-least-once。
-
-操作：同一 eventId/producer sequence/Content ID/Ref ID 重发 10 次，包含跨连接、跨进程和 ACK 丢失后的 retry；再分别发送“同 eventId 但 payload/content 不同”“同 sequence 但 eventId 不同”“同 contentId 换不兼容 role/kind”“跨 owner namespace 复用 content/ref ID”和“相同 payload 但新 eventId/sequence”五组。
-
-预期：完全相同的 retry 只有一条 Fact/Content/Ref/link 并返回原 hubOffset；前两组 fingerprint 冲突以 `idempotency_conflict` 拒绝；不兼容 role/kind 以 `content_identity_conflict` 拒绝；跨 namespace 以 ownership error 拒绝；冲突留下脱敏 quarantine 记录；最后一组是新事实。去重不依赖 `Date.now()` 或模糊文本相似度。
-
-失败：出现重复行、不同真实动作被错误合并，或 retry 生成新 ID。
-
-### ADF-011 Sequence gap、迟到补齐与不可恢复丢失
-
-方法：状态迁移。
-
-操作：发送 seq 1、2、4；查询 Sources；随后迟到发送 3；再模拟 spool quota 丢失 5–7。
-
-预期：2→4 形成 gap，3 到达后关闭；5–7 保留不可恢复 gap 与 dropped count；Facts/Context Pack coverage 都携带缺口。
-
-失败：Hub 猜造缺失事件、gap 只在日志不可查询，或补齐后删除审计轨迹。
-
-### ADF-012 Schema quarantine 不污染事实
-
-方法：异常输入。
-
-操作：提交坏 JSON、未知 event、字段类型错、超限正文、禁止 producer namespace 和未来 Beta schema。
-
-预期：事件进入有界 7 天 quarantine 或明确拒绝；Facts count 不变；Sources 显示分类计数；合法 producer 后续仍可写。
-
-失败：Hub crash、坏 payload 混入 SQLite Facts、quarantine 无上限，或 Beta schema 阻塞 Stable。
-
-### ADF-013 SQLite transaction 与 WAL 崩溃恢复
-
-方法：故障注入。
-
-操作：分别在 `BEGIN IMMEDIATE` 前、Fact insert 后、Content/link insert 后、COMMIT 前、COMMIT 后但 ACK 前强制结束 Hub；重启后执行 `PRAGMA integrity_check`、`foreign_key_check`，并让 Producer 以相同 eventId/sequence 重放；通过 storage adapter 尝试写负 byte length、expiry 早于 anchor、反向 gap range 和 contiguous sequence 大于 seen 的 fixture。
-
-预期：未 COMMIT 的 batch 整体不存在；已 COMMIT 的 Fact/Content/Ref/cursor/gap 全部存在；ACK 前崩溃的重放被幂等去重；所有已 COMMIT 的 hubOffset 唯一、严格递增且永不复用（未 COMMIT 的临时 rowid 不可见且允许被 SQLite 复用，retention 可留下空洞）；非法跨字段 fixture 被 SQLite CHECK 拒绝；WAL recovery 后查询正确。
-
-失败：出现半事务、ACK 后丢失、相同 eventId 重复、foreign key 断裂、损坏被静默忽略，或同一 offset 两个事件。
-
-### ADF-014 SQLite canonical 唯一性、完整性与索引重建
-
-方法：存储唯一性、派生索引恢复。
-
-操作：写入包含 Fact、Content ciphertext、External Ref、gap 的基准数据并记录查询结果；执行 `integrity_check/foreign_key_check`；删除并按 Registry migration 重建 secondary indexes；最后在一次性隔离副本中显式删除 `activity.sqlite`、WAL 与 SHM 后重启 Hub。
-
-预期：索引重建前后 Fact rows、内容 hash、event count、filters、correlation、Sources gap 与 Content/Ref 状态不变，完整性检查通过；显式删库后旧 Facts 不会从 App Server JSONL、业务库或 shadow files 自动重建；首期目录没有自动 backup/replica。
-
-失败：存在可查询的第二份 Fact store、删库后旧事实静默复活、索引重建改写 Fact、完整性失败被忽略，或把业务对象扫描结果伪装成恢复数据。
-
-### ADF-015 7 天内容与 30 天事实分别过期
-
-方法：边界值、时间迁移。
-
-操作：用受控时钟构造 retention anchor 为 6d23h59m、7d、29d23h59m、30d 的 content/fact；再构造“occurred 6 天前、今天才从 spool replay”“occurred 在未来、今天 ingest”和已过 30 天才到达的请求；同时给仍在持续写新 Fact 的同一 boot 建普通 gap、loss gap、terminal receipt 三类 29d/30d fixture；执行 retention；查询事实、内容、ref、source gap 和 sweep state。
-
-预期：anchor 永远是 `min(occurredAt, ingestedAt)`，replay 不重置 TTL；7 天前 SQLite ciphertext 被清空，Fact link 保留 digest/length，所关联 `activity_contents` tombstone 保留 kind/expired 状态到 30 天；30 天 Fact/link/tombstone rows 删除；已过 30 天才到达的请求不写 Fact，而以带 eventId/fingerprint 的 terminal receipt 推进 accounted cursor；三类 source gap 都按自身 expires index 在 30 天删除，不被同 boot 新 Fact 延长；迟到 row 仍会被 sweep 命中；没有永久 raw archive。
-
-失败：删除 Fact 时才删内容、内容过期导致 Fact 404、超过 30 天仍静默保存，或清理重写全部历史造成不可接受停顿。
-
-### ADF-016 Quota 与优先级保护
-
-方法：容量、backpressure。
-
-操作：在小 quota fixture 中写大量 Blob、sampled UI、normal tool 和 critical Query/response；触发 80/95/100% 水位。
-
-预期：先清过期 Content/quarantine、checkpoint 并 incremental vacuum，再采样低优先级；7 天内 critical 保留或进入可靠 `spool_events`；任何 spool 删除先在预留 quota 的 `spool_loss_ranges` durable；Sources 显示 quota、dropped 和 gap；业务收到可退避的 429。
-
-失败：无序删除、先丢 Query、磁盘填满导致运行时崩溃，或 loss 不可见。
-
-### ADF-017 Secret 双层拦截和 Content 加密
-
-方法：安全等价类。
-
-操作：在 Query、command、tool args/result、URL、header、`.env` 路径和 evidence excerpt 中放测试 token/cookie/password/private key/high-entropy secret；检查 Producer spool SQLite、`activity.sqlite`、WAL/SHM、export 和 API；轮换一次 Keychain content key 后重读旧/新 row；尝试把两行完整 ciphertext/nonce/tag 互换并解密。
-
-预期：禁止字段不落盘；允许内容被一致替换并报告 redaction；Content/locator 列只含 AES-GCM ciphertext 与非敏感 key ID/version，key bytes 不在目录；同 key nonce 不重复；轮换后旧/新 row 均可按版本读取；跨行置换因 AAD 不匹配而认证失败；database/WAL/SHM 权限为 0600、根目录为 0700；搜索测试 secret 0 命中。
-
-失败：任一 SQLite page/WAL/spool、日志或导出泄漏，只有 UI 打码，key 与 ciphertext 同目录，或 redaction 破坏 event schema。
-
-### ADF-018 Capability 权限与审计
-
-方法：权限矩阵。
-
-操作：分别用 producer append、UI read、export、delete、Learning Agent read token 调所有 API；重放/过期/跨 namespace token。
-
-预期：最小权限生效；producer 不能读，Learning Agent 不能任意 export/delete 或读 source locator；每次 read/export/delete/model job 有无正文的 audit。
-
-失败：共享万能 token、跨 producer 写入、审计泄漏正文，或 Activity Hub token 与 App Server/Auth token 复用。
-
-### ADF-019 Facts 页面只区分 Recorded、Computed 与 Model-generated
-
-方法：真实浏览器、语义边界。
-
-操作：用 `$playwright-cli` 打开 Facts，查看直接事件、Duration/retry computed 字段和一个后续模型摘要 fixture；切 Runtime/Surface/Project/Thread/Run/Kind/Actor/Result filter。
-
-预期：Recorded 和 Computed 清晰区分；模型文本带 run 标识；Facts 不显示未经模型生成的 Goal/Outcome，不显示无显式事件支撑的 Rework；filters 与 API 数量一致。
-
-失败：把 mock Goal/Outcome 当事实、用模型 confidence 百分比、隐式任务分组，或页面数字无法追到 Fact IDs。
-
-### ADF-020 Interaction Timeline 显示完整轨迹与缺口
-
-方法：真实浏览器、端到端。
-
-操作：完成一次包含 Query、Agent message、tool、terminal command、browser、verification 和 completion 的交互；制造一个 gap 和一个 expired content；用 `$playwright-cli` 展开/折叠、打开详情/ref。
-
-预期：actor/action/result 顺序和 ID 正确；高频事件可折叠但仍存在；gap、unlinked、expired/missing ref 明确；不存在的证据不能显示“已验证”。
-
-失败：时间线只剩摘要、隐藏失败/缺口、跳错 Thread/Run，或正文直接进入 `payload_json` 导致页面/接口失控。
-
-### ADF-021 Sources 页面证明覆盖而不是声称覆盖率
-
-方法：真实浏览器、数据对账。
-
-操作：让一个 producer 正常、一个 produced>acked、一个 gap、一个 invalid、一个 inactive，并制造高 commit latency/WAL backlog；对照 producer spool SQLite、Hub cursor、SQLite 状态和 API；用 `$playwright-cli` 查看 Sources。
-
-预期：显示 latest produced/acked、gap range、dropped/rejected、heartbeat、runtime/surface/version、SQLite commit latency 与 WAL/checkpoint 状态；没有无分母的 82%/98% 数字。
-
-失败：所有来源默认绿色、Beta/external 混淆、gap 只在后台日志，或状态不能与 cursor 对账。
-
-### ADF-022 UI 与 Agent 生成使用同一个 AnalysisJob API
-
-方法：等价类、接口一致性。
-
-操作：在 UI 选择相同时间/Project/Runtime/facts 生成一次；再由 CLI/Agent 用同一 filter 生成；比较 job、Pack 与权限。
-
-预期：都创建 AnalysisJob 和 Candidate；使用相同 Context Pack builder/policy；Agent 不能绕过 review 直接发布。
-
-失败：UI 在前端拼 Prompt、Agent 任意扫本机文件、两条链路 schema 不同，或 Agent 自动写正式 Learning。
-
-### ADF-023 Context Pack 冻结、可复现与 coverage 完整
-
-方法：快照、一致性。
-
-操作：创建 Pack 后继续写新 Facts、补齐 gap、让一个 raw content 过期；使用相同 Pack hash 重跑模型。
-
-预期：Pack 中 fact IDs/hash、resolved excerpts、schema、redaction、hubOffset/source watermarks、gap 和 truncated 状态不变；Learning 增量只按 hubOffset 取数，不因迟到 occurredAt 漏事件；新事件不进入旧 Pack；重跑输入字节一致。
-
-失败：模型运行时动态扫库、过期后 Pack 内容漂移、缺少来源缺口，或同 hash 对应不同输入。
-
-### ADF-024 Pack-time DLP 与 Project 模型策略
-
-方法：权限/隐私判定表。
-
-操作：分别使用 `modelAccess=none/local-only/approved-provider` Project，创建包含测试 secret、private excerpt 和 External Ref 的 Pack；切换本地/外部 model provider。
-
-预期：none 不创建可发送 Pack；local-only 禁止外部 provider；approved-provider 只发送脱敏最小 excerpt；locator、完整 Thread/scrollback/header/env 不进入模型输入。
-
-失败：模型持有全库 token、策略只在 UI 约束、secret 通过 External Ref 绕过，或发送内容无法预览/审计。
-
-### ADF-025 Candidate claim、数字与 evidence 强校验
-
-方法：模型输出恶意 fixture。
-
-操作：让模型输出不存在的 evidence ID、Pack 外 ID、错误次数/日期、无证据建议、超出 evidence scope 的泛化结论和合法 Candidate。
-
-预期：非法 Candidate validation failed；数字由系统覆盖/拒绝；每条 claim 有 evidence/counterEvidence；单案例只能是 `single_case` 或缩小适用范围。
-
-失败：引用仅检查格式、模型自报 3 incidents 被接受、好建议无证据也发布，或用模型 confidence 代替 coverage。
-
-### ADF-026 Candidate 审核、编辑、合并与版本不可变
-
-方法：状态迁移。
-
-操作：对 Candidate 分别接受、编辑、缩小 scope、拒绝、合并和标记冲突；对 Published Learning 添加新证据并更新。
-
-预期：人工操作生成 revision/audit；Published version 不可原地改；新证据生成新 Candidate/version；supersedes/mergedFrom/conflictsWith 可追溯。
-
-失败：编辑覆盖模型原文、拒绝删除审计、semantic similarity 自动合并，或旧引用打不开。
-
-### ADF-027 7/30 天过期后 Support Capsule 最小可追溯
-
-方法：保留期、删除优先级。
-
-操作：发布含最小证据的 Learning；让 raw content/Fact 过期；再执行用户删除/tombstone。
-
-预期：自然过期后 Learning 保留 claim、当时的最小脱敏事实片段、hash、Pack/model/prompt/policy 与原始证据已过期状态；用户删除后 capsule tombstone，Learning 进入 needs_revalidation/deprecated。
-
-失败：永久保存完整 Thread/scrollback、只留失效 Fact ID 无法审核，或 Learning 阻止用户删除。
-
-### ADF-028 模型失败不改变事实
-
-方法：故障隔离。
-
-操作：模拟 provider timeout、输出非法 JSON、token 超限、费用限制、进程崩溃和取消；比较前后 `activity.sqlite` Fact row count/content hash 与独立 `learning.sqlite`。
-
-预期：Facts 完全不变；LearningRun 记录失败；可基于相同 Pack 重试；不存在部分发布。
-
-失败：模型回写/修正事实、失败后 Pack 丢失、重复计费无去重，或半个 Candidate 可见为 Published。
-
-### ADF-029 定时/事件 Learning Agent 按 watermark 增量处理
-
-方法：调度、去重。
-
-操作：触发多次 completion/run done/verification；在 quiet period 内继续写事件；执行 daily/expiry sweep 并重启 Agent。
-
-预期：相同窗口聚合成一次 job；只处理 watermark 后新事实；重启不重复生成同 input hash；7 天内容过期前有可见 sweep。
-
-失败：每事件调用一次模型、全库每次重扫、重启重复 Candidate，或 lag/gap 被忽略。
-
-### ADF-030 Published Learning 检索与反馈闭环
-
-方法：端到端、状态反馈。
-
-操作：让 Agent 在匹配/不匹配 Project 与 tool 下检索；使用 Learning 后提交 useful/stale/wrong/unsafe；累计负反馈并创建新版本。
-
-预期：只有 Published version 被检索；返回 `learningId@version`、适用范围和最小证据摘要；retrieved/applied/feedback 成为新的 BehaviorFact；负反馈进入复审而非自动改/删。
-
-失败：Candidate 被注入 Agent、所有经验无边界塞进 prompt、反馈不可追溯，或旧 version 静默改变。
-
-## 需求追溯
-
-| 目标                          | 对应用例               |
-| ----------------------------- | ---------------------- |
-| 独立主动存储，不扫描现有库    | ADF-001、002、013、014 |
-| Stable/Beta/Dev/external 集中 | ADF-003–006、021       |
-| 真实 Query/操作轨迹           | ADF-007、008、019、020 |
-| 可靠写入与海量数据            | ADF-009–016            |
-| 7 天/30 天留存                | ADF-015、016、027      |
-| 隐私、权限、删除              | ADF-017、018、024、027 |
-| 模型生成而非规则伪造 Learning | ADF-022–026、028       |
-| Agent 总结与经验闭环          | ADF-029、030           |
+### ADF-018 Sequence gap、已知 drop 与 rejection 可区分
+
+- **Given**：提交 sequence 1、3；随后补 2；另触发 Backend 已知 queue/policy drop 和 schema reject。
+- **When**：依次查询 Sources 和 Facts。
+- **Then**：1→3 产生 unknown open gap，2 到达后关闭；只有已知 drop 产生 `source.events_dropped` 和 reason；schema reject 只进 `ingest_rejections`，不进 Facts。
+- **失败判断**：未知 gap 被编造原因、late event 改写 activityOffset、reject 污染 Facts。
+- **验证方式**：API、source_gaps/producer_instances/rejections/Facts rows。
+
+### ADF-019 7 天 Content 与 30 天 Fact 分别过期
+
+- **Given**：使用可控 clock 写入带 Content/Ref 的 6d23h、7d、29d23h、30d 边界数据、stale/active producer、gap、rejection、access audit、已完成到期/未到期和 pending/blocked delete job；另注入一个“completed 但仍残留 scope row”的 invariant fixture，并包含 occurredAt 早于 ingest 的迟到数据。
+- **When**：取得 retention lease 执行 sweep。
+- **Then**：TTL 锚点是 `min(occurredAt, ingestedAt)`；7 天 Content 清密文、到期 Ref 清 locator 并留 tombstone；Fact 到 30 天才删除并 cascade link 与它独占的 Content/Ref descriptor；相同内容/locator 的新 Fact 创建独立 owner row，不延长旧 row TTL；到期 gap/rejection/audit、完成后满 30 天且 scope+cutoff 已无 Fact 的 delete job 和无 FK 的 stale producer被删除；未到期 completed、残留 row 的 invariant job、所有 pending/running/blocked job和 active producer 保留，残留 job 继续遮蔽查询并报告错误；异常 orphan 被物理清理。Fact delete 的 `source_event_id` SET NULL 和 producer FK 检查都命中 child-key index，无 `source_gaps` full scan。
+- **失败判断**：replay/迟到或相同内容的新 Fact 重置旧 row TTL、正文过期同时删 Fact、到期密文/locator 仍可读取、source/rejection/audit/completed job/stale producer 永久残留、未完成 delete job 被 TTL 清除、owner cascade 后 orphan 残留、或未到期/仍有 FK 数据被删。
+- **验证方式**：clocked integration script、SQLite FK/link/orphan count、source_gaps FK `EXPLAIN QUERY PLAN`、API availability 查询。
+
+### ADF-020 Secret、正文、locator 与共享 Keychain key 的存储边界
+
+- **Given**：Query、回复、命令、tool JSON、URL、ExternalRef locator 中混入 token/cookie/password/private key/`.env` 内容；三个 Backend 首次同时初始化空 Keychain/DB。
+- **When**：通过所有允许入口提交并执行 export/query，再重启三个 Backend 解密同一 Content。
+- **Then**：禁止 secret 被拒绝或脱敏；正文只在加密 BLOB；locator 加密；`payload_json`、indexes、logs、export metadata 不含明文；三个 Backend 通过 `BEGIN EXCLUSIVE` 只创建/使用同一个 `com.runweave.activity/content-key-v1`，key 不进 argv/env/DB/log，重启后均能解密。
+- **失败判断**：DB/WAL/SHM/API/export/log 可搜索到 secret 或原始 locator，多 Backend 生成不同 key，或 key 出现在进程参数/环境变量。
+- **验证方式**：secret fixture、并发初始化 harness、文件 byte scan、进程参数/env scan、API/export、Keychain reference metadata。
+
+### ADF-021 文件权限与 API 登录鉴权
+
+- **Given**：本机和 LAN 客户端分别准备有效 Bearer、无 Bearer、错误 Bearer 与错误 Hook Token 请求。
+- **When**：访问 metadata/content/export/delete 与 managed Hook、external Hook、Electron、shell 四个专用 write routes。
+- **Then**：目录为 `0700`，DB/WAL/SHM 为 `0600`；本机和 LAN 请求均只按现有登录/Hook 鉴权判断，有效身份成功，无身份或错误身份拒绝。
+- **失败判断**：已登录请求因来源地址被额外拒绝、无身份请求成功、任意 route 无身份写高可信事件，或文件可被其它用户读取。
+- **验证方式**：stat、Backend/Vite HTTP auth matrix、network origin evidence。
+
+### ADF-022 Facts 页面展示 Recorded 与 Computed 而不混淆
+
+- **Given**：准备多 runtime/surface/project/thread/result 的 Fact、过期 Content、missing Ref 和可计算 duration。
+- **When**：用 `$playwright-cli` 打开 `/activity`，过滤、排序、翻页并打开详情。
+- **Then**：过滤与 API 一致；原始字段标 Recorded，duration/count 标 Computed；过期/missing 明确；没有模型生成字段。
+- **失败判断**：把 Computed 写成 Fact、正文缺失显示空成功、offset pagination 重复/漏 row。
+- **验证方式**：`$playwright-cli` DOM/snapshot + API 对照 + console。
+
+### ADF-023 Timeline 在并发写入时保持冻结阅读窗口
+
+- **Given**：一个 200 事件 interaction，另有 Backend 持续追加新事件。
+- **When**：打开 timeline 第一页取得 `asOfActivityOffset`，继续翻页。
+- **Then**：本次阅读只返回 `<= asOfActivityOffset` 的行，keyset 无重复/漏失；显式 causation/parent 可展开，unlinked 独立显示。
+- **失败判断**：新写入导致翻页漂移、使用 occurredAt 作为增量 cursor 漏迟到事件。
+- **验证方式**：并发 writer + `$playwright-cli` + API page manifest。
+
+### ADF-024 Sources 页面提供可核对分母
+
+- **Given**：healthy、open gap、closed gap、rejection、busy error、inactive 五类 producer 状态。
+- **When**：打开 Sources 并与数据库/counters 对照。
+- **Then**：显示 instance/boot/version/channel/surface、highest seen/contiguous、gap ranges、rejections、last seen/latency/error、WAL/checkpoint；不显示无法证明的“98% coverage”。
+- **失败判断**：只给百分比无分母、把 Backend 未收到的期间标为完整、或隐藏错误。
+- **验证方式**：`$playwright-cli` + producer_instances/source_gaps/rejections 对照。
+
+### ADF-025 Data Policy 的删除与导出使用普通登录鉴权
+
+- **Given**：Project A 有足以触发多批次的 3,000,000 Facts 和大量关联 source_gaps，Project B 有 bytes/locator 相同但 owner 独立的 Content/ExternalRef；另准备未登录/已登录请求、正常/失败 audit、并发 retention、三 Backend writer 和可暂停的 delete owner。
+- **When**：未登录和已登录分别直接调用 `POST /api/activity/operations` 执行 export/delete；成功 delete 后尝试 UPDATE job 的 scope/cutoff/auth/digest、倒退 cursor/count或把 completed 复活，再立即查询；持续三 Backend 各 50 events/s，依次 kill owner、停止全部 Backend、再启动一个 Backend；分别注入 Content/export/delete requested/completed audit failure。
+- **Then**：未登录返回 401；已登录 export 单次请求返回当前 snapshot，已登录 delete 单次请求在 500 ms 内提交 `pending job + delete_requested audit` 并返回 202。job scope/cutoff/auth/digest 不可更新，progress trigger 拒绝 cursor/count/time 倒退、非法状态转换与 completed 复活；job commit 后查询立即隐藏 cutoff 内目标；runner 每事务 ≤1000 Facts 且 owned mutation bytes ≤8 MiB，crash 后由新 owner 从最后 cursor 续跑，最终目标 rows/owned Content/Ref 为 0、新 Fact 与 B 不变，并有 delete_completed audit。
+- **失败判断**：仍要求 preview/confirmation ticket、已登录普通请求不能执行、未登录可执行、delete 请求扫描/删除全 scope或持 writer lock >500 ms、job 前数据仍可查询、跨 cutoff/Project 删除、batch 越界、crash 后从头/永久停滞、audit 失败仍返回 body/创建 job/报告完成，或 username/正文/token 出现在 argv、URL、log、config、audit。
+- **验证方式**：Stable/Beta/Dev API/CLI/UI、3M fixture、未登录/已登录矩阵、job pause/kill/takeover harness、cursor `EXPLAIN QUERY PLAN`、writer latency/ACK manifest、before/after SQLite owner/FK/count、audit rows 与 export scan。
+
+### ADF-026 第一阶段没有 Task/Goal/Outcome/Learning
+
+- **Given**：完整的 Facts/Timeline/Sources/Data Policy 数据集。
+- **When**：遍历 Activity 页面、API schema 和 `activity.sqlite` tables。
+- **Then**：没有 Task grouping、Goal/Outcome、Rework、Candidate、Generate、Published Learning 或 Learning 表；未来说明明确指向独立 `learning.sqlite` 和另行计划。
+- **失败判断**：页面查询自动触发模型、模型产物混入 facts，或在 activity DB 预建假 Learning 数据。
+- **验证方式**：`$playwright-cli` 全页面巡检、route/schema/table 清单。
+
+### ADF-027 Node/Electron 双 ABI SQLite 产物在三种 runtime 可加载
+
+- **Given**：`electron/package.json` 的显式 rebuild 依赖、被 `.gitignore` 排除的 staging root、workspace Node binding、独立 staged Electron binding、unpacked/packaged App Resources 和一个已安装 external runtime release；记录 Node/Electron ABI 与所有 binding hash/path。
+- **When**：执行 staging + package；验证 bundled/external manifest 的 schema/platform/arch/ABI、四个 role path、排序 `files[]` 和 `treeSha256`；分别从三种 runtime 启动真实 worker 写读同一临时 WAL DB，再切换/回滚 external runtime，并逐一新增/删除/篡改 worker、entry、package manifest、native binding 和任一非入口 transitive JS 文件。
+- **Then**：Node 与 Electron artifact 位于不同物理目录且 ABI 匹配；`.native-artifacts/` 无 tracked file；manifest 文件集合与 staging runtime 闭包完全相等且每个 regular file 有 size/hash；packaged/external resolver 在 Backend spawn 前全量扫描并校验逐文件/tree hash；三条路径及回滚成功，不依赖 repo cwd/NODE_PATH；任一树差异均 fail closed 且只禁用 Activity。
+- **失败判断**：缺 rebuild dependency、staging 被提交、electron-rebuild 覆盖 Node binding、bundled manifest 未由构建生成、只校验四个入口、漏掉 transitive JS/symlink/额外文件、Resources/external release 文件集合或 ABI/hash 不匹配后仍 spawn，或 rollback 后 require 失败。
+- **验证方式**：`scripts/verify-activity-sqlite-runtime.mjs` + unpacked/packaged App + external runtime install/rollback 证据。
+
+### ADF-028 Activity 全故障不能反向破坏主业务
+
+- **Given**：依次注入 `SQLITE_BUSY` 超时、`SQLITE_FULL`/5GB quota、corrupt/FK failure、native binding missing/ABI mismatch、Keychain unavailable，并准备 Terminal create/delete、Agent Team transition 和 Browser navigation 三类主业务动作。
+- **When**：每种 Activity 故障下分别执行三类业务动作和 Activity query。
+- **Then**：主业务按自身结果成功/失败，不被 Activity 记录异常改写；Activity 返回明确 unavailable/reject/error，写 diagnostic metadata，且不伪造 Fact/ACK；恢复后新事实可写，损坏库不会从日志/业务库补造。
+- **失败判断**：Activity 异常导致 Terminal/Agent Team/Browser 额外失败或进程退出、调用方收到假成功、静默换新 DB、或已有数据被覆盖。
+- **验证方式**：fault-injection integration harness + 主业务 API/Electron evidence + Activity/diagnostic/SQLite 对照。
+
+### ADF-029 User Query 只有 Hook 单一权威 emitter
+
+- **Given**：在 Runweave Terminal 中通过 Web/CLI `terminal send --agent` 发出 Query，随后 Agent 触发一次 `UserPromptSubmit`；另准备 Hook transport retry。
+- **When**：观察 Backend send 边界、Hook 写入和最终 Facts。
+- **Then**：Backend send 不产生 `user.query.submit_requested`；Hook 首次观察时生成唯一 event/interaction，transport retry 复用同一 identity；最终只有 1 个 Query Fact。
+- **失败判断**：Backend send 与 Hook 各写一条、CLI 手工伪造 Query、或传输 retry 生成新 eventId。
+- **验证方式**：Backend/Hook structured evidence、API/SQLite count 与 fingerprint。
+
+## 覆盖矩阵
+
+| 需求                                  | 用例                               |
+| ------------------------------------- | ---------------------------------- |
+| 不新增服务、复用 Backend              | ADF-001、ADF-006、ADF-007          |
+| 独立 SQLite、跨 Runtime 集中          | ADF-002、ADF-003、ADF-004          |
+| CLI/外部来源只经 Backend              | ADF-005、ADF-006、ADF-016          |
+| schema、字段来源、可靠事件            | ADF-008、ADF-015、ADF-017、ADF-018 |
+| 多进程 SQLite、幂等、原子、迁移、恢复 | ADF-009～ADF-014                   |
+| 7/30 天、隐私、权限                   | ADF-019～ADF-021、ADF-025          |
+| Facts/Timeline/Sources/Data Policy UI | ADF-022～ADF-025                   |
+| 第一阶段不做 Learning                 | ADF-026                            |
+| SQLite native runtime/双 ABI          | ADF-027                            |
+| 主业务故障隔离                        | ADF-028                            |
+| Query 单一权威入口                    | ADF-029                            |
+
+## 验收通过标准
+
+以下条件必须同时满足：
+
+1. ADF-001～ADF-029 全部有真实证据且通过。
+2. 三个 Backend 并发共享同库 10 分钟无丢失、重复、corruption 或未报告 busy failure。
+3. CLI/Browser/Electron/Hook 不直接打开 SQLite；没有新 Activity 服务、端口或发现文件。
+4. `integrity_check`、`foreign_key_check`、schema version、retention 和 security matrix 通过。
+5. `$playwright-cli` 验证四个页面视图，console error 为 0；静态检查不替代此项。
+6. 正式 `~/.runweave/activity/` 未被自动化测试污染，artifact 中无敏感正文。
 
 ## 执行记录
 
-本文件是实施前验收设计，本轮没有实现 Activity Hub，因此以上用例均未执行。实施时必须逐条记录状态、命令、证据路径、实际结果和阻塞原因；禁止预填“通过”。
+- 2026-07-11：依据用户新边界重写计划与测试合同；当前只完成文档/原型设计，功能代码与本文件用例均未执行。
+- 2026-07-12：完成 P0～P4 功能实现与以下真实证据：
+  - `pnpm activity:verify`：3 个独立进程首次并发初始化并共享 WAL，任一 Store 可见 300 Facts；幂等/冲突、sequence gap close、Content DLP+解密、冻结 export snapshot、Activity-key audit HMAC、7/30 天留存、delete cutoff、单 active job、blocked→恢复、maintenance fencing、低配额下丢弃 Content 但保留 metadata Fact、Verification 禁用、future schema fail-closed、`0700/0600` 权限全部通过。
+  - `RUNWEAVE_ACTIVITY_PACKAGED_RESOURCES=... RUNWEAVE_ACTIVITY_EXTERNAL_RELEASE=... node scripts/verify-activity-sqlite-runtime.mjs`：workspace Node、Electron staged binding、packaged Resources、external runtime release 四条路径通过，Electron 版本为 `33.4.11`。
+  - `pnpm toolkit:verify-hooks`：Toolkit Hook 源与 Electron Resources 同步，Query/Response 与 PreToolUse tool ID/name/input 显式字段随 Hook 投递且 App Server 不构成依赖。
+  - 真实隔离 Backend `127.0.0.1:5129` + Frontend `127.0.0.1:5189`：`playwright-cli` 验证 Facts、Recorded detail、短期 Content、Sources、Data Policy 与 delete completed polling；console error 为 0，证据截图为 `artifacts/activity-real-ui.png`。
+  - 真实 CLI：record started/completed 均返回 committed；facts/sources 在 `--plain` 下仍输出合法 JSON；不可达 Backend 退出码为 1 且明确输出 `Activity event was not recorded`。
+  - 产品原型 `docs/prototypes/system-activity-data-foundation/` 和架构流程 `docs/architecture-flows/system-activity-data-foundation-flow/` 已用 `playwright-cli` 遍历全部视图/场景，console error 为 0。
+  - 仓库门禁：`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm architecture:check`、`git diff --check` 全部通过；架构报告为 `over600=0`、runtime/type-only cycle `0/0`。
+- 尚未执行，因此不得标记 ADF-001～ADF-029 全量通过：ADF-013 的 3 Backend × 50 events/s × 10 分钟；ADF-016/023/025 的 3,000,000-row 性能与完整 snapshot/delete race；ADF-025 的完整 token/audit/crash/blocked/takeover 矩阵；ADF-028 的真实 `SQLITE_FULL`/corrupt/Keychain 故障矩阵；真实 Stable/Beta Desktop 并行与 external runtime rollback 安装流程。上述项目保持上线阻断门禁。

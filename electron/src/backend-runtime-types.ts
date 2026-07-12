@@ -5,6 +5,10 @@ export interface PackagedBackendPaths {
   backendEntry: string;
   frontendDistDir: string;
   nodePtyDir: string;
+  activityWorkerEntry: string;
+  betterSqlitePackageDir: string;
+  betterSqliteNativeBinding: string;
+  activityAvailable: boolean;
   releaseId: string;
   source: "external" | "bundled";
 }

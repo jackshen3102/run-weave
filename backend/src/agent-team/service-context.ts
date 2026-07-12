@@ -14,6 +14,7 @@ import { AgentTeamPaths } from "./storage/agent-team-paths";
 import { AgentTeamRunStore } from "./storage/run-store";
 import { AgentTeamAgentReadinessService } from "./agent-readiness";
 import type { AgentTeamServiceOptions } from "./service-types";
+import { recordAgentTeamRunTransition } from "./activity-events";
 
 export const agentTeamLogger = logger.child({
   component: "agent-team-service",
@@ -52,6 +53,8 @@ export class AgentTeamServiceContext {
     this.runStore = new AgentTeamRunStore(
       this.terminalSessionManager,
       this.paths,
+      (previous, current) =>
+        recordAgentTeamRunTransition(options.activity, previous, current),
     );
     this.promptSender = new AgentTeamPromptSender({
       terminalSessionManager: this.terminalSessionManager,

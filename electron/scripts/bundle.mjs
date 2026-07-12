@@ -1,5 +1,7 @@
 import { rmSync } from "node:fs";
 import { build } from "esbuild";
+import path from "node:path";
+import { finalizeActivitySqliteRuntime } from "./finalize-better-sqlite3-runtime.mjs";
 
 const outputDir = process.env.RUNWEAVE_ELECTRON_BUNDLE_OUTDIR ?? "dist";
 
@@ -87,9 +89,23 @@ await build({
   entryPoints: ["../backend/src/index.ts"],
   outdir: `${outputDir}/backend`,
   format: "cjs",
-  external: ["node-pty"],
+  external: ["node-pty", "better-sqlite3"],
   outExtension: { ".js": ".cjs" },
 });
+
+const activityWorkerEntry = path.resolve(
+  outputDir,
+  "backend",
+  "activity-sqlite-worker.cjs",
+);
+await build({
+  ...shared,
+  entryPoints: ["../backend/src/activity/sqlite-worker.ts"],
+  outfile: activityWorkerEntry,
+  format: "cjs",
+  external: ["better-sqlite3"],
+});
+finalizeActivitySqliteRuntime(activityWorkerEntry);
 
 await build({
   ...shared,

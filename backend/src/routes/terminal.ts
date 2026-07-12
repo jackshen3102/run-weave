@@ -8,6 +8,11 @@ import type {
 } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { AuthService } from "../auth/service";
+import {
+  recordTerminalSessionCreated,
+  recordTerminalSessionDeleted,
+  type TerminalActivityDependencies,
+} from "../terminal/activity-events";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { registerTerminalPreviewRoutes } from "./terminal-preview-routes";
@@ -120,6 +125,7 @@ export function createTerminalRouter(
     terminalEventService?: TerminalEventService;
     terminalStateService?: TerminalStateService;
     quickInputService?: TerminalQuickInputService;
+    activity?: TerminalActivityDependencies;
   },
 ): Router {
   const router = Router();
@@ -396,6 +402,7 @@ export function createTerminalRouter(
           ),
         },
       });
+      recordTerminalSessionCreated(options?.activity, createdSession);
       res.status(201).json(payload);
     } catch (error) {
       if (error instanceof TerminalCreateDefaultsError) {
@@ -566,6 +573,7 @@ export function createTerminalRouter(
         projectId: session?.projectId ?? null,
       },
     });
+    recordTerminalSessionDeleted(options?.activity, session);
     res.status(204).send();
   });
 

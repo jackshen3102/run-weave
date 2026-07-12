@@ -3,15 +3,20 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 
 const { spawn, spawnSync } = require("node:child_process");
+const { setTimeout } = require("node:timers");
 const os = require("node:os");
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const {
   STOP_EVENTS,
   buildAppServerBaseEvent,
   buildCompletionHookBody,
   deriveAgentHookEndpoint,
   deriveCompletionEndpoint,
+  extractCompletionSummary,
+  extractToolHook,
+  extractUserPrompt,
   normalizeEventName,
   normalizeReason,
   normalizeSource,
@@ -233,32 +238,57 @@ async function postAgentHook({
   panelId,
   tmuxPaneId,
   commandName,
+  rawHookEvent,
+  sessionSource,
+  query,
+  assistantResponse,
+  toolHook,
+  activityEventId,
 }) {
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Runweave-Hook-Token": token,
-      },
-      body: JSON.stringify({
-        terminalSessionId,
-        projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
-        ...(threadId ? { threadId } : {}),
-        ...(panelId ? { panelId } : {}),
-        ...(tmuxPaneId ? { tmuxPaneId } : {}),
-        commandName: commandName || null,
-        agent,
-        hookEvent,
-      }),
-    });
-    return { ok: response.ok, status: response.status };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
+  const body = JSON.stringify({
+    activityEventId,
+    terminalSessionId,
+    projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
+    ...(threadId ? { threadId } : {}),
+    ...(panelId ? { panelId } : {}),
+    ...(tmuxPaneId ? { tmuxPaneId } : {}),
+    commandName: commandName || null,
+    rawHookEvent: String(rawHookEvent || hookEvent),
+    ...(sessionSource ? { sessionSource } : {}),
+    ...(query ? { query } : {}),
+    ...(assistantResponse ? { response: assistantResponse } : {}),
+    ...(toolHook?.toolUseId ? { toolUseId: toolHook.toolUseId } : {}),
+    ...(toolHook?.toolName ? { toolName: toolHook.toolName } : {}),
+    ...(toolHook?.toolInput !== undefined ? { toolInput: toolHook.toolInput } : {}),
+    ...(toolHook?.toolResult !== undefined ? { toolResult: toolHook.toolResult } : {}),
+    agent,
+    hookEvent,
+  });
+  let lastError;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Runweave-Hook-Token": token,
+        },
+        body,
+      });
+      if (response.ok || response.status < 500 || attempt === 2) {
+        return { ok: response.ok, status: response.status, attempt };
+      }
+      lastError = new Error(`hook_endpoint_${response.status}`);
+    } catch (error) {
+      lastError = error;
+      if (attempt === 2) break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
+  return {
+    ok: false,
+    error: lastError instanceof Error ? lastError.message : String(lastError),
+  };
 }
 
 async function postCompletionHook({
@@ -311,6 +341,7 @@ async function main() {
     source === "codex" || source === "trae"
       ? toAgentHookStateEvent(normalizedEvent)
       : null;
+  const toolHook = extractToolHook(payload);
   const shouldRecordCompletion =
     completionReason !== "hook_stop" || STOP_EVENTS.has(normalizedEvent);
 
@@ -391,6 +422,7 @@ async function main() {
   }
 
   if (stateHookEvent && stateEndpoint) {
+    const activityEventId = crypto.randomUUID();
     const result = await postAgentHook({
       endpoint: stateEndpoint,
       token,
@@ -401,6 +433,24 @@ async function main() {
       panelId: terminalPanelId,
       tmuxPaneId,
       commandName,
+      rawHookEvent: rawEvent,
+      sessionSource:
+        payload.source === "startup" || payload.source === "resume"
+          ? payload.source
+          : undefined,
+      query:
+        stateHookEvent === "UserPromptSubmit"
+          ? extractUserPrompt(payload)
+          : undefined,
+      assistantResponse:
+        normalizedEvent === "stop"
+          ? extractCompletionSummary(payload)
+          : undefined,
+      toolHook:
+        stateHookEvent === "ToolRequested" || stateHookEvent === "ToolCompleted"
+          ? toolHook
+          : undefined,
+      activityEventId,
     });
     appendDebugLog("hook bridge posted agent hook", {
       terminalSessionId,
