@@ -1,13 +1,17 @@
 # Runweave Beta 开发与使用指南
 
-Runweave Beta 是 macOS 本机开发通道。正式版 Runweave（Stable）继续承载终端和开发上下文；当前源码 worktree 通过一条更新命令构建并部署到独立的 Beta App，作为被开发、重启、验证和回滚的目标。
+Runweave Beta 是 macOS 本机开发通道。正式版 Runweave（Stable）继续承载终端和开发上下文；当前源码 worktree 通过 Beta 控制命令构建并部署到本机 Beta 实例，作为被开发、重启、验证和回滚的目标。
+
+Beta 以 `instanceId` 区分本机实例。默认实例是 `default`；需要并行验证不同 worktree 或不同 revision 时，为每个目标显式传入 `--instance <id>`。合法 ID 只允许 1 到 32 位小写字母、数字和连字符，不能以连字符开头或结尾。
 
 当前没有单独的 `dev:beta` 热开发命令。推荐模型是：
 
 ```text
 Stable Runweave 中修改代码
         ↓
-预览 Beta 更新计划
+选择或创建 Beta 实例
+        ↓
+预览该实例的更新计划
         ↓
 构建并更新 Beta
         ↓
@@ -26,10 +30,20 @@ Stable Runweave 中修改代码
 
 ## 快速开始
 
-### 1. 预览更新计划
+### 1. 选择实例
+
+单实例日常开发可以省略 `--instance`，等价于 `--instance default`。多实例或跨 revision 验证必须显式传入实例名：
 
 ```bash
-pnpm runweave:beta:update --dry-run
+pnpm runweave:beta:status --instance agent-a --json
+```
+
+实例拥有独立的 App、userData、runtime、更新状态、App Server home 和 CDP 状态。不要用端口或最近启动时间推断目标实例。
+
+### 2. 预览更新计划
+
+```bash
+pnpm runweave:beta:update --instance agent-a --dry-run
 ```
 
 `--dry-run` 只读取源码、安装版本和已有状态，不构建、不安装、不退出进程，也不写更新状态。输出中的以下字段决定本次动作：
@@ -40,30 +54,30 @@ selected app-server action: update | skip
 reason: ...
 ```
 
-### 2. 构建并部署 Beta
+### 3. 构建并部署 Beta
 
 ```bash
-pnpm runweave:beta:update
+pnpm runweave:beta:update --instance agent-a
 ```
 
 首次部署没有历史基线时，会构建并安装完整 Beta App 和 Beta App Server。成功后更新器会等待 Beta Desktop、backend、CDP 以及需要更新的 App Server 达到健康状态，再输出完整 status。
 
-Beta App 安装在：
+Beta App 安装在实例化路径：
 
 ```text
-/Applications/Runweave Beta.app
+/Applications/Runweave Beta <instanceId>.app
 ```
 
 更新器正常情况下会自动启动或重启 Beta。需要手工打开时执行：
 
 ```bash
-open "/Applications/Runweave Beta.app"
+open "/Applications/Runweave Beta agent-a.app"
 ```
 
-### 3. 检查运行状态
+### 4. 检查运行状态
 
 ```bash
-pnpm runweave:beta:status --json
+pnpm runweave:beta:status --instance agent-a --json
 ```
 
 重点检查：
@@ -73,6 +87,8 @@ desktop.healthy
 backend.healthy
 appServer.healthy
 cdp.healthy
+cdp.desktop.healthy
+cdp.terminalBrowser.healthy
 source.gitHead
 source.dirty
 update.lastAction
@@ -90,6 +106,14 @@ lastFailure
 pnpm runweave:beta:update --dry-run
 pnpm runweave:beta:update
 pnpm runweave:beta:status --json
+```
+
+多实例时所有命令都带同一个 `--instance <id>`：
+
+```bash
+pnpm runweave:beta:update --instance agent-a --dry-run
+pnpm runweave:beta:update --instance agent-a
+pnpm runweave:beta:status --instance agent-a --json
 ```
 
 更新器会记录成功部署时 dirty 和 untracked 文件的内容摘要。仍未提交但内容未变化的文件在下一轮视为已经部署；只有提交差异、文件新增、修改、删除或权限变化才重新进入组件选择。
@@ -180,17 +204,19 @@ pnpm runweave:beta:update
 
 ## 固定隔离边界
 
-| 资源                  | Beta 路径或身份                                                 |
-| --------------------- | --------------------------------------------------------------- |
-| Desktop App           | `/Applications/Runweave Beta.app`                               |
-| bundle id             | `com.runweave.desktop.beta`                                     |
-| Electron userData     | `~/Library/Application Support/Runweave Beta`                   |
-| backend profile       | `~/Library/Application Support/Runweave Beta/browser-profile`   |
-| CLI profile           | `~/Library/Application Support/Runweave Beta/cli/config.json`   |
-| Desktop Runtime       | `~/Library/Application Support/Runweave Beta/runtime`           |
-| 更新状态              | `~/Library/Application Support/Runweave Beta/update/state.json` |
-| App Server            | `~/.runweave/app-server-beta`                                   |
-| App Server cloud sync | `~/.runweave/app-server-beta/cloud-sync`                        |
+| 资源                  | Beta 路径或身份                                                                |
+| --------------------- | ------------------------------------------------------------------------------ |
+| Desktop App           | `/Applications/Runweave Beta <instanceId>.app`                                 |
+| bundle id             | `com.runweave.desktop.beta.<instanceId>`                                       |
+| Electron userData     | `~/Library/Application Support/Runweave Beta/instances/<instanceId>/user-data` |
+| backend profile       | `<userData>/browser-profile`                                                   |
+| CLI profile           | `<userData>/cli/config.json`                                                   |
+| Desktop Runtime       | `<userData>/runtime`                                                           |
+| 更新状态              | `<userData>/update/state.json`                                                 |
+| App Server            | `~/.runweave/app-server-beta/<instanceId>`                                     |
+| App Server cloud sync | `~/.runweave/app-server-beta/<instanceId>/cloud-sync`                          |
+| Desktop CDP           | `status.cdp.desktop.endpoint`，动态 loopback endpoint                          |
+| Terminal Browser CDP  | `status.cdp.terminalBrowser.endpoint`，动态 loopback endpoint                  |
 
 Beta 构建不会安装全局 completion hook，不显示或启用正式版自动更新入口。Beta backend 启动后会在独立 CLI profile 中 refresh/login，并把动态 backend URL 和该 profile 路径注入新 terminal；不会读取或覆盖 `~/.runweave/config.json`。
 
@@ -211,16 +237,18 @@ git diff --check
 
 ### 页面与 CDP 验证
 
-先执行 `pnpm runweave:beta:status --json`，复制 `cdp.endpoint` 的实际值，再使用 `$toolkit:playwright-cli` 连接目标页面：
+先执行 `pnpm runweave:beta:status --instance <id> --json`，按验收目标复制实际 endpoint，再使用 `$toolkit:playwright-cli` 连接目标页面：
 
 ```bash
-playwright-cli -s=runweave-beta attach --cdp="<status.cdp.endpoint>"
+playwright-cli -s=runweave-beta-agent-a-desktop attach --cdp="<status.cdp.desktop.endpoint>"
 playwright-cli -s=runweave-beta eval \
   "JSON.stringify({title: document.title, channel: document.documentElement.dataset.runweaveChannel, revision: document.documentElement.dataset.runweaveSourceRevision})"
 playwright-cli -s=runweave-beta detach
 ```
 
 预期 `channel` 为 `beta`，标题和页面 revision 与 status 中的 `source.gitHead` 对应。dirty 或 untracked 内容不会进入页面 revision；是否部署了脏工作区必须同时检查 `source.dirty` 和更新状态中的 worktree snapshot。桌面并存、退出、恢复和窗口身份使用 `$computer-use` 验证。
+
+Terminal Browser 验收使用 `status.cdp.terminalBrowser.endpoint`。Desktop CDP 和 Terminal Browser CDP 是不同 surface；不要用一个 endpoint 代替另一个，也不要使用全局 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 或 Playwright 默认配置猜测目标。
 
 完整回归按 [Runweave Beta 自举开发通道测试用例](../testing/runweave-beta-self-hosting-test-cases.md) 执行。静态命令、status 或代码阅读不能代替该文档要求的真实桌面与页面行为证据。
 
@@ -229,7 +257,13 @@ playwright-cli -s=runweave-beta detach
 最近一次更新有问题时执行：
 
 ```bash
-pnpm runweave:beta:rollback
+pnpm runweave:beta:rollback --instance default
+```
+
+多实例回滚必须带实例：
+
+```bash
+pnpm runweave:beta:rollback --instance agent-a
 ```
 
 回滚会恢复最近一次更新前记录的 Beta App、Runtime 和 App Server 指针，并等待 Beta Desktop、backend、CDP 以及原本存在的 App Server 恢复健康。没有上一可用版本时命令返回非零状态。
@@ -241,13 +275,13 @@ pnpm runweave:beta:rollback
 更新日志位于：
 
 ```text
-~/Library/Application Support/Runweave Beta/update/logs/
+~/Library/Application Support/Runweave Beta/instances/<instanceId>/user-data/update/logs/
 ```
 
 失败摘要和对应日志路径同时出现在：
 
 ```bash
-pnpm runweave:beta:status --json
+pnpm runweave:beta:status --instance <id> --json
 ```
 
 ### `dry-run` 意外选择完整 App
@@ -264,4 +298,4 @@ pnpm runweave:beta:status --json
 
 ### Beta 与 Stable 看起来相同
 
-优先检查窗口标题和页面顶部的 `BETA` 标识，再用 `status --json` 中的 App 路径、userData、backend profile 和 CDP endpoint 交叉确认。不要只凭 Dock 图标或端口猜测通道。
+优先检查窗口标题和页面顶部的 `BETA` 标识，再用 `status --json` 中的 App 路径、userData、backend profile、Desktop CDP 和 Terminal Browser CDP endpoint 交叉确认。不要只凭 Dock 图标或端口猜测通道。

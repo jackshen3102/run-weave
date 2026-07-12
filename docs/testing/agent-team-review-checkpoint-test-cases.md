@@ -8,7 +8,7 @@
 
 ## 前提事实
 
-- 实施计划：`docs/plans/2026-07-12-agent-team-review-checkpoints.md`。
+- 架构边界：`docs/architecture/multi-agent-orchestrator.md#review-checkpoint`。
 - run 真相：`.runweave/agent-team/<runId>.json`。
 - worker 结果：pane-scoped `.runweave/outbox/<sessionId>.panel-<panelId>.json`。
 - 串行角色：`code -> code_review -> behavior_verify`，全部 behavior通过后增加 `code_review(final)`。
