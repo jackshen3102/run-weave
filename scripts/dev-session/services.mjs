@@ -286,9 +286,14 @@ export async function stopSessionServices(
   }
 }
 
-export async function cleanupStaleSessionServices(services) {
+export async function cleanupStaleSessionServices(
+  services,
+  { serviceNames = null } = {},
+) {
   const inspection = await inspectSessionServices(services);
-  const cleanedServices = structuredClone(inspection.services);
+  const cleanedServices = structuredClone(
+    serviceNames ? services : inspection.services,
+  );
   const stoppedServices = [];
   const skippedStaleServices = [];
   const orderedServiceNames = [
@@ -298,12 +303,28 @@ export async function cleanupStaleSessionServices(services) {
     "appServer",
   ];
   for (const serviceName of orderedServiceNames) {
+    if (serviceNames && !serviceNames.includes(serviceName)) {
+      continue;
+    }
     const originalService = services[serviceName];
-    const inspectedService = cleanedServices[serviceName];
+    const inspectedService = structuredClone(
+      inspection.services[serviceName],
+    );
     if (originalService?.ownership !== "dedicated") {
       continue;
     }
+    cleanedServices[serviceName] = inspectedService;
     if (inspectedService?.health !== "live") {
+      if (
+        !originalService.betaControl &&
+        processIdentityMatches(originalService.process)
+      ) {
+        await stopOwnedProcess(originalService.process);
+        inspectedService.cleanupStatus =
+          "stopped-owner-process-identity-verified";
+        stoppedServices.push(serviceName);
+        continue;
+      }
       inspectedService.cleanupStatus = "skipped-stale-identity";
       skippedStaleServices.push({
         service: serviceName,

@@ -21,7 +21,7 @@ async function main() {
   verifySafety(temporaryHome);
   verifyLegacyBackendEnv();
   process.stdout.write(
-    `${JSON.stringify({ ok: true, checks: ["planner", "beta-control-chain-classification", "profile-adapters", "impact-driven-ownership", "ownership-boundary", "legacy-env-compatibility", "manifest-permissions", "candidate-resolution", "stale-lock-recovery", "parallel-port-leases", "atomic-port-lease-publication", "stale-port-lease-aba", "partial-port-lease-fail-closed", "backend-profile-conflict-attribution", "atomic-backend-profile-lock", "stale-session-recovery-guidance", "symlink-fail-closed", "status-stop-serialization", "stale-session-preservation", "newer-schema-fail-closed", "path-and-endpoint-safety"] })}\n`,
+    `${JSON.stringify({ ok: true, checks: ["planner", "beta-control-chain-classification", "profile-adapters", "impact-driven-ownership", "ownership-boundary", "legacy-env-compatibility", "manifest-permissions", "candidate-resolution", "stale-lock-recovery", "parallel-port-leases", "atomic-port-lease-publication", "stale-port-lease-aba", "partial-port-lease-fail-closed", "backend-profile-conflict-attribution", "atomic-backend-profile-lock", "stale-session-recovery-guidance", "stale-cleanup-retry-convergence", "symlink-fail-closed", "status-stop-serialization", "stale-session-preservation", "newer-schema-fail-closed", "path-and-endpoint-safety"] })}\n`,
   );
 }
 

@@ -26,6 +26,7 @@ import {
   startSessionServices,
   stopSessionServices,
 } from "./services.mjs";
+import { processIdentityMatches } from "./service-runtime.mjs";
 
 function parseArgs(argv) {
   const command = argv[0] ?? "start";
@@ -334,12 +335,23 @@ async function runStop(options, sourceRoot) {
   });
   await withSessionLock(candidate.devSessionId, async () => {
     let manifest = await readManifest(candidate.devSessionId);
-    if (manifest.state === "stopped") {
+    const retryServiceNames =
+      options.cleanupStale && manifest.state === "stopped"
+        ? Object.entries(manifest.services)
+            .filter(
+              ([, service]) =>
+                service?.cleanupStatus === "skipped-stale-identity" &&
+                processIdentityMatches(service.process),
+            )
+            .map(([serviceName]) => serviceName)
+        : [];
+    const retryingPartialCleanup = retryServiceNames.length > 0;
+    if (manifest.state === "stopped" && !retryingPartialCleanup) {
       printResult(publicManifest(manifest), options.json);
       return;
     }
     if (options.cleanupStale) {
-      if (manifest.state !== "stale") {
+      if (manifest.state !== "stale" && !retryingPartialCleanup) {
         throw new DevSessionError(
           `--cleanup-stale requires a stale Session: ${manifest.devSessionId} (${manifest.state})`,
           5,
@@ -348,7 +360,10 @@ async function runStop(options, sourceRoot) {
       manifest = updateManifest(manifest, { state: "stopping" });
       await writeManifest(manifest);
       try {
-        const cleanup = await cleanupStaleSessionServices(manifest.services);
+        const cleanup = await cleanupStaleSessionServices(
+          manifest.services,
+          retryingPartialCleanup ? { serviceNames: retryServiceNames } : {},
+        );
         manifest = updateManifest(manifest, {
           state: "stopped",
           services: cleanup.services,
