@@ -8,6 +8,7 @@ import {
 } from "./terminal-browser-cdp-proxy-handler.js";
 import { getTerminalBrowserCdpTargets } from "./terminal-browser-view.js";
 import type { CdpProxyConnectionState } from "./terminal-browser-cdp-proxy-types.js";
+import { CDP_PROXY_TRACE_ENABLED } from "./terminal-browser-cdp-proxy-logging.js";
 
 export function getFirstWindowId(): number | null {
   const windows = BrowserWindow.getAllWindows();
@@ -36,12 +37,14 @@ export function getScopedTargets(scopedGroupId: string | null) {
 
 export function sendJson(ws: WebSocket, data: object): void {
   if (ws.readyState === WebSocket.OPEN) {
-    const payload = data as Record<string, unknown>;
-    console.info("[cdp-proxy] >>", {
-      id: payload.id ?? null,
-      method: payload.method ?? null,
-      sessionId: payload.sessionId ?? null,
-    });
+    if (CDP_PROXY_TRACE_ENABLED) {
+      const payload = data as Record<string, unknown>;
+      console.info("[cdp-proxy] >>", {
+        id: payload.id ?? null,
+        method: payload.method ?? null,
+        sessionId: payload.sessionId ?? null,
+      });
+    }
     ws.send(JSON.stringify(data));
   }
 }

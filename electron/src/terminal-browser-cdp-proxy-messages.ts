@@ -16,6 +16,7 @@ import {
   getTerminalBrowserEntryByTargetId,
 } from "./terminal-browser-view.js";
 import type { CdpProxyConnectionState } from "./terminal-browser-cdp-proxy-types.js";
+import { CDP_PROXY_TRACE_ENABLED } from "./terminal-browser-cdp-proxy-logging.js";
 import {
   broadcastTargetCreated,
   canUseTarget,
@@ -387,10 +388,12 @@ export async function handleMessage(
         } else {
           // For unhandled browser-level commands (e.g. Browser.setDownloadBehavior),
           // return an empty success so Playwright's init sequence doesn't break.
-          console.info("[cdp-proxy] stub OK for unhandled browser command", {
-            id,
-            method,
-          });
+          if (CDP_PROXY_TRACE_ENABLED) {
+            console.info("[cdp-proxy] stub OK for unhandled browser command", {
+              id,
+              method,
+            });
+          }
           sendJson(ws, buildCdpResult(id, {}));
         }
         return;

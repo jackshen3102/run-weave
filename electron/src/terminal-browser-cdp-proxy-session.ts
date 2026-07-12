@@ -6,6 +6,7 @@ import {
   setTerminalBrowserCdpProxyAttached,
 } from "./terminal-browser-view.js";
 import { shouldMarkTerminalBrowserMcpActivity } from "./terminal-browser-cdp-activity.js";
+import { CDP_PROXY_TRACE_ENABLED } from "./terminal-browser-cdp-proxy-logging.js";
 
 export interface CdpProxySession {
   proxySessionId: string;
@@ -211,13 +212,15 @@ export class CdpSessionManager {
       throw new Error(`Target detached: ${targetId}`);
     }
 
-    console.info("[cdp-proxy] forward", {
-      method,
-      targetId,
-      proxySessionId,
-      url: target.webContents.getURL(),
-      timestamp: Date.now(),
-    });
+    if (CDP_PROXY_TRACE_ENABLED) {
+      console.info("[cdp-proxy] forward", {
+        method,
+        targetId,
+        proxySessionId,
+        url: target.webContents.getURL(),
+        timestamp: Date.now(),
+      });
+    }
 
     if (shouldMarkTerminalBrowserMcpActivity(method)) {
       markTerminalBrowserMcpActivity(targetId);
