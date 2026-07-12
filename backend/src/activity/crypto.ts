@@ -36,7 +36,9 @@ function readKeychainKey(): Buffer | null {
     ],
     { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
   );
-  return result.status === 0 ? decodeKey(result.stdout) : null;
+  if (result.status !== 0) return null;
+  const encoded = result.stdout.trim();
+  return encoded ? decodeKey(encoded) : null;
 }
 
 function createKeychainKey(): Buffer {
@@ -51,11 +53,11 @@ function createKeychainKey(): Buffer {
       "-a",
       KEYCHAIN_ACCOUNT,
       "-w",
+      key.toString("base64"),
     ],
     {
       encoding: "utf8",
-      input: `${key.toString("base64")}\n`,
-      stdio: ["pipe", "ignore", "ignore"],
+      stdio: ["ignore", "ignore", "ignore"],
     },
   );
   if (result.status !== 0) {
