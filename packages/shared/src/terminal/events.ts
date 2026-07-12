@@ -201,15 +201,29 @@ export interface TerminalStateResponse {
   terminalState: TerminalState;
 }
 
-export type AgentHookStateEvent = "SessionStart" | "UserPromptSubmit" | "Stop";
+export type AgentHookStateEvent =
+  | "SessionStart"
+  | "UserPromptSubmit"
+  | "Stop"
+  | "ToolRequested"
+  | "ToolCompleted";
 
 export interface AgentHookStateRequest {
+  activityEventId?: string;
   terminalSessionId: string;
   projectId?: string;
   threadId?: string;
   panelId?: string | null;
   tmuxPaneId?: string | null;
   commandName?: string | null;
+  rawHookEvent?: string;
+  sessionSource?: "startup" | "resume";
+  query?: string;
+  response?: string;
+  toolUseId?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  toolResult?: unknown;
   agent: TerminalAgentKind;
   hookEvent: AgentHookStateEvent;
 }

@@ -11,6 +11,10 @@ export class AgentTeamRunStore {
   constructor(
     private readonly terminalSessionManager: TerminalSessionManager,
     private readonly paths: AgentTeamPaths,
+    private readonly onWrite?: (
+      previous: AgentTeamRun | null,
+      current: AgentTeamRun,
+    ) => void,
   ) {}
 
   async listRuns(projectId: string): Promise<AgentTeamRun[]> {
@@ -64,6 +68,11 @@ export class AgentTeamRunStore {
 
   async writeRun(run: AgentTeamRun): Promise<void> {
     assertSafeAgentTeamRunId(run.runId);
-    await writeJsonFile(this.paths.runFilePath(run.projectId, run.runId), run);
+    const filePath = this.paths.runFilePath(run.projectId, run.runId);
+    const previous = existsSync(filePath)
+      ? await readJsonFile<AgentTeamRun>(filePath)
+      : null;
+    await writeJsonFile(filePath, run);
+    this.onWrite?.(previous, run);
   }
 }

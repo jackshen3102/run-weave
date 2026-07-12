@@ -151,6 +151,11 @@ export class AuthService {
     };
   }
 
+  getActivityAuditSubject(accessToken: string): string | null {
+    const session = this.verifyAccessToken(accessToken);
+    return session?.username ?? null;
+  }
+
   async refreshSession(refreshToken: string): Promise<LoginResult | null> {
     const verified = verifyToken(refreshToken, this.config.jwtSecret);
     if (

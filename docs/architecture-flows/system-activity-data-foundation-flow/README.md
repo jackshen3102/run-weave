@@ -1,13 +1,14 @@
-# system-activity-data-foundation-flow（现有 Backend 共享 SQLite 与经验生成流程）
+# system-activity-data-foundation-flow（P0 共享 SQLite 与未来经验生成流程）
 
 Runweave 全系统行为数据如何由现有 Stable/Beta/Dev Backend 主动写入同一份 profile 外 SQLite、如何按 7/30 天保留，以及后续如何冻结数据交给模型生成 Learning 的可运行 HTML 技术说明。
 
-- **性质**：目标架构流程，不是已经上线的产品页面，也不是运行指标看板。
-- **梳理日期**：`2026-07-11`。
-- **代码基线**：`docs/activity-data-foundation-contracts@74f1151`。
+- **性质**：P0 已实现架构 + 明确的 Verification/Learning 未来边界；不是生产运行指标看板。
+- **梳理日期**：`2026-07-12`。
+- **代码基线**：`docs/activity-data-foundation-contracts` 当前 working tree。
 - **核心边界**：不新增服务或 daemon；Backend 是唯一 DB 访问边界，行为数据独立存储，大对象只保留引用，模型只读取冻结 Context Pack。
 - **配套计划**：`docs/plans/2026-07-11-system-activity-data-foundation.md`。
 - **配套验收**：`docs/testing/system-activity-data-foundation-test-cases.md`。
+- **配套产品原型**：`docs/prototypes/system-activity-data-foundation/`。
 
 ## 启动
 
@@ -47,11 +48,10 @@ Stable / Beta / Dev 各自现有 Backend
   → 当前 Backend query API
   → Facts / Timeline / Sources / Data Policy UI
 
-敏感操作
+数据操作
   → Content read: audit commit → body
-  → export/delete: preview(scope + membership/count digest + asOf offset)
-  → canonical scope + 同 Bearer session + 独立 token domain + expectedAction
-  → export: snapshot recheck + audit → body
+  → export/delete: 普通 Bearer 请求 + scope
+  → export: current snapshot + audit → body
   → delete: requested audit + query tombstone → durable chunked job
 
 maintenance
@@ -70,13 +70,13 @@ maintenance
 
 ## 与当前代码的关系
 
-当前代码提供可复用的业务边界，但还没有这一共享行为仓：
-
-- Backend Terminal Events 只在内存保留最近 500 条。
-- App Server 单 JSONL 是既有事件实现，不进入本方案的目标存储链。
-- Agent Team run、Terminal scrollback、Thread、Browser artifact 仍由各自源系统拥有，只作为 producer 输入或少量 External Ref。
-- Stable/Beta/Dev 继续使用各自现有 Backend；行为库路径固定在 profile 外，通过 `runtimeChannel` 区分来源。
-- 外部 TTY 不承诺自动捕获；Agent Query/Reply 需显式配置 `rw activity record agent-hook`，shell command 需受控 zsh adapter 调 `record terminal-command-*`，两者都必须选定 Backend profile/port。
+- `backend/src/activity/` 已实现 worker-owned SQLite、WAL、迁移、幂等、gap、加密 Content、7/30 天留存、审计和 durable delete job。
+- `backend/src/routes/activity.ts` 已实现复用现有登录鉴权的 Facts/Timeline/Sources/Policy/Content/export/delete API。
+- Stable/Beta/Dev 的 Backend 直接共享 profile 外固定数据库；三进程同库集成脚本已验证 300 条并发 Fact、完整性和权限。
+- Terminal、Hook、Electron Browser 与 Agent Team durable transition 已接线；Verification family 在身份化 runner 完成前不注册。
+- `/activity` 已实现 Facts、详情/Content、Timeline、Sources、Data Policy 与直接 export/delete；CLI 始终调用所选 Backend。
+- App Server JSONL、Thread、scrollback、run、outbox 与 Browser artifact 仍保持原职责，只作为来源或 External Ref，不成为 Activity 依赖。
+- 外部 TTY 仍不承诺自动捕获，只允许显式 Hook 或受控 shell adapter 经所选 Backend 写入。
 
 ## 页面视图
 
@@ -97,7 +97,7 @@ maintenance
 - Content 与 ExternalRef descriptor 按 Fact+role+ordinal 独占；跨 Project/Thread 即使内容或 locator 相同也不复用 row，scoped delete 只级联自己的对象。
 - Schema migration 使用 `BEGIN EXCLUSIVE + PRAGMA user_version`；retention/delete runner 的每个删除事务都按 owner + fencing token + 未过期状态重新校验，stale owner 不能继续删除。
 - packaged/external runtime 都由构建脚本生成完整文件树 manifest；Backend 启动 Activity worker 前必须校验 worker 和 JS/native runtime 闭包的 ABI、逐文件 SHA-256 与 tree hash。
-- Content read 必须先提交 audit；confirm 带 canonical scope、同一 Bearer session、独立 token type/audience、expectedAction 和 5 分钟票据。export 在 snapshot 重算；delete 先提交 query tombstone/job，再由现有 Backend 以 ≤1000 Facts/8 MiB 小事务可恢复删除。票据只在 UI 内存或 CLI stdin，不进 argv。
+- Content read/export/delete 使用普通登录鉴权并提交 audit；delete 先提交 query tombstone/job，再由现有 Backend 以 ≤1000 Facts/8 MiB 小事务可恢复删除。
 - 当前 Backend 不可达时客户端明确报告未记录；P0 不创建客户端 spool，也不伪造稍后会自动补传。
 - `activity.sqlite` 是行为数据唯一 canonical truth；删除它就代表删除行为数据，不能从 JSONL 或 projection 重建。
 - Query、可见回复、命令等短期正文存 7 天；Fact/link 存 30 天；完整 Thread、scrollback、run、截图等大对象只引用。
@@ -125,7 +125,7 @@ maintenance
 
 ## 浏览器验收状态
 
-2026-07-11 使用 `playwright-cli` 打开 `http://127.0.0.1:6196/`，以 1440×1000 viewport 完成：
+2026-07-12 使用 `playwright-cli` 打开 `http://127.0.0.1:6196/`，以 1440×1000 viewport 重新完成：
 
 - 数据主链、数据边界、数据结构、经验生成、失败语义 5 个视图均可见且有内容。
 - Query、Agent Team、Browser + 验证、Backend 不可达、Learning 5 个场景均可切换，详情随场景更新。
@@ -135,7 +135,7 @@ maintenance
 
 ## 非目标
 
-- 不实现生产 ActivityStore、数据迁移或模型调用。
+- 不在本阶段实现身份化 Verification runner、模型调用、Learning Candidate、审核发布或 `learning.sqlite`。
 - 不新增后台进程来统一转发 Stable/Beta/Dev 行为。
 - 不复用产品原型中的 mock Facts/Learning 作为架构证据。
 - 不承诺捕获未显式配置 Agent Hook 或受控 zsh adapter 的其它 TTY。

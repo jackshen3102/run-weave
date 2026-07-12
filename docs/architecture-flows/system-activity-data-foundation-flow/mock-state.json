@@ -70,10 +70,10 @@
       "id": "workflow-producers",
       "lane": "producers",
       "eyebrow": "WORKFLOW",
-      "title": "Agent Team / Verification",
-      "body": "Run state、worker dispatch/result、case dispatch/result 与身份化验证在明确边界发事件。",
-      "detail": "完整 run/outbox/evidence 仍由源系统拥有，只保存版本化引用。",
-      "tags": ["runId", "caseId", "evidenceRef"]
+      "title": "Agent Team / Verification boundary",
+      "body": "Agent Team run、worker、case 的 durable transition 已记录；verification.* 要等身份化 runner 完成后才注册。",
+      "detail": "完整 run/outbox/evidence 仍由源系统拥有，只保存版本化引用；普通 Agent 上报不能升级为 verification。",
+      "tags": ["runId", "caseId", "runner gated"]
     },
     {
       "id": "browser-producers",
@@ -180,15 +180,15 @@
       "eyebrow": "EXISTING BACKEND API",
       "title": "Backend query API",
       "body": "任一现有 Backend 通过自己的 ActivityStore 查询共享 activity.sqlite，并返回 keyset page 与详情。",
-      "detail": "UI、CLI、Agent 与 Learning preparation 都走 Backend API；confirm 带 canonical scope、独立 token domain、expectedAction 与同 session 票据。",
-      "tags": ["read API", "audit", "preview → confirm/job"]
+      "detail": "UI、CLI、Agent 与 Learning preparation 都走 Backend API；export/delete 与其它请求一样使用当前登录身份。",
+      "tags": ["read API", "audit", "direct operation/job"]
     },
     {
       "id": "activity-ui",
       "lane": "consumers",
       "eyebrow": "UI",
       "title": "Facts / Timeline / Sources / Data Policy",
-      "body": "UI 只消费当前 Backend API；Data Policy 先冻结 scope/digest/cutoff，delete confirm 后立即隐藏并展示分批 job 进度。",
+      "body": "UI 只消费当前 Backend API；Data Policy 直接提交 export/delete，delete 接受后立即隐藏并展示分批 job 进度。",
       "detail": "Duration 可以计算；Goal、Outcome、Learning 不能伪装成 Recorded Fact，也不展示无分母 coverage。",
       "tags": ["interaction", "source health", "durable delete job"]
     },
@@ -273,9 +273,9 @@
     },
     {
       "id": "browser",
-      "label": "Browser + 验证",
+      "label": "Browser + runner 边界",
       "tone": "cyan",
-      "summary": "Electron main-frame navigation 与身份化 verification runner 记录目标和结果，大 artifact 只引用。",
+      "summary": "Electron main-frame navigation 已接线；verification family 在身份化 runner 实现前保持未注册，大 artifact 只引用。",
       "path": [
         "browser-producers",
         "workflow-producers",
@@ -291,7 +291,7 @@
       ],
       "steps": [
         "记录 tab lifecycle 与 main-frame navigation；不把 CDP command 猜成高层动作。",
-        "Verification 必须带 case、runner、target runtime/route/build 与 result。",
+        "当前 registry 不注册 verification.*；未来 runner 必须带 case、runner、target runtime/route/build 与 result。",
         "Screenshot、DOM、trace 保存 digest/version ref。",
         "没有 target identity 或 evidence 的通过不能展示为独立验证。"
       ],
@@ -420,12 +420,12 @@
       "status": "record"
     },
     {
-      "source": "Terminal Browser / Verification",
-      "capture": "Electron main-frame events + identity runner",
-      "direct": "tab、navigation、target identity、case/result",
+      "source": "Terminal Browser / Verification boundary",
+      "capture": "Electron main-frame events；identity runner 尚未启用",
+      "direct": "当前记录 tab/navigation；case/result 等 runner 完成后再开放",
       "content": "无（report 只保存 External Ref）",
       "external": "screenshot / DOM / trace",
-      "coverage": "不从 CDP 或测试标题推断高层动作/Case",
+      "coverage": "不从 CDP 或测试标题推断高层动作/Case；verification family 当前未注册",
       "status": "record"
     },
     {
@@ -940,26 +940,26 @@
     },
     {
       "name": "activity_delete_jobs",
-      "purpose": "用户确认后立即成为查询 fail-closed tombstone；全局最多一个 active job，由任一现有 Backend 可恢复地分批物理删除。",
+      "purpose": "普通 delete 请求接受后立即成为查询 fail-closed tombstone；全局最多一个 active job，由任一现有 Backend 可恢复地分批物理删除。",
       "retention": "until completed + 30d",
       "columns": [
         {
           "name": "delete_job_id · request_id · auth HMAC/version",
           "type": "TEXT PK/UNIQUE · INTEGER",
           "source": "backend-store",
-          "origin": "确认事务生成；completion audit 可复制主体 HMAC，不依赖原 session 仍存活"
+          "origin": "普通请求事务生成；completion audit 可复制主体 HMAC，不依赖原 session 仍存活"
         },
         {
           "name": "scope_type/id · as_of_activity_offset",
           "type": "TEXT · INTEGER",
-          "source": "confirmed-ticket",
-          "origin": "重新 canonicalize scope 并匹配 ticket digest；confirmation trigger 禁止后续改 scope/cutoff"
+          "source": "request-snapshot",
+          "origin": "普通请求冻结 scope/cutoff；request trigger 禁止后续改 scope/cutoff"
         },
         {
           "name": "membership version/hash · count hash/fact count",
           "type": "INTEGER · TEXT",
-          "source": "preview-snapshot",
-          "origin": "保留用户确认时看到的冻结分母；delete 实际集合只能单调缩小"
+          "source": "request-snapshot",
+          "origin": "保留请求时的冻结分母；delete 实际集合只能单调缩小"
         },
         {
           "name": "status · cursor · deleted count · last error",
@@ -1158,9 +1158,9 @@
       "id": "user-delete",
       "severity": "privacy",
       "title": "用户删除 Project/Thread 数据",
-      "trigger": "preview 后由同一 Bearer session 从 body/内存提交 canonical scope、5 分钟票据和固定 expectedAction",
+      "trigger": "已登录用户直接提交 Project 或 Thread scope 的 delete 请求",
       "mechanism": "短事务提交 query tombstone + delete_requested audit；现有 Backend runner 用 fencing 分批删除并持久化 cursor，完成时写 completion audit。",
-      "observable": "确认后目标立即不可查；新 Fact 与另一 Project 不变；页面显示 pending/running/blocked/completed，Backend crash 后可接管。",
+      "observable": "请求接受后目标立即不可查；新 Fact 与另一 Project 不变；页面显示 pending/running/blocked/completed，Backend crash 后可接管。",
       "resolution": "每批 ≤1000 Facts/8 MiB，不长占 writer lock；完成后 job/audit 保留 30 天，不保留可查询正文副本。"
     }
   ],
@@ -1172,7 +1172,7 @@
     "Content 与 ExternalRef descriptor 按 Fact+role+ordinal 独占，跨 Project/Thread 不复用 row；scoped delete 只级联本 scope owner。",
     "大范围 delete 由 activity_delete_jobs 立即做查询 tombstone，再由现有 Backend 内部 runner 以 fenced 小事务可恢复删除；不新增进程。",
     "packaged/external runtime 都必须从构建产物 manifest 全量校验 worker 与 JS/native runtime 文件树、ABI 和逐文件/tree hash 后才能启动 Activity worker。",
-    "Content read 先 audit；export/delete confirm 带 canonical scope、独立 token type/audience、expectedAction 和同 session 票据，票据不进 argv。",
+    "Content read/export/delete 使用普通登录鉴权并提交 audit，不增加 confirmation token 或二次确认协议。",
     "外部 TTY 仅在显式配置 record agent-hook 或受控 zsh record terminal-command-* 时记录。",
     "7 天内容、30 天事实；完整 Thread、scrollback、run、截图等大对象只引用。",
     "Learning 基于冻结 Context Pack 生成并写独立 learning.sqlite，默认审核后发布。"

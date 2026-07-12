@@ -28,6 +28,16 @@ export function getToolkitHookCommand(config, event) {
   return commands[0];
 }
 
+export function verifyToolkitHookCommands(config, events, expectedCommand) {
+  for (const event of events) {
+    assert.equal(
+      getToolkitHookCommand(config, event),
+      expectedCommand,
+      `${event} must point at the toolkit hook dispatcher`,
+    );
+  }
+}
+
 export function runLauncher(launcherPath, extraEnv) {
   const payload = JSON.stringify({
     hook_event_name: "Stop",
@@ -136,5 +146,49 @@ export function runToolkitHookCommand(
       reject(new Error(`toolkit hook exited with ${code}: ${stderr}`));
     });
     child.stdin.end(payload);
+  });
+}
+
+export async function verifyPreToolHook(params) {
+  await runToolkitHookCommand(
+    params.command,
+    "codex",
+    {
+      HOME: params.homeDir,
+      RUNWEAVE_TOOLKIT_PLUGIN_ROOT: toolkitDir,
+      RUNWEAVE_APP_SERVER_URL: params.appServerUrl,
+      RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
+      RUNWEAVE_HOOK_ENDPOINT: params.endpoint,
+      RUNWEAVE_HOOK_TOKEN: "token-5",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-5",
+      RUNWEAVE_PROJECT_ID: "project-5",
+      RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+    },
+    {
+      hook_event_name: "PreToolUse",
+      session_id: "thread-5",
+      tool_use_id: "tool-call-5",
+      tool_name: "shell",
+      tool_input: { command: "pwd" },
+    },
+    { replacePluginDirPlaceholder: false },
+  );
+  assert.equal(params.requests.length, 12);
+  assert.equal(params.appServerRequests.length, 10);
+  assert.equal(params.requests[11].url, "/internal/terminal/agent-hook");
+  assert.match(params.requests[11].body.activityEventId, /^[0-9a-f-]{36}$/i);
+  assert.deepEqual({ ...params.requests[11].body, activityEventId: undefined }, {
+    activityEventId: undefined,
+    terminalSessionId: "terminal-5",
+    projectId: "project-5",
+    tmuxPaneId: "%13",
+    threadId: "thread-5",
+    commandName: null,
+    rawHookEvent: "PreToolUse",
+    toolUseId: "tool-call-5",
+    toolName: "shell",
+    toolInput: { command: "pwd" },
+    agent: "codex",
+    hookEvent: "ToolRequested",
   });
 }

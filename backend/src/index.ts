@@ -26,6 +26,7 @@ import { createAppHomeOverviewRouter } from "./routes/app-home-overview";
 import { createAppServerStateRouter } from "./routes/app-server-state";
 import { createDiagnosticLogsRouter } from "./routes/diagnostic-logs";
 import { createAgentTeamRouter } from "./routes/agent-team";
+import { registerActivityRoutes } from "./routes/activity-registration";
 import {
   createInternalTerminalAgentHookRouter,
   createTerminalStateRouter,
@@ -252,6 +253,7 @@ function createHttpApp(
       terminalSessionManager: services.terminalSessionManager,
       terminalStateService: services.terminalStateService,
       hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
+      activity: services.terminalActivity,
     }),
   );
   app.use(
@@ -263,6 +265,13 @@ function createHttpApp(
       hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
     }),
   );
+  registerActivityRoutes(app, {
+    services,
+    requireAuth,
+    requireTunnelAuth,
+    backendInstanceId: backendIdentity?.backendId ?? `backend:${process.pid}`,
+    hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
+  });
 
   if (process.env.RUNWEAVE_E2E_TEST_ROUTES === "true") {
     app.use("/test", createTestRouter());
@@ -323,6 +332,7 @@ function createHttpApp(
       terminalEventService: services.terminalEventService,
       terminalStateService: services.terminalStateService,
       quickInputService: services.terminalQuickInputService,
+      activity: services.terminalActivity,
     }),
   );
   app.use("/api/voice", requireAuth, createVoiceRouter());
@@ -404,6 +414,10 @@ function attachLifecycleHandlers(
       await services.terminalRuntimeRegistry.disposeAll();
       await services.terminalSessionManager.dispose();
       await services.terminalQuickInputStore.dispose();
+      if (services.activityMaintenanceTimer) {
+        clearInterval(services.activityMaintenanceTimer);
+      }
+      await services.activityStore?.close();
       codexAppServerClient.shutdown();
       await services.authStore.dispose();
       await profileLock.release();

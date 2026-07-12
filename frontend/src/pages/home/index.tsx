@@ -74,6 +74,7 @@ export function HomePage({
         navigate("/system-monitor");
       }
     : undefined;
+  const openActivity = () => navigate("/activity");
 
   if (clientMode === "mobile") {
     return (
@@ -103,6 +104,15 @@ export function HomePage({
                   <span className="sr-only">System Monitor</span>
                 </Button>
               ) : null}
+              <Button
+                variant="secondary"
+                size="sm"
+                className="rounded-full px-3"
+                onClick={openActivity}
+              >
+                <Activity className="h-4 w-4" />
+                <span className="sr-only">Activity Facts</span>
+              </Button>
               <Button
                 size="sm"
                 className="rounded-full px-4"
@@ -164,6 +174,7 @@ export function HomePage({
           onOpenConnectionManager={onOpenConnectionManager}
           onOpenTerminal={openTerminal}
           onOpenSystemMonitor={openSystemMonitor}
+          onOpenActivity={openActivity}
           onOpenChangePassword={openPasswordDialog}
           onLogout={handleAuthExpired}
         />

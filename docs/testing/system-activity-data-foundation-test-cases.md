@@ -1,7 +1,9 @@
 # Runweave Backend 内嵌行为数据底座测试用例
 
-> 状态：验收合同已按“现有 Backend 直接写共享 SQLite、不新增服务”重写；功能尚未实现，本文件未执行。
+> 状态：功能已实施并完成代表性集成/CLI/浏览器/native runtime 验证；放量级与完整故障矩阵尚未全部执行。
 > 对应计划：`docs/plans/2026-07-11-system-activity-data-foundation.md`
+> 配套产品原型：`docs/prototypes/system-activity-data-foundation/`
+> 配套架构流程：`docs/architecture-flows/system-activity-data-foundation-flow/`
 > 验证原则：不新增单元测试文件；使用临时数据库、可执行集成脚本、真实 Stable/Beta/Dev、真实 CLI 与 `$playwright-cli` 取证。
 
 ## 验收范围
@@ -14,7 +16,7 @@
 - CLI/Electron/Hook/Shell 只经 Backend 写入，不直接打开 SQLite。
 - SQLite WAL、多进程并发、幂等、事务、schema version、retention lease、崩溃恢复。
 - P0 14 个可靠事件族、字段来源、显式关联和 coverage gap。
-- 7 天 Content / 30 天 Fact、DLP、加密、local-only API、删除与导出。
+- 7 天 Content / 30 天 Fact、DLP、加密、登录鉴权、删除与导出。
 - Facts、Interaction Timeline、Sources、Data Policy 四个页面视图。
 
 不覆盖：
@@ -236,13 +238,13 @@ git diff --check
 - **失败判断**：DB/WAL/SHM/API/export/log 可搜索到 secret 或原始 locator，多 Backend 生成不同 key，或 key 出现在进程参数/环境变量。
 - **验证方式**：secret fixture、并发初始化 harness、文件 byte scan、进程参数/env scan、API/export、Keychain reference metadata。
 
-### ADF-021 文件权限与 API 本机鉴权
+### ADF-021 文件权限与 API 登录鉴权
 
-- **Given**：本机已登录用户、无 Bearer 请求、错误 Hook Token、LAN 直连 Backend、LAN 经 Frontend/App Vite proxy、本机经 Vite、伪造 forwarded/custom provenance header 和合法 loopback CLI/UI 请求。
+- **Given**：本机和 LAN 客户端分别准备有效 Bearer、无 Bearer、错误 Bearer 与错误 Hook Token 请求。
 - **When**：访问 metadata/content/export/delete 与 managed Hook、external Hook、Electron、shell 四个专用 write routes。
-- **Then**：目录为 `0700`，DB/WAL/SHM 为 `0600`；Vite 剥离来路 header 并注入真实 client address；Backend 只信任 loopback peer 的该 header；本机直连/经 Vite且认证正确时成功，LAN 直连/转发、伪造 header 和错误认证均拒绝。
-- **失败判断**：远程请求经 Vite 看起来像 loopback、`isLocalDirectRequest` 误拒本机 dev 页面、任意本机 route 无身份写高可信事件，或文件可被其它用户读取。
-- **验证方式**：stat、Backend/Vite HTTP auth+origin matrix、proxy request capture、network origin evidence。
+- **Then**：目录为 `0700`，DB/WAL/SHM 为 `0600`；本机和 LAN 请求均只按现有登录/Hook 鉴权判断，有效身份成功，无身份或错误身份拒绝。
+- **失败判断**：已登录请求因来源地址被额外拒绝、无身份请求成功、任意 route 无身份写高可信事件，或文件可被其它用户读取。
+- **验证方式**：stat、Backend/Vite HTTP auth matrix、network origin evidence。
 
 ### ADF-022 Facts 页面展示 Recorded 与 Computed 而不混淆
 
@@ -268,13 +270,13 @@ git diff --check
 - **失败判断**：只给百分比无分母、把 Backend 未收到的期间标为完整、或隐藏错误。
 - **验证方式**：`$playwright-cli` + producer_instances/source_gaps/rejections 对照。
 
-### ADF-025 Data Policy 的删除与导出受控
+### ADF-025 Data Policy 的删除与导出使用普通登录鉴权
 
-- **Given**：Project A 有足以触发多批次的 3,000,000 Facts 和大量关联 source_gaps，Project B 有 bytes/locator 相同但 owner 独立的 Content/ExternalRef；另准备正常/失败 audit、并发 retention、三 Backend writer、可暂停的 delete owner，以及 access/refresh/temporary/confirmation 四种 token。
-- **When**：读取 Content；从 Data Policy/CLI 对 A 做 export/delete preview，预览后新增 Fact，并让另一 Backend tombstone/delete cutoff 内成员；用省略/替换 canonical scope、不同 session/action/type/audience、过期/重放 ticket 调 confirm，同时反向把 confirmation ticket 当 Authorization、把 access token 当 confirmation；尝试 ticket argv 和旧直接 route。成功 delete confirm 后尝试 UPDATE job 的 scope/cutoff/auth/digest、倒退 cursor/count 或把 completed 复活，再立即查询；持续三 Backend 各 50 events/s，依次 kill owner、停止全部 Backend、再启动一个 Backend；另让 job blocked 超过 30 天使 access session 与 requested audit 均过期，再由另一 Backend 恢复并轮询到 completed；分别注入 Content/export/delete requested/completed audit failure。
-- **Then**：preview 在一致 snapshot 返回 canonical scope、membership/count digest/version、cutoff、estimate 和 5 分钟 ticket，0 mutation。export confirm 在 read snapshot 重算；成员变化返回 `activity_operation_preview_stale` + failed audit，0 body。delete confirm 不重扫 3M/不批量删除，只在短事务提交 `pending job + delete_requested audit` 并于 500 ms 内返回 202；confirmation trigger 拒绝 job scope/cutoff/auth/digest UPDATE，progress trigger 拒绝 cursor/count/time 倒退、非法状态转换与 completed 复活。因 cutoff 集合只会缩小，已被 retention 删除的成员不阻塞 job，新增 offset 不在范围。job commit 后查询立即隐藏全部目标，即使物理 rows 尚在；project/thread cursor SQL 命中 `(scope_id, activity_offset)` partial index 且 EXPLAIN 无 temp B-tree，source_gaps FK action 也命中 child-key index；runner 每事务 ≤1000 Facts 且 owned mutation bytes ≤8 MiB，cursor/count 原子更新，旧 owner 被 fencing 拒绝，新 owner 续跑，三 Backend 无未报告 busy loss；全部 Backend 停止期间进度暂停且 UI 不谎报完成，重启任一 Backend 后从最后 cursor 恢复。blocked >30 天后 job 仍保留 requester HMAC/version，completion 不依赖原 session/requested audit；最终目标 rows/owned Content/Ref 为 0、新 Fact 与 B 不变，并有 delete_completed audit。token domain、session、expectedAction、scope digest、request ID replay fence 全部生效；ticket 只走 UI memory/CLI stdin JSON envelope，不进 argv/URL/log/config。
-- **失败判断**：confirm 无 scope 仍执行、任一 token 跨 domain 使用、export 按陈旧 preview 返回 body、delete confirm 扫描/删除全 scope或持 writer lock >500 ms、job 前数据仍可查询、跨 cutoff/Project 删除、batch 越界、crash 后从头/永久停滞/stale owner 继续删、正常写入 busy 丢失、跨 Fact 共享 Content/Ref row、audit 失败仍返回 body/创建 job/报告完成，或 ticket/username/正文/token 出现在 argv、URL、log、config、audit。
-- **验证方式**：Stable/Beta/Dev API/CLI/UI、3M fixture、双 Backend snapshot race、ticket scope/domain/action/replay/expiry matrix、process argv scan、job pause/kill/takeover harness、cursor `EXPLAIN QUERY PLAN`、writer latency/ACK manifest、before/after SQLite owner/FK/count、audit rows 与 export scan。
+- **Given**：Project A 有足以触发多批次的 3,000,000 Facts 和大量关联 source_gaps，Project B 有 bytes/locator 相同但 owner 独立的 Content/ExternalRef；另准备未登录/已登录请求、正常/失败 audit、并发 retention、三 Backend writer 和可暂停的 delete owner。
+- **When**：未登录和已登录分别直接调用 `POST /api/activity/operations` 执行 export/delete；成功 delete 后尝试 UPDATE job 的 scope/cutoff/auth/digest、倒退 cursor/count或把 completed 复活，再立即查询；持续三 Backend 各 50 events/s，依次 kill owner、停止全部 Backend、再启动一个 Backend；分别注入 Content/export/delete requested/completed audit failure。
+- **Then**：未登录返回 401；已登录 export 单次请求返回当前 snapshot，已登录 delete 单次请求在 500 ms 内提交 `pending job + delete_requested audit` 并返回 202。job scope/cutoff/auth/digest 不可更新，progress trigger 拒绝 cursor/count/time 倒退、非法状态转换与 completed 复活；job commit 后查询立即隐藏 cutoff 内目标；runner 每事务 ≤1000 Facts 且 owned mutation bytes ≤8 MiB，crash 后由新 owner 从最后 cursor 续跑，最终目标 rows/owned Content/Ref 为 0、新 Fact 与 B 不变，并有 delete_completed audit。
+- **失败判断**：仍要求 preview/confirmation ticket、已登录普通请求不能执行、未登录可执行、delete 请求扫描/删除全 scope或持 writer lock >500 ms、job 前数据仍可查询、跨 cutoff/Project 删除、batch 越界、crash 后从头/永久停滞、audit 失败仍返回 body/创建 job/报告完成，或 username/正文/token 出现在 argv、URL、log、config、audit。
+- **验证方式**：Stable/Beta/Dev API/CLI/UI、3M fixture、未登录/已登录矩阵、job pause/kill/takeover harness、cursor `EXPLAIN QUERY PLAN`、writer latency/ACK manifest、before/after SQLite owner/FK/count、audit rows 与 export scan。
 
 ### ADF-026 第一阶段没有 Task/Goal/Outcome/Learning
 
@@ -338,3 +340,12 @@ git diff --check
 ## 执行记录
 
 - 2026-07-11：依据用户新边界重写计划与测试合同；当前只完成文档/原型设计，功能代码与本文件用例均未执行。
+- 2026-07-12：完成 P0～P4 功能实现与以下真实证据：
+  - `pnpm activity:verify`：3 个独立进程首次并发初始化并共享 WAL，任一 Store 可见 300 Facts；幂等/冲突、sequence gap close、Content DLP+解密、冻结 export snapshot、Activity-key audit HMAC、7/30 天留存、delete cutoff、单 active job、blocked→恢复、maintenance fencing、低配额下丢弃 Content 但保留 metadata Fact、Verification 禁用、future schema fail-closed、`0700/0600` 权限全部通过。
+  - `RUNWEAVE_ACTIVITY_PACKAGED_RESOURCES=... RUNWEAVE_ACTIVITY_EXTERNAL_RELEASE=... node scripts/verify-activity-sqlite-runtime.mjs`：workspace Node、Electron staged binding、packaged Resources、external runtime release 四条路径通过，Electron 版本为 `33.4.11`。
+  - `pnpm toolkit:verify-hooks`：Toolkit Hook 源与 Electron Resources 同步，Query/Response 与 PreToolUse tool ID/name/input 显式字段随 Hook 投递且 App Server 不构成依赖。
+  - 真实隔离 Backend `127.0.0.1:5129` + Frontend `127.0.0.1:5189`：`playwright-cli` 验证 Facts、Recorded detail、短期 Content、Sources、Data Policy 与 delete completed polling；console error 为 0，证据截图为 `artifacts/activity-real-ui.png`。
+  - 真实 CLI：record started/completed 均返回 committed；facts/sources 在 `--plain` 下仍输出合法 JSON；不可达 Backend 退出码为 1 且明确输出 `Activity event was not recorded`。
+  - 产品原型 `docs/prototypes/system-activity-data-foundation/` 和架构流程 `docs/architecture-flows/system-activity-data-foundation-flow/` 已用 `playwright-cli` 遍历全部视图/场景，console error 为 0。
+  - 仓库门禁：`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm architecture:check`、`git diff --check` 全部通过；架构报告为 `over600=0`、runtime/type-only cycle `0/0`。
+- 尚未执行，因此不得标记 ADF-001～ADF-029 全量通过：ADF-013 的 3 Backend × 50 events/s × 10 分钟；ADF-016/023/025 的 3,000,000-row 性能与完整 snapshot/delete race；ADF-025 的完整 token/audit/crash/blocked/takeover 矩阵；ADF-028 的真实 `SQLITE_FULL`/corrupt/Keychain 故障矩阵；真实 Stable/Beta Desktop 并行与 external runtime rollback 安装流程。上述项目保持上线阻断门禁。

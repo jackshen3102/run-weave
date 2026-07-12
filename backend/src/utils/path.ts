@@ -20,6 +20,30 @@ interface StorageEnv extends BrowserProfileStorageEnv {
   AUTH_STORE_FILE?: string;
   TERMINAL_SESSION_STORE_FILE?: string;
   RUNWEAVE_BACKEND_LOG_DIR?: string;
+  RUNWEAVE_ACTIVITY_HOME?: string;
+  RUNWEAVE_ACTIVITY_TEST_MODE?: string;
+}
+
+export interface ActivityStoragePaths {
+  activityHomeDir: string;
+  activityDatabaseFile: string;
+}
+
+export function resolveActivityStoragePaths(
+  env: NodeJS.ProcessEnv,
+  homeDir: string = os.homedir(),
+): ActivityStoragePaths {
+  const testHome =
+    env.RUNWEAVE_ACTIVITY_TEST_MODE === "true"
+      ? expandHomePath(env.RUNWEAVE_ACTIVITY_HOME, homeDir)
+      : undefined;
+  const activityHomeDir = path.resolve(
+    testHome ?? path.join(homeDir, ".runweave", "activity"),
+  );
+  return {
+    activityHomeDir,
+    activityDatabaseFile: path.join(activityHomeDir, "activity.sqlite"),
+  };
 }
 
 export function resolveStoragePaths(

@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'for root in \"${RUNWEAVE_TOOLKIT_PLUGIN_ROOT:-}\" \"__PLUGIN_DIR__\" . \"${CODEX_PLUGIN_ROOT:-}\" \"$HOME/.codex/plugins/cache/runweave/toolkit/latest\" \"$HOME/.codex/plugins/cache/runweave/toolkit\"/* \"${CLAUDE_PLUGIN_ROOT:-}\"; do if [ -n \"$root\" ] && [ -f \"$root/hooks/runweave-hook-dispatch.cjs\" ]; then exec node \"$root/hooks/runweave-hook-dispatch.cjs\"; fi; done; exit 0'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": ".*",

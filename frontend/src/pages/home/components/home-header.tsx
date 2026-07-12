@@ -3,7 +3,7 @@ import { ConnectionSwitcher } from "../../../components/connection-switcher";
 import { RuntimeMonitorBadge } from "../../../components/runtime-monitor-badge";
 import { ThemeToggle } from "../../../components/theme-toggle";
 import { Button } from "../../../components/ui/button";
-import { Activity } from "lucide-react";
+import { Activity, Database } from "lucide-react";
 
 interface HomeHeaderProps {
   terminalLoading: boolean;
@@ -14,6 +14,7 @@ interface HomeHeaderProps {
   onOpenConnectionManager?: () => void;
   onOpenTerminal: () => void;
   onOpenSystemMonitor?: () => void;
+  onOpenActivity: () => void;
   onOpenChangePassword: () => void;
   onLogout: () => void;
 }
@@ -27,6 +28,7 @@ export function HomeHeader({
   onOpenConnectionManager,
   onOpenTerminal,
   onOpenSystemMonitor,
+  onOpenActivity,
   onOpenChangePassword,
   onLogout,
 }: HomeHeaderProps) {
@@ -72,6 +74,15 @@ export function HomeHeader({
             System Monitor
           </Button>
         ) : null}
+        <Button
+          variant="secondary"
+          size="sm"
+          className="rounded-full px-4"
+          onClick={onOpenActivity}
+        >
+          <Database className="mr-2 h-4 w-4" />
+          Activity
+        </Button>
         <Button
           variant="ghost"
           size="sm"

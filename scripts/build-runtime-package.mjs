@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { resourcesBackendDir } from "../electron/scripts/activity-sqlite-runtime-paths.mjs";
 
 const repoRoot = process.cwd();
 const artifactsRoot = path.resolve(
@@ -127,6 +128,9 @@ if (!existsSync(backendEntry)) {
 if (!existsSync(cliEntry)) {
   throw new Error("CLI bundle is missing electron/dist/cli/index.cjs");
 }
+if (!existsSync(path.join(resourcesBackendDir, "activity-sqlite-worker.cjs"))) {
+  throw new Error("Activity SQLite Electron runtime is missing");
+}
 rmSync(releaseDir, { recursive: true, force: true });
 mkdirSync(path.join(releaseDir, "frontend"), { recursive: true });
 mkdirSync(path.join(releaseDir, "backend"), { recursive: true });
@@ -135,14 +139,22 @@ cpSync(frontendDist, path.join(releaseDir, "frontend", "dist"), {
   recursive: true,
 });
 cpSync(backendEntry, path.join(releaseDir, "backend", "index.cjs"));
+cpSync(resourcesBackendDir, path.join(releaseDir, "backend"), {
+  recursive: true,
+  dereference: true,
+});
 cpSync(cliEntry, path.join(releaseDir, "cli", "index.cjs"));
 
 const files = listFiles(releaseDir)
   .filter((filePath) => filePath !== "manifest.json")
   .map((filePath) => ({
     path: filePath,
+    size: statSync(path.join(releaseDir, filePath)).size,
     sha256: sha256(path.join(releaseDir, filePath)),
   }));
+const treeSha256 = createHash("sha256")
+  .update(files.map((file) => `${file.path}\0${file.size}\0${file.sha256}`).join("\n"))
+  .digest("hex");
 
 const manifest = {
   schemaVersion: 1,
@@ -159,11 +171,16 @@ const manifest = {
   },
   backend: {
     entry: "backend/index.cjs",
+    activityWorkerEntry: "backend/activity-sqlite-worker.cjs",
+    betterSqlitePackageDir: "backend/node_modules/better-sqlite3",
+    betterSqliteNativeBinding:
+      "backend/node_modules/better-sqlite3/build/Release/better_sqlite3.node",
   },
   cli: {
     entry: "cli/index.cjs",
   },
   files,
+  treeSha256,
 };
 
 writeFileSync(

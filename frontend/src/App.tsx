@@ -25,6 +25,7 @@ import { ConnectionsPage } from "./pages/connections-page";
 import { SystemMonitorPage } from "./pages/system-monitor-page";
 import { TerminalRoutePage } from "./pages/terminal-page";
 import { PrototypesPage } from "./pages/prototypes-page";
+import { ActivityPage } from "./pages/activity-page";
 
 const WEB_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_TOKEN_STORAGE_KEY = "viewer.auth.token";
@@ -378,6 +379,24 @@ export default function App() {
               onOpenConnectionManager={
                 isElectron ? openConnectionManager : undefined
               }
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path="/activity"
+        element={
+          needsConnection ? (
+            <Navigate to="/connections" replace />
+          ) : isAuthChecking ? (
+            authPendingView
+          ) : token ? (
+            <ActivityPage
+              apiBase={apiBase}
+              token={token}
+              onNavigateHome={() => window.location.assign(HOME_PATH)}
             />
           ) : (
             <Navigate to="/login" replace />
