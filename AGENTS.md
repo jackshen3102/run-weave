@@ -54,6 +54,15 @@
 - 分工：`$computer-use` 管本机桌面端、系统弹窗、应用启动/重启、菜单、安装器，以及进入 Runweave 桌面端具体页面；`$toolkit:playwright-cli` 管打开 Web/App 页面、点击、输入、截图、读 DOM 和浏览器自动化验收。
 - 涉及浏览器页面复现、修复或验收时，必须用 `$toolkit:playwright-cli`，不要用 `$computer-use` 或其它方案替代。两端都涉及时，先用 `$computer-use` 把环境准备到目标状态，再用 `$toolkit:playwright-cli` 做页面级验证与取证。
 
+### Runweave 变更验证门禁
+
+- 修复 Bug、实现功能或重构完成代码修改后，只要改动涉及运行行为、共享协议、服务生命周期或 UI/CDP 验收，必须使用 `$toolkit:runweave-change-validation`，再决定验证环境。纯诊断、只读评审和纯文档改动不触发。
+- 顺序固定为：完成最小代码修改 → 固定本次 patch 边界 → 在只包含本次 patch 的 source root 首次执行无显式 profile 的 `pnpm dev:session --dry-run --json` → 检查影响闭包 → 启动、验收并停止 Dev Session。
+- planner 给出的范围高于预期时，先检查是否误改公共契约或扩大消费者闭包；禁止显式向下降级。用户明确要求安装态、跨版本或桌面目标时可以提升 profile。
+- 未提交代码的验证环境只允许通过 `pnpm dev:session` 启动，后续只通过 `dev:status`、`dev:open`、`dev:stop` 管理；其余直接启动 Backend、App Server、Electron、Beta、手工 profile/端口或跳过 planner 的入口一律视为绕过。目标入口只从 `dev:status` 和 `dev:open` 解析。
+- 当前工作区包含无关改动时，使用独立 worktree 仅应用本次 patch，不 stash、reset 或混入他人改动；验收结束必须 `dev:stop` 并确认 dedicated 资源已清理。
+- `validationSessionId` 不允许任意命名：默认让第一次 `dev:session start` 自动生成并从 JSON 结果捕获；必须预先声明时使用 `rcv-YYYYMMDD-<hash6>`，其中 `hash6` 固定取 `SHA-256("<baselineRevision>\n<scenarioId>")` 前 6 位小写十六进制。与 `$toolkit:reproduce-before-fix` 组合时修复前后复用该 ID；第二次启动前先停止 Session 并归档 before manifest/证据，最终按 Before/After 并列呈现。同一 ID 因既有用户现场无法复用时，必须记录原 session ID、验证 session ID 和不能复用的原因。
+
 ## 编码约定
 
 - 前端与 App 代码优先使用 `ahooks` 的 `useMemoizedFn` 处理稳定函数引用；如需使用 `useCallback` / `React.useCallback`，先说明原因与替代方案，不要静默引入。

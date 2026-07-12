@@ -60,7 +60,45 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       session.cwd,
     );
     const prepared = await this.prepareInitialAcceptance(input, projectRoot);
-
+    const runId = createAgentTeamRunId(input.terminalSessionId);
+    const reviewCheckpointMode =
+      input.options?.reviewCheckpointMode ?? "disabled";
+    let reviewCheckpoint: AgentTeamRun["reviewCheckpoint"] = null;
+    if (reviewCheckpointMode === "local_commit") {
+      const preflight = await this.reviewCheckpointGit.preflight(projectRoot);
+      for (const project of this.terminalSessionManager.listProjects()) {
+        const runs = await this.runStore.listRuns(project.id);
+        const owner = runs.find(
+          (candidate) =>
+            candidate.runId !== runId &&
+            candidate.status !== "done" &&
+            candidate.status !== "failed" &&
+            candidate.reviewCheckpoint?.repoRoot === preflight.repoRoot,
+        );
+        if (owner) {
+          throw new AgentTeamError(
+            409,
+            `当前 Git worktree 已被 checkpoint run ${owner.runId} 占用`,
+          );
+        }
+      }
+      const branch = buildReviewCheckpointBranch(runId);
+      await this.reviewCheckpointGit.createRunBranch(
+        preflight.repoRoot,
+        branch,
+      );
+      reviewCheckpoint = {
+        mode: "local_commit",
+        repoRoot: preflight.repoRoot,
+        originalBranch: preflight.originalBranch,
+        branch,
+        taskBaseCommit: preflight.taskBaseCommit,
+        lastReviewedCommit: preflight.taskBaseCommit,
+        pendingReview: null,
+        checkpoints: [],
+        finalReviewedCommit: null,
+      };
+    }
     // Ensure the panel workspace so worker split is possible later.
     let mainPanelId: string | null = null;
     if (this.tmuxService) {
@@ -87,16 +125,20 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     }
     const now = new Date().toISOString();
     const run: AgentTeamRun = {
-      runId: createAgentTeamRunId(input.terminalSessionId),
+      runId,
       projectId: input.projectId,
       terminalSessionId: input.terminalSessionId,
       mainPanelId,
       phase: "intake",
       status: "running",
-      options: { autoApproveSplit: input.options?.autoApproveSplit ?? false },
+      options: {
+        autoApproveSplit: input.options?.autoApproveSplit ?? false,
+        reviewCheckpointMode,
+      },
       terminal,
       task,
       verification: prepared.verification,
+      reviewCheckpoint,
       activeWorkerRole: null,
       activeWorkerDispatch: null,
       clarify: [],
@@ -428,4 +470,9 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     }
     return run;
   }
+}
+
+function buildReviewCheckpointBranch(runId: string): string {
+  const suffix = runId.replace(/^atr_/, "").replace(/[^a-zA-Z0-9._-]+/g, "-");
+  return `runweave/agt-${suffix}`;
 }

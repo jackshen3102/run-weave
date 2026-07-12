@@ -100,6 +100,7 @@ export function createActiveWorkerDispatch(
   worker: Pick<AgentTeamWorker, "role" | "panelId" | "tmuxPaneId">,
   requestedAt: string,
   outboxMtimeMs: number | null,
+  reviewTarget: AgentTeamActiveWorkerDispatch["reviewTarget"] = null,
 ): AgentTeamActiveWorkerDispatch {
   return {
     role: worker.role,
@@ -107,7 +108,34 @@ export function createActiveWorkerDispatch(
     tmuxPaneId: worker.tmuxPaneId ?? null,
     requestedAt,
     outboxMtimeMs,
+    reviewTarget,
   };
+}
+
+export function completionReviewTargetMismatch(
+  run: AgentTeamRun,
+  outbox: AgentTeamWorkerOutbox,
+): string | null {
+  if (outbox.role !== "code_review" || !run.reviewCheckpoint) {
+    return null;
+  }
+  const expected = run.activeWorkerDispatch?.reviewTarget;
+  const actual = outbox.reviewTarget;
+  if (!expected || !actual) {
+    return "review_target_missing";
+  }
+  if (
+    expected.scope !== actual.scope ||
+    expected.baseCommit !== actual.baseCommit ||
+    expected.targetTree !== actual.targetTree ||
+    expected.planSha256 !== actual.planSha256 ||
+    expected.testCaseSha256 !== actual.testCaseSha256 ||
+    expected.requestedAt !== actual.requestedAt ||
+    expected.changedPaths.join("\0") !== actual.changedPaths.join("\0")
+  ) {
+    return "review_target_mismatch";
+  }
+  return null;
 }
 
 export function resolveActiveWorkerDispatch(
@@ -142,9 +170,19 @@ export function resolveActiveWorkerDispatch(
       worker,
       recheckCase.recheckRequestedAt,
       recheckCase.recheckOutboxMtimeMs ?? null,
+      worker.role === "code_review"
+        ? (run.reviewCheckpoint?.pendingReview ?? null)
+        : null,
     );
   }
-  return createActiveWorkerDispatch(worker, run.updatedAt, null);
+  return createActiveWorkerDispatch(
+    worker,
+    run.updatedAt,
+    null,
+    worker.role === "code_review"
+      ? (run.reviewCheckpoint?.pendingReview ?? null)
+      : null,
+  );
 }
 
 export function completionSignalWorkerMismatch(

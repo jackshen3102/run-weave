@@ -51,7 +51,45 @@ export interface AgentTeamVerificationConfig {
   planFilePath?: string | null;
   testCaseFilePath?: string | null;
   generatedTestCaseFilePath?: string | null;
+  planSha256?: string | null;
+  testCaseSha256?: string | null;
+  generatedTestCaseSha256?: string | null;
   acceptanceSource: AgentTeamAcceptanceSource;
+}
+
+export type AgentTeamReviewCheckpointMode = "disabled" | "local_commit";
+export type AgentTeamReviewScope = "full" | "incremental" | "final";
+
+export interface AgentTeamReviewTarget {
+  scope: AgentTeamReviewScope;
+  baseCommit: string;
+  targetTree: string;
+  changedPaths: string[];
+  planSha256: string | null;
+  testCaseSha256: string | null;
+  requestedAt: string;
+}
+
+export interface AgentTeamReviewCheckpoint {
+  sequence: number;
+  commit: string;
+  parentCommit: string;
+  tree: string;
+  reviewRound: number;
+  reviewerPanelId: string | null;
+  createdAt: string;
+}
+
+export interface AgentTeamReviewCheckpointState {
+  mode: "local_commit";
+  repoRoot: string;
+  originalBranch: string;
+  branch: string;
+  taskBaseCommit: string;
+  lastReviewedCommit: string;
+  pendingReview: AgentTeamReviewTarget | null;
+  checkpoints: AgentTeamReviewCheckpoint[];
+  finalReviewedCommit: string | null;
 }
 
 /** A single markdown acceptance case, drafted at proposal, tracked in loop. */
@@ -131,6 +169,7 @@ export interface HumanInterventionNote {
 
 export interface AgentTeamRunOptions {
   autoApproveSplit: boolean;
+  reviewCheckpointMode?: AgentTeamReviewCheckpointMode;
 }
 
 /** Persisted freshness boundary for the worker currently allowed to complete. */
@@ -141,6 +180,7 @@ export interface AgentTeamActiveWorkerDispatch {
   requestedAt: string;
   /** null means the pane-scoped outbox did not exist when work was dispatched. */
   outboxMtimeMs: number | null;
+  reviewTarget?: AgentTeamReviewTarget | null;
 }
 
 export interface AgentTeamRun {
@@ -157,6 +197,7 @@ export interface AgentTeamRun {
   terminal: AgentTeamTerminal;
   task: string;
   verification?: AgentTeamVerificationConfig | null;
+  reviewCheckpoint?: AgentTeamReviewCheckpointState | null;
   /** The only worker role currently allowed to do work in the serial flow. */
   activeWorkerRole?: AgentTeamWorkerRole | null;
   /** Identifies the current dispatch and separates its result from stale outboxes. */
@@ -211,6 +252,8 @@ export interface AgentTeamWorkerOutbox {
   error: string | null;
   completionReason?: string | null;
   finishedAt: string;
+  reviewTarget?: AgentTeamReviewTarget | null;
+  verifiedCheckpointCommit?: string | null;
   findings?: AgentTeamOutboxFinding[];
   resolvedFindings?: AgentTeamOutboxFinding[];
   remainingFindings?: AgentTeamOutboxFinding[];

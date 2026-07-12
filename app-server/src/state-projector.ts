@@ -79,6 +79,10 @@ function buildProjection(event: AppServerEventEnvelope): StateRefUpdate | null {
     projectId: event.scope?.projectId ?? null,
     terminalSessionId: event.scope?.terminalSessionId ?? null,
     terminalPanelId: event.scope?.terminalPanelId ?? null,
+    terminalTmuxPaneId:
+      event.scope?.terminalTmuxPaneId ??
+      readString(payload, "tmuxPaneId") ??
+      null,
     runId: event.scope?.runId ?? null,
     cwd: event.scope?.cwd ?? readString(payload, "cwd"),
     sourceInstanceId: event.source.instanceId,

@@ -242,6 +242,12 @@ export function normalizeAgentTeamWorkerOutbox(
           : "Worker completed",
     error: typeof record.error === "string" ? record.error : null,
     completionReason: record.completionReason ?? options.completionReason ?? null,
+    reviewTarget: normalizeReviewTarget(record.reviewTarget),
+    verifiedCheckpointCommit:
+      typeof record.verifiedCheckpointCommit === "string" &&
+      record.verifiedCheckpointCommit.trim()
+        ? record.verifiedCheckpointCommit.trim()
+        : null,
     finishedAt:
       typeof record.finishedAt === "string"
         ? record.finishedAt
@@ -254,6 +260,40 @@ export function normalizeAgentTeamWorkerOutbox(
       record.acceptanceResults,
       typeof record.error === "string" ? record.error : null,
     ),
+  };
+}
+
+function normalizeReviewTarget(
+  value: AgentTeamWorkerOutbox["reviewTarget"],
+): AgentTeamWorkerOutbox["reviewTarget"] {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  if (
+    !["full", "incremental", "final"].includes(value.scope) ||
+    typeof value.baseCommit !== "string" ||
+    !value.baseCommit.trim() ||
+    typeof value.targetTree !== "string" ||
+    !value.targetTree.trim() ||
+    !Array.isArray(value.changedPaths) ||
+    !value.changedPaths.every((item) => typeof item === "string") ||
+    typeof value.requestedAt !== "string" ||
+    !value.requestedAt.trim()
+  ) {
+    return null;
+  }
+  return {
+    scope: value.scope,
+    baseCommit: value.baseCommit.trim(),
+    targetTree: value.targetTree.trim(),
+    changedPaths: value.changedPaths.map((item) => item.trim()),
+    planSha256:
+      typeof value.planSha256 === "string" ? value.planSha256.trim() : null,
+    testCaseSha256:
+      typeof value.testCaseSha256 === "string"
+        ? value.testCaseSha256.trim()
+        : null,
+    requestedAt: value.requestedAt.trim(),
   };
 }
 

@@ -70,6 +70,13 @@ export function buildWorkerStartupPrompt(params: {
         : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skipReason?, evidence[] }]。",
       "首轮按测试案例顺序执行；遇到阻断失败可以停止，但必须在 outbox 写清失败 case、失败步骤和证据。",
     );
+    if (run.reviewCheckpoint) {
+      lines.push(
+        `本轮被测 checkpoint：${run.reviewCheckpoint.lastReviewedCommit}`,
+        "开始验收前执行 git rev-parse HEAD 并确认等于该 commit。",
+        `outbox 顶层 verifiedCheckpointCommit 必须等于 "${run.reviewCheckpoint.lastReviewedCommit}"。`,
+      );
+    }
   } else if (worker.role === "code_review") {
     lines.push(
       "",
@@ -80,6 +87,7 @@ export function buildWorkerStartupPrompt(params: {
         ? `把审查门禁结果写进 ${outboxPath} 的 acceptanceResults。优先使用 Code Review/代码审查相关 caseId；如果没有，使用最相关的 caseId。`
         : "把审查门禁结果写进 outbox 的 acceptanceResults。优先使用 Code Review/代码审查相关 caseId；如果没有，使用最相关的 caseId。",
     );
+    lines.push(...formatReviewTargetInstructions(run));
   }
   lines.push(
     "",
@@ -161,6 +169,7 @@ export function buildWorkerRecheckPrompt(params: {
         ].filter((item): item is string => Boolean(item))
       : []),
     ...cases.map(formatAcceptancePromptLine),
+    ...(isReviewWorker ? formatReviewTargetInstructions(run) : []),
     ...(skippedCases.length > 0
       ? [
           "",
@@ -182,7 +191,40 @@ export function buildWorkerRecheckPrompt(params: {
           ...(isReviewWorker ? [FINDING_SCHEMA] : []),
         ]
       : []),
+    ...(worker.role === "behavior_verify" && run.reviewCheckpoint
+      ? [
+          `本轮被测 checkpoint：${run.reviewCheckpoint.lastReviewedCommit}`,
+          "开始验收前执行 git rev-parse HEAD 并确认等于该 commit。",
+          `outbox 顶层 verifiedCheckpointCommit 必须等于 "${run.reviewCheckpoint.lastReviewedCommit}"。`,
+        ]
+      : []),
   ].join("\n");
+}
+
+function formatReviewTargetInstructions(run: AgentTeamRun): string[] {
+  const target = run.reviewCheckpoint?.pendingReview;
+  if (!target) {
+    return [];
+  }
+  const scopeDescription =
+    target.scope === "incremental"
+      ? "审查该增量 diff，同时检查失败链路、受影响调用方/消费者和 resolved findings 回归点。"
+      : target.scope === "final"
+        ? "这是最终收口审查：审查任务起点到最新 checkpoint 的完整 diff。"
+        : "这是首次审查：审查任务起点以来的完整 staged diff。";
+  return [
+    "",
+    "Review checkpoint 范围：",
+    `- scope=${target.scope}`,
+    `- baseCommit=${target.baseCommit}`,
+    `- targetTree=${target.targetTree}`,
+    `- changedPaths=${target.changedPaths.join(", ")}`,
+    `- planSha256=${target.planSha256 ?? "null"}`,
+    `- testCaseSha256=${target.testCaseSha256 ?? "null"}`,
+    `- requestedAt=${target.requestedAt}`,
+    `- ${scopeDescription}`,
+    "- outbox 顶层 reviewTarget 必须原样回显本 prompt 的 scope/baseCommit/targetTree/changedPaths/planSha256/testCaseSha256/requestedAt。",
+  ];
 }
 
 export function buildHumanNotePrompt(note: string): string {

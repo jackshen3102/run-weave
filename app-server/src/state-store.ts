@@ -11,6 +11,10 @@ export interface AppServerStateStoreSnapshot {
   threads: AppServerThreadRef[];
 }
 
+type PersistedAppServerThreadRef = AppServerThreadRef & {
+  terminalTmuxPaneId?: string | null;
+};
+
 export interface StateRefIdentity {
   agent: AppServerAgentKind;
   threadId: string;
@@ -26,6 +30,7 @@ export interface StateRefUpdate {
   projectId: string | null;
   terminalSessionId: string | null;
   terminalPanelId: string | null;
+  terminalTmuxPaneId: string | null;
   runId: string | null;
   cwd: string | null;
   sourceInstanceId: string | null;
@@ -54,28 +59,36 @@ export interface StateListOptions {
 
 export class AppServerStateStore {
   private readonly threads = new Map<string, AppServerThreadRef>();
+  private readonly threadTmuxPaneIds = new Map<string, string | null>();
 
   constructor(private readonly threadStatePath: string) {}
 
   async initialize(): Promise<void> {
     await mkdir(path.dirname(this.threadStatePath), { recursive: true });
     this.threads.clear();
-    for (const thread of await readStateArray<AppServerThreadRef>(
+    this.threadTmuxPaneIds.clear();
+    for (const persistedThread of await readStateArray<PersistedAppServerThreadRef>(
       this.threadStatePath,
       isThreadRef,
     )) {
+      const { terminalTmuxPaneId = null, ...thread } = persistedThread;
       this.threads.set(thread.threadId, thread);
+      this.threadTmuxPaneIds.set(thread.threadId, terminalTmuxPaneId);
     }
   }
 
   clear(): void {
     this.threads.clear();
+    this.threadTmuxPaneIds.clear();
   }
 
   async persist(): Promise<void> {
     await writeJsonFile(
       this.threadStatePath,
-      this.listThreads({ limit: 10_000 }),
+      this.listThreads({ limit: 10_000 }).map((thread) => ({
+        ...thread,
+        terminalTmuxPaneId: this.threadTmuxPaneIds.get(thread.threadId) ?? null,
+      })),
     );
   }
 
@@ -89,6 +102,10 @@ export class AppServerStateStore {
     return this.threads.get(threadId) ?? null;
   }
 
+  getThreadTmuxPaneId(threadId: string): string | null {
+    return this.threadTmuxPaneIds.get(threadId) ?? null;
+  }
+
   listThreads(options: Partial<StateListOptions>): AppServerThreadRef[] {
     return filterStateRefs([...this.threads.values()], options);
   }
@@ -96,6 +113,8 @@ export class AppServerStateStore {
   upsertThread(update: StateRefUpdate): StateStoreChange<AppServerThreadRef> {
     this.deleteFallbackThreadIfRealThreadArrived(update);
     const previous = this.threads.get(update.threadId) ?? null;
+    const previousTmuxPaneId =
+      this.threadTmuxPaneIds.get(update.threadId) ?? null;
     const current: AppServerThreadRef = {
       threadId: update.threadId,
       agent: update.agent,
@@ -116,10 +135,14 @@ export class AppServerStateStore {
       updatedAt: update.updatedAt,
     };
     this.threads.set(current.threadId, current);
+    this.threadTmuxPaneIds.set(current.threadId, update.terminalTmuxPaneId);
     return {
       previous,
       current,
-      changed: !previous || !stateRefsEqual(previous, current),
+      changed:
+        !previous ||
+        !stateRefsEqual(previous, current) ||
+        previousTmuxPaneId !== update.terminalTmuxPaneId,
     };
   }
 
@@ -129,7 +152,9 @@ export class AppServerStateStore {
     if (isFallbackThreadId(update.threadId)) {
       return;
     }
-    this.threads.delete(buildFallbackThreadId(update));
+    const fallbackThreadId = buildFallbackThreadId(update);
+    this.threads.delete(fallbackThreadId);
+    this.threadTmuxPaneIds.delete(fallbackThreadId);
   }
 }
 
@@ -196,11 +221,16 @@ async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function isThreadRef(value: unknown): value is AppServerThreadRef {
+function isThreadRef(value: unknown): value is PersistedAppServerThreadRef {
   if (!isStateRef(value)) {
     return false;
   }
-  return typeof value.threadId === "string";
+  return (
+    typeof value.threadId === "string" &&
+    (value.terminalTmuxPaneId === undefined ||
+      value.terminalTmuxPaneId === null ||
+      typeof value.terminalTmuxPaneId === "string")
+  );
 }
 
 function isStateRef(value: unknown): value is Record<string, unknown> & {
