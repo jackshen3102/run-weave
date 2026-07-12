@@ -142,6 +142,11 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
     ["-C", "frontend", "exec", "vite", "build", "--outDir", frontendDist],
     { cwd: ROOT, env },
   );
+  await runCheckedCommand(
+    "node",
+    ["scripts/prepare-better-sqlite3-runtime.mjs"],
+    { cwd: ELECTRON_DIR, env },
+  );
   await runCheckedCommand("node", ["scripts/bundle.mjs"], {
     cwd: ELECTRON_DIR,
     env: { ...env, RUNWEAVE_ELECTRON_BUNDLE_OUTDIR: electronDist },
