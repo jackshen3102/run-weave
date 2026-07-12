@@ -15,6 +15,7 @@ description: 在 Runweave 仓库完成代码修改后，根据本次真实 diff 
 - 未提交代码的验证环境只允许通过 `pnpm dev:session` 启动，并只用 `dev:status`、`dev:open`、`dev:stop` 管理生命周期。Agent 直接调用 Backend、App Server、Electron、Beta、手工 profile/端口或任何跳过 planner 的入口都视为绕过；Dev Session 内部调用的 adapter 不受此限制。
 - 当前工作区有无关改动时，使用只包含本次 patch 的独立 worktree；禁止 stash、reset 或混入他人改动。
 - 浏览器与桌面行为必须真实取证，静态检查不能代替行为验收。
+- Runweave UI/浏览器验收只能显式附着 `dev:open` 返回的 CDP endpoint。禁止使用 `playwright-cli open`、系统浏览器、headless 浏览器、默认 endpoint、环境变量或既有无关 Playwright session 代替目标 surface。
 
 ## 与真实复现的交接契约
 
@@ -99,21 +100,37 @@ node <skill-dir>/scripts/assert-dev-session-status.mjs \
 
 任一 dedicated 服务发生身份漂移、隐式 fallback 或能力退化时停止验收。比如 pane 归属用例要求 tmux，却实际退化为 PTY，不能继续把结果算作通过。
 
-### 4. 只从 Dev Session 解析验收入口
+### 4. 从 Dev Session 解析并附着验收入口
 
 根据行为所在层选择 surface：
 
-- Web 主页面：`web`；
-- Electron 主窗口和终端标签：`desktop`；
-- 终端内嵌 Browser：`terminal-browser`。
+- Electron 主窗口和终端标签：`desktop` CDP；
+- 终端右侧内嵌 Browser：`terminal-browser` CDP；
+- Web 主页面：先用 `web` 取得 URL；需要用户可见的右侧验收时，再用 `terminal-browser` 取得 CDP endpoint，把该 URL 导航到本次新建的内嵌 Browser tab。
 
-运行：
+对每个所需 surface 分别运行：
 
 ```bash
 pnpm dev:open --session <id> --surface <surface> --json
 ```
 
-使用输出的 URL/CDP endpoint 和建议的 Playwright session。桌面启动、系统弹窗或菜单准备使用 `$computer-use`；页面 DOM、点击、输入、刷新和截图使用 `$toolkit:playwright-cli`。禁止从环境变量、默认端口、旧 tab 或最近实例猜目标。
+`desktop` 和 `terminal-browser` 的 JSON 必须包含 `health: "ready"`、与目标 Session 一致的 `devSessionId`、`serviceInstanceId`、`endpoint` 和 `suggestedPlaywrightSession`。使用返回值显式附着：
+
+```bash
+playwright-cli -s="<suggestedPlaywrightSession>" attach --cdp="<endpoint>"
+```
+
+不得省略 `--cdp`，不得把 `PLAYWRIGHT_MCP_CDP_ENDPOINT`、默认端口、最近实例、旧 tab 或另一个 Playwright session 当成目标来源。不得执行 `playwright-cli open`；它会创建独立浏览器，不能证明结果来自 Runweave 的目标实例或用户可见 surface。
+
+附着后的操作与清理按 surface 区分：
+
+- `desktop`：读取 tab/page 列表并选择目标 Electron renderer；验收后只执行 `playwright-cli -s="<session>" detach`，不得关闭 page、窗口或 App。
+- `terminal-browser`：先保存现有 tab 列表和原活动 tab，再新建一个本次验收专属 tab；只在该 tab 中导航、操作和取证。验收后关闭这个专属 tab，必要时恢复原活动 tab，再执行 `detach`；不得关闭用户已有 tab 或外部 Browser。
+- 右侧 Web 验收：同时保存 `dev:open --surface web` 返回的 URL 和 `dev:open --surface terminal-browser` 返回的 CDP endpoint；附着 `terminal-browser` 后新建专属 tab 并导航到 Web URL。不得把 URL 交给 `playwright-cli open` 或系统浏览器。
+
+若 attach 失败、endpoint 身份不匹配，或 planner/profile 没有提供用户要求的 CDP surface，立即停止行为验收并报告环境阻塞。可以因为明确的验收目标提升 profile 后重新规划，但不得静默回退到独立、系统级或 headless 浏览器。
+
+桌面启动、系统弹窗或菜单准备使用 `$computer-use`；页面 DOM、点击、输入、刷新和截图使用 `$toolkit:playwright-cli`。每轮证据至少记录 `validationSessionId`、surface、`serviceInstanceId`、CDP endpoint、Playwright session 名、目标 page/tab URL，以及 DOM 或截图证据。
 
 ### 5. 执行真实场景
 
@@ -138,6 +155,7 @@ pnpm dev:stop --session <id> --json
 - planner 的最低 profile 与影响原因；
 - 实际使用的 target profile、ownership 和 surface；
 - `dev:status` / `dev:open` 的关键身份；
+- `playwright-cli attach` 使用的 CDP endpoint、Playwright session、目标 page/tab，以及只清理本次 tab 后成功 `detach` 的结果；
 - 真实验收结果与证据；
 - 同一个 `validationSessionId` 下的 Before/After 对照；
 - `dev:stop` 和资源清理结果；

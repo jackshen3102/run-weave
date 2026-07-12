@@ -60,6 +60,8 @@
 - 顺序固定为：完成最小代码修改 → 固定本次 patch 边界 → 在只包含本次 patch 的 source root 首次执行无显式 profile 的 `pnpm dev:session --dry-run --json` → 检查影响闭包 → 启动、验收并停止 Dev Session。
 - planner 给出的范围高于预期时，先检查是否误改公共契约或扩大消费者闭包；禁止显式向下降级。用户明确要求安装态、跨版本或桌面目标时可以提升 profile。
 - 未提交代码的验证环境只允许通过 `pnpm dev:session` 启动，后续只通过 `dev:status`、`dev:open`、`dev:stop` 管理；其余直接启动 Backend、App Server、Electron、Beta、手工 profile/端口或跳过 planner 的入口一律视为绕过。目标入口只从 `dev:status` 和 `dev:open` 解析。
+- Runweave UI/浏览器验收必须先用 `pnpm dev:open --session <id> --surface <surface> --json` 解析目标，再用 `$toolkit:playwright-cli` 的 `attach --cdp=<endpoint>` 显式附着该实例；禁止用 `playwright-cli open`、系统浏览器、headless 浏览器、默认 endpoint、环境变量或既有无关 Playwright session 替代。附着失败或目标 profile 不提供所需 CDP surface 时必须停止并报告环境阻塞。
+- Electron 主窗口和终端标签使用 `desktop` CDP；终端右侧内嵌 Browser 使用 `terminal-browser` CDP。需要在右侧验收 Web 页面时，分别从 `web` surface 取得 URL、从 `terminal-browser` surface 取得 CDP endpoint，附着后只在本次新建的 Browser tab 中导航。验收结束必须关闭本次新建的 tab 并 `detach`；不得关闭桌面窗口、外部 Browser 或用户已有 tab。
 - 当前工作区包含无关改动时，使用独立 worktree 仅应用本次 patch，不 stash、reset 或混入他人改动；验收结束必须 `dev:stop` 并确认 dedicated 资源已清理。
 - `validationSessionId` 不允许任意命名：默认让第一次 `dev:session start` 自动生成并从 JSON 结果捕获；必须预先声明时使用 `rcv-YYYYMMDD-<hash6>`，其中 `hash6` 固定取 `SHA-256("<baselineRevision>\n<scenarioId>")` 前 6 位小写十六进制。与 `$toolkit:reproduce-before-fix` 组合时修复前后复用该 ID；第二次启动前先停止 Session 并归档 before manifest/证据，最终按 Before/After 并列呈现。同一 ID 因既有用户现场无法复用时，必须记录原 session ID、验证 session ID 和不能复用的原因。
 
