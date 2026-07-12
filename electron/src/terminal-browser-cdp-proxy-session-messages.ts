@@ -9,6 +9,7 @@ import {
 } from "./terminal-browser-cdp-proxy-handler.js";
 import { closeTerminalBrowserTabFromProxy } from "./terminal-browser-view.js";
 import type { CdpProxyConnectionState } from "./terminal-browser-cdp-proxy-types.js";
+import { CDP_PROXY_TRACE_ENABLED } from "./terminal-browser-cdp-proxy-logging.js";
 import {
   getCurrentTargetInfos,
   getTargetInfoForRequest,
@@ -198,11 +199,13 @@ export async function handleSessionMessage(
   }
 
   if (SESSION_TARGET_INTERCEPTS.has(method)) {
-    console.info("[cdp-proxy] intercepted session-level Target command", {
-      id,
-      method,
-      sessionId,
-    });
+    if (CDP_PROXY_TRACE_ENABLED) {
+      console.info("[cdp-proxy] intercepted session-level Target command", {
+        id,
+        method,
+        sessionId,
+      });
+    }
     sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
     return;
   }

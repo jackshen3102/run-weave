@@ -18,13 +18,14 @@ import type {
   UpdateTerminalSessionScrollbackParams,
 } from "./store";
 import { getLiveTerminalScrollback } from "./live-scrollback";
-import {
-  createScrollbackBuffer,
-  readScrollbackBuffer,
-} from "./scrollback-buffer";
 import { LowDbStoreBase } from "./lowdb-store-base";
 
 const LIVE_SCROLLBACK_READ_BYTES = TERMINAL_LIVE_SCROLLBACK_BYTES + 4;
+const UTF8_BOUNDARY_READ_BYTES = 3;
+
+function isUtf8ContinuationByte(byte: number): boolean {
+  return (byte & 0xc0) === 0x80;
+}
 
 export class LowDbScrollbackStore extends LowDbStoreBase {
   async readSessionScrollback(terminalSessionId: string): Promise<string> {
@@ -169,14 +170,29 @@ export class LowDbScrollbackStore extends LowDbStoreBase {
       return;
     }
 
-    const oversizedScrollback = await readFile(scrollbackFile, "utf8");
-    const compactedScrollback = readScrollbackBuffer(
-      createScrollbackBuffer(
-        oversizedScrollback,
-        TERMINAL_COMPACTED_SCROLLBACK_BYTES,
-      ),
+    const bytesToRead = Math.min(
+      stats.size,
+      TERMINAL_COMPACTED_SCROLLBACK_BYTES + UTF8_BOUNDARY_READ_BYTES,
     );
-    await writeFile(scrollbackFile, compactedScrollback, "utf8");
+    const file = await open(scrollbackFile, "r");
+    let compactedScrollback: Buffer;
+    try {
+      const tail = Buffer.allocUnsafe(bytesToRead);
+      const { bytesRead } = await file.read(
+        tail,
+        0,
+        bytesToRead,
+        stats.size - bytesToRead,
+      );
+      let start = Math.max(0, bytesRead - TERMINAL_COMPACTED_SCROLLBACK_BYTES);
+      while (start < bytesRead && isUtf8ContinuationByte(tail[start] ?? 0)) {
+        start += 1;
+      }
+      compactedScrollback = tail.subarray(start, bytesRead);
+    } finally {
+      await file.close();
+    }
+    await writeFile(scrollbackFile, compactedScrollback);
   }
 
   protected async deleteScrollbackFile(

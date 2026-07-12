@@ -17,6 +17,7 @@ import {
   getScopedTargets,
   sendJson,
 } from "./terminal-browser-cdp-proxy-utils.js";
+import { CDP_PROXY_TRACE_ENABLED } from "./terminal-browser-cdp-proxy-logging.js";
 
 export type {
   CdpProxyOptions,
@@ -159,11 +160,13 @@ export async function startCdpProxy(
         return;
       }
 
-      console.info("[cdp-proxy] <<", {
-        id,
-        method,
-        sessionId: sessionId ?? null,
-      });
+      if (CDP_PROXY_TRACE_ENABLED) {
+        console.info("[cdp-proxy] <<", {
+          id,
+          method,
+          sessionId: sessionId ?? null,
+        });
+      }
       void handleMessage(
         connections,
         conn,
