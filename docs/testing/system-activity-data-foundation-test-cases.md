@@ -1,7 +1,7 @@
 # Runweave Backend 内嵌行为数据底座测试用例
 
 > 状态：功能已实施并完成代表性集成/CLI/浏览器/native runtime 验证；放量级与完整故障矩阵尚未全部执行。
-> 对应计划：`docs/plans/2026-07-11-system-activity-data-foundation.md`
+> 架构说明：`docs/architecture-flows/system-activity-data-foundation-flow/`
 > 配套产品原型：`docs/prototypes/system-activity-data-foundation/`
 > 配套架构流程：`docs/architecture-flows/system-activity-data-foundation-flow/`
 > 验证原则：不新增单元测试文件；使用临时数据库、可执行集成脚本、真实 Stable/Beta/Dev、真实 CLI 与 `$playwright-cli` 取证。

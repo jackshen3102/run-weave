@@ -31,8 +31,8 @@
 - 当前正式 App 路径是 `/Applications/Runweave.app`，bundle id 是 `com.runweave.desktop`。
 - 当前正式 Electron userData、browser profile、Desktop Runtime 和 App Server 都有持久化状态，不能作为 Beta 的可写目录复用。
 - 现有更新器能够区分 Desktop Runtime、完整 Desktop App 和 App Server 动作；Beta 必须复用这一组件语义。
-- App Server 已支持不同 home 并存；Beta 目标 home 是 `~/.runweave/app-server-beta`。
-- 目标 Beta App 路径是 `/Applications/Runweave Beta.app`，且必须使用独立 bundle、userData、profile、runtime、update state、日志与 CDP endpoint。
+- App Server 已支持不同 home 并存；默认 Beta 实例目标 home 是 `~/.runweave/app-server-beta/default`。
+- 默认 Beta 实例 App 路径是 `/Applications/Runweave Beta default.app`，且必须使用独立 bundle、userData、profile、runtime、update state、日志与两类 CDP endpoint。
 - 浏览器页面验收必须使用 `$toolkit:playwright-cli`；桌面 App 启停、并存、弹窗和 Dock/窗口验证必须使用 `$computer-use`。
 - 本仓库不新增单元测试文件；静态检查不能替代本文件的真实行为验收。
 
@@ -84,14 +84,14 @@ Given：
 
 When：
 
-1. 在 Stable 终端执行 `pnpm runweave:beta:update`。
+1. 在 Stable 终端执行 `pnpm runweave:beta:update --instance default`。
 2. 使用 `$computer-use` 等待 `Runweave Beta` 窗口出现，同时观察 Stable 窗口。
-3. 执行 `pnpm runweave:beta:status --json`。
-4. 使用 `$toolkit:playwright-cli` 连接 status 返回的 Beta CDP endpoint，读取页面标题、Beta 标识、版本和 source revision。
+3. 执行 `pnpm runweave:beta:status --instance default --json`。
+4. 使用 `$toolkit:playwright-cli` 连接 status 返回的 Beta Desktop CDP endpoint，读取页面标题、Beta 标识、版本和 source revision。
 
 Then：
 
-- `/Applications/Runweave Beta.app` 被安装并启动；
+- `/Applications/Runweave Beta default.app` 被安装并启动；
 - Stable 窗口和开发终端持续存在，Stable Desktop/backend/App Server PID 与基线一致；
 - Beta status 中 Desktop、backend 和 App Server 均属于 `beta`，路径均为 Beta 专属路径；
 - Playwright 读取到 Beta 页面，而不是 Stable 页面。
@@ -110,7 +110,7 @@ Given：Stable 与 Beta 均已安装且健康。
 
 When：
 
-1. 分别再次打开 `/Applications/Runweave.app` 和 `/Applications/Runweave Beta.app`。
+1. 分别再次打开 `/Applications/Runweave.app` 和 `/Applications/Runweave Beta default.app`。
 2. 使用 `$computer-use` 分别聚焦两个窗口，并核对应用名称、图标和 Beta 标识。
 3. 读取两个 App 的进程路径、userData、backend profile lock 和端口。
 
@@ -137,8 +137,8 @@ Given：
 
 When：
 
-1. 执行 `pnpm runweave:beta:update --dry-run`，保存动作输出。
-2. 执行 `pnpm runweave:beta:update`。
+1. 执行 `pnpm runweave:beta:update --instance default --dry-run`，保存动作输出。
+2. 执行 `pnpm runweave:beta:update --instance default`。
 3. 读取 Beta status，并用 `$toolkit:playwright-cli` 验证 Beta 页面加载当前 source revision。
 
 Then：
@@ -172,7 +172,7 @@ When：
 
 Then：
 
-- 只替换 `/Applications/Runweave Beta.app`；
+- 只替换 `/Applications/Runweave Beta default.app`；
 - Beta App 版本或构建 revision 更新并恢复健康；
 - `/Applications/Runweave.app` 内容、版本和进程均未被 Beta 动作修改。
 
@@ -219,7 +219,7 @@ Given：Stable 与 Beta 均健康，且 worktree 同时包含 runtime、Electron
 When：
 
 1. 记录双方进程、版本、runtime pointer、App Server pointer、update state 修改时间和 App bundle 摘要。
-2. 执行 `pnpm runweave:beta:update --dry-run`。
+2. 执行 `pnpm runweave:beta:update --instance default --dry-run`。
 3. 再次读取相同快照。
 
 Then：
@@ -245,8 +245,8 @@ Given：
 
 When：
 
-1. 执行 Beta update，记录非零退出码和失败输出。
-2. 若更新器未自动恢复，执行 `pnpm runweave:beta:rollback`。
+1. 执行 `pnpm runweave:beta:update --instance default`，记录非零退出码和失败输出。
+2. 若更新器未自动恢复，执行 `pnpm runweave:beta:rollback --instance default`。
 3. 用 `$computer-use` 和 `$toolkit:playwright-cli` 验证恢复后的 Beta。
 
 Then：
@@ -270,14 +270,14 @@ Given：Stable 与 Beta 均健康。
 
 When：
 
-1. 执行 `pnpm runweave:beta:status --json` 并解析 JSON。
-2. 使用返回的 base URL、PID、路径和 CDP endpoint 与真实进程/文件进行交叉核对。
-3. 用 `$toolkit:playwright-cli` 连接返回的 CDP endpoint 并读取 Beta 标识。
+1. 执行 `pnpm runweave:beta:status --instance default --json` 并解析 JSON。
+2. 使用返回的 base URL、PID、路径和 Desktop/Terminal Browser CDP endpoint 与真实进程/文件进行交叉核对。
+3. 用 `$toolkit:playwright-cli` 连接返回的 Desktop CDP endpoint 并读取 Beta 标识。
 4. 扫描 status 输出中的敏感字段名和值模式。
 
 Then：
 
-- JSON 包含计划定义的 channel、source、App、backend、App Server、CDP、上一可用 release 和失败摘要；
+- JSON 包含当前 channel、source、App、backend、App Server、Desktop CDP、Terminal Browser CDP、上一可用 release 和失败摘要；
 - 所有路径和 PID 与真实 Beta 一致；
 - CDP 连接目标明确属于 Beta；
 - 输出不包含 token、密码、JWT、Authorization 或 cookie。
