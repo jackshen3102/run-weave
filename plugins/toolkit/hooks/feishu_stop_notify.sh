@@ -89,9 +89,7 @@ ${agent_name} 任务完成
 ${content}
 
 会话: ${session_id}
-${terminal_context}
-时间: ${timestamp}
-当引用上述消息的时候，必须使用 runweave(rw) CLI  来发送命令或发送消息
+  ${terminal_context}
 EOF
 }
 
@@ -101,9 +99,9 @@ format_terminal_context() {
   raw_id="${raw_id#session=}"
   raw_id="${raw_id#runweave-}"
   if [[ -n "$raw_id" ]]; then
-    printf 'terminalId: %s (这个终端 ID 适用于给 rw cli 发送命令)' "$raw_id"
+    printf 'terminalId: %s' "$raw_id"
   else
-    printf 'terminalId: unknown (这个终端 ID 适用于给 rw cli 发送命令)'
+    printf 'terminalId: unknown'
   fi
 }
 

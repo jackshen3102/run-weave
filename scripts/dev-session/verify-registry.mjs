@@ -20,6 +20,7 @@ import {
   assertPathInside,
 } from "./contracts.mjs";
 import { startSessionServices } from "./services.mjs";
+import { verifyStaleCleanupRetryConvergence } from "./verify-stale-cleanup-retry.mjs";
 import {
   acquireServicePortLease,
   atomicWriteJson,
@@ -267,7 +268,10 @@ export async function verifyRegistry(sourceRoot, temporaryHome) {
       assert(error instanceof DevSessionError);
       assert.equal(error.exitCode, 5);
       assert.equal(error.details.conflict.type, "backend-profile-lock");
-      assert.equal(error.details.conflict.owner.devSessionId, first.devSessionId);
+      assert.equal(
+        error.details.conflict.owner.devSessionId,
+        first.devSessionId,
+      );
       assert.equal(error.details.conflict.owner.pid, process.pid);
       assert.equal(
         error.details.conflict.remediation.command,
@@ -278,7 +282,10 @@ export async function verifyRegistry(sourceRoot, temporaryHome) {
   );
 
   const externalDirectory = path.join(temporaryHome, "outside");
-  const linkedSessionPath = path.join(env.RUNWEAVE_DEV_SESSION_HOME, "dvs-link");
+  const linkedSessionPath = path.join(
+    env.RUNWEAVE_DEV_SESSION_HOME,
+    "dvs-link",
+  );
   await mkdir(externalDirectory, { mode: 0o700 });
   await symlink(externalDirectory, linkedSessionPath, "dir");
   await assert.rejects(
@@ -290,10 +297,7 @@ export async function verifyRegistry(sourceRoot, temporaryHome) {
     (error) => error?.code === "ENOENT",
   );
   await assert.rejects(
-    writeManifest(
-      createManifest({ sourceRoot, sessionId: "dvs-link" }),
-      env,
-    ),
+    writeManifest(createManifest({ sourceRoot, sessionId: "dvs-link" }), env),
     (error) => error instanceof DevSessionError && error.exitCode === 4,
   );
   await assert.rejects(
@@ -363,6 +367,12 @@ export async function verifyRegistry(sourceRoot, temporaryHome) {
   assert.deepEqual(cleanedRecoveryManifest.cleanup.sharedServicesPreserved, [
     "appServer",
   ]);
+  await verifyStaleCleanupRetryConvergence({
+    createManifest,
+    recoverySession,
+    sourceRoot,
+    env,
+  });
   assert.equal((await readManifest(first.devSessionId, env)).state, "ready");
   assert.equal((await readManifest(second.devSessionId, env)).state, "ready");
 
@@ -463,7 +473,10 @@ export function verifyLegacyBackendEnv() {
   assert.equal(env.RUNWEAVE_APP_SERVER_DISCOVERY, "explicit");
 }
 
-export async function verifyBackendProfileLockPublication(sourceRoot, temporaryHome) {
+export async function verifyBackendProfileLockPublication(
+  sourceRoot,
+  temporaryHome,
+) {
   const profileDir = path.join(temporaryHome, "backend-profile-lock");
   const verificationSource = `
     import { mkdir, open, readFile, rm, utimes } from "node:fs/promises";
@@ -537,4 +550,3 @@ export async function verifyBackendProfileLockPublication(sourceRoot, temporaryH
     identityStable: true,
   });
 }
-
