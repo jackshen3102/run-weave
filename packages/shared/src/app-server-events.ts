@@ -163,6 +163,51 @@ export interface AppServerThreadResponse {
   detail?: AppServerThreadDetail | null;
 }
 
+export type AppServerThreadDetailAvailability =
+  | "available"
+  | "provider_unsupported"
+  | "thread_not_found"
+  | "provider_unavailable";
+
+export type AppServerThreadDetailStatus =
+  | "notLoaded"
+  | "idle"
+  | "systemError"
+  | "active";
+
+export interface AppServerThreadMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface AppServerThreadDetailTurn {
+  id: string;
+  status: "completed" | "interrupted" | "failed" | "inProgress";
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  itemsView: "notLoaded" | "summary" | "full";
+  itemCount: number;
+  messages: AppServerThreadMessage[];
+}
+
+export interface AppServerCodexThreadDetail {
+  provider: "codex";
+  threadId: string;
+  preview: string;
+  status: AppServerThreadDetailStatus;
+  createdAt: string;
+  updatedAt: string;
+  turns: AppServerThreadDetailTurn[];
+}
+
+export interface AppServerThreadDetailResponse {
+  thread: AppServerThreadRef;
+  availability: AppServerThreadDetailAvailability;
+  detail?: AppServerCodexThreadDetail;
+}
+
 export interface AppServerSyncStatusResponse {
   enabled: boolean;
   syncDir: string;

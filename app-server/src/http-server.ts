@@ -6,6 +6,7 @@ import type {
   AppServerEventListResponse,
   AppServerSyncStatusResponse,
   AppServerThreadListResponse,
+  AppServerThreadDetailResponse,
   AppServerThreadResponse,
   CreateAppServerEventRequest,
 } from "@runweave/shared/app-server-events";
@@ -16,6 +17,7 @@ import {
 import { rejectNonLoopbackOrigin, requireBearerToken } from "./auth.js";
 import type { AppServerEventCenter } from "./event-center.js";
 import type { TraeThreadLifecycleReader } from "./trae-thread-lifecycle-reader.js";
+import type { CodexThreadDetailReader } from "./codex-app-server-client.js";
 
 const MAX_EVENTS_LIMIT = 500;
 const MAX_STATE_LIMIT = 500;
@@ -120,6 +122,7 @@ export function createHttpApp(options: {
   devSessionId: string | null;
   sourceRevision: string | null;
   traeLifecycleReader: TraeThreadLifecycleReader;
+  codexThreadDetailReader: CodexThreadDetailReader;
 }): express.Express {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
@@ -141,6 +144,7 @@ export function createHttpApp(options: {
         "event-center-v1",
         "dev-session-identity-v1",
         "provider-thread-lifecycle-v1",
+        "thread-detail-v1",
       ],
     });
   });
@@ -213,6 +217,23 @@ export function createHttpApp(options: {
           )
         : null;
       const response: AppServerThreadResponse = { thread, detail };
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/threads/:threadId/detail", async (req, res, next) => {
+    const thread = options.eventCenter
+      .getStateStore()
+      .getThread(req.params.threadId);
+    if (!thread) {
+      res.status(404).json({ message: "Thread not found" });
+      return;
+    }
+    try {
+      const response: AppServerThreadDetailResponse =
+        await options.codexThreadDetailReader.readThreadDetail(thread);
       res.json(response);
     } catch (error) {
       next(error);

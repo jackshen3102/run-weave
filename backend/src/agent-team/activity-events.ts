@@ -29,7 +29,7 @@ export function recordAgentTeamRunTransition(
       payload: {
         phase: current.phase,
         status: current.status,
-        round: current.loop.round,
+        nextRoundIndex: current.loop.round,
         ...(previous ? { previousPhase: previous.phase, previousStatus: previous.status } : {}),
       },
       result:
@@ -47,6 +47,7 @@ export function recordAgentTeamRunTransition(
     dispatch.requestedAt !== previous?.activeWorkerDispatch?.requestedAt
   ) {
     const worker = current.workers.find((item) => item.role === dispatch.role);
+    const dispatchRound = dispatch.round;
     events.push(activity.eventFactory.create({
       eventName: "agent_team.worker.dispatched",
       occurredAt: dispatch.requestedAt,
@@ -61,7 +62,7 @@ export function recordAgentTeamRunTransition(
       payload: {
         workerId: worker?.id ?? null,
         role: dispatch.role,
-        round: dispatch.round ?? current.loop.round,
+        ...(dispatchRound ? { round: dispatchRound } : {}),
         attempt: Math.max(
           1,
           ...current.acceptance
@@ -83,6 +84,7 @@ export function recordAgentTeamRunTransition(
     );
   });
   for (const item of dispatchedCases) {
+    const dispatchRound = current.activeWorkerDispatch?.round;
     events.push(activity.eventFactory.create({
       eventName: "agent_team.case.dispatched",
       occurredAt: item.recheckRequestedAt ?? current.updatedAt,
@@ -98,7 +100,7 @@ export function recordAgentTeamRunTransition(
         sourceCaseId: item.sourceCaseId ?? null,
         sourceFilePath: item.sourceFilePath ?? null,
         workerRole: item.recheckWorkerRole ?? null,
-        round: current.activeWorkerDispatch?.round ?? current.loop.round,
+        ...(dispatchRound ? { round: dispatchRound } : {}),
         attempt: item.recheckAttempt ?? 1,
       },
     }));
@@ -109,6 +111,7 @@ export function recordAgentTeamRunTransition(
     return item.status !== "pending" && item.status !== prior?.status;
   });
   for (const item of recordedCases) {
+    const recordedRound = previous?.activeWorkerDispatch?.round;
     events.push(activity.eventFactory.create({
       eventName: "agent_team.case.result_recorded",
       occurredAt: current.updatedAt,
@@ -124,14 +127,13 @@ export function recordAgentTeamRunTransition(
         reportedStatus: item.status,
         summary: item.resultSummary ?? null,
         evidenceCount: item.evidence.length,
-        round:
-          previous?.activeWorkerDispatch?.round ??
-          Math.max(1, current.loop.round - 1),
+        ...(recordedRound ? { round: recordedRound } : {}),
         attempt: item.recheckAttempt ?? 1,
       },
     }));
   }
   if (recordedCases.length > 0 && previous?.activeWorkerDispatch) {
+    const recordedRound = previous.activeWorkerDispatch.round;
     events.push(activity.eventFactory.create({
       eventName: "agent_team.worker.result_recorded",
       occurredAt: current.updatedAt,
@@ -148,9 +150,7 @@ export function recordAgentTeamRunTransition(
         reportedStatus: recordedCases.some((item) => item.status === "fail")
           ? "failed"
           : "completed",
-        round:
-          previous.activeWorkerDispatch.round ??
-          Math.max(1, current.loop.round - 1),
+        ...(recordedRound ? { round: recordedRound } : {}),
         caseCount: recordedCases.length,
       },
     }));

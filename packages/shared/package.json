@@ -43,6 +43,7 @@
     "./terminal-limits": "./src/terminal-limits.ts",
     "./terminal-preview-core": "./src/terminal-preview-core.ts",
     "./terminal-protocol": "./src/terminal-protocol.ts",
+    "./work-history": "./src/work-history.ts",
     "./voice": "./src/voice.ts"
   },
   "scripts": {

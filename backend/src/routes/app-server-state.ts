@@ -1,6 +1,10 @@
 import { Router } from "express";
-import type { AppServerThreadListResponse, AppServerThreadResponse } from "@runweave/shared/app-server-events";
+import type { AppServerThreadDetailResponse, AppServerThreadListResponse, AppServerThreadResponse } from "@runweave/shared/app-server-events";
 import { discoverAppServer } from "@runweave/shared/app-server/discovery";
+import {
+  AppServerHistoryGateway,
+  AppServerHistoryGatewayError,
+} from "../work-history/app-server-history-gateway";
 
 const MAX_LIMIT = 100;
 const AGENT_VALUES = new Set([
@@ -24,7 +28,9 @@ type StateQuery =
   | { ok: true; params: URLSearchParams }
   | { ok: false; message: string };
 
-export function createAppServerStateRouter(): Router {
+export function createAppServerStateRouter(
+  historyGateway = new AppServerHistoryGateway(),
+): Router {
   const router = Router();
 
   router.get("/threads", async (req, res, next) => {
@@ -76,6 +82,29 @@ export function createAppServerStateRouter(): Router {
       res.json((await response.json()) as AppServerThreadResponse);
     } catch (error) {
       next(error);
+    }
+  });
+
+  router.get("/threads/:threadId/detail", async (req, res) => {
+    const threadId = req.params.threadId.trim();
+    if (!threadId) {
+      res.status(400).json({ message: "Invalid thread id" });
+      return;
+    }
+    try {
+      const response: AppServerThreadDetailResponse =
+        await historyGateway.getThreadDetail(threadId);
+      res.json(response);
+    } catch (error) {
+      const threadNotFound =
+        error instanceof AppServerHistoryGatewayError &&
+        error.code === "thread_not_found";
+      res.status(threadNotFound ? 404 : 503).json({
+        availability: threadNotFound
+          ? "thread_not_found"
+          : "provider_unavailable",
+        message: threadNotFound ? "Thread not found" : "App Server unavailable",
+      });
     }
   });
 
