@@ -56,6 +56,7 @@ export const ACTIVITY_EVENT_NAMES = [
   "user.query.submit_requested",
   "agent.thread.started",
   "agent.thread.resumed",
+  "agent.lifecycle.observed",
   "agent.response.observed",
   "agent.tool.requested",
   "agent.tool.completed",

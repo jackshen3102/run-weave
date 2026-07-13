@@ -1,5 +1,6 @@
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
+import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type {
   PersistedTerminalProjectRecord,
   PersistedTerminalPanelRecord,
@@ -28,8 +29,10 @@ export interface TerminalSessionRecord {
   projectId: string;
   alias: string | null;
   threadId?: string;
+  threadProvider?: TerminalAgentKind;
   preview?: string;
   lastThreadId?: string;
+  lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
   lastThreadUpdatedAt?: Date;
   command: string;
@@ -57,8 +60,10 @@ export interface TerminalPanelRecord {
   alias: string | null;
   role: string | null;
   threadId?: string;
+  threadProvider?: TerminalAgentKind;
   preview?: string;
   lastThreadId?: string;
+  lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
   lastThreadUpdatedAt?: Date;
   agentTeamRunId: string | null;
@@ -130,8 +135,13 @@ export function buildSessionRecord(
     projectId: persisted.projectId,
     alias: persisted.alias ?? null,
     threadId: persisted.threadId,
+    threadProvider:
+      persisted.threadProvider ?? (persisted.threadId ? "codex" : undefined),
     preview: persisted.preview,
     lastThreadId: persisted.lastThreadId,
+    lastThreadProvider:
+      persisted.lastThreadProvider ??
+      (persisted.lastThreadId ? "codex" : undefined),
     lastThreadStatus: persisted.lastThreadStatus,
     ...(persisted.lastThreadUpdatedAt
       ? { lastThreadUpdatedAt: new Date(persisted.lastThreadUpdatedAt) }
@@ -201,8 +211,10 @@ export function toPersistedSession(
     projectId: session.projectId,
     alias: session.alias,
     threadId: session.threadId,
+    threadProvider: session.threadProvider,
     preview: session.preview,
     lastThreadId: session.lastThreadId,
+    lastThreadProvider: session.lastThreadProvider,
     lastThreadStatus: session.lastThreadStatus,
     ...(session.lastThreadUpdatedAt
       ? { lastThreadUpdatedAt: session.lastThreadUpdatedAt.toISOString() }
@@ -237,8 +249,13 @@ export function buildPanelRecord(
     alias: persisted.alias ?? null,
     role: persisted.role ?? null,
     threadId: persisted.threadId,
+    threadProvider:
+      persisted.threadProvider ?? (persisted.threadId ? "codex" : undefined),
     preview: persisted.preview,
     lastThreadId: persisted.lastThreadId,
+    lastThreadProvider:
+      persisted.lastThreadProvider ??
+      (persisted.lastThreadId ? "codex" : undefined),
     lastThreadStatus: persisted.lastThreadStatus,
     ...(persisted.lastThreadUpdatedAt
       ? { lastThreadUpdatedAt: new Date(persisted.lastThreadUpdatedAt) }
@@ -268,8 +285,10 @@ export function toPersistedPanel(
     alias: panel.alias,
     role: panel.role,
     threadId: panel.threadId,
+    threadProvider: panel.threadProvider,
     preview: panel.preview,
     lastThreadId: panel.lastThreadId,
+    lastThreadProvider: panel.lastThreadProvider,
     lastThreadStatus: panel.lastThreadStatus,
     ...(panel.lastThreadUpdatedAt
       ? { lastThreadUpdatedAt: panel.lastThreadUpdatedAt.toISOString() }

@@ -3,12 +3,14 @@ import { TERMINAL_PERSISTED_SCROLLBACK_BYTES } from "@runweave/shared/terminal-l
 interface ScrollbackChunk {
   text: string;
   bytes: number;
+  sequence: number;
 }
 
 export interface ScrollbackBuffer {
   chunks: ScrollbackChunk[];
   totalBytes: number;
   limitBytes: number;
+  nextSequence: number;
 }
 
 function countUtf8Bytes(value: string): number {
@@ -37,7 +39,7 @@ function trimTextToTailBytes(value: string, limitBytes: number): string {
 function normalizeChunk(
   text: string,
   limitBytes: number,
-): ScrollbackChunk | null {
+): Omit<ScrollbackChunk, "sequence"> | null {
   if (!text || limitBytes <= 0) {
     return null;
   }
@@ -66,6 +68,7 @@ export function createScrollbackBuffer(
     chunks: [],
     totalBytes: 0,
     limitBytes,
+    nextSequence: 0,
   };
 
   appendToScrollbackBuffer(buffer, initial);
@@ -81,7 +84,11 @@ export function appendToScrollbackBuffer(
     return;
   }
 
-  buffer.chunks.push(normalized);
+  buffer.chunks.push({
+    ...normalized,
+    sequence: buffer.nextSequence,
+  });
+  buffer.nextSequence += 1;
   buffer.totalBytes += normalized.bytes;
 
   while (buffer.totalBytes > buffer.limitBytes && buffer.chunks.length > 0) {
@@ -95,6 +102,27 @@ export function appendToScrollbackBuffer(
 
 export function readScrollbackBuffer(buffer: ScrollbackBuffer): string {
   return buffer.chunks.map((chunk) => chunk.text).join("");
+}
+
+export function captureScrollbackBufferCursor(
+  buffer: ScrollbackBuffer,
+): number {
+  return buffer.nextSequence;
+}
+
+export function readScrollbackBufferSince(
+  buffer: ScrollbackBuffer,
+  cursor: number,
+): string | null {
+  const firstAvailableSequence =
+    buffer.chunks[0]?.sequence ?? buffer.nextSequence;
+  if (cursor < firstAvailableSequence || cursor > buffer.nextSequence) {
+    return null;
+  }
+  return buffer.chunks
+    .filter((chunk) => chunk.sequence >= cursor)
+    .map((chunk) => chunk.text)
+    .join("");
 }
 
 export function readScrollbackBufferTailLines(

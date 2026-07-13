@@ -1,8 +1,13 @@
-import { stat } from "node:fs/promises";
-import type { AgentTeamAcceptanceEvidence, AgentTeamFindingSeverity, AgentTeamFindingStatus, AgentTeamOutboxFinding, AgentTeamOutboxRecommendation, AgentTeamWorkerOutbox } from "@runweave/shared/agent-team";
+import { open } from "node:fs/promises";
+import type { AgentTeamWorkerOutbox } from "@runweave/shared/agent-team";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { AgentTeamPaths } from "./storage/agent-team-paths";
-import { readJsonFile } from "./storage/json-file";
+import {
+  normalizeEvidenceList,
+  normalizeFindings,
+  normalizeFixVerifications,
+  normalizeRecommendations,
+} from "./outbox-normalizer";
 
 type CompletionEvent = Extract<TerminalEventEnvelope, { kind: "completion" }>;
 type OutboxCandidate = {
@@ -13,6 +18,7 @@ export interface AgentTeamResolvedOutbox {
   outbox: AgentTeamWorkerOutbox;
   path: string;
   mtimeMs: number | null;
+  rawContent: string;
 }
 export interface NormalizeAgentTeamWorkerOutboxOptions {
   terminalSessionId?: string;
@@ -22,28 +28,6 @@ export interface NormalizeAgentTeamWorkerOutboxOptions {
   completionReason?: string | null;
   finishedAt?: string;
 }
-
-const VALID_EVIDENCE_TYPES = new Set<AgentTeamAcceptanceEvidence["type"]>([
-  "screenshot",
-  "dom",
-  "text",
-  "command",
-  "event",
-  "json",
-  "log",
-  "code",
-]);
-const VALID_FINDING_SEVERITIES = new Set<AgentTeamFindingSeverity>([
-  "P0",
-  "P1",
-  "P2",
-  "P3",
-]);
-const VALID_FINDING_STATUSES = new Set<AgentTeamFindingStatus>([
-  "open",
-  "resolved",
-  "informational",
-]);
 
 /**
  * Resolve the worker outbox (with per-case acceptanceResults) for a pane
@@ -63,10 +47,11 @@ export class AgentTeamOutboxResolver {
     event: CompletionEvent,
   ): Promise<AgentTeamResolvedOutbox | null> {
     for (const candidate of this.outboxCandidates(event)) {
-      const outbox = await readJsonFile<AgentTeamWorkerOutbox>(candidate.path);
-      if (!outbox) {
+      const snapshot = await readStableOutboxSnapshot(candidate.path);
+      if (!snapshot) {
         continue;
       }
+      const { outbox, rawContent, mtimeMs } = snapshot;
       if (
         !this.matchesCompletionPane(event, outbox, {
           allowMissingPaneIdentity: candidate.allowMissingPaneIdentity,
@@ -95,13 +80,12 @@ export class AgentTeamOutboxResolver {
           normalized.completionReason ?? event.payload.completionReason,
         finishedAt: normalized.finishedAt ?? event.createdAt,
       };
-      let mtimeMs: number | null = null;
-      try {
-        mtimeMs = (await stat(candidate.path)).mtimeMs;
-      } catch {
-        // The next signal can retry if the file changed during resolution.
-      }
-      return { outbox: resolvedOutbox, path: candidate.path, mtimeMs };
+      return {
+        outbox: resolvedOutbox,
+        path: candidate.path,
+        mtimeMs,
+        rawContent,
+      };
     }
     return null;
   }
@@ -197,7 +181,32 @@ export class AgentTeamOutboxResolver {
     }
     return false;
   }
+}
 
+async function readStableOutboxSnapshot(path: string): Promise<{
+  outbox: AgentTeamWorkerOutbox;
+  rawContent: string;
+  mtimeMs: number;
+} | null> {
+  let handle;
+  try {
+    handle = await open(path, "r");
+    const before = await handle.stat();
+    const rawContent = await handle.readFile({ encoding: "utf8" });
+    const after = await handle.stat();
+    if (before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+      return null;
+    }
+    return {
+      outbox: JSON.parse(rawContent) as AgentTeamWorkerOutbox,
+      rawContent,
+      mtimeMs: after.mtimeMs,
+    };
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
+  }
 }
 
 export function normalizeAgentTeamWorkerOutbox(
@@ -241,7 +250,8 @@ export function normalizeAgentTeamWorkerOutbox(
           ? record.conclusion
           : "Worker completed",
     error: typeof record.error === "string" ? record.error : null,
-    completionReason: record.completionReason ?? options.completionReason ?? null,
+    completionReason:
+      record.completionReason ?? options.completionReason ?? null,
     reviewTarget: normalizeReviewTarget(record.reviewTarget),
     verifiedCheckpointCommit:
       typeof record.verifiedCheckpointCommit === "string" &&
@@ -251,11 +261,12 @@ export function normalizeAgentTeamWorkerOutbox(
     finishedAt:
       typeof record.finishedAt === "string"
         ? record.finishedAt
-        : options.finishedAt ?? new Date(0).toISOString(),
+        : (options.finishedAt ?? new Date(0).toISOString()),
     findings: normalizeFindings(record.findings, "open"),
     resolvedFindings: normalizeFindings(record.resolvedFindings, "resolved"),
     remainingFindings: normalizeFindings(record.remainingFindings, "open"),
     recommendations: normalizeRecommendations(record.recommendations),
+    fixVerifications: normalizeFixVerifications(record.fixVerifications),
     acceptanceResults: normalizeAcceptanceResults(
       record.acceptanceResults,
       typeof record.error === "string" ? record.error : null,
@@ -328,114 +339,6 @@ function normalizeAcceptanceResults(
       ...(typeof result.skipReason === "string" && result.skipReason.trim()
         ? { skipReason: result.skipReason.trim() }
         : {}),
-      evidence: Array.isArray(result.evidence)
-        ? result.evidence
-            .filter(
-              (evidence) =>
-                VALID_EVIDENCE_TYPES.has(evidence.type) &&
-                typeof evidence.ref === "string" &&
-                typeof evidence.label === "string" &&
-                evidence.label.trim() &&
-                typeof evidence.summary === "string" &&
-                evidence.summary.trim(),
-            )
-            .map((evidence) => ({
-              type: evidence.type,
-              label: evidence.label.trim(),
-              summary: evidence.summary.trim(),
-              ...(typeof evidence.detail === "string" && evidence.detail.trim()
-                ? { detail: evidence.detail.trim() }
-                : {}),
-              ref: evidence.ref,
-            }))
-        : [],
+      evidence: normalizeEvidenceList(result.evidence),
     }));
-}
-
-function normalizeFindings(
-  findings: unknown,
-  defaultStatus: AgentTeamFindingStatus,
-): AgentTeamOutboxFinding[] | undefined {
-  if (!Array.isArray(findings)) {
-    return undefined;
-  }
-  const normalized = findings
-    .map((finding) => normalizeFinding(finding, defaultStatus))
-    .filter((finding): finding is AgentTeamOutboxFinding => Boolean(finding));
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function normalizeRecommendations(
-  recommendations: unknown,
-): AgentTeamOutboxRecommendation[] | undefined {
-  if (!Array.isArray(recommendations)) {
-    return undefined;
-  }
-  const normalized = recommendations
-    .map(normalizeRecommendation)
-    .filter((item): item is AgentTeamOutboxRecommendation => Boolean(item));
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function normalizeFinding(
-  finding: unknown,
-  defaultStatus: AgentTeamFindingStatus,
-): AgentTeamOutboxFinding | null {
-  if (!finding || typeof finding !== "object") {
-    return null;
-  }
-  const record = finding as Record<string, unknown>;
-  const severity = normalizeSeverity(record.severity);
-  const title =
-    typeof record.title === "string"
-      ? record.title.trim()
-      : typeof record.summary === "string"
-        ? record.summary.trim().slice(0, 120)
-        : "";
-  const summary = typeof record.summary === "string" ? record.summary.trim() : "";
-  if (!severity || !title || !summary) {
-    return null;
-  }
-  const rawStatus =
-    typeof record.status === "string" ? record.status.trim() : defaultStatus;
-  const status = VALID_FINDING_STATUSES.has(rawStatus as AgentTeamFindingStatus)
-    ? (rawStatus as AgentTeamFindingStatus)
-    : defaultStatus;
-  return {
-    severity,
-    status,
-    title,
-    summary,
-    ...(typeof record.ref === "string" && record.ref.trim()
-      ? { ref: record.ref.trim() }
-      : {}),
-  };
-}
-
-function normalizeRecommendation(
-  recommendation: unknown,
-): AgentTeamOutboxRecommendation | null {
-  if (!recommendation || typeof recommendation !== "object") {
-    return null;
-  }
-  const record = recommendation as Record<string, unknown>;
-  const summary = typeof record.summary === "string" ? record.summary.trim() : "";
-  if (!summary) {
-    return null;
-  }
-  const severity = normalizeSeverity(record.severity);
-  return {
-    ...(severity ? { severity } : {}),
-    summary,
-  };
-}
-
-function normalizeSeverity(value: unknown): AgentTeamFindingSeverity | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const normalized = value.trim().toUpperCase();
-  return VALID_FINDING_SEVERITIES.has(normalized as AgentTeamFindingSeverity)
-    ? (normalized as AgentTeamFindingSeverity)
-    : null;
 }

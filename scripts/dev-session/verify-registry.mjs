@@ -461,6 +461,7 @@ export function verifyLegacyBackendEnv() {
   const env = createBackendEnv({
     baseEnv: explicitAppServer,
     backendPort: 5009,
+    sourceRoot: "/tmp/runweave-source-root",
   });
   assert.equal(
     env.RUNWEAVE_APP_SERVER_URL,
@@ -471,6 +472,10 @@ export function verifyLegacyBackendEnv() {
     explicitAppServer.RUNWEAVE_APP_SERVER_TOKEN,
   );
   assert.equal(env.RUNWEAVE_APP_SERVER_DISCOVERY, "explicit");
+  assert.equal(
+    env.RUNWEAVE_TOOLKIT_PLUGIN_ROOT,
+    path.join("/tmp/runweave-source-root", "electron", "resources"),
+  );
 }
 
 export async function verifyBackendProfileLockPublication(

@@ -131,6 +131,7 @@ export async function createTerminalPanelSplit(
       },
     },
   );
+  await tmuxService.setPanePanelId(splitTarget, panelId);
   const provisionalPanel = await terminalSessionManager.upsertPanel(
     buildSplitPanel(session, splitTarget.paneId, {
       panelId,

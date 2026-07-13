@@ -33,7 +33,11 @@ export class AppServerStateProjector {
     if (event.kind === "thread.state.changed") {
       return { threadChange: null };
     }
-    if (event.kind !== "agent.hook" && event.kind !== "agent.completion") {
+    if (
+      event.kind !== "agent.hook" &&
+      event.kind !== "agent.completion" &&
+      event.kind !== "agent.lifecycle.observed"
+    ) {
       return { threadChange: null };
     }
 
@@ -53,7 +57,9 @@ function buildProjection(event: AppServerEventEnvelope): StateRefUpdate | null {
   const status =
     event.kind === "agent.hook"
       ? readHookStatus(payload)
-      : readCompletionStatus(payload);
+      : event.kind === "agent.completion"
+        ? readCompletionStatus(payload)
+        : readLifecycleStatus(payload);
   if (!status) {
     return null;
   }
@@ -65,12 +71,14 @@ function buildProjection(event: AppServerEventEnvelope): StateRefUpdate | null {
       agent,
       terminalSessionId: event.scope?.terminalSessionId ?? null,
       terminalPanelId: event.scope?.terminalPanelId ?? null,
-      sourceInstanceId: event.source.instanceId,
       threadId: "",
     });
-  const hookEvent = event.kind === "agent.hook" ? readHookEvent(payload) : null;
+  const hookEvent =
+    event.kind === "agent.hook" ? readHookEvent(payload) : undefined;
   const completionReason =
-    event.kind === "agent.completion" ? readCompletionReason(payload) : null;
+    event.kind === "agent.completion"
+      ? readCompletionReason(payload)
+      : undefined;
 
   return {
     agent,
@@ -89,9 +97,30 @@ function buildProjection(event: AppServerEventEnvelope): StateRefUpdate | null {
     lastEventId: event.id,
     lastHookEvent: hookEvent,
     lastCompletionReason: completionReason,
+    ...(event.kind === "agent.lifecycle.observed"
+      ? {
+          lifecycleStatus: readLifecycleAvailability(payload),
+          lastLifecycleType: readString(payload, "observedLifecycle"),
+          lastLifecycleCursor: readString(payload, "lifecycleCursor"),
+        }
+      : {}),
     lastActivityAt: event.createdAt,
     updatedAt: event.createdAt,
   };
+}
+
+function readLifecycleStatus(
+  payload: Record<string, unknown>,
+): AppServerAgentRunStatus | null {
+  const status = readString(payload, "observedStatus");
+  return status === "running" || status === "idle" ? status : null;
+}
+
+function readLifecycleAvailability(
+  payload: Record<string, unknown>,
+): "available" | "degraded" | "unknown" {
+  const status = readString(payload, "lifecycleStatus");
+  return status === "available" || status === "degraded" ? status : "unknown";
 }
 
 function readHookStatus(

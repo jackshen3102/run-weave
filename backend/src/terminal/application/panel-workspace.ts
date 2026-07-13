@@ -12,6 +12,7 @@ import {
 } from "../runtime-launcher";
 import type { TmuxPaneInfo, TmuxService } from "../tmux-service";
 import type { TerminalEventService } from "../terminal-event-service";
+import { hasAgentReadyPrompt } from "../terminal-state-service";
 import { logger } from "../../logging";
 import {
   requireTmuxSession,
@@ -104,13 +105,41 @@ export async function ensureTmuxPanelWorkspace(
         pane,
         existingPanel.activeCommand,
       );
-      const nextTerminalState = getPanelTerminalStateForActiveCommand(
+      let nextTerminalState = getPanelTerminalStateForActiveCommand(
         effectiveActiveCommand,
         existingPanel.terminalState,
       );
-      const shouldClearCodexThreadMetadata =
+      if (
+        nextTerminalState.state === "agent_starting" &&
+        nextTerminalState.agent
+      ) {
+        try {
+          const capture = await tmuxService.capturePane({
+            ...target,
+            paneId: pane.paneId,
+          });
+          if (hasAgentReadyPrompt(nextTerminalState.agent, capture.data)) {
+            nextTerminalState = {
+              state: "agent_idle",
+              agent: nextTerminalState.agent,
+            };
+          }
+        } catch (error) {
+          panelLogger.warn("terminal.panel.ready-prompt.capture-failed", {
+            message: "Could not refresh terminal panel state from pane output",
+            terminalSessionId: session.id,
+            panelId: existingPanel.id,
+            tmuxPaneId: pane.paneId,
+            error,
+          });
+        }
+      }
+      const storedThreadProvider =
+        existingPanel.threadProvider ??
+        (existingPanel.threadId ? "codex" : undefined);
+      const shouldClearAgentThreadMetadata =
         Boolean(existingPanel.threadId || existingPanel.preview) &&
-        nextTerminalState.agent !== "codex" &&
+        nextTerminalState.agent !== storedThreadProvider &&
         !isEnvironmentAssignmentOnlyActiveCommand(effectiveActiveCommand);
       const shouldBackfillSessionAgentMetadata =
         shouldBackfillSessionAgentMetadataToMainPanel(
@@ -127,20 +156,22 @@ export async function ensureTmuxPanelWorkspace(
         existingPanel.activeCommand !== effectiveActiveCommand ||
         existingPanel.status !== "running" ||
         terminalStateChanged ||
-        shouldClearCodexThreadMetadata ||
+        shouldClearAgentThreadMetadata ||
         shouldBackfillSessionAgentMetadata
       ) {
         const updatedAt = new Date();
         existingPanel.cwd = pane.cwd || existingPanel.cwd;
         existingPanel.activeCommand = effectiveActiveCommand;
         existingPanel.terminalState = nextTerminalState;
-        if (shouldClearCodexThreadMetadata) {
+        if (shouldClearAgentThreadMetadata) {
           if (existingPanel.threadId) {
             existingPanel.lastThreadId = existingPanel.threadId;
+            existingPanel.lastThreadProvider = storedThreadProvider;
             existingPanel.lastThreadStatus = "idle";
             existingPanel.lastThreadUpdatedAt = updatedAt;
           }
           delete existingPanel.threadId;
+          delete existingPanel.threadProvider;
           delete existingPanel.preview;
         } else if (shouldBackfillSessionAgentMetadata) {
           await backfillSessionAgentMetadataToPrimaryPanel(
@@ -154,6 +185,12 @@ export async function ensureTmuxPanelWorkspace(
         await terminalSessionManager.upsertPanel(existingPanel);
         changed = true;
       }
+      await syncTmuxPanePanelId(
+        tmuxService,
+        target,
+        pane,
+        existingPanel.id,
+      );
       livePanelIds.push(existingPanel.id);
       continue;
     }
@@ -177,6 +214,7 @@ export async function ensureTmuxPanelWorkspace(
             ),
           });
     await terminalSessionManager.upsertPanel(panel);
+    await syncTmuxPanePanelId(tmuxService, target, pane, panel.id);
     livePanelIds.push(panel.id);
     changed = true;
   }
@@ -239,6 +277,21 @@ export async function ensureTmuxPanelWorkspace(
   }
 
   return workspace;
+}
+
+async function syncTmuxPanePanelId(
+  tmuxService: TmuxService,
+  target: ReturnType<TmuxService["buildTarget"]>,
+  pane: TmuxPaneInfo,
+  panelId: string,
+): Promise<void> {
+  if (pane.runweavePanelId === panelId) {
+    return;
+  }
+  await tmuxService.setPanePanelId(
+    { ...target, paneId: pane.paneId },
+    panelId,
+  );
 }
 
 export async function ensureTerminalPanelWorkspace(

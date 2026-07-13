@@ -14,13 +14,11 @@ function normalizeSource(value) {
   return SOURCES.has(source) ? source : null;
 }
 
-function inferSource() {
-  const explicit = normalizeSource(process.env.RUNWEAVE_HOOK_SOURCE);
-  if (explicit) {
-    return explicit;
+function inferPluginRootSource(value) {
+  if (!value) {
+    return null;
   }
-
-  const pluginRoot = path.resolve(__dirname, "..");
+  const pluginRoot = path.resolve(value);
   if (pluginRoot.includes(`${path.sep}.codex${path.sep}`)) {
     return "codex";
   }
@@ -30,15 +28,33 @@ function inferSource() {
   if (pluginRoot.includes(`${path.sep}.claude${path.sep}`)) {
     return "claude";
   }
+  return null;
+}
 
+function inferSource() {
+  const explicit = normalizeSource(process.env.RUNWEAVE_HOOK_SOURCE);
+  if (explicit) {
+    return explicit;
+  }
+
+  const pluginRootSource = inferPluginRootSource(
+    path.resolve(__dirname, ".."),
+  );
+  if (pluginRootSource) {
+    return pluginRootSource;
+  }
+  const inferredSources = new Set();
   if (process.env.CODEX_PLUGIN_ROOT) {
-    return "codex";
+    inferredSources.add(
+      inferPluginRootSource(process.env.CODEX_PLUGIN_ROOT) || "codex",
+    );
   }
   if (process.env.CLAUDE_PLUGIN_ROOT) {
-    return "claude";
+    inferredSources.add(
+      inferPluginRootSource(process.env.CLAUDE_PLUGIN_ROOT) || "claude",
+    );
   }
-
-  return "unknown";
+  return inferredSources.size === 1 ? [...inferredSources][0] : "unknown";
 }
 
 function main() {

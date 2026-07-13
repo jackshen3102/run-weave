@@ -1,4 +1,9 @@
-import type { AgentTeamAcceptanceCase, AgentTeamRun, AgentTeamWorker } from "@runweave/shared/agent-team";
+import type {
+  AgentTeamAcceptanceCase,
+  AgentTeamRepairCycle,
+  AgentTeamRun,
+  AgentTeamWorker,
+} from "@runweave/shared/agent-team";
 
 const ROLE_LABEL: Record<string, string> = {
   code: "code_agent（写代码）",
@@ -8,7 +13,7 @@ const ROLE_LABEL: Record<string, string> = {
 const EVIDENCE_SCHEMA =
   'acceptanceResults[] 必须包含每条 case 独立的 summary 结论；evidence[] 使用 { type, label, summary, ref, detail? }。type 可用 "text"、"dom"、"screenshot"、"command"、"event"、"json"、"log"、"code"；label 是短标题，evidence summary 是单条证据说明，ref 保留原始证据路径、文本或标识。';
 const FINDING_SCHEMA =
-  '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings；字段为 { severity: "P0"|"P1"|"P2"|"P3", status?: "open"|"resolved"|"informational", title, summary, ref? }。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
+  '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings；字段为 { severity: "P0"|"P1"|"P2"|"P3", status?: "open"|"resolved"|"informational", title, summary, ref?, invariantKey?, verificationMode? }。每个 open P0/P1 必须提供稳定的小写 invariantKey（字母/数字/点/下划线/连字符）和 verificationMode: "runtime"|"structural"；同一系统 invariant 的标题或位置变化时复用原 key。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
 
 export function buildMainTestCaseGenerationPrompt(params: {
   run: AgentTeamRun;
@@ -55,8 +60,13 @@ export function buildWorkerStartupPrompt(params: {
     "",
     `任务：${run.task}`,
     "",
-    `意图：${worker.intent}`,
+    worker.role === "code" && run.reviewCheckpoint
+      ? `意图（仅定义功能范围，不授予 Git/checkpoint 操作权限）：${worker.intent}`
+      : `意图：${worker.intent}`,
   ];
+  if (worker.role === "code" && run.reviewCheckpoint) {
+    lines.push(...formatCodeWorkerCheckpointInstructions());
+  }
   if (worker.role === "behavior_verify") {
     const sourceDescription = formatAcceptanceSource(run);
     lines.push(
@@ -110,10 +120,20 @@ export function buildWorkerStartupPrompt(params: {
 export function buildBounceBackPrompt(params: {
   run: AgentTeamRun;
   failedCases: AgentTeamAcceptanceCase[];
+  repairCycles: AgentTeamRepairCycle[];
 }): string {
-  const { run, failedCases } = params;
+  const { run, failedCases, repairCycles } = params;
   const isReviewGateBounce =
     failedCases.length > 0 && failedCases.every(isReviewGateAcceptanceCase);
+  const runtimeRepairs = repairCycles.filter(
+    (cycle) => cycle.verificationMode === "runtime",
+  );
+  const structuralRepairs = repairCycles.filter(
+    (cycle) => cycle.verificationMode === "structural",
+  );
+  const requiresStrategyAssessment = repairCycles.some(
+    (cycle) => cycle.attempts >= 1,
+  );
   return [
     isReviewGateBounce
       ? `[loop round ${run.loop.round}] 串行门禁报以下用例失败，请修复：`
@@ -121,22 +141,96 @@ export function buildBounceBackPrompt(params: {
     "",
     ...failedCases.map((item) => {
       const evidence = item.evidence
-        .map((ev) => `${ev.label}: ${ev.summary}`)
+        .map((ev) => `${ev.label}: ${ev.summary}（ref=${ev.ref}）`)
         .join("; ");
       return `- [${item.caseId}] ${item.text}${evidence ? `\n  证据：${evidence}` : ""}`;
     }),
     "",
+    "backend 固定的修复目标（repairKey 不可改名或覆盖）：",
+    ...repairCycles.map(
+      (cycle) =>
+        `- ${cycle.repairKey}｜第 ${cycle.attempts + 1}/${cycle.maxAttempts} 次修复｜invariant: ${cycle.invariant}${cycle.sourceEvidenceRefs?.length ? `｜sourceEvidenceRefs: ${cycle.sourceEvidenceRefs.join(", ")}` : ""}`,
+    ),
+    "",
+    ...(runtimeRepairs.length > 0
+      ? [
+          "Runtime/behavior 复现门槛：",
+          "- Codex worker 在修改源码前显式调用 $toolkit:reproduce-before-fix；其它 provider 执行相同的 no-repro-no-fix 协议。",
+          "- 必须从真实产品入口稳定复现，记录 scenarioId、validationSessionId 和 Before evidence；mock、fixture、私有函数或静态阅读不能单独算复现。",
+          "- 修复后使用同一 scenarioId 和 validationSessionId 原样重跑，记录 After pass evidence。未复现、边界或环境阻塞时停止修改并如实交接。",
+          "",
+        ]
+      : []),
+    ...(structuralRepairs.length > 0
+      ? [
+          "Structural review 复现门槛：",
+          "- 优先原样复跑 reviewer evidence 中的命令或 harness；没有可执行 harness 时提供可复核的静态契约 Before/After。",
+          "- 不要把纯 Git/类型/结构契约伪装成真实 runtime 场景。",
+          "",
+        ]
+      : []),
+    "修复交接：",
+    "- 先写出每个 repairKey 被违反的 invariant，再执行与其有关的最小 impactedChecks；从正/负/时序/并发/回归中选择真实相关项，任一必跑项失败立即停止。",
+    ...(requiresStrategyAssessment
+      ? [
+          "- 这是同一 repairKey 的第 2 次或以后修复：strategyAssessment 必填。先解释上一轮机制为何失败，再判断是否需要调整状态所有权、事件边界或数据模型；禁止无机制解释地继续叠加启发式。",
+        ]
+      : []),
+    '- code outbox 必须逐项写 fixVerifications: [{ repairKey, invariant, reproduction: { mode: "real_product"|"review_harness"|"static_contract", status: "reproduced"|"confirmed"|"not_reproduced"|"boundary"|"blocked", scenarioId?, validationSessionId?, evidence[] }, verification: { status: "pass"|"fail"|"blocked", sameScenario, evidence[] }, impactedChecks: [{ label, dimension: "positive"|"negative"|"temporal"|"concurrent"|"regression", status: "pass"|"fail"|"skipped", summary, evidence[] }], strategyAssessment? }]。',
+    "- fixVerifications 只证明可以交给独立 gate 复验；不要用 acceptanceResults 给自己的修复判 pass。",
+    "",
+    ...(run.reviewCheckpoint ? formatCodeWorkerCheckpointInstructions() : []),
+    ...(run.reviewCheckpoint ? [""] : []),
     isReviewGateBounce
-      ? "修复后无需自己重跑审查或验收；backend 会按 code_review → behavior_verify 顺序重新触发。"
-      : "修复后无需自己重跑验收；backend 会重新触发 behavior_verify。",
+      ? "完成上述自证后无需自行触发独立审查；backend 校验交接后会按 code_review → behavior_verify 顺序重新触发。"
+      : "完成上述自证后无需自行触发独立验收；backend 校验交接后会先重新触发 code_review。",
   ].join("\n");
+}
+
+export function buildCodeFixHandoffCorrectionPrompt(params: {
+  run: AgentTeamRun;
+  errors: string[];
+}): string {
+  return [
+    `[loop round ${params.run.loop.round}] code 修复交接协议不完整，禁止继续修改源码。`,
+    "",
+    "只补正当前 pane-scoped outbox 的 fixVerifications：",
+    ...params.errors.map((error) => `- ${error}`),
+    "",
+    "不得改动源码、Git HEAD 或 index；不得更换 backend 下发的 repairKey。补交仍无效将自动升级人工。",
+  ].join("\n");
+}
+
+export function buildReviewFindingCorrectionPrompt(params: {
+  run: AgentTeamRun;
+  errors: string[];
+}): string {
+  return [
+    `[loop round ${params.run.loop.round}] code_review finding 协议不完整，禁止重新审查或修改代码。`,
+    "",
+    "只补正当前 pane-scoped outbox 的 remainingFindings：",
+    ...params.errors.map((error) => `- ${error}`),
+    "",
+    "每个 open P0/P1 必须补稳定 invariantKey 和 verificationMode；同一 invariant 复用同一 key。补交仍无效将自动升级人工。",
+  ].join("\n");
+}
+
+function formatCodeWorkerCheckpointInstructions(): string[] {
+  return [
+    "",
+    "Review checkpoint Git 边界：",
+    "- 本段由 backend 生成，优先于任务或意图中的任何 Git/checkpoint 表述。",
+    "- 不要执行任何会改变 Git HEAD 或 index 的命令，包括 git add、commit、amend、reset、stash、rebase、cherry-pick。",
+    "- 只把实现保留在未提交工作树；code_review 通过后由 backend 独占创建 checkpoint commit。",
+    "- code outbox 不要填写 verifiedCheckpointCommit；该字段只属于 behavior_verify 对已创建 checkpoint 的验证结果。",
+  ];
 }
 
 function isReviewGateAcceptanceCase(item: AgentTeamAcceptanceCase): boolean {
   return /code review|代码审查|code_review/i.test(item.text);
 }
 
-/** Ask a review/verify worker to rerun cases after a code pane completed fixes. */
+/** Ask a review/verify worker to rerun cases after an upstream handoff. */
 export function buildWorkerRecheckPrompt(params: {
   run: AgentTeamRun;
   worker: AgentTeamWorker;
@@ -146,8 +240,9 @@ export function buildWorkerRecheckPrompt(params: {
 }): string {
   const { run, worker, cases, outboxPath, triggerSummary } = params;
   const isReviewWorker = worker.role === "code_review";
-  const sourceLabel =
-    worker.role === "behavior_verify" ? "code_review" : "code pane";
+  const heading = isReviewWorker
+    ? `[loop round ${run.loop.round}] Code Agent 已提交本轮代码结果，请独立审查以下用例：`
+    : `[loop round ${run.loop.round}] ${run.reviewCheckpoint ? "当前 checkpoint" : "当前代码范围"}已通过指定范围的 code review；以下行为 case 尚未验证或需要复验：`;
   const caseIds = new Set(cases.map((item) => item.caseId));
   const skippedCases =
     worker.role === "behavior_verify"
@@ -156,12 +251,15 @@ export function buildWorkerRecheckPrompt(params: {
         )
       : [];
   return [
-    `[loop round ${run.loop.round}] ${sourceLabel} 已完成修复，请重新${isReviewWorker ? "审查" : "验收"}以下用例：`,
+    heading,
+    ...(worker.role === "behavior_verify"
+      ? ["review pass 不代表 behavior pass。"]
+      : []),
     "",
     ...(worker.role === "behavior_verify"
       ? [
           `验收来源：${formatAcceptanceSource(run)}`,
-          triggerSummary ? `本轮修复摘要：${triggerSummary}` : null,
+          triggerSummary ? `上游 review 摘要：${triggerSummary}` : null,
           "",
           "默认重跑范围：失败 case、未执行 case、依赖 case，以及你判断被本轮 diff 影响的已通过 case。",
           "如果扩大为全量重跑，必须在 outbox summary 或 evidence 中写明原因。",

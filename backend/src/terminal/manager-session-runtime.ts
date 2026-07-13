@@ -1,5 +1,5 @@
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
-import type { TerminalState } from "@runweave/shared/terminal/state";
+import type { TerminalAgentKind, TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalRuntimeMetadata } from "./store";
 import type {
   RuntimeTerminalSessionRecord,
@@ -85,14 +85,16 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
     this.observeActiveCommand(terminalSessionId, nextActiveCommand);
     session.cwd = metadata.cwd;
     session.activeCommand = nextActiveCommand;
-    const shouldClearCodexThreadMetadata =
+    const storedThreadProvider =
+      session.threadProvider ?? (session.threadId ? "codex" : undefined);
+    const shouldClearAgentThreadMetadata =
       Boolean(session.threadId || session.preview) &&
-      getAgentForCommand(nextActiveCommand) !== "codex";
-    const clearedThreadId = shouldClearCodexThreadMetadata
+      getAgentForCommand(nextActiveCommand) !== storedThreadProvider;
+    const clearedThreadId = shouldClearAgentThreadMetadata
       ? session.threadId
       : undefined;
-    if (shouldClearCodexThreadMetadata) {
-      this.clearCodexThreadMetadata(session);
+    if (shouldClearAgentThreadMetadata) {
+      this.clearAgentThreadMetadata(session);
     }
     const lastActivityAt = this.touchSessionActivity(session, "immediate");
     await this.sessionStore.updateSessionMetadata({
@@ -101,15 +103,17 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
       activeCommand: nextActiveCommand,
       lastActivityAt: lastActivityAt.toISOString(),
     });
-    if (shouldClearCodexThreadMetadata) {
+    if (shouldClearAgentThreadMetadata) {
       if (clearedThreadId) {
         await this.updateSessionLastThread(
           terminalSessionId,
           clearedThreadId,
           "idle",
+          new Date(),
+          storedThreadProvider,
         );
       }
-      await this.persistClearedCodexThreadMetadata(terminalSessionId);
+      await this.persistClearedAgentThreadMetadata(terminalSessionId);
     }
     this.observer.onMetadataChanged?.({
       terminalSessionId,
@@ -153,46 +157,52 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
 
     session.command = launch.command;
     session.args = nextArgs;
-    const shouldClearCodexThreadMetadata =
+    const storedThreadProvider =
+      session.threadProvider ?? (session.threadId ? "codex" : undefined);
+    const shouldClearAgentThreadMetadata =
       Boolean(session.threadId || session.preview) &&
-      getAgentForCommand(launch.command) !== "codex";
-    const clearedThreadId = shouldClearCodexThreadMetadata
+      getAgentForCommand(launch.command) !== storedThreadProvider;
+    const clearedThreadId = shouldClearAgentThreadMetadata
       ? session.threadId
       : undefined;
-    if (shouldClearCodexThreadMetadata) {
-      this.clearCodexThreadMetadata(session);
+    if (shouldClearAgentThreadMetadata) {
+      this.clearAgentThreadMetadata(session);
     }
     await this.sessionStore.updateSessionLaunch({
       terminalSessionId,
       command: launch.command,
       args: nextArgs,
     });
-    if (shouldClearCodexThreadMetadata) {
+    if (shouldClearAgentThreadMetadata) {
       if (clearedThreadId) {
         await this.updateSessionLastThread(
           terminalSessionId,
           clearedThreadId,
           "idle",
+          new Date(),
+          storedThreadProvider,
         );
       }
-      await this.persistClearedCodexThreadMetadata(terminalSessionId);
+      await this.persistClearedAgentThreadMetadata(terminalSessionId);
     }
     return session;
   }
 
-  private clearCodexThreadMetadata(
+  private clearAgentThreadMetadata(
     session: RuntimeTerminalSessionRecord,
   ): void {
     delete session.threadId;
+    delete session.threadProvider;
     delete session.preview;
   }
 
-  private async persistClearedCodexThreadMetadata(
+  private async persistClearedAgentThreadMetadata(
     terminalSessionId: string,
   ): Promise<void> {
     await this.sessionStore.updateSessionThreadId({
       terminalSessionId,
       threadId: null,
+      provider: null,
     });
     await this.sessionStore.updateSessionPreview({
       terminalSessionId,
@@ -244,6 +254,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
   async updateSessionThreadId(
     terminalSessionId: string,
     threadId: string | null,
+    provider: TerminalAgentKind | null = null,
   ): Promise<TerminalSessionRecord | undefined> {
     const session = this.sessions.get(terminalSessionId);
     if (!session) {
@@ -251,18 +262,28 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
     }
 
     const nextThreadId = threadId?.trim() || undefined;
-    if (session.threadId === nextThreadId) {
+    const nextProvider = nextThreadId
+      ? provider ?? session.threadProvider ??
+        (session.threadId === nextThreadId ? "codex" : undefined)
+      : undefined;
+    if (
+      session.threadId === nextThreadId &&
+      session.threadProvider === nextProvider
+    ) {
       return session;
     }
 
     if (nextThreadId) {
       session.threadId = nextThreadId;
+      session.threadProvider = nextProvider;
     } else {
       delete session.threadId;
+      delete session.threadProvider;
     }
     await this.sessionStore.updateSessionThreadId({
       terminalSessionId,
       threadId: nextThreadId ?? null,
+      provider: nextProvider ?? null,
     });
     return session;
   }
@@ -298,6 +319,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
     threadId: string,
     status: TerminalLastThreadStatus,
     updatedAt = new Date(),
+    provider?: TerminalAgentKind,
   ): Promise<TerminalSessionRecord | undefined> {
     const session = this.sessions.get(terminalSessionId);
     if (!session) {
@@ -309,8 +331,16 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
       return session;
     }
 
+    const nextProvider =
+      provider ?? session.threadProvider ??
+      (session.threadId === nextThreadId ? "codex" : undefined);
+    if (!nextProvider) {
+      return session;
+    }
+
     if (
       session.lastThreadId === nextThreadId &&
+      session.lastThreadProvider === nextProvider &&
       session.lastThreadStatus === status &&
       session.lastThreadUpdatedAt?.getTime() === updatedAt.getTime()
     ) {
@@ -318,11 +348,13 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
     }
 
     session.lastThreadId = nextThreadId;
+    session.lastThreadProvider = nextProvider;
     session.lastThreadStatus = status;
     session.lastThreadUpdatedAt = updatedAt;
     await this.sessionStore.updateSessionLastThread({
       terminalSessionId,
       threadId: nextThreadId,
+      provider: nextProvider,
       status,
       updatedAt: updatedAt.toISOString(),
     });

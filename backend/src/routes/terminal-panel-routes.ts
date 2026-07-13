@@ -216,6 +216,10 @@ export function registerTerminalPanelRoutes(
         );
       }
       await options.tmuxService!.killPane(paneTarget);
+      await options.tmuxOutputWatcher?.unwatchPane(
+        session.id,
+        paneTarget.paneId,
+      );
       await terminalSessionManager.markPanelExited(panel.id);
       const nextWorkspace =
         await terminalSessionManager.removePanelFromWorkspace(

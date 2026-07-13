@@ -4,8 +4,10 @@ import {
 } from "@runweave/shared/terminal-limits";
 import {
   appendToScrollbackBuffer,
+  captureScrollbackBufferCursor,
   createScrollbackBuffer,
   readScrollbackBuffer,
+  readScrollbackBufferSince,
   readScrollbackBufferTailLines,
 } from "./scrollback-buffer";
 import type { RuntimeTerminalSessionRecord } from "./manager-records";
@@ -70,6 +72,23 @@ export class TerminalManagerBufferRuntime extends TerminalManagerBase {
     }
 
     return this.getLiveScrollback(terminalSessionId);
+  }
+
+  async captureOutputCursor(terminalSessionId: string): Promise<number | null> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return null;
+    }
+    await this.readScrollback(terminalSessionId);
+    return captureScrollbackBufferCursor(session.scrollbackBuffer);
+  }
+
+  readOutputSince(terminalSessionId: string, cursor: number): string | null {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session?.scrollbackLoaded) {
+      return null;
+    }
+    return readScrollbackBufferSince(session.scrollbackBuffer, cursor);
   }
 
   appendOutput(terminalSessionId: string, chunk: string): void {

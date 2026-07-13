@@ -15,6 +15,12 @@ import {
   buildWorkerStartupPrompt,
 } from "./prompt-builders";
 import { buildEscalationReason, foldRound, shouldEscalate } from "./loop";
+import {
+  buildRepairEscalationReason,
+  foldRepairGateResult,
+  repairCyclesForCases,
+  type AgentTeamRepairTarget,
+} from "./repair-loop";
 import { agentTeamLogger } from "./service-context";
 import { AgentTeamServiceSupport } from "./service-support";
 import {
@@ -49,6 +55,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       log: string;
       triggerSummary?: string | null;
       reviewScope?: "full" | "incremental" | "final";
+      acceptedRepairKeys?: string[];
     },
   ): Promise<AgentTeamRun>;
 
@@ -201,8 +208,10 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     run: AgentTeamRun,
     params: {
       acceptanceResults?: AgentTeamWorkerOutbox["acceptanceResults"];
-      hadDiff?: boolean;
+      objectiveProgress?: boolean;
+      observedNoProgress?: boolean;
       forceBounceCaseIds?: string[];
+      repairTargets?: AgentTeamRepairTarget[];
       completedWorkerRole?: AgentTeamWorkerRole | null;
       completedWorkerSummary?: string | null;
     },
@@ -219,17 +228,27 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       acceptance: ensureWorkerGateAcceptance(run.workers, run.acceptance),
     };
     const folded = foldRound(runWithGates, params);
+    const repairFolded = foldRepairGateResult({
+      loop: folded.loop,
+      completedRole: params.completedWorkerRole,
+      acceptanceResults: params.acceptanceResults ?? [],
+      targets: params.repairTargets ?? [],
+      round: run.loop.round,
+    });
     const logs = [...runWithGates.logs];
     if (folded.hadProgress) {
       logs.push(`round ${run.loop.round} 有进展，noProgress 计数清零`);
-    } else if (params.acceptanceResults?.length || params.hadDiff === false) {
+    } else if (
+      params.acceptanceResults?.length ||
+      params.observedNoProgress === true
+    ) {
       logs.push(
         `round ${run.loop.round} 无进展，noProgress=${folded.loop.noProgressCount}/${folded.loop.maxNoProgress}`,
       );
     }
 
     let status: AgentTeamStatus = "running";
-    let loop = folded.loop;
+    let loop = repairFolded.loop;
     let workers = run.workers;
     let activeWorkerRole = run.activeWorkerRole ?? null;
     // This completion consumed the current dispatch. A follow-up bounce or
@@ -250,9 +269,20 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       activeWorkerRole = null;
       activeWorkerDispatch = null;
       logs.push(`✅ 所有验收用例通过，run 完成`);
-    } else if (shouldEscalate(folded.loop)) {
-      const reason = buildEscalationReason(folded.loop, folded.acceptance);
-      loop = { ...folded.loop, escalated: true, lastReason: reason };
+    } else if (repairFolded.exhausted.length > 0) {
+      const reason = buildRepairEscalationReason(repairFolded.exhausted);
+      loop = { ...repairFolded.loop, escalated: true, lastReason: reason };
+      status = "need_human";
+      workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
+      activeWorkerRole = null;
+      activeWorkerDispatch = null;
+      logs.push(`⏸ ${reason}`);
+    } else if (shouldEscalate(repairFolded.loop)) {
+      const reason = buildEscalationReason(
+        repairFolded.loop,
+        folded.acceptance,
+      );
+      loop = { ...repairFolded.loop, escalated: true, lastReason: reason };
       status = "need_human";
       // Freeze all worker panes: stop injecting further rounds.
       workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
@@ -321,6 +351,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     const failedCases = run.acceptance.filter((item) =>
       caseIds.includes(item.caseId),
     );
+    const repairCycles = repairCyclesForCases(run.loop, caseIds);
     const session = this.terminalSessionManager.getSession(
       run.terminalSessionId,
     );
@@ -335,7 +366,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       const requestedAt = new Date().toISOString();
       await this.promptSender.sendPromptToPane(
         session,
-        buildBounceBackPrompt({ run, failedCases }),
+        buildBounceBackPrompt({ run, failedCases, repairCycles }),
         { panelId: codeWorker.panelId },
       );
       const bouncedAcceptance = run.acceptance.map((item) =>
@@ -351,6 +382,8 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
           requestedAt,
           outboxMtimeMs,
           run.loop.round,
+          null,
+          { repairKeys: repairCycles.map((cycle) => cycle.repairKey) },
         ),
         workers: setActiveWorker(run.workers, "code"),
         logs: [

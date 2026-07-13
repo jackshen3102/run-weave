@@ -6,13 +6,27 @@ import type {
 } from "@runweave/shared/agent-team";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { TerminalSessionRecord } from "../terminal/manager";
-import { buildWorkerRecheckPrompt } from "./prompt-builders";
+import {
+  buildCodeFixHandoffCorrectionPrompt,
+  buildReviewFindingCorrectionPrompt,
+  buildWorkerRecheckPrompt,
+} from "./prompt-builders";
 import { agentTeamLogger } from "./service-context";
-import { AgentTeamSerialDispatchService } from "./service-serial-dispatch";
+import {
+  logReconciledCompletion,
+  logStaleCompletion,
+} from "./service-completion-logging";
+import { AgentTeamRepairProtocolService } from "./service-repair-protocol";
 import type {
   AgentTeamCompletionSignal,
   AgentTeamCompletionSignalSource,
 } from "./service-types";
+import {
+  reviewFindingContractErrors,
+  validateCodeFixHandoff,
+  type AgentTeamRepairTarget,
+} from "./repair-loop";
+import { captureRepairSourceFingerprint } from "./repair-source-fingerprint";
 import {
   acceptanceCasesForRole,
   ensureWorkerGateAcceptance,
@@ -37,13 +51,14 @@ import {
   resolveAgentTeamTerminal,
 } from "./service-run-policy";
 
-export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatchService {
+export abstract class AgentTeamCompletionService extends AgentTeamRepairProtocolService {
   protected abstract resolveOutboxRound(
     run: AgentTeamRun,
     outbox: AgentTeamWorkerOutbox,
   ): {
     acceptanceResults: NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>;
     forceBounceCaseIds: string[];
+    repairTargets: AgentTeamRepairTarget[];
   };
 
   protected abstract markRecheckDispatchFailed(
@@ -126,7 +141,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
           activeWorker,
         );
         if (signalMismatch) {
-          this.logStaleCompletion(source, latest, activeWorker, signalMismatch);
+          logStaleCompletion(source, latest, activeWorker, signalMismatch);
           return false;
         }
         const resolvedOutbox =
@@ -142,12 +157,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
           source !== "terminal_event",
         );
         if (identityMismatch) {
-          this.logStaleCompletion(
-            source,
-            latest,
-            activeWorker,
-            identityMismatch,
-          );
+          logStaleCompletion(source, latest, activeWorker, identityMismatch);
           return false;
         }
         const dispatch = resolveActiveWorkerDispatch(latest, activeWorker);
@@ -156,13 +166,56 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
           outboxMtimeMs,
         );
         if (freshnessMismatch) {
-          this.logStaleCompletion(
-            source,
-            latest,
-            activeWorker,
-            freshnessMismatch,
-          );
+          logStaleCompletion(source, latest, activeWorker, freshnessMismatch);
           return false;
+        }
+        try {
+          await this.outboxHistoryStore.archive({
+            run: latest,
+            dispatch,
+            resolvedOutbox,
+            cwd: event.payload.cwd,
+          });
+        } catch (error) {
+          await this.pauseForRepairProtocolError(
+            latest,
+            `worker outbox 历史归档失败：${error instanceof Error ? error.message : String(error)}`,
+          );
+          return true;
+        }
+        if (dispatch.protocolCorrectionAttempt) {
+          const expected = dispatch.protocolCorrectionSourceFingerprint;
+          if (!expected) {
+            await this.pauseForRepairProtocolError(
+              latest,
+              "协议补交缺少源码指纹，无法证明补交期间未修改源码",
+            );
+            return true;
+          }
+          try {
+            const actual = await captureRepairSourceFingerprint(
+              this.resolveRequiredProjectRoot(
+                latest.projectId,
+                event.payload.cwd ?? latest.terminal.cwd ?? "",
+              ),
+            );
+            if (
+              actual.repoRoot !== expected.repoRoot ||
+              actual.sha256 !== expected.sha256
+            ) {
+              await this.pauseForRepairProtocolError(
+                latest,
+                "协议补交期间源码、Git HEAD 或 index 已变化",
+              );
+              return true;
+            }
+          } catch (error) {
+            await this.pauseForRepairProtocolError(
+              latest,
+              `协议补交源码指纹复核失败：${error instanceof Error ? error.message : String(error)}`,
+            );
+            return true;
+          }
         }
         const reviewTargetMismatch = completionReviewTargetMismatch(
           latest,
@@ -197,6 +250,45 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
           }
         }
         const initialRound = this.resolveOutboxRound(latest, outbox);
+        const reviewContractErrors = reviewFindingContractErrors(
+          outbox,
+          initialRound.acceptanceResults,
+        );
+        if (reviewContractErrors.length > 0) {
+          await this.handleProtocolCorrection(
+            latest,
+            activeWorker,
+            outboxMtimeMs,
+            reviewContractErrors,
+            buildReviewFindingCorrectionPrompt({
+              run: latest,
+              errors: reviewContractErrors,
+            }),
+            "code_review finding",
+          );
+          return true;
+        }
+        if (outbox.role === "code") {
+          const handoff = validateCodeFixHandoff(latest, outbox);
+          if (handoff.status === "blocked") {
+            await this.pauseForRepairProtocolError(latest, handoff.reason);
+            return true;
+          }
+          if (handoff.status === "invalid") {
+            await this.handleProtocolCorrection(
+              latest,
+              activeWorker,
+              outboxMtimeMs,
+              handoff.errors,
+              buildCodeFixHandoffCorrectionPrompt({
+                run: latest,
+                errors: handoff.errors,
+              }),
+              "code fixVerifications",
+            );
+            return true;
+          }
+        }
         const shouldDispatchRecheck = this.hasBouncedCasesForWorker(
           latest,
           outbox,
@@ -213,7 +305,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
           return false;
         }
         if (await this.dispatchNextSerialWorkerFromCompletion(latest, outbox)) {
-          this.logReconciledCompletion(
+          logReconciledCompletion(
             source,
             latest,
             activeWorker,
@@ -240,7 +332,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
         const round = this.resolveOutboxRound(roundRun, outbox);
         if (!round.acceptanceResults.length) {
           await this.dispatchBouncedCasesForRecheck(latest, outbox);
-          this.logReconciledCompletion(
+          logReconciledCompletion(
             source,
             latest,
             activeWorker,
@@ -252,10 +344,11 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
         await this.applyRound(roundRun, {
           acceptanceResults: round.acceptanceResults,
           forceBounceCaseIds: round.forceBounceCaseIds,
+          repairTargets: round.repairTargets,
           completedWorkerRole: parseWorkerRole(outbox.role),
           completedWorkerSummary: outbox.summary,
         });
-        this.logReconciledCompletion(
+        logReconciledCompletion(
           source,
           latest,
           activeWorker,
@@ -266,45 +359,6 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
       } finally {
         this.decrementPendingCompletionRound(run.runId);
       }
-    });
-  }
-
-  protected logStaleCompletion(
-    source: AgentTeamCompletionSignalSource,
-    run: AgentTeamRun,
-    worker: AgentTeamWorker,
-    reason: string,
-  ): void {
-    const fields = {
-      message: "Agent-team completion did not match the active dispatch",
-      source,
-      runId: run.runId,
-      role: worker.role,
-      panelId: worker.panelId ?? null,
-      reason,
-    };
-    if (source === "watchdog") {
-      agentTeamLogger.debug("agent-team.completion.stale", fields);
-      return;
-    }
-    agentTeamLogger.info("agent-team.completion.stale", fields);
-  }
-
-  protected logReconciledCompletion(
-    source: AgentTeamCompletionSignalSource,
-    run: AgentTeamRun,
-    worker: AgentTeamWorker,
-    outboxMtimeMs: number | null,
-    resultCount: number,
-  ): void {
-    agentTeamLogger.info("agent-team.completion.reconciled", {
-      message: "Agent-team completion reconciled from worker outbox",
-      source,
-      runId: run.runId,
-      role: worker.role,
-      panelId: worker.panelId ?? null,
-      outboxMtimeMs,
-      resultCount,
     });
   }
 
@@ -399,11 +453,17 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
     if (!role) {
       return false;
     }
-    if (run.phase === "executing" && role === "code") {
+    if (
+      run.phase === "executing" &&
+      role === "code" &&
+      outbox.status === "completed"
+    ) {
+      const repairKeys = run.activeWorkerDispatch?.repairKeys ?? [];
       await this.dispatchSerialWorker(run, "code_review", {
         cases: acceptanceCasesForRole(run, "code_review"),
         log: "code 完成，启动 code_review",
         triggerSummary: outbox.summary,
+        acceptedRepairKeys: repairKeys,
       });
       return true;
     }
@@ -435,6 +495,15 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
     );
     const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(session, worker);
     const now = new Date().toISOString();
+    const activeWorkerDispatch = createActiveWorkerDispatch(
+      worker,
+      now,
+      outboxMtimeMs,
+      run.loop.round,
+      worker.role === "code_review"
+        ? (run.reviewCheckpoint?.pendingReview ?? null)
+        : null,
+    );
     await this.promptSender.sendPromptToPane(
       session,
       buildWorkerRecheckPrompt({
@@ -454,15 +523,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
         : `code pane ${options.sourcePanelId ?? ""} 已完成，重新触发用例`;
     return this.updateRun(run, {
       activeWorkerRole: worker.role,
-      activeWorkerDispatch: createActiveWorkerDispatch(
-        worker,
-        now,
-        outboxMtimeMs,
-        run.loop.round,
-        worker.role === "code_review"
-          ? (run.reviewCheckpoint?.pendingReview ?? null)
-          : null,
-      ),
+      activeWorkerDispatch,
       workers: setActiveWorker(run.workers, worker.role),
       acceptance: ensureWorkerGateAcceptance(run.workers, run.acceptance).map(
         (item) =>
@@ -474,6 +535,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
                 resultSummary: null,
                 bouncedToPanelId: null,
                 recheckRequestedAt: now,
+                recheckDispatchId: activeWorkerDispatch.dispatchId ?? null,
                 recheckWorkerPanelId: worker.panelId,
                 recheckWorkerRole: worker.role,
                 recheckOutboxMtimeMs: outboxMtimeMs,

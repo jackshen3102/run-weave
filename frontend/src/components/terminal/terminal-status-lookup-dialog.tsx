@@ -46,6 +46,16 @@ const DETAIL_FIELDS: Array<{
   { label: "status", read: (thread) => thread.status },
   { label: "threadId", read: (thread) => thread.threadId },
   { label: "agent", read: (thread) => thread.agent },
+  { label: "identityStatus", read: (thread) => thread.identityStatus },
+  { label: "lifecycleStatus", read: (thread) => thread.lifecycleStatus },
+  {
+    label: "lastLifecycleType",
+    read: (thread) => thread.lastLifecycleType,
+  },
+  {
+    label: "lastLifecycleCursor",
+    read: (thread) => thread.lastLifecycleCursor,
+  },
   { label: "terminalSessionId", read: (thread) => thread.terminalSessionId },
   { label: "terminalPanelId", read: (thread) => thread.terminalPanelId },
   { label: "projectId", read: (thread) => thread.projectId },

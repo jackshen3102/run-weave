@@ -163,6 +163,7 @@ function buildAcceptanceCase(
     evidence: [],
     bouncedToPanelId: null,
     recheckRequestedAt: null,
+    recheckDispatchId: null,
     recheckWorkerPanelId: null,
     recheckWorkerRole: null,
     recheckOutboxMtimeMs: null,

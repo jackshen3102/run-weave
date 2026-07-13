@@ -6,14 +6,8 @@ import path from "node:path";
 import express from "express";
 import type { WebSocketServer } from "ws";
 import { migrateLegacyBrowserProfileRootIfNeeded } from "@runweave/shared/browser-profile-node";
-import { discoverAppServer } from "@runweave/shared/app-server/discovery";
 import { createRequireAuth } from "./auth/middleware";
-import { AppServerClient } from "./app-server/client";
-import { AppServerEventConsumer } from "./app-server/event-consumer";
-import { AppServerEventCursorStore } from "./app-server/event-cursor-store";
-import { handleAgentCompletionEvent } from "./app-server/handlers/agent-completion";
-import { handleAgentHookEvent } from "./app-server/handlers/agent-hook";
-import { isEventOwnedByThisBackend } from "./app-server/ownership";
+import { initializeAppServerEventIntegration } from "./app-server/integration";
 import { diagnosticLogRecorder } from "./diagnostic-logs/recorder";
 import {
   createRequestContextMiddleware,
@@ -69,7 +63,6 @@ import {
 const HASHED_ASSET_CACHE_CONTROL =
   "public, max-age=31536000, s-maxage=31536000, immutable";
 const REVALIDATED_STATIC_CACHE_CONTROL = "no-cache";
-const APP_SERVER_AGENT_EVENT_CONSUMER_ID = "backend:agent-events";
 
 type BackendStartStage =
   | "runtime-config"
@@ -100,99 +93,6 @@ function parseConfiguredOrigins(rawOrigins: string | undefined): string[] {
 }
 
 sanitizeCurrentTerminalProcessEnv();
-
-async function initializeAppServerEventIntegration(
-  services: RuntimeServices,
-  backendBaseUrl: string,
-): Promise<void> {
-  try {
-    const connection = await discoverAppServer({ env: process.env });
-    if (!connection) {
-      logger.info("backend.app-server.unavailable", {
-        component: "app-server",
-        message:
-          "Runweave app-server unavailable; backend will continue without global event center",
-      });
-      return;
-    }
-
-    const client = new AppServerClient(connection);
-    const storagePaths = resolveStoragePaths(process.env);
-    const backendInstanceId = `backend:${process.pid}:${backendBaseUrl}`;
-    await client.postEvent({
-      kind: "backend.started",
-      source: {
-        app: "backend",
-        instanceId: backendInstanceId,
-        pid: process.pid,
-      },
-      dedupeKey: `backend.started:${backendInstanceId}`,
-      payload: {
-        baseUrl: backendBaseUrl,
-      },
-    });
-
-    const cursorStore = new AppServerEventCursorStore(
-      path.join(
-        path.dirname(storagePaths.terminalSessionStoreFile),
-        "app-server-event-cursors.json",
-      ),
-    );
-    const consumer = new AppServerEventConsumer({
-      client,
-      cursorStore,
-      consumerId: APP_SERVER_AGENT_EVENT_CONSUMER_ID,
-      kinds: ["agent.hook", "agent.completion"],
-      isRelevant: (event) =>
-        isEventOwnedByThisBackend(event, services.terminalSessionManager) &&
-        event.source.instanceId !== backendInstanceId,
-      handler: async (event) => {
-        if (event.kind === "agent.hook") {
-          await handleAgentHookEvent(event, {
-            terminalSessionManager: services.terminalSessionManager,
-            terminalStateService: services.terminalStateService,
-          });
-          return;
-        }
-        if (event.kind === "agent.completion") {
-          const completion = await handleAgentCompletionEvent(event, {
-            terminalSessionManager: services.terminalSessionManager,
-            terminalStateService: services.terminalStateService,
-          });
-          if (completion) {
-            const reconciled =
-              await services.agentTeamService.reconcileCompletionSignal({
-                ...completion,
-                source: "app_server",
-              });
-            logger.info("backend.app-server.agent-team_completion", {
-              component: "app-server",
-              message: "App-server completion checked Agent Team outbox",
-              terminalSessionId: completion.terminalSessionId,
-              panelId: completion.panelId,
-              reconciled,
-            });
-          }
-        }
-      },
-    });
-    await consumer.start();
-    services.appServerEventConsumer = consumer;
-
-    logger.info("backend.app-server.connected", {
-      component: "app-server",
-      message: "Backend connected to Runweave app-server event center",
-      consumerId: APP_SERVER_AGENT_EVENT_CONSUMER_ID,
-    });
-  } catch (error) {
-    logger.warn("backend.app-server.integration.failed", {
-      component: "app-server",
-      message:
-        "Runweave app-server integration failed; backend will continue without global event center",
-      error,
-    });
-  }
-}
 
 function createHttpApp(
   services: RuntimeServices,
@@ -556,10 +456,13 @@ async function startRuntime(): Promise<void> {
     await initializeAppServerEventIntegration(services, controlPlaneBaseUrl);
 
     stage = "lifecycle-handlers";
-    attachLifecycleHandlers(server, services, profileLock, [
-      terminalWebSocketServer,
-      terminalEventsWebSocketServer,
-    ], serverConnections);
+    attachLifecycleHandlers(
+      server,
+      services,
+      profileLock,
+      [terminalWebSocketServer, terminalEventsWebSocketServer],
+      serverConnections,
+    );
     logger.info("backend.started", {
       component: "backend",
       message: "Backend started",

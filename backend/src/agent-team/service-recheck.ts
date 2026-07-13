@@ -22,6 +22,10 @@ import {
   findWorkerByRole,
   setActiveWorker,
 } from "./service-workflow-policy";
+import {
+  resolveRepairTargets,
+  type AgentTeamRepairTarget,
+} from "./repair-loop";
 
 const RECHECK_WATCHDOG_INTERVAL_MS = 10_000;
 const RECHECK_TIMEOUT_MS = 60 * 60 * 1000;
@@ -137,6 +141,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
                       },
                     ],
               recheckRequestedAt: null,
+              recheckDispatchId: null,
               recheckWorkerPanelId: null,
               recheckWorkerRole: null,
               recheckOutboxMtimeMs: null,
@@ -218,17 +223,18 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
     const now = new Date().toISOString();
     const caseIds = new Set(cases.map((item) => item.caseId));
     const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(session, worker);
+    const activeWorkerDispatch = createActiveWorkerDispatch(
+      worker,
+      now,
+      outboxMtimeMs,
+      run.loop.round,
+      worker.role === "code_review"
+        ? (run.reviewCheckpoint?.pendingReview ?? null)
+        : null,
+    );
     return this.updateRun(run, {
       activeWorkerRole: worker.role,
-      activeWorkerDispatch: createActiveWorkerDispatch(
-        worker,
-        now,
-        outboxMtimeMs,
-        run.loop.round,
-        worker.role === "code_review"
-          ? (run.reviewCheckpoint?.pendingReview ?? null)
-          : null,
-      ),
+      activeWorkerDispatch,
       workers: setActiveWorker(run.workers, worker.role),
       acceptance: run.acceptance.map((item) =>
         caseIds.has(item.caseId)
@@ -238,6 +244,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
               resultSummary: null,
               bouncedToPanelId: null,
               recheckRequestedAt: now,
+              recheckDispatchId: activeWorkerDispatch.dispatchId ?? null,
               recheckWorkerPanelId: worker.panelId ?? null,
               recheckWorkerRole: worker.role,
               recheckOutboxMtimeMs: outboxMtimeMs,
@@ -349,6 +356,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
   ): {
     acceptanceResults: NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>;
     forceBounceCaseIds: string[];
+    repairTargets: AgentTeamRepairTarget[];
   } {
     const runWithGates = {
       ...run,
@@ -360,6 +368,16 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
     const directResults = (outbox.acceptanceResults ?? []).filter((result) =>
       knownCaseIds.has(result.caseId),
     );
+    const reviewResult = synthesizeBlockingReviewResult(runWithGates, outbox);
+    if (reviewResult) {
+      return {
+        acceptanceResults: [reviewResult],
+        forceBounceCaseIds: [reviewResult.caseId],
+        repairTargets: resolveRepairTargets(runWithGates, outbox, [
+          reviewResult,
+        ]),
+      };
+    }
     if (directResults.length > 0) {
       return {
         acceptanceResults: directResults,
@@ -368,14 +386,13 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
               .filter((result) => result.status === "fail")
               .map((result) => result.caseId)
           : [],
+        repairTargets: resolveRepairTargets(
+          runWithGates,
+          outbox,
+          directResults,
+        ),
       };
     }
-    const reviewResult = synthesizeBlockingReviewResult(runWithGates, outbox);
-    return reviewResult
-      ? {
-          acceptanceResults: [reviewResult],
-          forceBounceCaseIds: [reviewResult.caseId],
-        }
-      : { acceptanceResults: [], forceBounceCaseIds: [] };
+    return { acceptanceResults: [], forceBounceCaseIds: [], repairTargets: [] };
   }
 }

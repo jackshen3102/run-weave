@@ -11,6 +11,7 @@ import type { TmuxService, TmuxTarget } from "./tmux-service";
 import type { TmuxOutputWatcher } from "./tmux-output-watcher";
 import { TmuxRebuildLimitError } from "./tmux-service";
 import { getAgentForCommand } from "./terminal-state-service";
+import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 
 export interface EnsureTerminalRuntimeResult {
   runtime: PtyRuntime;
@@ -81,29 +82,28 @@ export async function ensureTerminalRuntime(
         currentSession.command,
         currentSession.args,
       );
-      const codexThreadIdToResume =
+      const agentThreadToResume =
         !hasSession &&
         !options.allowMissingTmuxSession &&
-        shouldResumeCodexThreadAfterTmuxLoss(
-          currentSession,
-          wasInteractiveShellLaunch,
-        )
-          ? currentSession.threadId?.trim()
-          : undefined;
+        wasInteractiveShellLaunch
+          ? resolveAgentThreadToResume(currentSession)
+          : null;
       let warning: string | undefined;
 
       if (!hasSession && !options.allowMissingTmuxSession) {
-        if (codexThreadIdToResume) {
+        if (agentThreadToResume) {
           try {
             const attempt = options.tmuxService!.recordRebuildAttempt(
               currentSession.id,
             );
-            warning = `Original tmux session was lost; resumed Codex thread from saved threadId (${attempt.count}/${attempt.maxAttempts}).`;
+            warning = `Original tmux session was lost; resumed ${agentThreadToResume.provider} thread from saved threadId (${attempt.count}/${attempt.maxAttempts}).`;
             terminalLogger.warn(
-              "terminal.tmux.session-missing.codex-resume",
+              "terminal.tmux.session-missing.agent-resume",
               {
-                message: "Tmux terminal session missing; resuming Codex thread",
+                message: "Tmux terminal session missing; resuming agent thread",
                 terminalSessionId: currentSession.id,
+                provider: agentThreadToResume.provider,
+                threadId: agentThreadToResume.threadId,
                 sessionName: target.sessionName,
                 socketPath: target.socketPath,
                 rebuildCount: attempt.count,
@@ -160,7 +160,7 @@ export async function ensureTerminalRuntime(
           warning = "Command exited; returned to a shell.";
         }
 
-        if (wasInteractiveShellLaunch && !codexThreadIdToResume) {
+        if (wasInteractiveShellLaunch && !agentThreadToResume) {
           try {
             const attempt = options.tmuxService!.recordRebuildAttempt(
               currentSession.id,
@@ -211,6 +211,8 @@ export async function ensureTerminalRuntime(
               RUNWEAVE_TERMINAL_SESSION_ID: currentSession.id,
               RUNWEAVE_PROJECT_ID: currentSession.projectId,
               RUNWEAVE_TMUX_SESSION_NAME: target.sessionName,
+              RUNWEAVE_TOOLKIT_PLUGIN_ROOT:
+                process.env.RUNWEAVE_TOOLKIT_PLUGIN_ROOT,
               RUNWEAVE_HOOK_ENDPOINT: process.env.RUNWEAVE_HOOK_ENDPOINT,
               RUNWEAVE_COMPLETION_HOOK_ENDPOINT:
                 process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT,
@@ -228,10 +230,10 @@ export async function ensureTerminalRuntime(
         ) {
           await options.tmuxService!.waitForPaneReady(target);
         }
-        if (codexThreadIdToResume) {
+        if (agentThreadToResume) {
           await options.tmuxService!.sendInput(
             target,
-            buildCodexResumeCommand(codexThreadIdToResume),
+            buildAgentResumeCommand(agentThreadToResume),
           );
         }
       }
@@ -274,6 +276,8 @@ export async function ensureTerminalRuntime(
     env: {
       RUNWEAVE_TERMINAL_SESSION_ID: options.session.id,
       RUNWEAVE_PROJECT_ID: options.session.projectId,
+      RUNWEAVE_TOOLKIT_PLUGIN_ROOT:
+        process.env.RUNWEAVE_TOOLKIT_PLUGIN_ROOT,
       RUNWEAVE_HOOK_ENDPOINT: process.env.RUNWEAVE_HOOK_ENDPOINT,
       RUNWEAVE_COMPLETION_HOOK_ENDPOINT:
         process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT,
@@ -320,24 +324,39 @@ function isInteractiveShellLaunch(command: string, args: string[]): boolean {
   return !args.some((arg) => arg === "-c" || arg === "-lc");
 }
 
-function buildCodexResumeCommand(codexThreadId: string): string {
+export function buildAgentResumeCommand(thread: {
+  provider: TerminalAgentKind;
+  threadId: string;
+}): string {
   const args = [
-    ...CODEX_SKIP_UPDATE_ON_STARTUP_ARGS,
+    ...(thread.provider === "codex" ? CODEX_SKIP_UPDATE_ON_STARTUP_ARGS : []),
     "resume",
-    codexThreadId,
+    thread.threadId,
   ];
-  return `codex ${args.map(shellQuote).join(" ")}\n`;
+  return `${thread.provider} ${args.map(shellQuote).join(" ")}\n`;
 }
 
-function shouldResumeCodexThreadAfterTmuxLoss(
+export function resolveAgentThreadToResume(
   session: TerminalSessionRecord,
-  wasInteractiveShellLaunch: boolean,
-): boolean {
-  return (
-    wasInteractiveShellLaunch &&
-    getAgentForCommand(session.activeCommand) === "codex" &&
-    Boolean(session.threadId?.trim())
-  );
+): { provider: TerminalAgentKind; threadId: string } | null {
+  const activeProvider = getAgentForCommand(session.activeCommand);
+  const currentThreadId = session.threadId?.trim();
+  const currentProvider =
+    session.threadProvider ?? (currentThreadId ? "codex" : undefined);
+  const expectedProvider =
+    activeProvider ?? currentProvider ?? session.lastThreadProvider;
+  if (!expectedProvider) {
+    return null;
+  }
+
+  if (currentThreadId && currentProvider === expectedProvider) {
+    return { provider: expectedProvider, threadId: currentThreadId };
+  }
+
+  const recentThreadId = session.lastThreadId?.trim();
+  return recentThreadId && session.lastThreadProvider === expectedProvider
+    ? { provider: expectedProvider, threadId: recentThreadId }
+    : null;
 }
 
 function shellQuote(value: string): string {

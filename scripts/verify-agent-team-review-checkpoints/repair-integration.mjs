@@ -1,0 +1,124 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { captureRepairSourceFingerprint } from "../../backend/src/agent-team/repair-source-fingerprint.ts";
+import { createAgentTeamRouter } from "../../backend/src/routes/agent-team.ts";
+
+const backendRequire = createRequire(
+  new URL("../../backend/package.json", import.meta.url),
+);
+const express = backendRequire("express");
+let recordCheck = null;
+let createRepoFixture = null;
+
+function check(...args) {
+  return recordCheck(...args);
+}
+
+function createRepo() {
+  return createRepoFixture();
+}
+
+async function verifyRepairSourceFingerprint() {
+  const root = await createRepo();
+  const baseline = await captureRepairSourceFingerprint(root);
+
+  await mkdir(path.join(root, ".runweave"), { recursive: true });
+  await writeFile(path.join(root, ".runweave", "protocol.json"), "runtime\n");
+  const runtimeOnly = await captureRepairSourceFingerprint(root);
+  check(
+    "repair-protocol-runtime-artifacts-do-not-change-source-fingerprint",
+    runtimeOnly.sha256 === baseline.sha256,
+    { baseline, runtimeOnly },
+  );
+
+  await writeFile(path.join(root, "app.txt"), "changed\n");
+  const trackedChange = await captureRepairSourceFingerprint(root);
+  check(
+    "repair-protocol-tracked-source-change-updates-fingerprint",
+    trackedChange.sha256 !== baseline.sha256,
+    { baseline, trackedChange },
+  );
+
+  await writeFile(path.join(root, "new-source.txt"), "untracked\n");
+  const untrackedChange = await captureRepairSourceFingerprint(root);
+  check(
+    "repair-protocol-untracked-source-change-updates-fingerprint",
+    untrackedChange.sha256 !== trackedChange.sha256,
+    { trackedChange, untrackedChange },
+  );
+}
+
+async function verifyRepairBudgetRoute() {
+  const acceptedOptions = [];
+  const service = {
+    async startRun(input) {
+      acceptedOptions.push(input.options ?? {});
+      return { ok: true, options: input.options ?? {} };
+    },
+  };
+  const app = express();
+  app.use(express.json());
+  app.use("/agent-team", createAgentTeamRouter(service));
+  const server = await new Promise((resolve) => {
+    const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
+  });
+  try {
+    const address = server.address();
+    const baseUrl = `http://127.0.0.1:${address.port}/agent-team/runs`;
+    const post = (maxRepairAttempts) =>
+      fetch(baseUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: "project",
+          terminalSessionId: "terminal",
+          task: "fixture",
+          options: maxRepairAttempts === undefined ? {} : { maxRepairAttempts },
+        }),
+      });
+    const invalidLow = await post(0);
+    const invalidHigh = await post(6);
+    const validLow = await post(1);
+    const validHigh = await post(5);
+    const validDefault = await post(undefined);
+    check(
+      "repair-budget-route-enforces-one-to-five",
+      invalidLow.status === 400 &&
+        invalidHigh.status === 400 &&
+        validLow.ok &&
+        validHigh.ok &&
+        validDefault.ok &&
+        acceptedOptions.length === 3 &&
+        acceptedOptions[0]?.maxRepairAttempts === 1 &&
+        acceptedOptions[1]?.maxRepairAttempts === 5 &&
+        acceptedOptions[2]?.maxRepairAttempts === undefined,
+      {
+        statuses: [
+          invalidLow.status,
+          invalidHigh.status,
+          validLow.status,
+          validHigh.status,
+          validDefault.status,
+        ],
+        acceptedOptions,
+      },
+    );
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+}
+
+export async function verifyRepairIntegration(checkResult, createRepoResult) {
+  recordCheck = checkResult;
+  createRepoFixture = createRepoResult;
+  try {
+    await verifyRepairSourceFingerprint();
+    await verifyRepairBudgetRoute();
+  } finally {
+    recordCheck = null;
+    createRepoFixture = null;
+  }
+}

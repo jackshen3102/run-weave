@@ -1,9 +1,15 @@
 import type { AgentTeamAcceptanceCase, AgentTeamLoop, AgentTeamRun, AgentTeamWorkerOutbox } from "@runweave/shared/agent-team";
+import {
+  DEFAULT_MAX_REPAIR_ATTEMPTS,
+  resolveMaxRepairAttempts,
+} from "./repair-loop";
 
 export const DEFAULT_MAX_NO_PROGRESS = 3;
 export const DEFAULT_STABLE_FAIL_THRESHOLD = 2;
 
-export function createInitialLoop(): AgentTeamLoop {
+export function createInitialLoop(
+  maxRepairAttempts = DEFAULT_MAX_REPAIR_ATTEMPTS,
+): AgentTeamLoop {
   return {
     round: 1,
     noProgressCount: 0,
@@ -13,6 +19,8 @@ export function createInitialLoop(): AgentTeamLoop {
     stableFailThreshold: DEFAULT_STABLE_FAIL_THRESHOLD,
     errorFingerprints: [],
     bestPassCount: 0,
+    repairCycles: [],
+    maxRepairAttempts: resolveMaxRepairAttempts(maxRepairAttempts),
   };
 }
 
@@ -43,16 +51,24 @@ interface FoldRoundResult {
 /**
  * Fold one round's acceptance results into the run's loop + acceptance state,
  * applying debounce (single-round flip does not count) and objective progress
- * detection (pass count rising or a diff observed clears the counter).
+ * detection. Only acceptance improvement (or an explicit Debug UI signal)
+ * clears the counter; a code diff by itself is not objective progress.
  */
 export function foldRound(
   run: AgentTeamRun,
   params: {
     acceptanceResults?: AgentTeamWorkerOutbox["acceptanceResults"];
-    hadDiff?: boolean;
+    objectiveProgress?: boolean;
+    observedNoProgress?: boolean;
   },
 ): FoldRoundResult {
-  const loop: AgentTeamLoop = { ...run.loop, errorFingerprints: [...run.loop.errorFingerprints] };
+  const loop: AgentTeamLoop = {
+    ...run.loop,
+    errorFingerprints: [...run.loop.errorFingerprints],
+    repairCycles: [...(run.loop.repairCycles ?? [])],
+    maxRepairAttempts:
+      run.loop.maxRepairAttempts ?? DEFAULT_MAX_REPAIR_ATTEMPTS,
+  };
   const resultById = new Map(
     (params.acceptanceResults ?? []).map((result) => [result.caseId, result]),
   );
@@ -82,6 +98,7 @@ export function foldRound(
         evidence: result.evidence,
         bouncedToPanelId: null,
         recheckRequestedAt: null,
+        recheckDispatchId: null,
         recheckWorkerPanelId: null,
         recheckWorkerRole: null,
         recheckOutboxMtimeMs: null,
@@ -98,6 +115,7 @@ export function foldRound(
       consecutiveFail,
       evidence: result.evidence,
       recheckRequestedAt: null,
+      recheckDispatchId: null,
       recheckWorkerPanelId: null,
       recheckWorkerRole: null,
       recheckOutboxMtimeMs: null,
@@ -115,13 +133,13 @@ export function foldRound(
 
   const passCount = acceptance.filter((item) => item.status === "pass").length;
   const passRose = passCount > loop.bestPassCount;
-  const hadProgress = passRose || Boolean(params.hadDiff);
+  const hadProgress = passRose || params.objectiveProgress === true;
 
   loop.round += 1;
   loop.bestPassCount = Math.max(loop.bestPassCount, passCount);
   if (hadProgress) {
     loop.noProgressCount = 0;
-  } else if (params.hadDiff === false && resultById.size === 0) {
+  } else if (params.observedNoProgress === true && resultById.size === 0) {
     loop.noProgressCount += 1;
   } else if (params.acceptanceResults && params.acceptanceResults.length > 0) {
     // Only count a no-progress round when there were real stable fails; a

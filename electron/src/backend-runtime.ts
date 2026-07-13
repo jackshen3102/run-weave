@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import net from "node:net";
+import path from "node:path";
 import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
 import {
   recordLastKnownGoodRuntimeRelease,
@@ -47,6 +48,7 @@ export function resolvePackagedBackendPaths(
     betterSqlitePackageDir: release.betterSqlitePackageDir,
     betterSqliteNativeBinding: release.betterSqliteNativeBinding,
     activityAvailable: release.activityAvailable,
+    toolkitPluginRoot: path.join(resourcesPath, "runweave-hook-runtime"),
     releaseId: release.releaseId,
     source: release.source,
   };
@@ -115,6 +117,9 @@ export function buildPackagedBackendEnv(options: {
         }
       : {}),
     RUNWEAVE_NODE_PTY_DIR: options.backendPaths.nodePtyDir,
+    // Hook assets are Electron-shell controlled. Runtime manifests do not
+    // carry them, and electron/resources changes require a full app update.
+    RUNWEAVE_TOOLKIT_PLUGIN_ROOT: options.backendPaths.toolkitPluginRoot,
     ...(options.backendPaths.activityAvailable
       ? {
           RUNWEAVE_ACTIVITY_WORKER_ENTRY: options.backendPaths.activityWorkerEntry,
@@ -287,6 +292,7 @@ export async function startPackagedBackend(
         onIncidentEvent: options.onIncidentEvent,
         release,
         runtimeRoot: options.runtimeRoot ?? null,
+        toolkitPluginRoot: path.join(resourcesPath, "runweave-hook-runtime"),
       });
       runtime.startupWarning =
         failures.length > 0
@@ -313,6 +319,7 @@ async function startPackagedBackendForRelease(options: {
   onIncidentEvent?: (event: PackagedBackendRuntimeIncidentEvent) => void;
   release: RuntimeRelease;
   runtimeRoot: string | null;
+  toolkitPluginRoot: string;
 }): Promise<PackagedBackendRuntime> {
   const release = options.release;
   const nodePtyDir = preparePackagedNodePtyDir({
@@ -329,6 +336,7 @@ async function startPackagedBackendForRelease(options: {
     betterSqlitePackageDir: release.betterSqlitePackageDir,
     betterSqliteNativeBinding: release.betterSqliteNativeBinding,
     activityAvailable: release.activityAvailable,
+    toolkitPluginRoot: options.toolkitPluginRoot,
     releaseId: release.releaseId,
     source: release.source,
   };

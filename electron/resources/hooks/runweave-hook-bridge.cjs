@@ -131,15 +131,15 @@ function getCommandBasename(command) {
   return basename || null;
 }
 
-function readTmuxPaneCommandName() {
+function readTmuxPaneContext() {
   const socketPath = parseTmuxSocketPath(process.env.TMUX);
   const tmuxPaneId = process.env.TMUX_PANE;
   if (!socketPath || !tmuxPaneId) {
-    return null;
+    return { commandName: null, panelId: null };
   }
   const separator = "__RUNWEAVE_METADATA_FIELD__";
   const result = spawnSync(
-    "tmux",
+    process.env.TMUX_BINARY || "tmux",
     [
       "-S",
       socketPath,
@@ -147,7 +147,11 @@ function readTmuxPaneCommandName() {
       "-p",
       "-t",
       tmuxPaneId,
-      ["#{@runweave_command}", "#{pane_current_command}"].join(separator),
+      [
+        "#{@runweave_command}",
+        "#{pane_current_command}",
+        "#{@runweave_panel_id}",
+      ].join(separator),
     ],
     {
       encoding: "utf8",
@@ -156,12 +160,18 @@ function readTmuxPaneCommandName() {
     },
   );
   if (result.error || result.status !== 0) {
-    return null;
+    return { commandName: null, panelId: null };
   }
-  const [runweaveCommand = "", paneCommand = ""] = String(result.stdout || "")
+  const [runweaveCommand = "", paneCommand = "", panelId = ""] = String(
+    result.stdout || "",
+  )
     .replace(/\r?\n$/, "")
     .split(separator);
-  return getCommandBasename(runweaveCommand) || getCommandBasename(paneCommand);
+  return {
+    commandName:
+      getCommandBasename(runweaveCommand) || getCommandBasename(paneCommand),
+    panelId: panelId.trim() || null,
+  };
 }
 
 function notifyDesktop(source) {
@@ -333,10 +343,24 @@ async function main() {
   const payload = parsePayload(await readStdin());
   const rawEvent = readHookEvent(payload);
   const normalizedEvent = normalizeEventName(rawEvent);
-  const source = normalizeSource(args.source);
-  const commandName = args.commandName || readTmuxPaneCommandName();
+  const tmuxPaneContext = readTmuxPaneContext();
+  if (tmuxPaneContext.panelId) {
+    process.env.RUNWEAVE_TERMINAL_PANEL_ID = tmuxPaneContext.panelId;
+  }
+  const commandName = args.commandName || tmuxPaneContext.commandName;
+  const normalizedCommandName = String(commandName || "").toLowerCase();
+  let source = normalizeSource(args.source);
+  if (source === "unknown") {
+    if (["codex", "claude"].includes(normalizedCommandName)) {
+      source = normalizedCommandName;
+    } else if (
+      ["trae", "traecli", "traex"].includes(normalizedCommandName)
+    ) {
+      source = "trae";
+    }
+  }
   const completionReason = normalizeReason(args.reason);
-  const threadId = source === "codex" ? readThreadId(payload) : null;
+  const threadId = readThreadId(payload);
   const stateHookEvent =
     source === "codex" || source === "trae"
       ? toAgentHookStateEvent(normalizedEvent)

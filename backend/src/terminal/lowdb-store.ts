@@ -226,8 +226,10 @@ export class LowDbTerminalSessionStore
 
       if (params.threadId) {
         session.threadId = params.threadId;
+        session.threadProvider = params.provider ?? undefined;
       } else {
         delete session.threadId;
+        delete session.threadProvider;
       }
       await database.write();
     });
@@ -266,6 +268,7 @@ export class LowDbTerminalSessionStore
         return;
       }
       session.lastThreadId = params.threadId;
+      session.lastThreadProvider = params.provider;
       session.lastThreadStatus = params.status;
       session.lastThreadUpdatedAt = params.updatedAt;
       await database.write();

@@ -108,6 +108,27 @@ export class AgentTeamExportService extends AgentTeamLifecycleService {
     const outboxes = includeOutboxes
       ? await this.collectExportOutboxes(run, session, runBound, warnings)
       : [];
+    let outboxHistory: AgentTeamExportResponse["outboxHistory"] = [];
+    if (includeOutboxes) {
+      try {
+        outboxHistory = await this.outboxHistoryStore.list(
+          run.projectId,
+          run.runId,
+          session.cwd,
+        );
+        for (const item of outboxHistory) {
+          if (item.error) {
+            warnings.push(
+              `Could not read outbox history ${item.path}: ${item.error}`,
+            );
+          }
+        }
+      } catch (error) {
+        warnings.push(
+          `Could not list outbox history: ${formatErrorMessage(error)}`,
+        );
+      }
+    }
 
     return {
       run,
@@ -115,6 +136,7 @@ export class AgentTeamExportService extends AgentTeamLifecycleService {
       projectRoot: this.resolveProjectRoot(run.projectId, session.cwd),
       panels: { runBound, sessionOther },
       outboxes,
+      outboxHistory,
       acceptanceSummary: buildExportAcceptanceSummary(run, outboxes),
       warnings,
     };

@@ -4,6 +4,18 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { AgentTeamReviewCheckpointGit } from "../backend/src/agent-team/review-checkpoint-git.ts";
+import {
+  hasTraeReadyPrompt,
+  hasTraeStartupFailure,
+} from "../packages/shared/src/terminal-agent-readiness.ts";
+import { verifyRepairIntegration } from "./verify-agent-team-review-checkpoints/repair-integration.mjs";
+import { verifyEvidenceGatedRepairLoop } from "./verify-agent-team-review-checkpoints/repair-loop.mjs";
+import {
+  buildTraeMetadataScrollback,
+  buildTraeReadyScrollback,
+  verifyTraeReadiness,
+} from "./verify-agent-team-review-checkpoints/trae-readiness.mjs";
+import { verifyTmuxPaneOutput } from "./verify-agent-team-review-checkpoints/tmux-pane-output.mjs";
 
 const execFileAsync = promisify(execFile);
 const checks = [];
@@ -40,6 +52,76 @@ async function createRepo() {
 }
 
 async function main() {
+  const traeReadyScrollback = buildTraeReadyScrollback(
+    "Summarize recent commits",
+  );
+  check(
+    "trae-banner-only-is-not-ready",
+    !hasTraeReadyPrompt("TRAE CLI Next"),
+    "TraeX banner without metadata and input UI was accepted",
+  );
+  check(
+    "trae-metadata-without-input-is-not-ready",
+    !hasTraeReadyPrompt(buildTraeMetadataScrollback()),
+    "TraeX metadata without input prompt/footer was accepted",
+  );
+  check(
+    "trae-dynamic-summarize-suggestion-is-ready",
+    hasTraeReadyPrompt(traeReadyScrollback),
+    "real TraeX dynamic Summarize suggestion was not recognized",
+  );
+  check(
+    "trae-arbitrary-dynamic-suggestion-is-ready",
+    hasTraeReadyPrompt(
+      buildTraeReadyScrollback("Map dependency ownership boundaries"),
+    ),
+    "TraeX ready detection still depends on a suggestion allowlist",
+  );
+  check(
+    "trae-ready-does-not-require-divider-or-footer-decoration",
+    hasTraeReadyPrompt(
+      `${buildTraeMetadataScrollback()}\n❯ Suggest another safe task`,
+    ) &&
+      hasTraeReadyPrompt(
+        `${buildTraeMetadataScrollback()}\n··\n❯ Different prompt chrome\naccess: full`,
+      ),
+    "TraeX ready detection still depends on divider glyphs, width, or permission footer decoration",
+  );
+  check(
+    "trae-ready-suggestion-requires-banner",
+    !hasTraeReadyPrompt("❯ Summarize recent commits\n───\nmodel ▰ mode"),
+    "suggestion text without the TraeX UI banner was accepted",
+  );
+  check(
+    "trae-startup-failure-without-banner",
+    hasTraeStartupFailure("zsh: command not found: traex"),
+    "startup failure before the TraeX banner was ignored",
+  );
+  const staleReadyThenFailure = `${traeReadyScrollback}\nzsh: command not found: traex`;
+  check(
+    "trae-stale-ready-does-not-mask-failure",
+    !hasTraeReadyPrompt(staleReadyThenFailure) &&
+      hasTraeStartupFailure(staleReadyThenFailure),
+    "ready output masked a later startup failure",
+  );
+  const nextStartupWithoutReady = `${staleReadyThenFailure}\nTRAE CLI Next\nModel: default`;
+  check(
+    "trae-new-startup-epoch-requires-ready-marker",
+    !hasTraeReadyPrompt(nextStartupWithoutReady) &&
+      !hasTraeStartupFailure(nextStartupWithoutReady),
+    "a new startup banner reused a marker or failure from an older epoch",
+  );
+  check(
+    "trae-interactive-prompt-blocks-ready",
+    !hasTraeReadyPrompt(`${traeReadyScrollback}\nSelect an option`) &&
+      !hasTraeStartupFailure(`${traeReadyScrollback}\nSelect an option`),
+    "an interactive prompt after ready did not block dispatch",
+  );
+  await verifyTraeReadiness(check);
+  await verifyTmuxPaneOutput(check, roots);
+  verifyEvidenceGatedRepairLoop(check);
+  await verifyRepairIntegration(check, createRepo);
+
   const service = new AgentTeamReviewCheckpointGit();
   const root = await createRepo();
   await mkdir(path.join(root, ".runweave", "outbox"), { recursive: true });

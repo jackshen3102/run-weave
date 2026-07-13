@@ -61,6 +61,7 @@ const createRunSchema = z
       .object({
         autoApproveSplit: z.boolean().optional(),
         reviewCheckpointMode: z.enum(["disabled", "local_commit"]).optional(),
+        maxRepairAttempts: z.number().int().min(1).max(5).optional(),
       })
       .strict()
       .optional(),

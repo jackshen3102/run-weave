@@ -33,10 +33,14 @@ interface TerminalHistoryTarget {
   panelId?: string | null;
   projectId?: string | null;
   threadId?: string | null;
+  threadProvider?: TerminalSessionHistoryResponse["threadProvider"] | null;
   lastThreadId?: string | null;
+  lastThreadProvider?: TerminalSessionHistoryResponse["lastThreadProvider"] | null;
   lastThreadStatus?: TerminalSessionHistoryResponse["lastThreadStatus"] | null;
   panelThreadId?: string | null;
+  panelThreadProvider?: TerminalSessionHistoryResponse["threadProvider"] | null;
   panelLastThreadId?: string | null;
+  panelLastThreadProvider?: TerminalSessionHistoryResponse["lastThreadProvider"] | null;
   panelLastThreadStatus?:
     | TerminalSessionHistoryResponse["lastThreadStatus"]
     | null;
@@ -58,14 +62,18 @@ export function TerminalHistoryDrawer({
   const { apiBase, onAuthExpired, token } = useTerminalRuntime();
   const {
     lastThreadId: terminalLastThreadId,
+    lastThreadProvider: terminalLastThreadProvider,
     lastThreadStatus: terminalLastThreadStatus,
     panelId: terminalPanelId,
     panelLastThreadId: terminalPanelLastThreadId,
+    panelLastThreadProvider: terminalPanelLastThreadProvider,
     panelLastThreadStatus: terminalPanelLastThreadStatus,
     panelThreadId: terminalPanelThreadId,
+    panelThreadProvider: terminalPanelThreadProvider,
     projectId: terminalProjectId,
     sessionId: terminalSessionId,
     threadId: terminalThreadId,
+    threadProvider: terminalThreadProvider,
   } = target;
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const [history, setHistory] = useState<TerminalSessionHistoryResponse | null>(
@@ -159,8 +167,17 @@ export function TerminalHistoryDrawer({
         value: history?.threadId ?? terminalThreadId ?? null,
       },
       {
+        label: "Thread Provider",
+        value: history?.threadProvider ?? terminalThreadProvider ?? null,
+      },
+      {
         label: "Recent Thread",
         value: history?.lastThreadId ?? terminalLastThreadId ?? null,
+      },
+      {
+        label: "Recent Thread Provider",
+        value:
+          history?.lastThreadProvider ?? terminalLastThreadProvider ?? null,
       },
       {
         label: "Recent Thread State",
@@ -175,8 +192,16 @@ export function TerminalHistoryDrawer({
         value: terminalPanelThreadId ?? null,
       },
       {
+        label: "Panel Thread Provider",
+        value: terminalPanelThreadProvider ?? null,
+      },
+      {
         label: "Panel Recent Thread",
         value: terminalPanelLastThreadId ?? null,
+      },
+      {
+        label: "Panel Recent Thread Provider",
+        value: terminalPanelLastThreadProvider ?? null,
       },
       {
         label: "Panel Recent State",
@@ -185,19 +210,25 @@ export function TerminalHistoryDrawer({
     ],
     [
       history?.lastThreadId,
+      history?.lastThreadProvider,
       history?.lastThreadStatus,
       history?.projectId,
       history?.terminalSessionId,
       history?.threadId,
+      history?.threadProvider,
       terminalLastThreadId,
+      terminalLastThreadProvider,
       terminalLastThreadStatus,
       terminalPanelId,
       terminalPanelLastThreadId,
+      terminalPanelLastThreadProvider,
       terminalPanelLastThreadStatus,
       terminalPanelThreadId,
+      terminalPanelThreadProvider,
       terminalProjectId,
       terminalSessionId,
       terminalThreadId,
+      terminalThreadProvider,
     ],
   );
 

@@ -16,6 +16,10 @@ files:
   - "!node_modules/**/*"
 
 extraResources:
+  - from: resources/hooks
+    to: runweave-hook-runtime/hooks
+    filter:
+      - "**/*"
   - from: ../frontend/dist
     to: frontend/dist
     filter:

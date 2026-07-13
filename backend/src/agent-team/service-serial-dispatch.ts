@@ -5,6 +5,7 @@ import type {
   AgentTeamWorkerRole,
 } from "@runweave/shared/agent-team";
 import { buildWorkerRecheckPrompt } from "./prompt-builders";
+import { incrementRepairAttempts } from "./repair-loop";
 import { acceptanceCasesForRole } from "./service-acceptance-policy";
 import { AgentTeamExecutionService } from "./service-execution";
 import { resolveAgentTeamTerminal } from "./service-run-policy";
@@ -113,6 +114,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       log: string;
       triggerSummary?: string | null;
       reviewScope?: "full" | "incremental" | "final";
+      acceptedRepairKeys?: string[];
     },
   ): Promise<AgentTeamRun> {
     const session = this.terminalSessionManager.getSession(
@@ -137,12 +139,13 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
           planSha256: run.verification?.planSha256 ?? null,
           testCaseSha256: this.effectiveTestCaseSha256(run.verification),
         });
-        dispatchRun = await this.updateRun(run, {
+        dispatchRun = {
+          ...run,
           reviewCheckpoint: {
             ...run.reviewCheckpoint,
             pendingReview: reviewTarget,
           },
-        });
+        };
       } catch (error) {
         return this.pauseForCheckpointError(
           run,
@@ -176,28 +179,23 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
     );
     const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(session, worker);
     const now = new Date().toISOString();
-    await this.promptSender.sendPromptToPane(
-      session,
-      buildWorkerRecheckPrompt({
-        run: dispatchRun,
-        worker,
-        cases: options.cases,
-        outboxPath,
-        triggerSummary: options.triggerSummary ?? null,
-      }),
-      { panelId: worker.panelId },
-    );
-
     const caseIds = new Set(options.cases.map((item) => item.caseId));
-    return this.updateRun(dispatchRun, {
+    const acceptedRepairKeys = options.acceptedRepairKeys ?? [];
+    const activeWorkerDispatch = createActiveWorkerDispatch(
+      worker,
+      now,
+      outboxMtimeMs,
+      dispatchRun.loop.round,
+      reviewTarget,
+    );
+    const persistedRun = await this.updateRun(run, {
+      reviewCheckpoint: dispatchRun.reviewCheckpoint,
+      loop:
+        acceptedRepairKeys.length > 0
+          ? incrementRepairAttempts(run.loop, acceptedRepairKeys)
+          : run.loop,
       activeWorkerRole: role,
-      activeWorkerDispatch: createActiveWorkerDispatch(
-        worker,
-        now,
-        outboxMtimeMs,
-        dispatchRun.loop.round,
-        reviewTarget,
-      ),
+      activeWorkerDispatch,
       workers: setActiveWorker(dispatchRun.workers, role),
       acceptance: dispatchRun.acceptance.map((item) =>
         caseIds.has(item.caseId)
@@ -208,6 +206,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
               resultSummary: null,
               bouncedToPanelId: null,
               recheckRequestedAt: now,
+              recheckDispatchId: activeWorkerDispatch.dispatchId ?? null,
               recheckWorkerPanelId: worker.panelId,
               recheckWorkerRole: worker.role,
               recheckOutboxMtimeMs: outboxMtimeMs,
@@ -217,8 +216,32 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       ),
       logs: [
         ...dispatchRun.logs,
+        ...(acceptedRepairKeys.length > 0
+          ? [
+              `code 修复交接证据通过，repair attempts +1：${acceptedRepairKeys.join(", ")}`,
+            ]
+          : []),
         `${options.log}（${role} pane ${worker.panelId}）`,
       ],
     });
+    try {
+      await this.promptSender.sendPromptToPane(
+        session,
+        buildWorkerRecheckPrompt({
+          run: persistedRun,
+          worker,
+          cases: options.cases,
+          outboxPath,
+          triggerSummary: options.triggerSummary ?? null,
+        }),
+        { panelId: worker.panelId },
+      );
+    } catch (error) {
+      return this.pauseForCheckpointError(
+        persistedRun,
+        `worker prompt 投递失败：${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return persistedRun;
   }
 }

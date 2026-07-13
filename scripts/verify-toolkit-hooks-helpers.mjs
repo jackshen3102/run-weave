@@ -119,12 +119,13 @@ export function runToolkitHookCommand(
       }
     }
     delete env.TMUX;
+    delete env.TMUX_PANE;
 
     const child = spawn("bash", ["-lc", runnableCommand], {
       cwd: toolkitDir,
       env: {
         ...env,
-        TMUX_PANE: "%13",
+        ...(options.omitTmuxPane ? {} : { TMUX_PANE: "%13" }),
         ...extraEnv,
         ...(options.setHookSource === false
           ? {}
@@ -147,6 +148,155 @@ export function runToolkitHookCommand(
     });
     child.stdin.end(payload);
   });
+}
+
+export async function verifyPtyProviderInference(params) {
+  const requestStart = params.requests.length;
+  const appServerRequestStart = params.appServerRequests.length;
+  const baseEnv = {
+    HOME: params.homeDir,
+    RUNWEAVE_TOOLKIT_PLUGIN_ROOT: toolkitDir,
+    RUNWEAVE_APP_SERVER_URL: params.appServerUrl,
+    RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
+    RUNWEAVE_HOOK_ENDPOINT: params.endpoint,
+    RUNWEAVE_COMPLETION_HOOK_ENDPOINT: params.completionEndpoint,
+    RUNWEAVE_PROJECT_ID: "project-pty-provider",
+    RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+  };
+  const ptyOptions = {
+    omitTmuxPane: true,
+    replacePluginDirPlaceholder: false,
+    setHookSource: false,
+  };
+  const codexRoot = path.join(params.homeDir, ".codex", "plugins", "toolkit");
+  const traeRoot = path.join(
+    params.homeDir,
+    ".trae",
+    ".tmp",
+    "marketplaces",
+    "local",
+    "plugins",
+    "toolkit",
+  );
+  const claudeRoot = path.join(params.homeDir, ".claude", "plugins", "toolkit");
+
+  await runToolkitHookCommand(
+    params.userPromptCommand,
+    "codex",
+    {
+      ...baseEnv,
+      CODEX_PLUGIN_ROOT: codexRoot,
+      RUNWEAVE_HOOK_TOKEN: "token-pty-codex-query",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-pty-codex-query",
+    },
+    {
+      hook_event_name: "UserPromptSubmit",
+      prompt: "safe codex query",
+      session_id: "thread-pty-codex",
+    },
+    ptyOptions,
+  );
+  assert.equal(params.appServerRequests.at(-1).payload.source, "codex");
+  assert.equal(params.appServerRequests.at(-1).payload.stateHookEvent, "UserPromptSubmit");
+  assert.equal(params.requests.at(-1).body.agent, "codex");
+  assert.equal(params.requests.at(-1).body.query, "safe codex query");
+  assert.equal(params.requests.at(-1).body.tmuxPaneId, undefined);
+
+  await runToolkitHookCommand(
+    params.userPromptCommand,
+    "trae",
+    {
+      ...baseEnv,
+      CLAUDE_PLUGIN_ROOT: traeRoot,
+      RUNWEAVE_HOOK_TOKEN: "token-pty-trae-query",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-pty-trae-query",
+    },
+    {
+      hook_event_name: "UserPromptSubmit",
+      prompt: "safe trae query",
+      session_id: "thread-pty-trae",
+    },
+    ptyOptions,
+  );
+  assert.equal(params.appServerRequests.at(-1).payload.source, "trae");
+  assert.equal(params.appServerRequests.at(-1).payload.stateHookEvent, "UserPromptSubmit");
+  assert.equal(params.requests.at(-1).body.agent, "trae");
+  assert.equal(params.requests.at(-1).body.query, "safe trae query");
+  assert.equal(params.requests.at(-1).body.tmuxPaneId, undefined);
+
+  await runToolkitHookCommand(
+    params.stopCommand,
+    "trae",
+    {
+      ...baseEnv,
+      CLAUDE_PLUGIN_ROOT: traeRoot,
+      RUNWEAVE_HOOK_TOKEN: "token-pty-trae-response",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-pty-trae-response",
+    },
+    {},
+    ptyOptions,
+  );
+  assert.equal(params.appServerRequests.at(-2).payload.source, "trae");
+  assert.equal(params.appServerRequests.at(-2).payload.stateHookEvent, "Stop");
+  assert.equal(params.requests.at(-2).body.agent, "trae");
+  assert.equal(params.requests.at(-2).body.response, "done");
+  assert.equal(params.requests.at(-2).body.tmuxPaneId, undefined);
+
+  const requestsBeforeClaude = params.requests.length;
+  await runToolkitHookCommand(
+    params.userPromptCommand,
+    "claude",
+    {
+      ...baseEnv,
+      CLAUDE_PLUGIN_ROOT: claudeRoot,
+      RUNWEAVE_HOOK_TOKEN: "token-pty-claude",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-pty-claude",
+    },
+    { hook_event_name: "UserPromptSubmit", session_id: "thread-pty-claude" },
+    ptyOptions,
+  );
+  assert.equal(params.appServerRequests.at(-1).payload.source, "claude");
+  assert.equal(params.requests.length, requestsBeforeClaude);
+
+  const requestsBeforeConflict = params.requests.length;
+  await runToolkitHookCommand(
+    params.userPromptCommand,
+    "codex",
+    {
+      ...baseEnv,
+      CODEX_PLUGIN_ROOT: codexRoot,
+      CLAUDE_PLUGIN_ROOT: traeRoot,
+      RUNWEAVE_HOOK_TOKEN: "token-pty-conflict",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-pty-conflict",
+    },
+    { hook_event_name: "UserPromptSubmit", session_id: "thread-pty-conflict" },
+    ptyOptions,
+  );
+  assert.equal(params.appServerRequests.at(-1).payload.source, "unknown");
+  assert.equal(params.requests.length, requestsBeforeConflict);
+
+  await runToolkitHookCommand(
+    params.userPromptCommand,
+    "codex",
+    {
+      ...baseEnv,
+      CODEX_PLUGIN_ROOT: codexRoot,
+      CLAUDE_PLUGIN_ROOT: traeRoot,
+      RUNWEAVE_HOOK_TOKEN: "token-pty-explicit",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-pty-explicit",
+    },
+    {
+      hook_event_name: "UserPromptSubmit",
+      prompt: "safe explicit query",
+      session_id: "thread-pty-explicit",
+    },
+    { ...ptyOptions, setHookSource: true },
+  );
+  assert.equal(params.appServerRequests.at(-1).payload.source, "codex");
+  assert.equal(params.requests.at(-1).body.agent, "codex");
+  assert.equal(params.requests.at(-1).body.query, "safe explicit query");
+  assert.equal(params.requests.length - requestStart, 5);
+  assert.equal(params.appServerRequests.length - appServerRequestStart, 7);
 }
 
 export async function verifyPreToolHook(params) {
