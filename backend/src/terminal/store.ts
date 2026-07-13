@@ -1,5 +1,6 @@
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
+import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 
 export interface PersistedTerminalProjectRecord {
   id: string;
@@ -15,8 +16,10 @@ export interface PersistedTerminalSessionRecord {
   projectId: string;
   alias?: string | null;
   threadId?: string;
+  threadProvider?: TerminalAgentKind;
   preview?: string;
   lastThreadId?: string;
+  lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
   lastThreadUpdatedAt?: string;
   command: string;
@@ -44,8 +47,10 @@ export interface PersistedTerminalPanelRecord {
   alias?: string | null;
   role?: string | null;
   threadId?: string;
+  threadProvider?: TerminalAgentKind;
   preview?: string;
   lastThreadId?: string;
+  lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
   lastThreadUpdatedAt?: string;
   agentTeamRunId?: string | null;
@@ -133,6 +138,7 @@ export interface UpdateTerminalSessionAliasParams {
 export interface UpdateTerminalSessionThreadIdParams {
   terminalSessionId: string;
   threadId: string | null;
+  provider: TerminalAgentKind | null;
 }
 
 export interface UpdateTerminalSessionPreviewParams {
@@ -143,6 +149,7 @@ export interface UpdateTerminalSessionPreviewParams {
 export interface UpdateTerminalSessionLastThreadParams {
   terminalSessionId: string;
   threadId: string;
+  provider: TerminalAgentKind;
   status: TerminalLastThreadStatus;
   updatedAt: string;
 }
@@ -159,6 +166,7 @@ export interface UpdateTerminalSessionTerminalStateParams {
 export interface UpdateTerminalPanelThreadIdParams {
   panelId: string;
   threadId: string | null;
+  provider: TerminalAgentKind | null;
 }
 
 export interface UpdateTerminalPanelPreviewParams {
@@ -169,6 +177,7 @@ export interface UpdateTerminalPanelPreviewParams {
 export interface UpdateTerminalPanelLastThreadParams {
   panelId: string;
   threadId: string;
+  provider: TerminalAgentKind;
   status: TerminalLastThreadStatus;
   updatedAt: string;
 }

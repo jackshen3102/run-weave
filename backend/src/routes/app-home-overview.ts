@@ -1,8 +1,10 @@
 import type { AppHomeOverviewResponse, AppHomeOverviewSession } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
+import { discoverAppServer } from "@runweave/shared/app-server/discovery";
 import { Router } from "express";
 import path from "node:path";
 import { logger } from "../logging";
+import { AppServerClient } from "../app-server/client";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
   readCodexThreadSnapshot,
@@ -28,6 +30,27 @@ type CodexThreadOverviewSnapshot = {
   preview: string | null;
   statusType: CodexThreadStatusType | null;
 };
+
+function resolveThreadIdentity(
+  session: TerminalSession,
+): { provider: NonNullable<TerminalSession["threadProvider"]>; id: string } | null {
+  const activeAgent = getTerminalSessionAgent(session);
+  if (session.threadId) {
+    const provider = session.threadProvider ?? "codex";
+    return provider === activeAgent ? { provider, id: session.threadId } : null;
+  }
+  if (
+    session.lastThreadId &&
+    session.lastThreadProvider &&
+    session.lastThreadProvider === activeAgent
+  ) {
+    return {
+      provider: session.lastThreadProvider,
+      id: session.lastThreadId,
+    };
+  }
+  return null;
+}
 
 const appHomeLogger = logger.child({ component: "app-home-overview" });
 
@@ -64,7 +87,7 @@ function resolveEffectivePreview(
     return codexThreadSnapshot.preview ?? undefined;
   }
 
-  if (getTerminalSessionAgent(session) !== "codex") {
+  if (!resolveThreadIdentity(session)) {
     return undefined;
   }
 
@@ -74,9 +97,7 @@ function resolveEffectivePreview(
 function resolveEffectiveThreadId(
   session: TerminalSession,
 ): string | undefined {
-  return getTerminalSessionAgent(session) === "codex"
-    ? session.threadId
-    : undefined;
+  return resolveThreadIdentity(session)?.id;
 }
 
 function buildDisplayStatus(
@@ -134,7 +155,7 @@ function buildCodexDisplayStatus(
   codexThreadSnapshot?: CodexThreadOverviewSnapshot | null,
 ): DisplayStatusPayload | null {
   if (
-    getTerminalSessionAgent(session) !== "codex" ||
+    !resolveThreadIdentity(session) ||
     !codexThreadSnapshot?.statusType
   ) {
     return null;
@@ -153,10 +174,11 @@ function buildCodexDisplayStatus(
     return null;
   }
 
+  const agent = resolveThreadIdentity(session)?.provider ?? "codex";
   const terminalState: TerminalState =
     codexThreadSnapshot.statusType === "active"
-      ? { state: "agent_running", agent: "codex" }
-      : { state: "agent_idle", agent: "codex" };
+      ? { state: "agent_running", agent }
+      : { state: "agent_idle", agent };
 
   return terminalState.state === "agent_running"
     ? {
@@ -176,19 +198,62 @@ async function readCodexThreadOverviewSnapshot(
 ): Promise<CodexThreadOverviewSnapshot | null> {
   if (
     session.status === "exited" ||
-    getTerminalSessionAgent(session) !== "codex" ||
-    !session.threadId
+    resolveThreadIdentity(session)?.provider !== "codex"
   ) {
     return null;
   }
 
   try {
-    return await readCodexThreadSnapshot(session.threadId);
+    return await readCodexThreadSnapshot(resolveThreadIdentity(session)!.id);
   } catch (error) {
     appHomeLogger.warn("app.home-overview.codex-thread.read-failed", {
       message: "Failed to read Codex thread while building app home overview",
       terminalSessionId: session.id,
-      threadId: session.threadId,
+      threadId: resolveThreadIdentity(session)?.id ?? null,
+      error,
+    });
+    return null;
+  }
+}
+
+async function readAgentThreadOverviewSnapshot(
+  session: TerminalSession,
+): Promise<CodexThreadOverviewSnapshot | null> {
+  const identity = resolveThreadIdentity(session);
+  if (!identity) {
+    return null;
+  }
+  if (identity.provider === "codex") {
+    return readCodexThreadOverviewSnapshot(session);
+  }
+  if (
+    session.status === "exited" ||
+    getTerminalSessionAgent(session) !== identity.provider
+  ) {
+    return null;
+  }
+  try {
+    const connection = await discoverAppServer({ env: process.env });
+    if (!connection) {
+      return null;
+    }
+    const response = await new AppServerClient(connection).getThread(
+      identity.id,
+    );
+    if (!response?.detail) {
+      return null;
+    }
+    return {
+      preview: response.detail.preview,
+      statusType:
+        response.detail.status === "running" ? "active" : "idle",
+    };
+  } catch (error) {
+    appHomeLogger.warn("app.home-overview.agent-thread.read-failed", {
+      message: "Failed to read provider thread while building app home overview",
+      provider: identity.provider,
+      terminalSessionId: session.id,
+      threadId: identity.id,
       error,
     });
     return null;
@@ -229,7 +294,7 @@ export async function buildAppHomeOverviewPayload(
   const sessions = await Promise.all(
     terminalSessionManager.listSessions().map(async (session) => {
       const codexThreadSnapshot =
-        await readCodexThreadOverviewSnapshot(session);
+        await readAgentThreadOverviewSnapshot(session);
       await updateSessionPreviewFromCodexThread(
         terminalSessionManager,
         session,

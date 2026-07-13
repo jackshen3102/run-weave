@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import type {
   AgentTeamActiveWorkerDispatch,
   AgentTeamRun,
@@ -102,8 +103,16 @@ export function createActiveWorkerDispatch(
   outboxMtimeMs: number | null,
   round: number,
   reviewTarget: AgentTeamActiveWorkerDispatch["reviewTarget"] = null,
+  options: Pick<
+    AgentTeamActiveWorkerDispatch,
+    | "repairKeys"
+    | "dispatchId"
+    | "protocolCorrectionAttempt"
+    | "protocolCorrectionSourceFingerprint"
+  > = {},
 ): AgentTeamActiveWorkerDispatch {
   return {
+    dispatchId: options.dispatchId ?? randomUUID(),
     role: worker.role,
     panelId: worker.panelId ?? null,
     tmuxPaneId: worker.tmuxPaneId ?? null,
@@ -111,6 +120,10 @@ export function createActiveWorkerDispatch(
     requestedAt,
     outboxMtimeMs,
     reviewTarget,
+    repairKeys: options.repairKeys ?? [],
+    protocolCorrectionAttempt: options.protocolCorrectionAttempt ?? 0,
+    protocolCorrectionSourceFingerprint:
+      options.protocolCorrectionSourceFingerprint ?? null,
   };
 }
 
@@ -176,6 +189,13 @@ export function resolveActiveWorkerDispatch(
       worker.role === "code_review"
         ? (run.reviewCheckpoint?.pendingReview ?? null)
         : null,
+      {
+        dispatchId: createLegacyDispatchId(
+          run,
+          worker,
+          recheckCase.recheckRequestedAt,
+        ),
+      },
     );
   }
   return createActiveWorkerDispatch(
@@ -186,7 +206,30 @@ export function resolveActiveWorkerDispatch(
     worker.role === "code_review"
       ? (run.reviewCheckpoint?.pendingReview ?? null)
       : null,
+    {
+      dispatchId: createLegacyDispatchId(run, worker, run.updatedAt),
+    },
   );
+}
+
+function createLegacyDispatchId(
+  run: AgentTeamRun,
+  worker: Pick<AgentTeamWorker, "role" | "panelId" | "tmuxPaneId">,
+  requestedAt: string,
+): string {
+  const digest = createHash("sha256")
+    .update(
+      [
+        run.runId,
+        worker.role,
+        worker.panelId ?? "",
+        worker.tmuxPaneId ?? "",
+        requestedAt,
+      ].join("\0"),
+    )
+    .digest("hex")
+    .slice(0, 20);
+  return `legacy-${digest}`;
 }
 
 export function completionSignalWorkerMismatch(

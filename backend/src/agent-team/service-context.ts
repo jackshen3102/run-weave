@@ -11,6 +11,7 @@ import { AgentTeamOutboxResolver } from "./outbox-resolver";
 import { AgentTeamPromptSender } from "./prompt-sender";
 import { AgentTeamReviewCheckpointGit } from "./review-checkpoint-git";
 import { AgentTeamPaths } from "./storage/agent-team-paths";
+import { AgentTeamOutboxHistoryStore } from "./storage/outbox-history-store";
 import { AgentTeamRunStore } from "./storage/run-store";
 import { AgentTeamAgentReadinessService } from "./agent-readiness";
 import type { AgentTeamServiceOptions } from "./service-types";
@@ -33,6 +34,7 @@ export class AgentTeamServiceContext {
   protected readonly promptSender: AgentTeamPromptSender;
   protected readonly agentReadiness: AgentTeamAgentReadinessService;
   protected readonly outboxResolver: AgentTeamOutboxResolver;
+  protected readonly outboxHistoryStore: AgentTeamOutboxHistoryStore;
   protected readonly reviewCheckpointGit: AgentTeamReviewCheckpointGit;
   protected readonly eventQueues = new Map<string, Promise<unknown>>();
   protected readonly pendingCompletionRounds = new Map<string, number>();
@@ -72,6 +74,7 @@ export class AgentTeamServiceContext {
       tmuxOutputWatcher: this.tmuxOutputWatcher,
     });
     this.outboxResolver = new AgentTeamOutboxResolver(this.paths);
+    this.outboxHistoryStore = new AgentTeamOutboxHistoryStore(this.paths);
     this.reviewCheckpointGit = new AgentTeamReviewCheckpointGit();
   }
 

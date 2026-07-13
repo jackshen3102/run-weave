@@ -104,7 +104,10 @@ function getSessionAgentForPanelBackfill(
 function getSessionAgentMetadataForMainPanel(
   session: TerminalSessionRecord,
   panelTerminalState: TerminalState,
-): Pick<TerminalPanelRecord, "threadId" | "preview" | "terminalState"> {
+): Pick<
+  TerminalPanelRecord,
+  "threadId" | "threadProvider" | "preview" | "terminalState"
+> {
   const sessionAgent = getSessionAgentForPanelBackfill(session);
   if (
     !sessionAgent ||
@@ -115,6 +118,9 @@ function getSessionAgentMetadataForMainPanel(
   }
   return {
     ...(session.threadId ? { threadId: session.threadId } : {}),
+    ...(session.threadProvider
+      ? { threadProvider: session.threadProvider }
+      : {}),
     ...(session.preview ? { preview: session.preview } : {}),
     ...(session.terminalState ? { terminalState: session.terminalState } : {}),
   };
@@ -262,6 +268,8 @@ export async function backfillSessionAgentMetadataToPrimaryPanel(
   }
   if (session.threadId) {
     panel.threadId = session.threadId;
+    panel.threadProvider =
+      session.threadProvider ?? session.terminalState?.agent ?? "codex";
   }
   if (session.preview) {
     panel.preview = session.preview;
@@ -286,10 +294,14 @@ export async function syncSinglePanelMetadataToSession(
 
   let changed = false;
   const panelThreadId = panel.threadId ?? null;
-  if ((session.threadId ?? null) !== panelThreadId) {
+  if (
+    (session.threadId ?? null) !== panelThreadId ||
+    (session.threadProvider ?? null) !== (panel.threadProvider ?? null)
+  ) {
     await terminalSessionManager.updateSessionThreadId(
       session.id,
       panelThreadId,
+      panel.threadProvider ?? null,
     );
     changed = true;
   }

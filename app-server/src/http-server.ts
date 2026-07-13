@@ -15,6 +15,7 @@ import {
 } from "./singleton.js";
 import { rejectNonLoopbackOrigin, requireBearerToken } from "./auth.js";
 import type { AppServerEventCenter } from "./event-center.js";
+import type { TraeThreadLifecycleReader } from "./trae-thread-lifecycle-reader.js";
 
 const MAX_EVENTS_LIMIT = 500;
 const MAX_STATE_LIMIT = 500;
@@ -118,6 +119,7 @@ export function createHttpApp(options: {
   serviceInstanceId: string;
   devSessionId: string | null;
   sourceRevision: string | null;
+  traeLifecycleReader: TraeThreadLifecycleReader;
 }): express.Express {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
@@ -135,7 +137,11 @@ export function createHttpApp(options: {
       ...(options.sourceRevision
         ? { sourceRevision: options.sourceRevision }
         : {}),
-      capabilities: ["event-center-v1", "dev-session-identity-v1"],
+      capabilities: [
+        "event-center-v1",
+        "dev-session-identity-v1",
+        "provider-thread-lifecycle-v1",
+      ],
     });
   });
 
@@ -191,7 +197,7 @@ export function createHttpApp(options: {
     res.json(response);
   });
 
-  app.get("/threads/:threadId", (req, res) => {
+  app.get("/threads/:threadId", async (req, res, next) => {
     const thread = options.eventCenter
       .getStateStore()
       .getThread(req.params.threadId);
@@ -199,8 +205,18 @@ export function createHttpApp(options: {
       res.status(404).json({ message: "Thread not found" });
       return;
     }
-    const response: AppServerThreadResponse = { thread };
-    res.json(response);
+    try {
+      const detail = options.traeLifecycleReader.supports(thread.agent)
+        ? await options.traeLifecycleReader.readThread(
+            thread.threadId,
+            thread.agent,
+          )
+        : null;
+      const response: AppServerThreadResponse = { thread, detail };
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get("/sync/status", (_req, res) => {

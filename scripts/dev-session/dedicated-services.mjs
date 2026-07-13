@@ -151,7 +151,11 @@ export async function startDedicatedBackend({
     ],
     cwd: sourceRoot,
     env: {
-      ...createBackendEnv({ baseEnv: backendBaseEnv, backendPort: port }),
+      ...createBackendEnv({
+        baseEnv: backendBaseEnv,
+        backendPort: port,
+        sourceRoot,
+      }),
       RUNWEAVE_DEV_BROWSER_PROFILE_DIR: profileDir,
       BROWSER_PROFILE_DIR: profileDir,
       RUNWEAVE_DEV_SESSION_ID: sessionId,

@@ -27,6 +27,7 @@ export interface TmuxPaneMetadata {
 
 export interface TmuxPaneInfo extends TmuxPaneMetadata {
   paneId: string;
+  runweavePanelId: string | null;
   paneIndex: number;
   active: boolean;
   paneLeft: number;

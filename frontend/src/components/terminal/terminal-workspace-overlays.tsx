@@ -173,14 +173,18 @@ export function TerminalWorkspaceOverlays({
         open={historyDrawerOpen}
         target={{
           lastThreadId: historySession?.lastThreadId ?? null,
+          lastThreadProvider: historySession?.lastThreadProvider ?? null,
           lastThreadStatus: historySession?.lastThreadStatus ?? null,
           panelId: historyTerminalPanelId,
           panelLastThreadId: historyPanel?.lastThreadId ?? null,
+          panelLastThreadProvider: historyPanel?.lastThreadProvider ?? null,
           panelLastThreadStatus: historyPanel?.lastThreadStatus ?? null,
           panelThreadId: historyPanel?.threadId ?? null,
+          panelThreadProvider: historyPanel?.threadProvider ?? null,
           projectId: historySession?.projectId ?? null,
           sessionId: historyTerminalSessionId,
           threadId: historySession?.threadId ?? null,
+          threadProvider: historySession?.threadProvider ?? null,
         }}
         title={historyTerminalName}
         onOpenChange={(open) => {

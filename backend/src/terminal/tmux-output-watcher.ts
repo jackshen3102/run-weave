@@ -1,11 +1,18 @@
+import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, stat, truncate } from "node:fs/promises";
+import { mkdir, stat, truncate, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { logger } from "../logging";
 import { createTerminalRuntimeRecorder } from "./runtime-recorder";
+import {
+  appendToScrollbackBuffer,
+  captureScrollbackBufferCursor,
+  createScrollbackBuffer,
+  type ScrollbackBuffer,
+} from "./scrollback-buffer";
 import type { TerminalSessionManager, TerminalSessionRecord } from "./manager";
-import type { TmuxService, TmuxTarget } from "./tmux-service";
+import type { TmuxPaneTarget, TmuxService, TmuxTarget } from "./tmux-service";
 import type { TmuxLifecycleCoordinator } from "./tmux-lifecycle-coordinator";
 
 interface TmuxOutputWatcherOptions {
@@ -19,13 +26,26 @@ interface TmuxOutputWatcherOptions {
   startupConcurrency?: number;
 }
 
-interface WatchedTmuxSession {
+export interface TmuxPaneOutputCursor {
+  terminalSessionId: string;
+  paneId: string;
+  generation: number;
+  sequence: number;
+  offset?: number;
+}
+
+interface WatchedTmuxPane {
   decoder: StringDecoder;
   filePath: string;
+  generation: number;
   offset: number;
-  polling: boolean;
+  outputBuffer: ScrollbackBuffer;
+  polling: Promise<boolean> | null;
+  recordSessionOutput: boolean;
+  reconcileSessionLifecycle: boolean;
   recorder: ReturnType<typeof createTerminalRuntimeRecorder>;
-  target: TmuxTarget;
+  target: TmuxPaneTarget;
+  terminalSessionId: string;
 }
 
 const DEFAULT_TMUX_OUTPUT_POLL_INTERVAL_MS = 500;
@@ -33,6 +53,8 @@ const DEFAULT_TMUX_OUTPUT_MAX_TRANSPORT_BYTES = 1024 * 1024;
 const DEFAULT_TMUX_OUTPUT_STARTUP_MAX_SESSIONS = 8;
 const DEFAULT_TMUX_OUTPUT_STARTUP_CONCURRENCY = 2;
 const FORCE_TRUNCATE_TRANSPORT_BYTES_MULTIPLIER = 2;
+const PANE_OUTPUT_BOUNDARY_TIMEOUT_MS = 2_000;
+const PANE_OUTPUT_BOUNDARY_POLL_INTERVAL_MS = 10;
 const tmuxOutputLogger = logger.child({ component: "terminal" });
 
 export class TmuxOutputWatcher {
@@ -44,8 +66,9 @@ export class TmuxOutputWatcher {
   private readonly tmuxLifecycleCoordinator?: TmuxLifecycleCoordinator;
   private readonly startupMaxSessions: number;
   private readonly startupConcurrency: number;
-  private readonly watchedSessions = new Map<string, WatchedTmuxSession>();
+  private readonly watchedPanes = new Map<string, WatchedTmuxPane>();
   private pollTimer: NodeJS.Timeout | null = null;
+  private nextWatcherGeneration = 1;
   private disposed = false;
 
   constructor(options: TmuxOutputWatcherOptions) {
@@ -129,59 +152,196 @@ export class TmuxOutputWatcher {
       });
       return;
     }
-    const filePath = this.resolveOutputPath(session.id);
-    const existing = this.watchedSessions.get(session.id);
-    if (
-      existing &&
-      existing.filePath === filePath &&
-      existing.target.sessionName === target.sessionName &&
-      existing.target.socketPath === target.socketPath
-    ) {
-      return;
-    }
-
-    try {
-      if (existing) {
-        this.watchedSessions.delete(session.id);
-        await this.stopPipe(session.id, existing);
-      }
-      await mkdir(this.outputDir, { recursive: true });
-      await this.tmuxService.pipePaneOutput(target, filePath);
-    } catch (error) {
-      tmuxOutputLogger.warn("terminal.tmux.output-watch.setup.failed", {
-        message: "Failed to enable tmux output watcher",
+    const paneId = await this.tmuxService.readSelectedPane(target);
+    if (!paneId) {
+      tmuxOutputLogger.warn("terminal.tmux.output-watch.pane-missing", {
+        message: "Failed to resolve selected tmux pane for output watcher",
         terminalSessionId: session.id,
         sessionName: target.sessionName,
         socketPath: target.socketPath,
-        error,
       });
       return;
     }
+    const paneTarget = { ...target, paneId };
+    const existingLifecycleWatcher = Array.from(
+      this.watchedPanes.values(),
+    ).find(
+      (watched) =>
+        watched.terminalSessionId === session.id &&
+        watched.reconcileSessionLifecycle,
+    );
+    if (
+      existingLifecycleWatcher &&
+      isSamePaneTarget(existingLifecycleWatcher.target, paneTarget)
+    ) {
+      existingLifecycleWatcher.recordSessionOutput = true;
+      return;
+    }
 
-    this.watchedSessions.set(session.id, {
-      decoder: new StringDecoder("utf8"),
-      filePath,
-      offset: 0,
-      polling: false,
-      recorder: createTerminalRuntimeRecorder(
-        this.terminalSessionManager,
+    if (existingLifecycleWatcher) {
+      const existingKey = resolvePaneWatcherKey(
         session.id,
-      ),
-      target,
+        existingLifecycleWatcher.target.paneId,
+      );
+      this.watchedPanes.delete(existingKey);
+      await this.stopPipe(session.id, existingLifecycleWatcher);
+    }
+    await this.ensurePaneWatcher(session, paneTarget, {
+      reconcileSessionLifecycle: true,
+      recordSessionOutput: true,
     });
-    this.ensurePolling();
+  }
+
+  async capturePaneOutputCursorAndSendInput(
+    session: TerminalSessionRecord,
+    target: TmuxPaneTarget,
+    input: string,
+  ): Promise<TmuxPaneOutputCursor | null> {
+    if (this.disposed || !shouldWatchSession(session)) {
+      return null;
+    }
+    const sessionTarget = resolveTmuxTarget(session, this.tmuxService);
+    if (!isSameTmuxSessionTarget(sessionTarget, target)) {
+      return null;
+    }
+    const watched = await this.ensurePaneWatcher(session, target, {
+      reconcileSessionLifecycle: false,
+      recordSessionOutput: false,
+    });
+    if (!watched) {
+      return null;
+    }
+    const polled = await this.pollPane(watched);
+    const current = this.watchedPanes.get(
+      resolvePaneWatcherKey(session.id, target.paneId),
+    );
+    if (!polled || current !== watched) {
+      return null;
+    }
+    const generation = watched.generation;
+    const markerSearchCursor = captureScrollbackBufferCursor(
+      watched.outputBuffer,
+    );
+    const markerId = randomUUID();
+    const marker = `\u001b]777;runweave-pane-boundary=${markerId}\u0007`;
+    try {
+      await this.tmuxService.writePaneOutput(target, marker);
+      await this.tmuxService.sendInput(
+        target,
+        `${input}\r`,
+      );
+    } catch (error) {
+      tmuxOutputLogger.debug("terminal.tmux.output-watch.boundary.failed", {
+        message: "Failed to establish boundary and send pane input",
+        terminalSessionId: session.id,
+        sessionName: target.sessionName,
+        socketPath: target.socketPath,
+        paneId: target.paneId,
+        error,
+      });
+      return null;
+    }
+    const deadline = Date.now() + PANE_OUTPUT_BOUNDARY_TIMEOUT_MS;
+    while (Date.now() <= deadline) {
+      const markerPolled = await this.pollPane(watched);
+      const markerWatcher = this.watchedPanes.get(
+        resolvePaneWatcherKey(session.id, target.paneId),
+      );
+      if (
+        !markerPolled ||
+        markerWatcher !== watched ||
+        watched.generation !== generation ||
+        !isSamePaneTarget(watched.target, target)
+      ) {
+        return null;
+      }
+      const markerPosition = findScrollbackBufferPositionAfterMarker(
+        watched.outputBuffer,
+        markerSearchCursor,
+        marker,
+      );
+      if (markerPosition) {
+        return {
+          terminalSessionId: session.id,
+          paneId: target.paneId,
+          generation: watched.generation,
+          sequence: markerPosition.sequence,
+          offset: markerPosition.offset,
+        };
+      }
+      await waitForPaneOutputBoundary();
+    }
+    tmuxOutputLogger.debug("terminal.tmux.output-watch.boundary.timeout", {
+      message: "Timed out waiting for pane-local output boundary marker",
+      terminalSessionId: session.id,
+      sessionName: target.sessionName,
+      socketPath: target.socketPath,
+      paneId: target.paneId,
+    });
+    return null;
+  }
+
+  async readPaneOutputSince(
+    target: TmuxPaneTarget,
+    cursor: TmuxPaneOutputCursor,
+  ): Promise<string | null> {
+    if (this.disposed || cursor.paneId !== target.paneId) {
+      return null;
+    }
+    const watched = this.watchedPanes.get(
+      resolvePaneWatcherKey(cursor.terminalSessionId, cursor.paneId),
+    );
+    if (
+      !watched ||
+      watched.generation !== cursor.generation ||
+      !isSamePaneTarget(watched.target, target)
+    ) {
+      return null;
+    }
+    const polled = await this.pollPane(watched);
+    const current = this.watchedPanes.get(
+      resolvePaneWatcherKey(cursor.terminalSessionId, cursor.paneId),
+    );
+    if (
+      !polled ||
+      current !== watched ||
+      watched.generation !== cursor.generation ||
+      !isSamePaneTarget(watched.target, target)
+    ) {
+      return null;
+    }
+    return readScrollbackBufferFromPosition(
+      watched.outputBuffer,
+      cursor.sequence,
+      cursor.offset ?? 0,
+    );
+  }
+
+  async unwatchPane(
+    terminalSessionId: string,
+    paneId: string,
+  ): Promise<void> {
+    const key = resolvePaneWatcherKey(terminalSessionId, paneId);
+    const watched = this.watchedPanes.get(key);
+    if (!watched) {
+      return;
+    }
+    this.watchedPanes.delete(key);
+    await this.stopPipe(terminalSessionId, watched);
+    this.stopPollingIfIdle();
   }
 
   async unwatchSession(terminalSessionId: string): Promise<void> {
-    const watched = this.watchedSessions.get(terminalSessionId);
-    this.watchedSessions.delete(terminalSessionId);
-    if (watched) {
-      await this.stopPipe(terminalSessionId, watched);
-    }
-    if (this.watchedSessions.size === 0 && this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
+    const watchedPanes = Array.from(this.watchedPanes.entries()).filter(
+      ([, watched]) => watched.terminalSessionId === terminalSessionId,
+    );
+    watchedPanes.forEach(([key]) => this.watchedPanes.delete(key));
+    await Promise.all(
+      watchedPanes.map(([, watched]) =>
+        this.stopPipe(terminalSessionId, watched),
+      ),
+    );
+    this.stopPollingIfIdle();
   }
 
   async dispose(): Promise<void> {
@@ -191,17 +351,75 @@ export class TmuxOutputWatcher {
       this.pollTimer = null;
     }
     await Promise.all(
-      Array.from(this.watchedSessions.entries()).map(
-        async ([terminalSessionId, watched]) => {
-          await this.stopPipe(terminalSessionId, watched);
-        },
+      Array.from(this.watchedPanes.values()).map((watched) =>
+        this.stopPipe(watched.terminalSessionId, watched),
       ),
     );
-    this.watchedSessions.clear();
+    this.watchedPanes.clear();
+  }
+
+  private async ensurePaneWatcher(
+    session: TerminalSessionRecord,
+    target: TmuxPaneTarget,
+    options: {
+      reconcileSessionLifecycle: boolean;
+      recordSessionOutput: boolean;
+    },
+  ): Promise<WatchedTmuxPane | null> {
+    const key = resolvePaneWatcherKey(session.id, target.paneId);
+    const existing = this.watchedPanes.get(key);
+    if (existing && isSamePaneTarget(existing.target, target)) {
+      existing.reconcileSessionLifecycle ||= options.reconcileSessionLifecycle;
+      existing.recordSessionOutput ||= options.recordSessionOutput;
+      return existing;
+    }
+
+    if (existing) {
+      this.watchedPanes.delete(key);
+      await this.stopPipe(session.id, existing);
+    }
+
+    const filePath = this.resolveOutputPath(session.id, target.paneId);
+    try {
+      await mkdir(this.outputDir, { recursive: true });
+      await writeFile(filePath, "", { flag: "a" });
+      await this.tmuxService.pipePaneOutput(target, filePath);
+    } catch (error) {
+      tmuxOutputLogger.warn("terminal.tmux.output-watch.setup.failed", {
+        message: "Failed to enable pane-local tmux output watcher",
+        terminalSessionId: session.id,
+        sessionName: target.sessionName,
+        socketPath: target.socketPath,
+        paneId: target.paneId,
+        error,
+      });
+      return null;
+    }
+
+    const watched: WatchedTmuxPane = {
+      decoder: new StringDecoder("utf8"),
+      filePath,
+      generation: this.nextWatcherGeneration,
+      offset: 0,
+      outputBuffer: createScrollbackBuffer("", this.maxTransportBytes),
+      polling: null,
+      recordSessionOutput: options.recordSessionOutput,
+      reconcileSessionLifecycle: options.reconcileSessionLifecycle,
+      recorder: createTerminalRuntimeRecorder(
+        this.terminalSessionManager,
+        session.id,
+      ),
+      target,
+      terminalSessionId: session.id,
+    };
+    this.nextWatcherGeneration += 1;
+    this.watchedPanes.set(key, watched);
+    this.ensurePolling();
+    return watched;
   }
 
   private ensurePolling(): void {
-    if (this.pollTimer || this.watchedSessions.size === 0) {
+    if (this.pollTimer || this.watchedPanes.size === 0) {
       return;
     }
     this.pollTimer = setInterval(() => {
@@ -210,40 +428,95 @@ export class TmuxOutputWatcher {
     this.pollTimer.unref?.();
   }
 
+  private stopPollingIfIdle(): void {
+    if (this.watchedPanes.size === 0 && this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
   private async pollAll(): Promise<void> {
+    await this.removeMissingPaneWatchers();
     await Promise.all(
-      Array.from(this.watchedSessions.entries()).map(
-        async ([terminalSessionId, watched]) => {
-          await this.pollSession(terminalSessionId, watched);
+      Array.from(this.watchedPanes.values()).map((watched) =>
+        this.pollPane(watched),
+      ),
+    );
+  }
+
+  private async removeMissingPaneWatchers(): Promise<void> {
+    const watchedBySession = new Map<string, WatchedTmuxPane[]>();
+    for (const watched of this.watchedPanes.values()) {
+      const sessionWatchers = watchedBySession.get(watched.terminalSessionId);
+      if (sessionWatchers) {
+        sessionWatchers.push(watched);
+      } else {
+        watchedBySession.set(watched.terminalSessionId, [watched]);
+      }
+    }
+    await Promise.all(
+      Array.from(watchedBySession.entries()).map(
+        async ([terminalSessionId, watchedPanes]) => {
+          const session =
+            this.terminalSessionManager.getSession(terminalSessionId);
+          if (!session || !shouldWatchSession(session)) {
+            await this.unwatchSession(terminalSessionId);
+            return;
+          }
+          let livePaneIds: Set<string>;
+          try {
+            livePaneIds = new Set(
+              (
+                await this.tmuxService.listPanes(watchedPanes[0]!.target)
+              ).map((pane) => pane.paneId),
+            );
+          } catch {
+            return;
+          }
+          await Promise.all(
+            watchedPanes
+              .filter((watched) => !livePaneIds.has(watched.target.paneId))
+              .map((watched) =>
+                this.unwatchPane(terminalSessionId, watched.target.paneId),
+              ),
+          );
         },
       ),
     );
   }
 
-  private async pollSession(
-    terminalSessionId: string,
-    watched: WatchedTmuxSession,
-  ): Promise<void> {
+  private async pollPane(watched: WatchedTmuxPane): Promise<boolean> {
     if (watched.polling) {
-      return;
+      return watched.polling;
     }
+    watched.polling = this.pollPaneNow(watched).finally(() => {
+      watched.polling = null;
+    });
+    return watched.polling;
+  }
+
+  private async pollPaneNow(watched: WatchedTmuxPane): Promise<boolean> {
+    const terminalSessionId = watched.terminalSessionId;
     const session = this.terminalSessionManager.getSession(terminalSessionId);
     if (!session || !shouldWatchSession(session)) {
       await this.unwatchSession(terminalSessionId);
-      return;
+      return false;
     }
 
-    watched.polling = true;
     try {
-      if (await this.reconcileNonInteractiveSessionExit(session, watched)) {
-        return;
+      if (
+        watched.reconcileSessionLifecycle &&
+        (await this.reconcileNonInteractiveSessionExit(session, watched))
+      ) {
+        return false;
       }
       const fileStat = await stat(watched.filePath);
       if (fileStat.size < watched.offset) {
         watched.offset = 0;
+        this.invalidatePaneCursor(watched);
       }
       if (fileStat.size === watched.offset) {
-        return;
+        return true;
       }
       if (fileStat.size > this.maxTransportBytes) {
         tmuxOutputLogger.warn(
@@ -257,6 +530,7 @@ export class TmuxOutputWatcher {
           },
         );
         watched.offset = Math.max(0, fileStat.size - this.maxTransportBytes);
+        this.invalidatePaneCursor(watched);
       }
 
       await new Promise<void>((resolve, reject) => {
@@ -269,7 +543,10 @@ export class TmuxOutputWatcher {
             Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
           );
           if (output) {
-            watched.recorder.onData(output);
+            appendToScrollbackBuffer(watched.outputBuffer, output);
+            if (watched.recordSessionOutput) {
+              watched.recorder.onData(output);
+            }
           }
         });
         stream.on("error", reject);
@@ -277,7 +554,15 @@ export class TmuxOutputWatcher {
       });
       watched.offset = fileStat.size;
       await this.truncateTransportIfDrained(terminalSessionId, watched);
+      return true;
     } catch (error) {
+      const key = resolvePaneWatcherKey(
+        watched.terminalSessionId,
+        watched.target.paneId,
+      );
+      if (this.watchedPanes.get(key) === watched) {
+        this.invalidatePaneCursor(watched);
+      }
       tmuxOutputLogger.debug("terminal.tmux.output-watch.failed", {
         message: "Tmux output watch poll failed",
         terminalSessionId,
@@ -285,14 +570,13 @@ export class TmuxOutputWatcher {
         socketPath: watched.target.socketPath,
         error,
       });
-    } finally {
-      watched.polling = false;
+      return false;
     }
   }
 
   private async reconcileNonInteractiveSessionExit(
     session: TerminalSessionRecord,
-    watched: WatchedTmuxSession,
+    watched: WatchedTmuxPane,
   ): Promise<boolean> {
     if (
       !session.activeCommand ||
@@ -339,7 +623,7 @@ export class TmuxOutputWatcher {
 
   private async truncateTransportIfDrained(
     terminalSessionId: string,
-    watched: WatchedTmuxSession,
+    watched: WatchedTmuxPane,
   ): Promise<void> {
     const latestStat = await stat(watched.filePath);
     if (latestStat.size !== watched.offset) {
@@ -358,6 +642,7 @@ export class TmuxOutputWatcher {
       });
       await truncate(watched.filePath, 0);
       watched.offset = 0;
+      this.invalidatePaneCursor(watched);
       watched.decoder.end();
       watched.decoder = new StringDecoder("utf8");
       return;
@@ -367,14 +652,23 @@ export class TmuxOutputWatcher {
     watched.offset = 0;
     const remainingOutput = watched.decoder.end();
     if (remainingOutput) {
-      watched.recorder.onData(remainingOutput);
+      appendToScrollbackBuffer(watched.outputBuffer, remainingOutput);
+      if (watched.recordSessionOutput) {
+        watched.recorder.onData(remainingOutput);
+      }
     }
     watched.decoder = new StringDecoder("utf8");
   }
 
+  private invalidatePaneCursor(watched: WatchedTmuxPane): void {
+    watched.generation = this.nextWatcherGeneration;
+    this.nextWatcherGeneration += 1;
+    watched.outputBuffer = createScrollbackBuffer("", this.maxTransportBytes);
+  }
+
   private async stopPipe(
     terminalSessionId: string,
-    watched: WatchedTmuxSession,
+    watched: WatchedTmuxPane,
   ): Promise<void> {
     try {
       await this.tmuxService.stopPaneOutputPipe(watched.target);
@@ -389,10 +683,10 @@ export class TmuxOutputWatcher {
     }
   }
 
-  private resolveOutputPath(terminalSessionId: string): string {
+  private resolveOutputPath(terminalSessionId: string, paneId: string): string {
     return path.join(
       this.outputDir,
-      `${terminalSessionId.replace(/[^A-Za-z0-9_-]+/g, "-")}.log`,
+      `${sanitizeOutputPathSegment(terminalSessionId)}--${sanitizeOutputPathSegment(paneId)}.log`,
     );
   }
 }
@@ -420,4 +714,90 @@ function resolveTmuxTarget(
       session.tmuxSessionName ?? tmuxService.buildSessionName(session.id),
     socketPath: session.tmuxSocketPath ?? tmuxService.socketPath,
   };
+}
+
+function resolvePaneWatcherKey(
+  terminalSessionId: string,
+  paneId: string,
+): string {
+  return `${terminalSessionId}\u0000${paneId}`;
+}
+
+function isSameTmuxSessionTarget(left: TmuxTarget, right: TmuxTarget): boolean {
+  return (
+    left.sessionName === right.sessionName &&
+    left.socketPath === right.socketPath
+  );
+}
+
+function isSamePaneTarget(
+  left: TmuxPaneTarget,
+  right: TmuxPaneTarget,
+): boolean {
+  return left.paneId === right.paneId && isSameTmuxSessionTarget(left, right);
+}
+
+function sanitizeOutputPathSegment(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]+/g, "-");
+}
+
+function findScrollbackBufferPositionAfterMarker(
+  buffer: ScrollbackBuffer,
+  startSequence: number,
+  marker: string,
+): { sequence: number; offset: number } | null {
+  const firstAvailableSequence =
+    buffer.chunks[0]?.sequence ?? buffer.nextSequence;
+  if (
+    startSequence < firstAvailableSequence ||
+    startSequence > buffer.nextSequence
+  ) {
+    return null;
+  }
+  const chunks = buffer.chunks.filter(
+    (chunk) => chunk.sequence >= startSequence,
+  );
+  const output = chunks.map((chunk) => chunk.text).join("");
+  const markerIndex = output.indexOf(marker);
+  if (markerIndex < 0) {
+    return null;
+  }
+  let remaining = markerIndex + marker.length;
+  for (const chunk of chunks) {
+    if (remaining <= chunk.text.length) {
+      return { sequence: chunk.sequence, offset: remaining };
+    }
+    remaining -= chunk.text.length;
+  }
+  return null;
+}
+
+function readScrollbackBufferFromPosition(
+  buffer: ScrollbackBuffer,
+  sequence: number,
+  offset: number,
+): string | null {
+  const firstAvailableSequence =
+    buffer.chunks[0]?.sequence ?? buffer.nextSequence;
+  if (sequence < firstAvailableSequence || sequence > buffer.nextSequence) {
+    return null;
+  }
+  const chunks = buffer.chunks.filter((chunk) => chunk.sequence >= sequence);
+  if (chunks.length === 0) {
+    return offset === 0 ? "" : null;
+  }
+  if (chunks[0]!.sequence !== sequence || offset > chunks[0]!.text.length) {
+    return null;
+  }
+  return chunks
+    .map((chunk, index) =>
+      index === 0 ? chunk.text.slice(offset) : chunk.text,
+    )
+    .join("");
+}
+
+function waitForPaneOutputBoundary(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, PANE_OUTPUT_BOUNDARY_POLL_INTERVAL_MS);
+  });
 }

@@ -114,10 +114,29 @@ export interface AgentTeamAcceptanceCase {
   bouncedToPanelId?: string | null;
   /** Recheck dispatch metadata; used by the backend watchdog to detect stuck workers. */
   recheckRequestedAt?: string | null;
+  /** Dispatch that owns this recheck; stale dispatches must not be retried. */
+  recheckDispatchId?: string | null;
   recheckWorkerPanelId?: string | null;
   recheckWorkerRole?: AgentTeamWorkerRole | null;
   recheckOutboxMtimeMs?: number | null;
   recheckAttempt?: number;
+}
+
+export type AgentTeamFindingVerificationMode = "runtime" | "structural";
+
+export interface AgentTeamRepairCycle {
+  repairKey: string;
+  sourceRole: "code_review" | "behavior_verify";
+  caseIds: string[];
+  invariant: string;
+  verificationMode: AgentTeamFindingVerificationMode;
+  /** Reviewer/case evidence refs that a structural repair must reproduce. */
+  sourceEvidenceRefs?: string[];
+  attempts: number;
+  maxAttempts: number;
+  firstFailedRound: number;
+  lastFailedRound: number;
+  lastFailureSummary: string;
 }
 
 export interface AgentTeamLoop {
@@ -132,6 +151,9 @@ export interface AgentTeamLoop {
   errorFingerprints: string[];
   /** Highest acceptance pass count observed so far (objective progress signal). */
   bestPassCount: number;
+  /** Independent repair budgets; diffs and verifier timeouts do not reset them. */
+  repairCycles: AgentTeamRepairCycle[];
+  maxRepairAttempts: number; // default 3
 }
 
 export interface AgentTeamWorker {
@@ -165,15 +187,20 @@ export interface HumanInterventionNote {
   text: string;
   /** Fingerprints cleared by this intervention. */
   clearedFingerprints: string[];
+  /** Repair cycles archived before the human resumed the run. */
+  clearedRepairCycles?: AgentTeamRepairCycle[];
 }
 
 export interface AgentTeamRunOptions {
   autoApproveSplit: boolean;
   reviewCheckpointMode?: AgentTeamReviewCheckpointMode;
+  maxRepairAttempts?: number;
 }
 
 /** Persisted freshness boundary for the worker currently allowed to complete. */
 export interface AgentTeamActiveWorkerDispatch {
+  /** Unique identity for this backend-owned dispatch. */
+  dispatchId?: string;
   role: AgentTeamWorkerRole;
   panelId: string | null;
   tmuxPaneId: string | null;
@@ -183,6 +210,17 @@ export interface AgentTeamActiveWorkerDispatch {
   /** null means the pane-scoped outbox did not exist when work was dispatched. */
   outboxMtimeMs: number | null;
   reviewTarget?: AgentTeamReviewTarget | null;
+  /** Backend-owned repair identities expected from a bounced code worker. */
+  repairKeys?: string[];
+  /** One protocol-only correction is allowed before escalating to a human. */
+  protocolCorrectionAttempt?: number;
+  /** Source snapshot captured before a protocol-only outbox correction. */
+  protocolCorrectionSourceFingerprint?: AgentTeamSourceFingerprint | null;
+}
+
+export interface AgentTeamSourceFingerprint {
+  repoRoot: string;
+  sha256: string;
 }
 
 export interface AgentTeamRun {
@@ -234,6 +272,51 @@ export interface AgentTeamOutboxFinding {
   title: string;
   summary: string;
   ref?: string;
+  /** Stable system invariant identity for P0/P1 repair accounting. */
+  invariantKey?: string;
+  verificationMode?: AgentTeamFindingVerificationMode;
+}
+
+export type AgentTeamFixReproductionMode =
+  | "real_product"
+  | "review_harness"
+  | "static_contract";
+export type AgentTeamFixReproductionStatus =
+  | "reproduced"
+  | "confirmed"
+  | "not_reproduced"
+  | "boundary"
+  | "blocked";
+export type AgentTeamFixCheckDimension =
+  | "positive"
+  | "negative"
+  | "temporal"
+  | "concurrent"
+  | "regression";
+
+export interface AgentTeamFixVerification {
+  repairKey: string;
+  invariant: string;
+  reproduction: {
+    mode: AgentTeamFixReproductionMode;
+    status: AgentTeamFixReproductionStatus;
+    scenarioId?: string | null;
+    validationSessionId?: string | null;
+    evidence: AgentTeamAcceptanceEvidence[];
+  };
+  verification: {
+    status: "pass" | "fail" | "blocked";
+    sameScenario: boolean;
+    evidence: AgentTeamAcceptanceEvidence[];
+  };
+  impactedChecks: Array<{
+    label: string;
+    dimension: AgentTeamFixCheckDimension;
+    status: "pass" | "fail" | "skipped";
+    summary: string;
+    evidence: AgentTeamAcceptanceEvidence[];
+  }>;
+  strategyAssessment?: string | null;
 }
 
 export interface AgentTeamOutboxRecommendation {
@@ -260,6 +343,8 @@ export interface AgentTeamWorkerOutbox {
   resolvedFindings?: AgentTeamOutboxFinding[];
   remainingFindings?: AgentTeamOutboxFinding[];
   recommendations?: AgentTeamOutboxRecommendation[];
+  /** Code-worker evidence handoff for backend-owned repair keys. */
+  fixVerifications?: AgentTeamFixVerification[];
   acceptanceResults?: Array<{
     caseId: string;
     status: "pass" | "fail" | "skipped";
@@ -318,7 +403,7 @@ export interface SubmitAgentTeamSplitGateRequest {
 export interface RecordAgentTeamRoundRequest {
   /** Optional per-case results to fold into the loop (used by smoke/e2e). */
   acceptanceResults?: AgentTeamWorkerOutbox["acceptanceResults"];
-  /** Force-mark this round's objective progress signal. */
+  /** Legacy Debug UI signal; never derived from a worker code diff. */
   hadDiff?: boolean;
   /** UI-observed round baseline. Stale manual rounds are ignored. */
   expectedRound?: number;
@@ -368,6 +453,32 @@ export interface AgentTeamExportOutbox {
   error?: string;
 }
 
+/** Immutable observation of one pane outbox before the state machine consumes it. */
+export interface AgentTeamOutboxHistoryRecord {
+  schemaVersion: 1;
+  runId: string;
+  round: number;
+  dispatchId: string;
+  role: AgentTeamWorkerRole;
+  panelId: string | null;
+  tmuxPaneId: string | null;
+  requestedAt: string;
+  recordedAt: string;
+  sourcePath: string;
+  sourceMtimeMs: number;
+  contentSha256: string;
+  /** Exact file content observed by the backend. */
+  rawContent: string;
+  /** Normalized payload used by the state machine. */
+  outbox: AgentTeamWorkerOutbox;
+}
+
+export interface AgentTeamExportOutboxHistory {
+  path: string;
+  record: AgentTeamOutboxHistoryRecord | null;
+  error?: string;
+}
+
 export interface AgentTeamExportAcceptanceSummary {
   caseId: string;
   status: AgentTeamAcceptanceStatus;
@@ -386,6 +497,7 @@ export interface AgentTeamExportResponse {
     sessionOther: AgentTeamExportPanel[];
   };
   outboxes: AgentTeamExportOutbox[];
+  outboxHistory: AgentTeamExportOutboxHistory[];
   acceptanceSummary: AgentTeamExportAcceptanceSummary[];
   warnings: string[];
 }

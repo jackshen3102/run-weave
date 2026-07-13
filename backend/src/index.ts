@@ -13,6 +13,7 @@ import { AppServerEventConsumer } from "./app-server/event-consumer";
 import { AppServerEventCursorStore } from "./app-server/event-cursor-store";
 import { handleAgentCompletionEvent } from "./app-server/handlers/agent-completion";
 import { handleAgentHookEvent } from "./app-server/handlers/agent-hook";
+import { handleAgentLifecycleEvent } from "./app-server/handlers/agent-lifecycle";
 import { isEventOwnedByThisBackend } from "./app-server/ownership";
 import { diagnosticLogRecorder } from "./diagnostic-logs/recorder";
 import {
@@ -142,7 +143,7 @@ async function initializeAppServerEventIntegration(
       client,
       cursorStore,
       consumerId: APP_SERVER_AGENT_EVENT_CONSUMER_ID,
-      kinds: ["agent.hook", "agent.completion"],
+      kinds: ["agent.hook", "agent.completion", "agent.lifecycle.observed"],
       isRelevant: (event) =>
         isEventOwnedByThisBackend(event, services.terminalSessionManager) &&
         event.source.instanceId !== backendInstanceId,
@@ -151,6 +152,14 @@ async function initializeAppServerEventIntegration(
           await handleAgentHookEvent(event, {
             terminalSessionManager: services.terminalSessionManager,
             terminalStateService: services.terminalStateService,
+          });
+          return;
+        }
+        if (event.kind === "agent.lifecycle.observed") {
+          await handleAgentLifecycleEvent(event, {
+            terminalSessionManager: services.terminalSessionManager,
+            terminalStateService: services.terminalStateService,
+            activity: services.terminalActivity,
           });
           return;
         }

@@ -152,6 +152,13 @@ function formatPlainExport(payload: AgentTeamExportResponse): string {
       (item) =>
         `- ${item.exists ? "exists" : "missing"} ${item.scope} panel=${item.panelId ?? "null"} pane=${item.tmuxPaneId ?? "null"} path=${item.path}`,
     ),
+    "",
+    "Outbox history:",
+    ...(payload.outboxHistory ?? []).map((item) =>
+      item.record
+        ? `- round=${item.record.round} role=${item.record.role} dispatch=${item.record.dispatchId} sha256=${item.record.contentSha256} path=${item.path}`
+        : `- unreadable path=${item.path} error=${item.error ?? "unknown"}`,
+    ),
   );
   if (payload.warnings.length > 0) {
     lines.push("", "Warnings:", ...payload.warnings.map((item) => `- ${item}`));

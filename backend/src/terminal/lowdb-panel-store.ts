@@ -51,8 +51,10 @@ export class LowDbPanelStore extends LowDbScrollbackStore {
       }
       if (params.threadId) {
         panel.threadId = params.threadId;
+        panel.threadProvider = params.provider ?? undefined;
       } else {
         delete panel.threadId;
+        delete panel.threadProvider;
       }
       await database.write();
     });
@@ -90,6 +92,7 @@ export class LowDbPanelStore extends LowDbScrollbackStore {
         return;
       }
       panel.lastThreadId = params.threadId;
+      panel.lastThreadProvider = params.provider;
       panel.lastThreadStatus = params.status;
       panel.lastThreadUpdatedAt = params.updatedAt;
       await database.write();

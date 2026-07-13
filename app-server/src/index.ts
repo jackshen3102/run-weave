@@ -7,14 +7,15 @@ import { loadOrCreateToken } from "./auth.js";
 import { AppServerCloudSyncSim } from "./cloud-sync-sim.js";
 import { CodexAppServerClient } from "./codex-app-server-client.js";
 import {
-  CodexThreadStatusCompensator,
+  AgentThreadStatusReconciler,
   parseOptionalPositiveInteger,
-} from "./codex-thread-status-compensator.js";
+} from "./agent-thread-status-reconciler.js";
 import { AppServerEventCenter } from "./event-center.js";
 import { AppServerEventStore } from "./event-store.js";
 import { createHttpApp } from "./http-server.js";
 import { AppServerStateProjector } from "./state-projector.js";
 import { AppServerStateStore } from "./state-store.js";
+import { TraeThreadLifecycleReader } from "./trae-thread-lifecycle-reader.js";
 import {
   acquireSingletonLock,
   preflightSingleton,
@@ -68,15 +69,19 @@ async function main(): Promise<void> {
     stateProjector,
     cloudSync,
   });
-  const codexThreadStatusCompensator = new CodexThreadStatusCompensator({
+  const traeLifecycleReader = new TraeThreadLifecycleReader();
+  const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,
     sourceInstanceId,
-    statusReader: new CodexAppServerClient(),
+    codexStatusReader: new CodexAppServerClient(),
+    traeLifecycleReader,
     startDelayMs: parseOptionalPositiveInteger(
-      process.env.RUNWEAVE_APP_SERVER_CODEX_STATUS_START_DELAY_MS,
+      process.env.RUNWEAVE_APP_SERVER_THREAD_STATUS_START_DELAY_MS ??
+        process.env.RUNWEAVE_APP_SERVER_CODEX_STATUS_START_DELAY_MS,
     ),
     intervalMs: parseOptionalPositiveInteger(
-      process.env.RUNWEAVE_APP_SERVER_CODEX_STATUS_INTERVAL_MS,
+      process.env.RUNWEAVE_APP_SERVER_THREAD_STATUS_INTERVAL_MS ??
+        process.env.RUNWEAVE_APP_SERVER_CODEX_STATUS_INTERVAL_MS,
     ),
   });
   const app = createHttpApp({
@@ -86,6 +91,7 @@ async function main(): Promise<void> {
     serviceInstanceId,
     devSessionId: config.devSessionId,
     sourceRevision: config.sourceRevision,
+    traeLifecycleReader,
   });
   const server = http.createServer(app);
   const eventStreamServer = attachEventStreamWebSocketServer({
@@ -128,13 +134,13 @@ async function main(): Promise<void> {
     threadStatePath: config.threadStatePath,
     cloudSyncDir: config.cloudSyncDir,
   });
-  codexThreadStatusCompensator.start();
+  agentThreadStatusReconciler.start();
 
   attachShutdownHandlers(
     server,
     eventStreamServer,
     config.lockPath,
-    codexThreadStatusCompensator,
+    agentThreadStatusReconciler,
   );
 }
 
@@ -182,7 +188,7 @@ function attachShutdownHandlers(
   server: http.Server,
   eventStreamServer: WebSocketServer,
   lockPath: string,
-  codexThreadStatusCompensator: CodexThreadStatusCompensator,
+  agentThreadStatusReconciler: AgentThreadStatusReconciler,
 ): void {
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
@@ -190,7 +196,7 @@ function attachShutdownHandlers(
       return;
     }
     shuttingDown = true;
-    codexThreadStatusCompensator.stop();
+    agentThreadStatusReconciler.stop();
     await closeEventStreamServer(eventStreamServer);
     await closeServer(server);
     await releaseLock(lockPath);

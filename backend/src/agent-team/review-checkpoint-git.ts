@@ -109,16 +109,25 @@ export class AgentTeamReviewCheckpointGit {
       };
     }
 
-    await this.assertSafePendingPaths(state.repoRoot);
+    const pendingEntries = await this.assertSafePendingPaths(state.repoRoot);
     await this.runGit(state.repoRoot, [
       "add",
-      "-A",
+      "-u",
       "--",
       ".",
       ...CHECKPOINT_EXCLUDED_PATH_PREFIXES.map(
         (prefix) => `:(exclude)${prefix}**`,
       ),
     ]);
+    const untrackedPaths = pendingEntries
+      .filter(
+        (entry) =>
+          entry.status === "??" && !isCheckpointExcludedPath(entry.path),
+      )
+      .map((entry) => `:(literal)${entry.path}`);
+    if (untrackedPaths.length > 0) {
+      await this.runGit(state.repoRoot, ["add", "--", ...untrackedPaths]);
+    }
     const baseCommit =
       scope === "full" ? state.taskBaseCommit : state.lastReviewedCommit;
     const targetTree = (
@@ -330,7 +339,9 @@ export class AgentTeamReviewCheckpointGit {
     }
   }
 
-  private async assertSafePendingPaths(repoRoot: string): Promise<void> {
+  private async assertSafePendingPaths(
+    repoRoot: string,
+  ): Promise<GitStatusEntry[]> {
     const output = (
       await this.runGit(repoRoot, [
         "status",
@@ -339,7 +350,8 @@ export class AgentTeamReviewCheckpointGit {
         "--untracked-files=all",
       ])
     ).stdout;
-    for (const entry of this.statusEntries(output)) {
+    const entries = this.statusEntries(output);
+    for (const entry of entries) {
       const rawPath = entry.path;
       if (!rawPath || isCheckpointExcludedPath(rawPath)) {
         continue;
@@ -370,6 +382,7 @@ export class AgentTeamReviewCheckpointGit {
         }
       }
     }
+    return entries;
   }
 
   private async workingDiffNames(repoRoot: string): Promise<string[]> {

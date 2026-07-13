@@ -15,6 +15,7 @@ import {
   buildMainTestCaseGenerationPrompt,
 } from "./prompt-builders";
 import { createInitialLoop } from "./loop";
+import { resolveMaxRepairAttempts } from "./repair-loop";
 import { agentTeamLogger } from "./service-context";
 import { AgentTeamRecheckService } from "./service-recheck";
 import {
@@ -63,6 +64,9 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     const runId = createAgentTeamRunId(input.terminalSessionId);
     const reviewCheckpointMode =
       input.options?.reviewCheckpointMode ?? "disabled";
+    const maxRepairAttempts = resolveMaxRepairAttempts(
+      input.options?.maxRepairAttempts,
+    );
     let reviewCheckpoint: AgentTeamRun["reviewCheckpoint"] = null;
     if (reviewCheckpointMode === "local_commit") {
       const preflight = await this.reviewCheckpointGit.preflight(projectRoot);
@@ -134,6 +138,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       options: {
         autoApproveSplit: input.options?.autoApproveSplit ?? false,
         reviewCheckpointMode,
+        maxRepairAttempts,
       },
       terminal,
       task,
@@ -145,7 +150,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       proposal: null,
       workers: [],
       acceptance: [],
-      loop: createInitialLoop(),
+      loop: createInitialLoop(maxRepairAttempts),
       humanNotes: [],
       logs: [prepared.startLog],
       createdAt: now,
@@ -330,7 +335,8 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         acceptanceResults: manualFeedbackRound
           ? undefined
           : input.acceptanceResults,
-        hadDiff: input.hadDiff,
+        objectiveProgress: input.hadDiff === true,
+        observedNoProgress: input.hadDiff === false,
       });
     });
   }
@@ -348,6 +354,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     }
     const now = new Date().toISOString();
     const clearedFingerprints = [...run.loop.errorFingerprints];
+    const clearedRepairCycles = [...(run.loop.repairCycles ?? [])];
     const resumedAcceptance = run.acceptance.map((item) => ({
       ...item,
       consecutiveFail: 0,
@@ -369,11 +376,21 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         lastReason: null,
         errorFingerprints: [],
         bestPassCount: resumedBestPassCount,
+        repairCycles: [],
+        maxRepairAttempts:
+          run.loop.maxRepairAttempts ??
+          resolveMaxRepairAttempts(run.options.maxRepairAttempts),
       },
       acceptance: resumedAcceptance,
       humanNotes: [
         ...run.humanNotes,
-        { id: `note_${Date.now()}`, at: now, text: note, clearedFingerprints },
+        {
+          id: `note_${Date.now()}`,
+          at: now,
+          text: note,
+          clearedFingerprints,
+          clearedRepairCycles,
+        },
       ],
       logs: [...run.logs, "人工介入后恢复，loop 重新计数"],
     });

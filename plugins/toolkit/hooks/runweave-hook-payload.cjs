@@ -274,6 +274,7 @@ function buildAppServerBaseEvent({
     correlationId: threadId,
     payload: {
       source,
+      threadId,
       rawHookEvent: String(rawEvent || "Unknown"),
       normalizedEvent,
       stateHookEvent,

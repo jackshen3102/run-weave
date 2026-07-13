@@ -1,5 +1,14 @@
 import { type AgentTeamTerminal } from "@runweave/shared/agent-team";
-import { hasCodexRestartRequiredAfterUpdate, hasPendingCodexTrustPrompt, hasPendingCodexUpdatePrompt, hasStartedCodexUi, stripTerminalControlSequences } from "@runweave/shared/terminal-agent-readiness";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared/terminal-limits";
+import {
+  hasCodexRestartRequiredAfterUpdate,
+  hasPendingCodexTrustPrompt,
+  hasPendingCodexUpdatePrompt,
+  hasStartedCodexUi,
+  hasTraeReadyPrompt,
+  hasTraeStartupFailure,
+  stripTerminalControlSequences,
+} from "@runweave/shared/terminal-agent-readiness";
 import { type TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type {
   TerminalSessionManager,
@@ -7,7 +16,10 @@ import type {
 } from "../terminal/manager";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
+import type {
+  TmuxOutputWatcher,
+  TmuxPaneOutputCursor,
+} from "../terminal/tmux-output-watcher";
 import type { TmuxPaneTarget, TmuxService } from "../terminal/tmux-service";
 import { isTmuxBackedSession } from "../terminal/runtime-launcher";
 import {
@@ -25,6 +37,17 @@ const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
   "-c",
   "check_for_update_on_startup=false",
 ] as const;
+
+type TraeStartupOutputBoundary =
+  | {
+      kind: "pty";
+      cursor: number;
+    }
+  | {
+      kind: "tmux-pane";
+      cursor: TmuxPaneOutputCursor;
+      target: TmuxPaneTarget;
+    };
 
 export class AgentTeamAgentReadinessService {
   constructor(
@@ -78,11 +101,27 @@ export class AgentTeamAgentReadinessService {
       );
     }
 
-    await this.sendAgentStartCommand(session, terminal, agent, paneTarget, {
-      publishSessionState,
-    });
+    let traeStartupOutputBoundary: TraeStartupOutputBoundary | undefined;
+    if (agent !== "codex" && isTmuxBackedSession(session)) {
+      this.setAgentStarting(session, agent, publishSessionState);
+      traeStartupOutputBoundary =
+        await this.captureTraeStartupOutputBoundary(
+          session,
+          paneTarget,
+          buildAgentStartCommand(terminal, agent),
+        );
+    } else {
+      traeStartupOutputBoundary =
+        agent === "codex"
+          ? undefined
+          : await this.captureTraeStartupOutputBoundary(session, paneTarget);
+      await this.sendAgentStartCommand(session, terminal, agent, paneTarget, {
+        publishSessionState,
+      });
+    }
     await this.waitForAgentUi(session, terminal, agent, paneTarget, {
       publishSessionState,
+      traeStartupOutputBoundary,
     });
   }
 
@@ -93,12 +132,7 @@ export class AgentTeamAgentReadinessService {
     paneTarget: TmuxPaneTarget | undefined,
     options: { publishSessionState: boolean },
   ): Promise<void> {
-    if (agent === "codex" && options.publishSessionState) {
-      this.options.terminalStateService.setAgentStarting(session.id, agent, {
-        projectId: session.projectId,
-        reason: "metadata",
-      });
-    }
+    this.setAgentStarting(session, agent, options.publishSessionState);
     await sendInputToSession(
       this.options.terminalSessionManager,
       {
@@ -116,16 +150,30 @@ export class AgentTeamAgentReadinessService {
     );
   }
 
+  private setAgentStarting(
+    session: TerminalSessionRecord,
+    agent: TerminalAgentKind,
+    publishSessionState: boolean,
+  ): void {
+    if (!publishSessionState) {
+      return;
+    }
+    this.options.terminalStateService.setAgentStarting(session.id, agent, {
+      projectId: session.projectId,
+      reason: "metadata",
+    });
+  }
+
   private async waitForAgentUi(
     session: TerminalSessionRecord,
     terminal: AgentTeamTerminal,
     agent: TerminalAgentKind,
     paneTarget: TmuxPaneTarget | undefined,
-    options: { publishSessionState: boolean },
+    options: {
+      publishSessionState: boolean;
+      traeStartupOutputBoundary?: TraeStartupOutputBoundary;
+    },
   ): Promise<void> {
-    if (agent !== "codex") {
-      return;
-    }
     const deadline = Date.now() + AGENT_TEAM_AGENT_START_TIMEOUT_MS;
     let skippedCodexUpdatePrompt = false;
     let restartedAfterCodexUpdate = false;
@@ -153,7 +201,51 @@ export class AgentTeamAgentReadinessService {
         continue;
       }
       await this.acceptCodexTrustPromptIfNeeded(session, agent, paneTarget);
-      if (await this.isAgentUiReady(session, agent, paneTarget, options)) {
+      let traeStartupOutput: string | undefined;
+      let traeVisibleScrollback: string | undefined;
+      if (agent !== "codex") {
+        traeVisibleScrollback = await this.readCleanScrollback(
+          session,
+          paneTarget,
+          TERMINAL_CLIENT_SCROLLBACK_LINES,
+        );
+        const freshTraeStartupOutput = await this.readTraeStartupOutput(
+          session,
+          options.traeStartupOutputBoundary,
+        );
+        if (freshTraeStartupOutput === null) {
+          throw new AgentTeamError(
+            409,
+            `Lost pane-local output boundary while starting agent-team agent "${agent}"`,
+            {
+              agent,
+              terminalSessionId: session.id,
+              panelId: paneTarget?.paneId ?? null,
+              reason: "startup_output_boundary_lost",
+            },
+          );
+        }
+        traeStartupOutput = freshTraeStartupOutput;
+        if (hasTraeStartupFailure(traeStartupOutput)) {
+          throw new AgentTeamError(
+            409,
+            `Agent-team agent "${agent}" failed before becoming ready`,
+            {
+              agent,
+              terminalSessionId: session.id,
+              panelId: paneTarget?.paneId ?? null,
+              reason: "startup_failure",
+            },
+          );
+        }
+      }
+      if (
+        await this.isAgentUiReady(session, agent, paneTarget, {
+          publishSessionState: options.publishSessionState,
+          traeStartupOutput,
+          traeVisibleScrollback,
+        })
+      ) {
         return;
       }
       await wait(AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS);
@@ -245,21 +337,31 @@ export class AgentTeamAgentReadinessService {
     session: TerminalSessionRecord,
     agent: TerminalAgentKind,
     paneTarget: TmuxPaneTarget | undefined,
-    options: { publishSessionState: boolean },
+    options: {
+      publishSessionState: boolean;
+      traeStartupOutput?: string;
+      traeVisibleScrollback?: string;
+    },
   ): Promise<boolean> {
-    if (agent !== "codex") {
-      return true;
+    if (!(await this.hasActiveAgentOwner(session, agent, paneTarget))) {
+      return false;
     }
     if (options.publishSessionState) {
       const currentState = this.options.terminalStateService.getCurrent(
         session.id,
         session,
       );
-      if (currentState.agent === agent && currentState.state === "agent_idle") {
+      if (
+        agent === "codex" &&
+        currentState.agent === agent &&
+        currentState.state === "agent_idle"
+      ) {
         return true;
       }
-      const scrollback = await this.readCleanScrollback(session, paneTarget);
-      if (!hasStartedCodexUi(scrollback)) {
+      const scrollback =
+        options.traeVisibleScrollback ??
+        (await this.readCleanScrollback(session, paneTarget));
+      if (!hasStartedAgentUi(agent, scrollback, options.traeStartupOutput)) {
         return false;
       }
       this.options.terminalStateService.setAgentIdle(session.id, agent, {
@@ -268,27 +370,116 @@ export class AgentTeamAgentReadinessService {
       });
       return true;
     }
-    const scrollback = await this.readCleanScrollback(session, paneTarget);
-    if (!hasStartedCodexUi(scrollback)) {
+    const scrollback =
+      options.traeVisibleScrollback ??
+      (await this.readCleanScrollback(session, paneTarget));
+    if (!hasStartedAgentUi(agent, scrollback, options.traeStartupOutput)) {
       return false;
     }
     return true;
   }
 
+  private async hasActiveAgentOwner(
+    session: TerminalSessionRecord,
+    agent: TerminalAgentKind,
+    paneTarget: TmuxPaneTarget | undefined,
+  ): Promise<boolean> {
+    const activeCommand =
+      paneTarget && this.options.tmuxService
+        ? ((
+            await this.options.tmuxService.readPaneMetadata(
+              paneTarget,
+              session.command,
+            )
+          )?.activeCommand ?? null)
+        : session.activeCommand;
+    return hasMatchingAgentReadinessOwner(activeCommand, agent);
+  }
+
   private async readCleanScrollback(
     session: TerminalSessionRecord,
     paneTarget: TmuxPaneTarget | undefined,
+    historyLines = 120,
   ): Promise<string> {
     if (paneTarget && this.options.tmuxService) {
       const capture = await this.options.tmuxService.capturePane(
         paneTarget,
-        120,
+        historyLines,
       );
       return stripTerminalControlSequences(capture.data);
     }
     const scrollback =
       await this.options.terminalSessionManager.readLiveScrollback(session.id);
     return stripTerminalControlSequences(scrollback);
+  }
+
+  private async captureTraeStartupOutputBoundary(
+    session: TerminalSessionRecord,
+    paneTarget: TmuxPaneTarget | undefined,
+    tmuxStartInput?: string,
+  ): Promise<TraeStartupOutputBoundary> {
+    if (isTmuxBackedSession(session)) {
+      if (
+        !paneTarget ||
+        !this.options.tmuxOutputWatcher ||
+        !tmuxStartInput
+      ) {
+        throw this.createTraeOutputBoundaryError(session, paneTarget);
+      }
+      const cursor =
+        await this.options.tmuxOutputWatcher.capturePaneOutputCursorAndSendInput(
+          session,
+          paneTarget,
+          tmuxStartInput,
+        );
+      if (!cursor) {
+        throw this.createTraeOutputBoundaryError(session, paneTarget);
+      }
+      return { kind: "tmux-pane", cursor, target: paneTarget };
+    }
+
+    const cursor =
+      await this.options.terminalSessionManager.captureOutputCursor(session.id);
+    if (cursor === null) {
+      throw this.createTraeOutputBoundaryError(session, paneTarget);
+    }
+    return { kind: "pty", cursor };
+  }
+
+  private async readTraeStartupOutput(
+    session: TerminalSessionRecord,
+    boundary: TraeStartupOutputBoundary | undefined,
+  ): Promise<string | null> {
+    if (!boundary) {
+      return null;
+    }
+    if (boundary.kind === "tmux-pane") {
+      return (
+        (await this.options.tmuxOutputWatcher?.readPaneOutputSince(
+          boundary.target,
+          boundary.cursor,
+        )) ?? null
+      );
+    }
+    return this.options.terminalSessionManager.readOutputSince(
+      session.id,
+      boundary.cursor,
+    );
+  }
+
+  private createTraeOutputBoundaryError(
+    session: TerminalSessionRecord,
+    paneTarget: TmuxPaneTarget | undefined,
+  ): AgentTeamError {
+    return new AgentTeamError(
+      409,
+      `Failed to establish pane-local output boundary for agent-team agent "traex"`,
+      {
+        terminalSessionId: session.id,
+        panelId: paneTarget?.paneId ?? null,
+        reason: "startup_output_boundary_unavailable",
+      },
+    );
   }
 
   private async resolvePaneTarget(
@@ -305,7 +496,26 @@ export class AgentTeamAgentReadinessService {
       return undefined;
     }
     if (!target?.panelId && !target?.panelAlias && !target?.role) {
-      return undefined;
+      const tmuxTarget = {
+        sessionName:
+          session.tmuxSessionName ??
+          this.options.tmuxService.buildSessionName(session.id),
+        socketPath:
+          session.tmuxSocketPath ?? this.options.tmuxService.socketPath,
+      };
+      const paneId =
+        await this.options.tmuxService.readSelectedPane(tmuxTarget);
+      if (!paneId) {
+        throw new AgentTeamError(
+          409,
+          "Failed to resolve pane-local target for agent-team terminal",
+          {
+            terminalSessionId: session.id,
+            reason: "pane_target_unavailable",
+          },
+        );
+      }
+      return { ...tmuxTarget, paneId };
     }
     try {
       return (
@@ -332,6 +542,30 @@ export class AgentTeamAgentReadinessService {
       throw error;
     }
   }
+}
+
+function hasStartedAgentUi(
+  agent: TerminalAgentKind,
+  scrollback: string,
+  traeStartupOutput?: string,
+): boolean {
+  if (agent === "codex") {
+    return hasStartedCodexUi(scrollback);
+  }
+  return (
+    hasTraeReadyPrompt(scrollback) &&
+    (traeStartupOutput === undefined || hasTraeReadyPrompt(traeStartupOutput))
+  );
+}
+
+export function hasMatchingAgentReadinessOwner(
+  activeCommand: string | null,
+  agent: TerminalAgentKind,
+): boolean {
+  const activeAgent = getAgentForCommand(activeCommand);
+  return agent === "codex"
+    ? activeAgent === "codex"
+    : activeAgent !== null && activeAgent !== "codex";
 }
 
 function buildAgentStartCommand(

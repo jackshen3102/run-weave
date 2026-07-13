@@ -186,6 +186,11 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
           },
         ],
         extraResources: [
+          {
+            from: path.join(ELECTRON_DIR, "resources", "hooks"),
+            to: "runweave-hook-runtime/hooks",
+            filter: ["**/*"],
+          },
           { from: frontendDist, to: "frontend/dist", filter: ["**/*"] },
           {
             from: path.join(

@@ -20,7 +20,6 @@ export interface StateRefIdentity {
   threadId: string;
   terminalSessionId: string | null;
   terminalPanelId: string | null;
-  sourceInstanceId: string | null;
 }
 
 export interface StateRefUpdate {
@@ -35,8 +34,11 @@ export interface StateRefUpdate {
   cwd: string | null;
   sourceInstanceId: string | null;
   lastEventId: string;
-  lastHookEvent: string | null;
-  lastCompletionReason: AppServerCompletionReason | null;
+  lastHookEvent?: string | null;
+  lastCompletionReason?: AppServerCompletionReason | null;
+  lifecycleStatus?: AppServerThreadRef["lifecycleStatus"];
+  lastLifecycleType?: string | null;
+  lastLifecycleCursor?: string | null;
   lastActivityAt: string;
   updatedAt: string;
 }
@@ -111,7 +113,7 @@ export class AppServerStateStore {
   }
 
   upsertThread(update: StateRefUpdate): StateStoreChange<AppServerThreadRef> {
-    this.deleteFallbackThreadIfRealThreadArrived(update);
+    this.deleteSupersededFallbackThreads(update);
     const previous = this.threads.get(update.threadId) ?? null;
     const previousTmuxPaneId =
       this.threadTmuxPaneIds.get(update.threadId) ?? null;
@@ -127,10 +129,27 @@ export class AppServerStateStore {
       detailRef: isFallbackThreadId(update.threadId)
         ? null
         : { provider: update.agent, id: update.threadId },
+      identityStatus: isFallbackThreadId(update.threadId)
+        ? "unresolved"
+        : "resolved",
+      lifecycleStatus:
+        update.lifecycleStatus ??
+        previous?.lifecycleStatus ??
+        (update.agent === "codex" ? "available" : "degraded"),
+      lastLifecycleType:
+        update.lastLifecycleType ?? previous?.lastLifecycleType ?? null,
+      lastLifecycleCursor:
+        update.lastLifecycleCursor ?? previous?.lastLifecycleCursor ?? null,
       sourceInstanceId: update.sourceInstanceId,
       lastEventId: update.lastEventId,
-      lastHookEvent: update.lastHookEvent,
-      lastCompletionReason: update.lastCompletionReason,
+      lastHookEvent:
+        update.lastHookEvent === undefined
+          ? (previous?.lastHookEvent ?? null)
+          : update.lastHookEvent,
+      lastCompletionReason:
+        update.lastCompletionReason === undefined
+          ? (previous?.lastCompletionReason ?? null)
+          : update.lastCompletionReason,
       lastActivityAt: update.lastActivityAt,
       updatedAt: update.updatedAt,
     };
@@ -146,15 +165,20 @@ export class AppServerStateStore {
     };
   }
 
-  private deleteFallbackThreadIfRealThreadArrived(
-    update: StateRefUpdate,
-  ): void {
-    if (isFallbackThreadId(update.threadId)) {
-      return;
+  private deleteSupersededFallbackThreads(update: StateRefUpdate): void {
+    for (const thread of this.threads.values()) {
+      if (
+        thread.threadId === update.threadId ||
+        !isFallbackThreadId(thread.threadId) ||
+        thread.agent !== update.agent ||
+        thread.terminalSessionId !== update.terminalSessionId ||
+        thread.terminalPanelId !== update.terminalPanelId
+      ) {
+        continue;
+      }
+      this.threads.delete(thread.threadId);
+      this.threadTmuxPaneIds.delete(thread.threadId);
     }
-    const fallbackThreadId = buildFallbackThreadId(update);
-    this.threads.delete(fallbackThreadId);
-    this.threadTmuxPaneIds.delete(fallbackThreadId);
   }
 }
 
@@ -164,7 +188,6 @@ export function buildFallbackThreadId(identity: StateRefIdentity): string {
     identity.agent,
     identity.terminalSessionId ?? "none",
     identity.terminalPanelId ?? "none",
-    identity.sourceInstanceId ?? "none",
   ].join(":");
 }
 

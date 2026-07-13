@@ -1,3 +1,4 @@
+import { open } from "node:fs/promises";
 import { aiDiagnosticLog } from "../diagnostic-logs/recorder";
 import { logTerminalPerf } from "./perf-logging";
 import type {
@@ -41,6 +42,7 @@ export class TmuxPaneService extends TmuxSessionService {
           "#{pane_index}",
           "#{pane_current_path}",
           "#{@runweave_command}",
+          "#{@runweave_panel_id}",
           "#{pane_current_command}",
           "#{pane_active}",
           "#{pane_left}",
@@ -63,6 +65,7 @@ export class TmuxPaneService extends TmuxSessionService {
           rawPaneIndex = "0",
           cwd = "",
           rawRunweaveCommand = "",
+          rawRunweavePanelId = "",
           rawCommand = "",
           rawActive = "0",
           rawPaneLeft = "0",
@@ -78,6 +81,7 @@ export class TmuxPaneService extends TmuxSessionService {
         );
         return {
           paneId,
+          runweavePanelId: rawRunweavePanelId.trim() || null,
           paneIndex: parsePositiveInteger(rawPaneIndex),
           cwd,
           activeCommand: activeCommand.command,
@@ -154,6 +158,13 @@ export class TmuxPaneService extends TmuxSessionService {
 
   async selectPane(target: TmuxPaneTarget): Promise<void> {
     await this.runTmux(["select-pane", "-t", target.paneId], target);
+  }
+
+  async setPanePanelId(target: TmuxPaneTarget, panelId: string): Promise<void> {
+    await this.runTmux(
+      ["set-option", "-p", "-t", target.paneId, "@runweave_panel_id", panelId],
+      target,
+    );
   }
 
   async killPane(target: TmuxPaneTarget): Promise<void> {
@@ -249,6 +260,26 @@ export class TmuxPaneService extends TmuxSessionService {
           target,
         );
       }
+    }
+  }
+
+  async writePaneOutput(
+    target: TmuxPaneTarget,
+    data: string,
+  ): Promise<void> {
+    const result = await this.runTmux(
+      ["display-message", "-p", "-t", target.paneId, "#{pane_tty}"],
+      target,
+    );
+    const ttyPath = result.stdout.trim();
+    if (!ttyPath.startsWith("/dev/")) {
+      throw new Error(`tmux pane tty is unavailable: ${target.paneId}`);
+    }
+    const tty = await open(ttyPath, "w");
+    try {
+      await tty.writeFile(data);
+    } finally {
+      await tty.close();
     }
   }
 
@@ -396,20 +427,22 @@ export class TmuxPaneService extends TmuxSessionService {
     };
   }
 
-  async pipePaneOutput(target: TmuxTarget, outputPath: string): Promise<void> {
+  async pipePaneOutput(
+    target: TmuxTarget | TmuxPaneTarget,
+    outputPath: string,
+  ): Promise<void> {
+    const tmuxTarget = resolveTmuxTargetName(target);
     await this.runTmux(
-      [
-        "pipe-pane",
-        "-t",
-        target.sessionName,
-        `cat >> ${shellQuote(outputPath)}`,
-      ],
+      ["pipe-pane", "-t", tmuxTarget, `cat >> ${shellQuote(outputPath)}`],
       target,
     );
   }
 
-  async stopPaneOutputPipe(target: TmuxTarget): Promise<void> {
-    await this.runTmux(["pipe-pane", "-t", target.sessionName], target);
+  async stopPaneOutputPipe(target: TmuxTarget | TmuxPaneTarget): Promise<void> {
+    await this.runTmux(
+      ["pipe-pane", "-t", resolveTmuxTargetName(target)],
+      target,
+    );
   }
 
   private async readPaneWidth(

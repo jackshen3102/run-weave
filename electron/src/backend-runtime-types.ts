@@ -9,6 +9,7 @@ export interface PackagedBackendPaths {
   betterSqlitePackageDir: string;
   betterSqliteNativeBinding: string;
   activityAvailable: boolean;
+  toolkitPluginRoot: string;
   releaseId: string;
   source: "external" | "bundled";
 }

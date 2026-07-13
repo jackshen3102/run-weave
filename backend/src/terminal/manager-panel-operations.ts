@@ -1,5 +1,5 @@
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
-import type { TerminalState } from "@runweave/shared/terminal/state";
+import type { TerminalAgentKind, TerminalState } from "@runweave/shared/terminal/state";
 import {
   toPersistedPanel,
   toPersistedPanelWorkspace,
@@ -92,6 +92,7 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
   async updatePanelThreadId(
     panelId: string,
     threadId: string | null,
+    provider: TerminalAgentKind | null = null,
   ): Promise<TerminalPanelRecord | undefined> {
     const panel = this.panels.get(panelId);
     if (!panel) {
@@ -99,18 +100,27 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
     }
 
     const nextThreadId = threadId?.trim() || undefined;
-    if (panel.threadId === nextThreadId) {
+    const nextProvider = nextThreadId
+      ? provider ?? panel.threadProvider ??
+        (panel.threadId === nextThreadId ? "codex" : undefined)
+      : undefined;
+    if (
+      panel.threadId === nextThreadId && panel.threadProvider === nextProvider
+    ) {
       return panel;
     }
 
     if (nextThreadId) {
       panel.threadId = nextThreadId;
+      panel.threadProvider = nextProvider;
     } else {
       delete panel.threadId;
+      delete panel.threadProvider;
     }
     await this.sessionStore.updatePanelThreadId({
       panelId,
       threadId: nextThreadId ?? null,
+      provider: nextProvider ?? null,
     });
     return panel;
   }
@@ -146,6 +156,7 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
     threadId: string,
     status: TerminalLastThreadStatus,
     updatedAt = new Date(),
+    provider?: TerminalAgentKind,
   ): Promise<TerminalPanelRecord | undefined> {
     const panel = this.panels.get(panelId);
     if (!panel) {
@@ -157,8 +168,16 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
       return panel;
     }
 
+    const nextProvider =
+      provider ?? panel.threadProvider ??
+      (panel.threadId === nextThreadId ? "codex" : undefined);
+    if (!nextProvider) {
+      return panel;
+    }
+
     if (
       panel.lastThreadId === nextThreadId &&
+      panel.lastThreadProvider === nextProvider &&
       panel.lastThreadStatus === status &&
       panel.lastThreadUpdatedAt?.getTime() === updatedAt.getTime()
     ) {
@@ -166,11 +185,13 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
     }
 
     panel.lastThreadId = nextThreadId;
+    panel.lastThreadProvider = nextProvider;
     panel.lastThreadStatus = status;
     panel.lastThreadUpdatedAt = updatedAt;
     await this.sessionStore.updatePanelLastThread({
       panelId,
       threadId: nextThreadId,
+      provider: nextProvider,
       status,
       updatedAt: updatedAt.toISOString(),
     });

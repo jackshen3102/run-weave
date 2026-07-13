@@ -1,8 +1,18 @@
-import { stat } from "node:fs/promises";
-import type { AgentTeamAcceptanceEvidence, AgentTeamFindingSeverity, AgentTeamFindingStatus, AgentTeamOutboxFinding, AgentTeamOutboxRecommendation, AgentTeamWorkerOutbox } from "@runweave/shared/agent-team";
+import { open } from "node:fs/promises";
+import type {
+  AgentTeamAcceptanceEvidence,
+  AgentTeamFindingSeverity,
+  AgentTeamFindingStatus,
+  AgentTeamFixCheckDimension,
+  AgentTeamFixReproductionMode,
+  AgentTeamFixReproductionStatus,
+  AgentTeamFixVerification,
+  AgentTeamOutboxFinding,
+  AgentTeamOutboxRecommendation,
+  AgentTeamWorkerOutbox,
+} from "@runweave/shared/agent-team";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { AgentTeamPaths } from "./storage/agent-team-paths";
-import { readJsonFile } from "./storage/json-file";
 
 type CompletionEvent = Extract<TerminalEventEnvelope, { kind: "completion" }>;
 type OutboxCandidate = {
@@ -13,6 +23,7 @@ export interface AgentTeamResolvedOutbox {
   outbox: AgentTeamWorkerOutbox;
   path: string;
   mtimeMs: number | null;
+  rawContent: string;
 }
 export interface NormalizeAgentTeamWorkerOutboxOptions {
   terminalSessionId?: string;
@@ -44,6 +55,26 @@ const VALID_FINDING_STATUSES = new Set<AgentTeamFindingStatus>([
   "resolved",
   "informational",
 ]);
+const VALID_REPRODUCTION_MODES = new Set<AgentTeamFixReproductionMode>([
+  "real_product",
+  "review_harness",
+  "static_contract",
+]);
+const VALID_REPRODUCTION_STATUSES =
+  new Set<AgentTeamFixReproductionStatus>([
+    "reproduced",
+    "confirmed",
+    "not_reproduced",
+    "boundary",
+    "blocked",
+  ]);
+const VALID_CHECK_DIMENSIONS = new Set<AgentTeamFixCheckDimension>([
+  "positive",
+  "negative",
+  "temporal",
+  "concurrent",
+  "regression",
+]);
 
 /**
  * Resolve the worker outbox (with per-case acceptanceResults) for a pane
@@ -63,10 +94,11 @@ export class AgentTeamOutboxResolver {
     event: CompletionEvent,
   ): Promise<AgentTeamResolvedOutbox | null> {
     for (const candidate of this.outboxCandidates(event)) {
-      const outbox = await readJsonFile<AgentTeamWorkerOutbox>(candidate.path);
-      if (!outbox) {
+      const snapshot = await readStableOutboxSnapshot(candidate.path);
+      if (!snapshot) {
         continue;
       }
+      const { outbox, rawContent, mtimeMs } = snapshot;
       if (
         !this.matchesCompletionPane(event, outbox, {
           allowMissingPaneIdentity: candidate.allowMissingPaneIdentity,
@@ -95,13 +127,12 @@ export class AgentTeamOutboxResolver {
           normalized.completionReason ?? event.payload.completionReason,
         finishedAt: normalized.finishedAt ?? event.createdAt,
       };
-      let mtimeMs: number | null = null;
-      try {
-        mtimeMs = (await stat(candidate.path)).mtimeMs;
-      } catch {
-        // The next signal can retry if the file changed during resolution.
-      }
-      return { outbox: resolvedOutbox, path: candidate.path, mtimeMs };
+      return {
+        outbox: resolvedOutbox,
+        path: candidate.path,
+        mtimeMs,
+        rawContent,
+      };
     }
     return null;
   }
@@ -200,6 +231,32 @@ export class AgentTeamOutboxResolver {
 
 }
 
+async function readStableOutboxSnapshot(path: string): Promise<{
+  outbox: AgentTeamWorkerOutbox;
+  rawContent: string;
+  mtimeMs: number;
+} | null> {
+  let handle;
+  try {
+    handle = await open(path, "r");
+    const before = await handle.stat();
+    const rawContent = await handle.readFile({ encoding: "utf8" });
+    const after = await handle.stat();
+    if (before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+      return null;
+    }
+    return {
+      outbox: JSON.parse(rawContent) as AgentTeamWorkerOutbox,
+      rawContent,
+      mtimeMs: after.mtimeMs,
+    };
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
+  }
+}
+
 export function normalizeAgentTeamWorkerOutbox(
   outbox: unknown,
   options: NormalizeAgentTeamWorkerOutboxOptions = {},
@@ -256,6 +313,7 @@ export function normalizeAgentTeamWorkerOutbox(
     resolvedFindings: normalizeFindings(record.resolvedFindings, "resolved"),
     remainingFindings: normalizeFindings(record.remainingFindings, "open"),
     recommendations: normalizeRecommendations(record.recommendations),
+    fixVerifications: normalizeFixVerifications(record.fixVerifications),
     acceptanceResults: normalizeAcceptanceResults(
       record.acceptanceResults,
       typeof record.error === "string" ? record.error : null,
@@ -328,27 +386,7 @@ function normalizeAcceptanceResults(
       ...(typeof result.skipReason === "string" && result.skipReason.trim()
         ? { skipReason: result.skipReason.trim() }
         : {}),
-      evidence: Array.isArray(result.evidence)
-        ? result.evidence
-            .filter(
-              (evidence) =>
-                VALID_EVIDENCE_TYPES.has(evidence.type) &&
-                typeof evidence.ref === "string" &&
-                typeof evidence.label === "string" &&
-                evidence.label.trim() &&
-                typeof evidence.summary === "string" &&
-                evidence.summary.trim(),
-            )
-            .map((evidence) => ({
-              type: evidence.type,
-              label: evidence.label.trim(),
-              summary: evidence.summary.trim(),
-              ...(typeof evidence.detail === "string" && evidence.detail.trim()
-                ? { detail: evidence.detail.trim() }
-                : {}),
-              ref: evidence.ref,
-            }))
-        : [],
+      evidence: normalizeEvidenceList(result.evidence),
     }));
 }
 
@@ -409,7 +447,173 @@ function normalizeFinding(
     ...(typeof record.ref === "string" && record.ref.trim()
       ? { ref: record.ref.trim() }
       : {}),
+    ...(typeof record.invariantKey === "string" && record.invariantKey.trim()
+      ? { invariantKey: record.invariantKey.trim() }
+      : {}),
+    ...(record.verificationMode === "runtime" ||
+    record.verificationMode === "structural"
+      ? { verificationMode: record.verificationMode }
+      : {}),
   };
+}
+
+function normalizeFixVerifications(
+  value: unknown,
+): AgentTeamFixVerification[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const normalized = value
+    .map(normalizeFixVerification)
+    .filter((item): item is AgentTeamFixVerification => Boolean(item));
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeFixVerification(value: unknown): AgentTeamFixVerification | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const repairKey =
+    typeof record.repairKey === "string" ? record.repairKey.trim() : "";
+  const invariant =
+    typeof record.invariant === "string" ? record.invariant.trim() : "";
+  if (!repairKey || !invariant) {
+    return null;
+  }
+  const reproduction = normalizeReproduction(record.reproduction);
+  const verification = normalizeVerification(record.verification);
+  if (!reproduction || !verification) {
+    return null;
+  }
+  const impactedChecks = Array.isArray(record.impactedChecks)
+    ? record.impactedChecks
+        .map(normalizeImpactedCheck)
+        .filter(
+          (
+            item,
+          ): item is AgentTeamFixVerification["impactedChecks"][number] =>
+            Boolean(item),
+        )
+    : [];
+  return {
+    repairKey,
+    invariant,
+    reproduction,
+    verification,
+    impactedChecks,
+    ...(typeof record.strategyAssessment === "string" &&
+    record.strategyAssessment.trim()
+      ? { strategyAssessment: record.strategyAssessment.trim() }
+      : {}),
+  };
+}
+
+function normalizeReproduction(
+  value: unknown,
+): AgentTeamFixVerification["reproduction"] | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    !VALID_REPRODUCTION_MODES.has(record.mode as AgentTeamFixReproductionMode) ||
+    !VALID_REPRODUCTION_STATUSES.has(
+      record.status as AgentTeamFixReproductionStatus,
+    )
+  ) {
+    return null;
+  }
+  return {
+    mode: record.mode as AgentTeamFixReproductionMode,
+    status: record.status as AgentTeamFixReproductionStatus,
+    ...(typeof record.scenarioId === "string" && record.scenarioId.trim()
+      ? { scenarioId: record.scenarioId.trim() }
+      : {}),
+    ...(typeof record.validationSessionId === "string" &&
+    record.validationSessionId.trim()
+      ? { validationSessionId: record.validationSessionId.trim() }
+      : {}),
+    evidence: normalizeEvidenceList(record.evidence),
+  };
+}
+
+function normalizeVerification(
+  value: unknown,
+): AgentTeamFixVerification["verification"] | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    record.status !== "pass" &&
+    record.status !== "fail" &&
+    record.status !== "blocked"
+  ) {
+    return null;
+  }
+  return {
+    status: record.status,
+    sameScenario: record.sameScenario === true,
+    evidence: normalizeEvidenceList(record.evidence),
+  };
+}
+
+function normalizeImpactedCheck(
+  value: unknown,
+): AgentTeamFixVerification["impactedChecks"][number] | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const label = typeof record.label === "string" ? record.label.trim() : "";
+  const summary =
+    typeof record.summary === "string" ? record.summary.trim() : "";
+  if (
+    !label ||
+    !summary ||
+    !VALID_CHECK_DIMENSIONS.has(record.dimension as AgentTeamFixCheckDimension) ||
+    (record.status !== "pass" &&
+      record.status !== "fail" &&
+      record.status !== "skipped")
+  ) {
+    return null;
+  }
+  return {
+    label,
+    summary,
+    dimension: record.dimension as AgentTeamFixCheckDimension,
+    status: record.status,
+    evidence: normalizeEvidenceList(record.evidence),
+  };
+}
+
+function normalizeEvidenceList(value: unknown): AgentTeamAcceptanceEvidence[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter(
+      (evidence): evidence is AgentTeamAcceptanceEvidence =>
+        Boolean(evidence) &&
+        typeof evidence === "object" &&
+        VALID_EVIDENCE_TYPES.has(evidence.type) &&
+        typeof evidence.ref === "string" &&
+        Boolean(evidence.ref.trim()) &&
+        typeof evidence.label === "string" &&
+        Boolean(evidence.label.trim()) &&
+        typeof evidence.summary === "string" &&
+        Boolean(evidence.summary.trim()),
+    )
+    .map((evidence) => ({
+      type: evidence.type,
+      label: evidence.label.trim(),
+      summary: evidence.summary.trim(),
+      ...(typeof evidence.detail === "string" && evidence.detail.trim()
+        ? { detail: evidence.detail.trim() }
+        : {}),
+      ref: evidence.ref.trim(),
+    }));
 }
 
 function normalizeRecommendation(

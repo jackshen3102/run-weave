@@ -1,6 +1,9 @@
 import type { AgentHookStateEvent } from "@runweave/shared/terminal/events";
 import type { TerminalAgentKind, TerminalState, TerminalStateChangeReason } from "@runweave/shared/terminal/state";
-import { hasCodexReadyPrompt } from "@runweave/shared/terminal-agent-readiness";
+import {
+  hasCodexReadyPrompt,
+  hasTraeReadyPrompt,
+} from "@runweave/shared/terminal-agent-readiness";
 import { getExecutableCommandName } from "./completion-source-gate";
 import type { TerminalSessionRecord } from "./manager-records";
 import type { TerminalEventService } from "./terminal-event-service";
@@ -91,6 +94,24 @@ export class TerminalStateService {
     return this.setAndPublish(
       terminalSessionId,
       createAgentState(agent, "agent_idle"),
+      publishContext,
+    );
+  }
+
+  setAgentRunning(
+    terminalSessionId: string,
+    agent: TerminalAgentKind,
+    context?: Partial<TerminalStatePublishContext>,
+  ): TerminalState {
+    const publishContext = context
+      ? {
+          projectId: context.projectId ?? null,
+          reason: context.reason ?? "metadata",
+        }
+      : undefined;
+    return this.setAndPublish(
+      terminalSessionId,
+      createAgentState(agent, "agent_running"),
       publishContext,
     );
   }
@@ -274,12 +295,11 @@ function createAgentState(
   return { state, agent };
 }
 
-function hasAgentReadyPrompt(
+export function hasAgentReadyPrompt(
   agent: TerminalAgentKind,
   scrollback: string,
 ): boolean {
-  if (agent !== "codex") {
-    return false;
-  }
-  return hasCodexReadyPrompt(scrollback);
+  return agent === "codex"
+    ? hasCodexReadyPrompt(scrollback)
+    : hasTraeReadyPrompt(scrollback);
 }

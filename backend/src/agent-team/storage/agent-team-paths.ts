@@ -55,6 +55,54 @@ export class AgentTeamPaths {
     );
   }
 
+  outboxHistoryDir(
+    projectId: string | null,
+    runId: string,
+    cwd?: string | null,
+  ): string {
+    assertSafeAgentTeamRunId(runId);
+    return path.join(
+      this.projectRoot(projectId, cwd),
+      ".runweave",
+      "outbox-history",
+      runId,
+    );
+  }
+
+  outboxHistoryPath(
+    projectId: string | null,
+    runId: string,
+    round: number,
+    identity: {
+      role: string;
+      panelId?: string | null;
+      tmuxPaneId?: string | null;
+      dispatchId: string;
+      contentSha256: string;
+    },
+    cwd?: string | null,
+  ): string {
+    const paneIdentity = identity.panelId
+      ? `panel-${sanitizeOutboxSegment(identity.panelId)}`
+      : identity.tmuxPaneId
+        ? `pane-${sanitizeOutboxSegment(identity.tmuxPaneId)}`
+        : "pane-unbound";
+    const roundDirectory = `round-${String(
+      Math.max(0, Math.trunc(round)),
+    ).padStart(4, "0")}`;
+    const fileName = [
+      sanitizeOutboxSegment(identity.role),
+      paneIdentity,
+      sanitizeOutboxSegment(identity.dispatchId),
+      sanitizeOutboxSegment(identity.contentSha256.slice(0, 12)),
+    ].join("-");
+    return path.join(
+      this.outboxHistoryDir(projectId, runId, cwd),
+      roundDirectory,
+      `${fileName}.json`,
+    );
+  }
+
   private workerOutboxFileName(
     sessionId: string,
     pane: { panelId?: string | null; tmuxPaneId?: string | null },

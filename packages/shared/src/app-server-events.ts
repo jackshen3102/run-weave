@@ -91,6 +91,38 @@ export type AppServerAgentRunStatus =
   | "failed"
   | "unknown";
 
+export type AppServerThreadLifecycleStatus =
+  | "available"
+  | "degraded"
+  | "unknown";
+
+export interface AppServerThreadLifecycleEvent {
+  cursor: string;
+  type: string;
+  timestamp: string | null;
+  turnId: string | null;
+  raw: Record<string, unknown>;
+}
+
+export interface AppServerThreadTurn {
+  turnId: string;
+  status: "running" | "completed" | "interrupted";
+  startedAt: string | null;
+  completedAt: string | null;
+  preview: string | null;
+}
+
+export interface AppServerThreadDetail {
+  provider: AppServerAgentKind;
+  id: string;
+  status: "running" | "idle" | "interrupted" | "unknown";
+  preview: string | null;
+  turns: AppServerThreadTurn[];
+  lifecycle: AppServerThreadLifecycleEvent[];
+  lastLifecycleCursor: string | null;
+  sourcePath: string | null;
+}
+
 export interface AppServerThreadRef {
   threadId: string;
   agent: AppServerAgentKind;
@@ -104,6 +136,10 @@ export interface AppServerThreadRef {
     provider: AppServerAgentKind;
     id: string;
   } | null;
+  identityStatus: "resolved" | "unresolved";
+  lifecycleStatus: AppServerThreadLifecycleStatus;
+  lastLifecycleType: string | null;
+  lastLifecycleCursor: string | null;
   sourceInstanceId: string | null;
   lastEventId: string;
   lastHookEvent: string | null;
@@ -124,6 +160,7 @@ export interface AppServerThreadListResponse {
 
 export interface AppServerThreadResponse {
   thread: AppServerThreadRef;
+  detail?: AppServerThreadDetail | null;
 }
 
 export interface AppServerSyncStatusResponse {

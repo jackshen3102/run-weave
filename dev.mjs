@@ -27,6 +27,7 @@ const DEV_CHILD_ENV_KEYS_TO_REMOVE = [
   "RUNWEAVE_PROJECT_ID",
   "RUNWEAVE_RUNTIME_RELEASE_ID",
   "RUNWEAVE_TERMINAL_SESSION_ID",
+  "RUNWEAVE_TOOLKIT_PLUGIN_ROOT",
   "RUNWEAVE_TMUX_SESSION_NAME",
 ];
 
@@ -68,7 +69,11 @@ function resolveDevBrowserProfileDir(baseEnv) {
   );
 }
 
-export function createBackendEnv({ baseEnv, backendPort }) {
+export function createBackendEnv({
+  baseEnv,
+  backendPort,
+  sourceRoot = process.cwd(),
+}) {
   const env = createDevChildBaseEnv(baseEnv);
   const profileDir = resolveDevBrowserProfileDir(baseEnv);
   const sourceRevision = resolveDevSourceRevision(baseEnv);
@@ -79,6 +84,11 @@ export function createBackendEnv({ baseEnv, backendPort }) {
     PORT: String(backendPort),
     PORT_STRICT: "true",
     RUNWEAVE_RESOURCE_NAMESPACE: `profile:${createHash("sha256").update(profileDir).digest("hex").slice(0, 12)}`,
+    RUNWEAVE_TOOLKIT_PLUGIN_ROOT: path.join(
+      path.resolve(sourceRoot),
+      "electron",
+      "resources",
+    ),
     ...(sourceRevision ? { RUNWEAVE_SOURCE_REVISION: sourceRevision } : {}),
     SESSION_RESTORE_ENABLED: baseEnv.SESSION_RESTORE_ENABLED ?? "false",
   };

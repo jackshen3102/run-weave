@@ -76,6 +76,7 @@ try {
   await verifyFilteringAndAuth(context);
   await verifyWebSocketStateEvents(context);
   await verifyCodexThreadStatusCompensation(context);
+  await verifyUnknownTraeLifecycleNoop();
   await verifyLargeEventPaging(context, syncDir);
   await verifySyncFiles(syncDir);
 
@@ -268,6 +269,47 @@ async function verifyIsolationAndFallbackKeys(context) {
   );
   assert.equal(migratedThreads.threads.length, 1);
   assert.equal(migratedThreads.threads[0].threadId, "thread-fallback-real");
+
+  const crossSourcePanelId = "panel-fallback-cross-source";
+  await postEvent(
+    context,
+    hookEvent("SessionStart", {
+      correlationId: null,
+      scope: { terminalPanelId: crossSourcePanelId },
+      payload: { source: "traex", stateHookEvent: "SessionStart" },
+    }),
+  );
+  await postEvent(context, {
+    kind: "agent.lifecycle.observed",
+    source: {
+      app: "app-server",
+      instanceId: "app-server-reconciler-test",
+      pid: process.pid,
+    },
+    scope: {
+      projectId: ids.projectId,
+      terminalSessionId: ids.terminalSessionId,
+      terminalPanelId: crossSourcePanelId,
+      runId: ids.runId,
+      cwd: ids.cwd,
+    },
+    correlationId: "thread-fallback-cross-source-real",
+    payload: {
+      source: "traex",
+      observedStatus: "running",
+      lifecycleStatus: "available",
+      observedLifecycle: "task_started",
+      lifecycleCursor: "1",
+    },
+  });
+  const crossSourceThreads = await getJson(
+    context,
+    `/threads?terminalPanelId=${crossSourcePanelId}`,
+  );
+  assert.deepEqual(
+    crossSourceThreads.threads.map((thread) => thread.threadId),
+    ["thread-fallback-cross-source-real"],
+  );
 }
 
 async function verifyDedupe(context, syncDir) {
@@ -355,7 +397,7 @@ async function verifyCodexThreadStatusCompensation(context) {
   });
   const events = await getJson(
     context,
-    `/events?after=${running.body.event.id}&kind=agent.hook&limit=50`,
+    `/events?after=${running.body.event.id}&kind=agent.lifecycle.observed&limit=50`,
   );
   const compensationEvent = events.events.find(
     (event) =>
@@ -363,7 +405,8 @@ async function verifyCodexThreadStatusCompensation(context) {
   );
   assert.ok(compensationEvent);
   assert.equal(compensationEvent.payload.source, "codex");
-  assert.equal(compensationEvent.payload.stateHookEvent, "Stop");
+  assert.equal(compensationEvent.payload.observedStatus, "idle");
+  assert.equal(compensationEvent.payload.observedLifecycle, "thread/read:idle");
   assert.equal(
     compensationEvent.payload.compensationReason,
     "codex_thread_status_mismatch",
@@ -387,7 +430,7 @@ async function verifyCodexThreadStatusCompensation(context) {
   });
   const activeEvents = await getJson(
     context,
-    `/events?after=${running.body.event.id}&kind=agent.hook&limit=50`,
+    `/events?after=${running.body.event.id}&kind=agent.lifecycle.observed&limit=50`,
   );
   const activeCompensationEvent = activeEvents.events.find(
     (event) =>
@@ -395,11 +438,76 @@ async function verifyCodexThreadStatusCompensation(context) {
       event.payload?.compensation === true,
   );
   assert.ok(activeCompensationEvent);
+  assert.equal(activeCompensationEvent.payload.observedStatus, "running");
   assert.equal(
-    activeCompensationEvent.payload.stateHookEvent,
-    "UserPromptSubmit",
+    activeCompensationEvent.payload.observedLifecycle,
+    "thread/read:active",
   );
-  assert.equal(activeCompensationEvent.payload.observedThreadStatus, "active");
+}
+
+async function verifyUnknownTraeLifecycleNoop() {
+  const [{ AgentThreadStatusReconciler }, { AppServerStateStore }] =
+    await Promise.all([
+      import("../app-server/dist/agent-thread-status-reconciler.js"),
+      import("../app-server/dist/state-store.js"),
+    ]);
+  const stateStore = new AppServerStateStore(
+    path.join(stateDir, "unknown-lifecycle-thread-state.json"),
+  );
+  const now = new Date().toISOString();
+  stateStore.upsertThread({
+    agent: "traex",
+    status: "running",
+    threadId: "thread-unknown-lifecycle",
+    projectId: ids.projectId,
+    terminalSessionId: ids.terminalSessionId,
+    terminalPanelId: "panel-unknown-lifecycle",
+    terminalTmuxPaneId: null,
+    runId: ids.runId,
+    cwd: ids.cwd,
+    sourceInstanceId: source.instanceId,
+    lastEventId: "1",
+    lastActivityAt: now,
+    updatedAt: now,
+  });
+  const recorded = [];
+  const reconciler = new AgentThreadStatusReconciler({
+    eventCenter: {
+      getStateStore: () => stateStore,
+      record: async (input) => {
+        recorded.push(input);
+        return { created: true, event: { id: "2" } };
+      },
+    },
+    codexStatusReader: {
+      readThreadStatus: async () => null,
+      shutdown() {},
+    },
+    traeLifecycleReader: {
+      readThread: async () => ({
+        provider: "traex",
+        id: "thread-unknown-lifecycle",
+        status: "unknown",
+        preview: null,
+        turns: [],
+        lifecycle: [
+          {
+            cursor: "2",
+            type: "future_lifecycle",
+            timestamp: null,
+            turnId: null,
+            raw: { type: "future_lifecycle" },
+          },
+        ],
+        lastLifecycleCursor: "2",
+        sourcePath: null,
+      }),
+      shutdown() {},
+    },
+    sourceInstanceId: "app-server-reconciler-test",
+  });
+  await reconciler.reconcileOnce();
+  assert.equal(recorded.length, 0);
 }
 
 async function verifyLargeEventPaging(context, syncDir) {

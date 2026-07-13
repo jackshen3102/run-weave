@@ -6,13 +6,23 @@ import type {
 } from "@runweave/shared/agent-team";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { TerminalSessionRecord } from "../terminal/manager";
-import { buildWorkerRecheckPrompt } from "./prompt-builders";
+import {
+  buildCodeFixHandoffCorrectionPrompt,
+  buildReviewFindingCorrectionPrompt,
+  buildWorkerRecheckPrompt,
+} from "./prompt-builders";
 import { agentTeamLogger } from "./service-context";
 import { AgentTeamSerialDispatchService } from "./service-serial-dispatch";
 import type {
   AgentTeamCompletionSignal,
   AgentTeamCompletionSignalSource,
 } from "./service-types";
+import {
+  reviewFindingContractErrors,
+  validateCodeFixHandoff,
+  type AgentTeamRepairTarget,
+} from "./repair-loop";
+import { captureRepairSourceFingerprint } from "./repair-source-fingerprint";
 import {
   acceptanceCasesForRole,
   ensureWorkerGateAcceptance,
@@ -44,6 +54,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
   ): {
     acceptanceResults: NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>;
     forceBounceCaseIds: string[];
+    repairTargets: AgentTeamRepairTarget[];
   };
 
   protected abstract markRecheckDispatchFailed(
@@ -164,6 +175,54 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
           );
           return false;
         }
+        try {
+          await this.outboxHistoryStore.archive({
+            run: latest,
+            dispatch,
+            resolvedOutbox,
+            cwd: event.payload.cwd,
+          });
+        } catch (error) {
+          await this.pauseForRepairProtocolError(
+            latest,
+            `worker outbox 历史归档失败：${error instanceof Error ? error.message : String(error)}`,
+          );
+          return true;
+        }
+        if (dispatch.protocolCorrectionAttempt) {
+          const expected = dispatch.protocolCorrectionSourceFingerprint;
+          if (!expected) {
+            await this.pauseForRepairProtocolError(
+              latest,
+              "协议补交缺少源码指纹，无法证明补交期间未修改源码",
+            );
+            return true;
+          }
+          try {
+            const actual = await captureRepairSourceFingerprint(
+              this.resolveRequiredProjectRoot(
+                latest.projectId,
+                event.payload.cwd ?? latest.terminal.cwd ?? "",
+              ),
+            );
+            if (
+              actual.repoRoot !== expected.repoRoot ||
+              actual.sha256 !== expected.sha256
+            ) {
+              await this.pauseForRepairProtocolError(
+                latest,
+                "协议补交期间源码、Git HEAD 或 index 已变化",
+              );
+              return true;
+            }
+          } catch (error) {
+            await this.pauseForRepairProtocolError(
+              latest,
+              `协议补交源码指纹复核失败：${error instanceof Error ? error.message : String(error)}`,
+            );
+            return true;
+          }
+        }
         const reviewTargetMismatch = completionReviewTargetMismatch(
           latest,
           outbox,
@@ -197,6 +256,45 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
           }
         }
         const initialRound = this.resolveOutboxRound(latest, outbox);
+        const reviewContractErrors = reviewFindingContractErrors(
+          outbox,
+          initialRound.acceptanceResults,
+        );
+        if (reviewContractErrors.length > 0) {
+          await this.handleProtocolCorrection(
+            latest,
+            activeWorker,
+            outboxMtimeMs,
+            reviewContractErrors,
+            buildReviewFindingCorrectionPrompt({
+              run: latest,
+              errors: reviewContractErrors,
+            }),
+            "code_review finding",
+          );
+          return true;
+        }
+        if (outbox.role === "code") {
+          const handoff = validateCodeFixHandoff(latest, outbox);
+          if (handoff.status === "blocked") {
+            await this.pauseForRepairProtocolError(latest, handoff.reason);
+            return true;
+          }
+          if (handoff.status === "invalid") {
+            await this.handleProtocolCorrection(
+              latest,
+              activeWorker,
+              outboxMtimeMs,
+              handoff.errors,
+              buildCodeFixHandoffCorrectionPrompt({
+                run: latest,
+                errors: handoff.errors,
+              }),
+              "code fixVerifications",
+            );
+            return true;
+          }
+        }
         const shouldDispatchRecheck = this.hasBouncedCasesForWorker(
           latest,
           outbox,
@@ -252,6 +350,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
         await this.applyRound(roundRun, {
           acceptanceResults: round.acceptanceResults,
           forceBounceCaseIds: round.forceBounceCaseIds,
+          repairTargets: round.repairTargets,
           completedWorkerRole: parseWorkerRole(outbox.role),
           completedWorkerSummary: outbox.summary,
         });
@@ -288,6 +387,92 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
       return;
     }
     agentTeamLogger.info("agent-team.completion.stale", fields);
+  }
+
+  protected async handleProtocolCorrection(
+    run: AgentTeamRun,
+    worker: AgentTeamWorker,
+    outboxMtimeMs: number | null,
+    errors: string[],
+    prompt: string,
+    label: string,
+  ): Promise<AgentTeamRun> {
+    const dispatch = run.activeWorkerDispatch;
+    if ((dispatch?.protocolCorrectionAttempt ?? 0) >= 1) {
+      return this.pauseForRepairProtocolError(
+        run,
+        `${label} 连续两次不满足协议：${errors.join("；")}`,
+      );
+    }
+    const session = this.terminalSessionManager.getSession(
+      run.terminalSessionId,
+    );
+    if (!session || !worker.panelId) {
+      return this.pauseForRepairProtocolError(
+        run,
+        `${label} 协议补交无法投递：worker pane 不可用`,
+      );
+    }
+    let sourceFingerprint;
+    try {
+      sourceFingerprint = await captureRepairSourceFingerprint(
+        this.resolveRequiredProjectRoot(run.projectId, session.cwd),
+      );
+    } catch (error) {
+      return this.pauseForRepairProtocolError(
+        run,
+        `${label} 协议补交无法锁定源码边界：${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    const correctionRun = await this.updateRun(run, {
+      activeWorkerDispatch: {
+        ...(dispatch ??
+          createActiveWorkerDispatch(
+            worker,
+            new Date().toISOString(),
+            outboxMtimeMs,
+            run.loop.round,
+          )),
+        requestedAt: new Date().toISOString(),
+        outboxMtimeMs,
+        protocolCorrectionAttempt: 1,
+        protocolCorrectionSourceFingerprint: sourceFingerprint,
+      },
+      logs: [
+        ...run.logs,
+        `${label} 协议不完整，已要求原 worker 只补交 outbox：${errors.join("；")}`,
+      ],
+    });
+    try {
+      await this.promptSender.sendPromptToPane(session, prompt, {
+        panelId: worker.panelId,
+      });
+    } catch (error) {
+      return this.pauseForRepairProtocolError(
+        correctionRun,
+        `${label} 协议补交无法投递：${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return correctionRun;
+  }
+
+  protected async pauseForRepairProtocolError(
+    run: AgentTeamRun,
+    reason: string,
+  ): Promise<AgentTeamRun> {
+    return this.updateRun(run, {
+      status: "need_human",
+      activeWorkerRole: null,
+      activeWorkerDispatch: null,
+      workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+      loop: {
+        ...run.loop,
+        repairCycles: [...(run.loop.repairCycles ?? [])],
+        escalated: true,
+        lastReason: reason,
+      },
+      logs: [...run.logs, `⏸ ${reason}`],
+    });
   }
 
   protected logReconciledCompletion(
@@ -399,11 +584,17 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
     if (!role) {
       return false;
     }
-    if (run.phase === "executing" && role === "code") {
+    if (
+      run.phase === "executing" &&
+      role === "code" &&
+      outbox.status === "completed"
+    ) {
+      const repairKeys = run.activeWorkerDispatch?.repairKeys ?? [];
       await this.dispatchSerialWorker(run, "code_review", {
         cases: acceptanceCasesForRole(run, "code_review"),
         log: "code 完成，启动 code_review",
         triggerSummary: outbox.summary,
+        acceptedRepairKeys: repairKeys,
       });
       return true;
     }
@@ -435,6 +626,15 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
     );
     const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(session, worker);
     const now = new Date().toISOString();
+    const activeWorkerDispatch = createActiveWorkerDispatch(
+      worker,
+      now,
+      outboxMtimeMs,
+      run.loop.round,
+      worker.role === "code_review"
+        ? (run.reviewCheckpoint?.pendingReview ?? null)
+        : null,
+    );
     await this.promptSender.sendPromptToPane(
       session,
       buildWorkerRecheckPrompt({
@@ -454,15 +654,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
         : `code pane ${options.sourcePanelId ?? ""} 已完成，重新触发用例`;
     return this.updateRun(run, {
       activeWorkerRole: worker.role,
-      activeWorkerDispatch: createActiveWorkerDispatch(
-        worker,
-        now,
-        outboxMtimeMs,
-        run.loop.round,
-        worker.role === "code_review"
-          ? (run.reviewCheckpoint?.pendingReview ?? null)
-          : null,
-      ),
+      activeWorkerDispatch,
       workers: setActiveWorker(run.workers, worker.role),
       acceptance: ensureWorkerGateAcceptance(run.workers, run.acceptance).map(
         (item) =>
@@ -474,6 +666,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
                 resultSummary: null,
                 bouncedToPanelId: null,
                 recheckRequestedAt: now,
+                recheckDispatchId: activeWorkerDispatch.dispatchId ?? null,
                 recheckWorkerPanelId: worker.panelId,
                 recheckWorkerRole: worker.role,
                 recheckOutboxMtimeMs: outboxMtimeMs,

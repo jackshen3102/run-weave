@@ -1,5 +1,5 @@
 import type { TerminalLastThreadStatus } from "./session";
-import type { TerminalState } from "./state";
+import type { TerminalAgentKind, TerminalState } from "./state";
 
 export type TerminalPanelRole = string;
 
@@ -29,8 +29,10 @@ export interface TerminalPanelListItem {
   alias: string | null;
   role?: TerminalPanelRole | null;
   threadId?: string;
+  threadProvider?: TerminalAgentKind;
   preview?: string;
   lastThreadId?: string;
+  lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
   lastThreadUpdatedAt?: string;
   cwd: string;

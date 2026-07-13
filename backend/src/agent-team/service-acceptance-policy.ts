@@ -113,6 +113,7 @@ export function ensureWorkerGateAcceptance(
       evidence: [],
       bouncedToPanelId: null,
       recheckRequestedAt: null,
+      recheckDispatchId: null,
       recheckWorkerPanelId: null,
       recheckWorkerRole: null,
       recheckOutboxMtimeMs: null,
@@ -244,7 +245,47 @@ export function findRecheckWatchdogCases(
 ): AgentTeamAcceptanceCase[] {
   return run.acceptance.filter(
     (item) =>
-      isOverdueRecheckCase(item) || isLegacyOverdueRecheckCase(run, item),
+      isOverdueRecheckCase(item) &&
+      recheckCaseBelongsToActiveDispatch(run, item),
+  );
+}
+
+export function recheckCaseBelongsToActiveDispatch(
+  run: AgentTeamRun,
+  item: AgentTeamAcceptanceCase,
+): boolean {
+  const dispatch = run.activeWorkerDispatch;
+  if (
+    !dispatch ||
+    run.activeWorkerRole !== dispatch.role ||
+    item.recheckWorkerRole !== dispatch.role ||
+    item.recheckWorkerPanelId !== dispatch.panelId ||
+    item.recheckRequestedAt !== dispatch.requestedAt ||
+    item.recheckOutboxMtimeMs !== dispatch.outboxMtimeMs
+  ) {
+    return false;
+  }
+  if (
+    item.recheckDispatchId &&
+    item.recheckDispatchId !== dispatch.dispatchId
+  ) {
+    return false;
+  }
+  if (dispatch.role !== "code_review" || !run.reviewCheckpoint) {
+    return true;
+  }
+  const expected = dispatch.reviewTarget;
+  const current = run.reviewCheckpoint.pendingReview;
+  return Boolean(
+    expected &&
+      current &&
+      expected.scope === current.scope &&
+      expected.baseCommit === current.baseCommit &&
+      expected.targetTree === current.targetTree &&
+      expected.planSha256 === current.planSha256 &&
+      expected.testCaseSha256 === current.testCaseSha256 &&
+      expected.requestedAt === current.requestedAt &&
+      expected.changedPaths.join("\0") === current.changedPaths.join("\0"),
   );
 }
 
@@ -256,26 +297,6 @@ export function isOverdueRecheckCase(item: AgentTeamAcceptanceCase): boolean {
   return (
     Number.isFinite(requestedAt) &&
     Date.now() - requestedAt >= RECHECK_TIMEOUT_MS
-  );
-}
-
-export function isLegacyOverdueRecheckCase(
-  run: AgentTeamRun,
-  item: AgentTeamAcceptanceCase,
-): boolean {
-  if (item.status !== "pending" || item.recheckRequestedAt) {
-    return false;
-  }
-  if (
-    !run.logs.some(
-      (log) => log.includes("复验") && log.includes(`用例 ${item.caseId}`),
-    )
-  ) {
-    return false;
-  }
-  const updatedAt = Date.parse(run.updatedAt);
-  return (
-    Number.isFinite(updatedAt) && Date.now() - updatedAt >= RECHECK_TIMEOUT_MS
   );
 }
 
@@ -393,6 +414,13 @@ export function normalizeOutboxFinding(
     summary: resolvedSummary,
     ...(typeof record.ref === "string" && record.ref.trim()
       ? { ref: record.ref.trim() }
+      : {}),
+    ...(typeof record.invariantKey === "string" && record.invariantKey.trim()
+      ? { invariantKey: record.invariantKey.trim() }
+      : {}),
+    ...(record.verificationMode === "runtime" ||
+    record.verificationMode === "structural"
+      ? { verificationMode: record.verificationMode }
       : {}),
   };
 }

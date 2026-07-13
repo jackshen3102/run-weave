@@ -423,6 +423,12 @@ const cases = [
         isAppSensitivePath("electron/resources/icons/icon.icns"),
         true,
       );
+      assert.equal(
+        isAppSensitivePath(
+          "electron/resources/hooks/runweave-hook-bridge.cjs",
+        ),
+        true,
+      );
       assert.equal(isAppSensitivePath("electron/electron-builder.yml"), true);
       assert.equal(isAppSensitivePath("backend/src/index.ts"), false);
       assert.equal(isAppServerSensitivePath("app-server/src/index.ts"), true);

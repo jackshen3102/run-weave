@@ -1,5 +1,5 @@
 import type { TerminalProjectListItem } from "./project";
-import type { TerminalState } from "./state";
+import type { TerminalAgentKind, TerminalState } from "./state";
 
 export type TerminalRuntimePreference = "auto" | "tmux" | "pty";
 
@@ -36,8 +36,10 @@ export interface TerminalSessionStatusResponse {
   projectId: string;
   alias?: string | null;
   threadId?: string;
+  threadProvider?: TerminalAgentKind;
   preview?: string;
   lastThreadId?: string;
+  lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
   lastThreadUpdatedAt?: string;
   command: string;
@@ -61,8 +63,10 @@ export interface TerminalSessionListItem {
   projectId: string;
   alias?: string | null;
   threadId?: string;
+  threadProvider?: TerminalAgentKind;
   preview?: string;
   lastThreadId?: string;
+  lastThreadProvider?: TerminalAgentKind;
   lastThreadStatus?: TerminalLastThreadStatus;
   lastThreadUpdatedAt?: string;
   command: string;
