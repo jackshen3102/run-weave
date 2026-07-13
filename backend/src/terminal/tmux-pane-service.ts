@@ -292,21 +292,31 @@ export class TmuxPaneService extends TmuxSessionService {
     }
   }
 
-  async cancelCopyMode(target: TmuxTarget): Promise<void> {
+  async cancelCopyMode(target: TmuxTarget | TmuxPaneTarget): Promise<void> {
+    const tmuxTarget = resolveTmuxTargetName(target);
     aiDiagnosticLog("terminal tmux cancel-copy-mode requested", {
       tmuxSessionName: target.sessionName,
       socketPath: target.socketPath,
+      tmuxTarget,
     });
     try {
       await this.runTmux(
-        ["send-keys", "-t", target.sessionName, "-X", "cancel"],
+        ["send-keys", "-t", tmuxTarget, "-X", "cancel"],
         target,
       );
     } catch (error) {
+      if (
+        /not in a mode/i.test(
+          error instanceof Error ? error.message : String(error),
+        )
+      ) {
+        return;
+      }
       tmuxLogger.warn("terminal.tmux.cancel-copy-mode.failed", {
         message: "Failed to cancel tmux copy mode",
         sessionName: target.sessionName,
         socketPath: target.socketPath,
+        tmuxTarget,
         error,
       });
     }

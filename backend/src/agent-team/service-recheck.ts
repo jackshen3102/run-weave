@@ -224,6 +224,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
         worker,
         now,
         outboxMtimeMs,
+        run.loop.round,
         worker.role === "code_review"
           ? (run.reviewCheckpoint?.pendingReview ?? null)
           : null,

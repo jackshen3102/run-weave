@@ -458,6 +458,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamSerialDispatch
         worker,
         now,
         outboxMtimeMs,
+        run.loop.round,
         worker.role === "code_review"
           ? (run.reviewCheckpoint?.pendingReview ?? null)
           : null,

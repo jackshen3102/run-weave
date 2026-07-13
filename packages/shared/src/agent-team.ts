@@ -177,6 +177,8 @@ export interface AgentTeamActiveWorkerDispatch {
   role: AgentTeamWorkerRole;
   panelId: string | null;
   tmuxPaneId: string | null;
+  /** Loop round at dispatch time; absent on runs persisted before round attribution. */
+  round?: number;
   requestedAt: string;
   /** null means the pane-scoped outbox did not exist when work was dispatched. */
   outboxMtimeMs: number | null;

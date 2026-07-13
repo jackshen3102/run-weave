@@ -166,6 +166,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
         activeWorker,
         requestedAt,
         outboxMtimeMs,
+        run.loop.round,
       );
     }
     if (this.tmuxService && activeWorkers.some((worker) => worker.panelId)) {
@@ -349,6 +350,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
           codeWorker,
           requestedAt,
           outboxMtimeMs,
+          run.loop.round,
         ),
         workers: setActiveWorker(run.workers, "code"),
         logs: [

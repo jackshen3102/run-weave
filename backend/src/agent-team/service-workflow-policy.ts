@@ -100,12 +100,14 @@ export function createActiveWorkerDispatch(
   worker: Pick<AgentTeamWorker, "role" | "panelId" | "tmuxPaneId">,
   requestedAt: string,
   outboxMtimeMs: number | null,
+  round: number,
   reviewTarget: AgentTeamActiveWorkerDispatch["reviewTarget"] = null,
 ): AgentTeamActiveWorkerDispatch {
   return {
     role: worker.role,
     panelId: worker.panelId ?? null,
     tmuxPaneId: worker.tmuxPaneId ?? null,
+    round,
     requestedAt,
     outboxMtimeMs,
     reviewTarget,
@@ -170,6 +172,7 @@ export function resolveActiveWorkerDispatch(
       worker,
       recheckCase.recheckRequestedAt,
       recheckCase.recheckOutboxMtimeMs ?? null,
+      run.loop.round,
       worker.role === "code_review"
         ? (run.reviewCheckpoint?.pendingReview ?? null)
         : null,
@@ -179,6 +182,7 @@ export function resolveActiveWorkerDispatch(
     worker,
     run.updatedAt,
     null,
+    run.loop.round,
     worker.role === "code_review"
       ? (run.reviewCheckpoint?.pendingReview ?? null)
       : null,
