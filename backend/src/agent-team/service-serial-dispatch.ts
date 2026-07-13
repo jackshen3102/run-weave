@@ -195,6 +195,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
         worker,
         now,
         outboxMtimeMs,
+        dispatchRun.loop.round,
         reviewTarget,
       ),
       workers: setActiveWorker(dispatchRun.workers, role),

@@ -61,6 +61,7 @@ export function recordAgentTeamRunTransition(
       payload: {
         workerId: worker?.id ?? null,
         role: dispatch.role,
+        round: dispatch.round ?? current.loop.round,
         attempt: Math.max(
           1,
           ...current.acceptance
@@ -97,6 +98,7 @@ export function recordAgentTeamRunTransition(
         sourceCaseId: item.sourceCaseId ?? null,
         sourceFilePath: item.sourceFilePath ?? null,
         workerRole: item.recheckWorkerRole ?? null,
+        round: current.activeWorkerDispatch?.round ?? current.loop.round,
         attempt: item.recheckAttempt ?? 1,
       },
     }));
@@ -122,6 +124,9 @@ export function recordAgentTeamRunTransition(
         reportedStatus: item.status,
         summary: item.resultSummary ?? null,
         evidenceCount: item.evidence.length,
+        round:
+          previous?.activeWorkerDispatch?.round ??
+          Math.max(1, current.loop.round - 1),
         attempt: item.recheckAttempt ?? 1,
       },
     }));
@@ -143,6 +148,9 @@ export function recordAgentTeamRunTransition(
         reportedStatus: recordedCases.some((item) => item.status === "fail")
           ? "failed"
           : "completed",
+        round:
+          previous.activeWorkerDispatch.round ??
+          Math.max(1, current.loop.round - 1),
         caseCount: recordedCases.length,
       },
     }));

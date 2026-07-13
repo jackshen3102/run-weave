@@ -1,0 +1,753 @@
+{
+  "product": {
+    "title": "Work history",
+    "subtitle": "Recorded activity grouped by its real execution container"
+  },
+  "routes": [
+    {
+      "id": "terminals",
+      "label": "Terminal history",
+      "description": "Single-agent terminal sessions"
+    },
+    {
+      "id": "agent-team",
+      "label": "Multi-Agent runs",
+      "description": "Orchestrated worker runs"
+    }
+  ],
+  "terminals": [
+    {
+      "id": "79c39e47",
+      "project": "browser-hub/feature",
+      "cwd": "/workspace/browser-hub/feature",
+      "command": "Not retained",
+      "agent": "codex",
+      "status": "history-only",
+      "agentStatus": "idle",
+      "createdAt": "2026-07-05T06:06:49.000Z",
+      "lastActivityAt": "2026-07-05T08:54:09.326Z",
+      "preview": "同一个 Terminal 中关联了 4 个独立 Codex Thread；每个 Thread 保留自己的上下文和 Turns。",
+      "sourceSummary": [
+        {
+          "label": "Terminal session",
+          "value": "History only",
+          "tone": "neutral"
+        },
+        {
+          "label": "Activity facts",
+          "value": "Unavailable",
+          "tone": "neutral"
+        },
+        { "label": "Codex threads", "value": "4 · 33 turns", "tone": "good" },
+        { "label": "Scrollback", "value": "Unavailable", "tone": "neutral" }
+      ],
+      "recap": {
+        "summary": "该 Terminal 在 App Server 历史中关联了 4 个不同的 Codex Thread。它们围绕终端状态同步、App Server 状态补偿和 Agent Idle 判断展开，但模型上下文彼此独立，因此在同一 Terminal 档案中分段展示。",
+        "basis": "Generated from 4 ThreadRefs and 33 Codex turns",
+        "decisions": [
+          "Terminal 只保留一条外层记录，Thread ID 变化时创建新的内部 Thread 分段。",
+          "每个 Thread 的 Turns、状态和 preview 独立呈现，不跨 Thread 合并。",
+          "历史 Terminal 数据源缺失时明确标记 unavailable，不推断 scrollback 或 Activity facts。"
+        ],
+        "openItems": []
+      },
+      "threads": [
+        {
+          "id": "019f30e2-fc7e-7602-b568-bf476fef9a59",
+          "status": "idle",
+          "startType": "started",
+          "lastCompletionReason": "hook_stop",
+          "createdAt": "2026-07-05T06:06:49.000Z",
+          "lastActivityAt": "2026-07-05T06:40:42.562Z",
+          "preview": "帮我分析一下，现在终端的状态已经没有办法同步了，好像没收到事件，是不是 App Server 改出问题了呢？",
+          "turnCount": 8,
+          "turns": [
+            {
+              "id": "019f30e3-7eba-79e2-b201-7847ad679ed7",
+              "status": "completed",
+              "startedAt": 1783231643,
+              "durationMs": 115199,
+              "itemCount": 15
+            },
+            {
+              "id": "019f30e6-a712-77c2-af20-89554a2dceab",
+              "status": "completed",
+              "startedAt": 1783231850,
+              "durationMs": 30414,
+              "itemCount": 6
+            },
+            {
+              "id": "019f30e8-8fab-7f81-be2c-fec412b14a73",
+              "status": "completed",
+              "startedAt": 1783231975,
+              "durationMs": 88414,
+              "itemCount": 8
+            },
+            {
+              "id": "019f30ec-37d2-74b0-b38c-fb9a8271a2e2",
+              "status": "completed",
+              "startedAt": 1783232215,
+              "durationMs": 74393,
+              "itemCount": 9
+            },
+            {
+              "id": "019f30ee-e224-7ee3-9fa8-255e13be73aa",
+              "status": "completed",
+              "startedAt": 1783232389,
+              "durationMs": 68779,
+              "itemCount": 10
+            },
+            {
+              "id": "019f30f2-ce30-7683-8cc4-cdf9b3c90271",
+              "status": "completed",
+              "startedAt": 1783232646,
+              "durationMs": 164606,
+              "itemCount": 14
+            },
+            {
+              "id": "019f30fa-3763-7703-8b20-71029738db47",
+              "status": "completed",
+              "startedAt": 1783233132,
+              "durationMs": 92685,
+              "itemCount": 10
+            },
+            {
+              "id": "019f30ff-454d-7340-b8a3-b0af49f7fc54",
+              "status": "completed",
+              "startedAt": 1783233463,
+              "durationMs": 178961,
+              "itemCount": 12
+            }
+          ]
+        },
+        {
+          "id": "019f3108-5ec4-75f2-9b26-4d4c4d1ac657",
+          "status": "idle",
+          "startType": "started",
+          "lastCompletionReason": "hook_stop",
+          "createdAt": "2026-07-05T06:47:39.000Z",
+          "lastActivityAt": "2026-07-05T07:50:27.952Z",
+          "preview": "将 Backend 中的 Thread 状态轮询下沉到 App Server，并在状态不一致时推送补偿事件。",
+          "turnCount": 10,
+          "turns": [
+            {
+              "id": "019f3109-c36b-7c00-880c-0fca74447a96",
+              "status": "completed",
+              "startedAt": 1783234151,
+              "durationMs": 365077,
+              "itemCount": 31
+            },
+            {
+              "id": "019f3111-9a13-7502-8223-a5a1786e8e20",
+              "status": "completed",
+              "startedAt": 1783234664,
+              "durationMs": 199950,
+              "itemCount": 18
+            },
+            {
+              "id": "019f3115-2180-7661-85aa-77fb9279fc7d",
+              "status": "completed",
+              "startedAt": 1783234896,
+              "durationMs": 151860,
+              "itemCount": 20
+            },
+            {
+              "id": "019f3117-75cc-7621-8110-6f14d98e850d",
+              "status": "completed",
+              "startedAt": 1783235048,
+              "durationMs": 27701,
+              "itemCount": 4
+            },
+            {
+              "id": "019f3119-21e4-7412-b4d7-514f386362af",
+              "status": "completed",
+              "startedAt": 1783235158,
+              "durationMs": 38276,
+              "itemCount": 4
+            },
+            {
+              "id": "019f311a-41bb-76f1-ae06-dc63a4383fc6",
+              "status": "completed",
+              "startedAt": 1783235232,
+              "durationMs": 118893,
+              "itemCount": 21
+            },
+            {
+              "id": "019f311f-37de-7651-98c3-20185a761417",
+              "status": "completed",
+              "startedAt": 1783235557,
+              "durationMs": 81843,
+              "itemCount": 9
+            },
+            {
+              "id": "019f3121-35b9-7ce2-878f-1f8dd35ef339",
+              "status": "completed",
+              "startedAt": 1783235687,
+              "durationMs": 120401,
+              "itemCount": 13
+            },
+            {
+              "id": "019f3129-cb45-7cf0-8086-a99b3b278ef2",
+              "status": "completed",
+              "startedAt": 1783236250,
+              "durationMs": 107233,
+              "itemCount": 10
+            },
+            {
+              "id": "019f313f-305d-7542-b55a-37a414184871",
+              "status": "completed",
+              "startedAt": 1783237652,
+              "durationMs": 175392,
+              "itemCount": 9
+            }
+          ]
+        },
+        {
+          "id": "019f3112-7e80-7420-b96c-7336a53bcbeb",
+          "status": "idle",
+          "startType": "started",
+          "lastCompletionReason": "hook_stop",
+          "createdAt": "2026-07-05T06:58:43.000Z",
+          "lastActivityAt": "2026-07-05T06:58:54.489Z",
+          "preview": "Reply with exactly: real-thread-status-probe",
+          "turnCount": 1,
+          "turns": [
+            {
+              "id": "019f3112-7ffa-7090-a1b8-93ad982235c0",
+              "status": "completed",
+              "startedAt": 1783234723,
+              "durationMs": 10698,
+              "itemCount": 2
+            }
+          ]
+        },
+        {
+          "id": "019f3147-b17a-7d01-81de-0c134884e2f2",
+          "status": "idle",
+          "startType": "started",
+          "lastCompletionReason": "hook_stop",
+          "createdAt": "2026-07-05T07:56:49.000Z",
+          "lastActivityAt": "2026-07-05T08:54:09.326Z",
+          "preview": "分析 Terminal 2d635400 为什么应为 Agent Idle，而不是 Agent Running。",
+          "turnCount": 14,
+          "turns": [
+            {
+              "id": "019f3148-1dc1-73e0-bae9-757a737e7371",
+              "status": "completed",
+              "startedAt": 1783238237,
+              "durationMs": 128599,
+              "itemCount": 12
+            },
+            {
+              "id": "019f314a-c9d8-7f62-8d64-d3385e5e4ab7",
+              "status": "completed",
+              "startedAt": 1783238412,
+              "durationMs": 36708,
+              "itemCount": 6
+            },
+            {
+              "id": "019f314b-c185-7863-bd84-e88336a93ed8",
+              "status": "completed",
+              "startedAt": 1783238476,
+              "durationMs": 25657,
+              "itemCount": 3
+            },
+            {
+              "id": "019f314e-2884-7561-abb3-907648f70024",
+              "status": "completed",
+              "startedAt": 1783238633,
+              "durationMs": 70749,
+              "itemCount": 4
+            },
+            {
+              "id": "019f3153-0541-7f61-ac38-288664867f29",
+              "status": "completed",
+              "startedAt": 1783238952,
+              "durationMs": 173028,
+              "itemCount": 21
+            },
+            {
+              "id": "019f3156-dd0f-7ea2-9c9c-e9edf385fed4",
+              "status": "completed",
+              "startedAt": 1783239204,
+              "durationMs": 125071,
+              "itemCount": 10
+            },
+            {
+              "id": "019f315b-9a42-7ae0-b163-8b8425be7931",
+              "status": "completed",
+              "startedAt": 1783239514,
+              "durationMs": 144265,
+              "itemCount": 15
+            },
+            {
+              "id": "019f315f-ad94-78d0-8d27-bbb0ea707282",
+              "status": "completed",
+              "startedAt": 1783239781,
+              "durationMs": 71488,
+              "itemCount": 7
+            },
+            {
+              "id": "019f3161-b2ae-79b0-b5b2-9fa7e70b1fe6",
+              "status": "completed",
+              "startedAt": 1783239914,
+              "durationMs": 281218,
+              "itemCount": 25
+            },
+            {
+              "id": "019f316a-3252-7b71-bbe0-f223d1f0d35d",
+              "status": "completed",
+              "startedAt": 1783240471,
+              "durationMs": 134050,
+              "itemCount": 10
+            },
+            {
+              "id": "019f316e-e1f5-7361-bf48-1f685d4b1550",
+              "status": "completed",
+              "startedAt": 1783240778,
+              "durationMs": 88061,
+              "itemCount": 7
+            },
+            {
+              "id": "019f3172-1a03-79b3-8db6-68938efbdcff",
+              "status": "completed",
+              "startedAt": 1783240989,
+              "durationMs": 18515,
+              "itemCount": 2
+            },
+            {
+              "id": "019f3174-6293-7d11-b974-b15a2b1446de",
+              "status": "completed",
+              "startedAt": 1783241138,
+              "durationMs": 69371,
+              "itemCount": 5
+            },
+            {
+              "id": "019f3177-7369-74f1-8106-af44d0e9d85e",
+              "status": "completed",
+              "startedAt": 1783241339,
+              "durationMs": 309555,
+              "itemCount": 41
+            }
+          ]
+        }
+      ],
+      "facts": []
+    },
+    {
+      "id": "d5023252",
+      "project": "browser-hub/feature",
+      "cwd": "/workspace/browser-hub/feature",
+      "command": "/bin/zsh -l",
+      "agent": "codex",
+      "status": "running",
+      "agentStatus": "idle",
+      "createdAt": "2026-07-12T13:28:23.698Z",
+      "lastActivityAt": "2026-07-12T14:20:43.533Z",
+      "preview": "围绕现有 Activity 数据重新设计普通 Terminal 与 Multi-Agent Run 的独立工作档案。",
+      "sourceSummary": [
+        { "label": "Terminal session", "value": "Running", "tone": "good" },
+        { "label": "Activity facts", "value": "11 recorded", "tone": "good" },
+        { "label": "Codex threads", "value": "1 · 4 turns", "tone": "good" },
+        { "label": "Scrollback", "value": "Available", "tone": "good" }
+      ],
+      "recap": {
+        "summary": "本终端持续讨论 Activity 页面应该如何从事件审计升级为可回看的工作历史。方向先从任务档案转向 Terminal 档案，随后进一步拆分为普通 Terminal 与 Multi-Agent Run 两条独立路线。",
+        "basis": "Generated from 4 Codex turns and 11 Activity facts",
+        "decisions": [
+          "普通 Terminal 以 terminalSessionId 作为稳定归属锚点。",
+          "Codex thread/turn 用于补充问题、回答、状态和执行时长。",
+          "Multi-Agent Run 不进入普通 Terminal 列表，使用独立页面。"
+        ],
+        "openItems": [
+          "用可运行原型验证两套页面的信息密度与切换方式。",
+          "后续实现前确认普通 Terminal 的实时 thread/read 接线。"
+        ]
+      },
+      "threads": [
+        {
+          "id": "019f5683-eba0-7d33-a769-0faf54939d8d",
+          "status": "idle",
+          "startType": "started",
+          "createdAt": "2026-07-12T13:30:23.000Z",
+          "lastActivityAt": "2026-07-12T13:51:15.971Z",
+          "preview": "围绕现有 Activity 数据重新设计普通 Terminal 与 Multi-Agent Run 的独立工作档案。",
+          "turnCount": 4,
+          "turns": [
+            {
+              "id": "019f5685-782e-7801-a34c-329b3d3f1ecf",
+              "status": "completed",
+              "startedAt": "13:30:15",
+              "duration": "2m 30s",
+              "itemCount": 6,
+              "prompt": "现有 Activity 数据看不出价值，希望模型能结合关联数据做经验总结与复盘。",
+              "result": "将当前页面判断为审计日志，并铺开任务档案、决策链、经验库等方向。"
+            },
+            {
+              "id": "019f568a-a643-7a01-abbe-17add6b92986",
+              "status": "completed",
+              "startedAt": "13:35:54",
+              "duration": "2m 06s",
+              "itemCount": 3,
+              "prompt": "细化任务档案这种形态。",
+              "result": "细化目标、过程、产物、验收、结果和复盘的信息层级。"
+            },
+            {
+              "id": "019f568e-b9ec-7cf0-9fb6-3e1506e08c1e",
+              "status": "completed",
+              "startedAt": "13:40:22",
+              "duration": "3m 53s",
+              "itemCount": 6,
+              "prompt": "改为围绕 Terminal 记录，并把普通终端和 Multi-Agent Term 分开设计。",
+              "result": "确定普通 Terminal 展示连续工作历史，Multi-Agent 展示协作执行闭环。"
+            },
+            {
+              "id": "019f5695-a194-7fc1-ac86-8b578c521dfe",
+              "status": "interrupted",
+              "startedAt": "13:47:54",
+              "duration": null,
+              "itemCount": 9,
+              "prompt": "基于 localhost:5001/activity 和既有事实数据制作新的页面原型。",
+              "result": "已完成数据源核对；该 App Server 快照记录此 turn 为 interrupted。"
+            }
+          ]
+        }
+      ],
+      "facts": [
+        {
+          "time": "13:28:23",
+          "event": "terminal.session.created",
+          "source": "Activity",
+          "detail": "runtimeKind=tmux · status=running"
+        },
+        {
+          "time": "13:30:23",
+          "event": "agent.thread.started",
+          "source": "Activity",
+          "detail": "agent=codex · thread linked"
+        },
+        {
+          "time": "13:30:23",
+          "event": "user.query.submit_requested",
+          "source": "Activity",
+          "detail": "thread 019f5683…"
+        },
+        {
+          "time": "13:30:33",
+          "event": "user.query.submit_requested",
+          "source": "Activity",
+          "detail": "thread 019f5683…"
+        },
+        {
+          "time": "13:32:46",
+          "event": "agent.response.observed",
+          "source": "Activity",
+          "detail": "thread 019f5683…"
+        },
+        {
+          "time": "13:35:55",
+          "event": "user.query.submit_requested",
+          "source": "Activity",
+          "detail": "thread 019f5683…"
+        },
+        {
+          "time": "13:38:00",
+          "event": "agent.response.observed",
+          "source": "Activity",
+          "detail": "thread 019f5683…"
+        },
+        {
+          "time": "13:40:22",
+          "event": "user.query.submit_requested",
+          "source": "Activity",
+          "detail": "thread 019f5683…"
+        },
+        {
+          "time": "13:42:10",
+          "event": "user.query.submit_requested",
+          "source": "Activity",
+          "detail": "thread 019f5683…"
+        },
+        {
+          "time": "13:44:15",
+          "event": "agent.response.observed",
+          "source": "Activity",
+          "detail": "thread 019f5683…"
+        },
+        {
+          "time": "13:47:54",
+          "event": "user.query.submit_requested",
+          "source": "Activity",
+          "detail": "thread 019f5683…"
+        }
+      ]
+    },
+    {
+      "id": "77596d14",
+      "project": "browser-hub/browser-viewer",
+      "cwd": "/workspace/browser-hub/browser-viewer",
+      "command": "/bin/zsh -l",
+      "agent": "codex",
+      "status": "running",
+      "agentStatus": "idle",
+      "createdAt": "2026-07-08T03:34:20.198Z",
+      "lastActivityAt": "2026-07-12T13:53:03.549Z",
+      "preview": "Recent Activity 页面讨论与页面截图对应的 Codex 会话。",
+      "sourceSummary": [
+        { "label": "Terminal session", "value": "Running", "tone": "good" },
+        { "label": "Activity facts", "value": "6 recorded", "tone": "good" },
+        { "label": "Codex threads", "value": "1 linked", "tone": "good" },
+        { "label": "Scrollback", "value": "Available", "tone": "good" }
+      ],
+      "recap": {
+        "summary": "该终端记录了 Recent Activity 页面相关讨论。当前可确定存在一个 Codex thread、三次 query submit 和两次 response observed。",
+        "basis": "Generated from recorded Activity metadata",
+        "decisions": [],
+        "openItems": [
+          "未在本原型探针中读取该 thread 的 turns，因此不展示推测的执行细节。"
+        ]
+      },
+      "threads": [
+        {
+          "id": "019f563a-d150-7ac0-91e2-c82641bf3322",
+          "status": "idle",
+          "startType": "started",
+          "lastActivityAt": "2026-07-12T13:28:03.079Z",
+          "preview": "Recent Activity 页面讨论与页面截图对应的 Codex 会话。",
+          "turnCount": 0,
+          "turns": []
+        }
+      ],
+      "facts": [
+        {
+          "time": "12:17:59",
+          "event": "agent.thread.started",
+          "source": "Activity",
+          "detail": "agent=codex"
+        },
+        {
+          "time": "12:17:59",
+          "event": "user.query.submit_requested",
+          "source": "Activity",
+          "detail": "thread linked"
+        },
+        {
+          "time": "12:36:55",
+          "event": "agent.response.observed",
+          "source": "Activity",
+          "detail": "response recorded"
+        },
+        {
+          "time": "13:22:42",
+          "event": "user.query.submit_requested",
+          "source": "Activity",
+          "detail": "thread linked"
+        },
+        {
+          "time": "13:25:21",
+          "event": "user.query.submit_requested",
+          "source": "Activity",
+          "detail": "thread linked"
+        },
+        {
+          "time": "13:28:03",
+          "event": "agent.response.observed",
+          "source": "Activity",
+          "detail": "response recorded"
+        }
+      ]
+    },
+    {
+      "id": "f4741241",
+      "project": "browser-hub/browser-viewer",
+      "cwd": "/workspace/browser-hub/browser-viewer",
+      "command": "/bin/zsh -l",
+      "agent": "traex",
+      "status": "running",
+      "agentStatus": "idle",
+      "createdAt": "2026-07-08T11:57:34.896Z",
+      "lastActivityAt": "2026-07-12T14:20:43.532Z",
+      "preview": "TraeX terminal session",
+      "sourceSummary": [
+        { "label": "Terminal session", "value": "Running", "tone": "good" },
+        { "label": "Activity facts", "value": "2 recorded", "tone": "good" },
+        {
+          "label": "Codex threads",
+          "value": "Not applicable",
+          "tone": "neutral"
+        },
+        { "label": "Scrollback", "value": "Available", "tone": "good" }
+      ],
+      "recap": {
+        "summary": "该终端运行 TraeX。Codex App Server 不适用于这个 Agent，因此页面只展示 Terminal 与 Activity 中能够直接取得的事实。",
+        "basis": "Recorded Terminal and Activity metadata only",
+        "decisions": [],
+        "openItems": []
+      },
+      "threads": [],
+      "facts": [
+        {
+          "time": "13:23:50",
+          "event": "terminal.session.created",
+          "source": "Activity",
+          "detail": "status=running"
+        },
+        {
+          "time": "13:23:50",
+          "event": "producer.instance.started",
+          "source": "Activity",
+          "detail": "backend producer"
+        }
+      ]
+    }
+  ],
+  "agentTeamRuns": [
+    {
+      "id": "atr_406e9cdd_20260712050528",
+      "terminalSessionId": "406e9cdd",
+      "project": "browser-hub/feature",
+      "task": "ADF015 producer boundary fixture",
+      "phase": "executing",
+      "status": "done",
+      "createdAt": "2026-07-12T05:05:28.944Z",
+      "updatedAt": "2026-07-12T05:14:53.390Z",
+      "round": 2,
+      "completedRoundCount": 1,
+      "bestPassCount": 1,
+      "acceptanceCount": 1,
+      "activeWorkerRole": null,
+      "verification": {
+        "source": "test_case_file",
+        "testCaseFilePath": "artifacts/activity-data-foundation/20260712-120635-activity-100k-rerun/agent-team-fixture-test-cases.md"
+      },
+      "sourceSummary": [
+        { "label": "Run record", "value": "Available", "tone": "good" },
+        { "label": "Worker outbox", "value": "Available", "tone": "good" },
+        { "label": "Acceptance", "value": "1 / 1 pass", "tone": "good" },
+        { "label": "Evidence", "value": "5 records", "tone": "good" }
+      ],
+      "logs": [
+        "Agent Team 任务已提交，来源为测试案例文件。",
+        "Main agent 产出拆分提案，等待人工确认。",
+        "人工确认 1 个 worker，并完成 pane split。",
+        "Round 1 有进展，noProgress 计数清零。",
+        "所有验收用例通过，Run 完成。"
+      ],
+      "roundHistory": [
+        {
+          "round": 1,
+          "status": "completed",
+          "summary": "有进展，noProgress 计数清零",
+          "source": "Run log"
+        }
+      ],
+      "workers": [
+        {
+          "id": "w_1783833093099_10",
+          "role": "behavior_verify",
+          "intent": "Report fixture result only",
+          "panelId": "5e92887e-e1c1-4640-bfbb-687b574b00eb",
+          "tmuxPaneId": "%2",
+          "dispatchRound": 1,
+          "resultRound": 1,
+          "roundSource": "Run log; future records use dispatch.round",
+          "status": "completed",
+          "summary": "AGT-FIXTURE-001 通过：真实 Backend Activity API 返回 200，Run、Worker 与 Case transition 均已持久化。"
+        }
+      ],
+      "acceptance": [
+        {
+          "caseId": "AGT-FIXTURE-001",
+          "title": "Record one worker result",
+          "status": "pass",
+          "resultRound": 1,
+          "roundSource": "Run log; future records use dispatch.round",
+          "resultSummary": "Temporary acceptance fixture completed",
+          "attempt": 1,
+          "evidence": [
+            {
+              "type": "dom",
+              "label": "Activity API DOM",
+              "summary": "真实 Backend 查询返回 loginStatus=200、factsStatus=200、total=6。"
+            },
+            {
+              "type": "screenshot",
+              "label": "Durable transitions screenshot",
+              "summary": "截图展示 Run、Worker、Case 六条持久化事件。"
+            },
+            {
+              "type": "json",
+              "label": "Case result fact",
+              "summary": "Case result 记录 reportedStatus=pass 与 evidenceCount=1。"
+            },
+            {
+              "type": "json",
+              "label": "Worker result fact",
+              "summary": "behavior_verify Worker 的派发与完成结果均已持久化。"
+            },
+            {
+              "type": "json",
+              "label": "Run lifecycle facts",
+              "summary": "Run created、state_changed 与 completed 均已持久化。"
+            }
+          ]
+        }
+      ],
+      "activityFacts": [
+        {
+          "eventId": "22785c71-ded1-42fb-8510-e181f7657c53",
+          "event": "agent_team.run.created",
+          "round": 1,
+          "detail": "Run created for Terminal 406e9cdd",
+          "source": "Activity"
+        },
+        {
+          "eventId": null,
+          "event": "agent_team.run.state_changed",
+          "round": 1,
+          "detail": "Run phase and status transition recorded",
+          "source": "Activity"
+        },
+        {
+          "eventId": "237210c4-f8ac-49cb-808e-a1e38f42d5f2",
+          "event": "agent_team.worker.dispatched",
+          "round": null,
+          "attributedRound": 1,
+          "roundSource": "Run log",
+          "detail": "behavior_verify · panel 5e92887e… · pane %2",
+          "source": "Activity"
+        },
+        {
+          "eventId": "1131ffc3-e196-47fd-bff4-ef3048117414",
+          "event": "agent_team.case.result_recorded",
+          "round": null,
+          "attributedRound": 1,
+          "roundSource": "Run log",
+          "detail": "AGT-FIXTURE-001 · pass · evidenceCount=1",
+          "source": "Activity"
+        },
+        {
+          "eventId": "0025cda6-06fc-48c0-9a3f-c4978d84efc5",
+          "event": "agent_team.worker.result_recorded",
+          "round": null,
+          "attributedRound": 1,
+          "roundSource": "Run log",
+          "detail": "behavior_verify · completed · caseCount=1",
+          "source": "Activity"
+        },
+        {
+          "eventId": "1b89470b-30b3-4195-9957-0c265a73b317",
+          "event": "agent_team.run.completed",
+          "round": 2,
+          "detail": "Run completed with status=done",
+          "source": "Activity"
+        }
+      ],
+      "retrospective": {
+        "taskResult": "唯一验收用例通过，Run 状态为 done。",
+        "coordination": "本次只分配一个 behavior_verify Worker，没有 Code 或 Code Review Worker，因此不展示不存在的角色流程。",
+        "boundary": "Run、Worker、Case、测试案例来源和 pane-scoped outbox 均有明确记录；没有 Review checkpoint，因此页面不生成 Review 区块。"
+      }
+    }
+  ]
+}
