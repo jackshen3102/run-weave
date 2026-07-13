@@ -1,272 +1,29 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import {
-  chmod,
-  copyFile,
-  mkdtemp,
-  mkdir,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { installAllHooks } from "../electron/src/hooks/hook-installer.ts";
 import {
   assertFileMissing,
-  findRunweaveHooks,
   getToolkitHookCommand,
   runLauncher,
   runToolkitHookCommand,
   verifyPtyProviderInference,
   verifyPreToolHook,
-  verifyToolkitHookCommands,
 } from "./verify-toolkit-hooks-helpers.mjs";
-import { processTerminalAgentHook } from "../backend/src/terminal/agent-hook-processor.ts";
-import {
-  buildAgentResumeCommand,
-  resolveAgentThreadToResume,
-} from "../backend/src/terminal/runtime-launcher.ts";
+import { createToolkitHookFixture } from "./verify-toolkit-hooks/fixture.mjs";
+import { verifyToolkitHookProviderGuards } from "./verify-toolkit-hooks/provider-guards.mjs";
 
-const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const resourcesDir = path.join(repoRoot, "electron", "resources");
-const toolkitDir = path.join(repoRoot, "plugins", "toolkit");
-const toolkitHooksDir = path.join(repoRoot, "plugins", "toolkit", "hooks");
-const toolkitHooksConfigPath = path.join(toolkitDir, "hooks.json");
-const electronHooksDir = path.join(resourcesDir, "hooks");
-const hookAssets = [
-  "app-server-client.cjs",
-  "runweave-hook-bridge.cjs",
-  "runweave-hook-dispatch.cjs",
-  "runweave-hook-payload.cjs",
-  "feishu_stop_notify.sh",
-];
-const toolkitHookEvents = [
-  "PreToolUse",
-  "PostToolUse",
-  "SessionStart",
-  "Stop",
-  "SubagentStop",
-  "UserPromptSubmit",
-];
-const toolkitHookCommand =
-  'sh -c \'for root in "${RUNWEAVE_TOOLKIT_PLUGIN_ROOT:-}" "__PLUGIN_DIR__" . "${CODEX_PLUGIN_ROOT:-}" "$HOME/.codex/plugins/cache/runweave/toolkit/latest" "$HOME/.codex/plugins/cache/runweave/toolkit"/* "${CLAUDE_PLUGIN_ROOT:-}"; do if [ -n "$root" ] && [ -f "$root/hooks/runweave-hook-dispatch.cjs" ]; then exec node "$root/hooks/runweave-hook-dispatch.cjs"; fi; done; exit 0\'';
-
-const toolkitHooksConfig = JSON.parse(
-  await readFile(toolkitHooksConfigPath, "utf8"),
-);
-verifyToolkitHookCommands(toolkitHooksConfig, toolkitHookEvents, toolkitHookCommand);
-
-for (const asset of hookAssets) {
-  const toolkitAsset = await readFile(
-    path.join(toolkitHooksDir, asset),
-    "utf8",
-  );
-  const electronAsset = await readFile(
-    path.join(electronHooksDir, asset),
-    "utf8",
-  );
-  assert.equal(
-    electronAsset,
-    toolkitAsset,
-    `${asset} must stay synchronized between toolkit source and Electron resources`,
-  );
-}
-
-const homeDir = await mkdtemp(path.join(os.tmpdir(), "runweave-hook-home-"));
+const fixture = await createToolkitHookFixture();
+const {
+  cleanup,
+  codexToolkitDir,
+  fakeTmuxPath,
+  homeDir,
+  launcherPath,
+  toolkitDir,
+  toolkitHooksConfig,
+  traeToolkitDir,
+} = fixture;
 try {
-  await mkdir(path.join(homeDir, ".codex"), { recursive: true });
-  await mkdir(path.join(homeDir, ".trae"), { recursive: true });
-  const fakeTmuxPath = path.join(homeDir, "tmux");
-  await writeFile(
-    fakeTmuxPath,
-    [
-      "#!/bin/sh",
-      "printf '%s\\n' \"${RUNWEAVE_VERIFY_PANE_COMMAND:-traex}__RUNWEAVE_METADATA_FIELD__node__RUNWEAVE_METADATA_FIELD__panel-pane-3\"",
-      "",
-    ].join("\n"),
-  );
-  await chmod(fakeTmuxPath, 0o755);
-  const codexToolkitDir = path.join(
-    homeDir,
-    ".codex",
-    "plugins",
-    "cache",
-    "runweave",
-    "toolkit",
-    "current",
-  );
-  const traeToolkitDir = path.join(
-    homeDir,
-    ".trae",
-    ".tmp",
-    "marketplaces",
-    "local",
-    "plugins",
-    "toolkit",
-  );
-  await mkdir(path.join(codexToolkitDir, "hooks"), { recursive: true });
-  for (const asset of hookAssets) {
-    await copyFile(
-      path.join(toolkitHooksDir, asset),
-      path.join(codexToolkitDir, "hooks", asset),
-    );
-  }
-
-  await writeFile(
-    path.join(homeDir, ".codex", "hooks.json"),
-    JSON.stringify(
-      {
-        hooks: {
-          Stop: [
-            {
-              matcher: "*",
-              hooks: [
-                {
-                  type: "command",
-                  command: "/third-party/hook --keep",
-                  timeout: 9,
-                },
-              ],
-            },
-            {
-              matcher: "*",
-              hooks: [
-                {
-                  type: "command",
-                  command: `${homeDir}/.browser-viewer/bin/browser-viewer-hook-bridge --source codex`,
-                  timeout: 5,
-                },
-              ],
-            },
-            {
-              matcher: "*",
-              hooks: [
-                {
-                  type: "command",
-                  command: `${homeDir}/.codex/notify.sh`,
-                  timeout: 5,
-                },
-              ],
-            },
-          ],
-        },
-      },
-      null,
-      2,
-    ),
-  );
-
-  await writeFile(
-    path.join(homeDir, ".trae", "traecli.toml"),
-    [
-      'model = "test"',
-      "",
-      "# >>> runweave-hooks (managed by Runweave) >>>",
-      "[[hooks.Stop]]",
-      "",
-      "[[hooks.Stop.hooks]]",
-      "command = '/old/.runweave/bin/runweave-hook-bridge --source trae'",
-      'timeout = "unlimited"',
-      'type = "command"',
-      "",
-      "# <<< runweave-hooks (managed by Runweave) <<<",
-      "",
-      "# >>> runweave-hooks (managed by Browser Viewer) >>>",
-      "[[hooks.Stop]]",
-      "",
-      "[[hooks.Stop.hooks]]",
-      `command = '${homeDir}/.browser-viewer/bin/browser-viewer-hook-bridge --source trae'`,
-      'timeout = "unlimited"',
-      'type = "command"',
-      "",
-      "# <<< runweave-hooks (managed by Browser Viewer) <<<",
-      "",
-      "# >>> runweave-hooks (managed by Browser Viewer) >>>",
-      "",
-    ].join("\n"),
-  );
-
-  await installAllHooks({ homeDir, resourcesDir });
-
-  const launcherPath = path.join(
-    homeDir,
-    ".runweave",
-    "bin",
-    "runweave-hook-bridge",
-  );
-  const installedLauncher = await readFile(launcherPath, "utf8");
-  const resourceLauncher = await readFile(
-    path.join(electronHooksDir, "runweave-hook-bridge.cjs"),
-    "utf8",
-  );
-  assert.equal(installedLauncher, resourceLauncher);
-  const installedAppServerClient = await readFile(
-    path.join(homeDir, ".runweave", "bin", "app-server-client.cjs"),
-    "utf8",
-  );
-  const resourceAppServerClient = await readFile(
-    path.join(electronHooksDir, "app-server-client.cjs"),
-    "utf8",
-  );
-  assert.equal(installedAppServerClient, resourceAppServerClient);
-  const installedHookPayload = await readFile(
-    path.join(homeDir, ".runweave", "bin", "runweave-hook-payload.cjs"),
-    "utf8",
-  );
-  const resourceHookPayload = await readFile(
-    path.join(electronHooksDir, "runweave-hook-payload.cjs"),
-    "utf8",
-  );
-  assert.equal(installedHookPayload, resourceHookPayload);
-  await chmod(launcherPath, 0o755);
-
-  const codexHooks = JSON.parse(
-    await readFile(path.join(homeDir, ".codex", "hooks.json"), "utf8"),
-  );
-  assert.equal(
-    findRunweaveHooks(Object.values(codexHooks.hooks).flat()).length,
-    0,
-    "Codex global hooks must not contain Runweave hooks after plugin migration",
-  );
-  assert.deepEqual(codexHooks.hooks.Stop[0].hooks[0], {
-    type: "command",
-    command: "/third-party/hook --keep",
-    timeout: 9,
-  });
-  assert.equal(
-    JSON.stringify(codexHooks).includes("browser-viewer-hook-bridge"),
-    false,
-  );
-  assert.equal(JSON.stringify(codexHooks).includes(".codex/notify.sh"), false);
-
-  const traeToml = await readFile(
-    path.join(homeDir, ".trae", "traecli.toml"),
-    "utf8",
-  );
-  assert.equal(traeToml.includes('model = "test"'), true);
-  assert.equal(traeToml.includes("managed by Runweave"), false);
-  assert.equal(traeToml.includes("managed by Browser Viewer"), false);
-  assert.equal(traeToml.includes("browser-viewer-hook-bridge"), false);
-  assert.equal(traeToml.includes("runweave-hook-bridge --source trae"), false);
-  assert.equal(
-    traeToml.includes("/old/.runweave/bin/runweave-hook-bridge"),
-    false,
-  );
-  for (const event of [
-    "PostToolUse",
-    "Stop",
-    "SubagentStop",
-    "UserPromptSubmit",
-  ]) {
-    assert.equal(
-      traeToml.includes(`[[hooks.${event}]]`),
-      false,
-      `Trae global TOML must not install ${event} after plugin migration`,
-    );
-  }
-
   const requests = [];
   const appServerRequests = [];
   const server = createServer((request, response) => {
@@ -380,7 +137,8 @@ try {
     assert.equal(appServerRequests[1].payload.summary, "done");
     assert.equal(requests[0].url, "/internal/terminal/agent-hook");
     assert.equal(requests[0].token, "token-1");
-    assert.deepEqual(requests[0].body, { activityEventId: requests[0].body.activityEventId,
+    assert.deepEqual(requests[0].body, {
+      activityEventId: requests[0].body.activityEventId,
       terminalSessionId: "terminal-1",
       projectId: "project-1",
       tmuxPaneId: "%13",
@@ -423,7 +181,8 @@ try {
     assert.equal(appServerRequests[3].payload.source, "codex");
     assert.equal(requests[2].url, "/internal/terminal/agent-hook");
     assert.equal(requests[2].token, "token-2");
-    assert.deepEqual(requests[2].body, { activityEventId: requests[2].body.activityEventId,
+    assert.deepEqual(requests[2].body, {
+      activityEventId: requests[2].body.activityEventId,
       terminalSessionId: "terminal-2",
       projectId: "project-2",
       tmuxPaneId: "%13",
@@ -475,7 +234,8 @@ try {
     assert.equal(appServerRequests[4].correlationId, "thread-2b");
     assert.equal(requests[4].url, "/internal/terminal/agent-hook");
     assert.equal(requests[4].token, "token-2b");
-    assert.deepEqual(requests[4].body, { activityEventId: requests[4].body.activityEventId,
+    assert.deepEqual(requests[4].body, {
+      activityEventId: requests[4].body.activityEventId,
       terminalSessionId: "terminal-2b",
       projectId: "project-2b",
       tmuxPaneId: "%13",
@@ -554,15 +314,13 @@ try {
     assert.equal(appServerRequests[7].payload.source, "trae");
     assert.equal(appServerRequests[7].payload.threadId, "thread-1");
     assert.equal(appServerRequests[7].payload.panelId, "panel-pane-3");
-    assert.equal(
-      appServerRequests[7].scope.terminalPanelId,
-      "panel-pane-3",
-    );
+    assert.equal(appServerRequests[7].scope.terminalPanelId, "panel-pane-3");
     assert.equal(appServerRequests[8].kind, "agent.completion");
     assert.equal(appServerRequests[8].payload.source, "trae");
     assert.equal(requests[7].url, "/internal/terminal/agent-hook");
     assert.equal(requests[7].token, "token-3");
-    assert.deepEqual(requests[7].body, { activityEventId: requests[7].body.activityEventId,
+    assert.deepEqual(requests[7].body, {
+      activityEventId: requests[7].body.activityEventId,
       terminalSessionId: "terminal-3",
       projectId: "project-3",
       panelId: "panel-pane-3",
@@ -727,179 +485,9 @@ try {
     await new Promise((resolve) => appServer.close(resolve));
   }
 } finally {
-  await rm(homeDir, { force: true, recursive: true });
+  await cleanup();
 }
 
-await verifyDelayedCrossProviderHookGuard();
-await verifyTmuxPaneFallbackUniqueness();
-verifyAgentThreadResumeFallback();
+await verifyToolkitHookProviderGuards();
 
 console.log("toolkit hook verification passed");
-
-function verifyAgentThreadResumeFallback() {
-  const completedTraeThread = {
-    activeCommand: null,
-    lastThreadId: "thread-trae-recent",
-    lastThreadProvider: "traex",
-  };
-  const resolved = resolveAgentThreadToResume(completedTraeThread);
-  assert.deepEqual(resolved, {
-    provider: "traex",
-    threadId: "thread-trae-recent",
-  });
-  assert.equal(
-    buildAgentResumeCommand(resolved),
-    "traex resume thread-trae-recent\n",
-  );
-
-  assert.equal(
-    resolveAgentThreadToResume({
-      ...completedTraeThread,
-      activeCommand: "codex",
-    }),
-    null,
-  );
-  assert.equal(
-    resolveAgentThreadToResume({
-      ...completedTraeThread,
-      lastThreadId: "",
-    }),
-    null,
-  );
-  assert.equal(
-    resolveAgentThreadToResume({
-      ...completedTraeThread,
-      lastThreadProvider: undefined,
-    }),
-    null,
-  );
-}
-
-async function verifyDelayedCrossProviderHookGuard() {
-  const mutations = [];
-  const session = {
-    id: "terminal-provider-switch",
-    projectId: "project-provider-switch",
-    status: "running",
-    activeCommand: "codex",
-    threadId: "codex-current",
-    threadProvider: "codex",
-    terminalState: { state: "agent_idle", agent: "codex" },
-  };
-  const panel = {
-    id: "panel-provider-switch",
-    terminalSessionId: session.id,
-    tmuxPaneId: "%77",
-    status: "running",
-    activeCommand: "codex",
-    threadId: "codex-current",
-    threadProvider: "codex",
-    terminalState: { state: "agent_idle", agent: "codex" },
-  };
-  const terminalSessionManager = {
-    getSession: () => session,
-    getPanel: () => undefined,
-    listPanels: () => [panel],
-    getLastAiActiveCommand: () => null,
-    updatePanelTerminalState: async (...args) => mutations.push(args),
-    updateSessionLastThread: async (...args) => mutations.push(args),
-    updatePanelLastThread: async (...args) => mutations.push(args),
-    updateSessionThreadId: async (...args) => mutations.push(args),
-    updateSessionPreview: async (...args) => mutations.push(args),
-    updatePanelThreadId: async (...args) => mutations.push(args),
-    updatePanelPreview: async (...args) => mutations.push(args),
-  };
-  const terminalStateService = {
-    getCurrent: () => session.terminalState,
-    handleAgentHook: (...args) => {
-      mutations.push(args);
-      return { state: "agent_running", agent: "trae" };
-    },
-  };
-  const result = await processTerminalAgentHook(
-    { terminalSessionManager, terminalStateService },
-    {
-      terminalSessionId: session.id,
-      agent: "trae",
-      hookEvent: "UserPromptSubmit",
-      threadId: "stale-trae-thread",
-      panelId: "stale-panel",
-      tmuxPaneId: panel.tmuxPaneId,
-      commandName: "traex",
-    },
-  );
-
-  assert.equal(result.status, "ignored");
-  assert.equal(result.agent, "trae");
-  assert.equal(result.panelId, panel.id);
-  assert.equal(session.threadId, "codex-current");
-  assert.equal(session.threadProvider, "codex");
-  assert.equal(panel.threadId, "codex-current");
-  assert.equal(panel.threadProvider, "codex");
-  assert.equal(mutations.length, 0);
-}
-
-async function verifyTmuxPaneFallbackUniqueness() {
-  const session = {
-    id: "terminal-pane-fallback",
-    projectId: "project-pane-fallback",
-    status: "running",
-    activeCommand: "traex",
-    terminalState: { state: "agent_idle", agent: "trae" },
-  };
-  const makePanel = (id, tmuxPaneId) => ({
-    id,
-    terminalSessionId: session.id,
-    tmuxPaneId,
-    status: "running",
-    activeCommand: "traex",
-    terminalState: { state: "agent_idle", agent: "trae" },
-  });
-  const run = async (panels) => {
-    const mutations = [];
-    const terminalSessionManager = {
-      getSession: () => session,
-      getPanel: () => undefined,
-      listPanels: () => panels,
-      getLastAiActiveCommand: () => null,
-      updatePanelTerminalState: async (...args) => mutations.push(args),
-    };
-    const terminalStateService = {
-      getCurrent: () => session.terminalState,
-      handleAgentHook: (...args) => {
-        mutations.push(args);
-        return { state: "agent_running", agent: "trae" };
-      },
-    };
-    const result = await processTerminalAgentHook(
-      { terminalSessionManager, terminalStateService },
-      {
-        terminalSessionId: session.id,
-        agent: "trae",
-        hookEvent: "SessionStart",
-        panelId: "invalid-panel",
-        tmuxPaneId: "%0",
-        commandName: "traex",
-      },
-    );
-    return { mutations, result };
-  };
-
-  const unique = await run([makePanel("panel-a", "%0")]);
-  assert.equal(unique.result.status, "recorded");
-  assert.equal(unique.result.panelId, "panel-a");
-  assert.equal(unique.mutations.length, 2);
-
-  const duplicate = await run([
-    makePanel("panel-a", "%0"),
-    makePanel("panel-b", "%0"),
-  ]);
-  assert.equal(duplicate.result.status, "ignored");
-  assert.equal(duplicate.result.panelId, null);
-  assert.equal(duplicate.mutations.length, 0);
-
-  const missing = await run([makePanel("panel-c", "%1")]);
-  assert.equal(missing.result.status, "ignored");
-  assert.equal(missing.result.panelId, null);
-  assert.equal(missing.mutations.length, 0);
-}

@@ -29,14 +29,14 @@ import {
 import { sendInputToSession } from "../terminal/application/input-dispatcher";
 import { TerminalPanelError } from "../terminal/application/panel-common";
 import { resolvePanelTarget } from "../terminal/application/panel-targets";
+import {
+  buildAgentStartCommand,
+  waitForAgentReadinessPoll,
+} from "./agent-readiness-command";
 import { AgentTeamError } from "./errors";
 
 const AGENT_TEAM_AGENT_START_TIMEOUT_MS = 15000;
 const AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS = 250;
-const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
-  "-c",
-  "check_for_update_on_startup=false",
-] as const;
 
 type TraeStartupOutputBoundary =
   | {
@@ -104,12 +104,11 @@ export class AgentTeamAgentReadinessService {
     let traeStartupOutputBoundary: TraeStartupOutputBoundary | undefined;
     if (agent !== "codex" && isTmuxBackedSession(session)) {
       this.setAgentStarting(session, agent, publishSessionState);
-      traeStartupOutputBoundary =
-        await this.captureTraeStartupOutputBoundary(
-          session,
-          paneTarget,
-          buildAgentStartCommand(terminal, agent),
-        );
+      traeStartupOutputBoundary = await this.captureTraeStartupOutputBoundary(
+        session,
+        paneTarget,
+        buildAgentStartCommand(terminal, agent),
+      );
     } else {
       traeStartupOutputBoundary =
         agent === "codex"
@@ -192,12 +191,16 @@ export class AgentTeamAgentReadinessService {
         );
       if (startupInterruptionHandled === "skipped_update_prompt") {
         skippedCodexUpdatePrompt = true;
-        await wait(AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS);
+        await waitForAgentReadinessPoll(
+          AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS,
+        );
         continue;
       }
       if (startupInterruptionHandled === "restarted_after_update") {
         restartedAfterCodexUpdate = true;
-        await wait(AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS);
+        await waitForAgentReadinessPoll(
+          AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS,
+        );
         continue;
       }
       await this.acceptCodexTrustPromptIfNeeded(session, agent, paneTarget);
@@ -248,7 +251,7 @@ export class AgentTeamAgentReadinessService {
       ) {
         return;
       }
-      await wait(AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS);
+      await waitForAgentReadinessPoll(AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS);
     }
     throw new AgentTeamError(
       409,
@@ -419,11 +422,7 @@ export class AgentTeamAgentReadinessService {
     tmuxStartInput?: string,
   ): Promise<TraeStartupOutputBoundary> {
     if (isTmuxBackedSession(session)) {
-      if (
-        !paneTarget ||
-        !this.options.tmuxOutputWatcher ||
-        !tmuxStartInput
-      ) {
+      if (!paneTarget || !this.options.tmuxOutputWatcher || !tmuxStartInput) {
         throw this.createTraeOutputBoundaryError(session, paneTarget);
       }
       const cursor =
@@ -566,38 +565,4 @@ export function hasMatchingAgentReadinessOwner(
   return agent === "codex"
     ? activeAgent === "codex"
     : activeAgent !== null && activeAgent !== "codex";
-}
-
-function buildAgentStartCommand(
-  terminal: AgentTeamTerminal,
-  agent: TerminalAgentKind,
-): string {
-  const command = terminal.command?.trim() || agent;
-  const args =
-    agent === "codex"
-      ? withCodexSkipUpdateOnStartupArgs(terminal.args ?? [])
-      : (terminal.args ?? []);
-  if (args.length === 0) {
-    return command;
-  }
-  return [command, ...args.map(shellQuote)].join(" ");
-}
-
-function withCodexSkipUpdateOnStartupArgs(
-  args: readonly string[],
-): readonly string[] {
-  if (args.some((arg) => arg.includes("check_for_update_on_startup"))) {
-    return args;
-  }
-  return [...CODEX_SKIP_UPDATE_ON_STARTUP_ARGS, ...args];
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }

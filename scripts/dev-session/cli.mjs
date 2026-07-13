@@ -293,15 +293,17 @@ async function runStatus(options, sourceRoot) {
           },
         });
         await writeManifest(manifest);
-      } else if (inspection.reconciled) {
+      } else {
         manifest = updateManifest(manifest, {
           state: "ready",
           services: inspection.services,
-          source: {
-            ...manifest.source,
-            revision: inspection.sourceRevision,
-            dirty: inspection.sourceDirty ?? manifest.source.dirty,
-          },
+          source: inspection.reconciled
+            ? {
+                ...manifest.source,
+                revision: inspection.sourceRevision,
+                dirty: inspection.sourceDirty ?? manifest.source.dirty,
+              }
+            : manifest.source,
           failure: null,
         });
         await writeManifest(manifest);
