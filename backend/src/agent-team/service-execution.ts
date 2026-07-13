@@ -257,6 +257,14 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     const allAcceptancePassed =
       folded.acceptance.length > 0 &&
       folded.acceptance.every((item) => item.status === "pass");
+    const blockedBehaviorCases =
+      params.completedWorkerRole === "behavior_verify" &&
+      !params.acceptanceResults?.some((result) => result.status === "fail")
+        ? folded.acceptance.filter(
+            (item) =>
+              item.status === "pending" && item.lastRunStatus === "skipped",
+          )
+        : [];
     const needsFinalReview = Boolean(
       allAcceptancePassed &&
       run.reviewCheckpoint &&
@@ -269,6 +277,14 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       activeWorkerRole = null;
       activeWorkerDispatch = null;
       logs.push(`✅ 所有验收用例通过，run 完成`);
+    } else if (blockedBehaviorCases.length > 0) {
+      const reason = `behavior_verify 环境阻塞，必跑用例未完成：${blockedBehaviorCases.map((item) => item.caseId).join(", ")}`;
+      loop = { ...repairFolded.loop, escalated: true, lastReason: reason };
+      status = "need_human";
+      workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
+      activeWorkerRole = null;
+      activeWorkerDispatch = null;
+      logs.push(`⏸ ${reason}`);
     } else if (repairFolded.exhausted.length > 0) {
       const reason = buildRepairEscalationReason(repairFolded.exhausted);
       loop = { ...repairFolded.loop, escalated: true, lastReason: reason };
