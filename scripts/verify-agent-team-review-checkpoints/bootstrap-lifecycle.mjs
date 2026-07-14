@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -30,7 +30,7 @@ const FORMAL_WORKER_CASE = {
 };
 
 export async function verifyBootstrapLifecycle(check, roots) {
-  verifyReadyTextDoesNotAdvanceAuthoritativeState(check);
+  verifyTuiTextDoesNotAdvanceAuthoritativeState(check);
   await verifyInitialSplitStartsOnlyActiveWorker(check, roots);
   await verifyAgentTeamFormalPromptIsInitialQuery(check, roots);
   await verifyRecheckPromptIsInitialQuery(check, roots);
@@ -51,7 +51,7 @@ export async function verifyBootstrapLifecycle(check, roots) {
   await verifyCliPreparationCompatibility(check);
 }
 
-function verifyReadyTextDoesNotAdvanceAuthoritativeState(check) {
+function verifyTuiTextDoesNotAdvanceAuthoritativeState(check) {
   const callbacks = [];
   const cases = [
     {
@@ -103,13 +103,25 @@ function verifyReadyTextDoesNotAdvanceAuthoritativeState(check) {
     ),
     "utf8",
   );
+  const sharedPackageSource = readFileSync(
+    new URL("../../packages/shared/package.json", import.meta.url),
+    "utf8",
+  );
+  const sharedReadinessModule = new URL(
+    "../../packages/shared/src/terminal-agent-readiness.ts",
+    import.meta.url,
+  );
   check(
-    "bootstrap-ready-text-does-not-advance-authoritative-state",
+    "bootstrap-tui-text-does-not-advance-authoritative-state",
     results.every((state) => state.state === "agent_starting") &&
       callbacks.length === 0 &&
       !terminalStateSource.includes("hasAgentReadyPrompt") &&
+      !terminalStateSource.includes("scrollback") &&
       !panelWorkspaceSource.includes("hasAgentReadyPrompt") &&
-      !panelWorkspaceSource.includes("ready-prompt.capture"),
+      !panelWorkspaceSource.includes("ready-prompt.capture") &&
+      !panelWorkspaceSource.includes("capturePane(") &&
+      !sharedPackageSource.includes("terminal-agent-readiness") &&
+      !existsSync(sharedReadinessModule),
     { results, callbacks },
   );
 }
@@ -128,9 +140,12 @@ async function verifyInitialSplitStartsOnlyActiveWorker(check, roots) {
     const baseRun = buildRepairRun();
     const workers = baseRun.workers
       .filter((worker) => worker.role !== "behavior_verify")
-      .map(
-        ({ panelId: _panelId, tmuxPaneId: _tmuxPaneId, ...worker }) => worker,
-      );
+      .map((worker) => {
+        const workerWithoutPanel = { ...worker };
+        delete workerWithoutPanel.panelId;
+        delete workerWithoutPanel.tmuxPaneId;
+        return workerWithoutPanel;
+      });
     const run = {
       ...baseRun,
       projectId: harness.session.projectId,

@@ -239,7 +239,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
     });
     const terminal = resolveAgentTeamTerminal(run.terminal);
     try {
-      await this.agentReadiness.ensureAgentReady(session, terminal, {
+      await this.agentLaunch.submitAgentLaunch(session, terminal, {
         panelId: worker.panelId,
         prompt: workerPrompt,
       });

@@ -14,7 +14,7 @@ import { prepareTerminalAgent } from "../terminal/application/agent-preparation"
 import { resolvePanelTarget } from "../terminal/application/panel-targets";
 import { AgentTeamError } from "./errors";
 
-export class AgentTeamAgentReadinessService {
+export class AgentTeamAgentLaunchService {
   constructor(
     private readonly options: {
       terminalSessionManager: TerminalSessionManager;
@@ -26,7 +26,7 @@ export class AgentTeamAgentReadinessService {
     },
   ) {}
 
-  async ensureAgentReady(
+  async submitAgentLaunch(
     session: TerminalSessionRecord,
     terminal: AgentTeamTerminal,
     target?: {

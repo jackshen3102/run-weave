@@ -68,10 +68,10 @@ export function verifyEvidenceGatedRepairLoop(check) {
   );
   check(
     "repair-bounce-launches-formal-prompt-as-initial-query",
-    bounceBody.includes("this.agentReadiness.ensureAgentReady") &&
+    bounceBody.includes("this.agentLaunch.submitAgentLaunch") &&
       bounceBody.includes("prompt: bouncePrompt") &&
       bounceBody.indexOf("persistedRun = await this.updateRun") <
-        bounceBody.indexOf("this.agentReadiness.ensureAgentReady") &&
+        bounceBody.indexOf("this.agentLaunch.submitAgentLaunch") &&
       !bounceBody.includes("this.promptSender.sendPromptToPane"),
     bounceBody.slice(0, 4_000),
   );

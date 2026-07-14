@@ -161,7 +161,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
           run,
           planFilePath: prepared.verification.planFilePath ?? null,
         });
-        await this.agentReadiness.ensureAgentReady(session, terminal, {
+        await this.agentLaunch.submitAgentLaunch(session, terminal, {
           panelId: mainPanelId,
           publishSessionState: true,
           prompt: generationPrompt,

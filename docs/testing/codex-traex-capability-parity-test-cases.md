@@ -1,6 +1,6 @@
 # Codex 与 TraeX 能力对齐测试案例
 
-本文档把 Codex 与 TraeX 能力对齐的长期边界转成可执行、可取证、可追溯的验收合约。目标不是为各个表象分别打补丁，而是验证 Runweave 建立了 provider-neutral thread identity、TraeX lifecycle reader 与 provider reconciler，并由现有 Terminal、Activity、App Server、App Home、恢复和 readiness 消费链路共同使用。
+本文档把 Codex 与 TraeX 能力对齐的长期边界转成可执行、可取证、可追溯的验收合约。目标不是为各个表象分别打补丁，而是验证 Runweave 建立了 provider-neutral thread identity、TraeX lifecycle reader 与 provider reconciler，并由现有 Terminal、Activity、App Server、App Home、恢复和 launch/lifecycle 消费链路共同使用。
 
 ## 范围
 
@@ -11,7 +11,7 @@
 - `task_started`、`task_complete`、`turn_aborted` 与未知 lifecycle 的读取、投影、补偿、幂等和恢复。
 - App Server `/threads/:id`、Activity、App Home preview、Terminal history 对同一 TraeX thread 的一致消费。
 - reader 暂时不可用时的 degraded fallback，以及恢复后与真实 thread 的单记录收敛。
-- 隔离 Dev Session 内的 tmux 丢失恢复、Agent Team TraeX readiness 和普通 Terminal ready-prompt 兜底。
+- 隔离 Dev Session 内的 tmux 丢失恢复、Agent Team TraeX launch operation 和普通 Terminal lifecycle 状态收敛。
 - Codex 既有 thread/read、补偿和恢复行为不回退。
 
 不覆盖：
@@ -33,8 +33,8 @@
 | 阶段 3：provider reconciler、漏事件补偿、去重             | AGT-TRAE-003、AGT-TRAE-005、AGT-TRAE-007 |
 | 阶段 4：Terminal、Activity、App Server、App Home、history | AGT-TRAE-002、AGT-TRAE-004               |
 | tmux 丢失后 `traex resume <threadId>`                     | AGT-TRAE-008                             |
-| Agent Team TraeX readiness gate                           | AGT-TRAE-009、AGT-TRAE-010、AGT-TRAE-011 |
-| 普通 Terminal TraeX ready-prompt 兜底                     | AGT-TRAE-012                             |
+| Agent Team TraeX launch operation                         | AGT-TRAE-009、AGT-TRAE-010、AGT-TRAE-011 |
+| 普通 Terminal TraeX lifecycle 状态                        | AGT-TRAE-012                             |
 | Codex 既有能力不回退                                      | AGT-TRAE-013                             |
 
 ## 前提事实
@@ -44,7 +44,7 @@
 - Terminal / Panel 持久化必须同时保存 current/last thread 的 provider 与真实 thread ID。
 - App Server `/threads/:threadId`、App Home overview、Activity 与 Terminal history 必须消费同一 provider-aware ThreadRef。
 - tmux 恢复必须按 provider 选择 resume 命令；TraeX 只允许在匹配 `provider=traex` 且存在真实 thread ID 时注入 `traex resume <threadId>`。
-- readiness 必须同时覆盖 Agent Team TraeX worker 与普通 Terminal Trae family ready prompt；旧输出、错误 pane 或启动失败不能提前放行。
+- launch/lifecycle：`backend/src/agent-team/agent-launch.ts` 只提交带 operation identity 的 launch；`backend/src/terminal/terminal-state-service.ts` 只消费持久状态和可信 lifecycle，不解析 TUI 文案。
 - TraeX 原始真值文件位于 `~/.trae/cli/sessions/**/*.jsonl`，thread ID 来自 `session_meta.payload.id`；当前观测到的最小 lifecycle 为 `task_started`、`task_complete`、`turn_aborted`。
 - 真实行为验收必须先按 `$toolkit:runweave-change-validation` 在只包含本次 patch 的 source root 运行无显式 profile 的 `pnpm dev:session --dry-run --json`，再从 `pnpm dev:open --session <id> --surface <surface> --json` 解析 URL/CDP；不得复用 Stable、默认浏览器或无关 Playwright session。
 
@@ -296,32 +296,33 @@ pnpm dev:session --dry-run --json
 
 标签：tmux,recovery,boundary
 
-### AGT-TRAE-009 TraeX TUI 真实 ready 后 Agent Team 才派发任务
+### AGT-TRAE-009 TraeX launch operation 一次性提交正式任务
 
 前置条件：
 
-- 在隔离 Dev Session 中配置 Agent Team worker command 为 TraeX，并准备可稳定出现的真实 TraeX ready prompt。
-- 能捕获 worker pane scrollback、readiness 日志与首次任务输入时间顺序。
+- 在隔离 Dev Session 中配置 Agent Team worker command 为 TraeX。
+- 能捕获 active dispatch、launch response、pane input 与 lifecycle event。
 
 步骤：
 
-1. 启动 TraeX worker，持续捕获 pane scrollback 与 Agent Team 状态。
-2. 在 ready prompt 出现前后分别记录是否已派发 worker intent。
-3. 等待 worker 接收唯一无害任务标记。
+1. 创建 active worker dispatch，记录持久化的 `dispatchId`。
+2. 启动 TraeX worker并记录 launch response 与 pane input。
+3. 等待 matching lifecycle event，期间记录 terminal state。
 
 期望：
 
-- ready prompt 出现前 worker 保持 starting/等待态，没有收到任务标记。
-- 识别真实 ready 后才转为 ready/idle 并恰好派发一次任务；状态顺序和 pane 输入可取证。
+- dispatch boundary 先持久化；随后只提交一次 launch command，正式 worker prompt 是该命令的唯一 initial query。
+- launch response 为 `phase="command_submitted"`，携带 `operationId` 与 `commandSubmittedAt`；matching lifecycle 到达前保持 `agent_starting`。
+- TUI banner、suggestion、prompt 是否出现均不改变状态或触发第二次发送。
 
 失败判定：
 
-- 启动命令发出后立即派发任务、未识别 ready 即放行，或 ready 后重复派发。
-- 只凭固定 sleep 判 ready，没有验证 pane 的可观察状态。
+- dispatch boundary 尚未持久化就发送、正式 prompt 被二次注入、或同一 operation 重复提交。
+- 根据 scrollback/TUI 文案提前写入 idle、完成或重新派发。
 
-标签：agent-team,readiness,happy-path
+标签：agent-team,launch-operation,happy-path
 
-### AGT-TRAE-010 TraeX 启动失败时 Agent Team 阻止任务派发并给出错误
+### AGT-TRAE-010 TraeX launch 提交失败时 Agent Team 原子失败
 
 前置条件：
 
@@ -330,50 +331,50 @@ pnpm dev:session --dry-run --json
 
 步骤：
 
-1. 启动该 worker 并等待 readiness 的失败/超时终态。
+1. 启动该 worker 并等待 launch operation 的失败终态。
 2. 检查 pane 输入、run phase/status、worker dispatch 和错误信息。
 
 期望：
 
-- worker intent 从未发送到失败的 TUI，run 不把该 worker 标记为 executing/ready。
+- input 未被 backend 接受时不得产生 `command_submitted`，run 不把该 worker 标记为 executing/completed。
 - API/UI 返回包含 agent、worker/pane 与启动失败原因的可定位错误，不把失败降级成 ready。
 
 失败判定：
 
 - 启动失败仍派发任务、run 继续执行且无错误，或只记录无法定位的通用失败。
 
-标签：agent-team,readiness,error-path
+标签：agent-team,launch-operation,error-path
 
-### AGT-TRAE-011 TraeX 停在交互提示时 Agent Team 不把提示误判为 ready
+### AGT-TRAE-011 TraeX 交互提示文本不改写 authoritative state
 
 前置条件：
 
-- 在隔离 Dev Session 中可让 TraeX 启动后停在一个真实交互提示，且该画面不等于 ready prompt。
-- 能捕获 pane scrollback、readiness 判定与 worker 输入。
+- 在隔离 Dev Session 中可让 TraeX 启动后停在一个真实交互提示。
+- 能捕获 pane scrollback、launch operation、terminal state 与 worker 输入。
 
 步骤：
 
 1. 启动 TraeX worker并让其停在交互提示。
-2. 等待 readiness gate 完成其识别/超时流程，期间检查是否派发 intent。
-3. 若产品定义了安全自动处理的提示，则执行一次该分支并继续观察到真实 ready；否则保持阻止态。
+2. 重复查询 terminal state，确认没有 matching lifecycle event。
+3. 解决提示并等待真实 lifecycle event，再次查询状态。
 
 期望：
 
-- 交互提示不被误判为 ready，提示未解决前不派发 worker intent。
-- 只有进入真实 ready UI 后才允许一次派发；不可自动处理时返回明确阻塞原因。
+- 交互提示、ready banner 或其它 TUI 文案都不能把 `agent_starting` 改成 idle/running，也不能产生新 dispatch。
+- 只有匹配当前 operation/panel/provider/thread 的可信 lifecycle 才能推进状态。
 
 失败判定：
 
-- 交互提示出现时任务已被输入、提示文本被当作 ready pattern，或超时后静默继续执行。
+- 任意提示文本被当作 ready pattern，或文案变化导致状态、dispatch/outbox 发生副作用。
 
-标签：agent-team,readiness,interactive-prompt
+标签：agent-team,lifecycle,interactive-prompt
 
-### AGT-TRAE-012 普通 Terminal 从 TraeX ready prompt 收敛为 agent_idle
+### AGT-TRAE-012 普通 Terminal 不从 TraeX ready prompt 推导 agent_idle
 
 前置条件：
 
 - 在隔离 Dev Session 中创建普通非 Agent Team TraeX terminal。
-- 使 metadata 暂时仍为 `agent_starting`，同时 pane scrollback 已出现真实 TraeX ready prompt。
+- launch operation 已提交并处于 `agent_starting`，同时 pane scrollback 已出现真实 TraeX ready prompt，但没有 matching lifecycle event。
 
 步骤：
 
@@ -382,15 +383,15 @@ pnpm dev:session --dry-run --json
 
 期望：
 
-- ready-prompt fallback 把 session/panel 从 `agent_starting` 收敛到 `agent_idle`，provider 保持 TraeX。
-- Web UI 显示 idle/ready，不需要额外 Hook 才纠正状态。
+- refresh 前后 session/panel 都保持 `agent_starting/traex`，且不读取 scrollback 做状态判断。
+- matching lifecycle 到达后才收敛到 `agent_idle/traex`，Web UI 与 backend 状态一致。
 
 失败判定：
 
-- 已有真实 ready prompt 时仍长期显示 starting，或被误判为 running/shell idle/其他 provider。
-- 只在 Agent Team 路径生效，普通 Terminal 不收敛。
+- ready prompt 单独导致 idle/running、触发状态事件或影响 dispatch/outbox。
+- matching lifecycle 到达后仍不收敛，或状态被写入错误 provider/panel。
 
-标签：terminal-state,readiness,ui
+标签：terminal-state,lifecycle,ui
 
 ### AGT-TRAE-013 Codex thread、补偿与 tmux 恢复行为不回退
 
@@ -426,6 +427,6 @@ pnpm dev:session --dry-run --json
 - 静态门禁与 `git diff --check` 全部通过，但不以此替代行为证据。
 - AGT-TRAE-001 至 AGT-TRAE-013 全部 PASS；任一必跑用例真实失败即停止本轮并回传对应 case ID。
 - 每条 PASS 都有目标 Dev Session 的真实 JSONL/API/持久化/tmux 或 `$toolkit:playwright-cli` 证据，且能从 case ID 追溯到本文件和输入评审。
-- 同 cwd 并发、reader 降级恢复、缺 Stop 中断、tmux 丢失和 readiness 三分支均在隔离环境完成，没有操作用户现有 terminal/tmux。
+- 同 cwd 并发、reader 降级恢复、缺 Stop 中断、tmux 丢失和 launch/lifecycle 三分支均在隔离环境完成，没有操作用户现有 terminal/tmux。
 - 最终不存在用默认泛化 acceptance、cwd/时间猜测 identity、静态检查或无关浏览器 session 代替真实验收的情况。
 - 验收结束已关闭本次新建 tab、detach Playwright，并停止 Dev Session，确认 dedicated 资源清理。

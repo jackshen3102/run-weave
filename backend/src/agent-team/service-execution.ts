@@ -182,7 +182,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
         ),
       });
       try {
-        await this.agentReadiness.ensureAgentReady(session, terminal, {
+        await this.agentLaunch.submitAgentLaunch(session, terminal, {
           panelId: activeWorker.panelId,
           prompt: startupPrompt,
         });
@@ -424,7 +424,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
           `用例 ${caseIds.join(", ")} 稳定失败，抛回 code pane ${codeWorker.panelId}`,
         ],
       });
-      await this.agentReadiness.ensureAgentReady(session, terminal, {
+      await this.agentLaunch.submitAgentLaunch(session, terminal, {
         panelId: codeWorker.panelId,
         prompt: bouncePrompt,
       });

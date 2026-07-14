@@ -29,7 +29,7 @@
 关键代码锚点：
 
 - `packages/shared/src/agent-team.ts`
-- `backend/src/agent-team/agent-readiness.ts`
+- `backend/src/agent-team/agent-launch.ts`
 - `backend/src/agent-team/service.ts`
 - `backend/src/agent-team/loop.ts`
 - `backend/src/agent-team/outbox-resolver.ts`

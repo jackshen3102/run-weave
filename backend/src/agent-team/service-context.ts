@@ -13,7 +13,7 @@ import { AgentTeamReviewCheckpointGit } from "./review-checkpoint-git";
 import { AgentTeamPaths } from "./storage/agent-team-paths";
 import { AgentTeamOutboxHistoryStore } from "./storage/outbox-history-store";
 import { AgentTeamRunStore } from "./storage/run-store";
-import { AgentTeamAgentReadinessService } from "./agent-readiness";
+import { AgentTeamAgentLaunchService } from "./agent-launch";
 import type { AgentTeamServiceOptions } from "./service-types";
 import { recordAgentTeamRunTransition } from "./activity-events";
 
@@ -32,7 +32,7 @@ export class AgentTeamServiceContext {
   protected readonly paths: AgentTeamPaths;
   protected readonly runStore: AgentTeamRunStore;
   protected readonly promptSender: AgentTeamPromptSender;
-  protected readonly agentReadiness: AgentTeamAgentReadinessService;
+  protected readonly agentLaunch: AgentTeamAgentLaunchService;
   protected readonly outboxResolver: AgentTeamOutboxResolver;
   protected readonly outboxHistoryStore: AgentTeamOutboxHistoryStore;
   protected readonly reviewCheckpointGit: AgentTeamReviewCheckpointGit;
@@ -65,7 +65,7 @@ export class AgentTeamServiceContext {
       tmuxService: this.tmuxService,
       tmuxOutputWatcher: this.tmuxOutputWatcher,
     });
-    this.agentReadiness = new AgentTeamAgentReadinessService({
+    this.agentLaunch = new AgentTeamAgentLaunchService({
       terminalSessionManager: this.terminalSessionManager,
       ptyService: this.ptyService,
       runtimeRegistry: this.runtimeRegistry,

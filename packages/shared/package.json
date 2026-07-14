@@ -35,7 +35,6 @@
     "./terminal/session": "./src/terminal/session.ts",
     "./terminal/state": "./src/terminal/state.ts",
     "./terminal/websocket": "./src/terminal/websocket.ts",
-    "./terminal-agent-readiness": "./src/terminal-agent-readiness.ts",
     "./terminal-browser-annotation": "./src/terminal-browser-annotation.ts",
     "./terminal-browser-cdp-proxy": "./src/terminal-browser-cdp-proxy.ts",
     "./terminal-browser-device": "./src/terminal-browser-device.ts",

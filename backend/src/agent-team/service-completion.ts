@@ -655,7 +655,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamRepairProtocol
       triggerSummary: options.triggerSummary ?? null,
     });
     const terminal = resolveAgentTeamTerminal(run.terminal);
-    await this.agentReadiness.ensureAgentReady(session, terminal, {
+    await this.agentLaunch.submitAgentLaunch(session, terminal, {
       panelId: worker.panelId,
       prompt: workerPrompt,
     });

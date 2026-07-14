@@ -3,11 +3,8 @@ import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { AgentTeamAgentReadinessService } from "../../backend/src/agent-team/agent-readiness.ts";
 import { TmuxOutputWatcher } from "../../backend/src/terminal/tmux-output-watcher.ts";
 import { TmuxService } from "../../backend/src/terminal/tmux-service.ts";
-import { hasTraeReadyPrompt } from "../../packages/shared/src/terminal-agent-readiness.ts";
-import { buildTraeReadyScrollback } from "./trae-readiness.mjs";
 
 const execFileAsync = promisify(execFile);
 let recordCheck = null;
@@ -98,7 +95,7 @@ async function verifyTmuxPaneRawOutputHarness() {
     await sendTmuxFixtureCommand(
       runTmux,
       mainPaneId,
-      "printf 'TRAE CLI Next\\nmodel: main\\ndirectory: /tmp/project\\npermissions: normal\\n❯ Other pane suggestion\\n'",
+      "printf 'MAIN_PANE_OUTPUT\\n'",
     );
     await waitForFixtureOutput();
     const mainOutput = await watcher.readPaneOutputSince(
@@ -114,9 +111,9 @@ async function verifyTmuxPaneRawOutputHarness() {
       workerCursor,
     );
     check(
-      "tmux-other-pane-ready-is-isolated",
-      mainOutput?.includes("TRAE CLI Next") === true &&
-        workerOutputBeforeLaunch?.includes("TRAE CLI Next") === false &&
+      "tmux-other-pane-output-is-isolated",
+      mainOutput?.includes("MAIN_PANE_OUTPUT") === true &&
+        workerOutputBeforeLaunch?.includes("MAIN_PANE_OUTPUT") === false &&
         mismatchedOutput === null,
       { mainOutput, workerOutputBeforeLaunch, mismatchedOutput },
     );
@@ -124,7 +121,7 @@ async function verifyTmuxPaneRawOutputHarness() {
     await sendTmuxFixtureCommand(
       runTmux,
       workerPaneId,
-      "printf 'MAIN_SCREEN_BEFORE_ALT\\n\\033[?1049hTRAE CLI Next\\nmodel: worker\\ndirectory: /tmp/project\\npermissions: normal\\n❯ Dynamic worker suggestion\\n'",
+      "printf 'MAIN_SCREEN_BEFORE_ALT\\n\\033[?1049hALT_SCREEN_OUTPUT\\n'",
     );
     await waitForFixtureOutput();
     const workerRawOutput = await watcher.readPaneOutputSince(
@@ -137,10 +134,9 @@ async function verifyTmuxPaneRawOutputHarness() {
     check(
       "tmux-pane-raw-stream-survives-alternate-screen",
       workerRawOutput?.includes("MAIN_SCREEN_BEFORE_ALT") === true &&
-        workerRawOutput.includes("TRAE CLI Next") &&
-        hasTraeReadyPrompt(workerRawOutput) &&
+        workerRawOutput.includes("ALT_SCREEN_OUTPUT") &&
         !workerCapture.includes("MAIN_SCREEN_BEFORE_ALT") &&
-        workerCapture.includes("TRAE CLI Next"),
+        workerCapture.includes("ALT_SCREEN_OUTPUT"),
       { workerRawOutput, workerCapture },
     );
 
@@ -244,7 +240,7 @@ async function verifyTmuxPaneRawOutputHarness() {
     );
     await writeFile(
       watchedWorker.filePath,
-      buildTraeReadyScrollback("Fresh output after transport reset"),
+      "FRESH_OUTPUT_AFTER_TRANSPORT_RESET",
     );
     watchedWorker.offset = 1024 * 1024;
     const resetOutput = await watcher.readPaneOutputSince(
@@ -313,92 +309,11 @@ async function waitForFixtureCondition(condition, failureMessage) {
   throw new Error(failureMessage);
 }
 
-async function verifyTraeStartupFailureBoundary() {
-  const failure = "zsh: command not found: traex";
-  const session = {
-    id: "trae-stale-failure",
-    projectId: "project",
-    command: "/bin/zsh",
-    args: ["-l"],
-    cwd: "/tmp/project",
-    activeCommand: null,
-    scrollback: `${failure}\n➜  project git:(main) ✗`,
-    status: "running",
-    runtimeKind: "pty",
-    panelSplitEnabled: false,
-  };
-  const outputChunks = [failure];
-  let startupOutputReads = 0;
-  let idleTransitions = 0;
-  const service = new AgentTeamAgentReadinessService({
-    terminalSessionManager: {
-      async captureOutputCursor() {
-        return outputChunks.length;
-      },
-      readOutputSince(_terminalSessionId, cursor) {
-        startupOutputReads += 1;
-        if (startupOutputReads === 2) {
-          outputChunks.push(failure);
-          session.scrollback = failure;
-        }
-        return outputChunks.slice(cursor).join("");
-      },
-      async readLiveScrollback() {
-        return session.scrollback;
-      },
-    },
-    ptyService: {},
-    runtimeRegistry: {
-      getRuntime() {
-        return {
-          write() {
-            session.activeCommand = "traex";
-            outputChunks.push("traex\n");
-          },
-        };
-      },
-    },
-    terminalStateService: {
-      getCurrent() {
-        return session.activeCommand
-          ? { state: "agent_starting", agent: "traex" }
-          : { state: "shell_idle", agent: null };
-      },
-      setAgentStarting() {
-        return { state: "agent_starting", agent: "traex" };
-      },
-      setAgentIdle() {
-        idleTransitions += 1;
-        return { state: "agent_idle", agent: "traex" };
-      },
-    },
-  });
-
-  let failureError = null;
-  try {
-    await service.ensureAgentReady(session, { command: "traex", args: [] });
-  } catch (error) {
-    failureError = error;
-  }
-  check(
-    "trae-startup-output-cursor-detects-fresh-failure",
-    failureError?.details?.reason === "startup_failure" &&
-      startupOutputReads === 2 &&
-      idleTransitions === 0,
-    {
-      failureReason: failureError?.details?.reason ?? null,
-      startupOutputReads,
-      idleTransitions,
-    },
-  );
-}
-
 export async function verifyTmuxPaneOutput(checkResult, roots) {
   recordCheck = checkResult;
   cleanupRoots = roots;
   try {
     await verifyTmuxPaneRawOutputHarness();
-    await verifyTraeStartupFailureBoundary();
   } finally {
     recordCheck = null;
     cleanupRoots = null;

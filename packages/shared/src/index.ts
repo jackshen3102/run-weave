@@ -4,7 +4,6 @@ export * from "./runtime-monitor";
 export * from "./agent-team";
 export * from "./system-monitor";
 export * from "./terminal-protocol";
-export * from "./terminal-agent-readiness";
 export * from "./terminal-preview-core";
 export * from "./terminal-limits";
 export * from "./terminal-browser-annotation";
