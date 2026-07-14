@@ -236,6 +236,21 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
     });
   }
 
+  protected async pauseForWorkerDispatchError(
+    run: AgentTeamRun,
+    role: AgentTeamWorkerRole,
+    reason: string,
+  ): Promise<AgentTeamRun> {
+    return this.updateRun(run, {
+      status: "need_human",
+      activeWorkerRole: null,
+      activeWorkerDispatch: null,
+      workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+      loop: { ...run.loop, escalated: true, lastReason: reason },
+      logs: [...run.logs, `⏸ ${role} worker 投递已暂停：${reason}`],
+    });
+  }
+
   private async withVerificationDigests(
     projectRoot: string,
     verification: AgentTeamVerificationConfig,

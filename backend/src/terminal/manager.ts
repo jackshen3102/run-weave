@@ -19,7 +19,10 @@ export type {
   TerminalProjectRecord,
   TerminalSessionRecord,
 } from "./manager-records";
-export type { TerminalSessionManagerObserver } from "./manager-base";
+export type {
+  TerminalPanelMutationListener,
+  TerminalSessionManagerObserver,
+} from "./manager-base";
 
 export class TerminalSessionManager extends TerminalManagerPanelOperations {
   async createProject(

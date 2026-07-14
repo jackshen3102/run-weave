@@ -30,6 +30,7 @@ export async function handleAgentHookEvent(
     event.scope?.terminalTmuxPaneId ??
     readAppServerPayloadString(event.payload, "tmuxPaneId");
   const commandName = readAppServerPayloadString(event.payload, "commandName");
+  const operationId = readAppServerPayloadString(event.payload, "operationId");
   const agent =
     readAppServerAgent(event.payload) ??
     (terminalSessionId
@@ -62,6 +63,7 @@ export async function handleAgentHookEvent(
     panelId,
     tmuxPaneId,
     commandName,
+    operationId,
   });
   if (result.status === "not_found" || result.status === "exited") {
     return;

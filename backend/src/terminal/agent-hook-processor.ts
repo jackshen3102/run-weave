@@ -1,6 +1,9 @@
 import type { AgentHookStateEvent } from "@runweave/shared/terminal/events";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
-import type { TerminalAgentKind, TerminalState } from "@runweave/shared/terminal/state";
+import type {
+  TerminalAgentKind,
+  TerminalState,
+} from "@runweave/shared/terminal/state";
 import { logger } from "../logging";
 import {
   AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS,
@@ -25,6 +28,7 @@ function getLastThreadStatusForHookEvent(
 
 export interface ProcessTerminalAgentHookInput {
   terminalSessionId: string;
+  operationId?: string | null;
   agent: TerminalAgentKind;
   hookEvent: AgentHookStateEvent;
   threadId?: string | null;
@@ -111,6 +115,40 @@ export async function processTerminalAgentHook(
   }
   const panel = panelResolution.panel;
   const hookThreadId = input.threadId?.trim() || null;
+  const activePreparation = Boolean(
+    panel
+      ? options.terminalSessionManager.hasPanelAgentPreparation(
+          session.id,
+          panel.id,
+        )
+      : options.terminalSessionManager.hasSessionAgentPreparation(session.id),
+  );
+  const operationIdentityMatched = Boolean(
+    panel &&
+      input.operationId &&
+      options.terminalSessionManager.matchesPanelAgentPreparation(
+        session.id,
+        panel.id,
+        input.operationId,
+        input.agent,
+      ),
+  );
+  if (activePreparation && !operationIdentityMatched) {
+    return {
+      status: "ignored",
+      terminalSessionId: session.id,
+      agent: input.agent,
+      hookEvent: input.hookEvent,
+      activeCommand: session.activeCommand,
+      terminalState:
+        panel?.terminalState ??
+        session.terminalState ??
+        ({ state: "shell_idle", agent: null } satisfies TerminalState),
+      panelId: panel?.id ?? null,
+    };
+  }
+  const currentThreadIdentityMatched =
+    operationIdentityMatched || Boolean(input.currentThreadIdentityMatched);
 
   const sessionAgent = getTerminalSessionAgent(session);
   const panelAgent = panel ? getTerminalSessionAgent(panel) : null;
@@ -121,7 +159,7 @@ export async function processTerminalAgentHook(
     threadOwner.threadProvider ?? (threadOwner.threadId ? "codex" : null);
   const expectedProvider = activeAgent ?? currentThreadProvider;
   if (
-    !input.currentThreadIdentityMatched &&
+    !currentThreadIdentityMatched &&
     expectedProvider &&
     !isCompletionSourceAllowedForCommand(input.agent, expectedProvider)
   ) {
@@ -138,7 +176,7 @@ export async function processTerminalAgentHook(
       panelId: panel?.id ?? null,
     };
   }
-  const effectiveAgent = input.currentThreadIdentityMatched
+  const effectiveAgent = currentThreadIdentityMatched
     ? input.agent
     : panel &&
         panelAgent &&
@@ -158,7 +196,10 @@ export async function processTerminalAgentHook(
     (panel
       ? isCompletionSourceAllowedForCommand(input.agent, panel.activeCommand)
       : false) ||
-    isCompletionSourceAllowedForCommand(input.agent, input.commandName ?? null) ||
+    isCompletionSourceAllowedForCommand(
+      input.agent,
+      input.commandName ?? null,
+    ) ||
     sessionAgent === effectiveAgent ||
     panelAgent === effectiveAgent;
   const graceCommandMatches =
@@ -170,7 +211,7 @@ export async function processTerminalAgentHook(
       AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS;
 
   if (
-    !input.currentThreadIdentityMatched &&
+    !currentThreadIdentityMatched &&
     input.hookEvent !== "SessionStart" &&
     !currentCommandMatches &&
     !graceCommandMatches &&
@@ -204,6 +245,7 @@ export async function processTerminalAgentHook(
     await options.terminalSessionManager.updatePanelTerminalState(
       panel.id,
       terminalState,
+      input.operationId,
     );
   }
   if (hookThreadId) {
@@ -215,6 +257,7 @@ export async function processTerminalAgentHook(
         provider: effectiveAgent,
         hookEvent: input.hookEvent,
         threadId: hookThreadId,
+        operationId: input.operationId,
       })) ?? session;
   }
   return {
@@ -234,6 +277,7 @@ export async function syncAgentThreadMetadata(options: {
   provider: TerminalAgentKind;
   hookEvent: AgentHookStateEvent;
   threadId: string;
+  operationId?: string | null;
 }): Promise<ReturnType<TerminalSessionManager["getSession"]>> {
   const session = options.session;
   if (!session) {
@@ -256,6 +300,7 @@ export async function syncAgentThreadMetadata(options: {
       lastThreadStatus,
       lastThreadUpdatedAt,
       options.provider,
+      options.operationId,
     );
   }
 
@@ -299,6 +344,7 @@ export async function syncAgentThreadMetadata(options: {
         options.panel.id,
         options.threadId,
         options.provider,
+        options.operationId,
       );
       if (previousPanelThreadId !== options.threadId) {
         await options.terminalSessionManager.updatePanelPreview(
@@ -333,6 +379,8 @@ export async function syncAgentThreadMetadata(options: {
     await options.terminalSessionManager.updatePanelThreadId(
       options.panel.id,
       null,
+      null,
+      options.operationId,
     );
     await options.terminalSessionManager.updatePanelPreview(
       options.panel.id,
@@ -383,7 +431,7 @@ function resolveHookPanel(
     }
   | { ok: false } {
   const byId = panelId
-    ? terminalSessionManager.getPanel(panelId) ?? null
+    ? (terminalSessionManager.getPanel(panelId) ?? null)
     : null;
   const panels = tmuxPaneId
     ? terminalSessionManager.listPanels(terminalSessionId)
@@ -400,9 +448,7 @@ function resolveHookPanel(
     ) {
       return { ok: true, panel: byId };
     }
-    return tmuxPaneId && byPane
-      ? { ok: true, panel: byPane }
-      : { ok: false };
+    return tmuxPaneId && byPane ? { ok: true, panel: byPane } : { ok: false };
   }
   if (tmuxPaneId) {
     return byPane ? { ok: true, panel: byPane } : { ok: false };

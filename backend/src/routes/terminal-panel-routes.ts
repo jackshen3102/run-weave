@@ -1,6 +1,7 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
 import type { SendTerminalInterruptRequest, SendTerminalInputRequest, TerminalInputMode } from "@runweave/shared/terminal/input";
+import type { PrepareTerminalAgentRequest } from "@runweave/shared/terminal/agent-preparation";
 import type { CreateTerminalPanelRequest, ResizeTerminalPanelRequest, UpdateTerminalPanelRequest } from "@runweave/shared/terminal/panel";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { logger } from "../logging";
@@ -23,6 +24,7 @@ import {
   syncSinglePanelMetadataToSession,
 } from "../terminal/application/panel-metadata";
 import { createTerminalPanelSplit } from "../terminal/application/panel-split";
+import { prepareTerminalAgent } from "../terminal/application/agent-preparation";
 import {
   ensureTerminalPanelWorkspace,
   withPaneGeometry,
@@ -75,6 +77,24 @@ const resizeTerminalPanelSchema = z
   })
   .strict();
 
+const prepareTerminalAgentSchema = z
+  .object({
+    agent: z.enum(["codex", "traex"]),
+    prompt: z.string().trim().min(1).max(8_000),
+    panelId: z.string().trim().min(1).optional(),
+    cwd: z.string().trim().min(1).optional(),
+    role: z.string().trim().min(1).max(80).nullable().optional(),
+    alias: z.string().trim().min(1).max(80).nullable().optional(),
+    sourcePanelId: z.string().trim().min(1).optional(),
+    direction: z.enum(["right", "down"]).optional(),
+    focus: z.boolean().optional(),
+    command: z.string().trim().min(1).optional(),
+    commandLine: z.string().trim().min(1).max(8_000).optional(),
+    args: z.array(z.string()).optional(),
+    timeoutMs: z.number().int().min(0).max(600_000).optional(),
+  })
+  .strict();
+
 function sendRouteError(res: Response, error: unknown): void {
   if (sendTerminalPanelRouteError(res, error)) {
     return;
@@ -94,6 +114,31 @@ export function registerTerminalPanelRoutes(
   terminalSessionManager: TerminalSessionManager,
   options: TerminalPanelRouteOptions,
 ): void {
+  router.post("/session/:id/agent/prepare", async (req, res) => {
+    const parsed = prepareTerminalAgentSchema.safeParse(
+      req.body as PrepareTerminalAgentRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    try {
+      const session = getSessionOrThrow(terminalSessionManager, req.params.id);
+      const result = await prepareTerminalAgent(
+        terminalSessionManager,
+        session,
+        options,
+        parsed.data,
+      );
+      res.status(result.createdPanel ? 201 : 200).json(result);
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
   router.get("/session/:id/panels", async (req, res) => {
     try {
       const session = getSessionOrThrow(terminalSessionManager, req.params.id);

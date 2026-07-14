@@ -20,6 +20,7 @@ const AGENT_HOOKS = ["codex", "trae", "traecli", "traex"] as const;
 const agentHookStateSchema = z
   .object({
     activityEventId: z.string().uuid().optional(),
+    operationId: z.string().trim().min(1).max(256).optional(),
     terminalSessionId: z.string().trim().min(1),
     projectId: z.string().trim().min(1).optional(),
     threadId: z.string().trim().min(1).optional(),

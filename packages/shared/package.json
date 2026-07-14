@@ -25,6 +25,7 @@
     "./runtime-monitor": "./src/runtime-monitor.ts",
     "./system-monitor": "./src/system-monitor.ts",
     "./terminal": "./src/terminal/index.ts",
+    "./terminal/agent-preparation": "./src/terminal/agent-preparation.ts",
     "./terminal/completion": "./src/terminal/completion.ts",
     "./terminal/events": "./src/terminal/events.ts",
     "./terminal/input": "./src/terminal/input.ts",

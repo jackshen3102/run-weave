@@ -1,5 +1,6 @@
 import type { AgentTeamExportHistoryMode, AgentTeamExportResponse, AgentTeamRunsResponse } from "@runweave/shared/agent-team";
 import type { TerminalStateResponse } from "@runweave/shared/terminal/events";
+import type { PrepareTerminalAgentRequest, PrepareTerminalAgentResponse } from "@runweave/shared/terminal/agent-preparation";
 import type { SendTerminalInterruptRequest, SendTerminalInterruptResponse, SendTerminalInputRequest, SendTerminalInputResponse } from "@runweave/shared/terminal/input";
 import type { CreateTerminalPanelRequest, TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { CreateTerminalProjectRequest, TerminalProjectListItem } from "@runweave/shared/terminal/project";
@@ -84,6 +85,20 @@ export class TerminalHttpClient {
   ): Promise<TerminalPanelWorkspace> {
     return this.auth.requestJson<TerminalPanelWorkspace>(
       `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  prepareAgent(
+    terminalSessionId: string,
+    payload: PrepareTerminalAgentRequest,
+  ): Promise<PrepareTerminalAgentResponse> {
+    return this.auth.requestJson<PrepareTerminalAgentResponse>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/agent/prepare`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

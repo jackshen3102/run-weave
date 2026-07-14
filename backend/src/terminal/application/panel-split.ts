@@ -60,6 +60,7 @@ export interface CreateTerminalPanelSplitParams {
   args?: string[];
   cwd?: string;
   focus?: boolean;
+  skipPaneReadyWait?: boolean;
 }
 
 /**
@@ -118,6 +119,12 @@ export async function createTerminalPanelSplit(
   const command = params.command?.trim() || resolveDefaultTerminalCommand();
   const args = params.args ?? resolveDefaultTerminalArgs(command);
   const cwd = params.cwd?.trim() || sourcePanel.cwd || session.cwd;
+  const previousWorkspace = terminalSessionManager.getPanelWorkspace(
+    session.id,
+  );
+  const workspaceBeforeSplit = previousWorkspace
+    ? { ...previousWorkspace, panelIds: [...previousWorkspace.panelIds] }
+    : null;
   const splitTarget = await tmuxService.splitPane(
     buildPaneTarget(session, tmuxService, sourcePanel),
     {
@@ -131,55 +138,100 @@ export async function createTerminalPanelSplit(
       },
     },
   );
-  await tmuxService.setPanePanelId(splitTarget, panelId);
-  const provisionalPanel = await terminalSessionManager.upsertPanel(
-    buildSplitPanel(session, splitTarget.paneId, {
-      panelId,
-      alias,
-      role,
-      agentTeamRunId,
-      agentTeamWorkerId,
-      cwd,
-      activeCommand: null,
-    }),
-  );
-  const previousWorkspace = terminalSessionManager.getPanelWorkspace(
-    session.id,
-  );
-  await terminalSessionManager.upsertPanelWorkspace({
-    terminalSessionId: session.id,
-    activePanelId:
-      params.focus === false
-        ? previousWorkspace?.activePanelId || sourcePanel.id
-        : provisionalPanel.id,
-    panelIds: [...(previousWorkspace?.panelIds ?? []), provisionalPanel.id],
-    renderMode: "tmux-native",
-  });
-  await tmuxService.waitForPaneReady(splitTarget);
-  const metadata = await tmuxService.readPaneMetadata(splitTarget, command);
-  provisionalPanel.cwd = metadata?.cwd || cwd;
-  provisionalPanel.activeCommand = metadata?.activeCommand ?? null;
-  const panel = await terminalSessionManager.upsertPanel(provisionalPanel);
-  await clearMultiPanelMetadataFromSession(
-    terminalSessionManager,
-    session,
-    terminalSessionManager.listPanels(session.id),
-  );
-  if (params.focus !== false) {
-    await tmuxService.selectPane(splitTarget);
+  let registeredPanel = false;
+  try {
+    await tmuxService.setPanePanelId(splitTarget, panelId);
+    const provisionalPanel = await terminalSessionManager.upsertPanel(
+      buildSplitPanel(session, splitTarget.paneId, {
+        panelId,
+        alias,
+        role,
+        agentTeamRunId,
+        agentTeamWorkerId,
+        cwd,
+        activeCommand: null,
+      }),
+    );
+    registeredPanel = true;
+    await terminalSessionManager.upsertPanelWorkspace({
+      terminalSessionId: session.id,
+      activePanelId:
+        params.focus === false
+          ? previousWorkspace?.activePanelId || sourcePanel.id
+          : provisionalPanel.id,
+      panelIds: [...(previousWorkspace?.panelIds ?? []), provisionalPanel.id],
+      renderMode: "tmux-native",
+    });
+    if (!params.skipPaneReadyWait) {
+      await tmuxService.waitForPaneReady(splitTarget);
+      const metadata = await tmuxService.readPaneMetadata(splitTarget, command);
+      provisionalPanel.cwd = metadata?.cwd || cwd;
+      provisionalPanel.activeCommand = metadata?.activeCommand ?? null;
+    }
+    const panel = await terminalSessionManager.upsertPanel(provisionalPanel);
+    await clearMultiPanelMetadataFromSession(
+      terminalSessionManager,
+      session,
+      terminalSessionManager.listPanels(session.id),
+    );
+    if (params.focus !== false) {
+      await tmuxService.selectPane(splitTarget);
+    }
+    const workspace = toPanelWorkspacePayload(
+      terminalSessionManager,
+      session.id,
+    );
+    recordPanelEvent(
+      terminalSessionManager,
+      options.terminalEventService,
+      session,
+      "terminal_panel_created",
+      {
+        panel: toPanelListItem(panel, workspace?.activePanelId ?? panel.id),
+      },
+    );
+    if (!workspace) {
+      throw new TerminalPanelError(500, "Terminal panel workspace missing");
+    }
+    return { panel, workspace };
+  } catch (error) {
+    let paneRemoved = false;
+    let cleanupFailed = false;
+    try {
+      await tmuxService.killPane(splitTarget);
+      paneRemoved = true;
+    } catch {
+      // The caller receives the live pane identity below for explicit recovery.
+    }
+    await options.tmuxOutputWatcher
+      ?.unwatchPane(session.id, splitTarget.paneId)
+      .catch(() => {
+        cleanupFailed = true;
+      });
+    if (registeredPanel) {
+      await terminalSessionManager.markPanelExited(panelId).catch(() => {
+        cleanupFailed = true;
+      });
+      await terminalSessionManager
+        .removePanelFromWorkspace(session.id, panelId, sourcePanel.id)
+        .catch(() => {
+          cleanupFailed = true;
+        });
+    }
+    if (workspaceBeforeSplit) {
+      await terminalSessionManager
+        .upsertPanelWorkspace(workspaceBeforeSplit)
+        .catch(() => {
+          cleanupFailed = true;
+        });
+    }
+    if (!paneRemoved || cleanupFailed) {
+      throw new TerminalPanelError(
+        500,
+        "Failed to register terminal panel and fully restore its workspace",
+        { partialPanel: { panelId, tmuxPaneId: splitTarget.paneId } },
+      );
+    }
+    throw error;
   }
-  const workspace = toPanelWorkspacePayload(terminalSessionManager, session.id);
-  recordPanelEvent(
-    terminalSessionManager,
-    options.terminalEventService,
-    session,
-    "terminal_panel_created",
-    {
-      panel: toPanelListItem(panel, workspace?.activePanelId ?? panel.id),
-    },
-  );
-  if (!workspace) {
-    throw new TerminalPanelError(500, "Terminal panel workspace missing");
-  }
-  return { panel, workspace };
 }
