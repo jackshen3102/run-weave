@@ -121,7 +121,11 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       run.terminalSessionId,
     );
     if (!session) {
-      return run;
+      return this.pauseForWorkerDispatchError(
+        run,
+        role,
+        `readiness 失败：terminal session ${run.terminalSessionId} 不存在`,
+      );
     }
     let dispatchRun = run;
     let reviewTarget = null;
@@ -167,12 +171,12 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
     }
     const worker = findWorkerByRole(dispatchRun.workers, role);
     if (!worker?.panelId) {
-      return run;
+      return this.pauseForWorkerDispatchError(
+        run,
+        role,
+        "readiness 失败：worker pane 不存在",
+      );
     }
-    const terminal = resolveAgentTeamTerminal(run.terminal);
-    await this.agentReadiness.ensureAgentReady(session, terminal, {
-      panelId: worker.panelId,
-    });
     const outboxPath = this.paths.workerOutboxRelativePath(
       dispatchRun.terminalSessionId,
       worker,
@@ -196,6 +200,8 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
           : run.loop,
       activeWorkerRole: role,
       activeWorkerDispatch,
+      workerDispatchProtocolVersion: 1,
+      consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
       workers: setActiveWorker(dispatchRun.workers, role),
       acceptance: dispatchRun.acceptance.map((item) =>
         caseIds.has(item.caseId)
@@ -224,22 +230,31 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
         `${options.log}（${role} pane ${worker.panelId}）`,
       ],
     });
+    const workerPrompt = buildWorkerRecheckPrompt({
+      run: persistedRun,
+      worker,
+      cases: options.cases,
+      outboxPath,
+      triggerSummary: options.triggerSummary ?? null,
+    });
+    const terminal = resolveAgentTeamTerminal(run.terminal);
     try {
-      await this.promptSender.sendPromptToPane(
-        session,
-        buildWorkerRecheckPrompt({
-          run: persistedRun,
-          worker,
-          cases: options.cases,
-          outboxPath,
-          triggerSummary: options.triggerSummary ?? null,
-        }),
-        { panelId: worker.panelId },
-      );
+      await this.agentLaunch.submitAgentLaunch(session, terminal, {
+        panelId: worker.panelId,
+        prompt: workerPrompt,
+      });
     } catch (error) {
-      return this.pauseForCheckpointError(
-        persistedRun,
-        `worker prompt 投递失败：${error instanceof Error ? error.message : String(error)}`,
+      return this.pauseForWorkerDispatchError(
+        {
+          ...persistedRun,
+          reviewCheckpoint: run.reviewCheckpoint,
+          workers: run.workers,
+          acceptance: run.acceptance,
+          loop: run.loop,
+          logs: run.logs,
+        },
+        role,
+        `readiness 失败：${error instanceof Error ? error.message : String(error)}`,
       );
     }
     return persistedRun;

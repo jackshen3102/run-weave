@@ -93,6 +93,7 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
     panelId: string,
     threadId: string | null,
     provider: TerminalAgentKind | null = null,
+    operationId?: string | null,
   ): Promise<TerminalPanelRecord | undefined> {
     const panel = this.panels.get(panelId);
     if (!panel) {
@@ -122,6 +123,7 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
       threadId: nextThreadId ?? null,
       provider: nextProvider ?? null,
     });
+    this.notifyPanelMutation(panel, { operationId });
     return panel;
   }
 
@@ -157,6 +159,7 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
     status: TerminalLastThreadStatus,
     updatedAt = new Date(),
     provider?: TerminalAgentKind,
+    operationId?: string | null,
   ): Promise<TerminalPanelRecord | undefined> {
     const panel = this.panels.get(panelId);
     if (!panel) {
@@ -195,12 +198,14 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
       status,
       updatedAt: updatedAt.toISOString(),
     });
+    this.notifyPanelMutation(panel, { operationId });
     return panel;
   }
 
   async updatePanelTerminalState(
     panelId: string,
     terminalState: TerminalState,
+    operationId?: string | null,
   ): Promise<TerminalPanelRecord | undefined> {
     const panel = this.panels.get(panelId);
     if (!panel) {
@@ -219,10 +224,12 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
       panelId,
       terminalState,
     });
+    this.notifyPanelMutation(panel, { operationId });
     return panel;
   }
 
   async clearPanelsForSession(terminalSessionId: string): Promise<void> {
+    this.clearPanelAgentOperationState(terminalSessionId);
     for (const panel of this.panels.values()) {
       if (panel.terminalSessionId === terminalSessionId) {
         this.panels.delete(panel.id);

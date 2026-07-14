@@ -51,15 +51,18 @@ export async function handleAgentLifecycleEvent(
   const currentThreadIdentityMatched =
     currentThreadId === threadId && currentProvider === provider;
   const foregroundResult = shouldUpdateForeground
-    ? await processTerminalAgentHook(options, {
-        terminalSessionId: session.id,
-        agent: provider,
-        hookEvent: observedStatus === "running" ? "UserPromptSubmit" : "Stop",
-        threadId,
-        panelId: event.scope?.terminalPanelId,
-        tmuxPaneId: event.scope?.terminalTmuxPaneId,
-        currentThreadIdentityMatched,
-      })
+    ? await processTerminalAgentHook(
+        options,
+        {
+          terminalSessionId: session.id,
+          agent: provider,
+          hookEvent: observedStatus === "running" ? "UserPromptSubmit" : "Stop",
+          threadId,
+          panelId: event.scope?.terminalPanelId,
+          tmuxPaneId: event.scope?.terminalTmuxPaneId,
+        },
+        { currentThreadIdentityMatched },
+      )
     : null;
 
   const preview = readAppServerPayloadString(event.payload, "preview");

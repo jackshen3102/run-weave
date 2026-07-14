@@ -1,9 +1,5 @@
 import type { AgentHookStateEvent } from "@runweave/shared/terminal/events";
 import type { TerminalAgentKind, TerminalState, TerminalStateChangeReason } from "@runweave/shared/terminal/state";
-import {
-  hasCodexReadyPrompt,
-  hasTraeReadyPrompt,
-} from "@runweave/shared/terminal-agent-readiness";
 import { getExecutableCommandName } from "./completion-source-gate";
 import type { TerminalSessionRecord } from "./manager-records";
 import type { TerminalEventService } from "./terminal-event-service";
@@ -11,7 +7,7 @@ import type { TerminalStateStore } from "./terminal-state-store";
 
 type TerminalStateSessionSnapshot = Pick<
   TerminalSessionRecord,
-  "activeCommand" | "status" | "terminalState" | "scrollback"
+  "activeCommand" | "status" | "terminalState"
 >;
 type TerminalStatePanelSnapshot = Pick<
   TerminalStateSessionSnapshot,
@@ -162,27 +158,8 @@ export class TerminalStateService {
       resolveStoredAgentState(stored, agent) ??
       resolveStoredAgentState(sessionSnapshot.terminalState, agent);
     if (agentState) {
-      if (
-        agentState.state === "agent_starting" &&
-        hasAgentReadyPrompt(agent, sessionSnapshot.scrollback)
-      ) {
-        return this.setAndPublish(
-          terminalSessionId,
-          createAgentState(agent, "agent_idle"),
-          undefined,
-        );
-      }
       return agentState;
     }
-
-    if (hasAgentReadyPrompt(agent, sessionSnapshot.scrollback)) {
-      return this.setAndPublish(
-        terminalSessionId,
-        createAgentState(agent, "agent_idle"),
-        undefined,
-      );
-    }
-
     return createAgentState(agent, "agent_starting");
   }
 
@@ -293,13 +270,4 @@ function createAgentState(
   state: "agent_starting" | "agent_idle" | "agent_running",
 ): TerminalState {
   return { state, agent };
-}
-
-export function hasAgentReadyPrompt(
-  agent: TerminalAgentKind,
-  scrollback: string,
-): boolean {
-  return agent === "codex"
-    ? hasCodexReadyPrompt(scrollback)
-    : hasTraeReadyPrompt(scrollback);
 }

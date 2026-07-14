@@ -1,4 +1,5 @@
 import type { TerminalSessionMetadataSnapshot } from "@runweave/shared/terminal/events";
+import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type { TerminalSessionStore } from "./store";
 import {
   buildPanelRecord,
@@ -30,6 +31,11 @@ export interface TerminalSessionManagerObserver {
   }) => void;
 }
 
+export type TerminalPanelMutationListener = (
+  panel: TerminalPanelRecord,
+  context?: { operationId?: string | null },
+) => void;
+
 export abstract class TerminalManagerBase {
   protected readonly projects = new Map<string, TerminalProjectRecord>();
   protected readonly sessions = new Map<string, RuntimeTerminalSessionRecord>();
@@ -46,6 +52,25 @@ export abstract class TerminalManagerBase {
   protected readonly pendingScrollbackChunks = new Map<string, string[]>();
   protected readonly activityFlushTimers = new Map<string, NodeJS.Timeout>();
   protected readonly pendingActivityUpdates = new Map<string, Date>();
+  private readonly panelMutationListeners = new Map<
+    string,
+    Set<TerminalPanelMutationListener>
+  >();
+  private readonly panelAgentPreparations = new Map<
+    string,
+    {
+      operationId: string;
+      provider: TerminalAgentKind;
+      previousGeneration?: {
+        operationId: string;
+        provider: TerminalAgentKind;
+      };
+    }
+  >();
+  private readonly panelAgentOperationGenerations = new Map<
+    string,
+    { operationId: string; provider: TerminalAgentKind }
+  >();
 
   constructor(
     protected readonly sessionStore: TerminalSessionStore,
@@ -114,6 +139,147 @@ export abstract class TerminalManagerBase {
 
   getPanel(panelId: string): TerminalPanelRecord | undefined {
     return this.panels.get(panelId);
+  }
+
+  subscribePanelMutations(
+    panelId: string,
+    listener: TerminalPanelMutationListener,
+  ): () => void {
+    const listeners = this.panelMutationListeners.get(panelId) ?? new Set();
+    listeners.add(listener);
+    this.panelMutationListeners.set(panelId, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) {
+        this.panelMutationListeners.delete(panelId);
+      }
+    };
+  }
+
+  beginPanelAgentPreparation(
+    terminalSessionId: string,
+    panelId: string,
+    operationId: string,
+    provider: TerminalAgentKind,
+  ): boolean {
+    const key = `${terminalSessionId}\u0000${panelId}`;
+    if (this.panelAgentPreparations.has(key)) {
+      return false;
+    }
+    const identity = { operationId, provider };
+    const previousGeneration = this.panelAgentOperationGenerations.get(key);
+    this.panelAgentPreparations.set(key, {
+      ...identity,
+      previousGeneration,
+    });
+    this.panelAgentOperationGenerations.set(key, identity);
+    return true;
+  }
+
+  endPanelAgentPreparation(
+    terminalSessionId: string,
+    panelId: string,
+    operationId: string,
+  ): void {
+    const key = `${terminalSessionId}\u0000${panelId}`;
+    const preparation = this.panelAgentPreparations.get(key);
+    if (preparation?.operationId !== operationId) {
+      return;
+    }
+    this.panelAgentPreparations.delete(key);
+    if (
+      this.panelAgentOperationGenerations.get(key)?.operationId === operationId
+    ) {
+      if (preparation.previousGeneration) {
+        this.panelAgentOperationGenerations.set(
+          key,
+          preparation.previousGeneration,
+        );
+      } else {
+        this.panelAgentOperationGenerations.delete(key);
+      }
+    }
+  }
+
+  releasePanelAgentPreparation(
+    terminalSessionId: string,
+    panelId: string,
+    operationId: string,
+  ): void {
+    const key = `${terminalSessionId}\u0000${panelId}`;
+    if (this.panelAgentPreparations.get(key)?.operationId === operationId) {
+      this.panelAgentPreparations.delete(key);
+    }
+  }
+
+  matchesPanelAgentOperationGeneration(
+    terminalSessionId: string,
+    panelId: string,
+    operationId: string,
+    provider: TerminalAgentKind,
+  ): boolean {
+    const active = this.panelAgentOperationGenerations.get(
+      `${terminalSessionId}\u0000${panelId}`,
+    );
+    if (!active || active.operationId !== operationId) {
+      return false;
+    }
+    if (active.provider === "codex") {
+      return provider === "codex";
+    }
+    return (
+      provider === "trae" || provider === "traex" || provider === "traecli"
+    );
+  }
+
+  hasPanelAgentPreparation(
+    terminalSessionId: string,
+    panelId: string,
+  ): boolean {
+    return this.panelAgentPreparations.has(
+      `${terminalSessionId}\u0000${panelId}`,
+    );
+  }
+
+  hasPanelAgentOperationGeneration(
+    terminalSessionId: string,
+    panelId: string,
+  ): boolean {
+    return this.panelAgentOperationGenerations.has(
+      `${terminalSessionId}\u0000${panelId}`,
+    );
+  }
+
+  hasSessionAgentPreparation(terminalSessionId: string): boolean {
+    const prefix = `${terminalSessionId}\u0000`;
+    return Array.from(this.panelAgentPreparations.keys()).some((key) =>
+      key.startsWith(prefix),
+    );
+  }
+
+  protected clearPanelAgentOperationState(
+    terminalSessionId: string,
+  ): void {
+    const prefix = `${terminalSessionId}\u0000`;
+    for (const key of this.panelAgentPreparations.keys()) {
+      if (key.startsWith(prefix)) {
+        this.panelAgentPreparations.delete(key);
+      }
+    }
+    for (const key of this.panelAgentOperationGenerations.keys()) {
+      if (key.startsWith(prefix)) {
+        this.panelAgentOperationGenerations.delete(key);
+      }
+    }
+  }
+
+  protected notifyPanelMutation(
+    panel: TerminalPanelRecord,
+    context?: { operationId?: string | null },
+  ): void {
+    for (const listener of this.panelMutationListeners.get(panel.id) ?? []) {
+      listener(panel, context);
+    }
   }
 
   getPanelWorkspace(

@@ -70,10 +70,11 @@ async function main(): Promise<void> {
     cloudSync,
   });
   const traeLifecycleReader = new TraeThreadLifecycleReader();
+  const codexAppServerClient = new CodexAppServerClient();
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,
     sourceInstanceId,
-    codexStatusReader: new CodexAppServerClient(),
+    codexStatusReader: codexAppServerClient,
     traeLifecycleReader,
     startDelayMs: parseOptionalPositiveInteger(
       process.env.RUNWEAVE_APP_SERVER_THREAD_STATUS_START_DELAY_MS ??
@@ -92,6 +93,7 @@ async function main(): Promise<void> {
     devSessionId: config.devSessionId,
     sourceRevision: config.sourceRevision,
     traeLifecycleReader,
+    codexThreadDetailReader: codexAppServerClient,
   });
   const server = http.createServer(app);
   const eventStreamServer = attachEventStreamWebSocketServer({

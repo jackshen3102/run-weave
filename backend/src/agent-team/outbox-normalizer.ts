@@ -1,5 +1,7 @@
 import type {
   AgentTeamAcceptanceEvidence,
+  AgentTeamFindingCaseImpact,
+  AgentTeamFindingDisposition,
   AgentTeamFindingSeverity,
   AgentTeamFindingStatus,
   AgentTeamFixCheckDimension,
@@ -8,6 +10,7 @@ import type {
   AgentTeamFixVerification,
   AgentTeamOutboxFinding,
   AgentTeamOutboxRecommendation,
+  AgentTeamReviewFindingReproduction,
 } from "@runweave/shared/agent-team";
 
 const VALID_EVIDENCE_TYPES = new Set<AgentTeamAcceptanceEvidence["type"]>([
@@ -30,6 +33,11 @@ const VALID_FINDING_STATUSES = new Set<AgentTeamFindingStatus>([
   "open",
   "resolved",
   "informational",
+]);
+const VALID_FINDING_DISPOSITIONS = new Set<AgentTeamFindingDisposition>([
+  "blocking",
+  "out_of_scope",
+  "waived",
 ]);
 const VALID_REPRODUCTION_MODES = new Set<AgentTeamFixReproductionMode>([
   "real_product",
@@ -101,6 +109,13 @@ function normalizeFinding(
   const status = VALID_FINDING_STATUSES.has(rawStatus as AgentTeamFindingStatus)
     ? (rawStatus as AgentTeamFindingStatus)
     : defaultStatus;
+  const reproduction = normalizeReviewFindingReproduction(record.reproduction);
+  const disposition = VALID_FINDING_DISPOSITIONS.has(
+    record.disposition as AgentTeamFindingDisposition,
+  )
+    ? (record.disposition as AgentTeamFindingDisposition)
+    : undefined;
+  const caseImpacts = normalizeFindingCaseImpacts(record.caseImpacts);
   return {
     severity,
     status,
@@ -116,6 +131,83 @@ function normalizeFinding(
     record.verificationMode === "structural"
       ? { verificationMode: record.verificationMode }
       : {}),
+    ...(reproduction ? { reproduction } : {}),
+    ...(disposition ? { disposition } : {}),
+    ...(caseImpacts.length > 0 ? { caseImpacts } : {}),
+  };
+}
+
+function normalizeFindingCaseImpacts(
+  value: unknown,
+): AgentTeamFindingCaseImpact[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const record = item as Record<string, unknown>;
+    const caseId =
+      typeof record.caseId === "string" ? record.caseId.trim() : "";
+    const summary =
+      typeof record.summary === "string" ? record.summary.trim() : "";
+    if (!caseId || !summary) {
+      return [];
+    }
+    return [
+      {
+        caseId,
+        summary,
+        evidence: normalizeEvidenceList(record.evidence),
+      },
+    ];
+  });
+}
+
+export function normalizeReviewFindingReproduction(
+  value: unknown,
+): AgentTeamReviewFindingReproduction | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const steps = Array.isArray(record.steps)
+    ? record.steps
+        .filter((step): step is string => typeof step === "string")
+        .map((step) => step.trim())
+        .filter(Boolean)
+    : [];
+  const expected =
+    typeof record.expected === "string" ? record.expected.trim() : "";
+  const actual = typeof record.actual === "string" ? record.actual.trim() : "";
+  if (
+    !VALID_REPRODUCTION_MODES.has(
+      record.mode as AgentTeamFixReproductionMode,
+    ) ||
+    !VALID_REPRODUCTION_STATUSES.has(
+      record.status as AgentTeamFixReproductionStatus,
+    ) ||
+    steps.length === 0 ||
+    !expected ||
+    !actual
+  ) {
+    return null;
+  }
+  return {
+    mode: record.mode as AgentTeamFixReproductionMode,
+    status: record.status as AgentTeamFixReproductionStatus,
+    ...(typeof record.scenarioId === "string" && record.scenarioId.trim()
+      ? { scenarioId: record.scenarioId.trim() }
+      : {}),
+    ...(typeof record.validationSessionId === "string" &&
+    record.validationSessionId.trim()
+      ? { validationSessionId: record.validationSessionId.trim() }
+      : {}),
+    steps,
+    expected,
+    actual,
+    evidence: normalizeEvidenceList(record.evidence),
   };
 }
 

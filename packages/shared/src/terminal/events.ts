@@ -210,6 +210,7 @@ export type AgentHookStateEvent =
 
 export interface AgentHookStateRequest {
   activityEventId?: string;
+  operationId?: string;
   terminalSessionId: string;
   projectId?: string;
   threadId?: string;

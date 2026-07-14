@@ -45,6 +45,7 @@ interface UseTerminalEmulatorArgs {
   onAuthExpired?: () => void;
   onBottomStateChange: (state: TerminalBottomState) => void;
   onBufferTypeChange: (type: "normal" | "alternate" | undefined) => void;
+  onTmuxExitCopyModeRequest: () => void;
   onTmuxScrollbackActiveChange: (active: boolean) => void;
   onUserInputData?: (data: string) => void;
   onViewportResizeRef: MutableRef<(() => void) | undefined>;
@@ -75,6 +76,7 @@ export function useTerminalEmulator({
   onAuthExpired,
   onBottomStateChange,
   onBufferTypeChange,
+  onTmuxExitCopyModeRequest,
   onTmuxScrollbackActiveChange,
   onUserInputData,
   onViewportResizeRef,
@@ -147,7 +149,9 @@ export function useTerminalEmulator({
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
     terminal.attachCustomWheelEventHandler((event) => {
-      const canScroll = terminal.buffer.active.baseY > 0;
+      const { baseY, viewportY } = terminal.buffer.active;
+      const canScroll =
+        event.deltaY < 0 ? viewportY > 0 : event.deltaY > 0 && viewportY < baseY;
       if (!shouldSuppressWheelInput(event, canScroll)) {
         return true;
       }
@@ -158,6 +162,7 @@ export function useTerminalEmulator({
         !event.shiftKey
       ) {
         if (event.deltaY > 0 && viewportState.isAtBottom()) {
+          onTmuxExitCopyModeRequest();
           onTmuxScrollbackActiveChange(false);
           event.preventDefault();
           event.stopPropagation();
@@ -533,6 +538,7 @@ export function useTerminalEmulator({
     onAuthExpired,
     onBottomStateChange,
     onBufferTypeChange,
+    onTmuxExitCopyModeRequest,
     onTmuxScrollbackActiveChange,
     onUserInputData,
     onViewportResizeRef,

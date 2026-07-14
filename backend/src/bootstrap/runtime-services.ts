@@ -33,6 +33,8 @@ import {
   resolveActivityStoragePaths,
   resolveStoragePaths,
 } from "../utils/path";
+import { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
+import { WorkHistoryService } from "../work-history/work-history-service";
 
 export interface RuntimeServices {
   activityStore: ActivityStore | null;
@@ -50,6 +52,8 @@ export interface RuntimeServices {
   terminalQuickInputService: TerminalQuickInputService;
   terminalStateService: TerminalStateService;
   agentTeamService: AgentTeamService;
+  appServerHistoryGateway: AppServerHistoryGateway;
+  workHistoryService: WorkHistoryService;
   terminalEventService: TerminalEventService;
   terminalCompletionEventService: TerminalCompletionEventService;
   terminalRuntimeRegistry: TerminalRuntimeRegistry;
@@ -304,6 +308,13 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     activity: terminalActivity,
   });
   agentTeamService.initialize();
+  const appServerHistoryGateway = new AppServerHistoryGateway();
+  const workHistoryService = new WorkHistoryService(
+    terminalSessionManager,
+    activityQueryService,
+    appServerHistoryGateway,
+    agentTeamService,
+  );
 
   return {
     activityStore,
@@ -321,6 +332,8 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     terminalQuickInputService,
     terminalStateService,
     agentTeamService,
+    appServerHistoryGateway,
+    workHistoryService,
     terminalEventService,
     terminalCompletionEventService,
     terminalRuntimeRegistry,

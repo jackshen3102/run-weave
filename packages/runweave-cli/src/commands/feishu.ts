@@ -138,7 +138,12 @@ export async function runFeishuCommand(
           store,
           client,
           terminalClient,
-        }).catch(() => undefined);
+          stderr: io.stderr,
+        }).catch((error) => {
+          io.stderr.write(
+            `Feishu bridge message handling failed: ${classifyDeliveryError(error)}\n`,
+          );
+        });
       },
     });
     const wsClient = new Lark.WSClient({
@@ -186,6 +191,7 @@ async function handleMessage(params: {
   store: FeishuStateStore;
   client: Lark.Client;
   terminalClient: TerminalHttpClient;
+  stderr: Pick<NodeJS.WriteStream, "write">;
 }): Promise<void> {
   const { event } = params;
   const senderOpenId = event.sender.sender_id?.open_id;
@@ -257,6 +263,9 @@ async function handleMessage(params: {
     await safeReaction(params.client, event.message.message_id);
   } catch (error) {
     await params.store.finishDelivery(event.message.message_id, "failed");
+    params.stderr.write(
+      `Feishu reply delivery failed: ${classifyDeliveryError(error)}\n`,
+    );
     await safeReply(
       params.client,
       event.message.message_id,

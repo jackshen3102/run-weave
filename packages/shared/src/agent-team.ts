@@ -16,10 +16,7 @@ export type AgentTeamStatus =
   | "failed";
 
 /** Worker role catalog — mirrors the prototype's role dots. */
-export type AgentTeamWorkerRole =
-  | "code"
-  | "code_review"
-  | "behavior_verify";
+export type AgentTeamWorkerRole = "code" | "code_review" | "behavior_verify";
 
 export interface AgentTeamAcceptanceEvidence {
   type:
@@ -137,6 +134,10 @@ export interface AgentTeamRepairCycle {
   firstFailedRound: number;
   lastFailedRound: number;
   lastFailureSummary: string;
+  /** Exact reviewer finding and outbox retained for a later human disposition. */
+  finding?: AgentTeamOutboxFinding;
+  reviewTarget?: AgentTeamReviewTarget | null;
+  reviewOutbox?: AgentTeamWorkerOutbox;
 }
 
 export interface AgentTeamLoop {
@@ -201,6 +202,8 @@ export interface AgentTeamRunOptions {
 export interface AgentTeamActiveWorkerDispatch {
   /** Unique identity for this backend-owned dispatch. */
   dispatchId?: string;
+  /** Absent on persisted legacy dispatches whose worker prompt had no dispatch id. */
+  outboxDispatchIdRequired?: boolean;
   role: AgentTeamWorkerRole;
   panelId: string | null;
   tmuxPaneId: string | null;
@@ -223,6 +226,14 @@ export interface AgentTeamSourceFingerprint {
   sha256: string;
 }
 
+export interface AgentTeamConsumedWorkerDispatchReceipt {
+  dispatchId: string;
+  role: AgentTeamWorkerRole;
+  round: number;
+  contentSha256: string;
+  consumedAt: string;
+}
+
 export interface AgentTeamRun {
   runId: string;
   projectId: string;
@@ -242,12 +253,20 @@ export interface AgentTeamRun {
   activeWorkerRole?: AgentTeamWorkerRole | null;
   /** Identifies the current dispatch and separates its result from stale outboxes. */
   activeWorkerDispatch?: AgentTeamActiveWorkerDispatch | null;
+  /** Present on runs that require every newly dispatched outbox to echo dispatchId. */
+  workerDispatchProtocolVersion?: 1;
+  /** Durable receipts for dispatches whose state-machine effect has completed. */
+  consumedWorkerDispatches?: AgentTeamConsumedWorkerDispatchReceipt[];
   clarify: AgentTeamClarifyMessage[];
   proposal: AgentTeamProposal | null;
   workers: AgentTeamWorker[];
   acceptance: AgentTeamAcceptanceCase[];
   loop: AgentTeamLoop;
   humanNotes: HumanInterventionNote[];
+  /** Durable, review-target-scoped human decisions; never rewrites finding facts. */
+  findingDecisions?: AgentTeamFindingDecision[];
+  /** Reviewer result currently paused for an explicit scope/risk decision. */
+  pendingFindingDecision?: AgentTeamPendingFindingDecision | null;
   /** Observation log for the executing sidecar. */
   logs: string[];
   createdAt: string;
@@ -265,6 +284,30 @@ export interface AgentTeamTerminal {
 export type AgentTeamOutboxStatus = "completed" | "failed";
 export type AgentTeamFindingStatus = "open" | "resolved" | "informational";
 export type AgentTeamFindingSeverity = "P0" | "P1" | "P2" | "P3";
+export type AgentTeamFindingDisposition =
+  | "blocking"
+  | "out_of_scope"
+  | "waived";
+
+export interface AgentTeamFindingCaseImpact {
+  /** Backend acceptance case id, not the source markdown heading id. */
+  caseId: string;
+  /** Why this finding violates the selected product case. */
+  summary: string;
+  /** Evidence that connects the reproduced scenario to this product case. */
+  evidence: AgentTeamAcceptanceEvidence[];
+}
+
+export interface AgentTeamReviewFindingReproduction {
+  mode: AgentTeamFixReproductionMode;
+  status: AgentTeamFixReproductionStatus;
+  scenarioId?: string | null;
+  validationSessionId?: string | null;
+  steps: string[];
+  expected: string;
+  actual: string;
+  evidence: AgentTeamAcceptanceEvidence[];
+}
 
 export interface AgentTeamOutboxFinding {
   severity: AgentTeamFindingSeverity;
@@ -275,6 +318,34 @@ export interface AgentTeamOutboxFinding {
   /** Stable system invariant identity for P0/P1 repair accounting. */
   invariantKey?: string;
   verificationMode?: AgentTeamFindingVerificationMode;
+  /** Executed reviewer reproduction; required for every open P0/P1. */
+  reproduction?: AgentTeamReviewFindingReproduction;
+  /** Reviewer proposal. Only a recorded human decision can authorize non-blocking. */
+  disposition?: AgentTeamFindingDisposition;
+  /** Product cases observably affected by this finding. */
+  caseImpacts?: AgentTeamFindingCaseImpact[];
+}
+
+export interface AgentTeamFindingDecision {
+  id: string;
+  invariantKey: string;
+  scenarioId: string | null;
+  /** Immutable finding snapshot; disposition never replaces the observed fact. */
+  finding: AgentTeamOutboxFinding;
+  disposition: AgentTeamFindingDisposition;
+  caseIds: string[];
+  reason: string;
+  decidedAt: string;
+  reviewTarget: AgentTeamReviewTarget | null;
+}
+
+export interface AgentTeamPendingFindingDecision {
+  id: string;
+  finding: AgentTeamOutboxFinding;
+  outbox: AgentTeamWorkerOutbox;
+  reviewTarget: AgentTeamReviewTarget | null;
+  reason: string;
+  requestedAt: string;
 }
 
 export type AgentTeamFixReproductionMode =
@@ -326,6 +397,8 @@ export interface AgentTeamOutboxRecommendation {
 
 export interface AgentTeamWorkerOutbox {
   schemaVersion?: 1;
+  /** Echoes the backend-owned active dispatch; absent only for legacy prompts. */
+  dispatchId?: string | null;
   sessionId: string;
   panelId?: string | null;
   tmuxPaneId?: string | null;
@@ -400,21 +473,19 @@ export interface SubmitAgentTeamSplitGateRequest {
   generatedTestCaseFilePath?: string | null;
 }
 
-export interface RecordAgentTeamRoundRequest {
-  /** Optional per-case results to fold into the loop (used by smoke/e2e). */
-  acceptanceResults?: AgentTeamWorkerOutbox["acceptanceResults"];
-  /** Legacy Debug UI signal; never derived from a worker code diff. */
-  hadDiff?: boolean;
-  /** UI-observed round baseline. Stale manual rounds are ignored. */
-  expectedRound?: number;
-}
-
 export interface ResumeAgentTeamRunRequest {
   note: string;
 }
 
 export interface CompleteAgentTeamRunRequest {
   note?: string;
+}
+
+export interface DecideAgentTeamFindingRequest {
+  invariantKey: string;
+  disposition: AgentTeamFindingDisposition;
+  caseIds?: string[];
+  reason: string;
 }
 
 export interface FocusAgentTeamPaneRequest {

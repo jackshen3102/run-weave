@@ -107,12 +107,14 @@ export function createActiveWorkerDispatch(
     AgentTeamActiveWorkerDispatch,
     | "repairKeys"
     | "dispatchId"
+    | "outboxDispatchIdRequired"
     | "protocolCorrectionAttempt"
     | "protocolCorrectionSourceFingerprint"
   > = {},
 ): AgentTeamActiveWorkerDispatch {
   return {
     dispatchId: options.dispatchId ?? randomUUID(),
+    outboxDispatchIdRequired: options.outboxDispatchIdRequired ?? true,
     role: worker.role,
     panelId: worker.panelId ?? null,
     tmuxPaneId: worker.tmuxPaneId ?? null,
@@ -156,7 +158,7 @@ export function completionReviewTargetMismatch(
 export function resolveActiveWorkerDispatch(
   run: AgentTeamRun,
   worker: AgentTeamWorker,
-): AgentTeamActiveWorkerDispatch {
+): AgentTeamActiveWorkerDispatch | null {
   const persisted = run.activeWorkerDispatch;
   if (
     persisted &&
@@ -165,6 +167,9 @@ export function resolveActiveWorkerDispatch(
     (!persisted.tmuxPaneId || persisted.tmuxPaneId === worker.tmuxPaneId)
   ) {
     return persisted;
+  }
+  if (run.workerDispatchProtocolVersion === 1) {
+    return null;
   }
   const recheckCase = run.acceptance
     .filter(
@@ -190,11 +195,10 @@ export function resolveActiveWorkerDispatch(
         ? (run.reviewCheckpoint?.pendingReview ?? null)
         : null,
       {
-        dispatchId: createLegacyDispatchId(
-          run,
-          worker,
-          recheckCase.recheckRequestedAt,
-        ),
+        dispatchId:
+          recheckCase.recheckDispatchId ??
+          createLegacyDispatchId(run, worker, recheckCase.recheckRequestedAt),
+        outboxDispatchIdRequired: false,
       },
     );
   }
@@ -208,6 +212,7 @@ export function resolveActiveWorkerDispatch(
       : null,
     {
       dispatchId: createLegacyDispatchId(run, worker, run.updatedAt),
+      outboxDispatchIdRequired: false,
     },
   );
 }
@@ -251,6 +256,7 @@ export function completionSignalWorkerMismatch(
 export function completionOutboxIdentityMismatch(
   run: AgentTeamRun,
   worker: AgentTeamWorker,
+  dispatch: AgentTeamActiveWorkerDispatch,
   outbox: AgentTeamWorkerOutbox,
   requireRunId: boolean,
 ): string | null {
@@ -283,6 +289,26 @@ export function completionOutboxIdentityMismatch(
   );
   if (!matchesPanel && !matchesTmuxPane) {
     return "outbox_pane_identity_missing";
+  }
+  const expectedDispatchId = dispatch.dispatchId?.trim() ?? "";
+  const actualDispatchId = outbox.dispatchId?.trim() ?? "";
+  const dispatchIdRequired =
+    run.workerDispatchProtocolVersion === 1 ||
+    dispatch.outboxDispatchIdRequired === true;
+  if (dispatchIdRequired) {
+    if (!expectedDispatchId) {
+      return "active_dispatch_id_missing";
+    }
+    if (!actualDispatchId) {
+      return "outbox_dispatch_id_missing";
+    }
+  }
+  if (
+    expectedDispatchId &&
+    actualDispatchId &&
+    actualDispatchId !== expectedDispatchId
+  ) {
+    return "outbox_dispatch_id_mismatch";
   }
   return null;
 }

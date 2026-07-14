@@ -17,17 +17,12 @@ const runIdSchema = z
   );
 const runParamsSchema = z.object({ runId: runIdSchema }).strict();
 
-const workerRoleEnum = z.enum([
-  "code",
-  "code_review",
-  "behavior_verify",
-]);
+const workerRoleEnum = z.enum(["code", "code_review", "behavior_verify"]);
 const workerDraftSchema = z
   .object({ role: workerRoleEnum, intent: z.string().trim().min(1) })
   .strict();
 const optionalPathSchema = z.preprocess(
-  (value) =>
-    typeof value === "string" && value.trim() === "" ? null : value,
+  (value) => (typeof value === "string" && value.trim() === "" ? null : value),
   z.string().trim().min(1).nullable().optional(),
 );
 const acceptanceDraftSchema = z
@@ -92,48 +87,17 @@ const splitGateSchema = z
   })
   .strict();
 
-const acceptanceResultSchema = z
-  .object({
-    caseId: z.string().trim().min(1),
-    status: z.enum(["pass", "fail", "skipped"]),
-    summary: z.string().trim().min(1).nullable().optional(),
-    skipReason: z.string().trim().min(1).nullable().optional(),
-    evidence: z
-      .array(
-        z
-          .object({
-            type: z.enum([
-              "screenshot",
-              "dom",
-              "text",
-              "command",
-              "event",
-              "json",
-              "log",
-              "code",
-            ]),
-            label: z.string().trim().min(1),
-            summary: z.string().trim().min(1),
-            detail: z.string().trim().min(1).optional(),
-            ref: z.string().trim().min(1),
-          })
-          .strict(),
-      )
-      .default([]),
-  })
-  .strict();
-
-const recordRoundSchema = z
-  .object({
-    acceptanceResults: z.array(acceptanceResultSchema).optional(),
-    hadDiff: z.boolean().optional(),
-    expectedRound: z.number().int().positive().optional(),
-  })
-  .strict();
-
 const resumeSchema = z.object({ note: z.string().trim().min(1) }).strict();
 const completeSchema = z
   .object({ note: z.string().trim().min(1).optional() })
+  .strict();
+const findingDispositionSchema = z
+  .object({
+    invariantKey: z.string().trim().min(1),
+    disposition: z.enum(["blocking", "out_of_scope", "waived"]),
+    caseIds: z.array(z.string().trim().min(1)).optional(),
+    reason: z.string().trim().min(1),
+  })
   .strict();
 const focusSchema = z.object({ panelId: z.string().trim().min(1) }).strict();
 const exportQuerySchema = z
@@ -143,11 +107,15 @@ const exportQuerySchema = z
     includeSessionOther: z
       .enum(["true", "false"])
       .optional()
-      .transform((value) => (value === undefined ? undefined : value === "true")),
+      .transform((value) =>
+        value === undefined ? undefined : value === "true",
+      ),
     includeOutboxes: z
       .enum(["true", "false"])
       .optional()
-      .transform((value) => (value === undefined ? undefined : value === "true")),
+      .transform((value) =>
+        value === undefined ? undefined : value === "true",
+      ),
   })
   .strict();
 
@@ -266,25 +234,6 @@ export function createAgentTeamRouter(
     );
   });
 
-  router.post("/runs/:runId/round", async (req, res) => {
-    const params = runParamsSchema.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ message: "Invalid request params" });
-      return;
-    }
-    const parsed = recordRoundSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-    await handleServiceCall(res, () =>
-      agentTeamService.recordRound(params.data.runId, parsed.data),
-    );
-  });
-
   router.post("/runs/:runId/resume", async (req, res) => {
     const params = runParamsSchema.safeParse(req.params);
     if (!params.success) {
@@ -320,6 +269,25 @@ export function createAgentTeamRouter(
     }
     await handleServiceCall(res, () =>
       agentTeamService.completeRun(params.data.runId, parsed.data),
+    );
+  });
+
+  router.post("/runs/:runId/finding-disposition", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params" });
+      return;
+    }
+    const parsed = findingDispositionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.decideFinding(params.data.runId, parsed.data),
     );
   });
 

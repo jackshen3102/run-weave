@@ -1,14 +1,17 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import type { AgentTeamRun } from "@runweave/shared/agent-team";
+import type {
+  AgentTeamFindingDisposition,
+  AgentTeamRun,
+} from "@runweave/shared/agent-team";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import {
   completeAgentTeamRun,
+  decideAgentTeamFinding,
   focusAgentTeamPane,
   getAgentTeamRunForTerminal,
-  recordAgentTeamRound,
   resumeAgentTeamRun,
   startAgentTeamRun,
   submitAgentTeamSplitGate,
@@ -16,9 +19,13 @@ import {
 import { HttpError } from "../../services/http";
 import {
   AGENT_TEAM_POLL_INTERVAL_MS,
-  PHASE_LABEL,
+  getAgentTeamAttention,
+  getAgentTeamCaseElementId,
+  getAgentTeamStatusPresentation,
   type WorkerDraft,
 } from "./terminal-agent-team-panel-model";
+import { AgentTeamAttentionSummary } from "./terminal-agent-team-panel-attention";
+import { AgentTeamFindingDecisionCard } from "./terminal-agent-team-finding-decision";
 import {
   ExecutingSection,
   ProposalSection,
@@ -231,18 +238,6 @@ export function TerminalAgentTeamPanel({
     );
   });
 
-  const recordRound = useMemoizedFn((hadProgress: boolean): void => {
-    if (!run) {
-      return;
-    }
-    void runAction(() =>
-      recordAgentTeamRound(apiBase, token, run.runId, {
-        hadDiff: hadProgress,
-        expectedRound: run.loop.round,
-      }),
-    );
-  });
-
   const resume = useMemoizedFn((): void => {
     if (!run || !resumeNote.trim()) {
       return;
@@ -263,6 +258,28 @@ export function TerminalAgentTeamPanel({
     ).then(() => setResumeNote(""));
   });
 
+  const decideFinding = useMemoizedFn(
+    (
+      disposition: AgentTeamFindingDisposition,
+      caseIds: string[],
+      reason: string,
+    ): void => {
+      const pending = run?.pendingFindingDecision;
+      const invariantKey = pending?.finding.invariantKey;
+      if (!run || !invariantKey) {
+        return;
+      }
+      void runAction(() =>
+        decideAgentTeamFinding(apiBase, token, run.runId, {
+          invariantKey,
+          disposition,
+          caseIds,
+          reason: reason.trim(),
+        }),
+      );
+    },
+  );
+
   const focusPane = useMemoizedFn((panelId: string): void => {
     if (!run) {
       return;
@@ -276,6 +293,25 @@ export function TerminalAgentTeamPanel({
     workerDraftDirtyRef.current = true;
     setWorkerDrafts(drafts);
   });
+
+  const showAttentionDetails = useMemoizedFn((caseId: string): void => {
+    if (!run) {
+      return;
+    }
+    const element = document.getElementById(
+      getAgentTeamCaseElementId(run.runId, caseId),
+    );
+    element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (element instanceof HTMLElement) {
+      element.focus({ preventScroll: true });
+    }
+  });
+
+  const attention =
+    run?.phase === "executing" ? getAgentTeamAttention(run) : null;
+  const statusPresentation = run
+    ? getAgentTeamStatusPresentation(run, attention)
+    : null;
 
   if (!projectId || !terminalSessionId) {
     return (
@@ -293,18 +329,16 @@ export function TerminalAgentTeamPanel({
           <span
             className={[
               "rounded px-1.5 py-0.5 text-[10px] uppercase",
-              run.status === "need_human"
-                ? "bg-amber-500/20 text-amber-300"
-                : run.status === "running"
-                  ? "bg-emerald-500/20 text-emerald-300"
-                  : "bg-slate-700 text-slate-300",
+              statusPresentation?.tone === "danger"
+                ? "bg-rose-500/20 text-rose-300"
+                : statusPresentation?.tone === "warning"
+                  ? "bg-amber-500/20 text-amber-300"
+                  : statusPresentation?.tone === "running"
+                    ? "bg-emerald-500/20 text-emerald-300"
+                    : "bg-slate-700 text-slate-300",
             ].join(" ")}
           >
-            {run.status === "done"
-              ? "已完成"
-              : run.status === "failed"
-                ? "失败"
-                : PHASE_LABEL[run.phase]}
+            {statusPresentation?.label}
           </span>
         ) : null}
       </div>
@@ -313,6 +347,21 @@ export function TerminalAgentTeamPanel({
         <div className="mx-3 mt-2 rounded border border-rose-800 bg-rose-950/50 px-2 py-1 text-[11px] text-rose-300">
           {error}
         </div>
+      ) : null}
+
+      {run?.pendingFindingDecision ? (
+        <AgentTeamFindingDecisionCard
+          key={run.pendingFindingDecision.id}
+          run={run}
+          busy={busy}
+          onDecide={decideFinding}
+        />
+      ) : run && attention ? (
+        <AgentTeamAttentionSummary
+          attention={attention}
+          onFocusPane={focusPane}
+          onShowDetails={showAttentionDetails}
+        />
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -344,14 +393,17 @@ export function TerminalAgentTeamPanel({
           />
         ) : run.phase === "executing" ? (
           <ExecutingSection
+            apiBase={apiBase}
+            token={token}
+            projectId={projectId}
             run={run}
             busy={busy}
             resumeNote={resumeNote}
             onResumeNoteChange={setResumeNote}
-            onRecordRound={recordRound}
             onResume={resume}
             onComplete={complete}
             onFocusPane={focusPane}
+            onAuthExpired={onAuthExpired}
           />
         ) : null}
       </div>

@@ -1,4 +1,5 @@
 import type { TerminalCompletionEventListResponse, TerminalStateResponse } from "@runweave/shared/terminal/events";
+import type { PrepareTerminalAgentRequest, PrepareTerminalAgentResponse } from "@runweave/shared/terminal/agent-preparation";
 import type { CreateTerminalClipboardImageRequest, CreateTerminalClipboardImageResponse, SendTerminalInputRequest, SendTerminalInputResponse } from "@runweave/shared/terminal/input";
 import type { CreateTerminalPanelRequest, ResizeTerminalPanelRequest, TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { CreateTerminalProjectRequest, TerminalProjectListItem, UpdateTerminalProjectRequest } from "@runweave/shared/terminal/project";
@@ -14,10 +15,10 @@ export {
 } from "./terminal-quick-inputs";
 export {
   completeAgentTeamRun,
+  decideAgentTeamFinding,
   focusAgentTeamPane,
   getAgentTeamRunForTerminal,
   proposeAgentTeamSplit,
-  recordAgentTeamRound,
   resumeAgentTeamRun,
   startAgentTeamRun,
   submitAgentTeamSplitGate,
@@ -138,6 +139,26 @@ export async function createTerminalPanel(
   return requestJson<TerminalPanelWorkspace>(
     apiBase,
     `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/panels`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function prepareTerminalAgent(
+  apiBase: string,
+  token: string,
+  terminalSessionId: string,
+  payload: PrepareTerminalAgentRequest,
+): Promise<PrepareTerminalAgentResponse> {
+  return requestJson<PrepareTerminalAgentResponse>(
+    apiBase,
+    `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/agent/prepare`,
     {
       method: "POST",
       headers: {

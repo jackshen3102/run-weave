@@ -236,6 +236,21 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
     });
   }
 
+  protected async pauseForWorkerDispatchError(
+    run: AgentTeamRun,
+    role: AgentTeamWorkerRole,
+    reason: string,
+  ): Promise<AgentTeamRun> {
+    return this.updateRun(run, {
+      status: "need_human",
+      activeWorkerRole: null,
+      activeWorkerDispatch: null,
+      workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+      loop: { ...run.loop, escalated: true, lastReason: reason },
+      logs: [...run.logs, `⏸ ${role} worker 投递已暂停：${reason}`],
+    });
+  }
+
   private async withVerificationDigests(
     projectRoot: string,
     verification: AgentTeamVerificationConfig,
@@ -389,12 +404,16 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
         | "reviewCheckpoint"
         | "activeWorkerRole"
         | "activeWorkerDispatch"
+        | "workerDispatchProtocolVersion"
+        | "consumedWorkerDispatches"
         | "clarify"
         | "proposal"
         | "workers"
         | "acceptance"
         | "loop"
         | "humanNotes"
+        | "findingDecisions"
+        | "pendingFindingDecision"
         | "logs"
         | "mainPanelId"
       >
@@ -430,8 +449,11 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
     terminal: AgentTeamTerminal,
   ): void {
     const targetAgent = getAgentForCommand(terminal.command ?? null);
-    if (!targetAgent) {
-      return;
+    if (!targetAgent || (targetAgent !== "codex" && targetAgent !== "traex")) {
+      throw new AgentTeamError(
+        409,
+        `Agent-team terminal command "${terminal.command ?? ""}" does not support lifecycle bootstrap`,
+      );
     }
     const currentState = this.terminalStateService.getCurrent(
       session.id,

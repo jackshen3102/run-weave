@@ -1,4 +1,8 @@
-import { type ResolvedProfile, ProfileStore } from "../config/profile-store.js";
+import {
+  type ResolvedProfile,
+  type RunweaveProfile,
+  ProfileStore,
+} from "../config/profile-store.js";
 import { HttpError } from "../errors.js";
 import { createAuthClient, isExpired } from "./auth-client.js";
 import { requestJson, requestVoid } from "./http.js";
@@ -9,6 +13,11 @@ export interface AuthContext {
   accessToken: string;
   requestJson<T>(apiPath: string, init?: RequestInit): Promise<T>;
   requestVoid(apiPath: string, init?: RequestInit): Promise<void>;
+}
+
+interface AuthState {
+  current: RunweaveProfile;
+  refreshPromise?: Promise<RunweaveProfile>;
 }
 
 export async function resolveAuthContext(params: {
@@ -35,6 +44,8 @@ export async function resolveAuthContext(params: {
     throw new HttpError(401, "Runweave access token is missing");
   }
 
+  const state: AuthState = { current };
+
   return {
     profileName: resolved.name,
     baseUrl: current.baseUrl,
@@ -42,7 +53,7 @@ export async function resolveAuthContext(params: {
     async requestJson<T>(apiPath: string, init?: RequestInit) {
       return requestWithAuth<T>({
         resolved,
-        current,
+        state,
         store,
         apiPath,
         init,
@@ -52,7 +63,7 @@ export async function resolveAuthContext(params: {
     async requestVoid(apiPath: string, init?: RequestInit) {
       await requestWithAuth<void>({
         resolved,
-        current,
+        state,
         store,
         apiPath,
         init,
@@ -64,7 +75,7 @@ export async function resolveAuthContext(params: {
 
 async function requestWithAuth<T>(params: {
   resolved: ResolvedProfile;
-  current: { baseUrl: string; accessToken?: string; refreshToken?: string; expiresAt?: string };
+  state: AuthState;
   store: ProfileStore;
   apiPath: string;
   init?: RequestInit;
@@ -78,11 +89,12 @@ async function requestWithAuth<T>(params: {
     },
   });
 
+  const requestedProfile = params.state.current;
   try {
     return await requestWithParser<T>(
-      params.current.baseUrl,
+      requestedProfile.baseUrl,
       params.apiPath,
-      makeInit(params.current.accessToken ?? ""),
+      makeInit(requestedProfile.accessToken ?? ""),
       params.parse,
     );
   } catch (error) {
@@ -90,18 +102,29 @@ async function requestWithAuth<T>(params: {
       !(error instanceof HttpError) ||
       error.status !== 401 ||
       params.resolved.usesEnvAccessToken ||
-      !params.current.refreshToken
+      !requestedProfile.refreshToken
     ) {
       throw error;
     }
   }
 
-  const refreshed = await createAuthClient().refresh(params.current);
-  await params.store.saveProfile(params.resolved.name, refreshed);
+  if (params.state.current.accessToken === requestedProfile.accessToken) {
+    params.state.refreshPromise ??= (async () => {
+      const refreshed = await createAuthClient().refresh(params.state.current);
+      await params.store.saveProfile(params.resolved.name, refreshed);
+      params.state.current = refreshed;
+      return refreshed;
+    })().finally(() => {
+      params.state.refreshPromise = undefined;
+    });
+    await params.state.refreshPromise;
+  }
+
+  const current = params.state.current;
   return requestWithParser<T>(
-    refreshed.baseUrl,
+    current.baseUrl,
     params.apiPath,
-    makeInit(refreshed.accessToken ?? ""),
+    makeInit(current.accessToken ?? ""),
     params.parse,
   );
 }

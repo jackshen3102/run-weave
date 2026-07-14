@@ -5,6 +5,17 @@ import type {
   ActivityDeleteJobDto,
   ActivityOperationScope,
 } from "@runweave/shared/activity";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../../components/ui/alert-dialog";
 import { Button } from "../../components/ui/button";
 import {
   executeActivityOperation,
@@ -51,7 +62,30 @@ export function ActivityPolicyOperations({ apiBase, token }: { apiBase: string; 
         </select>
         <input className="h-9 min-w-72 flex-1 rounded-lg border border-border bg-background px-3 text-sm" value={scopeId} onChange={(event) => setScopeId(event.target.value)} placeholder={`${scopeType} ID`} />
         <Button variant="outline" onClick={() => operation.mutate("export")} disabled={operation.isPending}>Export</Button>
-        <Button variant="destructive" onClick={() => operation.mutate("delete")} disabled={operation.isPending}>Delete</Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" disabled={operation.isPending}>Delete</Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Activity data?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently deletes Activity facts and short-lived content for {scopeType}{" "}
+                {scopeId.trim() || "Not recorded"}. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={operation.isPending}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={operation.isPending}
+                onClick={() => operation.mutate("delete")}
+              >
+                Delete Activity data
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
       {operation.isError ? <p className="mt-3 text-sm text-destructive">{operation.error.message}</p> : null}
       {deleteJobQuery.data ? (

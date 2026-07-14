@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Team Finding 范围裁决</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #020617;
+        color: #cbd5e1;
+        display: grid;
+        place-items: start center;
+        padding: 18px;
+      }
+      main {
+        width: min(460px, 100%);
+        border: 1px solid #1e293b;
+        background: #050b1b;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 14px;
+        border-bottom: 1px solid #1e293b;
+      }
+      header strong {
+        font-size: 13px;
+      }
+      .status {
+        border-radius: 6px;
+        background: #88133766;
+        color: #fda4af;
+        padding: 4px 7px;
+        font-size: 11px;
+      }
+      .card {
+        margin: 12px;
+        border: 1px solid #be123c;
+        border-radius: 8px;
+        background: #4c051933;
+        padding: 12px;
+      }
+      .eyebrow {
+        display: flex;
+        justify-content: space-between;
+        color: #fda4af;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 9px 0 5px;
+        color: #ffe4e6;
+        font-size: 15px;
+        line-height: 1.35;
+      }
+      p {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+      .scenario {
+        margin-top: 10px;
+        border: 1px solid #334155;
+        border-radius: 6px;
+        background: #020617aa;
+        padding: 9px;
+      }
+      .scenario b,
+      .cases b,
+      label > span {
+        display: block;
+        margin-bottom: 5px;
+        color: #94a3b8;
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+      .scenario code {
+        color: #7dd3fc;
+        font-size: 11px;
+      }
+      .facts {
+        margin-top: 6px;
+        display: grid;
+        gap: 4px;
+        color: #cbd5e1;
+        font-size: 11px;
+      }
+      .cases {
+        margin-top: 10px;
+      }
+      .case {
+        display: flex;
+        gap: 8px;
+        margin-top: 6px;
+        border: 1px solid #334155;
+        border-radius: 6px;
+        padding: 8px;
+        background: #0f172a99;
+        font-size: 11px;
+      }
+      .case input {
+        margin-top: 2px;
+      }
+      .source {
+        margin-top: 3px;
+        color: #64748b;
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+      }
+      textarea {
+        width: 100%;
+        margin-top: 10px;
+        min-height: 58px;
+        resize: vertical;
+        border: 1px solid #475569;
+        border-radius: 6px;
+        background: #020617;
+        color: #e2e8f0;
+        padding: 8px;
+        font: inherit;
+        font-size: 11px;
+      }
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 7px;
+        margin-top: 9px;
+      }
+      button {
+        min-height: 34px;
+        border-radius: 6px;
+        border: 1px solid #475569;
+        background: #0f172a;
+        color: #cbd5e1;
+        padding: 6px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      button[data-value="blocking"] {
+        border-color: #be123c;
+        color: #fecdd3;
+      }
+      button[data-value="out_of_scope"] {
+        border-color: #0369a1;
+        color: #bae6fd;
+      }
+      button[data-value="waived"] {
+        border-color: #b45309;
+        color: #fde68a;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+      .error {
+        min-height: 16px;
+        margin-top: 6px;
+        color: #fda4af;
+        font-size: 10px;
+      }
+      .result {
+        display: none;
+        margin: 12px;
+        border: 1px solid #047857;
+        border-radius: 8px;
+        background: #022c2233;
+        padding: 12px;
+        color: #a7f3d0;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <strong>Agent Team</strong><span class="status">需要范围裁决</span>
+      </header>
+      <section class="card" id="decision-card" aria-label="Finding 范围裁决">
+        <div class="eyebrow">
+          <span>Finding 范围裁决</span><span id="severity"></span>
+        </div>
+        <h1 id="title"></h1>
+        <p id="summary"></p>
+        <div class="scenario">
+          <b>复现场景</b>
+          <code id="scenario-id"></code>
+          <div class="facts">
+            <span id="expected"></span><span id="actual"></span>
+          </div>
+        </div>
+        <div class="cases">
+          <b>映射到可追溯产品 Case</b>
+          <div id="case-list"></div>
+        </div>
+        <label
+          ><span>裁决原因</span
+          ><textarea
+            id="reason"
+            placeholder="说明为何继续修复、判定范围外或接受本轮风险"
+          ></textarea>
+        </label>
+        <div class="actions">
+          <button type="button" data-value="blocking">继续修复</button>
+          <button type="button" data-value="out_of_scope">标记范围外</button>
+          <button type="button" data-value="waived">本轮豁免</button>
+        </div>
+        <div class="error" id="error" aria-live="polite"></div>
+      </section>
+      <section class="result" id="result" aria-live="polite"></section>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

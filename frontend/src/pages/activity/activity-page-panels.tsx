@@ -5,9 +5,11 @@ import {
   Clock3,
   Database,
   FileClock,
+  History,
   Search,
   ShieldCheck,
   Unplug,
+  Users,
 } from "lucide-react";
 import type {
   ActivityDataPolicyDto,
@@ -23,18 +25,26 @@ import {
   type ActivityInteraction,
 } from "./activity-interactions";
 
-export type ActivityView = "activity" | "facts" | "timeline" | "sources" | "policy";
+export type ActivityView =
+  | "terminals"
+  | "runs"
+  | "facts"
+  | "timeline"
+  | "sources"
+  | "policy";
 
 const NAVIGATION: Array<{
   id: ActivityView;
   label: string;
   icon: typeof Activity;
+  group: "Work history" | "Raw data" | "Data";
 }> = [
-  { id: "activity", label: "Activity", icon: Activity },
-  { id: "facts", label: "Events", icon: Database },
-  { id: "timeline", label: "Timeline", icon: Clock3 },
-  { id: "sources", label: "Sources", icon: Unplug },
-  { id: "policy", label: "Data Policy", icon: ShieldCheck },
+  { id: "terminals", label: "Terminal History", icon: History, group: "Work history" },
+  { id: "runs", label: "Multi-Agent Runs", icon: Users, group: "Work history" },
+  { id: "facts", label: "Events", icon: Database, group: "Raw data" },
+  { id: "timeline", label: "Timeline", icon: Clock3, group: "Raw data" },
+  { id: "sources", label: "Sources", icon: Unplug, group: "Raw data" },
+  { id: "policy", label: "Data Policy", icon: ShieldCheck, group: "Data" },
 ];
 
 function formatTime(value: string): string {
@@ -121,24 +131,32 @@ export function ActivitySidebar({
         </div>
       </div>
       <nav className="mt-6 grid gap-1" aria-label="Activity views">
-        {NAVIGATION.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={`flex h-10 items-center gap-3 rounded-lg px-3 text-left text-sm ${
-                view === item.id
-                  ? "bg-[hsl(var(--primary))]/12 text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60"
-              }`}
-              onClick={() => onSelectView(item.id)}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </button>
-          );
-        })}
+        {(["Work history", "Raw data", "Data"] as const).map((group) => (
+          <div key={group} className="mb-3 grid gap-1">
+            <p className="px-3 pb-1 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              {group}
+            </p>
+            {NAVIGATION.filter((item) => item.group === group).map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-current={view === item.id ? "page" : undefined}
+                  className={`flex h-10 items-center gap-3 rounded-lg px-3 text-left text-sm ${
+                    view === item.id
+                      ? "bg-[hsl(var(--primary))]/12 text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60"
+                  }`}
+                  onClick={() => onSelectView(item.id)}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
       <div className="mt-8 border-t border-border/70 px-2 pt-4 text-xs text-muted-foreground">
         {currentSourceCount} of {sourceCount} sources current

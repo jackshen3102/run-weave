@@ -30,6 +30,7 @@ import { createTerminalRouter } from "./routes/terminal";
 import { createTestRouter } from "./routes/test";
 import { createPrototypePreviewRouter } from "./routes/prototype-preview";
 import { createVoiceRouter } from "./routes/voice";
+import { createWorkHistoryRouter } from "./routes/work-history";
 import { createCorsMiddleware } from "./server/cors";
 import { resolveFrontendDistDir } from "./server/frontend-dist";
 import {
@@ -204,7 +205,16 @@ function createHttpApp(
       terminalStateService: services.terminalStateService,
     }),
   );
-  app.use("/api/app-server", requireAuth, createAppServerStateRouter());
+  app.use(
+    "/api/app-server",
+    requireAuth,
+    createAppServerStateRouter(services.appServerHistoryGateway),
+  );
+  app.use(
+    "/api/work-history",
+    requireAuth,
+    createWorkHistoryRouter(services.workHistoryService),
+  );
   app.use(
     "/api/agent-team",
     requireAuth,

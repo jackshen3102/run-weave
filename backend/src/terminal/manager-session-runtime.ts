@@ -421,6 +421,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
     this.clearPendingActivityFlush(terminalSessionId);
     this.pendingActivityUpdates.delete(terminalSessionId);
     this.lastAiActiveCommands.delete(terminalSessionId);
+    this.clearPanelAgentOperationState(terminalSessionId);
     this.sessions.delete(terminalSessionId);
     for (const panel of this.panels.values()) {
       if (panel.terminalSessionId === terminalSessionId) {

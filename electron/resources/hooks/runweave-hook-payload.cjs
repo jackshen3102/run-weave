@@ -281,6 +281,8 @@ function buildAppServerBaseEvent({
       panelId: terminalPanelId,
       tmuxPaneId,
       commandName: commandName || null,
+      operationId:
+        process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
     },
   };
 }

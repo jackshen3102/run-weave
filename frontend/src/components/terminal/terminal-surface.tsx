@@ -38,6 +38,8 @@ import {
   type PastedImageReference,
 } from "./terminal-surface-utils";
 
+const TMUX_EXIT_COPY_MODE_REQUEST_COOLDOWN_MS = 1_000;
+
 interface TerminalSurfaceProps {
   active: boolean;
   terminalSessionId: string;
@@ -105,6 +107,7 @@ export function TerminalSurface({
   const floatingDraftDirtyRef = useRef(false);
   const floatingDraftSyncPendingRef = useRef(false);
   const floatingComposerVisibleRef = useRef(false);
+  const tmuxExitCopyModeRequestedAtRef = useRef(0);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<PastedImageReference[]>([]);
   const [bufferType, setBufferType] = useState<
@@ -275,6 +278,15 @@ export function TerminalSurface({
   );
 
   const requestTmuxExitCopyMode = useMemoizedFn(() => {
+    const now = Date.now();
+    if (
+      now - tmuxExitCopyModeRequestedAtRef.current <
+      TMUX_EXIT_COPY_MODE_REQUEST_COOLDOWN_MS
+    ) {
+      return;
+    }
+    tmuxExitCopyModeRequestedAtRef.current = now;
+
     const sendExitRequest = () => {
       void sendTerminalInputRequest(apiBase, token, terminalSessionId, {
         data: "",
@@ -292,7 +304,7 @@ export function TerminalSurface({
     if (!terminal) {
       return;
     }
-    if (tmuxScrollbackActive) {
+    if (runtimeKindRef.current === "tmux") {
       requestTmuxExitCopyMode();
     }
     scrollTerminalToBottom(terminal);
@@ -398,6 +410,7 @@ export function TerminalSurface({
     xtermUserInputSequenceRef,
     onBottomStateChange: handleBottomStateChange,
     onTmuxScrollbackActiveChange: setTmuxScrollbackActive,
+    onTmuxExitCopyModeRequest: requestTmuxExitCopyMode,
   });
 
   useEffect(() => {

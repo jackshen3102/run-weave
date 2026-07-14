@@ -1,4 +1,13 @@
-import type { AgentTeamRun, AgentTeamRunsResponse, CompleteAgentTeamRunRequest, CreateAgentTeamRunRequest, ProposeAgentTeamSplitRequest, RecordAgentTeamRoundRequest, ResumeAgentTeamRunRequest, SubmitAgentTeamSplitGateRequest } from "@runweave/shared/agent-team";
+import type {
+  AgentTeamRun,
+  AgentTeamRunsResponse,
+  CompleteAgentTeamRunRequest,
+  CreateAgentTeamRunRequest,
+  DecideAgentTeamFindingRequest,
+  ProposeAgentTeamSplitRequest,
+  ResumeAgentTeamRunRequest,
+  SubmitAgentTeamSplitGateRequest,
+} from "@runweave/shared/agent-team";
 import { requestJson } from "./http";
 
 const AGENT_TEAM_JSON_HEADERS = (token: string) => ({
@@ -66,23 +75,6 @@ export async function submitAgentTeamSplitGate(
   );
 }
 
-export async function recordAgentTeamRound(
-  apiBase: string,
-  token: string,
-  runId: string,
-  payload: RecordAgentTeamRoundRequest,
-): Promise<AgentTeamRun> {
-  return requestJson<AgentTeamRun>(
-    apiBase,
-    `/api/agent-team/runs/${encodeURIComponent(runId)}/round`,
-    {
-      method: "POST",
-      headers: AGENT_TEAM_JSON_HEADERS(token),
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
 export async function resumeAgentTeamRun(
   apiBase: string,
   token: string,
@@ -109,6 +101,23 @@ export async function completeAgentTeamRun(
   return requestJson<AgentTeamRun>(
     apiBase,
     `/api/agent-team/runs/${encodeURIComponent(runId)}/complete`,
+    {
+      method: "POST",
+      headers: AGENT_TEAM_JSON_HEADERS(token),
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function decideAgentTeamFinding(
+  apiBase: string,
+  token: string,
+  runId: string,
+  payload: DecideAgentTeamFindingRequest,
+): Promise<AgentTeamRun> {
+  return requestJson<AgentTeamRun>(
+    apiBase,
+    `/api/agent-team/runs/${encodeURIComponent(runId)}/finding-disposition`,
     {
       method: "POST",
       headers: AGENT_TEAM_JSON_HEADERS(token),

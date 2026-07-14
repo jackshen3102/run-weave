@@ -4,7 +4,6 @@ import type {
   AgentTeamVerificationConfig,
   AgentTeamWorker,
   AgentTeamWorkerRole,
-  RecordAgentTeamRoundRequest,
 } from "@runweave/shared/agent-team";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { TerminalSessionRecord } from "../terminal/manager";
@@ -43,34 +42,6 @@ export function createSyntheticCompletionEvent(
 
 export function formatErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-export function isStaleExpectedRound(
-  run: AgentTeamRun,
-  expectedRound: number | undefined,
-): boolean {
-  return expectedRound !== undefined && expectedRound !== run.loop.round;
-}
-
-export function isManualFeedbackRound(
-  input: RecordAgentTeamRoundRequest,
-): boolean {
-  const results = input.acceptanceResults;
-  return (
-    Boolean(results?.length) &&
-    results!.every((result) =>
-      result.evidence.some(
-        (evidence) =>
-          evidence.type === "text" &&
-          (evidence.ref === "manual: progress" ||
-            evidence.ref === "manual: no-progress"),
-      ),
-    )
-  );
-}
-
-export function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function resolveAgentTeamTerminal(

@@ -1,4 +1,5 @@
 import type {
+  AgentTeamPendingFindingDecision,
   AgentTeamRun,
   AgentTeamWorker,
 } from "@runweave/shared/agent-team";
@@ -7,12 +8,35 @@ import { AgentTeamSerialDispatchService } from "./service-serial-dispatch";
 import { createActiveWorkerDispatch } from "./service-workflow-policy";
 
 export abstract class AgentTeamRepairProtocolService extends AgentTeamSerialDispatchService {
+  protected async pauseForFindingDecision(
+    run: AgentTeamRun,
+    pendingFindingDecision: AgentTeamPendingFindingDecision,
+  ): Promise<AgentTeamRun> {
+    return this.updateRun(run, {
+      status: "need_human",
+      activeWorkerRole: null,
+      activeWorkerDispatch: null,
+      workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+      pendingFindingDecision,
+      loop: {
+        ...run.loop,
+        repairCycles: [...(run.loop.repairCycles ?? [])],
+        escalated: true,
+        lastReason: pendingFindingDecision.reason,
+      },
+      logs: [
+        ...run.logs,
+        `⏸ Finding 等待人工范围裁决：${pendingFindingDecision.finding.invariantKey ?? pendingFindingDecision.finding.title}`,
+      ],
+    });
+  }
+
   protected async handleProtocolCorrection(
     run: AgentTeamRun,
     worker: AgentTeamWorker,
     outboxMtimeMs: number | null,
     errors: string[],
-    prompt: string,
+    buildPrompt: (run: AgentTeamRun) => string,
     label: string,
   ): Promise<AgentTeamRun> {
     const dispatch = run.activeWorkerDispatch;
@@ -42,29 +66,35 @@ export abstract class AgentTeamRepairProtocolService extends AgentTeamSerialDisp
         `${label} 协议补交无法锁定源码边界：${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    const correctionRun = await this.updateRun(run, {
-      activeWorkerDispatch: {
-        ...(dispatch ??
-          createActiveWorkerDispatch(
-            worker,
-            new Date().toISOString(),
-            outboxMtimeMs,
-            run.loop.round,
-          )),
-        requestedAt: new Date().toISOString(),
-        outboxMtimeMs,
+    const correctionDispatch = createActiveWorkerDispatch(
+      worker,
+      new Date().toISOString(),
+      outboxMtimeMs,
+      dispatch?.round ?? run.loop.round,
+      dispatch?.reviewTarget ?? null,
+      {
+        repairKeys: dispatch?.repairKeys,
         protocolCorrectionAttempt: 1,
         protocolCorrectionSourceFingerprint: sourceFingerprint,
       },
+    );
+    const correctionRun = await this.updateRun(run, {
+      activeWorkerDispatch: correctionDispatch,
+      workerDispatchProtocolVersion: 1,
+      consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
       logs: [
         ...run.logs,
         `${label} 协议不完整，已要求原 worker 只补交 outbox：${errors.join("；")}`,
       ],
     });
     try {
-      await this.promptSender.sendPromptToPane(session, prompt, {
-        panelId: worker.panelId,
-      });
+      await this.promptSender.sendPromptToPane(
+        session,
+        buildPrompt(correctionRun),
+        {
+          panelId: worker.panelId,
+        },
+      );
     } catch (error) {
       return this.pauseForRepairProtocolError(
         correctionRun,

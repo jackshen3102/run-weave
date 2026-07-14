@@ -254,9 +254,11 @@ async function postAgentHook({
   assistantResponse,
   toolHook,
   activityEventId,
+  operationId,
 }) {
   const body = JSON.stringify({
     activityEventId,
+    ...(operationId ? { operationId } : {}),
     terminalSessionId,
     projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
     ...(threadId ? { threadId } : {}),
@@ -475,6 +477,8 @@ async function main() {
           ? toolHook
           : undefined,
       activityEventId,
+      operationId:
+        process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
     });
     appendDebugLog("hook bridge posted agent hook", {
       terminalSessionId,

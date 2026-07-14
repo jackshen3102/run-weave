@@ -1,5 +1,5 @@
 import { WebSocket } from "ws";
-import type { AppServerEventEnvelope, AppServerEventListResponse, AppServerEventStreamMessage, AppServerSyncStatusResponse, AppServerThreadListResponse, AppServerThreadResponse, CreateAppServerEventRequest } from "@runweave/shared/app-server-events";
+import type { AppServerEventEnvelope, AppServerEventListResponse, AppServerEventStreamMessage, AppServerSyncStatusResponse, AppServerThreadDetailResponse, AppServerThreadListResponse, AppServerThreadResponse, CreateAppServerEventRequest } from "@runweave/shared/app-server-events";
 import type { AppServerConnectionInfo } from "@runweave/shared/app-server/types";
 
 export class AppServerClient {
@@ -50,15 +50,32 @@ export class AppServerClient {
     status?: string;
     after?: string | null;
     limit?: number;
-  } = {}): Promise<AppServerThreadListResponse | null> {
+  } = {}, signal?: AbortSignal): Promise<AppServerThreadListResponse | null> {
     const response = await fetch(
       this.buildStateUrl("/threads", options),
-      { headers: this.headers() },
+      { headers: this.headers(), signal },
     );
     if (!response.ok) {
       return null;
     }
     return (await response.json()) as AppServerThreadListResponse;
+  }
+
+  async getThreadDetail(
+    threadId: string,
+    signal?: AbortSignal,
+  ): Promise<AppServerThreadDetailResponse | "thread_not_found" | null> {
+    const response = await fetch(
+      `${this.connection.baseUrl}/threads/${encodeURIComponent(threadId)}/detail`,
+      { headers: this.headers(), signal },
+    );
+    if (response.status === 404) {
+      return "thread_not_found";
+    }
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as AppServerThreadDetailResponse;
   }
 
   async getThread(threadId: string): Promise<AppServerThreadResponse | null> {

@@ -25,6 +25,7 @@
     "./runtime-monitor": "./src/runtime-monitor.ts",
     "./system-monitor": "./src/system-monitor.ts",
     "./terminal": "./src/terminal/index.ts",
+    "./terminal/agent-preparation": "./src/terminal/agent-preparation.ts",
     "./terminal/completion": "./src/terminal/completion.ts",
     "./terminal/events": "./src/terminal/events.ts",
     "./terminal/input": "./src/terminal/input.ts",
@@ -34,7 +35,6 @@
     "./terminal/session": "./src/terminal/session.ts",
     "./terminal/state": "./src/terminal/state.ts",
     "./terminal/websocket": "./src/terminal/websocket.ts",
-    "./terminal-agent-readiness": "./src/terminal-agent-readiness.ts",
     "./terminal-browser-annotation": "./src/terminal-browser-annotation.ts",
     "./terminal-browser-cdp-proxy": "./src/terminal-browser-cdp-proxy.ts",
     "./terminal-browser-device": "./src/terminal-browser-device.ts",
@@ -43,6 +43,7 @@
     "./terminal-limits": "./src/terminal-limits.ts",
     "./terminal-preview-core": "./src/terminal-preview-core.ts",
     "./terminal-protocol": "./src/terminal-protocol.ts",
+    "./work-history": "./src/work-history.ts",
     "./voice": "./src/voice.ts"
   },
   "scripts": {

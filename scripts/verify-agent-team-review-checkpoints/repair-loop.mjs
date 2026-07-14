@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { foldRound } from "../../backend/src/agent-team/loop.ts";
 import { normalizeAgentTeamWorkerOutbox } from "../../backend/src/agent-team/outbox-resolver.ts";
 import {
   buildBounceBackPrompt,
+  buildWorkerStartupPrompt,
   buildWorkerRecheckPrompt,
 } from "../../backend/src/agent-team/prompt-builders.ts";
 import {
@@ -12,19 +14,77 @@ import {
   reviewFindingContractErrors,
   validateCodeFixHandoff,
 } from "../../backend/src/agent-team/repair-loop.ts";
-import {
-  completionSignalWorkerMismatch,
-  createActiveWorkerDispatch,
-  workerOutboxFreshnessMismatch,
-} from "../../backend/src/agent-team/service-workflow-policy.ts";
+import { createActiveWorkerDispatch } from "../../backend/src/agent-team/service-workflow-policy.ts";
 import {
   buildFixVerification,
   buildRepairEvidence,
   buildRepairRun,
   normalizeRepairOutbox,
 } from "./repair-fixtures.mjs";
+import { verifyDispatchProtocolChecks } from "./repair-loop-dispatch.mjs";
+import { verifyFindingDispositionChecks } from "./repair-loop-finding-disposition.mjs";
+
+function buildReviewReproduction(overrides = {}) {
+  return {
+    mode: "review_harness",
+    status: "confirmed",
+    scenarioId: "review-finding-reproduction",
+    steps: ["run the production manager transition"],
+    expected: "the invariant remains satisfied",
+    actual: "the invariant is violated",
+    evidence: [buildRepairEvidence("review-reproduction")],
+    ...overrides,
+  };
+}
 
 export function verifyEvidenceGatedRepairLoop(check) {
+  const executionSource = readFileSync(
+    new URL(
+      "../../backend/src/agent-team/service-execution.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const bounceBody = executionSource.slice(
+    executionSource.indexOf("protected async bounceFailuresToCode"),
+  );
+  const completionSource = readFileSync(
+    new URL(
+      "../../backend/src/agent-team/service-completion.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const repairProtocolSource = readFileSync(
+    new URL(
+      "../../backend/src/agent-team/service-repair-protocol.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  check(
+    "repair-bounce-launches-formal-prompt-as-initial-query",
+    bounceBody.includes("this.agentLaunch.submitAgentLaunch") &&
+      bounceBody.includes("prompt: bouncePrompt") &&
+      bounceBody.indexOf("persistedRun = await this.updateRun") <
+        bounceBody.indexOf("this.agentLaunch.submitAgentLaunch") &&
+      !bounceBody.includes("this.promptSender.sendPromptToPane"),
+    bounceBody.slice(0, 4_000),
+  );
+  check(
+    "repair-consumption-persists-receipt-and-advances-protocol",
+    completionSource.includes("recordConsumedWorkerDispatch") &&
+      completionSource.includes("workerDispatchProtocolVersion: 1") &&
+      completionSource.includes("contentSha256: history.contentSha256"),
+    completionSource.slice(0, 20_000),
+  );
+  check(
+    "repair-protocol-correction-creates-fresh-dispatch-before-prompt",
+    repairProtocolSource.indexOf(
+      "const correctionDispatch = createActiveWorkerDispatch",
+    ) < repairProtocolSource.indexOf("buildPrompt(correctionRun)"),
+    repairProtocolSource,
+  );
   const run = buildRepairRun();
   const behaviorOutbox = normalizeAgentTeamWorkerOutbox({
     sessionId: run.terminalSessionId,
@@ -77,11 +137,37 @@ export function verifyEvidenceGatedRepairLoop(check) {
     "repair-runtime-prompt-requires-real-reproduction",
     runtimePrompt.includes("$toolkit:reproduce-before-fix") &&
       runtimePrompt.includes("同一 scenarioId") &&
-      runtimePrompt.includes("任一必跑项失败立即停止"),
+      runtimePrompt.includes("任一必跑项失败立即停止") &&
+      runtimePrompt.includes(
+        `DispatchId: ${runtimeRun.activeWorkerDispatch.dispatchId}`,
+      ),
     runtimePrompt,
   );
-  const reviewRecheckPrompt = buildWorkerRecheckPrompt({
+  const startupPrompt = buildWorkerStartupPrompt({
     run: runtimeRun,
+    worker: run.workers[0],
+    acceptance: run.acceptance,
+    outboxPath: ".runweave/outbox/repair.json",
+  });
+  check(
+    "repair-startup-prompt-binds-outbox-to-dispatch",
+    startupPrompt.includes(
+      `outbox 顶层 dispatchId 必须等于 "${runtimeRun.activeWorkerDispatch.dispatchId}"`,
+    ),
+    startupPrompt,
+  );
+  const reviewDispatchRun = {
+    ...runtimeRun,
+    activeWorkerRole: "code_review",
+    activeWorkerDispatch: createActiveWorkerDispatch(
+      run.workers[1],
+      run.updatedAt,
+      1,
+      run.loop.round,
+    ),
+  };
+  const reviewRecheckPrompt = buildWorkerRecheckPrompt({
+    run: reviewDispatchRun,
     worker: run.workers[1],
     cases: [run.acceptance[1]],
     triggerSummary: "code handoff",
@@ -92,8 +178,18 @@ export function verifyEvidenceGatedRepairLoop(check) {
       !reviewRecheckPrompt.includes("已完成修复"),
     reviewRecheckPrompt,
   );
+  const behaviorDispatchRun = {
+    ...runtimeRun,
+    activeWorkerRole: "behavior_verify",
+    activeWorkerDispatch: createActiveWorkerDispatch(
+      run.workers[2],
+      run.updatedAt,
+      1,
+      run.loop.round,
+    ),
+  };
   const behaviorRecheckPrompt = buildWorkerRecheckPrompt({
-    run: runtimeRun,
+    run: behaviorDispatchRun,
     worker: run.workers[2],
     cases: [run.acceptance[0]],
     triggerSummary: "incremental review passed",
@@ -103,6 +199,9 @@ export function verifyEvidenceGatedRepairLoop(check) {
     behaviorRecheckPrompt.includes("以下行为 case 尚未验证或需要复验") &&
       behaviorRecheckPrompt.includes("review pass 不代表 behavior pass") &&
       behaviorRecheckPrompt.includes("上游 review 摘要") &&
+      behaviorRecheckPrompt.includes(
+        `DispatchId: ${behaviorDispatchRun.activeWorkerDispatch.dispatchId}`,
+      ) &&
       !behaviorRecheckPrompt.includes("本轮修复摘要") &&
       !behaviorRecheckPrompt.includes("已完成修复"),
     behaviorRecheckPrompt,
@@ -173,6 +272,7 @@ export function verifyEvidenceGatedRepairLoop(check) {
         invariantKey: "checkpoint.index-ownership",
         verificationMode: "structural",
         ref: "review:checkpoint",
+        reproduction: buildReviewReproduction(),
       },
     ],
     acceptanceResults: [
@@ -186,10 +286,14 @@ export function verifyEvidenceGatedRepairLoop(check) {
   });
   check(
     "repair-review-finding-contract-valid",
-    reviewFindingContractErrors(reviewOutbox, reviewOutbox.acceptanceResults)
-      .length === 0,
+    reviewFindingContractErrors(
+      run,
+      reviewOutbox,
+      reviewOutbox.acceptanceResults,
+    ).length === 0,
     reviewOutbox,
   );
+  verifyFindingDispositionChecks(check, { run, reviewOutbox });
   const reviewTargets = resolveRepairTargets(
     run,
     reviewOutbox,
@@ -274,10 +378,39 @@ export function verifyEvidenceGatedRepairLoop(check) {
   check(
     "repair-new-review-finding-requires-stable-key",
     reviewFindingContractErrors(
+      run,
       invalidReviewOutbox,
       invalidReviewOutbox.acceptanceResults,
-    ).length === 2,
+    ).length === 3,
     invalidReviewOutbox,
+  );
+
+  const unreproducedRuntimeOutbox = normalizeAgentTeamWorkerOutbox({
+    ...reviewOutbox,
+    remainingFindings: [
+      {
+        severity: "P1",
+        status: "open",
+        title: "runtime inference only",
+        summary: "an intermediate state looked suspicious",
+        invariantKey: "readiness.runtime-inference",
+        verificationMode: "runtime",
+        reproduction: buildReviewReproduction({
+          mode: "real_product",
+          status: "not_reproduced",
+          scenarioId: "runtime-inference",
+        }),
+      },
+    ],
+  });
+  check(
+    "repair-runtime-review-finding-requires-observable-reproduction",
+    reviewFindingContractErrors(
+      run,
+      unreproducedRuntimeOutbox,
+      unreproducedRuntimeOutbox.acceptanceResults,
+    ).some((error) => error.includes("real_product + reproduced")),
+    unreproducedRuntimeOutbox,
   );
 
   const secondTitleOutbox = normalizeAgentTeamWorkerOutbox({
@@ -295,6 +428,11 @@ export function verifyEvidenceGatedRepairLoop(check) {
         summary: "readiness must use an event boundary",
         invariantKey: "readiness.event-boundary",
         verificationMode: "runtime",
+        reproduction: buildReviewReproduction({
+          mode: "real_product",
+          status: "reproduced",
+          scenarioId: "readiness-event-boundary",
+        }),
       },
     ],
   });
@@ -397,46 +535,12 @@ export function verifyEvidenceGatedRepairLoop(check) {
       ).status === "valid",
     multiRun.activeWorkerDispatch,
   );
-  check(
-    "repair-stale-outbox-cannot-double-count",
-    workerOutboxFreshnessMismatch(
-      createActiveWorkerDispatch(
-        run.workers[0],
-        run.updatedAt,
-        200,
-        run.loop.round,
-      ),
-      200,
-    ) === "outbox_not_newer_than_dispatch_baseline",
-    "stale outbox accepted",
-  );
-  check(
-    "repair-accepted-handoff-restart-state-is-idempotent",
-    incrementRepairAttempts(runtimeRun.loop, [runtimeCycle.repairKey])
-      .repairCycles[0]?.attempts === 1 &&
-      completionSignalWorkerMismatch(
-        {
-          kind: "completion",
-          payload: { panelId: "code-panel", tmuxPaneId: "%1" },
-        },
-        run.workers[1],
-      ) === "signal_panel_mismatch",
-    "a repeated code completion could match the persisted reviewer dispatch",
-  );
-  check(
-    "repair-legacy-outbox-remains-readable",
-    Boolean(
-      normalizeAgentTeamWorkerOutbox({
-        sessionId: "legacy",
-        role: "code",
-        status: "completed",
-        summary: "legacy",
-        error: null,
-        finishedAt: "2026-07-14T00:00:00.000Z",
-      }),
-    ),
-    "legacy outbox rejected",
-  );
+  verifyDispatchProtocolChecks(check, {
+    run,
+    runtimeRun,
+    runtimeCycle,
+    behaviorDispatchRun,
+  });
   check(
     "repair-counters-remain-independent",
     diffFold.loop.noProgressCount === 0 &&

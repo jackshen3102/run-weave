@@ -1,4 +1,5 @@
 import type { AgentTeamAcceptanceCase, AgentTeamLoop, AgentTeamRun, AgentTeamWorkerOutbox } from "@runweave/shared/agent-team";
+import { isDeepStrictEqual } from "node:util";
 import {
   DEFAULT_MAX_REPAIR_ATTEMPTS,
   resolveMaxRepairAttempts,
@@ -46,20 +47,18 @@ interface FoldRoundResult {
   /** Case ids that just crossed the stable-fail threshold this round. */
   newlyStableFailCaseIds: string[];
   hadProgress: boolean;
+  reviewStateChanged: boolean;
 }
 
 /**
  * Fold one round's acceptance results into the run's loop + acceptance state,
  * applying debounce (single-round flip does not count) and objective progress
- * detection. Only acceptance improvement (or an explicit Debug UI signal)
- * clears the counter; a code diff by itself is not objective progress.
+ * detection. Only acceptance improvement clears the counter.
  */
 export function foldRound(
   run: AgentTeamRun,
   params: {
     acceptanceResults?: AgentTeamWorkerOutbox["acceptanceResults"];
-    objectiveProgress?: boolean;
-    observedNoProgress?: boolean;
   },
 ): FoldRoundResult {
   const loop: AgentTeamLoop = {
@@ -85,6 +84,12 @@ export function foldRound(
         lastRunStatus: "skipped" as const,
         skipReason: result.skipReason ?? "复验范围未命中，保持上一轮状态",
         evidence: result.evidence.length > 0 ? result.evidence : acceptanceCase.evidence,
+        recheckRequestedAt: null,
+        recheckDispatchId: null,
+        recheckWorkerPanelId: null,
+        recheckWorkerRole: null,
+        recheckOutboxMtimeMs: null,
+        recheckAttempt: 0,
       };
     }
     if (result.status === "pass") {
@@ -133,14 +138,15 @@ export function foldRound(
 
   const passCount = acceptance.filter((item) => item.status === "pass").length;
   const passRose = passCount > loop.bestPassCount;
-  const hadProgress = passRose || params.objectiveProgress === true;
+  const hadProgress = passRose;
+  const reviewStateChanged = !isDeepStrictEqual(acceptance, run.acceptance);
 
-  loop.round += 1;
+  if (reviewStateChanged) {
+    loop.round += 1;
+  }
   loop.bestPassCount = Math.max(loop.bestPassCount, passCount);
   if (hadProgress) {
     loop.noProgressCount = 0;
-  } else if (params.observedNoProgress === true && resultById.size === 0) {
-    loop.noProgressCount += 1;
   } else if (params.acceptanceResults && params.acceptanceResults.length > 0) {
     // Only count a no-progress round when there were real stable fails; a
     // single-round flip (consecutiveFail below threshold) does not increment.
@@ -164,7 +170,13 @@ export function foldRound(
     }
   }
 
-  return { loop, acceptance, newlyStableFailCaseIds, hadProgress };
+  return {
+    loop,
+    acceptance,
+    newlyStableFailCaseIds,
+    hadProgress,
+    reviewStateChanged,
+  };
 }
 
 export function shouldEscalate(loop: AgentTeamLoop): boolean {

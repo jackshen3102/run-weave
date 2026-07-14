@@ -143,6 +143,33 @@ export class TmuxPaneService extends TmuxSessionService {
     };
   }
 
+  async respawnPane(
+    target: TmuxPaneTarget,
+    params: {
+      cwd: string;
+      command: string;
+      args?: string[];
+      env?: Record<string, string | undefined>;
+    },
+  ): Promise<void> {
+    await this.runTmux(
+      [
+        "respawn-pane",
+        "-k",
+        "-t",
+        target.paneId,
+        "-c",
+        params.cwd,
+        formatShellCommand({
+          command: params.command,
+          args: params.args ?? [],
+          env: params.env,
+        }),
+      ],
+      target,
+    );
+  }
+
   async readSelectedPane(target: TmuxTarget): Promise<string | null> {
     try {
       const result = await this.runTmux(
@@ -165,6 +192,32 @@ export class TmuxPaneService extends TmuxSessionService {
       ["set-option", "-p", "-t", target.paneId, "@runweave_panel_id", panelId],
       target,
     );
+  }
+
+  async setPaneOption(
+    target: TmuxPaneTarget,
+    name: string,
+    value: string,
+  ): Promise<void> {
+    await this.runTmux(
+      ["set-option", "-p", "-t", target.paneId, name, value],
+      target,
+    );
+  }
+
+  async readPaneOption(
+    target: TmuxPaneTarget,
+    name: string,
+  ): Promise<string | null> {
+    try {
+      const result = await this.runTmux(
+        ["show-options", "-p", "-v", "-t", target.paneId, name],
+        target,
+      );
+      return result.stdout.trim() || null;
+    } catch {
+      return null;
+    }
   }
 
   async killPane(target: TmuxPaneTarget): Promise<void> {

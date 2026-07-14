@@ -2,6 +2,7 @@ import { AlertTriangle, Play, Plus, X } from "lucide-react";
 import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import { Button } from "../ui/button";
 import {
+  getAgentTeamCaseElementId,
   ROLE_CYCLE,
   ROLE_LABEL,
   type WorkerDraft,
@@ -46,7 +47,9 @@ export function StartFlowSection({
       </p>
       <ol className="space-y-1 pl-4 text-xs text-slate-400 [list-style:decimal]">
         <li>服务端自动生成并确认 worker 拆分</li>
-        <li>自动 split 出 worker pane，并按 code → review → verify 串行门禁推进</li>
+        <li>
+          自动 split 出 worker pane，并按 code → review → verify 串行门禁推进
+        </li>
       </ol>
       <div className="rounded border border-slate-800 bg-slate-900/50 px-2 py-1.5 text-[11px] leading-relaxed text-slate-400">
         拆分策略：服务端自动拆分。右侧面板只展示状态与日志，不需要手动点击“拆分”。
@@ -192,7 +195,10 @@ export function ProposalSection({
           </div>
           <p className="mb-1 text-[10px] text-slate-500">
             Agent Team 把任务目标落成可观测验收用例，由 behavior_verify worker
-            跑。{splitManagedByServer ? "由服务端随拆分自动确认。" : "与拆分一并确认。"}
+            跑。
+            {splitManagedByServer
+              ? "由服务端随拆分自动确认。"
+              : "与拆分一并确认。"}
           </p>
           <ol className="space-y-0.5 pl-4 text-[11px] text-slate-400 [list-style:decimal]">
             {run.proposal.acceptance.map((item) => (
@@ -253,23 +259,29 @@ export function ProposalSection({
 }
 
 export function ExecutingSection({
+  apiBase,
+  token,
+  projectId,
   run,
   busy,
   resumeNote,
   onResumeNoteChange,
-  onRecordRound,
   onResume,
   onComplete,
   onFocusPane,
+  onAuthExpired,
 }: {
+  apiBase: string;
+  token: string;
+  projectId: string;
   run: AgentTeamRun;
   busy: boolean;
   resumeNote: string;
   onResumeNoteChange: (value: string) => void;
-  onRecordRound: (hadProgress: boolean) => void;
   onResume: () => void;
   onComplete: () => void;
   onFocusPane: (panelId: string) => void;
+  onAuthExpired?: () => void;
 }) {
   const { loop, acceptance } = run;
   const ratio =
@@ -285,11 +297,34 @@ export function ExecutingSection({
           Loop 状态
         </h3>
         <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">
-          {run.activeWorkerRole ? ROLE_LABEL[run.activeWorkerRole] : "Observe Only"}
+          {run.activeWorkerRole
+            ? ROLE_LABEL[run.activeWorkerRole]
+            : "Observe Only"}
         </span>
       </div>
 
       {run.reviewCheckpoint ? <ReviewCheckpointStatus run={run} /> : null}
+
+      {(run.findingDecisions ?? []).length > 0 ? (
+        <div className="rounded border border-sky-900 bg-sky-950/25 p-2 text-[10px] text-sky-200">
+          <div className="font-semibold uppercase text-sky-400">
+            Finding 裁决记录
+          </div>
+          {(run.findingDecisions ?? []).slice(-3).map((decision) => (
+            <div key={decision.id} className="mt-1 break-words">
+              <span className="font-mono">{decision.invariantKey}</span> ·{" "}
+              {formatFindingDisposition(decision.disposition)}
+              {decision.caseIds.length > 0
+                ? ` · ${decision.caseIds.join(", ")}`
+                : ""}
+              <span className="block text-sky-100/80">
+                {decision.finding.severity} · {decision.finding.title}
+              </span>
+              <span className="block text-sky-300/60">{decision.reason}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div
         className={[
@@ -328,7 +363,12 @@ export function ExecutingSection({
         </div>
       </div>
 
-      {loop.escalated ? (
+      {run.pendingFindingDecision ? (
+        <div className="rounded border border-rose-800 bg-rose-950/40 p-2 text-[11px] text-rose-200">
+          Loop 已暂停。请在顶部完成 Finding
+          范围裁决；这里不会提供通用“人工完成”入口。
+        </div>
+      ) : loop.escalated ? (
         <div className="space-y-2 rounded border border-rose-800 bg-rose-950/40 p-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
             <AlertTriangle className="h-4 w-4" /> 已熔断 · 升级人工
@@ -368,38 +408,7 @@ export function ExecutingSection({
         <div className="rounded border border-emerald-900 bg-emerald-950/30 p-2 text-xs text-emerald-300">
           Loop 已完成，worker pane 已冻结。
         </div>
-      ) : (
-        <details className="group rounded border border-slate-800 bg-slate-900/40 p-2">
-          <summary className="cursor-pointer select-none text-[10px] font-medium uppercase text-slate-500 hover:text-slate-300">
-            Debug
-          </summary>
-          <div className="mt-2 text-[10px] text-slate-500">
-            模拟 loop 反馈（连续 {loop.maxNoProgress} 轮无进展将自动熔断）：
-          </div>
-          <div className="mt-1 flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="flex-1 border-emerald-800 text-emerald-300"
-              disabled={busy}
-              onClick={() => onRecordRound(true)}
-            >
-              ✓ 有进展的一轮
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="flex-1 border-rose-800 text-rose-300"
-              disabled={busy}
-              onClick={() => onRecordRound(false)}
-            >
-              ✗ 无进展的一轮
-            </Button>
-          </div>
-        </details>
-      )}
+      ) : null}
 
       <div>
         <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-400">
@@ -415,8 +424,10 @@ export function ExecutingSection({
           {acceptance.map((item) => (
             <div
               key={item.caseId}
+              id={getAgentTeamCaseElementId(run.runId, item.caseId)}
+              tabIndex={-1}
               className={[
-                "rounded border px-2 py-1.5 text-[11px]",
+                "rounded border px-2 py-1.5 text-[11px] outline-none focus:ring-1 focus:ring-amber-400",
                 item.status === "pass"
                   ? "border-emerald-900 bg-emerald-950/30"
                   : item.status === "fail"
@@ -458,9 +469,13 @@ export function ExecutingSection({
                     </div>
                   ) : null}
                   <AcceptanceEvidenceDetails
+                    apiBase={apiBase}
+                    token={token}
+                    projectId={projectId}
                     status={item.status}
                     summary={item.resultSummary}
                     evidence={item.evidence}
+                    onAuthExpired={onAuthExpired}
                   />
                   {item.status === "fail" && item.bouncedToPanelId ? (
                     <div className="mt-0.5 text-[10px] text-amber-400">
@@ -487,6 +502,15 @@ export function ExecutingSection({
       </div>
     </div>
   );
+}
+
+function formatFindingDisposition(
+  disposition: "blocking" | "out_of_scope" | "waived",
+): string {
+  if (disposition === "blocking") {
+    return "继续修复";
+  }
+  return disposition === "out_of_scope" ? "范围外" : "本轮豁免";
 }
 
 function ReviewCheckpointStatus({ run }: { run: AgentTeamRun }) {

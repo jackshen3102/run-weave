@@ -23,7 +23,7 @@ export {
 
 const DEFAULT_TAIL_LINES = 120;
 export const DEFAULT_CONFIRM_TIMEOUT_MS = 3000;
-export const DEFAULT_AGENT_START_TIMEOUT_MS = 15000;
+export const DEFAULT_AGENT_START_TIMEOUT_MS = 120000;
 
 export async function sendWithConfirmation(params: {
   client: TerminalHttpClient;

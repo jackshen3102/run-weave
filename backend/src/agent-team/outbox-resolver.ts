@@ -235,6 +235,10 @@ export function normalizeAgentTeamWorkerOutbox(
 
   return {
     ...record,
+    dispatchId:
+      typeof record.dispatchId === "string" && record.dispatchId.trim()
+        ? record.dispatchId.trim()
+        : null,
     sessionId,
     projectId: record.projectId ?? options.projectId ?? null,
     panelId: record.panelId ?? options.panelId ?? null,
@@ -264,7 +268,11 @@ export function normalizeAgentTeamWorkerOutbox(
         : (options.finishedAt ?? new Date(0).toISOString()),
     findings: normalizeFindings(record.findings, "open"),
     resolvedFindings: normalizeFindings(record.resolvedFindings, "resolved"),
-    remainingFindings: normalizeFindings(record.remainingFindings, "open"),
+    remainingFindings:
+      Array.isArray(record.remainingFindings) &&
+      record.remainingFindings.length === 0
+        ? []
+        : normalizeFindings(record.remainingFindings, "open"),
     recommendations: normalizeRecommendations(record.recommendations),
     fixVerifications: normalizeFixVerifications(record.fixVerifications),
     acceptanceResults: normalizeAcceptanceResults(

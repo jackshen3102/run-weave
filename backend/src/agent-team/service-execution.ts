@@ -1,6 +1,8 @@
 import type {
   AgentTeamActiveWorkerDispatch,
   AgentTeamAcceptanceCase,
+  AgentTeamPendingFindingDecision,
+  AgentTeamRepairCycle,
   AgentTeamRun,
   AgentTeamStatus,
   AgentTeamWorker,
@@ -138,11 +140,6 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
         frozen: true,
       };
       boundWorkers.push(boundWorker);
-      if (panelId) {
-        await this.agentReadiness.ensureAgentReady(session, terminal, {
-          panelId,
-        });
-      }
     }
     const activeWorkerRole = resolveInitialActiveWorkerRole(boundWorkers);
     const activeWorkers = setActiveWorker(boundWorkers, activeWorkerRole);
@@ -156,25 +153,48 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
         activeWorker,
       );
       const requestedAt = new Date().toISOString();
-      await this.promptSender.sendPromptToPane(
-        session,
-        buildWorkerStartupPrompt({
-          run,
-          worker: activeWorker,
-          acceptance: executionAcceptance,
-          outboxPath: this.paths.workerOutboxRelativePath(
-            run.terminalSessionId,
-            activeWorker,
-          ),
-        }),
-        { panelId: activeWorker.panelId },
-      );
       activeWorkerDispatch = createActiveWorkerDispatch(
         activeWorker,
         requestedAt,
         outboxMtimeMs,
         run.loop.round,
       );
+    }
+    const persistedRun = await this.updateRun(run, {
+      phase: "executing",
+      status: "running",
+      terminal,
+      proposal: null,
+      activeWorkerRole,
+      activeWorkerDispatch,
+      workerDispatchProtocolVersion: 1,
+      consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
+      workers: activeWorkers,
+      acceptance: executionAcceptance,
+      logs: [...run.logs, context.log],
+    });
+    if (activeWorker?.panelId && activeWorkerDispatch) {
+      const startupPrompt = buildWorkerStartupPrompt({
+        run: persistedRun,
+        worker: activeWorker,
+        acceptance: executionAcceptance,
+        outboxPath: this.paths.workerOutboxRelativePath(
+          run.terminalSessionId,
+          activeWorker,
+        ),
+      });
+      try {
+        await this.agentLaunch.submitAgentLaunch(session, terminal, {
+          panelId: activeWorker.panelId,
+          prompt: startupPrompt,
+        });
+      } catch (error) {
+        return this.pauseForWorkerDispatchError(
+          persistedRun,
+          activeWorker.role,
+          `readiness 失败：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     if (this.tmuxService && activeWorkers.some((worker) => worker.panelId)) {
       try {
@@ -191,25 +211,13 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       }
     }
     await this.restoreMainPaneFocus(session, run.mainPanelId);
-    return this.updateRun(run, {
-      phase: "executing",
-      status: "running",
-      terminal,
-      proposal: null,
-      activeWorkerRole,
-      activeWorkerDispatch,
-      workers: activeWorkers,
-      acceptance: executionAcceptance,
-      logs: [...run.logs, context.log],
-    });
+    return persistedRun;
   }
 
   protected async applyRound(
     run: AgentTeamRun,
     params: {
       acceptanceResults?: AgentTeamWorkerOutbox["acceptanceResults"];
-      objectiveProgress?: boolean;
-      observedNoProgress?: boolean;
       forceBounceCaseIds?: string[];
       repairTargets?: AgentTeamRepairTarget[];
       completedWorkerRole?: AgentTeamWorkerRole | null;
@@ -236,12 +244,9 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       round: run.loop.round,
     });
     const logs = [...runWithGates.logs];
-    if (folded.hadProgress) {
+    if (folded.reviewStateChanged && folded.hadProgress) {
       logs.push(`round ${run.loop.round} 有进展，noProgress 计数清零`);
-    } else if (
-      params.acceptanceResults?.length ||
-      params.observedNoProgress === true
-    ) {
+    } else if (folded.reviewStateChanged && params.acceptanceResults?.length) {
       logs.push(
         `round ${run.loop.round} 无进展，noProgress=${folded.loop.noProgressCount}/${folded.loop.maxNoProgress}`,
       );
@@ -254,9 +259,18 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     // This completion consumed the current dispatch. A follow-up bounce or
     // serial worker dispatch will install a new boundary below.
     let activeWorkerDispatch: AgentTeamActiveWorkerDispatch | null = null;
+    let pendingFindingDecision: AgentTeamPendingFindingDecision | null = null;
     const allAcceptancePassed =
       folded.acceptance.length > 0 &&
       folded.acceptance.every((item) => item.status === "pass");
+    const blockedBehaviorCases =
+      params.completedWorkerRole === "behavior_verify" &&
+      !params.acceptanceResults?.some((result) => result.status === "fail")
+        ? folded.acceptance.filter(
+            (item) =>
+              item.status === "pending" && item.lastRunStatus === "skipped",
+          )
+        : [];
     const needsFinalReview = Boolean(
       allAcceptancePassed &&
       run.reviewCheckpoint &&
@@ -269,6 +283,14 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       activeWorkerRole = null;
       activeWorkerDispatch = null;
       logs.push(`✅ 所有验收用例通过，run 完成`);
+    } else if (blockedBehaviorCases.length > 0) {
+      const reason = `behavior_verify 环境阻塞，必跑用例未完成：${blockedBehaviorCases.map((item) => item.caseId).join(", ")}`;
+      loop = { ...repairFolded.loop, escalated: true, lastReason: reason };
+      status = "need_human";
+      workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
+      activeWorkerRole = null;
+      activeWorkerDispatch = null;
+      logs.push(`⏸ ${reason}`);
     } else if (repairFolded.exhausted.length > 0) {
       const reason = buildRepairEscalationReason(repairFolded.exhausted);
       loop = { ...repairFolded.loop, escalated: true, lastReason: reason };
@@ -276,6 +298,10 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
       activeWorkerRole = null;
       activeWorkerDispatch = null;
+      pendingFindingDecision = pendingDecisionFromReviewCycle(
+        repairFolded.exhausted,
+        reason,
+      );
       logs.push(`⏸ ${reason}`);
     } else if (shouldEscalate(repairFolded.loop)) {
       const reason = buildEscalationReason(
@@ -288,6 +314,10 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
       activeWorkerRole = null;
       activeWorkerDispatch = null;
+      pendingFindingDecision = pendingDecisionFromReviewCycle(
+        repairFolded.loop.repairCycles,
+        reason,
+      );
       logs.push(`⏸ ${reason}`);
     }
 
@@ -298,6 +328,9 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       workers,
       activeWorkerRole,
       activeWorkerDispatch,
+      pendingFindingDecision,
+      workerDispatchProtocolVersion: 1,
+      consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
       logs,
     });
 
@@ -358,46 +391,92 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     if (!session) {
       return run;
     }
+    let persistedRun: AgentTeamRun | null = null;
     try {
       const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(
         session,
         codeWorker,
       );
       const requestedAt = new Date().toISOString();
-      await this.promptSender.sendPromptToPane(
-        session,
-        buildBounceBackPrompt({ run, failedCases, repairCycles }),
-        { panelId: codeWorker.panelId },
+      const activeWorkerDispatch = createActiveWorkerDispatch(
+        codeWorker,
+        requestedAt,
+        outboxMtimeMs,
+        run.loop.round,
+        null,
+        { repairKeys: repairCycles.map((cycle) => cycle.repairKey) },
       );
+      const terminal = resolveAgentTeamTerminal(run.terminal);
+      const bouncePrompt = buildBounceBackPrompt({
+        run: {
+          ...run,
+          activeWorkerRole: "code",
+          activeWorkerDispatch,
+        },
+        failedCases,
+        repairCycles,
+      });
       const bouncedAcceptance = run.acceptance.map((item) =>
         caseIds.includes(item.caseId)
           ? { ...item, bouncedToPanelId: codeWorker.panelId }
           : item,
       );
-      return this.updateRun(run, {
+      persistedRun = await this.updateRun(run, {
         acceptance: bouncedAcceptance,
         activeWorkerRole: "code",
-        activeWorkerDispatch: createActiveWorkerDispatch(
-          codeWorker,
-          requestedAt,
-          outboxMtimeMs,
-          run.loop.round,
-          null,
-          { repairKeys: repairCycles.map((cycle) => cycle.repairKey) },
-        ),
+        activeWorkerDispatch,
+        workerDispatchProtocolVersion: 1,
+        consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
         workers: setActiveWorker(run.workers, "code"),
         logs: [
           ...run.logs,
           `用例 ${caseIds.join(", ")} 稳定失败，抛回 code pane ${codeWorker.panelId}`,
         ],
       });
+      await this.agentLaunch.submitAgentLaunch(session, terminal, {
+        panelId: codeWorker.panelId,
+        prompt: bouncePrompt,
+      });
+      return persistedRun;
     } catch (error) {
       agentTeamLogger.warn("agent-team.bounce.failed", {
         message: "Could not bounce failure back to code pane",
         runId: run.runId,
         error,
       });
+      if (persistedRun) {
+        return this.pauseForWorkerDispatchError(
+          persistedRun,
+          "code",
+          `bounce prompt 投递失败：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       return run;
     }
   }
+}
+
+function pendingDecisionFromReviewCycle(
+  cycles: AgentTeamRepairCycle[],
+  reason: string,
+): AgentTeamPendingFindingDecision | null {
+  const cycle = cycles.find(
+    (item) =>
+      item.sourceRole === "code_review" && item.finding && item.reviewOutbox,
+  );
+  if (!cycle?.finding || !cycle.reviewOutbox) {
+    return null;
+  }
+  return {
+    id: [
+      cycle.finding.invariantKey ?? cycle.repairKey,
+      cycle.finding.reproduction?.scenarioId ?? "no-scenario",
+      cycle.reviewTarget?.targetTree ?? "no-target",
+    ].join(":"),
+    finding: cycle.finding,
+    outbox: cycle.reviewOutbox,
+    reviewTarget: cycle.reviewTarget ?? null,
+    reason,
+    requestedAt: new Date().toISOString(),
+  };
 }
