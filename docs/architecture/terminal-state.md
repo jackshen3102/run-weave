@@ -32,6 +32,8 @@ export interface TerminalState {
 
 Codex 终端 session 还可以记录 `threadId` 和短 preview。它们用于 App 首页和终端列表展示；在 tmux session 丢失且当前 `activeCommand` 仍是 Codex 时，`threadId` 也可作为 `codex resume <threadId>` 的恢复参数。它们不属于 `TerminalState` 本体，也不能代替 hook / active command 判定。
 
+Terminal session 与 panel metadata 中的 current/last thread 必须同时携带 provider 和 thread ID。Codex、Trae、TraeX、TraeCLI 的 thread ID 不能只作为裸字符串保存或展示；同一 pane 从 Codex 切到 TraeX 时，旧 Codex last thread 与新 TraeX current thread 依靠 provider 字段区分。App Home、Terminal list、panel workspace 和 App Server ThreadRef 查询都只能消费这种 provider-aware identity，不能用 cwd、时间接近度或最近 hook 猜测归属。
+
 ## 状态来源
 
 后端 `TerminalStateService` 的主状态来源只有两类：
@@ -44,6 +46,8 @@ Codex 终端 session 还可以记录 `threadId` 和短 preview。它们用于 Ap
    - `SessionStart` -> `agent_idle`
    - `UserPromptSubmit` -> `agent_running`
    - `Stop` -> `agent_idle`
+
+Trae family 的 ready 判定必须来自当前启动轮次的真实输出。Agent Team 在 tmux-backed pane 中启动 TraeX worker 时，会先建立 pane-local startup output boundary，再发送启动命令；ready detector 必须同时看到 active command owner 仍属于 Trae family，并在该 boundary 之后看到新的 ready prompt。旧 ready 画面、其他 pane 输出、启动失败后的残留 prompt 或仅有 owner 切换都不能把状态推进为可派发任务。
 
 另外，app-server event center 上的 `agent.completion` 只允许作为受限兜底：当 backend 消费到同一 terminal session 的 `completionReason="hook_stop"` 且原始 hook event 为 `Stop` / `SubagentStop` 时，可以把它规范化为一次 `Stop` hook，并复用 agent hook processor 的 active command、grace window、session 生命周期和 source gate 规则校正为 `agent_idle`。App Server 自身也可以在 Codex `thread/read` 轮询发现 projected 状态与真实 thread 状态不一致时，写入一条 `payload.compensation=true` 的 `agent.hook` 补偿事件；backend 仍把它当作普通 hook 事件处理。这不是新的 completion 状态机，也不能让 notify、manual completion、AI process exit 或普通 completion feed 写入 `TerminalState`。
 

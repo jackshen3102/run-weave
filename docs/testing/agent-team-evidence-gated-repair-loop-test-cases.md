@@ -8,7 +8,7 @@
 
 ## 前提事实
 
-- 实施计划：`docs/plans/2026-07-14-agent-team-evidence-gated-repair-loop.md`。
+- 长期边界：`docs/architecture/multi-agent-orchestrator.md` 中的修复交接与预算规则。
 - run 真相：`.runweave/agent-team/<runId>.json`。
 - worker 结果：pane-scoped `.runweave/outbox/<sessionId>.panel-<panelId>.json`。
 - 串行路径：`code -> code_review -> behavior_verify`；只有 bounced code completion 需要 `fixVerifications`。

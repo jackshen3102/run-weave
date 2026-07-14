@@ -11,3 +11,4 @@
 ## 当前参考入口
 
 - `system-activity-data-foundation/`：行为事实底座的 Facts、Timeline、Sources、Data Policy 四视图原型。
+- `terminal-activity-archives/`：Terminal Activity Journal 与 Multi-Agent Round Journal 的冻结交互原型，说明 Terminal 档案、Thread 分段、异构事件 Inspector 与 Run Round 归因的产品方向。
