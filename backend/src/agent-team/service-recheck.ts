@@ -11,6 +11,7 @@ import { AgentTeamCompletionService } from "./service-completion";
 import { agentTeamLogger } from "./service-context";
 import {
   ensureWorkerGateAcceptance,
+  findActiveRecheckCases,
   findRecheckWatchdogCases,
   groupRecheckCasesByWorker,
   isGateWorkerOutbox,
@@ -29,9 +30,20 @@ import {
 
 const RECHECK_WATCHDOG_INTERVAL_MS = 10_000;
 const RECHECK_TIMEOUT_MS = 60 * 60 * 1000;
+const RECHECK_WATCHDOG_MAX_CONTINUOUS_GAP_MS = RECHECK_WATCHDOG_INTERVAL_MS * 3;
 const MAX_RECHECK_ATTEMPTS = 2;
 
+type RecheckWatchdogClock = {
+  lastObservedAtMs: number;
+  activeElapsedMs: number;
+};
+
 export class AgentTeamRecheckService extends AgentTeamCompletionService {
+  private readonly recheckWatchdogClocks = new Map<
+    string,
+    RecheckWatchdogClock
+  >();
+
   protected startRecheckWatchdog(): void {
     if (this.recheckWatchdogTimer) {
       return;
@@ -86,10 +98,48 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
           ) {
             return;
           }
-          if (findRecheckWatchdogCases(latest).length > 0) {
+          if (this.hasObservedRecheckTimeout(latest)) {
             await this.handleTimedOutRechecks(latest);
           }
         });
+      }
+    }
+  }
+
+  private hasObservedRecheckTimeout(
+    run: AgentTeamRun,
+    nowMs = Date.now(),
+  ): boolean {
+    const dispatchId = run.activeWorkerDispatch?.dispatchId;
+    const activeCases = findActiveRecheckCases(run);
+    if (!dispatchId || activeCases.length === 0) {
+      this.clearRecheckWatchdogClocks(run.runId);
+      return false;
+    }
+
+    const clockKey = `${run.runId}:${dispatchId}`;
+    const previous = this.recheckWatchdogClocks.get(clockKey);
+    const observedGapMs = previous ? nowMs - previous.lastObservedAtMs : 0;
+    const activeElapsedMs =
+      previous &&
+      observedGapMs >= 0 &&
+      observedGapMs <= RECHECK_WATCHDOG_MAX_CONTINUOUS_GAP_MS
+        ? previous.activeElapsedMs + observedGapMs
+        : (previous?.activeElapsedMs ?? 0);
+
+    this.clearRecheckWatchdogClocks(run.runId, clockKey);
+    this.recheckWatchdogClocks.set(clockKey, {
+      lastObservedAtMs: nowMs,
+      activeElapsedMs,
+    });
+    return activeElapsedMs >= RECHECK_TIMEOUT_MS;
+  }
+
+  private clearRecheckWatchdogClocks(runId: string, keepKey?: string): void {
+    const prefix = `${runId}:`;
+    for (const key of this.recheckWatchdogClocks.keys()) {
+      if (key.startsWith(prefix) && key !== keepKey) {
+        this.recheckWatchdogClocks.delete(key);
       }
     }
   }

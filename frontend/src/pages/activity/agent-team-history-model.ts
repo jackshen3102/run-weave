@@ -63,7 +63,12 @@ export function buildAgentTeamJournal(
       summary: fact.result?.status ?? readPayloadSummary(fact),
       round: attribution.round,
       attributionSource: attribution.source,
-      selection: { type: "fact", fact },
+      selection: {
+        type: "fact",
+        fact,
+        round: attribution.round,
+        attributionSource: attribution.source,
+      },
     };
     if (attribution.round === null) {
       unassigned.push(item);

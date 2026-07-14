@@ -243,9 +243,15 @@ export function hasPendingRecheckRequest(
 export function findRecheckWatchdogCases(
   run: AgentTeamRun,
 ): AgentTeamAcceptanceCase[] {
+  return findActiveRecheckCases(run).filter(isOverdueRecheckCase);
+}
+
+export function findActiveRecheckCases(
+  run: AgentTeamRun,
+): AgentTeamAcceptanceCase[] {
   return run.acceptance.filter(
     (item) =>
-      isOverdueRecheckCase(item) &&
+      hasPendingRecheckRequest(item) &&
       recheckCaseBelongsToActiveDispatch(run, item),
   );
 }
@@ -278,14 +284,14 @@ export function recheckCaseBelongsToActiveDispatch(
   const current = run.reviewCheckpoint.pendingReview;
   return Boolean(
     expected &&
-      current &&
-      expected.scope === current.scope &&
-      expected.baseCommit === current.baseCommit &&
-      expected.targetTree === current.targetTree &&
-      expected.planSha256 === current.planSha256 &&
-      expected.testCaseSha256 === current.testCaseSha256 &&
-      expected.requestedAt === current.requestedAt &&
-      expected.changedPaths.join("\0") === current.changedPaths.join("\0"),
+    current &&
+    expected.scope === current.scope &&
+    expected.baseCommit === current.baseCommit &&
+    expected.targetTree === current.targetTree &&
+    expected.planSha256 === current.planSha256 &&
+    expected.testCaseSha256 === current.testCaseSha256 &&
+    expected.requestedAt === current.requestedAt &&
+    expected.changedPaths.join("\0") === current.changedPaths.join("\0"),
   );
 }
 

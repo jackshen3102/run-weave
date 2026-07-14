@@ -11,7 +11,16 @@ import type { TerminalSessionListItem } from "@runweave/shared/terminal/session"
 export type WorkHistorySelection =
   | { type: "terminal"; terminal: TerminalSessionListItem }
   | { type: "thread"; thread: AppServerThreadDetailResponse }
-  | { type: "fact"; fact: ActivityFactDto }
+  | {
+      type: "fact";
+      fact: ActivityFactDto;
+      round?: number | null;
+      attributionSource?:
+        | "activity_payload"
+        | "dispatch_snapshot"
+        | "run_log_single_round"
+        | "unavailable";
+    }
   | { type: "run"; run: AgentTeamRun }
   | { type: "worker"; worker: AgentTeamWorker }
   | { type: "case"; acceptanceCase: AgentTeamAcceptanceCase }

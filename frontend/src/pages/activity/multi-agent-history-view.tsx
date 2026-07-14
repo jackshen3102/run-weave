@@ -273,9 +273,10 @@ function JournalSection({
                 <div>
                   <p className="text-sm font-medium">{item.title}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{item.summary}</p>
-                  {item.round !== null ? (
+                  {item.selection.type === "fact" ? (
                     <p className="mt-2 text-[0.68rem] text-muted-foreground">
-                      Round {item.round} · {item.attributionSource}
+                      {item.round !== null ? `Round ${item.round} · ` : ""}
+                      attributionSource={item.attributionSource}
                     </p>
                   ) : null}
                 </div>

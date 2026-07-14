@@ -24,6 +24,15 @@ export function WorkHistoryInspector({
   if (selection.type === "fact") {
     return (
       <div className="p-4">
+        {selection.attributionSource ? (
+          <div className="mb-3 rounded-lg border border-border/70 p-3 text-sm">
+            <p className="text-xs text-muted-foreground">Round attribution</p>
+            <p className="mt-1">
+              attributionSource={selection.attributionSource}
+              {selection.round != null ? ` · Round ${selection.round}` : ""}
+            </p>
+          </div>
+        ) : null}
         <ActivityFactDetail
           apiBase={apiBase}
           token={token}
