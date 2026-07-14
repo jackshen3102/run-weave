@@ -229,6 +229,7 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
   }
 
   async clearPanelsForSession(terminalSessionId: string): Promise<void> {
+    this.clearPanelAgentOperationState(terminalSessionId);
     for (const panel of this.panels.values()) {
       if (panel.terminalSessionId === terminalSessionId) {
         this.panels.delete(panel.id);

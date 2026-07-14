@@ -8,6 +8,7 @@ import type {
   AgentTeamFixVerification,
   AgentTeamOutboxFinding,
   AgentTeamOutboxRecommendation,
+  AgentTeamReviewFindingReproduction,
 } from "@runweave/shared/agent-team";
 
 const VALID_EVIDENCE_TYPES = new Set<AgentTeamAcceptanceEvidence["type"]>([
@@ -101,6 +102,9 @@ function normalizeFinding(
   const status = VALID_FINDING_STATUSES.has(rawStatus as AgentTeamFindingStatus)
     ? (rawStatus as AgentTeamFindingStatus)
     : defaultStatus;
+  const reproduction = normalizeReviewFindingReproduction(
+    record.reproduction,
+  );
   return {
     severity,
     status,
@@ -116,6 +120,53 @@ function normalizeFinding(
     record.verificationMode === "structural"
       ? { verificationMode: record.verificationMode }
       : {}),
+    ...(reproduction ? { reproduction } : {}),
+  };
+}
+
+export function normalizeReviewFindingReproduction(
+  value: unknown,
+): AgentTeamReviewFindingReproduction | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const steps = Array.isArray(record.steps)
+    ? record.steps
+        .filter((step): step is string => typeof step === "string")
+        .map((step) => step.trim())
+        .filter(Boolean)
+    : [];
+  const expected =
+    typeof record.expected === "string" ? record.expected.trim() : "";
+  const actual = typeof record.actual === "string" ? record.actual.trim() : "";
+  if (
+    !VALID_REPRODUCTION_MODES.has(
+      record.mode as AgentTeamFixReproductionMode,
+    ) ||
+    !VALID_REPRODUCTION_STATUSES.has(
+      record.status as AgentTeamFixReproductionStatus,
+    ) ||
+    steps.length === 0 ||
+    !expected ||
+    !actual
+  ) {
+    return null;
+  }
+  return {
+    mode: record.mode as AgentTeamFixReproductionMode,
+    status: record.status as AgentTeamFixReproductionStatus,
+    ...(typeof record.scenarioId === "string" && record.scenarioId.trim()
+      ? { scenarioId: record.scenarioId.trim() }
+      : {}),
+    ...(typeof record.validationSessionId === "string" &&
+    record.validationSessionId.trim()
+      ? { validationSessionId: record.validationSessionId.trim() }
+      : {}),
+    steps,
+    expected,
+    actual,
+    evidence: normalizeEvidenceList(record.evidence),
   };
 }
 

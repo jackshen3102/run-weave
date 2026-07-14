@@ -87,6 +87,38 @@ export function reviewFindingContractErrors(
         `remainingFindings[${index}].verificationMode 必须是 runtime 或 structural`,
       );
     }
+    const reproduction = finding.reproduction;
+    if (!reproduction) {
+      errors.push(
+        `remainingFindings[${index}].reproduction 缺失或不完整；无法复现不得提交 open P0/P1`,
+      );
+      return errors;
+    }
+    if (
+      finding.verificationMode === "runtime" &&
+      (reproduction.mode !== "real_product" ||
+        reproduction.status !== "reproduced" ||
+        !reproduction.scenarioId)
+    ) {
+      errors.push(
+        `remainingFindings[${index}].reproduction 必须是 real_product + reproduced，并提供 scenarioId`,
+      );
+    }
+    if (
+      finding.verificationMode === "structural" &&
+      (reproduction.mode === "real_product" ||
+        (reproduction.status !== "confirmed" &&
+          reproduction.status !== "reproduced"))
+    ) {
+      errors.push(
+        `remainingFindings[${index}].reproduction 必须是 review_harness/static_contract + confirmed|reproduced`,
+      );
+    }
+    if (reproduction.evidence.length === 0) {
+      errors.push(
+        `remainingFindings[${index}].reproduction.evidence 至少需要一条可追溯证据`,
+      );
+    }
     return errors;
   });
 }
@@ -139,7 +171,12 @@ export function resolveRepairTargets(
         caseIds: reviewCaseIds,
         invariant: finding.summary,
         verificationMode: finding.verificationMode,
-        sourceEvidenceRefs: finding.ref ? [finding.ref] : [],
+        sourceEvidenceRefs: Array.from(
+          new Set([
+            ...(finding.ref ? [finding.ref] : []),
+            ...(finding.reproduction?.evidence.map((item) => item.ref) ?? []),
+          ]),
+        ),
         failureSummary: `${finding.severity}: ${finding.title}`,
       },
     ];

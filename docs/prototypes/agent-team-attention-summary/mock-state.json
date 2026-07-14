@@ -1,0 +1,42 @@
+{
+  "defaultState": "review-blocker",
+  "states": {
+    "review-blocker": {
+      "runStatusLabel": "人工结束 · 有遗留",
+      "issueCount": 1,
+      "attention": {
+        "severity": "P1",
+        "title": "Review 未通过",
+        "summary": "成功提交的 operation generation 没有生命周期退休点，可能导致 panel 保持 agent_running。",
+        "meta": "case_25 · 已抛回 Code pane"
+      },
+      "cases": [
+        {
+          "id": "AGT-WH-001",
+          "status": "pass",
+          "summary": "Activity 新导航与默认视图已通过。"
+        },
+        {
+          "id": "AGT-WH-007",
+          "status": "pass",
+          "summary": "Activity facts 不可用时仍保留 Terminal 与 Thread 信息。"
+        },
+        {
+          "id": "AGT-WH-010",
+          "status": "pass",
+          "summary": "不同宽度下 Inspector 布局与焦点恢复已通过。"
+        },
+        {
+          "id": "AGT-WH-021",
+          "status": "pass",
+          "summary": "Events、Timeline、Sources 与 Data Policy 已通过。"
+        },
+        {
+          "id": "case_25",
+          "status": "fail",
+          "summary": "P1：成功提交的 operation generation 没有生命周期退休点。"
+        }
+      ]
+    }
+  }
+}

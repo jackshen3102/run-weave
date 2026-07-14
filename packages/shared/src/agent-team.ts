@@ -201,6 +201,8 @@ export interface AgentTeamRunOptions {
 export interface AgentTeamActiveWorkerDispatch {
   /** Unique identity for this backend-owned dispatch. */
   dispatchId?: string;
+  /** Absent on persisted legacy dispatches whose worker prompt had no dispatch id. */
+  outboxDispatchIdRequired?: boolean;
   role: AgentTeamWorkerRole;
   panelId: string | null;
   tmuxPaneId: string | null;
@@ -266,6 +268,17 @@ export type AgentTeamOutboxStatus = "completed" | "failed";
 export type AgentTeamFindingStatus = "open" | "resolved" | "informational";
 export type AgentTeamFindingSeverity = "P0" | "P1" | "P2" | "P3";
 
+export interface AgentTeamReviewFindingReproduction {
+  mode: AgentTeamFixReproductionMode;
+  status: AgentTeamFixReproductionStatus;
+  scenarioId?: string | null;
+  validationSessionId?: string | null;
+  steps: string[];
+  expected: string;
+  actual: string;
+  evidence: AgentTeamAcceptanceEvidence[];
+}
+
 export interface AgentTeamOutboxFinding {
   severity: AgentTeamFindingSeverity;
   status?: AgentTeamFindingStatus;
@@ -275,6 +288,8 @@ export interface AgentTeamOutboxFinding {
   /** Stable system invariant identity for P0/P1 repair accounting. */
   invariantKey?: string;
   verificationMode?: AgentTeamFindingVerificationMode;
+  /** Executed reviewer reproduction; required for every open P0/P1. */
+  reproduction?: AgentTeamReviewFindingReproduction;
 }
 
 export type AgentTeamFixReproductionMode =
@@ -326,6 +341,8 @@ export interface AgentTeamOutboxRecommendation {
 
 export interface AgentTeamWorkerOutbox {
   schemaVersion?: 1;
+  /** Echoes the backend-owned active dispatch; absent only for legacy prompts. */
+  dispatchId?: string | null;
   sessionId: string;
   panelId?: string | null;
   tmuxPaneId?: string | null;

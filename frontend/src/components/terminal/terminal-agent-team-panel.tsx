@@ -16,9 +16,12 @@ import {
 import { HttpError } from "../../services/http";
 import {
   AGENT_TEAM_POLL_INTERVAL_MS,
-  PHASE_LABEL,
+  getAgentTeamAttention,
+  getAgentTeamCaseElementId,
+  getAgentTeamStatusPresentation,
   type WorkerDraft,
 } from "./terminal-agent-team-panel-model";
+import { AgentTeamAttentionSummary } from "./terminal-agent-team-panel-attention";
 import {
   ExecutingSection,
   ProposalSection,
@@ -277,6 +280,25 @@ export function TerminalAgentTeamPanel({
     setWorkerDrafts(drafts);
   });
 
+  const showAttentionDetails = useMemoizedFn((caseId: string): void => {
+    if (!run) {
+      return;
+    }
+    const element = document.getElementById(
+      getAgentTeamCaseElementId(run.runId, caseId),
+    );
+    element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (element instanceof HTMLElement) {
+      element.focus({ preventScroll: true });
+    }
+  });
+
+  const attention =
+    run?.phase === "executing" ? getAgentTeamAttention(run) : null;
+  const statusPresentation = run
+    ? getAgentTeamStatusPresentation(run, attention)
+    : null;
+
   if (!projectId || !terminalSessionId) {
     return (
       <div className="flex h-full items-center justify-center p-4 text-xs text-slate-500">
@@ -293,18 +315,16 @@ export function TerminalAgentTeamPanel({
           <span
             className={[
               "rounded px-1.5 py-0.5 text-[10px] uppercase",
-              run.status === "need_human"
-                ? "bg-amber-500/20 text-amber-300"
-                : run.status === "running"
-                  ? "bg-emerald-500/20 text-emerald-300"
-                  : "bg-slate-700 text-slate-300",
+              statusPresentation?.tone === "danger"
+                ? "bg-rose-500/20 text-rose-300"
+                : statusPresentation?.tone === "warning"
+                  ? "bg-amber-500/20 text-amber-300"
+                  : statusPresentation?.tone === "running"
+                    ? "bg-emerald-500/20 text-emerald-300"
+                    : "bg-slate-700 text-slate-300",
             ].join(" ")}
           >
-            {run.status === "done"
-              ? "已完成"
-              : run.status === "failed"
-                ? "失败"
-                : PHASE_LABEL[run.phase]}
+            {statusPresentation?.label}
           </span>
         ) : null}
       </div>
@@ -313,6 +333,14 @@ export function TerminalAgentTeamPanel({
         <div className="mx-3 mt-2 rounded border border-rose-800 bg-rose-950/50 px-2 py-1 text-[11px] text-rose-300">
           {error}
         </div>
+      ) : null}
+
+      {run && attention ? (
+        <AgentTeamAttentionSummary
+          attention={attention}
+          onFocusPane={focusPane}
+          onShowDetails={showAttentionDetails}
+        />
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">

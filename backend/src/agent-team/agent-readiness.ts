@@ -39,7 +39,10 @@ export class AgentTeamAgentReadinessService {
   ): Promise<void> {
     const detectedAgent = getAgentForCommand(terminal.command ?? null);
     if (!detectedAgent) {
-      return;
+      throw new AgentTeamError(
+        409,
+        `Agent-team terminal command "${terminal.command ?? ""}" does not support lifecycle bootstrap`,
+      );
     }
     if (detectedAgent !== "codex" && detectedAgent !== "traex") {
       throw new AgentTeamError(

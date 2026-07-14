@@ -35,6 +35,9 @@ export interface ProcessTerminalAgentHookInput {
   panelId?: string | null;
   tmuxPaneId?: string | null;
   commandName?: string | null;
+}
+
+interface ProcessTerminalAgentHookContext {
   currentThreadIdentityMatched?: boolean;
 }
 
@@ -72,6 +75,7 @@ export async function processTerminalAgentHook(
     terminalStateService: TerminalStateService;
   },
   input: ProcessTerminalAgentHookInput,
+  context: ProcessTerminalAgentHookContext = {},
 ): Promise<ProcessTerminalAgentHookResult> {
   let session = options.terminalSessionManager.getSession(
     input.terminalSessionId,
@@ -115,9 +119,9 @@ export async function processTerminalAgentHook(
   }
   const panel = panelResolution.panel;
   const hookThreadId = input.threadId?.trim() || null;
-  const activePreparation = Boolean(
+  const operationGenerationTracked = Boolean(
     panel
-      ? options.terminalSessionManager.hasPanelAgentPreparation(
+      ? options.terminalSessionManager.hasPanelAgentOperationGeneration(
           session.id,
           panel.id,
         )
@@ -126,14 +130,21 @@ export async function processTerminalAgentHook(
   const operationIdentityMatched = Boolean(
     panel &&
       input.operationId &&
-      options.terminalSessionManager.matchesPanelAgentPreparation(
+      options.terminalSessionManager.matchesPanelAgentOperationGeneration(
         session.id,
         panel.id,
         input.operationId,
         input.agent,
       ),
   );
-  if (activePreparation && !operationIdentityMatched) {
+  const trustedCurrentThreadIdentityMatched = Boolean(
+    context.currentThreadIdentityMatched,
+  );
+  if (
+    operationGenerationTracked &&
+    !operationIdentityMatched &&
+    !trustedCurrentThreadIdentityMatched
+  ) {
     return {
       status: "ignored",
       terminalSessionId: session.id,
@@ -148,7 +159,7 @@ export async function processTerminalAgentHook(
     };
   }
   const currentThreadIdentityMatched =
-    operationIdentityMatched || Boolean(input.currentThreadIdentityMatched);
+    operationIdentityMatched || trustedCurrentThreadIdentityMatched;
 
   const sessionAgent = getTerminalSessionAgent(session);
   const panelAgent = panel ? getTerminalSessionAgent(panel) : null;

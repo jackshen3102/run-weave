@@ -2,6 +2,7 @@ import { AlertTriangle, Play, Plus, X } from "lucide-react";
 import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import { Button } from "../ui/button";
 import {
+  getAgentTeamCaseElementId,
   ROLE_CYCLE,
   ROLE_LABEL,
   type WorkerDraft,
@@ -46,7 +47,9 @@ export function StartFlowSection({
       </p>
       <ol className="space-y-1 pl-4 text-xs text-slate-400 [list-style:decimal]">
         <li>服务端自动生成并确认 worker 拆分</li>
-        <li>自动 split 出 worker pane，并按 code → review → verify 串行门禁推进</li>
+        <li>
+          自动 split 出 worker pane，并按 code → review → verify 串行门禁推进
+        </li>
       </ol>
       <div className="rounded border border-slate-800 bg-slate-900/50 px-2 py-1.5 text-[11px] leading-relaxed text-slate-400">
         拆分策略：服务端自动拆分。右侧面板只展示状态与日志，不需要手动点击“拆分”。
@@ -192,7 +195,10 @@ export function ProposalSection({
           </div>
           <p className="mb-1 text-[10px] text-slate-500">
             Agent Team 把任务目标落成可观测验收用例，由 behavior_verify worker
-            跑。{splitManagedByServer ? "由服务端随拆分自动确认。" : "与拆分一并确认。"}
+            跑。
+            {splitManagedByServer
+              ? "由服务端随拆分自动确认。"
+              : "与拆分一并确认。"}
           </p>
           <ol className="space-y-0.5 pl-4 text-[11px] text-slate-400 [list-style:decimal]">
             {run.proposal.acceptance.map((item) => (
@@ -285,7 +291,9 @@ export function ExecutingSection({
           Loop 状态
         </h3>
         <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">
-          {run.activeWorkerRole ? ROLE_LABEL[run.activeWorkerRole] : "Observe Only"}
+          {run.activeWorkerRole
+            ? ROLE_LABEL[run.activeWorkerRole]
+            : "Observe Only"}
         </span>
       </div>
 
@@ -415,8 +423,10 @@ export function ExecutingSection({
           {acceptance.map((item) => (
             <div
               key={item.caseId}
+              id={getAgentTeamCaseElementId(run.runId, item.caseId)}
+              tabIndex={-1}
               className={[
-                "rounded border px-2 py-1.5 text-[11px]",
+                "rounded border px-2 py-1.5 text-[11px] outline-none focus:ring-1 focus:ring-amber-400",
                 item.status === "pass"
                   ? "border-emerald-900 bg-emerald-950/30"
                   : item.status === "fail"

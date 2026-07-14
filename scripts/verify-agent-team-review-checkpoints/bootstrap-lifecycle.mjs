@@ -4,6 +4,7 @@ import path from "node:path";
 import { AgentTeamService } from "../../backend/src/agent-team/service.ts";
 import { prepareTerminalAgent } from "../../backend/src/terminal/application/agent-preparation.ts";
 import { processTerminalAgentHook } from "../../backend/src/terminal/agent-hook-processor.ts";
+import { handleAgentLifecycleEvent } from "../../backend/src/app-server/handlers/agent-lifecycle.ts";
 import { ensureTmuxPanelWorkspace } from "../../backend/src/terminal/application/panel-workspace.ts";
 import { LowDbTerminalSessionStore } from "../../backend/src/terminal/lowdb-store.ts";
 import { TerminalSessionManager } from "../../backend/src/terminal/manager.ts";
@@ -35,6 +36,7 @@ export async function verifyBootstrapLifecycle(check, roots) {
   await verifyCreatedPanelWaitsTenSeconds(check, roots);
   await verifyStaleHooksHaveNoSideEffects(check, roots);
   await verifyProductionStaleHooksHaveNoSideEffects(check, roots);
+  await verifyFailedRetryRestoresPreviousGeneration(check, roots);
   await verifyPanelSingleFlight(check, roots);
   await verifyNonShellRespawnFailsClosed(check, roots);
   await verifyCreatedPanelFailureIsAtomic(check, roots);
@@ -325,6 +327,12 @@ async function verifyCommandSubmissionReturnsStarting(check, roots) {
             harness.session.id,
             harness.panel.id,
           ) &&
+          harness.manager.matchesPanelAgentOperationGeneration(
+            harness.session.id,
+            harness.panel.id,
+            result.operationId,
+            "codex",
+          ) &&
           harness.activePanelMutationListeners() === 0,
         { result, panel: harness.manager.getPanel(harness.panel.id) },
       );
@@ -335,6 +343,15 @@ async function verifyCommandSubmissionReturnsStarting(check, roots) {
         "codex",
         result.operationId,
       );
+      const beforeStale = captureHookMetadata(harness);
+      const stale = await publishIdle(
+        harness,
+        harness.panel.id,
+        "stale-thread",
+        "codex",
+        "stale-operation",
+      );
+      const afterStale = captureHookMetadata(harness);
       const idle = await publishIdle(
         harness,
         harness.panel.id,
@@ -346,11 +363,13 @@ async function verifyCommandSubmissionReturnsStarting(check, roots) {
       check(
         "bootstrap-hooks-update-lifecycle-after-starting-response",
         running.status === "recorded" &&
+          stale.status === "ignored" &&
+          JSON.stringify(afterStale) === JSON.stringify(beforeStale) &&
           idle.status === "recorded" &&
           completedPanel?.lastThreadId === "fresh-thread" &&
           completedPanel.lastThreadStatus === "idle" &&
           completedPanel.terminalState?.state === "agent_idle",
-        { running, idle, completedPanel },
+        { running, stale, beforeStale, afterStale, idle, completedPanel },
       );
     });
   });
@@ -477,6 +496,11 @@ async function verifyProductionStaleHooksHaveNoSideEffects(check, roots) {
     if (!began) {
       throw new Error("production hook fixture could not begin preparation");
     }
+    harness.manager.releasePanelAgentPreparation(
+      harness.session.id,
+      harness.panel.id,
+      operationId,
+    );
 
     const before = captureProductionHookState(
       harness,
@@ -528,19 +552,239 @@ async function verifyProductionStaleHooksHaveNoSideEffects(check, roots) {
       callbacks,
       events,
     );
-    harness.manager.endPanelAgentPreparation(
-      harness.session.id,
-      harness.panel.id,
-      operationId,
-    );
-
     check(
       "bootstrap-production-stale-and-missing-hooks-have-zero-side-effects",
       stale.status === "ignored" &&
         missing.status === "ignored" &&
+        !harness.manager.hasPanelAgentPreparation(
+          harness.session.id,
+          harness.panel.id,
+        ) &&
+        harness.manager.hasPanelAgentOperationGeneration(
+          harness.session.id,
+          harness.panel.id,
+        ) &&
         JSON.stringify(afterStale) === JSON.stringify(before) &&
         JSON.stringify(afterMissing) === JSON.stringify(before),
       { before, afterStale, afterMissing, stale, missing },
+    );
+    const event = (threadId, provider = "codex") => ({
+      id: `lifecycle-${threadId}`,
+      version: 1,
+      kind: "agent.lifecycle.observed",
+      source: { app: "app-server", instanceId: "lifecycle-verifier" },
+      scope: {
+        projectId: harness.session.projectId,
+        terminalSessionId: harness.session.id,
+        terminalPanelId: harness.panel.id,
+        terminalTmuxPaneId: harness.panel.tmuxPaneId,
+        cwd: harness.session.cwd,
+      },
+      correlationId: threadId,
+      payload: {
+        source: provider,
+        threadId,
+        observedStatus: "idle",
+        observedLifecycle: "thread/read:idle",
+        lifecycleCursor: "thread/read:idle",
+        detailStatus: "idle",
+        compensation: true,
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    const beforeMismatch = captureHookMetadata(harness);
+    await handleAgentLifecycleEvent(event("wrong-thread"), {
+      terminalSessionManager: harness.manager,
+      terminalStateService,
+    });
+    const afterMismatch = captureHookMetadata(harness);
+    await handleAgentLifecycleEvent(event("panel-current-thread"), {
+      terminalSessionManager: harness.manager,
+      terminalStateService,
+    });
+    await Promise.all(callbackUpdates);
+    const completedPanel = harness.manager.getPanel(harness.panel.id);
+    const completedSession = harness.manager.getSession(harness.session.id);
+
+    check(
+      "bootstrap-trusted-current-thread-lifecycle-compensation-recorded",
+      JSON.stringify(afterMismatch) === JSON.stringify(beforeMismatch) &&
+        completedPanel?.terminalState?.state === "agent_idle" &&
+        completedPanel.threadId == null &&
+        completedPanel.lastThreadId === "panel-current-thread" &&
+        completedPanel.lastThreadStatus === "idle" &&
+        completedSession?.lastThreadId === "panel-current-thread" &&
+        completedSession.lastThreadStatus === "idle" &&
+        harness.manager.hasPanelAgentOperationGeneration(
+          harness.session.id,
+          harness.panel.id,
+        ),
+      {
+        beforeMismatch,
+        afterMismatch,
+        completedPanel,
+        completedSession,
+      },
+    );
+  });
+}
+
+async function verifyFailedRetryRestoresPreviousGeneration(check, roots) {
+  await withHarness(roots, async (harness) => {
+    const running = { state: "agent_running", agent: "codex" };
+    await harness.manager.updateSessionMetadata(harness.session.id, {
+      cwd: harness.session.cwd,
+      activeCommand: "codex",
+    });
+    await harness.manager.updateSessionTerminalState(
+      harness.session.id,
+      running,
+    );
+    harness.panel.activeCommand = "codex";
+    await harness.manager.upsertPanel(harness.panel);
+    await harness.manager.updatePanelTerminalState(harness.panel.id, running);
+    await harness.manager.updateSessionThreadId(
+      harness.session.id,
+      "current-thread",
+      "codex",
+    );
+    await harness.manager.updateSessionLastThread(
+      harness.session.id,
+      "current-thread",
+      "running",
+      new Date(Date.now() - 2_000),
+      "codex",
+    );
+    await harness.manager.updatePanelThreadId(
+      harness.panel.id,
+      "current-thread",
+      "codex",
+    );
+    await harness.manager.updatePanelLastThread(
+      harness.panel.id,
+      "current-thread",
+      "running",
+      new Date(Date.now() - 1_000),
+      "codex",
+    );
+
+    const terminalStateStore = new TerminalStateStore([
+      [harness.session.id, running],
+    ]);
+    const callbacks = [];
+    const callbackUpdates = [];
+    const events = [];
+    const terminalStateService = new TerminalStateService(
+      terminalStateStore,
+      {
+        record(event) {
+          events.push(event);
+        },
+      },
+      (terminalSessionId, terminalState) => {
+        callbacks.push({ terminalSessionId, terminalState });
+        callbackUpdates.push(
+          harness.manager.updateSessionTerminalState(
+            terminalSessionId,
+            terminalState,
+          ),
+        );
+      },
+    );
+    const currentOperationId = "submitted-operation-a";
+    const began = harness.manager.beginPanelAgentPreparation(
+      harness.session.id,
+      harness.panel.id,
+      currentOperationId,
+      "codex",
+    );
+    if (!began) {
+      throw new Error("retry rollback fixture could not begin operation A");
+    }
+    harness.manager.releasePanelAgentPreparation(
+      harness.session.id,
+      harness.panel.id,
+      currentOperationId,
+    );
+
+    const staleHook = () =>
+      processTerminalAgentHook(
+        {
+          terminalSessionManager: harness.manager,
+          terminalStateService,
+        },
+        {
+          terminalSessionId: harness.session.id,
+          panelId: harness.panel.id,
+          tmuxPaneId: harness.panel.tmuxPaneId,
+          operationId: "stale-operation",
+          agent: "codex",
+          hookEvent: "Stop",
+          threadId: "stale-thread",
+        },
+      );
+    const initial = captureProductionHookState(
+      harness,
+      terminalStateStore,
+      callbacks,
+      events,
+    );
+    const beforeRetry = await staleHook();
+    const afterFirstStale = captureProductionHookState(
+      harness,
+      terminalStateStore,
+      callbacks,
+      events,
+    );
+    const listPanes = harness.tmuxService.listPanes.bind(harness.tmuxService);
+    harness.tmuxService.listPanes = async (target) =>
+      (await listPanes(target)).map((pane) =>
+        pane.paneId === harness.panel.tmuxPaneId
+          ? {
+              ...pane,
+              activeCommand: "codex",
+              activeCommandSource: "runweave_command",
+              paneCommand: "node",
+            }
+          : pane,
+      );
+    const retryError = await captureError(() => prepare(harness));
+    const afterRetry = await staleHook();
+    await Promise.all(callbackUpdates);
+    const final = captureProductionHookState(
+      harness,
+      terminalStateStore,
+      callbacks,
+      events,
+    );
+
+    check(
+      "bootstrap-failed-retry-restores-previous-operation-generation",
+      beforeRetry.status === "ignored" &&
+        retryError?.statusCode === 409 &&
+        retryError.message.includes("not ready") &&
+        afterRetry.status === "ignored" &&
+        harness.manager.matchesPanelAgentOperationGeneration(
+          harness.session.id,
+          harness.panel.id,
+          currentOperationId,
+          "codex",
+        ) &&
+        !harness.manager.hasPanelAgentPreparation(
+          harness.session.id,
+          harness.panel.id,
+        ) &&
+        JSON.stringify(afterFirstStale) === JSON.stringify(initial) &&
+        JSON.stringify(final) === JSON.stringify(initial),
+      {
+        initial,
+        beforeRetry,
+        afterFirstStale,
+        retryError: describeError(retryError),
+        afterRetry,
+        final,
+      },
     );
   });
 }

@@ -13,7 +13,7 @@ const ROLE_LABEL: Record<string, string> = {
 const EVIDENCE_SCHEMA =
   'acceptanceResults[] 必须包含每条 case 独立的 summary 结论；evidence[] 使用 { type, label, summary, ref, detail? }。type 可用 "text"、"dom"、"screenshot"、"command"、"event"、"json"、"log"、"code"；label 是短标题，evidence summary 是单条证据说明，ref 保留原始证据路径、文本或标识。';
 const FINDING_SCHEMA =
-  '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings；字段为 { severity: "P0"|"P1"|"P2"|"P3", status?: "open"|"resolved"|"informational", title, summary, ref?, invariantKey?, verificationMode? }。每个 open P0/P1 必须提供稳定的小写 invariantKey（字母/数字/点/下划线/连字符）和 verificationMode: "runtime"|"structural"；同一系统 invariant 的标题或位置变化时复用原 key。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
+  '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings。每个 open P0/P1 必须提供稳定的小写 invariantKey、verificationMode: "runtime"|"structural"，以及 reproduction: { mode: "real_product"|"review_harness"|"static_contract", status: "reproduced"|"confirmed", scenarioId?, validationSessionId?, steps: string[], expected, actual, evidence[] }。runtime finding 只能使用 real_product + reproduced + scenarioId，并写清实际可观察错误；只观察到内部中间状态、静态推断、未复现或环境阻塞时不得提交 open P0/P1。structural finding 必须由 review_harness/static_contract 确认。同一 invariant 复用同一 key。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
 
 export function buildMainTestCaseGenerationPrompt(params: {
   run: AgentTeamRun;
@@ -211,7 +211,7 @@ export function buildReviewFindingCorrectionPrompt(params: {
     "只补正当前 pane-scoped outbox 的 remainingFindings：",
     ...params.errors.map((error) => `- ${error}`),
     "",
-    "每个 open P0/P1 必须补稳定 invariantKey 和 verificationMode；同一 invariant 复用同一 key。补交仍无效将自动升级人工。",
+    "每个 open P0/P1 必须补稳定 invariantKey、verificationMode 和已执行的 reproduction。runtime finding 必须真实复现可观察错误；无法复现就从 remainingFindings 移除，不得把推断补写成复现。补交仍无效将自动升级人工。",
   ].join("\n");
 }
 

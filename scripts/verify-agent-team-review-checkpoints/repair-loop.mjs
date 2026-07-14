@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { foldRound } from "../../backend/src/agent-team/loop.ts";
 import { normalizeAgentTeamWorkerOutbox } from "../../backend/src/agent-team/outbox-resolver.ts";
 import {
@@ -24,7 +25,37 @@ import {
   normalizeRepairOutbox,
 } from "./repair-fixtures.mjs";
 
+function buildReviewReproduction(overrides = {}) {
+  return {
+    mode: "review_harness",
+    status: "confirmed",
+    scenarioId: "review-finding-reproduction",
+    steps: ["run the production manager transition"],
+    expected: "the invariant remains satisfied",
+    actual: "the invariant is violated",
+    evidence: [buildRepairEvidence("review-reproduction")],
+    ...overrides,
+  };
+}
+
 export function verifyEvidenceGatedRepairLoop(check) {
+  const executionSource = readFileSync(
+    new URL(
+      "../../backend/src/agent-team/service-execution.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const bounceBody = executionSource.slice(
+    executionSource.indexOf("protected async bounceFailuresToCode"),
+  );
+  check(
+    "repair-bounce-launches-formal-prompt-as-initial-query",
+    bounceBody.includes("this.agentReadiness.ensureAgentReady") &&
+      bounceBody.includes("prompt: bouncePrompt") &&
+      !bounceBody.includes("this.promptSender.sendPromptToPane"),
+    bounceBody.slice(0, 4_000),
+  );
   const run = buildRepairRun();
   const behaviorOutbox = normalizeAgentTeamWorkerOutbox({
     sessionId: run.terminalSessionId,
@@ -173,6 +204,7 @@ export function verifyEvidenceGatedRepairLoop(check) {
         invariantKey: "checkpoint.index-ownership",
         verificationMode: "structural",
         ref: "review:checkpoint",
+        reproduction: buildReviewReproduction(),
       },
     ],
     acceptanceResults: [
@@ -276,8 +308,35 @@ export function verifyEvidenceGatedRepairLoop(check) {
     reviewFindingContractErrors(
       invalidReviewOutbox,
       invalidReviewOutbox.acceptanceResults,
-    ).length === 2,
+    ).length === 3,
     invalidReviewOutbox,
+  );
+
+  const unreproducedRuntimeOutbox = normalizeAgentTeamWorkerOutbox({
+    ...reviewOutbox,
+    remainingFindings: [
+      {
+        severity: "P1",
+        status: "open",
+        title: "runtime inference only",
+        summary: "an intermediate state looked suspicious",
+        invariantKey: "readiness.runtime-inference",
+        verificationMode: "runtime",
+        reproduction: buildReviewReproduction({
+          mode: "real_product",
+          status: "not_reproduced",
+          scenarioId: "runtime-inference",
+        }),
+      },
+    ],
+  });
+  check(
+    "repair-runtime-review-finding-requires-observable-reproduction",
+    reviewFindingContractErrors(
+      unreproducedRuntimeOutbox,
+      unreproducedRuntimeOutbox.acceptanceResults,
+    ).some((error) => error.includes("real_product + reproduced")),
+    unreproducedRuntimeOutbox,
   );
 
   const secondTitleOutbox = normalizeAgentTeamWorkerOutbox({
@@ -295,6 +354,11 @@ export function verifyEvidenceGatedRepairLoop(check) {
         summary: "readiness must use an event boundary",
         invariantKey: "readiness.event-boundary",
         verificationMode: "runtime",
+        reproduction: buildReviewReproduction({
+          mode: "real_product",
+          status: "reproduced",
+          scenarioId: "readiness-event-boundary",
+        }),
       },
     ],
   });

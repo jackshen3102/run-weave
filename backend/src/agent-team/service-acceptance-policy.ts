@@ -7,6 +7,7 @@ import type {
   AgentTeamWorkerRole,
 } from "@runweave/shared/agent-team";
 import { AgentTeamError } from "./errors";
+import { normalizeReviewFindingReproduction } from "./outbox-normalizer";
 
 const RECHECK_TIMEOUT_MS = 60 * 60 * 1000;
 
@@ -413,6 +414,9 @@ export function normalizeOutboxFinding(
     rawStatus === "resolved" || rawStatus === "informational"
       ? rawStatus
       : "open";
+  const reproduction = normalizeReviewFindingReproduction(
+    record.reproduction,
+  );
   return {
     severity: severity.toUpperCase() as "P0" | "P1" | "P2" | "P3",
     status,
@@ -428,6 +432,7 @@ export function normalizeOutboxFinding(
     record.verificationMode === "structural"
       ? { verificationMode: record.verificationMode }
       : {}),
+    ...(reproduction ? { reproduction } : {}),
   };
 }
 

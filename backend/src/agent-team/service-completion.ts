@@ -150,9 +150,11 @@ export abstract class AgentTeamCompletionService extends AgentTeamRepairProtocol
           return false;
         }
         const { outbox, mtimeMs: outboxMtimeMs } = resolvedOutbox;
+        const dispatch = resolveActiveWorkerDispatch(latest, activeWorker);
         const identityMismatch = completionOutboxIdentityMismatch(
           latest,
           activeWorker,
+          dispatch,
           outbox,
           source !== "terminal_event",
         );
@@ -160,7 +162,6 @@ export abstract class AgentTeamCompletionService extends AgentTeamRepairProtocol
           logStaleCompletion(source, latest, activeWorker, identityMismatch);
           return false;
         }
-        const dispatch = resolveActiveWorkerDispatch(latest, activeWorker);
         const freshnessMismatch = workerOutboxFreshnessMismatch(
           dispatch,
           outboxMtimeMs,

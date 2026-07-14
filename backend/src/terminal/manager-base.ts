@@ -58,6 +58,17 @@ export abstract class TerminalManagerBase {
   >();
   private readonly panelAgentPreparations = new Map<
     string,
+    {
+      operationId: string;
+      provider: TerminalAgentKind;
+      previousGeneration?: {
+        operationId: string;
+        provider: TerminalAgentKind;
+      };
+    }
+  >();
+  private readonly panelAgentOperationGenerations = new Map<
+    string,
     { operationId: string; provider: TerminalAgentKind }
   >();
 
@@ -155,11 +166,42 @@ export abstract class TerminalManagerBase {
     if (this.panelAgentPreparations.has(key)) {
       return false;
     }
-    this.panelAgentPreparations.set(key, { operationId, provider });
+    const identity = { operationId, provider };
+    const previousGeneration = this.panelAgentOperationGenerations.get(key);
+    this.panelAgentPreparations.set(key, {
+      ...identity,
+      previousGeneration,
+    });
+    this.panelAgentOperationGenerations.set(key, identity);
     return true;
   }
 
   endPanelAgentPreparation(
+    terminalSessionId: string,
+    panelId: string,
+    operationId: string,
+  ): void {
+    const key = `${terminalSessionId}\u0000${panelId}`;
+    const preparation = this.panelAgentPreparations.get(key);
+    if (preparation?.operationId !== operationId) {
+      return;
+    }
+    this.panelAgentPreparations.delete(key);
+    if (
+      this.panelAgentOperationGenerations.get(key)?.operationId === operationId
+    ) {
+      if (preparation.previousGeneration) {
+        this.panelAgentOperationGenerations.set(
+          key,
+          preparation.previousGeneration,
+        );
+      } else {
+        this.panelAgentOperationGenerations.delete(key);
+      }
+    }
+  }
+
+  releasePanelAgentPreparation(
     terminalSessionId: string,
     panelId: string,
     operationId: string,
@@ -170,13 +212,13 @@ export abstract class TerminalManagerBase {
     }
   }
 
-  matchesPanelAgentPreparation(
+  matchesPanelAgentOperationGeneration(
     terminalSessionId: string,
     panelId: string,
     operationId: string,
     provider: TerminalAgentKind,
   ): boolean {
-    const active = this.panelAgentPreparations.get(
+    const active = this.panelAgentOperationGenerations.get(
       `${terminalSessionId}\u0000${panelId}`,
     );
     if (!active || active.operationId !== operationId) {
@@ -199,11 +241,36 @@ export abstract class TerminalManagerBase {
     );
   }
 
+  hasPanelAgentOperationGeneration(
+    terminalSessionId: string,
+    panelId: string,
+  ): boolean {
+    return this.panelAgentOperationGenerations.has(
+      `${terminalSessionId}\u0000${panelId}`,
+    );
+  }
+
   hasSessionAgentPreparation(terminalSessionId: string): boolean {
     const prefix = `${terminalSessionId}\u0000`;
     return Array.from(this.panelAgentPreparations.keys()).some((key) =>
       key.startsWith(prefix),
     );
+  }
+
+  protected clearPanelAgentOperationState(
+    terminalSessionId: string,
+  ): void {
+    const prefix = `${terminalSessionId}\u0000`;
+    for (const key of this.panelAgentPreparations.keys()) {
+      if (key.startsWith(prefix)) {
+        this.panelAgentPreparations.delete(key);
+      }
+    }
+    for (const key of this.panelAgentOperationGenerations.keys()) {
+      if (key.startsWith(prefix)) {
+        this.panelAgentOperationGenerations.delete(key);
+      }
+    }
   }
 
   protected notifyPanelMutation(

@@ -235,6 +235,10 @@ export function normalizeAgentTeamWorkerOutbox(
 
   return {
     ...record,
+    dispatchId:
+      typeof record.dispatchId === "string" && record.dispatchId.trim()
+        ? record.dispatchId.trim()
+        : null,
     sessionId,
     projectId: record.projectId ?? options.projectId ?? null,
     panelId: record.panelId ?? options.panelId ?? null,

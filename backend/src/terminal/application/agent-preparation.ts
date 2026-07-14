@@ -38,6 +38,7 @@ export async function prepareTerminalAgent(
   let target: TerminalPanelTargetResolution | null = null;
   let createdPanel = false;
   let preparationPanelId: string | null = null;
+  let commandSubmitted = false;
   if (request.panelId) {
     preparationPanelId = request.panelId;
     if (
@@ -236,6 +237,7 @@ export async function prepareTerminalAgent(
         operationId,
         paneTarget,
       );
+      commandSubmitted = true;
     } catch (error) {
       throwPreparationError({
         phase: "cli_launch",
@@ -281,11 +283,19 @@ export async function prepareTerminalAgent(
       });
     }
   } finally {
-    terminalSessionManager.endPanelAgentPreparation(
-      session.id,
-      preparationPanelId,
-      operationId,
-    );
+    if (commandSubmitted) {
+      terminalSessionManager.releasePanelAgentPreparation(
+        session.id,
+        preparationPanelId,
+        operationId,
+      );
+    } else {
+      terminalSessionManager.endPanelAgentPreparation(
+        session.id,
+        preparationPanelId,
+        operationId,
+      );
+    }
   }
   throw new Error("Terminal agent preparation ended without a result");
 }
@@ -307,7 +317,7 @@ function assertPreparationTargetCurrent(input: {
     currentPanel?.status !== "running" ||
     currentPanel.terminalSessionId !== input.session.id ||
     currentPanel.tmuxPaneId !== input.paneTarget.paneId ||
-    !input.terminalSessionManager.matchesPanelAgentPreparation(
+    !input.terminalSessionManager.matchesPanelAgentOperationGeneration(
       input.session.id,
       input.panel.id,
       input.operationId,

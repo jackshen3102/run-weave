@@ -445,8 +445,11 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
     terminal: AgentTeamTerminal,
   ): void {
     const targetAgent = getAgentForCommand(terminal.command ?? null);
-    if (!targetAgent) {
-      return;
+    if (!targetAgent || (targetAgent !== "codex" && targetAgent !== "traex")) {
+      throw new AgentTeamError(
+        409,
+        `Agent-team terminal command "${terminal.command ?? ""}" does not support lifecycle bootstrap`,
+      );
     }
     const currentState = this.terminalStateService.getCurrent(
       session.id,

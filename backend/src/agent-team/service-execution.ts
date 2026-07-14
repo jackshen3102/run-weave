@@ -380,11 +380,16 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
         codeWorker,
       );
       const requestedAt = new Date().toISOString();
-      await this.promptSender.sendPromptToPane(
-        session,
-        buildBounceBackPrompt({ run, failedCases, repairCycles }),
-        { panelId: codeWorker.panelId },
-      );
+      const terminal = resolveAgentTeamTerminal(run.terminal);
+      const bouncePrompt = buildBounceBackPrompt({
+        run,
+        failedCases,
+        repairCycles,
+      });
+      await this.agentReadiness.ensureAgentReady(session, terminal, {
+        panelId: codeWorker.panelId,
+        prompt: bouncePrompt,
+      });
       const bouncedAcceptance = run.acceptance.map((item) =>
         caseIds.includes(item.caseId)
           ? { ...item, bouncedToPanelId: codeWorker.panelId }
