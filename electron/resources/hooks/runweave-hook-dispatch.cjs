@@ -18,17 +18,37 @@ function inferPluginRootSource(value) {
   if (!value) {
     return null;
   }
-  const pluginRoot = path.resolve(value);
-  if (pluginRoot.includes(`${path.sep}.codex${path.sep}`)) {
+  const parts = path.resolve(value).split(path.sep).filter(Boolean);
+  if (hasAdjacentPathParts(parts, ".codex", "plugins")) {
     return "codex";
   }
-  if (pluginRoot.includes(`${path.sep}.trae${path.sep}`)) {
+  if (hasPathSequence(parts, [".trae", "plugins"])) {
     return "trae";
   }
-  if (pluginRoot.includes(`${path.sep}.claude${path.sep}`)) {
+  if (hasAdjacentPathParts(parts, ".claude", "plugins")) {
     return "claude";
   }
   return null;
+}
+
+function hasAdjacentPathParts(parts, first, second) {
+  return parts.some(
+    (part, index) => part === first && parts[index + 1] === second,
+  );
+}
+
+function hasPathSequence(parts, sequence) {
+  let sequenceIndex = 0;
+  for (const part of parts) {
+    if (part !== sequence[sequenceIndex]) {
+      continue;
+    }
+    sequenceIndex += 1;
+    if (sequenceIndex === sequence.length) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function inferSource() {
