@@ -171,6 +171,8 @@ GET /events/latest
 app-server 会从 `agent.hook` 与 `agent.completion` 投影轻量 ThreadRef。ThreadRef 只保存
 当前状态和归属上下文，不保存完整 thread 正文、prompt、模型输出或 token。
 
+ThreadRef identity 是 provider-aware 的：`threadId` 必须和 `agent`、`detailRef` 一起解释。Codex 仍由 hook 和 Codex App Server 状态补偿提供轻量 projection；Trae family（`trae` / `traex` / `traecli`）的真实 thread identity 来自 hook payload 与 `~/.trae/cli/sessions/**/*.jsonl` 中的 `session_meta.payload.id`，不得按 cwd 或时间窗口猜测。reader 暂时不可用时可以保留 degraded / unresolved 状态，但恢复后必须收敛到同一个 provider + thread ID。
+
 状态映射：
 
 - `agent.hook` + `SessionStart` -> `starting`
@@ -195,6 +197,8 @@ GET /threads?projectId=<id>&terminalSessionId=<id>&terminalPanelId=<id>&agent=<a
 GET /threads/:threadId
 GET /sync/status
 ```
+
+`/threads/:threadId` 可以返回可用的 provider detail。Trae family detail 由 lifecycle reader 从 JSONL 读取并归一化为 turns、preview、last lifecycle cursor 和原始 lifecycle 事件；`task_started`、`task_complete`、`turn_aborted` 是当前已知的状态输入，未知 lifecycle 类型保留 raw，不臆造完成状态。reader 或源文件异常时，ThreadRef 保持可查询并标记 degraded / unknown，不能让 app-server 或 backend 主流程退出。
 
 `/threads` 返回按 `lastEventId` 升序的 ThreadRef 列表；展示层如果需要“running 优先”或
 “更新时间倒序”，必须自行排序。`/sync/status` 只暴露本地同步模拟状态和最近错误，不暴露

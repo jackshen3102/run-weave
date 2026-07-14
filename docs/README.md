@@ -71,6 +71,8 @@
 | Agent Team completion 恢复测试           | testing/agent-team-completion-recovery-test-cases.md                               |
 | Agent Team 验收来源测试                  | testing/agent-team-verification-case-source-test-cases.md                          |
 | Agent Team Review Checkpoint 测试        | testing/agent-team-review-checkpoint-test-cases.md                                 |
+| Agent Team 证据门禁修复闭环测试          | testing/agent-team-evidence-gated-repair-loop-test-cases.md                        |
+| Codex 与 TraeX 能力对齐测试              | testing/codex-traex-capability-parity-test-cases.md                                |
 | 飞书一次性终端投递测试                   | testing/feishu-one-shot-terminal-delivery-test-cases.md                            |
 | App Server ThreadRef fixture             | testing/app-server-threadref-fixture.md                                            |
 | Terminal Panel Split 测试                | testing/terminal-panel-split-test-cases.md                                         |
@@ -82,6 +84,7 @@
 | Runweave Dev Session 分层开发环境测试    | testing/runweave-dev-session-test-cases.md                                         |
 | Runweave Beta 多实例与 CDP 路由测试      | testing/runweave-beta-instance-cdp-routing-test-cases.md                           |
 | Backend 内嵌行为数据底座测试             | testing/system-activity-data-foundation-test-cases.md                              |
+| Terminal Activity Work History 测试      | testing/terminal-activity-work-history-test-cases.md                               |
 | Terminal Browser CDP/MCP 测试            | testing/terminal-browser-cdp-mcp-test-cases.md                                     |
 | Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md                              |
 | Terminal Browser 自适应多 Tab 测试       | testing/terminal-browser-adaptive-tabs-test-cases.md                               |

@@ -78,6 +78,14 @@ Agent Team 的 Loop Engine 由 `backend/src/agent-team/loop.ts` 维护：
 
 当 stable fail case 尚未反弹时，后端会通过 `buildBounceBackPrompt` 注入 code worker pane；当验收通过数提升或出现明确 diff 进展时，无进展计数会清零。熔断只冻结后续自动注入，不删除 pane 或 outbox，方便人工聚焦现场。
 
+## 修复交接与预算
+
+`code_review` 或 `behavior_verify` 失败回弹后，Code Agent 不能只用 `status="completed"` 进入下一道门禁。后端会先建立 backend-owned `repairKey`，并要求当前 code outbox 的 `fixVerifications` 恰好覆盖这些 key。behavior 失败使用 `behavior_verify:<caseId>`；review 阻断项使用 `code_review:<invariantKey>`，其中 open P0/P1 finding 必须带稳定 `invariantKey` 和 `verificationMode: "runtime" | "structural"`。
+
+runtime 修复交接必须记录真实产品复现、同场景 After 验证、`scenarioId`、`validationSessionId` 和证据；structural 修复可以使用 reviewer 给出的 harness 或静态契约证据，但必须复跑原证据入口。`fixVerifications` 只表示“可以交给独立 gate 复验”，不能让 code worker 给自己的修复判定 acceptance pass。缺失、过期、阻塞或不匹配的交接只允许一次 outbox 协议补交，仍无效则进入 `need_human`。
+
+修复次数由 `loop.repairCycles` 单独计数，默认 `maxRepairAttempts=3`，create-run 只能设置 1 到 5。任意 diff、`noProgressCount`、`recheckAttempt` 或 verifier timeout 都不能重置同一 repairKey 的预算。第 2 次及以后处理同一 repairKey 时，code outbox 必须包含 `strategyAssessment`，说明上一轮机制为何失败以及是否需要调整状态所有权、事件边界或数据模型。同一 repairKey 达到预算后仍被独立 gate 判失败，run 进入 `need_human` 并保留各轮 handoff、review/behavior 失败摘要和当前现场。
+
 ## Review Checkpoint
 
 `options.reviewCheckpointMode="local_commit"` 是显式开启的本地 Git checkpoint 模式；默认 `disabled`，不会改变现有 run。开启时后端先要求项目处于 Git 分支且工作区干净，再从当前 HEAD 创建 run 专属分支 `runweave/agt-<runId>`。checkpoint 只保留在本地，不 push、不 squash，也不替代后续正式提交或 PR 门禁。

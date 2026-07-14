@@ -1,7 +1,6 @@
 # Terminal Activity Work History 测试用例
 
 > 日期：2026-07-13
-> 对应计划：[`docs/plans/2026-07-13-terminal-activity-work-history.md`](../plans/2026-07-13-terminal-activity-work-history.md)
 > 原型基线：[`docs/prototypes/terminal-activity-archives/`](../prototypes/terminal-activity-archives/)
 > 状态：待实现后执行
 

@@ -1,6 +1,6 @@
 # Codex 与 TraeX 能力对齐测试案例
 
-本文档把 `docs/review/2026-07-13-codex-traex-capability-gap.review.md` 中确认的能力差距转成可执行、可取证、可追溯的验收合约。目标不是为各个表象分别打补丁，而是验证 Runweave 建立了 provider-neutral thread identity、TraeX lifecycle reader 与 provider reconciler，并由现有 Terminal、Activity、App Server、App Home、恢复和 readiness 消费链路共同使用。
+本文档把 Codex 与 TraeX 能力对齐的长期边界转成可执行、可取证、可追溯的验收合约。目标不是为各个表象分别打补丁，而是验证 Runweave 建立了 provider-neutral thread identity、TraeX lifecycle reader 与 provider reconciler，并由现有 Terminal、Activity、App Server、App Home、恢复和 readiness 消费链路共同使用。
 
 ## 范围
 
@@ -39,13 +39,12 @@
 
 ## 前提事实
 
-- 输入评审：`docs/review/2026-07-13-codex-traex-capability-gap.review.md`。
-- Hook bridge：`electron/resources/hooks/runweave-hook-bridge.cjs` 当前仅在 `source === "codex"` 时读取 thread ID。
-- Hook metadata 同步：`backend/src/terminal/agent-hook-processor.ts` 当前仅对 Codex 调用 thread metadata 同步。
-- Terminal / Panel 持久化：`backend/src/terminal/lowdb-store.ts`、`backend/src/terminal/lowdb-panel-store.ts` 现有字段只保存 thread ID，不能单独证明 provider 归属。
-- App Server thread 查询：`backend/src/routes/app-server-state.ts` 暴露 `/api/app-server/threads/:threadId`；App Home 的 snapshot 入口 `backend/src/routes/app-home-overview.ts` 当前只读取 Codex thread。
-- tmux 恢复：`backend/src/terminal/runtime-launcher.ts` 当前只构造 Codex resume command。
-- readiness：`backend/src/agent-team/agent-readiness.ts` 当前对非 Codex 直接结束等待；`backend/src/terminal/terminal-state-service.ts` 当前只识别 Codex ready prompt。
+- 长期边界：`docs/architecture/app-server-event-center.md`、`docs/architecture/terminal-state.md` 与 `docs/architecture/multi-agent-orchestrator.md`。
+- Hook bridge 与 metadata 同步必须保留 provider-aware thread identity，不能把 Trae family thread 退化成 `unknown` 或裸 ID。
+- Terminal / Panel 持久化必须同时保存 current/last thread 的 provider 与真实 thread ID。
+- App Server `/threads/:threadId`、App Home overview、Activity 与 Terminal history 必须消费同一 provider-aware ThreadRef。
+- tmux 恢复必须按 provider 选择 resume 命令；TraeX 只允许在匹配 `provider=traex` 且存在真实 thread ID 时注入 `traex resume <threadId>`。
+- readiness 必须同时覆盖 Agent Team TraeX worker 与普通 Terminal Trae family ready prompt；旧输出、错误 pane 或启动失败不能提前放行。
 - TraeX 原始真值文件位于 `~/.trae/cli/sessions/**/*.jsonl`，thread ID 来自 `session_meta.payload.id`；当前观测到的最小 lifecycle 为 `task_started`、`task_complete`、`turn_aborted`。
 - 真实行为验收必须先按 `$toolkit:runweave-change-validation` 在只包含本次 patch 的 source root 运行无显式 profile 的 `pnpm dev:session --dry-run --json`，再从 `pnpm dev:open --session <id> --surface <surface> --json` 解析 URL/CDP；不得复用 Stable、默认浏览器或无关 Playwright session。
 
