@@ -251,6 +251,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
           attempt,
           error,
         });
+        latestRun = (await this.getRun(latestRun.runId)) ?? latestRun;
         latestRun = await this.markRecheckDispatchFailed(
           latestRun,
           session,
@@ -285,6 +286,8 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
     return this.updateRun(run, {
       activeWorkerRole: worker.role,
       activeWorkerDispatch,
+      workerDispatchProtocolVersion: 1,
+      consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
       workers: setActiveWorker(run.workers, worker.role),
       acceptance: run.acceptance.map((item) =>
         caseIds.has(item.caseId)

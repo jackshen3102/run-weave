@@ -8,7 +8,6 @@ import {
   completeAgentTeamRun,
   focusAgentTeamPane,
   getAgentTeamRunForTerminal,
-  recordAgentTeamRound,
   resumeAgentTeamRun,
   startAgentTeamRun,
   submitAgentTeamSplitGate,
@@ -234,18 +233,6 @@ export function TerminalAgentTeamPanel({
     );
   });
 
-  const recordRound = useMemoizedFn((hadProgress: boolean): void => {
-    if (!run) {
-      return;
-    }
-    void runAction(() =>
-      recordAgentTeamRound(apiBase, token, run.runId, {
-        hadDiff: hadProgress,
-        expectedRound: run.loop.round,
-      }),
-    );
-  });
-
   const resume = useMemoizedFn((): void => {
     if (!run || !resumeNote.trim()) {
       return;
@@ -372,14 +359,17 @@ export function TerminalAgentTeamPanel({
           />
         ) : run.phase === "executing" ? (
           <ExecutingSection
+            apiBase={apiBase}
+            token={token}
+            projectId={projectId}
             run={run}
             busy={busy}
             resumeNote={resumeNote}
             onResumeNoteChange={setResumeNote}
-            onRecordRound={recordRound}
             onResume={resume}
             onComplete={complete}
             onFocusPane={focusPane}
+            onAuthExpired={onAuthExpired}
           />
         ) : null}
       </div>

@@ -3,7 +3,6 @@ import { z } from "zod";
 import type { AgentHookStateRequest, TerminalStateResponse } from "@runweave/shared/terminal/events";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
-import { readTerminalScrollback } from "../terminal/runtime-launcher";
 import {
   aggregatePanelTerminalState,
   type TerminalStateService,
@@ -81,15 +80,7 @@ export function createTerminalStateRouter(options: {
     const terminalState =
       runningPanels.length > 0
         ? aggregatePanelTerminalState(runningPanels)
-        : options.terminalStateService.getCurrent(session.id, {
-            ...session,
-            scrollback: await readTerminalScrollback(
-              session,
-              options.terminalSessionManager,
-              options.tmuxService,
-              "live",
-            ),
-          });
+        : options.terminalStateService.getCurrent(session.id, session);
 
     const payload: TerminalStateResponse = { terminalState };
     res.json(payload);

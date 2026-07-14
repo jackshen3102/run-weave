@@ -259,23 +259,29 @@ export function ProposalSection({
 }
 
 export function ExecutingSection({
+  apiBase,
+  token,
+  projectId,
   run,
   busy,
   resumeNote,
   onResumeNoteChange,
-  onRecordRound,
   onResume,
   onComplete,
   onFocusPane,
+  onAuthExpired,
 }: {
+  apiBase: string;
+  token: string;
+  projectId: string;
   run: AgentTeamRun;
   busy: boolean;
   resumeNote: string;
   onResumeNoteChange: (value: string) => void;
-  onRecordRound: (hadProgress: boolean) => void;
   onResume: () => void;
   onComplete: () => void;
   onFocusPane: (panelId: string) => void;
+  onAuthExpired?: () => void;
 }) {
   const { loop, acceptance } = run;
   const ratio =
@@ -376,38 +382,7 @@ export function ExecutingSection({
         <div className="rounded border border-emerald-900 bg-emerald-950/30 p-2 text-xs text-emerald-300">
           Loop 已完成，worker pane 已冻结。
         </div>
-      ) : (
-        <details className="group rounded border border-slate-800 bg-slate-900/40 p-2">
-          <summary className="cursor-pointer select-none text-[10px] font-medium uppercase text-slate-500 hover:text-slate-300">
-            Debug
-          </summary>
-          <div className="mt-2 text-[10px] text-slate-500">
-            模拟 loop 反馈（连续 {loop.maxNoProgress} 轮无进展将自动熔断）：
-          </div>
-          <div className="mt-1 flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="flex-1 border-emerald-800 text-emerald-300"
-              disabled={busy}
-              onClick={() => onRecordRound(true)}
-            >
-              ✓ 有进展的一轮
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="flex-1 border-rose-800 text-rose-300"
-              disabled={busy}
-              onClick={() => onRecordRound(false)}
-            >
-              ✗ 无进展的一轮
-            </Button>
-          </div>
-        </details>
-      )}
+      ) : null}
 
       <div>
         <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-400">
@@ -468,9 +443,13 @@ export function ExecutingSection({
                     </div>
                   ) : null}
                   <AcceptanceEvidenceDetails
+                    apiBase={apiBase}
+                    token={token}
+                    projectId={projectId}
                     status={item.status}
                     summary={item.resultSummary}
                     evidence={item.evidence}
+                    onAuthExpired={onAuthExpired}
                   />
                   {item.status === "fail" && item.bouncedToPanelId ? (
                     <div className="mt-0.5 text-[10px] text-amber-400">

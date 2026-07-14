@@ -1,4 +1,4 @@
-import type { AgentTeamRun, AgentTeamRunsResponse, CompleteAgentTeamRunRequest, CreateAgentTeamRunRequest, ProposeAgentTeamSplitRequest, RecordAgentTeamRoundRequest, ResumeAgentTeamRunRequest, SubmitAgentTeamSplitGateRequest } from "@runweave/shared/agent-team";
+import type { AgentTeamRun, AgentTeamRunsResponse, CompleteAgentTeamRunRequest, CreateAgentTeamRunRequest, ProposeAgentTeamSplitRequest, ResumeAgentTeamRunRequest, SubmitAgentTeamSplitGateRequest } from "@runweave/shared/agent-team";
 import { requestJson } from "./http";
 
 const AGENT_TEAM_JSON_HEADERS = (token: string) => ({
@@ -58,23 +58,6 @@ export async function submitAgentTeamSplitGate(
   return requestJson<AgentTeamRun>(
     apiBase,
     `/api/agent-team/runs/${encodeURIComponent(runId)}/split-gate`,
-    {
-      method: "POST",
-      headers: AGENT_TEAM_JSON_HEADERS(token),
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export async function recordAgentTeamRound(
-  apiBase: string,
-  token: string,
-  runId: string,
-  payload: RecordAgentTeamRoundRequest,
-): Promise<AgentTeamRun> {
-  return requestJson<AgentTeamRun>(
-    apiBase,
-    `/api/agent-team/runs/${encodeURIComponent(runId)}/round`,
     {
       method: "POST",
       headers: AGENT_TEAM_JSON_HEADERS(token),

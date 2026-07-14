@@ -16,10 +16,7 @@ export type AgentTeamStatus =
   | "failed";
 
 /** Worker role catalog — mirrors the prototype's role dots. */
-export type AgentTeamWorkerRole =
-  | "code"
-  | "code_review"
-  | "behavior_verify";
+export type AgentTeamWorkerRole = "code" | "code_review" | "behavior_verify";
 
 export interface AgentTeamAcceptanceEvidence {
   type:
@@ -225,6 +222,14 @@ export interface AgentTeamSourceFingerprint {
   sha256: string;
 }
 
+export interface AgentTeamConsumedWorkerDispatchReceipt {
+  dispatchId: string;
+  role: AgentTeamWorkerRole;
+  round: number;
+  contentSha256: string;
+  consumedAt: string;
+}
+
 export interface AgentTeamRun {
   runId: string;
   projectId: string;
@@ -244,6 +249,10 @@ export interface AgentTeamRun {
   activeWorkerRole?: AgentTeamWorkerRole | null;
   /** Identifies the current dispatch and separates its result from stale outboxes. */
   activeWorkerDispatch?: AgentTeamActiveWorkerDispatch | null;
+  /** Present on runs that require every newly dispatched outbox to echo dispatchId. */
+  workerDispatchProtocolVersion?: 1;
+  /** Durable receipts for dispatches whose state-machine effect has completed. */
+  consumedWorkerDispatches?: AgentTeamConsumedWorkerDispatchReceipt[];
   clarify: AgentTeamClarifyMessage[];
   proposal: AgentTeamProposal | null;
   workers: AgentTeamWorker[];
@@ -415,15 +424,6 @@ export interface SubmitAgentTeamSplitGateRequest {
   planFilePath?: string | null;
   testCaseFilePath?: string | null;
   generatedTestCaseFilePath?: string | null;
-}
-
-export interface RecordAgentTeamRoundRequest {
-  /** Optional per-case results to fold into the loop (used by smoke/e2e). */
-  acceptanceResults?: AgentTeamWorkerOutbox["acceptanceResults"];
-  /** Legacy Debug UI signal; never derived from a worker code diff. */
-  hadDiff?: boolean;
-  /** UI-observed round baseline. Stale manual rounds are ignored. */
-  expectedRound?: number;
 }
 
 export interface ResumeAgentTeamRunRequest {

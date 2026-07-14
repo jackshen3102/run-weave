@@ -18,7 +18,6 @@ export {
   focusAgentTeamPane,
   getAgentTeamRunForTerminal,
   proposeAgentTeamSplit,
-  recordAgentTeamRound,
   resumeAgentTeamRun,
   startAgentTeamRun,
   submitAgentTeamSplitGate,

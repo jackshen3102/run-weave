@@ -158,7 +158,7 @@ export function completionReviewTargetMismatch(
 export function resolveActiveWorkerDispatch(
   run: AgentTeamRun,
   worker: AgentTeamWorker,
-): AgentTeamActiveWorkerDispatch {
+): AgentTeamActiveWorkerDispatch | null {
   const persisted = run.activeWorkerDispatch;
   if (
     persisted &&
@@ -167,6 +167,9 @@ export function resolveActiveWorkerDispatch(
     (!persisted.tmuxPaneId || persisted.tmuxPaneId === worker.tmuxPaneId)
   ) {
     return persisted;
+  }
+  if (run.workerDispatchProtocolVersion === 1) {
+    return null;
   }
   const recheckCase = run.acceptance
     .filter(
@@ -289,7 +292,10 @@ export function completionOutboxIdentityMismatch(
   }
   const expectedDispatchId = dispatch.dispatchId?.trim() ?? "";
   const actualDispatchId = outbox.dispatchId?.trim() ?? "";
-  if (dispatch.outboxDispatchIdRequired) {
+  const dispatchIdRequired =
+    run.workerDispatchProtocolVersion === 1 ||
+    dispatch.outboxDispatchIdRequired === true;
+  if (dispatchIdRequired) {
     if (!expectedDispatchId) {
       return "active_dispatch_id_missing";
     }

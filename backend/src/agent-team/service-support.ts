@@ -404,6 +404,8 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
         | "reviewCheckpoint"
         | "activeWorkerRole"
         | "activeWorkerDispatch"
+        | "workerDispatchProtocolVersion"
+        | "consumedWorkerDispatches"
         | "clarify"
         | "proposal"
         | "workers"

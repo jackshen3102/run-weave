@@ -29,8 +29,10 @@ export interface PrepareTerminalAgentResponse {
   provider: TerminalAgentKind;
   threadId: string | null;
   status: "starting";
+  phase: "command_submitted";
   createdPanel: boolean;
   startedAt: string;
+  commandSubmittedAt: string;
 }
 
 export type TerminalAgentPreparationFailurePhase =

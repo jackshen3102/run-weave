@@ -92,45 +92,6 @@ const splitGateSchema = z
   })
   .strict();
 
-const acceptanceResultSchema = z
-  .object({
-    caseId: z.string().trim().min(1),
-    status: z.enum(["pass", "fail", "skipped"]),
-    summary: z.string().trim().min(1).nullable().optional(),
-    skipReason: z.string().trim().min(1).nullable().optional(),
-    evidence: z
-      .array(
-        z
-          .object({
-            type: z.enum([
-              "screenshot",
-              "dom",
-              "text",
-              "command",
-              "event",
-              "json",
-              "log",
-              "code",
-            ]),
-            label: z.string().trim().min(1),
-            summary: z.string().trim().min(1),
-            detail: z.string().trim().min(1).optional(),
-            ref: z.string().trim().min(1),
-          })
-          .strict(),
-      )
-      .default([]),
-  })
-  .strict();
-
-const recordRoundSchema = z
-  .object({
-    acceptanceResults: z.array(acceptanceResultSchema).optional(),
-    hadDiff: z.boolean().optional(),
-    expectedRound: z.number().int().positive().optional(),
-  })
-  .strict();
-
 const resumeSchema = z.object({ note: z.string().trim().min(1) }).strict();
 const completeSchema = z
   .object({ note: z.string().trim().min(1).optional() })
@@ -263,25 +224,6 @@ export function createAgentTeamRouter(
     }
     await handleServiceCall(res, () =>
       agentTeamService.submitSplitGate(params.data.runId, parsed.data),
-    );
-  });
-
-  router.post("/runs/:runId/round", async (req, res) => {
-    const params = runParamsSchema.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ message: "Invalid request params" });
-      return;
-    }
-    const parsed = recordRoundSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
-      return;
-    }
-    await handleServiceCall(res, () =>
-      agentTeamService.recordRound(params.data.runId, parsed.data),
     );
   });
 

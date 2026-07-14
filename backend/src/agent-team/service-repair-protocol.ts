@@ -12,7 +12,7 @@ export abstract class AgentTeamRepairProtocolService extends AgentTeamSerialDisp
     worker: AgentTeamWorker,
     outboxMtimeMs: number | null,
     errors: string[],
-    prompt: string,
+    buildPrompt: (run: AgentTeamRun) => string,
     label: string,
   ): Promise<AgentTeamRun> {
     const dispatch = run.activeWorkerDispatch;
@@ -42,29 +42,35 @@ export abstract class AgentTeamRepairProtocolService extends AgentTeamSerialDisp
         `${label} 协议补交无法锁定源码边界：${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    const correctionRun = await this.updateRun(run, {
-      activeWorkerDispatch: {
-        ...(dispatch ??
-          createActiveWorkerDispatch(
-            worker,
-            new Date().toISOString(),
-            outboxMtimeMs,
-            run.loop.round,
-          )),
-        requestedAt: new Date().toISOString(),
-        outboxMtimeMs,
+    const correctionDispatch = createActiveWorkerDispatch(
+      worker,
+      new Date().toISOString(),
+      outboxMtimeMs,
+      dispatch?.round ?? run.loop.round,
+      dispatch?.reviewTarget ?? null,
+      {
+        repairKeys: dispatch?.repairKeys,
         protocolCorrectionAttempt: 1,
         protocolCorrectionSourceFingerprint: sourceFingerprint,
       },
+    );
+    const correctionRun = await this.updateRun(run, {
+      activeWorkerDispatch: correctionDispatch,
+      workerDispatchProtocolVersion: 1,
+      consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
       logs: [
         ...run.logs,
         `${label} 协议不完整，已要求原 worker 只补交 outbox：${errors.join("；")}`,
       ],
     });
     try {
-      await this.promptSender.sendPromptToPane(session, prompt, {
-        panelId: worker.panelId,
-      });
+      await this.promptSender.sendPromptToPane(
+        session,
+        buildPrompt(correctionRun),
+        {
+          panelId: worker.panelId,
+        },
+      );
     } catch (error) {
       return this.pauseForRepairProtocolError(
         correctionRun,

@@ -25,7 +25,11 @@ export class AgentTeamOutboxHistoryStore {
     dispatch: AgentTeamActiveWorkerDispatch;
     resolvedOutbox: AgentTeamResolvedOutbox;
     cwd?: string | null;
-  }): Promise<{ path: string; record: AgentTeamOutboxHistoryRecord }> {
+  }): Promise<{
+    path: string;
+    record: AgentTeamOutboxHistoryRecord;
+    created: boolean;
+  }> {
     const { run, dispatch, resolvedOutbox } = options;
     if (resolvedOutbox.mtimeMs === null) {
       throw new Error("outbox mtime is unavailable");
@@ -35,10 +39,11 @@ export class AgentTeamOutboxHistoryStore {
       .digest("hex");
     const dispatchId =
       dispatch.dispatchId ?? createLegacyDispatchId(run, dispatch);
+    const round = dispatch.round ?? run.loop.round;
     const archivePath = this.paths.outboxHistoryPath(
       run.projectId,
       run.runId,
-      run.loop.round,
+      round,
       {
         role: dispatch.role,
         panelId: dispatch.panelId,
@@ -51,7 +56,7 @@ export class AgentTeamOutboxHistoryStore {
     const record: AgentTeamOutboxHistoryRecord = {
       schemaVersion: 1,
       runId: run.runId,
-      round: run.loop.round,
+      round,
       dispatchId,
       role: dispatch.role,
       panelId: dispatch.panelId,
@@ -65,7 +70,11 @@ export class AgentTeamOutboxHistoryStore {
       outbox: resolvedOutbox.outbox,
     };
     const existing = await createImmutableJsonFile(archivePath, record);
-    return { path: archivePath, record: existing ?? record };
+    return {
+      path: archivePath,
+      record: existing ?? record,
+      created: !existing,
+    };
   }
 
   async list(

@@ -3,7 +3,6 @@ import type {
   CompleteAgentTeamRunRequest,
   CreateAgentTeamRunRequest,
   ProposeAgentTeamSplitRequest,
-  RecordAgentTeamRoundRequest,
   ResumeAgentTeamRunRequest,
   SubmitAgentTeamSplitGateRequest,
 } from "@runweave/shared/agent-team";
@@ -24,17 +23,12 @@ import {
   setActiveWorker,
 } from "./service-workflow-policy";
 import {
-  delay,
   formatErrorMessage,
   formatVerificationSource,
-  isManualFeedbackRound,
-  isStaleExpectedRound,
   requireRunnableTask,
   requireVerificationConfig,
   resolveAgentTeamTerminal,
 } from "./service-run-policy";
-
-const MANUAL_FEEDBACK_COMPLETION_GRACE_MS = 200;
 
 export class AgentTeamLifecycleService extends AgentTeamRecheckService {
   async startRun(input: CreateAgentTeamRunRequest): Promise<AgentTeamRun> {
@@ -146,6 +140,8 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       reviewCheckpoint,
       activeWorkerRole: null,
       activeWorkerDispatch: null,
+      workerDispatchProtocolVersion: 1,
+      consumedWorkerDispatches: [],
       clarify: [],
       proposal: null,
       workers: [],
@@ -161,21 +157,15 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     if (acceptance.length === 0) {
       await this.runStore.writeRun(run);
       try {
-        await this.agentReadiness.ensureAgentReady(
-          session,
-          terminal,
-          mainPanelId
-            ? { panelId: mainPanelId, publishSessionState: true }
-            : undefined,
-        );
-        await this.promptSender.sendPromptToPane(
-          session,
-          buildMainTestCaseGenerationPrompt({
-            run,
-            planFilePath: prepared.verification.planFilePath ?? null,
-          }),
-          mainPanelId ? { panelId: mainPanelId } : undefined,
-        );
+        const generationPrompt = buildMainTestCaseGenerationPrompt({
+          run,
+          planFilePath: prepared.verification.planFilePath ?? null,
+        });
+        await this.agentReadiness.ensureAgentReady(session, terminal, {
+          panelId: mainPanelId,
+          publishSessionState: true,
+          prompt: generationPrompt,
+        });
       } catch (error) {
         await this.updateRun(run, {
           status: "failed",
@@ -305,43 +295,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     );
   }
 
-  // --- Phase 3: executing loop (record round) ---
-
-  /**
-   * Fold one round of acceptance results into the loop. Callable directly
-   * (smoke/e2e) or internally from a pane completion event.
-   */
-  async recordRound(
-    runId: string,
-    input: RecordAgentTeamRoundRequest,
-  ): Promise<AgentTeamRun> {
-    return this.enqueue(runId, async () => {
-      let latest = await this.requireRun(runId);
-      if (isStaleExpectedRound(latest, input.expectedRound)) {
-        return latest;
-      }
-      const manualFeedbackRound = isManualFeedbackRound(input);
-      if (manualFeedbackRound) {
-        await delay(MANUAL_FEEDBACK_COMPLETION_GRACE_MS);
-        latest = await this.requireRun(runId);
-        if (
-          isStaleExpectedRound(latest, input.expectedRound) ||
-          (this.pendingCompletionRounds.get(runId) ?? 0) > 0
-        ) {
-          return latest;
-        }
-      }
-      return this.applyRound(latest, {
-        acceptanceResults: manualFeedbackRound
-          ? undefined
-          : input.acceptanceResults,
-        objectiveProgress: input.hadDiff === true,
-        observedNoProgress: input.hadDiff === false,
-      });
-    });
-  }
-
-  // --- Phase 4: escalation -> resume ---
+  // --- Phase 3: escalation -> resume ---
 
   async resumeRun(
     runId: string,

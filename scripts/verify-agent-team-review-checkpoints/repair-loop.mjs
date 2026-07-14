@@ -52,12 +52,42 @@ export function verifyEvidenceGatedRepairLoop(check) {
   const bounceBody = executionSource.slice(
     executionSource.indexOf("protected async bounceFailuresToCode"),
   );
+  const completionSource = readFileSync(
+    new URL(
+      "../../backend/src/agent-team/service-completion.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const repairProtocolSource = readFileSync(
+    new URL(
+      "../../backend/src/agent-team/service-repair-protocol.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   check(
     "repair-bounce-launches-formal-prompt-as-initial-query",
     bounceBody.includes("this.agentReadiness.ensureAgentReady") &&
       bounceBody.includes("prompt: bouncePrompt") &&
+      bounceBody.indexOf("persistedRun = await this.updateRun") <
+        bounceBody.indexOf("this.agentReadiness.ensureAgentReady") &&
       !bounceBody.includes("this.promptSender.sendPromptToPane"),
     bounceBody.slice(0, 4_000),
+  );
+  check(
+    "repair-consumption-persists-receipt-and-advances-protocol",
+    completionSource.includes("recordConsumedWorkerDispatch") &&
+      completionSource.includes("workerDispatchProtocolVersion: 1") &&
+      completionSource.includes("contentSha256: history.contentSha256"),
+    completionSource.slice(0, 20_000),
+  );
+  check(
+    "repair-protocol-correction-creates-fresh-dispatch-before-prompt",
+    repairProtocolSource.indexOf(
+      "const correctionDispatch = createActiveWorkerDispatch",
+    ) < repairProtocolSource.indexOf("buildPrompt(correctionRun)"),
+    repairProtocolSource,
   );
   const run = buildRepairRun();
   const behaviorOutbox = normalizeAgentTeamWorkerOutbox({
@@ -109,7 +139,7 @@ export function verifyEvidenceGatedRepairLoop(check) {
   });
   check(
     "repair-runtime-prompt-requires-real-reproduction",
-      runtimePrompt.includes("$toolkit:reproduce-before-fix") &&
+    runtimePrompt.includes("$toolkit:reproduce-before-fix") &&
       runtimePrompt.includes("同一 scenarioId") &&
       runtimePrompt.includes("任一必跑项失败立即停止") &&
       runtimePrompt.includes(
@@ -599,9 +629,22 @@ export function verifyEvidenceGatedRepairLoop(check) {
   );
   check(
     "repair-recovered-dispatch-preserves-persisted-id",
-    recoveredDispatch.dispatchId === recoveredDispatchId &&
+    Boolean(recoveredDispatch) &&
+      recoveredDispatch.dispatchId === recoveredDispatchId &&
       recoveredDispatch.outboxDispatchIdRequired === false,
     recoveredDispatch,
+  );
+  check(
+    "repair-modern-run-never-synthesizes-legacy-dispatch",
+    resolveActiveWorkerDispatch(
+      {
+        ...recoveredRun,
+        workerDispatchProtocolVersion: 1,
+        consumedWorkerDispatches: [],
+      },
+      run.workers[2],
+    ) === null,
+    recoveredRun,
   );
   check(
     "repair-stale-outbox-cannot-double-count",

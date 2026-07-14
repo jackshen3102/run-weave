@@ -1,5 +1,11 @@
+import { RunweaveImageLightbox } from "@runweave/common/terminal";
+import "@runweave/common/terminal/image-lightbox.css";
+import { useMemoizedFn } from "ahooks";
 import { Crosshair } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { AgentTeamAcceptanceEvidence, AgentTeamAcceptanceStatus, AgentTeamRun } from "@runweave/shared/agent-team";
+import { HttpError } from "../../services/http";
+import { getTerminalProjectPreviewAsset } from "../../services/terminal";
 import { ROLE_LABEL } from "./terminal-agent-team-panel-model";
 
 const EVIDENCE_TYPE_LABEL: Record<AgentTeamAcceptanceEvidence["type"], string> =
@@ -27,13 +33,21 @@ const EVIDENCE_ATTACHMENT_LABEL: Partial<
 };
 
 export function AcceptanceEvidenceDetails({
+  apiBase,
+  token,
+  projectId,
   status,
   summary,
   evidence,
+  onAuthExpired,
 }: {
+  apiBase: string;
+  token: string;
+  projectId: string;
   status: AgentTeamAcceptanceStatus;
   summary?: string | null;
   evidence: AgentTeamAcceptanceEvidence[];
+  onAuthExpired?: () => void;
 }) {
   const leadSummary =
     summary?.trim() || (status === "pass" ? evidence[0]?.summary : null);
@@ -86,17 +100,13 @@ export function AcceptanceEvidenceDetails({
                           {item.detail}
                         </div>
                       ) : null}
-                      <details className="mt-0.5">
-                        <summary
-                          className="inline cursor-pointer select-none text-sky-300 hover:text-sky-200"
-                          title={item.ref}
-                        >
-                          {getEvidenceAttachmentLabel(item)}
-                        </summary>
-                        <div className="mt-0.5 break-all font-mono text-slate-500">
-                          {item.ref}
-                        </div>
-                      </details>
+                      <EvidenceAttachment
+                        apiBase={apiBase}
+                        token={token}
+                        projectId={projectId}
+                        evidence={item}
+                        onAuthExpired={onAuthExpired}
+                      />
                     </div>
                   ))}
                 </div>
@@ -104,6 +114,142 @@ export function AcceptanceEvidenceDetails({
             ))}
           </div>
         </details>
+      ) : null}
+    </div>
+  );
+}
+
+function EvidenceAttachment({
+  apiBase,
+  token,
+  projectId,
+  evidence,
+  onAuthExpired,
+}: {
+  apiBase: string;
+  token: string;
+  projectId: string;
+  evidence: AgentTeamAcceptanceEvidence;
+  onAuthExpired?: () => void;
+}) {
+  if (evidence.type === "screenshot") {
+    return (
+      <ScreenshotEvidenceAttachment
+        apiBase={apiBase}
+        token={token}
+        projectId={projectId}
+        evidence={evidence}
+        onAuthExpired={onAuthExpired}
+      />
+    );
+  }
+
+  return (
+    <details className="mt-0.5">
+      <summary
+        className="inline cursor-pointer select-none text-sky-300 hover:text-sky-200"
+        title={evidence.ref}
+      >
+        {getEvidenceAttachmentLabel(evidence)}
+      </summary>
+      <div className="mt-0.5 break-all font-mono text-slate-500">
+        {evidence.ref}
+      </div>
+    </details>
+  );
+}
+
+function ScreenshotEvidenceAttachment({
+  apiBase,
+  token,
+  projectId,
+  evidence,
+  onAuthExpired,
+}: {
+  apiBase: string;
+  token: string;
+  projectId: string;
+  evidence: AgentTeamAcceptanceEvidence;
+  onAuthExpired?: () => void;
+}) {
+  const objectUrlRef = useRef<string | null>(null);
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const releaseObjectUrl = useMemoizedFn(() => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    setObjectUrl(null);
+  });
+
+  useEffect(
+    () => () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+    },
+    [],
+  );
+
+  const openScreenshot = useMemoizedFn(async () => {
+    if (loading) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const blob = await getTerminalProjectPreviewAsset(
+        apiBase,
+        token,
+        projectId,
+        evidence.ref,
+      );
+      releaseObjectUrl();
+      const nextObjectUrl = URL.createObjectURL(blob);
+      objectUrlRef.current = nextObjectUrl;
+      setObjectUrl(nextObjectUrl);
+      setOpen(true);
+    } catch (caught) {
+      if (caught instanceof HttpError && caught.status === 401) {
+        onAuthExpired?.();
+      }
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  const closeScreenshot = useMemoizedFn(() => {
+    setOpen(false);
+    releaseObjectUrl();
+  });
+
+  return (
+    <div className="mt-0.5">
+      <button
+        type="button"
+        className="text-sky-300 hover:text-sky-200 disabled:cursor-wait disabled:text-slate-500"
+        disabled={loading}
+        onClick={openScreenshot}
+        title={evidence.ref}
+      >
+        {loading ? "加载截图…" : getEvidenceAttachmentLabel(evidence)}
+      </button>
+      {error ? (
+        <div className="mt-0.5 break-words text-rose-300">{error}</div>
+      ) : null}
+      {objectUrl ? (
+        <RunweaveImageLightbox
+          alt={evidence.label}
+          onClose={closeScreenshot}
+          open={open}
+          src={objectUrl}
+          title={evidence.ref}
+        />
       ) : null}
     </div>
   );

@@ -20,9 +20,13 @@ import { createTerminalPanelSplit } from "./panel-split";
 import { resolvePanelTarget } from "./panel-targets";
 import { isInteractiveShellLaunch } from "../tmux-output-watcher-helpers";
 import { sendInputToSession } from "./input-dispatcher";
+import { logger } from "../../logging";
 
 const AGENT_SHELL_STARTUP_DELAY_MS = 10_000;
 const AGENT_EXIT_PANE_OPTION = "@runweave_agent_prepare_exit";
+const agentPreparationLogger = logger.child({
+  component: "terminal-agent-preparation",
+});
 const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
   "-c",
   "check_for_update_on_startup=false",
@@ -39,6 +43,7 @@ export async function prepareTerminalAgent(
   let createdPanel = false;
   let preparationPanelId: string | null = null;
   let commandSubmitted = false;
+  let commandSubmittedAt: string;
   if (request.panelId) {
     preparationPanelId = request.panelId;
     if (
@@ -185,15 +190,6 @@ export async function prepareTerminalAgent(
       });
     }
 
-    await terminalSessionManager.updatePanelTerminalState(
-      panel.id,
-      {
-        state: "agent_starting",
-        agent: request.agent,
-      },
-      operationId,
-    );
-
     try {
       if (reusingPanel) {
         if (!isInteractiveShellLaunch(session.command, session.args)) {
@@ -211,6 +207,11 @@ export async function prepareTerminalAgent(
             RUNWEAVE_PROJECT_ID: session.projectId,
           },
         });
+        await terminalSessionManager.updatePanelTerminalState(
+          panel.id,
+          { state: "shell_idle", agent: null },
+          operationId,
+        );
       }
       if (createdPanel || reusingPanel) {
         await delay(AGENT_SHELL_STARTUP_DELAY_MS);
@@ -237,6 +238,7 @@ export async function prepareTerminalAgent(
         operationId,
         paneTarget,
       );
+      commandSubmittedAt = new Date().toISOString();
       commandSubmitted = true;
     } catch (error) {
       throwPreparationError({
@@ -252,9 +254,34 @@ export async function prepareTerminalAgent(
     }
 
     try {
-      const currentPanel = terminalSessionManager.getPanel(panel.id);
+      let currentPanel = terminalSessionManager.getPanel(panel.id);
       if (!currentPanel) {
         throw new Error("Terminal agent panel missing after command submission");
+      }
+      if (
+        !currentPanel.terminalState ||
+        currentPanel.terminalState.state === "shell_idle"
+      ) {
+        try {
+          currentPanel =
+            (await terminalSessionManager.updatePanelTerminalState(
+              panel.id,
+              { state: "agent_starting", agent: request.agent },
+              operationId,
+            )) ?? currentPanel;
+        } catch (error) {
+          agentPreparationLogger.warn(
+            "terminal.agent-preparation.command-submitted-state-failed",
+            {
+              message:
+                "Agent command was submitted but starting state could not be persisted",
+              terminalSessionId: session.id,
+              panelId: panel.id,
+              operationId,
+              error,
+            },
+          );
+        }
       }
       return {
         operationId,
@@ -264,8 +291,10 @@ export async function prepareTerminalAgent(
         provider: request.agent,
         threadId: null,
         status: "starting",
+        phase: "command_submitted",
         createdPanel,
         startedAt,
+        commandSubmittedAt,
       };
     } catch (error) {
       if (error instanceof TerminalPanelError) {

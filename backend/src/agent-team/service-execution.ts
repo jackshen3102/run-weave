@@ -138,11 +138,6 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
         frozen: true,
       };
       boundWorkers.push(boundWorker);
-      if (panelId) {
-        await this.agentReadiness.ensureAgentReady(session, terminal, {
-          panelId,
-        });
-      }
     }
     const activeWorkerRole = resolveInitialActiveWorkerRole(boundWorkers);
     const activeWorkers = setActiveWorker(boundWorkers, activeWorkerRole);
@@ -162,23 +157,42 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
         outboxMtimeMs,
         run.loop.round,
       );
-      await this.promptSender.sendPromptToPane(
-        session,
-        buildWorkerStartupPrompt({
-          run: {
-            ...run,
-            activeWorkerRole,
-            activeWorkerDispatch,
-          },
-          worker: activeWorker,
-          acceptance: executionAcceptance,
-          outboxPath: this.paths.workerOutboxRelativePath(
-            run.terminalSessionId,
-            activeWorker,
-          ),
-        }),
-        { panelId: activeWorker.panelId },
-      );
+    }
+    const persistedRun = await this.updateRun(run, {
+      phase: "executing",
+      status: "running",
+      terminal,
+      proposal: null,
+      activeWorkerRole,
+      activeWorkerDispatch,
+      workerDispatchProtocolVersion: 1,
+      consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
+      workers: activeWorkers,
+      acceptance: executionAcceptance,
+      logs: [...run.logs, context.log],
+    });
+    if (activeWorker?.panelId && activeWorkerDispatch) {
+      const startupPrompt = buildWorkerStartupPrompt({
+        run: persistedRun,
+        worker: activeWorker,
+        acceptance: executionAcceptance,
+        outboxPath: this.paths.workerOutboxRelativePath(
+          run.terminalSessionId,
+          activeWorker,
+        ),
+      });
+      try {
+        await this.agentReadiness.ensureAgentReady(session, terminal, {
+          panelId: activeWorker.panelId,
+          prompt: startupPrompt,
+        });
+      } catch (error) {
+        return this.pauseForWorkerDispatchError(
+          persistedRun,
+          activeWorker.role,
+          `readiness 失败：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     if (this.tmuxService && activeWorkers.some((worker) => worker.panelId)) {
       try {
@@ -195,25 +209,13 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       }
     }
     await this.restoreMainPaneFocus(session, run.mainPanelId);
-    return this.updateRun(run, {
-      phase: "executing",
-      status: "running",
-      terminal,
-      proposal: null,
-      activeWorkerRole,
-      activeWorkerDispatch,
-      workers: activeWorkers,
-      acceptance: executionAcceptance,
-      logs: [...run.logs, context.log],
-    });
+    return persistedRun;
   }
 
   protected async applyRound(
     run: AgentTeamRun,
     params: {
       acceptanceResults?: AgentTeamWorkerOutbox["acceptanceResults"];
-      objectiveProgress?: boolean;
-      observedNoProgress?: boolean;
       forceBounceCaseIds?: string[];
       repairTargets?: AgentTeamRepairTarget[];
       completedWorkerRole?: AgentTeamWorkerRole | null;
@@ -240,11 +242,11 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       round: run.loop.round,
     });
     const logs = [...runWithGates.logs];
-    if (folded.hadProgress) {
+    if (folded.reviewStateChanged && folded.hadProgress) {
       logs.push(`round ${run.loop.round} 有进展，noProgress 计数清零`);
     } else if (
-      params.acceptanceResults?.length ||
-      params.observedNoProgress === true
+      folded.reviewStateChanged &&
+      params.acceptanceResults?.length
     ) {
       logs.push(
         `round ${run.loop.round} 无进展，noProgress=${folded.loop.noProgressCount}/${folded.loop.maxNoProgress}`,
@@ -318,6 +320,8 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       workers,
       activeWorkerRole,
       activeWorkerDispatch,
+      workerDispatchProtocolVersion: 1,
+      consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
       logs,
     });
 
@@ -378,6 +382,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     if (!session) {
       return run;
     }
+    let persistedRun: AgentTeamRun | null = null;
     try {
       const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(
         session,
@@ -402,31 +407,41 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
         failedCases,
         repairCycles,
       });
-      await this.agentReadiness.ensureAgentReady(session, terminal, {
-        panelId: codeWorker.panelId,
-        prompt: bouncePrompt,
-      });
       const bouncedAcceptance = run.acceptance.map((item) =>
         caseIds.includes(item.caseId)
           ? { ...item, bouncedToPanelId: codeWorker.panelId }
           : item,
       );
-      return this.updateRun(run, {
+      persistedRun = await this.updateRun(run, {
         acceptance: bouncedAcceptance,
         activeWorkerRole: "code",
         activeWorkerDispatch,
+        workerDispatchProtocolVersion: 1,
+        consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
         workers: setActiveWorker(run.workers, "code"),
         logs: [
           ...run.logs,
           `用例 ${caseIds.join(", ")} 稳定失败，抛回 code pane ${codeWorker.panelId}`,
         ],
       });
+      await this.agentReadiness.ensureAgentReady(session, terminal, {
+        panelId: codeWorker.panelId,
+        prompt: bouncePrompt,
+      });
+      return persistedRun;
     } catch (error) {
       agentTeamLogger.warn("agent-team.bounce.failed", {
         message: "Could not bounce failure back to code pane",
         runId: run.runId,
         error,
       });
+      if (persistedRun) {
+        return this.pauseForWorkerDispatchError(
+          persistedRun,
+          "code",
+          `bounce prompt 投递失败：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       return run;
     }
   }

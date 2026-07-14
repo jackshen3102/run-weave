@@ -200,6 +200,8 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
           : run.loop,
       activeWorkerRole: role,
       activeWorkerDispatch,
+      workerDispatchProtocolVersion: 1,
+      consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
       workers: setActiveWorker(dispatchRun.workers, role),
       acceptance: dispatchRun.acceptance.map((item) =>
         caseIds.has(item.caseId)

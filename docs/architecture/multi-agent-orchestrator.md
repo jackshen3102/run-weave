@@ -109,7 +109,6 @@ review 范围由后端生成并写入 worker dispatch，reviewer 必须在 pane-
 - `POST /runs`：在指定 terminal session 上创建 run，可携带 `planFilePath` / `testCaseFilePath`，并可显式设置 `options.reviewCheckpointMode="local_commit"`。
 - `POST /runs/:runId/propose-split`：提交主 Agent 或用户产出的拆分提案，可携带 `testCaseFilePath` / `generatedTestCaseFilePath` 生成可追溯 acceptance。
 - `POST /runs/:runId/split-gate`：确认或驳回拆分提案。
-- `POST /runs/:runId/round`：记录一轮验收结果或进展信号。
 - `POST /runs/:runId/resume`：人工 note 介入并恢复 loop。
 - `POST /runs/:runId/focus-pane`：聚焦属于该 run 的主 pane 或 worker pane。
 - `GET /runs/:runId/export`：导出复盘包，供 CLI 和人工排障读取 run、pane、outbox、history tail 与验收摘要。
