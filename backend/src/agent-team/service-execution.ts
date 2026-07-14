@@ -156,10 +156,20 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
         activeWorker,
       );
       const requestedAt = new Date().toISOString();
+      activeWorkerDispatch = createActiveWorkerDispatch(
+        activeWorker,
+        requestedAt,
+        outboxMtimeMs,
+        run.loop.round,
+      );
       await this.promptSender.sendPromptToPane(
         session,
         buildWorkerStartupPrompt({
-          run,
+          run: {
+            ...run,
+            activeWorkerRole,
+            activeWorkerDispatch,
+          },
           worker: activeWorker,
           acceptance: executionAcceptance,
           outboxPath: this.paths.workerOutboxRelativePath(
@@ -168,12 +178,6 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
           ),
         }),
         { panelId: activeWorker.panelId },
-      );
-      activeWorkerDispatch = createActiveWorkerDispatch(
-        activeWorker,
-        requestedAt,
-        outboxMtimeMs,
-        run.loop.round,
       );
     }
     if (this.tmuxService && activeWorkers.some((worker) => worker.panelId)) {
@@ -380,9 +384,21 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
         codeWorker,
       );
       const requestedAt = new Date().toISOString();
+      const activeWorkerDispatch = createActiveWorkerDispatch(
+        codeWorker,
+        requestedAt,
+        outboxMtimeMs,
+        run.loop.round,
+        null,
+        { repairKeys: repairCycles.map((cycle) => cycle.repairKey) },
+      );
       const terminal = resolveAgentTeamTerminal(run.terminal);
       const bouncePrompt = buildBounceBackPrompt({
-        run,
+        run: {
+          ...run,
+          activeWorkerRole: "code",
+          activeWorkerDispatch,
+        },
         failedCases,
         repairCycles,
       });
@@ -398,14 +414,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       return this.updateRun(run, {
         acceptance: bouncedAcceptance,
         activeWorkerRole: "code",
-        activeWorkerDispatch: createActiveWorkerDispatch(
-          codeWorker,
-          requestedAt,
-          outboxMtimeMs,
-          run.loop.round,
-          null,
-          { repairKeys: repairCycles.map((cycle) => cycle.repairKey) },
-        ),
+        activeWorkerDispatch,
         workers: setActiveWorker(run.workers, "code"),
         logs: [
           ...run.logs,

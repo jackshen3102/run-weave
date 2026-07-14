@@ -508,7 +508,11 @@ export abstract class AgentTeamCompletionService extends AgentTeamRepairProtocol
     await this.promptSender.sendPromptToPane(
       session,
       buildWorkerRecheckPrompt({
-        run,
+        run: {
+          ...run,
+          activeWorkerRole: worker.role,
+          activeWorkerDispatch,
+        },
         worker,
         cases,
         outboxPath,

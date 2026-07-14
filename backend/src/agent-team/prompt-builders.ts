@@ -57,6 +57,7 @@ export function buildWorkerStartupPrompt(params: {
     `Session: ${run.terminalSessionId}`,
     `PanelId: ${worker.panelId ?? ""}`,
     `TmuxPaneId: ${worker.tmuxPaneId ?? ""}`,
+    ...formatWorkerDispatchInstructions(run),
     "",
     `任务：${run.task}`,
     "",
@@ -138,6 +139,7 @@ export function buildBounceBackPrompt(params: {
     isReviewGateBounce
       ? `[loop round ${run.loop.round}] 串行门禁报以下用例失败，请修复：`
       : `[loop round ${run.loop.round}] behavior_verify 连续多轮报以下用例失败，请修复：`,
+    ...formatWorkerDispatchInstructions(run),
     "",
     ...failedCases.map((item) => {
       const evidence = item.evidence
@@ -193,6 +195,7 @@ export function buildCodeFixHandoffCorrectionPrompt(params: {
 }): string {
   return [
     `[loop round ${params.run.loop.round}] code 修复交接协议不完整，禁止继续修改源码。`,
+    ...formatWorkerDispatchInstructions(params.run),
     "",
     "只补正当前 pane-scoped outbox 的 fixVerifications：",
     ...params.errors.map((error) => `- ${error}`),
@@ -207,6 +210,7 @@ export function buildReviewFindingCorrectionPrompt(params: {
 }): string {
   return [
     `[loop round ${params.run.loop.round}] code_review finding 协议不完整，禁止重新审查或修改代码。`,
+    ...formatWorkerDispatchInstructions(params.run),
     "",
     "只补正当前 pane-scoped outbox 的 remainingFindings：",
     ...params.errors.map((error) => `- ${error}`),
@@ -252,6 +256,7 @@ export function buildWorkerRecheckPrompt(params: {
       : [];
   return [
     heading,
+    ...formatWorkerDispatchInstructions(run),
     ...(worker.role === "behavior_verify"
       ? ["review pass 不代表 behavior pass。"]
       : []),
@@ -297,6 +302,17 @@ export function buildWorkerRecheckPrompt(params: {
         ]
       : []),
   ].join("\n");
+}
+
+function formatWorkerDispatchInstructions(run: AgentTeamRun): string[] {
+  const dispatchId = run.activeWorkerDispatch?.dispatchId?.trim();
+  if (!dispatchId) {
+    return [];
+  }
+  return [
+    `DispatchId: ${dispatchId}`,
+    `- outbox 顶层 dispatchId 必须等于 "${dispatchId}"；不得复用或改写其他 dispatch 的结果。`,
+  ];
 }
 
 function formatReviewTargetInstructions(run: AgentTeamRun): string[] {

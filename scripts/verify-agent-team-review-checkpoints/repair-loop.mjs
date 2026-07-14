@@ -3,6 +3,7 @@ import { foldRound } from "../../backend/src/agent-team/loop.ts";
 import { normalizeAgentTeamWorkerOutbox } from "../../backend/src/agent-team/outbox-resolver.ts";
 import {
   buildBounceBackPrompt,
+  buildWorkerStartupPrompt,
   buildWorkerRecheckPrompt,
 } from "../../backend/src/agent-team/prompt-builders.ts";
 import {
@@ -14,8 +15,10 @@ import {
   validateCodeFixHandoff,
 } from "../../backend/src/agent-team/repair-loop.ts";
 import {
+  completionOutboxIdentityMismatch,
   completionSignalWorkerMismatch,
   createActiveWorkerDispatch,
+  resolveActiveWorkerDispatch,
   workerOutboxFreshnessMismatch,
 } from "../../backend/src/agent-team/service-workflow-policy.ts";
 import {
@@ -106,13 +109,39 @@ export function verifyEvidenceGatedRepairLoop(check) {
   });
   check(
     "repair-runtime-prompt-requires-real-reproduction",
-    runtimePrompt.includes("$toolkit:reproduce-before-fix") &&
+      runtimePrompt.includes("$toolkit:reproduce-before-fix") &&
       runtimePrompt.includes("同一 scenarioId") &&
-      runtimePrompt.includes("任一必跑项失败立即停止"),
+      runtimePrompt.includes("任一必跑项失败立即停止") &&
+      runtimePrompt.includes(
+        `DispatchId: ${runtimeRun.activeWorkerDispatch.dispatchId}`,
+      ),
     runtimePrompt,
   );
-  const reviewRecheckPrompt = buildWorkerRecheckPrompt({
+  const startupPrompt = buildWorkerStartupPrompt({
     run: runtimeRun,
+    worker: run.workers[0],
+    acceptance: run.acceptance,
+    outboxPath: ".runweave/outbox/repair.json",
+  });
+  check(
+    "repair-startup-prompt-binds-outbox-to-dispatch",
+    startupPrompt.includes(
+      `outbox 顶层 dispatchId 必须等于 "${runtimeRun.activeWorkerDispatch.dispatchId}"`,
+    ),
+    startupPrompt,
+  );
+  const reviewDispatchRun = {
+    ...runtimeRun,
+    activeWorkerRole: "code_review",
+    activeWorkerDispatch: createActiveWorkerDispatch(
+      run.workers[1],
+      run.updatedAt,
+      1,
+      run.loop.round,
+    ),
+  };
+  const reviewRecheckPrompt = buildWorkerRecheckPrompt({
+    run: reviewDispatchRun,
     worker: run.workers[1],
     cases: [run.acceptance[1]],
     triggerSummary: "code handoff",
@@ -123,8 +152,18 @@ export function verifyEvidenceGatedRepairLoop(check) {
       !reviewRecheckPrompt.includes("已完成修复"),
     reviewRecheckPrompt,
   );
+  const behaviorDispatchRun = {
+    ...runtimeRun,
+    activeWorkerRole: "behavior_verify",
+    activeWorkerDispatch: createActiveWorkerDispatch(
+      run.workers[2],
+      run.updatedAt,
+      1,
+      run.loop.round,
+    ),
+  };
   const behaviorRecheckPrompt = buildWorkerRecheckPrompt({
-    run: runtimeRun,
+    run: behaviorDispatchRun,
     worker: run.workers[2],
     cases: [run.acceptance[0]],
     triggerSummary: "incremental review passed",
@@ -134,6 +173,9 @@ export function verifyEvidenceGatedRepairLoop(check) {
     behaviorRecheckPrompt.includes("以下行为 case 尚未验证或需要复验") &&
       behaviorRecheckPrompt.includes("review pass 不代表 behavior pass") &&
       behaviorRecheckPrompt.includes("上游 review 摘要") &&
+      behaviorRecheckPrompt.includes(
+        `DispatchId: ${behaviorDispatchRun.activeWorkerDispatch.dispatchId}`,
+      ) &&
       !behaviorRecheckPrompt.includes("本轮修复摘要") &&
       !behaviorRecheckPrompt.includes("已完成修复"),
     behaviorRecheckPrompt,
@@ -460,6 +502,106 @@ export function verifyEvidenceGatedRepairLoop(check) {
         ]),
       ).status === "valid",
     multiRun.activeWorkerDispatch,
+  );
+  const currentBehaviorOutbox = normalizeAgentTeamWorkerOutbox({
+    sessionId: behaviorDispatchRun.terminalSessionId,
+    panelId: run.workers[2].panelId,
+    tmuxPaneId: run.workers[2].tmuxPaneId,
+    projectId: behaviorDispatchRun.projectId,
+    runId: behaviorDispatchRun.runId,
+    role: "behavior_verify",
+    dispatchId: behaviorDispatchRun.activeWorkerDispatch.dispatchId,
+    status: "completed",
+    summary: "current behavior result",
+    error: null,
+    finishedAt: "2026-07-14T00:01:00.000Z",
+  });
+  const delayedStaleOutbox = normalizeAgentTeamWorkerOutbox({
+    ...currentBehaviorOutbox,
+    dispatchId: "dispatch-from-previous-round",
+  });
+  check(
+    "repair-current-dispatch-outbox-accepted",
+    completionOutboxIdentityMismatch(
+      behaviorDispatchRun,
+      run.workers[2],
+      behaviorDispatchRun.activeWorkerDispatch,
+      currentBehaviorOutbox,
+      true,
+    ) === null,
+    currentBehaviorOutbox,
+  );
+  check(
+    "repair-delayed-stale-outbox-rejected-even-when-fresh",
+    workerOutboxFreshnessMismatch(
+      behaviorDispatchRun.activeWorkerDispatch,
+      2,
+    ) === null &&
+      completionOutboxIdentityMismatch(
+        behaviorDispatchRun,
+        run.workers[2],
+        behaviorDispatchRun.activeWorkerDispatch,
+        delayedStaleOutbox,
+        true,
+      ) === "outbox_dispatch_id_mismatch",
+    delayedStaleOutbox,
+  );
+  const missingDispatchOutbox = normalizeAgentTeamWorkerOutbox({
+    ...currentBehaviorOutbox,
+    dispatchId: null,
+  });
+  check(
+    "repair-new-dispatch-requires-outbox-dispatch-id",
+    completionOutboxIdentityMismatch(
+      behaviorDispatchRun,
+      run.workers[2],
+      behaviorDispatchRun.activeWorkerDispatch,
+      missingDispatchOutbox,
+      true,
+    ) === "outbox_dispatch_id_missing",
+    missingDispatchOutbox,
+  );
+  const legacyDispatch = {
+    ...behaviorDispatchRun.activeWorkerDispatch,
+    outboxDispatchIdRequired: undefined,
+  };
+  check(
+    "repair-legacy-dispatch-allows-legacy-outbox",
+    completionOutboxIdentityMismatch(
+      { ...behaviorDispatchRun, activeWorkerDispatch: legacyDispatch },
+      run.workers[2],
+      legacyDispatch,
+      missingDispatchOutbox,
+      true,
+    ) === null,
+    legacyDispatch,
+  );
+  const recoveredDispatchId =
+    behaviorDispatchRun.activeWorkerDispatch.dispatchId;
+  const recoveredRun = {
+    ...behaviorDispatchRun,
+    activeWorkerDispatch: null,
+    acceptance: [
+      {
+        ...run.acceptance[0],
+        status: "pending",
+        recheckRequestedAt: run.updatedAt,
+        recheckDispatchId: recoveredDispatchId,
+        recheckWorkerPanelId: run.workers[2].panelId,
+        recheckWorkerRole: "behavior_verify",
+        recheckOutboxMtimeMs: 1,
+      },
+    ],
+  };
+  const recoveredDispatch = resolveActiveWorkerDispatch(
+    recoveredRun,
+    run.workers[2],
+  );
+  check(
+    "repair-recovered-dispatch-preserves-persisted-id",
+    recoveredDispatch.dispatchId === recoveredDispatchId &&
+      recoveredDispatch.outboxDispatchIdRequired === false,
+    recoveredDispatch,
   );
   check(
     "repair-stale-outbox-cannot-double-count",
