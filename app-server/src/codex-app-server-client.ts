@@ -1,14 +1,23 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type {
   AppServerCodexThreadDetail,
   AppServerThreadDetailResponse,
-  AppServerThreadDetailStatus,
   AppServerThreadDetailTurn,
   AppServerThreadRef,
 } from "@runweave/shared/app-server-events";
+import {
+  asRecord,
+  isExecutableFile,
+  isPresent,
+  normalizeDate,
+  normalizeDetailStatus,
+  readMtimeMs,
+  readNonNegativeNumber,
+  readString,
+} from "./codex-app-server-helpers.js";
 
 export type CodexThreadStatusType =
   | "notLoaded"
@@ -585,57 +594,4 @@ function normalizeItemsView(
     : itemCount > 0
       ? "full"
       : "notLoaded";
-}
-
-function normalizeDetailStatus(
-  status: AppServerThreadRef["status"],
-): AppServerThreadDetailStatus {
-  if (status === "running" || status === "starting") return "active";
-  if (status === "failed") return "systemError";
-  if (status === "idle" || status === "completed") return "idle";
-  return "notLoaded";
-}
-
-function normalizeDate(value: unknown): string | null {
-  if (typeof value !== "string" && typeof value !== "number") {
-    return null;
-  }
-  const date = new Date(typeof value === "number" ? value * 1_000 : value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
-
-function readNonNegativeNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-    ? value
-    : undefined;
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function isPresent<T>(value: T | null): value is T {
-  return value !== null;
-}
-
-function readMtimeMs(filePath: string): number {
-  try {
-    return statSync(filePath).mtimeMs;
-  } catch {
-    return 0;
-  }
-}
-
-function isExecutableFile(filePath: string): boolean {
-  try {
-    return existsSync(filePath) && statSync(filePath).isFile();
-  } catch {
-    return false;
-  }
 }

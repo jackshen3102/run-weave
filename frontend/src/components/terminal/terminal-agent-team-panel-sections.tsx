@@ -305,6 +305,27 @@ export function ExecutingSection({
 
       {run.reviewCheckpoint ? <ReviewCheckpointStatus run={run} /> : null}
 
+      {(run.findingDecisions ?? []).length > 0 ? (
+        <div className="rounded border border-sky-900 bg-sky-950/25 p-2 text-[10px] text-sky-200">
+          <div className="font-semibold uppercase text-sky-400">
+            Finding 裁决记录
+          </div>
+          {(run.findingDecisions ?? []).slice(-3).map((decision) => (
+            <div key={decision.id} className="mt-1 break-words">
+              <span className="font-mono">{decision.invariantKey}</span> ·{" "}
+              {formatFindingDisposition(decision.disposition)}
+              {decision.caseIds.length > 0
+                ? ` · ${decision.caseIds.join(", ")}`
+                : ""}
+              <span className="block text-sky-100/80">
+                {decision.finding.severity} · {decision.finding.title}
+              </span>
+              <span className="block text-sky-300/60">{decision.reason}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <div
         className={[
           "rounded border p-2",
@@ -342,7 +363,12 @@ export function ExecutingSection({
         </div>
       </div>
 
-      {loop.escalated ? (
+      {run.pendingFindingDecision ? (
+        <div className="rounded border border-rose-800 bg-rose-950/40 p-2 text-[11px] text-rose-200">
+          Loop 已暂停。请在顶部完成 Finding
+          范围裁决；这里不会提供通用“人工完成”入口。
+        </div>
+      ) : loop.escalated ? (
         <div className="space-y-2 rounded border border-rose-800 bg-rose-950/40 p-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
             <AlertTriangle className="h-4 w-4" /> 已熔断 · 升级人工
@@ -476,6 +502,15 @@ export function ExecutingSection({
       </div>
     </div>
   );
+}
+
+function formatFindingDisposition(
+  disposition: "blocking" | "out_of_scope" | "waived",
+): string {
+  if (disposition === "blocking") {
+    return "继续修复";
+  }
+  return disposition === "out_of_scope" ? "范围外" : "本轮豁免";
 }
 
 function ReviewCheckpointStatus({ run }: { run: AgentTeamRun }) {

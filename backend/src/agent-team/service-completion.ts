@@ -10,19 +10,19 @@ import type { TerminalSessionRecord } from "../terminal/manager";
 import {
   buildCodeFixHandoffCorrectionPrompt,
   buildReviewFindingCorrectionPrompt,
-  buildWorkerRecheckPrompt,
 } from "./prompt-builders";
 import { agentTeamLogger } from "./service-context";
 import {
   logReconciledCompletion,
   logStaleCompletion,
 } from "./service-completion-logging";
-import { AgentTeamRepairProtocolService } from "./service-repair-protocol";
+import { AgentTeamCompletionRecheckService } from "./service-completion-recheck";
 import type {
   AgentTeamCompletionSignal,
   AgentTeamCompletionSignalSource,
 } from "./service-types";
 import {
+  resolvePendingFindingDecision,
   reviewFindingContractErrors,
   validateCodeFixHandoff,
   type AgentTeamRepairTarget,
@@ -39,20 +39,15 @@ import {
   completionOutboxIdentityMismatch,
   completionReviewTargetMismatch,
   completionSignalWorkerMismatch,
-  createActiveWorkerDispatch,
   findWorkerByRole,
   parseWorkerRole,
   resolveActiveWorkerDispatch,
-  setActiveWorker,
   shouldDispatchNextSerialWorker,
   workerOutboxFreshnessMismatch,
 } from "./service-workflow-policy";
-import {
-  createSyntheticCompletionEvent,
-  resolveAgentTeamTerminal,
-} from "./service-run-policy";
+import { createSyntheticCompletionEvent } from "./service-run-policy";
 
-export abstract class AgentTeamCompletionService extends AgentTeamRepairProtocolService {
+export abstract class AgentTeamCompletionService extends AgentTeamCompletionRecheckService {
   protected abstract resolveOutboxRound(
     run: AgentTeamRun,
     outbox: AgentTeamWorkerOutbox,
@@ -295,6 +290,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamRepairProtocol
         }
         const initialRound = this.resolveOutboxRound(latest, outbox);
         const reviewContractErrors = reviewFindingContractErrors(
+          latest,
           outbox,
           initialRound.acceptanceResults,
         );
@@ -312,6 +308,18 @@ export abstract class AgentTeamCompletionService extends AgentTeamRepairProtocol
             "code_review finding",
           );
           await recordConsumed(correctionRun);
+          return true;
+        }
+        const pendingFindingDecision = resolvePendingFindingDecision(
+          latest,
+          outbox,
+        );
+        if (pendingFindingDecision) {
+          const pausedRun = await this.pauseForFindingDecision(
+            latest,
+            pendingFindingDecision,
+          );
+          await recordConsumed(pausedRun);
           return true;
         }
         if (outbox.role === "code") {
@@ -583,82 +591,4 @@ export abstract class AgentTeamCompletionService extends AgentTeamRepairProtocol
     return null;
   }
 
-  protected async sendRecheckToWorker(
-    run: AgentTeamRun,
-    session: TerminalSessionRecord,
-    worker: AgentTeamWorker,
-    cases: AgentTeamAcceptanceCase[],
-    options: {
-      attempt: number;
-      sourcePanelId?: string | null;
-      reason?: "timeout_retry";
-      triggerSummary?: string | null;
-    },
-  ): Promise<AgentTeamRun> {
-    if (!worker.panelId) {
-      return run;
-    }
-    const outboxPath = this.paths.workerOutboxRelativePath(
-      run.terminalSessionId,
-      worker,
-    );
-    const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(session, worker);
-    const now = new Date().toISOString();
-    const activeWorkerDispatch = createActiveWorkerDispatch(
-      worker,
-      now,
-      outboxMtimeMs,
-      run.loop.round,
-      worker.role === "code_review"
-        ? (run.reviewCheckpoint?.pendingReview ?? null)
-        : null,
-    );
-    const caseIds = new Set(cases.map((item) => item.caseId));
-    const logPrefix =
-      options.reason === "timeout_retry"
-        ? `复验 worker 超时，已重试触发用例`
-        : `code pane ${options.sourcePanelId ?? ""} 已完成，重新触发用例`;
-    const persistedRun = await this.updateRun(run, {
-      activeWorkerRole: worker.role,
-      activeWorkerDispatch,
-      workerDispatchProtocolVersion: 1,
-      consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
-      workers: setActiveWorker(run.workers, worker.role),
-      acceptance: ensureWorkerGateAcceptance(run.workers, run.acceptance).map(
-        (item) =>
-          caseIds.has(item.caseId)
-            ? {
-                ...item,
-                status: "pending" as const,
-                consecutiveFail: 0,
-                resultSummary: null,
-                bouncedToPanelId: null,
-                recheckRequestedAt: now,
-                recheckDispatchId: activeWorkerDispatch.dispatchId ?? null,
-                recheckWorkerPanelId: worker.panelId,
-                recheckWorkerRole: worker.role,
-                recheckOutboxMtimeMs: outboxMtimeMs,
-                recheckAttempt: options.attempt,
-              }
-            : item,
-      ),
-      logs: [
-        ...run.logs,
-        `${logPrefix} ${Array.from(caseIds).join(", ")} 复验（${worker.role} pane ${worker.panelId}，attempt ${options.attempt}）`,
-      ],
-    });
-    const workerPrompt = buildWorkerRecheckPrompt({
-      run: persistedRun,
-      worker,
-      cases,
-      outboxPath,
-      triggerSummary: options.triggerSummary ?? null,
-    });
-    const terminal = resolveAgentTeamTerminal(run.terminal);
-    await this.agentLaunch.submitAgentLaunch(session, terminal, {
-      panelId: worker.panelId,
-      prompt: workerPrompt,
-    });
-    return persistedRun;
-  }
 }

@@ -1,11 +1,15 @@
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import type { AgentTeamRun } from "@runweave/shared/agent-team";
+import type {
+  AgentTeamFindingDisposition,
+  AgentTeamRun,
+} from "@runweave/shared/agent-team";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import {
   completeAgentTeamRun,
+  decideAgentTeamFinding,
   focusAgentTeamPane,
   getAgentTeamRunForTerminal,
   resumeAgentTeamRun,
@@ -21,6 +25,7 @@ import {
   type WorkerDraft,
 } from "./terminal-agent-team-panel-model";
 import { AgentTeamAttentionSummary } from "./terminal-agent-team-panel-attention";
+import { AgentTeamFindingDecisionCard } from "./terminal-agent-team-finding-decision";
 import {
   ExecutingSection,
   ProposalSection,
@@ -253,6 +258,28 @@ export function TerminalAgentTeamPanel({
     ).then(() => setResumeNote(""));
   });
 
+  const decideFinding = useMemoizedFn(
+    (
+      disposition: AgentTeamFindingDisposition,
+      caseIds: string[],
+      reason: string,
+    ): void => {
+      const pending = run?.pendingFindingDecision;
+      const invariantKey = pending?.finding.invariantKey;
+      if (!run || !invariantKey) {
+        return;
+      }
+      void runAction(() =>
+        decideAgentTeamFinding(apiBase, token, run.runId, {
+          invariantKey,
+          disposition,
+          caseIds,
+          reason: reason.trim(),
+        }),
+      );
+    },
+  );
+
   const focusPane = useMemoizedFn((panelId: string): void => {
     if (!run) {
       return;
@@ -322,7 +349,14 @@ export function TerminalAgentTeamPanel({
         </div>
       ) : null}
 
-      {run && attention ? (
+      {run?.pendingFindingDecision ? (
+        <AgentTeamFindingDecisionCard
+          key={run.pendingFindingDecision.id}
+          run={run}
+          busy={busy}
+          onDecide={decideFinding}
+        />
+      ) : run && attention ? (
         <AgentTeamAttentionSummary
           attention={attention}
           onFocusPane={focusPane}

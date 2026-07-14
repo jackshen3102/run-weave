@@ -134,6 +134,10 @@ export interface AgentTeamRepairCycle {
   firstFailedRound: number;
   lastFailedRound: number;
   lastFailureSummary: string;
+  /** Exact reviewer finding and outbox retained for a later human disposition. */
+  finding?: AgentTeamOutboxFinding;
+  reviewTarget?: AgentTeamReviewTarget | null;
+  reviewOutbox?: AgentTeamWorkerOutbox;
 }
 
 export interface AgentTeamLoop {
@@ -259,6 +263,10 @@ export interface AgentTeamRun {
   acceptance: AgentTeamAcceptanceCase[];
   loop: AgentTeamLoop;
   humanNotes: HumanInterventionNote[];
+  /** Durable, review-target-scoped human decisions; never rewrites finding facts. */
+  findingDecisions?: AgentTeamFindingDecision[];
+  /** Reviewer result currently paused for an explicit scope/risk decision. */
+  pendingFindingDecision?: AgentTeamPendingFindingDecision | null;
   /** Observation log for the executing sidecar. */
   logs: string[];
   createdAt: string;
@@ -276,6 +284,19 @@ export interface AgentTeamTerminal {
 export type AgentTeamOutboxStatus = "completed" | "failed";
 export type AgentTeamFindingStatus = "open" | "resolved" | "informational";
 export type AgentTeamFindingSeverity = "P0" | "P1" | "P2" | "P3";
+export type AgentTeamFindingDisposition =
+  | "blocking"
+  | "out_of_scope"
+  | "waived";
+
+export interface AgentTeamFindingCaseImpact {
+  /** Backend acceptance case id, not the source markdown heading id. */
+  caseId: string;
+  /** Why this finding violates the selected product case. */
+  summary: string;
+  /** Evidence that connects the reproduced scenario to this product case. */
+  evidence: AgentTeamAcceptanceEvidence[];
+}
 
 export interface AgentTeamReviewFindingReproduction {
   mode: AgentTeamFixReproductionMode;
@@ -299,6 +320,32 @@ export interface AgentTeamOutboxFinding {
   verificationMode?: AgentTeamFindingVerificationMode;
   /** Executed reviewer reproduction; required for every open P0/P1. */
   reproduction?: AgentTeamReviewFindingReproduction;
+  /** Reviewer proposal. Only a recorded human decision can authorize non-blocking. */
+  disposition?: AgentTeamFindingDisposition;
+  /** Product cases observably affected by this finding. */
+  caseImpacts?: AgentTeamFindingCaseImpact[];
+}
+
+export interface AgentTeamFindingDecision {
+  id: string;
+  invariantKey: string;
+  scenarioId: string | null;
+  /** Immutable finding snapshot; disposition never replaces the observed fact. */
+  finding: AgentTeamOutboxFinding;
+  disposition: AgentTeamFindingDisposition;
+  caseIds: string[];
+  reason: string;
+  decidedAt: string;
+  reviewTarget: AgentTeamReviewTarget | null;
+}
+
+export interface AgentTeamPendingFindingDecision {
+  id: string;
+  finding: AgentTeamOutboxFinding;
+  outbox: AgentTeamWorkerOutbox;
+  reviewTarget: AgentTeamReviewTarget | null;
+  reason: string;
+  requestedAt: string;
 }
 
 export type AgentTeamFixReproductionMode =
@@ -432,6 +479,13 @@ export interface ResumeAgentTeamRunRequest {
 
 export interface CompleteAgentTeamRunRequest {
   note?: string;
+}
+
+export interface DecideAgentTeamFindingRequest {
+  invariantKey: string;
+  disposition: AgentTeamFindingDisposition;
+  caseIds?: string[];
+  reason: string;
 }
 
 export interface FocusAgentTeamPaneRequest {

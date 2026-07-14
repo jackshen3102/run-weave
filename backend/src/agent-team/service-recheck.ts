@@ -15,8 +15,9 @@ import {
   findRecheckWatchdogCases,
   groupRecheckCasesByWorker,
   isGateWorkerOutbox,
+  isReviewGateAcceptanceCase,
   resolveRecheckDispatches,
-  synthesizeBlockingReviewResult,
+  synthesizeBlockingReviewResults,
 } from "./service-acceptance-policy";
 import {
   createActiveWorkerDispatch,
@@ -24,6 +25,7 @@ import {
   setActiveWorker,
 } from "./service-workflow-policy";
 import {
+  rawBlockingReviewFindings,
   resolveRepairTargets,
   type AgentTeamRepairTarget,
 } from "./repair-loop";
@@ -421,15 +423,46 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
     const directResults = (outbox.acceptanceResults ?? []).filter((result) =>
       knownCaseIds.has(result.caseId),
     );
-    const reviewResult = synthesizeBlockingReviewResult(runWithGates, outbox);
-    if (reviewResult) {
+    const reviewResults = synthesizeBlockingReviewResults(runWithGates, outbox);
+    if (reviewResults.length > 0) {
       return {
-        acceptanceResults: [reviewResult],
-        forceBounceCaseIds: [reviewResult.caseId],
-        repairTargets: resolveRepairTargets(runWithGates, outbox, [
-          reviewResult,
-        ]),
+        acceptanceResults: reviewResults,
+        forceBounceCaseIds: reviewResults.map((result) => result.caseId),
+        repairTargets: resolveRepairTargets(
+          runWithGates,
+          outbox,
+          reviewResults,
+        ),
       };
+    }
+    if (
+      outbox.role === "code_review" &&
+      rawBlockingReviewFindings(outbox).length > 0
+    ) {
+      const reviewGate = runWithGates.acceptance.find(
+        isReviewGateAcceptanceCase,
+      );
+      if (reviewGate) {
+        return {
+          acceptanceResults: [
+            {
+              caseId: reviewGate.caseId,
+              status: "pass",
+              summary: "阻断 finding 已由人工完成范围裁决",
+              evidence: [
+                {
+                  type: "event",
+                  label: "Finding 人工裁决",
+                  summary: "非 blocking disposition 已记录，finding 事实仍保留",
+                  ref: `finding-decisions:${run.runId}`,
+                },
+              ],
+            },
+          ],
+          forceBounceCaseIds: [],
+          repairTargets: [],
+        };
+      }
     }
     if (directResults.length > 0) {
       return {

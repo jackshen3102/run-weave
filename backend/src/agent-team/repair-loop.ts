@@ -1,17 +1,19 @@
 import type {
+  AgentTeamAcceptanceCase,
+  AgentTeamFindingDecision,
   AgentTeamFixVerification,
   AgentTeamLoop,
   AgentTeamOutboxFinding,
+  AgentTeamPendingFindingDecision,
   AgentTeamRepairCycle,
+  AgentTeamReviewTarget,
   AgentTeamRun,
   AgentTeamWorkerOutbox,
   AgentTeamWorkerRole,
 } from "@runweave/shared/agent-team";
-
 export const DEFAULT_MAX_REPAIR_ATTEMPTS = 3;
 export const MIN_REPAIR_ATTEMPTS = 1;
 export const MAX_REPAIR_ATTEMPTS = 5;
-
 export interface AgentTeamRepairTarget {
   repairKey: string;
   sourceRole: "code_review" | "behavior_verify";
@@ -20,13 +22,14 @@ export interface AgentTeamRepairTarget {
   verificationMode: "runtime" | "structural";
   sourceEvidenceRefs: string[];
   failureSummary: string;
+  finding?: AgentTeamOutboxFinding;
+  reviewTarget?: AgentTeamReviewTarget | null;
+  reviewOutbox?: AgentTeamWorkerOutbox;
 }
-
 export type CodeFixHandoffValidation =
   | { status: "valid"; repairKeys: string[] }
   | { status: "invalid"; errors: string[] }
   | { status: "blocked"; reason: string };
-
 export function resolveMaxRepairAttempts(value: unknown): number {
   return typeof value === "number" &&
     Number.isInteger(value) &&
@@ -35,7 +38,6 @@ export function resolveMaxRepairAttempts(value: unknown): number {
     ? value
     : DEFAULT_MAX_REPAIR_ATTEMPTS;
 }
-
 export function isValidInvariantKey(value: unknown): value is string {
   return (
     typeof value === "string" &&
@@ -43,7 +45,7 @@ export function isValidInvariantKey(value: unknown): value is string {
   );
 }
 
-export function blockingReviewFindings(
+export function rawBlockingReviewFindings(
   outbox: AgentTeamWorkerOutbox,
 ): AgentTeamOutboxFinding[] {
   return (outbox.remainingFindings ?? []).filter(
@@ -53,14 +55,113 @@ export function blockingReviewFindings(
   );
 }
 
+export function blockingReviewFindings(
+  run: AgentTeamRun,
+  outbox: AgentTeamWorkerOutbox,
+): AgentTeamOutboxFinding[] {
+  const reviewTarget = resolveReviewTarget(run, outbox);
+  return rawBlockingReviewFindings(outbox).filter((finding) => {
+    const decision = findFindingDecision(run, finding, reviewTarget);
+    return !decision || decision.disposition === "blocking";
+  });
+}
+
+export function isTraceableProductCase(item: AgentTeamAcceptanceCase): boolean {
+  return Boolean(
+    item.sourceCaseId &&
+    item.sourceFilePath &&
+    !/code review|代码审查|code_review/i.test(item.text),
+  );
+}
+
+export function findFindingDecision(
+  run: AgentTeamRun,
+  finding: AgentTeamOutboxFinding,
+  reviewTarget: AgentTeamReviewTarget | null,
+): AgentTeamFindingDecision | null {
+  const invariantKey = finding.invariantKey?.trim();
+  if (!invariantKey) {
+    return null;
+  }
+  const scenarioId = finding.reproduction?.scenarioId?.trim() ?? null;
+  return (
+    (run.findingDecisions ?? [])
+      .slice()
+      .reverse()
+      .find(
+        (decision) =>
+          decision.invariantKey === invariantKey &&
+          decision.scenarioId === scenarioId &&
+          reviewTargetsMatch(decision.reviewTarget, reviewTarget),
+      ) ?? null
+  );
+}
+
+export function resolveFindingCaseIds(
+  run: AgentTeamRun,
+  finding: AgentTeamOutboxFinding,
+  reviewTarget: AgentTeamReviewTarget | null = resolveReviewTarget(run),
+): string[] {
+  const decision = findFindingDecision(run, finding, reviewTarget);
+  const caseIds =
+    decision?.disposition === "blocking"
+      ? decision.caseIds
+      : (finding.caseImpacts ?? []).map((impact) => impact.caseId);
+  return Array.from(new Set(caseIds)).filter((caseId) => {
+    const acceptanceCase = run.acceptance.find(
+      (item) => item.caseId === caseId,
+    );
+    return Boolean(acceptanceCase && isTraceableProductCase(acceptanceCase));
+  });
+}
+
+export function resolvePendingFindingDecision(
+  run: AgentTeamRun,
+  outbox: AgentTeamWorkerOutbox,
+): AgentTeamPendingFindingDecision | null {
+  if (outbox.role !== "code_review") {
+    return null;
+  }
+  const reviewTarget = resolveReviewTarget(run, outbox);
+  for (const finding of rawBlockingReviewFindings(outbox)) {
+    if (findFindingDecision(run, finding, reviewTarget)) {
+      continue;
+    }
+    const proposedDisposition = finding.disposition ?? "blocking";
+    const traceabilityErrors =
+      reviewTarget?.scope === "final"
+        ? findingCaseTraceabilityErrors(run, finding)
+        : [];
+    if (proposedDisposition === "blocking" && traceabilityErrors.length === 0) {
+      continue;
+    }
+    const reason =
+      proposedDisposition === "out_of_scope"
+        ? "Reviewer 认为该 finding 可复现但不属于产品支持范围，需要人工确认。"
+        : proposedDisposition === "waived"
+          ? "Reviewer 不能自行豁免 finding，需要人工明确接受风险。"
+          : `Final review blocker 缺少可追溯产品 Case：${traceabilityErrors.join("；")}`;
+    return {
+      id: buildPendingDecisionId(finding, reviewTarget),
+      finding,
+      outbox,
+      reviewTarget,
+      reason,
+      requestedAt: new Date().toISOString(),
+    };
+  }
+  return null;
+}
+
 export function reviewFindingContractErrors(
+  _run: AgentTeamRun,
   outbox: AgentTeamWorkerOutbox,
   acceptanceResults: NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>,
 ): string[] {
   if (outbox.role !== "code_review") {
     return [];
   }
-  const findings = blockingReviewFindings(outbox);
+  const findings = rawBlockingReviewFindings(outbox);
   const hasFailure =
     acceptanceResults.some((result) => result.status === "fail") ||
     findings.length > 0;
@@ -68,16 +169,12 @@ export function reviewFindingContractErrors(
     return [];
   }
   if (findings.length === 0) {
-    return [
-      "P0/P1 review fail 必须在 remainingFindings 中提供阻断 finding",
-    ];
+    return ["P0/P1 review fail 必须在 remainingFindings 中提供阻断 finding"];
   }
   return findings.flatMap((finding, index) => {
     const errors: string[] = [];
     if (!isValidInvariantKey(finding.invariantKey)) {
-      errors.push(
-        `remainingFindings[${index}].invariantKey 缺失或格式无效`,
-      );
+      errors.push(`remainingFindings[${index}].invariantKey 缺失或格式无效`);
     }
     if (
       finding.verificationMode !== "runtime" &&
@@ -151,24 +248,28 @@ export function resolveRepairTargets(
   if (outbox.role !== "code_review") {
     return [];
   }
-  const reviewCaseIds =
+  const fallbackReviewCaseIds =
     failedResults.length > 0
       ? failedResults.map((result) => result.caseId)
       : run.acceptance
           .filter((item) => /code review|代码审查|code_review/i.test(item.text))
           .map((item) => item.caseId);
-  return blockingReviewFindings(outbox).flatMap((finding) => {
+  const reviewTarget = resolveReviewTarget(run, outbox);
+  return blockingReviewFindings(run, outbox).flatMap((finding) => {
     if (
       !isValidInvariantKey(finding.invariantKey) ||
       !finding.verificationMode
     ) {
       return [];
     }
+    const mappedCaseIds = resolveFindingCaseIds(run, finding, reviewTarget);
+    const caseIds =
+      mappedCaseIds.length > 0 ? mappedCaseIds : fallbackReviewCaseIds;
     return [
       {
         repairKey: `code_review:${finding.invariantKey.trim()}`,
         sourceRole: "code_review" as const,
-        caseIds: reviewCaseIds,
+        caseIds,
         invariant: finding.summary,
         verificationMode: finding.verificationMode,
         sourceEvidenceRefs: Array.from(
@@ -178,6 +279,9 @@ export function resolveRepairTargets(
           ]),
         ),
         failureSummary: `${finding.severity}: ${finding.title}`,
+        finding,
+        reviewTarget,
+        reviewOutbox: outbox,
       },
     ];
   });
@@ -225,6 +329,9 @@ export function foldRepairGateResult(params: {
         sourceEvidenceRefs: target.sourceEvidenceRefs,
         lastFailedRound: round,
         lastFailureSummary: target.failureSummary,
+        finding: target.finding,
+        reviewTarget: target.reviewTarget,
+        reviewOutbox: target.reviewOutbox,
       });
       continue;
     }
@@ -236,11 +343,13 @@ export function foldRepairGateResult(params: {
       verificationMode: target.verificationMode,
       sourceEvidenceRefs: target.sourceEvidenceRefs,
       attempts: 0,
-      maxAttempts:
-        params.loop.maxRepairAttempts ?? DEFAULT_MAX_REPAIR_ATTEMPTS,
+      maxAttempts: params.loop.maxRepairAttempts ?? DEFAULT_MAX_REPAIR_ATTEMPTS,
       firstFailedRound: round,
       lastFailedRound: round,
       lastFailureSummary: target.failureSummary,
+      finding: target.finding,
+      reviewTarget: target.reviewTarget,
+      reviewOutbox: target.reviewOutbox,
     });
   }
 
@@ -253,6 +362,73 @@ export function foldRepairGateResult(params: {
     loop: { ...params.loop, repairCycles },
     exhausted,
   };
+}
+
+function findingCaseTraceabilityErrors(
+  run: AgentTeamRun,
+  finding: AgentTeamOutboxFinding,
+): string[] {
+  const impacts = finding.caseImpacts ?? [];
+  if (impacts.length === 0) {
+    return ["caseImpacts 为空"];
+  }
+  return impacts.flatMap((impact) => {
+    const errors: string[] = [];
+    const acceptanceCase = run.acceptance.find(
+      (item) => item.caseId === impact.caseId,
+    );
+    if (!acceptanceCase) {
+      errors.push(`${impact.caseId} 不存在`);
+    } else if (!isTraceableProductCase(acceptanceCase)) {
+      errors.push(`${impact.caseId} 不是可追溯产品 Case`);
+    }
+    if (!impact.summary.trim()) {
+      errors.push(`${impact.caseId} 缺少影响说明`);
+    }
+    if (impact.evidence.length === 0) {
+      errors.push(`${impact.caseId} 缺少影响证据`);
+    }
+    return errors;
+  });
+}
+
+function resolveReviewTarget(
+  run: AgentTeamRun,
+  outbox?: AgentTeamWorkerOutbox,
+): AgentTeamReviewTarget | null {
+  return (
+    run.activeWorkerDispatch?.reviewTarget ??
+    outbox?.reviewTarget ??
+    run.reviewCheckpoint?.pendingReview ??
+    null
+  );
+}
+
+function reviewTargetsMatch(
+  left: AgentTeamReviewTarget | null,
+  right: AgentTeamReviewTarget | null,
+): boolean {
+  if (!left || !right) {
+    return left === right;
+  }
+  return (
+    left.scope === right.scope &&
+    left.baseCommit === right.baseCommit &&
+    left.targetTree === right.targetTree &&
+    left.planSha256 === right.planSha256 &&
+    left.testCaseSha256 === right.testCaseSha256
+  );
+}
+
+function buildPendingDecisionId(
+  finding: AgentTeamOutboxFinding,
+  reviewTarget: AgentTeamReviewTarget | null,
+): string {
+  return [
+    finding.invariantKey ?? "unknown",
+    finding.reproduction?.scenarioId ?? "no-scenario",
+    reviewTarget?.targetTree ?? "no-target",
+  ].join(":");
 }
 
 export function incrementRepairAttempts(
@@ -372,7 +548,9 @@ export function validateCodeFixHandoff(
       );
       for (const ref of sourceRefs) {
         if (!reproductionRefs.has(ref) || !verificationRefs.has(ref)) {
-          errors.push(`${key} 未用 reviewer 原 evidence ref 完成 Before/After：${ref}`);
+          errors.push(
+            `${key} 未用 reviewer 原 evidence ref 完成 Before/After：${ref}`,
+          );
         }
       }
     }

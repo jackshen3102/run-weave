@@ -15,6 +15,7 @@ export {
 } from "./terminal-quick-inputs";
 export {
   completeAgentTeamRun,
+  decideAgentTeamFinding,
   focusAgentTeamPane,
   getAgentTeamRunForTerminal,
   proposeAgentTeamSplit,

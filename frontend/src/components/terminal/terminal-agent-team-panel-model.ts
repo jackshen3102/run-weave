@@ -118,6 +118,9 @@ export function getAgentTeamStatusPresentation(
   run: AgentTeamRun,
   attention: AgentTeamAttention | null,
 ): AgentTeamStatusPresentation {
+  if (run.pendingFindingDecision) {
+    return { label: "需要范围裁决", tone: "danger" };
+  }
   if (run.status === "need_human" || run.loop.escalated) {
     return { label: "需要人工", tone: "danger" };
   }
@@ -126,6 +129,14 @@ export function getAgentTeamStatusPresentation(
   }
   if (run.status === "done" && attention) {
     return { label: "人工结束 · 有遗留", tone: "warning" };
+  }
+  if (
+    run.status === "done" &&
+    (run.findingDecisions ?? []).some(
+      (decision) => decision.disposition !== "blocking",
+    )
+  ) {
+    return { label: "已完成 · 有裁决", tone: "warning" };
   }
   if (run.status === "done") {
     return { label: "已完成", tone: "neutral" };

@@ -8,6 +8,7 @@ import type {
 } from "@runweave/shared/agent-team";
 import { AgentTeamError } from "./errors";
 import { normalizeReviewFindingReproduction } from "./outbox-normalizer";
+import { blockingReviewFindings, resolveFindingCaseIds } from "./repair-loop";
 
 const RECHECK_TIMEOUT_MS = 60 * 60 * 1000;
 
@@ -158,35 +159,60 @@ export function isReviewGateAcceptanceCase(
   return /code review|代码审查|code_review/i.test(item.text);
 }
 
-export function synthesizeBlockingReviewResult(
+export function synthesizeBlockingReviewResults(
   run: AgentTeamRun,
   outbox: AgentTeamWorkerOutbox,
-): NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>[number] | null {
+): NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]> {
   if (!isReviewWorkerOutbox(outbox)) {
-    return null;
+    return [];
   }
-  const summary = summarizeBlockingReviewFindings(outbox);
-  if (!summary) {
-    return null;
-  }
-  const target =
+  const fallbackTarget =
     run.acceptance.find(isReviewGateAcceptanceCase) ?? run.acceptance[0];
-  if (!target) {
-    return null;
+  const results = new Map<
+    string,
+    NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>[number]
+  >();
+  for (const finding of blockingReviewFindings(run, outbox)) {
+    const mappedCaseIds = resolveFindingCaseIds(
+      run,
+      finding,
+      outbox.reviewTarget ?? run.reviewCheckpoint?.pendingReview ?? null,
+    );
+    const caseIds =
+      mappedCaseIds.length > 0
+        ? mappedCaseIds
+        : fallbackTarget
+          ? [fallbackTarget.caseId]
+          : [];
+    const findingSummary = `${finding.severity}: ${finding.title}`;
+    const findingEvidence = [
+      ...(finding.reproduction?.evidence ?? []),
+      ...(finding.ref
+        ? [
+            {
+              type: "text" as const,
+              label: "审查引用",
+              summary: finding.summary,
+              ref: finding.ref,
+            },
+          ]
+        : []),
+    ];
+    for (const caseId of caseIds) {
+      const existing = results.get(caseId);
+      results.set(caseId, {
+        caseId,
+        status: "fail",
+        summary: existing?.summary
+          ? `${existing.summary}; ${findingSummary}`.slice(0, 500)
+          : findingSummary,
+        evidence: existing
+          ? [...existing.evidence, ...findingEvidence]
+          : findingEvidence,
+      });
+    }
   }
-  return {
-    caseId: target.caseId,
-    status: "fail",
-    summary,
-    evidence: [
-      {
-        type: "text",
-        label: "审查阻断",
-        summary: `${outbox.role} 发现阻断问题：${summary}`,
-        ref: `${outbox.role} blocker: ${summary}`,
-      },
-    ],
-  };
+  return Array.from(results.values());
 }
 
 export function isReviewWorkerOutbox(outbox: AgentTeamWorkerOutbox): boolean {
@@ -414,9 +440,7 @@ export function normalizeOutboxFinding(
     rawStatus === "resolved" || rawStatus === "informational"
       ? rawStatus
       : "open";
-  const reproduction = normalizeReviewFindingReproduction(
-    record.reproduction,
-  );
+  const reproduction = normalizeReviewFindingReproduction(record.reproduction);
   return {
     severity: severity.toUpperCase() as "P0" | "P1" | "P2" | "P3",
     status,

@@ -13,7 +13,7 @@ const ROLE_LABEL: Record<string, string> = {
 const EVIDENCE_SCHEMA =
   'acceptanceResults[] 必须包含每条 case 独立的 summary 结论；evidence[] 使用 { type, label, summary, ref, detail? }。type 可用 "text"、"dom"、"screenshot"、"command"、"event"、"json"、"log"、"code"；label 是短标题，evidence summary 是单条证据说明，ref 保留原始证据路径、文本或标识。';
 const FINDING_SCHEMA =
-  '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings。每个 open P0/P1 必须提供稳定的小写 invariantKey、verificationMode: "runtime"|"structural"，以及 reproduction: { mode: "real_product"|"review_harness"|"static_contract", status: "reproduced"|"confirmed", scenarioId?, validationSessionId?, steps: string[], expected, actual, evidence[] }。runtime finding 只能使用 real_product + reproduced + scenarioId，并写清实际可观察错误；只观察到内部中间状态、静态推断、未复现或环境阻塞时不得提交 open P0/P1。structural finding 必须由 review_harness/static_contract 确认。同一 invariant 复用同一 key。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
+  '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings。每个 open P0/P1 必须提供稳定的小写 invariantKey、verificationMode: "runtime"|"structural"，以及 reproduction: { mode: "real_product"|"review_harness"|"static_contract", status: "reproduced"|"confirmed", scenarioId?, validationSessionId?, steps: string[], expected, actual, evidence[] }。runtime finding 只能使用 real_product + reproduced + scenarioId，并写清实际可观察错误；只观察到内部中间状态、静态推断、未复现或环境阻塞时不得提交 open P0/P1。structural finding 必须由 review_harness/static_contract 确认。Final review 的 blocking finding 还必须提供 caseImpacts: [{ caseId, summary, evidence[] }]，caseId 使用 prompt 列出的 backend 产品 Case id，不能使用 generic Code Review gate；每条映射都要说明该复现场景如何违反产品 Case。若问题真实但不属于支持/需求范围，设置 disposition="out_of_scope" 申请人工裁决；reviewer 不得设置 waived。未设置 disposition 默认 blocking。同一 invariant 复用同一 key。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
 
 export function buildMainTestCaseGenerationPrompt(params: {
   run: AgentTeamRun;
@@ -92,7 +92,9 @@ export function buildWorkerStartupPrompt(params: {
     lines.push(
       "",
       "审查用例（发现 P0/P1/blocker/critical 时必须写 fail；无阻断问题写 pass）：",
-      ...acceptance.map((item, index) => `${index + 1}. [${item.caseId}] ${item.text}`),
+      ...acceptance.map(
+        (item, index) => `${index + 1}. [${item.caseId}] ${item.text}`,
+      ),
       "",
       outboxPath
         ? `把审查门禁结果写进 ${outboxPath} 的 acceptanceResults。优先使用 Code Review/代码审查相关 caseId；如果没有，使用最相关的 caseId。`
@@ -215,7 +217,7 @@ export function buildReviewFindingCorrectionPrompt(params: {
     "只补正当前 pane-scoped outbox 的 remainingFindings：",
     ...params.errors.map((error) => `- ${error}`),
     "",
-    "每个 open P0/P1 必须补稳定 invariantKey、verificationMode 和已执行的 reproduction。runtime finding 必须真实复现可观察错误；无法复现就从 remainingFindings 移除，不得把推断补写成复现。补交仍无效将自动升级人工。",
+    "每个 open P0/P1 必须补稳定 invariantKey、verificationMode 和已执行的 reproduction。Final review 的 blocking finding 还必须映射 prompt 列出的可追溯产品 Case；真实但范围存疑的问题使用 out_of_scope 申请人工裁决，reviewer 不得自行 waived。runtime finding 必须真实复现可观察错误；无法复现就从 remainingFindings 移除，不得把推断补写成复现。补交仍无效将自动升级人工。",
   ].join("\n");
 }
 
@@ -326,6 +328,12 @@ function formatReviewTargetInstructions(run: AgentTeamRun): string[] {
       : target.scope === "final"
         ? "这是最终收口审查：审查任务起点到最新 checkpoint 的完整 diff。"
         : "这是首次审查：审查任务起点以来的完整 staged diff。";
+  const productCases = run.acceptance.filter(
+    (item) =>
+      item.sourceCaseId &&
+      item.sourceFilePath &&
+      !isReviewGateAcceptanceCase(item),
+  );
   return [
     "",
     "Review checkpoint 范围：",
@@ -337,6 +345,15 @@ function formatReviewTargetInstructions(run: AgentTeamRun): string[] {
     `- testCaseSha256=${target.testCaseSha256 ?? "null"}`,
     `- requestedAt=${target.requestedAt}`,
     `- ${scopeDescription}`,
+    ...(target.scope === "final"
+      ? [
+          "- Final blocker 只能映射以下可追溯产品 Case（caseImpacts.caseId 使用 backend id）：",
+          ...productCases.map(
+            (item) =>
+              `  - ${item.caseId}｜${item.sourceCaseId}｜${item.sourceFilePath}｜${item.text}`,
+          ),
+        ]
+      : []),
     "- outbox 顶层 reviewTarget 必须原样回显本 prompt 的 scope/baseCommit/targetTree/changedPaths/planSha256/testCaseSha256/requestedAt。",
   ];
 }

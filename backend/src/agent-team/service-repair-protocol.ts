@@ -1,4 +1,5 @@
 import type {
+  AgentTeamPendingFindingDecision,
   AgentTeamRun,
   AgentTeamWorker,
 } from "@runweave/shared/agent-team";
@@ -7,6 +8,29 @@ import { AgentTeamSerialDispatchService } from "./service-serial-dispatch";
 import { createActiveWorkerDispatch } from "./service-workflow-policy";
 
 export abstract class AgentTeamRepairProtocolService extends AgentTeamSerialDispatchService {
+  protected async pauseForFindingDecision(
+    run: AgentTeamRun,
+    pendingFindingDecision: AgentTeamPendingFindingDecision,
+  ): Promise<AgentTeamRun> {
+    return this.updateRun(run, {
+      status: "need_human",
+      activeWorkerRole: null,
+      activeWorkerDispatch: null,
+      workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+      pendingFindingDecision,
+      loop: {
+        ...run.loop,
+        repairCycles: [...(run.loop.repairCycles ?? [])],
+        escalated: true,
+        lastReason: pendingFindingDecision.reason,
+      },
+      logs: [
+        ...run.logs,
+        `⏸ Finding 等待人工范围裁决：${pendingFindingDecision.finding.invariantKey ?? pendingFindingDecision.finding.title}`,
+      ],
+    });
+  }
+
   protected async handleProtocolCorrection(
     run: AgentTeamRun,
     worker: AgentTeamWorker,

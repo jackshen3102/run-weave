@@ -1,0 +1,26 @@
+{
+  "runId": "atr_scope_decision",
+  "status": "need_human",
+  "finding": {
+    "severity": "P1",
+    "title": "手工重启同一 panel 后旧 hook 可能污染状态",
+    "summary": "prepared codex exec 退出后，在同一 panel 手工再次执行 codex exec，旧 generation hook 可能被记录。",
+    "scenarioId": "manual-relaunch-same-panel",
+    "expected": "旧 generation hook 被忽略",
+    "actual": "旧 hook 更新 agent_idle 与 lastThreadId"
+  },
+  "cases": [
+    {
+      "caseId": "case_12",
+      "sourceCaseId": "AGT-TERM-012",
+      "sourceFilePath": "docs/testing/terminal-state-test-cases.md",
+      "text": "正式 worker prompt 启动后的 lifecycle hook 只更新当前 generation"
+    },
+    {
+      "caseId": "case_18",
+      "sourceCaseId": "AGT-TERM-018",
+      "sourceFilePath": "docs/testing/terminal-state-test-cases.md",
+      "text": "worker outbox 完成后状态收口稳定"
+    }
+  ]
+}

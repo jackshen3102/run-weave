@@ -1,6 +1,8 @@
 import type {
   AgentTeamActiveWorkerDispatch,
   AgentTeamAcceptanceCase,
+  AgentTeamPendingFindingDecision,
+  AgentTeamRepairCycle,
   AgentTeamRun,
   AgentTeamStatus,
   AgentTeamWorker,
@@ -244,10 +246,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     const logs = [...runWithGates.logs];
     if (folded.reviewStateChanged && folded.hadProgress) {
       logs.push(`round ${run.loop.round} 有进展，noProgress 计数清零`);
-    } else if (
-      folded.reviewStateChanged &&
-      params.acceptanceResults?.length
-    ) {
+    } else if (folded.reviewStateChanged && params.acceptanceResults?.length) {
       logs.push(
         `round ${run.loop.round} 无进展，noProgress=${folded.loop.noProgressCount}/${folded.loop.maxNoProgress}`,
       );
@@ -260,6 +259,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     // This completion consumed the current dispatch. A follow-up bounce or
     // serial worker dispatch will install a new boundary below.
     let activeWorkerDispatch: AgentTeamActiveWorkerDispatch | null = null;
+    let pendingFindingDecision: AgentTeamPendingFindingDecision | null = null;
     const allAcceptancePassed =
       folded.acceptance.length > 0 &&
       folded.acceptance.every((item) => item.status === "pass");
@@ -298,6 +298,10 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
       activeWorkerRole = null;
       activeWorkerDispatch = null;
+      pendingFindingDecision = pendingDecisionFromReviewCycle(
+        repairFolded.exhausted,
+        reason,
+      );
       logs.push(`⏸ ${reason}`);
     } else if (shouldEscalate(repairFolded.loop)) {
       const reason = buildEscalationReason(
@@ -310,6 +314,10 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       workers = run.workers.map((worker) => ({ ...worker, frozen: true }));
       activeWorkerRole = null;
       activeWorkerDispatch = null;
+      pendingFindingDecision = pendingDecisionFromReviewCycle(
+        repairFolded.loop.repairCycles,
+        reason,
+      );
       logs.push(`⏸ ${reason}`);
     }
 
@@ -320,6 +328,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       workers,
       activeWorkerRole,
       activeWorkerDispatch,
+      pendingFindingDecision,
       workerDispatchProtocolVersion: 1,
       consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
       logs,
@@ -445,4 +454,29 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       return run;
     }
   }
+}
+
+function pendingDecisionFromReviewCycle(
+  cycles: AgentTeamRepairCycle[],
+  reason: string,
+): AgentTeamPendingFindingDecision | null {
+  const cycle = cycles.find(
+    (item) =>
+      item.sourceRole === "code_review" && item.finding && item.reviewOutbox,
+  );
+  if (!cycle?.finding || !cycle.reviewOutbox) {
+    return null;
+  }
+  return {
+    id: [
+      cycle.finding.invariantKey ?? cycle.repairKey,
+      cycle.finding.reproduction?.scenarioId ?? "no-scenario",
+      cycle.reviewTarget?.targetTree ?? "no-target",
+    ].join(":"),
+    finding: cycle.finding,
+    outbox: cycle.reviewOutbox,
+    reviewTarget: cycle.reviewTarget ?? null,
+    reason,
+    requestedAt: new Date().toISOString(),
+  };
 }

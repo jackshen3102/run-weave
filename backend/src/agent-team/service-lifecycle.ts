@@ -2,6 +2,7 @@ import type {
   AgentTeamRun,
   CompleteAgentTeamRunRequest,
   CreateAgentTeamRunRequest,
+  DecideAgentTeamFindingRequest,
   ProposeAgentTeamSplitRequest,
   ResumeAgentTeamRunRequest,
   SubmitAgentTeamSplitGateRequest,
@@ -14,7 +15,11 @@ import {
   buildMainTestCaseGenerationPrompt,
 } from "./prompt-builders";
 import { createInitialLoop } from "./loop";
-import { resolveMaxRepairAttempts } from "./repair-loop";
+import {
+  isTraceableProductCase,
+  resolveMaxRepairAttempts,
+  resolvePendingFindingDecision,
+} from "./repair-loop";
 import { agentTeamLogger } from "./service-context";
 import { AgentTeamRecheckService } from "./service-recheck";
 import {
@@ -29,7 +34,6 @@ import {
   requireVerificationConfig,
   resolveAgentTeamTerminal,
 } from "./service-run-policy";
-
 export class AgentTeamLifecycleService extends AgentTeamRecheckService {
   async startRun(input: CreateAgentTeamRunRequest): Promise<AgentTeamRun> {
     const session = this.requireSession(input.terminalSessionId);
@@ -148,6 +152,8 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       acceptance: [],
       loop: createInitialLoop(maxRepairAttempts),
       humanNotes: [],
+      findingDecisions: [],
+      pendingFindingDecision: null,
       logs: [prepared.startLog],
       createdAt: now,
       updatedAt: now,
@@ -199,9 +205,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     });
     return await this.requireRun(run.runId);
   }
-
   // --- Phase 2: intake -> proposal (+ split gate) ---
-
   async proposeSplit(
     runId: string,
     input: ProposeAgentTeamSplitRequest,
@@ -294,14 +298,18 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       },
     );
   }
-
   // --- Phase 3: escalation -> resume ---
-
   async resumeRun(
     runId: string,
     input: ResumeAgentTeamRunRequest,
   ): Promise<AgentTeamRun> {
     const run = await this.requireRun(runId);
+    if (run.pendingFindingDecision) {
+      throw new AgentTeamError(
+        409,
+        "当前存在待裁决 review finding，请先选择 blocking、out_of_scope 或 waived",
+      );
+    }
     const note = input.note?.trim();
     if (!note) {
       throw new AgentTeamError(400, "A human intervention note is required");
@@ -353,6 +361,130 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     return nextRun;
   }
 
+  async decideFinding(
+    runId: string,
+    input: DecideAgentTeamFindingRequest,
+  ): Promise<AgentTeamRun> {
+    return this.enqueue(runId, async () => {
+      const run = await this.requireRun(runId);
+      const pending = run.pendingFindingDecision;
+      if (!pending || run.status !== "need_human") {
+        throw new AgentTeamError(409, "Run 没有待裁决 review finding");
+      }
+      const invariantKey = input.invariantKey.trim();
+      if (pending.finding.invariantKey !== invariantKey) {
+        throw new AgentTeamError(409, "Finding 已变化，请刷新后重新裁决");
+      }
+      const reason = input.reason.trim();
+      if (!reason) {
+        throw new AgentTeamError(400, "Finding 裁决原因不能为空");
+      }
+      const caseIds = Array.from(
+        new Set(
+          (input.caseIds ?? []).map((caseId) => caseId.trim()).filter(Boolean),
+        ),
+      );
+      if (input.disposition !== "out_of_scope" && caseIds.length === 0) {
+        throw new AgentTeamError(
+          400,
+          `${input.disposition} 裁决必须映射至少一个可追溯产品 Case`,
+        );
+      }
+      const invalidCaseId = caseIds.find((caseId) => {
+        const acceptanceCase = run.acceptance.find(
+          (item) => item.caseId === caseId,
+        );
+        return !acceptanceCase || !isTraceableProductCase(acceptanceCase);
+      });
+      if (invalidCaseId) {
+        throw new AgentTeamError(400, `${invalidCaseId} 不是可追溯产品 Case`);
+      }
+      const now = new Date().toISOString();
+      const decision = {
+        id: `finding_decision_${Date.now()}`,
+        invariantKey,
+        scenarioId: pending.finding.reproduction?.scenarioId ?? null,
+        finding: pending.finding,
+        disposition: input.disposition,
+        caseIds: input.disposition === "out_of_scope" ? [] : caseIds,
+        reason,
+        decidedAt: now,
+        reviewTarget: pending.reviewTarget,
+      };
+      const repairKey = `code_review:${invariantKey}`;
+      const decidedRun: AgentTeamRun = {
+        ...run,
+        status: "running",
+        activeWorkerRole: null,
+        activeWorkerDispatch: null,
+        workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+        findingDecisions: [...(run.findingDecisions ?? []), decision],
+        pendingFindingDecision: null,
+        loop: {
+          ...run.loop,
+          noProgressCount: 0,
+          escalated: false,
+          lastReason: null,
+          repairCycles: (run.loop.repairCycles ?? []).map((cycle) =>
+            input.disposition === "blocking" && cycle.repairKey === repairKey
+              ? { ...cycle, attempts: 0, caseIds }
+              : cycle,
+          ),
+        },
+        logs: [
+          ...run.logs,
+          `人工裁决 finding ${invariantKey}：${input.disposition}${caseIds.length > 0 ? `（${caseIds.join(", ")}）` : ""}；${reason}`,
+        ],
+        updatedAt: now,
+      };
+      const nextPending = resolvePendingFindingDecision(
+        decidedRun,
+        pending.outbox,
+      );
+      if (nextPending) {
+        return this.updateRun(decidedRun, {
+          status: "need_human",
+          pendingFindingDecision: nextPending,
+          loop: {
+            ...decidedRun.loop,
+            escalated: true,
+            lastReason: nextPending.reason,
+          },
+        });
+      }
+
+      let continuationRun = decidedRun;
+      let round = this.resolveOutboxRound(continuationRun, pending.outbox);
+      if (
+        continuationRun.reviewCheckpoint?.pendingReview &&
+        round.acceptanceResults.length > 0 &&
+        round.acceptanceResults.every((result) => result.status === "pass")
+      ) {
+        continuationRun = await this.finalizeReviewCheckpoint(
+          continuationRun,
+          pending.outbox,
+        );
+        if (continuationRun.status !== "running") {
+          return continuationRun;
+        }
+        round = this.resolveOutboxRound(continuationRun, pending.outbox);
+      }
+      if (round.acceptanceResults.length === 0) {
+        return this.pauseForRepairProtocolError(
+          continuationRun,
+          "人工裁决后 reviewer outbox 没有可消费的验收结果",
+        );
+      }
+      return this.applyRound(continuationRun, {
+        acceptanceResults: round.acceptanceResults,
+        forceBounceCaseIds: round.forceBounceCaseIds,
+        repairTargets: round.repairTargets,
+        completedWorkerRole: "code_review",
+        completedWorkerSummary: pending.outbox.summary,
+      });
+    });
+  }
+
   async completeRun(
     runId: string,
     input: CompleteAgentTeamRunRequest,
@@ -366,6 +498,22 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     }
     if (run.status === "failed") {
       throw new AgentTeamError(409, "Run has already failed");
+    }
+    if (run.pendingFindingDecision) {
+      throw new AgentTeamError(
+        409,
+        "存在待裁决 review finding，不能用人工完成隐藏失败",
+      );
+    }
+    if (
+      (run.loop.repairCycles ?? []).some(
+        (cycle) => cycle.sourceRole === "code_review",
+      )
+    ) {
+      throw new AgentTeamError(
+        409,
+        "存在未处理 review finding，请先记录 blocking、out_of_scope 或 waived 裁决",
+      );
     }
     const note = input.note?.trim();
     const now = new Date().toISOString();
