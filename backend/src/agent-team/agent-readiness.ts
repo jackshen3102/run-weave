@@ -4,8 +4,6 @@ import {
   hasCodexRestartRequiredAfterUpdate,
   hasPendingCodexTrustPrompt,
   hasPendingCodexUpdatePrompt,
-  hasStartedCodexUi,
-  hasTraeReadyPrompt,
   hasTraeStartupFailure,
   stripTerminalControlSequences,
 } from "@runweave/shared/terminal-agent-readiness";
@@ -16,10 +14,7 @@ import type {
 } from "../terminal/manager";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
-import type {
-  TmuxOutputWatcher,
-  TmuxPaneOutputCursor,
-} from "../terminal/tmux-output-watcher";
+import type { TmuxOutputWatcher } from "../terminal/tmux-output-watcher";
 import type { TmuxPaneTarget, TmuxService } from "../terminal/tmux-service";
 import { isTmuxBackedSession } from "../terminal/runtime-launcher";
 import {
@@ -33,21 +28,21 @@ import {
   buildAgentStartCommand,
   waitForAgentReadinessPoll,
 } from "./agent-readiness-command";
+import {
+  hasMatchingAgentReadinessOwner,
+  hasStartedAgentUi,
+} from "./agent-readiness-detection";
 import { AgentTeamError } from "./errors";
+import {
+  captureTraeStartupOutputBoundary,
+  readTraeStartupOutput,
+  type TraeStartupOutputBoundary,
+} from "./trae-startup-output-boundary";
 
 const AGENT_TEAM_AGENT_START_TIMEOUT_MS = 15000;
 const AGENT_TEAM_AGENT_START_POLL_INTERVAL_MS = 250;
 
-type TraeStartupOutputBoundary =
-  | {
-      kind: "pty";
-      cursor: number;
-    }
-  | {
-      kind: "tmux-pane";
-      cursor: TmuxPaneOutputCursor;
-      target: TmuxPaneTarget;
-    };
+export { hasMatchingAgentReadinessOwner } from "./agent-readiness-detection";
 
 export class AgentTeamAgentReadinessService {
   constructor(
@@ -421,64 +416,19 @@ export class AgentTeamAgentReadinessService {
     paneTarget: TmuxPaneTarget | undefined,
     tmuxStartInput?: string,
   ): Promise<TraeStartupOutputBoundary> {
-    if (isTmuxBackedSession(session)) {
-      if (!paneTarget || !this.options.tmuxOutputWatcher || !tmuxStartInput) {
-        throw this.createTraeOutputBoundaryError(session, paneTarget);
-      }
-      const cursor =
-        await this.options.tmuxOutputWatcher.capturePaneOutputCursorAndSendInput(
-          session,
-          paneTarget,
-          tmuxStartInput,
-        );
-      if (!cursor) {
-        throw this.createTraeOutputBoundaryError(session, paneTarget);
-      }
-      return { kind: "tmux-pane", cursor, target: paneTarget };
-    }
-
-    const cursor =
-      await this.options.terminalSessionManager.captureOutputCursor(session.id);
-    if (cursor === null) {
-      throw this.createTraeOutputBoundaryError(session, paneTarget);
-    }
-    return { kind: "pty", cursor };
+    return captureTraeStartupOutputBoundary(
+      this.options,
+      session,
+      paneTarget,
+      tmuxStartInput,
+    );
   }
 
   private async readTraeStartupOutput(
     session: TerminalSessionRecord,
     boundary: TraeStartupOutputBoundary | undefined,
   ): Promise<string | null> {
-    if (!boundary) {
-      return null;
-    }
-    if (boundary.kind === "tmux-pane") {
-      return (
-        (await this.options.tmuxOutputWatcher?.readPaneOutputSince(
-          boundary.target,
-          boundary.cursor,
-        )) ?? null
-      );
-    }
-    return this.options.terminalSessionManager.readOutputSince(
-      session.id,
-      boundary.cursor,
-    );
-  }
-
-  private createTraeOutputBoundaryError(
-    session: TerminalSessionRecord,
-    paneTarget: TmuxPaneTarget | undefined,
-  ): AgentTeamError {
-    return new AgentTeamError(
-      409,
-      `Failed to establish pane-local output boundary for agent-team agent "traex"`,
-      {
-        terminalSessionId: session.id,
-        panelId: paneTarget?.paneId ?? null,
-        reason: "startup_output_boundary_unavailable",
-      },
-    );
+    return readTraeStartupOutput(this.options, session, boundary);
   }
 
   private async resolvePaneTarget(
@@ -541,28 +491,4 @@ export class AgentTeamAgentReadinessService {
       throw error;
     }
   }
-}
-
-function hasStartedAgentUi(
-  agent: TerminalAgentKind,
-  scrollback: string,
-  traeStartupOutput?: string,
-): boolean {
-  if (agent === "codex") {
-    return hasStartedCodexUi(scrollback);
-  }
-  return (
-    hasTraeReadyPrompt(scrollback) &&
-    (traeStartupOutput === undefined || hasTraeReadyPrompt(traeStartupOutput))
-  );
-}
-
-export function hasMatchingAgentReadinessOwner(
-  activeCommand: string | null,
-  agent: TerminalAgentKind,
-): boolean {
-  const activeAgent = getAgentForCommand(activeCommand);
-  return agent === "codex"
-    ? activeAgent === "codex"
-    : activeAgent !== null && activeAgent !== "codex";
 }
