@@ -111,6 +111,8 @@ async function main() {
   const desktopVerification = args.verifyDesktop
     ? {
         appServerHome,
+        expectedAppVersion:
+          plan.mode === "app" ? appBuildVersion : installedAppVersion,
         runtimeHome,
         statusPath: path.join(
           path.dirname(statePath),

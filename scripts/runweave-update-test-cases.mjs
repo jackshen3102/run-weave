@@ -25,6 +25,7 @@ import {
   validateResolvedUpdateOptions,
   validateUpdateTargetIsolation,
 } from "./runweave-update-core.mjs";
+import { resolveDesktopVerificationResult } from "./runweave-update-operations.mjs";
 
 const cases = [
   {
@@ -285,6 +286,55 @@ const cases = [
           },
           verifyDesktop: true,
         }),
+      );
+    },
+  },
+  {
+    name: "desktop verification accepts renderer route changes for the expected app version",
+    run() {
+      const status = {
+        app: {
+          path: "/Applications/Runweave.app",
+          pid: 1234,
+          version: "0.155.0",
+        },
+        appServer: { home: "/tmp/app-server" },
+        backend: { available: true },
+        cdp: {
+          desktop: {
+            endpoint: "http://127.0.0.1:9223",
+            pid: 1234,
+          },
+        },
+        sourceRevision: "revision",
+        window: {
+          url: "runweave://app/index.html",
+          visible: true,
+        },
+      };
+      const targets = [
+        { type: "page", url: "https://example.com" },
+        { type: "page", url: "runweave://app/terminal/65d39c46" },
+      ];
+      const input = {
+        appPath: "/Applications/Runweave.app",
+        endpoint: "http://127.0.0.1:9223",
+        expectedAppVersion: "0.155.0",
+        status,
+        statusPath: "/tmp/desktop-verification.json",
+        targets,
+      };
+
+      assert.equal(
+        resolveDesktopVerificationResult(input)?.pageUrl,
+        "runweave://app/terminal/65d39c46",
+      );
+      assert.equal(
+        resolveDesktopVerificationResult({
+          ...input,
+          expectedAppVersion: "0.156.0",
+        }),
+        null,
       );
     },
   },

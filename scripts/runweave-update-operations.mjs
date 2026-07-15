@@ -123,42 +123,75 @@ function createDesktopVerificationLaunchEnv({
   return env;
 }
 
-async function waitForDesktopVerification({ appPath, endpoint, statusPath }) {
+export function resolveDesktopVerificationResult({
+  appPath,
+  endpoint,
+  expectedAppVersion,
+  status,
+  statusPath,
+  targets,
+}) {
+  if (
+    status?.app?.path !== appPath ||
+    status.app.version !== expectedAppVersion ||
+    !Number.isInteger(status.app.pid) ||
+    status.app.pid <= 0 ||
+    status.cdp?.desktop?.endpoint !== endpoint ||
+    status.cdp.desktop.pid !== status.app.pid ||
+    status.backend?.available !== true ||
+    status.window?.visible !== true
+  ) {
+    return null;
+  }
+
+  const page = Array.isArray(targets)
+    ? targets.find(
+        (target) =>
+          target?.type === "page" &&
+          (target.url?.startsWith("runweave://app") ||
+            target.url?.startsWith("browser-viewer://app")),
+      )
+    : null;
+  if (!page) {
+    return null;
+  }
+
+  return {
+    appServer: status.appServer,
+    appPath: status.app.path,
+    appVersion: status.app.version,
+    backend: status.backend,
+    endpoint,
+    pageUrl: page.url,
+    pid: status.app.pid,
+    sourceRevision: status.sourceRevision,
+    statusPath,
+    window: status.window,
+  };
+}
+
+async function waitForDesktopVerification({
+  appPath,
+  endpoint,
+  expectedAppVersion,
+  statusPath,
+}) {
   for (let attempt = 1; attempt <= 60; attempt += 1) {
     const status = readJsonFile(statusPath);
-    if (
-      status?.app?.path === appPath &&
-      Number.isInteger(status.app.pid) &&
-      status.app.pid > 0 &&
-      status.cdp?.desktop?.endpoint === endpoint &&
-      status.cdp.desktop.pid === status.app.pid &&
-      status.backend?.available === true &&
-      status.window?.visible === true &&
-      typeof status.window.url === "string" &&
-      status.window.url
-    ) {
+    if (status) {
       try {
         const response = await fetch(`${endpoint}/json/list`);
         const targets = response.ok ? await response.json() : null;
-        const page = Array.isArray(targets)
-          ? targets.find(
-              (target) =>
-                target?.type === "page" && target.url === status.window.url,
-            )
-          : null;
-        if (page) {
-          return {
-            appServer: status.appServer,
-            appPath: status.app.path,
-            appVersion: status.app.version,
-            backend: status.backend,
-            endpoint,
-            pageUrl: page.url,
-            pid: status.app.pid,
-            sourceRevision: status.sourceRevision,
-            statusPath,
-            window: status.window,
-          };
+        const result = resolveDesktopVerificationResult({
+          appPath,
+          endpoint,
+          expectedAppVersion,
+          status,
+          statusPath,
+          targets,
+        });
+        if (result) {
+          return result;
         }
       } catch {
         // The renderer and CDP endpoint can become ready after the process starts.
@@ -210,6 +243,7 @@ export async function openApp(appPath, options = {}) {
     return await waitForDesktopVerification({
       appPath,
       endpoint,
+      expectedAppVersion: desktopVerification.expectedAppVersion,
       statusPath,
     });
   }

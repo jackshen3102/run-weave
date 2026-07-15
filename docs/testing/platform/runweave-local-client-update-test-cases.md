@@ -55,6 +55,7 @@ Expected cases:
 | LCU-016 | Native path matcher                                | Update scripts, resources, and builder config are app-sensitive |
 | LCU-017 | One-command update script change                   | Auto mode selects full app update                               |
 | LCU-018 | Dotenv codesign identity                           | Only the configured identity changes; other keys remain         |
+| LCU-019 | Desktop renderer route changes during verification | Expected App version passes without exact URL equality          |
 
 ## Manual Smoke Cases
 
@@ -76,3 +77,6 @@ full app update, the command exits before building or quitting Runweave.
 must emit `desktop verification ready` with the installed App identity, visible
 window state, and main renderer CDP endpoint. Attach Playwright to that exact
 endpoint and verify the terminal page; do not use the Terminal Browser proxy.
+The renderer URL is informational and may change while verification is running;
+the installed App version must match, but the current URL does not need to equal
+the URL captured in the desktop status file.
