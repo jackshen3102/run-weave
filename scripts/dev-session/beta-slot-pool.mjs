@@ -590,7 +590,7 @@ export async function releaseBetaSlotLease(identity) {
   await fs.rm(verified.leasePath);
 }
 
-async function calculatePathBytes(targetPath) {
+async function calculatePathBytes(targetPath, rejectSymlink = true) {
   const stats = await fs.lstat(targetPath).catch((error) => {
     if (error?.code === "ENOENT") {
       return null;
@@ -601,16 +601,19 @@ async function calculatePathBytes(targetPath) {
     return 0;
   }
   if (stats.isSymbolicLink()) {
-    throw new DevSessionError("refusing to size a symlinked Beta path", 4, {
-      path: targetPath,
-    });
+    if (rejectSymlink) {
+      throw new DevSessionError("refusing to size a symlinked Beta path", 4, {
+        path: targetPath,
+      });
+    }
+    return stats.size;
   }
   if (!stats.isDirectory()) {
     return stats.size;
   }
   let bytes = 0;
   for (const entry of await fs.readdir(targetPath)) {
-    bytes += await calculatePathBytes(path.join(targetPath, entry));
+    bytes += await calculatePathBytes(path.join(targetPath, entry), false);
   }
   return bytes;
 }
@@ -668,10 +671,12 @@ export async function assertBetaPoolDiskBudget({
   sourceRoot,
   slotId,
   homeDir = os.homedir(),
+  applicationsDir = "/Applications",
   env = process.env,
   cleanedBytes = 0,
 }) {
   const targets = resolveBetaUpdateTargets(homeDir, assertBetaSlotId(slotId));
+  const appPath = path.join(applicationsDir, path.basename(targets.appPath));
   const configured = env.RUNWEAVE_BETA_POOL_MIN_FREE_BYTES?.trim();
   const configuredFloor = configured
     ? Number(configured)
@@ -684,7 +689,7 @@ export async function assertBetaPoolDiskBudget({
     );
   }
   const estimates = await Promise.all([
-    calculatePathBytes(targets.appPath),
+    calculatePathBytes(appPath),
     calculatePathBytes(targets.runtimeHome),
     calculatePathBytes(path.join(targets.appServerHome, "runtime")),
     calculateTrackedSourceBytes(sourceRoot),
@@ -706,7 +711,7 @@ export async function assertBetaPoolDiskBudget({
   }
   const requiredFreeBytes = Math.max(configuredFloor, plannedWriteBytes * 3);
   const filesystemPaths = await Promise.all([
-    nearestExistingPath(targets.appPath),
+    nearestExistingPath(appPath),
     nearestExistingPath(targets.instanceRoot),
     nearestExistingPath(targets.appServerHome),
   ]);

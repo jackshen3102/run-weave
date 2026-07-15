@@ -332,6 +332,73 @@ export async function verifyBetaSlotPool(temporaryHome) {
   assert(["pool-04", "pool-05"].includes(remainingHealthyLease.lease.slotId));
   await releaseBetaSlotLease(remainingHealthyLease);
 
+  const diskBudgetHome = path.join(temporaryHome, "disk-budget-home");
+  const diskBudgetApplications = path.join(
+    temporaryHome,
+    "disk-budget-applications",
+  );
+  const diskBudgetTargets = resolveBetaUpdateTargets(
+    diskBudgetHome,
+    "pool-05",
+  );
+  const diskBudgetAppPath = path.join(
+    diskBudgetApplications,
+    path.basename(diskBudgetTargets.appPath),
+  );
+  const frameworkVersions = path.join(
+    diskBudgetAppPath,
+    "Contents",
+    "Frameworks",
+    "Electron Framework.framework",
+    "Versions",
+  );
+  await fs.mkdir(path.join(frameworkVersions, "A"), { recursive: true });
+  await fs.writeFile(
+    path.join(frameworkVersions, "A", "Electron Framework"),
+    "framework",
+  );
+  await fs.symlink("A", path.join(frameworkVersions, "Current"));
+  await fs.symlink(
+    path.join("Versions", "Current", "Electron Framework"),
+    path.join(
+      diskBudgetAppPath,
+      "Contents",
+      "Frameworks",
+      "Electron Framework.framework",
+      "Electron Framework",
+    ),
+  );
+  const diskBudget = await assertBetaPoolDiskBudget({
+    sourceRoot: process.cwd(),
+    slotId: "pool-05",
+    homeDir: diskBudgetHome,
+    applicationsDir: diskBudgetApplications,
+    env: { RUNWEAVE_BETA_POOL_MIN_FREE_BYTES: "0" },
+  });
+  assert(diskBudget.plannedWriteBytes > 0);
+
+  const symlinkedAppTargets = resolveBetaUpdateTargets(
+    diskBudgetHome,
+    "pool-04",
+  );
+  await fs.symlink(
+    diskBudgetAppPath,
+    path.join(
+      diskBudgetApplications,
+      path.basename(symlinkedAppTargets.appPath),
+    ),
+  );
+  await assert.rejects(
+    assertBetaPoolDiskBudget({
+      sourceRoot: process.cwd(),
+      slotId: "pool-04",
+      homeDir: diskBudgetHome,
+      applicationsDir: diskBudgetApplications,
+      env: { RUNWEAVE_BETA_POOL_MIN_FREE_BYTES: "0" },
+    }),
+    /refusing to size a symlinked Beta path/,
+  );
+
   await assert.rejects(
     assertBetaPoolDiskBudget({
       sourceRoot: process.cwd(),
