@@ -16,6 +16,7 @@
 | 架构 / 网络拓扑                 | architecture/network-topology.md                                |
 | app-server 架构概览             | architecture/app-server-architecture.md                         |
 | app-server Event Center 细节    | architecture/app-server-event-center.md                         |
+| Activity / Work History         | architecture/app-server-event-center.md#work-history-聚合边界   |
 | App 移动端边界                  | architecture/app-mobile.md                                      |
 | App 后端连接管理                | architecture/app-mobile.md#配置与安全                           |
 | App 终端语音输入                | architecture/app-mobile.md#app-终端语音输入                     |
@@ -54,7 +55,7 @@
 
 ## 测试用例（活文档）
 
-供人或 agent 执行的测试用例与回归清单，非可执行测试代码。完整目录与本轮执行总账见 `testing/README.md` 和 `testing/test-run-report.md`。
+供人或 agent 执行的测试用例与回归清单，非可执行测试代码。测试层级与命令选择见 `testing/layers.md` 和 `testing/command-matrix.md`。
 
 | 需求                                     | 阅读                                                                                   |
 | ---------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -83,6 +84,7 @@
 | Runweave Beta 自举开发通道测试           | testing/platform/runweave-beta-self-hosting-test-cases.md                              |
 | Runweave Dev Session 分层开发环境测试    | testing/platform/runweave-dev-session-test-cases.md                                    |
 | Runweave Beta 多实例与 CDP 路由测试      | testing/platform/runweave-beta-instance-cdp-routing-test-cases.md                      |
+| Runweave Beta 五槽位池测试               | testing/beta-slot-pool-test-cases.md                                                   |
 | Backend 内嵌行为数据底座测试             | testing/architecture/system-activity-data-foundation-test-cases.md                     |
 | Terminal Activity Work History 测试      | testing/terminal/terminal-activity-work-history-test-cases.md                          |
 | Terminal Browser CDP/MCP 测试            | testing/terminal/terminal-browser-cdp-mcp-test-cases.md                                |
