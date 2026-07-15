@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useMemoizedFn } from "ahooks";
+import { ChevronRight } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { HttpError } from "../../services/http";
 import {
@@ -139,6 +140,11 @@ export function MultiAgentHistoryView({
     setSelection(null);
     onSelectEvent(null);
   });
+  const closeMobileDetail = useMemoizedFn(() => {
+    setSelection(null);
+    onSelectEvent(null);
+    onSelectRun(null);
+  });
   const loadMore = useMemoizedFn(() => void detailQuery.fetchNextPage());
   const loadMoreRuns = useMemoizedFn(() => void listQuery.fetchNextPage());
 
@@ -146,6 +152,9 @@ export function MultiAgentHistoryView({
     <WorkHistoryLayout
       inspectorOpen={Boolean(activeSelection && selectedEventKey)}
       onCloseInspector={closeInspector}
+      mobileDetailOpen={Boolean(selectedRunId)}
+      mobileDetailLabel="Multi-Agent Runs"
+      onCloseMobileDetail={closeMobileDetail}
       list={
         <div>
           <div className="border-b border-border/70 p-4">
@@ -157,23 +166,33 @@ export function MultiAgentHistoryView({
           ) : (
             <div>
               {runs.map((run) => (
-                <button
-                  type="button"
+                <article
                   key={run.runId}
-                  className={`w-full border-b border-border/70 p-4 text-left ${effectiveRunId === run.runId ? "bg-primary/10" : "hover:bg-muted/50"}`}
-                  onClick={() => selectRun(run.runId)}
+                  className={`w-full select-text border-b border-border/70 p-4 ${effectiveRunId === run.runId ? selectedRunId ? "bg-primary/10" : "md:bg-primary/10" : ""}`}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-medium">{run.runId}</p>
-                    <span className="text-[0.68rem] text-muted-foreground">{run.status}</span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{run.runId}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {run.mode} · {run.workerCount} workers
+                      </p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Next round index {run.nextRoundIndex}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-[0.68rem] text-muted-foreground">{run.status}</span>
+                      <button
+                        type="button"
+                        aria-label={`Open Run ${run.runId}`}
+                        className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:h-8 md:w-8"
+                        onClick={() => selectRun(run.runId)}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {run.mode} · {run.workerCount} workers
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Next round index {run.nextRoundIndex}
-                  </p>
-                </button>
+                </article>
               ))}
               {listQuery.hasNextPage ? (
                 <div className="p-3 text-center">
@@ -263,28 +282,35 @@ function JournalSection({
       ) : (
         <div className="mt-3 grid gap-3">
           {items.map((item) => (
-            <button
-              type="button"
+            <article
               key={item.id}
-              className="rounded-lg border border-border/70 p-4 text-left hover:bg-muted/40"
-              onClick={() => onSelect(item.selection)}
+              className="flex select-text items-start justify-between gap-3 rounded-lg border border-border/70 p-4"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">{item.title}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{item.summary}</p>
-                  {item.selection.type === "fact" ? (
-                    <p className="mt-2 text-[0.68rem] text-muted-foreground">
-                      {item.round !== null ? `Round ${item.round} · ` : ""}
-                      attributionSource={item.attributionSource}
-                    </p>
-                  ) : null}
-                </div>
-                <time className="shrink-0 text-xs text-muted-foreground">
+              <div>
+                <p className="text-sm font-medium">{item.title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{item.summary}</p>
+                {item.selection.type === "fact" ? (
+                  <p className="mt-2 text-[0.68rem] text-muted-foreground">
+                    {item.round !== null ? `Round ${item.round} · ` : ""}
+                    attributionSource={item.attributionSource}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 items-start gap-2">
+                <time className="pt-2 text-xs text-muted-foreground">
                   {new Date(item.occurredAt).toLocaleString()}
                 </time>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  aria-label={`Open ${item.title} details`}
+                  onClick={() => onSelect(item.selection)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
-            </button>
+            </article>
           ))}
         </div>
       )}

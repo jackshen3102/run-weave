@@ -18,18 +18,33 @@ import {
 } from "../../components/ui/alert-dialog";
 import { Button } from "../../components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
+import {
   executeActivityOperation,
   fetchActivityDeleteJob,
 } from "../../services/activity";
 
-export function ActivityPolicyOperations({ apiBase, token }: { apiBase: string; token: string }) {
+export function ActivityPolicyOperations({
+  apiBase,
+  token,
+}: {
+  apiBase: string;
+  token: string;
+}) {
   const [scopeType, setScopeType] = useState<"project" | "thread">("project");
   const [scopeId, setScopeId] = useState("");
   const [result, setResult] = useState<unknown>(null);
   const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
   const deleteJobQuery = useQuery({
     queryKey: ["activity", "delete-job", apiBase, deleteJobId],
-    queryFn: () => fetchActivityDeleteJob(apiBase, token, deleteJobId as string),
+    queryFn: () =>
+      fetchActivityDeleteJob(apiBase, token, deleteJobId as string),
     enabled: Boolean(deleteJobId),
     refetchInterval: (query) =>
       query.state.data?.status === "completed" ? false : 1_000,
@@ -38,9 +53,8 @@ export function ActivityPolicyOperations({ apiBase, token }: { apiBase: string; 
     mutationFn: async (action: ActivityOperationAction) => {
       const id = scopeId.trim();
       if (!id) throw new Error("Enter a scope ID");
-      const scope: ActivityOperationScope = scopeType === "project"
-        ? { projectId: id }
-        : { threadId: id };
+      const scope: ActivityOperationScope =
+        scopeType === "project" ? { projectId: id } : { threadId: id };
       return executeActivityOperation(apiBase, token, action, scope);
     },
     onSuccess: (nextResult) => {
@@ -56,26 +70,52 @@ export function ActivityPolicyOperations({ apiBase, token }: { apiBase: string; 
     <section className="mt-5 rounded-xl border border-border/70 bg-card/70 p-5">
       <h2 className="font-semibold">Export or delete a scope</h2>
       <div className="mt-4 flex flex-wrap gap-2">
-        <select className="h-9 rounded-lg border border-border bg-background px-3 text-sm" value={scopeType} onChange={(event) => setScopeType(event.target.value as "project" | "thread")}>
-          <option value="project">Project</option>
-          <option value="thread">Thread</option>
-        </select>
-        <input className="h-9 min-w-72 flex-1 rounded-lg border border-border bg-background px-3 text-sm" value={scopeId} onChange={(event) => setScopeId(event.target.value)} placeholder={`${scopeType} ID`} />
-        <Button variant="outline" onClick={() => operation.mutate("export")} disabled={operation.isPending}>Export</Button>
+        <Select
+          value={scopeType}
+          onValueChange={(value: "project" | "thread") => setScopeType(value)}
+        >
+          <SelectTrigger className="h-9 w-44" aria-label="Scope type">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="project">Project</SelectItem>
+              <SelectItem value="thread">Thread</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <input
+          className="h-9 min-w-0 flex-1 basis-72 rounded-lg border border-border bg-background px-3 text-sm"
+          value={scopeId}
+          onChange={(event) => setScopeId(event.target.value)}
+          placeholder={`${scopeType} ID`}
+        />
+        <Button
+          variant="outline"
+          onClick={() => operation.mutate("export")}
+          disabled={operation.isPending}
+        >
+          Export
+        </Button>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="destructive" disabled={operation.isPending}>Delete</Button>
+            <Button variant="destructive" disabled={operation.isPending}>
+              Delete
+            </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Activity data?</AlertDialogTitle>
               <AlertDialogDescription>
-                This permanently deletes Activity facts and short-lived content for {scopeType}{" "}
-                {scopeId.trim() || "Not recorded"}. This action cannot be undone.
+                This permanently deletes Activity facts and short-lived content
+                for {scopeType} {scopeId.trim() || "Not recorded"}. This action
+                cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={operation.isPending}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel disabled={operation.isPending}>
+                Cancel
+              </AlertDialogCancel>
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 disabled={operation.isPending}
@@ -87,17 +127,30 @@ export function ActivityPolicyOperations({ apiBase, token }: { apiBase: string; 
           </AlertDialogContent>
         </AlertDialog>
       </div>
-      {operation.isError ? <p className="mt-3 text-sm text-destructive">{operation.error.message}</p> : null}
+      {operation.isError ? (
+        <p className="mt-3 text-sm text-destructive">
+          {operation.error.message}
+        </p>
+      ) : null}
       {deleteJobQuery.data ? (
         <div className="mt-4 rounded-lg border border-border bg-background p-4 text-sm">
           <p className="font-medium">Delete job {deleteJobQuery.data.status}</p>
           <p className="mt-2 text-muted-foreground">
-            {deleteJobQuery.data.deletedFactCount} / {deleteJobQuery.data.previewFactCount} facts physically deleted
+            {deleteJobQuery.data.deletedFactCount} /{" "}
+            {deleteJobQuery.data.previewFactCount} facts physically deleted
           </p>
-          {deleteJobQuery.data.lastErrorCode ? <p className="mt-2 text-destructive">{deleteJobQuery.data.lastErrorCode}</p> : null}
+          {deleteJobQuery.data.lastErrorCode ? (
+            <p className="mt-2 text-destructive">
+              {deleteJobQuery.data.lastErrorCode}
+            </p>
+          ) : null}
         </div>
       ) : null}
-      {result ? <pre className="mt-4 max-h-64 overflow-auto rounded-lg bg-muted/50 p-3 text-xs">{JSON.stringify(result, null, 2)}</pre> : null}
+      {result ? (
+        <pre className="mt-4 max-h-64 overflow-auto rounded-lg bg-muted/50 p-3 text-xs">
+          {JSON.stringify(result, null, 2)}
+        </pre>
+      ) : null}
     </section>
   );
 }

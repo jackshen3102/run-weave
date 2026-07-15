@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useMemoizedFn } from "ahooks";
+import { ChevronRight } from "lucide-react";
 import type { WorkHistorySourceStatus } from "@runweave/shared/work-history";
 import { Button } from "../../components/ui/button";
 import { HttpError } from "../../services/http";
@@ -168,6 +169,11 @@ export function TerminalHistoryView({
     setSelection(null);
     onSelectEvent(null);
   });
+  const closeMobileDetail = useMemoizedFn(() => {
+    setSelection(null);
+    onSelectEvent(null);
+    onSelectTerminal(null);
+  });
   const loadMore = useMemoizedFn(() => {
     void detailQuery.fetchNextPage();
   });
@@ -179,6 +185,9 @@ export function TerminalHistoryView({
     <WorkHistoryLayout
       inspectorOpen={Boolean(activeSelection && selectedEventKey)}
       onCloseInspector={closeInspector}
+      mobileDetailOpen={Boolean(selectedTerminalId)}
+      mobileDetailLabel="Terminal History"
+      onCloseMobileDetail={closeMobileDetail}
       list={
         <div>
           <div className="border-b border-border/70 p-4">
@@ -194,23 +203,33 @@ export function TerminalHistoryView({
           ) : (
             <div>
               {terminals.map((terminal) => (
-                <button
-                  type="button"
+                <article
                   key={terminal.terminalSessionId}
-                  className={`w-full border-b border-border/70 p-4 text-left ${effectiveTerminalId === terminal.terminalSessionId ? "bg-primary/10" : "hover:bg-muted/50"}`}
-                  onClick={() => selectTerminal(terminal.terminalSessionId)}
+                  className={`w-full select-text border-b border-border/70 p-4 ${effectiveTerminalId === terminal.terminalSessionId ? selectedTerminalId ? "bg-primary/10" : "md:bg-primary/10" : ""}`}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-medium">{terminal.title}</p>
-                    <span className="text-[0.68rem] text-muted-foreground">{terminal.status}</span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{terminal.title}</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {terminal.projectId}
+                      </p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {terminal.knownThreadCount} known Threads · {formatTime(terminal.lastActivityAt)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-[0.68rem] text-muted-foreground">{terminal.status}</span>
+                      <button
+                        type="button"
+                        aria-label={`Open ${terminal.title} Terminal archive`}
+                        className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:h-8 md:w-8"
+                        onClick={() => selectTerminal(terminal.terminalSessionId)}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
-                    {terminal.projectId}
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {terminal.knownThreadCount} known Threads · {formatTime(terminal.lastActivityAt)}
-                  </p>
-                </button>
+                </article>
               ))}
               {listQuery.hasNextPage ? (
                 <div className="p-3 text-center">
@@ -250,27 +269,34 @@ export function TerminalHistoryView({
               <SourceStatuses values={detail.sourceStatus} />
               <div className="mt-5 grid gap-3">
                 {journal.map((entry) => (
-                  <button
-                    type="button"
+                  <article
                     key={entry.id}
-                    className="rounded-lg border border-border/70 p-4 text-left hover:bg-muted/40"
-                    onClick={() => selectEntry(entry.selection)}
+                    className="flex select-text items-start justify-between gap-3 rounded-lg border border-border/70 p-4"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">{entry.title}</p>
-                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                          {entry.summary}
-                        </p>
-                        <p className="mt-2 text-[0.68rem] text-muted-foreground">
-                          {entry.sourceType} · {entry.sourceId}
-                        </p>
-                      </div>
-                      <time className="shrink-0 text-xs text-muted-foreground">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{entry.title}</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                        {entry.summary}
+                      </p>
+                      <p className="mt-2 text-[0.68rem] text-muted-foreground">
+                        {entry.sourceType} · {entry.sourceId}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-start gap-2">
+                      <time className="pt-2 text-xs text-muted-foreground">
                         {formatTime(entry.occurredAt)}
                       </time>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label={`Open ${entry.title} details`}
+                        onClick={() => selectEntry(entry.selection)}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
                     </div>
-                  </button>
+                  </article>
                 ))}
               </div>
               {detailQuery.hasNextPage ? (
