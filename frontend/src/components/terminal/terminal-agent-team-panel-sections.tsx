@@ -1,4 +1,4 @@
-import { AlertTriangle, Play, Plus, X } from "lucide-react";
+import { AlertTriangle, Play, Plus, RotateCcw, X } from "lucide-react";
 import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import { Button } from "../ui/button";
 import {
@@ -13,6 +13,7 @@ import {
 } from "./terminal-agent-team-panel-details";
 
 export function StartFlowSection({
+  mode = "start",
   task,
   planFilePath,
   testCaseFilePath,
@@ -24,6 +25,7 @@ export function StartFlowSection({
   onReviewCheckpointEnabledChange,
   onStart,
 }: {
+  mode?: "start" | "retry";
   task: string;
   planFilePath: string;
   testCaseFilePath: string;
@@ -37,13 +39,21 @@ export function StartFlowSection({
 }) {
   return (
     <div className="space-y-3">
-      <div className="text-sm font-medium text-slate-200">这是一个普通终端</div>
+      <div className="text-sm font-medium text-slate-200">
+        {mode === "retry" ? "重新开始 Agent Team" : "这是一个普通终端"}
+      </div>
       <p className="text-xs leading-relaxed text-slate-400">
-        当前是标准 shell 会话，没有多 Agent 流程。提交任务后，Agent Team 会进入
-        <code className="mx-1 rounded bg-slate-800 px-1">
-          拆分提案 → 执行观测
-        </code>
-        。
+        {mode === "retry" ? (
+          "已回填上一次任务参数。提交后会创建新的 Run，原失败记录会保留。"
+        ) : (
+          <>
+            当前是标准 shell 会话，没有多 Agent 流程。提交任务后，Agent Team 会进入
+            <code className="mx-1 rounded bg-slate-800 px-1">
+              拆分提案 → 执行观测
+            </code>
+            。
+          </>
+        )}
       </p>
       <ol className="space-y-1 pl-4 text-xs text-slate-400 [list-style:decimal]">
         <li>服务端自动生成并确认 worker 拆分</li>
@@ -104,8 +114,50 @@ export function StartFlowSection({
         disabled={busy || !task.trim()}
         onClick={onStart}
       >
-        <Play className="h-4 w-4" /> 开始 Agent Team
+        <Play className="h-4 w-4" />
+        {mode === "retry" ? "重新开始 Agent Team" : "开始 Agent Team"}
       </Button>
+    </div>
+  );
+}
+
+export function FailedRunSection({
+  run,
+  busy,
+  onRetry,
+}: {
+  run: AgentTeamRun;
+  busy: boolean;
+  onRetry: () => void;
+}) {
+  const recentLogs = run.logs.slice(-5).reverse();
+  return (
+    <div className="space-y-3">
+      <div className="rounded border border-rose-800 bg-rose-950/40 p-2">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
+          <AlertTriangle className="h-4 w-4" /> Agent Team 执行失败
+        </div>
+        <p className="mt-1 whitespace-pre-wrap break-words text-[11px] text-rose-200">
+          {run.logs.at(-1) ?? "Agent Team 未能完成当前 Run。"}
+        </p>
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        className="w-full"
+        disabled={busy}
+        onClick={onRetry}
+      >
+        <RotateCcw className="h-4 w-4" /> 修改参数并重试
+      </Button>
+      <div>
+        <div className="mb-1 text-xs font-semibold text-slate-400">Log</div>
+        <div className="space-y-0.5 rounded border border-slate-800 bg-slate-950/60 p-2 font-mono text-[10px] text-slate-400">
+          {recentLogs.map((line, index) => (
+            <div key={`${index}-${line}`}>{line}</div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -268,6 +320,7 @@ export function ExecutingSection({
   onResumeNoteChange,
   onResume,
   onComplete,
+  onRetry,
   onFocusPane,
   onAuthExpired,
 }: {
@@ -280,6 +333,7 @@ export function ExecutingSection({
   onResumeNoteChange: (value: string) => void;
   onResume: () => void;
   onComplete: () => void;
+  onRetry: () => void;
   onFocusPane: (panelId: string) => void;
   onAuthExpired?: () => void;
 }) {
@@ -407,6 +461,24 @@ export function ExecutingSection({
       ) : run.status === "done" ? (
         <div className="rounded border border-emerald-900 bg-emerald-950/30 p-2 text-xs text-emerald-300">
           Loop 已完成，worker pane 已冻结。
+        </div>
+      ) : run.status === "failed" ? (
+        <div className="space-y-2 rounded border border-rose-800 bg-rose-950/40 p-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
+            <AlertTriangle className="h-4 w-4" /> Agent Team 执行失败
+          </div>
+          <p className="text-[11px] text-rose-200">
+            {run.logs.at(-1) ?? "Agent Team 未能完成当前 Run。"}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="w-full"
+            disabled={busy}
+            onClick={onRetry}
+          >
+            <RotateCcw className="h-4 w-4" /> 修改参数并重试
+          </Button>
         </div>
       ) : null}
 

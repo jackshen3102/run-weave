@@ -317,12 +317,17 @@ export async function inspectElectronHandshake(service) {
 
 export function resolveBetaReconciliationPaths(services) {
   const beta = services.beta;
+  const pooledBeta = /^pool-0[1-5]$/.test(beta?.instanceId ?? "");
   const desktopEndpoint = services.cdp?.desktop?.endpoint;
   const terminalBrowserEndpoint = services.cdp?.terminalBrowser?.endpoint;
   if (
     beta?.ownership !== "dedicated" ||
     beta.channel !== "beta" ||
     !beta.instanceId ||
+    (pooledBeta &&
+      (beta.slotId !== beta.instanceId ||
+        typeof beta.leaseNonce !== "string" ||
+        !beta.leaseNonce)) ||
     !beta.ownerDevSessionId ||
     !beta.userDataDir ||
     !beta.betaControl?.cwd ||
@@ -370,6 +375,7 @@ export async function reconcileBetaSessionServices(services) {
     return null;
   }
   const beta = services.beta;
+  const pooledBeta = /^pool-0[1-5]$/.test(beta.instanceId);
   const [status, desktopState] = await Promise.all([
     buildBetaStatus(paths),
     readJson(paths.desktopStatusPath),
@@ -378,6 +384,9 @@ export async function reconcileBetaSessionServices(services) {
   if (
     status.channel !== "beta" ||
     status.instanceId !== beta.instanceId ||
+    (pooledBeta &&
+      (status.slotId !== beta.slotId ||
+        status.poolPolicy !== "fixed-pool-v1")) ||
     status.devSessionId !== beta.ownerDevSessionId ||
     typeof revision !== "string" ||
     !revision ||

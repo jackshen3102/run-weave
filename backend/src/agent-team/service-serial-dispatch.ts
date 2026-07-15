@@ -115,6 +115,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       triggerSummary?: string | null;
       reviewScope?: "full" | "incremental" | "final";
       acceptedRepairKeys?: string[];
+      reviewChallenge?: { repairKeys: string[]; reason: string };
     },
   ): Promise<AgentTeamRun> {
     const session = this.terminalSessionManager.getSession(
@@ -236,6 +237,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       cases: options.cases,
       outboxPath,
       triggerSummary: options.triggerSummary ?? null,
+      reviewChallenge: options.reviewChallenge ?? null,
     });
     const terminal = resolveAgentTeamTerminal(run.terminal);
     try {

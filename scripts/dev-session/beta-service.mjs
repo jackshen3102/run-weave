@@ -23,6 +23,8 @@ export async function startDedicatedBeta({
   sourceRoot,
   sessionId,
   instanceId,
+  slotId,
+  leaseNonce,
   revision,
   desktopCdpPort,
   terminalBrowserCdpPort,
@@ -125,9 +127,19 @@ export async function startDedicatedBeta({
       timeout: 15 * 60_000,
     });
   } catch (error) {
+    let cleanupFailure = null;
+    try {
+      await stopBetaControl();
+    } catch (stopError) {
+      cleanupFailure =
+        stopError instanceof Error ? stopError.message : String(stopError);
+    }
     throw new DevSessionError("Beta instance update/start failed", 1, {
       instanceId,
       stderr: error?.stderr?.slice(-4_000) ?? null,
+      ...(cleanupFailure
+        ? { resetUnsafe: true, cleanupFailure }
+        : { resetUnsafe: false }),
     });
   }
   const status = await buildBetaStatus(paths);
@@ -141,7 +153,20 @@ export async function startDedicatedBeta({
     !status.cdp.desktop.healthy ||
     !status.cdp.terminalBrowser.healthy
   ) {
-    await stopBetaControl().catch(() => undefined);
+    try {
+      await stopBetaControl();
+    } catch (error) {
+      throw new DevSessionError(
+        "Beta readiness failed and identity-safe cleanup did not complete",
+        5,
+        {
+          instanceId,
+          status,
+          resetUnsafe: true,
+          cleanupFailure: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
     throw new DevSessionError("Beta instance readiness identity failed", 4, {
       instanceId,
       status,
@@ -173,7 +198,7 @@ export async function startDedicatedBeta({
     !appServerLock ||
     appServerHealth?.ok !== true
   ) {
-    await stopBetaControl().catch(() => undefined);
+    await stopBetaControl();
     throw new DevSessionError(
       "Beta component ownership handshake failed",
       4,
@@ -185,6 +210,8 @@ export async function startDedicatedBeta({
     serviceInstanceId: `beta:${instanceId}:${status.desktop.pid}`,
     ownerDevSessionId: sessionId,
     instanceId,
+    slotId,
+    leaseNonce,
     channel: "beta",
     pid: status.desktop.pid,
     sourceRevision: revision,
@@ -212,16 +239,23 @@ export async function startDedicatedBeta({
     ownership: "dedicated",
     serviceInstanceId: `beta-renderer:${instanceId}:${status.desktop.pid}`,
     ownerDevSessionId: sessionId,
+    slotId,
+    leaseNonce,
     pid: status.desktop.pid,
     url: "runweave://app/index.html",
     sourceRevision: revision,
     expectedBackendServiceInstanceId: backendHealth.serviceInstanceId,
     process: processInfo,
   };
-  const backend = sharedBackend ?? {
+  const sharedBackendWithSlot = sharedBackend
+    ? { ...sharedBackend, slotId, leaseNonce }
+    : null;
+  const backend = sharedBackendWithSlot ?? {
     ownership: "dedicated",
     serviceInstanceId: backendHealth.serviceInstanceId,
     ownerDevSessionId: sessionId,
+    slotId,
+    leaseNonce,
     pid: backendLock.pid,
     url: status.backend.baseUrl,
     resourceNamespace: backendHealth.resourceNamespace,
@@ -241,10 +275,15 @@ export async function startDedicatedBeta({
       logPath: status.update.logPath,
     },
   };
-  const appServer = sharedAppServer ?? {
+  const sharedAppServerWithSlot = sharedAppServer
+    ? { ...sharedAppServer, slotId, leaseNonce }
+    : null;
+  const appServer = sharedAppServerWithSlot ?? {
     ownership: "dedicated",
     serviceInstanceId: appServerHealth.serviceInstanceId,
     ownerDevSessionId: sessionId,
+    slotId,
+    leaseNonce,
     pid: appServerLock.pid,
     url: status.appServer.baseUrl,
     protocolVersion: appServerHealth.protocolVersion,
@@ -273,7 +312,7 @@ export async function startDedicatedBeta({
     inspectAppServerHandshake(appServer),
   ]);
   if (!backendInspection.ok || !appServerInspection.ok) {
-    await stopBetaControl().catch(() => undefined);
+    await stopBetaControl();
     throw new DevSessionError("Beta component identity drifted", 4, {
       instanceId,
       backend: backendInspection.reason,
@@ -302,6 +341,8 @@ export async function startDedicatedBeta({
         ownership: "dedicated",
         serviceInstanceId: `cdp:${instanceId}:desktop`,
         ownerDevSessionId: sessionId,
+        slotId,
+        leaseNonce,
         instanceId,
         pid: status.desktop.pid,
         endpoint: status.cdp.desktop.endpoint,
@@ -311,6 +352,8 @@ export async function startDedicatedBeta({
         ownership: "dedicated",
         serviceInstanceId: `cdp:${instanceId}:terminal-browser`,
         ownerDevSessionId: sessionId,
+        slotId,
+        leaseNonce,
         instanceId,
         pid: status.desktop.pid,
         endpoint: status.cdp.terminalBrowser.endpoint,

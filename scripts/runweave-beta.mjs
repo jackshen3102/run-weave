@@ -25,6 +25,17 @@ import {
   runAppServerCli,
   waitForHealthyBeta,
 } from "./runweave-beta-operations.mjs";
+import {
+  BETA_SLOT_IDS,
+  BETA_SLOT_POLICY,
+  applyBetaSlotRetention,
+} from "./dev-session/beta-slot-pool.mjs";
+import {
+  cleanupLegacyBeta,
+  inventoryLegacyBeta,
+  purgeLegacyBeta,
+  restoreLegacyBeta,
+} from "./runweave-beta-legacy.mjs";
 
 function parseControlArgs(args) {
   const options = {
@@ -32,6 +43,9 @@ function parseControlArgs(args) {
     devSessionId: null,
     desktopCdpPort: 9335,
     terminalBrowserCdpPort: 9336,
+    operationId: null,
+    confirm: null,
+    instanceProvided: false,
   };
   const forwarded = [];
   for (let index = 0; index < args.length; index += 1) {
@@ -41,6 +55,8 @@ function parseControlArgs(args) {
       ["--dev-session", "devSessionId"],
       ["--desktop-cdp-port", "desktopCdpPort"],
       ["--terminal-browser-cdp-port", "terminalBrowserCdpPort"],
+      ["--operation", "operationId"],
+      ["--confirm", "confirm"],
     ]).get(arg);
     if (!option) {
       forwarded.push(arg);
@@ -52,6 +68,9 @@ function parseControlArgs(args) {
     }
     index += 1;
     options[option] = option.endsWith("Port") ? Number(value) : value;
+    if (option === "instanceId") {
+      options.instanceProvided = true;
+    }
   }
   for (const port of [
     options.desktopCdpPort,
@@ -356,6 +375,9 @@ async function update(paths, args, { throwOnFailure = false } = {}) {
   }
 
   const state = (await readJson(paths.statePath)) ?? {};
+  if (state.mode !== "app") {
+    baseline.app.backupPath = baseline.priorAppBackupPath;
+  }
   await writeJson(paths.statePath, {
     ...state,
     channel: BETA_CHANNEL,
@@ -378,6 +400,9 @@ async function update(paths, args, { throwOnFailure = false } = {}) {
       state.appServerAction === "update",
       startedAt,
     );
+    if (paths.slotId) {
+      await applyBetaSlotRetention({ slotId: paths.slotId });
+    }
     console.log(JSON.stringify(status, null, 2));
     return status;
   } catch (error) {
@@ -490,6 +515,24 @@ async function verify(paths) {
   if (/authorization|cookie|jwt|password|token/i.test(serialized)) {
     throw new Error("Beta status contains a sensitive field name");
   }
+  const poolPaths = BETA_SLOT_IDS.map((slotId) =>
+    resolveBetaPaths(paths.sourceRoot, os.homedir(), slotId),
+  );
+  for (const poolPath of poolPaths) {
+    if (
+      poolPath.runtimeHome.startsWith(`${poolPath.userData}${path.sep}`) ||
+      poolPath.statePath.startsWith(`${poolPath.userData}${path.sep}`) ||
+      poolPath.instanceId !== poolPath.slotId ||
+      poolPath.poolPolicy !== BETA_SLOT_POLICY
+    ) {
+      throw new Error(
+        `Beta pool warm/mutable boundary is invalid: ${poolPath.instanceId}`,
+      );
+    }
+  }
+  if (new Set(poolPaths.map((poolPath) => poolPath.appPath)).size !== 5) {
+    throw new Error("Beta pool app targets must contain exactly five paths");
+  }
   console.log(
     JSON.stringify(
       {
@@ -497,6 +540,19 @@ async function verify(paths) {
         channel: BETA_CHANNEL,
         isolatedPaths: betaPaths,
         statusContract: status,
+        poolContract: {
+          policy: BETA_SLOT_POLICY,
+          capacity: BETA_SLOT_IDS.length,
+          slots: poolPaths.map((poolPath) => ({
+            slotId: poolPath.slotId,
+            appPath: poolPath.appPath,
+            instanceRoot: poolPath.instanceRoot,
+            runtimeHome: poolPath.runtimeHome,
+            statePath: poolPath.statePath,
+            userData: poolPath.userData,
+            appServerHome: poolPath.appServerHome,
+          })),
+        },
       },
       null,
       2,
@@ -514,6 +570,46 @@ async function main() {
     options.devSessionId,
     options,
   );
+  if (command === "legacy-inventory") {
+    console.log(JSON.stringify(await inventoryLegacyBeta(), null, 2));
+    return;
+  }
+  if (command === "legacy-cleanup") {
+    if (!options.instanceProvided) {
+      throw new Error("legacy-cleanup requires an explicit --instance");
+    }
+    console.log(
+      JSON.stringify(
+        await cleanupLegacyBeta({ instanceId: options.instanceId }),
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+  if (command === "legacy-restore") {
+    console.log(
+      JSON.stringify(
+        await restoreLegacyBeta({ operationId: options.operationId }),
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+  if (command === "legacy-purge") {
+    console.log(
+      JSON.stringify(
+        await purgeLegacyBeta({
+          operationId: options.operationId,
+          confirm: options.confirm,
+        }),
+        null,
+        2,
+      ),
+    );
+    return;
+  }
   if (command === "update") {
     await withBetaLock(paths, () => update(paths, forwarded));
     return;
@@ -557,11 +653,16 @@ async function main() {
     return;
   }
   throw new Error(
-    "Usage: node scripts/runweave-beta.mjs <update|status|open|stop|rollback|migrate|verify> [--instance id]",
+    "Usage: node scripts/runweave-beta.mjs <update|status|open|stop|rollback|migrate|verify|legacy-inventory|legacy-cleanup|legacy-restore|legacy-purge> [--instance id]",
   );
 }
 
 await main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  const message = error instanceof Error ? error.message : String(error);
+  if (process.argv.includes("--json")) {
+    console.error(JSON.stringify({ ok: false, error: message }, null, 2));
+  } else {
+    console.error(message);
+  }
   process.exitCode = 1;
 });

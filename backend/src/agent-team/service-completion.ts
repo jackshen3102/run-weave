@@ -324,6 +324,23 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionRech
         }
         if (outbox.role === "code") {
           const handoff = validateCodeFixHandoff(latest, outbox);
+          if (handoff.status === "reviewer_reproduction_required") {
+            const reviewRun = await this.dispatchSerialWorker(
+              latest,
+              "code_review",
+              {
+                cases: acceptanceCasesForRole(latest, "code_review"),
+                log: "code 无法复现重复 review finding，回派 reviewer 现场举证",
+                triggerSummary: handoff.reason,
+                reviewChallenge: {
+                  repairKeys: handoff.repairKeys,
+                  reason: handoff.reason,
+                },
+              },
+            );
+            await recordConsumed(reviewRun);
+            return true;
+          }
           if (handoff.status === "blocked") {
             const pausedRun = await this.pauseForRepairProtocolError(
               latest,

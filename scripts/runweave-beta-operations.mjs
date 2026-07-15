@@ -256,6 +256,8 @@ export async function restoreBaseline(paths, baseline, options = {}) {
     await openBeta(paths, buildUpdateEnv(paths, baselineRevision));
   }
 
+  baseline.app.backupPath = baseline.priorAppBackupPath ?? null;
+
   return { appChanged, appServerChanged, runtimeChanged };
 }
 

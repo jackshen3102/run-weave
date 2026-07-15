@@ -138,6 +138,9 @@ export function buildBounceBackPrompt(params: {
   const requiresStrategyAssessment = repairCycles.some(
     (cycle) => cycle.attempts >= 1,
   );
+  const requiresExecutableReviewReproduction = structuralRepairs.some(
+    (cycle) => cycle.attempts >= 1,
+  );
   return [
     isReviewGateBounce
       ? `[loop round ${run.loop.round}] 串行门禁报以下用例失败，请修复：`
@@ -169,7 +172,14 @@ export function buildBounceBackPrompt(params: {
     ...(structuralRepairs.length > 0
       ? [
           "Structural review 复现门槛：",
-          "- 优先原样复跑 reviewer evidence 中的命令或 harness；没有可执行 harness 时提供可复核的静态契约 Before/After。",
+          ...(requiresExecutableReviewReproduction
+            ? [
+                "- 这是修复后重复出现的 P0/P1：必须先原样执行 reviewer 提供的 scenarioId、步骤和 harness；static_contract 不再足够。",
+                "- 按相同场景无法复现时不要继续猜测性修改；提交 not_reproduced + 执行证据，backend 会回派 reviewer 现场举证。",
+              ]
+            : [
+                "- 优先原样复跑 reviewer evidence 中的命令或 harness；没有可执行 harness 时提供可复核的静态契约 Before/After。",
+              ]),
           "- 不要把纯 Git/类型/结构契约伪装成真实 runtime 场景。",
           "",
         ]
@@ -244,8 +254,16 @@ export function buildWorkerRecheckPrompt(params: {
   cases: AgentTeamAcceptanceCase[];
   outboxPath?: string | null;
   triggerSummary?: string | null;
+  reviewChallenge?: { repairKeys: string[]; reason: string } | null;
 }): string {
-  const { run, worker, cases, outboxPath, triggerSummary } = params;
+  const {
+    run,
+    worker,
+    cases,
+    outboxPath,
+    triggerSummary,
+    reviewChallenge,
+  } = params;
   const isReviewWorker = worker.role === "code_review";
   const heading = isReviewWorker
     ? `[loop round ${run.loop.round}] Code Agent 已提交本轮代码结果，请独立审查以下用例：`
@@ -276,6 +294,16 @@ export function buildWorkerRecheckPrompt(params: {
       : []),
     ...cases.map(formatAcceptancePromptLine),
     ...(isReviewWorker ? formatReviewTargetInstructions(run) : []),
+    ...(isReviewWorker && reviewChallenge
+      ? [
+          "",
+          "重复 P0/P1 复现争议：",
+          `- repairKeys: ${reviewChallenge.repairKeys.join(", ")}`,
+          `- ${reviewChallenge.reason}`,
+          "- 你必须在当前 checkpoint 亲自执行原 scenarioId：复现成功则提交 review_harness + reproduced + command evidence；无法复现则从 remainingFindings 移除。",
+          "- 禁止复用上一轮静态证据，禁止用 static_contract 继续维持该 finding。",
+        ]
+      : []),
     ...(skippedCases.length > 0
       ? [
           "",

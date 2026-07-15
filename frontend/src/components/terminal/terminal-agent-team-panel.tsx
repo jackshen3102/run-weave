@@ -28,6 +28,7 @@ import { AgentTeamAttentionSummary } from "./terminal-agent-team-panel-attention
 import { AgentTeamFindingDecisionCard } from "./terminal-agent-team-finding-decision";
 import {
   ExecutingSection,
+  FailedRunSection,
   ProposalSection,
   StartFlowSection,
 } from "./terminal-agent-team-panel-sections";
@@ -61,6 +62,7 @@ export function TerminalAgentTeamPanel({
   const [reviewCheckpointEnabled, setReviewCheckpointEnabled] = useState(false);
   const [workerDrafts, setWorkerDrafts] = useState<WorkerDraft[] | null>(null);
   const [resumeNote, setResumeNote] = useState("");
+  const [retryingRunId, setRetryingRunId] = useState<string | null>(null);
 
   const projectId = activeProject?.projectId ?? null;
   const terminalSessionId = activeSession?.terminalSessionId ?? null;
@@ -137,6 +139,7 @@ export function TerminalAgentTeamPanel({
   useEffect(() => {
     setRun(null);
     setError(null);
+    setRetryingRunId(null);
     syncWorkerDraftsFromRun(null);
     syncActiveRunPresence(null);
     if (!projectId || !terminalSessionId) {
@@ -202,12 +205,27 @@ export function TerminalAgentTeamPanel({
             : "disabled",
         },
       }).then((next) => {
+        setRetryingRunId(null);
         if (next.phase === "executing") {
           onPanelSplitEnabledChange?.(true);
         }
         return next;
       }),
     );
+  });
+
+  const retryFailedRun = useMemoizedFn((): void => {
+    if (!run || run.status !== "failed") {
+      return;
+    }
+    setTask(run.task);
+    setPlanFilePath(run.verification?.planFilePath ?? "");
+    setTestCaseFilePath(run.verification?.testCaseFilePath ?? "");
+    setReviewCheckpointEnabled(
+      run.options.reviewCheckpointMode === "local_commit",
+    );
+    setRetryingRunId(run.runId);
+    setError(null);
   });
 
   const confirmSplit = useMemoizedFn((): void => {
@@ -369,6 +387,20 @@ export function TerminalAgentTeamPanel({
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
           </div>
+        ) : run?.status === "failed" && retryingRunId === run.runId ? (
+          <StartFlowSection
+            mode="retry"
+            task={task}
+            planFilePath={planFilePath}
+            testCaseFilePath={testCaseFilePath}
+            reviewCheckpointEnabled={reviewCheckpointEnabled}
+            busy={busy}
+            onTaskChange={setTask}
+            onPlanFilePathChange={setPlanFilePath}
+            onTestCaseFilePathChange={setTestCaseFilePath}
+            onReviewCheckpointEnabledChange={setReviewCheckpointEnabled}
+            onStart={startFlow}
+          />
         ) : !run ? (
           <StartFlowSection
             task={task}
@@ -382,6 +414,8 @@ export function TerminalAgentTeamPanel({
             onReviewCheckpointEnabledChange={setReviewCheckpointEnabled}
             onStart={startFlow}
           />
+        ) : run.status === "failed" && run.phase !== "executing" ? (
+          <FailedRunSection run={run} busy={busy} onRetry={retryFailedRun} />
         ) : run.phase === "proposal" && workerDrafts ? (
           <ProposalSection
             run={run}
@@ -402,6 +436,7 @@ export function TerminalAgentTeamPanel({
             onResumeNoteChange={setResumeNote}
             onResume={resume}
             onComplete={complete}
+            onRetry={retryFailedRun}
             onFocusPane={focusPane}
             onAuthExpired={onAuthExpired}
           />

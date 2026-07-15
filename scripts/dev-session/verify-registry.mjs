@@ -344,35 +344,117 @@ export async function verifyRegistry(sourceRoot, temporaryHome) {
     ),
     true,
   );
-  const recoveryCleanup = await execFileAsync(
-    process.execPath,
-    [
-      "scripts/dev-session/cli.mjs",
-      "stop",
-      "--session",
-      recoverySession.devSessionId,
-      "--cleanup-stale",
-      "--json",
-    ],
-    { cwd: sourceRoot, env },
-  );
-  const cleanedRecoveryManifest = JSON.parse(recoveryCleanup.stdout);
-  assert.equal(cleanedRecoveryManifest.state, "stopped");
-  assert.equal(
-    cleanedRecoveryManifest.cleanup.skippedStaleServices.some(
-      (service) => service.service === "backend",
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [
+        "scripts/dev-session/cli.mjs",
+        "stop",
+        "--session",
+        recoverySession.devSessionId,
+        "--cleanup-stale",
+        "--json",
+      ],
+      { cwd: sourceRoot, env },
     ),
-    true,
+    (error) => error?.code === 5,
   );
-  assert.deepEqual(cleanedRecoveryManifest.cleanup.sharedServicesPreserved, [
-    "appServer",
-  ]);
+  const blockedRecoveryManifest = await readManifest(
+    recoverySession.devSessionId,
+    env,
+  );
+  assert.equal(blockedRecoveryManifest.state, "stale");
+  assert.equal(
+    blockedRecoveryManifest.failure.message,
+    "stale service identity drifted; refusing to reset or release Beta slot",
+  );
   await verifyStaleCleanupRetryConvergence({
     createManifest,
     recoverySession,
     sourceRoot,
     env,
   });
+
+  const releasedLeaseHome = path.join(temporaryHome, "released-lease-home");
+  const releasedLeaseNonce = "released-lease-nonce";
+  const releasedLeaseSession = {
+    ...createManifest({
+      sourceRoot,
+      sessionId: "dvs-failed-released-lease",
+    }),
+    state: "failed",
+    profile: "beta",
+    targetEnvironment: {
+      kind: "beta",
+      acceptanceSurfaces: ["desktop", "terminal-browser"],
+      instanceId: "pool-01",
+      betaSlot: {
+        policy: "fixed-pool-v1",
+        capacity: 5,
+        requestedSlotId: null,
+        assignedSlotId: "pool-01",
+        leaseNonce: releasedLeaseNonce,
+      },
+    },
+    services: Object.fromEntries(
+      Object.entries(recoverySession.services).map(([serviceName, service]) => [
+        serviceName,
+        serviceName === "cdp"
+          ? {
+              desktop: {
+                ...service.desktop,
+                slotId: "pool-01",
+                leaseNonce: releasedLeaseNonce,
+              },
+              terminalBrowser: {
+                ...service.terminalBrowser,
+                slotId: "pool-01",
+                leaseNonce: releasedLeaseNonce,
+              },
+            }
+          : {
+              ...service,
+              slotId: "pool-01",
+              leaseNonce: releasedLeaseNonce,
+            },
+      ]),
+    ),
+    failure: {
+      message: "start failed after identity-safe cleanup",
+      exitCode: 1,
+      leaseRetained: false,
+    },
+  };
+  await writeManifest(releasedLeaseSession, env);
+  const releasedLeaseEnv = { ...env, HOME: releasedLeaseHome };
+  const releasedLeaseStatus = await execFileAsync(
+    process.execPath,
+    [
+      "scripts/dev-session/cli.mjs",
+      "status",
+      "--session",
+      releasedLeaseSession.devSessionId,
+      "--json",
+    ],
+    { cwd: sourceRoot, env: releasedLeaseEnv },
+  );
+  assert.equal(JSON.parse(releasedLeaseStatus.stdout).state, "failed");
+  const releasedLeaseStop = await execFileAsync(
+    process.execPath,
+    [
+      "scripts/dev-session/cli.mjs",
+      "stop",
+      "--session",
+      releasedLeaseSession.devSessionId,
+      "--json",
+    ],
+    { cwd: sourceRoot, env: releasedLeaseEnv },
+  );
+  assert.equal(JSON.parse(releasedLeaseStop.stdout).state, "stopped");
+  assert.equal(
+    (await readManifest(releasedLeaseSession.devSessionId, env)).state,
+    "stopped",
+  );
   assert.equal((await readManifest(first.devSessionId, env)).state, "ready");
   assert.equal((await readManifest(second.devSessionId, env)).state, "ready");
 

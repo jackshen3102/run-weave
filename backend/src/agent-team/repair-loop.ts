@@ -29,6 +29,11 @@ export interface AgentTeamRepairTarget {
 export type CodeFixHandoffValidation =
   | { status: "valid"; repairKeys: string[] }
   | { status: "invalid"; errors: string[] }
+  | {
+      status: "reviewer_reproduction_required";
+      repairKeys: string[];
+      reason: string;
+    }
   | { status: "blocked"; reason: string };
 export function resolveMaxRepairAttempts(value: unknown): number {
   return typeof value === "number" &&
@@ -154,7 +159,7 @@ export function resolvePendingFindingDecision(
 }
 
 export function reviewFindingContractErrors(
-  _run: AgentTeamRun,
+  run: AgentTeamRun,
   outbox: AgentTeamWorkerOutbox,
   acceptanceResults: NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>,
 ): string[] {
@@ -173,6 +178,15 @@ export function reviewFindingContractErrors(
   }
   return findings.flatMap((finding, index) => {
     const errors: string[] = [];
+    const repairCycle = finding.invariantKey
+      ? (run.loop.repairCycles ?? []).find(
+          (cycle) =>
+            cycle.repairKey === `code_review:${finding.invariantKey}`,
+        )
+      : null;
+    const requiresExecutableReproduction = Boolean(
+      repairCycle && repairCycle.attempts >= 1,
+    );
     if (!isValidInvariantKey(finding.invariantKey)) {
       errors.push(`remainingFindings[${index}].invariantKey 缺失或格式无效`);
     }
@@ -209,6 +223,17 @@ export function reviewFindingContractErrors(
     ) {
       errors.push(
         `remainingFindings[${index}].reproduction 必须是 review_harness/static_contract + confirmed|reproduced`,
+      );
+    }
+    if (
+      requiresExecutableReproduction &&
+      (reproduction.mode !== "review_harness" ||
+        reproduction.status !== "reproduced" ||
+        !reproduction.scenarioId?.trim() ||
+        !reproduction.evidence.some((item) => item.type === "command"))
+    ) {
+      errors.push(
+        `remainingFindings[${index}] 是修复后重复出现的 P0/P1，必须使用 review_harness + reproduced，提供 scenarioId 和 command evidence；无法复现就从 remainingFindings 移除`,
       );
     }
     if (reproduction.evidence.length === 0) {
@@ -480,6 +505,7 @@ export function validateCodeFixHandoff(
   const expected = new Set(expectedKeys);
   const actual = new Set(verifications.keys());
   const errors: string[] = [];
+  const reviewerReproductionKeys: string[] = [];
   for (const key of expected) {
     if (!actual.has(key)) {
       errors.push(`缺少 fixVerifications: ${key}`);
@@ -501,7 +527,30 @@ export function validateCodeFixHandoff(
       errors.push(`repair cycle 不存在: ${key}`);
       continue;
     }
+    if (item.invariant.trim() !== cycle.invariant.trim()) {
+      errors.push(`${key} invariant 与 backend repair cycle 不一致`);
+    }
     const reproductionStatus = item.reproduction.status;
+    if (
+      cycle.sourceRole === "code_review" &&
+      cycle.attempts >= 1 &&
+      reproductionStatus === "not_reproduced"
+    ) {
+      const reviewerScenarioId = cycle.finding?.reproduction?.scenarioId?.trim();
+      if (!reviewerScenarioId) {
+        errors.push(`${key} reviewer 未提供可执行 scenarioId`);
+      } else if (item.reproduction.scenarioId?.trim() !== reviewerScenarioId) {
+        errors.push(`${key} 未按 reviewer scenarioId ${reviewerScenarioId} 复现`);
+      }
+      if (item.reproduction.mode !== cycle.finding?.reproduction?.mode) {
+        errors.push(`${key} 未使用 reviewer 下发的复现模式`);
+      }
+      if (item.reproduction.evidence.length === 0) {
+        errors.push(`${key} not_reproduced 缺少执行证据`);
+      }
+      reviewerReproductionKeys.push(key);
+      continue;
+    }
     if (
       reproductionStatus === "not_reproduced" ||
       reproductionStatus === "boundary" ||
@@ -514,9 +563,6 @@ export function validateCodeFixHandoff(
         status: "blocked",
         reason: `${key} 未达到修复交接门槛：reproduction=${reproductionStatus}, verification=${item.verification.status}, impactedCheckFailed=${item.impactedChecks.some((check) => check.status === "fail")}`,
       };
-    }
-    if (item.invariant.trim() !== cycle.invariant.trim()) {
-      errors.push(`${key} invariant 与 backend repair cycle 不一致`);
     }
     if (cycle.verificationMode === "runtime") {
       if (
@@ -580,6 +626,14 @@ export function validateCodeFixHandoff(
     if (cycle.attempts >= 1 && !item.strategyAssessment?.trim()) {
       errors.push(`${key} 第 2 次及以后修复缺少 strategyAssessment`);
     }
+  }
+
+  if (errors.length === 0 && reviewerReproductionKeys.length > 0) {
+    return {
+      status: "reviewer_reproduction_required",
+      repairKeys: reviewerReproductionKeys,
+      reason: `code worker 按 reviewer 场景无法复现：${reviewerReproductionKeys.join(", ")}；reviewer 必须在当前 checkpoint 亲自复现并提供新证据，否则移除 finding`,
+    };
   }
 
   return errors.length > 0

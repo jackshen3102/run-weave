@@ -55,6 +55,17 @@ export function verifyEvidenceGatedRepairLoop(check) {
     ),
     "utf8",
   );
+  const lifecycleSource = readFileSync(
+    new URL(
+      "../../backend/src/agent-team/service-lifecycle.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const resumeBody = lifecycleSource.slice(
+    lifecycleSource.indexOf("async resumeRun"),
+    lifecycleSource.indexOf("async decideFinding"),
+  );
   const repairProtocolSource = readFileSync(
     new URL(
       "../../backend/src/agent-team/service-repair-protocol.ts",
@@ -77,6 +88,29 @@ export function verifyEvidenceGatedRepairLoop(check) {
       completionSource.includes("workerDispatchProtocolVersion: 1") &&
       completionSource.includes("contentSha256: history.contentSha256"),
     completionSource.slice(0, 20_000),
+  );
+  check(
+    "repair-not-reproduced-review-finding-returns-to-reviewer",
+    completionSource.includes(
+      'handoff.status === "reviewer_reproduction_required"',
+    ) &&
+      completionSource.includes(
+        "code 无法复现重复 review finding，回派 reviewer 现场举证",
+      ),
+    completionSource.slice(0, 20_000),
+  );
+  check(
+    "repair-human-resume-creates-fresh-dispatch-before-reactivating-worker",
+    resumeBody.includes("activeWorkerRole: null") &&
+      resumeBody.includes("workers: setActiveWorker(run.workers, null)") &&
+      resumeBody.includes('activeWorkerRole === "code"') &&
+      resumeBody.includes("return this.bounceFailuresToCode(") &&
+      resumeBody.includes(
+        "return this.dispatchSerialWorker(nextRun, activeWorkerRole",
+      ) &&
+      resumeBody.indexOf("await this.trySendToMain") <
+        resumeBody.indexOf("return this.bounceFailuresToCode("),
+    resumeBody,
   );
   check(
     "repair-protocol-correction-creates-fresh-dispatch-before-prompt",
@@ -331,6 +365,152 @@ export function verifyEvidenceGatedRepairLoop(check) {
     structuralPrompt.includes("原样复跑 reviewer evidence") &&
       !structuralPrompt.includes("Codex worker 在修改源码前显式调用"),
     structuralPrompt,
+  );
+  const repeatedReviewReproduction = buildReviewReproduction({
+    status: "reproduced",
+    scenarioId: "repeated-review-finding",
+  });
+  const repeatedReviewOutbox = normalizeAgentTeamWorkerOutbox({
+    ...reviewOutbox,
+    remainingFindings: [
+      {
+        ...reviewOutbox.remainingFindings[0],
+        reproduction: repeatedReviewReproduction,
+      },
+    ],
+  });
+  const repeatedStructuralCycle = {
+    ...structuralCycle,
+    attempts: 1,
+    finding: repeatedReviewOutbox.remainingFindings[0],
+  };
+  const repeatedStructuralRun = {
+    ...structuralRun,
+    loop: {
+      ...structuralRun.loop,
+      repairCycles: [repeatedStructuralCycle],
+    },
+    activeWorkerDispatch: createActiveWorkerDispatch(
+      run.workers[0],
+      run.updatedAt,
+      1,
+      run.loop.round,
+      null,
+      { repairKeys: [repeatedStructuralCycle.repairKey] },
+    ),
+  };
+  check(
+    "repair-repeated-review-finding-rejects-static-contract",
+    reviewFindingContractErrors(
+      repeatedStructuralRun,
+      reviewOutbox,
+      reviewOutbox.acceptanceResults,
+    ).some((error) => error.includes("修复后重复出现的 P0/P1")),
+    reviewOutbox,
+  );
+  check(
+    "repair-repeated-review-finding-requires-executable-reproduction",
+    reviewFindingContractErrors(
+      repeatedStructuralRun,
+      repeatedReviewOutbox,
+      repeatedReviewOutbox.acceptanceResults,
+    ).length === 0,
+    repeatedReviewOutbox,
+  );
+  const repeatedStructuralPrompt = buildBounceBackPrompt({
+    run: repeatedStructuralRun,
+    failedCases: [run.acceptance[1]],
+    repairCycles: [repeatedStructuralCycle],
+  });
+  check(
+    "repair-repeated-structural-prompt-requires-reviewer-scenario",
+    repeatedStructuralPrompt.includes(
+      "这是修复后重复出现的 P0/P1",
+    ) &&
+      repeatedStructuralPrompt.includes(
+        "backend 会回派 reviewer 现场举证",
+      ),
+    repeatedStructuralPrompt,
+  );
+  const reviewerChallengePrompt = buildWorkerRecheckPrompt({
+    run: {
+      ...repeatedStructuralRun,
+      activeWorkerRole: "code_review",
+      activeWorkerDispatch: createActiveWorkerDispatch(
+        run.workers[1],
+        run.updatedAt,
+        1,
+        run.loop.round,
+      ),
+    },
+    worker: run.workers[1],
+    cases: [run.acceptance[1]],
+    reviewChallenge: {
+      repairKeys: [repeatedStructuralCycle.repairKey],
+      reason: "code worker 按 reviewer 场景无法复现",
+    },
+  });
+  check(
+    "repair-reviewer-challenge-requires-new-executable-evidence",
+    reviewerChallengePrompt.includes("重复 P0/P1 复现争议") &&
+      reviewerChallengePrompt.includes("无法复现则从 remainingFindings 移除") &&
+      reviewerChallengePrompt.includes(
+        "禁止复用上一轮静态证据",
+      ),
+    reviewerChallengePrompt,
+  );
+  const notReproducedOutbox = normalizeRepairOutbox(
+    repeatedStructuralRun,
+    [
+      buildFixVerification(repeatedStructuralCycle, {
+        reproduction: {
+          mode: "review_harness",
+          status: "not_reproduced",
+          scenarioId: "repeated-review-finding",
+          evidence: [buildRepairEvidence("not-reproduced")],
+        },
+        verification: {
+          status: "blocked",
+          sameScenario: true,
+          evidence: [],
+        },
+        impactedChecks: [],
+        strategyAssessment:
+          "按 reviewer 场景执行后未观察到该 invariant 违约，退回 reviewer 举证。",
+      }),
+    ],
+  );
+  check(
+    "repair-code-not-reproduced-requests-reviewer-evidence",
+    validateCodeFixHandoff(repeatedStructuralRun, notReproducedOutbox)
+      .status === "reviewer_reproduction_required",
+    notReproducedOutbox,
+  );
+  const mismatchedScenarioOutbox = normalizeRepairOutbox(
+    repeatedStructuralRun,
+    [
+      buildFixVerification(repeatedStructuralCycle, {
+        reproduction: {
+          mode: "review_harness",
+          status: "not_reproduced",
+          scenarioId: "different-scenario",
+          evidence: [buildRepairEvidence("wrong-scenario")],
+        },
+        verification: {
+          status: "blocked",
+          sameScenario: true,
+          evidence: [],
+        },
+        impactedChecks: [],
+        strategyAssessment: "执行的不是 reviewer 原场景。",
+      }),
+    ],
+  );
+  check(
+    "repair-code-not-reproduced-must-use-reviewer-scenario",
+    validateCodeFixHandoff(repeatedStructuralRun, mismatchedScenarioOutbox)
+      .status === "invalid",
+    mismatchedScenarioOutbox,
   );
   check(
     "repair-structural-handoff-valid",

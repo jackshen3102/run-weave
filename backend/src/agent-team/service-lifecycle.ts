@@ -22,6 +22,7 @@ import {
 } from "./repair-loop";
 import { agentTeamLogger } from "./service-context";
 import { AgentTeamRecheckService } from "./service-recheck";
+import { acceptanceCasesForRole } from "./service-acceptance-policy";
 import {
   normalizeWorkers,
   resolveInitialActiveWorkerRole,
@@ -328,9 +329,9 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       run.activeWorkerRole ?? resolveInitialActiveWorkerRole(run.workers);
     const nextRun = await this.updateRun(run, {
       status: "running",
-      activeWorkerRole,
+      activeWorkerRole: null,
       activeWorkerDispatch: null,
-      workers: setActiveWorker(run.workers, activeWorkerRole),
+      workers: setActiveWorker(run.workers, null),
       loop: {
         ...run.loop,
         noProgressCount: 0,
@@ -358,7 +359,25 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     });
     // Inject the human note back into the main agent context.
     await this.trySendToMain(nextRun, buildHumanNotePrompt(note));
-    return nextRun;
+    if (!activeWorkerRole) {
+      return this.pauseForRepairProtocolError(
+        nextRun,
+        "人工介入后无法恢复：没有可重新派发的 worker pane",
+      );
+    }
+    const roleCases = acceptanceCasesForRole(nextRun, activeWorkerRole);
+    const failedCases = roleCases.filter((item) => item.status === "fail");
+    if (activeWorkerRole === "code" && failedCases.length > 0) {
+      return this.bounceFailuresToCode(
+        nextRun,
+        failedCases.map((item) => item.caseId),
+      );
+    }
+    return this.dispatchSerialWorker(nextRun, activeWorkerRole, {
+      cases: failedCases.length > 0 ? failedCases : roleCases,
+      log: "人工介入后恢复，建立 fresh worker dispatch",
+      triggerSummary: note,
+    });
   }
 
   async decideFinding(

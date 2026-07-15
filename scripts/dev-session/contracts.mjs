@@ -148,6 +148,61 @@ export function validateManifest(value) {
   if (!value.services || typeof value.services !== "object") {
     throw new DevSessionError("manifest services are missing", 4);
   }
+  if (
+    value.profile === "beta" &&
+    value.targetEnvironment?.betaSlot === undefined &&
+    /^pool-0[1-5]$/.test(value.targetEnvironment?.instanceId ?? "")
+  ) {
+    throw new DevSessionError("pooled Beta manifest is missing betaSlot", 4);
+  }
+  if (value.profile === "beta" && value.targetEnvironment?.betaSlot) {
+    const betaSlot = value.targetEnvironment?.betaSlot;
+    const assignmentPending =
+      ["planned", "failed"].includes(value.state) &&
+      betaSlot?.assignedSlotId === null &&
+      betaSlot?.leaseNonce === null;
+    if (
+      betaSlot?.policy !== "fixed-pool-v1" ||
+      betaSlot.capacity !== 5 ||
+      (!assignmentPending &&
+        (!/^pool-0[1-5]$/.test(betaSlot.assignedSlotId ?? "") ||
+          typeof betaSlot.leaseNonce !== "string" ||
+          !betaSlot.leaseNonce ||
+          value.targetEnvironment.instanceId !== betaSlot.assignedSlotId)) ||
+      (assignmentPending &&
+        value.targetEnvironment.instanceId !== betaSlot.requestedSlotId) ||
+      (betaSlot.requestedSlotId !== null &&
+        !/^pool-0[1-5]$/.test(betaSlot.requestedSlotId)) ||
+      (!assignmentPending &&
+        betaSlot.requestedSlotId !== null &&
+        betaSlot.requestedSlotId !== betaSlot.assignedSlotId)
+    ) {
+      throw new DevSessionError("manifest Beta slot contract is invalid", 4);
+    }
+    if (!assignmentPending) {
+      const slotServices = [
+        value.services.frontend,
+        value.services.backend,
+        value.services.appServer,
+        value.services.electron,
+        value.services.beta,
+        value.services.cdp?.desktop,
+        value.services.cdp?.terminalBrowser,
+      ];
+      if (
+        slotServices.some(
+          (service) =>
+            service?.slotId !== betaSlot.assignedSlotId ||
+            service?.leaseNonce !== betaSlot.leaseNonce,
+        )
+      ) {
+        throw new DevSessionError(
+          "manifest Beta service slot identity is inconsistent",
+          4,
+        );
+      }
+    }
+  }
   return value;
 }
 

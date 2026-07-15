@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { constants as fsConstants, existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -29,7 +29,9 @@ export function resolveBetaPaths(
 ) {
   const targets = resolveBetaUpdateTargets(homeDir, instanceId);
   const userData = targets.userData;
-  const updateDir = path.join(userData, "update");
+  const updateDir = targets.poolSlot
+    ? path.join(targets.instanceRoot, "diagnostics")
+    : path.join(userData, "update");
   const appServerHome = targets.appServerHome;
   return {
     sourceRoot: path.resolve(sourceRoot),
@@ -44,6 +46,8 @@ export function resolveBetaPaths(
     devSessionId,
     desktopCdpPort: ports.desktopCdpPort ?? 9335,
     instanceId: targets.instanceId,
+    slotId: targets.poolSlot ? targets.instanceId : null,
+    poolPolicy: targets.poolSlot ? "fixed-pool-v1" : null,
     instanceRoot: targets.instanceRoot,
     terminalBrowserCdpPort: ports.terminalBrowserCdpPort ?? 9336,
     appServerHome,
@@ -61,9 +65,10 @@ export function resolveBetaPaths(
     runtimeHome: targets.runtimeHome,
     runtimeArtifactsRoot: path.join(targets.instanceRoot, "runtime-artifacts"),
     runtimeBuildRoot: path.join(targets.instanceRoot, "build", "runtime"),
-    runtimeCurrentPath: path.join(userData, "runtime", "current.json"),
+    runtimeCurrentPath: path.join(targets.runtimeHome, "current.json"),
     statePath: targets.statePath,
     userData,
+    warmStateRoot: targets.warmStateRoot,
   };
 }
 
@@ -112,6 +117,52 @@ export function isPidLive(pid) {
   }
 }
 
+export async function inspectRecordedProcessState(filePath, pidPath) {
+  let handle;
+  try {
+    handle = await fs.open(
+      filePath,
+      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
+    );
+    const opened = await handle.stat();
+    if (!opened.isFile()) {
+      throw new Error("recorded process state is not a regular file");
+    }
+    const value = JSON.parse(await handle.readFile("utf8"));
+    const named = await fs.lstat(filePath);
+    if (
+      named.isSymbolicLink() ||
+      named.dev !== opened.dev ||
+      named.ino !== opened.ino
+    ) {
+      throw new Error("recorded process state identity changed while reading");
+    }
+    const pid = pidPath.reduce((current, key) => current?.[key], value);
+    if (!Number.isInteger(pid) || pid <= 0) {
+      throw new Error("recorded process state has no valid PID");
+    }
+    return {
+      path: filePath,
+      exists: true,
+      trusted: true,
+      active: isPidLive(pid),
+      pid,
+      reason: null,
+    };
+  } catch (error) {
+    return {
+      path: filePath,
+      exists: error?.code !== "ENOENT",
+      trusted: false,
+      active: false,
+      pid: null,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    await handle?.close();
+  }
+}
+
 export async function runCapture(command, args, options = {}) {
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -138,6 +189,40 @@ export async function runCapture(command, args, options = {}) {
       });
     });
   });
+}
+
+export async function inspectProcessReferences(targetPaths) {
+  const normalizedPaths = targetPaths
+    .filter((targetPath) => typeof targetPath === "string" && targetPath)
+    .map((targetPath) => path.resolve(targetPath));
+  const result = await runCapture("ps", ["-axo", "pid=,command="]);
+  if (!result.ok) {
+    return {
+      trusted: false,
+      active: false,
+      identities: [],
+      reason: result.stderr.trim() || "process inventory failed",
+    };
+  }
+  const identities = result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => {
+      const match = /^(\d+)\s+/.exec(line);
+      const pid = Number.parseInt(match?.[1] ?? "", 10);
+      return (
+        Number.isInteger(pid) &&
+        pid !== process.pid &&
+        normalizedPaths.some((targetPath) => line.includes(targetPath))
+      );
+    });
+  return {
+    trusted: true,
+    active: identities.length > 0,
+    identities,
+    reason: null,
+  };
 }
 
 export async function getGitHead(sourceRoot) {
@@ -450,6 +535,8 @@ export async function buildBetaStatus(paths) {
     schemaVersion: 1,
     channel: BETA_CHANNEL,
     instanceId: paths.instanceId,
+    slotId: paths.slotId,
+    poolPolicy: paths.poolPolicy,
     devSessionId: desktopState?.devSessionId ?? paths.devSessionId,
     source: {
       root: state?.sourceRoot ?? paths.sourceRoot,

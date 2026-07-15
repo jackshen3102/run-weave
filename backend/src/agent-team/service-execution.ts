@@ -58,6 +58,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       triggerSummary?: string | null;
       reviewScope?: "full" | "incremental" | "final";
       acceptedRepairKeys?: string[];
+      reviewChallenge?: { repairKeys: string[]; reason: string };
     },
   ): Promise<AgentTeamRun>;
 

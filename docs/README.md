@@ -84,7 +84,7 @@
 | Runweave Beta 自举开发通道测试           | testing/platform/runweave-beta-self-hosting-test-cases.md                              |
 | Runweave Dev Session 分层开发环境测试    | testing/platform/runweave-dev-session-test-cases.md                                    |
 | Runweave Beta 多实例与 CDP 路由测试      | testing/platform/runweave-beta-instance-cdp-routing-test-cases.md                      |
-| Runweave Beta 五槽位池测试               | testing/beta-slot-pool-test-cases.md                                                   |
+| Runweave Beta 五槽位池与回收测试         | testing/beta-slot-pool-test-cases.md                                                   |
 | Backend 内嵌行为数据底座测试             | testing/architecture/system-activity-data-foundation-test-cases.md                     |
 | Terminal Activity Work History 测试      | testing/terminal/terminal-activity-work-history-test-cases.md                          |
 | Terminal Browser CDP/MCP 测试            | testing/terminal/terminal-browser-cdp-mcp-test-cases.md                                |

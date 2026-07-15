@@ -159,20 +159,27 @@ export function verifyPlanner(sourceRoot) {
   assert.equal(combinedDesktopContract.profile, "beta");
   assert.equal(combinedDesktopContract.executable, true);
 
-  const maxBetaInstance = buildDevSessionPlan({
+  const requestedBetaSlot = buildDevSessionPlan({
     sourceRoot,
     changedFiles: ["scripts/runweave-beta.mjs"],
     explicitProfile: "beta",
-    explicitInstance: "a".repeat(32),
+    explicitInstance: "pool-05",
   });
-  assert.equal(maxBetaInstance.targetEnvironment.instanceId.length, 32);
+  assert.equal(requestedBetaSlot.targetEnvironment.instanceId, "pool-05");
+  assert.deepEqual(requestedBetaSlot.targetEnvironment.betaSlot, {
+    policy: "fixed-pool-v1",
+    capacity: 5,
+    requestedSlotId: "pool-05",
+    assignedSlotId: null,
+    leaseNonce: null,
+  });
   expectDevSessionError(
     () =>
       buildDevSessionPlan({
         sourceRoot,
         changedFiles: ["scripts/runweave-beta.mjs"],
         explicitProfile: "beta",
-        explicitInstance: "a".repeat(33),
+        explicitInstance: "dvs-legacy",
       }),
     2,
   );
@@ -234,4 +241,3 @@ export function verifyPlanner(sourceRoot) {
     appServer: "shared-declared",
   });
 }
-
