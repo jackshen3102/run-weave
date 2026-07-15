@@ -16,7 +16,7 @@
 - 终端 tab 按钮带 `data-terminal-session-id`；项目按钮可通过可见项目名和 `aria-pressed` 取证。
 - 后端项目/终端列表来自 `backend/src/routes/terminal-project-routes.ts` 与 `backend/src/routes/terminal.ts`；`TerminalSessionManager.listProjects/listSessions` 按 `order` 优先、否则按 `createdAt` 排序，因此“第一个项目/第一个终端”是有序回退，不应覆盖有效的最近选择。
 - 本机持久化文件名包含 `terminal-session-store.json`，由 browser profile 目录保存项目、终端、排序、状态等数据。
-- 本地更新脚本 `scripts/runweave-update.mjs` 会在需要时退出并重启 `/Applications/Runweave.app`；桌面端页面验证必须使用 `$computer-use` 操作桌面 App，并使用 `$toolkit:playwright-cli` 对页面 URL、DOM、localStorage 和 API 响应取证。
+- 本地更新脚本 `scripts/runweave-update.mjs` 会在需要时退出并重启 `/Applications/Runweave.app`；真实更新使用 `--verify-desktop` 返回安装态主窗口 CDP，再用 `$toolkit:playwright-cli` 对页面 URL、DOM、localStorage 和 API 响应取证。
 
 ## 必跑命令
 
@@ -34,9 +34,9 @@ git diff --check
 
 行为验收必须额外执行真实环境验证：
 
-- 使用 `$computer-use` 打开本机 Runweave 桌面端，准备至少 2 个项目，且目标项目至少有 2 个终端。
-- 使用 `$toolkit:playwright-cli` 连接桌面端对应页面或等价的 Electron dev 页面，读取 URL、`localStorage["viewer.terminal.recent.<apiBase>"]`、项目按钮 `aria-pressed`、终端 tab 的 `data-terminal-session-id`。
-- 需要覆盖真实更新重启时，执行 `pnpm runweave:update`，等待 `/Applications/Runweave.app` 重启完成后再用 `$computer-use` + `$toolkit:playwright-cli` 取证。
+- 准备至少 2 个项目，且目标项目至少有 2 个终端。
+- 使用 `$toolkit:playwright-cli` 显式附着目标 desktop CDP，读取 URL、`localStorage["viewer.terminal.recent.<apiBase>"]`、项目按钮 `aria-pressed`、终端 tab 的 `data-terminal-session-id`。
+- 需要覆盖真实更新重启时，执行 `pnpm runweave:update --verify-desktop`，从 `desktop verification ready` 读取 endpoint 并附着取证。
 
 ## 测试设计方法
 
@@ -50,13 +50,13 @@ git diff --check
 
 ### DRTS-001 有效最近选择在桌面更新重启后恢复到同一项目和终端
 
-标签：desktop-restart update recent-selection playwright computer-use
+标签：desktop-restart update recent-selection playwright
 步骤：
 
 1. 使用已登录桌面端，准备项目 A、项目 B，且后端 `GET /api/terminal/project` 中 A 排在 B 前。
 2. 在项目 B 下准备终端 B1、B2，且后端 `GET /api/terminal/session` 中 B1 排在 B2 前。
 3. 用 `$toolkit:playwright-cli` 选择项目 B 的终端 B2，确认 URL 为 `/terminal/<B2>`，并确认 `localStorage["viewer.terminal.recent.<apiBase>"]` 中 `projectId=B`、`terminalSessionId=B2`、`projectSessionIds[B]=B2`。
-4. 执行 `pnpm runweave:update`，用 `$computer-use` 等待 Runweave 桌面端退出并重新显示终端工作台。
+4. 执行 `pnpm runweave:update --verify-desktop`，确认输出的 App 路径、PID、窗口可见性和 desktop CDP 身份后，使用 `$toolkit:playwright-cli` 显式附着该 endpoint。
 5. 用 `$toolkit:playwright-cli` 读取重启后的 URL、项目按钮 `aria-pressed`、终端 tab `data-terminal-session-id`、localStorage、`/api/terminal/project` 和 `/api/terminal/session`。
    期望：
 6. 页面 URL 最终为 `/terminal/<B2>`。

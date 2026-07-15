@@ -243,6 +243,7 @@ const cases = [
         "--app-server-home",
         "/Users/bytedance/.runweave/app-server-test",
         "--no-restart",
+        "--verify-desktop",
         "--dry-run",
       ]);
       assert.equal(
@@ -256,7 +257,35 @@ const cases = [
         "/Users/bytedance/.runweave/app-server-test",
       );
       assert.equal(parsed.noRestart, true);
+      assert.equal(parsed.verifyDesktop, true);
       assert.equal(parsed.dryRun, true);
+    },
+  },
+  {
+    name: "desktop verification requires a restart",
+    run() {
+      assert.throws(
+        () =>
+          validateResolvedUpdateOptions({
+            noRestart: true,
+            plan: {
+              appServer: { action: "skip" },
+              mode: "runtime",
+            },
+            verifyDesktop: true,
+          }),
+        /--verify-desktop cannot be combined with --no-restart/,
+      );
+      assert.doesNotThrow(() =>
+        validateResolvedUpdateOptions({
+          noRestart: false,
+          plan: {
+            appServer: { action: "skip" },
+            mode: "runtime",
+          },
+          verifyDesktop: true,
+        }),
+      );
     },
   },
   {
@@ -417,6 +446,10 @@ const cases = [
       assert.equal(isAppSensitivePath("scripts/runweave-update.mjs"), true);
       assert.equal(
         isAppSensitivePath("scripts/runweave-update-core.mjs"),
+        true,
+      );
+      assert.equal(
+        isAppSensitivePath("scripts/runweave-update-operations.mjs"),
         true,
       );
       assert.equal(

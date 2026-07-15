@@ -44,8 +44,9 @@ Expected cases:
 | Installed app version is newer than source package | auto mode can still select runtime update                       |
 | Explicit runtime mode                              | runtime mode is honored                                         |
 | App build version                                  | generated app build version is newer than installed             |
-| Cross-worktree args                                | `--repo`, `--mode`, `--no-restart`, `--dry-run` parse correctly |
+| Cross-worktree args                                | update and desktop verification options parse correctly         |
 | `--no-restart` with app update                     | rejected before any update action                               |
+| `--verify-desktop` with `--no-restart`             | rejected before any update action                               |
 | Native path matcher                                | update scripts, resources, and builder config are app-sensitive |
 | One-command update script change                   | auto mode selects full app update                               |
 | Dotenv codesign identity                           | updates only the configured identity and preserves other keys   |
@@ -59,9 +60,14 @@ pnpm runweave:update --dry-run
 pnpm runweave:update --dry-run --mode runtime
 pnpm runweave:update --dry-run --mode app
 pnpm runweave:update --dry-run --repo /Users/bytedance/Code/browser-hub/feature
+pnpm runweave:update --dry-run --verify-desktop
 ```
 
 Expected result: each command prints the source worktree, installed app path,
 installed version, source shell version, selected mode, and reason.
 `--no-restart` is only valid for runtime updates; if auto mode resolves to a
 full app update, the command exits before building or quitting Runweave.
+`--verify-desktop` prints its status path during dry-run and, on a real run,
+must emit `desktop verification ready` with the installed App identity, visible
+window state, and main renderer CDP endpoint. Attach Playwright to that exact
+endpoint and verify the terminal page; do not use the Terminal Browser proxy.

@@ -34,7 +34,10 @@ pnpm runweave:update --mode runtime
 pnpm runweave:update --mode app
 pnpm runweave:update --repo /Users/bytedance/Code/browser-hub/feature
 pnpm runweave:update --dry-run
+pnpm runweave:update --verify-desktop
 ```
+
+`--verify-desktop` 会在升级后用干净环境启动安装态 App，写入 `~/Library/Application Support/RunweaveLocalUpdate/desktop-verification.json`，并在 App 路径、PID、版本、窗口可见性与 Electron 主 renderer CDP target 完成握手后输出 `desktop verification ready` JSON。页面验收必须显式附着该 JSON 的 `endpoint`；不要把默认端口或 Terminal Browser 的 `9224` proxy 当作主窗口入口。该参数不能与 `--no-restart` 组合。
 
 完整 app 更新会优先使用 `RUNWEAVE_CODESIGN_IDENTITY` 环境变量。未显式配置时，会读取 `backend/.env` 中的 `RUNWEAVE_CODESIGN_IDENTITY`；若该配置为空或身份已不可用，会自动选择本机钥匙串里的第一个可用 codesigning identity，并写回 `backend/.env`。找不到可用身份时才回退到 ad-hoc。若要减少 macOS TCC 在 Desktop/Documents 等受保护目录上的重复授权，可以显式固定签名身份：
 

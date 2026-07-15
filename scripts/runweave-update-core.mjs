@@ -56,9 +56,7 @@ export const INSTALLED_APP_CONTROL_PATH_PREFIXES = [
   "scripts/electron-dist-retry.mjs",
   "scripts/electron-local-update.mjs",
   "scripts/publish-local-updates.mjs",
-  "scripts/runweave-update.mjs",
-  "scripts/runweave-update-core.mjs",
-  "scripts/runweave-update-test-cases.mjs",
+  "scripts/runweave-update",
   "scripts/runweave-beta.mjs",
   "scripts/serve-local-updates.mjs",
 ];
@@ -484,7 +482,11 @@ function resolveAppServerUpdatePlan({
   };
 }
 
-export function validateResolvedUpdateOptions({ noRestart, plan }) {
+export function validateResolvedUpdateOptions({
+  noRestart,
+  plan,
+  verifyDesktop,
+}) {
   if (noRestart && plan.mode === "app") {
     throw new Error(
       "--no-restart is only supported for runtime updates. App updates must quit and relaunch the target desktop app.",
@@ -495,103 +497,11 @@ export function validateResolvedUpdateOptions({ noRestart, plan }) {
       "--no-restart cannot be combined with an App Server update because updating App Server requires rw app-server restart. Use --app-server=skip to skip App Server or rerun without --no-restart.",
     );
   }
-}
-
-export function parseRunweaveUpdateArgs(argv) {
-  const result = {
-    appPath: null,
-    appServerHome: null,
-    appServerMode: "auto",
-    dryRun: false,
-    mode: "auto",
-    noRestart: false,
-    runtimeHome: null,
-    sourceRoot: process.cwd(),
-    statePath: null,
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const readValue = (name) => {
-      const value = argv[index + 1];
-      if (!value) {
-        throw new Error(`${name} requires a value`);
-      }
-      index += 1;
-      return value;
-    };
-
-    if (arg === "--dry-run") {
-      result.dryRun = true;
-      continue;
-    }
-    if (arg === "--no-restart") {
-      result.noRestart = true;
-      continue;
-    }
-    if (arg === "--mode") {
-      result.mode = readValue("--mode");
-      continue;
-    }
-    if (arg.startsWith("--mode=")) {
-      result.mode = arg.slice("--mode=".length);
-      continue;
-    }
-    if (arg === "--app-server") {
-      result.appServerMode = readValue("--app-server");
-      continue;
-    }
-    if (arg.startsWith("--app-server=")) {
-      result.appServerMode = arg.slice("--app-server=".length);
-      continue;
-    }
-    if (arg === "--app-server-home") {
-      result.appServerHome = readValue("--app-server-home");
-      continue;
-    }
-    if (arg.startsWith("--app-server-home=")) {
-      result.appServerHome = arg.slice("--app-server-home=".length);
-      continue;
-    }
-    if (arg === "--repo" || arg === "--source-root") {
-      result.sourceRoot = readValue(arg);
-      continue;
-    }
-    if (arg.startsWith("--repo=")) {
-      result.sourceRoot = arg.slice("--repo=".length);
-      continue;
-    }
-    if (arg.startsWith("--source-root=")) {
-      result.sourceRoot = arg.slice("--source-root=".length);
-      continue;
-    }
-    if (arg === "--app-path") {
-      result.appPath = readValue("--app-path");
-      continue;
-    }
-    if (arg.startsWith("--app-path=")) {
-      result.appPath = arg.slice("--app-path=".length);
-      continue;
-    }
-    if (arg === "--runtime-home") {
-      result.runtimeHome = readValue("--runtime-home");
-      continue;
-    }
-    if (arg.startsWith("--runtime-home=")) {
-      result.runtimeHome = arg.slice("--runtime-home=".length);
-      continue;
-    }
-    if (arg === "--state-path") {
-      result.statePath = readValue("--state-path");
-      continue;
-    }
-    if (arg.startsWith("--state-path=")) {
-      result.statePath = arg.slice("--state-path=".length);
-      continue;
-    }
-
-    throw new Error(`Unknown argument: ${arg}`);
+  if (noRestart && verifyDesktop) {
+    throw new Error(
+      "--verify-desktop cannot be combined with --no-restart because desktop verification requires relaunching the target app.",
+    );
   }
-
-  return result;
 }
+
+export { parseRunweaveUpdateArgs } from "./runweave-update-args.mjs";
