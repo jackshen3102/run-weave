@@ -1,7 +1,7 @@
 # Terminal Activity Work History 测试用例
 
 > 日期：2026-07-13
-> 原型基线：[`docs/prototypes/terminal-activity-archives/`](../prototypes/terminal-activity-archives/)
+> 原型基线：旧 Terminal Activity 原型已冻结并删除；当前实现以 Activity 页 `Terminal History` / `Multi-Agent Runs` 和本用例为准。
 > 状态：待实现后执行
 
 ## 1. 验收目标

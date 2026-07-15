@@ -10,5 +10,7 @@
 
 ## 当前参考入口
 
-- `system-activity-data-foundation/`：行为事实底座的 Facts、Timeline、Sources、Data Policy 四视图原型。
-- `terminal-activity-archives/`：Terminal Activity Journal 与 Multi-Agent Round Journal 的冻结交互原型，说明 Terminal 档案、Thread 分段、异构事件 Inspector 与 Run Round 归因的产品方向。
+- `activity-insights-hub/`：Activity 事实、Timeline、Sources 与 Data Policy 的冻结交互原型。
+- `agent-team-attention-summary/`：Agent Team run 注意力摘要与待处理项原型。
+- `agent-team-finding-disposition/`：Agent Team finding disposition 交互原型。
+- `terminal-browser-adaptive-tabs/`：Terminal Browser 多 tab 自适应体验原型。

@@ -4,7 +4,7 @@
 
 `dev-session` 的 Beta profile 当前会按 `instanceId/sessionId` 生成独立 Beta App、userData、Runtime 和 App Server home。目标是使用固定 5 个全局槽位，并同时保证租约原子性、跨 session 状态清空、release 数量与磁盘占用有界、shared/Stable 所有权安全和 legacy 显式迁移。
 
-对应计划：`docs/plans/2026-07-15-beta-slot-pool.md`。
+对应长期边界：`docs/deployment/runweave-beta.md#五槽位池计划状态`。原计划文档已按每日文档整理规则删除。
 
 ## 范围
 

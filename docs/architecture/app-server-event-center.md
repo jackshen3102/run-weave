@@ -214,6 +214,29 @@ GET /api/app-server/threads/:threadId
 代理只在 backend 侧读取 app-server lock/token 并转发轻量 ThreadRef 响应。App Server 未发现、
 不可达或返回非预期状态时，代理返回 503；前端不直接接触 App Server token。
 
+## Work History 聚合边界
+
+Activity 页面里的 `Terminal History` 与 `Multi-Agent Runs` 不是新的事件事实源。它们由
+backend 的 `/api/work-history/*` 路由在读取时聚合现有来源：
+
+- `/api/work-history/terminals`：列出 backend 当前已知 terminal session，并用 App Server
+  ThreadRef 统计每个 session 的已知 thread 数。
+- `/api/work-history/terminals/:terminalSessionId`：返回 terminal session 详情、该 session
+  关联的 ThreadRef/Thread detail、Activity Facts 和 source status。
+- `/api/work-history/runs`：列出当前项目集合里的 Agent Team run 摘要。
+- `/api/work-history/runs/:runId`：返回 Agent Team run 任务包和按 runId 查询到的 Activity Facts。
+
+聚合层只保存分页 cursor 和降级状态，不复制 Thread 正文、Activity Fact 或 Agent Team run。
+App Server 不可达时，Terminal History 仍可展示 terminal session 与 Activity Facts，并把
+`appServer` source 标为 unavailable；Activity 查询失败时保留 terminal/thread/run 视图，
+把 `activity` source 标为 unavailable。Thread detail 分页超过当前批次或 provider reader
+不可用时标为 partial，不把缺失详情解释成 thread 不存在。
+
+前端 journal 的排序与归因来自共享 DTO：Terminal History 按 terminal、thread、turn、activity
+构成时间线；Multi-Agent Runs 按 setup、round、acceptance 和 unassigned events 分组。Agent Team
+round 优先使用 Activity payload 里的 round，其次使用 dispatch snapshot，再退到 run log 中唯一
+round；无法唯一归因时必须显示 `unavailable`，不能猜测轮次。
+
 ## 实时消费
 
 实时消费使用 WebSocket：
