@@ -702,11 +702,13 @@ async function main() {
   }
   if (command === "stop") {
     await quitBeta(paths);
-    const appServerStop = await runAppServerCli(paths, "stop");
-    if (!appServerStop.ok && !/not running/i.test(appServerStop.stderr)) {
-      throw new Error(
-        `failed to stop Beta App Server: ${appServerStop.stderr}`,
-      );
+    if (!options.sharedAppServerLockPath) {
+      const appServerStop = await runAppServerCli(paths, "stop");
+      if (!appServerStop.ok && !/not running/i.test(appServerStop.stderr)) {
+        throw new Error(
+          `failed to stop Beta App Server: ${appServerStop.stderr}`,
+        );
+      }
     }
     console.log(JSON.stringify(await buildBetaStatus(paths), null, 2));
     return;

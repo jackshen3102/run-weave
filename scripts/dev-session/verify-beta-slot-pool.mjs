@@ -25,6 +25,7 @@ import {
   buildUpdateArgs,
   buildUpdateEnv,
 } from "../runweave-beta-operations.mjs";
+import { buildBetaStopArgs } from "./beta-service.mjs";
 import { validateManifest } from "./contracts.mjs";
 import {
   cleanupLegacyBeta,
@@ -45,6 +46,33 @@ function leaseOptions(homeDir, index, requestedSlotId = null) {
 }
 
 export async function verifyBetaSlotPool(temporaryHome) {
+  const sharedStopLockPath = path.join(
+    temporaryHome,
+    ".runweave",
+    "app-server",
+    "app-server.lock.json",
+  );
+  const stopArgs = buildBetaStopArgs({
+    sourceRoot: process.cwd(),
+    instanceId: "pool-01",
+    sessionId: "dvs-shared-binding",
+    sharedAppServer: {
+      lockPath: sharedStopLockPath,
+    },
+  });
+  assert.equal(
+    stopArgs[stopArgs.indexOf("--shared-app-server-lock-path") + 1],
+    sharedStopLockPath,
+  );
+  assert.equal(
+    buildBetaStopArgs({
+      sourceRoot: process.cwd(),
+      instanceId: "pool-01",
+      sessionId: "dvs-dedicated-binding",
+      sharedAppServer: null,
+    }).includes("--shared-app-server-lock-path"),
+    false,
+  );
   const betaPaths = resolveBetaPaths(
     process.cwd(),
     temporaryHome,

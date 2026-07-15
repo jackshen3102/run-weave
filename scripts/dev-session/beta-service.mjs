@@ -19,6 +19,26 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+export function buildBetaStopArgs({
+  sourceRoot,
+  instanceId,
+  sessionId,
+  sharedAppServer,
+}) {
+  const args = [
+    path.join(sourceRoot, "scripts", "runweave-beta.mjs"),
+    "stop",
+    "--instance",
+    instanceId,
+    "--dev-session",
+    sessionId,
+  ];
+  if (sharedAppServer) {
+    args.push("--shared-app-server-lock-path", sharedAppServer.lockPath);
+  }
+  return args;
+}
+
 export async function startDedicatedBeta({
   sourceRoot,
   sessionId,
@@ -113,14 +133,12 @@ export async function startDedicatedBeta({
   const stopBetaControl = async () => {
     await execFileAsync(
       process.execPath,
-      [
-        path.join(sourceRoot, "scripts", "runweave-beta.mjs"),
-        "stop",
-        "--instance",
+      buildBetaStopArgs({
+        sourceRoot,
         instanceId,
-        "--dev-session",
         sessionId,
-      ],
+        sharedAppServer,
+      }),
       { cwd: sourceRoot, encoding: "utf8" },
     );
   };
@@ -229,14 +247,12 @@ export async function startDedicatedBeta({
     appPath: status.desktop.appPath,
     betaControl: {
       command: process.execPath,
-      args: [
-        path.join(sourceRoot, "scripts", "runweave-beta.mjs"),
-        "stop",
-        "--instance",
+      args: buildBetaStopArgs({
+        sourceRoot,
         instanceId,
-        "--dev-session",
         sessionId,
-      ],
+        sharedAppServer,
+      }),
       cwd: sourceRoot,
     },
     process: processInfo,
