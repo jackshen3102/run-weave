@@ -28,6 +28,8 @@ import {
 import { buildAgentTeamPanelRole } from "./service-workflow-policy";
 import { AgentTeamServiceContext, agentTeamLogger } from "./service-context";
 
+const WORKER_THREAD_READINESS_TIMEOUT_MS = 10_000;
+
 export class AgentTeamServiceSupport extends AgentTeamServiceContext {
   protected resolveProjectRoot(projectId: string, cwd: string): string | null {
     return (
@@ -244,7 +246,7 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
   ): Promise<AgentTeamRun> {
     return this.updateRun(run, {
       status: "need_human",
-      activeWorkerRole: null,
+      activeWorkerRole: role,
       activeWorkerDispatch: null,
       workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
       loop: { ...run.loop, escalated: true, lastReason: reason },
@@ -358,15 +360,37 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
     }
     const expectedAgent = getAgentForCommand(terminal.command ?? null);
     const panel = this.terminalSessionManager.getPanel(worker.panelId);
-    const panelAgent = panel
-      ? (panel.terminalState?.agent ?? getAgentForCommand(panel.activeCommand))
-      : null;
-    if (
+    let readyPanel: TerminalPanelRecord | null | undefined = panel;
+    const startingThreadId =
       expectedAgent &&
-      panel?.status === "running" &&
-      panel.terminalState?.state === "agent_idle" &&
-      panelAgent === expectedAgent
-    ) {
+      panel?.terminalState?.state === "agent_starting" &&
+      panel.lastThreadProvider === expectedAgent &&
+      panel.lastThreadStatus === "idle"
+        ? panel.lastThreadId?.trim()
+        : null;
+    if (expectedAgent && startingThreadId) {
+      readyPanel = await this.waitForWorkerThreadReadiness(
+        worker.panelId,
+        expectedAgent,
+        startingThreadId,
+      );
+      if (!readyPanel) {
+        throw new AgentTeamError(
+          409,
+          `${worker.role} worker 的 agent thread 未以已记录身份进入 ready，禁止向 agent_starting pane 投递`,
+        );
+      }
+    }
+    const readyPanelAgent = readyPanel
+      ? (readyPanel.terminalState?.agent ??
+        getAgentForCommand(readyPanel.activeCommand))
+      : null;
+    const reusableActiveThread =
+      expectedAgent &&
+      readyPanel?.status === "running" &&
+      readyPanelAgent === expectedAgent &&
+      readyPanel.terminalState?.state === "agent_idle";
+    if (reusableActiveThread) {
       await this.promptSender.sendPromptToPane(session, prompt, {
         panelId: worker.panelId,
       });
@@ -396,7 +420,7 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
       ) ||
         panel?.threadId ||
         panel?.lastThreadId ||
-        panelAgent,
+        readyPanelAgent,
     );
     if (hasExistingWorkerContext) {
       throw new AgentTeamError(
@@ -408,6 +432,61 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
     await this.agentLaunch.submitAgentLaunch(session, terminal, {
       panelId: worker.panelId,
       prompt,
+    });
+  }
+
+  private async waitForWorkerThreadReadiness(
+    panelId: string,
+    expectedAgent: NonNullable<ReturnType<typeof getAgentForCommand>>,
+    expectedThreadId: string,
+  ): Promise<TerminalPanelRecord | null> {
+    const isReady = (candidate: TerminalPanelRecord | undefined) =>
+      candidate?.status === "running" &&
+      candidate.terminalState?.state === "agent_idle" &&
+      candidate.terminalState.agent === expectedAgent &&
+      candidate.threadProvider === expectedAgent &&
+      candidate.threadId?.trim() === expectedThreadId;
+    const current = this.terminalSessionManager.getPanel(panelId);
+    if (isReady(current)) {
+      return current ?? null;
+    }
+    return new Promise((resolve) => {
+      let unsubscribe: () => void = () => undefined;
+      let settled = false;
+      const finish = (candidate: TerminalPanelRecord | null) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve(candidate);
+      };
+      const inspect = (candidate: TerminalPanelRecord | undefined) => {
+        if (isReady(candidate)) {
+          finish(candidate ?? null);
+          return;
+        }
+        if (
+          !candidate ||
+          candidate.status !== "running" ||
+          (candidate.terminalState?.agent &&
+            candidate.terminalState.agent !== expectedAgent) ||
+          candidate.terminalState?.state === "shell_idle" ||
+          candidate.terminalState?.state === "agent_running"
+        ) {
+          finish(null);
+        }
+      };
+      const timeout = setTimeout(
+        () => finish(null),
+        WORKER_THREAD_READINESS_TIMEOUT_MS,
+      );
+      unsubscribe = this.terminalSessionManager.subscribePanelMutations(
+        panelId,
+        inspect,
+      );
+      inspect(this.terminalSessionManager.getPanel(panelId));
     });
   }
 

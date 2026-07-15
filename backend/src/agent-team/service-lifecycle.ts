@@ -326,7 +326,9 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       (item) => item.status === "pass",
     ).length;
     const activeWorkerRole =
-      run.activeWorkerRole ?? resolveInitialActiveWorkerRole(run.workers);
+      run.activeWorkerRole ??
+      run.consumedWorkerDispatches?.at(-1)?.role ??
+      resolveInitialActiveWorkerRole(run.workers);
     const nextRun = await this.updateRun(run, {
       status: "running",
       activeWorkerRole: null,

@@ -25,8 +25,100 @@ export async function verifyBootstrapAuthority(check, roots) {
   await verifyInitialSplitStartsOnlyActiveWorker(check, roots);
   await verifyAgentTeamFormalPromptIsInitialQuery(check, roots);
   await verifyRecheckReusesExistingWorkerThread(check, roots);
+  await verifyPersistedIdleStartingThreadWaitsForReadiness(check, roots);
   await verifyStoppedExistingThreadResumesInFixedPane(check, roots);
   await verifyUnavailableExistingThreadFailsClosed(check, roots);
+}
+
+async function verifyPersistedIdleStartingThreadWaitsForReadiness(
+  check,
+  roots,
+) {
+  await withHarness(roots, async (harness) => {
+    await establishReusableAgentPanel(harness, "persisted-idle-thread");
+    await harness.manager.updatePanelTerminalState(harness.panel.id, {
+      state: "agent_starting",
+      agent: "codex",
+    });
+    const service = new AgentTeamSerialDispatchHarness({
+      terminalSessionManager: harness.manager,
+      terminalEventService: { record() {}, subscribe() {} },
+      ptyService: harness.options.ptyService,
+      runtimeRegistry: harness.options.runtimeRegistry,
+      terminalStateService: harness.options.terminalStateService,
+      tmuxService: harness.tmuxService,
+      cwd: harness.session.cwd,
+    });
+    const baseRun = buildRepairRun();
+    const reviewWorker = {
+      ...baseRun.workers.find((worker) => worker.role === "code_review"),
+      panelId: harness.panel.id,
+      tmuxPaneId: harness.panel.tmuxPaneId,
+    };
+    const run = {
+      ...baseRun,
+      projectId: harness.session.projectId,
+      terminalSessionId: harness.session.id,
+      terminal: {
+        command: "codex",
+        args: [],
+        cwd: harness.session.cwd,
+      },
+      workers: [reviewWorker],
+      acceptance: [FORMAL_WORKER_CASE],
+      consumedWorkerDispatches: [
+        {
+          dispatchId: "persisted-idle-dispatch",
+          role: "code_review",
+          round: 1,
+          contentSha256: "fixture",
+          consumedAt: "2026-07-15T00:00:00.000Z",
+        },
+      ],
+      reviewCheckpoint: null,
+    };
+    harness.setExecutePaneSends(false);
+    const dispatch = service.dispatch(run, "code_review", {
+      cases: [FORMAL_WORKER_CASE],
+      log: "resume persisted idle review",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const sentBeforeReady = service.secondaryPrompts.length;
+    await harness.manager.updatePanelThreadId(
+      harness.panel.id,
+      "different-thread",
+      "codex",
+    );
+    await harness.manager.updatePanelTerminalState(harness.panel.id, {
+      state: "agent_idle",
+      agent: "codex",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const sentWithMismatchedIdentity = service.secondaryPrompts.length;
+    await harness.manager.updatePanelThreadId(
+      harness.panel.id,
+      "persisted-idle-thread",
+      "codex",
+    );
+    const result = await dispatch;
+    check(
+      "agent-team-persisted-idle-starting-thread-waits-for-current-thread-readiness",
+      result.status === "running" &&
+        result.activeWorkerRole === "code_review" &&
+        sentBeforeReady === 0 &&
+        sentWithMismatchedIdentity === 0 &&
+        service.secondaryPrompts.length === 1 &&
+        service.secondaryPrompts[0].target.panelId === harness.panel.id &&
+        service.resumedThreads.length === 0 &&
+        harness.respawnedPanes.length === 0,
+      {
+        result,
+        secondaryPrompts: service.secondaryPrompts,
+        resumedThreads: service.resumedThreads,
+        respawnedPanes: harness.respawnedPanes,
+      },
+    );
+  });
 }
 
 function verifyWorkerPanesStayFixedAcrossRechecks(check) {
@@ -485,7 +577,7 @@ async function verifyUnavailableExistingThreadFailsClosed(check, roots) {
     check(
       "agent-team-existing-thread-unavailable-fails-closed",
       result.status === "need_human" &&
-        result.activeWorkerRole === null &&
+        result.activeWorkerRole === "code_review" &&
         result.logs.some((item) => item.includes("禁止新开 thread")) &&
         harness.respawnedPanes.length === 0 &&
         harness.paneOperations.every((item) => item.type !== "send") &&

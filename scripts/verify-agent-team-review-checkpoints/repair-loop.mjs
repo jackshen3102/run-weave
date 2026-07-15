@@ -66,6 +66,17 @@ export function verifyEvidenceGatedRepairLoop(check) {
     lifecycleSource.indexOf("async resumeRun"),
     lifecycleSource.indexOf("async decideFinding"),
   );
+  const supportSource = readFileSync(
+    new URL(
+      "../../backend/src/agent-team/service-support.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const pauseDispatchBody = supportSource.slice(
+    supportSource.indexOf("protected async pauseForWorkerDispatchError"),
+    supportSource.indexOf("private async withVerificationDigests"),
+  );
   const repairProtocolSource = readFileSync(
     new URL(
       "../../backend/src/agent-team/service-repair-protocol.ts",
@@ -101,8 +112,10 @@ export function verifyEvidenceGatedRepairLoop(check) {
   );
   check(
     "repair-human-resume-creates-fresh-dispatch-before-reactivating-worker",
-    resumeBody.includes("activeWorkerRole: null") &&
+      resumeBody.includes("activeWorkerRole: null") &&
       resumeBody.includes("workers: setActiveWorker(run.workers, null)") &&
+      resumeBody.includes("run.consumedWorkerDispatches?.at(-1)?.role") &&
+      pauseDispatchBody.includes("activeWorkerRole: role") &&
       resumeBody.includes('activeWorkerRole === "code"') &&
       resumeBody.includes("return this.bounceFailuresToCode(") &&
       resumeBody.includes(
