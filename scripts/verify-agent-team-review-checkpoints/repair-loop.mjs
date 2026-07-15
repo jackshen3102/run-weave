@@ -141,13 +141,15 @@ export function verifyEvidenceGatedRepairLoop(check) {
   check(
     "main-agent-intervention-is-explicit-and-cannot-dispose-findings",
     resumeBody.includes("async interveneRun(") &&
-      resumeBody.includes(
-        'run.status !== "need_human" && !supersedingActiveDispatch',
-      ) &&
+      resumeBody.includes("reopeningCompletedAcceptance") &&
+      resumeBody.includes("run.status === \"done\"") &&
       resumeBody.includes("if (run.pendingFindingDecision)") &&
       resumeBody.includes("Agent 不得代替人工 disposition") &&
       resumeBody.includes("this.prepareSplitAcceptance(run") &&
       resumeBody.includes("ensureWorkerGateAcceptance(") &&
+      resumeBody.includes(
+        "assertAcceptanceRefreshPreservesTraceableCases(",
+      ) &&
       resumeBody.includes("return this.bounceFailuresToCode(") &&
       resumeBody.includes("return this.dispatchSerialWorker(") &&
       resumeBody.includes("agentInterventions:") &&

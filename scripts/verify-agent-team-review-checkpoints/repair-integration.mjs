@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { captureRepairSourceFingerprint } from "../../backend/src/agent-team/repair-source-fingerprint.ts";
+import { assertAcceptanceRefreshPreservesTraceableCases } from "../../backend/src/agent-team/service-acceptance-policy.ts";
 import { createAgentTeamRouter } from "../../backend/src/routes/agent-team.ts";
 
 const backendRequire = createRequire(
@@ -17,6 +18,42 @@ function check(...args) {
 
 function createRepo() {
   return createRepoFixture();
+}
+
+function acceptanceCase(caseId) {
+  return {
+    caseId,
+    sourceCaseId: caseId,
+    sourceFilePath: "docs/testing/full-test-cases.md",
+    text: caseId,
+    status: "pending",
+    consecutiveFail: 0,
+    evidence: [],
+  };
+}
+
+function verifyAcceptanceRefreshPreservesCases() {
+  const existing = [acceptanceCase("BSP-001"), acceptanceCase("BSP-002")];
+  let removalError = null;
+  try {
+    assertAcceptanceRefreshPreservesTraceableCases(existing, [
+      acceptanceCase("BSP-002"),
+      acceptanceCase("BSP-003"),
+    ]);
+  } catch (error) {
+    removalError = error;
+  }
+  assertAcceptanceRefreshPreservesTraceableCases(existing, [
+    ...existing,
+    acceptanceCase("BSP-003"),
+  ]);
+  check(
+    "agent-intervention-refresh-cannot-silently-drop-traceable-cases",
+    removalError?.statusCode === 409 &&
+      removalError.message.includes("BSP-001") &&
+      removalError.message.includes("完整测试案例文件"),
+    { removalError: removalError?.message },
+  );
 }
 
 async function verifyRepairSourceFingerprint() {
@@ -228,6 +265,7 @@ export async function verifyRepairIntegration(checkResult, createRepoResult) {
   recordCheck = checkResult;
   createRepoFixture = createRepoResult;
   try {
+    verifyAcceptanceRefreshPreservesCases();
     await verifyRepairSourceFingerprint();
     await verifyRepairBudgetRoute();
     await verifyAgentInterventionRoute();

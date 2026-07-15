@@ -26,6 +26,31 @@ export function acceptanceCasesForRole(
   return acceptance;
 }
 
+export function assertAcceptanceRefreshPreservesTraceableCases(
+  existing: AgentTeamAcceptanceCase[],
+  refreshed: AgentTeamAcceptanceCase[],
+): void {
+  const refreshedCaseIds = new Set(
+    refreshed
+      .filter((item) => !isReviewGateAcceptanceCase(item))
+      .map((item) => item.caseId),
+  );
+  const missingCaseIds = existing
+    .filter(
+      (item) =>
+        !isReviewGateAcceptanceCase(item) &&
+        Boolean(item.sourceCaseId && item.sourceFilePath),
+    )
+    .map((item) => item.caseId)
+    .filter((caseId) => !refreshedCaseIds.has(caseId));
+  if (missingCaseIds.length > 0) {
+    throw new AgentTeamError(
+      409,
+      `刷新验收合同不能删除既有可追溯 Case：${missingCaseIds.join(", ")}。请提供包含旧 Case 与新增 Case 的完整测试案例文件`,
+    );
+  }
+}
+
 export function hasRolePassed(
   run: AgentTeamRun,
   role: AgentTeamWorkerRole,

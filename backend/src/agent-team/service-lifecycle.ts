@@ -26,6 +26,7 @@ import { agentTeamLogger } from "./service-context";
 import { AgentTeamRecheckService } from "./service-recheck";
 import {
   acceptanceCasesForRole,
+  assertAcceptanceRefreshPreservesTraceableCases,
   ensureWorkerGateAcceptance,
 } from "./service-acceptance-policy";
 import {
@@ -455,13 +456,17 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         input.action === "dispatch" &&
         run.status === "running" &&
         run.activeWorkerRole === input.role;
+      const reopeningCompletedAcceptance =
+        input.action === "refresh_acceptance" && run.status === "done";
       if (
         run.phase !== "executing" ||
-        (run.status !== "need_human" && !supersedingActiveDispatch)
+        (run.status !== "need_human" &&
+          !supersedingActiveDispatch &&
+          !reopeningCompletedAcceptance)
       ) {
         throw new AgentTeamError(
           409,
-          "Agent intervention 只允许处理 executing/need_human，或显式覆盖当前同 role dispatch",
+          "Agent intervention 只允许处理 executing/need_human、恢复完成态验收，或显式覆盖当前同 role dispatch",
         );
       }
       if (run.pendingFindingDecision) {
@@ -493,6 +498,10 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         const prepared = await this.prepareSplitAcceptance(run, {
           generatedTestCaseFilePath,
         });
+        assertAcceptanceRefreshPreservesTraceableCases(
+          run.acceptance,
+          prepared.acceptance,
+        );
         const acceptance = ensureWorkerGateAcceptance(
           run.workers,
           prepared.acceptance,
