@@ -221,6 +221,21 @@ async function main() {
     true,
     interventionHead,
   );
+  const interventionFinalTarget = await service.prepareReviewTarget({
+    state: state3,
+    scope: "final",
+    planSha256: "plan-one",
+    testCaseSha256: "cases-one",
+    expectedHeadCommit: interventionHead,
+    rebasedCheckpointCommit: checkpoint2.commit,
+  });
+  check(
+    "final-review-target-allows-explicit-rebased-intervention-head",
+    interventionFinalTarget.targetCommit === interventionHead &&
+      interventionFinalTarget.changedPaths.includes("control-plane.txt"),
+    interventionFinalTarget,
+  );
+  await service.assertReviewTargetUnchanged(state3, interventionFinalTarget);
 
   const emptyRoot = await createRepo();
   const emptyPreflight = await service.preflight(emptyRoot);

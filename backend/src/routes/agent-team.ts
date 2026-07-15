@@ -125,14 +125,34 @@ const agentInterventionSchema = z
     }
     if (
       value.role !== "behavior_verify" &&
-      (value.checkpointAllowedDirtyPaths != null ||
-        value.checkpointExpectedHeadCommit != null ||
+      value.checkpointAllowedDirtyPaths != null
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["checkpointAllowedDirtyPaths"],
+        message: "只有 behavior_verify 可声明 dirty checkpoint 例外",
+      });
+    }
+    if (
+      value.role !== "behavior_verify" &&
+      value.role !== "code_review" &&
+      (value.checkpointExpectedHeadCommit != null ||
         value.checkpointRebasedCommit != null)
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["role"],
-        message: "只有 behavior_verify 可声明 checkpoint 例外",
+        message: "只有 behavior_verify 或 code_review 可重锚 checkpoint HEAD",
+      });
+    }
+    if (
+      value.checkpointRebasedCommit != null &&
+      value.checkpointExpectedHeadCommit == null
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["checkpointExpectedHeadCommit"],
+        message: "checkpointRebasedCommit 需要 checkpointExpectedHeadCommit",
       });
     }
   });

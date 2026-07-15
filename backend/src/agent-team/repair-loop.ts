@@ -439,6 +439,7 @@ function reviewTargetsMatch(
   return (
     left.scope === right.scope &&
     left.baseCommit === right.baseCommit &&
+    (left.targetCommit ?? null) === (right.targetCommit ?? null) &&
     left.targetTree === right.targetTree &&
     left.planSha256 === right.planSha256 &&
     left.testCaseSha256 === right.testCaseSha256

@@ -314,6 +314,7 @@ export function recheckCaseBelongsToActiveDispatch(
     current &&
     expected.scope === current.scope &&
     expected.baseCommit === current.baseCommit &&
+    (expected.targetCommit ?? null) === (current.targetCommit ?? null) &&
     expected.targetTree === current.targetTree &&
     expected.planSha256 === current.planSha256 &&
     expected.testCaseSha256 === current.testCaseSha256 &&

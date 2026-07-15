@@ -143,6 +143,8 @@ async function verifyAgentInterventionRoute() {
       role: "code_review",
       note: "复用原 reviewer pane 重新举证",
       caseIds: ["BSP-017"],
+      checkpointExpectedHeadCommit: "0123456789abcdef0123456789abcdef01234567",
+      checkpointRebasedCommit: "fedcba9876543210fedcba9876543210fedcba98",
     });
     const refresh = await post({
       action: "refresh_acceptance",
@@ -170,8 +172,14 @@ async function verifyAgentInterventionRoute() {
     });
     const invalidCheckpointOverride = await post({
       action: "dispatch",
+      role: "code",
+      note: "code 不得重锚 checkpoint",
+      checkpointExpectedHeadCommit: "0123456789abcdef0123456789abcdef01234567",
+    });
+    const invalidReviewerDirtyOverride = await post({
+      action: "dispatch",
       role: "code_review",
-      note: "reviewer 不得使用 behavior checkpoint 例外",
+      note: "reviewer 不得声明 dirty checkpoint 例外",
       checkpointAllowedDirtyPaths: ["app.txt"],
     });
     check(
@@ -181,6 +189,10 @@ async function verifyAgentInterventionRoute() {
         acceptedInterventions.length === 2 &&
         acceptedInterventions[0]?.input.action === "dispatch" &&
         acceptedInterventions[0]?.input.role === "code_review" &&
+        acceptedInterventions[0]?.input.checkpointExpectedHeadCommit ===
+          "0123456789abcdef0123456789abcdef01234567" &&
+        acceptedInterventions[0]?.input.checkpointRebasedCommit ===
+          "fedcba9876543210fedcba9876543210fedcba98" &&
         acceptedInterventions[1]?.input.action === "refresh_acceptance" &&
         acceptedInterventions[1]?.input.generatedTestCaseFilePath ===
           "docs/testing/beta-slot-pool-warm-retry-test-cases.md" &&
@@ -196,11 +208,13 @@ async function verifyAgentInterventionRoute() {
       "agent-intervention-route-rejects-invalid-shapes",
       invalidDispatch.status === 400 &&
         invalidRole.status === 400 &&
-        invalidCheckpointOverride.status === 400,
+        invalidCheckpointOverride.status === 400 &&
+        invalidReviewerDirtyOverride.status === 400,
       {
         invalidDispatchStatus: invalidDispatch.status,
         invalidRoleStatus: invalidRole.status,
         invalidCheckpointOverrideStatus: invalidCheckpointOverride.status,
+        invalidReviewerDirtyOverrideStatus: invalidReviewerDirtyOverride.status,
       },
     );
   } finally {

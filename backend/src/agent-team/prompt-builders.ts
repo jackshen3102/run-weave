@@ -374,6 +374,7 @@ function formatReviewTargetInstructions(run: AgentTeamRun): string[] {
     "Review checkpoint 范围：",
     `- scope=${target.scope}`,
     `- baseCommit=${target.baseCommit}`,
+    `- targetCommit=${target.targetCommit ?? "null"}`,
     `- targetTree=${target.targetTree}`,
     `- changedPaths=${target.changedPaths.join(", ")}`,
     `- planSha256=${target.planSha256 ?? "null"}`,
@@ -389,7 +390,7 @@ function formatReviewTargetInstructions(run: AgentTeamRun): string[] {
           ),
         ]
       : []),
-    "- outbox 顶层 reviewTarget 必须原样回显本 prompt 的 scope/baseCommit/targetTree/changedPaths/planSha256/testCaseSha256/requestedAt。",
+    "- outbox 顶层 reviewTarget 必须原样回显本 prompt 的 scope/baseCommit/targetCommit/targetTree/changedPaths/planSha256/testCaseSha256/requestedAt。",
   ];
 }
 

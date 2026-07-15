@@ -82,25 +82,39 @@ export class AgentTeamReviewCheckpointGit {
     scope: AgentTeamReviewScope;
     planSha256: string | null;
     testCaseSha256: string | null;
+    expectedHeadCommit?: string;
+    rebasedCheckpointCommit?: string;
   }): Promise<AgentTeamReviewTarget> {
     const { state, scope } = params;
-    await this.assertBranchAndHead(state);
     if (scope === "final") {
+      if (params.expectedHeadCommit) {
+        await this.assertCheckpointHead(
+          state,
+          [],
+          params.expectedHeadCommit,
+          params.rebasedCheckpointCommit,
+        );
+      } else {
+        await this.assertBranchAndHead(state);
+      }
+      const targetCommit =
+        params.expectedHeadCommit ?? state.lastReviewedCommit;
       const targetTree = (
         await this.runGit(state.repoRoot, [
           "rev-parse",
-          `${state.lastReviewedCommit}^{tree}`,
+          `${targetCommit}^{tree}`,
         ])
       ).stdout.trim();
       const changedPaths = await this.diffNames(
         state.repoRoot,
         state.taskBaseCommit,
-        state.lastReviewedCommit,
+        targetCommit,
         false,
       );
       return {
         scope,
         baseCommit: state.taskBaseCommit,
+        targetCommit,
         targetTree,
         changedPaths,
         planSha256: params.planSha256,
@@ -109,6 +123,7 @@ export class AgentTeamReviewCheckpointGit {
       };
     }
 
+    await this.assertBranchAndHead(state);
     const pendingEntries = await this.assertSafePendingPaths(state.repoRoot);
     await this.runGit(state.repoRoot, [
       "add",
@@ -160,13 +175,19 @@ export class AgentTeamReviewCheckpointGit {
     state: AgentTeamReviewCheckpointState,
     target: AgentTeamReviewTarget,
   ): Promise<void> {
-    await this.assertBranchAndHead(state);
+    const finalTargetCommit =
+      target.scope === "final" ? target.targetCommit : null;
+    if (finalTargetCommit) {
+      await this.assertBranchAndCommit(state, finalTargetCommit);
+    } else {
+      await this.assertBranchAndHead(state);
+    }
     const actualTree =
       target.scope === "final"
         ? (
             await this.runGit(state.repoRoot, [
               "rev-parse",
-              `${state.lastReviewedCommit}^{tree}`,
+              `${finalTargetCommit ?? state.lastReviewedCommit}^{tree}`,
             ])
           ).stdout.trim()
         : (await this.runGit(state.repoRoot, ["write-tree"])).stdout.trim();
@@ -400,6 +421,13 @@ export class AgentTeamReviewCheckpointGit {
   private async assertBranchAndHead(
     state: AgentTeamReviewCheckpointState,
   ): Promise<void> {
+    await this.assertBranchAndCommit(state, state.lastReviewedCommit);
+  }
+
+  private async assertBranchAndCommit(
+    state: AgentTeamReviewCheckpointState,
+    expectedCommit: string,
+  ): Promise<void> {
     const branch = (
       await this.runGit(state.repoRoot, [
         "symbolic-ref",
@@ -411,10 +439,10 @@ export class AgentTeamReviewCheckpointGit {
     const head = (
       await this.runGit(state.repoRoot, ["rev-parse", "HEAD"])
     ).stdout.trim();
-    if (branch !== state.branch || head !== state.lastReviewedCommit) {
+    if (branch !== state.branch || head !== expectedCommit) {
       throw new AgentTeamError(
         409,
-        `Review checkpoint Git 状态已漂移：expected ${state.branch}@${state.lastReviewedCommit}，actual ${branch}@${head}`,
+        `Review checkpoint Git 状态已漂移：expected ${state.branch}@${expectedCommit}，actual ${branch}@${head}`,
       );
     }
   }

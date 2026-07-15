@@ -60,6 +60,8 @@ export type AgentTeamReviewScope = "full" | "incremental" | "final";
 export interface AgentTeamReviewTarget {
   scope: AgentTeamReviewScope;
   baseCommit: string;
+  /** Exact committed HEAD covered by a final review target. */
+  targetCommit?: string | null;
   targetTree: string;
   changedPaths: string[];
   planSha256: string | null;

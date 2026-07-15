@@ -34,15 +34,18 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
           state,
           target,
         );
+        const finalReviewedCommit =
+          target.targetCommit ?? state.lastReviewedCommit;
         return this.updateRun(run, {
           reviewCheckpoint: {
             ...state,
+            lastReviewedCommit: finalReviewedCommit,
             pendingReview: null,
-            finalReviewedCommit: state.lastReviewedCommit,
+            finalReviewedCommit,
           },
           logs: [
             ...run.logs,
-            `最终全量 review 通过：${state.taskBaseCommit}..${state.lastReviewedCommit}`,
+            `最终全量 review 通过：${state.taskBaseCommit}..${finalReviewedCommit}`,
           ],
         });
       }
@@ -145,6 +148,8 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
           scope,
           planSha256: run.verification?.planSha256 ?? null,
           testCaseSha256: this.effectiveTestCaseSha256(run.verification),
+          expectedHeadCommit: options.checkpointExpectedHeadCommit,
+          rebasedCheckpointCommit: options.checkpointRebasedCommit,
         });
         dispatchRun = {
           ...run,
