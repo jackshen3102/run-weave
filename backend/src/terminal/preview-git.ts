@@ -139,16 +139,23 @@ function parseGitStatus(
 ): Pick<TerminalPreviewGitChangesResponse, "staged" | "working"> {
   const staged = new Map<string, TerminalPreviewChangeFile>();
   const working = new Map<string, TerminalPreviewChangeFile>();
-  for (const line of output.split("\n")) {
-    if (!line) {
+  const records = output.split("\0");
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record) {
       continue;
     }
-    const indexStatus = line[0] ?? " ";
-    const workingStatus = line[1] ?? " ";
-    const rawPath = line.slice(3);
-    const repoPath = rawPath.includes(" -> ")
-      ? rawPath.split(" -> ").at(-1)!
-      : rawPath;
+    const indexStatus = record[0] ?? " ";
+    const workingStatus = record[1] ?? " ";
+    const repoPath = record.slice(3);
+    if (
+      indexStatus === "R" ||
+      indexStatus === "C" ||
+      workingStatus === "R" ||
+      workingStatus === "C"
+    ) {
+      index += 1;
+    }
     const projectPath = stripProjectPrefix(repoPath, projectRelativeToRepo);
     if (!projectPath) {
       continue;
@@ -194,7 +201,7 @@ export async function getPreviewGitChanges(params: {
   const pathspec = projectRelativeToRepo || ".";
   const output = await runGit(
     repoRoot,
-    ["status", "--porcelain=v1", "--untracked-files=all", "--", pathspec],
+    ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", pathspec],
     { maxBuffer: 1024 * 1024 },
   );
   const parsed = parseGitStatus(output, projectRelativeToRepo);
@@ -260,7 +267,7 @@ export async function resetPreviewGitChange(params: {
   const repoPath = toRepoPath(projectRelativeToRepo, relativePath);
   const statusOutput = await runGit(
     repoRoot,
-    ["status", "--porcelain=v1", "--untracked-files=all", "--", repoPath],
+    ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", repoPath],
     { maxBuffer: 1024 * 1024 },
   );
   const changes = parseGitStatus(statusOutput, projectRelativeToRepo);
@@ -313,7 +320,7 @@ export async function getPreviewFileDiff(params: {
   const repoPath = toRepoPath(projectRelativeToRepo, relativePath);
   const statusOutput = await runGit(
     repoRoot,
-    ["status", "--porcelain=v1", "--untracked-files=all", "--", repoPath],
+    ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", repoPath],
     { maxBuffer: 1024 * 1024 },
   );
   const changes = parseGitStatus(statusOutput, projectRelativeToRepo);
