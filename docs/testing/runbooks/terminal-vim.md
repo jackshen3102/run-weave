@@ -2,7 +2,7 @@
 
 ## 测试门槛
 
-- E2E：`pnpm --filter ./frontend e2e -- tests/terminal.spec.ts tests/terminal-vim.spec.ts`
+- E2E：当前仅有 `frontend/tests/smoke.spec.ts`；先执行 `pnpm test:e2e`，Vim 行为按本 Runbook 使用合规 `$toolkit:playwright-cli` 手工验收
 - 静态检查：涉及后端或终端协议时补 `pnpm --filter ./backend typecheck && pnpm --filter ./backend lint`
 
 ## 发布规则

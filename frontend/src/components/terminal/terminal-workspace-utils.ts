@@ -10,7 +10,7 @@ export function resolveHistoryPanelId(
   workspace: TerminalPanelWorkspace | null,
   activePanelId: string | null,
 ): string | null {
-  if (!workspace) {
+  if (!workspace || !Array.isArray(workspace.panels)) {
     return null;
   }
   return (

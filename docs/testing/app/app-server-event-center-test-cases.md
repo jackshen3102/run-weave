@@ -118,31 +118,6 @@ Expected:
 
 Automated by: `pnpm toolkit:verify-hooks`.
 
-## AS-EC-006 Backend Discover-Only Degraded Client
-
-Steps:
-
-1. Start backend without app-server.
-2. Let backend try to discover app-server after its control plane URL is known.
-3. Write scoped and unscoped `agent.completion` events.
-
-Expected:
-
-- Backend startup is not blocked when app-server discovery fails or times out.
-- Backend does not import or spawn app-server.
-- When app-server is available, backend posts `backend.started` and connects to
-  `/events/stream?kind=agent.completion`.
-- Backend only processes events whose `terminalSessionId` or `projectId` belongs
-  to the current backend.
-- Cursor advances only after the handler completes.
-
-Verification:
-
-- Type-level and lint coverage: backend typecheck/lint.
-- Runtime coverage: app-server and hook verification scripts cover the shared
-  protocol, stream, and fallback surfaces. A full backend runtime smoke can be
-  added if this path later gains user-visible side effects.
-
 ## AS-EC-007 Auth, Origin, And Hook Payload Validation
 
 Steps:

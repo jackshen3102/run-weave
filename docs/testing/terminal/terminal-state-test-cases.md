@@ -76,40 +76,39 @@ scrollback 只用于终端显示、诊断或用户取证，不能推进 `agent_s
 
 本节用于代码审查和服务层不变量确认，不作为真实浏览器/API 系统验收入口。系统验收入口以 `TS-API-*`、`TS-WS-*`、`TS-HOME-*`、`TS-CLI-*` 和 `TS-UI-*` 的真实路径为准。
 
-| ID         | 初始条件                                                                                              | 操作                                                                   | 预期                                                   | 当前实现     |
-| ---------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------ | ------------ |
-| TS-SVC-001 | 无 store；session running，`command="zsh"`，`activeCommand=null`                                      | `getCurrent()`                                                         | `shell_idle/null`                                      | 应通过       |
-| TS-SVC-002 | 无 store；session running，`command="zsh"`，`activeCommand="codex"`                                | `getCurrent()`                                                         | `agent_starting/codex`                                 | 应通过       |
-| TS-SVC-003 | 无 store；session running，`activeCommand="/usr/local/bin/codex"`                                   | `getCurrent()`                                                         | `agent_starting/codex`                                 | 应通过       |
-| TS-SVC-004 | 无 store；session running，`activeCommand="node"`                                                     | `getCurrent()`                                                         | `shell_idle/null`                                      | 应通过       |
-| TS-SVC-005 | store 为 `agent_running`；session exited，`activeCommand="codex"`                                     | `getCurrent()`                                                         | `shell_idle/null`                                      | 应通过       |
-| TS-SVC-006 | session running，`activeCommand="codex"`，无同 agent store                                            | `setShellActiveCommand()`                                              | `agent_starting/codex`                                 | 应通过       |
-| TS-SVC-007 | store 为 `agent_running`；session running，`command="zsh"`，`activeCommand=null`                      | `setShellActiveCommand()`                                              | `shell_idle/null`                                      | 应通过       |
-| TS-SVC-008 | store 为 `agent_running`；session running，`command="zsh"`，`activeCommand="node"`                    | `setShellActiveCommand()`                                              | `shell_idle/null`                                      | 应通过       |
-| TS-SVC-009 | 代码审查：`getTerminalSessionAgent()` / `isCodexSession()`                                            | 搜索并审查状态判断是否只读取当前 `activeCommand`，不读取原始 `command` | stale launch command 不会复活 Codex 状态               | 静态不变量   |
-| TS-SVC-012 | 无 store；session running，`activeCommand="Codex"`                                                    | `getCurrent()`                                                         | 明确预期：若只支持精确 `codex`，应为 `shell_idle/null` | 需确认并固定 |
-| TS-SVC-013 | 任意 store；`agent="codex"`，`hookEvent="SessionStart"`                                               | `handleAgentHook()`                                                    | `agent_idle/codex`                                     | 应通过       |
-| TS-SVC-014 | 任意 store；`agent="codex"`，`hookEvent="UserPromptSubmit"`                                           | `handleAgentHook()`                                                    | `agent_running/codex`                                  | 应通过       |
-| TS-SVC-015 | store 为 `agent_running`；`agent="codex"`，`hookEvent="Stop"`                                         | `handleAgentHook()`                                                    | `agent_idle/codex`                                     | 应通过       |
-| TS-SVC-016 | 任意 store/session                                                                                    | 代码搜索 `reconcileCurrentFromOutput` / Codex Working 输出正则         | 不应存在运行时代码命中；tail heuristic 不属于状态服务  | 已按目标清理 |
-| TS-SVC-017 | 当前为 `agent_starting`；scrollback 含任意 Codex/TraeX ready 文案                                     | `getCurrent()`                                                         | 保持 `agent_starting`，不写 store、不发布状态事件       | 目标契约     |
-| TS-SVC-018 | 当前为 `agent_starting`；live scrollback 仅含 Codex Working 文案                                      | `getCurrent()`                                                         | 保持 `agent_starting/codex`，不因输出文本进入 running  | 目标契约     |
-| TS-SVC-019 | 当前为 `agent_idle`；scrollback/tail 含 Codex Working 文案                                            | `getCurrent()`                                                         | 保持 `agent_idle/codex`，不因输出文本进入 running      | 目标契约     |
-| TS-SVC-020 | 当前为 `shell_idle`；scrollback/tail 含 Codex Working 文案                                            | `getCurrent()`                                                         | 保持 `shell_idle/null`                                 | 目标契约     |
+| ID         | 初始条件                                                                           | 操作                                                                   | 预期                                                   | 当前实现     |
+| ---------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------ | ------------ |
+| TS-SVC-001 | 无 store；session running，`command="zsh"`，`activeCommand=null`                   | `getCurrent()`                                                         | `shell_idle/null`                                      | 应通过       |
+| TS-SVC-002 | 无 store；session running，`command="zsh"`，`activeCommand="codex"`                | `getCurrent()`                                                         | `agent_starting/codex`                                 | 应通过       |
+| TS-SVC-003 | 无 store；session running，`activeCommand="/usr/local/bin/codex"`                  | `getCurrent()`                                                         | `agent_starting/codex`                                 | 应通过       |
+| TS-SVC-004 | 无 store；session running，`activeCommand="node"`                                  | `getCurrent()`                                                         | `shell_idle/null`                                      | 应通过       |
+| TS-SVC-005 | store 为 `agent_running`；session exited，`activeCommand="codex"`                  | `getCurrent()`                                                         | `shell_idle/null`                                      | 应通过       |
+| TS-SVC-006 | session running，`activeCommand="codex"`，无同 agent store                         | `setShellActiveCommand()`                                              | `agent_starting/codex`                                 | 应通过       |
+| TS-SVC-007 | store 为 `agent_running`；session running，`command="zsh"`，`activeCommand=null`   | `setShellActiveCommand()`                                              | `shell_idle/null`                                      | 应通过       |
+| TS-SVC-008 | store 为 `agent_running`；session running，`command="zsh"`，`activeCommand="node"` | `setShellActiveCommand()`                                              | `shell_idle/null`                                      | 应通过       |
+| TS-SVC-009 | 代码审查：`getTerminalSessionAgent()` / `isCodexSession()`                         | 搜索并审查状态判断是否只读取当前 `activeCommand`，不读取原始 `command` | stale launch command 不会复活 Codex 状态               | 静态不变量   |
+| TS-SVC-012 | 无 store；session running，`activeCommand="Codex"`                                 | `getCurrent()`                                                         | 明确预期：若只支持精确 `codex`，应为 `shell_idle/null` | 需确认并固定 |
+| TS-SVC-013 | 任意 store；`agent="codex"`，`hookEvent="SessionStart"`                            | `handleAgentHook()`                                                    | `agent_idle/codex`                                     | 应通过       |
+| TS-SVC-014 | 任意 store；`agent="codex"`，`hookEvent="UserPromptSubmit"`                        | `handleAgentHook()`                                                    | `agent_running/codex`                                  | 应通过       |
+| TS-SVC-015 | store 为 `agent_running`；`agent="codex"`，`hookEvent="Stop"`                      | `handleAgentHook()`                                                    | `agent_idle/codex`                                     | 应通过       |
+| TS-SVC-016 | 任意 store/session                                                                 | 代码搜索 `reconcileCurrentFromOutput` / Codex Working 输出正则         | 不应存在运行时代码命中；tail heuristic 不属于状态服务  | 已按目标清理 |
+| TS-SVC-017 | 当前为 `agent_starting`；scrollback 含任意 Codex/TraeX ready 文案                  | `getCurrent()`                                                         | 保持 `agent_starting`，不写 store、不发布状态事件      | 目标契约     |
+| TS-SVC-018 | 当前为 `agent_starting`；live scrollback 仅含 Codex Working 文案                   | `getCurrent()`                                                         | 保持 `agent_starting/codex`，不因输出文本进入 running  | 目标契约     |
+| TS-SVC-019 | 当前为 `agent_idle`；scrollback/tail 含 Codex Working 文案                         | `getCurrent()`                                                         | 保持 `agent_idle/codex`，不因输出文本进入 running      | 目标契约     |
+| TS-SVC-020 | 当前为 `shell_idle`；scrollback/tail 含 Codex Working 文案                         | `getCurrent()`                                                         | 保持 `shell_idle/null`                                 | 目标契约     |
 
 ## 后端状态 API 测试
 
-| ID         | 初始条件                                                                                           | 请求                                        | 预期                                                                |
-| ---------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------- |
-| TS-API-001 | session 不存在                                                                                     | `GET /api/terminal/session/not-found/state` | 404                                                                 |
-| TS-API-002 | session running，`activeCommand="codex"`，无 store                                               | `GET /state`                                | 200，`agent_starting/codex`                                         |
-| TS-API-003 | 真实 Codex session 曾进入 `agent_running`，随后进程退出或 terminal status 变为 exited              | `GET /state`                                | 200，`shell_idle/null`；不得因旧 store 保留 Agent Running           |
-| TS-API-004 | session running，store 为 `agent_starting`，live scrollback 命中任意 ready prompt                  | `GET /state`                                | 200，保持 `agent_starting/codex`；不得读取或匹配 TUI 文案            |
-| TS-API-005 | session running，store 为 `agent_idle`，live tail 命中 Codex Working                               | `GET /state`                                | 200，保持 `agent_idle/codex`；不得推进到 running                    |
-| TS-API-006 | session running，store 为 `agent_idle`，live tail 不命中                                           | `GET /state`                                | 200，保持 `agent_idle/codex`                                        |
-| TS-API-010 | session running，store 为 `shell_idle`，live tail 命中 Working                                     | `GET /state`                                | 200，保持 `shell_idle/null`                                         |
-| TS-API-007 | 真实 shell session 中进入 Codex 后退出到 shell，shell hook/tmux metadata 报告 `activeCommand=null` | `GET /state`                                | 200，`shell_idle/null`；不继续展示 Agent Idle/Running               |
-| TS-API-008 | 真实 shell session 中进入 Codex 后回到 shell，再执行普通 `node -e "setTimeout(()=>{}, 5000)"`      | `GET /state`                                | 200，`shell_idle/null`；普通 node 不应被旧 Codex 状态污染           |
+| ID         | 初始条件                                                                                           | 请求                                        | 预期                                                      |
+| ---------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------- |
+| TS-API-001 | session 不存在                                                                                     | `GET /api/terminal/session/not-found/state` | 404                                                       |
+| TS-API-003 | 真实 Codex session 曾进入 `agent_running`，随后进程退出或 terminal status 变为 exited              | `GET /state`                                | 200，`shell_idle/null`；不得因旧 store 保留 Agent Running |
+| TS-API-004 | session running，store 为 `agent_starting`，live scrollback 命中任意 ready prompt                  | `GET /state`                                | 200，保持 `agent_starting/codex`；不得读取或匹配 TUI 文案 |
+| TS-API-005 | session running，store 为 `agent_idle`，live tail 命中 Codex Working                               | `GET /state`                                | 200，保持 `agent_idle/codex`；不得推进到 running          |
+| TS-API-006 | session running，store 为 `agent_idle`，live tail 不命中                                           | `GET /state`                                | 200，保持 `agent_idle/codex`                              |
+| TS-API-010 | session running，store 为 `shell_idle`，live tail 命中 Working                                     | `GET /state`                                | 200，保持 `shell_idle/null`                               |
+| TS-API-007 | 真实 shell session 中进入 Codex 后退出到 shell，shell hook/tmux metadata 报告 `activeCommand=null` | `GET /state`                                | 200，`shell_idle/null`；不继续展示 Agent Idle/Running     |
+| TS-API-008 | 真实 shell session 中进入 Codex 后回到 shell，再执行普通 `node -e "setTimeout(()=>{}, 5000)"`      | `GET /state`                                | 200，`shell_idle/null`；普通 node 不应被旧 Codex 状态污染 |
 
 已下线旧构造态：`command="codex" + activeCommand=null/node` 不再作为 `TS-API-*` 系统验收 case；它只能通过手工改数据稳定制造，由 TS-SVC-009 静态不变量和 TS-API-007/008 真实路径覆盖。
 
@@ -149,29 +148,29 @@ scrollback 只用于终端显示、诊断或用户取证，不能推进 `agent_s
 
 ## App home overview 测试
 
-| ID          | 初始条件                                                                        | 请求                         | 预期                                                                                                              |
-| ----------- | ------------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| TS-HOME-001 | running session，store `agent_running`                                          | `GET /api/app/home/overview` | session `displayStatus="running"`，`displayStatusLabel="Agent Running"`，携带 `terminalState=agent_running/codex` |
-| TS-HOME-002 | running session，`activeCommand="codex"`，尚无可信 lifecycle                    | `GET /home/overview`         | `displayStatus="agent-starting"`，`terminalState=agent_starting/codex`                                            |
-| TS-HOME-008 | running session，store 为 `agent_starting`，scrollback 有 Codex ready prompt       | `GET /home/overview`         | 仍为 `displayStatus="agent-starting"`；TUI 文案不能推进状态                                                       |
-| TS-HOME-003 | running shell session                                                           | `GET /home/overview`         | `displayStatus="idle"`，`terminalState=shell_idle/null`                                                           |
-| TS-HOME-004 | exited session，残留 `activeCommand="codex"`                                    | `GET /home/overview`         | `displayStatus="exited"`，`terminalState=shell_idle/null`                                                         |
-| TS-HOME-005 | 多 session 混排                                                                 | `GET /home/overview`         | 按 `lastActivityAt` 降序；同时间保持原顺序                                                                        |
-| TS-HOME-006 | 真实 shell session 中进入 Codex 后回到 shell，再执行普通 node 命令              | `GET /home/overview`         | 展示普通 shell/命令状态，不展示 Agent Idle/Running                                                                |
-| TS-HOME-007 | response payload                                                                | `GET /home/overview`         | 不读取或返回 tail；不触发 live scrollback 读取                                                                    |
+| ID          | 初始条件                                                                     | 请求                         | 预期                                                                                                              |
+| ----------- | ---------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| TS-HOME-001 | running session，store `agent_running`                                       | `GET /api/app/home/overview` | session `displayStatus="running"`，`displayStatusLabel="Agent Running"`，携带 `terminalState=agent_running/codex` |
+| TS-HOME-002 | running session，`activeCommand="codex"`，尚无可信 lifecycle                 | `GET /home/overview`         | `displayStatus="agent-starting"`，`terminalState=agent_starting/codex`                                            |
+| TS-HOME-008 | running session，store 为 `agent_starting`，scrollback 有 Codex ready prompt | `GET /home/overview`         | 仍为 `displayStatus="agent-starting"`；TUI 文案不能推进状态                                                       |
+| TS-HOME-003 | running shell session                                                        | `GET /home/overview`         | `displayStatus="idle"`，`terminalState=shell_idle/null`                                                           |
+| TS-HOME-004 | exited session，残留 `activeCommand="codex"`                                 | `GET /home/overview`         | `displayStatus="exited"`，`terminalState=shell_idle/null`                                                         |
+| TS-HOME-005 | 多 session 混排                                                              | `GET /home/overview`         | 按 `lastActivityAt` 降序；同时间保持原顺序                                                                        |
+| TS-HOME-006 | 真实 shell session 中进入 Codex 后回到 shell，再执行普通 node 命令           | `GET /home/overview`         | 展示普通 shell/命令状态，不展示 Agent Idle/Running                                                                |
+| TS-HOME-007 | response payload                                                             | `GET /home/overview`         | 不读取或返回 tail；不触发 live scrollback 读取                                                                    |
 
 ## CLI 测试
 
-| ID         | 初始条件                                                                                                                | 命令                                                            | 预期                                                                                                         |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| TS-CLI-001 | `/state` 返回 `shell_idle/null`，session `activeCommand="sleep"`                                                        | `rw terminal handoff <id> --json`                               | `terminalState="shell_idle"`，`agent=null`，`inferredWorkloadState="shell_idle"`，`stateConfidence="strong"` |
-| TS-CLI-002 | `/state` 返回 `agent_idle/codex`，tail 看起来像 busy                                                                    | `handoff --json`                                                | 仍输出 `agent_idle`，不被 tail heuristic 改成 running                                                        |
-| TS-CLI-003 | `/state` 返回 `agent_running/codex`，session `activeCommand="codex"`                                                    | `handoff --json`                                                | 输出 `agent_running`、`agent="codex"`，`stateReasons` 包含 `terminalState=agent_running`                     |
-| TS-CLI-004 | session exited，旧 tail 含 Codex prompt                                                                                 | `handoff --json`                                                | `terminalState="shell_idle"`，不显示 agent running                                                           |
-| TS-CLI-005 | 真实 shell session 中进入 Codex 后回到 shell，再执行普通 node 命令，`/state` 返回 `shell_idle`                          | `handoff --json`                                                | 输出 shell idle，避免旧 Codex 状态影响 handoff                                                               |
-| TS-CLI-006 | interrupt success                                                                                                       | `rw terminal interrupt <id> --json`                             | 输出 HTTP interrupt response + `transport="http"`；不包含状态变更字段                                        |
-| TS-CLI-007 | interrupt 之后立即 handoff，后端仍 `agent_running`                                                                      | `interrupt` 后 `handoff`                                        | handoff 仍为 `agent_running`，直到 hook Stop 或 activeCommand 变化                                           |
-| TS-CLI-008 | `rw terminal send --agent codex` 启动 Codex 后，backend 返回 `phase="command_submitted"` 与 `operationId`            | `rw terminal send <id> --agent codex --text ... --enter --json` | CLI 以 launch operation 响应确认提交，不解析 Codex TUI 文案                                                   |
+| ID         | 初始条件                                                                                                  | 命令                                                            | 预期                                                                                                         |
+| ---------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| TS-CLI-001 | `/state` 返回 `shell_idle/null`，session `activeCommand="sleep"`                                          | `rw terminal handoff <id> --json`                               | `terminalState="shell_idle"`，`agent=null`，`inferredWorkloadState="shell_idle"`，`stateConfidence="strong"` |
+| TS-CLI-002 | `/state` 返回 `agent_idle/codex`，tail 看起来像 busy                                                      | `handoff --json`                                                | 仍输出 `agent_idle`，不被 tail heuristic 改成 running                                                        |
+| TS-CLI-003 | `/state` 返回 `agent_running/codex`，session `activeCommand="codex"`                                      | `handoff --json`                                                | 输出 `agent_running`、`agent="codex"`，`stateReasons` 包含 `terminalState=agent_running`                     |
+| TS-CLI-004 | session exited，旧 tail 含 Codex prompt                                                                   | `handoff --json`                                                | `terminalState="shell_idle"`，不显示 agent running                                                           |
+| TS-CLI-005 | 真实 shell session 中进入 Codex 后回到 shell，再执行普通 node 命令，`/state` 返回 `shell_idle`            | `handoff --json`                                                | 输出 shell idle，避免旧 Codex 状态影响 handoff                                                               |
+| TS-CLI-006 | interrupt success                                                                                         | `rw terminal interrupt <id> --json`                             | 输出 HTTP interrupt response + `transport="http"`；不包含状态变更字段                                        |
+| TS-CLI-007 | interrupt 之后立即 handoff，后端仍 `agent_running`                                                        | `interrupt` 后 `handoff`                                        | handoff 仍为 `agent_running`，直到 hook Stop 或 activeCommand 变化                                           |
+| TS-CLI-008 | `rw terminal send --agent codex` 启动 Codex 后，backend 返回 `phase="command_submitted"` 与 `operationId` | `rw terminal send <id> --agent codex --text ... --enter --json` | CLI 以 launch operation 响应确认提交，不解析 Codex TUI 文案                                                  |
 
 ## App terminal detail / UI 验收
 
@@ -227,7 +226,7 @@ scrollback 只用于终端显示、诊断或用户取证，不能推进 `agent_s
 
 ## 浏览器真实流量验收步骤
 
-以下步骤用于 TS-API-002、TS-API-004、TS-HOME-002、TS-HOME-008、TS-UI-002、TS-UI-011 的真实路径验收。不要用 Playwright E2E harness 或 `frontend/tests/*.spec.ts` 替代。
+以下步骤用于 TS-API-004、TS-HOME-002、TS-HOME-008、TS-UI-002、TS-UI-011 的真实路径验收。不要用 Playwright E2E harness 或 `frontend/tests/*.spec.ts` 替代。
 
 1. 按 `$toolkit:runweave-change-validation` 启动 planner 选定的隔离 Dev Session，不设置 `RUNWEAVE_E2E_TEST_ROUTES=true`。
 2. 用 `$toolkit:playwright-cli` 打开前端登录页，使用真实登录表单登录。

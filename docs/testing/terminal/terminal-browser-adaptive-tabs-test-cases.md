@@ -6,7 +6,7 @@
 
 - 每条 case 使用 `### TBAT-xxx 标题` 三级标题。
 - case 正文只使用 loader 可识别的 `标签`、`步骤`、`期望`、`失败判定`；环境准备和证据要求都写入步骤或期望。
-- case ID 唯一且连续，可直接填写到 Agent Team 的 `测试案例文件`：`docs/testing/terminal-browser-adaptive-tabs-test-cases.md`。
+- case ID 唯一且连续，可直接填写到 Agent Team 的 `测试案例文件`：`docs/testing/terminal/terminal-browser-adaptive-tabs-test-cases.md`。
 - 每条 case 独立准备环境，不依赖上一条遗留状态；失败即保留现场证据并停止当前 case。
 
 ## 范围
@@ -23,7 +23,7 @@
 
 - pinned tabs、可编辑 groups、vertical tabs、recently closed、hover thumbnail。
 - App/Ionic、backend HTTP API、鉴权和 Origin；本改动没有这些调用方或协议。
-- AI tab 上限、CDP 连接上限的完整安全测试；沿用 `docs/testing/terminal-browser-cdp-mcp-test-cases.md`。
+- AI tab 上限、CDP 连接上限的完整安全测试；沿用 `docs/testing/terminal/terminal-browser-cdp-mcp-test-cases.md`。
 - 单元测试/Vitest；本仓库使用真实浏览器和桌面端验收。
 
 ## 前提事实

@@ -41,13 +41,18 @@ git diff --check
 
 ### ATCR-001 双通道 completion 同时成功时只推进一次
 
-前置条件：backend 与 App Server 均健康；run 正在等待 `code_review`；review outbox 尚不存在。
+步骤：
 
-操作：让 review worker 写入 `case_12=fail` outbox 并正常结束；保留 App Server 和 `/internal/terminal-completion` 两条上报；用 `$toolkit:playwright-cli` 观察 sidecar，保存 run/outbox/日志。
+- backend 与 App Server 均健康；run 正在等待 `code_review`；review outbox 尚不存在。
+- 让 review worker 写入 `case_12=fail` outbox 并正常结束；保留 App Server 和 `/internal/terminal-completion` 两条上报；用 `$toolkit:playwright-cli` 观察 sidecar，保存 run/outbox/日志。
 
-预期：run 只记录一次 `case_12` fail，只向 code pane 回弹一次；`loop.round`、`noProgressCount` 不因重复 signal 多增长；active role 变为 `code`。
+期望：
 
-失败判断：同一结果产生两条修复 prompt、重复 round、重复 fail 计数，或仍停在 `code_review`。
+- run 只记录一次 `case_12` fail，只向 code pane 回弹一次；`loop.round`、`noProgressCount` 不因重复 signal 多增长；active role 变为 `code`。
+
+失败判定：
+
+- 同一结果产生两条修复 prompt、重复 round、重复 fail 计数，或仍停在 `code_review`。
 
 ### ATCR-002 review 完成时 backend 重启后由 App Server 重放恢复
 
@@ -55,7 +60,7 @@ git diff --check
 
 操作：review 写完 fail outbox 后、Stop 上报前停止 backend；确认 hook 日志中 App Server post 成功且直连 completion 失败；重新启动 backend；用 `$toolkit:playwright-cli` 观察 sidecar。
 
-预期：backend 恢复后 10 秒内读取已有 review outbox，`case_12` 变为 fail并回弹 code；无需再次操作 review pane。
+期望：backend 恢复后 10 秒内读取已有 review outbox，`case_12` 变为 fail并回弹 code；无需再次操作 review pane。
 
 失败判断：只恢复 terminal idle、run JSON 不更新、等待一小时后才重试，或 behavior_verify 被错误启动。
 
@@ -65,7 +70,7 @@ git diff --check
 
 操作：code worker 写入 completed outbox时停止 backend，并让直连 completion 失败；随后恢复 backend；使用 `$toolkit:playwright-cli` 观察 worker 状态。
 
-预期：恢复扫描识别精确 runId/role/panel 的 code outbox，只启动一次 `code_review`，run 记录对应日志并冻结 code。
+期望：恢复扫描识别精确 runId/role/panel 的 code outbox，只启动一次 `code_review`，run 记录对应日志并冻结 code。
 
 失败判断：run 永久停在 code、创建多个 review prompt，或直接跳过 review 启动 behavior_verify。
 
@@ -75,7 +80,7 @@ git diff --check
 
 操作：分别在 worker Stop 前停止 backend，写入对应 outbox并恢复 backend；用 `$toolkit:playwright-cli` 观察两个 run。
 
-预期：pass run 进入 `done`；fail run 只回弹一次 code；两个 run 的 session/panel/outbox 不串扰。
+期望：pass run 进入 `done`；fail run 只回弹一次 code；两个 run 的 session/panel/outbox 不串扰。
 
 失败判断：pass run 仍 running、fail run 被标 done、两个 run 相互消费 outbox或重复派发。
 
@@ -85,7 +90,7 @@ git diff --check
 
 操作：写入合法 fail outbox并结束 worker，确认两条网络上报均未成功；只恢复 backend，不人工重发 completion；用 `$toolkit:playwright-cli` 观察 sidecar。
 
-预期：backend 启动扫描或 10 秒周期扫描消费 outbox并回弹 code；恢复不依赖 App Server 历史事件。
+期望：backend 启动扫描或 10 秒周期扫描消费 outbox并回弹 code；恢复不依赖 App Server 历史事件。
 
 失败判断：run 保持 pending、必须手工再发 Stop，或恢复错误 worker。
 
@@ -95,7 +100,7 @@ git diff --check
 
 操作：在 requestedAt 之后创建合法 review outbox，不发送 completion；等待一次周期扫描并用 `$toolkit:playwright-cli` 观察 sidecar。
 
-预期：outbox mtime 晚于 requestedAt 即被消费，run 进入对应 fail/pass 后续状态。
+期望：outbox mtime 晚于 requestedAt 即被消费，run 进入对应 fail/pass 后续状态。
 
 失败判断：扫描因 baseline 为 null 永久跳过文件，或把 requestedAt 之前的文件当作新结果。
 
@@ -105,7 +110,7 @@ git diff --check
 
 操作：每次只放入一个错误变体，触发 App Server signal并等待周期扫描；读取 run 和结构化日志。
 
-预期：四个变体均不改变 acceptance、active role、loop 计数或 worker prompt；日志给出明确 stale reason且不包含敏感信息。
+期望：四个变体均不改变 acceptance、active role、loop 计数或 worker prompt；日志给出明确 stale reason且不包含敏感信息。
 
 失败判断：任一错误文件推进 run、回弹 code或启动 behavior_verify。
 
@@ -115,7 +120,7 @@ git diff --check
 
 操作：worker 写入 pass outbox并正常 Stop；确认直连 `/internal/terminal-completion` 成功；用 `$toolkit:playwright-cli` 观察 sidecar。
 
-预期：review pass 后只启动一次 behavior_verify；App Server 不可用不阻断现有实时路径。
+期望：review pass 后只启动一次 behavior_verify；App Server 不可用不阻断现有实时路径。
 
 失败判断：系统强依赖 App Server、run 不推进或重复派发 verifier。
 
@@ -125,7 +130,7 @@ git diff --check
 
 操作：通过隔离 event fixture 或重连消费方式再次投递同一 completion signal；读取 code pane、run JSON和日志。
 
-预期：第二次 signal 被识别为 duplicate/stale，不修改 acceptance、round、noProgress 或 active role，也不再次发送 prompt。
+期望：第二次 signal 被识别为 duplicate/stale，不修改 acceptance、round、noProgress 或 active role，也不再次发送 prompt。
 
 失败判断：任何状态或 pane 输入发生第二次变化。
 
@@ -135,7 +140,7 @@ git diff --check
 
 操作：等待 watchdog 扫描；第一次检查重试派发；再次构造超过一小时且达到最大 attempt 的状态并扫描；用 `$toolkit:playwright-cli` 观察 sidecar。
 
-预期：有结果时走即时 reconciliation；无结果时才进入原有 retry，达到上限后进入 `need_human`，证据明确是 outbox 缺失而非有效结果被忽略。
+期望：有结果时走即时 reconciliation；无结果时才进入原有 retry，达到上限后进入 `need_human`，证据明确是 outbox 缺失而非有效结果被忽略。
 
 失败判断：未超时就重试、存在合法 outbox仍判超时、或达到上限后 run 继续无限等待。
 

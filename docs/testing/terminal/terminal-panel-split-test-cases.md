@@ -176,7 +176,7 @@ $RW_BIN auth login --base-url "$RUNWEAVE_BASE_URL" --username admin
 
 ## Web UI 与 `$toolkit:playwright-cli` 验收
 
-建议新增或扩展 Playwright E2E：`frontend/tests/terminal-panels.spec.ts`。只覆盖用户可见 split、focus、CLI/API event sync、单 surface 约束和 preview resize，不新增前端 unit test。
+当前没有独立的 `terminal-panels.spec.ts`；Panel 的用户可见 split、focus、CLI/API event sync、单 surface 约束和 preview resize 按本文件的真实 Dev Session 与 `$toolkit:playwright-cli` Case 验收，不新增前端 unit test。
 
 | ID          | 场景                             | 步骤                                                                | 预期                                                                      |
 | ----------- | -------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------- |

@@ -56,7 +56,8 @@
 
 ### Runweave 变更验证门禁
 
-- 修复 Bug、实现功能或重构完成代码修改后，只要改动涉及运行行为、共享协议、服务生命周期或 UI/CDP 验收，必须使用 `$toolkit:runweave-change-validation`，再决定验证环境。纯诊断、只读评审和纯文档改动不触发。
+- `$toolkit:runweave-change-validation` 仅在用户当前请求中显式点名时触发；不因普通代码修改、Bug 修复、功能实现、重构、运行行为、共享协议、服务生命周期或 UI/CDP 验收自动使用，也不跨请求延续触发状态。
+- 未显式调用该技能时，按当前任务执行范围相称的验证，不默认启动完整 Dev Session。显式调用后，才应用以下全部门禁。
 - 顺序固定为：完成最小代码修改 → 固定本次 patch 边界 → 在只包含本次 patch 的 source root 首次执行无显式 profile 的 `pnpm dev:session --dry-run --json` → 检查影响闭包 → 启动、验收并停止 Dev Session。
 - planner 给出的范围高于预期时，先检查是否误改公共契约或扩大消费者闭包；禁止显式向下降级。用户明确要求安装态、跨版本或桌面目标时可以提升 profile。
 - 未提交代码的验证环境只允许通过 `pnpm dev:session` 启动，后续只通过 `dev:status`、`dev:open`、`dev:stop` 管理；其余直接启动 Backend、App Server、Electron、Beta、手工 profile/端口或跳过 planner 的入口一律视为绕过。目标入口只从 `dev:status` 和 `dev:open` 解析。

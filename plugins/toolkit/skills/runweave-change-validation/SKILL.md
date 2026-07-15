@@ -1,11 +1,18 @@
 ---
 name: runweave-change-validation
-description: 在 Runweave 仓库完成代码修改后，根据本次真实 diff 通过 Dev Session 规划、启动、发现并清理隔离验证环境。用于修复 Bug、实现功能或重构后的行为验收；当改动可能影响 frontend、backend、app-server、Electron、Beta、共享协议、运行时或 CDP surface 时必须使用。不要用于纯诊断、只读评审或纯文档改动。
+description: 仅当用户在当前请求中显式指定 $toolkit:runweave-change-validation 时使用；不要因普通代码修改、Bug 修复、功能实现、重构、共享协议、服务生命周期、UI 或 CDP 验收自动触发。被显式调用后，根据真实 diff 通过 Dev Session 规划、启动、发现并清理隔离验证环境。
 ---
 
 # Runweave 变更验证
 
 把 Dev Session 当作代码改完后的环境裁决器，而不是编码前猜测 profile 的工具。
+
+## 触发边界
+
+- 仅当用户在当前请求中显式点名 `$toolkit:runweave-change-validation` 时使用本技能。
+- 未显式点名时，不因代码修改、Bug 修复、功能实现、重构、运行行为、共享协议、服务生命周期、UI 或 CDP 验收而自动使用。
+- 显式调用只对当前请求有效，不跨请求或后续轮次延续。
+- 未调用本技能时，按当前任务与仓库约束执行范围相称的验证，不默认启动完整 Dev Session。
 
 ## 不可变边界
 

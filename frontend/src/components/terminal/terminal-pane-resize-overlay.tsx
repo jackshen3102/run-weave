@@ -60,7 +60,12 @@ function buildResizeHandles(
   workspace: TerminalPanelWorkspace | null,
   cellSize: TerminalCellSize | null,
 ): PaneResizeHandle[] {
-  if (!workspace || !cellSize || workspace.panels.length < 2) {
+  if (
+    !workspace ||
+    !cellSize ||
+    !Array.isArray(workspace.panels) ||
+    workspace.panels.length < 2
+  ) {
     return [];
   }
   const handles: PaneResizeHandle[] = [];

@@ -147,6 +147,6 @@ pnpm --filter ./backend typecheck
 pnpm --filter ./frontend typecheck
 pnpm --filter ./backend lint
 pnpm --filter ./frontend lint
-pnpm --filter ./frontend test -- terminal-preview.spec.ts
+pnpm test:e2e
 git diff --check
 ```

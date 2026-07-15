@@ -54,46 +54,46 @@
 
 ## 测试用例（活文档）
 
-供人或 agent 执行的测试用例与回归清单，非可执行测试代码。
+供人或 agent 执行的测试用例与回归清单，非可执行测试代码。完整目录与本轮执行总账见 `testing/README.md` 和 `testing/test-run-report.md`。
 
-| 需求                                     | 阅读                                                                               |
-| ---------------------------------------- | ---------------------------------------------------------------------------------- |
-| 测试层级与命名                           | testing/layers.md                                                                  |
-| 测试命令选择                             | testing/command-matrix.md                                                          |
-| TerminalState 测试                       | testing/terminal-state-test-cases.md                                               |
-| Terminal 事件恢复与架构问题测试          | testing/terminal-event-recovery-test-cases.md                                      |
-| Terminal activeCommand 一致性测试        | testing/terminal-active-command-consistency-test-cases.md                          |
-| App 设备在线测试                         | testing/app-device-online-test-cases.md                                            |
-| app-server CLI 启动测试                  | testing/app-server-event-center-test-cases.md#as-ec-008-cli-owned-app-server-start |
-| app-server 状态同步测试                  | testing/app-server-state-sync-test-cases.md                                        |
-| Runweave Agent CLI 控制面测试            | testing/runweave-cli-control-plane-test-cases.md                                   |
-| Agent Team / Loop Engineer 测试          | testing/agent-team-loop-engineer-test-cases.md                                     |
-| Agent Team completion 恢复测试           | testing/agent-team-completion-recovery-test-cases.md                               |
-| Agent Team 验收来源测试                  | testing/agent-team-verification-case-source-test-cases.md                          |
-| Agent Team Review Checkpoint 测试        | testing/agent-team-review-checkpoint-test-cases.md                                 |
-| Agent Team 证据门禁修复闭环测试          | testing/agent-team-evidence-gated-repair-loop-test-cases.md                        |
-| Codex 与 TraeX 能力对齐测试              | testing/codex-traex-capability-parity-test-cases.md                                |
-| 飞书一次性终端投递测试                   | testing/feishu-one-shot-terminal-delivery-test-cases.md                            |
-| App Server ThreadRef fixture             | testing/app-server-threadref-fixture.md                                            |
-| Terminal Panel Split 测试                | testing/terminal-panel-split-test-cases.md                                         |
-| 桌面端重启项目/终端恢复测试              | testing/desktop-restart-terminal-selection-test-cases.md                           |
-| Terminal Floating Composer 测试          | testing/terminal-floating-composer-test-cases.md                                   |
-| Terminal IME 输入测试                    | testing/terminal-ime-input-test-cases.md                                           |
-| 本地客户端更新测试                       | testing/runweave-local-client-update-test-cases.md                                 |
-| Runweave Beta 自举开发通道测试           | testing/runweave-beta-self-hosting-test-cases.md                                   |
-| Runweave Dev Session 分层开发环境测试    | testing/runweave-dev-session-test-cases.md                                         |
-| Runweave Beta 多实例与 CDP 路由测试      | testing/runweave-beta-instance-cdp-routing-test-cases.md                           |
-| Backend 内嵌行为数据底座测试             | testing/system-activity-data-foundation-test-cases.md                              |
-| Terminal Activity Work History 测试      | testing/terminal-activity-work-history-test-cases.md                               |
-| Terminal Browser CDP/MCP 测试            | testing/terminal-browser-cdp-mcp-test-cases.md                                     |
-| Terminal Browser Playwright MCP 工具测试 | testing/terminal-browser-playwright-mcp-test-cases.md                              |
-| Terminal Browser 自适应多 Tab 测试       | testing/terminal-browser-adaptive-tabs-test-cases.md                               |
-| 多项目原型轮巡库测试                     | testing/prototype-gallery-preview-test-cases.md                                    |
-| 系统性架构重构验收                       | testing/runweave-systematic-architecture-refactor-test-cases.md                    |
-| 独立行为数据底座目标架构验收             | testing/system-activity-data-foundation-test-cases.md                              |
-| 终端回归（Vim）                          | testing/runbooks/terminal-vim.md                                                   |
-| Explorer Quick Search 回归               | testing/runbooks/explorer-quick-search.md                                          |
-| Web Terminal 状态查询回归                | testing/runbooks/status-lookup-ui.md                                               |
+| 需求                                     | 阅读                                                                                   |
+| ---------------------------------------- | -------------------------------------------------------------------------------------- |
+| 测试层级与命名                           | testing/layers.md                                                                      |
+| 测试命令选择                             | testing/command-matrix.md                                                              |
+| TerminalState 测试                       | testing/terminal/terminal-state-test-cases.md                                          |
+| Terminal 事件恢复与架构问题测试          | testing/terminal/terminal-event-recovery-test-cases.md                                 |
+| Terminal activeCommand 一致性测试        | testing/terminal/terminal-active-command-consistency-test-cases.md                     |
+| App 设备在线测试                         | testing/app/app-device-online-test-cases.md                                            |
+| app-server CLI 启动测试                  | testing/app/app-server-event-center-test-cases.md#as-ec-008-cli-owned-app-server-start |
+| app-server 状态同步测试                  | testing/app/app-server-state-sync-test-cases.md                                        |
+| Runweave Agent CLI 控制面测试            | testing/platform/runweave-cli-control-plane-test-cases.md                              |
+| Agent Team / Loop Engineer 测试          | testing/agent-team/agent-team-loop-engineer-test-cases.md                              |
+| Agent Team completion 恢复测试           | testing/agent-team/agent-team-completion-recovery-test-cases.md                        |
+| Agent Team 验收来源测试                  | testing/agent-team/agent-team-verification-case-source-test-cases.md                   |
+| Agent Team Review Checkpoint 测试        | testing/agent-team/agent-team-review-checkpoint-test-cases.md                          |
+| Agent Team 证据门禁修复闭环测试          | testing/agent-team/agent-team-evidence-gated-repair-loop-test-cases.md                 |
+| Codex 与 TraeX 能力对齐测试              | testing/agent-team/codex-traex-capability-parity-test-cases.md                         |
+| 飞书一次性终端投递测试                   | testing/app/feishu-one-shot-terminal-delivery-test-cases.md                            |
+| App Server ThreadRef fixture             | testing/app/app-server-threadref-fixture.md                                            |
+| Terminal Panel Split 测试                | testing/terminal/terminal-panel-split-test-cases.md                                    |
+| 桌面端重启项目/终端恢复测试              | testing/platform/desktop-restart-terminal-selection-test-cases.md                      |
+| Terminal Floating Composer 测试          | testing/terminal/terminal-floating-composer-test-cases.md                              |
+| Terminal IME 输入测试                    | testing/terminal/terminal-ime-input-test-cases.md                                      |
+| 本地客户端更新测试                       | testing/platform/runweave-local-client-update-test-cases.md                            |
+| Runweave Beta 自举开发通道测试           | testing/platform/runweave-beta-self-hosting-test-cases.md                              |
+| Runweave Dev Session 分层开发环境测试    | testing/platform/runweave-dev-session-test-cases.md                                    |
+| Runweave Beta 多实例与 CDP 路由测试      | testing/platform/runweave-beta-instance-cdp-routing-test-cases.md                      |
+| Backend 内嵌行为数据底座测试             | testing/architecture/system-activity-data-foundation-test-cases.md                     |
+| Terminal Activity Work History 测试      | testing/terminal/terminal-activity-work-history-test-cases.md                          |
+| Terminal Browser CDP/MCP 测试            | testing/terminal/terminal-browser-cdp-mcp-test-cases.md                                |
+| Terminal Browser Playwright MCP 工具测试 | testing/terminal/terminal-browser-playwright-mcp-test-cases.md                         |
+| Terminal Browser 自适应多 Tab 测试       | testing/terminal/terminal-browser-adaptive-tabs-test-cases.md                          |
+| 多项目原型轮巡库测试                     | testing/browser/prototype-gallery-preview-test-cases.md                                |
+| 系统性架构重构验收                       | testing/architecture/runweave-systematic-architecture-refactor-test-cases.md           |
+| 独立行为数据底座目标架构验收             | testing/architecture/system-activity-data-foundation-test-cases.md                     |
+| 终端回归（Vim）                          | testing/runbooks/terminal-vim.md                                                       |
+| Explorer Quick Search 回归               | testing/runbooks/explorer-quick-search.md                                              |
+| Web Terminal 状态查询回归                | testing/runbooks/status-lookup-ui.md                                                   |
 
 ## 历史归档（冻结，不代表当前事实）
 
