@@ -115,6 +115,9 @@ export function verifyEvidenceGatedRepairLoop(check) {
       resumeBody.includes("activeWorkerRole: null") &&
       resumeBody.includes("workers: setActiveWorker(run.workers, null)") &&
       resumeBody.includes("run.consumedWorkerDispatches?.at(-1)?.role") &&
+      resumeBody.includes('lastRepairSourceRole === "behavior_verify"') &&
+      resumeBody.includes('repairKey: `behavior_verify:${item.caseId}`') &&
+      resumeBody.includes("repairCycles: resumedRepairCycles") &&
       pauseDispatchBody.includes("activeWorkerRole: role") &&
       resumeBody.includes('activeWorkerRole === "code"') &&
       resumeBody.includes("return this.bounceFailuresToCode(") &&
@@ -123,6 +126,24 @@ export function verifyEvidenceGatedRepairLoop(check) {
       ) &&
       resumeBody.indexOf("await this.trySendToMain") <
         resumeBody.indexOf("return this.bounceFailuresToCode("),
+    resumeBody,
+  );
+  check(
+    "main-agent-intervention-is-explicit-and-cannot-dispose-findings",
+    resumeBody.includes("async interveneRun(") &&
+      resumeBody.includes(
+        'run.phase !== "executing" || run.status !== "need_human"',
+      ) &&
+      resumeBody.includes("if (run.pendingFindingDecision)") &&
+      resumeBody.includes("Agent 不得代替人工 disposition") &&
+      resumeBody.includes("this.prepareSplitAcceptance(run") &&
+      resumeBody.includes("ensureWorkerGateAcceptance(") &&
+      resumeBody.includes("return this.bounceFailuresToCode(") &&
+      resumeBody.includes("return this.dispatchSerialWorker(") &&
+      resumeBody.includes("agentInterventions:") &&
+      resumeBody.includes(
+        "checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths",
+      ),
     resumeBody,
   );
   check(

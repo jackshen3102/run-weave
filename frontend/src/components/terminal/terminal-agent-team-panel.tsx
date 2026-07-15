@@ -8,11 +8,9 @@ import type {
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import {
-  completeAgentTeamRun,
   decideAgentTeamFinding,
   focusAgentTeamPane,
   getAgentTeamRunForTerminal,
-  resumeAgentTeamRun,
   startAgentTeamRun,
   submitAgentTeamSplitGate,
 } from "../../services/terminal";
@@ -61,7 +59,6 @@ export function TerminalAgentTeamPanel({
   const [testCaseFilePath, setTestCaseFilePath] = useState("");
   const [reviewCheckpointEnabled, setReviewCheckpointEnabled] = useState(false);
   const [workerDrafts, setWorkerDrafts] = useState<WorkerDraft[] | null>(null);
-  const [resumeNote, setResumeNote] = useState("");
   const [retryingRunId, setRetryingRunId] = useState<string | null>(null);
 
   const projectId = activeProject?.projectId ?? null;
@@ -256,26 +253,6 @@ export function TerminalAgentTeamPanel({
     );
   });
 
-  const resume = useMemoizedFn((): void => {
-    if (!run || !resumeNote.trim()) {
-      return;
-    }
-    const note = resumeNote.trim();
-    void runAction(() =>
-      resumeAgentTeamRun(apiBase, token, run.runId, { note }),
-    ).then(() => setResumeNote(""));
-  });
-
-  const complete = useMemoizedFn((): void => {
-    if (!run) {
-      return;
-    }
-    const note = resumeNote.trim();
-    void runAction(() =>
-      completeAgentTeamRun(apiBase, token, run.runId, note ? { note } : {}),
-    ).then(() => setResumeNote(""));
-  });
-
   const decideFinding = useMemoizedFn(
     (
       disposition: AgentTeamFindingDisposition,
@@ -432,12 +409,7 @@ export function TerminalAgentTeamPanel({
             projectId={projectId}
             run={run}
             busy={busy}
-            resumeNote={resumeNote}
-            onResumeNoteChange={setResumeNote}
-            onResume={resume}
-            onComplete={complete}
             onRetry={retryFailedRun}
-            onFocusPane={focusPane}
             onAuthExpired={onAuthExpired}
           />
         ) : null}

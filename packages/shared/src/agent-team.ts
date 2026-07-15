@@ -192,6 +192,23 @@ export interface HumanInterventionNote {
   clearedRepairCycles?: AgentTeamRepairCycle[];
 }
 
+export type AgentTeamAgentInterventionAction =
+  | "dispatch"
+  | "refresh_acceptance";
+
+export interface AgentTeamAgentIntervention {
+  id: string;
+  at: string;
+  action: AgentTeamAgentInterventionAction;
+  note: string;
+  role: AgentTeamWorkerRole;
+  caseIds: string[];
+  previousReason: string | null;
+  generatedTestCaseFilePath?: string | null;
+  /** Exact dirty paths the main Agent accepted for this checkpoint dispatch. */
+  checkpointAllowedDirtyPaths?: string[];
+}
+
 export interface AgentTeamRunOptions {
   autoApproveSplit: boolean;
   reviewCheckpointMode?: AgentTeamReviewCheckpointMode;
@@ -263,6 +280,8 @@ export interface AgentTeamRun {
   acceptance: AgentTeamAcceptanceCase[];
   loop: AgentTeamLoop;
   humanNotes: HumanInterventionNote[];
+  /** Recovery actions chosen by the main Agent through the control plane. */
+  agentInterventions?: AgentTeamAgentIntervention[];
   /** Durable, review-target-scoped human decisions; never rewrites finding facts. */
   findingDecisions?: AgentTeamFindingDecision[];
   /** Reviewer result currently paused for an explicit scope/risk decision. */
@@ -475,6 +494,15 @@ export interface SubmitAgentTeamSplitGateRequest {
 
 export interface ResumeAgentTeamRunRequest {
   note: string;
+}
+
+export interface InterveneAgentTeamRunRequest {
+  action: AgentTeamAgentInterventionAction;
+  note: string;
+  role: AgentTeamWorkerRole;
+  caseIds?: string[];
+  generatedTestCaseFilePath?: string | null;
+  checkpointAllowedDirtyPaths?: string[];
 }
 
 export interface CompleteAgentTeamRunRequest {

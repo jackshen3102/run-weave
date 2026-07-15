@@ -88,6 +88,42 @@ const splitGateSchema = z
   .strict();
 
 const resumeSchema = z.object({ note: z.string().trim().min(1) }).strict();
+const agentInterventionSchema = z
+  .object({
+    action: z.enum(["dispatch", "refresh_acceptance"]),
+    note: z.string().trim().min(1),
+    role: workerRoleEnum,
+    caseIds: z.array(z.string().trim().min(1)).min(1).max(100).optional(),
+    generatedTestCaseFilePath: optionalPathSchema,
+    checkpointAllowedDirtyPaths: z
+      .array(z.string().trim().min(1))
+      .min(1)
+      .max(100)
+      .optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.action === "dispatch" &&
+      value.generatedTestCaseFilePath != null
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["generatedTestCaseFilePath"],
+        message: "dispatch 不接受 generatedTestCaseFilePath",
+      });
+    }
+    if (
+      value.role !== "behavior_verify" &&
+      value.checkpointAllowedDirtyPaths != null
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["checkpointAllowedDirtyPaths"],
+        message: "只有 behavior_verify 可声明 checkpoint dirty path 例外",
+      });
+    }
+  });
 const completeSchema = z
   .object({ note: z.string().trim().min(1).optional() })
   .strict();
@@ -250,6 +286,25 @@ export function createAgentTeamRouter(
     }
     await handleServiceCall(res, () =>
       agentTeamService.resumeRun(params.data.runId, parsed.data),
+    );
+  });
+
+  router.post("/runs/:runId/intervene", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params" });
+      return;
+    }
+    const parsed = agentInterventionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.interveneRun(params.data.runId, parsed.data),
     );
   });
 

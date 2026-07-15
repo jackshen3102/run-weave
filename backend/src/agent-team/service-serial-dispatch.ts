@@ -115,6 +115,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       reviewScope?: "full" | "incremental" | "final";
       acceptedRepairKeys?: string[];
       reviewChallenge?: { repairKeys: string[]; reason: string };
+      checkpointAllowedDirtyPaths?: string[];
     },
   ): Promise<AgentTeamRun> {
     const session = this.terminalSessionManager.getSession(
@@ -161,6 +162,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
         await this.assertVerificationSourcesUnchanged(run);
         await this.reviewCheckpointGit.assertCheckpointHead(
           run.reviewCheckpoint,
+          options.checkpointAllowedDirtyPaths,
         );
       } catch (error) {
         return this.pauseForCheckpointError(

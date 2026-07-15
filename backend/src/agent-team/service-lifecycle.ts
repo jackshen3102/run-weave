@@ -1,8 +1,10 @@
 import type {
+  AgentTeamAcceptanceCase,
   AgentTeamRun,
   CompleteAgentTeamRunRequest,
   CreateAgentTeamRunRequest,
   DecideAgentTeamFindingRequest,
+  InterveneAgentTeamRunRequest,
   ProposeAgentTeamSplitRequest,
   ResumeAgentTeamRunRequest,
   SubmitAgentTeamSplitGateRequest,
@@ -22,7 +24,10 @@ import {
 } from "./repair-loop";
 import { agentTeamLogger } from "./service-context";
 import { AgentTeamRecheckService } from "./service-recheck";
-import { acceptanceCasesForRole } from "./service-acceptance-policy";
+import {
+  acceptanceCasesForRole,
+  ensureWorkerGateAcceptance,
+} from "./service-acceptance-policy";
 import {
   normalizeWorkers,
   resolveInitialActiveWorkerRole,
@@ -35,6 +40,32 @@ import {
   requireVerificationConfig,
   resolveAgentTeamTerminal,
 } from "./service-run-policy";
+
+function selectAgentInterventionCases(
+  eligibleCases: AgentTeamAcceptanceCase[],
+  requestedCaseIds: string[] | undefined,
+): AgentTeamAcceptanceCase[] {
+  if (eligibleCases.length === 0) {
+    throw new AgentTeamError(409, "目标 worker 当前没有可介入的 case");
+  }
+  if (!requestedCaseIds || requestedCaseIds.length === 0) {
+    return eligibleCases;
+  }
+  const requested = new Set(requestedCaseIds);
+  const selected = eligibleCases.filter((item) => requested.has(item.caseId));
+  const selectedIds = new Set(selected.map((item) => item.caseId));
+  const invalidCaseIds = requestedCaseIds.filter(
+    (caseId) => !selectedIds.has(caseId),
+  );
+  if (invalidCaseIds.length > 0) {
+    throw new AgentTeamError(
+      400,
+      `目标 worker 不拥有这些 case：${invalidCaseIds.join(", ")}`,
+    );
+  }
+  return selected;
+}
+
 export class AgentTeamLifecycleService extends AgentTeamRecheckService {
   async startRun(input: CreateAgentTeamRunRequest): Promise<AgentTeamRun> {
     const session = this.requireSession(input.terminalSessionId);
@@ -318,6 +349,38 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     const now = new Date().toISOString();
     const clearedFingerprints = [...run.loop.errorFingerprints];
     const clearedRepairCycles = [...(run.loop.repairCycles ?? [])];
+    const lastRepairSourceRole = [...(run.consumedWorkerDispatches ?? [])]
+      .reverse()
+      .find((dispatch) => dispatch.role !== "code")?.role;
+    const recoverableBehaviorRepairCycles =
+      clearedRepairCycles.length === 0 &&
+      lastRepairSourceRole === "behavior_verify"
+        ? run.acceptance
+            .filter((item) => item.status === "fail")
+            .map((item) => ({
+              repairKey: `behavior_verify:${item.caseId}`,
+              sourceRole: "behavior_verify" as const,
+              caseIds: [item.caseId],
+              invariant: item.text,
+              verificationMode: "runtime" as const,
+              sourceEvidenceRefs: item.evidence.map((evidence) => evidence.ref),
+              attempts: 0,
+              maxAttempts:
+                run.loop.maxRepairAttempts ??
+                resolveMaxRepairAttempts(run.options.maxRepairAttempts),
+              firstFailedRound: run.loop.round,
+              lastFailedRound: run.loop.round,
+              lastFailureSummary: item.resultSummary ?? item.text,
+            }))
+        : [];
+    const resumedRepairCycles = (
+      clearedRepairCycles.length > 0
+        ? clearedRepairCycles
+        : recoverableBehaviorRepairCycles
+    ).map((cycle) => ({
+      ...cycle,
+      attempts: 0,
+    }));
     const resumedAcceptance = run.acceptance.map((item) => ({
       ...item,
       consecutiveFail: 0,
@@ -341,7 +404,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         lastReason: null,
         errorFingerprints: [],
         bestPassCount: resumedBestPassCount,
-        repairCycles: [],
+        repairCycles: resumedRepairCycles,
         maxRepairAttempts:
           run.loop.maxRepairAttempts ??
           resolveMaxRepairAttempts(run.options.maxRepairAttempts),
@@ -379,6 +442,171 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       cases: failedCases.length > 0 ? failedCases : roleCases,
       log: "人工介入后恢复，建立 fresh worker dispatch",
       triggerSummary: note,
+    });
+  }
+
+  async interveneRun(
+    runId: string,
+    input: InterveneAgentTeamRunRequest,
+  ): Promise<AgentTeamRun> {
+    return this.enqueue(runId, async () => {
+      const run = await this.requireRun(runId);
+      if (run.phase !== "executing" || run.status !== "need_human") {
+        throw new AgentTeamError(
+          409,
+          "Agent intervention 只允许处理 executing/need_human run",
+        );
+      }
+      if (run.pendingFindingDecision) {
+        throw new AgentTeamError(
+          409,
+          "当前存在 P0/P1 finding 范围裁决，Agent 不得代替人工 disposition",
+        );
+      }
+      const note = input.note.trim();
+      const previousReason = run.loop.lastReason;
+      const now = new Date().toISOString();
+
+      if (input.action === "refresh_acceptance") {
+        if (input.role === "code") {
+          throw new AgentTeamError(
+            400,
+            "刷新验收合同后只能派发 code_review 或 behavior_verify",
+          );
+        }
+        const generatedTestCaseFilePath =
+          input.generatedTestCaseFilePath ??
+          run.verification?.generatedTestCaseFilePath;
+        if (!generatedTestCaseFilePath) {
+          throw new AgentTeamError(
+            400,
+            "refresh_acceptance 需要 generatedTestCaseFilePath",
+          );
+        }
+        const prepared = await this.prepareSplitAcceptance(run, {
+          generatedTestCaseFilePath,
+        });
+        const acceptance = ensureWorkerGateAcceptance(
+          run.workers,
+          prepared.acceptance,
+        );
+        const roleCases = acceptanceCasesForRole(
+          { ...run, acceptance },
+          input.role,
+        );
+        const cases = selectAgentInterventionCases(
+          roleCases,
+          input.caseIds,
+        );
+        const refreshedRun = await this.updateRun(run, {
+          status: "running",
+          activeWorkerRole: null,
+          activeWorkerDispatch: null,
+          workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+          verification: prepared.verification,
+          acceptance,
+          reviewCheckpoint: run.reviewCheckpoint
+            ? {
+                ...run.reviewCheckpoint,
+                pendingReview: null,
+                finalReviewedCommit: null,
+              }
+            : run.reviewCheckpoint,
+          loop: {
+            ...run.loop,
+            noProgressCount: 0,
+            escalated: false,
+            lastReason: null,
+            errorFingerprints: [],
+            bestPassCount: 0,
+            repairCycles: [],
+          },
+          agentInterventions: [
+            ...(run.agentInterventions ?? []),
+            {
+              id: `agent_intervention_${Date.now()}`,
+              at: now,
+              action: input.action,
+              note,
+              role: input.role,
+              caseIds: cases.map((item) => item.caseId),
+              previousReason,
+              generatedTestCaseFilePath:
+                prepared.verification.generatedTestCaseFilePath,
+              checkpointAllowedDirtyPaths:
+                input.checkpointAllowedDirtyPaths,
+            },
+          ],
+          logs: [
+            ...run.logs,
+            `Agent 刷新验收合同：${prepared.verification.generatedTestCaseFilePath ?? generatedTestCaseFilePath}`,
+          ],
+        });
+        return this.dispatchSerialWorker(refreshedRun, input.role, {
+          cases,
+          log: "Agent intervention 刷新验收合同后重新派发",
+          triggerSummary: note,
+          reviewScope: input.role === "code_review" ? "full" : undefined,
+          checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
+        });
+      }
+
+      let cases: AgentTeamAcceptanceCase[];
+      if (input.role === "code") {
+        const repairCaseIds = new Set(
+          (run.loop.repairCycles ?? []).flatMap((cycle) => cycle.caseIds),
+        );
+        const eligibleCases = run.acceptance.filter(
+          (item) => item.status === "fail" && repairCaseIds.has(item.caseId),
+        );
+        cases = selectAgentInterventionCases(eligibleCases, input.caseIds);
+      } else {
+        cases = selectAgentInterventionCases(
+          acceptanceCasesForRole(run, input.role),
+          input.caseIds,
+        );
+      }
+      const intervenedRun = await this.updateRun(run, {
+        status: "running",
+        activeWorkerRole: null,
+        activeWorkerDispatch: null,
+        workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+        loop: {
+          ...run.loop,
+          escalated: false,
+          lastReason: null,
+          repairCycles: [...(run.loop.repairCycles ?? [])],
+        },
+        agentInterventions: [
+          ...(run.agentInterventions ?? []),
+          {
+            id: `agent_intervention_${Date.now()}`,
+            at: now,
+            action: input.action,
+            note,
+            role: input.role,
+            caseIds: cases.map((item) => item.caseId),
+            previousReason,
+            checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
+          },
+        ],
+        logs: [
+          ...run.logs,
+          `Agent intervention 选择 ${input.role}：${cases.map((item) => item.caseId).join(", ")}`,
+        ],
+      });
+      if (input.role === "code") {
+        return this.bounceFailuresToCode(
+          intervenedRun,
+          cases.map((item) => item.caseId),
+        );
+      }
+      return this.dispatchSerialWorker(intervenedRun, input.role, {
+        cases,
+        log: "Agent intervention 重新派发",
+        triggerSummary: note,
+        checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
+      });
     });
   }
 

@@ -557,6 +557,7 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
         | "acceptance"
         | "loop"
         | "humanNotes"
+        | "agentInterventions"
         | "findingDecisions"
         | "pendingFindingDecision"
         | "logs"

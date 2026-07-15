@@ -296,6 +296,7 @@ export class AgentTeamReviewCheckpointGit {
 
   async assertCheckpointHead(
     state: AgentTeamReviewCheckpointState,
+    allowedDirtyPaths: string[] = [],
   ): Promise<void> {
     await this.assertBranchAndHead(state);
     const statusOutput = (
@@ -309,10 +310,24 @@ export class AgentTeamReviewCheckpointGit {
     const pendingCodePaths = this.statusPaths(statusOutput).filter(
       (filePath) => !isCheckpointExcludedPath(filePath),
     );
-    if (pendingCodePaths.length > 0) {
+    const pendingCodePathSet = new Set(pendingCodePaths);
+    const staleAllowedPaths = allowedDirtyPaths.filter(
+      (filePath) => !pendingCodePathSet.has(filePath),
+    );
+    if (staleAllowedPaths.length > 0) {
       throw new AgentTeamError(
         409,
-        `Checkpoint 后存在未提交代码，behavior 不得启动：${pendingCodePaths.join(", ")}`,
+        `Checkpoint dirty path 例外与当前 worktree 不一致：${staleAllowedPaths.join(", ")}`,
+      );
+    }
+    const allowedDirtyPathSet = new Set(allowedDirtyPaths);
+    const unacknowledgedCodePaths = pendingCodePaths.filter(
+      (filePath) => !allowedDirtyPathSet.has(filePath),
+    );
+    if (unacknowledgedCodePaths.length > 0) {
+      throw new AgentTeamError(
+        409,
+        `Checkpoint 后存在未提交代码，behavior 不得启动：${unacknowledgedCodePaths.join(", ")}`,
       );
     }
   }

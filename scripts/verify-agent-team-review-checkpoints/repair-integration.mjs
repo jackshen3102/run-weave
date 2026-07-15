@@ -111,12 +111,106 @@ async function verifyRepairBudgetRoute() {
   }
 }
 
+async function verifyAgentInterventionRoute() {
+  const acceptedInterventions = [];
+  const service = {
+    async interveneRun(runId, input) {
+      acceptedInterventions.push({ runId, input });
+      return {
+        runId,
+        status: "running",
+        activeWorkerRole: input.role,
+      };
+    },
+  };
+  const app = express();
+  app.use(express.json());
+  app.use("/agent-team", createAgentTeamRouter(service));
+  const server = await new Promise((resolve) => {
+    const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
+  });
+  try {
+    const address = server.address();
+    const url = `http://127.0.0.1:${address.port}/agent-team/runs/run-1/intervene`;
+    const post = (body) =>
+      fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const dispatch = await post({
+      action: "dispatch",
+      role: "code_review",
+      note: "复用原 reviewer pane 重新举证",
+      caseIds: ["BSP-017"],
+    });
+    const refresh = await post({
+      action: "refresh_acceptance",
+      role: "behavior_verify",
+      note: "切换到可复现的 warm retry 验收合同",
+      caseIds: ["BSP-017"],
+      generatedTestCaseFilePath:
+        "docs/testing/beta-slot-pool-warm-retry-test-cases.md",
+      checkpointAllowedDirtyPaths: [
+        "docs/testing/beta-slot-pool-warm-retry-test-cases.md",
+      ],
+    });
+    const invalidDispatch = await post({
+      action: "dispatch",
+      role: "behavior_verify",
+      note: "非法携带新验收文件",
+      generatedTestCaseFilePath: "docs/testing/invalid.md",
+    });
+    const invalidRole = await post({
+      action: "dispatch",
+      role: "main_agent",
+      note: "非法 worker role",
+    });
+    const invalidCheckpointOverride = await post({
+      action: "dispatch",
+      role: "code_review",
+      note: "reviewer 不得使用 behavior checkpoint 例外",
+      checkpointAllowedDirtyPaths: ["app.txt"],
+    });
+    check(
+      "agent-intervention-route-accepts-dispatch-and-refresh",
+      dispatch.ok &&
+        refresh.ok &&
+        acceptedInterventions.length === 2 &&
+        acceptedInterventions[0]?.input.action === "dispatch" &&
+        acceptedInterventions[0]?.input.role === "code_review" &&
+        acceptedInterventions[1]?.input.action === "refresh_acceptance" &&
+        acceptedInterventions[1]?.input.generatedTestCaseFilePath ===
+          "docs/testing/beta-slot-pool-warm-retry-test-cases.md" &&
+        acceptedInterventions[1]?.input.checkpointAllowedDirtyPaths?.[0] ===
+          "docs/testing/beta-slot-pool-warm-retry-test-cases.md",
+      { acceptedInterventions },
+    );
+    check(
+      "agent-intervention-route-rejects-invalid-shapes",
+      invalidDispatch.status === 400 &&
+        invalidRole.status === 400 &&
+        invalidCheckpointOverride.status === 400,
+      {
+        invalidDispatchStatus: invalidDispatch.status,
+        invalidRoleStatus: invalidRole.status,
+        invalidCheckpointOverrideStatus: invalidCheckpointOverride.status,
+      },
+    );
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+}
+
 export async function verifyRepairIntegration(checkResult, createRepoResult) {
   recordCheck = checkResult;
   createRepoFixture = createRepoResult;
   try {
     await verifyRepairSourceFingerprint();
     await verifyRepairBudgetRoute();
+    await verifyAgentInterventionRoute();
   } finally {
     recordCheck = null;
     createRepoFixture = null;

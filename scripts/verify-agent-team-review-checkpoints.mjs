@@ -136,6 +136,12 @@ async function main() {
     "review artifact blocked checkpoint head",
   );
   await writeFile(path.join(root, "app.txt"), "base\nround-one\nround-two\n");
+  await service.assertCheckpointHead(state2, ["app.txt"]);
+  check(
+    "checkpoint-head-allows-explicit-agent-intervention-path",
+    true,
+    "explicit checkpoint path did not permit behavior dispatch",
+  );
   const target2 = await service.prepareReviewTarget({
     state: state2,
     scope: "incremental",

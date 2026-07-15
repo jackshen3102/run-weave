@@ -1,5 +1,14 @@
-import type { AgentTeamExportResponse } from "@runweave/shared/agent-team";
-import { getStringOption, parseArgs, resolveOutputMode } from "../args.js";
+import type {
+  AgentTeamAgentInterventionAction,
+  AgentTeamExportResponse,
+  AgentTeamWorkerRole,
+} from "@runweave/shared/agent-team";
+import {
+  getStringOption,
+  parseArgs,
+  requireStringOption,
+  resolveOutputMode,
+} from "../args.js";
 import { resolveAuthContext } from "../client/auth-context.js";
 import { TerminalHttpClient } from "../client/terminal-http-client.js";
 import { CliError } from "../errors.js";
@@ -15,7 +24,7 @@ export async function runAgentTeamCommand(
   },
 ): Promise<void> {
   if (!subcommand) {
-    throw new CliError("Usage: rw agent-team <export> [options]", 2);
+    throw new CliError("Usage: rw agent-team <export|intervene> [options]", 2);
   }
   const parsed = parseArgs(args, new Set(["json", "plain"]));
   const mode = resolveOutputMode(parsed.options);
@@ -48,6 +57,36 @@ export async function runAgentTeamCommand(
     return;
   }
 
+  if (subcommand === "intervene") {
+    const runId = await resolveRunId(client, parsed.positionals[0], parsed.options);
+    const action = resolveInterventionAction(
+      requireStringOption(parsed.options, "action"),
+    );
+    const role = resolveWorkerRole(requireStringOption(parsed.options, "role"));
+    const run = await client.interveneAgentTeamRun(runId, {
+      action,
+      role,
+      note: requireStringOption(parsed.options, "note"),
+      caseIds: resolveCaseIds(getStringOption(parsed.options, "cases")),
+      generatedTestCaseFilePath: getStringOption(
+        parsed.options,
+        "generated-test-case-file",
+      ),
+      checkpointAllowedDirtyPaths: resolveCommaSeparatedValues(
+        getStringOption(parsed.options, "checkpoint-allow-dirty-paths"),
+        "--checkpoint-allow-dirty-paths",
+      ),
+    });
+    writeOutput(
+      io.stdout,
+      mode,
+      mode === "json"
+        ? run
+        : `Run ${run.runId}: ${run.status}, activeWorker=${run.activeWorkerRole ?? "none"}, dispatch=${run.activeWorkerDispatch?.dispatchId ?? "none"}`,
+    );
+    return;
+  }
+
   throw new CliError(`Unknown agent-team command: ${subcommand}`, 2);
 }
 
@@ -75,6 +114,52 @@ async function resolveRunId(
     throw new CliError("Multiple agent-team runs found; pass runId explicitly", 1);
   }
   return response.runs[0]!.runId;
+}
+
+function resolveInterventionAction(
+  value: string,
+): AgentTeamAgentInterventionAction {
+  if (value === "dispatch" || value === "refresh_acceptance") {
+    return value;
+  }
+  throw new CliError(
+    "--action must be one of: dispatch, refresh_acceptance",
+    2,
+  );
+}
+
+function resolveWorkerRole(value: string): AgentTeamWorkerRole {
+  if (
+    value === "code" ||
+    value === "code_review" ||
+    value === "behavior_verify"
+  ) {
+    return value;
+  }
+  throw new CliError(
+    "--role must be one of: code, code_review, behavior_verify",
+    2,
+  );
+}
+
+function resolveCaseIds(value: string | undefined): string[] | undefined {
+  return resolveCommaSeparatedValues(value, "--cases");
+}
+
+function resolveCommaSeparatedValues(
+  value: string | undefined,
+  optionName: string,
+): string[] | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const caseIds = Array.from(
+    new Set(value.split(",").map((item) => item.trim()).filter(Boolean)),
+  );
+  if (caseIds.length === 0) {
+    throw new CliError(`${optionName} must contain at least one value`, 2);
+  }
+  return caseIds;
 }
 
 function resolveOptionalBoolean(

@@ -7,10 +7,7 @@ import {
   ROLE_LABEL,
   type WorkerDraft,
 } from "./terminal-agent-team-panel-model";
-import {
-  AcceptanceEvidenceDetails,
-  PaneFocusList,
-} from "./terminal-agent-team-panel-details";
+import { AcceptanceEvidenceDetails } from "./terminal-agent-team-panel-details";
 
 export function StartFlowSection({
   mode = "start",
@@ -316,12 +313,7 @@ export function ExecutingSection({
   projectId,
   run,
   busy,
-  resumeNote,
-  onResumeNoteChange,
-  onResume,
-  onComplete,
   onRetry,
-  onFocusPane,
   onAuthExpired,
 }: {
   apiBase: string;
@@ -329,12 +321,7 @@ export function ExecutingSection({
   projectId: string;
   run: AgentTeamRun;
   busy: boolean;
-  resumeNote: string;
-  onResumeNoteChange: (value: string) => void;
-  onResume: () => void;
-  onComplete: () => void;
   onRetry: () => void;
-  onFocusPane: (panelId: string) => void;
   onAuthExpired?: () => void;
 }) {
   const { loop, acceptance } = run;
@@ -421,42 +408,6 @@ export function ExecutingSection({
         <div className="rounded border border-rose-800 bg-rose-950/40 p-2 text-[11px] text-rose-200">
           Loop 已暂停。请在顶部完成 Finding
           范围裁决；这里不会提供通用“人工完成”入口。
-        </div>
-      ) : loop.escalated ? (
-        <div className="space-y-2 rounded border border-rose-800 bg-rose-950/40 p-2">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
-            <AlertTriangle className="h-4 w-4" /> 已熔断 · 升级人工
-          </div>
-          <p className="text-[11px] text-rose-200">{loop.lastReason}</p>
-          <PaneFocusList run={run} onFocusPane={onFocusPane} />
-          <textarea
-            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
-            rows={2}
-            placeholder="填写人工干预 note（恢复时注入主 Agent；完成时作为记录保存）"
-            value={resumeNote}
-            onChange={(event) => onResumeNoteChange(event.target.value)}
-          />
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              className="flex-1"
-              disabled={busy || !resumeNote.trim()}
-              onClick={onResume}
-            >
-              人工已介入 · 恢复 loop →
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="flex-1 border-emerald-800 text-emerald-300 hover:bg-emerald-950/40 hover:text-emerald-200"
-              disabled={busy}
-              onClick={onComplete}
-            >
-              人工确认完成
-            </Button>
-          </div>
         </div>
       ) : run.status === "done" ? (
         <div className="rounded border border-emerald-900 bg-emerald-950/30 p-2 text-xs text-emerald-300">
