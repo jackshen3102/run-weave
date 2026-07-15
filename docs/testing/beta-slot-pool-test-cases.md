@@ -68,7 +68,7 @@ git diff --check
 | BSP-010 | 磁盘不足时先安全清理再 fail closed        | CLI + 文件系统                   |
 | BSP-011 | 显式 `--instance` 不能绕过容量            | CLI                              |
 | BSP-012 | dry-run 全程只读且不承诺槽位              | CLI + 文件快照                   |
-| BSP-013 | shared Backend/App Server 不归槽位清理    | CLI + 真实进程                   |
+| BSP-013 | shared 服务不归槽位清理                   | CLI + 真实进程                   |
 | BSP-014 | 损坏/未知 lease schema 保持占用           | CLI + 文件系统                   |
 | BSP-015 | start 失败按 reset 结果释放或保留 lease   | CLI + 故障注入                   |
 | BSP-016 | legacy 只盘点，cleanup/purge 显式且可恢复 | CLI + 文件系统                   |
@@ -160,12 +160,12 @@ git diff --check
 - Then：dry-run 输出 policy/capacity/requestedSlotId、`authoritative:false` 的 snapshot，assignedSlotId/leaseNonce 为 null；所有记录路径摘要与 mtime 不变；后续真实 start 可得到不同结果且不视为错误。
 - 失败判断：dry-run 创建/修改任何状态、获取临时 lease，或承诺实际 assigned slot。
 
-### BSP-013 shared Backend/App Server 不归槽位清理
+### BSP-013 shared 服务不归槽位清理
 
-- Given：planner 选择 shared Backend/App Server，记录 shared PID、home、lock、token、event log 与内容摘要；Beta Electron 使用一个 slot ready。
+- Given：planner 按当前 impact closure 为 Backend/App Server 分别选择 ownership，且至少一个服务为 shared；记录每个 shared 服务的 PID、home、lock、token、event log 与内容摘要，并记录其余 dedicated 服务的 slot identity；Beta Electron 使用一个 slot ready。不得通过降低 profile ownership boundary 强行构造 shared 服务。
 - When：停止 Beta、运行 pool janitor 与磁盘 retention。
-- Then：只停止/清理 slot-owned Electron/userData；shared PID 继续存活，home/lock/token/event 摘要不变；manifest 明确显示 shared ownership。
-- 失败判断：shared 资源被写入 lease、被 stop/delete/prune，或状态输出把 shared 声称为 slot-owned。
+- Then：只停止/清理 slot-owned Electron/userData 与 dedicated 服务；每个 shared 服务的 PID 继续存活，home/lock/token/event 摘要不变；manifest 分别如实显示 shared/dedicated ownership。
+- 失败判断：任一 shared 资源被写入 lease、被 stop/delete/prune，dedicated 资源未按槽位生命周期收敛，或状态输出把 shared 服务声称为 slot-owned。
 
 ### BSP-014 损坏/未知 lease schema 保持占用
 
