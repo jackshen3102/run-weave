@@ -116,6 +116,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       acceptedRepairKeys?: string[];
       reviewChallenge?: { repairKeys: string[]; reason: string };
       checkpointAllowedDirtyPaths?: string[];
+      checkpointExpectedHeadCommit?: string;
     },
   ): Promise<AgentTeamRun> {
     const session = this.terminalSessionManager.getSession(
@@ -163,6 +164,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
         await this.reviewCheckpointGit.assertCheckpointHead(
           run.reviewCheckpoint,
           options.checkpointAllowedDirtyPaths,
+          options.checkpointExpectedHeadCommit,
         );
       } catch (error) {
         return this.pauseForCheckpointError(

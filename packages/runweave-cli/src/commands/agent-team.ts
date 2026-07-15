@@ -76,6 +76,10 @@ export async function runAgentTeamCommand(
         getStringOption(parsed.options, "checkpoint-allow-dirty-paths"),
         "--checkpoint-allow-dirty-paths",
       ),
+      checkpointExpectedHeadCommit: getStringOption(
+        parsed.options,
+        "checkpoint-head",
+      ),
     });
     writeOutput(
       io.stdout,

@@ -207,6 +207,8 @@ export interface AgentTeamAgentIntervention {
   generatedTestCaseFilePath?: string | null;
   /** Exact dirty paths the main Agent accepted for this checkpoint dispatch. */
   checkpointAllowedDirtyPaths?: string[];
+  /** Exact descendant HEAD the main Agent accepted for this behavior dispatch. */
+  checkpointExpectedHeadCommit?: string;
 }
 
 export interface AgentTeamRunOptions {
@@ -503,6 +505,7 @@ export interface InterveneAgentTeamRunRequest {
   caseIds?: string[];
   generatedTestCaseFilePath?: string | null;
   checkpointAllowedDirtyPaths?: string[];
+  checkpointExpectedHeadCommit?: string;
 }
 
 export interface CompleteAgentTeamRunRequest {

@@ -297,8 +297,40 @@ export class AgentTeamReviewCheckpointGit {
   async assertCheckpointHead(
     state: AgentTeamReviewCheckpointState,
     allowedDirtyPaths: string[] = [],
+    expectedHeadCommit?: string,
   ): Promise<void> {
-    await this.assertBranchAndHead(state);
+    if (expectedHeadCommit) {
+      const branch = (
+        await this.runGit(state.repoRoot, [
+          "symbolic-ref",
+          "--quiet",
+          "--short",
+          "HEAD",
+        ])
+      ).stdout.trim();
+      const head = (
+        await this.runGit(state.repoRoot, ["rev-parse", "HEAD"])
+      ).stdout.trim();
+      const mergeBase = (
+        await this.runGit(state.repoRoot, [
+          "merge-base",
+          state.lastReviewedCommit,
+          expectedHeadCommit,
+        ])
+      ).stdout.trim();
+      if (
+        branch !== state.branch ||
+        head !== expectedHeadCommit ||
+        mergeBase !== state.lastReviewedCommit
+      ) {
+        throw new AgentTeamError(
+          409,
+          `Agent intervention checkpoint HEAD 无效：expected ${state.branch}@${expectedHeadCommit} descendant of ${state.lastReviewedCommit}，actual ${branch}@${head}`,
+        );
+      }
+    } else {
+      await this.assertBranchAndHead(state);
+    }
     const statusOutput = (
       await this.runGit(state.repoRoot, [
         "status",

@@ -100,6 +100,11 @@ const agentInterventionSchema = z
       .min(1)
       .max(100)
       .optional(),
+    checkpointExpectedHeadCommit: z
+      .string()
+      .trim()
+      .regex(/^[0-9a-f]{40}$/)
+      .optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -115,12 +120,13 @@ const agentInterventionSchema = z
     }
     if (
       value.role !== "behavior_verify" &&
-      value.checkpointAllowedDirtyPaths != null
+      (value.checkpointAllowedDirtyPaths != null ||
+        value.checkpointExpectedHeadCommit != null)
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["checkpointAllowedDirtyPaths"],
-        message: "只有 behavior_verify 可声明 checkpoint dirty path 例外",
+        path: ["role"],
+        message: "只有 behavior_verify 可声明 checkpoint 例外",
       });
     }
   });

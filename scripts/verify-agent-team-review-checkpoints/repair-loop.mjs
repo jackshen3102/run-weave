@@ -143,6 +143,9 @@ export function verifyEvidenceGatedRepairLoop(check) {
       resumeBody.includes("agentInterventions:") &&
       resumeBody.includes(
         "checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths",
+      ) &&
+      resumeBody.includes(
+        "checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit",
       ),
     resumeBody,
   );

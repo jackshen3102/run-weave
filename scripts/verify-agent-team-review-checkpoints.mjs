@@ -198,6 +198,24 @@ async function main() {
   );
   await service.assertReviewTargetUnchanged(state3, finalTarget);
   check("final-target-unchanged", true, "final target rejected");
+  await writeFile(path.join(root, "control-plane.txt"), "agent intervention\n");
+  await git(root, ["add", "control-plane.txt"]);
+  await git(root, [
+    "-c",
+    "user.name=Fixture",
+    "-c",
+    "user.email=fixture@runweave.local",
+    "commit",
+    "-m",
+    "control-plane update",
+  ]);
+  const interventionHead = await git(root, ["rev-parse", "HEAD"]);
+  await service.assertCheckpointHead(state3, [], interventionHead);
+  check(
+    "checkpoint-head-allows-explicit-descendant-agent-intervention-commit",
+    true,
+    interventionHead,
+  );
 
   const emptyRoot = await createRepo();
   const emptyPreflight = await service.preflight(emptyRoot);

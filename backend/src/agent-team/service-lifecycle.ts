@@ -535,6 +535,8 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
                 prepared.verification.generatedTestCaseFilePath,
               checkpointAllowedDirtyPaths:
                 input.checkpointAllowedDirtyPaths,
+              checkpointExpectedHeadCommit:
+                input.checkpointExpectedHeadCommit,
             },
           ],
           logs: [
@@ -548,6 +550,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
           triggerSummary: note,
           reviewScope: input.role === "code_review" ? "full" : undefined,
           checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
+          checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit,
         });
       }
 
@@ -588,6 +591,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
             caseIds: cases.map((item) => item.caseId),
             previousReason,
             checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
+            checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit,
           },
         ],
         logs: [
@@ -606,6 +610,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         log: "Agent intervention 重新派发",
         triggerSummary: note,
         checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
+        checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit,
       });
     });
   }
