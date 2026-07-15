@@ -49,15 +49,19 @@ export function buildUpdateEnv(
   paths,
   gitHead,
   appBackupPath = paths.appBackupPath,
+  sharedAppServer = null,
 ) {
-  return {
+  const env = {
     ...process.env,
     BROWSER_PROFILE_DIR: paths.profileDir,
     RUNWEAVE_CONFIG_FILE: paths.cliConfigPath,
     RUNWEAVE_CLI_BUNDLE_OUTFILE: paths.controlCliPath,
     RUNWEAVE_APP_BACKUP_PATH: appBackupPath,
-    RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: paths.appServerCloudSyncDir,
-    RUNWEAVE_APP_SERVER_HOME: paths.appServerHome,
+    RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR: sharedAppServer
+      ? path.join(sharedAppServer.homeDir, "cloud-sync")
+      : paths.appServerCloudSyncDir,
+    RUNWEAVE_APP_SERVER_HOME:
+      sharedAppServer?.homeDir ?? paths.appServerHome,
     RUNWEAVE_DESKTOP_CHANNEL: BETA_CHANNEL,
     RUNWEAVE_DESKTOP_INSTANCE_ID: paths.instanceId,
     RUNWEAVE_DESKTOP_CDP_PORT: String(paths.desktopCdpPort),
@@ -81,9 +85,32 @@ export function buildUpdateEnv(
     VITE_RUNWEAVE_CHANNEL: BETA_CHANNEL,
     VITE_RUNWEAVE_SOURCE_REVISION: gitHead ?? "unknown",
   };
+  for (const key of [
+    "RUNWEAVE_APP_SERVER_DISCOVERY",
+    "RUNWEAVE_APP_SERVER_TOKEN",
+    "RUNWEAVE_APP_SERVER_URL",
+    "RUNWEAVE_SHARED_APP_SERVER_LOCK_PATH",
+    "RUNWEAVE_SHARED_APP_SERVER_PID",
+  ]) {
+    delete env[key];
+  }
+  if (sharedAppServer) {
+    Object.assign(env, {
+      RUNWEAVE_APP_SERVER_DISCOVERY: "explicit",
+      RUNWEAVE_APP_SERVER_TOKEN: sharedAppServer.token,
+      RUNWEAVE_APP_SERVER_URL: sharedAppServer.url,
+      RUNWEAVE_SHARED_APP_SERVER_LOCK_PATH: sharedAppServer.lockPath,
+      RUNWEAVE_SHARED_APP_SERVER_PID: String(sharedAppServer.pid),
+    });
+  }
+  return env;
 }
 
-export function buildUpdateArgs(paths, args) {
+export function buildUpdateArgs(
+  paths,
+  args,
+  appServerHome = paths.appServerHome,
+) {
   return [
     path.join(paths.sourceRoot, "scripts", "runweave-update.mjs"),
     "--repo",
@@ -93,21 +120,27 @@ export function buildUpdateArgs(paths, args) {
     "--runtime-home",
     paths.runtimeHome,
     "--app-server-home",
-    paths.appServerHome,
+    appServerHome,
     "--state-path",
     paths.statePath,
     ...args,
   ];
 }
 
-export async function runUpdateProcess(paths, args, env, logPath) {
+export async function runUpdateProcess(
+  paths,
+  args,
+  env,
+  logPath,
+  appServerHome = paths.appServerHome,
+) {
   let logHandle = null;
   if (logPath) {
     await fs.mkdir(path.dirname(logPath), { recursive: true });
     logHandle = await fs.open(logPath, "a", 0o600);
   }
   return await new Promise((resolve, reject) => {
-    const child = spawn("node", buildUpdateArgs(paths, args), {
+    const child = spawn("node", buildUpdateArgs(paths, args, appServerHome), {
       cwd: paths.sourceRoot,
       env,
       stdio: ["inherit", "pipe", "pipe"],

@@ -57,6 +57,12 @@ export async function startDedicatedBeta({
     "--app-server",
     sharedAppServer ? "skip" : "update",
   ];
+  if (sharedAppServer) {
+    controlArgs.push(
+      "--shared-app-server-lock-path",
+      sharedAppServer.lockPath,
+    );
+  }
   const launchEnv = { ...process.env };
   launchEnv.RUNWEAVE_MANAGES_PACKAGED_BACKEND = sharedBackend
     ? "false"

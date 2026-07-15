@@ -16,6 +16,11 @@ import {
   runBetaPoolJanitor,
 } from "./beta-slot-pool.mjs";
 import { resolveBetaUpdateTargets } from "../runweave-update-core.mjs";
+import { resolveBetaPaths } from "../runweave-beta-state.mjs";
+import {
+  buildUpdateArgs,
+  buildUpdateEnv,
+} from "../runweave-beta-operations.mjs";
 import { validateManifest } from "./contracts.mjs";
 import {
   cleanupLegacyBeta,
@@ -36,6 +41,82 @@ function leaseOptions(homeDir, index, requestedSlotId = null) {
 }
 
 export async function verifyBetaSlotPool(temporaryHome) {
+  const betaPaths = resolveBetaPaths(
+    process.cwd(),
+    temporaryHome,
+    "pool-01",
+    "dvs-shared-binding",
+  );
+  const ambientAppServer = Object.fromEntries(
+    [
+      "RUNWEAVE_APP_SERVER_DISCOVERY",
+      "RUNWEAVE_APP_SERVER_HOME",
+      "RUNWEAVE_APP_SERVER_TOKEN",
+      "RUNWEAVE_APP_SERVER_URL",
+      "RUNWEAVE_SHARED_APP_SERVER_LOCK_PATH",
+      "RUNWEAVE_SHARED_APP_SERVER_PID",
+    ].map((key) => [key, process.env[key]]),
+  );
+  Object.assign(process.env, {
+    RUNWEAVE_APP_SERVER_DISCOVERY: "explicit",
+    RUNWEAVE_APP_SERVER_HOME: "/tmp/ambient-app-server",
+    RUNWEAVE_APP_SERVER_TOKEN: "ambient-token",
+    RUNWEAVE_APP_SERVER_URL: "http://127.0.0.1:6198",
+    RUNWEAVE_SHARED_APP_SERVER_LOCK_PATH:
+      "/tmp/ambient-app-server/app-server.lock.json",
+    RUNWEAVE_SHARED_APP_SERVER_PID: "6198",
+  });
+  try {
+    const isolatedEnv = buildUpdateEnv(betaPaths, "verify-revision");
+    assert.equal(isolatedEnv.RUNWEAVE_APP_SERVER_HOME, betaPaths.appServerHome);
+    assert.equal(isolatedEnv.RUNWEAVE_APP_SERVER_DISCOVERY, undefined);
+    assert.equal(isolatedEnv.RUNWEAVE_APP_SERVER_TOKEN, undefined);
+    assert.equal(isolatedEnv.RUNWEAVE_APP_SERVER_URL, undefined);
+    assert.equal(isolatedEnv.RUNWEAVE_SHARED_APP_SERVER_LOCK_PATH, undefined);
+    assert.equal(isolatedEnv.RUNWEAVE_SHARED_APP_SERVER_PID, undefined);
+
+    const sharedHome = path.join(temporaryHome, ".runweave", "app-server");
+    const sharedAppServer = {
+      homeDir: sharedHome,
+      lockPath: path.join(sharedHome, "app-server.lock.json"),
+      pid: 61_999,
+      token: "explicit-token",
+      url: "http://127.0.0.1:6199",
+    };
+    const sharedEnv = buildUpdateEnv(
+      betaPaths,
+      "verify-revision",
+      betaPaths.appBackupPath,
+      sharedAppServer,
+    );
+    assert.equal(sharedEnv.RUNWEAVE_APP_SERVER_HOME, sharedHome);
+    assert.equal(
+      sharedEnv.RUNWEAVE_APP_SERVER_CLOUD_SYNC_DIR,
+      path.join(sharedHome, "cloud-sync"),
+    );
+    assert.equal(sharedEnv.RUNWEAVE_APP_SERVER_DISCOVERY, "explicit");
+    assert.equal(sharedEnv.RUNWEAVE_APP_SERVER_TOKEN, "explicit-token");
+    assert.equal(sharedEnv.RUNWEAVE_APP_SERVER_URL, sharedAppServer.url);
+    assert.equal(
+      sharedEnv.RUNWEAVE_SHARED_APP_SERVER_LOCK_PATH,
+      sharedAppServer.lockPath,
+    );
+    assert.equal(sharedEnv.RUNWEAVE_SHARED_APP_SERVER_PID, "61999");
+    const sharedArgs = buildUpdateArgs(betaPaths, [], sharedHome);
+    assert.equal(
+      sharedArgs[sharedArgs.indexOf("--app-server-home") + 1],
+      sharedHome,
+    );
+  } finally {
+    for (const [key, value] of Object.entries(ambientAppServer)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+
   const legacyManifest = {
     schemaVersion: 1,
     devSessionId: "dvs-legacy-beta",

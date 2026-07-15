@@ -30,6 +30,7 @@ import {
   BETA_SLOT_POLICY,
   applyBetaSlotRetention,
 } from "./dev-session/beta-slot-pool.mjs";
+import { assertLoopbackUrl } from "./dev-session/contracts.mjs";
 import {
   cleanupLegacyBeta,
   inventoryLegacyBeta,
@@ -46,6 +47,7 @@ function parseControlArgs(args) {
     operationId: null,
     confirm: null,
     instanceProvided: false,
+    sharedAppServerLockPath: null,
   };
   const forwarded = [];
   for (let index = 0; index < args.length; index += 1) {
@@ -57,6 +59,7 @@ function parseControlArgs(args) {
       ["--terminal-browser-cdp-port", "terminalBrowserCdpPort"],
       ["--operation", "operationId"],
       ["--confirm", "confirm"],
+      ["--shared-app-server-lock-path", "sharedAppServerLockPath"],
     ]).get(arg);
     if (!option) {
       forwarded.push(arg);
@@ -80,7 +83,42 @@ function parseControlArgs(args) {
       throw new Error(`invalid Beta CDP port: ${port}`);
     }
   }
+  if (
+    options.sharedAppServerLockPath &&
+    !path.isAbsolute(options.sharedAppServerLockPath)
+  ) {
+    throw new Error("shared App Server lock path must be absolute");
+  }
   return { forwarded, options };
+}
+
+async function resolveSharedAppServer(lockPath) {
+  if (!lockPath) {
+    return null;
+  }
+  const resolvedLockPath = path.resolve(lockPath);
+  const homeDir = path.dirname(resolvedLockPath);
+  const lock = await readJson(resolvedLockPath);
+  const token = await fs
+    .readFile(path.join(homeDir, "app-server-token"), "utf8")
+    .then((value) => value.trim())
+    .catch(() => "");
+  if (
+    !Number.isInteger(lock?.pid) ||
+    lock.pid <= 0 ||
+    !Number.isInteger(lock?.port) ||
+    lock.port <= 0 ||
+    !token
+  ) {
+    throw new Error("shared App Server identity is invalid");
+  }
+  return {
+    homeDir,
+    lockPath: resolvedLockPath,
+    pid: lock.pid,
+    token,
+    url: assertLoopbackUrl(`http://${lock.host}:${lock.port}`),
+  };
 }
 
 async function withBetaLock(paths, operation) {
@@ -318,12 +356,27 @@ async function migrateLegacyDefault(paths) {
   console.log(JSON.stringify(result, null, 2));
 }
 
-async function update(paths, args, { throwOnFailure = false } = {}) {
+async function update(
+  paths,
+  args,
+  { throwOnFailure = false, sharedAppServer = null } = {},
+) {
   const dryRun = args.includes("--dry-run");
   const gitHead = await getGitHead(paths.sourceRoot);
-  const env = buildUpdateEnv(paths, gitHead);
+  const env = buildUpdateEnv(
+    paths,
+    gitHead,
+    paths.appBackupPath,
+    sharedAppServer,
+  );
   if (dryRun) {
-    const result = await runUpdateProcess(paths, args, env, null);
+    const result = await runUpdateProcess(
+      paths,
+      args,
+      env,
+      null,
+      sharedAppServer?.homeDir,
+    );
     if (!result.ok) {
       process.exitCode = result.code;
     }
@@ -345,8 +398,14 @@ async function update(paths, args, { throwOnFailure = false } = {}) {
   const result = await runUpdateProcess(
     paths,
     args,
-    buildUpdateEnv(paths, gitHead, baseline.app.backupPath),
+    buildUpdateEnv(
+      paths,
+      gitHead,
+      baseline.app.backupPath,
+      sharedAppServer,
+    ),
     logPath,
+    sharedAppServer?.homeDir,
   );
   if (!result.ok) {
     const cause = new Error(`update process exited with code ${result.code}`);
@@ -611,7 +670,14 @@ async function main() {
     return;
   }
   if (command === "update") {
-    await withBetaLock(paths, () => update(paths, forwarded));
+    const sharedAppServer = await resolveSharedAppServer(
+      options.sharedAppServerLockPath,
+    );
+    await withBetaLock(paths, () =>
+      update(paths, forwarded, {
+        sharedAppServer,
+      }),
+    );
     return;
   }
   if (command === "status") {
