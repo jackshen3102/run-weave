@@ -235,6 +235,12 @@ export async function ensureTerminalRuntime(
             target,
             buildAgentResumeCommand(agentThreadToResume),
           );
+          currentSession =
+            (await options.terminalSessionManager.updateSessionThreadId(
+              currentSession.id,
+              agentThreadToResume.threadId,
+              agentThreadToResume.provider,
+            )) ?? currentSession;
         }
       }
       await options.tmuxOutputWatcher?.watchSession(currentSession);
