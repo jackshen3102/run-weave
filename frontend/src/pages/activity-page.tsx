@@ -181,15 +181,15 @@ export function ActivityPage({
   const timelineComputed = timelineQuery.data?.pages[0]?.computed;
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <div className="grid min-h-screen grid-cols-[220px_minmax(0,1fr)] max-lg:grid-cols-1">
+    <main className="h-dvh overflow-hidden bg-background text-foreground">
+      <div className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]">
         <ActivitySidebar
           view={view}
           onSelectView={selectView}
           currentSourceCount={currentSourceCount}
           sourceCount={currentSources.length}
         />
-        <section className="min-w-0">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <ActivityHeader
             search={search}
             runtimeChannel={runtimeChannel}
@@ -197,7 +197,13 @@ export function ActivityPage({
             onSearchChange={updateSearch}
             onRuntimeChannelChange={updateRuntimeChannel}
           />
-          <div className={view === "terminals" || view === "runs" ? "p-4" : "p-7"}>
+          <div
+            className={
+              view === "terminals" || view === "runs"
+                ? "min-h-0 flex-1 overflow-hidden p-4 max-md:p-2"
+                : "min-h-0 flex-1 overflow-auto p-7 max-md:p-3"
+            }
+          >
             {view === "terminals" ? (
               <TerminalHistoryView
                 apiBase={apiBase}

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, ChevronDown, ChevronRight, CircleDot, Terminal } from "lucide-react";
 import type { ActivityFactDto } from "@runweave/shared/activity";
+import { Button } from "../../components/ui/button";
 import { fetchActivityContent } from "../../services/activity";
 
 export interface ActivityInteraction {
@@ -177,37 +178,45 @@ export function ActivityInteractionCard({
 
   return (
     <article className="border-b border-border/70 last:border-b-0">
-      <button type="button" className="w-full px-5 py-4 text-left" onClick={onToggle}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex min-w-0 gap-3">
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-              <Terminal className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="max-w-3xl truncate text-sm font-semibold">
-                  {question ?? (queryContent.isPending && expanded ? "Loading question…" : "User request")}
-                </h3>
-                <span className={`rounded-full px-2 py-0.5 text-[0.68rem] font-medium ${
-                  status === "Completed"
-                    ? "bg-emerald-500/15 text-emerald-300"
-                    : status === "In progress"
-                      ? "bg-amber-500/15 text-amber-300"
-                      : "bg-destructive/15 text-destructive"
-                }`}>
-                  {status}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {interaction.terminalSessionId ? `Terminal ${interaction.terminalSessionId}` : "Terminal unavailable"}
-                {` · ${agentLabel(interaction)}`}
-                {duration ? ` · ${duration}` : ""}
-              </p>
+      <div className="flex select-text items-start justify-between gap-4 px-5 py-4">
+        <div className="flex min-w-0 gap-3">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <Terminal className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="max-w-3xl truncate text-sm font-semibold">
+                {question ?? (queryContent.isPending && expanded ? "Loading question…" : "User request")}
+              </h3>
+              <span className={`rounded-full px-2 py-0.5 text-[0.68rem] font-medium ${
+                status === "Completed"
+                  ? "bg-emerald-500/15 text-emerald-300"
+                  : status === "In progress"
+                    ? "bg-amber-500/15 text-amber-300"
+                    : "bg-destructive/15 text-destructive"
+              }`}>
+                {status}
+              </span>
             </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {interaction.terminalSessionId ? `Terminal ${interaction.terminalSessionId}` : "Terminal unavailable"}
+              {` · ${agentLabel(interaction)}`}
+              {duration ? ` · ${duration}` : ""}
+            </p>
           </div>
-          {expanded ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
         </div>
-      </button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          aria-label={expanded ? "Collapse interaction details" : "Expand interaction details"}
+          aria-expanded={expanded}
+          onClick={onToggle}
+        >
+          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </Button>
+      </div>
 
       {expanded ? (
         <div className="border-t border-border/50 bg-muted/15 px-5 py-4">

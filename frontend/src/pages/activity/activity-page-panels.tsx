@@ -1,16 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  Activity,
-  ArrowLeft,
-  Clock3,
-  Database,
-  FileClock,
-  History,
-  Search,
-  ShieldCheck,
-  Unplug,
-  Users,
-} from "lucide-react";
+import { ArrowLeft, ChevronRight, FileClock, Search } from "lucide-react";
 import type {
   ActivityDataPolicyDto,
   ActivityFactDto,
@@ -18,34 +7,24 @@ import type {
   ActivitySourceDto,
   ActivityTimelineSelector,
 } from "@runweave/shared/activity";
+import { terminalPreviewFormatBytes } from "@runweave/shared/terminal-preview-core";
 import { Button } from "../../components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { ActivityPolicyOperations } from "./activity-policy-operations";
+import { ACTIVITY_NAVIGATION, type ActivityView } from "./activity-navigation";
 import {
   ActivityInteractionCard,
   type ActivityInteraction,
 } from "./activity-interactions";
 
-export type ActivityView =
-  | "terminals"
-  | "runs"
-  | "facts"
-  | "timeline"
-  | "sources"
-  | "policy";
-
-const NAVIGATION: Array<{
-  id: ActivityView;
-  label: string;
-  icon: typeof Activity;
-  group: "Work history" | "Raw data" | "Data";
-}> = [
-  { id: "terminals", label: "Terminal History", icon: History, group: "Work history" },
-  { id: "runs", label: "Multi-Agent Runs", icon: Users, group: "Work history" },
-  { id: "facts", label: "Events", icon: Database, group: "Raw data" },
-  { id: "timeline", label: "Timeline", icon: Clock3, group: "Raw data" },
-  { id: "sources", label: "Sources", icon: Unplug, group: "Raw data" },
-  { id: "policy", label: "Data Policy", icon: ShieldCheck, group: "Data" },
-];
+export type { ActivityView } from "./activity-navigation";
 
 function formatTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
@@ -56,7 +35,13 @@ function formatTime(value: string): string {
   }).format(new Date(value));
 }
 
-function FactRow({ fact, onSelect }: { fact: ActivityFactDto; onSelect?: (fact: ActivityFactDto) => void }) {
+function FactRow({
+  fact,
+  onSelect,
+}: {
+  fact: ActivityFactDto;
+  onSelect?: (fact: ActivityFactDto) => void;
+}) {
   const scope =
     fact.scope.threadId ??
     fact.scope.runId ??
@@ -64,38 +49,45 @@ function FactRow({ fact, onSelect }: { fact: ActivityFactDto; onSelect?: (fact: 
     fact.scope.terminalSessionId ??
     "unlinked";
   return (
-    <article className="border-b border-border/70 px-5 py-4 last:border-b-0">
-      <button type="button" className="w-full text-left" onClick={() => onSelect?.(fact)}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-border bg-muted/70 px-2 py-0.5 text-[0.68rem] font-medium text-muted-foreground">
-                Recorded
-              </span>
-              <h3 className="truncate text-sm font-semibold text-foreground">
-                {fact.eventName}
-              </h3>
-            </div>
-            <p className="mt-2 truncate text-xs text-muted-foreground">
-              {scope}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2 text-[0.68rem] text-muted-foreground">
-              <span className="rounded-full border border-border/70 px-2 py-1">
-                {fact.runtime.channel}
-              </span>
-              <span className="rounded-full border border-border/70 px-2 py-1">
-                {fact.runtime.surface}
-              </span>
-              <span className="rounded-full border border-border/70 px-2 py-1">
-                offset {fact.activityOffset}
-              </span>
-            </div>
-          </div>
-          <time className="shrink-0 text-xs text-muted-foreground">
-            {formatTime(fact.occurredAt)}
-          </time>
+    <article className="flex select-text items-start justify-between gap-4 border-b border-border/70 px-5 py-4 last:border-b-0">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-border bg-muted/70 px-2 py-0.5 text-[0.68rem] font-medium text-muted-foreground">
+            Recorded
+          </span>
+          <h3 className="truncate text-sm font-semibold text-foreground">
+            {fact.eventName}
+          </h3>
         </div>
-      </button>
+        <p className="mt-2 truncate text-xs text-muted-foreground">{scope}</p>
+        <div className="mt-3 flex flex-wrap gap-2 text-[0.68rem] text-muted-foreground">
+          <span className="rounded-full border border-border/70 px-2 py-1">
+            {fact.runtime.channel}
+          </span>
+          <span className="rounded-full border border-border/70 px-2 py-1">
+            {fact.runtime.surface}
+          </span>
+          <span className="rounded-full border border-border/70 px-2 py-1">
+            offset {fact.activityOffset}
+          </span>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-start gap-2">
+        <time className="pt-2 text-xs text-muted-foreground">
+          {formatTime(fact.occurredAt)}
+        </time>
+        {onSelect ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            aria-label={`Open ${fact.eventName} event details`}
+            onClick={() => onSelect(fact)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        ) : null}
+      </div>
     </article>
   );
 }
@@ -120,8 +112,8 @@ export function ActivitySidebar({
   sourceCount: number;
 }) {
   return (
-    <aside className="border-r border-border/70 bg-card/55 p-4 max-lg:border-b max-lg:border-r-0">
-      <div className="flex items-center gap-3 px-2 py-3">
+    <aside className="min-h-0 overflow-y-auto border-r border-border/70 bg-card/55 p-4 max-md:overflow-hidden max-md:border-b max-md:border-r-0 max-md:px-3 max-md:py-2">
+      <div className="flex items-center gap-3 px-2 py-3 max-md:hidden">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[hsl(var(--primary))] text-sm font-bold text-primary-foreground">
           R
         </div>
@@ -130,35 +122,40 @@ export function ActivitySidebar({
           <p className="text-[0.68rem] text-muted-foreground">Activity</p>
         </div>
       </div>
-      <nav className="mt-6 grid gap-1" aria-label="Activity views">
+      <nav
+        className="mt-6 grid gap-1 max-md:mt-0 max-md:flex max-md:gap-2 max-md:overflow-x-auto max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden"
+        aria-label="Activity views"
+      >
         {(["Work history", "Raw data", "Data"] as const).map((group) => (
-          <div key={group} className="mb-3 grid gap-1">
-            <p className="px-3 pb-1 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <div key={group} className="mb-3 grid gap-1 max-md:contents">
+            <p className="px-3 pb-1 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground max-md:hidden">
               {group}
             </p>
-            {NAVIGATION.filter((item) => item.group === group).map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-current={view === item.id ? "page" : undefined}
-                  className={`flex h-10 items-center gap-3 rounded-lg px-3 text-left text-sm ${
-                    view === item.id
-                      ? "bg-[hsl(var(--primary))]/12 text-foreground"
-                      : "text-muted-foreground hover:bg-muted/60"
-                  }`}
-                  onClick={() => onSelectView(item.id)}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </button>
-              );
-            })}
+            {ACTIVITY_NAVIGATION.filter((item) => item.group === group).map(
+              (item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-current={view === item.id ? "page" : undefined}
+                    className={`flex h-10 items-center gap-3 whitespace-nowrap rounded-lg px-3 text-left text-sm max-md:shrink-0 ${
+                      view === item.id
+                        ? "bg-[hsl(var(--primary))]/12 text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60"
+                    }`}
+                    onClick={() => onSelectView(item.id)}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </button>
+                );
+              },
+            )}
           </div>
         ))}
       </nav>
-      <div className="mt-8 border-t border-border/70 px-2 pt-4 text-xs text-muted-foreground">
+      <div className="mt-8 border-t border-border/70 px-2 pt-4 text-xs text-muted-foreground max-md:hidden">
         {currentSourceCount} of {sourceCount} sources current
       </div>
     </aside>
@@ -179,21 +176,27 @@ export function ActivityHeader({
   onRuntimeChannelChange: (value: ActivityRuntimeChannel | "") => void;
 }) {
   return (
-    <header className="flex min-h-16 items-center justify-between gap-4 border-b border-border/70 px-7 py-3 max-md:flex-col max-md:items-stretch">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={onNavigateHome}>
+    <header className="flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-border/70 px-7 py-3 max-lg:flex-col max-lg:items-stretch max-md:gap-2 max-md:px-4 max-md:py-2">
+      <div className="flex min-w-0 items-center gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="max-md:h-10 max-md:w-10 max-md:shrink-0 max-md:p-0"
+          onClick={onNavigateHome}
+          aria-label="Back home"
+        >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Home
+          <span className="max-md:sr-only">Home</span>
         </Button>
-        <div>
+        <div className="min-w-0">
           <h1 className="font-semibold">Activity</h1>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground max-md:hidden">
             Terminal sessions, questions, and outcomes
           </p>
         </div>
       </div>
       <div className="flex gap-2">
-        <label className="flex h-9 min-w-72 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm max-md:min-w-0 max-md:flex-1">
+        <label className="flex h-9 min-w-72 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm max-lg:min-w-0 max-lg:flex-1">
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
             className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
@@ -202,19 +205,30 @@ export function ActivityHeader({
             placeholder="Search event, Thread, project"
           />
         </label>
-        <select
-          className="h-9 rounded-lg border border-border bg-card px-3 text-sm"
-          value={runtimeChannel}
-          onChange={(event) =>
-            onRuntimeChannelChange(event.target.value as ActivityRuntimeChannel | "")
+        <Select
+          value={runtimeChannel || "all"}
+          onValueChange={(value) =>
+            onRuntimeChannelChange(
+              value === "all" ? "" : (value as ActivityRuntimeChannel),
+            )
           }
         >
-          <option value="">All runtimes</option>
-          <option value="stable">Stable</option>
-          <option value="beta">Beta</option>
-          <option value="dev">Dev</option>
-          <option value="external">External</option>
-        </select>
+          <SelectTrigger
+            className="h-9 w-36 bg-card max-md:w-28"
+            aria-label="Runtime"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">All runtimes</SelectItem>
+              <SelectItem value="stable">Stable</SelectItem>
+              <SelectItem value="beta">Beta</SelectItem>
+              <SelectItem value="dev">Dev</SelectItem>
+              <SelectItem value="external">External</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </div>
     </header>
   );
@@ -241,7 +255,8 @@ export function RecentActivityPanel({
         <div>
           <h2 className="font-semibold">Recent activity</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Questions and responses grouped by their recorded terminal and thread
+            Questions and responses grouped by their recorded terminal and
+            thread
           </p>
         </div>
         <span className="text-sm tabular-nums text-muted-foreground">
@@ -303,11 +318,17 @@ export function FactsPanel({
       ) : facts.length === 0 ? (
         <EmptyPanel message="No recorded facts match these filters." />
       ) : (
-        facts.map((fact) => <FactRow key={fact.eventId} fact={fact} onSelect={onSelectFact} />)
+        facts.map((fact) => (
+          <FactRow key={fact.eventId} fact={fact} onSelect={onSelectFact} />
+        ))
       )}
       {hasNextPage ? (
         <div className="border-t border-border/70 p-4 text-center">
-          <Button variant="outline" onClick={onLoadMore} disabled={isFetchingNextPage}>
+          <Button
+            variant="outline"
+            onClick={onLoadMore}
+            disabled={isFetchingNextPage}
+          >
             {isFetchingNextPage ? "Loading…" : "Load more"}
           </Button>
         </div>
@@ -346,19 +367,28 @@ export function TimelinePanel({
             : ""}
         </p>
       ) : null}
-      <div className="mt-5 flex gap-2">
-        <select
-          className="h-9 rounded-lg border border-border bg-background px-3 text-sm"
+      <div className="mt-5 flex gap-2 max-sm:flex-col">
+        <Select
           value={timelineType}
-          onChange={(event) =>
-            onTimelineTypeChange(event.target.value as ActivityTimelineSelector["type"])
+          onValueChange={(value: ActivityTimelineSelector["type"]) =>
+            onTimelineTypeChange(value)
           }
         >
-          <option value="interaction">Interaction</option>
-          <option value="correlation">Correlation</option>
-          <option value="thread">Thread</option>
-          <option value="run">Run</option>
-        </select>
+          <SelectTrigger
+            className="h-9 w-40 max-sm:w-full"
+            aria-label="Timeline type"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="interaction">Interaction</SelectItem>
+              <SelectItem value="correlation">Correlation</SelectItem>
+              <SelectItem value="thread">Thread</SelectItem>
+              <SelectItem value="run">Run</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         <input
           className="h-9 flex-1 rounded-lg border border-border bg-background px-3 text-sm outline-none"
           value={timelineId}
@@ -385,28 +415,26 @@ export function TimelineFactsList({
   onLoadMore: () => void;
 }) {
   return (
-      <div className="mt-5 overflow-hidden rounded-lg border border-border/70">
-        {!deferredTimelineId ? (
-          <EmptyPanel message="Enter an explicit ID to open a timeline." />
-        ) : facts.length === 0 ? (
-          <EmptyPanel message="No facts are linked to this ID." />
-        ) : (
-          facts.map((fact) => (
-            <FactRow key={fact.eventId} fact={fact} />
-          ))
-        )}
-        {hasNextPage ? (
-          <div className="border-t border-border/70 p-4 text-center">
-            <Button
-              variant="outline"
-              onClick={onLoadMore}
-              disabled={isFetchingNextPage}
-            >
-              {isFetchingNextPage ? "Loading…" : "Load more"}
-            </Button>
-          </div>
-        ) : null}
-      </div>
+    <div className="mt-5 overflow-hidden rounded-lg border border-border/70">
+      {!deferredTimelineId ? (
+        <EmptyPanel message="Enter an explicit ID to open a timeline." />
+      ) : facts.length === 0 ? (
+        <EmptyPanel message="No facts are linked to this ID." />
+      ) : (
+        facts.map((fact) => <FactRow key={fact.eventId} fact={fact} />)
+      )}
+      {hasNextPage ? (
+        <div className="border-t border-border/70 p-4 text-center">
+          <Button
+            variant="outline"
+            onClick={onLoadMore}
+            disabled={isFetchingNextPage}
+          >
+            {isFetchingNextPage ? "Loading…" : "Load more"}
+          </Button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -444,17 +472,22 @@ export function SourcesPanel({
             <div className="min-w-0">
               <p className="truncate font-medium">{source.producerName}</p>
               <p className="mt-1 truncate text-xs text-muted-foreground">
-                {source.runtimeChannel} · {source.runtimeSurface} · {source.producerVersion}
+                {source.runtimeChannel} · {source.runtimeSurface} ·{" "}
+                {source.producerVersion}
               </p>
               <p className="mt-1 break-all text-xs text-muted-foreground">
-                instance {source.producerInstanceId} · boot {source.producerBootId}
+                instance {source.producerInstanceId} · boot{" "}
+                {source.producerBootId}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {source.gapRanges.length === 0
                   ? "no observed gap ranges"
-                  : source.gapRanges.map((gap) =>
-                      `${gap.firstSequence}-${gap.lastSequence} ${gap.status}${gap.reasonCode ? ` (${gap.reasonCode})` : ""}`,
-                    ).join(" · ")}
+                  : source.gapRanges
+                      .map(
+                        (gap) =>
+                          `${gap.firstSequence}-${gap.lastSequence} ${gap.status}${gap.reasonCode ? ` (${gap.reasonCode})` : ""}`,
+                      )
+                      .join(" · ")}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {source.rejectionCount} rejections
@@ -466,9 +499,13 @@ export function SourcesPanel({
                   : " · no error"}
               </p>
             </div>
-            <span className="tabular-nums">{source.highestContiguousSequence}/{source.highestSeenSequence}</span>
+            <span className="tabular-nums">
+              {source.highestContiguousSequence}/{source.highestSeenSequence}
+            </span>
             <span>{source.openGapCount} gaps</span>
-            <span className="text-xs text-muted-foreground">{formatTime(source.lastSeenAt)}</span>
+            <span className="text-xs text-muted-foreground">
+              {formatTime(source.lastSeenAt)}
+            </span>
           </article>
         ))
       )}
@@ -489,14 +526,41 @@ export function PolicyPanel({
     <>
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {[
-          ["Fact retention", `${policy?.factRetentionDays ?? 30} days`, "Recorded metadata"],
-          ["Content retention", `${policy?.contentRetentionDays ?? 7} days`, "Query, response, command and excerpt"],
-          ["SQLite", policy?.journalMode ?? "unavailable", policy?.databasePathLabel ?? "Local database"],
-          ["Database size", `${policy?.databaseBytes ?? 0} bytes`, "Computed from the shared database file"],
-          ["Delete jobs", String(policy?.pendingDeleteJobs ?? 0), "Pending, running or blocked"],
-          ["Schema", String(policy?.schemaVersion ?? 0), "Compatibility major and additive minor"],
+          [
+            "Fact retention",
+            `${policy?.factRetentionDays ?? 30} days`,
+            "Recorded metadata",
+          ],
+          [
+            "Content retention",
+            `${policy?.contentRetentionDays ?? 7} days`,
+            "Query, response, command and excerpt",
+          ],
+          [
+            "SQLite",
+            policy?.journalMode ?? "unavailable",
+            policy?.databasePathLabel ?? "Local database",
+          ],
+          [
+            "Database size",
+            terminalPreviewFormatBytes(policy?.databaseBytes ?? 0),
+            "Computed from the shared database file",
+          ],
+          [
+            "Delete jobs",
+            String(policy?.pendingDeleteJobs ?? 0),
+            "Pending, running or blocked",
+          ],
+          [
+            "Schema",
+            String(policy?.schemaVersion ?? 0),
+            "Compatibility major and additive minor",
+          ],
         ].map(([label, value, detail]) => (
-          <article key={label} className="rounded-xl border border-border/70 bg-card/70 p-5">
+          <article
+            key={label}
+            className="rounded-xl border border-border/70 bg-card/70 p-5"
+          >
             <FileClock className="h-5 w-5 text-muted-foreground" />
             <p className="mt-4 text-xs text-muted-foreground">{label}</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
