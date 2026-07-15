@@ -91,6 +91,7 @@ const prepareTerminalAgentSchema = z
     command: z.string().trim().min(1).optional(),
     commandLine: z.string().trim().min(1).max(8_000).optional(),
     args: z.array(z.string()).optional(),
+    resumeThreadId: z.string().trim().min(1).optional(),
     timeoutMs: z.number().int().min(0).max(600_000).optional(),
   })
   .strict();

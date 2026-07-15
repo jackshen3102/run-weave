@@ -5,6 +5,7 @@ import type {
   AgentTeamRun,
   AgentTeamTerminal,
   AgentTeamVerificationConfig,
+  AgentTeamWorker,
   AgentTeamWorkerRole,
   CreateAgentTeamRunRequest,
   ProposeAgentTeamSplitRequest,
@@ -343,6 +344,71 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
         error,
       });
     }
+  }
+
+  protected async submitWorkerDispatchPrompt(
+    run: AgentTeamRun,
+    session: TerminalSessionRecord,
+    terminal: AgentTeamTerminal,
+    worker: AgentTeamWorker,
+    prompt: string,
+  ): Promise<void> {
+    if (!worker.panelId) {
+      throw new AgentTeamError(409, `${worker.role} worker pane 不存在`);
+    }
+    const expectedAgent = getAgentForCommand(terminal.command ?? null);
+    const panel = this.terminalSessionManager.getPanel(worker.panelId);
+    const panelAgent = panel
+      ? (panel.terminalState?.agent ?? getAgentForCommand(panel.activeCommand))
+      : null;
+    if (
+      expectedAgent &&
+      panel?.status === "running" &&
+      panel.terminalState?.state === "agent_idle" &&
+      panelAgent === expectedAgent
+    ) {
+      await this.promptSender.sendPromptToPane(session, prompt, {
+        panelId: worker.panelId,
+      });
+      return;
+    }
+
+    const resumableThreadId =
+      expectedAgent &&
+      panel?.status === "running" &&
+      panel.terminalState?.state === "shell_idle" &&
+      panel.lastThreadProvider === expectedAgent &&
+      panel.lastThreadStatus === "idle"
+        ? panel.lastThreadId?.trim()
+        : null;
+    if (resumableThreadId) {
+      await this.agentLaunch.submitAgentResume(session, terminal, {
+        panelId: worker.panelId,
+        threadId: resumableThreadId,
+        prompt,
+      });
+      return;
+    }
+
+    const hasExistingWorkerContext = Boolean(
+      run.consumedWorkerDispatches?.some(
+        (receipt) => receipt.role === worker.role,
+      ) ||
+        panel?.threadId ||
+        panel?.lastThreadId ||
+        panelAgent,
+    );
+    if (hasExistingWorkerContext) {
+      throw new AgentTeamError(
+        409,
+        `${worker.role} worker 的既有 agent thread 当前不可复用，禁止新开 thread 丢失上下文`,
+      );
+    }
+
+    await this.agentLaunch.submitAgentLaunch(session, terminal, {
+      panelId: worker.panelId,
+      prompt,
+    });
   }
 
   protected async restoreMainPaneFocus(

@@ -8,7 +8,6 @@ import { buildWorkerRecheckPrompt } from "./prompt-builders";
 import { incrementRepairAttempts } from "./repair-loop";
 import { acceptanceCasesForRole } from "./service-acceptance-policy";
 import { AgentTeamExecutionService } from "./service-execution";
-import { resolveAgentTeamTerminal } from "./service-run-policy";
 import {
   createActiveWorkerDispatch,
   findWorkerByRole,
@@ -239,12 +238,14 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       triggerSummary: options.triggerSummary ?? null,
       reviewChallenge: options.reviewChallenge ?? null,
     });
-    const terminal = resolveAgentTeamTerminal(run.terminal);
     try {
-      await this.agentLaunch.submitAgentLaunch(session, terminal, {
-        panelId: worker.panelId,
-        prompt: workerPrompt,
-      });
+      await this.submitWorkerDispatchPrompt(
+        persistedRun,
+        session,
+        run.terminal,
+        worker,
+        workerPrompt,
+      );
     } catch (error) {
       return this.pauseForWorkerDispatchError(
         {

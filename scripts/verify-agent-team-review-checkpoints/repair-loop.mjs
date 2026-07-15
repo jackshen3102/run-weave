@@ -74,12 +74,12 @@ export function verifyEvidenceGatedRepairLoop(check) {
     "utf8",
   );
   check(
-    "repair-bounce-launches-formal-prompt-as-initial-query",
-    bounceBody.includes("this.agentLaunch.submitAgentLaunch") &&
-      bounceBody.includes("prompt: bouncePrompt") &&
+    "repair-bounce-reuses-fixed-worker-thread",
+    bounceBody.includes("this.submitWorkerDispatchPrompt(") &&
+      bounceBody.includes("bouncePrompt") &&
       bounceBody.indexOf("persistedRun = await this.updateRun") <
-        bounceBody.indexOf("this.agentLaunch.submitAgentLaunch") &&
-      !bounceBody.includes("this.promptSender.sendPromptToPane"),
+        bounceBody.indexOf("this.submitWorkerDispatchPrompt(") &&
+      !bounceBody.includes("this.agentLaunch.submitAgentLaunch"),
     bounceBody.slice(0, 4_000),
   );
   check(

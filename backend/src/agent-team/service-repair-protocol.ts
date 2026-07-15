@@ -88,12 +88,12 @@ export abstract class AgentTeamRepairProtocolService extends AgentTeamSerialDisp
       ],
     });
     try {
-      await this.promptSender.sendPromptToPane(
+      await this.submitWorkerDispatchPrompt(
+        correctionRun,
         session,
+        run.terminal,
+        worker,
         buildPrompt(correctionRun),
-        {
-          panelId: worker.panelId,
-        },
       );
     } catch (error) {
       return this.pauseForRepairProtocolError(
