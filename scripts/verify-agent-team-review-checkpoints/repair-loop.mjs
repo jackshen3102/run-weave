@@ -67,10 +67,7 @@ export function verifyEvidenceGatedRepairLoop(check) {
     lifecycleSource.indexOf("async decideFinding"),
   );
   const supportSource = readFileSync(
-    new URL(
-      "../../backend/src/agent-team/service-support.ts",
-      import.meta.url,
-    ),
+    new URL("../../backend/src/agent-team/service-support.ts", import.meta.url),
     "utf8",
   );
   const pauseDispatchBody = supportSource.slice(
@@ -101,6 +98,16 @@ export function verifyEvidenceGatedRepairLoop(check) {
     completionSource.slice(0, 20_000),
   );
   check(
+    "behavior-checkpoint-contract-is-scoped-to-dispatch",
+    completionSource.includes(
+      "latest.activeWorkerDispatch?.verifiedCheckpointCommit",
+    ) &&
+      completionSource.includes(
+        "latest.activeWorkerDispatch?.checkpointAllowedDirtyPaths",
+      ),
+    completionSource.slice(0, 20_000),
+  );
+  check(
     "repair-not-reproduced-review-finding-returns-to-reviewer",
     completionSource.includes(
       'handoff.status === "reviewer_reproduction_required"',
@@ -112,11 +119,11 @@ export function verifyEvidenceGatedRepairLoop(check) {
   );
   check(
     "repair-human-resume-creates-fresh-dispatch-before-reactivating-worker",
-      resumeBody.includes("activeWorkerRole: null") &&
+    resumeBody.includes("activeWorkerRole: null") &&
       resumeBody.includes("workers: setActiveWorker(run.workers, null)") &&
       resumeBody.includes("run.consumedWorkerDispatches?.at(-1)?.role") &&
       resumeBody.includes('lastRepairSourceRole === "behavior_verify"') &&
-      resumeBody.includes('repairKey: `behavior_verify:${item.caseId}`') &&
+      resumeBody.includes("repairKey: `behavior_verify:${item.caseId}`") &&
       resumeBody.includes("repairCycles: resumedRepairCycles") &&
       pauseDispatchBody.includes("activeWorkerRole: role") &&
       resumeBody.includes('activeWorkerRole === "code"') &&
@@ -132,7 +139,7 @@ export function verifyEvidenceGatedRepairLoop(check) {
     "main-agent-intervention-is-explicit-and-cannot-dispose-findings",
     resumeBody.includes("async interveneRun(") &&
       resumeBody.includes(
-        'run.phase !== "executing" || run.status !== "need_human"',
+        'run.status !== "need_human" && !supersedingActiveDispatch',
       ) &&
       resumeBody.includes("if (run.pendingFindingDecision)") &&
       resumeBody.includes("Agent 不得代替人工 disposition") &&
@@ -146,7 +153,8 @@ export function verifyEvidenceGatedRepairLoop(check) {
       ) &&
       resumeBody.includes(
         "checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit",
-      ),
+      ) &&
+      resumeBody.includes("Agent intervention 覆盖当前"),
     resumeBody,
   );
   check(
@@ -251,12 +259,28 @@ export function verifyEvidenceGatedRepairLoop(check) {
   );
   const behaviorDispatchRun = {
     ...runtimeRun,
+    reviewCheckpoint: {
+      mode: "local_commit",
+      repoRoot: "/tmp/repo",
+      originalBranch: "main",
+      branch: "runweave/fixture",
+      taskBaseCommit: "a".repeat(40),
+      lastReviewedCommit: "b".repeat(40),
+      pendingReview: null,
+      checkpoints: [],
+      finalReviewedCommit: null,
+    },
     activeWorkerRole: "behavior_verify",
     activeWorkerDispatch: createActiveWorkerDispatch(
       run.workers[2],
       run.updatedAt,
       1,
       run.loop.round,
+      null,
+      {
+        verifiedCheckpointCommit: "c".repeat(40),
+        checkpointAllowedDirtyPaths: ["control-plane.ts"],
+      },
     ),
   };
   const behaviorRecheckPrompt = buildWorkerRecheckPrompt({
@@ -272,6 +296,12 @@ export function verifyEvidenceGatedRepairLoop(check) {
       behaviorRecheckPrompt.includes("上游 review 摘要") &&
       behaviorRecheckPrompt.includes(
         `DispatchId: ${behaviorDispatchRun.activeWorkerDispatch.dispatchId}`,
+      ) &&
+      behaviorRecheckPrompt.includes(
+        `本轮被测 checkpoint：${"c".repeat(40)}`,
+      ) &&
+      behaviorRecheckPrompt.includes(
+        `verifiedCheckpointCommit 必须等于 "${"c".repeat(40)}"`,
       ) &&
       !behaviorRecheckPrompt.includes("本轮修复摘要") &&
       !behaviorRecheckPrompt.includes("已完成修复"),
@@ -461,12 +491,8 @@ export function verifyEvidenceGatedRepairLoop(check) {
   });
   check(
     "repair-repeated-structural-prompt-requires-reviewer-scenario",
-    repeatedStructuralPrompt.includes(
-      "这是修复后重复出现的 P0/P1",
-    ) &&
-      repeatedStructuralPrompt.includes(
-        "backend 会回派 reviewer 现场举证",
-      ),
+    repeatedStructuralPrompt.includes("这是修复后重复出现的 P0/P1") &&
+      repeatedStructuralPrompt.includes("backend 会回派 reviewer 现场举证"),
     repeatedStructuralPrompt,
   );
   const reviewerChallengePrompt = buildWorkerRecheckPrompt({
@@ -491,32 +517,27 @@ export function verifyEvidenceGatedRepairLoop(check) {
     "repair-reviewer-challenge-requires-new-executable-evidence",
     reviewerChallengePrompt.includes("重复 P0/P1 复现争议") &&
       reviewerChallengePrompt.includes("无法复现则从 remainingFindings 移除") &&
-      reviewerChallengePrompt.includes(
-        "禁止复用上一轮静态证据",
-      ),
+      reviewerChallengePrompt.includes("禁止复用上一轮静态证据"),
     reviewerChallengePrompt,
   );
-  const notReproducedOutbox = normalizeRepairOutbox(
-    repeatedStructuralRun,
-    [
-      buildFixVerification(repeatedStructuralCycle, {
-        reproduction: {
-          mode: "review_harness",
-          status: "not_reproduced",
-          scenarioId: "repeated-review-finding",
-          evidence: [buildRepairEvidence("not-reproduced")],
-        },
-        verification: {
-          status: "blocked",
-          sameScenario: true,
-          evidence: [],
-        },
-        impactedChecks: [],
-        strategyAssessment:
-          "按 reviewer 场景执行后未观察到该 invariant 违约，退回 reviewer 举证。",
-      }),
-    ],
-  );
+  const notReproducedOutbox = normalizeRepairOutbox(repeatedStructuralRun, [
+    buildFixVerification(repeatedStructuralCycle, {
+      reproduction: {
+        mode: "review_harness",
+        status: "not_reproduced",
+        scenarioId: "repeated-review-finding",
+        evidence: [buildRepairEvidence("not-reproduced")],
+      },
+      verification: {
+        status: "blocked",
+        sameScenario: true,
+        evidence: [],
+      },
+      impactedChecks: [],
+      strategyAssessment:
+        "按 reviewer 场景执行后未观察到该 invariant 违约，退回 reviewer 举证。",
+    }),
+  ]);
   check(
     "repair-code-not-reproduced-requests-reviewer-evidence",
     validateCodeFixHandoff(repeatedStructuralRun, notReproducedOutbox)

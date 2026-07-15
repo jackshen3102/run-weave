@@ -82,11 +82,12 @@ export function buildWorkerStartupPrompt(params: {
         : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skipReason?, evidence[] }]。",
       "首轮按测试案例顺序执行；遇到阻断失败可以停止，但必须在 outbox 写清失败 case、失败步骤和证据。",
     );
-    if (run.reviewCheckpoint) {
+    const checkpointCommit = behaviorCheckpointCommit(run);
+    if (checkpointCommit) {
       lines.push(
-        `本轮被测 checkpoint：${run.reviewCheckpoint.lastReviewedCommit}`,
+        `本轮被测 checkpoint：${checkpointCommit}`,
         "开始验收前执行 git rev-parse HEAD 并确认等于该 commit。",
-        `outbox 顶层 verifiedCheckpointCommit 必须等于 "${run.reviewCheckpoint.lastReviewedCommit}"。`,
+        `outbox 顶层 verifiedCheckpointCommit 必须等于 "${checkpointCommit}"。`,
       );
     }
   } else if (worker.role === "code_review") {
@@ -256,14 +257,8 @@ export function buildWorkerRecheckPrompt(params: {
   triggerSummary?: string | null;
   reviewChallenge?: { repairKeys: string[]; reason: string } | null;
 }): string {
-  const {
-    run,
-    worker,
-    cases,
-    outboxPath,
-    triggerSummary,
-    reviewChallenge,
-  } = params;
+  const { run, worker, cases, outboxPath, triggerSummary, reviewChallenge } =
+    params;
   const isReviewWorker = worker.role === "code_review";
   const heading = isReviewWorker
     ? `[loop round ${run.loop.round}] Code Agent 已提交本轮代码结果，请独立审查以下用例：`
@@ -325,14 +320,25 @@ export function buildWorkerRecheckPrompt(params: {
           ...(isReviewWorker ? [FINDING_SCHEMA] : []),
         ]
       : []),
-    ...(worker.role === "behavior_verify" && run.reviewCheckpoint
-      ? [
-          `本轮被测 checkpoint：${run.reviewCheckpoint.lastReviewedCommit}`,
-          "开始验收前执行 git rev-parse HEAD 并确认等于该 commit。",
-          `outbox 顶层 verifiedCheckpointCommit 必须等于 "${run.reviewCheckpoint.lastReviewedCommit}"。`,
-        ]
+    ...(worker.role === "behavior_verify" && behaviorCheckpointCommit(run)
+      ? (() => {
+          const checkpointCommit = behaviorCheckpointCommit(run)!;
+          return [
+            `本轮被测 checkpoint：${checkpointCommit}`,
+            "开始验收前执行 git rev-parse HEAD 并确认等于该 commit。",
+            `outbox 顶层 verifiedCheckpointCommit 必须等于 "${checkpointCommit}"。`,
+          ];
+        })()
       : []),
   ].join("\n");
+}
+
+function behaviorCheckpointCommit(run: AgentTeamRun): string | null {
+  return (
+    run.activeWorkerDispatch?.verifiedCheckpointCommit ??
+    run.reviewCheckpoint?.lastReviewedCommit ??
+    null
+  );
 }
 
 function formatWorkerDispatchInstructions(run: AgentTeamRun): string[] {

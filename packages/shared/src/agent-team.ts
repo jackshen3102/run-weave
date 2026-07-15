@@ -232,6 +232,10 @@ export interface AgentTeamActiveWorkerDispatch {
   /** null means the pane-scoped outbox did not exist when work was dispatched. */
   outboxMtimeMs: number | null;
   reviewTarget?: AgentTeamReviewTarget | null;
+  /** Commit the behavior worker must verify for this exact dispatch. */
+  verifiedCheckpointCommit?: string | null;
+  /** Exact dirty paths accepted for this exact behavior dispatch. */
+  checkpointAllowedDirtyPaths?: string[];
   /** Backend-owned repair identities expected from a bounced code worker. */
   repairKeys?: string[];
   /** One protocol-only correction is allowed before escalating to a human. */

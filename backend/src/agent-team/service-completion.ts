@@ -263,13 +263,13 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionRech
           return true;
         }
         if (outbox.role === "behavior_verify" && latest.reviewCheckpoint) {
-          if (
-            outbox.verifiedCheckpointCommit !==
-            latest.reviewCheckpoint.lastReviewedCommit
-          ) {
+          const expectedCheckpointCommit =
+            latest.activeWorkerDispatch?.verifiedCheckpointCommit ??
+            latest.reviewCheckpoint.lastReviewedCommit;
+          if (outbox.verifiedCheckpointCommit !== expectedCheckpointCommit) {
             const pausedRun = await this.pauseForCheckpointError(
               latest,
-              `behavior outbox checkpoint 不匹配：expected ${latest.reviewCheckpoint.lastReviewedCommit}，actual ${outbox.verifiedCheckpointCommit ?? "null"}`,
+              `behavior outbox checkpoint 不匹配：expected ${expectedCheckpointCommit}，actual ${outbox.verifiedCheckpointCommit ?? "null"}`,
             );
             await recordConsumed(pausedRun);
             return true;
@@ -278,6 +278,8 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionRech
             await this.assertVerificationSourcesUnchanged(latest);
             await this.reviewCheckpointGit.assertCheckpointHead(
               latest.reviewCheckpoint,
+              latest.activeWorkerDispatch?.checkpointAllowedDirtyPaths,
+              expectedCheckpointCommit,
             );
           } catch (error) {
             const pausedRun = await this.pauseForCheckpointError(
@@ -607,5 +609,4 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionRech
     }
     return null;
   }
-
 }

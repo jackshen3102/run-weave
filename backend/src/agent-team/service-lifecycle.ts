@@ -451,10 +451,17 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
   ): Promise<AgentTeamRun> {
     return this.enqueue(runId, async () => {
       const run = await this.requireRun(runId);
-      if (run.phase !== "executing" || run.status !== "need_human") {
+      const supersedingActiveDispatch =
+        input.action === "dispatch" &&
+        run.status === "running" &&
+        run.activeWorkerRole === input.role;
+      if (
+        run.phase !== "executing" ||
+        (run.status !== "need_human" && !supersedingActiveDispatch)
+      ) {
         throw new AgentTeamError(
           409,
-          "Agent intervention 只允许处理 executing/need_human run",
+          "Agent intervention 只允许处理 executing/need_human，或显式覆盖当前同 role dispatch",
         );
       }
       if (run.pendingFindingDecision) {
@@ -494,10 +501,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
           { ...run, acceptance },
           input.role,
         );
-        const cases = selectAgentInterventionCases(
-          roleCases,
-          input.caseIds,
-        );
+        const cases = selectAgentInterventionCases(roleCases, input.caseIds);
         const refreshedRun = await this.updateRun(run, {
           status: "running",
           activeWorkerRole: null,
@@ -533,10 +537,8 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
               previousReason,
               generatedTestCaseFilePath:
                 prepared.verification.generatedTestCaseFilePath,
-              checkpointAllowedDirtyPaths:
-                input.checkpointAllowedDirtyPaths,
-              checkpointExpectedHeadCommit:
-                input.checkpointExpectedHeadCommit,
+              checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
+              checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit,
             },
           ],
           logs: [
@@ -596,6 +598,9 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         ],
         logs: [
           ...run.logs,
+          ...(supersedingActiveDispatch
+            ? [`Agent intervention 覆盖当前 ${input.role} dispatch`]
+            : []),
           `Agent intervention 选择 ${input.role}：${cases.map((item) => item.caseId).join(", ")}`,
         ],
       });

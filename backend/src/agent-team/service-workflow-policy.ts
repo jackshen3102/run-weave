@@ -108,6 +108,8 @@ export function createActiveWorkerDispatch(
     | "repairKeys"
     | "dispatchId"
     | "outboxDispatchIdRequired"
+    | "verifiedCheckpointCommit"
+    | "checkpointAllowedDirtyPaths"
     | "protocolCorrectionAttempt"
     | "protocolCorrectionSourceFingerprint"
   > = {},
@@ -122,6 +124,8 @@ export function createActiveWorkerDispatch(
     requestedAt,
     outboxMtimeMs,
     reviewTarget,
+    verifiedCheckpointCommit: options.verifiedCheckpointCommit ?? null,
+    checkpointAllowedDirtyPaths: options.checkpointAllowedDirtyPaths ?? [],
     repairKeys: options.repairKeys ?? [],
     protocolCorrectionAttempt: options.protocolCorrectionAttempt ?? 0,
     protocolCorrectionSourceFingerprint:

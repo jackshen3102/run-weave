@@ -195,6 +195,15 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       outboxMtimeMs,
       dispatchRun.loop.round,
       reviewTarget,
+      role === "behavior_verify" && run.reviewCheckpoint
+        ? {
+            verifiedCheckpointCommit:
+              options.checkpointExpectedHeadCommit ??
+              run.reviewCheckpoint.lastReviewedCommit,
+            checkpointAllowedDirtyPaths:
+              options.checkpointAllowedDirtyPaths ?? [],
+          }
+        : {},
     );
     const persistedRun = await this.updateRun(run, {
       reviewCheckpoint: dispatchRun.reviewCheckpoint,
