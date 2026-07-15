@@ -15,7 +15,11 @@ import {
   resolveBetaPoolPaths,
   runBetaPoolJanitor,
 } from "./beta-slot-pool.mjs";
-import { resolveBetaUpdateTargets } from "../runweave-update-core.mjs";
+import {
+  BETA_UPDATE_BUILDER_CONFIG,
+  resolveBetaUpdateTargets,
+  validateUpdateTargetIsolation,
+} from "../runweave-update-core.mjs";
 import { resolveBetaPaths } from "../runweave-beta-state.mjs";
 import {
   buildUpdateArgs,
@@ -102,11 +106,24 @@ export async function verifyBetaSlotPool(temporaryHome) {
       sharedAppServer.lockPath,
     );
     assert.equal(sharedEnv.RUNWEAVE_SHARED_APP_SERVER_PID, "61999");
-    const sharedArgs = buildUpdateArgs(betaPaths, [], sharedHome);
+    const sharedArgs = buildUpdateArgs(betaPaths, []);
     assert.equal(
       sharedArgs[sharedArgs.indexOf("--app-server-home") + 1],
-      sharedHome,
+      betaPaths.appServerHome,
     );
+    const updateArg = (flag) => sharedArgs[sharedArgs.indexOf(flag) + 1];
+    validateUpdateTargetIsolation({
+      appBackupPath: betaPaths.appBackupPath,
+      appName: betaPaths.appName,
+      appPath: updateArg("--app-path"),
+      appServerHome: updateArg("--app-server-home"),
+      channel: "beta",
+      electronBuilderConfig: BETA_UPDATE_BUILDER_CONFIG,
+      homeDir: temporaryHome,
+      instanceId: betaPaths.instanceId,
+      runtimeHome: updateArg("--runtime-home"),
+      statePath: updateArg("--state-path"),
+    });
   } finally {
     for (const [key, value] of Object.entries(ambientAppServer)) {
       if (value === undefined) {

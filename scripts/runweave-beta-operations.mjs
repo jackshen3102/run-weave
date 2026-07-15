@@ -106,11 +106,7 @@ export function buildUpdateEnv(
   return env;
 }
 
-export function buildUpdateArgs(
-  paths,
-  args,
-  appServerHome = paths.appServerHome,
-) {
+export function buildUpdateArgs(paths, args) {
   return [
     path.join(paths.sourceRoot, "scripts", "runweave-update.mjs"),
     "--repo",
@@ -120,27 +116,21 @@ export function buildUpdateArgs(
     "--runtime-home",
     paths.runtimeHome,
     "--app-server-home",
-    appServerHome,
+    paths.appServerHome,
     "--state-path",
     paths.statePath,
     ...args,
   ];
 }
 
-export async function runUpdateProcess(
-  paths,
-  args,
-  env,
-  logPath,
-  appServerHome = paths.appServerHome,
-) {
+export async function runUpdateProcess(paths, args, env, logPath) {
   let logHandle = null;
   if (logPath) {
     await fs.mkdir(path.dirname(logPath), { recursive: true });
     logHandle = await fs.open(logPath, "a", 0o600);
   }
   return await new Promise((resolve, reject) => {
-    const child = spawn("node", buildUpdateArgs(paths, args, appServerHome), {
+    const child = spawn("node", buildUpdateArgs(paths, args), {
       cwd: paths.sourceRoot,
       env,
       stdio: ["inherit", "pipe", "pipe"],

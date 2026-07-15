@@ -370,13 +370,7 @@ async function update(
     sharedAppServer,
   );
   if (dryRun) {
-    const result = await runUpdateProcess(
-      paths,
-      args,
-      env,
-      null,
-      sharedAppServer?.homeDir,
-    );
+    const result = await runUpdateProcess(paths, args, env, null);
     if (!result.ok) {
       process.exitCode = result.code;
     }
@@ -405,7 +399,6 @@ async function update(
       sharedAppServer,
     ),
     logPath,
-    sharedAppServer?.homeDir,
   );
   if (!result.ok) {
     const cause = new Error(`update process exited with code ${result.code}`);
