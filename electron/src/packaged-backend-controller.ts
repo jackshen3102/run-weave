@@ -72,6 +72,7 @@ export function writeBetaDesktopStatus(stoppedAt: string | null = null): void {
     const appPath = app.isPackaged
       ? path.resolve(path.dirname(process.execPath), "../..")
       : null;
+    const mainWindow = desktopRuntime.mainWindow;
     mkdirSync(userDataPath, { recursive: true });
     writeFileSync(
       tempPath,
@@ -131,6 +132,25 @@ export function writeBetaDesktopStatus(stoppedAt: string | null = null): void {
                 : (desktopRuntime.cdpProxy?.endpoint ?? null),
               pid: stoppedAt ? null : process.pid,
             },
+          },
+          window: {
+            exists: Boolean(mainWindow && !mainWindow.isDestroyed()),
+            focused:
+              mainWindow && !mainWindow.isDestroyed()
+                ? mainWindow.isFocused()
+                : false,
+            minimized:
+              mainWindow && !mainWindow.isDestroyed()
+                ? mainWindow.isMinimized()
+                : false,
+            url:
+              mainWindow && !mainWindow.isDestroyed()
+                ? mainWindow.webContents.getURL()
+                : null,
+            visible:
+              mainWindow && !mainWindow.isDestroyed()
+                ? mainWindow.isVisible()
+                : false,
           },
           stoppedAt,
           updatedAt: new Date().toISOString(),

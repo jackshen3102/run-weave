@@ -56,9 +56,7 @@ export const INSTALLED_APP_CONTROL_PATH_PREFIXES = [
   "scripts/electron-dist-retry.mjs",
   "scripts/electron-local-update.mjs",
   "scripts/publish-local-updates.mjs",
-  "scripts/runweave-update.mjs",
-  "scripts/runweave-update-core.mjs",
-  "scripts/runweave-update-test-cases.mjs",
+  "scripts/runweave-update",
   "scripts/runweave-beta.mjs",
   "scripts/serve-local-updates.mjs",
 ];
@@ -484,7 +482,7 @@ function resolveAppServerUpdatePlan({
   };
 }
 
-export function validateResolvedUpdateOptions({ noRestart, plan }) {
+export function validateResolvedUpdateOptions({ noRestart, plan, verifyDesktop }) {
   if (noRestart && plan.mode === "app") {
     throw new Error(
       "--no-restart is only supported for runtime updates. App updates must quit and relaunch the target desktop app.",
@@ -493,6 +491,11 @@ export function validateResolvedUpdateOptions({ noRestart, plan }) {
   if (noRestart && plan.appServer?.action === "update") {
     throw new Error(
       "--no-restart cannot be combined with an App Server update because updating App Server requires rw app-server restart. Use --app-server=skip to skip App Server or rerun without --no-restart.",
+    );
+  }
+  if (noRestart && verifyDesktop) {
+    throw new Error(
+      "--verify-desktop cannot be combined with --no-restart because desktop verification requires relaunching the target app.",
     );
   }
 }
@@ -508,6 +511,7 @@ export function parseRunweaveUpdateArgs(argv) {
     runtimeHome: null,
     sourceRoot: process.cwd(),
     statePath: null,
+    verifyDesktop: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -527,6 +531,10 @@ export function parseRunweaveUpdateArgs(argv) {
     }
     if (arg === "--no-restart") {
       result.noRestart = true;
+      continue;
+    }
+    if (arg === "--verify-desktop") {
+      result.verifyDesktop = true;
       continue;
     }
     if (arg === "--mode") {

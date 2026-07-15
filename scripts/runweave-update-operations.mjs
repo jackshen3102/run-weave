@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
+import net from "node:net";
 import path from "node:path";
 import { commandName } from "./runweave-update-core.mjs";
 import { appName, electronBuilderConfig } from "./runweave-update-context.mjs";
@@ -12,6 +13,9 @@ import {
   runChecked,
   wait,
 } from "./runweave-update-system.mjs";
+
+const DESKTOP_VERIFICATION_PORT_START = 9223;
+const DESKTOP_VERIFICATION_PORT_ATTEMPTS = 50;
 
 export async function getRunningAppLines() {
   const result = await runCapture("pgrep", ["-fl", appName]);
@@ -70,6 +74,103 @@ export async function waitForInstalledAppStart(appPath) {
   throw new Error(`${appName} did not start from ${appPath}`);
 }
 
+async function isLoopbackPortAvailable(port) {
+  return await new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => server.close(() => resolve(true)));
+    server.listen(port, "127.0.0.1");
+  });
+}
+
+async function resolveDesktopVerificationPort() {
+  for (
+    let offset = 0;
+    offset < DESKTOP_VERIFICATION_PORT_ATTEMPTS;
+    offset += 1
+  ) {
+    const port = DESKTOP_VERIFICATION_PORT_START + offset;
+    if (await isLoopbackPortAvailable(port)) {
+      return port;
+    }
+  }
+  throw new Error(
+    `No desktop verification port is available from ${DESKTOP_VERIFICATION_PORT_START}`,
+  );
+}
+
+function createDesktopVerificationLaunchEnv({
+  appServerHome,
+  port,
+  runtimeHome,
+  statusPath,
+}) {
+  const env = { ...process.env };
+  for (const name of Object.keys(env)) {
+    if (
+      name.startsWith("RUNWEAVE_") ||
+      name.startsWith("BROWSER_VIEWER_") ||
+      name === "ELECTRON_RUN_AS_NODE" ||
+      name === "FRONTEND_DIST_DIR"
+    ) {
+      delete env[name];
+    }
+  }
+  env.RUNWEAVE_APP_SERVER_HOME = appServerHome;
+  env.RUNWEAVE_DESKTOP_CDP_PORT = String(port);
+  env.RUNWEAVE_DESKTOP_STATUS_PATH = statusPath;
+  env.RUNWEAVE_RUNTIME_HOME = runtimeHome;
+  return env;
+}
+
+async function waitForDesktopVerification({ appPath, endpoint, statusPath }) {
+  for (let attempt = 1; attempt <= 60; attempt += 1) {
+    const status = readJsonFile(statusPath);
+    if (
+      status?.app?.path === appPath &&
+      Number.isInteger(status.app.pid) &&
+      status.app.pid > 0 &&
+      status.cdp?.desktop?.endpoint === endpoint &&
+      status.cdp.desktop.pid === status.app.pid &&
+      status.backend?.available === true &&
+      status.window?.visible === true &&
+      typeof status.window.url === "string" &&
+      status.window.url
+    ) {
+      try {
+        const response = await fetch(`${endpoint}/json/list`);
+        const targets = response.ok ? await response.json() : null;
+        const page = Array.isArray(targets)
+          ? targets.find(
+              (target) =>
+                target?.type === "page" && target.url === status.window.url,
+            )
+          : null;
+        if (page) {
+          return {
+            appServer: status.appServer,
+            appPath: status.app.path,
+            appVersion: status.app.version,
+            backend: status.backend,
+            endpoint,
+            pageUrl: page.url,
+            pid: status.app.pid,
+            sourceRevision: status.sourceRevision,
+            statusPath,
+            window: status.window,
+          };
+        }
+      } catch {
+        // The renderer and CDP endpoint can become ready after the process starts.
+      }
+    }
+    await wait(500);
+  }
+  throw new Error(
+    `Desktop verification did not become ready at ${statusPath}`,
+  );
+}
+
 export async function quitApp() {
   if (process.platform !== "darwin") {
     return;
@@ -79,12 +180,39 @@ export async function quitApp() {
   await waitForAppExit();
 }
 
-export async function openApp(appPath) {
+export async function openApp(appPath, options = {}) {
   if (process.platform !== "darwin") {
     return;
   }
 
   await fs.access(appPath);
+  const desktopVerification = options.desktopVerification ?? null;
+  if (desktopVerification) {
+    const port = await resolveDesktopVerificationPort();
+    const endpoint = `http://127.0.0.1:${port}`;
+    const statusPath = path.resolve(desktopVerification.statusPath);
+    const executable = path.join(appPath, "Contents", "MacOS", appName);
+    await fs.access(executable);
+    await fs.mkdir(path.dirname(statusPath), { recursive: true });
+    await fs.rm(statusPath, { force: true });
+    const child = spawn(executable, [], {
+      detached: true,
+      env: createDesktopVerificationLaunchEnv({
+        appServerHome: desktopVerification.appServerHome,
+        port,
+        runtimeHome: desktopVerification.runtimeHome,
+        statusPath,
+      }),
+      stdio: "ignore",
+    });
+    child.unref();
+    await waitForInstalledAppStart(appPath);
+    return await waitForDesktopVerification({
+      appPath,
+      endpoint,
+      statusPath,
+    });
+  }
   if (
     process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND === "false" ||
     process.env.RUNWEAVE_APP_SERVER_DISCOVERY === "explicit"
@@ -101,15 +229,16 @@ export async function openApp(appPath) {
     await runChecked("open", ["-n", appPath]);
   }
   await waitForInstalledAppStart(appPath);
+  return null;
 }
 
-export async function restartApp(appPath) {
+export async function restartApp(appPath, options = {}) {
   if (process.platform !== "darwin") {
     return;
   }
 
   await quitApp();
-  await openApp(appPath);
+  return await openApp(appPath, options);
 }
 
 export async function installBuiltApp({
@@ -278,6 +407,7 @@ export async function runAppUpdate({
   codesignIdentity,
   gitHead,
   launchAfterInstall,
+  desktopVerification,
   sourceRoot,
 }) {
   const releaseAppPath = path.join(
@@ -316,8 +446,9 @@ export async function runAppUpdate({
   await quitApp();
   await installBuiltApp({ appBackupPath, appPath, releaseAppPath });
   if (launchAfterInstall) {
-    await openApp(appPath);
+    return await openApp(appPath, { desktopVerification });
   }
+  return null;
 }
 
 export async function writeUpdateState(statePath, state) {

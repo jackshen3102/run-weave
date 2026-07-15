@@ -214,6 +214,7 @@ if (hasSingleInstanceLock) {
       desktopRuntime.mainWindow = createWindow({
         hideOnClose: true,
         onReadyToShow: (win) => {
+          writeBetaDesktopStatus();
           void checkAndNotifyAppServerAvailability(process.env, win);
         },
       });

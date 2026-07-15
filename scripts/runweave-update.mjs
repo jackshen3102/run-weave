@@ -93,7 +93,11 @@ async function main() {
     installedAppVersion,
     sourceShellVersion,
   });
-  validateResolvedUpdateOptions({ noRestart: args.noRestart, plan });
+  validateResolvedUpdateOptions({
+    noRestart: args.noRestart,
+    plan,
+    verifyDesktop: args.verifyDesktop,
+  });
   const gitHead = await getGitHead(sourceRoot);
   const gitDirty = await getGitStatusDirty(sourceRoot);
   const worktreeSnapshot = await createWorktreeSnapshot(sourceRoot);
@@ -104,6 +108,16 @@ async function main() {
     installedAppVersion,
     sourceShellVersion,
   });
+  const desktopVerification = args.verifyDesktop
+    ? {
+        appServerHome,
+        runtimeHome,
+        statusPath: path.join(
+          path.dirname(statePath),
+          "desktop-verification.json",
+        ),
+      }
+    : null;
 
   console.log(`[runweave-update] channel: ${channel}`);
   console.log(`[runweave-update] source: ${sourceRoot}`);
@@ -123,6 +137,9 @@ async function main() {
     `[runweave-update] selected app-server action: ${plan.appServer.action}`,
   );
   console.log(`[runweave-update] app-server reason: ${plan.appServer.reason}`);
+  console.log(
+    `[runweave-update] desktop verification: ${desktopVerification ? desktopVerification.statusPath : "disabled"}`,
+  );
   if (plan.mode === "app") {
     console.log(
       `[runweave-update] codesign identity: ${codesignIdentity.identity ?? "ad-hoc"} (${codesignIdentity.source})`,
@@ -146,6 +163,7 @@ async function main() {
 
   let runtimeRelease = null;
   let appServerRelease = null;
+  let desktopVerificationResult = null;
   const previousAppServerReleaseId =
     state?.appServerReleaseId ?? state?.appServer?.releaseId ?? null;
   const deferBetaRestartUntilAppServer =
@@ -159,11 +177,13 @@ async function main() {
       sourceRoot,
     });
     if (!args.noRestart && !deferBetaRestartUntilAppServer) {
-      await restartApp(appPath);
+      desktopVerificationResult = await restartApp(appPath, {
+        desktopVerification,
+      });
     }
   } else {
     try {
-      await runAppUpdate({
+      desktopVerificationResult = await runAppUpdate({
         appBackupPath,
         appBuildVersion,
         appPath,
@@ -171,6 +191,7 @@ async function main() {
         codesignIdentity: codesignIdentity.identity,
         gitHead,
         launchAfterInstall: !deferBetaRestartUntilAppServer,
+        desktopVerification,
         sourceRoot,
       });
     } catch (error) {
@@ -186,7 +207,7 @@ async function main() {
       if (!codesignIdentity.identity) {
         throw error;
       }
-      await runAppUpdate({
+      desktopVerificationResult = await runAppUpdate({
         appBackupPath,
         appBuildVersion,
         appPath,
@@ -194,6 +215,7 @@ async function main() {
         codesignIdentity: codesignIdentity.identity,
         gitHead,
         launchAfterInstall: !deferBetaRestartUntilAppServer,
+        desktopVerification,
         sourceRoot,
       });
     }
@@ -208,9 +230,13 @@ async function main() {
   }
   if (deferBetaRestartUntilAppServer) {
     if (plan.mode === "runtime") {
-      await restartApp(appPath);
+      desktopVerificationResult = await restartApp(appPath, {
+        desktopVerification,
+      });
     } else {
-      await openApp(appPath);
+      desktopVerificationResult = await openApp(appPath, {
+        desktopVerification,
+      });
     }
   }
   const nextInstalledVersion = await readInstalledMacAppVersion(appPath);
@@ -239,12 +265,19 @@ async function main() {
     codesignIdentity: plan.mode === "app" ? codesignIdentity.identity : null,
     codesignIdentitySource:
       plan.mode === "app" ? codesignIdentity.source : null,
+    desktopVerification: desktopVerificationResult,
     runtimeHome,
     runtimeReleaseId: runtimeRelease?.releaseId ?? null,
     sourceRoot,
     updatedAt: new Date().toISOString(),
     worktreeSnapshot,
   });
+
+  if (desktopVerificationResult) {
+    console.log(
+      `[runweave-update] desktop verification ready: ${JSON.stringify(desktopVerificationResult)}`,
+    );
+  }
 
   console.log("[runweave-update] done");
 }
