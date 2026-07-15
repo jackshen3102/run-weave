@@ -42,7 +42,6 @@ pnpm --filter ./backend typecheck
 pnpm --filter ./frontend typecheck
 pnpm --filter ./frontend lint
 pnpm agent-team:verify-review-checkpoints
-pnpm testing:inventory
 git diff --check
 ```
 
