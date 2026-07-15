@@ -119,6 +119,20 @@ export async function processTerminalAgentHook(
   }
   const panel = panelResolution.panel;
   const hookThreadId = input.threadId?.trim() || null;
+  const currentThreadOwner = panel ?? session;
+  const lastThreadOwner =
+    panel?.lastThreadId || panel?.lastThreadProvider ? panel : session;
+  const persistedLastThreadProvider =
+    lastThreadOwner.lastThreadProvider ??
+    (lastThreadOwner.lastThreadId ? "codex" : null);
+  const resumedLastThreadIdentityMatched = Boolean(
+    input.hookEvent === "UserPromptSubmit" &&
+      hookThreadId &&
+      !currentThreadOwner.threadId &&
+      !currentThreadOwner.threadProvider &&
+      lastThreadOwner.lastThreadId === hookThreadId &&
+      persistedLastThreadProvider === input.agent,
+  );
   const operationGenerationTracked = Boolean(
     panel
       ? options.terminalSessionManager.hasPanelAgentOperationGeneration(
@@ -138,7 +152,7 @@ export async function processTerminalAgentHook(
       ),
   );
   const trustedCurrentThreadIdentityMatched = Boolean(
-    context.currentThreadIdentityMatched,
+    context.currentThreadIdentityMatched || resumedLastThreadIdentityMatched,
   );
   if (
     operationGenerationTracked &&

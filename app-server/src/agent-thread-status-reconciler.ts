@@ -210,8 +210,7 @@ export class AgentThreadStatusReconciler {
     return (
       thread.lifecycleStatus === "available" &&
       thread.lastLifecycleCursor === observed.lifecycleCursor &&
-      thread.lastLifecycleType === observed.lifecycleType &&
-      thread.status === observed.status
+      thread.lastLifecycleType === observed.lifecycleType
     );
   }
 
