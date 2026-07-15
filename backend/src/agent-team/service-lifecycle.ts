@@ -539,6 +539,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
                 prepared.verification.generatedTestCaseFilePath,
               checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
               checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit,
+              checkpointRebasedCommit: input.checkpointRebasedCommit,
             },
           ],
           logs: [
@@ -553,6 +554,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
           reviewScope: input.role === "code_review" ? "full" : undefined,
           checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
           checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit,
+          checkpointRebasedCommit: input.checkpointRebasedCommit,
         });
       }
 
@@ -594,6 +596,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
             previousReason,
             checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
             checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit,
+            checkpointRebasedCommit: input.checkpointRebasedCommit,
           },
         ],
         logs: [
@@ -616,6 +619,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         triggerSummary: note,
         checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths,
         checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit,
+        checkpointRebasedCommit: input.checkpointRebasedCommit,
       });
     });
   }

@@ -154,8 +154,8 @@ async function verifyAgentInterventionRoute() {
       checkpointAllowedDirtyPaths: [
         "docs/testing/beta-slot-pool-warm-retry-test-cases.md",
       ],
-      checkpointExpectedHeadCommit:
-        "0123456789abcdef0123456789abcdef01234567",
+      checkpointExpectedHeadCommit: "0123456789abcdef0123456789abcdef01234567",
+      checkpointRebasedCommit: "fedcba9876543210fedcba9876543210fedcba98",
     });
     const invalidDispatch = await post({
       action: "dispatch",
@@ -187,7 +187,9 @@ async function verifyAgentInterventionRoute() {
         acceptedInterventions[1]?.input.checkpointAllowedDirtyPaths?.[0] ===
           "docs/testing/beta-slot-pool-warm-retry-test-cases.md" &&
         acceptedInterventions[1]?.input.checkpointExpectedHeadCommit ===
-          "0123456789abcdef0123456789abcdef01234567",
+          "0123456789abcdef0123456789abcdef01234567" &&
+        acceptedInterventions[1]?.input.checkpointRebasedCommit ===
+          "fedcba9876543210fedcba9876543210fedcba98",
       { acceptedInterventions },
     );
     check(

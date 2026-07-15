@@ -105,6 +105,11 @@ const agentInterventionSchema = z
       .trim()
       .regex(/^[0-9a-f]{40}$/)
       .optional(),
+    checkpointRebasedCommit: z
+      .string()
+      .trim()
+      .regex(/^[0-9a-f]{40}$/)
+      .optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -121,7 +126,8 @@ const agentInterventionSchema = z
     if (
       value.role !== "behavior_verify" &&
       (value.checkpointAllowedDirtyPaths != null ||
-        value.checkpointExpectedHeadCommit != null)
+        value.checkpointExpectedHeadCommit != null ||
+        value.checkpointRebasedCommit != null)
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

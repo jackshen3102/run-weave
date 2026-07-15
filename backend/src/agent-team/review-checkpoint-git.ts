@@ -298,6 +298,7 @@ export class AgentTeamReviewCheckpointGit {
     state: AgentTeamReviewCheckpointState,
     allowedDirtyPaths: string[] = [],
     expectedHeadCommit?: string,
+    rebasedCheckpointCommit?: string,
   ): Promise<void> {
     if (expectedHeadCommit) {
       const branch = (
@@ -311,21 +312,27 @@ export class AgentTeamReviewCheckpointGit {
       const head = (
         await this.runGit(state.repoRoot, ["rev-parse", "HEAD"])
       ).stdout.trim();
+      const checkpointAnchor = rebasedCheckpointCommit
+        ? await this.verifyRebasedCheckpointAnchor(
+            state,
+            rebasedCheckpointCommit,
+          )
+        : state.lastReviewedCommit;
       const mergeBase = (
         await this.runGit(state.repoRoot, [
           "merge-base",
-          state.lastReviewedCommit,
+          checkpointAnchor,
           expectedHeadCommit,
         ])
       ).stdout.trim();
       if (
         branch !== state.branch ||
         head !== expectedHeadCommit ||
-        mergeBase !== state.lastReviewedCommit
+        mergeBase !== checkpointAnchor
       ) {
         throw new AgentTeamError(
           409,
-          `Agent intervention checkpoint HEAD 无效：expected ${state.branch}@${expectedHeadCommit} descendant of ${state.lastReviewedCommit}，actual ${branch}@${head}`,
+          `Agent intervention checkpoint HEAD 无效：expected ${state.branch}@${expectedHeadCommit} descendant of ${checkpointAnchor}，actual ${branch}@${head}`,
         );
       }
     } else {
@@ -362,6 +369,32 @@ export class AgentTeamReviewCheckpointGit {
         `Checkpoint 后存在未提交代码，behavior 不得启动：${unacknowledgedCodePaths.join(", ")}`,
       );
     }
+  }
+
+  private async verifyRebasedCheckpointAnchor(
+    state: AgentTeamReviewCheckpointState,
+    commit: string,
+  ): Promise<string> {
+    const checkpoint = state.checkpoints.at(-1);
+    if (!checkpoint || checkpoint.commit !== state.lastReviewedCommit) {
+      throw new AgentTeamError(
+        409,
+        "Agent intervention 无法重锚：缺少 lastReviewedCommit 对应 checkpoint 记录",
+      );
+    }
+    const message = (
+      await this.runGit(state.repoRoot, ["show", "-s", "--format=%B", commit])
+    ).stdout;
+    if (
+      !message.includes(`Runweave-Review-Sequence: ${checkpoint.sequence}`) ||
+      !message.includes(`Runweave-Review-Tree: ${checkpoint.tree}`)
+    ) {
+      throw new AgentTeamError(
+        409,
+        `Agent intervention rebase 锚点与 checkpoint C${checkpoint.sequence}/${checkpoint.tree} 不匹配：${commit}`,
+      );
+    }
+    return commit;
   }
 
   private async assertBranchAndHead(

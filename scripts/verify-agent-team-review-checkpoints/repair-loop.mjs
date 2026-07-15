@@ -104,6 +104,9 @@ export function verifyEvidenceGatedRepairLoop(check) {
     ) &&
       completionSource.includes(
         "latest.activeWorkerDispatch?.checkpointAllowedDirtyPaths",
+      ) &&
+      completionSource.includes(
+        "latest.activeWorkerDispatch?.checkpointRebasedCommit",
       ),
     completionSource.slice(0, 20_000),
   );
@@ -153,6 +156,9 @@ export function verifyEvidenceGatedRepairLoop(check) {
       ) &&
       resumeBody.includes(
         "checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit",
+      ) &&
+      resumeBody.includes(
+        "checkpointRebasedCommit: input.checkpointRebasedCommit",
       ) &&
       resumeBody.includes("Agent intervention 覆盖当前"),
     resumeBody,
@@ -280,6 +286,7 @@ export function verifyEvidenceGatedRepairLoop(check) {
       {
         verifiedCheckpointCommit: "c".repeat(40),
         checkpointAllowedDirtyPaths: ["control-plane.ts"],
+        checkpointRebasedCommit: "d".repeat(40),
       },
     ),
   };

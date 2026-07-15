@@ -280,6 +280,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionRech
               latest.reviewCheckpoint,
               latest.activeWorkerDispatch?.checkpointAllowedDirtyPaths,
               expectedCheckpointCommit,
+              latest.activeWorkerDispatch?.checkpointRebasedCommit ?? undefined,
             );
           } catch (error) {
             const pausedRun = await this.pauseForCheckpointError(

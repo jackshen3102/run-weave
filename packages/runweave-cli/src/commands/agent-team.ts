@@ -36,7 +36,11 @@ export async function runAgentTeamCommand(
   const client = new TerminalHttpClient(auth);
 
   if (subcommand === "export") {
-    const runId = await resolveRunId(client, parsed.positionals[0], parsed.options);
+    const runId = await resolveRunId(
+      client,
+      parsed.positionals[0],
+      parsed.options,
+    );
     const payload = await client.exportAgentTeamRun(runId, {
       history: resolveHistoryMode(getStringOption(parsed.options, "history")),
       tail: resolveTail(getStringOption(parsed.options, "tail")),
@@ -58,7 +62,11 @@ export async function runAgentTeamCommand(
   }
 
   if (subcommand === "intervene") {
-    const runId = await resolveRunId(client, parsed.positionals[0], parsed.options);
+    const runId = await resolveRunId(
+      client,
+      parsed.positionals[0],
+      parsed.options,
+    );
     const action = resolveInterventionAction(
       requireStringOption(parsed.options, "action"),
     );
@@ -79,6 +87,10 @@ export async function runAgentTeamCommand(
       checkpointExpectedHeadCommit: getStringOption(
         parsed.options,
         "checkpoint-head",
+      ),
+      checkpointRebasedCommit: getStringOption(
+        parsed.options,
+        "checkpoint-rebased-commit",
       ),
     });
     writeOutput(
@@ -115,7 +127,10 @@ async function resolveRunId(
     throw new CliError("No agent-team run found for the terminal session", 1);
   }
   if (response.runs.length > 1) {
-    throw new CliError("Multiple agent-team runs found; pass runId explicitly", 1);
+    throw new CliError(
+      "Multiple agent-team runs found; pass runId explicitly",
+      1,
+    );
   }
   return response.runs[0]!.runId;
 }
@@ -158,7 +173,12 @@ function resolveCommaSeparatedValues(
     return undefined;
   }
   const caseIds = Array.from(
-    new Set(value.split(",").map((item) => item.trim()).filter(Boolean)),
+    new Set(
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
   );
   if (caseIds.length === 0) {
     throw new CliError(`${optionName} must contain at least one value`, 2);

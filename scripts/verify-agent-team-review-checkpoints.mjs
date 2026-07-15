@@ -210,7 +210,12 @@ async function main() {
     "control-plane update",
   ]);
   const interventionHead = await git(root, ["rev-parse", "HEAD"]);
-  await service.assertCheckpointHead(state3, [], interventionHead);
+  await service.assertCheckpointHead(
+    state3,
+    [],
+    interventionHead,
+    checkpoint2.commit,
+  );
   check(
     "checkpoint-head-allows-explicit-descendant-agent-intervention-commit",
     true,

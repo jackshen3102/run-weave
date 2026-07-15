@@ -209,6 +209,8 @@ export interface AgentTeamAgentIntervention {
   checkpointAllowedDirtyPaths?: string[];
   /** Exact descendant HEAD the main Agent accepted for this behavior dispatch. */
   checkpointExpectedHeadCommit?: string;
+  /** Rewritten checkpoint anchor accepted after a branch rebase. */
+  checkpointRebasedCommit?: string;
 }
 
 export interface AgentTeamRunOptions {
@@ -236,6 +238,8 @@ export interface AgentTeamActiveWorkerDispatch {
   verifiedCheckpointCommit?: string | null;
   /** Exact dirty paths accepted for this exact behavior dispatch. */
   checkpointAllowedDirtyPaths?: string[];
+  /** Rewritten checkpoint commit whose trailers match the persisted checkpoint. */
+  checkpointRebasedCommit?: string | null;
   /** Backend-owned repair identities expected from a bounced code worker. */
   repairKeys?: string[];
   /** One protocol-only correction is allowed before escalating to a human. */
@@ -510,6 +514,7 @@ export interface InterveneAgentTeamRunRequest {
   generatedTestCaseFilePath?: string | null;
   checkpointAllowedDirtyPaths?: string[];
   checkpointExpectedHeadCommit?: string;
+  checkpointRebasedCommit?: string;
 }
 
 export interface CompleteAgentTeamRunRequest {
