@@ -95,6 +95,10 @@ function selectionBody(selection: Exclude<WorkHistorySelection, { type: "fact" }
       );
     case "thread": {
       const { thread } = selection;
+      const detailUpdatedAt =
+        thread.detail && "updatedAt" in thread.detail
+          ? thread.detail.updatedAt
+          : thread.thread.updatedAt;
       return (
         <div>
           <DefinitionList
@@ -102,33 +106,46 @@ function selectionBody(selection: Exclude<WorkHistorySelection, { type: "fact" }
               Provider: thread.thread.agent,
               Availability: thread.availability,
               Status: thread.detail?.status ?? thread.thread.status,
-              Updated: thread.detail?.updatedAt ?? thread.thread.updatedAt,
+              Updated: detailUpdatedAt,
             }}
           />
           {thread.detail?.turns.length ? (
             <div className="mt-6 grid gap-4">
-              {thread.detail.turns.map((turn) => (
-                <section key={turn.id} className="rounded-lg border border-border/70 p-3">
-                  <p className="text-sm font-medium">{turn.id}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {turn.status} · {turn.itemsView} · {turn.itemCount} items
-                  </p>
-                  <div className="mt-3 grid gap-2">
-                    {turn.messages.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No text messages recorded.</p>
-                    ) : (
-                      turn.messages.map((message) => (
-                        <div key={message.id} className="rounded-md bg-muted/55 p-3 text-sm">
-                          <p className="text-[0.68rem] font-medium uppercase text-muted-foreground">
-                            {message.role}
-                          </p>
-                          <p className="mt-1 whitespace-pre-wrap">{message.text}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </section>
-              ))}
+              {thread.detail.turns.map((turn) => {
+                const turnId = "id" in turn ? turn.id : turn.turnId;
+                if (!("messages" in turn)) {
+                  return (
+                    <section key={turnId} className="rounded-lg border border-border/70 p-3">
+                      <p className="text-sm font-medium">{turnId}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {turn.status} · {turn.preview || "No preview"}
+                      </p>
+                    </section>
+                  );
+                }
+                return (
+                  <section key={turnId} className="rounded-lg border border-border/70 p-3">
+                    <p className="text-sm font-medium">{turnId}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {turn.status} · {turn.itemsView} · {turn.itemCount} items
+                    </p>
+                    <div className="mt-3 grid gap-2">
+                      {turn.messages.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No text messages recorded.</p>
+                      ) : (
+                        turn.messages.map((message) => (
+                          <div key={message.id} className="rounded-md bg-muted/55 p-3 text-sm">
+                            <p className="text-[0.68rem] font-medium uppercase text-muted-foreground">
+                              {message.role}
+                            </p>
+                            <p className="mt-1 whitespace-pre-wrap">{message.text}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
           ) : (
             <p className="mt-5 text-sm text-muted-foreground">

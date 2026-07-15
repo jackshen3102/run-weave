@@ -232,6 +232,18 @@ export function createHttpApp(options: {
       return;
     }
     try {
+      if (options.traeLifecycleReader.supports(thread.agent)) {
+        const detail = await options.traeLifecycleReader.readThread(
+          thread.threadId,
+          thread.agent,
+        );
+        res.json({
+          thread,
+          availability: detail ? "available" : "thread_not_found",
+          ...(detail ? { detail } : {}),
+        } satisfies AppServerThreadDetailResponse);
+        return;
+      }
       const response: AppServerThreadDetailResponse =
         await options.codexThreadDetailReader.readThreadDetail(thread);
       res.json(response);

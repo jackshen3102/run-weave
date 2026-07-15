@@ -66,6 +66,8 @@
     "toolkit:sync": "node ./scripts/sync-toolkit-plugin.mjs",
     "toolkit:sync:staged": "node ./scripts/sync-toolkit-plugin.mjs --if-staged",
     "toolkit:verify-hooks": "pnpm --filter ./electron exec tsx ../scripts/verify-toolkit-hooks.mjs",
+    "testing:inventory": "node ./scripts/audit-testing-case-inventory.mjs",
+    "testing:status": "node ./scripts/audit-testing-case-status.mjs",
     "perf:terminal": "node ./scripts/terminal-perf-ralph.mjs",
     "quality:gate": "node ./scripts/quality-gate.mjs",
     "prepare": "husky"

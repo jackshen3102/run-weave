@@ -98,7 +98,7 @@ http://127.0.0.1:6188/?tabs=10&width=420&active=4&prototypeControls=1
 - 产品核心功能清单是否已确认：已确认并进入产品；真实产品验收固定为 preferred 180px、active minimum 80px、inactive minimum 44px、gap 4px 和 touch / pen 1.8 秒解冻。
 - 原型辅助功能清单是否已确认：已明确不进入产品。
 - 最终截图：`prototype-preview.png`（Playwright，1440 × 900，420px sidecar + 10 tabs）。
-- 对应权威文档：`docs/architecture/terminal-code-preview.md` 与 `docs/testing/terminal-browser-adaptive-tabs-test-cases.md`。
+- 对应权威文档：`docs/architecture/terminal-code-preview.md` 与 `docs/testing/terminal/terminal-browser-adaptive-tabs-test-cases.md`。
 - 实施结果：Renderer 自适应布局、Overview、关闭冻结、键盘与拖拽，以及 Electron 顺序持久化已于 2026-07-10 完成。
 - 冻结时间：2026-07-10。
 

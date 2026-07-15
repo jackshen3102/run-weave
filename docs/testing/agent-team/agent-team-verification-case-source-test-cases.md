@@ -50,10 +50,10 @@ git diff --check
 ## 覆盖清单
 
 - 功能正确性：AGT-VERIFY-001 到 AGT-VERIFY-004 覆盖 UI、文件优先级、计划生成、任务生成。
-- 边界与异常：AGT-VERIFY-005 到 AGT-VERIFY-007 覆盖不可解析文件、缺失路径、项目外路径。
-- 状态与时序：AGT-VERIFY-008 到 AGT-VERIFY-010 覆盖 proposal/executing 来源、`behavior_verify` prompt 和复验范围。
-- 数据与协议：AGT-VERIFY-002、AGT-VERIFY-003、AGT-VERIFY-008 验证 run JSON 中 `verification`、`acceptance[].sourceCaseId`、`sourceFilePath`。
-- 安全与权限：AGT-VERIFY-007 覆盖项目目录边界；接口鉴权沿用现有 backend `requireAuth`，本轮不新增鉴权规则。
+- 边界与异常：AGT-VERIFY-005 的任务描述生成路径由同文档保留；不可解析文件、缺失路径、项目外路径由 `AGT-ARCH-003` 统一覆盖。
+- 状态与时序：AGT-VERIFY-009 到 AGT-VERIFY-011 覆盖 proposal/executing 来源、`behavior_verify` prompt 和复验范围。
+- 数据与协议：AGT-VERIFY-002、AGT-VERIFY-003、AGT-VERIFY-009 验证 run JSON 中 `verification`、`acceptance[].sourceCaseId`、`sourceFilePath`。
+- 安全与权限：目录边界由 `AGT-ARCH-003` 覆盖；接口鉴权沿用现有 backend `requireAuth`，本轮不新增鉴权规则。
 - 回归与兼容：AGT-VERIFY-005、AGT-VERIFY-009 防止回退到默认泛化 acceptance。
 - 可取证性：每条用例均要求 DOM / 截图 / API 响应 / run JSON / pane capture / outbox 中至少一种真实证据。
 
@@ -95,14 +95,14 @@ git diff --check
 
 前置条件：
 
-- 存在项目内测试案例文件 `docs/testing/agent-team-verification-case-source-test-cases.md`。
+- 存在项目内测试案例文件 `docs/testing/agent-team/agent-team-verification-case-source-test-cases.md`。
 - 该文件至少包含 `AGT-VERIFY-001` 和 `AGT-VERIFY-002` 两个三级标题 case。
 - 当前 terminal 可启动新的 Agent Team run。
 
 步骤：
 
 1. 在 Agent Team 启动面板填写任务描述。
-2. `测试案例文件` 填写 `docs/testing/agent-team-verification-case-source-test-cases.md`。
+2. `测试案例文件` 填写 `docs/testing/agent-team/agent-team-verification-case-source-test-cases.md`。
 3. `计划文件` 留空。
 4. 启动 Agent Team。
 5. 读取 proposal / executing 面板和 `.runweave/agent-team/<runId>.json`。
@@ -110,7 +110,7 @@ git diff --check
 期望：
 
 - run JSON 的 `verification.acceptanceSource` 为 `test_case_file`。
-- run JSON 的 `verification.testCaseFilePath` 为 `docs/testing/agent-team-verification-case-source-test-cases.md`。
+- run JSON 的 `verification.testCaseFilePath` 为 `docs/testing/agent-team/agent-team-verification-case-source-test-cases.md`。
 - `acceptance[]` 中保留原始 case ID，例如 `caseId` 或 `sourceCaseId` 等于 `AGT-VERIFY-001`。
 - acceptance 文案包含对应 case 的标题、步骤摘要、期望摘要和失败判定摘要。
 - 默认泛化用例 `核心改动按任务目标落地`、`关键回归用例通过` 不出现在 behavior acceptance 中。
@@ -131,7 +131,7 @@ git diff --check
 前置条件：
 
 - 存在项目内输入文件 `docs/architecture/multi-agent-orchestrator.md`，用于填写启动面板的 `计划文件` 字段。
-- 存在测试案例文件 `docs/testing/agent-team-verification-case-source-test-cases.md`，包含 `AGT-VERIFY-003`。
+- 存在测试案例文件 `docs/testing/agent-team/agent-team-verification-case-source-test-cases.md`，包含 `AGT-VERIFY-003`。
 
 步骤：
 
@@ -176,7 +176,7 @@ git diff --check
 期望：
 
 - 生成文件位于 `docs/testing/` 且以 `-test-cases.md` 结尾。
-- 生成文件中的每条可执行用例为 `### AGT-VERIFY-xxx 标题`，并包含 `步骤`、`期望`、`失败判定`。
+- 生成文件中的每条可执行用例均为可追溯的三级标题 case（保留生成来源使用的领域前缀，例如 `### AGT-ARCH-xxx 标题`），并包含 `步骤`、`期望`、`失败判定`。
 - split payload 包含 `generatedTestCaseFilePath`。
 - split payload 的 workers 包含且只包含本轮要求的三类角色：`code`、`code_review`、`behavior_verify`。
 - run JSON 的 `verification.acceptanceSource` 为 `plan_file_generated`。
@@ -184,7 +184,7 @@ git diff --check
 失败判定：
 
 - 未生成测试案例文件就进入 worker split。
-- 生成文件不在 `docs/testing/` 或不以 `-test-cases.md` 结尾。
+- 生成文件不在 `docs/testing/` 或不以 `-test-cases.md` 结尾；生成的三级标题不是可解析、可追溯的 case ID。
 - payload 未带 `generatedTestCaseFilePath`。
 - workers 缺少 `code`、`code_review` 或 `behavior_verify` 任一角色。
 
@@ -216,11 +216,11 @@ git diff --check
 - 生成文件位于 `docs/testing/` 且以 `-test-cases.md` 结尾。
 - run JSON 的 `verification.acceptanceSource` 为 `task_generated`。
 - behavior acceptance 来自生成文件中的 case ID。
-- 默认泛化 acceptance 不出现。
+- 除 behavior acceptance 外，可以存在由后端为 `code_review` worker 注入的独立 Code Review gate；该 gate 不计入 behavior acceptance，也不视为默认泛化产品 Case。
 
 失败判定：
 
-- 两个文件为空时直接进入默认泛化 acceptance。
+- 两个文件为空时直接进入无来源的泛化 behavior acceptance，或将 Code Review gate 错误地作为 behavior acceptance。
 - 没有生成文件或没有回填 `generatedTestCaseFilePath`。
 - 来源错误显示为 `test_case_file` 或缺失。
 
@@ -230,104 +230,11 @@ git diff --check
 - 生成文件路径。
 - run JSON `verification` 和 `acceptance` 片段。
 
-### AGT-VERIFY-006 生成文件无法解析时阻止 split 并提示缺少可追溯测试案例文件
-
-前置条件：
-
-- 准备一个项目内 Markdown 文件，位于 `docs/testing/invalid-agent-team-test-cases.md`。
-- 文件不存在任何 `### AGT-VERIFY-001 标题` 形式的三级标题，或缺少可执行 case 内容。
-
-步骤：
-
-1. 让主 Agent 尝试以该文件作为 `generatedTestCaseFilePath` 调用 `propose-split`。
-2. 读取 API 响应、run JSON 和 worker pane 状态。
-
-期望：
-
-- API 返回明确错误，错误信息包含“缺少可追溯测试案例文件”或等价说明。
-- run 不进入 `executing`。
-- 不创建 `behavior_verify` worker pane。
-- run JSON 的 `acceptance` 不包含默认泛化用例。
-
-失败判定：
-
-- 不可解析文件仍能进入 worker split。
-- 后端补出 `核心改动按任务目标落地` 或 `关键回归用例通过`。
-- 错误信息无法定位测试案例文件不可解析。
-
-证据：
-
-- API 响应体。
-- run JSON 片段。
-- worker pane 列表或 Agent Team 面板截图。
-
-### AGT-VERIFY-007 路径不存在时阻止启动或 split
-
-前置条件：
-
-- 当前项目内不存在 `docs/testing/not-exist-test-cases.md`。
-
-步骤：
-
-1. 在 `测试案例文件` 输入 `docs/testing/not-exist-test-cases.md`。
-2. 填写任务描述并点击启动 Agent Team。
-3. 如果从主 Agent 发起 split，则用同一路径作为 `generatedTestCaseFilePath` 调用 `propose-split`。
-4. 读取 UI 错误或 API 响应。
-
-期望：
-
-- 启动或 split 被阻止。
-- UI 或 API 错误包含不存在的路径。
-- 不创建新的 worker pane。
-- run 不进入 `executing`。
-
-失败判定：
-
-- 系统忽略不存在路径并进入 worker split。
-- 错误只显示通用失败，无法定位路径。
-- 仍生成默认 acceptance。
-
-证据：
-
-- UI 错误截图 / DOM，或 API 响应体。
-- `.runweave/agent-team/<runId>.json` 的 `phase`、`workers`、`acceptance` 片段。
-
-### AGT-VERIFY-008 项目外路径被阻止且不读取文件内容
-
-前置条件：
-
-- 准备一个项目外路径，例如 `/tmp/external-agent-team-test-cases.md`。
-- 该文件即使存在，也不应被当前项目读取。
-
-步骤：
-
-1. 在 `测试案例文件` 输入项目外绝对路径。
-2. 填写任务描述并启动 Agent Team。
-3. 如果从主 Agent 发起 split，则用同一路径作为 `generatedTestCaseFilePath` 调用 `propose-split`。
-4. 读取 UI 错误或 API 响应。
-
-期望：
-
-- 启动或 split 被阻止。
-- 错误说明路径必须位于当前项目目录内。
-- backend 不把项目外文件内容转换成 acceptance。
-
-失败判定：
-
-- 项目外文件被读取并生成 acceptance。
-- UI 或 API 未提示项目目录边界。
-- run JSON 记录项目外路径为 `testCaseFilePath` 或 `generatedTestCaseFilePath`。
-
-证据：
-
-- UI 错误截图 / DOM，或 API 响应体。
-- run JSON 中未进入 executing 的片段。
-
 ### AGT-VERIFY-009 Proposal 和 Executing 面板展示 acceptance 来源与原始 case ID
 
 前置条件：
 
-- 使用 `docs/testing/agent-team-verification-case-source-test-cases.md` 或生成文件成功启动 Agent Team。
+- 使用 `docs/testing/agent-team/agent-team-verification-case-source-test-cases.md` 或生成文件成功启动 Agent Team。
 - run 已进入 proposal 或 executing。
 
 步骤：

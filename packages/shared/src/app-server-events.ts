@@ -205,7 +205,7 @@ export interface AppServerCodexThreadDetail {
 export interface AppServerThreadDetailResponse {
   thread: AppServerThreadRef;
   availability: AppServerThreadDetailAvailability;
-  detail?: AppServerCodexThreadDetail;
+  detail?: AppServerCodexThreadDetail | AppServerThreadDetail;
 }
 
 export interface AppServerSyncStatusResponse {

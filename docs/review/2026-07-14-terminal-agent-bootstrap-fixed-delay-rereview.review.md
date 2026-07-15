@@ -15,7 +15,7 @@
 - patch SHA-256：`3cd93e1c9018fae825e73b3c48a77909fa4d8e928ddf825ae18966ac687e0d10`
 - 边界：28 paths，2397 additions / 922 deletions
 - 计划：`docs/plans/2026-07-13-terminal-activity-work-history.md`，SHA-256 `7d0ef294770bdbe3e3081ea32ccd2edcdee0bc46dc846051a9aad2319cbb8d42`
-- 测试案例：`docs/testing/terminal-activity-work-history-test-cases.md`，SHA-256 `c92e190387c6a929239e61f960018b429d634053934ee61d045841df2d2210de`
+- 测试案例：`docs/testing/terminal/terminal-activity-work-history-test-cases.md`，SHA-256 `c92e190387c6a929239e61f960018b429d634053934ee61d045841df2d2210de`
 
 target tree 使用临时 index 从 HEAD 重新加入 `backend/electron/frontend/packages/plugins/scripts` 的完整 tracked + untracked 当前内容；既有 review 文档和 `.runweave` runtime artifacts 不进入边界。
 

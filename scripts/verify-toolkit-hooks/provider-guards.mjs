@@ -76,6 +76,7 @@ async function verifyDelayedCrossProviderHookGuard() {
     getPanel: () => undefined,
     listPanels: () => [panel],
     getLastAiActiveCommand: () => null,
+    hasPanelAgentOperationGeneration: () => false,
     updatePanelTerminalState: async (...args) => mutations.push(args),
     updateSessionLastThread: async (...args) => mutations.push(args),
     updatePanelLastThread: async (...args) => mutations.push(args),
@@ -137,6 +138,7 @@ async function verifyTmuxPaneFallbackUniqueness() {
       getPanel: () => undefined,
       listPanels: () => panels,
       getLastAiActiveCommand: () => null,
+      hasPanelAgentOperationGeneration: () => false,
       updatePanelTerminalState: async (...args) => mutations.push(args),
     };
     const terminalStateService = {

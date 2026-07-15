@@ -70,8 +70,8 @@ git diff --check
 
 ## 4. 必跑矩阵
 
-| 编号   | 场景                               | 层级                  | 必跑 |
-| ------ | ---------------------------------- | --------------------- | ---- |
+| 编号       | 场景                               | 层级                  | 必跑 |
+| ---------- | ---------------------------------- | --------------------- | ---- |
 | AGT-WH-001 | Activity 新导航与默认视图          | UI                    | 是   |
 | AGT-WH-002 | 同一 Terminal 关联两个 Thread      | API + UI              | 是   |
 | AGT-WH-003 | 退出/重进 Codex 不拆 Terminal 档案 | 实际行为 + UI         | 是   |
@@ -794,18 +794,18 @@ git diff --check
 
 ## 6. 需求覆盖映射
 
-| 计划能力                       | 覆盖用例                               |
-| ------------------------------ | -------------------------------------- |
-| Terminal 以 session 为唯一档案 | AGT-WH-002、AGT-WH-003、AGT-WH-020                 |
+| 计划能力                       | 覆盖用例                                                   |
+| ------------------------------ | ---------------------------------------------------------- |
+| Terminal 以 session 为唯一档案 | AGT-WH-002、AGT-WH-003、AGT-WH-020                         |
 | 多 Thread 分段与按需详情       | AGT-WH-002、AGT-WH-004、AGT-WH-005、AGT-WH-018、AGT-WH-023 |
 | Work History 聚合与分页        | AGT-WH-007、AGT-WH-008、AGT-WH-011、AGT-WH-019、AGT-WH-024 |
-| Multi-Agent 独立路线           | AGT-WH-012、AGT-WH-013、AGT-WH-014                 |
-| Round 真实归属和历史兼容       | AGT-WH-013、AGT-WH-015                         |
-| Acceptance 真实 Evidence       | AGT-WH-016、AGT-WH-017                         |
-| Inspector/Drawer               | AGT-WH-009、AGT-WH-010、AGT-WH-022                 |
+| Multi-Agent 独立路线           | AGT-WH-012、AGT-WH-013、AGT-WH-014                         |
+| Round 真实归属和历史兼容       | AGT-WH-013、AGT-WH-015                                     |
+| Acceptance 真实 Evidence       | AGT-WH-016、AGT-WH-017                                     |
+| Inspector/Drawer               | AGT-WH-009、AGT-WH-010、AGT-WH-022                         |
 | 不过度设计/不伪造字段          | AGT-WH-005、AGT-WH-015、AGT-WH-016、AGT-WH-017、AGT-WH-020 |
-| 原 Activity 能力回归           | AGT-WH-001、AGT-WH-021                         |
-| 鉴权和数据保护                 | AGT-WH-005、AGT-WH-019                         |
+| 原 Activity 能力回归           | AGT-WH-001、AGT-WH-021                                     |
+| 鉴权和数据保护                 | AGT-WH-005、AGT-WH-019                                     |
 
 ## 7. 执行规则
 

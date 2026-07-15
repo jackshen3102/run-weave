@@ -498,6 +498,19 @@ export function createTerminalRouter(
           )) ?? updatedSession;
       }
       if (parsed.data.panelSplitEnabled !== undefined) {
+        const runningPanelCount = terminalSessionManager
+          .listPanels(session.id)
+          .filter((panel) => panel.status === "running").length;
+        if (
+          parsed.data.panelSplitEnabled === false &&
+          session.panelSplitEnabled &&
+          runningPanelCount > 1
+        ) {
+          res.status(409).json({
+            message: "Close extra panels before disabling panel split.",
+          });
+          return;
+        }
         updatedSession =
           (await terminalSessionManager.updateSessionPanelSplitEnabled(
             session.id,

@@ -30,7 +30,7 @@
 - terminal-events WS：`backend/src/ws/terminal-events-server.ts`
 - Web workspace：`frontend/src/components/terminal/terminal-workspace.tsx`
 - App session：`app/src/hooks/use-app-session.ts`
-- E2E：`frontend/tests/terminal.spec.ts`
+- E2E：当前仓库仅有 `frontend/tests/smoke.spec.ts`；Web 实时同步行为必须按本文件的 RW-WS Case 使用合规 `$toolkit:playwright-cli` 真实验收
 
 ## 测试环境
 
@@ -67,16 +67,16 @@ $RW_BIN auth login \
 
 ## 自动化静态验证
 
-| ID            | 范围              | 命令                                                                                                                                                                                                                   | 预期                                |
-| ------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| RW-STATIC-001 | CLI 类型          | `pnpm --filter @runweave/cli typecheck`                                                                                                                                                                                | 无 TS error                         |
-| RW-STATIC-002 | CLI lint          | `pnpm --filter @runweave/cli lint`                                                                                                                                                                                     | 无 lint error                       |
-| RW-STATIC-003 | CLI 构建          | `pnpm --filter @runweave/cli build`                                                                                                                                                                                    | 生成 `packages/runweave-cli/dist`   |
-| RW-STATIC-004 | shared 类型       | `pnpm --filter @runweave/shared typecheck`                                                                                                                                                                             | terminal event 协议无 TS error      |
-| RW-STATIC-005 | backend lint/type | `pnpm --filter @runweave/backend lint && pnpm --filter @runweave/backend typecheck`                                                                                                                                    | 无 lint/TS error                    |
-| RW-STATIC-006 | Web lint/type     | `pnpm --filter @runweave/frontend lint && pnpm --filter @runweave/frontend typecheck`                                                                                                                                  | 无 lint/TS error                    |
-| RW-STATIC-007 | Web E2E 事件同步  | `pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "externally created" && pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "externally deleted"` | 外部创建/删除后 UI 通过事件刷新列表 |
-| RW-STATIC-008 | App 类型          | `pnpm --filter @runweave/app typecheck`                                                                                                                                                                                | 无 TS error                         |
+| ID            | 范围              | 命令                                                                                                     | 预期                                |
+| ------------- | ----------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| RW-STATIC-001 | CLI 类型          | `pnpm --filter @runweave/cli typecheck`                                                                  | 无 TS error                         |
+| RW-STATIC-002 | CLI lint          | `pnpm --filter @runweave/cli lint`                                                                       | 无 lint error                       |
+| RW-STATIC-003 | CLI 构建          | `pnpm --filter @runweave/cli build`                                                                      | 生成 `packages/runweave-cli/dist`   |
+| RW-STATIC-004 | shared 类型       | `pnpm --filter @runweave/shared typecheck`                                                               | terminal event 协议无 TS error      |
+| RW-STATIC-005 | backend lint/type | `pnpm --filter @runweave/backend lint && pnpm --filter @runweave/backend typecheck`                      | 无 lint/TS error                    |
+| RW-STATIC-006 | Web lint/type     | `pnpm --filter @runweave/frontend lint && pnpm --filter @runweave/frontend typecheck`                    | 无 lint/TS error                    |
+| RW-STATIC-007 | Web E2E 事件同步  | 不再引用不存在的独立 spec；按 RW-WS-005/006 使用合规 `$toolkit:playwright-cli` 真实验收外部创建/删除场景 | 外部创建/删除后 UI 通过事件刷新列表 |
+| RW-STATIC-008 | App 类型          | `pnpm --filter @runweave/app typecheck`                                                                  | 无 TS error                         |
 
 ## Health 测试
 
@@ -213,20 +213,20 @@ $RW_BIN terminal show "$COMMAND_TERMINAL_ID" --json \
 
 本组验证外部 agent 通过 CLI/HTTP 创建项目和终端时，Web/App 是否像用户手动创建一样响应。涉及浏览器操作时必须使用 `$toolkit:playwright-cli`。
 
-| ID        | 场景                          | 步骤                                                                                                                    | 预期                                                                 |
-| --------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| RW-WS-001 | 后端发布 project 创建事件     | 调用 `POST /api/terminal/project` 或 `$RW_BIN project ensure ...`                                                       | backend route 测试中 `terminalEventService` 记录 `project_created`   |
-| RW-WS-002 | 后端发布 terminal 创建事件    | 调用 `POST /api/terminal/session` 或 `$RW_BIN terminal create ...`                                                      | backend route 测试中记录 `terminal_session_created`                  |
-| RW-WS-003 | 后端发布 terminal 删除事件    | 调用 `DELETE /api/terminal/session/:id` 或 `$RW_BIN terminal delete ...`                                                | backend route 测试中记录 `terminal_session_deleted`                  |
-| RW-WS-004 | 后端发布 project 删除事件     | 调用 `DELETE /api/terminal/project/:id` 或 `$RW_BIN project delete ...`                                                 | backend route 测试中记录 `project_deleted`，含级联 session ids       |
-| RW-WS-005 | Web 实时刷新新增 project/tab  | 运行 `pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "adds externally created"`    | 页面无需刷新，刷新权威列表后出现外部创建的 project 和 terminal tab   |
-| RW-WS-006 | Web 实时刷新删除 terminal tab | 运行 `pnpm --filter @runweave/frontend exec playwright test tests/terminal.spec.ts --grep "removes externally deleted"` | 外部删除 terminal 后 tab 从页面消失                                  |
-| RW-WS-007 | Catchup 不重复                | Web 断开 terminal-events WS 后创建/删除 project/session，再重连                                                         | catchup 触发权威列表刷新，不出现重复或幽灵 project/tab               |
-| RW-WS-008 | Catchup gap 收敛              | Web/App 的 terminal-events cursor 早于服务端保留窗口或进程重启后重连                                                    | 客户端发现不可恢复 gap 后全量刷新项目/终端列表，不静默漏变更         |
-| RW-WS-009 | Live 不抢当前 active terminal | Web 当前正在另一个终端；外部创建新 terminal                                                                             | 新 tab 出现，但当前 URL/active terminal 不被强制切换                 |
-| RW-WS-010 | 空状态自动选中新 session      | Web 初始没有 active project/session；外部创建 project/session                                                           | 刷新权威列表后 UI 有可见 project/tab，并进入可用终端                 |
-| RW-WS-011 | App Home 实时刷新             | App 已登录并连接 terminal-events；外部创建或删除 project/session                                                        | 首页 overview 通过 `/api/app/home/overview` 刷新收敛；不需要下拉刷新 |
-| RW-WS-012 | State 事件仍正常合并          | 创建终端后触发 `terminal_state_changed`                                                                                 | 状态 badge 更新；结构变化仍由列表刷新负责                            |
+| ID        | 场景                          | 步骤                                                                                                                                                  | 预期                                                                 |
+| --------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| RW-WS-001 | 后端发布 project 创建事件     | 调用 `POST /api/terminal/project` 或 `$RW_BIN project ensure ...`                                                                                     | backend route 测试中 `terminalEventService` 记录 `project_created`   |
+| RW-WS-002 | 后端发布 terminal 创建事件    | 调用 `POST /api/terminal/session` 或 `$RW_BIN terminal create ...`                                                                                    | backend route 测试中记录 `terminal_session_created`                  |
+| RW-WS-003 | 后端发布 terminal 删除事件    | 调用 `DELETE /api/terminal/session/:id` 或 `$RW_BIN terminal delete ...`                                                                              | backend route 测试中记录 `terminal_session_deleted`                  |
+| RW-WS-004 | 后端发布 project 删除事件     | 调用 `DELETE /api/terminal/project/:id` 或 `$RW_BIN project delete ...`                                                                               | backend route 测试中记录 `project_deleted`，含级联 session ids       |
+| RW-WS-005 | Web 实时刷新新增 project/tab  | 使用合规 `$toolkit:playwright-cli` 打开本轮 Dev Session 的 Web terminal；通过 `$RW_BIN project ensure` / `$RW_BIN terminal create` 外部创建并读取 DOM | 页面无需刷新，刷新权威列表后出现外部创建的 project 和 terminal tab   |
+| RW-WS-006 | Web 实时刷新删除 terminal tab | 使用合规 `$toolkit:playwright-cli` 打开本轮 Dev Session 的 Web terminal；通过 `$RW_BIN terminal delete` 外部删除并读取 DOM                            | 外部删除 terminal 后 tab 从页面消失                                  |
+| RW-WS-007 | Catchup 不重复                | Web 断开 terminal-events WS 后创建/删除 project/session，再重连                                                                                       | catchup 触发权威列表刷新，不出现重复或幽灵 project/tab               |
+| RW-WS-008 | Catchup gap 收敛              | Web/App 的 terminal-events cursor 早于服务端保留窗口或进程重启后重连                                                                                  | 客户端发现不可恢复 gap 后全量刷新项目/终端列表，不静默漏变更         |
+| RW-WS-009 | Live 不抢当前 active terminal | Web 当前正在另一个终端；外部创建新 terminal                                                                                                           | 新 tab 出现，但当前 URL/active terminal 不被强制切换                 |
+| RW-WS-010 | 空状态自动选中新 session      | Web 初始没有 active project/session；外部创建 project/session                                                                                         | 刷新权威列表后 UI 有可见 project/tab，并进入可用终端                 |
+| RW-WS-011 | App Home 实时刷新             | App 已登录并连接 terminal-events；外部创建或删除 project/session                                                                                      | 首页 overview 通过 `/api/app/home/overview` 刷新收敛；不需要下拉刷新 |
+| RW-WS-012 | State 事件仍正常合并          | 创建终端后触发 `terminal_state_changed`                                                                                                               | 状态 badge 更新；结构变化仍由列表刷新负责                            |
 
 ## Profile 与配置优先级测试
 

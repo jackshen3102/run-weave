@@ -1,6 +1,6 @@
 # System Activity Data Foundation 产品原型
 
-面向 `docs/testing/system-activity-data-foundation-test-cases.md` 与
+面向 `docs/testing/architecture/system-activity-data-foundation-test-cases.md` 与
 `docs/architecture-flows/system-activity-data-foundation-flow/` 的可运行 HTML 参考原型。
 
 ## 启动

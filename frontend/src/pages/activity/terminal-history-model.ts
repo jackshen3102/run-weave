@@ -33,7 +33,7 @@ export function buildTerminalJournal(
     if (!thread) continue;
     entries.push({
       id: `thread:${ref.threadId}`,
-      occurredAt: thread.detail?.createdAt ?? ref.lastActivityAt,
+      occurredAt: ref.lastActivityAt,
       sourceType: "thread",
       sourceId: ref.threadId,
       title: `${ref.agent} Thread`,
@@ -44,16 +44,19 @@ export function buildTerminalJournal(
       selection: { type: "thread", thread },
     });
     for (const turn of thread.detail?.turns ?? []) {
+      const turnId = "id" in turn ? turn.id : turn.turnId;
       entries.push({
-        id: `turn:${ref.threadId}:${turn.id}`,
+        id: `turn:${ref.threadId}:${turnId}`,
         occurredAt:
-          turn.startedAt ?? turn.completedAt ?? thread.detail?.updatedAt ?? ref.updatedAt,
+          turn.startedAt ?? turn.completedAt ?? ref.updatedAt,
         sourceType: "turn",
-        sourceId: `${ref.threadId}:${turn.id}`,
+        sourceId: `${ref.threadId}:${turnId}`,
         title: `Turn ${turn.status}`,
         summary:
-          turn.messages.find((message) => message.role === "user")?.text ||
-          `${turn.itemCount} recorded items`,
+          "messages" in turn
+            ? turn.messages.find((message) => message.role === "user")?.text ||
+              `${turn.itemCount} recorded items`
+            : turn.preview || `${turn.status} turn`,
         selection: { type: "thread", thread },
       });
     }

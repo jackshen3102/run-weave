@@ -140,7 +140,9 @@ function statusLabel(interaction: ActivityInteraction): string {
 }
 
 function contentDescriptor(fact: ActivityFactDto | undefined, role: "query" | "response") {
-  return fact?.contentDescriptors.find((descriptor) => descriptor.role === role);
+  return Array.isArray(fact?.contentDescriptors)
+    ? fact.contentDescriptors.find((descriptor) => descriptor.role === role)
+    : undefined;
 }
 
 export function ActivityInteractionCard({

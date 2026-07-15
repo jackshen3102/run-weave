@@ -92,7 +92,7 @@ git diff --check
 
 ## 入口与 Panel Split 用例
 
-### AGT-ENTRY-001 默认不显示 Agent Team tab
+### AGT-ENTRY-001 可运行 tmux terminal 显示 Agent Team tab
 
 步骤：
 
@@ -103,12 +103,27 @@ git diff --check
 
 期望：
 
-- sidecar tab 只显示 Preview、Browser，不显示 Agent Team。
-- 顶部下拉菜单不再提供 Agent Team 入口。
+- sidecar tab 显示 Preview、Browser、Agent Team。
+- Agent Team 入口只对 running 且可提供 tmux/panel workspace 的 terminal 显示。
 - 项目目录下还没有新的 `.runweave/agent-team/*.json`。
 - 左侧终端仍是普通 shell，没有自动注入 Agent Team prompt。
 
+说明：旧判据“默认只显示 Preview、Browser”与当前被测契约“可运行 tmux/panel session 显示 Agent Team 入口”冲突；本 Case 保留入口可见性和不自动启动 run 的检查，不再把 Agent Team tab 可见本身判为失败。
+
+失败判定：
+
+- 可运行的 tmux/panel terminal 未显示 Agent Team 入口，或普通 shell 被自动注入 Agent Team prompt。
+- 打开 terminal 后自动创建 Agent Team run，或项目目录下出现未由用户发起的新 run 文件。
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-ENTRY-002 终端 tab 右键打开 Agent Team
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -125,7 +140,15 @@ git diff --check
 - 刷新后 `panelSplitEnabled` 保持为 true，Agent Team tab 仍可见。
 - 证据必须包含右键菜单截图、Agent Team tab 截图和刷新后仍可见的截图。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-ENTRY-003 Panel Split 开关是 session 级服务端状态
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -140,23 +163,39 @@ git diff --check
 - 换浏览器或 Electron 连接同一 backend 后，以后端 session list 返回值为准，不依赖 localStorage。
 - 禁用 Panel Split 只隐藏控制条和 Agent Team 入口，不删除已有 pane；当 panelCount > 1 时禁用项必须不可用并有提示。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-BOOT-001 Agent Team 绑定当前终端而非整个项目
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
 1. 在同一项目下创建两个 terminal session：A 和 B。
 2. 在 A 的终端 tab 右键打开 Agent Team，并点击开启流程。
-3. 切换到 B，确认 B 默认没有 Agent Team tab；再通过右键打开 B 的 Agent Team tab。
+3. 切换到 B，确认 B 没有继承 A 的 active Agent Team run；再通过右键打开 B 的 Agent Team tab。
 4. 再切回 A。
 
 期望：
 
-- A 显示已进入 `clarify`。
-- B 仍显示普通终端空态。
+- A 显示当前终端自己的 active Agent Team run；未自动确认拆分时进入 `clarify`，自动确认拆分时可直接进入 `executing`。
+- B 在显式开启前没有 active Agent Team run；打开 B 的 Agent Team tab 后，B 只显示自己的普通终端空态。
 - A 和 B 的 UI 状态不会串线。
 - run JSON 的 `projectId` 相同但 `terminalSessionId` 只等于 A。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-BOOT-002 切换项目不复用旧 run
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -171,7 +210,15 @@ git diff --check
 - 项目 A 恢复显示原 run。
 - `.runweave/agent-team` 文件只写在对应项目根目录下。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-BOOT-003 active run 优先保留 Agent Team tab
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -187,7 +234,15 @@ git diff --check
 
 ## 启动与 Agent Readiness 用例
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-START-001 开启流程并注入主 Agent prompt
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -205,7 +260,15 @@ git diff --check
 - run JSON 包含 `phase=clarify`、`status=clarifying`、`mainPanelId`、`options.autoApproveSplit`、`terminal.command=codex`。
 - 如果 tmux workspace 初始化失败，UI 必须显示可理解错误或保持可恢复状态，不得进入半启动假成功。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-START-002 同一终端重复开启冲突
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -218,7 +281,15 @@ git diff --check
 - 若触发后端冲突，右侧显示“This terminal already has an active agent-team run”或等价错误。
 - `.runweave/agent-team` 中不会出现同一 terminal 的两个 active run 被 UI 同时引用。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-START-003 刷新页面恢复 run
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -232,7 +303,15 @@ git diff --check
 - 即使 `panelSplitEnabled=false` 被误关，只要存在 active Agent Team run，Agent Team tab 仍应可见并恢复原 run。
 - 终端画面和右侧状态保持一致。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-START-004 已有其它 Agent 时的冲突
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -247,7 +326,15 @@ git diff --check
   或等价冲突信息。
 - run 不进入 `clarify` 假成功；终端现场不被清空。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-START-005 Codex 启动超时
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -263,7 +350,15 @@ git diff --check
 
 ## 澄清与提案用例
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-CLARIFY-001 人主导提案
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -277,7 +372,15 @@ git diff --check
 - proposal 含验收用例草案。
 - 右侧展示“确认拆分”和“驳回”。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-CLARIFY-002 Agent 主导提案
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -290,7 +393,15 @@ git diff --check
 - proposal.source 为 `agent`。
 - UI 从轮询或操作结果进入 `proposal`。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-PROPOSAL-001 增删 worker 后确认
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -306,7 +417,15 @@ git diff --check
 - 右侧进入 `executing`，workers 列表带 `panelId`/`tmuxPaneId`。
 - 验收用例仍来自 proposal，不因只编辑 worker 而丢失。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-PROPOSAL-002 空 worker 防误确认
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -319,7 +438,15 @@ git diff --check
 - 不会发起 split。
 - UI 不进入 executing。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-PROPOSAL-003 驳回提案回到澄清
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -333,7 +460,15 @@ git diff --check
 - 日志出现“人工驳回拆分提案，退回澄清”。
 - 可以再次发起提案。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-PROPOSAL-004 验收用例草案可见性
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -348,7 +483,15 @@ git diff --check
 
 ## 自动确认用例
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-AUTO-001 自动确认跳过人工门
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -363,7 +506,15 @@ git diff --check
 - 日志包含“自动确认拆分已开启，跳过人工门，直接 split”或 Agent 主导等价文案。
 - 生成 acceptance 用例，并显示在 executing 面板。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-AUTO-002 自动确认与 Agent 主导组合
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -378,7 +529,15 @@ git diff --check
 
 ## Pane 与 worker 用例
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-PANE-001 worker pane 创建和 prompt 注入
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -394,7 +553,15 @@ git diff --check
 - 每个 worker pane 有角色、runId、意图和完成要求；prompt 不应被发送到 main pane 或其它 worker pane。
 - `behavior_verify` pane 明确看到验收用例和写 outbox 要求。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-PANE-002 worker pane 继承 Agent Team terminal cwd
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -407,7 +574,15 @@ git diff --check
 - 不应从浏览器当前目录、backend cwd 或其它 pane 泄漏出错误 cwd。
 - 若后续调用方通过 `terminal.cwd` 覆盖 cwd，最终验证仍必须通过真实 worker pane 画面确认。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-PANE-003 split 不抢占主 pane
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -420,7 +595,15 @@ git diff --check
 - main pane 仍可被识别为主 Agent pane。
 - 右侧 executing 默认 Observe Only。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-PANE-004 已有多 pane 终端上开启流程
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -434,7 +617,15 @@ git diff --check
 - 新 worker pane alias/role 不与已有 pane 冲突。
 - 如果发生 alias/role 冲突，UI 显示明确错误并保持可恢复。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-PANE-005 非 tmux runtime 的入口与降级
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -450,7 +641,15 @@ git diff --check
 - 不应进入一个没有任何可用 worker pane 的假 executing 状态。
 - 如当前实现仍会以 `panelId=null` 进入 executing，记录为真实设计缺陷。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-PANE-006 聚焦 worker pane
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -464,7 +663,15 @@ git diff --check
 - 右侧不改变 run 内容。
 - 若 pane 已消失，UI 显示聚焦失败，不把错误吞掉。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-PANE-007 CLI panel agent 定向不串 pane
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -483,7 +690,15 @@ git diff --check
 
 ## Executing 与 loop 用例
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-LOOP-001 有进展的一轮
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -498,7 +713,15 @@ git diff --check
 - acceptance 显示 pass 状态和 text evidence。
 - 日志出现“有进展，noProgress 计数清零”。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-LOOP-002 第一次无进展不立即计数
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -512,7 +735,15 @@ git diff --check
 - 因稳定 fail 阈值未到，`noProgressCount` 可能保持 0。
 - 这个行为需要在测试记录中明确，防止被误判为按钮失效。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-LOOP-003 稳定 fail 后抛回 code pane
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -525,7 +756,15 @@ git diff --check
 - code pane 收到带失败用例和证据的 bounce prompt。
 - worker 之间没有横向通信；抛回动作来自编排层。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-LOOP-004 连续无进展触发熔断
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -541,7 +780,15 @@ git diff --check
 - 所有 worker 显示为 frozen 或不再被自动注入下一轮。
 - 若 UI 文案写“连续 3 轮”但实际需要更多轮，应记录文案与实现的差异。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-LOOP-005 熔断期间 completion 不推进 loop
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -555,7 +802,15 @@ git diff --check
 - 不会马上重复熔断或覆盖人工现场。
 - 事件可以被记录，但 Agent Team run 不应自动前进。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-LOOP-006 恢复后注入人工 note
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -571,7 +826,15 @@ git diff --check
 - note 输入框清空。
 - 下一轮不会在没有新稳定 fail 的情况下立即复燃。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-LOOP-007 恢复后历史 bestPassCount 影响
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -588,7 +851,15 @@ git diff --check
 
 ## 真实 completion / outbox 用例
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-OUTBOX-001 behavior_verify 写 outbox 推进 loop
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -604,7 +875,15 @@ git diff --check
 - 右侧 UI 的 pass/fail、证据、round 和日志与 outbox 内容一致。
 - 证据中保留 outbox 片段和 UI 截图。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-OUTBOX-002 多 worker outbox 覆盖风险
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -619,7 +898,15 @@ git diff --check
 - 若某 worker 仍写旧 session 级 outbox，带 `panelId` 或 `tmuxPaneId` 的 completion 不应盲读无归属旧文件。
 - 若当前实现出现覆盖或错归因，记录为高优先级缺陷，并附两个 pane 的 outbox 写入时间和 UI 结果。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-OUTBOX-003 脏 panel env 的归因
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -632,7 +919,15 @@ git diff --check
 - 后端不得把 completion 错归因给另一个仍存在的 worker pane。
 - 如果无法校验 panel 归属，应在测试记录中标明当前实现风险。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-OUTBOX-004 损坏 outbox 的可观测性
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -648,7 +943,15 @@ git diff --check
 
 ## 并发与多端用例
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-CONC-001 两个浏览器 tab 同时开启同一终端
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -661,7 +964,15 @@ git diff --check
 - 两个 tab UI 收敛到同一状态。
 - 不出现两个 run 文件被轮询随机切换的现象。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-CONC-002 UI 手动 round 与真实 completion 同时到达
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -674,7 +985,15 @@ git diff --check
 - `round` 不应异常双跳或覆盖已有 acceptance。
 - 如果 HTTP 手动 round 与 completion 事件竞态造成双计，记录具体轮次变化。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-CONC-003 resume 与在途 completion 竞态
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -688,9 +1007,17 @@ git diff --check
 - 人工 note 不应被 completion 覆盖。
 - 右侧日志顺序可解释。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ## 错误、鉴权与恢复用例
 
 ### AGT-ERR-001 鉴权过期
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -704,7 +1031,15 @@ git diff --check
 - 不把 401 当普通 run 错误继续展示。
 - 用户可以重新登录后恢复查看同一 run。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-ERR-002 非法操作反馈
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -718,7 +1053,15 @@ git diff --check
 - run 状态不被破坏。
 - 用户刷新后仍能看到一致状态。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-ERR-003 backend 重启恢复
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -732,7 +1075,15 @@ git diff --check
 - proposal、workers、acceptance、loop 和 logs 不丢失。
 - 已丢失的 tmux pane 不应被当作可聚焦 worker 假展示。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-ERR-004 terminal session 删除
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -748,7 +1099,15 @@ git diff --check
 
 ## 旧 Orchestrator 下线回归
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-REG-001 Orchestrator tab 和路由不可见
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -764,7 +1123,15 @@ git diff --check
 - 不再出现 Orchestrator tab。
 - Agent Team 操作走 `/api/agent-team/*`，不走 `/api/orchestrator/*`。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-REG-002 Preview 和 Browser sidecar 不退化
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -779,7 +1146,15 @@ git diff --check
 - Preview 的项目文件状态不被 Agent Team 切换破坏。
 - Browser tab、CDP proxy、刷新/前进后退不受 Agent Team 新 tab 影响。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-REG-003 Terminal panel split 基础能力不退化
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -795,7 +1170,15 @@ git diff --check
 - 普通 panel 工具不会破坏 Agent Team run 的 worker 归属。
 - panelSplitEnabled 写入服务端 session metadata；刷新后手工 panel 工具状态仍恢复。
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-REG-004 Hook payload 双副本一致
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -810,7 +1193,15 @@ git diff --check
 
 ## Electron / Computer Use 用例
 
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
+
 ### AGT-DESK-002 桌面端准备环境，浏览器验收页面
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 步骤：
 
@@ -822,6 +1213,10 @@ git diff --check
 
 - 桌面端准备的 backend/runtime 能被浏览器页面复用。
 - 最终验证证据仍来自浏览器 UI、DOM、截图和终端画面。
+
+失败判定：
+
+- 任一验收项不满足，或出现未在步骤中允许的额外副作用。
 
 ## 验收出口
 

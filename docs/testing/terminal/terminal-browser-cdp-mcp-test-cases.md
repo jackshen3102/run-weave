@@ -214,7 +214,7 @@ S05-S08 属于高风险安全命令。如果代理没有正确拦截，可能改
 
 ### 自动化回归覆盖
 
-`frontend/tests/terminal-browser-mcp-indicator.spec.ts` 覆盖以下可自动化规则：
+当前仓库没有独立的 `terminal-browser-mcp-indicator.spec.ts`；以下规则必须通过本文件定义的真实 Terminal Browser CDP endpoint 和 `$toolkit:playwright-cli`/MCP 入口验收：
 
 - `MI01` / `MI02`：`cdpProxyAttached=true` 但 `mcpActivityUntil=null` 时不显示 `MCP`。
 - `MI03`：`mcpActivityUntil` 未过期时显示且只显示一个 `MCP`。
@@ -227,7 +227,7 @@ S05-S08 属于高风险安全命令。如果代理没有正确拦截，可能改
 执行命令：
 
 ```bash
-pnpm --filter @runweave/frontend exec playwright test tests/terminal-browser-mcp-indicator.spec.ts
+当前没有对应的 Playwright spec；使用本文件的真实 Terminal Browser CDP 验收步骤。
 ```
 
 ### 桌面端人工验收步骤
@@ -268,13 +268,13 @@ R12 需要基于真实 Terminal Browser 验收：分别复制 tab A、tab B 的 
 
 ### 多客户端自动化覆盖
 
-`frontend/tests/terminal-browser-cdp-multi-client.spec.ts` 覆盖 `R03`。该用例需要真实桌面端 CDP endpoint；默认 CI 不设置 endpoint 时跳过。
+当前仓库没有独立的 `terminal-browser-cdp-multi-client.spec.ts`；`R03` 需要真实桌面端 CDP endpoint，未提供 endpoint 时记录为 blocked，不以自动化 spec 缺失冒充通过。
 
 执行命令：
 
 ```bash
 RUNWEAVE_DESKTOP_CDP_ENDPOINT=http://127.0.0.1:9224 \
-  pnpm --filter @runweave/frontend exec playwright test tests/terminal-browser-cdp-multi-client.spec.ts
+  当前没有对应的 Playwright spec；使用本文件的真实 Terminal Browser CDP 验收步骤。
 ```
 
 ## Playwright MCP 端到端验收建议

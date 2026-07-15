@@ -32,6 +32,7 @@ export function buildMainTestCaseGenerationPrompt(params: {
     "",
     "当前缺少可追溯测试案例文件，禁止直接进入 worker split，也禁止使用默认泛化 acceptance。",
     "请先调用 $toolkit:write-test-cases 生成测试案例文档，然后再提交 worker 拆分提案。",
+    "生成前先读取输入来源；若来源已出现可追溯 case ID 前缀，所有生成 case 必须继承该前缀，不得另造领域前缀；只有来源未给出 case ID 前缀时才按主题新建。",
     "",
     "输入来源：",
     sourceText,
