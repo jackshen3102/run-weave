@@ -44,13 +44,13 @@ pnpm runweave:beta:status --instance agent-a --json
 
 实例拥有独立的 App、userData、runtime、更新状态、App Server home 和 CDP 状态。不要用端口或最近启动时间推断目标实例。
 
-### 五槽位池计划状态
+### 五槽位池状态
 
-当前已沉淀的目标是把 `dev-session` 的 Beta profile 收敛到固定 5 个全局槽位：
-`pool-01` 至 `pool-05`。这个池化边界目前是计划和验收合同，不是现行
-`runweave:beta:*` 命令的已上线行为；低层 Beta 命令仍按显式 `instanceId` 操作实例。
+`dev-session --profile beta` 已收敛到固定 5 个全局槽位：`pool-01` 至 `pool-05`。低层
+`runweave:beta:*` 命令仍按显式 `instanceId` 操作既有 legacy instance，不能用来推断
+`dev-session` 的池化所有权。
 
-实施时必须同时满足：
+池化实现必须同时满足：
 
 - dry-run 只输出 `policy`、`capacity`、`requestedSlotId` 和非权威 capacity snapshot，
   不创建 session、manifest、lease 或目录，也不承诺 `assignedSlotId`。
@@ -63,7 +63,9 @@ pnpm runweave:beta:status --instance agent-a --json
 - 每个槽位的 Desktop Runtime 与 App Server Runtime 最多保留 current + previous；磁盘不足时
   只能清理所有权可证明的 pool 垃圾，仍不足则 fail closed。
 
-验收合同见 [Runweave Beta 槽位池测试用例](../testing/beta-slot-pool-test-cases.md)。在固定槽位池真正落地前，不要按这组目标推断当前命令行为。
+验收合同见 [Runweave Beta 槽位池测试用例](../testing/beta-slot-pool-test-cases.md)。需要验证
+`dev-session --profile beta` 时，以该合同和 `dev:status` / `dev:open` 返回的 slot、lease、
+manifest、CDP 身份为准。
 
 ### 2. 预览更新计划
 

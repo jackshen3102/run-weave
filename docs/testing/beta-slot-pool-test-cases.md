@@ -4,7 +4,7 @@
 
 `dev-session` 的 Beta profile 当前会按 `instanceId/sessionId` 生成独立 Beta App、userData、Runtime 和 App Server home。目标是使用固定 5 个全局槽位，并同时保证租约原子性、跨 session 状态清空、release 数量与磁盘占用有界、shared/Stable 所有权安全和 legacy 显式迁移。
 
-对应长期边界：`docs/deployment/runweave-beta.md#五槽位池计划状态`。原计划文档已按每日文档整理规则删除。
+对应长期边界：`docs/deployment/runweave-beta.md#五槽位池状态`。原计划文档已按每日文档整理规则删除。
 
 ## 范围
 
@@ -211,6 +211,6 @@ git diff --check
 ## 通过标准
 
 - 所有必跑门禁通过；
-- BSP-001 至 BSP-016 均有可定位到本次 validationSessionId、slotId、leaseNonce、manifest 和命令输出的证据；
+- BSP-001 至 BSP-017 均有可定位到本次 validationSessionId、slotId、leaseNonce、manifest 和命令输出的证据；
 - 任意失败不得以重跑、默认浏览器、ambient CDP、截图或静态检查替代真实行为结论；
 - 验收结束关闭本轮新建 tab、detach、stop Dev Session，并确认 dedicated 资源与 lease 已按预期收敛。
