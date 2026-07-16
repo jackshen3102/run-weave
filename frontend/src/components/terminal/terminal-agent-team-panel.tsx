@@ -25,11 +25,11 @@ import {
 import { AgentTeamAttentionSummary } from "./terminal-agent-team-panel-attention";
 import { AgentTeamFindingDecisionCard } from "./terminal-agent-team-finding-decision";
 import {
-  ExecutingSection,
   FailedRunSection,
   ProposalSection,
   StartFlowSection,
 } from "./terminal-agent-team-panel-sections";
+import { ExecutingSection } from "./terminal-agent-team-executing-section";
 
 interface TerminalAgentTeamPanelProps {
   apiBase: string;
