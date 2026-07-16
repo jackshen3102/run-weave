@@ -22,7 +22,7 @@
 
 ## 前提事实
 
-- 原型目录：`docs/prototypes/terminal-floating-composer/`。
+- 产品原型已删除；以以下真实前端入口和浏览器行为作为验收依据。
 - 真实前端入口：
   - `frontend/src/components/terminal/terminal-surface.tsx`
   - `frontend/src/components/terminal/terminal-surface-layout.tsx`

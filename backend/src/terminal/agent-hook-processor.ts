@@ -243,14 +243,15 @@ export async function processTerminalAgentHook(
     lastAiActiveCommand.clearedAt !== null &&
     Date.now() - lastAiActiveCommand.clearedAt <=
       AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS;
+  const currentTargetState =
+    panel?.terminalState ??
+    options.terminalStateService.getCurrent(session.id, session);
 
   if (
-    !currentThreadIdentityMatched &&
     input.hookEvent !== "SessionStart" &&
     !currentCommandMatches &&
     !graceCommandMatches &&
-    options.terminalStateService.getCurrent(session.id, session).agent !==
-      effectiveAgent
+    currentTargetState.agent !== effectiveAgent
   ) {
     return {
       status: "ignored",
@@ -258,10 +259,7 @@ export async function processTerminalAgentHook(
       agent: effectiveAgent,
       hookEvent: input.hookEvent,
       activeCommand: session.activeCommand,
-      terminalState: options.terminalStateService.getCurrent(
-        session.id,
-        session,
-      ),
+      terminalState: currentTargetState,
       panelId: panel?.id ?? null,
       ignoreReason: "inactive_agent",
     };
