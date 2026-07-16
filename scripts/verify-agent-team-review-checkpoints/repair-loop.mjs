@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { foldRound } from "../../backend/src/agent-team/loop.ts";
 import { normalizeAgentTeamWorkerOutbox } from "../../backend/src/agent-team/outbox-resolver.ts";
 import {
   buildBounceBackPrompt,
@@ -8,8 +7,6 @@ import {
 } from "../../backend/src/agent-team/prompt-builders.ts";
 import {
   foldRepairGateResult,
-  incrementRepairAttempts,
-  resolveMaxRepairAttempts,
   resolveRepairTargets,
   reviewFindingContractErrors,
   validateCodeFixHandoff,
@@ -21,7 +18,7 @@ import {
   buildRepairRun,
   normalizeRepairOutbox,
 } from "./repair-fixtures.mjs";
-import { verifyDispatchProtocolChecks } from "./repair-loop-dispatch.mjs";
+import { verifyRepairLoopContinuation } from "./repair-loop-continuation.mjs";
 import { verifyFindingDispositionChecks } from "./repair-loop-finding-disposition.mjs";
 
 function buildReviewReproduction(overrides = {}) {
@@ -55,6 +52,32 @@ export function verifyEvidenceGatedRepairLoop(check) {
     ),
     "utf8",
   );
+  const lifecycleSource = readFileSync(
+    new URL(
+      "../../backend/src/agent-team/service-lifecycle.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const interventionSource = readFileSync(
+    new URL(
+      "../../backend/src/agent-team/service-intervention.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const resumeBody = `${lifecycleSource.slice(
+    lifecycleSource.indexOf("async resumeRun"),
+    lifecycleSource.indexOf("async completeRun"),
+  )}\n${interventionSource}`;
+  const supportSource = readFileSync(
+    new URL("../../backend/src/agent-team/service-support.ts", import.meta.url),
+    "utf8",
+  );
+  const pauseDispatchBody = supportSource.slice(
+    supportSource.indexOf("protected async pauseForWorkerDispatchError"),
+    supportSource.indexOf("private async withVerificationDigests"),
+  );
   const repairProtocolSource = readFileSync(
     new URL(
       "../../backend/src/agent-team/service-repair-protocol.ts",
@@ -63,12 +86,12 @@ export function verifyEvidenceGatedRepairLoop(check) {
     "utf8",
   );
   check(
-    "repair-bounce-launches-formal-prompt-as-initial-query",
-    bounceBody.includes("this.agentLaunch.submitAgentLaunch") &&
-      bounceBody.includes("prompt: bouncePrompt") &&
+    "repair-bounce-reuses-fixed-worker-thread",
+    bounceBody.includes("this.submitWorkerDispatchPrompt(") &&
+      bounceBody.includes("bouncePrompt") &&
       bounceBody.indexOf("persistedRun = await this.updateRun") <
-        bounceBody.indexOf("this.agentLaunch.submitAgentLaunch") &&
-      !bounceBody.includes("this.promptSender.sendPromptToPane"),
+        bounceBody.indexOf("this.submitWorkerDispatchPrompt(") &&
+      !bounceBody.includes("this.agentLaunch.submitAgentLaunch"),
     bounceBody.slice(0, 4_000),
   );
   check(
@@ -77,6 +100,88 @@ export function verifyEvidenceGatedRepairLoop(check) {
       completionSource.includes("workerDispatchProtocolVersion: 1") &&
       completionSource.includes("contentSha256: history.contentSha256"),
     completionSource.slice(0, 20_000),
+  );
+  check(
+    "behavior-checkpoint-contract-is-scoped-to-dispatch",
+    completionSource.includes(
+      "latest.activeWorkerDispatch?.verifiedCheckpointCommit",
+    ) &&
+      completionSource.includes(
+        "latest.activeWorkerDispatch?.checkpointAllowedDirtyPaths",
+      ) &&
+      completionSource.includes(
+        "latest.activeWorkerDispatch?.checkpointRebasedCommit",
+      ),
+    completionSource.slice(0, 20_000),
+  );
+  check(
+    "repair-not-reproduced-review-finding-returns-to-reviewer",
+    completionSource.includes(
+      'handoff.status === "reviewer_reproduction_required"',
+    ) &&
+      completionSource.includes(
+        "code 无法复现重复 review finding，回派 reviewer 现场举证",
+      ),
+    completionSource.slice(0, 20_000),
+  );
+  check(
+    "repair-human-resume-creates-fresh-dispatch-before-reactivating-worker",
+    resumeBody.includes("activeWorkerRole: null") &&
+      resumeBody.includes("workers: setActiveWorker(run.workers, null)") &&
+      resumeBody.includes("run.consumedWorkerDispatches?.at(-1)?.role") &&
+      resumeBody.includes('lastRepairSourceRole === "behavior_verify"') &&
+      resumeBody.includes("repairKey: `behavior_verify:${item.caseId}`") &&
+      resumeBody.includes("repairCycles: resumedRepairCycles") &&
+      pauseDispatchBody.includes("activeWorkerRole: role") &&
+      resumeBody.includes('activeWorkerRole === "code"') &&
+      resumeBody.includes("return this.bounceFailuresToCode(") &&
+      resumeBody.includes(
+        "return this.dispatchSerialWorker(nextRun, activeWorkerRole",
+      ) &&
+      resumeBody.indexOf("await this.trySendToMain") <
+        resumeBody.indexOf("return this.bounceFailuresToCode("),
+    resumeBody,
+  );
+  check(
+    "human-gate-notification-is-centralized-configurable-and-default-on",
+    supportSource.includes('run.status !== "need_human"') &&
+      supportSource.includes('next.status === "need_human"') &&
+      supportSource.includes("next.options.notifyMainOnHumanGate !== false") &&
+      supportSource.includes(
+        "await this.trySendToMain(next, buildHumanGateMainPrompt(next))",
+      ) &&
+      lifecycleSource.includes(
+        "input.options?.notifyMainOnHumanGate ?? true",
+      ) &&
+      !executionSource.includes("buildBlockedBehaviorMainPrompt"),
+    { supportSource, lifecycleSource, executionSource },
+  );
+  check(
+    "main-agent-intervention-is-explicit-and-cannot-dispose-findings",
+    resumeBody.includes("async interveneRun(") &&
+      resumeBody.includes("reopeningCompletedAcceptance") &&
+      resumeBody.includes('run.status === "done"') &&
+      resumeBody.includes("if (run.pendingFindingDecision)") &&
+      resumeBody.includes("Agent 不得代替人工 disposition") &&
+      resumeBody.includes("this.prepareSplitAcceptance(run") &&
+      resumeBody.includes("ensureWorkerGateAcceptance(") &&
+      resumeBody.includes("mergeAcceptanceRefresh(") &&
+      resumeBody.includes("const affectedCaseIds = input.caseIds ?? []") &&
+      resumeBody.includes("bestPassCount: refreshedBestPassCount") &&
+      resumeBody.includes("return this.bounceFailuresToCode(") &&
+      resumeBody.includes("return this.dispatchSerialWorker(") &&
+      resumeBody.includes("agentInterventions:") &&
+      resumeBody.includes(
+        "checkpointAllowedDirtyPaths: input.checkpointAllowedDirtyPaths",
+      ) &&
+      resumeBody.includes(
+        "checkpointExpectedHeadCommit: input.checkpointExpectedHeadCommit",
+      ) &&
+      resumeBody.includes(
+        "checkpointRebasedCommit: input.checkpointRebasedCommit",
+      ) &&
+      resumeBody.includes("Agent intervention 覆盖当前"),
+    resumeBody,
   );
   check(
     "repair-protocol-correction-creates-fresh-dispatch-before-prompt",
@@ -180,12 +285,29 @@ export function verifyEvidenceGatedRepairLoop(check) {
   );
   const behaviorDispatchRun = {
     ...runtimeRun,
+    reviewCheckpoint: {
+      mode: "local_commit",
+      repoRoot: "/tmp/repo",
+      originalBranch: "main",
+      branch: "runweave/fixture",
+      taskBaseCommit: "a".repeat(40),
+      lastReviewedCommit: "b".repeat(40),
+      pendingReview: null,
+      checkpoints: [],
+      finalReviewedCommit: null,
+    },
     activeWorkerRole: "behavior_verify",
     activeWorkerDispatch: createActiveWorkerDispatch(
       run.workers[2],
       run.updatedAt,
       1,
       run.loop.round,
+      null,
+      {
+        verifiedCheckpointCommit: "c".repeat(40),
+        checkpointAllowedDirtyPaths: ["control-plane.ts"],
+        checkpointRebasedCommit: "d".repeat(40),
+      },
     ),
   };
   const behaviorRecheckPrompt = buildWorkerRecheckPrompt({
@@ -201,6 +323,12 @@ export function verifyEvidenceGatedRepairLoop(check) {
       behaviorRecheckPrompt.includes("上游 review 摘要") &&
       behaviorRecheckPrompt.includes(
         `DispatchId: ${behaviorDispatchRun.activeWorkerDispatch.dispatchId}`,
+      ) &&
+      behaviorRecheckPrompt.includes(
+        `本轮被测 checkpoint：${"c".repeat(40)}`,
+      ) &&
+      behaviorRecheckPrompt.includes(
+        `verifiedCheckpointCommit 必须等于 "${"c".repeat(40)}"`,
       ) &&
       !behaviorRecheckPrompt.includes("本轮修复摘要") &&
       !behaviorRecheckPrompt.includes("已完成修复"),
@@ -332,184 +460,29 @@ export function verifyEvidenceGatedRepairLoop(check) {
       !structuralPrompt.includes("Codex worker 在修改源码前显式调用"),
     structuralPrompt,
   );
-  check(
-    "repair-structural-handoff-valid",
-    validateCodeFixHandoff(
-      structuralRun,
-      normalizeRepairOutbox(structuralRun, [
-        buildFixVerification(structuralCycle),
-      ]),
-    ).status === "valid",
-    structuralCycle,
-  );
-  check(
-    "repair-structural-rejects-unrelated-harness",
-    validateCodeFixHandoff(
-      structuralRun,
-      normalizeRepairOutbox(structuralRun, [
-        buildFixVerification(structuralCycle, {
-          reproduction: {
-            mode: "review_harness",
-            status: "confirmed",
-            evidence: [buildRepairEvidence("unrelated-before")],
-          },
-          verification: {
-            status: "pass",
-            sameScenario: true,
-            evidence: [buildRepairEvidence("unrelated-after")],
-          },
-        }),
-      ]),
-    ).status === "invalid",
-    structuralCycle,
-  );
-
-  const invalidReviewOutbox = normalizeAgentTeamWorkerOutbox({
-    ...reviewOutbox,
-    remainingFindings: [
-      {
-        severity: "P1",
-        status: "open",
-        title: "missing contract",
-        summary: "missing stable identity",
-      },
-    ],
+  const repeatedReviewReproduction = buildReviewReproduction({
+    status: "reproduced",
+    scenarioId: "repeated-review-finding",
   });
-  check(
-    "repair-new-review-finding-requires-stable-key",
-    reviewFindingContractErrors(
-      run,
-      invalidReviewOutbox,
-      invalidReviewOutbox.acceptanceResults,
-    ).length === 3,
-    invalidReviewOutbox,
-  );
-
-  const unreproducedRuntimeOutbox = normalizeAgentTeamWorkerOutbox({
-    ...reviewOutbox,
-    remainingFindings: [
-      {
-        severity: "P1",
-        status: "open",
-        title: "runtime inference only",
-        summary: "an intermediate state looked suspicious",
-        invariantKey: "readiness.runtime-inference",
-        verificationMode: "runtime",
-        reproduction: buildReviewReproduction({
-          mode: "real_product",
-          status: "not_reproduced",
-          scenarioId: "runtime-inference",
-        }),
-      },
-    ],
-  });
-  check(
-    "repair-runtime-review-finding-requires-observable-reproduction",
-    reviewFindingContractErrors(
-      run,
-      unreproducedRuntimeOutbox,
-      unreproducedRuntimeOutbox.acceptanceResults,
-    ).some((error) => error.includes("real_product + reproduced")),
-    unreproducedRuntimeOutbox,
-  );
-
-  const secondTitleOutbox = normalizeAgentTeamWorkerOutbox({
+  const repeatedReviewOutbox = normalizeAgentTeamWorkerOutbox({
     ...reviewOutbox,
     remainingFindings: [
       {
         ...reviewOutbox.remainingFindings[0],
-        title: "new symptom, same invariant",
-        summary: "backend still owns checkpoint index at a new call site",
-      },
-      {
-        severity: "P1",
-        status: "open",
-        title: "readiness boundary",
-        summary: "readiness must use an event boundary",
-        invariantKey: "readiness.event-boundary",
-        verificationMode: "runtime",
-        reproduction: buildReviewReproduction({
-          mode: "real_product",
-          status: "reproduced",
-          scenarioId: "readiness-event-boundary",
-        }),
+        reproduction: repeatedReviewReproduction,
       },
     ],
   });
-  const isolatedTargets = resolveRepairTargets(
-    run,
-    secondTitleOutbox,
-    secondTitleOutbox.acceptanceResults,
-  );
-  check(
-    "repair-review-invariant-keys-isolate-generic-case",
-    isolatedTargets
-      .map((target) => target.repairKey)
-      .sort()
-      .join(",") ===
-      "code_review:checkpoint.index-ownership,code_review:readiness.event-boundary",
-    isolatedTargets,
-  );
-
-  let budgetLoop = behaviorFold.loop;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    budgetLoop = incrementRepairAttempts(budgetLoop, [runtimeCycle.repairKey]);
-  }
-  const budgetRun = { ...run, loop: budgetLoop };
-  const diffFold = foldRound(budgetRun, { hadDiff: true });
-  const exhausted = foldRepairGateResult({
-    loop: diffFold.loop,
-    completedRole: "behavior_verify",
-    acceptanceResults: behaviorOutbox.acceptanceResults,
-    targets: behaviorTargets,
-    round: 3,
-  });
-  check(
-    "repair-diff-does-not-reset-budget",
-    exhausted.loop.repairCycles[0]?.attempts === 3 &&
-      exhausted.exhausted[0]?.repairKey === runtimeCycle.repairKey,
-    exhausted,
-  );
-  check(
-    "repair-budget-default-and-bounds",
-    resolveMaxRepairAttempts(undefined) === 3 &&
-      resolveMaxRepairAttempts(1) === 1 &&
-      resolveMaxRepairAttempts(5) === 5 &&
-      resolveMaxRepairAttempts(0) === 3 &&
-      resolveMaxRepairAttempts(6) === 3,
-    "repair budget bounds failed",
-  );
-
-  const secondAttemptCycle = { ...runtimeCycle, attempts: 1 };
-  const secondAttemptRun = {
-    ...runtimeRun,
-    loop: { ...runtimeRun.loop, repairCycles: [secondAttemptCycle] },
+  const repeatedStructuralCycle = {
+    ...structuralCycle,
+    attempts: 1,
+    finding: repeatedReviewOutbox.remainingFindings[0],
   };
-  check(
-    "repair-second-attempt-requires-strategy-assessment",
-    validateCodeFixHandoff(
-      secondAttemptRun,
-      normalizeRepairOutbox(secondAttemptRun, [
-        buildFixVerification(secondAttemptCycle),
-      ]),
-    ).status === "invalid" &&
-      validateCodeFixHandoff(
-        secondAttemptRun,
-        normalizeRepairOutbox(secondAttemptRun, [
-          buildFixVerification(secondAttemptCycle, {
-            strategyAssessment:
-              "上一轮缺少事件边界，本轮调整状态所有权而非增加文案分支。",
-          }),
-        ]),
-      ).status === "valid",
-    secondAttemptCycle,
-  );
-
-  const multiRun = {
-    ...run,
+  const repeatedStructuralRun = {
+    ...structuralRun,
     loop: {
-      ...reviewFold.loop,
-      repairCycles: [runtimeCycle, structuralCycle],
+      ...structuralRun.loop,
+      repairCycles: [repeatedStructuralCycle],
     },
     activeWorkerDispatch: createActiveWorkerDispatch(
       run.workers[0],
@@ -517,35 +490,76 @@ export function verifyEvidenceGatedRepairLoop(check) {
       1,
       run.loop.round,
       null,
-      { repairKeys: [runtimeCycle.repairKey, structuralCycle.repairKey] },
+      { repairKeys: [repeatedStructuralCycle.repairKey] },
     ),
   };
   check(
-    "repair-multi-finding-requires-complete-handoff",
-    validateCodeFixHandoff(
-      multiRun,
-      normalizeRepairOutbox(multiRun, [buildFixVerification(runtimeCycle)]),
-    ).status === "invalid" &&
-      validateCodeFixHandoff(
-        multiRun,
-        normalizeRepairOutbox(multiRun, [
-          buildFixVerification(runtimeCycle),
-          buildFixVerification(structuralCycle),
-        ]),
-      ).status === "valid",
-    multiRun.activeWorkerDispatch,
+    "repair-repeated-review-finding-rejects-static-contract",
+    reviewFindingContractErrors(
+      repeatedStructuralRun,
+      reviewOutbox,
+      reviewOutbox.acceptanceResults,
+    ).some((error) => error.includes("修复后重复出现的 P0/P1")),
+    reviewOutbox,
   );
-  verifyDispatchProtocolChecks(check, {
-    run,
-    runtimeRun,
-    runtimeCycle,
-    behaviorDispatchRun,
+  check(
+    "repair-repeated-review-finding-requires-executable-reproduction",
+    reviewFindingContractErrors(
+      repeatedStructuralRun,
+      repeatedReviewOutbox,
+      repeatedReviewOutbox.acceptanceResults,
+    ).length === 0,
+    repeatedReviewOutbox,
+  );
+  const repeatedStructuralPrompt = buildBounceBackPrompt({
+    run: repeatedStructuralRun,
+    failedCases: [run.acceptance[1]],
+    repairCycles: [repeatedStructuralCycle],
   });
   check(
-    "repair-counters-remain-independent",
-    diffFold.loop.noProgressCount === 0 &&
-      diffFold.loop.repairCycles[0]?.attempts === 3 &&
-      run.acceptance[0].recheckAttempt === undefined,
-    diffFold.loop,
+    "repair-repeated-structural-prompt-requires-reviewer-scenario",
+    repeatedStructuralPrompt.includes("这是修复后重复出现的 P0/P1") &&
+      repeatedStructuralPrompt.includes("backend 会回派 reviewer 现场举证"),
+    repeatedStructuralPrompt,
   );
+  const reviewerChallengePrompt = buildWorkerRecheckPrompt({
+    run: {
+      ...repeatedStructuralRun,
+      activeWorkerRole: "code_review",
+      activeWorkerDispatch: createActiveWorkerDispatch(
+        run.workers[1],
+        run.updatedAt,
+        1,
+        run.loop.round,
+      ),
+    },
+    worker: run.workers[1],
+    cases: [run.acceptance[1]],
+    reviewChallenge: {
+      repairKeys: [repeatedStructuralCycle.repairKey],
+      reason: "code worker 按 reviewer 场景无法复现",
+    },
+  });
+  check(
+    "repair-reviewer-challenge-requires-new-executable-evidence",
+    reviewerChallengePrompt.includes("重复 P0/P1 复现争议") &&
+      reviewerChallengePrompt.includes("无法复现则从 remainingFindings 移除") &&
+      reviewerChallengePrompt.includes("禁止复用上一轮静态证据"),
+    reviewerChallengePrompt,
+  );
+  verifyRepairLoopContinuation(check, {
+    behaviorDispatchRun,
+    behaviorFold,
+    behaviorOutbox,
+    behaviorTargets,
+    repeatedStructuralCycle,
+    repeatedStructuralRun,
+    reviewFold,
+    reviewOutbox,
+    run,
+    runtimeCycle,
+    runtimeRun,
+    structuralCycle,
+    structuralRun,
+  });
 }

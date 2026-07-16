@@ -11,6 +11,10 @@ import type {
   AgentTeamWorkerOutbox,
   AgentTeamWorkerRole,
 } from "@runweave/shared/agent-team";
+import {
+  isValidInvariantKey,
+  rawBlockingReviewFindings,
+} from "./repair-review-contract";
 export const DEFAULT_MAX_REPAIR_ATTEMPTS = 3;
 export const MIN_REPAIR_ATTEMPTS = 1;
 export const MAX_REPAIR_ATTEMPTS = 5;
@@ -26,9 +30,20 @@ export interface AgentTeamRepairTarget {
   reviewTarget?: AgentTeamReviewTarget | null;
   reviewOutbox?: AgentTeamWorkerOutbox;
 }
+
+export {
+  isValidInvariantKey,
+  rawBlockingReviewFindings,
+  reviewFindingContractErrors,
+} from "./repair-review-contract";
 export type CodeFixHandoffValidation =
   | { status: "valid"; repairKeys: string[] }
   | { status: "invalid"; errors: string[] }
+  | {
+      status: "reviewer_reproduction_required";
+      repairKeys: string[];
+      reason: string;
+    }
   | { status: "blocked"; reason: string };
 export function resolveMaxRepairAttempts(value: unknown): number {
   return typeof value === "number" &&
@@ -38,23 +53,6 @@ export function resolveMaxRepairAttempts(value: unknown): number {
     ? value
     : DEFAULT_MAX_REPAIR_ATTEMPTS;
 }
-export function isValidInvariantKey(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    /^[a-z0-9][a-z0-9._-]{2,79}$/.test(value.trim())
-  );
-}
-
-export function rawBlockingReviewFindings(
-  outbox: AgentTeamWorkerOutbox,
-): AgentTeamOutboxFinding[] {
-  return (outbox.remainingFindings ?? []).filter(
-    (finding) =>
-      (finding.severity === "P0" || finding.severity === "P1") &&
-      (finding.status ?? "open") === "open",
-  );
-}
-
 export function blockingReviewFindings(
   run: AgentTeamRun,
   outbox: AgentTeamWorkerOutbox,
@@ -151,73 +149,6 @@ export function resolvePendingFindingDecision(
     };
   }
   return null;
-}
-
-export function reviewFindingContractErrors(
-  _run: AgentTeamRun,
-  outbox: AgentTeamWorkerOutbox,
-  acceptanceResults: NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>,
-): string[] {
-  if (outbox.role !== "code_review") {
-    return [];
-  }
-  const findings = rawBlockingReviewFindings(outbox);
-  const hasFailure =
-    acceptanceResults.some((result) => result.status === "fail") ||
-    findings.length > 0;
-  if (!hasFailure) {
-    return [];
-  }
-  if (findings.length === 0) {
-    return ["P0/P1 review fail 必须在 remainingFindings 中提供阻断 finding"];
-  }
-  return findings.flatMap((finding, index) => {
-    const errors: string[] = [];
-    if (!isValidInvariantKey(finding.invariantKey)) {
-      errors.push(`remainingFindings[${index}].invariantKey 缺失或格式无效`);
-    }
-    if (
-      finding.verificationMode !== "runtime" &&
-      finding.verificationMode !== "structural"
-    ) {
-      errors.push(
-        `remainingFindings[${index}].verificationMode 必须是 runtime 或 structural`,
-      );
-    }
-    const reproduction = finding.reproduction;
-    if (!reproduction) {
-      errors.push(
-        `remainingFindings[${index}].reproduction 缺失或不完整；无法复现不得提交 open P0/P1`,
-      );
-      return errors;
-    }
-    if (
-      finding.verificationMode === "runtime" &&
-      (reproduction.mode !== "real_product" ||
-        reproduction.status !== "reproduced" ||
-        !reproduction.scenarioId)
-    ) {
-      errors.push(
-        `remainingFindings[${index}].reproduction 必须是 real_product + reproduced，并提供 scenarioId`,
-      );
-    }
-    if (
-      finding.verificationMode === "structural" &&
-      (reproduction.mode === "real_product" ||
-        (reproduction.status !== "confirmed" &&
-          reproduction.status !== "reproduced"))
-    ) {
-      errors.push(
-        `remainingFindings[${index}].reproduction 必须是 review_harness/static_contract + confirmed|reproduced`,
-      );
-    }
-    if (reproduction.evidence.length === 0) {
-      errors.push(
-        `remainingFindings[${index}].reproduction.evidence 至少需要一条可追溯证据`,
-      );
-    }
-    return errors;
-  });
 }
 
 export function resolveRepairTargets(
@@ -414,6 +345,7 @@ function reviewTargetsMatch(
   return (
     left.scope === right.scope &&
     left.baseCommit === right.baseCommit &&
+    (left.targetCommit ?? null) === (right.targetCommit ?? null) &&
     left.targetTree === right.targetTree &&
     left.planSha256 === right.planSha256 &&
     left.testCaseSha256 === right.testCaseSha256
@@ -480,6 +412,7 @@ export function validateCodeFixHandoff(
   const expected = new Set(expectedKeys);
   const actual = new Set(verifications.keys());
   const errors: string[] = [];
+  const reviewerReproductionKeys: string[] = [];
   for (const key of expected) {
     if (!actual.has(key)) {
       errors.push(`缺少 fixVerifications: ${key}`);
@@ -501,7 +434,33 @@ export function validateCodeFixHandoff(
       errors.push(`repair cycle 不存在: ${key}`);
       continue;
     }
+    if (item.invariant.trim() !== cycle.invariant.trim()) {
+      errors.push(`${key} invariant 与 backend repair cycle 不一致`);
+    }
     const reproductionStatus = item.reproduction.status;
+    if (
+      cycle.sourceRole === "code_review" &&
+      cycle.attempts >= 1 &&
+      reproductionStatus === "not_reproduced"
+    ) {
+      const reviewerScenarioId =
+        cycle.finding?.reproduction?.scenarioId?.trim();
+      if (!reviewerScenarioId) {
+        errors.push(`${key} reviewer 未提供可执行 scenarioId`);
+      } else if (item.reproduction.scenarioId?.trim() !== reviewerScenarioId) {
+        errors.push(
+          `${key} 未按 reviewer scenarioId ${reviewerScenarioId} 复现`,
+        );
+      }
+      if (item.reproduction.mode !== cycle.finding?.reproduction?.mode) {
+        errors.push(`${key} 未使用 reviewer 下发的复现模式`);
+      }
+      if (item.reproduction.evidence.length === 0) {
+        errors.push(`${key} not_reproduced 缺少执行证据`);
+      }
+      reviewerReproductionKeys.push(key);
+      continue;
+    }
     if (
       reproductionStatus === "not_reproduced" ||
       reproductionStatus === "boundary" ||
@@ -514,9 +473,6 @@ export function validateCodeFixHandoff(
         status: "blocked",
         reason: `${key} 未达到修复交接门槛：reproduction=${reproductionStatus}, verification=${item.verification.status}, impactedCheckFailed=${item.impactedChecks.some((check) => check.status === "fail")}`,
       };
-    }
-    if (item.invariant.trim() !== cycle.invariant.trim()) {
-      errors.push(`${key} invariant 与 backend repair cycle 不一致`);
     }
     if (cycle.verificationMode === "runtime") {
       if (
@@ -580,6 +536,14 @@ export function validateCodeFixHandoff(
     if (cycle.attempts >= 1 && !item.strategyAssessment?.trim()) {
       errors.push(`${key} 第 2 次及以后修复缺少 strategyAssessment`);
     }
+  }
+
+  if (errors.length === 0 && reviewerReproductionKeys.length > 0) {
+    return {
+      status: "reviewer_reproduction_required",
+      repairKeys: reviewerReproductionKeys,
+      reason: `code worker 按 reviewer 场景无法复现：${reviewerReproductionKeys.join(", ")}；reviewer 必须在当前 checkpoint 亲自复现并提供新证据，否则移除 finding`,
+    };
   }
 
   return errors.length > 0

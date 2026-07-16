@@ -34,6 +34,8 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+export { verifyBackendProfileLockPublication } from "./verify-backend-profile-lock.mjs";
+
 export function expectDevSessionError(callback, exitCode) {
   assert.throws(callback, (error) => {
     assert(error instanceof DevSessionError);
@@ -344,35 +346,117 @@ export async function verifyRegistry(sourceRoot, temporaryHome) {
     ),
     true,
   );
-  const recoveryCleanup = await execFileAsync(
-    process.execPath,
-    [
-      "scripts/dev-session/cli.mjs",
-      "stop",
-      "--session",
-      recoverySession.devSessionId,
-      "--cleanup-stale",
-      "--json",
-    ],
-    { cwd: sourceRoot, env },
-  );
-  const cleanedRecoveryManifest = JSON.parse(recoveryCleanup.stdout);
-  assert.equal(cleanedRecoveryManifest.state, "stopped");
-  assert.equal(
-    cleanedRecoveryManifest.cleanup.skippedStaleServices.some(
-      (service) => service.service === "backend",
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [
+        "scripts/dev-session/cli.mjs",
+        "stop",
+        "--session",
+        recoverySession.devSessionId,
+        "--cleanup-stale",
+        "--json",
+      ],
+      { cwd: sourceRoot, env },
     ),
-    true,
+    (error) => error?.code === 5,
   );
-  assert.deepEqual(cleanedRecoveryManifest.cleanup.sharedServicesPreserved, [
-    "appServer",
-  ]);
+  const blockedRecoveryManifest = await readManifest(
+    recoverySession.devSessionId,
+    env,
+  );
+  assert.equal(blockedRecoveryManifest.state, "stale");
+  assert.equal(
+    blockedRecoveryManifest.failure.message,
+    "stale service identity drifted; refusing to reset or release Beta slot",
+  );
   await verifyStaleCleanupRetryConvergence({
     createManifest,
     recoverySession,
     sourceRoot,
     env,
   });
+
+  const releasedLeaseHome = path.join(temporaryHome, "released-lease-home");
+  const releasedLeaseNonce = "released-lease-nonce";
+  const releasedLeaseSession = {
+    ...createManifest({
+      sourceRoot,
+      sessionId: "dvs-failed-released-lease",
+    }),
+    state: "failed",
+    profile: "beta",
+    targetEnvironment: {
+      kind: "beta",
+      acceptanceSurfaces: ["desktop", "terminal-browser"],
+      instanceId: "pool-01",
+      betaSlot: {
+        policy: "fixed-pool-v1",
+        capacity: 5,
+        requestedSlotId: null,
+        assignedSlotId: "pool-01",
+        leaseNonce: releasedLeaseNonce,
+      },
+    },
+    services: Object.fromEntries(
+      Object.entries(recoverySession.services).map(([serviceName, service]) => [
+        serviceName,
+        serviceName === "cdp"
+          ? {
+              desktop: {
+                ...service.desktop,
+                slotId: "pool-01",
+                leaseNonce: releasedLeaseNonce,
+              },
+              terminalBrowser: {
+                ...service.terminalBrowser,
+                slotId: "pool-01",
+                leaseNonce: releasedLeaseNonce,
+              },
+            }
+          : {
+              ...service,
+              slotId: "pool-01",
+              leaseNonce: releasedLeaseNonce,
+            },
+      ]),
+    ),
+    failure: {
+      message: "start failed after identity-safe cleanup",
+      exitCode: 1,
+      leaseRetained: false,
+    },
+  };
+  await writeManifest(releasedLeaseSession, env);
+  const releasedLeaseEnv = { ...env, HOME: releasedLeaseHome };
+  const releasedLeaseStatus = await execFileAsync(
+    process.execPath,
+    [
+      "scripts/dev-session/cli.mjs",
+      "status",
+      "--session",
+      releasedLeaseSession.devSessionId,
+      "--json",
+    ],
+    { cwd: sourceRoot, env: releasedLeaseEnv },
+  );
+  assert.equal(JSON.parse(releasedLeaseStatus.stdout).state, "failed");
+  const releasedLeaseStop = await execFileAsync(
+    process.execPath,
+    [
+      "scripts/dev-session/cli.mjs",
+      "stop",
+      "--session",
+      releasedLeaseSession.devSessionId,
+      "--json",
+    ],
+    { cwd: sourceRoot, env: releasedLeaseEnv },
+  );
+  assert.equal(JSON.parse(releasedLeaseStop.stdout).state, "stopped");
+  assert.equal(
+    (await readManifest(releasedLeaseSession.devSessionId, env)).state,
+    "stopped",
+  );
   assert.equal((await readManifest(first.devSessionId, env)).state, "ready");
   assert.equal((await readManifest(second.devSessionId, env)).state, "ready");
 
@@ -476,82 +560,4 @@ export function verifyLegacyBackendEnv() {
     env.RUNWEAVE_TOOLKIT_PLUGIN_ROOT,
     path.join("/tmp/runweave-source-root", "electron", "resources"),
   );
-}
-
-export async function verifyBackendProfileLockPublication(
-  sourceRoot,
-  temporaryHome,
-) {
-  const profileDir = path.join(temporaryHome, "backend-profile-lock");
-  const verificationSource = `
-    import { mkdir, open, readFile, rm, utimes } from "node:fs/promises";
-    import path from "node:path";
-    import {
-      acquireBackendProfileLock,
-      BackendProfileLockConflictError,
-    } from "./src/server/profile-lock.ts";
-
-    void (async () => {
-    const profileDir = process.env.RUNWEAVE_VERIFY_PROFILE_DIR;
-    await mkdir(profileDir, { recursive: true, mode: 0o700 });
-    const lockFile = path.join(profileDir, "backend.lock.json");
-    const partialCreator = await open(lockFile, "wx", 0o600);
-    await utimes(lockFile, new Date(0), new Date(0));
-    let partialFailedClosed = false;
-    try {
-      await acquireBackendProfileLock({
-        devSessionId: "dvs-profile-competitor",
-        profileDir,
-        port: 6206,
-        host: "127.0.0.1",
-      });
-    } catch (error) {
-      partialFailedClosed = error instanceof BackendProfileLockConflictError;
-    }
-    await partialCreator.close();
-    await rm(lockFile);
-
-    const lock = await acquireBackendProfileLock({
-      devSessionId: "dvs-profile-owner",
-      profileDir,
-      port: 6206,
-      host: "127.0.0.1",
-    });
-    const createdOwner = JSON.parse(await readFile(lockFile, "utf8"));
-    await lock.update({ port: 6207 });
-    const updatedOwner = JSON.parse(await readFile(lockFile, "utf8"));
-    await lock.release();
-    process.stdout.write(JSON.stringify({
-      partialFailedClosed,
-      createdDevSessionId: createdOwner.devSessionId,
-      createdPort: createdOwner.port,
-      updatedPort: updatedOwner.port,
-      identityStable:
-        createdOwner.backendId === updatedOwner.backendId &&
-        createdOwner.pid === updatedOwner.pid,
-    }) + "\\n");
-    })().catch((error) => {
-      console.error(error);
-      process.exit(1);
-    });
-  `;
-  const { stdout } = await execFileAsync(
-    "pnpm",
-    ["-C", "backend", "exec", "tsx", "-e", verificationSource],
-    {
-      cwd: sourceRoot,
-      env: {
-        ...process.env,
-        RUNWEAVE_VERIFY_PROFILE_DIR: profileDir,
-      },
-    },
-  );
-  const result = JSON.parse(stdout.trim().split(/\r?\n/).at(-1));
-  assert.deepEqual(result, {
-    partialFailedClosed: true,
-    createdDevSessionId: "dvs-profile-owner",
-    createdPort: 6206,
-    updatedPort: 6207,
-    identityStable: true,
-  });
 }

@@ -18,15 +18,24 @@ import {
   writeManifest,
 } from "./registry.mjs";
 import {
-  assertSessionServicesStoppable,
-  cleanupStaleSessionServices,
   inspectSessionServices,
   resolveOpenTarget,
   resolveSourceRevision,
   startSessionServices,
   stopSessionServices,
 } from "./services.mjs";
-import { processIdentityMatches } from "./service-runtime.mjs";
+import {
+  acquireBetaSlotLease,
+  applyBetaSlotRetention,
+  assertBetaPoolDiskBudget,
+  assertBetaSlotLease,
+  inspectBetaSlotCapacity,
+  recordBetaSlotRelease,
+  releaseBetaSlotLease,
+  resetBetaSlotMutableState,
+  runBetaPoolJanitor,
+} from "./beta-slot-pool.mjs";
+import { runStop } from "./cli-stop.mjs";
 
 function parseArgs(argv) {
   const command = argv[0] ?? "start";
@@ -133,6 +142,37 @@ function updateManifest(manifest, fields) {
   };
 }
 
+function retainsBetaSlotLease(manifest) {
+  return Boolean(
+    manifest.profile === "beta" &&
+    manifest.targetEnvironment.betaSlot?.assignedSlotId &&
+    manifest.state !== "stopped" &&
+    !(manifest.state === "failed" && manifest.failure?.leaseRetained === false),
+  );
+}
+
+function attachBetaSlotToPlannedServices(services, slotId, leaseNonce) {
+  const next = structuredClone(services);
+  for (const serviceName of [
+    "frontend",
+    "backend",
+    "appServer",
+    "electron",
+    "beta",
+  ]) {
+    next[serviceName] = {
+      ...next[serviceName],
+      slotId,
+      leaseNonce,
+    };
+  }
+  next.cdp = {
+    desktop: { ...next.cdp.desktop, slotId, leaseNonce },
+    terminalBrowser: { ...next.cdp.terminalBrowser, slotId, leaseNonce },
+  };
+  return next;
+}
+
 function buildStaleRecovery(sessionId, services, staleOwnedServices) {
   const staleServices = staleOwnedServices.map((serviceName) => ({
     service: serviceName,
@@ -190,7 +230,20 @@ async function runStart(options, sourceRoot) {
     serviceOverrides: options.serviceOverrides,
   });
   if (options.dryRun) {
-    printResult({ dryRun: true, ...plan }, options.json);
+    const dryRunPlan =
+      plan.profile === "beta"
+        ? {
+            ...plan,
+            targetEnvironment: {
+              ...plan.targetEnvironment,
+              betaSlot: {
+                ...plan.targetEnvironment.betaSlot,
+                capacitySnapshot: await inspectBetaSlotCapacity(),
+              },
+            },
+          }
+        : plan;
+    printResult({ dryRun: true, ...dryRunPlan }, options.json);
     return;
   }
   if (!plan.executable) {
@@ -208,8 +261,14 @@ async function runStart(options, sourceRoot) {
     options.sessionId ?? createReadableSessionId(),
   );
   const revision = await resolveSourceRevision(sourceRoot);
+  if (plan.profile === "beta") {
+    await runBetaPoolJanitor();
+  }
   await withSessionLock(sessionId, async (paths) => {
     let manifestCreated = false;
+    let slotLease = null;
+    let diskSummary = null;
+    let startedServices = null;
     try {
       const existing = await readOptionalManifest(sessionId);
       if (existing && existing.state !== "stopped") {
@@ -230,15 +289,56 @@ async function runStart(options, sourceRoot) {
       });
       await writeManifest(manifest);
       manifestCreated = true;
+      if (plan.profile === "beta") {
+        slotLease = await acquireBetaSlotLease({
+          requestedSlotId: plan.targetEnvironment.betaSlot.requestedSlotId,
+          ownerSessionId: sessionId,
+          ownerSourceRoot: sourceRoot,
+          ownerRevision: revision,
+          ownerManifestPath: paths.manifestPath,
+        });
+        const assignedSlotId = slotLease.lease.slotId;
+        plan.targetEnvironment = {
+          ...plan.targetEnvironment,
+          instanceId: assignedSlotId,
+          betaSlot: {
+            ...plan.targetEnvironment.betaSlot,
+            assignedSlotId,
+            leaseNonce: slotLease.lease.leaseNonce,
+          },
+        };
+        plan.services = attachBetaSlotToPlannedServices(
+          plan.services,
+          assignedSlotId,
+          slotLease.lease.leaseNonce,
+        );
+        manifest = updateManifest(manifest, {
+          targetEnvironment: plan.targetEnvironment,
+          services: plan.services,
+        });
+      }
       manifest = updateManifest(manifest, { state: "starting" });
       await writeManifest(manifest);
-      const services = await startSessionServices({
+      if (plan.profile === "beta") {
+        const startRetention = await applyBetaSlotRetention({
+          slotId: slotLease.lease.slotId,
+        });
+        diskSummary = await assertBetaPoolDiskBudget({
+          sourceRoot,
+          slotId: slotLease.lease.slotId,
+          cleanedBytes: startRetention.cleanedBytes,
+        });
+      }
+      startedServices = await startSessionServices({
         plan,
         sessionId,
         revision,
         paths,
       });
-      manifest = updateManifest(manifest, { state: "ready", services });
+      manifest = updateManifest(manifest, {
+        state: "ready",
+        services: startedServices,
+      });
       await writeManifest(manifest);
       printResult(publicManifest(manifest), options.json);
     } catch (error) {
@@ -246,15 +346,56 @@ async function runStart(options, sourceRoot) {
         ? await readOptionalManifest(sessionId)
         : null;
       if (existing && existing.state !== "ready") {
-        await writeManifest(
-          updateManifest(existing, {
-            state: "failed",
-            failure: {
-              message: error instanceof Error ? error.message : String(error),
-              exitCode: error instanceof DevSessionError ? error.exitCode : 1,
-            },
-          }),
-        );
+        let resetFailure =
+          error instanceof DevSessionError && error.details?.resetUnsafe
+            ? new Error("identity-safe start cleanup did not complete")
+            : null;
+        if (startedServices && !resetFailure) {
+          try {
+            await stopSessionServices(startedServices);
+          } catch (cleanupError) {
+            resetFailure = cleanupError;
+          }
+        }
+        if (slotLease && !resetFailure) {
+          try {
+            const cleanupSummary = await resetBetaSlotMutableState({
+              slotId: slotLease.lease.slotId,
+            });
+            const retention = await applyBetaSlotRetention({
+              slotId: slotLease.lease.slotId,
+            });
+            await recordBetaSlotRelease({
+              slotId: slotLease.lease.slotId,
+              revision,
+              cleanupSummary: { ...cleanupSummary, retention },
+              diskSummary,
+            });
+          } catch (cleanupError) {
+            resetFailure = cleanupError;
+          }
+        }
+        const failedManifest = updateManifest(existing, {
+          state: resetFailure ? "stale" : "failed",
+          ...(startedServices ? { services: startedServices } : {}),
+          failure: {
+            message: error instanceof Error ? error.message : String(error),
+            exitCode: error instanceof DevSessionError ? error.exitCode : 1,
+            ...(resetFailure
+              ? {
+                  resetFailure:
+                    resetFailure instanceof Error
+                      ? resetFailure.message
+                      : String(resetFailure),
+                  leaseRetained: true,
+                }
+              : { leaseRetained: false }),
+          },
+        });
+        await writeManifest(failedManifest);
+        if (slotLease && !resetFailure) {
+          await releaseBetaSlotLease(slotLease);
+        }
       }
       throw error;
     }
@@ -268,6 +409,13 @@ async function runStatus(options, sourceRoot) {
   });
   await withSessionLock(candidate.devSessionId, async () => {
     let manifest = await readManifest(candidate.devSessionId);
+    if (retainsBetaSlotLease(manifest)) {
+      await assertBetaSlotLease({
+        slotId: manifest.targetEnvironment.betaSlot.assignedSlotId,
+        ownerSessionId: manifest.devSessionId,
+        leaseNonce: manifest.targetEnvironment.betaSlot.leaseNonce,
+      });
+    }
     const canReconcileStaleBeta =
       manifest.state === "stale" &&
       manifest.services.beta?.ownership === "dedicated";
@@ -324,125 +472,17 @@ async function runOpen(options, sourceRoot) {
       5,
     );
   }
+  if (manifest.profile === "beta" && manifest.targetEnvironment.betaSlot) {
+    await assertBetaSlotLease({
+      slotId: manifest.targetEnvironment.betaSlot.assignedSlotId,
+      ownerSessionId: manifest.devSessionId,
+      leaseNonce: manifest.targetEnvironment.betaSlot.leaseNonce,
+    });
+  }
   const surface = assertSurface(
     options.surface ?? manifest.targetEnvironment.acceptanceSurfaces[0],
   );
   printResult(await resolveOpenTarget(manifest, surface), options.json);
-}
-
-async function runStop(options, sourceRoot) {
-  const candidate = await resolveManifestCandidate({
-    sessionId: options.sessionId,
-    sourceRoot,
-  });
-  await withSessionLock(candidate.devSessionId, async () => {
-    let manifest = await readManifest(candidate.devSessionId);
-    const retryServiceNames =
-      options.cleanupStale && manifest.state === "stopped"
-        ? Object.entries(manifest.services)
-            .filter(
-              ([, service]) =>
-                service?.cleanupStatus === "skipped-stale-identity" &&
-                processIdentityMatches(service.process),
-            )
-            .map(([serviceName]) => serviceName)
-        : [];
-    const retryingPartialCleanup = retryServiceNames.length > 0;
-    if (manifest.state === "stopped" && !retryingPartialCleanup) {
-      printResult(publicManifest(manifest), options.json);
-      return;
-    }
-    if (options.cleanupStale) {
-      if (manifest.state !== "stale" && !retryingPartialCleanup) {
-        throw new DevSessionError(
-          `--cleanup-stale requires a stale Session: ${manifest.devSessionId} (${manifest.state})`,
-          5,
-        );
-      }
-      manifest = updateManifest(manifest, { state: "stopping" });
-      await writeManifest(manifest);
-      try {
-        const cleanup = await cleanupStaleSessionServices(
-          manifest.services,
-          retryingPartialCleanup ? { serviceNames: retryServiceNames } : {},
-        );
-        manifest = updateManifest(manifest, {
-          state: "stopped",
-          services: cleanup.services,
-          failure: null,
-        });
-        await writeManifest(manifest);
-        printResult(
-          { ...publicManifest(manifest), cleanup: cleanup.summary },
-          options.json,
-        );
-      } catch (error) {
-        manifest = updateManifest(manifest, {
-          state: "stale",
-          failure: {
-            message: error instanceof Error ? error.message : String(error),
-            exitCode: error instanceof DevSessionError ? error.exitCode : 1,
-          },
-        });
-        await writeManifest(manifest);
-        throw error;
-      }
-      return;
-    }
-    if (manifest.state !== "failed" && manifest.state !== "planned") {
-      try {
-        await assertSessionServicesStoppable(manifest.services);
-      } catch (error) {
-        const details =
-          error instanceof DevSessionError && error.details
-            ? error.details
-            : {};
-        const staleOwnedServices = Array.isArray(details.staleOwnedServices)
-          ? details.staleOwnedServices
-          : [];
-        const recovery = buildStaleRecovery(
-          manifest.devSessionId,
-          details.services ?? manifest.services,
-          staleOwnedServices,
-        );
-        const enrichedError =
-          error instanceof DevSessionError
-            ? new DevSessionError(error.message, error.exitCode, {
-                ...details,
-                recovery,
-              })
-            : error;
-        manifest = updateManifest(manifest, {
-          state: "stale",
-          failure: {
-            message: error instanceof Error ? error.message : String(error),
-            exitCode: error instanceof DevSessionError ? error.exitCode : 1,
-            recovery,
-          },
-        });
-        await writeManifest(manifest);
-        throw enrichedError;
-      }
-    }
-    manifest = updateManifest(manifest, { state: "stopping" });
-    await writeManifest(manifest);
-    try {
-      await stopSessionServices(manifest.services, { identityVerified: true });
-    } catch (error) {
-      manifest = updateManifest(manifest, {
-        state: "stale",
-        failure: {
-          message: error instanceof Error ? error.message : String(error),
-          exitCode: error instanceof DevSessionError ? error.exitCode : 1,
-        },
-      });
-      await writeManifest(manifest);
-      throw error;
-    }
-    manifest = updateManifest(manifest, { state: "stopped", failure: null });
-    await writeManifest(manifest);
-    printResult(publicManifest(manifest), options.json);
-  });
 }
 
 async function main() {
@@ -455,7 +495,12 @@ async function main() {
   } else if (options.command === "open") {
     await runOpen(options, sourceRoot);
   } else {
-    await runStop(options, sourceRoot);
+    await runStop(options, sourceRoot, {
+      buildStaleRecovery,
+      printResult,
+      retainsBetaSlotLease,
+      updateManifest,
+    });
   }
 }
 

@@ -55,6 +55,7 @@ const createRunSchema = z
     options: z
       .object({
         autoApproveSplit: z.boolean().optional(),
+        notifyMainOnHumanGate: z.boolean().optional(),
         reviewCheckpointMode: z.enum(["disabled", "local_commit"]).optional(),
         maxRepairAttempts: z.number().int().min(1).max(5).optional(),
       })
@@ -88,6 +89,81 @@ const splitGateSchema = z
   .strict();
 
 const resumeSchema = z.object({ note: z.string().trim().min(1) }).strict();
+const agentInterventionSchema = z
+  .object({
+    action: z.enum(["dispatch", "refresh_acceptance"]),
+    note: z.string().trim().min(1),
+    role: workerRoleEnum,
+    caseIds: z.array(z.string().trim().min(1)).min(1).max(100).optional(),
+    generatedTestCaseFilePath: optionalPathSchema,
+    checkpointAllowedDirtyPaths: z
+      .array(z.string().trim().min(1))
+      .min(1)
+      .max(100)
+      .optional(),
+    checkpointExpectedHeadCommit: z
+      .string()
+      .trim()
+      .regex(/^[0-9a-f]{40}$/)
+      .optional(),
+    checkpointRebasedCommit: z
+      .string()
+      .trim()
+      .regex(/^[0-9a-f]{40}$/)
+      .optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.action === "dispatch" &&
+      value.generatedTestCaseFilePath != null
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["generatedTestCaseFilePath"],
+        message: "dispatch 不接受 generatedTestCaseFilePath",
+      });
+    }
+    if (value.action === "refresh_acceptance" && !value.caseIds?.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["caseIds"],
+        message: "refresh_acceptance 必须声明受影响的业务 Case",
+      });
+    }
+    if (
+      value.role !== "behavior_verify" &&
+      value.checkpointAllowedDirtyPaths != null
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["checkpointAllowedDirtyPaths"],
+        message: "只有 behavior_verify 可声明 dirty checkpoint 例外",
+      });
+    }
+    if (
+      value.role !== "behavior_verify" &&
+      value.role !== "code_review" &&
+      (value.checkpointExpectedHeadCommit != null ||
+        value.checkpointRebasedCommit != null)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["role"],
+        message: "只有 behavior_verify 或 code_review 可重锚 checkpoint HEAD",
+      });
+    }
+    if (
+      value.checkpointRebasedCommit != null &&
+      value.checkpointExpectedHeadCommit == null
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["checkpointExpectedHeadCommit"],
+        message: "checkpointRebasedCommit 需要 checkpointExpectedHeadCommit",
+      });
+    }
+  });
 const completeSchema = z
   .object({ note: z.string().trim().min(1).optional() })
   .strict();
@@ -250,6 +326,25 @@ export function createAgentTeamRouter(
     }
     await handleServiceCall(res, () =>
       agentTeamService.resumeRun(params.data.runId, parsed.data),
+    );
+  });
+
+  router.post("/runs/:runId/intervene", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params" });
+      return;
+    }
+    const parsed = agentInterventionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.interveneRun(params.data.runId, parsed.data),
     );
   });
 

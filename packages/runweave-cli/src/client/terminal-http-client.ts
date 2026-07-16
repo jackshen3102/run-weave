@@ -1,4 +1,10 @@
-import type { AgentTeamExportHistoryMode, AgentTeamExportResponse, AgentTeamRunsResponse } from "@runweave/shared/agent-team";
+import type {
+  AgentTeamExportHistoryMode,
+  AgentTeamExportResponse,
+  AgentTeamRun,
+  AgentTeamRunsResponse,
+  InterveneAgentTeamRunRequest,
+} from "@runweave/shared/agent-team";
 import type { TerminalStateResponse } from "@runweave/shared/terminal/events";
 import type { PrepareTerminalAgentRequest, PrepareTerminalAgentResponse } from "@runweave/shared/terminal/agent-preparation";
 import type { SendTerminalInterruptRequest, SendTerminalInterruptResponse, SendTerminalInputRequest, SendTerminalInputResponse } from "@runweave/shared/terminal/input";
@@ -226,6 +232,20 @@ export class TerminalHttpClient {
     const suffix = queryText ? `?${queryText}` : "";
     return this.auth.requestJson<AgentTeamExportResponse>(
       `/api/agent-team/runs/${encodeURIComponent(runId)}/export${suffix}`,
+    );
+  }
+
+  interveneAgentTeamRun(
+    runId: string,
+    payload: InterveneAgentTeamRunRequest,
+  ): Promise<AgentTeamRun> {
+    return this.auth.requestJson<AgentTeamRun>(
+      `/api/agent-team/runs/${encodeURIComponent(runId)}/intervene`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
     );
   }
 }

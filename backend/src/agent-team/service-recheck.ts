@@ -6,7 +6,6 @@ import type {
   AgentTeamWorkerOutbox,
 } from "@runweave/shared/agent-team";
 import type { TerminalSessionRecord } from "../terminal/manager";
-import { createTerminalPanelSplit } from "../terminal/application/panel-split";
 import { AgentTeamCompletionService } from "./service-completion";
 import { agentTeamLogger } from "./service-context";
 import {
@@ -229,18 +228,11 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
       }
       const attempt =
         Math.max(...group.map((item) => item.recheckAttempt ?? 0)) + 1;
-      const refreshed = await this.replaceWorkerPaneForRecheck(
-        latestRun,
-        session,
-        worker,
-        attempt,
-      );
-      latestRun = refreshed.run;
       try {
         latestRun = await this.sendRecheckToWorker(
           latestRun,
           session,
-          refreshed.worker,
+          worker,
           group,
           { attempt, reason: "timeout_retry" },
         );
@@ -248,8 +240,8 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
         agentTeamLogger.warn("agent-team.recheck_retry.failed", {
           message: "Could not dispatch timed-out recheck",
           runId: latestRun.runId,
-          role: refreshed.worker.role,
-          panelId: refreshed.worker.panelId,
+          role: worker.role,
+          panelId: worker.panelId,
           attempt,
           error,
         });
@@ -257,7 +249,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
         latestRun = await this.markRecheckDispatchFailed(
           latestRun,
           session,
-          refreshed.worker,
+          worker,
           group,
           attempt,
         );
@@ -312,65 +304,6 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
         `复验 worker ${worker.role} pane ${worker.panelId ?? ""} 投递失败，已记录 attempt ${attempt}：${Array.from(caseIds).join(", ")}`,
       ],
     });
-  }
-
-  protected async replaceWorkerPaneForRecheck(
-    run: AgentTeamRun,
-    session: TerminalSessionRecord,
-    worker: AgentTeamWorker,
-    attempt: number,
-  ): Promise<{ run: AgentTeamRun; worker: AgentTeamWorker }> {
-    if (!this.tmuxService) {
-      return { run, worker };
-    }
-    try {
-      const suffix = `${worker.role}-retry-${Date.now().toString(36).slice(-6)}`;
-      const { panel } = await createTerminalPanelSplit(
-        this.terminalSessionManager,
-        session,
-        {
-          ptyService: this.ptyService,
-          runtimeRegistry: this.runtimeRegistry,
-          tmuxService: this.tmuxService,
-          tmuxOutputWatcher: this.tmuxOutputWatcher,
-          terminalEventService: this.terminalEventService,
-        },
-        {
-          sourcePanelId: worker.panelId ?? undefined,
-          direction: attempt % 2 === 0 ? "down" : "right",
-          role: suffix,
-          alias: suffix,
-          agentTeamRunId: run.runId,
-          agentTeamWorkerId: worker.id,
-          cwd: run.terminal.cwd ?? undefined,
-          focus: false,
-        },
-      );
-      const replacement = {
-        ...worker,
-        panelId: panel.id,
-        tmuxPaneId: panel.tmuxPaneId,
-      };
-      const nextRun = await this.updateRun(run, {
-        workers: run.workers.map((item) =>
-          item.id === worker.id ? replacement : item,
-        ),
-        logs: [
-          ...run.logs,
-          `复验 worker ${worker.role} pane ${worker.panelId} 超时，已切换到 fresh pane ${panel.id}`,
-        ],
-      });
-      return { run: nextRun, worker: replacement };
-    } catch (error) {
-      agentTeamLogger.warn("agent-team.recheck_worker_replace.failed", {
-        message: "Could not create replacement worker pane for recheck",
-        runId: run.runId,
-        role: worker.role,
-        panelId: worker.panelId,
-        error,
-      });
-      return { run, worker };
-    }
   }
 
   protected findRecheckWorker(

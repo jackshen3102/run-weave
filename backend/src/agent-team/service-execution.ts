@@ -58,6 +58,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       triggerSummary?: string | null;
       reviewScope?: "full" | "incremental" | "final";
       acceptedRepairKeys?: string[];
+      reviewChallenge?: { repairKeys: string[]; reason: string };
     },
   ): Promise<AgentTeamRun>;
 
@@ -406,7 +407,6 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
         null,
         { repairKeys: repairCycles.map((cycle) => cycle.repairKey) },
       );
-      const terminal = resolveAgentTeamTerminal(run.terminal);
       const bouncePrompt = buildBounceBackPrompt({
         run: {
           ...run,
@@ -433,10 +433,13 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
           `用例 ${caseIds.join(", ")} 稳定失败，抛回 code pane ${codeWorker.panelId}`,
         ],
       });
-      await this.agentLaunch.submitAgentLaunch(session, terminal, {
-        panelId: codeWorker.panelId,
-        prompt: bouncePrompt,
-      });
+      await this.submitWorkerDispatchPrompt(
+        persistedRun,
+        session,
+        resolveAgentTeamTerminal(run.terminal),
+        codeWorker,
+        bouncePrompt,
+      );
       return persistedRun;
     } catch (error) {
       agentTeamLogger.warn("agent-team.bounce.failed", {

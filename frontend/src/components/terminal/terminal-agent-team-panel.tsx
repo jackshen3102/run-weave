@@ -8,11 +8,9 @@ import type {
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import {
-  completeAgentTeamRun,
   decideAgentTeamFinding,
   focusAgentTeamPane,
   getAgentTeamRunForTerminal,
-  resumeAgentTeamRun,
   startAgentTeamRun,
   submitAgentTeamSplitGate,
 } from "../../services/terminal";
@@ -28,6 +26,7 @@ import { AgentTeamAttentionSummary } from "./terminal-agent-team-panel-attention
 import { AgentTeamFindingDecisionCard } from "./terminal-agent-team-finding-decision";
 import {
   ExecutingSection,
+  FailedRunSection,
   ProposalSection,
   StartFlowSection,
 } from "./terminal-agent-team-panel-sections";
@@ -59,8 +58,9 @@ export function TerminalAgentTeamPanel({
   const [planFilePath, setPlanFilePath] = useState("");
   const [testCaseFilePath, setTestCaseFilePath] = useState("");
   const [reviewCheckpointEnabled, setReviewCheckpointEnabled] = useState(false);
+  const [notifyMainOnHumanGate, setNotifyMainOnHumanGate] = useState(true);
   const [workerDrafts, setWorkerDrafts] = useState<WorkerDraft[] | null>(null);
-  const [resumeNote, setResumeNote] = useState("");
+  const [retryingRunId, setRetryingRunId] = useState<string | null>(null);
 
   const projectId = activeProject?.projectId ?? null;
   const terminalSessionId = activeSession?.terminalSessionId ?? null;
@@ -137,6 +137,7 @@ export function TerminalAgentTeamPanel({
   useEffect(() => {
     setRun(null);
     setError(null);
+    setRetryingRunId(null);
     syncWorkerDraftsFromRun(null);
     syncActiveRunPresence(null);
     if (!projectId || !terminalSessionId) {
@@ -197,17 +198,34 @@ export function TerminalAgentTeamPanel({
         testCaseFilePath: normalizeOptionalPath(testCaseFilePath),
         options: {
           autoApproveSplit: true,
+          notifyMainOnHumanGate,
           reviewCheckpointMode: reviewCheckpointEnabled
             ? "local_commit"
             : "disabled",
         },
       }).then((next) => {
+        setRetryingRunId(null);
         if (next.phase === "executing") {
           onPanelSplitEnabledChange?.(true);
         }
         return next;
       }),
     );
+  });
+
+  const retryFailedRun = useMemoizedFn((): void => {
+    if (!run || run.status !== "failed") {
+      return;
+    }
+    setTask(run.task);
+    setPlanFilePath(run.verification?.planFilePath ?? "");
+    setTestCaseFilePath(run.verification?.testCaseFilePath ?? "");
+    setReviewCheckpointEnabled(
+      run.options.reviewCheckpointMode === "local_commit",
+    );
+    setNotifyMainOnHumanGate(run.options.notifyMainOnHumanGate !== false);
+    setRetryingRunId(run.runId);
+    setError(null);
   });
 
   const confirmSplit = useMemoizedFn((): void => {
@@ -236,26 +254,6 @@ export function TerminalAgentTeamPanel({
         verdict: "rejected",
       }),
     );
-  });
-
-  const resume = useMemoizedFn((): void => {
-    if (!run || !resumeNote.trim()) {
-      return;
-    }
-    const note = resumeNote.trim();
-    void runAction(() =>
-      resumeAgentTeamRun(apiBase, token, run.runId, { note }),
-    ).then(() => setResumeNote(""));
-  });
-
-  const complete = useMemoizedFn((): void => {
-    if (!run) {
-      return;
-    }
-    const note = resumeNote.trim();
-    void runAction(() =>
-      completeAgentTeamRun(apiBase, token, run.runId, note ? { note } : {}),
-    ).then(() => setResumeNote(""));
   });
 
   const decideFinding = useMemoizedFn(
@@ -369,19 +367,39 @@ export function TerminalAgentTeamPanel({
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
           </div>
+        ) : run?.status === "failed" && retryingRunId === run.runId ? (
+          <StartFlowSection
+            mode="retry"
+            task={task}
+            planFilePath={planFilePath}
+            testCaseFilePath={testCaseFilePath}
+            reviewCheckpointEnabled={reviewCheckpointEnabled}
+            notifyMainOnHumanGate={notifyMainOnHumanGate}
+            busy={busy}
+            onTaskChange={setTask}
+            onPlanFilePathChange={setPlanFilePath}
+            onTestCaseFilePathChange={setTestCaseFilePath}
+            onReviewCheckpointEnabledChange={setReviewCheckpointEnabled}
+            onNotifyMainOnHumanGateChange={setNotifyMainOnHumanGate}
+            onStart={startFlow}
+          />
         ) : !run ? (
           <StartFlowSection
             task={task}
             planFilePath={planFilePath}
             testCaseFilePath={testCaseFilePath}
             reviewCheckpointEnabled={reviewCheckpointEnabled}
+            notifyMainOnHumanGate={notifyMainOnHumanGate}
             busy={busy}
             onTaskChange={setTask}
             onPlanFilePathChange={setPlanFilePath}
             onTestCaseFilePathChange={setTestCaseFilePath}
             onReviewCheckpointEnabledChange={setReviewCheckpointEnabled}
+            onNotifyMainOnHumanGateChange={setNotifyMainOnHumanGate}
             onStart={startFlow}
           />
+        ) : run.status === "failed" && run.phase !== "executing" ? (
+          <FailedRunSection run={run} busy={busy} onRetry={retryFailedRun} />
         ) : run.phase === "proposal" && workerDrafts ? (
           <ProposalSection
             run={run}
@@ -398,11 +416,7 @@ export function TerminalAgentTeamPanel({
             projectId={projectId}
             run={run}
             busy={busy}
-            resumeNote={resumeNote}
-            onResumeNoteChange={setResumeNote}
-            onResume={resume}
-            onComplete={complete}
-            onFocusPane={focusPane}
+            onRetry={retryFailedRun}
             onAuthExpired={onAuthExpired}
           />
         ) : null}

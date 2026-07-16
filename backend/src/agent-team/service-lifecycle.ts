@@ -2,7 +2,6 @@ import type {
   AgentTeamRun,
   CompleteAgentTeamRunRequest,
   CreateAgentTeamRunRequest,
-  DecideAgentTeamFindingRequest,
   ProposeAgentTeamSplitRequest,
   ResumeAgentTeamRunRequest,
   SubmitAgentTeamSplitGateRequest,
@@ -15,13 +14,12 @@ import {
   buildMainTestCaseGenerationPrompt,
 } from "./prompt-builders";
 import { createInitialLoop } from "./loop";
-import {
-  isTraceableProductCase,
-  resolveMaxRepairAttempts,
-  resolvePendingFindingDecision,
-} from "./repair-loop";
+import { resolveMaxRepairAttempts } from "./repair-loop";
 import { agentTeamLogger } from "./service-context";
-import { AgentTeamRecheckService } from "./service-recheck";
+import { AgentTeamInterventionService } from "./service-intervention";
+import {
+  acceptanceCasesForRole,
+} from "./service-acceptance-policy";
 import {
   normalizeWorkers,
   resolveInitialActiveWorkerRole,
@@ -34,7 +32,8 @@ import {
   requireVerificationConfig,
   resolveAgentTeamTerminal,
 } from "./service-run-policy";
-export class AgentTeamLifecycleService extends AgentTeamRecheckService {
+
+export class AgentTeamLifecycleService extends AgentTeamInterventionService {
   async startRun(input: CreateAgentTeamRunRequest): Promise<AgentTeamRun> {
     const session = this.requireSession(input.terminalSessionId);
     const existing = await this.runStore.getRunByTerminalSession(
@@ -135,6 +134,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       status: "running",
       options: {
         autoApproveSplit: input.options?.autoApproveSplit ?? false,
+        notifyMainOnHumanGate: input.options?.notifyMainOnHumanGate ?? true,
         reviewCheckpointMode,
         maxRepairAttempts,
       },
@@ -196,14 +196,11 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         log: "自动确认拆分已开启，跳过人工门，直接 split",
       });
     }
-    await this.runStore.writeRun({
-      ...run,
+    return this.updateRun(run, {
       phase: "proposal",
       status: "need_human",
       proposal,
-      updatedAt: new Date().toISOString(),
     });
-    return await this.requireRun(run.runId);
   }
   // --- Phase 2: intake -> proposal (+ split gate) ---
   async proposeSplit(
@@ -317,6 +314,38 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     const now = new Date().toISOString();
     const clearedFingerprints = [...run.loop.errorFingerprints];
     const clearedRepairCycles = [...(run.loop.repairCycles ?? [])];
+    const lastRepairSourceRole = [...(run.consumedWorkerDispatches ?? [])]
+      .reverse()
+      .find((dispatch) => dispatch.role !== "code")?.role;
+    const recoverableBehaviorRepairCycles =
+      clearedRepairCycles.length === 0 &&
+      lastRepairSourceRole === "behavior_verify"
+        ? run.acceptance
+            .filter((item) => item.status === "fail")
+            .map((item) => ({
+              repairKey: `behavior_verify:${item.caseId}`,
+              sourceRole: "behavior_verify" as const,
+              caseIds: [item.caseId],
+              invariant: item.text,
+              verificationMode: "runtime" as const,
+              sourceEvidenceRefs: item.evidence.map((evidence) => evidence.ref),
+              attempts: 0,
+              maxAttempts:
+                run.loop.maxRepairAttempts ??
+                resolveMaxRepairAttempts(run.options.maxRepairAttempts),
+              firstFailedRound: run.loop.round,
+              lastFailedRound: run.loop.round,
+              lastFailureSummary: item.resultSummary ?? item.text,
+            }))
+        : [];
+    const resumedRepairCycles = (
+      clearedRepairCycles.length > 0
+        ? clearedRepairCycles
+        : recoverableBehaviorRepairCycles
+    ).map((cycle) => ({
+      ...cycle,
+      attempts: 0,
+    }));
     const resumedAcceptance = run.acceptance.map((item) => ({
       ...item,
       consecutiveFail: 0,
@@ -325,12 +354,14 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       (item) => item.status === "pass",
     ).length;
     const activeWorkerRole =
-      run.activeWorkerRole ?? resolveInitialActiveWorkerRole(run.workers);
+      run.activeWorkerRole ??
+      run.consumedWorkerDispatches?.at(-1)?.role ??
+      resolveInitialActiveWorkerRole(run.workers);
     const nextRun = await this.updateRun(run, {
       status: "running",
-      activeWorkerRole,
+      activeWorkerRole: null,
       activeWorkerDispatch: null,
-      workers: setActiveWorker(run.workers, activeWorkerRole),
+      workers: setActiveWorker(run.workers, null),
       loop: {
         ...run.loop,
         noProgressCount: 0,
@@ -338,7 +369,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         lastReason: null,
         errorFingerprints: [],
         bestPassCount: resumedBestPassCount,
-        repairCycles: [],
+        repairCycles: resumedRepairCycles,
         maxRepairAttempts:
           run.loop.maxRepairAttempts ??
           resolveMaxRepairAttempts(run.options.maxRepairAttempts),
@@ -358,130 +389,24 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
     });
     // Inject the human note back into the main agent context.
     await this.trySendToMain(nextRun, buildHumanNotePrompt(note));
-    return nextRun;
-  }
-
-  async decideFinding(
-    runId: string,
-    input: DecideAgentTeamFindingRequest,
-  ): Promise<AgentTeamRun> {
-    return this.enqueue(runId, async () => {
-      const run = await this.requireRun(runId);
-      const pending = run.pendingFindingDecision;
-      if (!pending || run.status !== "need_human") {
-        throw new AgentTeamError(409, "Run 没有待裁决 review finding");
-      }
-      const invariantKey = input.invariantKey.trim();
-      if (pending.finding.invariantKey !== invariantKey) {
-        throw new AgentTeamError(409, "Finding 已变化，请刷新后重新裁决");
-      }
-      const reason = input.reason.trim();
-      if (!reason) {
-        throw new AgentTeamError(400, "Finding 裁决原因不能为空");
-      }
-      const caseIds = Array.from(
-        new Set(
-          (input.caseIds ?? []).map((caseId) => caseId.trim()).filter(Boolean),
-        ),
+    if (!activeWorkerRole) {
+      return this.pauseForRepairProtocolError(
+        nextRun,
+        "人工介入后无法恢复：没有可重新派发的 worker pane",
       );
-      if (input.disposition !== "out_of_scope" && caseIds.length === 0) {
-        throw new AgentTeamError(
-          400,
-          `${input.disposition} 裁决必须映射至少一个可追溯产品 Case`,
-        );
-      }
-      const invalidCaseId = caseIds.find((caseId) => {
-        const acceptanceCase = run.acceptance.find(
-          (item) => item.caseId === caseId,
-        );
-        return !acceptanceCase || !isTraceableProductCase(acceptanceCase);
-      });
-      if (invalidCaseId) {
-        throw new AgentTeamError(400, `${invalidCaseId} 不是可追溯产品 Case`);
-      }
-      const now = new Date().toISOString();
-      const decision = {
-        id: `finding_decision_${Date.now()}`,
-        invariantKey,
-        scenarioId: pending.finding.reproduction?.scenarioId ?? null,
-        finding: pending.finding,
-        disposition: input.disposition,
-        caseIds: input.disposition === "out_of_scope" ? [] : caseIds,
-        reason,
-        decidedAt: now,
-        reviewTarget: pending.reviewTarget,
-      };
-      const repairKey = `code_review:${invariantKey}`;
-      const decidedRun: AgentTeamRun = {
-        ...run,
-        status: "running",
-        activeWorkerRole: null,
-        activeWorkerDispatch: null,
-        workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
-        findingDecisions: [...(run.findingDecisions ?? []), decision],
-        pendingFindingDecision: null,
-        loop: {
-          ...run.loop,
-          noProgressCount: 0,
-          escalated: false,
-          lastReason: null,
-          repairCycles: (run.loop.repairCycles ?? []).map((cycle) =>
-            input.disposition === "blocking" && cycle.repairKey === repairKey
-              ? { ...cycle, attempts: 0, caseIds }
-              : cycle,
-          ),
-        },
-        logs: [
-          ...run.logs,
-          `人工裁决 finding ${invariantKey}：${input.disposition}${caseIds.length > 0 ? `（${caseIds.join(", ")}）` : ""}；${reason}`,
-        ],
-        updatedAt: now,
-      };
-      const nextPending = resolvePendingFindingDecision(
-        decidedRun,
-        pending.outbox,
+    }
+    const roleCases = acceptanceCasesForRole(nextRun, activeWorkerRole);
+    const failedCases = roleCases.filter((item) => item.status === "fail");
+    if (activeWorkerRole === "code" && failedCases.length > 0) {
+      return this.bounceFailuresToCode(
+        nextRun,
+        failedCases.map((item) => item.caseId),
       );
-      if (nextPending) {
-        return this.updateRun(decidedRun, {
-          status: "need_human",
-          pendingFindingDecision: nextPending,
-          loop: {
-            ...decidedRun.loop,
-            escalated: true,
-            lastReason: nextPending.reason,
-          },
-        });
-      }
-
-      let continuationRun = decidedRun;
-      let round = this.resolveOutboxRound(continuationRun, pending.outbox);
-      if (
-        continuationRun.reviewCheckpoint?.pendingReview &&
-        round.acceptanceResults.length > 0 &&
-        round.acceptanceResults.every((result) => result.status === "pass")
-      ) {
-        continuationRun = await this.finalizeReviewCheckpoint(
-          continuationRun,
-          pending.outbox,
-        );
-        if (continuationRun.status !== "running") {
-          return continuationRun;
-        }
-        round = this.resolveOutboxRound(continuationRun, pending.outbox);
-      }
-      if (round.acceptanceResults.length === 0) {
-        return this.pauseForRepairProtocolError(
-          continuationRun,
-          "人工裁决后 reviewer outbox 没有可消费的验收结果",
-        );
-      }
-      return this.applyRound(continuationRun, {
-        acceptanceResults: round.acceptanceResults,
-        forceBounceCaseIds: round.forceBounceCaseIds,
-        repairTargets: round.repairTargets,
-        completedWorkerRole: "code_review",
-        completedWorkerSummary: pending.outbox.summary,
-      });
+    }
+    return this.dispatchSerialWorker(nextRun, activeWorkerRole, {
+      cases: failedCases.length > 0 ? failedCases : roleCases,
+      log: "人工介入后恢复，建立 fresh worker dispatch",
+      triggerSummary: note,
     });
   }
 

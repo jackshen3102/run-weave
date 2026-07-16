@@ -1,4 +1,4 @@
-import { AlertTriangle, Play, Plus, X } from "lucide-react";
+import { AlertTriangle, Play, Plus, RotateCcw, X } from "lucide-react";
 import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import { Button } from "../ui/button";
 import {
@@ -7,43 +7,56 @@ import {
   ROLE_LABEL,
   type WorkerDraft,
 } from "./terminal-agent-team-panel-model";
-import {
-  AcceptanceEvidenceDetails,
-  PaneFocusList,
-} from "./terminal-agent-team-panel-details";
+import { AcceptanceEvidenceDetails } from "./terminal-agent-team-panel-details";
+import { ReviewCheckpointStatus } from "./terminal-agent-team-review-checkpoint-status";
 
 export function StartFlowSection({
+  mode = "start",
   task,
   planFilePath,
   testCaseFilePath,
   reviewCheckpointEnabled,
+  notifyMainOnHumanGate,
   busy,
   onTaskChange,
   onPlanFilePathChange,
   onTestCaseFilePathChange,
   onReviewCheckpointEnabledChange,
+  onNotifyMainOnHumanGateChange,
   onStart,
 }: {
+  mode?: "start" | "retry";
   task: string;
   planFilePath: string;
   testCaseFilePath: string;
   reviewCheckpointEnabled: boolean;
+  notifyMainOnHumanGate: boolean;
   busy: boolean;
   onTaskChange: (value: string) => void;
   onPlanFilePathChange: (value: string) => void;
   onTestCaseFilePathChange: (value: string) => void;
   onReviewCheckpointEnabledChange: (value: boolean) => void;
+  onNotifyMainOnHumanGateChange: (value: boolean) => void;
   onStart: () => void;
 }) {
   return (
     <div className="space-y-3">
-      <div className="text-sm font-medium text-slate-200">这是一个普通终端</div>
+      <div className="text-sm font-medium text-slate-200">
+        {mode === "retry" ? "重新开始 Agent Team" : "这是一个普通终端"}
+      </div>
       <p className="text-xs leading-relaxed text-slate-400">
-        当前是标准 shell 会话，没有多 Agent 流程。提交任务后，Agent Team 会进入
-        <code className="mx-1 rounded bg-slate-800 px-1">
-          拆分提案 → 执行观测
-        </code>
-        。
+        {mode === "retry" ? (
+          "已回填上一次任务参数。提交后会创建新的 Run，原失败记录会保留。"
+        ) : (
+          <>
+            当前是标准 shell 会话，没有多 Agent 流程。提交任务后，Agent Team
+            会进入
+            <code className="mx-1 rounded bg-slate-800 px-1">
+              拆分提案 → 执行观测
+            </code>
+            。
+          </>
+        )}
       </p>
       <ol className="space-y-1 pl-4 text-xs text-slate-400 [list-style:decimal]">
         <li>服务端自动生成并确认 worker 拆分</li>
@@ -82,6 +95,25 @@ export function StartFlowSection({
           </span>
         </span>
       </label>
+      <label className="flex items-start gap-2 rounded border border-slate-800 bg-slate-900/50 p-2 text-[11px] text-slate-300">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={notifyMainOnHumanGate}
+          onChange={(event) =>
+            onNotifyMainOnHumanGateChange(event.target.checked)
+          }
+        />
+        <span>
+          <span className="block font-medium text-slate-200">
+            Human Gate 时通知主 Agent
+          </span>
+          <span className="mt-0.5 block text-slate-500">
+            默认开启。主 Agent
+            可分析并执行允许的恢复动作，但不能代替人工审批或裁决。
+          </span>
+        </span>
+      </label>
       <label className="block space-y-1 text-[11px] text-slate-400">
         <span>测试案例文件</span>
         <input
@@ -104,8 +136,50 @@ export function StartFlowSection({
         disabled={busy || !task.trim()}
         onClick={onStart}
       >
-        <Play className="h-4 w-4" /> 开始 Agent Team
+        <Play className="h-4 w-4" />
+        {mode === "retry" ? "重新开始 Agent Team" : "开始 Agent Team"}
       </Button>
+    </div>
+  );
+}
+
+export function FailedRunSection({
+  run,
+  busy,
+  onRetry,
+}: {
+  run: AgentTeamRun;
+  busy: boolean;
+  onRetry: () => void;
+}) {
+  const recentLogs = run.logs.slice(-5).reverse();
+  return (
+    <div className="space-y-3">
+      <div className="rounded border border-rose-800 bg-rose-950/40 p-2">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
+          <AlertTriangle className="h-4 w-4" /> Agent Team 执行失败
+        </div>
+        <p className="mt-1 whitespace-pre-wrap break-words text-[11px] text-rose-200">
+          {run.logs.at(-1) ?? "Agent Team 未能完成当前 Run。"}
+        </p>
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        className="w-full"
+        disabled={busy}
+        onClick={onRetry}
+      >
+        <RotateCcw className="h-4 w-4" /> 修改参数并重试
+      </Button>
+      <div>
+        <div className="mb-1 text-xs font-semibold text-slate-400">Log</div>
+        <div className="space-y-0.5 rounded border border-slate-800 bg-slate-950/60 p-2 font-mono text-[10px] text-slate-400">
+          {recentLogs.map((line, index) => (
+            <div key={`${index}-${line}`}>{line}</div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -264,11 +338,7 @@ export function ExecutingSection({
   projectId,
   run,
   busy,
-  resumeNote,
-  onResumeNoteChange,
-  onResume,
-  onComplete,
-  onFocusPane,
+  onRetry,
   onAuthExpired,
 }: {
   apiBase: string;
@@ -276,11 +346,7 @@ export function ExecutingSection({
   projectId: string;
   run: AgentTeamRun;
   busy: boolean;
-  resumeNote: string;
-  onResumeNoteChange: (value: string) => void;
-  onResume: () => void;
-  onComplete: () => void;
-  onFocusPane: (panelId: string) => void;
+  onRetry: () => void;
   onAuthExpired?: () => void;
 }) {
   const { loop, acceptance } = run;
@@ -368,45 +434,27 @@ export function ExecutingSection({
           Loop 已暂停。请在顶部完成 Finding
           范围裁决；这里不会提供通用“人工完成”入口。
         </div>
-      ) : loop.escalated ? (
-        <div className="space-y-2 rounded border border-rose-800 bg-rose-950/40 p-2">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
-            <AlertTriangle className="h-4 w-4" /> 已熔断 · 升级人工
-          </div>
-          <p className="text-[11px] text-rose-200">{loop.lastReason}</p>
-          <PaneFocusList run={run} onFocusPane={onFocusPane} />
-          <textarea
-            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
-            rows={2}
-            placeholder="填写人工干预 note（恢复时注入主 Agent；完成时作为记录保存）"
-            value={resumeNote}
-            onChange={(event) => onResumeNoteChange(event.target.value)}
-          />
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              className="flex-1"
-              disabled={busy || !resumeNote.trim()}
-              onClick={onResume}
-            >
-              人工已介入 · 恢复 loop →
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="flex-1 border-emerald-800 text-emerald-300 hover:bg-emerald-950/40 hover:text-emerald-200"
-              disabled={busy}
-              onClick={onComplete}
-            >
-              人工确认完成
-            </Button>
-          </div>
-        </div>
       ) : run.status === "done" ? (
         <div className="rounded border border-emerald-900 bg-emerald-950/30 p-2 text-xs text-emerald-300">
           Loop 已完成，worker pane 已冻结。
+        </div>
+      ) : run.status === "failed" ? (
+        <div className="space-y-2 rounded border border-rose-800 bg-rose-950/40 p-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
+            <AlertTriangle className="h-4 w-4" /> Agent Team 执行失败
+          </div>
+          <p className="text-[11px] text-rose-200">
+            {run.logs.at(-1) ?? "Agent Team 未能完成当前 Run。"}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="w-full"
+            disabled={busy}
+            onClick={onRetry}
+          >
+            <RotateCcw className="h-4 w-4" /> 修改参数并重试
+          </Button>
         </div>
       ) : null}
 
@@ -511,47 +559,6 @@ function formatFindingDisposition(
     return "继续修复";
   }
   return disposition === "out_of_scope" ? "范围外" : "本轮豁免";
-}
-
-function ReviewCheckpointStatus({ run }: { run: AgentTeamRun }) {
-  const checkpoint = run.reviewCheckpoint;
-  if (!checkpoint) {
-    return null;
-  }
-  const target = checkpoint.pendingReview;
-  const latest = checkpoint.checkpoints.at(-1) ?? null;
-  const shortSha = (value: string) => value.slice(0, 8);
-  return (
-    <div className="space-y-1 rounded border border-sky-900 bg-sky-950/20 p-2 text-[10px] text-slate-400">
-      <div className="flex items-center justify-between">
-        <span className="font-semibold uppercase text-sky-300">
-          Review Checkpoint
-        </span>
-        <span>{latest ? `C${latest.sequence}` : "等待首次 review"}</span>
-      </div>
-      <div className="break-all">分支：{checkpoint.branch}</div>
-      <div>任务基线：{shortSha(checkpoint.taskBaseCommit)}</div>
-      <div>
-        最新 checkpoint：
-        {latest ? shortSha(latest.commit) : "尚未创建"}
-      </div>
-      {target ? (
-        <div className="rounded border border-sky-900/70 bg-slate-950/40 p-1.5">
-          <div>
-            当前审查：{target.scope} · {shortSha(target.baseCommit)} → tree{" "}
-            {shortSha(target.targetTree)}
-          </div>
-          <div>影响文件：{target.changedPaths.length}</div>
-        </div>
-      ) : null}
-      {checkpoint.finalReviewedCommit ? (
-        <div>最终全量 review：{shortSha(checkpoint.finalReviewedCommit)}</div>
-      ) : null}
-      <div className="text-slate-500">
-        本地 checkpoint 仅表示代码审查基线，不代表行为验收或发布完成。
-      </div>
-    </div>
-  );
 }
 
 function formatVerificationSource(run: AgentTeamRun): string {

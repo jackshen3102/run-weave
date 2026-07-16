@@ -20,6 +20,7 @@ export function buildRepairRun() {
     status: "running",
     options: {
       autoApproveSplit: true,
+      notifyMainOnHumanGate: true,
       reviewCheckpointMode: "disabled",
       maxRepairAttempts: 3,
     },

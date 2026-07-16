@@ -11,7 +11,6 @@ import {
   createActiveWorkerDispatch,
   setActiveWorker,
 } from "./service-workflow-policy";
-import { resolveAgentTeamTerminal } from "./service-run-policy";
 
 export abstract class AgentTeamCompletionRecheckService extends AgentTeamRepairProtocolService {
   protected async sendRecheckToWorker(
@@ -85,11 +84,13 @@ export abstract class AgentTeamCompletionRecheckService extends AgentTeamRepairP
       outboxPath,
       triggerSummary: options.triggerSummary ?? null,
     });
-    const terminal = resolveAgentTeamTerminal(run.terminal);
-    await this.agentLaunch.submitAgentLaunch(session, terminal, {
-      panelId: worker.panelId,
-      prompt: workerPrompt,
-    });
+    await this.submitWorkerDispatchPrompt(
+      persistedRun,
+      session,
+      run.terminal,
+      worker,
+      workerPrompt,
+    );
     return persistedRun;
   }
 }

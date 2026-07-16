@@ -44,6 +44,18 @@ export async function prepareTerminalAgent(
   let preparationPanelId: string | null = null;
   let commandSubmitted = false;
   let commandSubmittedAt: string;
+  const resumeThreadId = request.resumeThreadId?.trim() || null;
+  if (resumeThreadId && !request.panelId) {
+    throwPreparationError({
+      phase: "cli_launch",
+      operationId,
+      session,
+      panel: null,
+      createdPanel: false,
+      provider: request.agent,
+      message: "Resuming an agent thread requires an existing panel",
+    });
+  }
   if (request.panelId) {
     preparationPanelId = request.panelId;
     if (
@@ -161,6 +173,7 @@ export async function prepareTerminalAgent(
     const startedAtMs = Date.now();
     const startedAt = new Date(startedAtMs).toISOString();
     const reusingPanel = request.panelId !== undefined;
+    const resumingThread = Boolean(resumeThreadId);
 
     if (
       panel.status !== "running" ||
@@ -191,7 +204,7 @@ export async function prepareTerminalAgent(
     }
 
     try {
-      if (reusingPanel) {
+      if (reusingPanel && !resumingThread) {
         if (!isInteractiveShellLaunch(session.command, session.args)) {
           throw new Error(
             "Terminal session command is not a persistent interactive shell",
@@ -213,7 +226,7 @@ export async function prepareTerminalAgent(
           operationId,
         );
       }
-      if (createdPanel || reusingPanel) {
+      if (createdPanel || (reusingPanel && !resumingThread)) {
         await delay(AGENT_SHELL_STARTUP_DELAY_MS);
       }
       assertPreparationTargetCurrent({
@@ -257,6 +270,10 @@ export async function prepareTerminalAgent(
       let currentPanel = terminalSessionManager.getPanel(panel.id);
       if (!currentPanel) {
         throw new Error("Terminal agent panel missing after command submission");
+      }
+      if (resumingThread) {
+        currentPanel.activeCommand = request.command?.trim() || request.agent;
+        currentPanel = await terminalSessionManager.upsertPanel(currentPanel);
       }
       if (
         !currentPanel.terminalState ||
@@ -364,10 +381,13 @@ function buildAgentLaunchCommand(
   operationId: string,
 ): string {
   const command = request.command?.trim() || request.agent;
+  const requestedArgs = request.resumeThreadId?.trim()
+    ? [...(request.args ?? []), "resume", request.resumeThreadId.trim()]
+    : (request.args ?? []);
   const args =
     request.agent === "codex"
-      ? withCodexSkipUpdateOnStartupArgs(request.args ?? [])
-      : (request.args ?? []);
+      ? withCodexSkipUpdateOnStartupArgs(requestedArgs)
+      : requestedArgs;
   const invocation = request.commandLine?.trim()
     ? `${request.commandLine.trim()} ${shellQuote(request.prompt)}`
     : [command, ...args.map(shellQuote), shellQuote(request.prompt)].join(" ");

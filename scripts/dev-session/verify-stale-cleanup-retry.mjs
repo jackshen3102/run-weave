@@ -5,7 +5,11 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { isProcessLive, spawnDetached } from "./service-runtime.mjs";
-import { resolveSessionPaths, writeManifest } from "./registry.mjs";
+import {
+  readManifest,
+  resolveSessionPaths,
+  writeManifest,
+} from "./registry.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -15,20 +19,26 @@ export async function verifyStaleCleanupRetryConvergence({
   sourceRoot,
   env,
 }) {
-  const inertCleanupRetry = await execFileAsync(
-    process.execPath,
-    [
-      "scripts/dev-session/cli.mjs",
-      "stop",
-      "--session",
-      recoverySession.devSessionId,
-      "--cleanup-stale",
-      "--json",
-    ],
-    { cwd: sourceRoot, env },
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [
+        "scripts/dev-session/cli.mjs",
+        "stop",
+        "--session",
+        recoverySession.devSessionId,
+        "--cleanup-stale",
+        "--json",
+      ],
+      { cwd: sourceRoot, env },
+    ),
+    (error) => error?.code === 5,
   );
-  const inertCleanupManifest = JSON.parse(inertCleanupRetry.stdout);
-  assert.equal(inertCleanupManifest.cleanup, undefined);
+  const inertCleanupManifest = await readManifest(
+    recoverySession.devSessionId,
+    env,
+  );
+  assert.equal(inertCleanupManifest.state, "stale");
   assert.equal(
     inertCleanupManifest.services.backend.cleanupStatus,
     "skipped-stale-identity",

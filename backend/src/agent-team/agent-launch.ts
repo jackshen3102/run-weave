@@ -37,19 +37,7 @@ export class AgentTeamAgentLaunchService {
       prompt?: string;
     },
   ): Promise<void> {
-    const detectedAgent = getAgentForCommand(terminal.command ?? null);
-    if (!detectedAgent) {
-      throw new AgentTeamError(
-        409,
-        `Agent-team terminal command "${terminal.command ?? ""}" does not support lifecycle bootstrap`,
-      );
-    }
-    if (detectedAgent !== "codex" && detectedAgent !== "traex") {
-      throw new AgentTeamError(
-        409,
-        `Agent-team terminal agent "${detectedAgent}" does not support lifecycle bootstrap`,
-      );
-    }
+    const detectedAgent = resolveLifecycleAgent(terminal);
     const panelTarget = await resolvePanelTarget(
       this.options.terminalSessionManager,
       session,
@@ -83,4 +71,64 @@ export class AgentTeamAgentLaunchService {
       },
     );
   }
+
+  async submitAgentResume(
+    session: TerminalSessionRecord,
+    terminal: AgentTeamTerminal,
+    target: {
+      panelId: string;
+      threadId: string;
+      prompt: string;
+    },
+  ): Promise<void> {
+    const detectedAgent = resolveLifecycleAgent(terminal);
+    const panelTarget = await resolvePanelTarget(
+      this.options.terminalSessionManager,
+      session,
+      {
+        tmuxService: this.options.tmuxService,
+      },
+      { panelId: target.panelId },
+      "explicit-or-active",
+    );
+    await prepareTerminalAgent(
+      this.options.terminalSessionManager,
+      session,
+      {
+        ptyService: this.options.ptyService,
+        runtimeRegistry: this.options.runtimeRegistry,
+        terminalStateService: this.options.terminalStateService,
+        tmuxService: this.options.tmuxService,
+        tmuxOutputWatcher: this.options.tmuxOutputWatcher,
+      },
+      {
+        agent: detectedAgent,
+        prompt: target.prompt,
+        panelId: panelTarget.panel.id,
+        cwd: terminal.cwd ?? session.cwd,
+        command: terminal.command,
+        args: terminal.args,
+        resumeThreadId: target.threadId,
+      },
+    );
+  }
+}
+
+function resolveLifecycleAgent(
+  terminal: AgentTeamTerminal,
+): "codex" | "traex" {
+  const detectedAgent = getAgentForCommand(terminal.command ?? null);
+  if (!detectedAgent) {
+    throw new AgentTeamError(
+      409,
+      `Agent-team terminal command "${terminal.command ?? ""}" does not support lifecycle bootstrap`,
+    );
+  }
+  if (detectedAgent !== "codex" && detectedAgent !== "traex") {
+    throw new AgentTeamError(
+      409,
+      `Agent-team terminal agent "${detectedAgent}" does not support lifecycle bootstrap`,
+    );
+  }
+  return detectedAgent;
 }

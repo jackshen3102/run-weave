@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from "node:fs";
-import { AgentTeamService } from "../../backend/src/agent-team/service.ts";
 import { TerminalStateService } from "../../backend/src/terminal/terminal-state-service.ts";
 import { TerminalStateStore } from "../../backend/src/terminal/terminal-state-store.ts";
 import { DEFAULT_TERMINAL_AGENT_BOOTSTRAP_PROMPT } from "../../packages/shared/src/terminal/agent-preparation.ts";
@@ -9,6 +8,7 @@ import {
   withControlledStartupDelay,
   withHarness,
 } from "./bootstrap-lifecycle-harness.mjs";
+import { AgentTeamSerialDispatchHarness } from "./bootstrap-lifecycle-serial-harness.mjs";
 
 const FORMAL_WORKER_CASE = {
   caseId: "case_2",
@@ -21,9 +21,136 @@ const FORMAL_WORKER_CASE = {
 
 export async function verifyBootstrapAuthority(check, roots) {
   verifyTuiTextDoesNotAdvanceAuthoritativeState(check);
+  verifyWorkerPanesStayFixedAcrossRechecks(check);
   await verifyInitialSplitStartsOnlyActiveWorker(check, roots);
   await verifyAgentTeamFormalPromptIsInitialQuery(check, roots);
-  await verifyRecheckPromptIsInitialQuery(check, roots);
+  await verifyRecheckReusesExistingWorkerThread(check, roots);
+  await verifyPersistedIdleStartingThreadWaitsForReadiness(check, roots);
+  await verifyStoppedExistingThreadResumesInFixedPane(check, roots);
+  await verifyUnavailableExistingThreadFailsClosed(check, roots);
+}
+
+async function verifyPersistedIdleStartingThreadWaitsForReadiness(
+  check,
+  roots,
+) {
+  await withHarness(roots, async (harness) => {
+    await establishReusableAgentPanel(harness, "persisted-idle-thread");
+    await harness.manager.updatePanelTerminalState(harness.panel.id, {
+      state: "agent_starting",
+      agent: "codex",
+    });
+    const service = new AgentTeamSerialDispatchHarness({
+      terminalSessionManager: harness.manager,
+      terminalEventService: { record() {}, subscribe() {} },
+      ptyService: harness.options.ptyService,
+      runtimeRegistry: harness.options.runtimeRegistry,
+      terminalStateService: harness.options.terminalStateService,
+      tmuxService: harness.tmuxService,
+      cwd: harness.session.cwd,
+    });
+    const baseRun = buildRepairRun();
+    const reviewWorker = {
+      ...baseRun.workers.find((worker) => worker.role === "code_review"),
+      panelId: harness.panel.id,
+      tmuxPaneId: harness.panel.tmuxPaneId,
+    };
+    const run = {
+      ...baseRun,
+      projectId: harness.session.projectId,
+      terminalSessionId: harness.session.id,
+      terminal: {
+        command: "codex",
+        args: [],
+        cwd: harness.session.cwd,
+      },
+      workers: [reviewWorker],
+      acceptance: [FORMAL_WORKER_CASE],
+      consumedWorkerDispatches: [
+        {
+          dispatchId: "persisted-idle-dispatch",
+          role: "code_review",
+          round: 1,
+          contentSha256: "fixture",
+          consumedAt: "2026-07-15T00:00:00.000Z",
+        },
+      ],
+      reviewCheckpoint: null,
+    };
+    harness.setExecutePaneSends(false);
+    const dispatch = service.dispatch(run, "code_review", {
+      cases: [FORMAL_WORKER_CASE],
+      log: "resume persisted idle review",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const sentBeforeReady = service.secondaryPrompts.length;
+    await harness.manager.updatePanelThreadId(
+      harness.panel.id,
+      "different-thread",
+      "codex",
+    );
+    await harness.manager.updatePanelTerminalState(harness.panel.id, {
+      state: "agent_idle",
+      agent: "codex",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const sentWithMismatchedIdentity = service.secondaryPrompts.length;
+    await harness.manager.updatePanelThreadId(
+      harness.panel.id,
+      "persisted-idle-thread",
+      "codex",
+    );
+    const result = await dispatch;
+    check(
+      "agent-team-persisted-idle-starting-thread-waits-for-current-thread-readiness",
+      result.status === "running" &&
+        result.activeWorkerRole === "code_review" &&
+        sentBeforeReady === 0 &&
+        sentWithMismatchedIdentity === 0 &&
+        service.secondaryPrompts.length === 1 &&
+        service.secondaryPrompts[0].target.panelId === harness.panel.id &&
+        service.resumedThreads.length === 0 &&
+        harness.respawnedPanes.length === 0,
+      {
+        result,
+        secondaryPrompts: service.secondaryPrompts,
+        resumedThreads: service.resumedThreads,
+        respawnedPanes: harness.respawnedPanes,
+      },
+    );
+  });
+}
+
+function verifyWorkerPanesStayFixedAcrossRechecks(check) {
+  const recheckSource = readFileSync(
+    new URL("../../backend/src/agent-team/service-recheck.ts", import.meta.url),
+    "utf8",
+  );
+  const preparationSource = readFileSync(
+    new URL(
+      "../../backend/src/terminal/application/agent-preparation.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  check(
+    "agent-team-recheck-never-replaces-fixed-worker-pane",
+    !recheckSource.includes("createTerminalPanelSplit") &&
+      !recheckSource.includes("replaceWorkerPaneForRecheck") &&
+      !recheckSource.includes("fresh pane"),
+    recheckSource.slice(0, 8_000),
+  );
+  check(
+    "agent-team-thread-resume-preserves-fixed-worker-pane",
+    preparationSource.includes("reusingPanel && !resumingThread") &&
+      preparationSource.includes("resumeThreadId") &&
+      preparationSource.includes(
+        "currentPanel.activeCommand = request.command?.trim() || request.agent",
+      ) &&
+      preparationSource.indexOf("reusingPanel && !resumingThread") <
+        preparationSource.indexOf("respawnPane("),
+    preparationSource.slice(0, 12_000),
+  );
 }
 
 function verifyTuiTextDoesNotAdvanceAuthoritativeState(check) {
@@ -273,7 +400,7 @@ async function verifyAgentTeamFormalPromptIsInitialQuery(check, roots) {
   });
 }
 
-async function verifyRecheckPromptIsInitialQuery(check, roots) {
+async function verifyRecheckReusesExistingWorkerThread(check, roots) {
   await withHarness(roots, async (harness) => {
     await establishReusableAgentPanel(harness, "old-review-thread");
     const service = new AgentTeamSerialDispatchHarness({
@@ -306,77 +433,163 @@ async function verifyRecheckPromptIsInitialQuery(check, roots) {
       reviewCheckpoint: null,
     };
     harness.setExecutePaneSends(false);
-    await withControlledStartupDelay(async (clock) => {
-      const recheck = service.recheck(run, harness.session, reviewWorker, [
-        FORMAL_WORKER_CASE,
-      ]);
-      await clock.waitForTimer();
-      check(
-        "agent-team-recheck-persists-boundary-before-agent-launch",
-        clock.timerCount() === 1 &&
-          service.persistedRuns.length === 1 &&
-          harness.paneOperations.every((item) => item.type !== "send"),
-        {
-          timerCount: clock.timerCount(),
-          persistedRuns: service.persistedRuns,
-          paneOperations: harness.paneOperations,
-        },
-      );
-      clock.advanceTo(10_000);
-      const result = await recheck;
-      const sends = harness.paneOperations.filter(
-        (item) => item.type === "send",
-      );
-      check(
-        "agent-team-recheck-submits-formal-prompt-as-only-initial-query",
-        sends.length === 1 &&
-          sends[0].paneId === harness.panel.tmuxPaneId &&
-          sends[0].command.includes(FORMAL_WORKER_CASE.text) &&
-          !sends[0].command.includes(DEFAULT_TERMINAL_AGENT_BOOTSTRAP_PROMPT) &&
-          service.secondaryPromptCount === 0 &&
-          result.activeWorkerDispatch?.panelId === harness.panel.id,
-        { sends, result },
-      );
-    });
+    const result = await service.recheck(run, harness.session, reviewWorker, [
+      FORMAL_WORKER_CASE,
+    ]);
+    check(
+      "agent-team-recheck-persists-boundary-before-reusing-thread",
+      service.persistedRuns.length === 1 &&
+        harness.respawnedPanes.length === 0 &&
+        harness.paneOperations.every((item) => item.type !== "send"),
+      {
+        persistedRuns: service.persistedRuns,
+        paneOperations: harness.paneOperations,
+      },
+    );
+    check(
+      "agent-team-recheck-reuses-existing-worker-thread",
+      service.secondaryPrompts.length === 1 &&
+        service.secondaryPrompts[0].text.includes(FORMAL_WORKER_CASE.text) &&
+        service.secondaryPrompts[0].target.panelId === harness.panel.id &&
+        result.activeWorkerDispatch?.panelId === harness.panel.id,
+      { secondaryPrompts: service.secondaryPrompts, result },
+    );
   });
 }
 
-class AgentTeamSerialDispatchHarness extends AgentTeamService {
-  persistedRuns = [];
-  secondaryPromptCount = 0;
-
-  constructor(options) {
-    super(options);
-    this.promptSender.sendPromptToPane = async () => {
-      this.secondaryPromptCount += 1;
-    };
-  }
-
-  dispatch(run, role, options) {
-    return this.dispatchSerialWorker(run, role, options);
-  }
-
-  split(run, workers, acceptance) {
-    return this.applySplit(run, workers, acceptance, {
-      source: "agent",
-      log: "fixture split",
+async function verifyStoppedExistingThreadResumesInFixedPane(check, roots) {
+  await withHarness(roots, async (harness) => {
+    await establishReusableAgentPanel(harness, "old-review-thread");
+    await harness.manager.updatePanelTerminalState(harness.panel.id, {
+      state: "shell_idle",
+      agent: null,
     });
-  }
-
-  recheck(run, session, worker, cases) {
-    return this.sendRecheckToWorker(run, session, worker, cases, {
-      attempt: 1,
+    const service = new AgentTeamSerialDispatchHarness({
+      terminalSessionManager: harness.manager,
+      terminalEventService: { record() {}, subscribe() {} },
+      ptyService: harness.options.ptyService,
+      runtimeRegistry: harness.options.runtimeRegistry,
+      terminalStateService: harness.options.terminalStateService,
+      tmuxService: harness.tmuxService,
+      cwd: harness.session.cwd,
     });
-  }
-
-  async updateRun(run, patch) {
-    const next = {
-      ...run,
-      ...patch,
-      updatedAt: new Date().toISOString(),
+    const baseRun = buildRepairRun();
+    const reviewWorker = {
+      ...baseRun.workers.find((worker) => worker.role === "code_review"),
+      panelId: harness.panel.id,
+      tmuxPaneId: harness.panel.tmuxPaneId,
     };
-    this.persistedRuns.push(next);
-    return next;
-  }
+    const run = {
+      ...baseRun,
+      projectId: harness.session.projectId,
+      terminalSessionId: harness.session.id,
+      terminal: {
+        command: "codex",
+        args: [],
+        cwd: harness.session.cwd,
+      },
+      workers: [reviewWorker],
+      acceptance: [FORMAL_WORKER_CASE],
+      consumedWorkerDispatches: [
+        {
+          dispatchId: "old-review-dispatch",
+          role: "code_review",
+          round: 1,
+          contentSha256: "fixture",
+          consumedAt: "2026-07-15T00:00:00.000Z",
+        },
+      ],
+      reviewCheckpoint: null,
+    };
+    harness.setExecutePaneSends(false);
+    const result = await service.dispatch(run, "code_review", {
+      cases: [FORMAL_WORKER_CASE],
+      log: "retry review",
+    });
+    check(
+      "agent-team-stopped-thread-resumes-in-fixed-worker-pane",
+      result.status === "running" &&
+        result.activeWorkerRole === "code_review" &&
+        service.resumedThreads.length === 1 &&
+        service.resumedThreads[0].target.panelId === harness.panel.id &&
+        service.resumedThreads[0].target.threadId === "old-review-thread" &&
+        service.resumedThreads[0].target.prompt.includes(
+          FORMAL_WORKER_CASE.text,
+        ) &&
+        harness.respawnedPanes.length === 0 &&
+        harness.paneOperations.every((item) => item.type !== "send") &&
+        service.secondaryPrompts.length === 0,
+      {
+        result,
+        resumedThreads: service.resumedThreads,
+        respawnedPanes: harness.respawnedPanes,
+        paneOperations: harness.paneOperations,
+        secondaryPrompts: service.secondaryPrompts,
+      },
+    );
+  });
 }
 
+async function verifyUnavailableExistingThreadFailsClosed(check, roots) {
+  await withHarness(roots, async (harness) => {
+    const service = new AgentTeamSerialDispatchHarness({
+      terminalSessionManager: harness.manager,
+      terminalEventService: { record() {}, subscribe() {} },
+      ptyService: harness.options.ptyService,
+      runtimeRegistry: harness.options.runtimeRegistry,
+      terminalStateService: harness.options.terminalStateService,
+      tmuxService: harness.tmuxService,
+      cwd: harness.session.cwd,
+    });
+    const baseRun = buildRepairRun();
+    const reviewWorker = {
+      ...baseRun.workers.find((worker) => worker.role === "code_review"),
+      panelId: harness.panel.id,
+      tmuxPaneId: harness.panel.tmuxPaneId,
+    };
+    const run = {
+      ...baseRun,
+      projectId: harness.session.projectId,
+      terminalSessionId: harness.session.id,
+      terminal: {
+        command: "codex",
+        args: [],
+        cwd: harness.session.cwd,
+      },
+      workers: [reviewWorker],
+      acceptance: [FORMAL_WORKER_CASE],
+      consumedWorkerDispatches: [
+        {
+          dispatchId: "old-review-dispatch",
+          role: "code_review",
+          round: 1,
+          contentSha256: "fixture",
+          consumedAt: "2026-07-15T00:00:00.000Z",
+        },
+      ],
+      reviewCheckpoint: null,
+    };
+    harness.setExecutePaneSends(false);
+    const result = await service.dispatch(run, "code_review", {
+      cases: [FORMAL_WORKER_CASE],
+      log: "retry review",
+    });
+    check(
+      "agent-team-existing-thread-unavailable-fails-closed",
+      result.status === "need_human" &&
+        result.activeWorkerRole === "code_review" &&
+        result.logs.some((item) => item.includes("禁止新开 thread")) &&
+        harness.respawnedPanes.length === 0 &&
+        harness.paneOperations.every((item) => item.type !== "send") &&
+        service.secondaryPrompts.length === 0 &&
+        service.resumedThreads.length === 0,
+      {
+        result,
+        resumedThreads: service.resumedThreads,
+        respawnedPanes: harness.respawnedPanes,
+        paneOperations: harness.paneOperations,
+        secondaryPrompts: service.secondaryPrompts,
+      },
+    );
+  });
+}

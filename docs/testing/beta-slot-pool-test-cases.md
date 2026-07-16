@@ -16,6 +16,7 @@
 - current/previous release、App backup、日志与磁盘预算；
 - shared Backend/App Server、Stable 和 legacy instance 的所有权边界；
 - stale/orphan/broken/unknown-schema 的 fail-closed 与恢复。
+- stop/reset/release 后在同一 validation HOME 显式复用同一 warm slot。
 
 不覆盖：
 
@@ -67,10 +68,11 @@ git diff --check
 | BSP-010 | 磁盘不足时先安全清理再 fail closed        | CLI + 文件系统                   |
 | BSP-011 | 显式 `--instance` 不能绕过容量            | CLI                              |
 | BSP-012 | dry-run 全程只读且不承诺槽位              | CLI + 文件快照                   |
-| BSP-013 | shared Backend/App Server 不归槽位清理    | CLI + 真实进程                   |
+| BSP-013 | shared 服务不归槽位清理                   | CLI + 真实进程                   |
 | BSP-014 | 损坏/未知 lease schema 保持占用           | CLI + 文件系统                   |
 | BSP-015 | start 失败按 reset 结果释放或保留 lease   | CLI + 故障注入                   |
 | BSP-016 | legacy 只盘点，cleanup/purge 显式且可恢复 | CLI + 文件系统                   |
+| BSP-017 | stop/reset 后 warm 重试仍复用同一槽位     | CLI + 真实进程 + `$computer-use` |
 
 ## 用例细则
 
@@ -158,12 +160,12 @@ git diff --check
 - Then：dry-run 输出 policy/capacity/requestedSlotId、`authoritative:false` 的 snapshot，assignedSlotId/leaseNonce 为 null；所有记录路径摘要与 mtime 不变；后续真实 start 可得到不同结果且不视为错误。
 - 失败判断：dry-run 创建/修改任何状态、获取临时 lease，或承诺实际 assigned slot。
 
-### BSP-013 shared Backend/App Server 不归槽位清理
+### BSP-013 shared 服务不归槽位清理
 
-- Given：planner 选择 shared Backend/App Server，记录 shared PID、home、lock、token、event log 与内容摘要；Beta Electron 使用一个 slot ready。
+- Given：planner 按当前 impact closure 为 Backend/App Server 分别选择 ownership，且至少一个服务为 shared；记录每个 shared 服务的 PID、home、lock、token、event log 与内容摘要，并记录其余 dedicated 服务的 slot identity；Beta Electron 使用一个 slot ready。不得通过降低 profile ownership boundary 强行构造 shared 服务。
 - When：停止 Beta、运行 pool janitor 与磁盘 retention。
-- Then：只停止/清理 slot-owned Electron/userData；shared PID 继续存活，home/lock/token/event 摘要不变；manifest 明确显示 shared ownership。
-- 失败判断：shared 资源被写入 lease、被 stop/delete/prune，或状态输出把 shared 声称为 slot-owned。
+- Then：只停止/清理 slot-owned Electron/userData 与 dedicated 服务；每个 shared 服务的 PID 继续存活，home/lock/token/event 摘要不变；manifest 分别如实显示 shared/dedicated ownership。
+- 失败判断：任一 shared 资源被写入 lease、被 stop/delete/prune，dedicated 资源未按槽位生命周期收敛，或状态输出把 shared 服务声称为 slot-owned。
 
 ### BSP-014 损坏/未知 lease schema 保持占用
 
@@ -185,6 +187,13 @@ git diff --check
 - When：先运行自动 start janitor 与 `legacy-inventory --json`，再仅对 inactive trusted instance 执行 `legacy-cleanup --instance <id> --json`、`legacy-restore --operation <id> --json`、再次 cleanup 和 `legacy-purge --operation <id> --confirm <id> --json`。
 - Then：自动 janitor/inventory 不删除任何 legacy；trusted cleanup 原子进入 quarantine 并写 journal/恢复命令，restore 可恢复，purge 只有 operationId 与 confirm 一致才删除；active/unowned/symlink/path-escape/Stable 均拒绝。
 - 失败判断：按 glob 自动删除、active/无 owner 被清、无 journal 无法恢复、错误 confirm 仍 purge，或 Stable 被修改。
+
+### BSP-017 stop/reset 后 warm 重试仍复用同一槽位
+
+- Given：同一隔离 validation HOME 中 `pool-01` 已有 warm App、warm-state 与 App Server Runtime；按 warm-state 的实际 update mode 记录 Desktop 基线：`mode=app` 时记录 App identity 且允许 `runtimeReleaseId=null`，`mode=runtime` 时还必须记录 Desktop Runtime current release；上一 owner 已完成 stop/reset，manifest 为 `stopped` 或 identity-safe `failed`，`pool-01` lease 已释放，mutable user state 已清空；同时记录 App Server current release 与 Stable 摘要。
+- When：显式执行 `pnpm dev:session --profile beta --instance pool-01 --json` 启动 session A，用 `$computer-use` 确认窗口后执行 `pnpm dev:stop --session <sessionA> --json`；确认 stop/reset 与 lease release 完成，再在同一 validation HOME 中再次显式请求 `pool-01` 启动 session B。
+- Then：A 与 B 都分配 `pool-01`，各自 manifest/lease 的 ownerSessionId 与 nonce 在其生命周期内一致且两轮 nonce 不同；B 只能在 A 的 reset、stopped/failed manifest 落盘和 lease 释放后获取槽位；不创建或切换到其他 pool App/slot；既有 warm App、warm-state、按 update mode 实际存在的 Desktop Runtime release 与 App Server Runtime 归属链保留，Stable 摘要不变。
+- 失败判断：A 未安全收敛便让 B 获取 lease、B 随机切换其他 slot、创建新的 App/slot、复用 A 的 nonce、删除既有 warm App/runtime、把 `mode=app` 的合法 `runtimeReleaseId=null` 误判为环境阻塞、修改 Stable，或在 Given 不成立时仍强行重试。Computer Use 服务不可用时只把窗口证据标记为环境 `blocked`，不得据此判产品失败。
 
 ## 覆盖清单
 

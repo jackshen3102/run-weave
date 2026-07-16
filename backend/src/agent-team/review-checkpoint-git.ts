@@ -82,25 +82,39 @@ export class AgentTeamReviewCheckpointGit {
     scope: AgentTeamReviewScope;
     planSha256: string | null;
     testCaseSha256: string | null;
+    expectedHeadCommit?: string;
+    rebasedCheckpointCommit?: string;
   }): Promise<AgentTeamReviewTarget> {
     const { state, scope } = params;
-    await this.assertBranchAndHead(state);
     if (scope === "final") {
+      if (params.expectedHeadCommit) {
+        await this.assertCheckpointHead(
+          state,
+          [],
+          params.expectedHeadCommit,
+          params.rebasedCheckpointCommit,
+        );
+      } else {
+        await this.assertBranchAndHead(state);
+      }
+      const targetCommit =
+        params.expectedHeadCommit ?? state.lastReviewedCommit;
       const targetTree = (
         await this.runGit(state.repoRoot, [
           "rev-parse",
-          `${state.lastReviewedCommit}^{tree}`,
+          `${targetCommit}^{tree}`,
         ])
       ).stdout.trim();
       const changedPaths = await this.diffNames(
         state.repoRoot,
         state.taskBaseCommit,
-        state.lastReviewedCommit,
+        targetCommit,
         false,
       );
       return {
         scope,
         baseCommit: state.taskBaseCommit,
+        targetCommit,
         targetTree,
         changedPaths,
         planSha256: params.planSha256,
@@ -109,6 +123,7 @@ export class AgentTeamReviewCheckpointGit {
       };
     }
 
+    await this.assertBranchAndHead(state);
     const pendingEntries = await this.assertSafePendingPaths(state.repoRoot);
     await this.runGit(state.repoRoot, [
       "add",
@@ -160,13 +175,19 @@ export class AgentTeamReviewCheckpointGit {
     state: AgentTeamReviewCheckpointState,
     target: AgentTeamReviewTarget,
   ): Promise<void> {
-    await this.assertBranchAndHead(state);
+    const finalTargetCommit =
+      target.scope === "final" ? target.targetCommit : null;
+    if (finalTargetCommit) {
+      await this.assertBranchAndCommit(state, finalTargetCommit);
+    } else {
+      await this.assertBranchAndHead(state);
+    }
     const actualTree =
       target.scope === "final"
         ? (
             await this.runGit(state.repoRoot, [
               "rev-parse",
-              `${state.lastReviewedCommit}^{tree}`,
+              `${finalTargetCommit ?? state.lastReviewedCommit}^{tree}`,
             ])
           ).stdout.trim()
         : (await this.runGit(state.repoRoot, ["write-tree"])).stdout.trim();
@@ -296,8 +317,48 @@ export class AgentTeamReviewCheckpointGit {
 
   async assertCheckpointHead(
     state: AgentTeamReviewCheckpointState,
+    allowedDirtyPaths: string[] = [],
+    expectedHeadCommit?: string,
+    rebasedCheckpointCommit?: string,
   ): Promise<void> {
-    await this.assertBranchAndHead(state);
+    if (expectedHeadCommit) {
+      const branch = (
+        await this.runGit(state.repoRoot, [
+          "symbolic-ref",
+          "--quiet",
+          "--short",
+          "HEAD",
+        ])
+      ).stdout.trim();
+      const head = (
+        await this.runGit(state.repoRoot, ["rev-parse", "HEAD"])
+      ).stdout.trim();
+      const checkpointAnchor = rebasedCheckpointCommit
+        ? await this.verifyRebasedCheckpointAnchor(
+            state,
+            rebasedCheckpointCommit,
+          )
+        : state.lastReviewedCommit;
+      const mergeBase = (
+        await this.runGit(state.repoRoot, [
+          "merge-base",
+          checkpointAnchor,
+          expectedHeadCommit,
+        ])
+      ).stdout.trim();
+      if (
+        branch !== state.branch ||
+        head !== expectedHeadCommit ||
+        mergeBase !== checkpointAnchor
+      ) {
+        throw new AgentTeamError(
+          409,
+          `Agent intervention checkpoint HEAD 无效：expected ${state.branch}@${expectedHeadCommit} descendant of ${checkpointAnchor}，actual ${branch}@${head}`,
+        );
+      }
+    } else {
+      await this.assertBranchAndHead(state);
+    }
     const statusOutput = (
       await this.runGit(state.repoRoot, [
         "status",
@@ -309,16 +370,63 @@ export class AgentTeamReviewCheckpointGit {
     const pendingCodePaths = this.statusPaths(statusOutput).filter(
       (filePath) => !isCheckpointExcludedPath(filePath),
     );
-    if (pendingCodePaths.length > 0) {
+    const pendingCodePathSet = new Set(pendingCodePaths);
+    const staleAllowedPaths = allowedDirtyPaths.filter(
+      (filePath) => !pendingCodePathSet.has(filePath),
+    );
+    if (staleAllowedPaths.length > 0) {
       throw new AgentTeamError(
         409,
-        `Checkpoint 后存在未提交代码，behavior 不得启动：${pendingCodePaths.join(", ")}`,
+        `Checkpoint dirty path 例外与当前 worktree 不一致：${staleAllowedPaths.join(", ")}`,
+      );
+    }
+    const allowedDirtyPathSet = new Set(allowedDirtyPaths);
+    const unacknowledgedCodePaths = pendingCodePaths.filter(
+      (filePath) => !allowedDirtyPathSet.has(filePath),
+    );
+    if (unacknowledgedCodePaths.length > 0) {
+      throw new AgentTeamError(
+        409,
+        `Checkpoint 后存在未提交代码，behavior 不得启动：${unacknowledgedCodePaths.join(", ")}`,
       );
     }
   }
 
+  private async verifyRebasedCheckpointAnchor(
+    state: AgentTeamReviewCheckpointState,
+    commit: string,
+  ): Promise<string> {
+    const checkpoint = state.checkpoints.at(-1);
+    if (!checkpoint || checkpoint.commit !== state.lastReviewedCommit) {
+      throw new AgentTeamError(
+        409,
+        "Agent intervention 无法重锚：缺少 lastReviewedCommit 对应 checkpoint 记录",
+      );
+    }
+    const message = (
+      await this.runGit(state.repoRoot, ["show", "-s", "--format=%B", commit])
+    ).stdout;
+    if (
+      !message.includes(`Runweave-Review-Sequence: ${checkpoint.sequence}`) ||
+      !message.includes(`Runweave-Review-Tree: ${checkpoint.tree}`)
+    ) {
+      throw new AgentTeamError(
+        409,
+        `Agent intervention rebase 锚点与 checkpoint C${checkpoint.sequence}/${checkpoint.tree} 不匹配：${commit}`,
+      );
+    }
+    return commit;
+  }
+
   private async assertBranchAndHead(
     state: AgentTeamReviewCheckpointState,
+  ): Promise<void> {
+    await this.assertBranchAndCommit(state, state.lastReviewedCommit);
+  }
+
+  private async assertBranchAndCommit(
+    state: AgentTeamReviewCheckpointState,
+    expectedCommit: string,
   ): Promise<void> {
     const branch = (
       await this.runGit(state.repoRoot, [
@@ -331,10 +439,10 @@ export class AgentTeamReviewCheckpointGit {
     const head = (
       await this.runGit(state.repoRoot, ["rev-parse", "HEAD"])
     ).stdout.trim();
-    if (branch !== state.branch || head !== state.lastReviewedCommit) {
+    if (branch !== state.branch || head !== expectedCommit) {
       throw new AgentTeamError(
         409,
-        `Review checkpoint Git 状态已漂移：expected ${state.branch}@${state.lastReviewedCommit}，actual ${branch}@${head}`,
+        `Review checkpoint Git 状态已漂移：expected ${state.branch}@${expectedCommit}，actual ${branch}@${head}`,
       );
     }
   }

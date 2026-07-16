@@ -82,11 +82,12 @@ export function buildWorkerStartupPrompt(params: {
         : "把每条用例的结果写进 outbox 的 acceptanceResults：[{ caseId, status: pass|fail|skipped, summary, skipReason?, evidence[] }]。",
       "首轮按测试案例顺序执行；遇到阻断失败可以停止，但必须在 outbox 写清失败 case、失败步骤和证据。",
     );
-    if (run.reviewCheckpoint) {
+    const checkpointCommit = behaviorCheckpointCommit(run);
+    if (checkpointCommit) {
       lines.push(
-        `本轮被测 checkpoint：${run.reviewCheckpoint.lastReviewedCommit}`,
+        `本轮被测 checkpoint：${checkpointCommit}`,
         "开始验收前执行 git rev-parse HEAD 并确认等于该 commit。",
-        `outbox 顶层 verifiedCheckpointCommit 必须等于 "${run.reviewCheckpoint.lastReviewedCommit}"。`,
+        `outbox 顶层 verifiedCheckpointCommit 必须等于 "${checkpointCommit}"。`,
       );
     }
   } else if (worker.role === "code_review") {
@@ -138,6 +139,9 @@ export function buildBounceBackPrompt(params: {
   const requiresStrategyAssessment = repairCycles.some(
     (cycle) => cycle.attempts >= 1,
   );
+  const requiresExecutableReviewReproduction = structuralRepairs.some(
+    (cycle) => cycle.attempts >= 1,
+  );
   return [
     isReviewGateBounce
       ? `[loop round ${run.loop.round}] 串行门禁报以下用例失败，请修复：`
@@ -169,7 +173,14 @@ export function buildBounceBackPrompt(params: {
     ...(structuralRepairs.length > 0
       ? [
           "Structural review 复现门槛：",
-          "- 优先原样复跑 reviewer evidence 中的命令或 harness；没有可执行 harness 时提供可复核的静态契约 Before/After。",
+          ...(requiresExecutableReviewReproduction
+            ? [
+                "- 这是修复后重复出现的 P0/P1：必须先原样执行 reviewer 提供的 scenarioId、步骤和 harness；static_contract 不再足够。",
+                "- 按相同场景无法复现时不要继续猜测性修改；提交 not_reproduced + 执行证据，backend 会回派 reviewer 现场举证。",
+              ]
+            : [
+                "- 优先原样复跑 reviewer evidence 中的命令或 harness；没有可执行 harness 时提供可复核的静态契约 Before/After。",
+              ]),
           "- 不要把纯 Git/类型/结构契约伪装成真实 runtime 场景。",
           "",
         ]
@@ -244,8 +255,10 @@ export function buildWorkerRecheckPrompt(params: {
   cases: AgentTeamAcceptanceCase[];
   outboxPath?: string | null;
   triggerSummary?: string | null;
+  reviewChallenge?: { repairKeys: string[]; reason: string } | null;
 }): string {
-  const { run, worker, cases, outboxPath, triggerSummary } = params;
+  const { run, worker, cases, outboxPath, triggerSummary, reviewChallenge } =
+    params;
   const isReviewWorker = worker.role === "code_review";
   const heading = isReviewWorker
     ? `[loop round ${run.loop.round}] Code Agent 已提交本轮代码结果，请独立审查以下用例：`
@@ -276,6 +289,16 @@ export function buildWorkerRecheckPrompt(params: {
       : []),
     ...cases.map(formatAcceptancePromptLine),
     ...(isReviewWorker ? formatReviewTargetInstructions(run) : []),
+    ...(isReviewWorker && reviewChallenge
+      ? [
+          "",
+          "重复 P0/P1 复现争议：",
+          `- repairKeys: ${reviewChallenge.repairKeys.join(", ")}`,
+          `- ${reviewChallenge.reason}`,
+          "- 你必须在当前 checkpoint 亲自执行原 scenarioId：复现成功则提交 review_harness + reproduced + command evidence；无法复现则从 remainingFindings 移除。",
+          "- 禁止复用上一轮静态证据，禁止用 static_contract 继续维持该 finding。",
+        ]
+      : []),
     ...(skippedCases.length > 0
       ? [
           "",
@@ -297,14 +320,25 @@ export function buildWorkerRecheckPrompt(params: {
           ...(isReviewWorker ? [FINDING_SCHEMA] : []),
         ]
       : []),
-    ...(worker.role === "behavior_verify" && run.reviewCheckpoint
-      ? [
-          `本轮被测 checkpoint：${run.reviewCheckpoint.lastReviewedCommit}`,
-          "开始验收前执行 git rev-parse HEAD 并确认等于该 commit。",
-          `outbox 顶层 verifiedCheckpointCommit 必须等于 "${run.reviewCheckpoint.lastReviewedCommit}"。`,
-        ]
+    ...(worker.role === "behavior_verify" && behaviorCheckpointCommit(run)
+      ? (() => {
+          const checkpointCommit = behaviorCheckpointCommit(run)!;
+          return [
+            `本轮被测 checkpoint：${checkpointCommit}`,
+            "开始验收前执行 git rev-parse HEAD 并确认等于该 commit。",
+            `outbox 顶层 verifiedCheckpointCommit 必须等于 "${checkpointCommit}"。`,
+          ];
+        })()
       : []),
   ].join("\n");
+}
+
+function behaviorCheckpointCommit(run: AgentTeamRun): string | null {
+  return (
+    run.activeWorkerDispatch?.verifiedCheckpointCommit ??
+    run.reviewCheckpoint?.lastReviewedCommit ??
+    null
+  );
 }
 
 function formatWorkerDispatchInstructions(run: AgentTeamRun): string[] {
@@ -340,6 +374,7 @@ function formatReviewTargetInstructions(run: AgentTeamRun): string[] {
     "Review checkpoint 范围：",
     `- scope=${target.scope}`,
     `- baseCommit=${target.baseCommit}`,
+    `- targetCommit=${target.targetCommit ?? "null"}`,
     `- targetTree=${target.targetTree}`,
     `- changedPaths=${target.changedPaths.join(", ")}`,
     `- planSha256=${target.planSha256 ?? "null"}`,
@@ -355,7 +390,7 @@ function formatReviewTargetInstructions(run: AgentTeamRun): string[] {
           ),
         ]
       : []),
-    "- outbox 顶层 reviewTarget 必须原样回显本 prompt 的 scope/baseCommit/targetTree/changedPaths/planSha256/testCaseSha256/requestedAt。",
+    "- outbox 顶层 reviewTarget 必须原样回显本 prompt 的 scope/baseCommit/targetCommit/targetTree/changedPaths/planSha256/testCaseSha256/requestedAt。",
   ];
 }
 
@@ -366,6 +401,66 @@ export function buildHumanNotePrompt(note: string): string {
     note,
     "",
     "loop 已重置（错误指纹 + 无进展计数清零），请据此调整后继续推进。",
+  ].join("\n");
+}
+
+export function buildBlockedBehaviorMainPrompt(params: {
+  run: AgentTeamRun;
+  blockedCases: AgentTeamAcceptanceCase[];
+}): string {
+  const { run, blockedCases } = params;
+  return [
+    `[Agent Team ${run.runId}] behavior_verify 遇到阻塞，run 已暂停，请分析后选择最小恢复动作。`,
+    "",
+    ...blockedCases.flatMap((item) => [
+      `- [${item.caseId}] ${item.sourceFilePath ?? "unknown"}${item.sourceHeading ? `｜${item.sourceHeading}` : ""}`,
+      `  验收合同：${item.text}`,
+      `  阻塞原因：${item.skipReason ?? "worker 未提供 skipReason"}`,
+      ...(item.evidence.length > 0
+        ? [
+            `  证据：${item.evidence.map((evidence) => `${evidence.label}: ${evidence.summary}（ref=${evidence.ref}）`).join("；")}`,
+          ]
+        : ["  证据：无"]),
+    ]),
+    "",
+    "恢复要求：",
+    "- 先判断是环境问题、验收合同问题还是依赖/顺序问题，不要默认修改测试合同。",
+    `- 环境或依赖修复后，执行 rw agent-team intervene ${run.runId} --action dispatch --role behavior_verify --cases <受影响 Case> --note <原因>。`,
+    `- 确需修改验收合同时，编辑项目内完整测试案例文件，再执行 rw agent-team intervene ${run.runId} --action refresh_acceptance --role <code_review|behavior_verify> --cases <受影响 Case> --generated-test-case-file <文件> --note <原因>。`,
+    "- 未声明的 Case 必须保持既有状态和证据，禁止全量重跑。",
+    "- 无法安全判断时保持 need_human，并向用户说明需要的决策。",
+  ].join("\n");
+}
+
+export function buildHumanGateMainPrompt(run: AgentTeamRun): string {
+  const blockedCases = run.loop.lastReason?.startsWith(
+    "behavior_verify 环境阻塞",
+  )
+    ? run.acceptance.filter(
+        (item) => item.status === "pending" && item.lastRunStatus === "skipped",
+      )
+    : [];
+  if (blockedCases.length > 0) {
+    return buildBlockedBehaviorMainPrompt({ run, blockedCases });
+  }
+
+  return [
+    `[Agent Team ${run.runId}] run 已进入 Human Gate，请检查当前状态并推进允许的下一步。`,
+    `阶段：${run.phase}`,
+    `原因：${run.loop.lastReason ?? run.logs.at(-1) ?? "未记录"}`,
+    ...(run.phase === "proposal"
+      ? [
+          "当前是拆分提案门禁：请向用户说明提案并等待确认或拒绝，不得代替用户审批。",
+        ]
+      : []),
+    ...(run.pendingFindingDecision
+      ? [
+          `当前是 P0/P1 finding 范围裁决：${run.pendingFindingDecision.reason}`,
+          "必须请求用户 disposition，不得由 Agent 代替人工裁决。",
+        ]
+      : []),
+    "先分析门禁原因；仅在现有权限允许且能安全恢复时执行修复或 Agent intervention。",
+    "本通知不授权绕过 Human Gate。无法安全判断时，向用户说明所需决策。",
   ].join("\n");
 }
 

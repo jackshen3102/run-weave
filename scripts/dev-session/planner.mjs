@@ -6,12 +6,16 @@ import { isInstalledAppControlPath } from "../runweave-update-core.mjs";
 
 import {
   DevSessionError,
-  assertBetaInstanceId,
   assertDevSessionId,
   assertOwnership,
   assertProfile,
   assertSurface,
 } from "./contracts.mjs";
+import {
+  BETA_SLOT_CAPACITY,
+  BETA_SLOT_POLICY,
+  assertBetaSlotId,
+} from "./beta-slot-pool.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -481,9 +485,22 @@ export function buildDevSessionPlan({
       acceptanceSurfaces: [surface],
       instanceId: explicitInstance
         ? profile === "beta"
-          ? assertBetaInstanceId(explicitInstance)
+          ? assertBetaSlotId(explicitInstance)
           : assertDevSessionId(explicitInstance)
         : null,
+      ...(profile === "beta"
+        ? {
+            betaSlot: {
+              policy: BETA_SLOT_POLICY,
+              capacity: BETA_SLOT_CAPACITY,
+              requestedSlotId: explicitInstance
+                ? assertBetaSlotId(explicitInstance)
+                : null,
+              assignedSlotId: null,
+              leaseNonce: null,
+            },
+          }
+        : {}),
     },
     sourceRoot,
     executable: EXECUTABLE_PROFILES.has(profile),

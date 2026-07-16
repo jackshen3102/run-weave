@@ -24,10 +24,11 @@ import {
   assertGeneratedTestCaseFilePath,
   formatVerificationSource,
 } from "./service-run-policy";
+import { buildHumanGateMainPrompt } from "./prompt-builders";
 import { buildAgentTeamPanelRole } from "./service-workflow-policy";
-import { AgentTeamServiceContext, agentTeamLogger } from "./service-context";
+import { AgentTeamWorkerDispatchSupport } from "./service-worker-dispatch-support";
 
-export class AgentTeamServiceSupport extends AgentTeamServiceContext {
+export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
   protected resolveProjectRoot(projectId: string, cwd: string): string | null {
     return (
       this.terminalSessionManager.getProject(projectId)?.path ?? cwd ?? null
@@ -243,7 +244,7 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
   ): Promise<AgentTeamRun> {
     return this.updateRun(run, {
       status: "need_human",
-      activeWorkerRole: null,
+      activeWorkerRole: role,
       activeWorkerDispatch: null,
       workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
       loop: { ...run.loop, escalated: true, lastReason: reason },
@@ -320,76 +321,6 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
     this.pendingCompletionRounds.delete(runId);
   }
 
-  protected async trySendToMain(
-    run: AgentTeamRun,
-    text: string,
-  ): Promise<void> {
-    const session = this.terminalSessionManager.getSession(
-      run.terminalSessionId,
-    );
-    if (!session) {
-      return;
-    }
-    try {
-      await this.promptSender.sendPromptToPane(
-        session,
-        text,
-        run.mainPanelId ? { panelId: run.mainPanelId } : undefined,
-      );
-    } catch (error) {
-      agentTeamLogger.warn("agent-team.main_prompt.failed", {
-        message: "Could not inject prompt into main pane",
-        runId: run.runId,
-        error,
-      });
-    }
-  }
-
-  protected async restoreMainPaneFocus(
-    session: TerminalSessionRecord,
-    mainPanelId: string | null | undefined,
-  ): Promise<void> {
-    if (!mainPanelId || !this.tmuxService) {
-      return;
-    }
-    const panel = this.terminalSessionManager.getPanel(mainPanelId);
-    if (!panel) {
-      return;
-    }
-    try {
-      await this.tmuxService.selectPane({
-        ...this.tmuxService.buildTarget(session.id),
-        paneId: panel.tmuxPaneId,
-      });
-      await this.terminalSessionManager.focusPanel(session.id, mainPanelId);
-      const workspace = this.terminalSessionManager.getPanelWorkspace(
-        session.id,
-      );
-      if (workspace) {
-        this.terminalEventService.record({
-          kind: "terminal_panel_focused",
-          terminalSessionId: session.id,
-          projectId: session.projectId,
-          payload: {
-            terminalSessionId: session.id,
-            panelId: mainPanelId,
-            alias: panel.alias,
-            role: panel.role,
-            source: "api",
-            workspace,
-          } as never,
-        });
-      }
-    } catch (error) {
-      agentTeamLogger.warn("agent-team.restore_main_focus.failed", {
-        message: "Could not restore main pane focus after split",
-        terminalSessionId: session.id,
-        panelId: mainPanelId,
-        error,
-      });
-    }
-  }
-
   protected async updateRun(
     run: AgentTeamRun,
     patch: Partial<
@@ -412,6 +343,7 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
         | "acceptance"
         | "loop"
         | "humanNotes"
+        | "agentInterventions"
         | "findingDecisions"
         | "pendingFindingDecision"
         | "logs"
@@ -425,6 +357,13 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
       updatedAt: new Date().toISOString(),
     };
     await this.runStore.writeRun(next);
+    if (
+      run.status !== "need_human" &&
+      next.status === "need_human" &&
+      next.options.notifyMainOnHumanGate !== false
+    ) {
+      await this.trySendToMain(next, buildHumanGateMainPrompt(next));
+    }
     return next;
   }
 

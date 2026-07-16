@@ -1,11 +1,12 @@
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const KEYCHAIN_SERVICE = "com.runweave.activity";
 const KEYCHAIN_ACCOUNT = "content-key-v1";
 const KEY_BYTES = 32;
+const SECURITY_ITEM_NOT_FOUND_STATUS = 44;
 
 export interface ActivityEncryptedValue {
   ciphertext: Buffer;
@@ -23,7 +24,7 @@ function decodeKey(encoded: string): Buffer {
   return key;
 }
 
-function readKeychainKey(): Buffer | null {
+function readKeychainKey(keychainPath?: string): Buffer | null {
   const result = spawnSync(
     "/usr/bin/security",
     [
@@ -33,15 +34,34 @@ function readKeychainKey(): Buffer | null {
       "-a",
       KEYCHAIN_ACCOUNT,
       "-w",
+      ...(keychainPath ? [keychainPath] : []),
     ],
     { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
   );
-  if (result.status !== 0) return null;
+  if (result.status === SECURITY_ITEM_NOT_FOUND_STATUS) return null;
+  if (result.status !== 0) {
+    throw new Error("activity_content_key_read_failed");
+  }
   const encoded = result.stdout.trim();
   return encoded ? decodeKey(encoded) : null;
 }
 
-function createKeychainKey(): Buffer {
+function resolveDefaultKeychainPath(): string | null {
+  const result = spawnSync(
+    "/usr/bin/security",
+    ["default-keychain", "-d", "user"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+  );
+  if (result.status !== 0) return null;
+  const output = result.stdout.trim();
+  if (!output) return null;
+  const keychainPath = output.startsWith('"') && output.endsWith('"')
+    ? output.slice(1, -1)
+    : output;
+  return existsSync(keychainPath) ? keychainPath : null;
+}
+
+function createKeychainKey(keychainPath: string): Buffer {
   const key = crypto.randomBytes(KEY_BYTES);
   const result = spawnSync(
     "/usr/bin/security",
@@ -54,6 +74,7 @@ function createKeychainKey(): Buffer {
       KEYCHAIN_ACCOUNT,
       "-w",
       key.toString("base64"),
+      keychainPath,
     ],
     {
       encoding: "utf8",
@@ -63,7 +84,7 @@ function createKeychainKey(): Buffer {
   if (result.status !== 0) {
     throw new Error("activity_content_key_create_failed");
   }
-  return readKeychainKey() ?? key;
+  return readKeychainKey(keychainPath) ?? key;
 }
 
 export function loadActivityContentKey(
@@ -96,7 +117,13 @@ export function loadActivityContentKey(
   if (process.platform !== "darwin") {
     return null;
   }
-  return readKeychainKey() ?? createKeychainKey();
+  const existing = readKeychainKey();
+  if (existing) return existing;
+  const defaultKeychainPath = resolveDefaultKeychainPath();
+  if (!defaultKeychainPath) {
+    throw new Error("activity_default_keychain_unavailable");
+  }
+  return createKeychainKey(defaultKeychainPath);
 }
 
 export async function loadActivityEncryptionKey(params: {

@@ -4,6 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { AgentTeamReviewCheckpointGit } from "../backend/src/agent-team/review-checkpoint-git.ts";
+import {
+  AGENT_TEAM_REVIEW_GATE_CASE_ID,
+  ensureWorkerGateAcceptance,
+  isReviewGateAcceptanceCase,
+} from "../backend/src/agent-team/service-acceptance-policy.ts";
 import { verifyRepairIntegration } from "./verify-agent-team-review-checkpoints/repair-integration.mjs";
 import { verifyEvidenceGatedRepairLoop } from "./verify-agent-team-review-checkpoints/repair-loop.mjs";
 import { verifyBootstrapLifecycle } from "./verify-agent-team-review-checkpoints/bootstrap-lifecycle.mjs";
@@ -43,6 +48,57 @@ async function createRepo() {
 }
 
 async function main() {
+  const reviewWorker = { id: "review", role: "code_review", intent: "review" };
+  const productCase = {
+    caseId: "BSP-017",
+    text: "stop/reset 后 warm 重试仍复用同一槽位",
+    status: "pending",
+    consecutiveFail: 0,
+    evidence: [],
+  };
+  const acceptanceWithReviewGate = ensureWorkerGateAcceptance(
+    [reviewWorker],
+    [productCase],
+  );
+  check(
+    "review-gate-uses-stable-reserved-case-id",
+    acceptanceWithReviewGate.length === 2 &&
+      acceptanceWithReviewGate[0]?.caseId === AGENT_TEAM_REVIEW_GATE_CASE_ID &&
+      acceptanceWithReviewGate[1]?.caseId === "BSP-017",
+    acceptanceWithReviewGate,
+  );
+  const acceptanceAfterProductCaseGrowth = ensureWorkerGateAcceptance(
+    [reviewWorker],
+    [productCase, { ...productCase, caseId: "BSP-018" }],
+  );
+  check(
+    "review-gate-id-does-not-drift-with-product-case-count",
+    acceptanceAfterProductCaseGrowth.length === 3 &&
+      acceptanceAfterProductCaseGrowth[0]?.caseId ===
+        AGENT_TEAM_REVIEW_GATE_CASE_ID &&
+      acceptanceAfterProductCaseGrowth
+        .slice(1)
+        .map((item) => item.caseId)
+        .join(",") === "BSP-017,BSP-018",
+    acceptanceAfterProductCaseGrowth,
+  );
+  const legacyReviewGate = {
+    ...acceptanceWithReviewGate[0],
+    caseId: "case_17",
+  };
+  const acceptanceWithLegacyReviewGate = ensureWorkerGateAcceptance(
+    [reviewWorker],
+    [productCase, legacyReviewGate],
+  );
+  check(
+    "legacy-numbered-review-gate-remains-recognized",
+    isReviewGateAcceptanceCase(legacyReviewGate) &&
+      acceptanceWithLegacyReviewGate.length === 2 &&
+      acceptanceWithLegacyReviewGate[0] === legacyReviewGate &&
+      acceptanceWithLegacyReviewGate[1] === productCase,
+    acceptanceWithLegacyReviewGate,
+  );
+
   await verifyBootstrapLifecycle(check, roots);
   verifyEvidenceGatedRepairLoop(check);
   await verifyRepairIntegration(check, createRepo);
@@ -136,6 +192,12 @@ async function main() {
     "review artifact blocked checkpoint head",
   );
   await writeFile(path.join(root, "app.txt"), "base\nround-one\nround-two\n");
+  await service.assertCheckpointHead(state2, ["app.txt"]);
+  check(
+    "checkpoint-head-allows-explicit-agent-intervention-path",
+    true,
+    "explicit checkpoint path did not permit behavior dispatch",
+  );
   const target2 = await service.prepareReviewTarget({
     state: state2,
     scope: "incremental",
@@ -192,6 +254,44 @@ async function main() {
   );
   await service.assertReviewTargetUnchanged(state3, finalTarget);
   check("final-target-unchanged", true, "final target rejected");
+  await writeFile(path.join(root, "control-plane.txt"), "agent intervention\n");
+  await git(root, ["add", "control-plane.txt"]);
+  await git(root, [
+    "-c",
+    "user.name=Fixture",
+    "-c",
+    "user.email=fixture@runweave.local",
+    "commit",
+    "-m",
+    "control-plane update",
+  ]);
+  const interventionHead = await git(root, ["rev-parse", "HEAD"]);
+  await service.assertCheckpointHead(
+    state3,
+    [],
+    interventionHead,
+    checkpoint2.commit,
+  );
+  check(
+    "checkpoint-head-allows-explicit-descendant-agent-intervention-commit",
+    true,
+    interventionHead,
+  );
+  const interventionFinalTarget = await service.prepareReviewTarget({
+    state: state3,
+    scope: "final",
+    planSha256: "plan-one",
+    testCaseSha256: "cases-one",
+    expectedHeadCommit: interventionHead,
+    rebasedCheckpointCommit: checkpoint2.commit,
+  });
+  check(
+    "final-review-target-allows-explicit-rebased-intervention-head",
+    interventionFinalTarget.targetCommit === interventionHead &&
+      interventionFinalTarget.changedPaths.includes("control-plane.txt"),
+    interventionFinalTarget,
+  );
+  await service.assertReviewTargetUnchanged(state3, interventionFinalTarget);
 
   const emptyRoot = await createRepo();
   const emptyPreflight = await service.preflight(emptyRoot);

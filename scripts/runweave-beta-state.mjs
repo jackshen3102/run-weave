@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -7,6 +6,17 @@ import {
   BETA_UPDATE_APP_NAME,
   resolveBetaUpdateTargets,
 } from "./runweave-update-core.mjs";
+import {
+  isPidLive,
+  runCapture,
+} from "./runweave-beta-process-state.mjs";
+
+export {
+  inspectProcessReferences,
+  inspectRecordedProcessState,
+  isPidLive,
+  runCapture,
+} from "./runweave-beta-process-state.mjs";
 
 export const BETA_APP_NAME = BETA_UPDATE_APP_NAME;
 export const BETA_CHANNEL = "beta";
@@ -29,7 +39,9 @@ export function resolveBetaPaths(
 ) {
   const targets = resolveBetaUpdateTargets(homeDir, instanceId);
   const userData = targets.userData;
-  const updateDir = path.join(userData, "update");
+  const updateDir = targets.poolSlot
+    ? path.join(targets.instanceRoot, "diagnostics")
+    : path.join(userData, "update");
   const appServerHome = targets.appServerHome;
   return {
     sourceRoot: path.resolve(sourceRoot),
@@ -44,6 +56,8 @@ export function resolveBetaPaths(
     devSessionId,
     desktopCdpPort: ports.desktopCdpPort ?? 9335,
     instanceId: targets.instanceId,
+    slotId: targets.poolSlot ? targets.instanceId : null,
+    poolPolicy: targets.poolSlot ? "fixed-pool-v1" : null,
     instanceRoot: targets.instanceRoot,
     terminalBrowserCdpPort: ports.terminalBrowserCdpPort ?? 9336,
     appServerHome,
@@ -53,7 +67,12 @@ export function resolveBetaPaths(
     appServerLogPath: path.join(appServerHome, "app-server.log"),
     appServerEventLogPath: path.join(appServerHome, "app-server-events.jsonl"),
     cliConfigPath: path.join(userData, "cli", "config.json"),
-    controlCliPath: path.join(targets.instanceRoot, "control", "cli", "index.js"),
+    controlCliPath: path.join(
+      targets.instanceRoot,
+      "control",
+      "cli",
+      "index.js",
+    ),
     desktopStatusPath: path.join(userData, "beta-desktop-status.json"),
     logDir: path.join(updateDir, "logs"),
     pendingPath: path.join(updateDir, "pending.json"),
@@ -61,9 +80,10 @@ export function resolveBetaPaths(
     runtimeHome: targets.runtimeHome,
     runtimeArtifactsRoot: path.join(targets.instanceRoot, "runtime-artifacts"),
     runtimeBuildRoot: path.join(targets.instanceRoot, "build", "runtime"),
-    runtimeCurrentPath: path.join(userData, "runtime", "current.json"),
+    runtimeCurrentPath: path.join(targets.runtimeHome, "current.json"),
     statePath: targets.statePath,
     userData,
+    warmStateRoot: targets.warmStateRoot,
   };
 }
 
@@ -97,46 +117,6 @@ export async function writeReleaseId(pointerPath, releaseId) {
   await writeJson(pointerPath, {
     releaseId,
     activatedAt: new Date().toISOString(),
-  });
-}
-
-export function isPidLive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return false;
-  }
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function runCapture(command, args, options = {}) {
-  return await new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      env: options.env ?? process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.once("error", reject);
-    child.once("close", (code, signal) => {
-      resolve({
-        ok: code === 0,
-        code: code ?? 1,
-        signal,
-        stdout,
-        stderr,
-      });
-    });
   });
 }
 
@@ -254,10 +234,14 @@ export async function readProcessSignature(pid) {
   if (!isPidLive(pid)) {
     return "";
   }
-  const result = await runCapture(
-    "/bin/ps",
-    ["-p", String(pid), "-o", "lstart=", "-o", "command="],
-  );
+  const result = await runCapture("/bin/ps", [
+    "-p",
+    String(pid),
+    "-o",
+    "lstart=",
+    "-o",
+    "command=",
+  ]);
   return result.ok ? result.stdout.trim() : "";
 }
 
@@ -283,7 +267,9 @@ export async function inspectBetaDesktopProcessOwnership(paths) {
     desktopState?.app?.userDataPath !== paths.userData ||
     typeof desktopState?.app?.startedAt !== "string" ||
     typeof executable !== "string" ||
-    !path.resolve(executable).startsWith(`${expectedExecutableRoot}${path.sep}`) ||
+    !path
+      .resolve(executable)
+      .startsWith(`${expectedExecutableRoot}${path.sep}`) ||
     !desktopState?.app?.processSignature ||
     currentProcessSignature !== desktopState.app.processSignature ||
     !currentProcessSignature.includes(executable)
@@ -313,8 +299,7 @@ export async function inspectBetaDesktopOwnership(paths) {
   }
   const { desktopState, pid } = processOwnership;
   const desktopEndpoint = desktopState?.cdp?.desktop?.endpoint;
-  const terminalBrowserEndpoint =
-    desktopState?.cdp?.terminalBrowser?.endpoint;
+  const terminalBrowserEndpoint = desktopState?.cdp?.terminalBrowser?.endpoint;
   const [desktopOwned, desktopTarget, terminalOwned, terminalVersion] =
     await Promise.all([
       isCdpEndpointOwnedByDesktop(desktopEndpoint, pid),
@@ -406,7 +391,8 @@ export async function buildBetaStatus(paths) {
       : (appServerLock?.pid ?? null);
   const appServerBaseUrl =
     desktopState?.appServer?.baseUrl ??
-    (appServerLock?.host === "127.0.0.1" && Number.isInteger(appServerLock?.port)
+    (appServerLock?.host === "127.0.0.1" &&
+    Number.isInteger(appServerLock?.port)
       ? `http://127.0.0.1:${appServerLock.port}`
       : null);
   const desktopCdpEndpoint =
@@ -450,6 +436,8 @@ export async function buildBetaStatus(paths) {
     schemaVersion: 1,
     channel: BETA_CHANNEL,
     instanceId: paths.instanceId,
+    slotId: paths.slotId,
+    poolPolicy: paths.poolPolicy,
     devSessionId: desktopState?.devSessionId ?? paths.devSessionId,
     source: {
       root: state?.sourceRoot ?? paths.sourceRoot,
@@ -501,9 +489,7 @@ export async function buildBetaStatus(paths) {
         pid: desktopCdpHealthy ? desktopPid : null,
       },
       terminalBrowser: {
-        endpoint: terminalBrowserCdpHealthy
-          ? terminalBrowserCdpEndpoint
-          : null,
+        endpoint: terminalBrowserCdpHealthy ? terminalBrowserCdpEndpoint : null,
         healthy: terminalBrowserCdpHealthy,
         pid: terminalBrowserCdpHealthy ? desktopPid : null,
       },

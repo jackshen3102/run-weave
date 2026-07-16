@@ -1,4 +1,15 @@
 import type { TerminalRuntimePreference } from "./terminal-protocol";
+import type { AgentTeamWorkerRole } from "./agent-team-worker";
+import type {
+  AgentTeamAgentIntervention,
+} from "./agent-team-intervention";
+
+export type {
+  AgentTeamAgentIntervention,
+  AgentTeamAgentInterventionAction,
+  InterveneAgentTeamRunRequest,
+} from "./agent-team-intervention";
+export type { AgentTeamWorkerRole } from "./agent-team-worker";
 
 /**
  * Agent-team / loop-engineer data model. This replaces the retired
@@ -16,8 +27,6 @@ export type AgentTeamStatus =
   | "failed";
 
 /** Worker role catalog — mirrors the prototype's role dots. */
-export type AgentTeamWorkerRole = "code" | "code_review" | "behavior_verify";
-
 export interface AgentTeamAcceptanceEvidence {
   type:
     | "screenshot"
@@ -60,6 +69,8 @@ export type AgentTeamReviewScope = "full" | "incremental" | "final";
 export interface AgentTeamReviewTarget {
   scope: AgentTeamReviewScope;
   baseCommit: string;
+  /** Exact committed HEAD covered by a final review target. */
+  targetCommit?: string | null;
   targetTree: string;
   changedPaths: string[];
   planSha256: string | null;
@@ -194,6 +205,8 @@ export interface HumanInterventionNote {
 
 export interface AgentTeamRunOptions {
   autoApproveSplit: boolean;
+  /** Notify the main Agent once when the run enters a Human Gate. */
+  notifyMainOnHumanGate: boolean;
   reviewCheckpointMode?: AgentTeamReviewCheckpointMode;
   maxRepairAttempts?: number;
 }
@@ -213,6 +226,12 @@ export interface AgentTeamActiveWorkerDispatch {
   /** null means the pane-scoped outbox did not exist when work was dispatched. */
   outboxMtimeMs: number | null;
   reviewTarget?: AgentTeamReviewTarget | null;
+  /** Commit the behavior worker must verify for this exact dispatch. */
+  verifiedCheckpointCommit?: string | null;
+  /** Exact dirty paths accepted for this exact behavior dispatch. */
+  checkpointAllowedDirtyPaths?: string[];
+  /** Rewritten checkpoint commit whose trailers match the persisted checkpoint. */
+  checkpointRebasedCommit?: string | null;
   /** Backend-owned repair identities expected from a bounced code worker. */
   repairKeys?: string[];
   /** One protocol-only correction is allowed before escalating to a human. */
@@ -263,6 +282,8 @@ export interface AgentTeamRun {
   acceptance: AgentTeamAcceptanceCase[];
   loop: AgentTeamLoop;
   humanNotes: HumanInterventionNote[];
+  /** Recovery actions chosen by the main Agent through the control plane. */
+  agentInterventions?: AgentTeamAgentIntervention[];
   /** Durable, review-target-scoped human decisions; never rewrites finding facts. */
   findingDecisions?: AgentTeamFindingDecision[];
   /** Reviewer result currently paused for an explicit scope/risk decision. */

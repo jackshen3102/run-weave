@@ -31,6 +31,7 @@ export const RUNWEAVE_CODESIGN_IDENTITY_ENV = "RUNWEAVE_CODESIGN_IDENTITY";
 export const BETA_UPDATE_APP_NAME = "Runweave Beta";
 export const BETA_UPDATE_BUILDER_CONFIG = "electron-builder.beta.yml";
 const BETA_INSTANCE_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
+const BETA_SLOT_ID_PATTERN = /^pool-0[1-5]$/;
 
 export function assertBetaInstanceId(value) {
   if (typeof value !== "string" || !BETA_INSTANCE_ID_PATTERN.test(value)) {
@@ -39,6 +40,14 @@ export function assertBetaInstanceId(value) {
     );
   }
   return value;
+}
+
+export function assertBetaSlotId(value) {
+  const instanceId = assertBetaInstanceId(value);
+  if (!BETA_SLOT_ID_PATTERN.test(instanceId)) {
+    throw new Error("Beta slot id must be pool-01 through pool-05");
+  }
+  return instanceId;
 }
 
 export function resolveBetaAppName(instanceId) {
@@ -133,6 +142,13 @@ export function resolveBetaUpdateTargets(
     safeInstanceId,
   );
   const userData = path.join(instanceRoot, "user-data");
+  const poolSlot = BETA_SLOT_ID_PATTERN.test(safeInstanceId);
+  const runtimeHome = poolSlot
+    ? path.join(instanceRoot, "runtime")
+    : path.join(userData, "runtime");
+  const warmStateRoot = poolSlot
+    ? path.join(instanceRoot, "warm-state")
+    : path.join(userData, "update");
   return {
     appName,
     appPath: path.join("/Applications", `${appName}.app`),
@@ -145,9 +161,11 @@ export function resolveBetaUpdateTargets(
     bundleId: `com.runweave.desktop.beta.${safeInstanceId}`,
     instanceId: safeInstanceId,
     instanceRoot,
-    runtimeHome: path.join(userData, "runtime"),
-    statePath: path.join(userData, "update", "state.json"),
+    poolSlot,
+    runtimeHome,
+    statePath: path.join(warmStateRoot, "state.json"),
     userData,
+    warmStateRoot,
   };
 }
 

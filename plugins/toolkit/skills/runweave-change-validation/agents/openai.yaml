@@ -1,4 +1,3 @@
 interface:
-  display_name: "Runweave 变更验证"
   short_description: "仅在显式调用时用 Dev Session 完成隔离验收"
   default_prompt: "使用 $toolkit:runweave-change-validation 根据当前代码 diff 选择并完成正确的 Runweave 隔离验证流程。"

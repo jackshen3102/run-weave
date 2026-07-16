@@ -9,6 +9,7 @@ import {
   inspectAppServerHandshake,
   inspectBackendHandshake,
   inspectElectronHandshake,
+  isProcessLive,
   processIdentityMatches,
   reconcileBetaSessionServices,
 } from "./service-runtime.mjs";
@@ -109,7 +110,9 @@ export async function startSessionServices({
       return await startDedicatedBeta({
         sourceRoot: plan.sourceRoot,
         sessionId,
-        instanceId: plan.targetEnvironment.instanceId ?? sessionId,
+        instanceId: plan.targetEnvironment.instanceId,
+        slotId: plan.targetEnvironment.betaSlot.assignedSlotId,
+        leaseNonce: plan.targetEnvironment.betaSlot.leaseNonce,
         revision,
         desktopCdpPort,
         terminalBrowserCdpPort,
@@ -222,11 +225,29 @@ export async function startSessionServices({
       cdp: desktop.cdp,
     };
   } catch (error) {
+    const cleanupFailures = [];
     for (const started of startedProcesses.reverse()) {
       await (started.cleanup
         ? started.cleanup()
         : stopSpawnedProcess(started.processInfo)
-      ).catch(() => undefined);
+      ).catch((cleanupError) => {
+        cleanupFailures.push(
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : String(cleanupError),
+        );
+      });
+    }
+    if (plan.profile === "beta" && cleanupFailures.length > 0) {
+      throw new DevSessionError(
+        "Beta start failed and identity-safe cleanup did not complete",
+        5,
+        {
+          resetUnsafe: true,
+          startFailure: error instanceof Error ? error.message : String(error),
+          cleanupFailures,
+        },
+      );
     }
     throw error;
   } finally {
@@ -315,6 +336,16 @@ export async function cleanupStaleSessionServices(
     }
     cleanedServices[serviceName] = inspectedService;
     if (inspectedService?.health !== "live") {
+      const recordedPid = originalService.process?.pid;
+      if (
+        Number.isInteger(recordedPid) &&
+        recordedPid > 0 &&
+        !isProcessLive(recordedPid)
+      ) {
+        inspectedService.cleanupStatus = "already-stopped";
+        stoppedServices.push(serviceName);
+        continue;
+      }
       if (
         !originalService.betaControl &&
         processIdentityMatches(originalService.process)
@@ -445,6 +476,13 @@ export async function resolveOpenTarget(manifest, surface) {
     revision: cdp.sourceRevision,
     health: "ready",
     suggestedPlaywrightSession: `${manifest.devSessionId}-${surface}`,
+    ...(manifest.profile === "beta" && manifest.targetEnvironment.betaSlot
+      ? {
+          slotId: manifest.targetEnvironment.betaSlot.assignedSlotId,
+          leaseNonce: manifest.targetEnvironment.betaSlot.leaseNonce,
+          ownerSessionId: manifest.devSessionId,
+        }
+      : {}),
   };
 }
 

@@ -9,9 +9,19 @@ import type {
 import { AgentTeamError } from "./errors";
 import { normalizeReviewFindingReproduction } from "./outbox-normalizer";
 import { blockingReviewFindings, resolveFindingCaseIds } from "./repair-loop";
+import {
+  AGENT_TEAM_REVIEW_GATE_CASE_ID,
+  isReviewGateAcceptanceCase,
+} from "./service-acceptance-refresh-policy";
+
+export {
+  AGENT_TEAM_REVIEW_GATE_CASE_ID,
+  assertAcceptanceRefreshPreservesTraceableCases,
+  isReviewGateAcceptanceCase,
+  mergeAcceptanceRefresh,
+} from "./service-acceptance-refresh-policy";
 
 const RECHECK_TIMEOUT_MS = 60 * 60 * 1000;
-
 export function acceptanceCasesForRole(
   run: AgentTeamRun,
   role: AgentTeamWorkerRole,
@@ -101,13 +111,20 @@ export function ensureWorkerGateAcceptance(
   if (!workers.some((worker) => worker.role === "code_review")) {
     return acceptance;
   }
-  if (acceptance.some(isReviewGateAcceptanceCase)) {
-    return acceptance;
+  const reviewGateIndex = acceptance.findIndex(isReviewGateAcceptanceCase);
+  if (reviewGateIndex >= 0) {
+    if (reviewGateIndex === 0) {
+      return acceptance;
+    }
+    return [
+      acceptance[reviewGateIndex]!,
+      ...acceptance.slice(0, reviewGateIndex),
+      ...acceptance.slice(reviewGateIndex + 1),
+    ];
   }
   return [
-    ...acceptance,
     {
-      caseId: `case_${acceptance.length + 1}`,
+      caseId: AGENT_TEAM_REVIEW_GATE_CASE_ID,
       text: "Code Review 未发现阻断性问题（P0/P1），或阻断问题已修复",
       status: "pending",
       consecutiveFail: 0,
@@ -123,6 +140,7 @@ export function ensureWorkerGateAcceptance(
       lastRunStatus: "pending",
       skipReason: null,
     },
+    ...acceptance,
   ];
 }
 
@@ -151,12 +169,6 @@ export function assertTraceableBehaviorAcceptance(
       `缺少可追溯测试案例文件：${untraceable.caseId} 没有来源 case 或来源文件`,
     );
   }
-}
-
-export function isReviewGateAcceptanceCase(
-  item: AgentTeamAcceptanceCase,
-): boolean {
-  return /code review|代码审查|code_review/i.test(item.text);
 }
 
 export function synthesizeBlockingReviewResults(
@@ -314,6 +326,7 @@ export function recheckCaseBelongsToActiveDispatch(
     current &&
     expected.scope === current.scope &&
     expected.baseCommit === current.baseCommit &&
+    (expected.targetCommit ?? null) === (current.targetCommit ?? null) &&
     expected.targetTree === current.targetTree &&
     expected.planSha256 === current.planSha256 &&
     expected.testCaseSha256 === current.testCaseSha256 &&

@@ -18,6 +18,7 @@ export interface PrepareTerminalAgentRequest {
   command?: string;
   commandLine?: string;
   args?: string[];
+  resumeThreadId?: string;
   timeoutMs?: number;
 }
 

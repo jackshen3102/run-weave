@@ -8,7 +8,6 @@ import { buildWorkerRecheckPrompt } from "./prompt-builders";
 import { incrementRepairAttempts } from "./repair-loop";
 import { acceptanceCasesForRole } from "./service-acceptance-policy";
 import { AgentTeamExecutionService } from "./service-execution";
-import { resolveAgentTeamTerminal } from "./service-run-policy";
 import {
   createActiveWorkerDispatch,
   findWorkerByRole,
@@ -35,15 +34,18 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
           state,
           target,
         );
+        const finalReviewedCommit =
+          target.targetCommit ?? state.lastReviewedCommit;
         return this.updateRun(run, {
           reviewCheckpoint: {
             ...state,
+            lastReviewedCommit: finalReviewedCommit,
             pendingReview: null,
-            finalReviewedCommit: state.lastReviewedCommit,
+            finalReviewedCommit,
           },
           logs: [
             ...run.logs,
-            `最终全量 review 通过：${state.taskBaseCommit}..${state.lastReviewedCommit}`,
+            `最终全量 review 通过：${state.taskBaseCommit}..${finalReviewedCommit}`,
           ],
         });
       }
@@ -115,6 +117,10 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       triggerSummary?: string | null;
       reviewScope?: "full" | "incremental" | "final";
       acceptedRepairKeys?: string[];
+      reviewChallenge?: { repairKeys: string[]; reason: string };
+      checkpointAllowedDirtyPaths?: string[];
+      checkpointExpectedHeadCommit?: string;
+      checkpointRebasedCommit?: string;
     },
   ): Promise<AgentTeamRun> {
     const session = this.terminalSessionManager.getSession(
@@ -142,6 +148,8 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
           scope,
           planSha256: run.verification?.planSha256 ?? null,
           testCaseSha256: this.effectiveTestCaseSha256(run.verification),
+          expectedHeadCommit: options.checkpointExpectedHeadCommit,
+          rebasedCheckpointCommit: options.checkpointRebasedCommit,
         });
         dispatchRun = {
           ...run,
@@ -161,6 +169,9 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
         await this.assertVerificationSourcesUnchanged(run);
         await this.reviewCheckpointGit.assertCheckpointHead(
           run.reviewCheckpoint,
+          options.checkpointAllowedDirtyPaths,
+          options.checkpointExpectedHeadCommit,
+          options.checkpointRebasedCommit,
         );
       } catch (error) {
         return this.pauseForCheckpointError(
@@ -191,6 +202,16 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       outboxMtimeMs,
       dispatchRun.loop.round,
       reviewTarget,
+      role === "behavior_verify" && run.reviewCheckpoint
+        ? {
+            verifiedCheckpointCommit:
+              options.checkpointExpectedHeadCommit ??
+              run.reviewCheckpoint.lastReviewedCommit,
+            checkpointAllowedDirtyPaths:
+              options.checkpointAllowedDirtyPaths ?? [],
+            checkpointRebasedCommit: options.checkpointRebasedCommit ?? null,
+          }
+        : {},
     );
     const persistedRun = await this.updateRun(run, {
       reviewCheckpoint: dispatchRun.reviewCheckpoint,
@@ -236,13 +257,16 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
       cases: options.cases,
       outboxPath,
       triggerSummary: options.triggerSummary ?? null,
+      reviewChallenge: options.reviewChallenge ?? null,
     });
-    const terminal = resolveAgentTeamTerminal(run.terminal);
     try {
-      await this.agentLaunch.submitAgentLaunch(session, terminal, {
-        panelId: worker.panelId,
-        prompt: workerPrompt,
-      });
+      await this.submitWorkerDispatchPrompt(
+        persistedRun,
+        session,
+        run.terminal,
+        worker,
+        workerPrompt,
+      );
     } catch (error) {
       return this.pauseForWorkerDispatchError(
         {

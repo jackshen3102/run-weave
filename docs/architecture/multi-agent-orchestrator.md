@@ -64,6 +64,7 @@ intake
 - `executing` 状态下，`behavior_verify` 的验收结果和代码 diff 作为 loop 进展信号。
 - 开启本地 review checkpoint 时，每轮 `code_review` 通过后先形成 checkpoint commit；所有行为用例通过后，还要对任务基线到最新 checkpoint 做一次 final full review，才能结束 run。
 - 连续无进展达到 `maxNoProgress`（默认 3）时触发熔断，run 进入 `need_human`，worker 冻结。
+- `options.notifyMainOnHumanGate` 默认开启；run 首次进入 `need_human` 时通知主 Agent，但不授权 Agent 绕过拆分审批、finding disposition 等人工门禁。
 - 人工 note 恢复后清空重复失败 fingerprint，重新计数，并把 note 注入主 Agent 上下文。
 
 ## Loop Engine
