@@ -195,20 +195,9 @@ $RW_BIN auth login --base-url "$RUNWEAVE_BASE_URL" --username admin
 | TPS-WEB-013 | reconnect catchup                | 断开/刷新页面前执行 split/focus                                     | 页面恢复后 chips、active target 和 backend workspace 一致                 |
 | TPS-WEB-014 | mobile/App 非目标                | 检查首期 Web 实现范围                                               | 不要求 Ionic App 提供 panel split UI；不破坏现有 App terminal 页面        |
 
-## 原型验证
+## 原型验证（已下线）
 
-原型只验证交互方向，不验证真实 backend、tmux 或 WebSocket。
-
-```bash
-python3 -m http.server 6188 --directory docs/prototypes/terminal-panel-split
-```
-
-| ID                | 场景            | 步骤                                 | 预期                                         |
-| ----------------- | --------------- | ------------------------------------ | -------------------------------------------- |
-| TPS-PROTOTYPE-001 | 单 surface 暗示 | 打开 `http://127.0.0.1:6188/`        | 页面主体只有一个 `tmux attach surface`       |
-| TPS-PROTOTYPE-002 | 模拟 split      | 点击 Split Right / Split Down        | 在同一个模拟 surface 内增加 pane             |
-| TPS-PROTOTYPE-003 | 模拟 CLI event  | 点击 Simulate CLI split              | chips 和 active target 通过模拟事件更新      |
-| TPS-PROTOTYPE-004 | 非产品脚手架    | 检查 event feed、toast、CLI simulate | 明确只作为验证脚手架，不直接移植到产品主界面 |
+旧 Terminal Panel Split 产品原型已经删除，原 `TPS-PROTOTYPE-*` 用例不再执行。交互与真实 backend、tmux、WebSocket 行为统一由上方 `TPS-WEB-*` 用例验收。
 
 ## 负向与边界测试
 

@@ -2,7 +2,7 @@
 
 > 状态：功能已实施并完成代表性集成/CLI/浏览器/native runtime 验证；放量级与完整故障矩阵尚未全部执行。
 > 架构说明：`docs/architecture-flows/system-activity-data-foundation-flow/`
-> 配套产品原型：旧行为事实原型已冻结并删除；当前产品视角见 `docs/prototypes/activity-insights-hub/`。
+> 配套产品原型：旧行为事实原型与 Activity 产品原型均已删除；当前行为以真实页面和配套架构流程为准。
 > 配套架构流程：`docs/architecture-flows/system-activity-data-foundation-flow/`
 > 验证原则：不新增单元测试文件；使用临时数据库、可执行集成脚本、真实 Stable/Beta/Dev、真实 CLI 与 `$playwright-cli` 取证。
 
@@ -346,6 +346,6 @@ git diff --check
   - `pnpm toolkit:verify-hooks`：Toolkit Hook 源与 Electron Resources 同步，Query/Response 与 PreToolUse tool ID/name/input 显式字段随 Hook 投递且 App Server 不构成依赖。
   - 真实隔离 Backend `127.0.0.1:5129` + Frontend `127.0.0.1:5189`：`playwright-cli` 验证 Facts、Recorded detail、短期 Content、Sources、Data Policy 与 delete completed polling；console error 为 0，证据截图为 `artifacts/activity-real-ui.png`。
   - 真实 CLI：record started/completed 均返回 committed；facts/sources 在 `--plain` 下仍输出合法 JSON；不可达 Backend 退出码为 1 且明确输出 `Activity event was not recorded`。
-  - 当前产品视角 `docs/prototypes/activity-insights-hub/` 和架构流程 `docs/architecture-flows/system-activity-data-foundation-flow/` 已用 `playwright-cli` 遍历全部视图/场景，console error 为 0。
+  - 当时的 Activity 产品原型和架构流程 `docs/architecture-flows/system-activity-data-foundation-flow/` 已用 `playwright-cli` 遍历全部视图/场景，console error 为 0；产品原型现已删除。
   - 仓库门禁：`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm architecture:check`、`git diff --check` 全部通过；架构报告为 `over600=0`、runtime/type-only cycle `0/0`。
 - 尚未执行，因此不得标记 ADF-001～ADF-029 全量通过：ADF-013 的 3 Backend × 50 events/s × 10 分钟；ADF-016/023/025 的 3,000,000-row 性能与完整 snapshot/delete race；ADF-025 的完整 token/audit/crash/blocked/takeover 矩阵；ADF-028 的真实 `SQLITE_FULL`/corrupt/Keychain 故障矩阵；真实 Stable/Beta Desktop 并行与 external runtime rollback 安装流程。上述项目保持上线阻断门禁。
