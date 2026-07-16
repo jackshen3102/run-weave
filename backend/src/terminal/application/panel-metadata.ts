@@ -93,6 +93,32 @@ export function getPanelTerminalStateForActiveCommand(
   return { state: "agent_starting", agent };
 }
 
+export function resolveReconciledPanelTerminalState(
+  pane: Pick<
+    TmuxPaneInfo,
+    | "activeCommand"
+    | "activeCommandSource"
+    | "agentPrepareCommand"
+    | "agentPrepareExit"
+    | "paneCommand"
+  >,
+  effectiveActiveCommand: string | null,
+  previous?: TerminalState,
+): TerminalState {
+  const next = getPanelTerminalStateForActiveCommand(
+    effectiveActiveCommand,
+    previous,
+  );
+  if (
+    resolvePendingPreparedAgent(pane) &&
+    previous?.agent &&
+    !getAgentForCommand(effectiveActiveCommand)
+  ) {
+    return previous;
+  }
+  return next;
+}
+
 function getSessionAgentForPanelBackfill(
   session: TerminalSessionRecord,
 ): string | null {
@@ -234,16 +260,68 @@ export function resolveEffectivePanelActiveCommand(
   pane: TmuxPaneInfo,
   existingActiveCommand?: string | null,
 ): string | null {
+  const preparedAgent = resolvePendingPreparedAgent(pane);
+  if (preparedAgent) {
+    return preparedAgent;
+  }
   if (
     pane.activeCommandSource === "runweave_command" &&
     isInteractiveShellActiveCommand(pane.paneCommand)
   ) {
     return pane.paneCommand;
   }
+  if (
+    pane.activeCommandSource === "pane_current_command" &&
+    isInteractiveShellActiveCommand(pane.activeCommand)
+  ) {
+    return null;
+  }
   if (shouldKeepNodeWrappedActiveCommand(existingActiveCommand ?? null, pane)) {
     return existingActiveCommand ?? null;
   }
   return pane.activeCommand;
+}
+
+export function isStalePendingAgentPrepare(
+  pane: Pick<
+    TmuxPaneInfo,
+    | "activeCommandSource"
+    | "agentPrepareCommand"
+    | "agentPrepareExit"
+    | "paneCommand"
+  >,
+): boolean {
+  return Boolean(
+    pane.agentPrepareExit?.startsWith("pending:") &&
+      getAgentForCommand(pane.agentPrepareCommand) &&
+      pane.activeCommandSource !== "runweave_command" &&
+      isInteractiveShellActiveCommand(pane.paneCommand),
+  );
+}
+
+function resolvePendingPreparedAgent(
+  pane: Pick<
+    TmuxPaneInfo,
+    | "activeCommandSource"
+    | "agentPrepareCommand"
+    | "agentPrepareExit"
+    | "paneCommand"
+  >,
+): TerminalState["agent"] {
+  if (
+    !pane.agentPrepareExit?.startsWith("pending:") ||
+    isStalePendingAgentPrepare(pane)
+  ) {
+    return null;
+  }
+  const agent = getAgentForCommand(pane.agentPrepareCommand);
+  if (!agent) {
+    return null;
+  }
+  return pane.activeCommandSource === "runweave_command" ||
+    !isInteractiveShellActiveCommand(pane.paneCommand)
+    ? agent
+    : null;
 }
 
 export async function backfillSessionAgentMetadataToPrimaryPanel(

@@ -17,7 +17,7 @@ interface TerminalWorkspaceState {
   terminalStateBySessionId: Record<string, TerminalState>;
   panelWorkspaceBySessionId: Record<string, TerminalPanelWorkspace>;
   activePanelIdBySessionId: Record<string, string>;
-  completionMarkers: Record<string, boolean>;
+  completionMarkers: Record<string, number>;
   bellMarkers: Record<string, boolean>;
   cachedSurfaceSessionIds: string[];
   projectDialogMode: TerminalWorkspaceProjectDialogMode;
@@ -46,7 +46,7 @@ interface TerminalWorkspaceActions {
   setActivePanelIdBySessionId: (
     next: StateUpdater<Record<string, string>>,
   ) => void;
-  setCompletionMarkers: (next: StateUpdater<Record<string, boolean>>) => void;
+  setCompletionMarkers: (next: StateUpdater<Record<string, number>>) => void;
   setBellMarkers: (next: StateUpdater<Record<string, boolean>>) => void;
   setCachedSurfaceSessionIds: (next: StateUpdater<string[]>) => void;
   setProjectDialogMode: (

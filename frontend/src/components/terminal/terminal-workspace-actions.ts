@@ -231,6 +231,8 @@ export function useTerminalWorkspaceActions({
               args: [],
               cwd: "",
               activeCommand: null,
+              completionRevision: 0,
+              acknowledgedCompletionRevision: 0,
               status: "running",
               createdAt,
               lastActivityAt: createdAt,

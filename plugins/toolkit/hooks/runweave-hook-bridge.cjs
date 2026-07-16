@@ -100,6 +100,10 @@ function readTmuxSessionEnv() {
 
   const env = {};
   for (const line of String(result.stdout || "").split(/\r?\n/)) {
+    if (line.startsWith("-RUNWEAVE_")) {
+      delete process.env[line.slice(1)];
+      continue;
+    }
     if (!line.startsWith("RUNWEAVE_")) {
       continue;
     }
@@ -148,6 +152,8 @@ function readTmuxPaneContext() {
       "-t",
       tmuxPaneId,
       [
+        "#{@runweave_agent_prepare_command}",
+        "#{@runweave_agent_prepare_exit}",
         "#{@runweave_command}",
         "#{pane_current_command}",
         "#{@runweave_panel_id}",
@@ -162,14 +168,29 @@ function readTmuxPaneContext() {
   if (result.error || result.status !== 0) {
     return { commandName: null, panelId: null };
   }
-  const [runweaveCommand = "", paneCommand = "", panelId = ""] = String(
-    result.stdout || "",
-  )
+  const [
+    agentPrepareCommand = "",
+    agentPrepareExit = "",
+    runweaveCommand = "",
+    paneCommand = "",
+    panelId = "",
+  ] = String(result.stdout || "")
     .replace(/\r?\n$/, "")
     .split(separator);
+  const normalizedPaneCommand = getCommandBasename(paneCommand);
+  const paneAtInteractivePrompt = ["bash", "fish", "sh", "zsh"].includes(
+    normalizedPaneCommand,
+  );
+  const pendingAgentCommand =
+    agentPrepareExit.startsWith("pending:") &&
+    (Boolean(runweaveCommand.trim()) || !paneAtInteractivePrompt)
+      ? getCommandBasename(agentPrepareCommand)
+      : null;
   return {
     commandName:
-      getCommandBasename(runweaveCommand) || getCommandBasename(paneCommand),
+      pendingAgentCommand ||
+      getCommandBasename(runweaveCommand) ||
+      getCommandBasename(paneCommand),
     panelId: panelId.trim() || null,
   };
 }

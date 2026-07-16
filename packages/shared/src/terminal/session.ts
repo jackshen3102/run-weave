@@ -74,6 +74,8 @@ export interface TerminalSessionListItem {
   cwd: string;
   activeCommand: string | null;
   terminalState?: TerminalState;
+  completionRevision: number;
+  acknowledgedCompletionRevision: number;
   tmuxSessionName?: string;
   tmuxSocketPath?: string;
   status: "running" | "exited";
@@ -113,4 +115,5 @@ export interface AppHomeOverviewResponse {
 export interface UpdateTerminalSessionRequest {
   alias?: string | null;
   panelSplitEnabled?: boolean;
+  acknowledgedCompletionRevision?: number;
 }

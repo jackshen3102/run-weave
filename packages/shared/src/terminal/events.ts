@@ -201,6 +201,23 @@ export interface TerminalStateResponse {
   terminalState: TerminalState;
 }
 
+export type AgentHookIgnoreReason =
+  | "panel_identity_mismatch"
+  | "operation_identity_mismatch"
+  | "agent_identity_mismatch"
+  | "inactive_agent";
+
+export type AgentHookStateResponse =
+  | {
+      terminalState: TerminalState;
+      disposition: "recorded" | "exited";
+    }
+  | {
+      terminalState: TerminalState;
+      disposition: "ignored";
+      ignoreReason: AgentHookIgnoreReason;
+    };
+
 export type AgentHookStateEvent =
   | "SessionStart"
   | "UserPromptSubmit"

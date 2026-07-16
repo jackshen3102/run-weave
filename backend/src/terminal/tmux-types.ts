@@ -28,6 +28,8 @@ export interface TmuxPaneMetadata {
 export interface TmuxPaneInfo extends TmuxPaneMetadata {
   paneId: string;
   runweavePanelId: string | null;
+  agentPrepareCommand: string | null;
+  agentPrepareExit: string | null;
   paneIndex: number;
   active: boolean;
   paneLeft: number;
@@ -37,6 +39,11 @@ export interface TmuxPaneInfo extends TmuxPaneMetadata {
   windowWidth: number;
   windowHeight: number;
 }
+
+export const TMUX_AGENT_PREPARE_EXIT_OPTION =
+  "@runweave_agent_prepare_exit";
+export const TMUX_AGENT_PREPARE_COMMAND_OPTION =
+  "@runweave_agent_prepare_command";
 
 export type TmuxKeySequenceItem =
   | { type: "literal"; value: string; delayAfterMs?: number }

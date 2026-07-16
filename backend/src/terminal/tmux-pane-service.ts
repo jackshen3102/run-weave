@@ -8,6 +8,10 @@ import type {
   TmuxPaneTarget,
   TmuxTarget,
 } from "./tmux-types";
+import {
+  TMUX_AGENT_PREPARE_COMMAND_OPTION,
+  TMUX_AGENT_PREPARE_EXIT_OPTION,
+} from "./tmux-types";
 import { TmuxSessionService } from "./tmux-session-service";
 import {
   CaptureHistoryLines,
@@ -43,6 +47,8 @@ export class TmuxPaneService extends TmuxSessionService {
           "#{pane_current_path}",
           "#{@runweave_command}",
           "#{@runweave_panel_id}",
+          `#{${TMUX_AGENT_PREPARE_COMMAND_OPTION}}`,
+          `#{${TMUX_AGENT_PREPARE_EXIT_OPTION}}`,
           "#{pane_current_command}",
           "#{pane_active}",
           "#{pane_left}",
@@ -66,6 +72,8 @@ export class TmuxPaneService extends TmuxSessionService {
           cwd = "",
           rawRunweaveCommand = "",
           rawRunweavePanelId = "",
+          rawAgentPrepareCommand = "",
+          rawAgentPrepareExit = "",
           rawCommand = "",
           rawActive = "0",
           rawPaneLeft = "0",
@@ -82,6 +90,8 @@ export class TmuxPaneService extends TmuxSessionService {
         return {
           paneId,
           runweavePanelId: rawRunweavePanelId.trim() || null,
+          agentPrepareCommand: rawAgentPrepareCommand.trim() || null,
+          agentPrepareExit: rawAgentPrepareExit.trim() || null,
           paneIndex: parsePositiveInteger(rawPaneIndex),
           cwd,
           activeCommand: activeCommand.command,
@@ -201,6 +211,16 @@ export class TmuxPaneService extends TmuxSessionService {
   ): Promise<void> {
     await this.runTmux(
       ["set-option", "-p", "-t", target.paneId, name, value],
+      target,
+    );
+  }
+
+  async unsetPaneOption(
+    target: TmuxPaneTarget,
+    name: string,
+  ): Promise<void> {
+    await this.runTmux(
+      ["set-option", "-p", "-u", "-t", target.paneId, name],
       target,
     );
   }

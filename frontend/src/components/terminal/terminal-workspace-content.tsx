@@ -8,12 +8,16 @@ import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-sto
 import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_SESSIONS,
+  updateTerminalSessions,
   useTerminalProjectsQuery,
   useTerminalSessionsQuery,
+  useTerminalWorkspaceQueryClient,
 } from "../../features/terminal/queries/terminal-workspace-queries";
 import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
 import { resolveCachedTerminalSurfaceIds } from "../../features/terminal/surface-cache";
 import type { ClientMode } from "../../features/client-mode";
+import { HttpError } from "../../services/http";
+import { updateTerminalSession } from "../../services/terminal";
 import {
   resolvePreferredProjectId,
   resolvePreferredSessionId,
@@ -89,6 +93,7 @@ export function TerminalWorkspaceContent({
   const { scope } = useTerminalRuntime();
   const projectsQuery = useTerminalProjectsQuery();
   const sessionsQuery = useTerminalSessionsQuery();
+  const { queryClient } = useTerminalWorkspaceQueryClient();
   const projects = projectsQuery.data ?? EMPTY_TERMINAL_PROJECTS;
   const sessions = sessionsQuery.data ?? EMPTY_TERMINAL_SESSIONS;
   const hasLoadedSessions = projectsQuery.isFetched && sessionsQuery.isFetched;
@@ -321,6 +326,48 @@ export function TerminalWorkspaceContent({
     !requestError &&
     activeProjectLoaded &&
     (visibleSessions.length === 0 || activeSession !== null);
+  const handleSelectSessionTab = useMemoizedFn((terminalSessionId: string) => {
+    const completionRevision =
+      useTerminalWorkspaceStore.getState().completionMarkers[
+        terminalSessionId
+      ];
+    selectActiveSession(terminalSessionId);
+    if (!completionRevision) {
+      return;
+    }
+    setCompletionMarkers((current) => {
+      if (current[terminalSessionId] !== completionRevision) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[terminalSessionId];
+      return next;
+    });
+    void updateTerminalSession(apiBase, token, terminalSessionId, {
+      acknowledgedCompletionRevision: completionRevision,
+    })
+      .then((updatedSession) => {
+        updateTerminalSessions(queryClient, scope, (currentSessions) =>
+          currentSessions.map((session) =>
+            session.terminalSessionId === terminalSessionId
+              ? updatedSession
+              : session,
+          ),
+        );
+      })
+      .catch((error) => {
+        setCompletionMarkers((current) => ({
+          ...current,
+          [terminalSessionId]: Math.max(
+            current[terminalSessionId] ?? 0,
+            completionRevision,
+          ),
+        }));
+        if (error instanceof HttpError && error.status === 401) {
+          onAuthExpired?.();
+        }
+      });
+  });
   usePersistRecentSelection({
     apiBase: scope,
     activeProjectId,
@@ -335,18 +382,7 @@ export function TerminalWorkspaceContent({
     visibleProjects,
     visibleSessions,
     onSelectProject: selectActiveProject,
-    onSelectSession: selectActiveSession,
-  });
-  const handleSelectSessionTab = useMemoizedFn((terminalSessionId: string) => {
-    setCompletionMarkers((current) => {
-      if (!current[terminalSessionId]) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[terminalSessionId];
-      return next;
-    });
-    selectActiveSession(terminalSessionId);
+    onSelectSession: handleSelectSessionTab,
   });
   useEffect(() => {
     if (!hasLoadedSessions || requestError || sessions.length > 0) {
@@ -355,18 +391,31 @@ export function TerminalWorkspaceContent({
     onNoSessionAvailable?.();
   }, [hasLoadedSessions, onNoSessionAvailable, requestError, sessions.length]);
   useEffect(() => {
-    if (!activeSession?.terminalSessionId) {
-      return;
-    }
     setCompletionMarkers((current) => {
-      if (!current[activeSession.terminalSessionId]) {
-        return current;
-      }
+      let changed = false;
       const next = { ...current };
-      delete next[activeSession.terminalSessionId];
-      return next;
+      for (const session of sessions) {
+        const currentRevision = next[session.terminalSessionId] ?? 0;
+        if (
+          currentRevision > 0 &&
+          currentRevision <= session.acknowledgedCompletionRevision
+        ) {
+          delete next[session.terminalSessionId];
+          changed = true;
+        }
+        if (
+          session.completionRevision <=
+            session.acknowledgedCompletionRevision ||
+          currentRevision >= session.completionRevision
+        ) {
+          continue;
+        }
+        next[session.terminalSessionId] = session.completionRevision;
+        changed = true;
+      }
+      return changed ? next : current;
     });
-  }, [activeSession?.terminalSessionId, setCompletionMarkers]);
+  }, [sessions, setCompletionMarkers]);
   useEffect(() => {
     if (!activeSession?.terminalSessionId) {
       return;

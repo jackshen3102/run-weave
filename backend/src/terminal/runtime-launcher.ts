@@ -12,6 +12,10 @@ import type { TmuxOutputWatcher } from "./tmux-output-watcher";
 import { TmuxRebuildLimitError } from "./tmux-service";
 import { getAgentForCommand } from "./terminal-state-service";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
+import {
+  buildTerminalRuntimeEnvironment,
+  buildTmuxSessionRuntimeEnvironment,
+} from "./runtime-environment";
 
 export interface EnsureTerminalRuntimeResult {
   runtime: PtyRuntime;
@@ -52,6 +56,41 @@ export function resolveTmuxTarget(
       session.tmuxSessionName ?? tmuxService.buildSessionName(session.id),
     socketPath: session.tmuxSocketPath ?? tmuxService.socketPath,
   };
+}
+
+export async function syncExistingTmuxSessionEnvironments(
+  terminalSessionManager: TerminalSessionManager,
+  tmuxService: TmuxService,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<
+  Array<{ terminalSessionId: string; error: unknown }>
+> {
+  const failures: Array<{ terminalSessionId: string; error: unknown }> = [];
+  for (const session of terminalSessionManager.listSessions()) {
+    if (session.status !== "running" || !isTmuxBackedSession(session)) {
+      continue;
+    }
+    const target = resolveTmuxTarget(session, tmuxService);
+    if (!(await tmuxService.hasSession(target))) {
+      continue;
+    }
+    try {
+      await tmuxService.syncSessionEnvironment(
+        target,
+        buildTmuxSessionRuntimeEnvironment(
+          {
+            terminalSessionId: session.id,
+            projectId: session.projectId,
+            tmuxSessionName: target.sessionName,
+          },
+          env,
+        ),
+      );
+    } catch (error) {
+      failures.push({ terminalSessionId: session.id, error });
+    }
+  }
+  return failures;
 }
 
 export async function ensureTerminalRuntime(
@@ -201,28 +240,18 @@ export async function ensureTerminalRuntime(
       }
 
       if (!hasSession) {
+        const terminalEnvironment = buildTerminalRuntimeEnvironment({
+          terminalSessionId: currentSession.id,
+          projectId: currentSession.projectId,
+          tmuxSessionName: target.sessionName,
+        });
         await options.tmuxService!.createDetachedSession(
           target,
           currentSession.cwd,
           {
             command: currentSession.command,
             args: currentSession.args,
-            env: {
-              RUNWEAVE_TERMINAL_SESSION_ID: currentSession.id,
-              RUNWEAVE_PROJECT_ID: currentSession.projectId,
-              RUNWEAVE_TMUX_SESSION_NAME: target.sessionName,
-              RUNWEAVE_TOOLKIT_PLUGIN_ROOT:
-                process.env.RUNWEAVE_TOOLKIT_PLUGIN_ROOT,
-              RUNWEAVE_HOOK_ENDPOINT: process.env.RUNWEAVE_HOOK_ENDPOINT,
-              RUNWEAVE_COMPLETION_HOOK_ENDPOINT:
-                process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT,
-              RUNWEAVE_HOOK_DEBUG_LOG: process.env.RUNWEAVE_HOOK_DEBUG_LOG,
-              RUNWEAVE_HOOK_TOKEN: process.env.RUNWEAVE_HOOK_TOKEN,
-              RUNWEAVE_BASE_URL: process.env.RUNWEAVE_BASE_URL,
-              RUNWEAVE_BACKEND_PORT: process.env.RUNWEAVE_BACKEND_PORT,
-              RUNWEAVE_CONFIG_FILE: process.env.RUNWEAVE_CONFIG_FILE,
-              RUNWEAVE_DESKTOP_CHANNEL: process.env.RUNWEAVE_DESKTOP_CHANNEL,
-            },
+            env: terminalEnvironment,
           },
         );
         if (
@@ -243,6 +272,14 @@ export async function ensureTerminalRuntime(
             )) ?? currentSession;
         }
       }
+      await options.tmuxService!.syncSessionEnvironment(
+        target,
+        buildTmuxSessionRuntimeEnvironment({
+          terminalSessionId: currentSession.id,
+          projectId: currentSession.projectId,
+          tmuxSessionName: target.sessionName,
+        }),
+      );
       await options.tmuxOutputWatcher?.watchSession(currentSession);
 
       const attachCommand = options.tmuxService!.buildAttachCommand(
@@ -279,21 +316,10 @@ export async function ensureTerminalRuntime(
     command: options.session.command,
     args: options.session.args,
     cwd: options.session.cwd,
-    env: {
-      RUNWEAVE_TERMINAL_SESSION_ID: options.session.id,
-      RUNWEAVE_PROJECT_ID: options.session.projectId,
-      RUNWEAVE_TOOLKIT_PLUGIN_ROOT:
-        process.env.RUNWEAVE_TOOLKIT_PLUGIN_ROOT,
-      RUNWEAVE_HOOK_ENDPOINT: process.env.RUNWEAVE_HOOK_ENDPOINT,
-      RUNWEAVE_COMPLETION_HOOK_ENDPOINT:
-        process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT,
-      RUNWEAVE_HOOK_DEBUG_LOG: process.env.RUNWEAVE_HOOK_DEBUG_LOG,
-      RUNWEAVE_HOOK_TOKEN: process.env.RUNWEAVE_HOOK_TOKEN,
-      RUNWEAVE_BASE_URL: process.env.RUNWEAVE_BASE_URL,
-      RUNWEAVE_BACKEND_PORT: process.env.RUNWEAVE_BACKEND_PORT,
-      RUNWEAVE_CONFIG_FILE: process.env.RUNWEAVE_CONFIG_FILE,
-      RUNWEAVE_DESKTOP_CHANNEL: process.env.RUNWEAVE_DESKTOP_CHANNEL,
-    },
+    env: buildTerminalRuntimeEnvironment({
+      terminalSessionId: options.session.id,
+      projectId: options.session.projectId,
+    }),
     fallback: resolveTerminalFallbackLaunchConfig({
       command: options.session.command,
       args: options.session.args,

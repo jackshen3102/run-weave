@@ -40,6 +40,15 @@ export function toMetadataRecord(
     ...(session.terminalState !== undefined
       ? { terminalState: session.terminalState }
       : {}),
+    ...(session.completionRevision !== undefined
+      ? { completionRevision: session.completionRevision }
+      : {}),
+    ...(session.acknowledgedCompletionRevision !== undefined
+      ? {
+          acknowledgedCompletionRevision:
+            session.acknowledgedCompletionRevision,
+        }
+      : {}),
   };
 }
 

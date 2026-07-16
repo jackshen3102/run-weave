@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   assertFileMissing,
@@ -113,6 +114,77 @@ try {
       "hook bridge must not start app-server or create an app-server lock",
     );
     requests.length = 0;
+
+    const isolatedAppServerHome = path.join(homeDir, "isolated-app-server");
+    await writeAppServerDiscoveryFiles(
+      isolatedAppServerHome,
+      appServerPort,
+      "app-server-token",
+    );
+    const homeDiscoveryStart = appServerRequests.length;
+    await runLauncher(launcherPath, {
+      HOME: homeDir,
+      RUNWEAVE_APP_SERVER_HOME: isolatedAppServerHome,
+      RUNWEAVE_HOOK_ENDPOINT: endpoint,
+      RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
+      RUNWEAVE_HOOK_TOKEN: "token-home-discovery",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-home-discovery",
+      RUNWEAVE_PROJECT_ID: "project-home-discovery",
+      RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+    });
+    assert.equal(
+      appServerRequests.length - homeDiscoveryStart,
+      2,
+      "RUNWEAVE_APP_SERVER_HOME must target the isolated App Server",
+    );
+
+    const globalAppServerHome = path.join(
+      homeDir,
+      ".runweave",
+      "app-server",
+    );
+    await writeAppServerDiscoveryFiles(
+      globalAppServerHome,
+      appServerPort,
+      "app-server-token",
+    );
+    const explicitDiscoveryStart = appServerRequests.length;
+    await runLauncher(launcherPath, {
+      HOME: homeDir,
+      RUNWEAVE_APP_SERVER_DISCOVERY: "explicit",
+      RUNWEAVE_HOOK_ENDPOINT: endpoint,
+      RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
+      RUNWEAVE_HOOK_TOKEN: "token-explicit-discovery",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-explicit-discovery",
+      RUNWEAVE_PROJECT_ID: "project-explicit-discovery",
+      RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+    });
+    assert.equal(
+      appServerRequests.length,
+      explicitDiscoveryStart,
+      "explicit discovery must not fall back to the global App Server",
+    );
+
+    const disabledDiscoveryStart = appServerRequests.length;
+    await runLauncher(launcherPath, {
+      HOME: homeDir,
+      RUNWEAVE_APP_SERVER_DISCOVERY: "disabled",
+      RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
+      RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
+      RUNWEAVE_HOOK_ENDPOINT: endpoint,
+      RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
+      RUNWEAVE_HOOK_TOKEN: "token-disabled-discovery",
+      RUNWEAVE_TERMINAL_SESSION_ID: "terminal-disabled-discovery",
+      RUNWEAVE_PROJECT_ID: "project-disabled-discovery",
+      RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+    });
+    assert.equal(
+      appServerRequests.length,
+      disabledDiscoveryStart,
+      "disabled discovery must not contact an App Server",
+    );
+    requests.length = 0;
+    appServerRequests.length = 0;
 
     await runLauncher(launcherPath, {
       HOME: homeDir,
@@ -491,3 +563,18 @@ try {
 await verifyToolkitHookProviderGuards();
 
 console.log("toolkit hook verification passed");
+
+async function writeAppServerDiscoveryFiles(stateDir, port, token) {
+  await mkdir(stateDir, { recursive: true });
+  await writeFile(
+    path.join(stateDir, "app-server.lock.json"),
+    `${JSON.stringify({
+      pid: process.pid,
+      host: "127.0.0.1",
+      port,
+      startedAt: new Date().toISOString(),
+      version: "0.1.0",
+    })}\n`,
+  );
+  await writeFile(path.join(stateDir, "app-server-token"), `${token}\n`);
+}

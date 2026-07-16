@@ -83,6 +83,8 @@ export function toSessionListItem(
     cwd: session.cwd,
     activeCommand: session.activeCommand,
     ...(terminalState ? { terminalState } : {}),
+    completionRevision: session.completionRevision,
+    acknowledgedCompletionRevision: session.acknowledgedCompletionRevision,
     tmuxSessionName: session.tmuxSessionName,
     tmuxSocketPath: session.tmuxSocketPath,
     status: session.status,

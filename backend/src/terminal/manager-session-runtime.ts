@@ -410,6 +410,54 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
     return session;
   }
 
+  async recordSessionCompletion(
+    terminalSessionId: string,
+  ): Promise<number | null> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return null;
+    }
+
+    const completionRevision = session.completionRevision + 1;
+    session.completionRevision = completionRevision;
+    await this.sessionStore.updateSessionCompletion({
+      terminalSessionId,
+      completionRevision,
+      acknowledgedCompletionRevision:
+        session.acknowledgedCompletionRevision,
+    });
+    return completionRevision;
+  }
+
+  async acknowledgeSessionCompletion(
+    terminalSessionId: string,
+    completionRevision: number,
+  ): Promise<TerminalSessionRecord | undefined> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const acknowledgedCompletionRevision = Math.min(
+      completionRevision,
+      session.completionRevision,
+    );
+    if (
+      acknowledgedCompletionRevision <=
+      session.acknowledgedCompletionRevision
+    ) {
+      return session;
+    }
+
+    session.acknowledgedCompletionRevision = acknowledgedCompletionRevision;
+    await this.sessionStore.updateSessionCompletion({
+      terminalSessionId,
+      completionRevision: session.completionRevision,
+      acknowledgedCompletionRevision,
+    });
+    return session;
+  }
+
   async destroySession(terminalSessionId: string): Promise<boolean> {
     const session = this.sessions.get(terminalSessionId);
     if (!session) {

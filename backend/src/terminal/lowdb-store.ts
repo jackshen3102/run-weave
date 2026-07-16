@@ -6,6 +6,7 @@ import type {
   UpdateTerminalProjectParams,
   UpdateTerminalSessionActivityParams,
   UpdateTerminalSessionAliasParams,
+  UpdateTerminalSessionCompletionParams,
   UpdateTerminalSessionExitParams,
   UpdateTerminalSessionLastThreadParams,
   UpdateTerminalSessionLaunchParams,
@@ -309,6 +310,25 @@ export class LowDbTerminalSessionStore
       }
 
       session.terminalState = params.terminalState;
+      await database.write();
+    });
+  }
+
+  async updateSessionCompletion(
+    params: UpdateTerminalSessionCompletionParams,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const session = database.data.sessions.find(
+        (candidate) => candidate.id === params.terminalSessionId,
+      );
+      if (!session) {
+        return;
+      }
+
+      session.completionRevision = params.completionRevision;
+      session.acknowledgedCompletionRevision =
+        params.acknowledgedCompletionRevision;
       await database.write();
     });
   }

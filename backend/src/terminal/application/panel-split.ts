@@ -6,6 +6,7 @@ import type {
   TerminalSessionRecord,
 } from "../manager";
 import { ensureTerminalRuntime } from "../runtime-launcher";
+import { buildTerminalRuntimeEnvironment } from "../runtime-environment";
 import {
   resolveDefaultTerminalArgs,
   resolveDefaultTerminalCommand,
@@ -132,10 +133,13 @@ export async function createTerminalPanelSplit(
       cwd,
       command,
       args,
-      env: {
-        RUNWEAVE_TERMINAL_SESSION_ID: session.id,
-        RUNWEAVE_TERMINAL_PANEL_ID: panelId,
-      },
+      env: buildTerminalRuntimeEnvironment({
+        terminalSessionId: session.id,
+        terminalPanelId: panelId,
+        projectId: session.projectId,
+        tmuxSessionName:
+          session.tmuxSessionName ?? tmuxService.buildSessionName(session.id),
+      }),
     },
   );
   let registeredPanel = false;
