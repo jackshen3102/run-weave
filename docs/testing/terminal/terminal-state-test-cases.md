@@ -114,24 +114,27 @@ scrollback 只用于终端显示、诊断或用户取证，不能推进 `agent_s
 
 ## 内部 agent hook API 测试
 
-| ID          | 初始条件                                                                                | 请求                                 | 预期                                                      |
-| ----------- | --------------------------------------------------------------------------------------- | ------------------------------------ | --------------------------------------------------------- |
-| TS-HOOK-001 | hook token 缺失                                                                         | `POST /internal/terminal/agent-hook` | 401，不写状态                                             |
-| TS-HOOK-002 | hook token 错误                                                                         | `POST /internal/terminal/agent-hook` | 401，不写状态                                             |
-| TS-HOOK-003 | body 缺 `terminalSessionId`                                                             | `POST`                               | 400，不写状态                                             |
-| TS-HOOK-004 | `agent!="codex"`                                                                        | `POST`                               | 400；第一阶段 schema 只接受 Codex                         |
-| TS-HOOK-005 | `hookEvent` 非枚举                                                                      | `POST`                               | 400                                                       |
-| TS-HOOK-006 | session 不存在                                                                          | 合法 token + body                    | 404                                                       |
-| TS-HOOK-007 | session exited                                                                          | 合法 `UserPromptSubmit`              | 202，返回 `shell_idle/null`，不写 running                 |
-| TS-HOOK-008 | running session，`activeCommand="codex"`                                                | `SessionStart`                       | 202，`agent_idle/codex`                                   |
-| TS-HOOK-009 | running session，`activeCommand="codex"`                                                | `UserPromptSubmit`                   | 202，`agent_running/codex`                                |
-| TS-HOOK-010 | running session，`activeCommand="codex"`，已有 running                                  | `Stop`                               | 202，`agent_idle/codex`                                   |
-| TS-HOOK-011 | running session，`activeCommand="node"`，store 为空                                     | `UserPromptSubmit`                   | 202，保持 `shell_idle/null`，记录 ignored                 |
-| TS-HOOK-012 | running session，`activeCommand=null`，`lastAiActiveCommand=codex` 且在 grace window 内 | `Stop`                               | 202，接收并写 `agent_idle/codex`                          |
-| TS-HOOK-013 | running session，`activeCommand=null`，`lastAiActiveCommand=codex` 但超过 grace window  | `Stop`                               | 202，保持当前非 Codex 状态                                |
-| TS-HOOK-014 | 真实普通 shell/node 前台，非 grace window，且服务端当前不是 Codex 状态                  | `UserPromptSubmit`                   | 202，忽略并保持 `shell_idle/null`                         |
-| TS-HOOK-015 | 真实 shell idle，非 grace window，且服务端当前不是 Codex 状态                           | `Stop`                               | 202，忽略并保持 `shell_idle/null`                         |
-| TS-HOOK-016 | running session，store 已为 `agent_running`，但 `activeCommand` 短暂为空                | `Stop`                               | 202，允许落到 `agent_idle/codex`，避免 Stop hook 晚到丢失 |
+`202` 只表示 hook 请求已被 endpoint 处理。所有 `TS-HOOK-*` 用例必须同时断言响应 `disposition`：状态写入路径为 `recorded`，session 已退出为 `exited`，门禁拒绝为 `ignored` 并断言具体 `ignoreReason`。只比较 `terminalState` 不能判定通过，因为 ignored 会返回拒绝前的当前状态。若目标 panel 存在 operation generation，请求必须携带当前 matching `operationId + agent`；缺失或过期 operationId 应按 `operation_identity_mismatch` 验收，而不是用于验证状态映射。
+
+| ID          | 初始条件                                                                                                     | 请求                                            | 预期                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------- |
+| TS-HOOK-001 | hook token 缺失                                                                                              | `POST /internal/terminal/agent-hook`            | 401，不写状态                                                                     |
+| TS-HOOK-002 | hook token 错误                                                                                              | `POST /internal/terminal/agent-hook`            | 401，不写状态                                                                     |
+| TS-HOOK-003 | body 缺 `terminalSessionId`                                                                                  | `POST`                                          | 400，不写状态                                                                     |
+| TS-HOOK-004 | `agent!="codex"`                                                                                             | `POST`                                          | 400；第一阶段 schema 只接受 Codex                                                 |
+| TS-HOOK-005 | `hookEvent` 非枚举                                                                                           | `POST`                                          | 400                                                                               |
+| TS-HOOK-006 | session 不存在                                                                                               | 合法 token + body                               | 404                                                                               |
+| TS-HOOK-007 | session exited                                                                                               | 合法 `UserPromptSubmit`                         | 202，`disposition=exited`，返回 `shell_idle/null`，不写 running                   |
+| TS-HOOK-008 | running panel，`activeCommand="codex"`；若存在 operation generation，持有 matching operationId               | 携带 matching operationId 的 `SessionStart`     | 202，`disposition=recorded`，`agent_idle/codex`                                   |
+| TS-HOOK-009 | running panel，`activeCommand="codex"`；若存在 operation generation，持有 matching operationId               | 携带 matching operationId 的 `UserPromptSubmit` | 202，`disposition=recorded`，`agent_running/codex`                                |
+| TS-HOOK-010 | running panel，`activeCommand="codex"`，已有 running；若存在 operation generation，持有 matching operationId | 携带 matching operationId 的 `Stop`             | 202，`disposition=recorded`，`agent_idle/codex`                                   |
+| TS-HOOK-011 | running session，`activeCommand="node"`，store 为空                                                          | `UserPromptSubmit`                              | 202，`disposition=ignored`、`ignoreReason=inactive_agent`，保持 `shell_idle/null` |
+| TS-HOOK-012 | running session，`activeCommand=null`，`lastAiActiveCommand=codex` 且在 grace window 内                      | `Stop`                                          | 202，`disposition=recorded`，写 `agent_idle/codex`                                |
+| TS-HOOK-013 | running session，`activeCommand=null`，`lastAiActiveCommand=codex` 但超过 grace window                       | `Stop`                                          | 202，`disposition=ignored`、`ignoreReason=inactive_agent`，保持当前非 Codex 状态  |
+| TS-HOOK-014 | 真实普通 shell/node 前台，非 grace window，且服务端当前不是 Codex 状态                                       | `UserPromptSubmit`                              | 202，`disposition=ignored`、`ignoreReason=inactive_agent`，保持 `shell_idle/null` |
+| TS-HOOK-015 | 真实 shell idle，非 grace window，且服务端当前不是 Codex 状态                                                | `Stop`                                          | 202，`disposition=ignored`、`ignoreReason=inactive_agent`，保持 `shell_idle/null` |
+| TS-HOOK-016 | running session，store 已为 `agent_running`，但 `activeCommand` 短暂为空                                     | `Stop`                                          | 202，`disposition=recorded`，允许落到 `agent_idle/codex`，避免 Stop hook 晚到丢失 |
+| TS-HOOK-017 | running Codex panel 存在 active operation generation                                                         | 缺失或携带过期 operationId 的合法状态 hook      | 202，`disposition=ignored`、`ignoreReason=operation_identity_mismatch`，状态不变  |
 
 ## metadata / WebSocket 集成测试
 

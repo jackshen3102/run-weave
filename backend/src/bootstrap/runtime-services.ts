@@ -29,6 +29,7 @@ import { TerminalStateStore } from "../terminal/terminal-state-store";
 import type { TerminalActivityDependencies } from "../terminal/activity-events";
 import { LowDbTerminalSessionStore } from "../terminal/lowdb-store";
 import { logOrphanedTmuxSessions } from "../terminal/tmux-orphan-scan";
+import { syncExistingTmuxSessionEnvironments } from "../terminal/runtime-launcher";
 import {
   resolveActivityStoragePaths,
   resolveStoragePaths,
@@ -241,6 +242,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
   );
   const terminalCompletionEventService = new TerminalCompletionEventService(
     terminalEventService,
+    terminalSessionManager,
   );
   const terminalRuntimeRegistry = new TerminalRuntimeRegistry();
   const tmuxLifecycleCoordinator = new TmuxLifecycleCoordinator();
@@ -270,6 +272,18 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxLifecycleCoordinator,
   });
   await terminalSessionManager.initialize();
+  const tmuxEnvironmentFailures =
+    await syncExistingTmuxSessionEnvironments(
+      terminalSessionManager,
+      tmuxService,
+    );
+  for (const failure of tmuxEnvironmentFailures) {
+    logger.warn("terminal.tmux.environment-sync.startup.failed", {
+      message: "Failed to refresh terminal tmux environment during startup",
+      terminalSessionId: failure.terminalSessionId,
+      error: failure.error,
+    });
+  }
   terminalStateService = new TerminalStateService(
     new TerminalStateStore(
       terminalSessionManager

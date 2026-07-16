@@ -48,7 +48,7 @@ export function createInternalTerminalCompletionRouter(options: {
 }): Router {
   const router = Router();
 
-  router.post("/", (req, res) => {
+  router.post("/", async (req, res) => {
     const expectedToken = options.hookToken;
     if (!expectedToken) {
       terminalCompletionLogger.warn("terminal-completion.hook.unavailable", {
@@ -167,8 +167,9 @@ export function createInternalTerminalCompletionRouter(options: {
       return;
     }
 
-    const event: TerminalEventEnvelope =
-      options.completionEventService.record(
+    let event: TerminalEventEnvelope;
+    try {
+      event = await options.completionEventService.record(
         {
           terminalSessionId: parsed.data.terminalSessionId,
           source: effectiveSource,
@@ -183,6 +184,15 @@ export function createInternalTerminalCompletionRouter(options: {
         },
         session,
       );
+    } catch (error) {
+      terminalCompletionLogger.error("terminal-completion.record.failed", {
+        message: "Terminal completion event failed to persist",
+        terminalSessionId: parsed.data.terminalSessionId,
+        error,
+      });
+      res.status(500).json({ message: "Terminal completion event failed" });
+      return;
+    }
     terminalCompletionLogger.info("terminal-completion.recorded", {
       message: "Terminal completion event recorded",
       id: event.id,

@@ -374,15 +374,31 @@ async function verifyCommandSubmissionFailureFailsClosed(check, roots) {
       await clock.waitForTimer();
       clock.advanceTo(10_000);
       const error = await capturePromiseError(preparation);
+      const paneTarget = {
+        ...harness.tmuxService.buildTarget(harness.session.id),
+        paneId: harness.panel.tmuxPaneId,
+      };
+      const [prepareCommand, prepareExit] = await Promise.all([
+        harness.tmuxService.readPaneOption(
+          paneTarget,
+          "@runweave_agent_prepare_command",
+        ),
+        harness.tmuxService.readPaneOption(
+          paneTarget,
+          "@runweave_agent_prepare_exit",
+        ),
+      ]);
       check(
         "bootstrap-command-submission-failure-fails-cli-launch",
         error?.details?.phase === "cli_launch" &&
           error.message.includes("fixture command submission failure") &&
+          prepareCommand === null &&
+          prepareExit === null &&
           !harness.manager.hasPanelAgentPreparation(
             harness.session.id,
             harness.panel.id,
           ),
-        describeError(error),
+        { error: describeError(error), prepareCommand, prepareExit },
       );
     });
   });

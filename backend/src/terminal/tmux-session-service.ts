@@ -129,6 +129,41 @@ export class TmuxSessionService extends TmuxProcess {
     );
   }
 
+  async syncSessionEnvironment(
+    target: TmuxTarget,
+    env: Record<string, string | undefined>,
+  ): Promise<void> {
+    const args = Object.entries(env).flatMap(([key, value]) =>
+      value
+        ? ["set-environment", "-t", target.sessionName, key, value, ";"]
+        : ["set-environment", "-t", target.sessionName, "-u", key, ";"],
+    );
+    if (args.length === 0) {
+      return;
+    }
+    await this.runTmux(args.slice(0, -1), target);
+  }
+
+  async readSessionEnvironment(
+    target: TmuxTarget,
+  ): Promise<Record<string, string>> {
+    const result = await this.runTmux(
+      ["show-environment", "-t", target.sessionName],
+      target,
+    );
+    return Object.fromEntries(
+      result.stdout
+        .split(/\r?\n/)
+        .filter((line) => line && !line.startsWith("-"))
+        .map((line) => {
+          const separatorIndex = line.indexOf("=");
+          return separatorIndex < 0
+            ? [line, ""]
+            : [line.slice(0, separatorIndex), line.slice(separatorIndex + 1)];
+        }),
+    );
+  }
+
   async killSession(target: TmuxTarget): Promise<void> {
     try {
       await this.runTmux(["kill-session", "-t", target.sessionName], target);

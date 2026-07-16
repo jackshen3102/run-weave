@@ -147,6 +147,10 @@ async function verifyTmuxPaneFallbackUniqueness() {
         mutations.push(args);
         return { state: "agent_running", agent: "trae" };
       },
+      setAggregatedPanelAgentHookState(_sessionId, terminalState) {
+        mutations.push([_sessionId, terminalState]);
+        return terminalState;
+      },
     };
     const result = await processTerminalAgentHook(
       { terminalSessionManager, terminalStateService },

@@ -125,19 +125,22 @@ export class TerminalStateService {
         }
       : undefined;
 
-    if (hookEvent === "UserPromptSubmit") {
-      return this.setAndPublish(
-        terminalSessionId,
-        createAgentState(agent, "agent_running"),
-        publishContext,
-      );
-    }
-
     return this.setAndPublish(
       terminalSessionId,
-      createAgentState(agent, "agent_idle"),
+      resolveAgentHookTerminalState(agent, hookEvent),
       publishContext,
     );
+  }
+
+  setAggregatedPanelAgentHookState(
+    terminalSessionId: string,
+    terminalState: TerminalState,
+    projectId: string | null,
+  ): TerminalState {
+    return this.setAndPublish(terminalSessionId, terminalState, {
+      projectId,
+      reason: "agent_hook",
+    });
   }
 
   getCurrent(
@@ -257,12 +260,29 @@ export function aggregatePanelTerminalState(
     return createAgentState(runningAgentPanel.agent, "agent_running");
   }
 
+  const startingAgentPanel = agentPanels.find(
+    (panel) => panel.state === "agent_starting",
+  );
+  if (startingAgentPanel) {
+    return createAgentState(startingAgentPanel.agent, "agent_starting");
+  }
+
   const idleAgentPanel = agentPanels[0];
   if (idleAgentPanel) {
     return createAgentState(idleAgentPanel.agent, "agent_idle");
   }
 
   return SHELL_IDLE;
+}
+
+export function resolveAgentHookTerminalState(
+  agent: TerminalAgentKind,
+  hookEvent: AgentHookStateEvent,
+): TerminalState {
+  return createAgentState(
+    agent,
+    hookEvent === "UserPromptSubmit" ? "agent_running" : "agent_idle",
+  );
 }
 
 function createAgentState(

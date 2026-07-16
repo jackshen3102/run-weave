@@ -20,6 +20,7 @@ import { recordSupportLog, useSupportLogs } from "../features/support-logs";
 import { basename, shortPath } from "../lib/app-terminal-path-labels";
 import { formatRelativeTime } from "../lib/terminal-home-view-model";
 import { useAppTerminalActions } from "../hooks/use-app-terminal-actions";
+import { getCurrentTerminalState } from "../services/terminal";
 import { useAppTerminalConnection } from "../hooks/use-app-terminal-connection";
 import type { AppDeviceConnectionSnapshot } from "../hooks/use-app-device-connection";
 import { classifyApiFailure } from "../services/api-failure";
@@ -166,10 +167,27 @@ export function AppTerminalPage({
     ],
   );
   useEffect(() => {
+    let cancelled = false;
     const initialState = initialSession?.terminalState ?? SHELL_IDLE_STATE;
     resetTerminalUi();
     setTerminalState(initialState);
-  }, [initialSession?.terminalState, resetTerminalUi, terminalSessionId]);
+    void getCurrentTerminalState(apiBase, accessToken, terminalSessionId)
+      .then(({ terminalState: currentTerminalState }) => {
+        if (!cancelled) {
+          setTerminalState(currentTerminalState);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    accessToken,
+    apiBase,
+    initialSession?.terminalState,
+    resetTerminalUi,
+    terminalSessionId,
+  ]);
 
   const {
     handlePickImage,

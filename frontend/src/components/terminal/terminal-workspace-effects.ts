@@ -183,7 +183,7 @@ export function useSessionSelectionShortcuts({
 interface SessionMarkerCleanupOptions {
   sessions: TerminalSessionListItem[];
   historyTerminalSessionId: string | null;
-  setCompletionMarkers: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  setCompletionMarkers: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   setBellMarkers: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   setHistoryDrawerOpen: (open: boolean) => void;
   setHistoryTerminalSessionId: (terminalSessionId: string | null) => void;

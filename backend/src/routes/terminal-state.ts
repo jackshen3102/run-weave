@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
-import type { AgentHookStateRequest, TerminalStateResponse } from "@runweave/shared/terminal/events";
+import type {
+  AgentHookStateRequest,
+  AgentHookStateResponse,
+  TerminalStateResponse,
+} from "@runweave/shared/terminal/events";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import {
@@ -135,10 +139,18 @@ export function createInternalTerminalAgentHookRouter(options: {
         res.status(404).json({ message: "Terminal session not found" });
         return;
       }
-      recordAgentHookActivity(options.activity, parsed.data, hookActivityEvents);
+      recordAgentHookActivity(
+        options.activity,
+        parsed.data,
+        hookActivityEvents,
+      );
       res.status(202).json({
-        terminalState: options.terminalStateService.getCurrent(session.id, session),
-      });
+        terminalState: options.terminalStateService.getCurrent(
+          session.id,
+          session,
+        ),
+        disposition: "recorded",
+      } satisfies AgentHookStateResponse);
       return;
     }
 
@@ -148,7 +160,10 @@ export function createInternalTerminalAgentHookRouter(options: {
       return;
     }
     if (result.status === "exited") {
-      res.status(202).json({ terminalState: result.terminalState });
+      res.status(202).json({
+        terminalState: result.terminalState,
+        disposition: "exited",
+      } satisfies AgentHookStateResponse);
       return;
     }
     if (result.status === "ignored") {
@@ -159,8 +174,13 @@ export function createInternalTerminalAgentHookRouter(options: {
         hookEvent: result.hookEvent,
         activeCommand: result.activeCommand,
         panelId: result.panelId,
+        ignoreReason: result.ignoreReason,
       });
-      res.status(202).json({ terminalState: result.terminalState });
+      res.status(202).json({
+        terminalState: result.terminalState,
+        disposition: "ignored",
+        ignoreReason: result.ignoreReason,
+      } satisfies AgentHookStateResponse);
       return;
     }
 
@@ -173,7 +193,10 @@ export function createInternalTerminalAgentHookRouter(options: {
       state: result.terminalState.state,
     });
     recordAgentHookActivity(options.activity, parsed.data, hookActivityEvents);
-    res.status(202).json({ terminalState: result.terminalState });
+    res.status(202).json({
+      terminalState: result.terminalState,
+      disposition: "recorded",
+    } satisfies AgentHookStateResponse);
   });
 
   return router;
@@ -193,22 +216,22 @@ function recordAgentHookActivity(
       : hook.hookEvent === "ToolCompleted"
         ? "agent.tool.completed"
         : hook.hookEvent === "SessionStart"
-      ? hook.sessionSource === "resume"
-        ? "agent.thread.resumed"
-        : "agent.thread.started"
-      : hook.hookEvent === "UserPromptSubmit"
-        ? "user.query.submit_requested"
-        : "agent.response.observed";
+          ? hook.sessionSource === "resume"
+            ? "agent.thread.resumed"
+            : "agent.thread.started"
+          : hook.hookEvent === "UserPromptSubmit"
+            ? "user.query.submit_requested"
+            : "agent.response.observed";
   const content =
     hook.hookEvent === "ToolRequested"
       ? hook.toolInput
       : hook.hookEvent === "ToolCompleted"
         ? hook.toolResult
         : hook.hookEvent === "UserPromptSubmit"
-      ? hook.query
-      : hook.hookEvent === "Stop"
-        ? hook.response
-        : undefined;
+          ? hook.query
+          : hook.hookEvent === "Stop"
+            ? hook.response
+            : undefined;
   const existingEvent = hook.activityEventId
     ? hookActivityEvents.get(hook.activityEventId)
     : undefined;
@@ -244,7 +267,8 @@ function recordAgentHookActivity(
     event.eventId = hook.activityEventId;
   }
   if (content !== undefined && content !== null) {
-    const text = typeof content === "string" ? content : JSON.stringify(content);
+    const text =
+      typeof content === "string" ? content : JSON.stringify(content);
     event.contents.push({
       contentId: crypto.randomUUID(),
       role:

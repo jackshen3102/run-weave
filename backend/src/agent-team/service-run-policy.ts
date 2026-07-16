@@ -28,6 +28,7 @@ export function createSyntheticCompletionEvent(
     payload: {
       source: "codex",
       completionReason: "manual",
+      completionRevision: session.completionRevision,
       commandName: run.terminal.command ?? null,
       rawHookEvent: null,
       hookEvent: "",

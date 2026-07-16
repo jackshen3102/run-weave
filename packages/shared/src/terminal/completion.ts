@@ -33,6 +33,7 @@ export interface TerminalCompletionEvent {
 export interface TerminalCompletionEventPayload {
   source: TerminalCompletionEvent["source"];
   completionReason: TerminalCompletionReason;
+  completionRevision: number;
   commandName: string | null;
   rawHookEvent: string | null;
   hookEvent: string;

@@ -11,7 +11,7 @@ import { TmuxService } from "../../backend/src/terminal/tmux-service.ts";
 export const LONG_RUNNING_COMMAND = "node -e 'setInterval(() => {}, 1000)' --";
 export const PROMPT = "Inspect this fixture without modifying files, then wait.";
 
-export async function withHarness(roots, run) {
+export async function withHarness(roots, run, options = {}) {
   const root = await mkdtemp(
     path.join(os.tmpdir(), "runweave-bootstrap-lifecycle-"),
   );
@@ -46,8 +46,8 @@ export async function withHarness(roots, run) {
     return started;
   };
   let session = await manager.createSession({
-    command: "/bin/zsh",
-    args: ["-f"],
+    command: options.shell ?? "/bin/zsh",
+    args: options.shellArgs ?? ["-f"],
     cwd: root,
   });
   const tmuxService = new TmuxService({ socketPath });
@@ -161,6 +161,9 @@ export async function withHarness(roots, run) {
             state: hookEvent === "Stop" ? "agent_idle" : "agent_running",
             agent,
           };
+        },
+        setAggregatedPanelAgentHookState(_sessionId, terminalState) {
+          return terminalState;
         },
       },
     },

@@ -21,9 +21,13 @@ import { resolvePanelTarget } from "./panel-targets";
 import { isInteractiveShellLaunch } from "../tmux-output-watcher-helpers";
 import { sendInputToSession } from "./input-dispatcher";
 import { logger } from "../../logging";
+import {
+  TMUX_AGENT_PREPARE_COMMAND_OPTION,
+  TMUX_AGENT_PREPARE_EXIT_OPTION,
+} from "../tmux-service";
+import { buildTerminalRuntimeEnvironment } from "../runtime-environment";
 
 const AGENT_SHELL_STARTUP_DELAY_MS = 10_000;
-const AGENT_EXIT_PANE_OPTION = "@runweave_agent_prepare_exit";
 const agentPreparationLogger = logger.child({
   component: "terminal-agent-preparation",
 });
@@ -214,11 +218,14 @@ export async function prepareTerminalAgent(
           command: session.command,
           args: session.args,
           cwd: request.cwd?.trim() || panel.cwd || session.cwd,
-          env: {
-            RUNWEAVE_TERMINAL_SESSION_ID: session.id,
-            RUNWEAVE_TERMINAL_PANEL_ID: panel.id,
-            RUNWEAVE_PROJECT_ID: session.projectId,
-          },
+          env: buildTerminalRuntimeEnvironment({
+            terminalSessionId: session.id,
+            terminalPanelId: panel.id,
+            projectId: session.projectId,
+            tmuxSessionName:
+              session.tmuxSessionName ??
+              options.tmuxService.buildSessionName(session.id),
+          }),
         });
         await terminalSessionManager.updatePanelTerminalState(
           panel.id,
@@ -239,7 +246,12 @@ export async function prepareTerminalAgent(
       });
       await options.tmuxService.setPaneOption(
         paneTarget,
-        AGENT_EXIT_PANE_OPTION,
+        TMUX_AGENT_PREPARE_COMMAND_OPTION,
+        request.agent,
+      );
+      await options.tmuxService.setPaneOption(
+        paneTarget,
+        TMUX_AGENT_PREPARE_EXIT_OPTION,
         `pending:${operationId}`,
       );
       await sendInputToSession(
@@ -254,6 +266,10 @@ export async function prepareTerminalAgent(
       commandSubmittedAt = new Date().toISOString();
       commandSubmitted = true;
     } catch (error) {
+      await clearPendingAgentPrepareOptions(
+        options.tmuxService,
+        paneTarget,
+      );
       throwPreparationError({
         phase: "cli_launch",
         operationId,
@@ -346,6 +362,20 @@ export async function prepareTerminalAgent(
   throw new Error("Terminal agent preparation ended without a result");
 }
 
+async function clearPendingAgentPrepareOptions(
+  tmuxService: NonNullable<TerminalPanelOptions["tmuxService"]>,
+  paneTarget: TerminalPanelTargetResolution["paneTarget"],
+): Promise<void> {
+  await Promise.all([
+    tmuxService
+      .unsetPaneOption(paneTarget, TMUX_AGENT_PREPARE_COMMAND_OPTION)
+      .catch(() => undefined),
+    tmuxService
+      .unsetPaneOption(paneTarget, TMUX_AGENT_PREPARE_EXIT_OPTION)
+      .catch(() => undefined),
+  ]);
+}
+
 function assertPreparationTargetCurrent(input: {
   terminalSessionManager: TerminalSessionManager;
   session: TerminalSessionRecord;
@@ -391,7 +421,7 @@ function buildAgentLaunchCommand(
   const invocation = request.commandLine?.trim()
     ? `${request.commandLine.trim()} ${shellQuote(request.prompt)}`
     : [command, ...args.map(shellQuote), shellQuote(request.prompt)].join(" ");
-  return `export RUNWEAVE_TERMINAL_AGENT_OPERATION_ID=${shellQuote(operationId)}; ${invocation}; __runweave_agent_exit=$?; unset RUNWEAVE_TERMINAL_AGENT_OPERATION_ID; tmux set-option -p -t "$TMUX_PANE" ${AGENT_EXIT_PANE_OPTION} "exit:${operationId}:$__runweave_agent_exit"`;
+  return `RUNWEAVE_TERMINAL_AGENT_OPERATION_ID=${shellQuote(operationId)} ${invocation}; __runweave_agent_exit=$?; tmux set-option -p -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_EXIT_OPTION} "exit:${operationId}:$__runweave_agent_exit"; tmux set-option -p -u -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_COMMAND_OPTION}`;
 }
 
 function withCodexSkipUpdateOnStartupArgs(

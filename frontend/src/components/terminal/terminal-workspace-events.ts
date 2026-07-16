@@ -272,8 +272,7 @@ export function useTerminalWorkspaceEvents({
       }
       const markerSessionIds = events
         .filter((event) => event.kind === "completion")
-        .map((event) => event.terminalSessionId)
-        .filter((terminalSessionId) => knownSessionIds.has(terminalSessionId));
+        .filter((event) => knownSessionIds.has(event.terminalSessionId));
       if (markerSessionIds.length === 0) {
         return;
       }
@@ -281,11 +280,13 @@ export function useTerminalWorkspaceEvents({
       setCompletionMarkers((current) => {
         let changed = false;
         const next = { ...current };
-        for (const terminalSessionId of markerSessionIds) {
-          if (!next[terminalSessionId]) {
-            next[terminalSessionId] = true;
-            changed = true;
+        for (const event of markerSessionIds) {
+          const currentRevision = next[event.terminalSessionId] ?? 0;
+          if (event.payload.completionRevision <= currentRevision) {
+            continue;
           }
+          next[event.terminalSessionId] = event.payload.completionRevision;
+          changed = true;
         }
         return changed ? next : current;
       });

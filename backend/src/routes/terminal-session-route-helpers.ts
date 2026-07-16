@@ -23,6 +23,14 @@ export const createTerminalSessionSchema = z
   })
   .strict();
 
+export const updateTerminalSessionSchema = z
+  .object({
+    alias: z.string().trim().max(80).nullable().optional(),
+    panelSplitEnabled: z.boolean().optional(),
+    acknowledgedCompletionRevision: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+
 export const sendTerminalInputSchema = z
   .object({
     data: z.string(),

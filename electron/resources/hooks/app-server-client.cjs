@@ -9,9 +9,16 @@ const APP_SERVER_SERVICE_NAME = "runweave-app-server";
 const APP_SERVER_PROTOCOL_VERSION = 1;
 
 async function discoverAppServer() {
+  const discoveryMode = process.env.RUNWEAVE_APP_SERVER_DISCOVERY?.trim();
+  if (discoveryMode === "disabled") {
+    return null;
+  }
   const fromEnv = await discoverFromEnv();
   if (fromEnv) {
     return fromEnv;
+  }
+  if (discoveryMode === "explicit") {
+    return null;
   }
   return discoverFromDefaultFiles();
 }
@@ -26,8 +33,11 @@ async function discoverFromEnv() {
 }
 
 async function discoverFromDefaultFiles() {
-  const stateDir = process.env.RUNWEAVE_APP_SERVER_STATE_DIR?.trim()
-    ? path.resolve(expandHomePath(process.env.RUNWEAVE_APP_SERVER_STATE_DIR))
+  const configuredStateDir =
+    process.env.RUNWEAVE_APP_SERVER_STATE_DIR?.trim() ||
+    process.env.RUNWEAVE_APP_SERVER_HOME?.trim();
+  const stateDir = configuredStateDir
+    ? path.resolve(expandHomePath(configuredStateDir))
     : path.join(os.homedir(), ".runweave", "app-server");
   try {
     const lock = JSON.parse(

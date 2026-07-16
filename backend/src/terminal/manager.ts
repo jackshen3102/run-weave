@@ -154,6 +154,8 @@ export class TerminalSessionManager extends TerminalManagerPanelOperations {
       lastActivityAt: now,
       runtimeKind: "pty",
       recoverable: false,
+      completionRevision: 0,
+      acknowledgedCompletionRevision: 0,
       panelSplitEnabled: false,
     });
 

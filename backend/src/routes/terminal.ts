@@ -47,6 +47,7 @@ import {
   resolveTerminalCreateDefaults,
   sanitizeTerminalError,
   TerminalCreateDefaultsError,
+  updateTerminalSessionSchema,
 } from "./terminal-session-route-helpers";
 import { registerTerminalTicketRoutes } from "./terminal-ticket-routes";
 import { registerTerminalPrototypeGalleryRoutes } from "./terminal-prototype-gallery-routes";
@@ -223,13 +224,6 @@ export function createTerminalRouter(
     terminalEventService: options?.terminalEventService,
     terminalStateService: options?.terminalStateService,
   });
-
-  const updateTerminalSessionSchema = z
-    .object({
-      alias: z.string().trim().max(80).nullable().optional(),
-      panelSplitEnabled: z.boolean().optional(),
-    })
-    .strict();
 
   router.post("/session", async (req, res) => {
     const parsed = createTerminalSessionSchema.safeParse(
@@ -515,6 +509,13 @@ export function createTerminalRouter(
           (await terminalSessionManager.updateSessionPanelSplitEnabled(
             session.id,
             parsed.data.panelSplitEnabled,
+          )) ?? updatedSession;
+      }
+      if (parsed.data.acknowledgedCompletionRevision !== undefined) {
+        updatedSession =
+          (await terminalSessionManager.acknowledgeSessionCompletion(
+            session.id,
+            parsed.data.acknowledgedCompletionRevision,
           )) ?? updatedSession;
       }
       res.json(

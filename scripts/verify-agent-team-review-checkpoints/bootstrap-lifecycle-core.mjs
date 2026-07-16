@@ -16,9 +16,15 @@ import {
   withControlledStartupDelay,
   withHarness,
 } from "./bootstrap-lifecycle-harness.mjs";
+import {
+  verifyBootstrapReconciliationSetup,
+  verifyBootstrapWorkspaceReconciliation,
+} from "./bootstrap-lifecycle-reconciliation.mjs";
 
 export async function verifyBootstrapCore(check, roots) {
+  await verifyBootstrapReconciliationSetup(check, roots);
   await verifyCommandSubmissionReturnsStarting(check, roots);
+  await verifyBootstrapWorkspaceReconciliation(check, roots);
   await verifyReusedPanelRespawnsAgent(check, roots);
   await verifyShellIdleExistingPanelRespawnsAgent(check, roots);
   await verifyCreatedPanelWaitsTenSeconds(check, roots);
@@ -47,22 +53,22 @@ async function verifyReusedPanelRespawnsAgent(check, roots) {
       check(
         "bootstrap-reused-panel-respawns-agent",
         harness.respawnedPanes.length === 1 &&
-        harness.respawnedPanes[0].paneId === harness.panel.tmuxPaneId &&
-        harness.paneOperations.length === 2 &&
-        harness.paneOperations[0].type === "respawn" &&
-        harness.paneOperations[0].paneId === harness.panel.tmuxPaneId &&
-        harness.paneOperations[0].command === harness.session.command &&
-        harness.paneOperations[1].type === "send" &&
-        harness.paneOperations[1].command.includes(
-          "RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
-        ) &&
-        harness.paneOperations[1].paneId === harness.panel.tmuxPaneId &&
-        harness.paneOperations[1].command.includes(PROMPT) &&
-        result.status === "starting" &&
-        result.threadId === null &&
-        harness.manager.getPanel(harness.panel.id)?.terminalState?.state ===
-          "agent_starting" &&
-        harness.captureReadCount() === 0,
+          harness.respawnedPanes[0].paneId === harness.panel.tmuxPaneId &&
+          harness.paneOperations.length === 2 &&
+          harness.paneOperations[0].type === "respawn" &&
+          harness.paneOperations[0].paneId === harness.panel.tmuxPaneId &&
+          harness.paneOperations[0].command === harness.session.command &&
+          harness.paneOperations[1].type === "send" &&
+          harness.paneOperations[1].command.includes(
+            "RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
+          ) &&
+          harness.paneOperations[1].paneId === harness.panel.tmuxPaneId &&
+          harness.paneOperations[1].command.includes(PROMPT) &&
+          result.status === "starting" &&
+          result.threadId === null &&
+          harness.manager.getPanel(harness.panel.id)?.terminalState?.state ===
+            "agent_starting" &&
+          harness.captureReadCount() === 0,
         { paneOperations: harness.paneOperations, result },
       );
     });
@@ -112,9 +118,7 @@ async function verifyShellIdleExistingPanelRespawnsAgent(check, roots) {
         "bootstrap-shell-idle-existing-panel-sends-once-with-fresh-thread",
         sends.length === 1 &&
           sends[0].paneId === harness.panel.tmuxPaneId &&
-          sends[0].command.includes(
-            "RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
-          ) &&
+          sends[0].command.includes("RUNWEAVE_TERMINAL_AGENT_OPERATION_ID") &&
           sends[0].command.includes(PROMPT) &&
           result.createdPanel === false &&
           result.status === "starting" &&
@@ -162,9 +166,7 @@ async function verifyCreatedPanelWaitsTenSeconds(check, roots) {
         "bootstrap-created-panel-sends-one-complete-command-at-10000ms",
         result.createdPanel === true &&
           sends.length === 1 &&
-          sends[0].command.includes(
-            "RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
-          ) &&
+          sends[0].command.includes("RUNWEAVE_TERMINAL_AGENT_OPERATION_ID") &&
           sends[0].command.includes(PROMPT) &&
           result.status === "starting" &&
           result.threadId === null &&

@@ -10,7 +10,12 @@ import {
   isTmuxBackedSession,
   resolveTmuxTarget,
 } from "../runtime-launcher";
-import type { TmuxPaneInfo, TmuxService } from "../tmux-service";
+import {
+  TMUX_AGENT_PREPARE_COMMAND_OPTION,
+  TMUX_AGENT_PREPARE_EXIT_OPTION,
+  type TmuxPaneInfo,
+  type TmuxService,
+} from "../tmux-service";
 import type { TerminalEventService } from "../terminal-event-service";
 import { logger } from "../../logging";
 import {
@@ -23,10 +28,11 @@ import {
   buildDefaultPanel,
   buildSplitPanel,
   clearMultiPanelMetadataFromSession,
-  getPanelTerminalStateForActiveCommand,
   isEnvironmentAssignmentOnlyActiveCommand,
+  isStalePendingAgentPrepare,
   recordPanelEvent,
   resolveEffectivePanelActiveCommand,
+  resolveReconciledPanelTerminalState,
   shouldBackfillSessionAgentMetadataToMainPanel,
   syncSinglePanelMetadataToSession,
 } from "./panel-metadata";
@@ -100,11 +106,30 @@ export async function ensureTmuxPanelWorkspace(
   for (const pane of panes) {
     const existingPanel = panelsByPaneId.get(pane.paneId);
     if (existingPanel) {
+      if (isStalePendingAgentPrepare(pane)) {
+        await Promise.all([
+          tmuxService
+            .unsetPaneOption(
+              { ...target, paneId: pane.paneId },
+              TMUX_AGENT_PREPARE_COMMAND_OPTION,
+            )
+            .catch(() => undefined),
+          tmuxService
+            .unsetPaneOption(
+              { ...target, paneId: pane.paneId },
+              TMUX_AGENT_PREPARE_EXIT_OPTION,
+            )
+            .catch(() => undefined),
+        ]);
+        pane.agentPrepareCommand = null;
+        pane.agentPrepareExit = null;
+      }
       const effectiveActiveCommand = resolveEffectivePanelActiveCommand(
         pane,
         existingPanel.activeCommand,
       );
-      const nextTerminalState = getPanelTerminalStateForActiveCommand(
+      const nextTerminalState = resolveReconciledPanelTerminalState(
+        pane,
         effectiveActiveCommand,
         existingPanel.terminalState,
       );

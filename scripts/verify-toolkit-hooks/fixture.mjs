@@ -79,7 +79,7 @@ export async function createToolkitHookFixture() {
       fakeTmuxPath,
       [
         "#!/bin/sh",
-        "printf '%s\\n' \"${RUNWEAVE_VERIFY_PANE_COMMAND:-traex}__RUNWEAVE_METADATA_FIELD__node__RUNWEAVE_METADATA_FIELD__panel-pane-3\"",
+        "printf '%s\\n' \"__RUNWEAVE_METADATA_FIELD____RUNWEAVE_METADATA_FIELD__${RUNWEAVE_VERIFY_PANE_COMMAND:-traex}__RUNWEAVE_METADATA_FIELD__node__RUNWEAVE_METADATA_FIELD__panel-pane-3\"",
         "",
       ].join("\n"),
     );

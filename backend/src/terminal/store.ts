@@ -37,6 +37,8 @@ export interface PersistedTerminalSessionRecord {
   tmuxUnavailableReason?: string;
   recoverable?: boolean;
   terminalState?: TerminalState;
+  completionRevision?: number;
+  acknowledgedCompletionRevision?: number;
   panelSplitEnabled?: boolean;
   order?: number;
 }
@@ -163,6 +165,12 @@ export interface UpdateTerminalSessionTerminalStateParams {
   terminalState: TerminalState;
 }
 
+export interface UpdateTerminalSessionCompletionParams {
+  terminalSessionId: string;
+  completionRevision: number;
+  acknowledgedCompletionRevision: number;
+}
+
 export interface UpdateTerminalPanelThreadIdParams {
   panelId: string;
   threadId: string | null;
@@ -268,6 +276,9 @@ export interface TerminalSessionStore {
   ): Promise<void>;
   updateSessionTerminalState(
     params: UpdateTerminalSessionTerminalStateParams,
+  ): Promise<void>;
+  updateSessionCompletion(
+    params: UpdateTerminalSessionCompletionParams,
   ): Promise<void>;
   updateSessionPanelSplitEnabled(
     params: UpdateTerminalSessionPanelSplitEnabledParams,

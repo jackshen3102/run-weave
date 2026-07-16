@@ -51,6 +51,8 @@ export interface TerminalSessionRecord {
   tmuxUnavailableReason?: string;
   recoverable?: boolean;
   terminalState?: TerminalState;
+  completionRevision: number;
+  acknowledgedCompletionRevision: number;
   panelSplitEnabled: boolean;
 }
 
@@ -164,6 +166,9 @@ export function buildSessionRecord(
     ...(persisted.terminalState !== undefined
       ? { terminalState: persisted.terminalState }
       : {}),
+    completionRevision: persisted.completionRevision ?? 0,
+    acknowledgedCompletionRevision:
+      persisted.acknowledgedCompletionRevision ?? 0,
     panelSplitEnabled: persisted.panelSplitEnabled ?? false,
   };
 }
@@ -236,6 +241,8 @@ export function toPersistedSession(
     ...(session.terminalState !== undefined
       ? { terminalState: session.terminalState }
       : {}),
+    completionRevision: session.completionRevision,
+    acknowledgedCompletionRevision: session.acknowledgedCompletionRevision,
     panelSplitEnabled: session.panelSplitEnabled,
   };
 }

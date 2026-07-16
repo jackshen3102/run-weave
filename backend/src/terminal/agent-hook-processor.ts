@@ -1,4 +1,7 @@
-import type { AgentHookStateEvent } from "@runweave/shared/terminal/events";
+import type {
+  AgentHookIgnoreReason,
+  AgentHookStateEvent,
+} from "@runweave/shared/terminal/events";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type {
   TerminalAgentKind,
@@ -11,7 +14,9 @@ import {
 } from "./completion-source-gate";
 import type { TerminalSessionManager } from "./manager";
 import {
+  aggregatePanelTerminalState,
   getTerminalSessionAgent,
+  resolveAgentHookTerminalState,
   type TerminalStateService,
 } from "./terminal-state-service";
 import { readCodexThreadSnapshot } from "./codex-thread-snapshot";
@@ -59,6 +64,7 @@ export type ProcessTerminalAgentHookResult =
       activeCommand: string | null;
       terminalState: TerminalState;
       panelId: string | null;
+      ignoreReason: AgentHookIgnoreReason;
     }
   | {
       status: "recorded";
@@ -115,6 +121,7 @@ export async function processTerminalAgentHook(
         session,
       ),
       panelId: null,
+      ignoreReason: "panel_identity_mismatch",
     };
   }
   const panel = panelResolution.panel;
@@ -127,11 +134,11 @@ export async function processTerminalAgentHook(
     (lastThreadOwner.lastThreadId ? "codex" : null);
   const resumedLastThreadIdentityMatched = Boolean(
     input.hookEvent === "UserPromptSubmit" &&
-      hookThreadId &&
-      !currentThreadOwner.threadId &&
-      !currentThreadOwner.threadProvider &&
-      lastThreadOwner.lastThreadId === hookThreadId &&
-      persistedLastThreadProvider === input.agent,
+    hookThreadId &&
+    !currentThreadOwner.threadId &&
+    !currentThreadOwner.threadProvider &&
+    lastThreadOwner.lastThreadId === hookThreadId &&
+    persistedLastThreadProvider === input.agent,
   );
   const operationGenerationTracked = Boolean(
     panel
@@ -143,13 +150,13 @@ export async function processTerminalAgentHook(
   );
   const operationIdentityMatched = Boolean(
     panel &&
-      input.operationId &&
-      options.terminalSessionManager.matchesPanelAgentOperationGeneration(
-        session.id,
-        panel.id,
-        input.operationId,
-        input.agent,
-      ),
+    input.operationId &&
+    options.terminalSessionManager.matchesPanelAgentOperationGeneration(
+      session.id,
+      panel.id,
+      input.operationId,
+      input.agent,
+    ),
   );
   const trustedCurrentThreadIdentityMatched = Boolean(
     context.currentThreadIdentityMatched || resumedLastThreadIdentityMatched,
@@ -170,6 +177,7 @@ export async function processTerminalAgentHook(
         session.terminalState ??
         ({ state: "shell_idle", agent: null } satisfies TerminalState),
       panelId: panel?.id ?? null,
+      ignoreReason: "operation_identity_mismatch",
     };
   }
   const currentThreadIdentityMatched =
@@ -199,6 +207,7 @@ export async function processTerminalAgentHook(
         session,
       ),
       panelId: panel?.id ?? null,
+      ignoreReason: "agent_identity_mismatch",
     };
   }
   const effectiveAgent = currentThreadIdentityMatched
@@ -254,23 +263,38 @@ export async function processTerminalAgentHook(
         session,
       ),
       panelId: panel?.id ?? null,
+      ignoreReason: "inactive_agent",
     };
   }
 
-  const terminalState = options.terminalStateService.handleAgentHook(
-    session.id,
-    effectiveAgent,
-    input.hookEvent,
-    {
-      projectId: session.projectId,
-      reason: "agent_hook",
-    },
-  );
+  let terminalState: TerminalState;
   if (panel) {
+    const panelTerminalState = resolveAgentHookTerminalState(
+      effectiveAgent,
+      input.hookEvent,
+    );
     await options.terminalSessionManager.updatePanelTerminalState(
       panel.id,
-      terminalState,
+      panelTerminalState,
       input.operationId,
+    );
+    terminalState = aggregatePanelTerminalState(
+      options.terminalSessionManager.listPanels(session.id),
+    );
+    options.terminalStateService.setAggregatedPanelAgentHookState(
+      session.id,
+      terminalState,
+      session.projectId,
+    );
+  } else {
+    terminalState = options.terminalStateService.handleAgentHook(
+      session.id,
+      effectiveAgent,
+      input.hookEvent,
+      {
+        projectId: session.projectId,
+        reason: "agent_hook",
+      },
     );
   }
   if (hookThreadId) {

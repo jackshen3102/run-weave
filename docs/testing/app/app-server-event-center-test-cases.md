@@ -213,3 +213,68 @@ Expected:
 - Hook process exit code remains `0`.
 
 Automated by: `pnpm toolkit:verify-hooks`.
+
+## AS-EC-011 Isolated App-Server Discovery Propagates Into Terminal Panes
+
+Steps:
+
+1. Start a real App Server with a temporary `RUNWEAVE_APP_SERVER_HOME`.
+2. Start Backend with `RUNWEAVE_APP_SERVER_DISCOVERY=explicit` and the
+   matching isolated App Server URL/token.
+3. Create a real tmux-backed terminal and inspect its tmux session
+   environment.
+4. Trigger the real hook bridge from the terminal Pane.
+
+Expected:
+
+- The tmux session environment contains the isolated discovery mode,
+  App Server URL/token, and state home; the token value is never logged.
+- Hook bridge writes `agent.hook` / `agent.completion` only to the isolated
+  App Server event log.
+- Global `~/.runweave/app-server/app-server-events.jsonl` does not receive the
+  isolated terminal event.
+- Existing backend fallback hook endpoints remain available.
+
+Automated by: `pnpm toolkit:verify-hooks` plus isolated runtime verification.
+
+## AS-EC-012 Existing Tmux Sessions Refresh Discovery After Backend Restart
+
+Steps:
+
+1. Start Backend A with isolated App Server A and create a tmux-backed
+   terminal.
+2. Stop Backend A without killing the tmux session.
+3. Start Backend B against isolated App Server B while reusing the same
+   browser profile/tmux socket.
+4. Reattach to the terminal and trigger hook bridge from its existing Pane.
+
+Expected:
+
+- Backend B refreshes the existing tmux session environment before hooks run.
+- The existing Pane discovers App Server B, not App Server A or the global
+  default.
+- App Server B receives the event; App Server A and global event logs do not.
+
+Failure:
+
+- Existing Pane keeps stale discovery values after reattach.
+- Hook bridge falls back to global discovery when explicit isolated discovery
+  is configured.
+
+## AS-EC-013 Hook Discovery Honors HOME And Explicit Mode
+
+Steps:
+
+1. Run hook discovery with only `RUNWEAVE_APP_SERVER_HOME` pointing to a
+   temporary healthy App Server.
+2. Run with `RUNWEAVE_APP_SERVER_DISCOVERY=explicit` and no valid explicit
+   URL/token while a healthy global App Server fixture exists.
+3. Run with `RUNWEAVE_APP_SERVER_DISCOVERY=disabled`.
+
+Expected:
+
+- `RUNWEAVE_APP_SERVER_HOME` resolves lock/token from that directory.
+- Explicit mode returns unavailable instead of reading global files.
+- Disabled mode never contacts or reads an App Server.
+
+Automated by: `pnpm toolkit:verify-hooks`.
