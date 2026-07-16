@@ -15,11 +15,13 @@ export function StartFlowSection({
   planFilePath,
   testCaseFilePath,
   reviewCheckpointEnabled,
+  notifyMainOnHumanGate,
   busy,
   onTaskChange,
   onPlanFilePathChange,
   onTestCaseFilePathChange,
   onReviewCheckpointEnabledChange,
+  onNotifyMainOnHumanGateChange,
   onStart,
 }: {
   mode?: "start" | "retry";
@@ -27,11 +29,13 @@ export function StartFlowSection({
   planFilePath: string;
   testCaseFilePath: string;
   reviewCheckpointEnabled: boolean;
+  notifyMainOnHumanGate: boolean;
   busy: boolean;
   onTaskChange: (value: string) => void;
   onPlanFilePathChange: (value: string) => void;
   onTestCaseFilePathChange: (value: string) => void;
   onReviewCheckpointEnabledChange: (value: boolean) => void;
+  onNotifyMainOnHumanGateChange: (value: boolean) => void;
   onStart: () => void;
 }) {
   return (
@@ -44,7 +48,8 @@ export function StartFlowSection({
           "已回填上一次任务参数。提交后会创建新的 Run，原失败记录会保留。"
         ) : (
           <>
-            当前是标准 shell 会话，没有多 Agent 流程。提交任务后，Agent Team 会进入
+            当前是标准 shell 会话，没有多 Agent 流程。提交任务后，Agent Team
+            会进入
             <code className="mx-1 rounded bg-slate-800 px-1">
               拆分提案 → 执行观测
             </code>
@@ -86,6 +91,25 @@ export function StartFlowSection({
           <span className="mt-0.5 block text-slate-500">
             要求干净 Git worktree；创建专用本地分支，不会自动 push、squash
             或发布。
+          </span>
+        </span>
+      </label>
+      <label className="flex items-start gap-2 rounded border border-slate-800 bg-slate-900/50 p-2 text-[11px] text-slate-300">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={notifyMainOnHumanGate}
+          onChange={(event) =>
+            onNotifyMainOnHumanGateChange(event.target.checked)
+          }
+        />
+        <span>
+          <span className="block font-medium text-slate-200">
+            Human Gate 时通知主 Agent
+          </span>
+          <span className="mt-0.5 block text-slate-500">
+            默认开启。主 Agent
+            可分析并执行允许的恢复动作，但不能代替人工审批或裁决。
           </span>
         </span>
       </label>

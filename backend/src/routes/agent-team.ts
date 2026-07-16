@@ -55,6 +55,7 @@ const createRunSchema = z
     options: z
       .object({
         autoApproveSplit: z.boolean().optional(),
+        notifyMainOnHumanGate: z.boolean().optional(),
         reviewCheckpointMode: z.enum(["disabled", "local_commit"]).optional(),
         maxRepairAttempts: z.number().int().min(1).max(5).optional(),
       })
@@ -121,6 +122,13 @@ const agentInterventionSchema = z
         code: z.ZodIssueCode.custom,
         path: ["generatedTestCaseFilePath"],
         message: "dispatch 不接受 generatedTestCaseFilePath",
+      });
+    }
+    if (value.action === "refresh_acceptance" && !value.caseIds?.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["caseIds"],
+        message: "refresh_acceptance 必须声明受影响的业务 Case",
       });
     }
     if (

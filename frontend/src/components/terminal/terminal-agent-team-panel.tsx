@@ -58,6 +58,7 @@ export function TerminalAgentTeamPanel({
   const [planFilePath, setPlanFilePath] = useState("");
   const [testCaseFilePath, setTestCaseFilePath] = useState("");
   const [reviewCheckpointEnabled, setReviewCheckpointEnabled] = useState(false);
+  const [notifyMainOnHumanGate, setNotifyMainOnHumanGate] = useState(true);
   const [workerDrafts, setWorkerDrafts] = useState<WorkerDraft[] | null>(null);
   const [retryingRunId, setRetryingRunId] = useState<string | null>(null);
 
@@ -197,6 +198,7 @@ export function TerminalAgentTeamPanel({
         testCaseFilePath: normalizeOptionalPath(testCaseFilePath),
         options: {
           autoApproveSplit: true,
+          notifyMainOnHumanGate,
           reviewCheckpointMode: reviewCheckpointEnabled
             ? "local_commit"
             : "disabled",
@@ -221,6 +223,7 @@ export function TerminalAgentTeamPanel({
     setReviewCheckpointEnabled(
       run.options.reviewCheckpointMode === "local_commit",
     );
+    setNotifyMainOnHumanGate(run.options.notifyMainOnHumanGate !== false);
     setRetryingRunId(run.runId);
     setError(null);
   });
@@ -371,11 +374,13 @@ export function TerminalAgentTeamPanel({
             planFilePath={planFilePath}
             testCaseFilePath={testCaseFilePath}
             reviewCheckpointEnabled={reviewCheckpointEnabled}
+            notifyMainOnHumanGate={notifyMainOnHumanGate}
             busy={busy}
             onTaskChange={setTask}
             onPlanFilePathChange={setPlanFilePath}
             onTestCaseFilePathChange={setTestCaseFilePath}
             onReviewCheckpointEnabledChange={setReviewCheckpointEnabled}
+            onNotifyMainOnHumanGateChange={setNotifyMainOnHumanGate}
             onStart={startFlow}
           />
         ) : !run ? (
@@ -384,11 +389,13 @@ export function TerminalAgentTeamPanel({
             planFilePath={planFilePath}
             testCaseFilePath={testCaseFilePath}
             reviewCheckpointEnabled={reviewCheckpointEnabled}
+            notifyMainOnHumanGate={notifyMainOnHumanGate}
             busy={busy}
             onTaskChange={setTask}
             onPlanFilePathChange={setPlanFilePath}
             onTestCaseFilePathChange={setTestCaseFilePath}
             onReviewCheckpointEnabledChange={setReviewCheckpointEnabled}
+            onNotifyMainOnHumanGateChange={setNotifyMainOnHumanGate}
             onStart={startFlow}
           />
         ) : run.status === "failed" && run.phase !== "executing" ? (

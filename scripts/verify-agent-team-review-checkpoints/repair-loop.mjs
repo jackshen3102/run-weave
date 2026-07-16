@@ -139,17 +139,31 @@ export function verifyEvidenceGatedRepairLoop(check) {
     resumeBody,
   );
   check(
+    "human-gate-notification-is-centralized-configurable-and-default-on",
+    supportSource.includes('run.status !== "need_human"') &&
+      supportSource.includes('next.status === "need_human"') &&
+      supportSource.includes("next.options.notifyMainOnHumanGate !== false") &&
+      supportSource.includes(
+        "await this.trySendToMain(next, buildHumanGateMainPrompt(next))",
+      ) &&
+      lifecycleSource.includes(
+        "input.options?.notifyMainOnHumanGate ?? true",
+      ) &&
+      !executionSource.includes("buildBlockedBehaviorMainPrompt"),
+    { supportSource, lifecycleSource, executionSource },
+  );
+  check(
     "main-agent-intervention-is-explicit-and-cannot-dispose-findings",
     resumeBody.includes("async interveneRun(") &&
       resumeBody.includes("reopeningCompletedAcceptance") &&
-      resumeBody.includes("run.status === \"done\"") &&
+      resumeBody.includes('run.status === "done"') &&
       resumeBody.includes("if (run.pendingFindingDecision)") &&
       resumeBody.includes("Agent 不得代替人工 disposition") &&
       resumeBody.includes("this.prepareSplitAcceptance(run") &&
       resumeBody.includes("ensureWorkerGateAcceptance(") &&
-      resumeBody.includes(
-        "assertAcceptanceRefreshPreservesTraceableCases(",
-      ) &&
+      resumeBody.includes("mergeAcceptanceRefresh(") &&
+      resumeBody.includes("const affectedCaseIds = input.caseIds ?? []") &&
+      resumeBody.includes("bestPassCount: refreshedBestPassCount") &&
       resumeBody.includes("return this.bounceFailuresToCode(") &&
       resumeBody.includes("return this.dispatchSerialWorker(") &&
       resumeBody.includes("agentInterventions:") &&

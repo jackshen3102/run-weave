@@ -309,7 +309,7 @@ function fixtureRun(projectId: string, terminalSessionId: string): AgentTeamRun 
     terminalSessionId,
     phase: "executing",
     status: "running",
-    options: { autoApproveSplit: true },
+    options: { autoApproveSplit: true, notifyMainOnHumanGate: true },
     terminal: { command: "/bin/zsh", cwd: process.cwd() },
     task: "verify Work History",
     activeWorkerRole: null,

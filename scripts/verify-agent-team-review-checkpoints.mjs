@@ -4,6 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { AgentTeamReviewCheckpointGit } from "../backend/src/agent-team/review-checkpoint-git.ts";
+import {
+  AGENT_TEAM_REVIEW_GATE_CASE_ID,
+  ensureWorkerGateAcceptance,
+  isReviewGateAcceptanceCase,
+} from "../backend/src/agent-team/service-acceptance-policy.ts";
 import { verifyRepairIntegration } from "./verify-agent-team-review-checkpoints/repair-integration.mjs";
 import { verifyEvidenceGatedRepairLoop } from "./verify-agent-team-review-checkpoints/repair-loop.mjs";
 import { verifyBootstrapLifecycle } from "./verify-agent-team-review-checkpoints/bootstrap-lifecycle.mjs";
@@ -43,6 +48,57 @@ async function createRepo() {
 }
 
 async function main() {
+  const reviewWorker = { id: "review", role: "code_review", intent: "review" };
+  const productCase = {
+    caseId: "BSP-017",
+    text: "stop/reset 后 warm 重试仍复用同一槽位",
+    status: "pending",
+    consecutiveFail: 0,
+    evidence: [],
+  };
+  const acceptanceWithReviewGate = ensureWorkerGateAcceptance(
+    [reviewWorker],
+    [productCase],
+  );
+  check(
+    "review-gate-uses-stable-reserved-case-id",
+    acceptanceWithReviewGate.length === 2 &&
+      acceptanceWithReviewGate[0]?.caseId === AGENT_TEAM_REVIEW_GATE_CASE_ID &&
+      acceptanceWithReviewGate[1]?.caseId === "BSP-017",
+    acceptanceWithReviewGate,
+  );
+  const acceptanceAfterProductCaseGrowth = ensureWorkerGateAcceptance(
+    [reviewWorker],
+    [productCase, { ...productCase, caseId: "BSP-018" }],
+  );
+  check(
+    "review-gate-id-does-not-drift-with-product-case-count",
+    acceptanceAfterProductCaseGrowth.length === 3 &&
+      acceptanceAfterProductCaseGrowth[0]?.caseId ===
+        AGENT_TEAM_REVIEW_GATE_CASE_ID &&
+      acceptanceAfterProductCaseGrowth
+        .slice(1)
+        .map((item) => item.caseId)
+        .join(",") === "BSP-017,BSP-018",
+    acceptanceAfterProductCaseGrowth,
+  );
+  const legacyReviewGate = {
+    ...acceptanceWithReviewGate[0],
+    caseId: "case_17",
+  };
+  const acceptanceWithLegacyReviewGate = ensureWorkerGateAcceptance(
+    [reviewWorker],
+    [productCase, legacyReviewGate],
+  );
+  check(
+    "legacy-numbered-review-gate-remains-recognized",
+    isReviewGateAcceptanceCase(legacyReviewGate) &&
+      acceptanceWithLegacyReviewGate.length === 2 &&
+      acceptanceWithLegacyReviewGate[0] === legacyReviewGate &&
+      acceptanceWithLegacyReviewGate[1] === productCase,
+    acceptanceWithLegacyReviewGate,
+  );
+
   await verifyBootstrapLifecycle(check, roots);
   verifyEvidenceGatedRepairLoop(check);
   await verifyRepairIntegration(check, createRepo);

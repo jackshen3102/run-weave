@@ -26,8 +26,8 @@ import { agentTeamLogger } from "./service-context";
 import { AgentTeamRecheckService } from "./service-recheck";
 import {
   acceptanceCasesForRole,
-  assertAcceptanceRefreshPreservesTraceableCases,
   ensureWorkerGateAcceptance,
+  mergeAcceptanceRefresh,
 } from "./service-acceptance-policy";
 import {
   normalizeWorkers,
@@ -168,6 +168,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
       status: "running",
       options: {
         autoApproveSplit: input.options?.autoApproveSplit ?? false,
+        notifyMainOnHumanGate: input.options?.notifyMainOnHumanGate ?? true,
         reviewCheckpointMode,
         maxRepairAttempts,
       },
@@ -229,14 +230,11 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         log: "自动确认拆分已开启，跳过人工门，直接 split",
       });
     }
-    await this.runStore.writeRun({
-      ...run,
+    return this.updateRun(run, {
       phase: "proposal",
       status: "need_human",
       proposal,
-      updatedAt: new Date().toISOString(),
     });
-    return await this.requireRun(run.runId);
   }
   // --- Phase 2: intake -> proposal (+ split gate) ---
   async proposeSplit(
@@ -498,19 +496,27 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
         const prepared = await this.prepareSplitAcceptance(run, {
           generatedTestCaseFilePath,
         });
-        assertAcceptanceRefreshPreservesTraceableCases(
-          run.acceptance,
-          prepared.acceptance,
-        );
+        const affectedCaseIds = input.caseIds ?? [];
         const acceptance = ensureWorkerGateAcceptance(
           run.workers,
-          prepared.acceptance,
+          mergeAcceptanceRefresh(
+            run.acceptance,
+            ensureWorkerGateAcceptance(run.workers, prepared.acceptance),
+            affectedCaseIds,
+          ),
         );
-        const roleCases = acceptanceCasesForRole(
-          { ...run, acceptance },
-          input.role,
+        const affectedCases = selectAgentInterventionCases(
+          acceptanceCasesForRole({ ...run, acceptance }, "behavior_verify"),
+          affectedCaseIds,
         );
-        const cases = selectAgentInterventionCases(roleCases, input.caseIds);
+        const cases =
+          input.role === "behavior_verify"
+            ? affectedCases
+            : acceptanceCasesForRole({ ...run, acceptance }, "code_review");
+        const refreshedBestPassCount = acceptance.filter(
+          (item) => item.status === "pass",
+        ).length;
+        const affectedSet = new Set(affectedCaseIds);
         const refreshedRun = await this.updateRun(run, {
           status: "running",
           activeWorkerRole: null,
@@ -531,8 +537,11 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
             escalated: false,
             lastReason: null,
             errorFingerprints: [],
-            bestPassCount: 0,
-            repairCycles: [],
+            bestPassCount: refreshedBestPassCount,
+            repairCycles: (run.loop.repairCycles ?? []).filter(
+              (cycle) =>
+                !cycle.caseIds.some((caseId) => affectedSet.has(caseId)),
+            ),
           },
           agentInterventions: [
             ...(run.agentInterventions ?? []),
@@ -542,7 +551,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
               action: input.action,
               note,
               role: input.role,
-              caseIds: cases.map((item) => item.caseId),
+              caseIds: affectedCaseIds,
               previousReason,
               generatedTestCaseFilePath:
                 prepared.verification.generatedTestCaseFilePath,
@@ -553,7 +562,7 @@ export class AgentTeamLifecycleService extends AgentTeamRecheckService {
           ],
           logs: [
             ...run.logs,
-            `Agent 刷新验收合同：${prepared.verification.generatedTestCaseFilePath ?? generatedTestCaseFilePath}`,
+            `Agent 刷新验收合同：${prepared.verification.generatedTestCaseFilePath ?? generatedTestCaseFilePath}；影响 Case：${affectedCaseIds.join(", ")}`,
           ],
         });
         return this.dispatchSerialWorker(refreshedRun, input.role, {

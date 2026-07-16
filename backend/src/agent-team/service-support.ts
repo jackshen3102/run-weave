@@ -25,6 +25,7 @@ import {
   assertGeneratedTestCaseFilePath,
   formatVerificationSource,
 } from "./service-run-policy";
+import { buildHumanGateMainPrompt } from "./prompt-builders";
 import { buildAgentTeamPanelRole } from "./service-workflow-policy";
 import { AgentTeamServiceContext, agentTeamLogger } from "./service-context";
 
@@ -418,9 +419,9 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
       run.consumedWorkerDispatches?.some(
         (receipt) => receipt.role === worker.role,
       ) ||
-        panel?.threadId ||
-        panel?.lastThreadId ||
-        readyPanelAgent,
+      panel?.threadId ||
+      panel?.lastThreadId ||
+      readyPanelAgent,
     );
     if (hasExistingWorkerContext) {
       throw new AgentTeamError(
@@ -571,6 +572,13 @@ export class AgentTeamServiceSupport extends AgentTeamServiceContext {
       updatedAt: new Date().toISOString(),
     };
     await this.runStore.writeRun(next);
+    if (
+      run.status !== "need_human" &&
+      next.status === "need_human" &&
+      next.options.notifyMainOnHumanGate !== false
+    ) {
+      await this.trySendToMain(next, buildHumanGateMainPrompt(next));
+    }
     return next;
   }
 

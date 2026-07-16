@@ -217,6 +217,8 @@ export interface AgentTeamAgentIntervention {
 
 export interface AgentTeamRunOptions {
   autoApproveSplit: boolean;
+  /** Notify the main Agent once when the run enters a Human Gate. */
+  notifyMainOnHumanGate: boolean;
   reviewCheckpointMode?: AgentTeamReviewCheckpointMode;
   maxRepairAttempts?: number;
 }
