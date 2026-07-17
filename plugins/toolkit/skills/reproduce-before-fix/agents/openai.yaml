@@ -1,5 +1,7 @@
 interface:
+  display_name: "Reproduce Before Fix"
   short_description: "要求先在真实业务场景复现问题，再决定是否进入修复与优化"
+  default_prompt: "使用 $toolkit:reproduce-before-fix 先通过真实业务入口复现问题，再决定是否修复。"
 
 policy:
   allow_implicit_invocation: false

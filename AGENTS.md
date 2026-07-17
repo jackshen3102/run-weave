@@ -56,6 +56,8 @@
 
 ### Runweave 变更验证门禁
 
+- 任何任务只要需要实际执行 `pnpm dev:session`、`pnpm dev:status`、`pnpm dev:open` 或 `pnpm dev:stop`，必须使用 `$toolkit:runweave-dev-session` 管理准确 worktree、Session ID、profile、surface 与清理；纯概念说明或只读代码分析不触发。
+- `$toolkit:runweave-dev-session` 是 Dev Session 生命周期技能，不自动扩大为完整代码变更验收。若显式调用 `$toolkit:runweave-change-validation`，两者组合使用：前者负责 Session 操作，后者负责 patch 边界、真实行为验收和证据合同。
 - `$toolkit:runweave-change-validation` 仅在用户当前请求中显式点名时触发；不因普通代码修改、Bug 修复、功能实现、重构、运行行为、共享协议、服务生命周期或 UI/CDP 验收自动使用，也不跨请求延续触发状态。
 - 未显式调用该技能时，按当前任务执行范围相称的验证，不默认启动完整 Dev Session。显式调用后，才应用以下全部门禁。
 - 顺序固定为：完成最小代码修改 → 固定本次 patch 边界 → 在只包含本次 patch 的 source root 首次执行无显式 profile 的 `pnpm dev:session --dry-run --json` → 检查影响闭包 → 启动、验收并停止 Dev Session。

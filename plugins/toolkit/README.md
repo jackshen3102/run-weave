@@ -28,6 +28,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `recorded-browser-mcp-verification`
 - `review-only`
 - `runweave-change-validation`
+- `runweave-dev-session`
 - `run-test-cases`
 - `shadcn`
 - `sync-branch-hard-reset`
