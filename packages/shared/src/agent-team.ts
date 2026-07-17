@@ -1,8 +1,7 @@
 import type { TerminalRuntimePreference } from "./terminal-protocol";
 import type { AgentTeamWorkerRole } from "./agent-team-worker";
-import type {
-  AgentTeamAgentIntervention,
-} from "./agent-team-intervention";
+import type { AgentTeamAgentIntervention } from "./agent-team-intervention";
+import type { AgentTeamAcceptanceEvidence } from "./agent-team-evidence";
 
 export type {
   AgentTeamAgentIntervention,
@@ -10,6 +9,7 @@ export type {
   InterveneAgentTeamRunRequest,
 } from "./agent-team-intervention";
 export type { AgentTeamWorkerRole } from "./agent-team-worker";
+export type { AgentTeamAcceptanceEvidence } from "./agent-team-evidence";
 
 /**
  * Agent-team / loop-engineer data model. This replaces the retired
@@ -25,27 +25,6 @@ export type AgentTeamStatus =
   | "need_human"
   | "done"
   | "failed";
-
-/** Worker role catalog — mirrors the prototype's role dots. */
-export interface AgentTeamAcceptanceEvidence {
-  type:
-    | "screenshot"
-    | "dom"
-    | "text"
-    | "command"
-    | "event"
-    | "json"
-    | "log"
-    | "code";
-  /** Short human-facing title, e.g. "状态推送". */
-  label: string;
-  /** One-line human-facing explanation. */
-  summary: string;
-  /** Optional extra detail for expanded evidence views. */
-  detail?: string;
-  /** Raw evidence pointer or text. */
-  ref: string;
-}
 
 export type AgentTeamAcceptanceStatus = "pass" | "fail" | "pending";
 export type AgentTeamAcceptanceSource =

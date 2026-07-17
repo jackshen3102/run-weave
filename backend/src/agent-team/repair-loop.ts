@@ -1,5 +1,4 @@
 import type {
-  AgentTeamAcceptanceCase,
   AgentTeamFindingDecision,
   AgentTeamFixVerification,
   AgentTeamLoop,
@@ -15,6 +14,10 @@ import {
   isValidInvariantKey,
   rawBlockingReviewFindings,
 } from "./repair-review-contract";
+import {
+  findingCaseTraceabilityErrors,
+  isTraceableProductCase,
+} from "./repair-loop-traceability";
 export const DEFAULT_MAX_REPAIR_ATTEMPTS = 3;
 export const MIN_REPAIR_ATTEMPTS = 1;
 export const MAX_REPAIR_ATTEMPTS = 5;
@@ -38,6 +41,7 @@ export {
   rawBlockingReviewFindings,
   reviewFindingContractErrors,
 } from "./repair-review-contract";
+export { isTraceableProductCase } from "./repair-loop-traceability";
 export type CodeFixHandoffValidation =
   | { status: "valid"; repairKeys: string[] }
   | { status: "invalid"; errors: string[] }
@@ -64,14 +68,6 @@ export function blockingReviewFindings(
     const decision = findFindingDecision(run, finding, reviewTarget);
     return !decision || decision.disposition === "blocking";
   });
-}
-
-export function isTraceableProductCase(item: AgentTeamAcceptanceCase): boolean {
-  return Boolean(
-    item.sourceCaseId &&
-    item.sourceFilePath &&
-    !/code review|代码审查|code_review/i.test(item.text),
-  );
 }
 
 export function findFindingDecision(
@@ -214,9 +210,7 @@ export function resolveRepairTargets(
         invariant: finding.summary,
         verificationMode: finding.verificationMode,
         sourceEvidenceRefs: Array.from(
-          new Set(
-            finding.reproduction?.evidence.map((item) => item.ref) ?? [],
-          ),
+          new Set(finding.reproduction?.evidence.map((item) => item.ref) ?? []),
         ),
         ...(finding.reproduction
           ? { sourceReproduction: finding.reproduction }
@@ -307,34 +301,6 @@ export function foldRepairGateResult(params: {
     loop: { ...params.loop, repairCycles },
     exhausted,
   };
-}
-
-function findingCaseTraceabilityErrors(
-  run: AgentTeamRun,
-  finding: AgentTeamOutboxFinding,
-): string[] {
-  const impacts = finding.caseImpacts ?? [];
-  if (impacts.length === 0) {
-    return ["caseImpacts 为空"];
-  }
-  return impacts.flatMap((impact) => {
-    const errors: string[] = [];
-    const acceptanceCase = run.acceptance.find(
-      (item) => item.caseId === impact.caseId,
-    );
-    if (!acceptanceCase) {
-      errors.push(`${impact.caseId} 不存在`);
-    } else if (!isTraceableProductCase(acceptanceCase)) {
-      errors.push(`${impact.caseId} 不是可追溯产品 Case`);
-    }
-    if (!impact.summary.trim()) {
-      errors.push(`${impact.caseId} 缺少影响说明`);
-    }
-    if (impact.evidence.length === 0) {
-      errors.push(`${impact.caseId} 缺少影响证据`);
-    }
-    return errors;
-  });
 }
 
 function resolveReviewTarget(
@@ -543,8 +509,7 @@ export function validateCodeFixHandoff(
     }
     if (cycle.verificationMode === "structural") {
       const sourceEvidence =
-        sourceReproduction?.evidence.map((evidence) => evidence.ref) ??
-        [];
+        sourceReproduction?.evidence.map((evidence) => evidence.ref) ?? [];
       const sourceRefs =
         sourceReproduction?.mode === "review_harness"
           ? Array.from(
