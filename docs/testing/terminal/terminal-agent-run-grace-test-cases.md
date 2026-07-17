@@ -14,6 +14,8 @@
 - Agent launch response 提供 `operationId`、`panelId` 和 `tmuxPaneId`。
 - `RUNWEAVE_TERMINAL_AGENT_OPERATION_ID` 随 launch command 注入 Agent 进程。
 - grace 从后端观察到目标 Panel `activeCommand` 由 Agent command 变为 `null` 的时刻开始计算，长度为 30 秒。
+- `Stop` 和 hook-stop completion 只能信任后端当前目标 Panel 的 `activeCommand` 或同 scope 的有效 grace 租约；请求体里的 stale `commandName` 不能覆盖 `activeCommand=null`、普通命令或已删除活动租约的后端事实。
+- 单 running Panel legacy Stop 被解析并 recorded 时，HTTP body 必须返回 resolved `panelId`，且不得创建额外的 Session-scope activity。
 - 本仓库不新增 backend 单测；测试必须创建真实 Session/Panel 并启动真实 Codex。
 
 ## 必跑命令
@@ -37,6 +39,7 @@ git diff --check
 | 一致                  | 一致                        | Agent command | 不适用     | recorded                             |
 | 一致                  | 一致                        | null          | 30 秒内    | recorded                             |
 | 一致                  | 一致                        | null          | 超过 30 秒 | ignored/inactive_agent               |
+| 一致                  | 一致                        | 普通非 Agent | 无租约     | ignored/inactive_agent               |
 | 不一致                | 任意                        | null          | 任意       | ignored，不得消费其它 Panel 的 grace |
 | 一致                  | 过期/缺失且 generation 存在 | 任意          | 任意       | ignored/operation_identity_mismatch  |
 | 无 identity 且多 Pane | 任意                        | 任意          | 任意       | ignored/panel_identity_mismatch      |
@@ -102,6 +105,7 @@ git diff --check
 **失败判断**
 
 - 返回 `recorded`，或重新把 Panel B/Session 写为 `agent_idle/codex`。
+- 请求体带有 stale `commandName=codex` 时绕过过期 grace 或当前非 Agent 命令。
 
 **验证方式**
 
@@ -178,7 +182,7 @@ git diff --check
 **预期结果（Then）**
 
 - 请求解析到唯一 running Panel并 `recorded`。
-- 响应返回该 Panel ID，不创建第二份 Session 级活动事实。
+- 响应 body 和 backend 日志都返回该 Panel ID，不创建第二份 Session 级活动事实。
 
 **失败判断**
 

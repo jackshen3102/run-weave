@@ -65,6 +65,7 @@
 | Terminal 事件恢复与架构问题测试          | testing/terminal/terminal-event-recovery-test-cases.md                                 |
 | Terminal activeCommand 一致性测试        | testing/terminal/terminal-active-command-consistency-test-cases.md                     |
 | Terminal Agent Prepare 状态一致性测试    | testing/terminal/terminal-agent-prepare-state-consistency-test-cases.md                |
+| Terminal Panel Agent 活动租约测试        | testing/terminal/terminal-agent-run-grace-test-cases.md                                |
 | App 设备在线测试                         | testing/app/app-device-online-test-cases.md                                            |
 | app-server CLI 启动测试                  | testing/app/app-server-event-center-test-cases.md#as-ec-008-cli-owned-app-server-start |
 | app-server 状态同步测试                  | testing/app/app-server-state-sync-test-cases.md                                        |
