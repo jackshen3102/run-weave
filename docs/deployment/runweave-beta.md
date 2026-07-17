@@ -2,7 +2,7 @@
 
 Runweave Beta 是 macOS 本机开发通道。正式版 Runweave（Stable）继续承载终端和开发上下文；当前源码 worktree 通过 Beta 控制命令构建并部署到本机 Beta 实例，作为被开发、重启、验证和回滚的目标。
 
-Beta 以 `instanceId` 区分本机实例。默认实例是 `default`；需要并行验证不同 worktree 或不同 revision 时，为每个目标显式传入 `--instance <id>`。合法 ID 只允许 1 到 32 位小写字母、数字和连字符，不能以连字符开头或结尾。
+日常开发不再自行命名 Beta 实例。`pnpm dev:session` 从固定的 `pool-01` 至 `pool-05` 中分配一个槽位，并用 lease 隔离并行 worktree；调用方只保存返回的 `devSessionId`。`default`、`agent-a` 等自定义实例只作为既有 legacy 资源被只读盘点、停止或显式清理，不能再更新、打开或回滚。
 
 `dev-session --profile beta` 使用独立的固定池策略：只会分配 `pool-01` 至 `pool-05`，不再按 Session 创建新的 App 或实例目录。`--dry-run` 只返回非权威容量快照；真实 start 才获取 lease，stop 完成进程身份校验、mutable reset、release retention 和 metadata 落盘后才释放。`update`、`open`、`rollback` 等低层可变操作只接受固定池 ID；既有 legacy instance 只允许只读盘点、停止和显式 cleanup，不再允许创建或更新。
 
@@ -13,15 +13,13 @@ Beta 以 `instanceId` 区分本机实例。默认实例是 `default`；需要并
 ```text
 Stable Runweave 中修改代码
         ↓
-选择或创建 Beta 实例
+预览 planner 的影响范围
         ↓
-预览该实例的更新计划
-        ↓
-构建并更新 Beta
+获取池槽位并构建、更新 Beta
         ↓
 在 Beta 中验证真实行为
         ↓
-继续下一轮修改
+停止 Session，再继续下一轮修改
 ```
 
 ## 适用范围与前置条件
@@ -124,7 +122,7 @@ BETA · <version> · <source revision>
 rw health --json
 ```
 
-Beta terminal 的输出应满足 `reachable=true`、`authenticated=true`、`profile=beta`，且 `baseUrl` 与 `pnpm runweave:beta:status --json` 返回的 `backend.baseUrl` 一致。Stable terminal 应连接 Stable backend，Beta terminal 应连接 Beta backend。
+Beta terminal 的输出应满足 `reachable=true`、`authenticated=true`、`profile=beta`，且 `baseUrl` 与 `pnpm dev:status --session <devSessionId> --json` 返回的 `backend.baseUrl` 一致。Stable terminal 应连接 Stable backend，Beta terminal 应连接 Beta backend。
 
 ### Beta 登录账号
 
@@ -156,19 +154,22 @@ pnpm dev:session --json
 
 ## 固定隔离边界
 
-| 资源                  | Beta 路径或身份                                                                |
-| --------------------- | ------------------------------------------------------------------------------ |
-| Desktop App           | `/Applications/Runweave Beta <instanceId>.app`                                 |
-| bundle id             | `com.runweave.desktop.beta.<instanceId>`                                       |
-| Electron userData     | `~/Library/Application Support/Runweave Beta/instances/<instanceId>/user-data` |
-| backend profile       | `<userData>/browser-profile`                                                   |
-| CLI profile           | `<userData>/cli/config.json`                                                   |
-| Desktop Runtime       | `<userData>/runtime`                                                           |
-| 更新状态              | `<userData>/update/state.json`                                                 |
-| App Server            | `~/.runweave/app-server-beta/<instanceId>`                                     |
-| App Server cloud sync | `~/.runweave/app-server-beta/<instanceId>/cloud-sync`                          |
-| Desktop CDP           | `status.cdp.desktop.endpoint`，动态 loopback endpoint                          |
-| Terminal Browser CDP  | `status.cdp.terminalBrowser.endpoint`，动态 loopback endpoint                  |
+以下 `<slotId>` 只能是 `pool-01` 至 `pool-05`：
+
+| 资源                  | Beta 路径或身份                                                    |
+| --------------------- | ------------------------------------------------------------------ |
+| Desktop App           | `/Applications/Runweave Beta <slotId>.app`                         |
+| bundle id             | `com.runweave.desktop.beta.<slotId>`                               |
+| 实例根目录            | `~/Library/Application Support/Runweave Beta/instances/<slotId>`   |
+| Electron userData     | `<实例根目录>/user-data`                                           |
+| backend profile       | `<userData>/browser-profile`                                       |
+| CLI profile           | `<userData>/cli/config.json`                                       |
+| Desktop Runtime       | `<实例根目录>/runtime`                                             |
+| 更新状态              | `<实例根目录>/warm-state/state.json`                               |
+| App Server            | `~/.runweave/app-server-beta/<slotId>`                             |
+| App Server cloud sync | `~/.runweave/app-server-beta/<slotId>/cloud-sync`                  |
+| Desktop CDP           | `dev:open --surface desktop` 返回的动态 loopback endpoint          |
+| Terminal Browser CDP  | `dev:open --surface terminal-browser` 返回的动态 loopback endpoint |
 
 Beta 构建不会安装全局 completion hook，不显示或启用正式版自动更新入口。Beta backend 启动后会在独立 CLI profile 中 refresh/login，并把动态 backend URL 和该 profile 路径注入新 terminal；不会读取或覆盖 `~/.runweave/config.json`。
 
@@ -189,18 +190,19 @@ git diff --check
 
 ### 页面与 CDP 验证
 
-先执行 `pnpm runweave:beta:status --instance <id> --json`，按验收目标复制实际 endpoint，再使用 `$toolkit:playwright-cli` 连接目标页面：
+先从当前 Session 解析 surface，再使用 `$toolkit:playwright-cli` 显式附着该 endpoint：
 
 ```bash
-playwright-cli -s=runweave-beta-agent-a-desktop attach --cdp="<status.cdp.desktop.endpoint>"
-playwright-cli -s=runweave-beta eval \
+pnpm dev:open --session <devSessionId> --surface desktop --json
+playwright-cli -s=runweave-beta-desktop attach --cdp="<dev:open 返回的 cdpEndpoint>"
+playwright-cli -s=runweave-beta-desktop eval \
   "JSON.stringify({title: document.title, channel: document.documentElement.dataset.runweaveChannel, revision: document.documentElement.dataset.runweaveSourceRevision})"
-playwright-cli -s=runweave-beta detach
+playwright-cli -s=runweave-beta-desktop detach
 ```
 
-预期 `channel` 为 `beta`，标题和页面 revision 与 status 中的 `source.gitHead` 对应。dirty 或 untracked 内容不会进入页面 revision；是否部署了脏工作区必须同时检查 `source.dirty` 和更新状态中的 worktree snapshot。桌面并存、退出、恢复和窗口身份使用 `$computer-use` 验证。
+预期 `channel` 为 `beta`，标题和页面 revision 与 `dev:status` 中的 `source.revision` 对应。dirty 或 untracked 内容不会进入页面 revision；是否部署了脏工作区必须同时检查 `source.dirty` 和更新状态中的 worktree snapshot。桌面并存、退出、恢复和窗口身份使用 `$computer-use` 验证。
 
-Terminal Browser 验收使用 `status.cdp.terminalBrowser.endpoint`。Desktop CDP 和 Terminal Browser CDP 是不同 surface；不要用一个 endpoint 代替另一个，也不要使用全局 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 或 Playwright 默认配置猜测目标。
+Terminal Browser 验收先执行 `pnpm dev:open --session <devSessionId> --surface terminal-browser --json`，再附着其返回的 endpoint。Desktop CDP 和 Terminal Browser CDP 是不同 surface；不要用一个 endpoint 代替另一个，也不要使用全局 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 或 Playwright 默认配置猜测目标。
 
 完整回归按 [Runweave Beta 自举开发通道测试用例](../testing/platform/runweave-beta-self-hosting-test-cases.md) 执行。静态命令、status 或代码阅读不能代替该文档要求的真实桌面与页面行为证据。
 
@@ -217,13 +219,13 @@ App 回滚副本保存在 `/Applications/.Runweave Beta pool-0N.rollback-<timest
 更新日志位于：
 
 ```text
-~/Library/Application Support/Runweave Beta/instances/<instanceId>/user-data/update/logs/
+~/Library/Application Support/Runweave Beta/instances/<slotId>/diagnostics/logs/
 ```
 
 失败摘要和对应日志路径同时出现在：
 
 ```bash
-pnpm runweave:beta:status --instance <id> --json
+pnpm dev:status --session <devSessionId> --json
 ```
 
 ### `dry-run` 意外选择完整 App

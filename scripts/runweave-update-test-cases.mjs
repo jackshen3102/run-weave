@@ -446,7 +446,7 @@ const cases = [
         ],
         [
           "appBackupPath",
-          "/Applications/Runweave.app",
+          "/Applications/.Runweave Beta default.rollback-123.app",
           /app backup path must be \/Applications\/\.Runweave Beta default\.rollback/,
         ],
       ];

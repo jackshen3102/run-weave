@@ -45,6 +45,13 @@ export async function runStop(options, sourceRoot, helpers) {
         ownerSessionId: manifest.devSessionId,
         leaseNonce: betaSlot.leaseNonce,
       });
+      if (!(await betaSlotProcessesAreAbsent(betaSlot.assignedSlotId))) {
+        throw new DevSessionError(
+          "Beta slot processes remain; refusing to reset or release the slot",
+          5,
+          { slotId: betaSlot.assignedSlotId, resetUnsafe: true },
+        );
+      }
       const reset = await resetBetaSlotMutableState({
         slotId: betaSlot.assignedSlotId,
       });

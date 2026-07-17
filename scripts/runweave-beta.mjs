@@ -37,7 +37,6 @@ import {
   purgeLegacyBeta,
   restoreLegacyBeta,
 } from "./runweave-beta-legacy.mjs";
-import { migrateLegacyDefault } from "./runweave-beta-migration.mjs";
 
 function parseControlArgs(args) {
   const options = {
@@ -489,10 +488,6 @@ async function main() {
     await withBetaLock(paths, () => rollback(paths));
     return;
   }
-  if (command === "migrate") {
-    await withBetaLock(paths, () => migrateLegacyDefault(paths, update));
-    return;
-  }
   if (command === "verify") {
     await verify(paths);
     return;
@@ -516,7 +511,7 @@ async function main() {
     return;
   }
   throw new Error(
-    "Usage: node scripts/runweave-beta.mjs <update|status|open|stop|rollback|migrate|verify|legacy-inventory|legacy-cleanup|legacy-restore|legacy-purge> [--instance id]",
+    "Usage: node scripts/runweave-beta.mjs <update|status|open|stop|rollback|verify|legacy-inventory|legacy-cleanup|legacy-restore|legacy-purge> [--instance id]",
   );
 }
 
