@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -150,6 +150,53 @@ export function runToolkitHookCommand(
   });
 }
 
+export async function verifyTmuxPaneContextFailure(params) {
+  const requestsBeforeFailure = params.requests.length;
+  const appServerRequestsBeforeFailure = params.appServerRequests.length;
+  await runToolkitHookCommand(params.command, "trae", {
+    HOME: params.homeDir,
+    RUNWEAVE_TOOLKIT_PLUGIN_ROOT: toolkitDir,
+    RUNWEAVE_APP_SERVER_URL: params.appServerUrl,
+    RUNWEAVE_APP_SERVER_TOKEN: "app-server-token",
+    RUNWEAVE_HOOK_ENDPOINT: params.endpoint,
+    RUNWEAVE_COMPLETION_HOOK_ENDPOINT: params.completionEndpoint,
+    RUNWEAVE_HOOK_TOKEN: "token-tmux-failure",
+    RUNWEAVE_TERMINAL_SESSION_ID: "terminal-tmux-failure",
+    RUNWEAVE_TERMINAL_PANEL_ID: "stale-panel",
+    RUNWEAVE_PROJECT_ID: "project-tmux-failure",
+    RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
+    RUNWEAVE_VERIFY_TMUX_FAIL: "1",
+    TMUX: "/tmp/runweave-verify.sock,1,0",
+    TMUX_BINARY: params.fakeTmuxPath,
+  });
+
+  const appServerHook =
+    params.appServerRequests[appServerRequestsBeforeFailure];
+  assert.equal(appServerHook.kind, "agent.hook");
+  assert.equal(appServerHook.payload.panelId, null);
+  assert.equal(appServerHook.scope.terminalPanelId, null);
+  assert.equal(appServerHook.payload.tmuxPaneId, "%13");
+  const backendHook = params.requests[requestsBeforeFailure];
+  assert.equal(backendHook.url, "/internal/terminal/agent-hook");
+  assert.equal(backendHook.body.panelId, undefined);
+  assert.equal(backendHook.body.tmuxPaneId, "%13");
+}
+
+export async function writeAppServerDiscoveryFiles(stateDir, port, token) {
+  await mkdir(stateDir, { recursive: true });
+  await writeFile(
+    path.join(stateDir, "app-server.lock.json"),
+    `${JSON.stringify({
+      pid: process.pid,
+      host: "127.0.0.1",
+      port,
+      startedAt: new Date().toISOString(),
+      version: "0.1.0",
+    })}\n`,
+  );
+  await writeFile(path.join(stateDir, "app-server-token"), `${token}\n`);
+}
+
 export async function verifyPtyProviderInference(params) {
   const requestStart = params.requests.length;
   const appServerRequestStart = params.appServerRequests.length;
@@ -197,7 +244,10 @@ export async function verifyPtyProviderInference(params) {
     ptyOptions,
   );
   assert.equal(params.appServerRequests.at(-1).payload.source, "codex");
-  assert.equal(params.appServerRequests.at(-1).payload.stateHookEvent, "UserPromptSubmit");
+  assert.equal(
+    params.appServerRequests.at(-1).payload.stateHookEvent,
+    "UserPromptSubmit",
+  );
   assert.equal(params.requests.at(-1).body.agent, "codex");
   assert.equal(params.requests.at(-1).body.query, "safe codex query");
   assert.equal(params.requests.at(-1).body.tmuxPaneId, undefined);
@@ -219,7 +269,10 @@ export async function verifyPtyProviderInference(params) {
     ptyOptions,
   );
   assert.equal(params.appServerRequests.at(-1).payload.source, "trae");
-  assert.equal(params.appServerRequests.at(-1).payload.stateHookEvent, "UserPromptSubmit");
+  assert.equal(
+    params.appServerRequests.at(-1).payload.stateHookEvent,
+    "UserPromptSubmit",
+  );
   assert.equal(params.requests.at(-1).body.agent, "trae");
   assert.equal(params.requests.at(-1).body.query, "safe trae query");
   assert.equal(params.requests.at(-1).body.tmuxPaneId, undefined);
@@ -327,18 +380,21 @@ export async function verifyPreToolHook(params) {
   assert.equal(params.appServerRequests.length, 10);
   assert.equal(params.requests[11].url, "/internal/terminal/agent-hook");
   assert.match(params.requests[11].body.activityEventId, /^[0-9a-f-]{36}$/i);
-  assert.deepEqual({ ...params.requests[11].body, activityEventId: undefined }, {
-    activityEventId: undefined,
-    terminalSessionId: "terminal-5",
-    projectId: "project-5",
-    tmuxPaneId: "%13",
-    threadId: "thread-5",
-    commandName: null,
-    rawHookEvent: "PreToolUse",
-    toolUseId: "tool-call-5",
-    toolName: "shell",
-    toolInput: { command: "pwd" },
-    agent: "codex",
-    hookEvent: "ToolRequested",
-  });
+  assert.deepEqual(
+    { ...params.requests[11].body, activityEventId: undefined },
+    {
+      activityEventId: undefined,
+      terminalSessionId: "terminal-5",
+      projectId: "project-5",
+      tmuxPaneId: "%13",
+      threadId: "thread-5",
+      commandName: null,
+      rawHookEvent: "PreToolUse",
+      toolUseId: "tool-call-5",
+      toolName: "shell",
+      toolInput: { command: "pwd" },
+      agent: "codex",
+      hookEvent: "ToolRequested",
+    },
+  );
 }

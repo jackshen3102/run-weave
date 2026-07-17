@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   assertFileMissing,
@@ -9,6 +8,8 @@ import {
   runToolkitHookCommand,
   verifyPtyProviderInference,
   verifyPreToolHook,
+  verifyTmuxPaneContextFailure,
+  writeAppServerDiscoveryFiles,
 } from "./verify-toolkit-hooks-helpers.mjs";
 import { createToolkitHookFixture } from "./verify-toolkit-hooks/fixture.mjs";
 import { verifyToolkitHookProviderGuards } from "./verify-toolkit-hooks/provider-guards.mjs";
@@ -138,11 +139,7 @@ try {
       "RUNWEAVE_APP_SERVER_HOME must target the isolated App Server",
     );
 
-    const globalAppServerHome = path.join(
-      homeDir,
-      ".runweave",
-      "app-server",
-    );
+    const globalAppServerHome = path.join(homeDir, ".runweave", "app-server");
     await writeAppServerDiscoveryFiles(
       globalAppServerHome,
       appServerPort,
@@ -194,6 +191,7 @@ try {
       RUNWEAVE_COMPLETION_HOOK_ENDPOINT: `http://127.0.0.1:${port}/internal/terminal-completion`,
       RUNWEAVE_HOOK_TOKEN: "token-1",
       RUNWEAVE_TERMINAL_SESSION_ID: "terminal-1",
+      RUNWEAVE_TERMINAL_AGENT_OPERATION_ID: "operation-1",
       RUNWEAVE_PROJECT_ID: "project-1",
       RUNWEAVE_HOOK_SUPPRESS_DESKTOP_NOTIFY: "1",
     });
@@ -215,6 +213,7 @@ try {
       projectId: "project-1",
       tmuxPaneId: "%13",
       threadId: "thread-1",
+      operationId: "operation-1",
       rawHookEvent: "Stop",
       response: "done",
       agent: "codex",
@@ -227,6 +226,7 @@ try {
     assert.equal(requests[1].body.source, "codex");
     assert.equal(requests[1].body.rawHookEvent, "Stop");
     assert.equal(requests[1].body.summary, "done");
+    assert.equal(requests[1].body.operationId, "operation-1");
 
     await runToolkitHookCommand(
       getToolkitHookCommand(toolkitHooksConfig, "Stop"),
@@ -533,6 +533,20 @@ try {
       appServerRequests,
     });
 
+    await verifyTmuxPaneContextFailure({
+      command: getToolkitHookCommand(toolkitHooksConfig, "Stop"),
+      homeDir,
+      appServerUrl: `http://127.0.0.1:${appServerPort}`,
+      endpoint,
+      completionEndpoint: `http://127.0.0.1:${port}/internal/terminal-completion`,
+      fakeTmuxPath,
+      requests,
+      appServerRequests,
+    });
+
+    const requestsBeforeIdentitylessLauncher = requests.length;
+    const appServerRequestsBeforeIdentitylessLauncher =
+      appServerRequests.length;
     await runLauncher(launcherPath, {
       HOME: homeDir,
       RUNWEAVE_APP_SERVER_URL: `http://127.0.0.1:${appServerPort}`,
@@ -544,12 +558,12 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(
       requests.length,
-      19,
+      requestsBeforeIdentitylessLauncher,
       "launcher without Runweave identity must not post any request",
     );
     assert.equal(
       appServerRequests.length,
-      20,
+      appServerRequestsBeforeIdentitylessLauncher,
       "launcher without Runweave identity must not post app-server events",
     );
   } finally {
@@ -563,18 +577,3 @@ try {
 await verifyToolkitHookProviderGuards();
 
 console.log("toolkit hook verification passed");
-
-async function writeAppServerDiscoveryFiles(stateDir, port, token) {
-  await mkdir(stateDir, { recursive: true });
-  await writeFile(
-    path.join(stateDir, "app-server.lock.json"),
-    `${JSON.stringify({
-      pid: process.pid,
-      host: "127.0.0.1",
-      port,
-      startedAt: new Date().toISOString(),
-      version: "0.1.0",
-    })}\n`,
-  );
-  await writeFile(path.join(stateDir, "app-server-token"), `${token}\n`);
-}

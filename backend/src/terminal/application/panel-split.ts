@@ -156,6 +156,12 @@ export async function createTerminalPanelSplit(
         activeCommand: null,
       }),
     );
+    await terminalSessionManager.observePanelActiveCommand(
+      session.id,
+      provisionalPanel.id,
+      null,
+      provisionalPanel.activeCommand,
+    );
     registeredPanel = true;
     await terminalSessionManager.upsertPanelWorkspace({
       terminalSessionId: session.id,
@@ -170,7 +176,14 @@ export async function createTerminalPanelSplit(
       await tmuxService.waitForPaneReady(splitTarget);
       const metadata = await tmuxService.readPaneMetadata(splitTarget, command);
       provisionalPanel.cwd = metadata?.cwd || cwd;
-      provisionalPanel.activeCommand = metadata?.activeCommand ?? null;
+      const nextActiveCommand = metadata?.activeCommand ?? null;
+      await terminalSessionManager.observePanelActiveCommand(
+        session.id,
+        provisionalPanel.id,
+        provisionalPanel.activeCommand,
+        nextActiveCommand,
+      );
+      provisionalPanel.activeCommand = nextActiveCommand;
     }
     const panel = await terminalSessionManager.upsertPanel(provisionalPanel);
     await clearMultiPanelMetadataFromSession(

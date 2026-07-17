@@ -6,6 +6,7 @@ import type {
   PersistedTerminalPanelRecord,
   PersistedTerminalPanelWorkspaceRecord,
   PersistedTerminalProjectRecord,
+  PersistedRecentAgentActivityRecord,
   PersistedTerminalSessionMetadataRecord,
   PersistedTerminalSessionRecord,
 } from "./store";
@@ -16,6 +17,7 @@ export interface TerminalSessionStoreData {
   sessions: PersistedTerminalSessionMetadataRecord[];
   panels: PersistedTerminalPanelRecord[];
   panelWorkspaces: PersistedTerminalPanelWorkspaceRecord[];
+  recentAgentActivities: PersistedRecentAgentActivityRecord[];
 }
 
 type LegacyTerminalSessionRecord = Partial<PersistedTerminalSessionRecord> & {
@@ -37,6 +39,7 @@ interface LegacyTerminalSessionStoreData {
   sessions?: LegacyTerminalSessionRecord[];
   panels?: PersistedTerminalPanelRecord[];
   panelWorkspaces?: PersistedTerminalPanelWorkspaceRecord[];
+  recentAgentActivities?: PersistedRecentAgentActivityRecord[];
 }
 
 const DEFAULT_DATA: TerminalSessionStoreData = {
@@ -44,6 +47,7 @@ const DEFAULT_DATA: TerminalSessionStoreData = {
   sessions: [],
   panels: [],
   panelWorkspaces: [],
+  recentAgentActivities: [],
 };
 
 export abstract class LowDbStoreBase {
@@ -80,6 +84,9 @@ export abstract class LowDbStoreBase {
     const sessions = [...(rawData.sessions ?? [])];
     const panels = [...(rawData.panels ?? [])];
     const panelWorkspaces = [...(rawData.panelWorkspaces ?? [])];
+    const recentAgentActivities = [
+      ...(rawData.recentAgentActivities ?? []),
+    ];
 
     if (projects.length === 0) {
       projects.push({
@@ -118,6 +125,7 @@ export abstract class LowDbStoreBase {
       sessions: normalizedSessions,
       panels,
       panelWorkspaces,
+      recentAgentActivities,
     };
     await database.write();
     this.database = database as unknown as Low<TerminalSessionStoreData>;
@@ -173,6 +181,12 @@ export abstract class LowDbStoreBase {
   protected getPanelWorkspaces(): PersistedTerminalPanelWorkspaceRecord[] {
     return (this.getDatabase().data.panelWorkspaces ?? []).map((workspace) =>
       structuredClone(workspace),
+    );
+  }
+
+  protected getRecentAgentActivities(): PersistedRecentAgentActivityRecord[] {
+    return (this.getDatabase().data.recentAgentActivities ?? []).map(
+      (activity) => structuredClone(activity),
     );
   }
 

@@ -8,6 +8,109 @@ const COMPLETION_REASONS = new Set([
   "manual",
 ]);
 
+function parseTmuxSocketPath(value) {
+  if (!value) {
+    return null;
+  }
+  const socketPath = String(value).split(",")[0]?.trim();
+  return socketPath || null;
+}
+
+function getCommandBasename(command) {
+  const normalized = String(command || "")
+    .trim()
+    .replace(/\\+/g, "/");
+  if (!normalized) {
+    return null;
+  }
+  const basename = normalized.split("/").filter(Boolean).at(-1) || normalized;
+  return basename || null;
+}
+
+function readTmuxPaneContext(spawnSync) {
+  const socketPath = parseTmuxSocketPath(process.env.TMUX);
+  const tmuxPaneId = process.env.TMUX_PANE;
+  if (!socketPath || !tmuxPaneId) {
+    return {
+      commandName: null,
+      panelId: null,
+      resolved: false,
+      reason: "missing_tmux_context",
+    };
+  }
+  const separator = "__RUNWEAVE_METADATA_FIELD__";
+  let result;
+  let attempts = 0;
+  while (attempts < 2) {
+    attempts += 1;
+    result = spawnSync(
+      process.env.TMUX_BINARY || "tmux",
+      [
+        "-S",
+        socketPath,
+        "display-message",
+        "-p",
+        "-t",
+        tmuxPaneId,
+        [
+          "#{@runweave_agent_prepare_command}",
+          "#{@runweave_agent_prepare_exit}",
+          "#{@runweave_command}",
+          "#{pane_current_command}",
+          "#{@runweave_panel_id}",
+        ].join(separator),
+      ],
+      {
+        encoding: "utf8",
+        timeout: 1000,
+        maxBuffer: 32 * 1024,
+      },
+    );
+    if (!result.error && result.status === 0) {
+      break;
+    }
+  }
+  if (!result || result.error || result.status !== 0) {
+    return {
+      commandName: null,
+      panelId: null,
+      resolved: false,
+      reason: "tmux_display_message_failed",
+      attempts,
+      status: result?.status ?? null,
+      error: result?.error instanceof Error ? result.error.message : null,
+    };
+  }
+  const [
+    agentPrepareCommand = "",
+    agentPrepareExit = "",
+    runweaveCommand = "",
+    paneCommand = "",
+    panelId = "",
+  ] = String(result.stdout || "")
+    .replace(/\r?\n$/, "")
+    .split(separator);
+  const normalizedPaneCommand = getCommandBasename(paneCommand);
+  const paneAtInteractivePrompt = ["bash", "fish", "sh", "zsh"].includes(
+    normalizedPaneCommand,
+  );
+  const pendingAgentCommand =
+    agentPrepareExit.startsWith("pending:") &&
+    (Boolean(runweaveCommand.trim()) || !paneAtInteractivePrompt)
+      ? getCommandBasename(agentPrepareCommand)
+      : null;
+  return {
+    commandName:
+      pendingAgentCommand ||
+      getCommandBasename(runweaveCommand) ||
+      getCommandBasename(paneCommand),
+    panelId: panelId.trim() || null,
+    resolved: true,
+    reason: null,
+    attempts,
+  };
+}
+
 function normalizeSummaryText(value) {
   if (typeof value !== "string") {
     return null;
@@ -64,7 +167,13 @@ function extractCompletionSummary(payload) {
 }
 
 function extractUserPrompt(payload) {
-  for (const key of ["prompt", "query", "user_prompt", "userPrompt", "message"]) {
+  for (const key of [
+    "prompt",
+    "query",
+    "user_prompt",
+    "userPrompt",
+    "message",
+  ]) {
     const normalized = normalizeSummaryText(payload?.[key]);
     if (normalized) return normalized;
   }
@@ -206,7 +315,10 @@ function toAgentHookStateEvent(normalizedEvent) {
   if (normalizedEvent === "pretooluse" || normalizedEvent === "pre_tool_use") {
     return "ToolRequested";
   }
-  if (normalizedEvent === "posttooluse" || normalizedEvent === "post_tool_use") {
+  if (
+    normalizedEvent === "posttooluse" ||
+    normalizedEvent === "post_tool_use"
+  ) {
     return "ToolCompleted";
   }
   return null;
@@ -228,6 +340,7 @@ function buildCompletionHookBody({
     rawHookEvent: String(rawEvent || "Stop"),
     hookEvent: String(rawEvent || "Stop"),
     summary: extractCompletionSummary(payload),
+    operationId: process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
     panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID || null,
     tmuxPaneId: process.env.TMUX_PANE || null,
     cwd:
@@ -281,8 +394,7 @@ function buildAppServerBaseEvent({
       panelId: terminalPanelId,
       tmuxPaneId,
       commandName: commandName || null,
-      operationId:
-        process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
+      operationId: process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
     },
   };
 }
@@ -299,9 +411,11 @@ module.exports = {
   normalizeEventName,
   normalizeReason,
   normalizeSource,
+  parseTmuxSocketPath,
   parseArgs,
   parsePayload,
   readHookEvent,
+  readTmuxPaneContext,
   readThreadId,
   toAgentHookStateEvent,
 };

@@ -19,6 +19,7 @@ export interface TerminalCompletionEvent {
   cwd: string | null;
   outboxPath?: string | null;
   summary?: string | null;
+  operationId?: string | null;
   /**
    * The panel (workspace pane) that produced the completion, when the terminal
    * session is split into multiple tmux panes. `null` for single-pane
@@ -40,6 +41,7 @@ export interface TerminalCompletionEventPayload {
   cwd: string | null;
   outboxPath?: string | null;
   summary?: string | null;
+  operationId?: string | null;
   panelId?: string | null;
   tmuxPaneId?: string | null;
 }

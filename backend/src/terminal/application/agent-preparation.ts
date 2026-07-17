@@ -63,12 +63,12 @@ export async function prepareTerminalAgent(
   if (request.panelId) {
     preparationPanelId = request.panelId;
     if (
-      !terminalSessionManager.beginPanelAgentPreparation(
+      !(await terminalSessionManager.beginPanelAgentPreparation(
         session.id,
         request.panelId,
         operationId,
         request.agent,
-      )
+      ))
     ) {
       throwPreparationError({
         phase: "cli_launch",
@@ -121,7 +121,7 @@ export async function prepareTerminalAgent(
     }
   } catch (error) {
     if (preparationPanelId) {
-      terminalSessionManager.endPanelAgentPreparation(
+      await terminalSessionManager.endPanelAgentPreparation(
         session.id,
         preparationPanelId,
         operationId,
@@ -154,12 +154,12 @@ export async function prepareTerminalAgent(
   if (!preparationPanelId) {
     preparationPanelId = panel.id;
     if (
-      !terminalSessionManager.beginPanelAgentPreparation(
+      !(await terminalSessionManager.beginPanelAgentPreparation(
         session.id,
         panel.id,
         operationId,
         request.agent,
-      )
+      ))
     ) {
       throwPreparationError({
         phase: "cli_launch",
@@ -288,7 +288,14 @@ export async function prepareTerminalAgent(
         throw new Error("Terminal agent panel missing after command submission");
       }
       if (resumingThread) {
-        currentPanel.activeCommand = request.command?.trim() || request.agent;
+        const nextActiveCommand = request.command?.trim() || request.agent;
+        await terminalSessionManager.observePanelActiveCommand(
+          session.id,
+          currentPanel.id,
+          currentPanel.activeCommand,
+          nextActiveCommand,
+        );
+        currentPanel.activeCommand = nextActiveCommand;
         currentPanel = await terminalSessionManager.upsertPanel(currentPanel);
       }
       if (
@@ -352,7 +359,7 @@ export async function prepareTerminalAgent(
         operationId,
       );
     } else {
-      terminalSessionManager.endPanelAgentPreparation(
+      await terminalSessionManager.endPanelAgentPreparation(
         session.id,
         preparationPanelId,
         operationId,

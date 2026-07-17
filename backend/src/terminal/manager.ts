@@ -161,7 +161,7 @@ export class TerminalSessionManager extends TerminalManagerPanelOperations {
 
     await this.sessionStore.insertSession(toPersistedSession(session));
     this.sessions.set(session.id, session);
-    this.observeActiveCommand(session.id, session.activeCommand);
+    await this.observeActiveCommand(session.id, null, session.activeCommand);
     return session;
   }
 }
