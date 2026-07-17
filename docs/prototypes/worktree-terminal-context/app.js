@@ -1,22 +1,17 @@
-/* global URLSearchParams, document, fetch, window */
+/* global document, fetch */
 
 const app = document.querySelector("#app");
 
-const params = new URLSearchParams(window.location.search);
-const requestedLayout = params.get("layout") ?? "rail";
-
 const viewState = {
   data: null,
-  layout: requestedLayout,
+  activeParentProjectId: null,
   activeProjectId: null,
-  activeWorktreeId: null,
-  activeSessionByWorktree: {},
-  lastWorktreeByProject: {},
-  selectedPathByWorktree: {},
-  pinnedWorktreeIds: new Set(),
+  activeSessionByProject: {},
+  lastProjectByParent: {},
+  selectedPathByProject: {},
+  pinnedProjectIds: new Set(),
   worktreeRailCollapsed: false,
   previewMode: "changes",
-  contextMenuOpen: false,
 };
 
 function escapeHtml(value) {
@@ -37,14 +32,14 @@ function allWorktrees() {
 function getActiveProject() {
   return (
     viewState.data.projects.find(
-      (project) => project.id === viewState.activeProjectId,
+      (project) => project.id === viewState.activeParentProjectId,
     ) ?? viewState.data.projects[0]
   );
 }
 
 function getActiveWorktree() {
   const match = allWorktrees().find(
-    ({ worktree }) => worktree.id === viewState.activeWorktreeId,
+    ({ worktree }) => worktree.projectId === viewState.activeProjectId,
   );
   return match?.worktree ?? getActiveProject().worktrees[0];
 }
@@ -52,7 +47,7 @@ function getActiveWorktree() {
 function getActiveSession() {
   const worktree = getActiveWorktree();
   const activeSessionId =
-    viewState.activeSessionByWorktree[worktree.id] ??
+    viewState.activeSessionByProject[worktree.projectId] ??
     worktree.lastActiveSessionId;
   return (
     worktree.sessions.find((session) => session.id === activeSessionId) ??
@@ -60,8 +55,10 @@ function getActiveSession() {
   );
 }
 
-function getWorktreeProject(worktreeId) {
-  return allWorktrees().find(({ worktree }) => worktree.id === worktreeId)
+function getWorktreeProject(projectId) {
+  return allWorktrees().find(
+    ({ worktree }) => worktree.projectId === projectId,
+  )
     ?.project;
 }
 
@@ -88,10 +85,10 @@ function renderProjectTabs() {
         .map(
           (project) => `
             <button
-              class="project-tab ${project.id === viewState.activeProjectId ? "active" : ""}"
+              class="project-tab ${project.id === viewState.activeParentProjectId ? "active" : ""}"
               type="button"
               role="tab"
-              aria-selected="${project.id === viewState.activeProjectId}"
+              aria-selected="${project.id === viewState.activeParentProjectId}"
               data-project-id="${escapeHtml(project.id)}"
             >
               ${escapeHtml(project.name)}
@@ -104,88 +101,18 @@ function renderProjectTabs() {
   `;
 }
 
-function renderTopbar({ projects = true, flatContexts = false } = {}) {
+function renderTopbar() {
   return `
     <header class="topbar">
       ${renderBrand()}
-      ${projects ? renderProjectTabs() : ""}
-      ${flatContexts ? renderFlatContextTabs() : ""}
-      ${!projects && !flatContexts ? '<div class="topbar-spacer"></div>' : ""}
+      ${renderProjectTabs()}
       <button class="icon-button quick-input-button" type="button" aria-label="快捷指令" title="快捷指令">⚡</button>
       <button class="icon-button" type="button" aria-label="More actions" title="More actions">⋯</button>
     </header>
   `;
 }
 
-function renderWorktreeTabs(project = getActiveProject()) {
-  return `
-    <div class="tabs-scroll" role="tablist" aria-label="Worktrees">
-      ${project.worktrees
-        .map(
-          (worktree) => `
-            <button
-              class="worktree-tab ${worktree.id === viewState.activeWorktreeId ? "active" : ""}"
-              type="button"
-              role="tab"
-              aria-selected="${worktree.id === viewState.activeWorktreeId}"
-              data-worktree-id="${escapeHtml(worktree.id)}"
-              title="${escapeHtml(worktree.path)}"
-            >
-              ${statusDot(worktree.status)}
-              <span class="branch-name">${escapeHtml(worktree.branch)}</span>
-              ${
-                worktree.dirtyCount
-                  ? `<span class="change-count">${worktree.dirtyCount}</span>`
-                  : ""
-              }
-            </button>
-          `,
-        )
-        .join("")}
-    </div>
-  `;
-}
-
-function renderContextBar() {
-  return `
-    <div class="context-bar">
-      <span class="context-label"><span class="branch-glyph">⑂</span> Worktrees</span>
-      ${renderWorktreeTabs()}
-    </div>
-  `;
-}
-
-function renderFlatContextTabs() {
-  return `
-    <div class="tabs-scroll" role="tablist" aria-label="Project contexts">
-      ${allWorktrees()
-        .map(
-          ({ project, worktree }) => `
-            <button
-              class="flat-context-tab ${worktree.id === viewState.activeWorktreeId ? "active" : ""}"
-              type="button"
-              role="tab"
-              aria-selected="${worktree.id === viewState.activeWorktreeId}"
-              data-worktree-id="${escapeHtml(worktree.id)}"
-              title="${escapeHtml(worktree.path)}"
-            >
-              ${statusDot(worktree.status)}
-              <span class="repo-name">${escapeHtml(project.name)}</span>
-              <span>${escapeHtml(worktree.branch)}</span>
-              ${
-                worktree.dirtyCount
-                  ? `<span class="change-count">${worktree.dirtyCount}</span>`
-                  : ""
-              }
-            </button>
-          `,
-        )
-        .join("")}
-    </div>
-  `;
-}
-
-function renderSessionTab(session, worktree, terminalOwned = false) {
+function renderSessionTab(session, worktree) {
   const activeSession = getActiveSession();
   const isActive = activeSession?.id === session.id;
   return `
@@ -195,12 +122,11 @@ function renderSessionTab(session, worktree, terminalOwned = false) {
       role="tab"
       aria-selected="${isActive}"
       data-session-id="${escapeHtml(session.id)}"
-      data-worktree-id="${escapeHtml(worktree.id)}"
+      data-context-project-id="${escapeHtml(worktree.projectId)}"
       title="${escapeHtml(`${session.name} · ${worktree.branch}`)}"
     >
       ${statusDot(session.status)}
       <span class="session-name">${escapeHtml(session.name)}</span>
-      ${terminalOwned ? `<span class="worktree-mini">${escapeHtml(worktree.branch)}</span>` : ""}
       <span class="agent-badge">${escapeHtml(session.agent)}</span>
     </button>
   `;
@@ -219,79 +145,6 @@ function renderSessionBar(worktree = getActiveWorktree()) {
   `;
 }
 
-function renderTerminalOwnedSessionBar() {
-  const project = getActiveProject();
-  return `
-    <div class="session-bar" role="tablist" aria-label="Terminal sessions grouped by worktree">
-      <div class="terminal-owned-groups">
-        ${project.worktrees
-          .map(
-            (worktree) => `
-              <div class="terminal-owned-group">
-                <div class="terminal-owned-group-label" title="${escapeHtml(worktree.path)}">
-                  ${statusDot(worktree.status)}
-                  <span>${escapeHtml(worktree.branch)}</span>
-                </div>
-                ${worktree.sessions
-                  .map((session) => renderSessionTab(session, worktree, true))
-                  .join("")}
-              </div>
-            `,
-          )
-          .join("")}
-        <button class="session-add" type="button" aria-label="New terminal" title="New terminal">+</button>
-      </div>
-    </div>
-  `;
-}
-
-function renderContextTrigger() {
-  const project = getActiveProject();
-  const worktree = getActiveWorktree();
-  return `
-    <button
-      class="context-trigger"
-      type="button"
-      data-toggle-context-menu="true"
-      aria-expanded="${viewState.contextMenuOpen}"
-    >
-      ${statusDot(worktree.status)}
-      <strong>${escapeHtml(project.name)}</strong>
-      <span>/</span>
-      <span>${escapeHtml(worktree.branch)}</span>
-      <span>⌄</span>
-    </button>
-  `;
-}
-
-function renderContextPopover(position = "") {
-  if (!viewState.contextMenuOpen) return "";
-  return `
-    <div class="context-popover ${position}" role="dialog" aria-label="Switch worktree">
-      <div class="popover-head">Switch context</div>
-      ${allWorktrees()
-        .map(
-          ({ project, worktree }) => `
-            <button
-              class="popover-item ${worktree.id === viewState.activeWorktreeId ? "active" : ""}"
-              type="button"
-              data-worktree-id="${escapeHtml(worktree.id)}"
-            >
-              <span>
-                <strong>${escapeHtml(project.name)} · ${escapeHtml(worktree.branch)}</strong>
-                <span>${escapeHtml(worktree.path)}</span>
-              </span>
-              <span class="popover-meta">
-                ${worktree.dirtyCount ? `${worktree.dirtyCount} changes` : "clean"}
-              </span>
-            </button>
-          `,
-        )
-        .join("")}
-    </div>
-  `;
-}
-
 function classifyTerminalLine(line) {
   if (line.startsWith("$")) return "command";
   if (line.includes("ready") || line.includes("Done")) return "success";
@@ -299,10 +152,7 @@ function classifyTerminalLine(line) {
   return "";
 }
 
-function renderTerminalPanel({
-  compactTrigger = false,
-  showContextHeader = true,
-} = {}) {
+function renderTerminalPanel({ showContextHeader = true } = {}) {
   const worktree = getActiveWorktree();
   const session = getActiveSession();
   return `
@@ -310,7 +160,7 @@ function renderTerminalPanel({
       ${
         showContextHeader
           ? `<header class="terminal-context-header">
-              ${compactTrigger ? renderContextTrigger() : `<span>${statusDot(worktree.status)}</span><strong>${escapeHtml(worktree.branch)}</strong>`}
+              <span>${statusDot(worktree.status)}</span><strong>${escapeHtml(worktree.branch)}</strong>
               <span class="cwd">${escapeHtml(session.cwd)}</span>
               <span>${escapeHtml(session.agent)}</span>
             </header>`
@@ -335,7 +185,7 @@ function renderTerminalPanel({
 
 function findSelectedItem(worktree, mode) {
   const items = mode === "changes" ? worktree.changes : worktree.files;
-  const storedPath = viewState.selectedPathByWorktree[worktree.id];
+  const storedPath = viewState.selectedPathByProject[worktree.projectId];
   return (
     items.find((item) => item.path === storedPath) ??
     items.find((item) => item.path === worktree.selectedFilePath) ??
@@ -489,32 +339,6 @@ function renderWorkspaceBody(options = {}) {
   `;
 }
 
-function renderNestedLayout() {
-  return `
-    ${renderTopbar()}
-    ${renderContextBar()}
-    ${renderSessionBar()}
-    ${renderWorkspaceBody()}
-  `;
-}
-
-function renderFlatLayout() {
-  return `
-    ${renderTopbar({ projects: false, flatContexts: true })}
-    ${renderSessionBar()}
-    ${renderWorkspaceBody()}
-  `;
-}
-
-function renderCompactLayout() {
-  return `
-    ${renderTopbar()}
-    ${renderSessionBar()}
-    ${renderWorkspaceBody({ compactTrigger: true })}
-    ${renderContextPopover("compact-position")}
-  `;
-}
-
 function getSortedWorktrees(project) {
   return project.worktrees
     .map((worktree, index) => ({ worktree, index }))
@@ -522,8 +346,12 @@ function getSortedWorktrees(project) {
       if (left.worktree.isPrimary !== right.worktree.isPrimary) {
         return left.worktree.isPrimary ? -1 : 1;
       }
-      const leftPinned = viewState.pinnedWorktreeIds.has(left.worktree.id);
-      const rightPinned = viewState.pinnedWorktreeIds.has(right.worktree.id);
+      const leftPinned = viewState.pinnedProjectIds.has(
+        left.worktree.projectId,
+      );
+      const rightPinned = viewState.pinnedProjectIds.has(
+        right.worktree.projectId,
+      );
       if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
       const activityDifference =
         Date.parse(right.worktree.lastActivityAt ?? 0) -
@@ -577,9 +405,9 @@ function renderRail() {
             (worktree) => `
             <div class="rail-worktree-row">
               <button
-                class="rail-worktree-button ${worktree.id === viewState.activeWorktreeId ? "active" : ""}"
+                class="rail-worktree-button ${worktree.projectId === viewState.activeProjectId ? "active" : ""}"
                 type="button"
-                data-worktree-id="${escapeHtml(worktree.id)}"
+                data-context-project-id="${escapeHtml(worktree.projectId)}"
               >
                 ${statusDot(worktree.status)}
                 <span class="rail-copy">
@@ -591,14 +419,14 @@ function renderRail() {
                 worktree.isPrimary
                   ? `<span class="rail-pin-button active permanent" role="img" aria-label="当前项目，始终置顶" title="当前项目，始终置顶">${renderPinIcon(true)}</span>`
                   : `<button
-                      class="rail-pin-button ${viewState.pinnedWorktreeIds.has(worktree.id) ? "active" : ""}"
+                      class="rail-pin-button ${viewState.pinnedProjectIds.has(worktree.projectId) ? "active" : ""}"
                       type="button"
-                      data-toggle-pinned-worktree="${escapeHtml(worktree.id)}"
-                      aria-label="${viewState.pinnedWorktreeIds.has(worktree.id) ? "取消固定" : "固定到顶部"} ${escapeHtml(worktree.name)}"
-                      aria-pressed="${viewState.pinnedWorktreeIds.has(worktree.id)}"
-                      title="${viewState.pinnedWorktreeIds.has(worktree.id) ? "取消固定" : "固定到顶部"}"
+                      data-toggle-pinned-project="${escapeHtml(worktree.projectId)}"
+                      aria-label="${viewState.pinnedProjectIds.has(worktree.projectId) ? "取消固定" : "固定到顶部"} ${escapeHtml(worktree.name)}"
+                      aria-pressed="${viewState.pinnedProjectIds.has(worktree.projectId)}"
+                      title="${viewState.pinnedProjectIds.has(worktree.projectId) ? "取消固定" : "固定到顶部"}"
                     >
-                      ${renderPinIcon(viewState.pinnedWorktreeIds.has(worktree.id))}
+                      ${renderPinIcon(viewState.pinnedProjectIds.has(worktree.projectId))}
                     </button>`
               }
             </div>
@@ -623,41 +451,10 @@ function renderRailLayout() {
   `;
 }
 
-function renderTerminalOwnedLayout() {
-  const worktree = getActiveWorktree();
-  return `
-    ${renderTopbar()}
-    ${renderTerminalOwnedSessionBar()}
-    <div class="context-summary">
-      ${statusDot(worktree.status)}
-      <strong>${escapeHtml(worktree.branch)}</strong>
-      <span class="summary-path">${escapeHtml(worktree.path)}</span>
-      ${worktree.dirtyCount ? `<span class="change-count">${worktree.dirtyCount}</span>` : ""}
-    </div>
-    ${renderWorkspaceBody()}
-  `;
-}
-
 function render() {
-  const validLayout = viewState.data.layouts.some(
-    (layout) => layout.id === viewState.layout,
-  );
-  if (!validLayout) viewState.layout = "rail";
-
-  const layoutMarkup =
-    viewState.layout === "flat"
-      ? renderFlatLayout()
-      : viewState.layout === "compact"
-        ? renderCompactLayout()
-        : viewState.layout === "rail"
-          ? renderRailLayout()
-          : viewState.layout === "terminal-owned"
-            ? renderTerminalOwnedLayout()
-            : renderNestedLayout();
-
   app.innerHTML = `
-    <section class="product-frame" data-layout="${escapeHtml(viewState.layout)}">
-      ${layoutMarkup}
+    <section class="product-frame" data-layout="rail">
+      ${renderRailLayout()}
     </section>
   `;
 }
@@ -665,24 +462,23 @@ function render() {
 function selectProject(projectId) {
   const project = viewState.data.projects.find((item) => item.id === projectId);
   if (!project) return;
-  viewState.activeProjectId = project.id;
-  viewState.activeWorktreeId =
-    viewState.lastWorktreeByProject[project.id] ?? project.worktrees[0]?.id;
-  viewState.contextMenuOpen = false;
+  viewState.activeParentProjectId = project.id;
+  viewState.activeProjectId =
+    viewState.lastProjectByParent[project.id] ??
+    project.worktrees[0]?.projectId;
 }
 
-function selectWorktree(worktreeId) {
-  const project = getWorktreeProject(worktreeId);
+function selectWorktreeProject(projectId) {
+  const project = getWorktreeProject(projectId);
   if (!project) return;
-  viewState.activeProjectId = project.id;
-  viewState.activeWorktreeId = worktreeId;
-  viewState.lastWorktreeByProject[project.id] = worktreeId;
-  viewState.contextMenuOpen = false;
+  viewState.activeParentProjectId = project.id;
+  viewState.activeProjectId = projectId;
+  viewState.lastProjectByParent[project.id] = projectId;
 }
 
-function selectSession(sessionId, worktreeId) {
-  selectWorktree(worktreeId);
-  viewState.activeSessionByWorktree[worktreeId] = sessionId;
+function selectSession(sessionId, projectId) {
+  selectWorktreeProject(projectId);
+  viewState.activeSessionByProject[projectId] = sessionId;
 }
 
 function setPreviewMode(mode) {
@@ -691,7 +487,7 @@ function setPreviewMode(mode) {
   const worktree = getActiveWorktree();
   const items = mode === "changes" ? worktree.changes : worktree.files;
   if (items[0]) {
-    viewState.selectedPathByWorktree[worktree.id] = items[0].path;
+    viewState.selectedPathByProject[worktree.projectId] = items[0].path;
   }
 }
 
@@ -711,28 +507,32 @@ app.addEventListener("click", (event) => {
     return;
   }
 
-  if (target.dataset.togglePinnedWorktree) {
-    const worktreeId = target.dataset.togglePinnedWorktree;
-    if (allWorktrees().find(({ worktree }) => worktree.id === worktreeId)?.worktree.isPrimary) {
+  if (target.dataset.togglePinnedProject) {
+    const projectId = target.dataset.togglePinnedProject;
+    if (
+      allWorktrees().find(
+        ({ worktree }) => worktree.projectId === projectId,
+      )?.worktree.isPrimary
+    ) {
       return;
     }
-    if (viewState.pinnedWorktreeIds.has(worktreeId)) {
-      viewState.pinnedWorktreeIds.delete(worktreeId);
+    if (viewState.pinnedProjectIds.has(projectId)) {
+      viewState.pinnedProjectIds.delete(projectId);
     } else {
-      viewState.pinnedWorktreeIds.add(worktreeId);
+      viewState.pinnedProjectIds.add(projectId);
     }
     render();
     return;
   }
 
-  if (target.dataset.sessionId && target.dataset.worktreeId) {
-    selectSession(target.dataset.sessionId, target.dataset.worktreeId);
+  if (target.dataset.sessionId && target.dataset.contextProjectId) {
+    selectSession(target.dataset.sessionId, target.dataset.contextProjectId);
     render();
     return;
   }
 
-  if (target.dataset.worktreeId) {
-    selectWorktree(target.dataset.worktreeId);
+  if (target.dataset.contextProjectId) {
+    selectWorktreeProject(target.dataset.contextProjectId);
     render();
     return;
   }
@@ -744,17 +544,12 @@ app.addEventListener("click", (event) => {
   }
 
   if (target.dataset.filePath) {
-    viewState.selectedPathByWorktree[getActiveWorktree().id] =
+    viewState.selectedPathByProject[getActiveWorktree().projectId] =
       target.dataset.filePath;
     render();
     return;
   }
 
-  if (target.dataset.toggleContextMenu) {
-    viewState.contextMenuOpen = !viewState.contextMenuOpen;
-    render();
-    return;
-  }
 });
 
 function renderLoadError(error) {
@@ -781,25 +576,25 @@ fetch("./mock-state.json")
   })
   .then((data) => {
     viewState.data = data;
+    viewState.activeParentProjectId = data.activeParentProjectId;
     viewState.activeProjectId = data.activeProjectId;
-    viewState.activeWorktreeId =
-      params.get("worktree") ?? data.activeWorktreeId;
     for (const { project, worktree } of allWorktrees()) {
-      viewState.activeSessionByWorktree[worktree.id] =
+      viewState.activeSessionByProject[worktree.projectId] =
         worktree.lastActiveSessionId;
-      viewState.lastWorktreeByProject[project.id] ??= worktree.id;
-      viewState.selectedPathByWorktree[worktree.id] = worktree.selectedFilePath;
+      viewState.lastProjectByParent[project.id] ??= worktree.projectId;
+      viewState.selectedPathByProject[worktree.projectId] =
+        worktree.selectedFilePath;
       if (worktree.pinned) {
-        viewState.pinnedWorktreeIds.add(worktree.id);
+        viewState.pinnedProjectIds.add(worktree.projectId);
       }
     }
     const requestedWorktreeProject = getWorktreeProject(
-      viewState.activeWorktreeId,
+      viewState.activeProjectId,
     );
     if (requestedWorktreeProject) {
-      viewState.activeProjectId = requestedWorktreeProject.id;
-      viewState.lastWorktreeByProject[requestedWorktreeProject.id] =
-        viewState.activeWorktreeId;
+      viewState.activeParentProjectId = requestedWorktreeProject.id;
+      viewState.lastProjectByParent[requestedWorktreeProject.id] =
+        viewState.activeProjectId;
     }
     render();
   })

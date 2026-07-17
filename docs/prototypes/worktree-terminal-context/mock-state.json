@@ -1,30 +1,8 @@
 {
   "appName": "Runweave",
   "connection": "local",
-  "activeProjectId": "runweave",
-  "activeWorktreeId": "runweave-feature",
-  "layouts": [
-    {
-      "id": "nested",
-      "label": "A 双层上下文条"
-    },
-    {
-      "id": "flat",
-      "label": "B 扁平上下文标签"
-    },
-    {
-      "id": "compact",
-      "label": "C 紧凑选择器"
-    },
-    {
-      "id": "rail",
-      "label": "D Worktree 列表"
-    },
-    {
-      "id": "terminal-owned",
-      "label": "E 终端即上下文"
-    }
-  ],
+  "activeParentProjectId": "runweave",
+  "activeProjectId": "wt:cnVud2VhdmU:YWN0aXZpdHktZm91bmRhdGlvbg",
   "projects": [
     {
       "id": "runweave",
@@ -34,7 +12,8 @@
       "discoveryMode": "git-worktree-watch",
       "worktrees": [
         {
-          "id": "runweave-main",
+          "projectId": "runweave",
+          "parentProjectId": "runweave",
           "isPrimary": true,
           "pinned": true,
           "lastActivityAt": "2026-07-17T08:20:00.000Z",
@@ -104,7 +83,8 @@
           ]
         },
         {
-          "id": "runweave-feature",
+          "projectId": "wt:cnVud2VhdmU:YWN0aXZpdHktZm91bmRhdGlvbg",
+          "parentProjectId": "runweave",
           "isPrimary": false,
           "pinned": true,
           "lastActivityAt": "2026-07-17T08:58:00.000Z",
@@ -207,7 +187,8 @@
           ]
         },
         {
-          "id": "runweave-fix",
+          "projectId": "wt:cnVud2VhdmU:cHJldmlldy1zeW5j",
+          "parentProjectId": "runweave",
           "isPrimary": false,
           "pinned": false,
           "lastActivityAt": "2026-07-17T08:46:00.000Z",
@@ -272,7 +253,8 @@
           ]
         },
         {
-          "id": "runweave-docs",
+          "projectId": "wt:cnVud2VhdmU:ZG9jcy1pbmRleA",
+          "parentProjectId": "runweave",
           "isPrimary": false,
           "pinned": false,
           "lastActivityAt": "2026-07-17T07:35:00.000Z",
@@ -327,7 +309,8 @@
       "discoveryMode": "git-worktree-watch",
       "worktrees": [
         {
-          "id": "agent-console-main",
+          "projectId": "agent-console",
+          "parentProjectId": "agent-console",
           "isPrimary": true,
           "pinned": false,
           "lastActivityAt": "2026-07-16T11:00:00.000Z",
