@@ -94,7 +94,7 @@ async function verifyFailedRetryRestoresPreviousGeneration(check, roots) {
       },
     );
     const currentOperationId = "submitted-operation-a";
-    const began = harness.manager.beginPanelAgentPreparation(
+    const began = await harness.manager.beginPanelAgentPreparation(
       harness.session.id,
       harness.panel.id,
       currentOperationId,
@@ -346,7 +346,7 @@ async function verifyCancellationDuringDelaySendsNothing(check, roots) {
     await withControlledStartupDelay(async (clock) => {
       const preparation = prepare(harness);
       await clock.waitForTimer();
-      harness.manager.endPanelAgentPreparation(
+      await harness.manager.endPanelAgentPreparation(
         harness.session.id,
         harness.panel.id,
         harness.activePreparationOperationId(),

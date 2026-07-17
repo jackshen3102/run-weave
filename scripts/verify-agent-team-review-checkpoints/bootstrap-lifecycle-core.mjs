@@ -259,7 +259,7 @@ async function verifyCommandSubmissionReturnsStarting(check, roots) {
 async function verifyStaleHooksHaveNoSideEffects(check, roots) {
   await withHarness(roots, async (harness) => {
     const operationId = "active-operation";
-    harness.manager.beginPanelAgentPreparation(
+    await harness.manager.beginPanelAgentPreparation(
       harness.session.id,
       harness.panel.id,
       operationId,
@@ -295,7 +295,7 @@ async function verifyStaleHooksHaveNoSideEffects(check, roots) {
         { before, after, stale, missing },
       );
     } finally {
-      harness.manager.endPanelAgentPreparation(
+      await harness.manager.endPanelAgentPreparation(
         harness.session.id,
         harness.panel.id,
         operationId,
@@ -368,7 +368,7 @@ async function verifyProductionStaleHooksHaveNoSideEffects(check, roots) {
       },
     );
     const operationId = "current-production-operation";
-    const began = harness.manager.beginPanelAgentPreparation(
+    const began = await harness.manager.beginPanelAgentPreparation(
       harness.session.id,
       harness.panel.id,
       operationId,

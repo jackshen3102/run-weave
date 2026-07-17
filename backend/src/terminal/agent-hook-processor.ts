@@ -257,7 +257,8 @@ export async function processTerminalAgentHook(
     panel?.terminalState ??
     options.terminalStateService.getCurrent(session.id, session);
   const canFallbackToCurrentStateAgent =
-    input.hookEvent !== "Stop" && currentTargetState.agent === effectiveAgent;
+    currentTargetState.agent === effectiveAgent &&
+    (input.hookEvent !== "Stop" || currentThreadIdentityMatched);
 
   if (
     input.hookEvent !== "SessionStart" &&
