@@ -196,6 +196,7 @@ export function createInternalTerminalAgentHookRouter(options: {
     res.status(202).json({
       terminalState: result.terminalState,
       disposition: "recorded",
+      panelId: result.panelId,
     } satisfies AgentHookStateResponse);
   });
 

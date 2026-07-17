@@ -70,6 +70,32 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
       };
     }
 
+    let testCaseValidationError: string | null = null;
+    if (input.options?.flow === "verify_first" && planFilePath) {
+      try {
+        const loaded = await loadAcceptanceCasesFromMarkdown({
+          projectRoot,
+          requestedPath: planFilePath,
+        });
+        const verification = await this.withVerificationDigests(projectRoot, {
+          planFilePath,
+          testCaseFilePath: loaded.sourceFilePath,
+          generatedTestCaseFilePath: null,
+          acceptanceSource: "test_case_file",
+        });
+        return {
+          verification,
+          acceptance: loaded.cases,
+          startLog: `Verify First 已将输入文件 ${loaded.sourceFilePath} 识别为测试案例，生成 worker 拆分提案`,
+        };
+      } catch (error) {
+        if (!(error instanceof AgentTeamError) || error.statusCode !== 400) {
+          throw error;
+        }
+        testCaseValidationError = error.message;
+      }
+    }
+
     const acceptanceSource: AgentTeamAcceptanceSource = planFilePath
       ? "plan_file_generated"
       : "task_generated";
@@ -82,8 +108,10 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
     return {
       verification,
       acceptance: [],
-      startLog:
-        acceptanceSource === "plan_file_generated"
+      testCaseValidationError,
+      startLog: testCaseValidationError
+        ? `输入文件未通过测试案例解析：${testCaseValidationError}`
+        : acceptanceSource === "plan_file_generated"
           ? `缺少测试案例文件，已要求主 Agent 基于计划文件 ${planFilePath} 生成 docs/testing 用例`
           : "缺少测试案例文件，已要求主 Agent 基于任务描述生成 docs/testing 用例",
     };

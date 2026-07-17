@@ -8,6 +8,7 @@ import type {
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { TerminalSessionRecord } from "../terminal/manager";
 import {
+  buildBehaviorFailureCorrectionPrompt,
   buildCodeFixHandoffCorrectionPrompt,
   buildReviewFindingCorrectionPrompt,
 } from "./prompt-builders";
@@ -19,6 +20,7 @@ import {
 import { AgentTeamCompletionSignalService } from "./service-completion-signal";
 import type { AgentTeamCompletionSignalSource } from "./service-types";
 import {
+  behaviorFailureContractErrors,
   resolvePendingFindingDecision,
   reviewFindingContractErrors,
   validateCodeFixHandoff,
@@ -254,6 +256,26 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionSign
           }
         }
         const initialRound = this.resolveOutboxRound(latest, outbox);
+        const behaviorContractErrors = behaviorFailureContractErrors(
+          outbox,
+          initialRound.acceptanceResults,
+        );
+        if (behaviorContractErrors.length > 0) {
+          const correctionRun = await this.handleProtocolCorrection(
+            latest,
+            activeWorker,
+            outboxMtimeMs,
+            behaviorContractErrors,
+            (run) =>
+              buildBehaviorFailureCorrectionPrompt({
+                run,
+                errors: behaviorContractErrors,
+              }),
+            "behavior_verify reproduction",
+          );
+          await recordConsumed(correctionRun);
+          return true;
+        }
         const reviewContractErrors = reviewFindingContractErrors(
           latest,
           outbox,

@@ -231,6 +231,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
               status: "pending" as const,
               consecutiveFail: 0,
               resultSummary: null,
+              reproduction: null,
               bouncedToPanelId: null,
               recheckRequestedAt: now,
               recheckDispatchId: activeWorkerDispatch.dispatchId ?? null,

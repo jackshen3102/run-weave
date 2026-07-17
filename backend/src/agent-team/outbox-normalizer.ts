@@ -250,16 +250,34 @@ function normalizeFixVerification(
             Boolean(item),
         )
     : [];
+  const skillInvocation = normalizeSkillInvocation(record.skillInvocation);
   return {
     repairKey,
     invariant,
     reproduction,
+    ...(skillInvocation ? { skillInvocation } : {}),
     verification,
     impactedChecks,
     ...(typeof record.strategyAssessment === "string" &&
     record.strategyAssessment.trim()
       ? { strategyAssessment: record.strategyAssessment.trim() }
       : {}),
+  };
+}
+
+function normalizeSkillInvocation(
+  value: unknown,
+): AgentTeamFixVerification["skillInvocation"] | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.name !== "$toolkit:reproduce-before-fix") {
+    return null;
+  }
+  return {
+    name: "$toolkit:reproduce-before-fix",
+    evidence: normalizeEvidenceList(record.evidence),
   };
 }
 

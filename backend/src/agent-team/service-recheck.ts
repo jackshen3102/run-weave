@@ -179,6 +179,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
               status: "fail" as const,
               consecutiveFail: latestRun.loop.stableFailThreshold,
               resultSummary: `复验 worker 连续 ${MAX_RECHECK_ATTEMPTS} 次未更新 outbox`,
+              reproduction: null,
               evidence:
                 item.evidence.length > 0
                   ? item.evidence
@@ -289,6 +290,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
               ...item,
               status: "pending" as const,
               resultSummary: null,
+              reproduction: null,
               bouncedToPanelId: null,
               recheckRequestedAt: now,
               recheckDispatchId: activeWorkerDispatch.dispatchId ?? null,

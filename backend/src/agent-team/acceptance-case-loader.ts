@@ -180,6 +180,7 @@ function extractSections(lines: string[]): {
   failures: string[];
   dependencies: string[];
   tags: string[];
+  verification: string[];
 } {
   const sections = {
     preconditions: [] as string[],
@@ -188,6 +189,7 @@ function extractSections(lines: string[]): {
     failures: [] as string[],
     dependencies: [] as string[],
     tags: [] as string[],
+    verification: [] as string[],
   };
   let current: keyof typeof sections | null = null;
   for (const line of lines) {
@@ -210,57 +212,67 @@ function extractSections(lines: string[]): {
     failures: cleanMarkdownLines(sections.failures),
     dependencies: cleanMarkdownLines(sections.dependencies),
     tags: cleanMarkdownLines(sections.tags),
+    verification: cleanMarkdownLines(sections.verification),
   };
 }
 
-function parseSectionLabel(
-  line: string,
-): {
+function parseSectionLabel(line: string): {
   key:
     | "preconditions"
     | "steps"
     | "expectations"
     | "failures"
     | "dependencies"
-    | "tags";
+    | "tags"
+    | "verification";
   rest: string;
 } | null {
-  const trimmed = line.trim().replace(/^[-*+]\s+/, "");
+  const trimmed = line
+    .trim()
+    .replace(/^[-*+]\s+/, "")
+    .replace(/^(?:\*\*|__)(.*?)(?:\*\*|__)\s*(.*)$/, "$1$2");
   const match =
-    /^(前置条件|前提|步骤|操作|期望|预期结果|失败判定|失败判断|依赖|标签)\s*[:：]?\s*(.*)$/.exec(trimmed) ??
-    /^(Given(?:[(（]前置[)）])?|When(?:[(（]操作[)）])?|Then(?:[(（]预期(?:[,，]\s*可取证)?[)）])?)\s*[:：]\s*(.*)$/i.exec(trimmed);
+    /^((?:前置条件|前提)(?:[(（]Given[)）])?|(?:步骤|操作)(?:[(（]When[)）])?|(?:期望|预期结果)(?:[(（]Then[)）])?|失败判定|失败判断|依赖|标签|验证方式)\s*[:：]?\s*(.*)$/i.exec(
+      trimmed,
+    ) ??
+    /^(Given(?:[(（]前置[)）])?|When(?:[(（]操作[)）])?|Then(?:[(（]预期(?:[,，]\s*可取证)?[)）])?)\s*[:：]\s*(.*)$/i.exec(
+      trimmed,
+    );
   if (!match) {
     return null;
   }
   const label = match[1]!;
   const rest = match[2]?.trim() ?? "";
-  const normalizedLabel = label.toLowerCase();
+  const normalizedLabel = label.replace(/[(（].*?[)）]$/, "").toLowerCase();
   if (
-    label === "前置条件" ||
-    label === "前提" ||
+    normalizedLabel === "前置条件" ||
+    normalizedLabel === "前提" ||
     normalizedLabel.startsWith("given")
   ) {
     return { key: "preconditions", rest };
   }
   if (
-    label === "步骤" ||
-    label === "操作" ||
+    normalizedLabel === "步骤" ||
+    normalizedLabel === "操作" ||
     normalizedLabel.startsWith("when")
   ) {
     return { key: "steps", rest };
   }
   if (
-    label === "期望" ||
-    label === "预期结果" ||
+    normalizedLabel === "期望" ||
+    normalizedLabel === "预期结果" ||
     normalizedLabel.startsWith("then")
   ) {
     return { key: "expectations", rest };
   }
-  if (label === "失败判定" || label === "失败判断") {
+  if (normalizedLabel === "失败判定" || normalizedLabel === "失败判断") {
     return { key: "failures", rest };
   }
-  if (label === "依赖") {
+  if (normalizedLabel === "依赖") {
     return { key: "dependencies", rest };
+  }
+  if (normalizedLabel === "验证方式") {
+    return { key: "verification", rest };
   }
   return { key: "tags", rest };
 }
@@ -294,7 +306,10 @@ function extractTags(text: string): string[] {
 
 function isInsidePath(rootPath: string, targetPath: string): boolean {
   const relative = path.relative(rootPath, targetPath);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  return (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  );
 }
 
 function toPosixRelativePath(rootPath: string, targetPath: string): string {

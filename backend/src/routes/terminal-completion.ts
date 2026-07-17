@@ -162,15 +162,19 @@ export function createInternalTerminalCompletionRouter(options: {
       });
       return;
     }
+    const targetCommandSource = getCompletionSourceForCommand(
+      targetActiveCommand,
+    );
+    const reportedCommandMatchesCurrentTarget =
+      targetCommandSource === effectiveSource &&
+      targetCommandSource ===
+        getCompletionSourceForCommand(parsed.data.commandName ?? null);
     const currentCommandMatches =
       isCompletionSourceAllowedForCommand(
         effectiveSource,
         targetActiveCommand,
       ) ||
-      isCompletionSourceAllowedForCommand(
-        effectiveSource,
-        parsed.data.commandName ?? null,
-      ) ||
+      reportedCommandMatchesCurrentTarget ||
       getTerminalSessionAgent(targetPanel ?? session) === effectiveSource;
     const now = Date.now();
     const graceCommandMatches =

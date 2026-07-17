@@ -268,7 +268,7 @@ export function resolveEffectivePanelActiveCommand(
     pane.activeCommandSource === "runweave_command" &&
     isInteractiveShellActiveCommand(pane.paneCommand)
   ) {
-    return pane.paneCommand;
+    return null;
   }
   if (
     pane.activeCommandSource === "pane_current_command" &&

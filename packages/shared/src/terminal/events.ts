@@ -211,6 +211,7 @@ export type AgentHookStateResponse =
   | {
       terminalState: TerminalState;
       disposition: "recorded" | "exited";
+      panelId?: string | null;
     }
   | {
       terminalState: TerminalState;

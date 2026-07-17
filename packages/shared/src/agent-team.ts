@@ -1,8 +1,7 @@
 import type { TerminalRuntimePreference } from "./terminal-protocol";
 import type { AgentTeamWorkerRole } from "./agent-team-worker";
-import type {
-  AgentTeamAgentIntervention,
-} from "./agent-team-intervention";
+import type { AgentTeamAgentIntervention } from "./agent-team-intervention";
+import type { AgentTeamAcceptanceEvidence } from "./agent-team-evidence";
 
 export type {
   AgentTeamAgentIntervention,
@@ -10,6 +9,7 @@ export type {
   InterveneAgentTeamRunRequest,
 } from "./agent-team-intervention";
 export type { AgentTeamWorkerRole } from "./agent-team-worker";
+export type { AgentTeamAcceptanceEvidence } from "./agent-team-evidence";
 
 /**
  * Agent-team / loop-engineer data model. This replaces the retired
@@ -25,27 +25,6 @@ export type AgentTeamStatus =
   | "need_human"
   | "done"
   | "failed";
-
-/** Worker role catalog — mirrors the prototype's role dots. */
-export interface AgentTeamAcceptanceEvidence {
-  type:
-    | "screenshot"
-    | "dom"
-    | "text"
-    | "command"
-    | "event"
-    | "json"
-    | "log"
-    | "code";
-  /** Short human-facing title, e.g. "状态推送". */
-  label: string;
-  /** One-line human-facing explanation. */
-  summary: string;
-  /** Optional extra detail for expanded evidence views. */
-  detail?: string;
-  /** Raw evidence pointer or text. */
-  ref: string;
-}
 
 export type AgentTeamAcceptanceStatus = "pass" | "fail" | "pending";
 export type AgentTeamAcceptanceSource =
@@ -116,6 +95,8 @@ export interface AgentTeamAcceptanceCase {
   skipReason?: string | null;
   /** Latest per-case conclusion supplied by the verification worker. */
   resultSummary?: string | null;
+  /** Executed failure scenario supplied by behavior_verify. */
+  reproduction?: AgentTeamReviewFindingReproduction | null;
   /** Latest observed status from the behavior_verify worker. */
   status: AgentTeamAcceptanceStatus;
   /** Consecutive stable-fail rounds (debounce state); reset on pass/flip. */
@@ -143,6 +124,8 @@ export interface AgentTeamRepairCycle {
   verificationMode: AgentTeamFindingVerificationMode;
   /** Reviewer/case evidence refs that a structural repair must reproduce. */
   sourceEvidenceRefs?: string[];
+  /** Verifier-owned scenario that the code worker must reproduce unchanged. */
+  sourceReproduction?: AgentTeamReviewFindingReproduction;
   attempts: number;
   maxAttempts: number;
   firstFailedRound: number;
@@ -401,6 +384,11 @@ export interface AgentTeamFixVerification {
     validationSessionId?: string | null;
     evidence: AgentTeamAcceptanceEvidence[];
   };
+  /** Auditable proof that code invoked the mandatory reproduce-before-fix skill. */
+  skillInvocation?: {
+    name: "$toolkit:reproduce-before-fix";
+    evidence: AgentTeamAcceptanceEvidence[];
+  };
   verification: {
     status: "pass" | "fail" | "blocked";
     sameScenario: boolean;
@@ -450,6 +438,8 @@ export interface AgentTeamWorkerOutbox {
     summary?: string | null;
     skipReason?: string | null;
     evidence: AgentTeamAcceptanceEvidence[];
+    /** Required for behavior_verify failures. */
+    reproduction?: AgentTeamReviewFindingReproduction;
   }>;
 }
 

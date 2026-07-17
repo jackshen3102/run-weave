@@ -105,6 +105,48 @@ export function verifyRepairLoopContinuation(check, context) {
     ).status === "valid",
     structuralCycle,
   );
+  const executableStructuralReproduction = {
+    ...structuralCycle.sourceReproduction,
+    mode: "review_harness",
+    status: "reproduced",
+    evidence: [
+      buildRepairEvidence("original-harness"),
+      {
+        type: "code",
+        label: "contract",
+        summary: "expected structural contract",
+        ref: "docs/architecture/contract.md:10-20",
+      },
+    ],
+  };
+  const executableStructuralCycle = {
+    ...structuralCycle,
+    sourceReproduction: executableStructuralReproduction,
+  };
+  const executableStructuralRun = {
+    ...structuralRun,
+    loop: {
+      ...structuralRun.loop,
+      repairCycles: [executableStructuralCycle],
+    },
+  };
+  check(
+    "repair-review-harness-accepts-reproduced-and-requires-executable-ref-only",
+    validateCodeFixHandoff(
+      executableStructuralRun,
+      normalizeRepairOutbox(executableStructuralRun, [
+        buildFixVerification(executableStructuralCycle, {
+          reproduction: {
+            mode: "review_harness",
+            status: "reproduced",
+            scenarioId: executableStructuralReproduction.scenarioId,
+            evidence: [buildRepairEvidence("original-harness")],
+          },
+        }),
+      ]),
+    ).status === "valid",
+    executableStructuralCycle,
+  );
   check(
     "repair-structural-rejects-unrelated-harness",
     validateCodeFixHandoff(

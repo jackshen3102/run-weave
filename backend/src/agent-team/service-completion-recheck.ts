@@ -62,6 +62,7 @@ export abstract class AgentTeamCompletionRecheckService extends AgentTeamRepairP
                 status: "pending" as const,
                 consecutiveFail: 0,
                 resultSummary: null,
+                reproduction: null,
                 bouncedToPanelId: null,
                 recheckRequestedAt: now,
                 recheckDispatchId: activeWorkerDispatch.dispatchId ?? null,

@@ -1,5 +1,4 @@
 import type {
-  AgentTeamAcceptanceCase,
   AgentTeamFindingDecision,
   AgentTeamFixVerification,
   AgentTeamLoop,
@@ -15,6 +14,10 @@ import {
   isValidInvariantKey,
   rawBlockingReviewFindings,
 } from "./repair-review-contract";
+import {
+  findingCaseTraceabilityErrors,
+  isTraceableProductCase,
+} from "./repair-loop-traceability";
 export const DEFAULT_MAX_REPAIR_ATTEMPTS = 3;
 export const MIN_REPAIR_ATTEMPTS = 1;
 export const MAX_REPAIR_ATTEMPTS = 5;
@@ -25,6 +28,7 @@ export interface AgentTeamRepairTarget {
   invariant: string;
   verificationMode: "runtime" | "structural";
   sourceEvidenceRefs: string[];
+  sourceReproduction?: AgentTeamRepairCycle["sourceReproduction"];
   failureSummary: string;
   finding?: AgentTeamOutboxFinding;
   reviewTarget?: AgentTeamReviewTarget | null;
@@ -32,10 +36,12 @@ export interface AgentTeamRepairTarget {
 }
 
 export {
+  behaviorFailureContractErrors,
   isValidInvariantKey,
   rawBlockingReviewFindings,
   reviewFindingContractErrors,
 } from "./repair-review-contract";
+export { isTraceableProductCase } from "./repair-loop-traceability";
 export type CodeFixHandoffValidation =
   | { status: "valid"; repairKeys: string[] }
   | { status: "invalid"; errors: string[] }
@@ -62,14 +68,6 @@ export function blockingReviewFindings(
     const decision = findFindingDecision(run, finding, reviewTarget);
     return !decision || decision.disposition === "blocking";
   });
-}
-
-export function isTraceableProductCase(item: AgentTeamAcceptanceCase): boolean {
-  return Boolean(
-    item.sourceCaseId &&
-    item.sourceFilePath &&
-    !/code review|代码审查|code_review/i.test(item.text),
-  );
 }
 
 export function findFindingDecision(
@@ -171,7 +169,15 @@ export function resolveRepairTargets(
         caseIds: [result.caseId],
         invariant,
         verificationMode: "runtime",
-        sourceEvidenceRefs: result.evidence.map((item) => item.ref),
+        sourceEvidenceRefs: Array.from(
+          new Set([
+            ...result.evidence.map((item) => item.ref),
+            ...(result.reproduction?.evidence.map((item) => item.ref) ?? []),
+          ]),
+        ),
+        ...(result.reproduction
+          ? { sourceReproduction: result.reproduction }
+          : {}),
         failureSummary: result.summary ?? invariant,
       };
     });
@@ -204,11 +210,11 @@ export function resolveRepairTargets(
         invariant: finding.summary,
         verificationMode: finding.verificationMode,
         sourceEvidenceRefs: Array.from(
-          new Set([
-            ...(finding.ref ? [finding.ref] : []),
-            ...(finding.reproduction?.evidence.map((item) => item.ref) ?? []),
-          ]),
+          new Set(finding.reproduction?.evidence.map((item) => item.ref) ?? []),
         ),
+        ...(finding.reproduction
+          ? { sourceReproduction: finding.reproduction }
+          : {}),
         failureSummary: `${finding.severity}: ${finding.title}`,
         finding,
         reviewTarget,
@@ -258,6 +264,7 @@ export function foldRepairGateResult(params: {
         invariant: target.invariant,
         verificationMode: target.verificationMode,
         sourceEvidenceRefs: target.sourceEvidenceRefs,
+        sourceReproduction: target.sourceReproduction,
         lastFailedRound: round,
         lastFailureSummary: target.failureSummary,
         finding: target.finding,
@@ -273,6 +280,7 @@ export function foldRepairGateResult(params: {
       invariant: target.invariant,
       verificationMode: target.verificationMode,
       sourceEvidenceRefs: target.sourceEvidenceRefs,
+      sourceReproduction: target.sourceReproduction,
       attempts: 0,
       maxAttempts: params.loop.maxRepairAttempts ?? DEFAULT_MAX_REPAIR_ATTEMPTS,
       firstFailedRound: round,
@@ -293,34 +301,6 @@ export function foldRepairGateResult(params: {
     loop: { ...params.loop, repairCycles },
     exhausted,
   };
-}
-
-function findingCaseTraceabilityErrors(
-  run: AgentTeamRun,
-  finding: AgentTeamOutboxFinding,
-): string[] {
-  const impacts = finding.caseImpacts ?? [];
-  if (impacts.length === 0) {
-    return ["caseImpacts 为空"];
-  }
-  return impacts.flatMap((impact) => {
-    const errors: string[] = [];
-    const acceptanceCase = run.acceptance.find(
-      (item) => item.caseId === impact.caseId,
-    );
-    if (!acceptanceCase) {
-      errors.push(`${impact.caseId} 不存在`);
-    } else if (!isTraceableProductCase(acceptanceCase)) {
-      errors.push(`${impact.caseId} 不是可追溯产品 Case`);
-    }
-    if (!impact.summary.trim()) {
-      errors.push(`${impact.caseId} 缺少影响说明`);
-    }
-    if (impact.evidence.length === 0) {
-      errors.push(`${impact.caseId} 缺少影响证据`);
-    }
-    return errors;
-  });
 }
 
 function resolveReviewTarget(
@@ -439,6 +419,30 @@ export function validateCodeFixHandoff(
     }
     const reproductionStatus = item.reproduction.status;
     if (
+      item.skillInvocation?.name !== "$toolkit:reproduce-before-fix" ||
+      item.skillInvocation.evidence.length === 0
+    ) {
+      return {
+        status: "blocked",
+        reason: `${key} 缺少修改源码前调用 $toolkit:reproduce-before-fix 的可追溯证据；该门槛不能事后补写`,
+      };
+    }
+    const sourceReproduction =
+      cycle.sourceReproduction ?? cycle.finding?.reproduction;
+    if (sourceReproduction?.scenarioId?.trim()) {
+      if (
+        item.reproduction.scenarioId?.trim() !==
+        sourceReproduction.scenarioId.trim()
+      ) {
+        errors.push(
+          `${key} 未复用 verifier scenarioId ${sourceReproduction.scenarioId}`,
+        );
+      }
+      if (item.reproduction.mode !== sourceReproduction.mode) {
+        errors.push(`${key} 未复用 verifier reproduction mode`);
+      }
+    }
+    if (
       cycle.sourceRole === "code_review" &&
       cycle.attempts >= 1 &&
       reproductionStatus === "not_reproduced"
@@ -486,26 +490,45 @@ export function validateCodeFixHandoff(
       }
       if (!item.reproduction.validationSessionId?.trim()) {
         errors.push(`${key} 缺少 validationSessionId`);
+      } else if (
+        sourceReproduction?.validationSessionId?.trim() &&
+        item.reproduction.validationSessionId.trim() !==
+          sourceReproduction.validationSessionId.trim()
+      ) {
+        errors.push(
+          `${key} 未复用 verifier validationSessionId ${sourceReproduction.validationSessionId}`,
+        );
       }
     } else if (
-      item.reproduction.status !== "confirmed" ||
+      (item.reproduction.status !== "confirmed" &&
+        item.reproduction.status !== "reproduced") ||
       (item.reproduction.mode !== "review_harness" &&
         item.reproduction.mode !== "static_contract")
     ) {
       errors.push(`${key} structural finding 必须由原 harness 或静态契约确认`);
     }
     if (cycle.verificationMode === "structural") {
-      const sourceRefs = cycle.sourceEvidenceRefs ?? [];
+      const sourceEvidence =
+        sourceReproduction?.evidence.map((evidence) => evidence.ref) ?? [];
+      const sourceRefs =
+        sourceReproduction?.mode === "review_harness"
+          ? Array.from(
+              new Set(
+                sourceReproduction.evidence
+                  .filter((evidence) => evidence.type === "command")
+                  .map((evidence) => evidence.ref),
+              ),
+            )
+          : sourceEvidence.length > 0
+            ? sourceEvidence
+            : (cycle.sourceEvidenceRefs ?? []);
       const reproductionRefs = new Set(
         item.reproduction.evidence.map((evidence) => evidence.ref),
       );
-      const verificationRefs = new Set(
-        item.verification.evidence.map((evidence) => evidence.ref),
-      );
       for (const ref of sourceRefs) {
-        if (!reproductionRefs.has(ref) || !verificationRefs.has(ref)) {
+        if (!reproductionRefs.has(ref)) {
           errors.push(
-            `${key} 未用 reviewer 原 evidence ref 完成 Before/After：${ref}`,
+            `${key} 未引用 verifier 原始 Before evidence ref：${ref}`,
           );
         }
       }
