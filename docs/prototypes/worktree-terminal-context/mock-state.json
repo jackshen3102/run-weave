@@ -1,0 +1,377 @@
+{
+  "appName": "Runweave",
+  "connection": "local",
+  "activeProjectId": "runweave",
+  "activeWorktreeId": "runweave-feature",
+  "layouts": [
+    {
+      "id": "nested",
+      "label": "A 双层上下文条"
+    },
+    {
+      "id": "flat",
+      "label": "B 扁平上下文标签"
+    },
+    {
+      "id": "compact",
+      "label": "C 紧凑选择器"
+    },
+    {
+      "id": "rail",
+      "label": "D Worktree 列表"
+    },
+    {
+      "id": "terminal-owned",
+      "label": "E 终端即上下文"
+    }
+  ],
+  "projects": [
+    {
+      "id": "runweave",
+      "name": "feature",
+      "repositoryPath": "~/Code/browser-hub/feature",
+      "worktreeRoot": "~/Code/browser-hub/feature/.worktree",
+      "discoveryMode": "git-worktree-watch",
+      "worktrees": [
+        {
+          "id": "runweave-main",
+          "isPrimary": true,
+          "pinned": true,
+          "lastActivityAt": "2026-07-17T08:20:00.000Z",
+          "name": "main",
+          "branch": "main",
+          "path": "~/Code/browser-hub/feature",
+          "status": "idle",
+          "dirtyCount": 0,
+          "ahead": 0,
+          "behind": 0,
+          "lastActiveSessionId": "terminal-main-dev",
+          "sessions": [
+            {
+              "id": "terminal-main-dev",
+              "name": "dev server",
+              "agent": "bash",
+              "status": "idle",
+              "cwd": "~/Code/browser-hub/feature",
+              "lines": [
+                "$ git status --short",
+                "$ pnpm dev",
+                "backend ready at http://127.0.0.1:5002",
+                "frontend ready at http://127.0.0.1:5173",
+                "waiting for terminal input..."
+              ]
+            },
+            {
+              "id": "terminal-main-shell",
+              "name": "shell",
+              "agent": "bash",
+              "status": "idle",
+              "cwd": "~/Code/browser-hub/feature",
+              "lines": [
+                "$ git branch --show-current",
+                "main",
+                "$ git worktree list",
+                "~/Code/browser-hub/feature  [main]"
+              ]
+            }
+          ],
+          "changes": [],
+          "files": [
+            {
+              "path": "frontend/src/components/terminal/terminal-workspace.tsx",
+              "kind": "tsx"
+            },
+            {
+              "path": "frontend/src/features/terminal/workspace-store.ts",
+              "kind": "ts"
+            },
+            {
+              "path": "backend/src/terminal/manager.ts",
+              "kind": "ts"
+            },
+            {
+              "path": "packages/shared/src/terminal/project.ts",
+              "kind": "ts"
+            }
+          ],
+          "selectedFilePath": "frontend/src/components/terminal/terminal-workspace.tsx",
+          "filePreview": [
+            "export function TerminalWorkspace(props: TerminalWorkspaceProps) {",
+            "  const workspace = useTerminalWorkspace(props);",
+            "",
+            "  return <TerminalWorkspaceShell {...workspace} />;",
+            "}"
+          ]
+        },
+        {
+          "id": "runweave-feature",
+          "isPrimary": false,
+          "pinned": true,
+          "lastActivityAt": "2026-07-17T08:58:00.000Z",
+          "name": "activity-foundation",
+          "branch": "feat/activity-foundation",
+          "path": "~/Code/browser-hub/feature/.worktree/activity-foundation",
+          "status": "running",
+          "dirtyCount": 5,
+          "ahead": 2,
+          "behind": 0,
+          "lastActiveSessionId": "terminal-feature-codex",
+          "sessions": [
+            {
+              "id": "terminal-feature-codex",
+              "name": "Codex · activity",
+              "agent": "codex",
+              "status": "running",
+              "cwd": "~/Code/browser-hub/feature/.worktree/activity-foundation",
+              "lines": [
+                "$ codex",
+                "Inspecting the Activity event pipeline...",
+                "Edited backend/src/activity/activity-store.ts",
+                "Edited frontend/src/pages/activity-page.tsx",
+                "Running pnpm typecheck"
+              ]
+            },
+            {
+              "id": "terminal-feature-dev",
+              "name": "dev server",
+              "agent": "bash",
+              "status": "idle",
+              "cwd": "~/Code/browser-hub/feature/.worktree/activity-foundation",
+              "lines": [
+                "$ pnpm dev",
+                "backend ready at http://127.0.0.1:5102",
+                "frontend ready at http://127.0.0.1:5273",
+                "hmr update /src/pages/activity-page.tsx"
+              ]
+            }
+          ],
+          "changes": [
+            {
+              "path": "backend/src/activity/activity-store.ts",
+              "kind": "M",
+              "additions": 42,
+              "deletions": 8
+            },
+            {
+              "path": "frontend/src/pages/activity-page.tsx",
+              "kind": "M",
+              "additions": 31,
+              "deletions": 12
+            },
+            {
+              "path": "packages/shared/src/activity/events.ts",
+              "kind": "A",
+              "additions": 58,
+              "deletions": 0
+            },
+            {
+              "path": "docs/architecture/activity.md",
+              "kind": "M",
+              "additions": 17,
+              "deletions": 3
+            },
+            {
+              "path": "pnpm-lock.yaml",
+              "kind": "M",
+              "additions": 4,
+              "deletions": 4
+            }
+          ],
+          "files": [
+            {
+              "path": "backend/src/activity/activity-store.ts",
+              "kind": "ts"
+            },
+            {
+              "path": "frontend/src/pages/activity-page.tsx",
+              "kind": "tsx"
+            },
+            {
+              "path": "packages/shared/src/activity/events.ts",
+              "kind": "ts"
+            },
+            {
+              "path": "docs/architecture/activity.md",
+              "kind": "md"
+            }
+          ],
+          "selectedFilePath": "backend/src/activity/activity-store.ts",
+          "filePreview": [
+            "export class ActivityStore {",
+            "  constructor(private readonly database: Database) {}",
+            "",
+            "  append(event: ActivityEvent): void {",
+            "    this.insertEvent.run(event);",
+            "  }",
+            "}"
+          ]
+        },
+        {
+          "id": "runweave-fix",
+          "isPrimary": false,
+          "pinned": false,
+          "lastActivityAt": "2026-07-17T08:46:00.000Z",
+          "name": "preview-sync",
+          "branch": "fix/preview-sync",
+          "path": "~/Code/browser-hub/feature/.worktree/preview-sync",
+          "status": "attention",
+          "dirtyCount": 2,
+          "ahead": 0,
+          "behind": 1,
+          "lastActiveSessionId": "terminal-fix-trae",
+          "sessions": [
+            {
+              "id": "terminal-fix-trae",
+              "name": "Trae · preview sync",
+              "agent": "trae",
+              "status": "attention",
+              "cwd": "~/Code/browser-hub/feature/.worktree/preview-sync",
+              "lines": [
+                "$ trae",
+                "Reproduced stale Preview root after context change",
+                "Changed frontend/src/features/terminal/preview-store.ts",
+                "Needs decision: preserve open file per worktree?"
+              ]
+            }
+          ],
+          "changes": [
+            {
+              "path": "frontend/src/features/terminal/preview-store.ts",
+              "kind": "M",
+              "additions": 19,
+              "deletions": 7
+            },
+            {
+              "path": "frontend/src/components/terminal/terminal-preview-panel.tsx",
+              "kind": "M",
+              "additions": 12,
+              "deletions": 4
+            }
+          ],
+          "files": [
+            {
+              "path": "frontend/src/features/terminal/preview-store.ts",
+              "kind": "ts"
+            },
+            {
+              "path": "frontend/src/components/terminal/terminal-preview-panel.tsx",
+              "kind": "tsx"
+            },
+            {
+              "path": "frontend/src/components/terminal/use-terminal-preview-panel-data.ts",
+              "kind": "ts"
+            }
+          ],
+          "selectedFilePath": "frontend/src/features/terminal/preview-store.ts",
+          "filePreview": [
+            "export interface TerminalPreviewStore {",
+            "  ui: TerminalPreviewUiState;",
+            "  projects: Record<string, TerminalPreviewProjectState>;",
+            "  openPreview(projectId: string): void;",
+            "}"
+          ]
+        },
+        {
+          "id": "runweave-docs",
+          "isPrimary": false,
+          "pinned": false,
+          "lastActivityAt": "2026-07-17T07:35:00.000Z",
+          "name": "docs-index",
+          "branch": "chore/docs-index",
+          "path": "~/Code/browser-hub/feature/.worktree/docs-index",
+          "status": "idle",
+          "dirtyCount": 0,
+          "ahead": 1,
+          "behind": 0,
+          "lastActiveSessionId": "terminal-docs-shell",
+          "sessions": [
+            {
+              "id": "terminal-docs-shell",
+              "name": "shell",
+              "agent": "bash",
+              "status": "idle",
+              "cwd": "~/Code/browser-hub/feature/.worktree/docs-index",
+              "lines": [
+                "$ git status --short",
+                "$ git log --oneline -1",
+                "a13f9c7 docs: refresh prototype index"
+              ]
+            }
+          ],
+          "changes": [],
+          "files": [
+            {
+              "path": "docs/prototypes/README.md",
+              "kind": "md"
+            },
+            {
+              "path": "docs/README.md",
+              "kind": "md"
+            }
+          ],
+          "selectedFilePath": "docs/prototypes/README.md",
+          "filePreview": [
+            "# Prototypes",
+            "",
+            "- Worktree terminal context",
+            "- Terminal browser adaptive tabs"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "agent-console",
+      "name": "agent-console",
+      "repositoryPath": "~/Code/browser-hub/agent-console",
+      "worktreeRoot": "~/Code/browser-hub/agent-console/.worktree",
+      "discoveryMode": "git-worktree-watch",
+      "worktrees": [
+        {
+          "id": "agent-console-main",
+          "isPrimary": true,
+          "pinned": false,
+          "lastActivityAt": "2026-07-16T11:00:00.000Z",
+          "name": "main",
+          "branch": "main",
+          "path": "~/Code/browser-hub/agent-console",
+          "status": "idle",
+          "dirtyCount": 0,
+          "ahead": 0,
+          "behind": 0,
+          "lastActiveSessionId": "terminal-console-shell",
+          "sessions": [
+            {
+              "id": "terminal-console-shell",
+              "name": "shell",
+              "agent": "bash",
+              "status": "idle",
+              "cwd": "~/Code/browser-hub/agent-console",
+              "lines": [
+                "$ git status --short",
+                "$ pnpm typecheck",
+                "Done in 3.1s"
+              ]
+            }
+          ],
+          "changes": [],
+          "files": [
+            {
+              "path": "src/app.tsx",
+              "kind": "tsx"
+            },
+            {
+              "path": "src/store.ts",
+              "kind": "ts"
+            }
+          ],
+          "selectedFilePath": "src/app.tsx",
+          "filePreview": [
+            "export function App() {",
+            "  return <AgentConsole />;",
+            "}"
+          ]
+        }
+      ]
+    }
+  ]
+}
