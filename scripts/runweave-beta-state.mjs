@@ -4,12 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import {
   BETA_UPDATE_APP_NAME,
+  resolveBetaAppBackupPrefix,
   resolveBetaUpdateTargets,
 } from "./runweave-update-core.mjs";
-import {
-  isPidLive,
-  runCapture,
-} from "./runweave-beta-process-state.mjs";
+import { isPidLive, runCapture } from "./runweave-beta-process-state.mjs";
 
 export {
   inspectProcessReferences,
@@ -47,10 +45,7 @@ export function resolveBetaPaths(
     sourceRoot: path.resolve(sourceRoot),
     appName: targets.appName,
     appPath: targets.appPath,
-    appBackupPath: path.join(
-      "/Applications",
-      `.${targets.appName}.app.previous`,
-    ),
+    appBackupPath: resolveBetaAppBackupPrefix(targets.instanceId),
     bundleId: targets.bundleId,
     buildRoot: path.join(targets.instanceRoot, "build"),
     devSessionId,

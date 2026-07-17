@@ -17,6 +17,7 @@ interface TerminalWorkspaceState {
   terminalStateBySessionId: Record<string, TerminalState>;
   panelWorkspaceBySessionId: Record<string, TerminalPanelWorkspace>;
   activePanelIdBySessionId: Record<string, string>;
+  agentRecoveryRevisionBySessionId: Record<string, number>;
   completionMarkers: Record<string, number>;
   bellMarkers: Record<string, boolean>;
   cachedSurfaceSessionIds: string[];
@@ -46,6 +47,7 @@ interface TerminalWorkspaceActions {
   setActivePanelIdBySessionId: (
     next: StateUpdater<Record<string, string>>,
   ) => void;
+  bumpAgentRecoveryRevision: (terminalSessionId: string) => void;
   setCompletionMarkers: (next: StateUpdater<Record<string, number>>) => void;
   setBellMarkers: (next: StateUpdater<Record<string, boolean>>) => void;
   setCachedSurfaceSessionIds: (next: StateUpdater<string[]>) => void;
@@ -120,6 +122,7 @@ const initialState: TerminalWorkspaceState = {
   terminalStateBySessionId: {},
   panelWorkspaceBySessionId: {},
   activePanelIdBySessionId: {},
+  agentRecoveryRevisionBySessionId: {},
   completionMarkers: {},
   bellMarkers: {},
   cachedSurfaceSessionIds: [],
@@ -175,6 +178,15 @@ export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
           next,
           state.activePanelIdBySessionId,
         ),
+      })),
+    bumpAgentRecoveryRevision: (terminalSessionId) =>
+      set((state) => ({
+        agentRecoveryRevisionBySessionId: {
+          ...state.agentRecoveryRevisionBySessionId,
+          [terminalSessionId]:
+            (state.agentRecoveryRevisionBySessionId[terminalSessionId] ?? 0) +
+            1,
+        },
       })),
     setCompletionMarkers: (next) =>
       set((state) => ({

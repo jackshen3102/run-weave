@@ -89,6 +89,14 @@ export async function runCapture(command, args, options = {}) {
   });
 }
 
+export function isExternalTmuxReference(line, targetPaths) {
+  const executable = /^(?:\d+)\s+(\S+)/.exec(line)?.[1] ?? "";
+  return (
+    path.basename(executable) === "tmux" &&
+    !targetPaths.some((targetPath) => executable.includes(targetPath))
+  );
+}
+
 export async function inspectProcessReferences(targetPaths) {
   const normalizedPaths = targetPaths
     .filter((targetPath) => typeof targetPath === "string" && targetPath)
@@ -112,6 +120,7 @@ export async function inspectProcessReferences(targetPaths) {
       return (
         Number.isInteger(pid) &&
         pid !== process.pid &&
+        !isExternalTmuxReference(line, normalizedPaths) &&
         normalizedPaths.some((targetPath) => line.includes(targetPath))
       );
     });

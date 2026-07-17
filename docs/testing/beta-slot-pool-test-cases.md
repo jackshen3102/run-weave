@@ -33,9 +33,9 @@
 - manifest 中 `assignedSlotId + leaseNonce + ownerSessionId` 必须与 lease 一致。
 - stop/reset 成功并落盘后才能释放 lease；失败时 lease 保持占用。
 - shared 服务只记录引用，slot janitor 无权停止或清理它们。
-- 每槽 Desktop/App Server Runtime 最多各保留 current + previous 两个 release；App backup 最多 1 个；日志最多 5 个且合计不超过 64 MiB。
+- 每槽 Desktop/App Server Runtime 最多各保留 current + previous 两个 release；App rollback 最多 1 个且路径不能以 `.app` 结尾；旧 `.app.previous-*` 必须迁移并注销 LaunchServices；日志最多 5 个且合计不超过 64 MiB。
 - 默认最小可用磁盘为 4 GiB；实际门禁为 `max(configuredFloor, plannedWriteBytes * 3)`。
-- legacy 自动流程只 inventory；cleanup/purge 必须显式指定单实例/operation。
+- `update/open/rollback` 只接受固定池 ID，非池目标必须在创建目录前失败；legacy 自动流程只 inventory，既有实例仅允许 status/stop/cleanup/purge。
 
 ## 必跑门禁
 
@@ -92,10 +92,10 @@ git diff --check
 
 ### BSP-003 多轮 update 后 release 与磁盘占用有界
 
-- Given：一个 idle slot 已有 current/previous Desktop Runtime、App Server Runtime 和一个 App backup；记录槽位 `du`。
-- When：在同一槽位连续执行 10 次产生不同 releaseId 的成功 update，并在每轮读取 current/previous pointer、release 目录、backup、日志数量与字节。
-- Then：两类 Runtime 始终各不超过 2 个 release，App backup 不超过 1 个，日志不超过 5 个且合计不超过 64 MiB；第 3 轮后槽位 `du` 只随 current/previous 实际大小波动，不随轮次线性累积。
-- 失败判断：存在未引用第 3 个 release、多个 backup、超限日志、current/previous 被删，或相同规模产物下 `du` 连续增长。
+- Given：一个 idle slot 已有 current/previous Desktop Runtime、App Server Runtime 和一个旧 `.app.previous-*` App backup；记录槽位 `du`。
+- When：先执行 retention，再在同一槽位连续执行 10 次产生不同 releaseId 的成功 update，并在每轮读取 current/previous pointer、release 目录、rollback、日志数量与字节。
+- Then：旧 backup 原子迁移成不带 `.app` 后缀的 rollback 并更新 pointer；两类 Runtime 始终各不超过 2 个 release，App rollback 不超过 1 个，日志不超过 5 个且合计不超过 64 MiB；第 3 轮后槽位 `du` 只随 current/previous 实际大小波动，不随轮次线性累积。
+- 失败判断：LaunchServices 仍注册旧 backup 路径、rollback 仍以 `.app` 结尾、存在未引用第 3 个 release、多个 rollback、超限日志、current/previous 被删，或相同规模产物下 `du` 连续增长。
 
 ### BSP-004 6 个并发请求最多成功 5 个
 
@@ -120,7 +120,7 @@ git diff --check
 
 ### BSP-007 stale/orphan 槽位只在身份可证时恢复
 
-- Given：构造 pool v1 lease，其 manifest 为 stale 或缺失；allocatorPid 已死且 acquiredAt 超过 10 分钟；recorded dedicated PID 分别准备“身份匹配残留”和“PID 已复用身份不匹配”两组独立前置。
+- Given：构造 pool v1 lease，其 manifest 为 stale 或缺失；allocatorPid 已死且 acquiredAt 超过 10 分钟；分别准备“槽位仍有真实进程”“记录 PID 已死”“PID 已复用但槽位零路径引用”“状态文件与 control CLI 均缺失”四组独立前置。
 - When：运行 start 前 janitor 或 `stop --cleanup-stale`。
 - Then：身份匹配组可安全 stop/reset/release；身份不匹配组不发信号、不删数据，slot 标记 broken 并输出证据与人工恢复指引。
 - 失败判断：按 PID/进程名误杀身份不匹配进程，或未经 reset 直接释放 lease。
@@ -150,8 +150,8 @@ git diff --check
 
 - Given：分别准备 requested `pool-01` 空闲、requested `pool-01` 已占用、`dvs-xxx`、`custom-name` 四个独立输入。
 - When：执行 Beta dry-run 与真实 start。
-- Then：合法空闲 slot 可获取；合法占用 slot 立即失败且不回退；非 pool 名称在 dev-session 层被拒绝；低层 legacy 命令仍可显式操作其 instance；不会创建 custom App。
-- 失败判断：非法名称进入池、显式占用时偷偷换槽，或 legacy 入口被无关破坏。
+- Then：合法空闲 slot 可获取；合法占用 slot 立即失败且不回退；非 pool 名称在 dev-session 和低层可变命令中都被拒绝且不创建目录；既有 legacy 仍可 status/stop/cleanup；不会创建 custom App。
+- 失败判断：非法名称进入池、显式占用时偷偷换槽、低层 update/open/rollback 创建 custom App，或 legacy 只读/清理入口被无关破坏。
 
 ### BSP-012 dry-run 全程只读且不承诺槽位
 
@@ -183,9 +183,9 @@ git diff --check
 
 ### BSP-016 legacy 只盘点，cleanup/purge 显式且可恢复
 
-- Given：准备 inactive trusted legacy、active legacy、无可信 identity legacy、symlink/path-escape legacy 和 Stable 基线；所有组独立。
+- Given：准备 inactive trusted legacy、仅剩 instance/App Server 目录的半残 legacy、active legacy、无可信 identity legacy、symlink/path-escape legacy 和 Stable 基线；所有组独立。
 - When：先运行自动 start janitor 与 `legacy-inventory --json`，再仅对 inactive trusted instance 执行 `legacy-cleanup --instance <id> --json`、`legacy-restore --operation <id> --json`、再次 cleanup 和 `legacy-purge --operation <id> --confirm <id> --json`。
-- Then：自动 janitor/inventory 不删除任何 legacy；trusted cleanup 原子进入 quarantine 并写 journal/恢复命令，restore 可恢复，purge 只有 operationId 与 confirm 一致才删除；active/unowned/symlink/path-escape/Stable 均拒绝。
+- Then：自动 janitor/inventory 不删除任何 legacy；完整和半残 trusted cleanup 都原子进入 quarantine 并写 journal/恢复命令，App 路径被注销，restore 可恢复，purge 只有 operationId 与 confirm 一致才删除；active/unowned/symlink/path-escape/Stable 均拒绝。
 - 失败判断：按 glob 自动删除、active/无 owner 被清、无 journal 无法恢复、错误 confirm 仍 purge，或 Stable 被修改。
 
 ### BSP-017 stop/reset 后 warm 重试仍复用同一槽位
@@ -205,7 +205,7 @@ git diff --check
 - 幂等与去重：BSP-002 重复 start/stop；BSP-016 cleanup/restore/purge operation identity。
 - 数据与协议：BSP-006、BSP-009、BSP-014 验证持久文件和 manifest/lease/CDP 合约。
 - 安全与权限：BSP-006 防跨 owner 数据泄漏；BSP-007/BSP-013/BSP-016 防越权清理。
-- 回归兼容：BSP-002 禁止 per-session target；BSP-011 保留低层 legacy；BSP-013 保留 shared impact closure。
+- 回归兼容：BSP-002/BSP-011 禁止新的 per-session target 但保留 legacy 只读与清理；BSP-013 保留 shared impact closure。
 - 网络失败不单独覆盖：本需求不引入远程网络依赖；App Server/Backend 不可用由 BSP-015 的 start failure 路径覆盖。
 
 ## 通过标准

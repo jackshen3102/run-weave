@@ -393,8 +393,7 @@ const cases = [
       const homeDir = "/tmp/runweave-test-home";
       const targets = resolveBetaUpdateTargets(homeDir);
       const valid = {
-        appBackupPath:
-          "/Applications/.Runweave Beta default.app.previous-123",
+        appBackupPath: "/Applications/.Runweave Beta default.rollback-123",
         appName: targets.appName,
         appPath: targets.appPath,
         appServerHome: targets.appServerHome,
@@ -448,7 +447,7 @@ const cases = [
         [
           "appBackupPath",
           "/Applications/Runweave.app",
-          /app backup path must be \/Applications\/\.Runweave Beta default\.app\.previous/,
+          /app backup path must be \/Applications\/\.Runweave Beta default\.rollback/,
         ],
       ];
       for (const [key, value, message] of mismatches) {
@@ -507,9 +506,7 @@ const cases = [
         true,
       );
       assert.equal(
-        isAppSensitivePath(
-          "electron/resources/hooks/runweave-hook-bridge.cjs",
-        ),
+        isAppSensitivePath("electron/resources/hooks/runweave-hook-bridge.cjs"),
         true,
       );
       assert.equal(isAppSensitivePath("electron/electron-builder.yml"), true);

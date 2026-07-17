@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
 import type { SendTerminalInterruptRequest, SendTerminalInputRequest, TerminalInputMode } from "@runweave/shared/terminal/input";
-import type { PrepareTerminalAgentRequest } from "@runweave/shared/terminal/agent-preparation";
+import type { PrepareTerminalAgentRequest, RecoverTerminalAgentRequest } from "@runweave/shared/terminal/agent-preparation";
 import type { CreateTerminalPanelRequest, ResizeTerminalPanelRequest, UpdateTerminalPanelRequest } from "@runweave/shared/terminal/panel";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { logger } from "../logging";
@@ -25,6 +25,7 @@ import {
 } from "../terminal/application/panel-metadata";
 import { createTerminalPanelSplit } from "../terminal/application/panel-split";
 import { prepareTerminalAgent } from "../terminal/application/agent-preparation";
+import { recoverTerminalAgent } from "../terminal/application/agent-recovery";
 import {
   ensureTerminalPanelWorkspace,
   withPaneGeometry,
@@ -96,6 +97,12 @@ const prepareTerminalAgentSchema = z
   })
   .strict();
 
+const recoverTerminalAgentSchema = z
+  .object({
+    panelId: z.string().trim().min(1).optional(),
+  })
+  .strict();
+
 function sendRouteError(res: Response, error: unknown): void {
   if (sendTerminalPanelRouteError(res, error)) {
     return;
@@ -135,6 +142,32 @@ export function registerTerminalPanelRoutes(
         parsed.data,
       );
       res.status(result.createdPanel ? 201 : 200).json(result);
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  router.post("/session/:id/agent/recover", async (req, res) => {
+    const parsed = recoverTerminalAgentSchema.safeParse(
+      req.body as RecoverTerminalAgentRequest,
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    try {
+      const session = getSessionOrThrow(terminalSessionManager, req.params.id);
+      res.json(
+        await recoverTerminalAgent(
+          terminalSessionManager,
+          session,
+          options,
+          parsed.data,
+        ),
+      );
     } catch (error) {
       sendRouteError(res, error);
     }

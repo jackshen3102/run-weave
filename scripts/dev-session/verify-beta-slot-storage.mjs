@@ -14,8 +14,25 @@ import {
   purgeLegacyBeta,
   restoreLegacyBeta,
 } from "../runweave-beta-legacy.mjs";
+import { isExternalTmuxReference } from "../runweave-beta-process-state.mjs";
 
 export async function verifyBetaSlotStorage(temporaryHome) {
+  const betaAppPath = "/Applications/Runweave Beta pool-01.app";
+  assert.equal(
+    isExternalTmuxReference(
+      `123 /opt/homebrew/bin/tmux RUNWEAVE_APP_PATH=${betaAppPath}`,
+      [betaAppPath],
+    ),
+    true,
+  );
+  assert.equal(
+    isExternalTmuxReference(
+      `123 ${betaAppPath}/Contents/Resources/tmux --socket owned`,
+      [betaAppPath],
+    ),
+    false,
+  );
+
   const diskBudgetHome = path.join(temporaryHome, "disk-budget-home");
   const diskBudgetApplications = path.join(
     temporaryHome,
@@ -138,6 +155,10 @@ export async function verifyBetaSlotStorage(temporaryHome) {
     applicationsDir,
     ".Runweave Beta pool-02.app.previous-2",
   );
+  const migratedBackup = path.join(
+    applicationsDir,
+    ".Runweave Beta pool-02.rollback-2",
+  );
   await Promise.all([
     fs.mkdir(referencedBackup),
     fs.mkdir(
@@ -179,9 +200,51 @@ export async function verifyBetaSlotStorage(temporaryHome) {
     "app-server-3",
   ]);
   assert.equal(retention.logs.count, 5);
+  assert.equal(retention.appBackupMigrated, true);
+  assert.equal(retention.launchServicesUnregistered, 0);
   assert.deepEqual(await fs.readdir(applicationsDir), [
-    path.basename(referencedBackup),
+    path.basename(migratedBackup),
   ]);
+  assert.equal(
+    JSON.parse(await fs.readFile(targets.statePath, "utf8")).previous.app
+      .backupPath,
+    migratedBackup,
+  );
+
+  const absentBackupHome = path.join(temporaryHome, "absent-backup-home");
+  const absentBackupApplications = path.join(
+    temporaryHome,
+    "absent-backup-applications",
+  );
+  const absentBackupTargets = resolveBetaUpdateTargets(
+    absentBackupHome,
+    "pool-03",
+  );
+  await Promise.all([
+    fs.mkdir(path.dirname(absentBackupTargets.statePath), { recursive: true }),
+    fs.mkdir(absentBackupApplications, { recursive: true }),
+  ]);
+  await fs.writeFile(
+    absentBackupTargets.statePath,
+    `${JSON.stringify({
+      previous: {
+        app: {
+          exists: false,
+          backupPath: path.join(
+            absentBackupApplications,
+            ".Runweave Beta pool-03.app.previous-missing",
+          ),
+        },
+      },
+    })}\n`,
+  );
+  const absentBackupRetention = await applyBetaSlotRetention({
+    slotId: "pool-03",
+    homeDir: absentBackupHome,
+    applicationsDir: absentBackupApplications,
+  });
+  assert.equal(absentBackupRetention.appBackupMigrated, false);
+  assert.deepEqual(await fs.readdir(absentBackupApplications), []);
 
   await fs.mkdir(targets.userData, { recursive: true });
   await fs.writeFile(path.join(targets.userData, "owner-a-cookie"), "secret");
@@ -264,4 +327,30 @@ export async function verifyBetaSlotStorage(temporaryHome) {
     applicationsDir: legacyApplications,
   });
   assert.equal(purged.state, "purged");
+
+  const partialTargets = resolveBetaUpdateTargets(legacyHome, "legacy-partial");
+  await fs.mkdir(partialTargets.appServerHome, { recursive: true });
+  const partialInventory = await inventoryLegacyBeta({
+    homeDir: legacyHome,
+    applicationsDir: legacyApplications,
+  });
+  const partialInstance = partialInventory.instances.find(
+    (instance) => instance.instanceId === "legacy-partial",
+  );
+  assert.equal(partialInstance?.resources[0].exists, false);
+  assert.equal(partialInstance?.trusted, true);
+  const partialCleanup = await cleanupLegacyBeta({
+    instanceId: "legacy-partial",
+    homeDir: legacyHome,
+    applicationsDir: legacyApplications,
+  });
+  assert.equal(partialCleanup.state, "quarantined");
+  assert.equal(partialCleanup.entries.length, 1);
+  assert.equal(partialCleanup.launchServicesUnregistered, false);
+  await purgeLegacyBeta({
+    operationId: partialCleanup.operationId,
+    confirm: partialCleanup.operationId,
+    homeDir: legacyHome,
+    applicationsDir: legacyApplications,
+  });
 }

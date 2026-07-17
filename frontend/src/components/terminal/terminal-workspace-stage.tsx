@@ -63,6 +63,9 @@ export function TerminalWorkspaceStage({
   const cachedSurfaceSessionIds = useTerminalWorkspaceStore(
     (state) => state.cachedSurfaceSessionIds,
   );
+  const agentRecoveryRevisionBySessionId = useTerminalWorkspaceStore(
+    (state) => state.agentRecoveryRevisionBySessionId,
+  );
   const terminalStateBySessionId = useTerminalWorkspaceStore(
     (state) => state.terminalStateBySessionId,
   );
@@ -148,7 +151,7 @@ export function TerminalWorkspaceStage({
                           ? "left-0"
                           : "-left-[9999em] pointer-events-none",
                       ].join(" ")}
-                      key={`${apiBase}:${session.terminalSessionId}:surface`}
+                      key={`${apiBase}:${session.terminalSessionId}:surface:${agentRecoveryRevisionBySessionId[session.terminalSessionId] ?? 0}`}
                     >
                       <TerminalSurface
                         active={isActive}

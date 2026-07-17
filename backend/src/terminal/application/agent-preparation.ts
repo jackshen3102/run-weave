@@ -36,11 +36,17 @@ const CODEX_SKIP_UPDATE_ON_STARTUP_ARGS = [
   "check_for_update_on_startup=false",
 ] as const;
 
+interface PrepareTerminalAgentInternalOptions {
+  resetPanelBeforeResume?: boolean;
+  skipInitialPrompt?: boolean;
+}
+
 export async function prepareTerminalAgent(
   terminalSessionManager: TerminalSessionManager,
   session: TerminalSessionRecord,
   options: TerminalPanelOptions,
   request: PrepareTerminalAgentRequest,
+  internalOptions?: PrepareTerminalAgentInternalOptions,
 ): Promise<PrepareTerminalAgentResponse> {
   const operationId = `terminal_agent_prepare_${randomUUID()}`;
   let target: TerminalPanelTargetResolution | null = null;
@@ -49,6 +55,8 @@ export async function prepareTerminalAgent(
   let commandSubmitted = false;
   let commandSubmittedAt: string;
   const resumeThreadId = request.resumeThreadId?.trim() || null;
+  const resetPanelBeforeResume =
+    internalOptions?.resetPanelBeforeResume === true;
   if (resumeThreadId && !request.panelId) {
     throwPreparationError({
       phase: "cli_launch",
@@ -79,6 +87,17 @@ export async function prepareTerminalAgent(
         provider: request.agent,
         message:
           "Terminal agent preparation already in progress for this panel",
+      });
+    }
+    if (resetPanelBeforeResume && !resumeThreadId) {
+      throwPreparationError({
+        phase: "cli_launch",
+        operationId,
+        session,
+        panel: terminalSessionManager.getPanel(request.panelId) ?? null,
+        createdPanel: false,
+        provider: request.agent,
+        message: "Resetting an agent panel requires a saved thread to resume",
       });
     }
   }
@@ -208,7 +227,7 @@ export async function prepareTerminalAgent(
     }
 
     try {
-      if (reusingPanel && !resumingThread) {
+      if (reusingPanel && (!resumingThread || resetPanelBeforeResume)) {
         if (!isInteractiveShellLaunch(session.command, session.args)) {
           throw new Error(
             "Terminal session command is not a persistent interactive shell",
@@ -233,7 +252,9 @@ export async function prepareTerminalAgent(
           operationId,
         );
       }
-      if (createdPanel || (reusingPanel && !resumingThread)) {
+      if (resetPanelBeforeResume) {
+        await options.tmuxService.waitForPaneReady(paneTarget);
+      } else if (createdPanel || (reusingPanel && !resumingThread)) {
         await delay(AGENT_SHELL_STARTUP_DELAY_MS);
       }
       assertPreparationTargetCurrent({
@@ -258,7 +279,11 @@ export async function prepareTerminalAgent(
         terminalSessionManager,
         options,
         session,
-        buildAgentLaunchCommand(request, operationId),
+        buildAgentLaunchCommand(
+          request,
+          operationId,
+          internalOptions?.skipInitialPrompt === true,
+        ),
         "line",
         operationId,
         paneTarget,
@@ -416,6 +441,7 @@ function assertPreparationTargetCurrent(input: {
 function buildAgentLaunchCommand(
   request: PrepareTerminalAgentRequest,
   operationId: string,
+  skipInitialPrompt = false,
 ): string {
   const command = request.command?.trim() || request.agent;
   const requestedArgs = request.resumeThreadId?.trim()
@@ -426,8 +452,19 @@ function buildAgentLaunchCommand(
       ? withCodexSkipUpdateOnStartupArgs(requestedArgs)
       : requestedArgs;
   const invocation = request.commandLine?.trim()
-    ? `${request.commandLine.trim()} ${shellQuote(request.prompt)}`
-    : [command, ...args.map(shellQuote), shellQuote(request.prompt)].join(" ");
+    ? [
+        request.commandLine.trim(),
+        skipInitialPrompt ? null : shellQuote(request.prompt),
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : [
+        command,
+        ...args.map(shellQuote),
+        skipInitialPrompt ? null : shellQuote(request.prompt),
+      ]
+        .filter(Boolean)
+        .join(" ");
   return `RUNWEAVE_TERMINAL_AGENT_OPERATION_ID=${shellQuote(operationId)} ${invocation}; __runweave_agent_exit=$?; tmux set-option -p -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_EXIT_OPTION} "exit:${operationId}:$__runweave_agent_exit"; tmux set-option -p -u -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_COMMAND_OPTION}`;
 }
 

@@ -54,6 +54,16 @@ export function resolveBetaAppName(instanceId) {
   return `${BETA_UPDATE_APP_NAME} ${assertBetaInstanceId(instanceId)}`;
 }
 
+export function resolveBetaAppBackupPrefix(
+  instanceId,
+  applicationsDir = "/Applications",
+) {
+  return path.join(
+    applicationsDir,
+    `.${resolveBetaAppName(instanceId)}.rollback`,
+  );
+}
+
 export const INSTALLED_APP_CONTROL_PATH_PREFIXES = [
   "electron/resources/",
   "electron/scripts/",
@@ -214,10 +224,7 @@ export function validateUpdateTargetIsolation({
     }
   }
   if (appBackupPath) {
-    const backupPrefix = path.join(
-      "/Applications",
-      `.${expected.appName}.app.previous`,
-    );
+    const backupPrefix = resolveBetaAppBackupPrefix(instanceId);
     const resolvedBackupPath = path.resolve(appBackupPath);
     if (
       resolvedBackupPath !== backupPrefix &&
