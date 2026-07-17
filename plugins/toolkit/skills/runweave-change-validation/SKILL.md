@@ -14,6 +14,10 @@ description: 仅当用户在当前请求中显式指定 $toolkit:runweave-change
 - 显式调用只对当前请求有效，不跨请求或后续轮次延续。
 - 未调用本技能时，按当前任务与仓库约束执行范围相称的验证，不默认启动完整 Dev Session。
 
+## 必需技能
+
+- 实际执行任何 Dev Session planner、start、status、open、attach、recovery 或 stop 操作时，同时使用 `$toolkit:runweave-dev-session`。本技能负责 patch 边界、完整验收和证据合同；该技能负责准确的 Session 生命周期。
+
 ## 不可变边界
 
 - 始终从 Stable terminal 执行命令；所有 Dev Session profile 都只是被测面。

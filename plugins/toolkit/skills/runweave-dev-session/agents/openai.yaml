@@ -1,0 +1,7 @@
+interface:
+  display_name: "Runweave Dev Session"
+  short_description: "安全规划、启动、定位并清理 Runweave Dev Session"
+  default_prompt: "使用 $toolkit:runweave-dev-session 安全规划并管理当前任务所需的 Runweave Dev Session。"
+
+policy:
+  allow_implicit_invocation: true
