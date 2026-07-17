@@ -10,6 +10,7 @@ export const DEFAULT_STABLE_FAIL_THRESHOLD = 2;
 
 export function createInitialLoop(
   maxRepairAttempts = DEFAULT_MAX_REPAIR_ATTEMPTS,
+  stableFailThreshold = DEFAULT_STABLE_FAIL_THRESHOLD,
 ): AgentTeamLoop {
   return {
     round: 1,
@@ -17,7 +18,7 @@ export function createInitialLoop(
     maxNoProgress: DEFAULT_MAX_NO_PROGRESS,
     escalated: false,
     lastReason: null,
-    stableFailThreshold: DEFAULT_STABLE_FAIL_THRESHOLD,
+    stableFailThreshold,
     errorFingerprints: [],
     bestPassCount: 0,
     repairCycles: [],

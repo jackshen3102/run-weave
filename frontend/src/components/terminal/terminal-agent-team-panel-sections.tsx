@@ -1,5 +1,5 @@
 import { AlertTriangle, Play, Plus, RotateCcw, X } from "lucide-react";
-import type { AgentTeamRun } from "@runweave/shared/agent-team";
+import type { AgentTeamFlow, AgentTeamRun } from "@runweave/shared/agent-team";
 import { Button } from "../ui/button";
 import {
   ROLE_CYCLE,
@@ -14,12 +14,14 @@ export function StartFlowSection({
   testCaseFilePath,
   reviewCheckpointEnabled,
   notifyMainOnHumanGate,
+  flow,
   busy,
   onTaskChange,
   onPlanFilePathChange,
   onTestCaseFilePathChange,
   onReviewCheckpointEnabledChange,
   onNotifyMainOnHumanGateChange,
+  onFlowChange,
   onStart,
 }: {
   mode?: "start" | "retry";
@@ -28,12 +30,14 @@ export function StartFlowSection({
   testCaseFilePath: string;
   reviewCheckpointEnabled: boolean;
   notifyMainOnHumanGate: boolean;
+  flow: AgentTeamFlow;
   busy: boolean;
   onTaskChange: (value: string) => void;
   onPlanFilePathChange: (value: string) => void;
   onTestCaseFilePathChange: (value: string) => void;
   onReviewCheckpointEnabledChange: (value: boolean) => void;
   onNotifyMainOnHumanGateChange: (value: boolean) => void;
+  onFlowChange: (value: AgentTeamFlow) => void;
   onStart: () => void;
 }) {
   return (
@@ -58,9 +62,60 @@ export function StartFlowSection({
       <ol className="space-y-1 pl-4 text-xs text-slate-400 [list-style:decimal]">
         <li>服务端自动生成并确认 worker 拆分</li>
         <li>
-          自动 split 出 worker pane，并按 code → review → verify 串行门禁推进
+          {flow === "verify_first"
+            ? "自动 split 出 worker pane，先跑验证；失败按 verify → code → review 回环推进"
+            : "自动 split 出 worker pane，并按 code → review → verify 串行门禁推进"}
         </li>
       </ol>
+      <div className="space-y-1.5 rounded border border-slate-800 bg-slate-900/50 p-2">
+        <div className="text-[11px] font-medium text-slate-200">执行模式</div>
+        <div className="flex gap-1.5">
+          {(
+            [
+              {
+                value: "code_first" as const,
+                label: "Code First",
+                hint: "先写码 → 评审 → 验证",
+              },
+              {
+                value: "verify_first" as const,
+                label: "Verify First",
+                hint: "先验证 → 失败才修复 → 评审",
+              },
+            ]
+          ).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={[
+                "flex-1 rounded border px-2 py-1.5 text-left transition-colors",
+                flow === option.value
+                  ? "border-sky-600 bg-sky-950/40"
+                  : "border-slate-800 bg-slate-950 hover:border-slate-600",
+              ].join(" ")}
+              onClick={() => onFlowChange(option.value)}
+              aria-pressed={flow === option.value}
+            >
+              <span
+                className={[
+                  "block text-xs font-medium",
+                  flow === option.value ? "text-sky-200" : "text-slate-300",
+                ].join(" ")}
+              >
+                {option.label}
+              </span>
+              <span className="mt-0.5 block text-[10px] text-slate-500">
+                {option.hint}
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] leading-relaxed text-slate-500">
+          {flow === "verify_first"
+            ? "适合回归/测试案例体检：behavior_verify 先跑全部用例，失败即抛回 code 修复。首轮全绿且无改动直接完成。"
+            : "标准开发流程：code 先落地改动，再评审、验证。"}
+        </p>
+      </div>
       <div className="rounded border border-slate-800 bg-slate-900/50 px-2 py-1.5 text-[11px] leading-relaxed text-slate-400">
         拆分策略：服务端自动拆分。右侧面板只展示状态与日志，不需要手动点击“拆分”。
       </div>

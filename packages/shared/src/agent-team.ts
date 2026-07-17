@@ -66,6 +66,9 @@ export interface AgentTeamVerificationConfig {
 export type AgentTeamReviewCheckpointMode = "disabled" | "local_commit";
 export type AgentTeamReviewScope = "full" | "incremental" | "final";
 
+/** Execution entry order: write-first or behavior-verification-first. */
+export type AgentTeamFlow = "code_first" | "verify_first";
+
 export interface AgentTeamReviewTarget {
   scope: AgentTeamReviewScope;
   baseCommit: string;
@@ -209,6 +212,8 @@ export interface AgentTeamRunOptions {
   notifyMainOnHumanGate: boolean;
   reviewCheckpointMode?: AgentTeamReviewCheckpointMode;
   maxRepairAttempts?: number;
+  /** Execution entry order; defaults to code_first when absent. */
+  flow?: AgentTeamFlow;
 }
 
 /** Persisted freshness boundary for the worker currently allowed to complete. */

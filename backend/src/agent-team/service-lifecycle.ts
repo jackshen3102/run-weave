@@ -61,6 +61,8 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
     const runId = createAgentTeamRunId(input.terminalSessionId);
     const reviewCheckpointMode =
       input.options?.reviewCheckpointMode ?? "disabled";
+    const flow = input.options?.flow ?? "code_first";
+    const stableFailThreshold = flow === "verify_first" ? 1 : undefined;
     const maxRepairAttempts = resolveMaxRepairAttempts(
       input.options?.maxRepairAttempts,
     );
@@ -137,6 +139,7 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
         notifyMainOnHumanGate: input.options?.notifyMainOnHumanGate ?? true,
         reviewCheckpointMode,
         maxRepairAttempts,
+        flow,
       },
       terminal,
       task,
@@ -150,7 +153,7 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
       proposal: null,
       workers: [],
       acceptance: [],
-      loop: createInitialLoop(maxRepairAttempts),
+      loop: createInitialLoop(maxRepairAttempts, stableFailThreshold),
       humanNotes: [],
       findingDecisions: [],
       pendingFindingDecision: null,
@@ -356,7 +359,10 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
     const activeWorkerRole =
       run.activeWorkerRole ??
       run.consumedWorkerDispatches?.at(-1)?.role ??
-      resolveInitialActiveWorkerRole(run.workers);
+      resolveInitialActiveWorkerRole(
+        run.workers,
+        run.options.flow ?? "code_first",
+      );
     const nextRun = await this.updateRun(run, {
       status: "running",
       activeWorkerRole: null,
