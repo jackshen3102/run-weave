@@ -38,8 +38,8 @@ export async function withHarness(roots, run, options = {}) {
   let activePreparationOperationId = null;
   const beginPanelAgentPreparation =
     manager.beginPanelAgentPreparation.bind(manager);
-  manager.beginPanelAgentPreparation = (...args) => {
-    const started = beginPanelAgentPreparation(...args);
+  manager.beginPanelAgentPreparation = async (...args) => {
+    const started = await beginPanelAgentPreparation(...args);
     if (started) {
       activePreparationOperationId = args[2];
     }
@@ -302,7 +302,8 @@ export async function withControlledStartupDelay(run) {
   const timers = [];
   let elapsedMs = 0;
   globalThis.setTimeout = (callback, timeoutMs, ...args) => {
-    if (timeoutMs !== 10_000) {
+    const stack = new Error().stack ?? "";
+    if (timeoutMs !== 10_000 || !stack.includes("agent-preparation.ts:535")) {
       return originalSetTimeout(callback, timeoutMs, ...args);
     }
     const timer = { callback, args, fired: false };

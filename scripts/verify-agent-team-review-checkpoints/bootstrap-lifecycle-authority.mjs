@@ -142,12 +142,14 @@ function verifyWorkerPanesStayFixedAcrossRechecks(check) {
   );
   check(
     "agent-team-thread-resume-preserves-fixed-worker-pane",
-    preparationSource.includes("reusingPanel && !resumingThread") &&
+    preparationSource.includes(
+      "reusingPanel && (!resumingThread || resetPanelBeforeResume)",
+    ) &&
       preparationSource.includes("resumeThreadId") &&
-      preparationSource.includes(
-        "currentPanel.activeCommand = request.command?.trim() || request.agent",
-      ) &&
-      preparationSource.indexOf("reusingPanel && !resumingThread") <
+      preparationSource.includes("currentPanel.activeCommand = nextActiveCommand") &&
+      preparationSource.indexOf(
+        "reusingPanel && (!resumingThread || resetPanelBeforeResume)",
+      ) <
         preparationSource.indexOf("respawnPane("),
     preparationSource.slice(0, 12_000),
   );
