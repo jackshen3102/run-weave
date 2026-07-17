@@ -70,20 +70,18 @@ export function StartFlowSection({
       <div className="space-y-1.5 rounded border border-slate-800 bg-slate-900/50 p-2">
         <div className="text-[11px] font-medium text-slate-200">执行模式</div>
         <div className="flex gap-1.5">
-          {(
-            [
-              {
-                value: "code_first" as const,
-                label: "Code First",
-                hint: "先写码 → 评审 → 验证",
-              },
-              {
-                value: "verify_first" as const,
-                label: "Verify First",
-                hint: "先验证 → 失败才修复 → 评审",
-              },
-            ]
-          ).map((option) => (
+          {[
+            {
+              value: "code_first" as const,
+              label: "Code First",
+              hint: "先写码 → 评审 → 验证",
+            },
+            {
+              value: "verify_first" as const,
+              label: "Verify First",
+              hint: "先验证 → 失败才修复 → 评审",
+            },
+          ].map((option) => (
             <button
               key={option.value}
               type="button"
@@ -120,7 +118,18 @@ export function StartFlowSection({
         拆分策略：服务端自动拆分。右侧面板只展示状态与日志，不需要手动点击“拆分”。
       </div>
       <label className="block space-y-1 text-[11px] text-slate-400">
-        <span>计划文件</span>
+        <span>
+          测试案例文件{flow === "verify_first" ? "（Verify First 优先）" : ""}
+        </span>
+        <input
+          className="h-8 w-full rounded border border-slate-800 bg-slate-950 px-2 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
+          value={testCaseFilePath}
+          onChange={(event) => onTestCaseFilePathChange(event.target.value)}
+          placeholder="docs/testing/example-test-cases.md"
+        />
+      </label>
+      <label className="block space-y-1 text-[11px] text-slate-400">
+        <span>计划文件（可选上下文）</span>
         <input
           className="h-8 w-full rounded border border-slate-800 bg-slate-950 px-2 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
           value={planFilePath}
@@ -165,15 +174,6 @@ export function StartFlowSection({
             可分析并执行允许的恢复动作，但不能代替人工审批或裁决。
           </span>
         </span>
-      </label>
-      <label className="block space-y-1 text-[11px] text-slate-400">
-        <span>测试案例文件</span>
-        <input
-          className="h-8 w-full rounded border border-slate-800 bg-slate-950 px-2 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"
-          value={testCaseFilePath}
-          onChange={(event) => onTestCaseFilePathChange(event.target.value)}
-          placeholder="docs/testing/example-test-cases.md"
-        />
       </label>
       <textarea
         className="min-h-20 w-full resize-y rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-600"

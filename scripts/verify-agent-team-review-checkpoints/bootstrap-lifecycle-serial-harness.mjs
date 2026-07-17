@@ -28,6 +28,10 @@ export class AgentTeamSerialDispatchHarness extends AgentTeamService {
     });
   }
 
+  prepareInitial(input, projectRoot) {
+    return this.prepareInitialAcceptance(input, projectRoot);
+  }
+
   recheck(run, session, worker, cases) {
     return this.sendRecheckToWorker(run, session, worker, cases, {
       attempt: 1,

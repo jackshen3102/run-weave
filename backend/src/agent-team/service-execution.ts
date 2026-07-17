@@ -424,6 +424,26 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       caseIds.includes(item.caseId),
     );
     const repairCycles = repairCyclesForCases(run.loop, caseIds);
+    const missingReproductionCaseIds = new Set(
+      repairCycles
+        .filter(
+          (cycle) =>
+            !(cycle.sourceReproduction ?? cycle.finding?.reproduction),
+        )
+        .flatMap((cycle) => cycle.caseIds),
+    );
+    const reproductionCases = acceptanceCasesForRole(
+      run,
+      "behavior_verify",
+    ).filter((item) => missingReproductionCaseIds.has(item.caseId));
+    if (reproductionCases.length > 0) {
+      return this.dispatchSerialWorker(run, "behavior_verify", {
+        cases: reproductionCases,
+        log: "code 修复前缺少可执行复现场景，先回派 behavior_verify",
+        triggerSummary:
+          "必须从真实产品入口提交 scenarioId、validationSessionId、steps、expected、actual 和 evidence；完整 reproduction 通过 backend 校验前不得回派 code。",
+      });
+    }
     const session = this.terminalSessionManager.getSession(
       run.terminalSessionId,
     );

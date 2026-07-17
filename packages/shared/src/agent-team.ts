@@ -116,6 +116,8 @@ export interface AgentTeamAcceptanceCase {
   skipReason?: string | null;
   /** Latest per-case conclusion supplied by the verification worker. */
   resultSummary?: string | null;
+  /** Executed failure scenario supplied by behavior_verify. */
+  reproduction?: AgentTeamReviewFindingReproduction | null;
   /** Latest observed status from the behavior_verify worker. */
   status: AgentTeamAcceptanceStatus;
   /** Consecutive stable-fail rounds (debounce state); reset on pass/flip. */
@@ -143,6 +145,8 @@ export interface AgentTeamRepairCycle {
   verificationMode: AgentTeamFindingVerificationMode;
   /** Reviewer/case evidence refs that a structural repair must reproduce. */
   sourceEvidenceRefs?: string[];
+  /** Verifier-owned scenario that the code worker must reproduce unchanged. */
+  sourceReproduction?: AgentTeamReviewFindingReproduction;
   attempts: number;
   maxAttempts: number;
   firstFailedRound: number;
@@ -401,6 +405,11 @@ export interface AgentTeamFixVerification {
     validationSessionId?: string | null;
     evidence: AgentTeamAcceptanceEvidence[];
   };
+  /** Auditable proof that code invoked the mandatory reproduce-before-fix skill. */
+  skillInvocation?: {
+    name: "$toolkit:reproduce-before-fix";
+    evidence: AgentTeamAcceptanceEvidence[];
+  };
   verification: {
     status: "pass" | "fail" | "blocked";
     sameScenario: boolean;
@@ -450,6 +459,8 @@ export interface AgentTeamWorkerOutbox {
     summary?: string | null;
     skipReason?: string | null;
     evidence: AgentTeamAcceptanceEvidence[];
+    /** Required for behavior_verify failures. */
+    reproduction?: AgentTeamReviewFindingReproduction;
   }>;
 }
 

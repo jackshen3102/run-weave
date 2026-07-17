@@ -10,6 +10,7 @@ import type {
 import { logger } from "../logging";
 import {
   AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS,
+  getCompletionSourceForCommand,
   isCompletionSourceAllowedForCommand,
 } from "./completion-source-gate";
 import type { TerminalSessionManager } from "./manager";
@@ -229,12 +230,16 @@ export async function processTerminalAgentHook(
       session.id,
       panel?.id ?? null,
     );
+  const targetCommandSource = getCompletionSourceForCommand(
+    targetActiveCommand,
+  );
+  const reportedCommandMatchesCurrentTarget =
+    targetCommandSource === input.agent &&
+    targetCommandSource ===
+      getCompletionSourceForCommand(input.commandName ?? null);
   const currentCommandMatches =
     isCompletionSourceAllowedForCommand(input.agent, targetActiveCommand) ||
-    isCompletionSourceAllowedForCommand(
-      input.agent,
-      input.commandName ?? null,
-    ) ||
+    reportedCommandMatchesCurrentTarget ||
     sessionAgent === effectiveAgent ||
     panelAgent === effectiveAgent;
   const graceCommandMatches =

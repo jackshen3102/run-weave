@@ -86,6 +86,8 @@ export function buildRepairRun() {
 
 export function buildFixVerification(cycle, overrides = {}) {
   const runtime = cycle.verificationMode === "runtime";
+  const sourceReproduction =
+    cycle.sourceReproduction ?? cycle.finding?.reproduction;
   const structuralEvidence = (cycle.sourceEvidenceRefs ?? []).map((ref) => ({
     ...buildRepairEvidence("review-harness"),
     ref,
@@ -98,15 +100,22 @@ export function buildFixVerification(cycle, overrides = {}) {
       status: runtime ? "reproduced" : "confirmed",
       ...(runtime
         ? {
-            scenarioId: "repair-runtime",
-            validationSessionId: "dvs-repair",
+            scenarioId: sourceReproduction?.scenarioId ?? "repair-runtime",
+            validationSessionId:
+              sourceReproduction?.validationSessionId ?? "dvs-repair",
           }
-        : {}),
+        : sourceReproduction?.scenarioId
+          ? { scenarioId: sourceReproduction.scenarioId }
+          : {}),
       evidence: runtime
         ? [buildRepairEvidence("before")]
         : structuralEvidence.length > 0
           ? structuralEvidence
           : [buildRepairEvidence("before")],
+    },
+    skillInvocation: {
+      name: "$toolkit:reproduce-before-fix",
+      evidence: [buildRepairEvidence("reproduce-before-fix")],
     },
     verification: {
       status: "pass",

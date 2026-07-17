@@ -7,6 +7,7 @@ import {
   normalizeFindings,
   normalizeFixVerifications,
   normalizeRecommendations,
+  normalizeReviewFindingReproduction,
 } from "./outbox-normalizer";
 
 type CompletionEvent = Extract<TerminalEventEnvelope, { kind: "completion" }>;
@@ -334,19 +335,25 @@ function normalizeAcceptanceResults(
           result.status === "fail" ||
           result.status === "skipped"),
     )
-    .map((result) => ({
-      caseId: result.caseId,
-      status: result.status,
-      ...(typeof result.summary === "string" && result.summary.trim()
-        ? { summary: result.summary.trim() }
-        : result.status === "fail" &&
-            failureCount === 1 &&
-            singleFailureFallback?.trim()
-          ? { summary: singleFailureFallback.trim() }
+    .map((result) => {
+      const reproduction = normalizeReviewFindingReproduction(
+        result.reproduction,
+      );
+      return {
+        caseId: result.caseId,
+        status: result.status,
+        ...(typeof result.summary === "string" && result.summary.trim()
+          ? { summary: result.summary.trim() }
+          : result.status === "fail" &&
+              failureCount === 1 &&
+              singleFailureFallback?.trim()
+            ? { summary: singleFailureFallback.trim() }
+            : {}),
+        ...(typeof result.skipReason === "string" && result.skipReason.trim()
+          ? { skipReason: result.skipReason.trim() }
           : {}),
-      ...(typeof result.skipReason === "string" && result.skipReason.trim()
-        ? { skipReason: result.skipReason.trim() }
-        : {}),
-      evidence: normalizeEvidenceList(result.evidence),
-    }));
+        evidence: normalizeEvidenceList(result.evidence),
+        ...(reproduction ? { reproduction } : {}),
+      };
+    });
 }

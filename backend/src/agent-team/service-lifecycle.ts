@@ -17,9 +17,7 @@ import { createInitialLoop } from "./loop";
 import { resolveMaxRepairAttempts } from "./repair-loop";
 import { agentTeamLogger } from "./service-context";
 import { AgentTeamInterventionService } from "./service-intervention";
-import {
-  acceptanceCasesForRole,
-} from "./service-acceptance-policy";
+import { acceptanceCasesForRole } from "./service-acceptance-policy";
 import {
   normalizeWorkers,
   resolveInitialActiveWorkerRole,
@@ -169,6 +167,7 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
         const generationPrompt = buildMainTestCaseGenerationPrompt({
           run,
           planFilePath: prepared.verification.planFilePath ?? null,
+          testCaseValidationError: prepared.testCaseValidationError,
         });
         await this.agentLaunch.submitAgentLaunch(session, terminal, {
           panelId: mainPanelId,
@@ -332,6 +331,9 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
               invariant: item.text,
               verificationMode: "runtime" as const,
               sourceEvidenceRefs: item.evidence.map((evidence) => evidence.ref),
+              ...(item.reproduction
+                ? { sourceReproduction: item.reproduction }
+                : {}),
               attempts: 0,
               maxAttempts:
                 run.loop.maxRepairAttempts ??

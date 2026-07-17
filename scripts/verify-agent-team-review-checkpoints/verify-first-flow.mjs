@@ -1,4 +1,7 @@
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import { createInitialLoop } from "../../backend/src/agent-team/loop.ts";
+import { buildMainTestCaseGenerationPrompt } from "../../backend/src/agent-team/prompt-builders.ts";
 import {
   withControlledStartupDelay,
   withHarness,
@@ -54,12 +57,30 @@ function buildExecutingVerifyFirstRun(harness, overrides = {}) {
     clarify: [],
     proposal: null,
     workers: [
-      { id: "code-worker", role: "code", intent: "fix",
-        panelId: "code-panel", tmuxPaneId: "%1", frozen: true },
-      { id: "review-worker", role: "code_review", intent: "review",
-        panelId: "review-panel", tmuxPaneId: "%2", frozen: true },
-      { id: "behavior-worker", role: "behavior_verify", intent: "verify",
-        panelId: "behavior-panel", tmuxPaneId: "%3", frozen: false },
+      {
+        id: "code-worker",
+        role: "code",
+        intent: "fix",
+        panelId: "code-panel",
+        tmuxPaneId: "%1",
+        frozen: true,
+      },
+      {
+        id: "review-worker",
+        role: "code_review",
+        intent: "review",
+        panelId: "review-panel",
+        tmuxPaneId: "%2",
+        frozen: true,
+      },
+      {
+        id: "behavior-worker",
+        role: "behavior_verify",
+        intent: "verify",
+        panelId: "behavior-panel",
+        tmuxPaneId: "%3",
+        frozen: false,
+      },
     ],
     acceptance: [behaviorCase("BSP-001")],
     loop: createInitialLoop(3, 1),
@@ -69,6 +90,98 @@ function buildExecutingVerifyFirstRun(harness, overrides = {}) {
     updatedAt: now,
     ...overrides,
   };
+}
+
+async function verifyPlanInputRecognition(check, roots) {
+  await withHarness(roots, async (harness) => {
+    const service = buildService(harness);
+    const sourceFilePath = "verify-first-source.md";
+    await writeFile(
+      path.join(harness.session.cwd, sourceFilePath),
+      [
+        "# Verify First cases",
+        "",
+        "### VF-PARSE-001 existing test case",
+        "",
+        "**前置条件（Given）**",
+        "",
+        "- fixture ready",
+        "",
+        "**操作（When）**",
+        "",
+        "1. run verification",
+        "",
+        "**预期结果（Then）**",
+        "",
+        "- verification passes",
+        "",
+        "**失败判断**",
+        "",
+        "- verification fails",
+        "",
+        "**验证方式**",
+        "",
+        "- command evidence",
+      ].join("\n"),
+    );
+    const input = {
+      projectId: harness.session.projectId,
+      terminalSessionId: harness.session.id,
+      task: "verify existing cases first",
+      planFilePath: sourceFilePath,
+      options: { flow: "verify_first" },
+    };
+    const prepared = await service.prepareInitial(input, harness.session.cwd);
+    check(
+      "verify-first-recognizes-plan-input-as-test-cases",
+      prepared.acceptance.length === 1 &&
+        prepared.acceptance[0]?.caseId === "VF-PARSE-001" &&
+        prepared.verification.testCaseFilePath === sourceFilePath &&
+        prepared.verification.acceptanceSource === "test_case_file" &&
+        !prepared.testCaseValidationError,
+      prepared,
+    );
+
+    const invalidSourceFilePath = "verify-first-invalid-source.md";
+    await writeFile(
+      path.join(harness.session.cwd, invalidSourceFilePath),
+      [
+        "# Invalid cases",
+        "",
+        "### VF-PARSE-002 incomplete test case",
+        "",
+        "**操作（When）**",
+        "",
+        "1. run verification",
+      ].join("\n"),
+    );
+    const invalidPrepared = await service.prepareInitial(
+      { ...input, planFilePath: invalidSourceFilePath },
+      harness.session.cwd,
+    );
+    const prompt = buildMainTestCaseGenerationPrompt({
+      run: buildExecutingVerifyFirstRun(harness, {
+        verification: invalidPrepared.verification,
+      }),
+      planFilePath: invalidSourceFilePath,
+      testCaseValidationError: invalidPrepared.testCaseValidationError,
+    });
+    check(
+      "verify-first-reports-parse-error-and-repairs-source-first",
+      invalidPrepared.acceptance.length === 0 &&
+        invalidPrepared.testCaseValidationError?.includes(
+          "VF-PARSE-002 缺少期望、失败判定",
+        ) &&
+        prompt.includes("VF-PARSE-002 缺少期望、失败判定") &&
+        prompt.includes("输入文件（测试案例解析未通过）") &&
+        prompt.includes("优先修复原文件") &&
+        prompt.includes("不要创建内容重复的新文档"),
+      {
+        validationError: invalidPrepared.testCaseValidationError,
+        prompt,
+      },
+    );
+  });
 }
 
 // Scenario 1: reversed entry — applySplit on a verify_first run makes the first
@@ -88,7 +201,12 @@ async function verifyReversedEntry(check, roots) {
       activeWorkerRole: null,
       workers: [],
       acceptance: [],
-      proposal: { summary: "fixture split", workers, acceptance, source: "agent" },
+      proposal: {
+        summary: "fixture split",
+        workers,
+        acceptance,
+        source: "agent",
+      },
     };
     harness.setExecutePaneSends(false);
     await withControlledStartupDelay(async (clock) => {
@@ -109,7 +227,10 @@ async function verifyReversedEntry(check, roots) {
             false,
         {
           activeWorkerRole: result.activeWorkerRole,
-          workers: result.workers.map((w) => ({ role: w.role, frozen: w.frozen })),
+          workers: result.workers.map((w) => ({
+            role: w.role,
+            frozen: w.frozen,
+          })),
         },
       );
     });
@@ -130,7 +251,9 @@ async function verifyFirstPassAllGreenCompletes(check, roots) {
       completedWorkerRole: "behavior_verify",
       completedWorkerSummary: "all green",
     });
-    const reviewGate = result.acceptance.find((c) => c.caseId === "AGT-REVIEW-GATE");
+    const reviewGate = result.acceptance.find(
+      (c) => c.caseId === "AGT-REVIEW-GATE",
+    );
     const behavior = result.acceptance.find((c) => c.caseId === "BSP-001");
     check(
       "verify-first-first-pass-all-green-completes",
@@ -141,7 +264,10 @@ async function verifyFirstPassAllGreenCompletes(check, roots) {
         service.secondaryPrompts.length === 0,
       {
         status: result.status,
-        acceptance: result.acceptance.map((c) => ({ caseId: c.caseId, status: c.status })),
+        acceptance: result.acceptance.map((c) => ({
+          caseId: c.caseId,
+          status: c.status,
+        })),
       },
     );
   });
@@ -196,20 +322,26 @@ async function verifyReviewGateNotBypassedAfterCodeActivity(check, roots) {
       completedWorkerRole: "behavior_verify",
       completedWorkerSummary: "behavior green after fix",
     });
-    const reviewGate = result.acceptance.find((c) => c.caseId === "AGT-REVIEW-GATE");
+    const reviewGate = result.acceptance.find(
+      (c) => c.caseId === "AGT-REVIEW-GATE",
+    );
     check(
       "verify-first-review-gate-not-bypassed-after-code-activity",
       result.status !== "done" && reviewGate?.status !== "pass",
       {
         status: result.status,
         reviewGateStatus: reviewGate?.status,
-        acceptance: result.acceptance.map((c) => ({ caseId: c.caseId, status: c.status })),
+        acceptance: result.acceptance.map((c) => ({
+          caseId: c.caseId,
+          status: c.status,
+        })),
       },
     );
   });
 }
 
 export async function verifyVerifyFirstFlow(check, roots) {
+  await verifyPlanInputRecognition(check, roots);
   await verifyReversedEntry(check, roots);
   await verifyFirstPassAllGreenCompletes(check, roots);
   await verifyReviewGateNotBypassedAfterCodeActivity(check, roots);

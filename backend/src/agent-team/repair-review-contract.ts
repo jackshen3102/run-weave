@@ -21,6 +21,45 @@ export function rawBlockingReviewFindings(
   );
 }
 
+export function behaviorFailureContractErrors(
+  outbox: AgentTeamWorkerOutbox,
+  acceptanceResults: NonNullable<AgentTeamWorkerOutbox["acceptanceResults"]>,
+): string[] {
+  if (outbox.role !== "behavior_verify") {
+    return [];
+  }
+  return acceptanceResults.flatMap((result) => {
+    if (result.status !== "fail") {
+      return [];
+    }
+    const reproduction = result.reproduction;
+    if (!reproduction) {
+      return [
+        `${result.caseId} fail 缺少完整 reproduction；必须提供 real_product + reproduced、scenarioId、validationSessionId、steps、expected、actual 和 evidence`,
+      ];
+    }
+    const errors: string[] = [];
+    if (
+      reproduction.mode !== "real_product" ||
+      reproduction.status !== "reproduced"
+    ) {
+      errors.push(
+        `${result.caseId}.reproduction 必须是 real_product + reproduced`,
+      );
+    }
+    if (!reproduction.scenarioId?.trim()) {
+      errors.push(`${result.caseId}.reproduction 缺少 scenarioId`);
+    }
+    if (!reproduction.validationSessionId?.trim()) {
+      errors.push(`${result.caseId}.reproduction 缺少 validationSessionId`);
+    }
+    if (reproduction.evidence.length === 0 || result.evidence.length === 0) {
+      errors.push(`${result.caseId} fail 缺少可追溯复现证据`);
+    }
+    return errors;
+  });
+}
+
 export function reviewFindingContractErrors(
   run: AgentTeamRun,
   outbox: AgentTeamWorkerOutbox,

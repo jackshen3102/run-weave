@@ -51,4 +51,5 @@ export interface PreparedAgentTeamAcceptance {
   verification: AgentTeamVerificationConfig;
   acceptance: AgentTeamAcceptanceCase[];
   startLog: string;
+  testCaseValidationError?: string | null;
 }

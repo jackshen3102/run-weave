@@ -205,6 +205,16 @@ export function verifyEvidenceGatedRepairLoop(check) {
         status: "fail",
         summary: "runtime still fails",
         evidence: [buildRepairEvidence("runtime-fail")],
+        reproduction: {
+          mode: "real_product",
+          status: "reproduced",
+          scenarioId: "repair-runtime",
+          validationSessionId: "dvs-repair",
+          steps: ["open the product and reproduce the failed behavior"],
+          expected: "runtime invariant holds",
+          actual: "runtime invariant fails",
+          evidence: [buildRepairEvidence("runtime-reproduction")],
+        },
       },
     ],
   });
@@ -457,7 +467,7 @@ export function verifyEvidenceGatedRepairLoop(check) {
   check(
     "repair-structural-uses-original-harness",
     structuralPrompt.includes("原样复跑 reviewer evidence") &&
-      !structuralPrompt.includes("Codex worker 在修改源码前显式调用"),
+      structuralPrompt.includes("$toolkit:reproduce-before-fix"),
     structuralPrompt,
   );
   const repeatedReviewReproduction = buildReviewReproduction({
@@ -477,6 +487,10 @@ export function verifyEvidenceGatedRepairLoop(check) {
     ...structuralCycle,
     attempts: 1,
     finding: repeatedReviewOutbox.remainingFindings[0],
+    sourceReproduction: repeatedReviewReproduction,
+    sourceEvidenceRefs: repeatedReviewReproduction.evidence.map(
+      (item) => item.ref,
+    ),
   };
   const repeatedStructuralRun = {
     ...structuralRun,
