@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type {
   AgentTeamFindingDisposition,
+  AgentTeamFlow,
   AgentTeamRun,
 } from "@runweave/shared/agent-team";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
@@ -59,6 +60,7 @@ export function TerminalAgentTeamPanel({
   const [testCaseFilePath, setTestCaseFilePath] = useState("");
   const [reviewCheckpointEnabled, setReviewCheckpointEnabled] = useState(false);
   const [notifyMainOnHumanGate, setNotifyMainOnHumanGate] = useState(true);
+  const [flow, setFlow] = useState<AgentTeamFlow>("code_first");
   const [workerDrafts, setWorkerDrafts] = useState<WorkerDraft[] | null>(null);
   const [retryingRunId, setRetryingRunId] = useState<string | null>(null);
 
@@ -199,6 +201,7 @@ export function TerminalAgentTeamPanel({
         options: {
           autoApproveSplit: true,
           notifyMainOnHumanGate,
+          flow,
           reviewCheckpointMode: reviewCheckpointEnabled
             ? "local_commit"
             : "disabled",
@@ -224,6 +227,7 @@ export function TerminalAgentTeamPanel({
       run.options.reviewCheckpointMode === "local_commit",
     );
     setNotifyMainOnHumanGate(run.options.notifyMainOnHumanGate !== false);
+    setFlow(run.options.flow ?? "code_first");
     setRetryingRunId(run.runId);
     setError(null);
   });
@@ -375,12 +379,14 @@ export function TerminalAgentTeamPanel({
             testCaseFilePath={testCaseFilePath}
             reviewCheckpointEnabled={reviewCheckpointEnabled}
             notifyMainOnHumanGate={notifyMainOnHumanGate}
+            flow={flow}
             busy={busy}
             onTaskChange={setTask}
             onPlanFilePathChange={setPlanFilePath}
             onTestCaseFilePathChange={setTestCaseFilePath}
             onReviewCheckpointEnabledChange={setReviewCheckpointEnabled}
             onNotifyMainOnHumanGateChange={setNotifyMainOnHumanGate}
+            onFlowChange={setFlow}
             onStart={startFlow}
           />
         ) : !run ? (
@@ -390,12 +396,14 @@ export function TerminalAgentTeamPanel({
             testCaseFilePath={testCaseFilePath}
             reviewCheckpointEnabled={reviewCheckpointEnabled}
             notifyMainOnHumanGate={notifyMainOnHumanGate}
+            flow={flow}
             busy={busy}
             onTaskChange={setTask}
             onPlanFilePathChange={setPlanFilePath}
             onTestCaseFilePathChange={setTestCaseFilePath}
             onReviewCheckpointEnabledChange={setReviewCheckpointEnabled}
             onNotifyMainOnHumanGateChange={setNotifyMainOnHumanGate}
+            onFlowChange={setFlow}
             onStart={startFlow}
           />
         ) : run.status === "failed" && run.phase !== "executing" ? (

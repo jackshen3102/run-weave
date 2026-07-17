@@ -34,6 +34,10 @@ export class AgentTeamSerialDispatchHarness extends AgentTeamService {
     });
   }
 
+  round(run, params) {
+    return this.applyRound(run, params);
+  }
+
   async updateRun(run, patch) {
     const next = {
       ...run,

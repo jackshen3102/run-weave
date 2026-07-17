@@ -58,6 +58,7 @@ const createRunSchema = z
         notifyMainOnHumanGate: z.boolean().optional(),
         reviewCheckpointMode: z.enum(["disabled", "local_commit"]).optional(),
         maxRepairAttempts: z.number().int().min(1).max(5).optional(),
+        flow: z.enum(["code_first", "verify_first"]).optional(),
       })
       .strict()
       .optional(),

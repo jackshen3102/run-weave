@@ -1,0 +1,347 @@
+{
+  "workspace": {
+    "title": "Activity",
+    "subtitle": "Terminal sessions, questions, and outcomes",
+    "currentSources": 4,
+    "sourceCount": 4,
+    "runtimeFilter": "All runtimes"
+  },
+  "navigation": [
+    {
+      "group": "Work history",
+      "items": [
+        {
+          "id": "attention",
+          "label": "Needs Attention",
+          "icon": "inbox",
+          "badge": 3
+        },
+        { "id": "terminals", "label": "Terminal History", "icon": "terminal" },
+        { "id": "runs", "label": "Multi-Agent Runs", "icon": "users" }
+      ]
+    },
+    {
+      "group": "Raw data",
+      "items": [
+        { "id": "facts", "label": "Events", "icon": "database" },
+        { "id": "timeline", "label": "Timeline", "icon": "clock" },
+        { "id": "sources", "label": "Sources", "icon": "source" }
+      ]
+    },
+    {
+      "group": "Data",
+      "items": [{ "id": "policy", "label": "Data Policy", "icon": "shield" }]
+    }
+  ],
+  "filters": [
+    { "id": "all", "label": "All", "count": 4 },
+    { "id": "attention", "label": "Needs attention", "count": 3 },
+    { "id": "resolved", "label": "Resolved", "count": 1 }
+  ],
+  "activeFilterId": "attention",
+  "activeItemId": "attention-breaker",
+  "attentionItems": [
+    {
+      "id": "attention-breaker",
+      "kind": "agent_team.need_human",
+      "status": "attention",
+      "priority": "blocking",
+      "priorityLabel": "Blocked",
+      "title": "Agent Team 已熔断，等待人工介入",
+      "summary": "AGT-WH-015 在同一场景连续失败，Loop 已冻结并保留 worker pane 现场。",
+      "projectId": "browser-viewer",
+      "projectLabel": "browser-viewer",
+      "runId": "atr_4ef1c0a8",
+      "terminalSessionId": "bvw-agent-team-42",
+      "terminalLabel": "agent-team-loop",
+      "panelId": "panel_code_42",
+      "panelLabel": "Code pane",
+      "updatedAt": "2 min ago",
+      "reason": "同一错误指纹连续 3 轮未产生新的通过用例，达到 maxNoProgress=3。",
+      "actions": [
+        { "id": "focus", "label": "Focus code pane", "variant": "secondary" },
+        { "id": "resume", "label": "Resume run", "variant": "primary" }
+      ],
+      "loop": {
+        "round": 6,
+        "noProgressCount": 3,
+        "maxNoProgress": 3,
+        "bestPassCount": 14,
+        "acceptanceCount": 15,
+        "lastWorkerRole": "behavior_verify"
+      },
+      "acceptance": {
+        "caseId": "case_agt_wh_015",
+        "sourceCaseId": "AGT-WH-015",
+        "title": "Unavailable provenance remains visible in Journal and Inspector",
+        "sourceFilePath": "docs/testing/agent-team/work-history-test-cases.md",
+        "status": "fail",
+        "resultSummary": "Journal 与 Inspector 均未显示 attributionSource=unavailable。"
+      },
+      "references": [
+        {
+          "id": "ref-run-42",
+          "kind": "run",
+          "label": "atr_4ef1c0a8",
+          "description": "Agent Team run · round 6 · need_human",
+          "uri": "runweave://agent-team/atr_4ef1c0a8",
+          "scope": "browser-viewer",
+          "updatedAt": "2 min ago",
+          "live": true
+        },
+        {
+          "id": "ref-terminal-42",
+          "kind": "terminal",
+          "label": "agent-team-loop",
+          "description": "Terminal bvw-agent-team-42 · Codex · agent_idle",
+          "uri": "runweave://terminal/bvw-agent-team-42",
+          "scope": "browser-viewer",
+          "updatedAt": "2 min ago",
+          "live": true
+        },
+        {
+          "id": "ref-case-015",
+          "kind": "acceptance",
+          "label": "AGT-WH-015",
+          "description": "Traceable acceptance case · failed in round 6",
+          "uri": "runweave://acceptance/atr_4ef1c0a8/case_agt_wh_015",
+          "scope": "atr_4ef1c0a8",
+          "updatedAt": "4 min ago",
+          "live": true
+        }
+      ],
+      "history": [
+        {
+          "label": "behavior_verify failed",
+          "meta": "Round 6 · 4 min ago",
+          "tone": "danger"
+        },
+        {
+          "label": "No progress circuit breaker opened",
+          "meta": "3 / 3 · 2 min ago",
+          "tone": "danger"
+        },
+        {
+          "label": "Worker panes frozen",
+          "meta": "Scene retained · 2 min ago",
+          "tone": "neutral"
+        }
+      ]
+    },
+    {
+      "id": "attention-split",
+      "kind": "agent_team.split_gate",
+      "status": "attention",
+      "priority": "review",
+      "priorityLabel": "Review",
+      "title": "拆分提案等待确认",
+      "summary": "主 Agent 已生成可追溯测试案例，并提议创建 3 个串行 worker。",
+      "projectId": "browser-viewer",
+      "projectLabel": "browser-viewer",
+      "runId": "atr_c3305225",
+      "terminalSessionId": "bvw-agent-team-31",
+      "terminalLabel": "reference-protocol",
+      "panelId": "panel_main_31",
+      "panelLabel": "Main pane",
+      "updatedAt": "8 min ago",
+      "reason": "generatedTestCaseFilePath 已通过 loader，等待人工确认 worker 意图。",
+      "actions": [
+        { "id": "reject", "label": "Reject", "variant": "secondary" },
+        { "id": "confirm", "label": "Confirm split", "variant": "primary" }
+      ],
+      "proposal": {
+        "source": "agent",
+        "summary": "先定义 Reference handle，再接 Action Center projection，最后做行为验证。",
+        "testCaseFilePath": "docs/testing/agent-team/action-center-reference-test-cases.md",
+        "acceptanceSource": "plan_file_generated",
+        "workers": [
+          {
+            "role": "code",
+            "intent": "实现共享 DTO、resolver 与 Activity 接线"
+          },
+          { "role": "code_review", "intent": "审查权限、幂等和状态所有权" },
+          {
+            "role": "behavior_verify",
+            "intent": "验证列表、门禁动作与 live resolve"
+          }
+        ]
+      },
+      "references": [
+        {
+          "id": "ref-run-31",
+          "kind": "run",
+          "label": "atr_c3305225",
+          "description": "Agent Team run · proposal · need_human",
+          "uri": "runweave://agent-team/atr_c3305225",
+          "scope": "browser-viewer",
+          "updatedAt": "8 min ago",
+          "live": true
+        },
+        {
+          "id": "ref-test-plan",
+          "kind": "artifact",
+          "label": "action-center-reference-test-cases.md",
+          "description": "Loader-validated acceptance source",
+          "uri": "runweave://artifact/browser-viewer/docs%2Ftesting%2Fagent-team%2Faction-center-reference-test-cases.md",
+          "scope": "browser-viewer",
+          "updatedAt": "9 min ago",
+          "live": true
+        }
+      ],
+      "history": [
+        {
+          "label": "Traceable test cases loaded",
+          "meta": "3 cases · 9 min ago",
+          "tone": "success"
+        },
+        {
+          "label": "Split proposal submitted",
+          "meta": "source=agent · 8 min ago",
+          "tone": "neutral"
+        }
+      ]
+    },
+    {
+      "id": "attention-finding",
+      "kind": "agent_team.finding_disposition",
+      "status": "attention",
+      "priority": "blocking",
+      "priorityLabel": "P1",
+      "title": "Final review finding 需要范围裁决",
+      "summary": "Resume note 中的 reference handle 未校验 project scope，可能解析到其它项目对象。",
+      "projectId": "browser-viewer",
+      "projectLabel": "browser-viewer",
+      "runId": "atr_a8e92f11",
+      "terminalSessionId": "bvw-agent-team-27",
+      "terminalLabel": "action-center-ui",
+      "panelId": "panel_review_27",
+      "panelLabel": "Code review pane",
+      "updatedAt": "14 min ago",
+      "reason": "Reviewer 提供了 structural reproduction，但无法自动证明属于当前产品 Case。",
+      "actions": [
+        { "id": "focus", "label": "Focus review pane", "variant": "secondary" },
+        {
+          "id": "review-finding",
+          "label": "Review finding",
+          "variant": "primary"
+        }
+      ],
+      "finding": {
+        "severity": "P1",
+        "invariantKey": "reference-project-scope",
+        "verificationMode": "structural",
+        "expected": "Resolver 必须拒绝 workspace/project scope 不匹配的 handle。",
+        "actual": "当前设计草案只按 URI path 定位对象，未绑定 project identity。",
+        "caseImpacts": ["AGT-REF-004"]
+      },
+      "references": [
+        {
+          "id": "ref-run-27",
+          "kind": "run",
+          "label": "atr_a8e92f11",
+          "description": "Agent Team run · final review paused",
+          "uri": "runweave://agent-team/atr_a8e92f11",
+          "scope": "browser-viewer",
+          "updatedAt": "14 min ago",
+          "live": true
+        },
+        {
+          "id": "ref-review-outbox",
+          "kind": "artifact",
+          "label": "code_review outbox",
+          "description": "Pane-scoped finding and reproduction evidence",
+          "uri": "runweave://artifact/atr_a8e92f11/panel_review_27/outbox",
+          "scope": "atr_a8e92f11",
+          "updatedAt": "14 min ago",
+          "live": true
+        }
+      ],
+      "history": [
+        {
+          "label": "Final full review completed",
+          "meta": "target d83ce395 · 16 min ago",
+          "tone": "neutral"
+        },
+        {
+          "label": "P1 finding requested disposition",
+          "meta": "14 min ago",
+          "tone": "danger"
+        }
+      ]
+    },
+    {
+      "id": "resolved-completion",
+      "kind": "terminal.completion",
+      "status": "resolved",
+      "priority": "normal",
+      "priorityLabel": "Resolved",
+      "title": "Terminal response completed",
+      "summary": "Codex completion 已记录，并关联到当前 terminal 与 thread。",
+      "projectId": "browser-viewer",
+      "projectLabel": "browser-viewer",
+      "terminalSessionId": "bvw-codex-18",
+      "terminalLabel": "activity-polish",
+      "updatedAt": "26 min ago",
+      "reason": "Completion hook 与 TerminalState 均已确认 agent_idle。",
+      "actions": [
+        { "id": "focus", "label": "Open terminal", "variant": "secondary" }
+      ],
+      "references": [
+        {
+          "id": "ref-terminal-18",
+          "kind": "terminal",
+          "label": "activity-polish",
+          "description": "Terminal bvw-codex-18 · Codex · agent_idle",
+          "uri": "runweave://terminal/bvw-codex-18",
+          "scope": "browser-viewer",
+          "updatedAt": "26 min ago",
+          "live": true
+        }
+      ],
+      "history": [
+        {
+          "label": "Completion recorded",
+          "meta": "Hook · 26 min ago",
+          "tone": "success"
+        },
+        {
+          "label": "TerminalState changed",
+          "meta": "agent_running → agent_idle",
+          "tone": "neutral"
+        }
+      ]
+    }
+  ],
+  "referenceSources": [
+    {
+      "id": "recent",
+      "label": "Recent",
+      "items": [
+        "ref-run-42",
+        "ref-case-015",
+        "ref-terminal-42",
+        "ref-review-outbox"
+      ]
+    },
+    {
+      "id": "terminals",
+      "label": "Terminals",
+      "items": ["ref-terminal-42", "ref-terminal-18"]
+    },
+    {
+      "id": "runs",
+      "label": "Agent Team runs",
+      "items": ["ref-run-42", "ref-run-31", "ref-run-27"]
+    },
+    {
+      "id": "acceptance",
+      "label": "Acceptance cases",
+      "items": ["ref-case-015", "ref-test-plan"]
+    },
+    {
+      "id": "artifacts",
+      "label": "Artifacts & evidence",
+      "items": ["ref-review-outbox", "ref-test-plan"]
+    }
+  ]
+}

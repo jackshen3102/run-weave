@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type {
   AgentTeamActiveWorkerDispatch,
+  AgentTeamFlow,
   AgentTeamRun,
   AgentTeamWorker,
   AgentTeamWorkerOutbox,
@@ -58,7 +59,16 @@ export function clampExportTailLines(value: number | undefined): number {
 
 export function resolveInitialActiveWorkerRole(
   workers: AgentTeamWorker[],
+  flow: AgentTeamFlow = "code_first",
 ): AgentTeamWorkerRole | null {
+  if (flow === "verify_first") {
+    const verifier = workers.find(
+      (worker) => worker.role === "behavior_verify" && worker.panelId,
+    );
+    if (verifier) {
+      return verifier.role;
+    }
+  }
   for (const role of EXECUTION_WORKER_ORDER) {
     if (workers.some((worker) => worker.role === role && worker.panelId)) {
       return role;

@@ -32,6 +32,7 @@ import {
   ensureWorkerGateAcceptance,
   findStableFailCaseIdsNeedingBounce,
   hasRolePassed,
+  isReviewGateAcceptanceCase,
   isUnbouncedFailCase,
   mergeCaseIds,
 } from "./service-acceptance-policy";
@@ -142,7 +143,10 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       };
       boundWorkers.push(boundWorker);
     }
-    const activeWorkerRole = resolveInitialActiveWorkerRole(boundWorkers);
+    const activeWorkerRole = resolveInitialActiveWorkerRole(
+      boundWorkers,
+      run.options.flow ?? "code_first",
+    );
     const activeWorkers = setActiveWorker(boundWorkers, activeWorkerRole);
     const activeWorker = activeWorkerRole
       ? findWorkerByRole(activeWorkers, activeWorkerRole)
@@ -261,13 +265,44 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     // serial worker dispatch will install a new boundary below.
     let activeWorkerDispatch: AgentTeamActiveWorkerDispatch | null = null;
     let pendingFindingDecision: AgentTeamPendingFindingDecision | null = null;
+    // verify_first can finish its first pass all-green with zero code activity.
+    // The synthetic review gate then never gets dispatched (code_review only
+    // runs after code), which would strand the run in `running`. When no code or
+    // code_review dispatch has ever been consumed, there is no diff to review, so
+    // the gate is vacuously satisfied. Once any code/code_review work happens the
+    // gate flows through the normal review path instead.
+    const codeReviewEverRan = (run.consumedWorkerDispatches ?? []).some(
+      (receipt) => receipt.role === "code" || receipt.role === "code_review",
+    );
+    let foldedAcceptance = folded.acceptance;
+    if (
+      params.completedWorkerRole === "behavior_verify" &&
+      !codeReviewEverRan &&
+      foldedAcceptance.length > 0
+    ) {
+      const nonGatePassed = foldedAcceptance
+        .filter((item) => !isReviewGateAcceptanceCase(item))
+        .every((item) => item.status === "pass");
+      if (nonGatePassed) {
+        foldedAcceptance = foldedAcceptance.map((item) =>
+          isReviewGateAcceptanceCase(item) && item.status !== "pass"
+            ? {
+                ...item,
+                status: "pass" as const,
+                lastRunStatus: "pass" as const,
+                resultSummary: "无代码改动，Code Review 门禁无审查对象",
+              }
+            : item,
+        );
+      }
+    }
     const allAcceptancePassed =
-      folded.acceptance.length > 0 &&
-      folded.acceptance.every((item) => item.status === "pass");
+      foldedAcceptance.length > 0 &&
+      foldedAcceptance.every((item) => item.status === "pass");
     const blockedBehaviorCases =
       params.completedWorkerRole === "behavior_verify" &&
       !params.acceptanceResults?.some((result) => result.status === "fail")
-        ? folded.acceptance.filter(
+        ? foldedAcceptance.filter(
             (item) =>
               item.status === "pending" && item.lastRunStatus === "skipped",
           )
@@ -275,6 +310,9 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     const needsFinalReview = Boolean(
       allAcceptancePassed &&
       run.reviewCheckpoint &&
+      // A zero-diff run (no checkpoint ever produced, e.g. verify_first with
+      // all cases green on the first pass) has nothing to review.
+      run.reviewCheckpoint.checkpoints.length > 0 &&
       run.reviewCheckpoint.finalReviewedCommit !==
         run.reviewCheckpoint.lastReviewedCommit,
     );
@@ -307,7 +345,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     } else if (shouldEscalate(repairFolded.loop)) {
       const reason = buildEscalationReason(
         repairFolded.loop,
-        folded.acceptance,
+        foldedAcceptance,
       );
       loop = { ...repairFolded.loop, escalated: true, lastReason: reason };
       status = "need_human";
@@ -325,7 +363,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     const nextRun = await this.updateRun(run, {
       status,
       loop,
-      acceptance: folded.acceptance,
+      acceptance: foldedAcceptance,
       workers,
       activeWorkerRole,
       activeWorkerDispatch,

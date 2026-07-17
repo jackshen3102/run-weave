@@ -12,6 +12,7 @@ import {
 import { verifyRepairIntegration } from "./verify-agent-team-review-checkpoints/repair-integration.mjs";
 import { verifyEvidenceGatedRepairLoop } from "./verify-agent-team-review-checkpoints/repair-loop.mjs";
 import { verifyBootstrapLifecycle } from "./verify-agent-team-review-checkpoints/bootstrap-lifecycle.mjs";
+import { verifyVerifyFirstFlow } from "./verify-agent-team-review-checkpoints/verify-first-flow.mjs";
 
 const execFileAsync = promisify(execFile);
 const checks = [];
@@ -102,6 +103,7 @@ async function main() {
   await verifyBootstrapLifecycle(check, roots);
   verifyEvidenceGatedRepairLoop(check);
   await verifyRepairIntegration(check, createRepo);
+  await verifyVerifyFirstFlow(check, roots);
 
   const service = new AgentTeamReviewCheckpointGit();
   const root = await createRepo();
