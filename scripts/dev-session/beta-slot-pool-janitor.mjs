@@ -141,6 +141,13 @@ async function stopRecordedDedicatedServices(manifest, lease, homeDir) {
       await stopOwnedProcess(service.process);
     }
   }
+  if (!(await betaSlotProcessesAreAbsent(lease.slotId, homeDir))) {
+    throw new DevSessionError(
+      "Beta janitor found slot processes after dedicated service cleanup",
+      5,
+      { slotId: lease.slotId },
+    );
+  }
 }
 
 export async function runBetaPoolJanitor({

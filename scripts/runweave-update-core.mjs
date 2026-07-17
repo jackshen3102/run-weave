@@ -226,9 +226,12 @@ export function validateUpdateTargetIsolation({
   if (appBackupPath) {
     const backupPrefix = resolveBetaAppBackupPrefix(instanceId);
     const resolvedBackupPath = path.resolve(appBackupPath);
+    const timestampSuffix = resolvedBackupPath.startsWith(`${backupPrefix}-`)
+      ? resolvedBackupPath.slice(backupPrefix.length + 1)
+      : null;
     if (
       resolvedBackupPath !== backupPrefix &&
-      !resolvedBackupPath.startsWith(`${backupPrefix}-`)
+      !/^\d+$/.test(timestampSuffix ?? "")
     ) {
       throw new Error(
         `Refusing Beta update: app backup path must be ${backupPrefix} or a timestamped child; received ${resolvedBackupPath}`,

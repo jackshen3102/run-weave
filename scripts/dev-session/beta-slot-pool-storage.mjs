@@ -331,10 +331,14 @@ export async function applyBetaSlotRetention({
   const backupPrefix = path.basename(
     resolveBetaAppBackupPrefix(slotId, applicationsDir),
   );
+  const isRollbackEntry = (entry) =>
+    entry === backupPrefix ||
+    (entry.startsWith(`${backupPrefix}-`) &&
+      /^\d+$/.test(entry.slice(backupPrefix.length + 1)));
   const legacyBackupPrefix = `.${targets.appName}.app.previous`;
   const applicationEntries = await fs.readdir(applicationsDir).catch(() => []);
   const backupPaths = applicationEntries
-    .filter((entry) => entry.startsWith(backupPrefix))
+    .filter(isRollbackEntry)
     .map((entry) => path.join(applicationsDir, entry));
   let legacyBackupPaths = applicationEntries
     .filter((entry) => entry.startsWith(legacyBackupPrefix))
