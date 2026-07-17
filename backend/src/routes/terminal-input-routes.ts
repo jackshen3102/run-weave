@@ -1,4 +1,5 @@
 import type { Router } from "express";
+import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type {
   SendTerminalInterruptRequest,
   SendTerminalInterruptResponse,
@@ -8,6 +9,7 @@ import type {
 import { aiDiagnosticLog } from "../diagnostic-logs/recorder";
 import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
+import type { TerminalPanelRecord } from "../terminal/manager";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
 import type { TerminalStateService } from "../terminal/terminal-state-service";
@@ -34,6 +36,8 @@ import {
 import { registerTerminalClipboardImageRoutes } from "./terminal-clipboard-image-routes";
 
 const terminalLogger = logger.child({ component: "terminal" });
+const INTERRUPT_AGENT_IDLE_POLL_INTERVAL_MS = 300;
+const INTERRUPT_AGENT_IDLE_POLL_TIMEOUT_MS = 5_000;
 
 interface TerminalInputRouteOptions {
   ptyService?: PtyService;
@@ -43,6 +47,67 @@ interface TerminalInputRouteOptions {
   terminalEventService?: TerminalEventService;
   terminalStateService?: TerminalStateService;
   quickInputService?: TerminalQuickInputService;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function reconcileInterruptAgentState(params: {
+  terminalSessionManager: TerminalSessionManager;
+  terminalStateService: TerminalStateService;
+  terminalSessionId: string;
+  projectId: string;
+  agent: TerminalAgentKind;
+  panel: TerminalPanelRecord | null;
+}): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < INTERRUPT_AGENT_IDLE_POLL_TIMEOUT_MS) {
+    const session = params.terminalSessionManager.getSession(
+      params.terminalSessionId,
+    );
+    if (!session || session.status !== "running") {
+      return;
+    }
+    const panel = params.panel
+      ? params.terminalSessionManager.getPanel(params.panel.id) ?? null
+      : null;
+    const target = panel ?? session;
+    if (target.activeCommand === null) {
+      return;
+    }
+    const currentAgent = getTerminalSessionAgent(target);
+    if (currentAgent !== params.agent) {
+      return;
+    }
+    await delay(INTERRUPT_AGENT_IDLE_POLL_INTERVAL_MS);
+  }
+
+  const terminalState = { state: "agent_idle", agent: params.agent } as const;
+  if (params.panel) {
+    await params.terminalSessionManager.updatePanelTerminalState(
+      params.panel.id,
+      terminalState,
+    );
+  } else {
+    params.terminalStateService.handleAgentHook(
+      params.terminalSessionId,
+      params.agent,
+      "Stop",
+      {
+        projectId: params.projectId,
+        reason: "interrupt",
+      },
+    );
+  }
+  aiDiagnosticLog("terminal interrupt reconciled agent state", {
+    terminalSessionId: params.terminalSessionId,
+    panelId: params.panel?.id ?? null,
+    state: terminalState.state,
+    agent: terminalState.agent,
+  });
 }
 
 export function registerTerminalInputRoutes(
@@ -253,28 +318,40 @@ export function registerTerminalInputRoutes(
         interruptAccepted: true,
         interruptSequence: "escape",
       };
-      const agent = getTerminalSessionAgent(session);
+      const panel =
+        isTmuxBackedSession(session) && options.tmuxService
+          ? (
+              await resolvePanelTarget(
+                terminalSessionManager,
+                session,
+                {
+                  tmuxService: options.tmuxService,
+                  terminalEventService: options.terminalEventService,
+                },
+                {
+                  panelId: parsed.data.panelId,
+                  panelAlias: parsed.data.panelAlias,
+                  role: parsed.data.role,
+                },
+                "explicit-or-active",
+              )
+            ).panel
+          : null;
+      const agent = getTerminalSessionAgent(panel ?? session);
       if (options.terminalStateService && agent) {
-        const terminalState = options.terminalStateService.handleAgentHook(
-          session.id,
+        void reconcileInterruptAgentState({
+          terminalSessionManager,
+          terminalStateService: options.terminalStateService,
+          terminalSessionId: session.id,
+          projectId: session.projectId,
           agent,
-          "Stop",
-          {
-            projectId: session.projectId,
-            reason: "interrupt",
-          },
-        );
-        aiDiagnosticLog("terminal interrupt updated agent state", {
-          terminalSessionId: session.id,
-          operationId: parsed.data.operationId ?? null,
-          state: terminalState.state,
-          agent: terminalState.agent,
-        });
-        terminalLogger.info("terminal.interrupt.agent-state-updated", {
-          message: "Terminal interrupt updated agent state",
-          terminalSessionId: session.id,
-          state: terminalState.state,
-          agent: terminalState.agent,
+          panel,
+        }).catch((error) => {
+          terminalLogger.warn("terminal.interrupt.reconcile.failed", {
+            message: "Terminal interrupt reconcile failed",
+            terminalSessionId: session.id,
+            error,
+          });
         });
       }
       aiDiagnosticLog("terminal interrupt accepted", {

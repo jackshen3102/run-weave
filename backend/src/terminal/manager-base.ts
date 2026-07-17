@@ -14,7 +14,13 @@ import {
   type TerminalSessionRecord,
 } from "./manager-records";
 import { sortTerminalProjects, sortTerminalSessions } from "./manager-ordering";
-import type { LastAiActiveCommandRecord } from "./completion-source-gate";
+import {
+  AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS,
+  AGENT_ACTIVITY_STARTING_MAX_AGE_MS,
+  buildRecentAgentActivityKey,
+  isCompletionSourceAllowedForCommand,
+  type RecentAgentActivityRecord,
+} from "./completion-source-gate";
 
 export interface TerminalSessionManagerObserver {
   onBell?: (input: {
@@ -44,9 +50,9 @@ export abstract class TerminalManagerBase {
     string,
     TerminalPanelWorkspaceRecord
   >();
-  protected readonly lastAiActiveCommands = new Map<
+  protected readonly recentAgentActivities = new Map<
     string,
-    LastAiActiveCommandRecord
+    RecentAgentActivityRecord
   >();
   protected readonly scrollbackFlushTimers = new Map<string, NodeJS.Timeout>();
   protected readonly pendingScrollbackChunks = new Map<string, string[]>();
@@ -65,6 +71,7 @@ export abstract class TerminalManagerBase {
         operationId: string;
         provider: TerminalAgentKind;
       };
+      previousActivity?: RecentAgentActivityRecord;
     }
   >();
   private readonly panelAgentOperationGenerations = new Map<
@@ -84,6 +91,8 @@ export abstract class TerminalManagerBase {
     const persistedPanels = await this.sessionStore.listPanels();
     const persistedPanelWorkspaces =
       await this.sessionStore.listPanelWorkspaces();
+    const persistedRecentAgentActivities =
+      await this.sessionStore.listRecentAgentActivities();
 
     for (const persisted of persistedProjects) {
       this.projects.set(persisted.id, buildProjectRecord(persisted));
@@ -109,6 +118,76 @@ export abstract class TerminalManagerBase {
         );
       }
     }
+    const now = Date.now();
+    const invalidActivities: RecentAgentActivityRecord[] = [];
+    for (const activity of persistedRecentAgentActivities) {
+      const session = this.sessions.get(activity.terminalSessionId);
+      const panel = activity.panelId
+        ? this.panels.get(activity.panelId)
+        : null;
+      const targetActiveCommand = panel
+        ? panel.activeCommand
+        : session?.activeCommand ?? null;
+      const targetExists = Boolean(
+        session &&
+          (!activity.panelId ||
+            (panel?.terminalSessionId === activity.terminalSessionId &&
+              panel.status === "running")),
+      );
+      const activeMatches =
+        activity.phase === "active" &&
+        isCompletionSourceAllowedForCommand(
+          activity.source,
+          targetActiveCommand,
+        );
+      const startingMatches =
+        activity.phase === "starting" &&
+        activity.operationId !== null &&
+        Number.isFinite(activity.observedAt) &&
+        now - activity.observedAt >= 0 &&
+        now - activity.observedAt <= AGENT_ACTIVITY_STARTING_MAX_AGE_MS;
+      const graceMatches =
+        activity.phase === "grace" &&
+        targetActiveCommand === null &&
+        activity.clearedAt !== null &&
+        Number.isFinite(activity.clearedAt) &&
+        now - activity.clearedAt >= 0 &&
+        now - activity.clearedAt <=
+          AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS;
+      if (
+        !targetExists ||
+        !isTerminalAgentKind(activity.source) ||
+        !Number.isFinite(activity.observedAt) ||
+        (!startingMatches && !activeMatches && !graceMatches)
+      ) {
+        invalidActivities.push(activity);
+        continue;
+      }
+      this.recentAgentActivities.set(
+        buildRecentAgentActivityKey(
+          activity.terminalSessionId,
+          activity.panelId,
+        ),
+        activity,
+      );
+      if (panel && activity.operationId) {
+        this.panelAgentOperationGenerations.set(
+          `${activity.terminalSessionId}\u0000${panel.id}`,
+          {
+            operationId: activity.operationId,
+            provider: activity.source,
+          },
+        );
+      }
+    }
+    await Promise.all(
+      invalidActivities.map((activity) =>
+        this.sessionStore.deleteRecentAgentActivity(
+          activity.terminalSessionId,
+          activity.panelId,
+        ),
+      ),
+    );
   }
 
   listProjects(): TerminalProjectRecord[] {
@@ -156,31 +235,71 @@ export abstract class TerminalManagerBase {
     };
   }
 
-  beginPanelAgentPreparation(
+  async beginPanelAgentPreparation(
     terminalSessionId: string,
     panelId: string,
     operationId: string,
     provider: TerminalAgentKind,
-  ): boolean {
+  ): Promise<boolean> {
     const key = `${terminalSessionId}\u0000${panelId}`;
     if (this.panelAgentPreparations.has(key)) {
       return false;
     }
     const identity = { operationId, provider };
     const previousGeneration = this.panelAgentOperationGenerations.get(key);
+    const activityKey = buildRecentAgentActivityKey(
+      terminalSessionId,
+      panelId,
+    );
+    const previousActivity = this.recentAgentActivities.get(activityKey);
     this.panelAgentPreparations.set(key, {
       ...identity,
       previousGeneration,
+      previousActivity,
     });
     this.panelAgentOperationGenerations.set(key, identity);
+    const activity: RecentAgentActivityRecord = {
+      terminalSessionId,
+      panelId,
+      command: provider,
+      source: provider,
+      operationId,
+      phase: "starting",
+      observedAt: Date.now(),
+      clearedAt: null,
+    };
+    this.recentAgentActivities.delete(
+      buildRecentAgentActivityKey(terminalSessionId, null),
+    );
+    this.recentAgentActivities.set(activityKey, activity);
+    try {
+      await this.sessionStore.deleteRecentAgentActivity(
+        terminalSessionId,
+        null,
+      );
+      await this.sessionStore.upsertRecentAgentActivity(activity);
+    } catch (error) {
+      this.panelAgentPreparations.delete(key);
+      if (previousGeneration) {
+        this.panelAgentOperationGenerations.set(key, previousGeneration);
+      } else {
+        this.panelAgentOperationGenerations.delete(key);
+      }
+      if (previousActivity) {
+        this.recentAgentActivities.set(activityKey, previousActivity);
+      } else {
+        this.recentAgentActivities.delete(activityKey);
+      }
+      throw error;
+    }
     return true;
   }
 
-  endPanelAgentPreparation(
+  async endPanelAgentPreparation(
     terminalSessionId: string,
     panelId: string,
     operationId: string,
-  ): void {
+  ): Promise<void> {
     const key = `${terminalSessionId}\u0000${panelId}`;
     const preparation = this.panelAgentPreparations.get(key);
     if (preparation?.operationId !== operationId) {
@@ -198,6 +317,25 @@ export abstract class TerminalManagerBase {
       } else {
         this.panelAgentOperationGenerations.delete(key);
       }
+    }
+    const activityKey = buildRecentAgentActivityKey(
+      terminalSessionId,
+      panelId,
+    );
+    if (preparation.previousActivity) {
+      this.recentAgentActivities.set(
+        activityKey,
+        preparation.previousActivity,
+      );
+      await this.sessionStore.upsertRecentAgentActivity(
+        preparation.previousActivity,
+      );
+    } else {
+      this.recentAgentActivities.delete(activityKey);
+      await this.sessionStore.deleteRecentAgentActivity(
+        terminalSessionId,
+        panelId,
+      );
     }
   }
 
@@ -250,6 +388,26 @@ export abstract class TerminalManagerBase {
     );
   }
 
+  getPanelAgentOperationGeneration(
+    terminalSessionId: string,
+    panelId: string,
+  ): { operationId: string; provider: TerminalAgentKind } | null {
+    return (
+      this.panelAgentOperationGenerations.get(
+        `${terminalSessionId}\u0000${panelId}`,
+      ) ?? null
+    );
+  }
+
+  clearPanelAgentOperationGeneration(
+    terminalSessionId: string,
+    panelId: string,
+  ): void {
+    const key = `${terminalSessionId}\u0000${panelId}`;
+    this.panelAgentPreparations.delete(key);
+    this.panelAgentOperationGenerations.delete(key);
+  }
+
   hasSessionAgentPreparation(terminalSessionId: string): boolean {
     const prefix = `${terminalSessionId}\u0000`;
     return Array.from(this.panelAgentPreparations.keys()).some((key) =>
@@ -287,4 +445,13 @@ export abstract class TerminalManagerBase {
   ): TerminalPanelWorkspaceRecord | undefined {
     return this.panelWorkspaces.get(terminalSessionId);
   }
+}
+
+function isTerminalAgentKind(value: string): value is TerminalAgentKind {
+  return (
+    value === "codex" ||
+    value === "trae" ||
+    value === "traecli" ||
+    value === "traex"
+  );
 }

@@ -46,6 +46,7 @@ const toolkitHookAssets = [
 ];
 const marketplacePath = path.join(repoRoot, marketplaceRelativePath);
 const codexHome = process.env.CODEX_HOME || path.join(homedir(), ".codex");
+const traeHome = path.join(homedir(), ".trae");
 const syncDisabled = process.env.RUNWEAVE_SKIP_TOOLKIT_PLUGIN_SYNC === "1";
 
 if (syncDisabled) {
@@ -93,8 +94,14 @@ preserveCodexCompatibilityCache(
   codexCompatibilityVersions,
   codexCacheSnapshot,
 );
-cleanupCodexCompatibilitySnapshot(codexCacheSnapshot);
-installForTrae(pluginName);
+cleanupCompatibilitySnapshot(codexCacheSnapshot);
+const traeCacheSnapshot = snapshotTraeCompatibilityCache(pluginName);
+try {
+  installForTrae(pluginName);
+} finally {
+  preserveTraeCompatibilityCache(pluginName, traeCacheSnapshot);
+  cleanupCompatibilitySnapshot(traeCacheSnapshot);
+}
 
 if (shouldStageCachebuster) {
   run("git", [
@@ -385,7 +392,7 @@ function updateCodexLatestCacheAlias(cacheRoot, currentCachePath) {
   symlinkSync(currentCachePath, latestPath, "dir");
 }
 
-function cleanupCodexCompatibilitySnapshot(cacheSnapshot) {
+function cleanupCompatibilitySnapshot(cacheSnapshot) {
   if (!cacheSnapshot?.root) {
     return;
   }
@@ -394,6 +401,90 @@ function cleanupCodexCompatibilitySnapshot(cacheSnapshot) {
 
 function getCodexPluginCacheRoot(pluginName, marketplaceName) {
   return path.join(codexHome, "plugins", "cache", marketplaceName, pluginName);
+}
+
+function snapshotTraeCompatibilityCache(pluginName) {
+  const cacheRoot = getTraePluginCacheRoot(pluginName);
+  const snapshotRoot = path.join(
+    traeHome,
+    ".tmp",
+    `toolkit-cache-snapshot-${Date.now()}-${process.pid}`,
+  );
+  const versions = new Set();
+  const snapshots = new Map();
+
+  for (const entry of listDirectoryNames(cacheRoot)) {
+    addVersion(versions, entry);
+  }
+  for (const version of versions) {
+    const sourcePath = path.join(cacheRoot, version);
+    const sourceState = getPathState(sourcePath);
+    if (sourceState !== "directory" && sourceState !== "symlink") {
+      continue;
+    }
+
+    mkdirSync(snapshotRoot, { recursive: true });
+    const snapshotPath = path.join(snapshotRoot, version);
+    try {
+      cpSync(sourcePath, snapshotPath, {
+        recursive: true,
+        dereference: true,
+        force: true,
+      });
+      snapshots.set(version, snapshotPath);
+      log(`Snapshotted Trae plugin cache ${version}.`);
+    } catch (error) {
+      rmSync(snapshotRoot, { recursive: true, force: true });
+      throw new Error(
+        `Failed to snapshot Trae plugin cache ${version}: ${error.message}`,
+      );
+    }
+  }
+
+  if (snapshots.size === 0) {
+    rmSync(snapshotRoot, { recursive: true, force: true });
+    return { root: null, snapshots };
+  }
+  return { root: snapshotRoot, snapshots };
+}
+
+function preserveTraeCompatibilityCache(pluginName, cacheSnapshot) {
+  const currentVersion = readJson(manifestPath).version;
+  if (!currentVersion) {
+    throw new Error("Toolkit plugin manifest is missing version.");
+  }
+
+  const cacheRoot = getTraePluginCacheRoot(pluginName);
+  for (const [version, snapshotPath] of cacheSnapshot.snapshots) {
+    if (version === currentVersion) {
+      continue;
+    }
+
+    const versionPath = path.join(cacheRoot, version);
+    const versionState = getPathState(versionPath);
+    if (versionState === "directory") {
+      log(`Keeping existing Trae compatibility cache ${version}.`);
+      continue;
+    }
+    if (versionState === "symlink") {
+      rmSync(versionPath, { force: true });
+    } else if (versionState === "other") {
+      log(`Skipping compatibility cache over non-directory ${versionPath}.`);
+      continue;
+    }
+
+    mkdirSync(cacheRoot, { recursive: true });
+    cpSync(snapshotPath, versionPath, {
+      recursive: true,
+      dereference: true,
+      force: true,
+    });
+    log(`Restored historical Trae compatibility cache ${version}.`);
+  }
+}
+
+function getTraePluginCacheRoot(pluginName) {
+  return path.join(traeHome, "plugins", "cache", "local", pluginName);
 }
 
 function listDirectoryNames(directoryPath) {

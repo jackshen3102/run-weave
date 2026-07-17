@@ -67,6 +67,7 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
       panelIds: nextPanelIds,
     };
     this.panelWorkspaces.set(terminalSessionId, nextWorkspace);
+    await this.clearRecentAgentActivity(terminalSessionId, panelId);
     await this.sessionStore.updatePanelWorkspace({
       workspace: toPersistedPanelWorkspace(nextWorkspace),
     });
@@ -229,6 +230,7 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
   }
 
   async clearPanelsForSession(terminalSessionId: string): Promise<void> {
+    this.clearRecentAgentActivitiesForSession(terminalSessionId);
     this.clearPanelAgentOperationState(terminalSessionId);
     for (const panel of this.panels.values()) {
       if (panel.terminalSessionId === terminalSessionId) {

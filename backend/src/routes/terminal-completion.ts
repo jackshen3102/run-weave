@@ -36,6 +36,7 @@ const completionEventSchema = z
     cwd: z.string().trim().min(1).nullable().optional(),
     outboxPath: z.string().trim().min(1).nullable().optional(),
     summary: z.string().trim().min(1).nullable().optional(),
+    operationId: z.string().trim().min(1).max(256).nullable().optional(),
     panelId: z.string().trim().min(1).nullable().optional(),
     tmuxPaneId: z.string().trim().min(1).nullable().optional(),
   })
@@ -115,38 +116,72 @@ export function createInternalTerminalCompletionRouter(options: {
       return;
     }
     const { panelId, tmuxPaneId } = resolvedPane;
-    const paneActiveCommand = panelId
-      ? (options.terminalSessionManager.getPanel(panelId)?.activeCommand ?? null)
+    const targetPanel = panelId
+      ? (options.terminalSessionManager.getPanel(panelId) ?? null)
       : null;
+    const paneActiveCommand = targetPanel?.activeCommand ?? null;
+    const targetActiveCommand = panelId
+      ? paneActiveCommand
+      : session.activeCommand;
     const effectiveSource = resolveEffectiveCompletionSource({
       reportedSource: parsed.data.source,
       paneActiveCommand,
       sessionActiveCommand: session.activeCommand,
       commandName: parsed.data.commandName ?? null,
     });
-    const lastAiActiveCommand =
-      options.terminalSessionManager.getLastAiActiveCommand(session.id);
+    const recentAgentActivity =
+      options.terminalSessionManager.getRecentAgentActivity(
+        session.id,
+        panelId,
+      );
+    const operationGeneration = panelId
+      ? options.terminalSessionManager.getPanelAgentOperationGeneration(
+          session.id,
+          panelId,
+        )
+      : null;
+    const operationIdentityMatches = operationGeneration
+      ? parsed.data.operationId === operationGeneration.operationId &&
+        isCompletionSourceAllowedForCommand(
+          effectiveSource,
+          operationGeneration.provider,
+        )
+      : true;
+    if (!operationIdentityMatches) {
+      terminalCompletionLogger.info("terminal-completion.ignored", {
+        message: "Terminal completion operation identity rejected",
+        terminalSessionId: parsed.data.terminalSessionId,
+        panelId,
+        operationId: parsed.data.operationId ?? null,
+        reason: "operation_identity_mismatch",
+      });
+      res.status(202).json({
+        event: null,
+        ignored: true,
+        reason: "operation_identity_mismatch",
+      });
+      return;
+    }
     const currentCommandMatches =
       isCompletionSourceAllowedForCommand(
         effectiveSource,
-        session.activeCommand,
-      ) ||
-      isCompletionSourceAllowedForCommand(
-        effectiveSource,
-        paneActiveCommand,
+        targetActiveCommand,
       ) ||
       isCompletionSourceAllowedForCommand(
         effectiveSource,
         parsed.data.commandName ?? null,
       ) ||
-      getTerminalSessionAgent(session) === effectiveSource;
+      getTerminalSessionAgent(targetPanel ?? session) === effectiveSource;
     const now = Date.now();
     const graceCommandMatches =
-      session.activeCommand === null &&
-      lastAiActiveCommand !== null &&
-      lastAiActiveCommand.source === effectiveSource &&
-      lastAiActiveCommand.clearedAt !== null &&
-      now - lastAiActiveCommand.clearedAt <=
+      targetActiveCommand === null &&
+      recentAgentActivity?.phase === "grace" &&
+      recentAgentActivity.source === effectiveSource &&
+      recentAgentActivity.clearedAt !== null &&
+      (recentAgentActivity.operationId === null
+        ? operationGeneration === null
+        : recentAgentActivity.operationId === parsed.data.operationId) &&
+      now - recentAgentActivity.clearedAt <=
         AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS;
 
     if (!currentCommandMatches && !graceCommandMatches) {
@@ -157,9 +192,9 @@ export function createInternalTerminalCompletionRouter(options: {
         effectiveSource,
         activeCommand: session.activeCommand,
         paneActiveCommand,
-        lastAiActiveCommand: lastAiActiveCommand?.command ?? null,
-        lastAiActiveCommandClearedAt: lastAiActiveCommand?.clearedAt
-          ? new Date(lastAiActiveCommand.clearedAt).toISOString()
+        recentAgentActivity: recentAgentActivity?.command ?? null,
+        recentAgentActivityClearedAt: recentAgentActivity?.clearedAt
+          ? new Date(recentAgentActivity.clearedAt).toISOString()
           : null,
         rawHookEvent,
       });
@@ -179,6 +214,7 @@ export function createInternalTerminalCompletionRouter(options: {
           cwd: parsed.data.cwd ?? null,
           outboxPath: parsed.data.outboxPath ?? null,
           summary: parsed.data.summary ?? null,
+          operationId: parsed.data.operationId ?? null,
           panelId,
           tmuxPaneId,
         },
@@ -201,9 +237,9 @@ export function createInternalTerminalCompletionRouter(options: {
       reportedSource: parsed.data.source,
       activeCommand: session.activeCommand,
       paneActiveCommand,
-      lastAiActiveCommand: lastAiActiveCommand?.command ?? null,
-      lastAiActiveCommandClearedAt: lastAiActiveCommand?.clearedAt
-        ? new Date(lastAiActiveCommand.clearedAt).toISOString()
+      recentAgentActivity: recentAgentActivity?.command ?? null,
+      recentAgentActivityClearedAt: recentAgentActivity?.clearedAt
+        ? new Date(recentAgentActivity.clearedAt).toISOString()
         : null,
       rawHookEvent,
     });
@@ -273,7 +309,29 @@ function resolveCompletionPane(
     return { ok: true, panelId, tmuxPaneId: byId.tmuxPaneId };
   }
   if (tmuxPaneId) {
-    return { ok: true, panelId: byPane?.id ?? null, tmuxPaneId };
+    return byPane
+      ? { ok: true, panelId: byPane.id, tmuxPaneId }
+      : {
+          ok: false,
+          panelId: null,
+          tmuxPaneId,
+          reason: "unknown_tmux_pane_id",
+        };
   }
-  return { ok: true, panelId: null, tmuxPaneId: null };
+  const runningPanels = panels.filter((panel) => panel.status === "running");
+  if (runningPanels.length === 1) {
+    return {
+      ok: true,
+      panelId: runningPanels[0]!.id,
+      tmuxPaneId: runningPanels[0]!.tmuxPaneId,
+    };
+  }
+  return runningPanels.length === 0
+    ? { ok: true, panelId: null, tmuxPaneId: null }
+    : {
+        ok: false,
+        panelId: null,
+        tmuxPaneId: null,
+        reason: "ambiguous_panel_identity",
+      };
 }

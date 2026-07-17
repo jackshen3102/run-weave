@@ -223,13 +223,14 @@ export async function processTerminalAgentHook(
           )
         ? sessionAgent
         : input.agent;
-  const lastAiActiveCommand =
-    options.terminalSessionManager.getLastAiActiveCommand(session.id);
+  const targetActiveCommand = panel?.activeCommand ?? session.activeCommand;
+  const recentAgentActivity =
+    options.terminalSessionManager.getRecentAgentActivity(
+      session.id,
+      panel?.id ?? null,
+    );
   const currentCommandMatches =
-    isCompletionSourceAllowedForCommand(input.agent, session.activeCommand) ||
-    (panel
-      ? isCompletionSourceAllowedForCommand(input.agent, panel.activeCommand)
-      : false) ||
+    isCompletionSourceAllowedForCommand(input.agent, targetActiveCommand) ||
     isCompletionSourceAllowedForCommand(
       input.agent,
       input.commandName ?? null,
@@ -237,21 +238,27 @@ export async function processTerminalAgentHook(
     sessionAgent === effectiveAgent ||
     panelAgent === effectiveAgent;
   const graceCommandMatches =
-    session.activeCommand === null &&
-    lastAiActiveCommand !== null &&
-    lastAiActiveCommand.source === input.agent &&
-    lastAiActiveCommand.clearedAt !== null &&
-    Date.now() - lastAiActiveCommand.clearedAt <=
+    input.hookEvent === "Stop" &&
+    targetActiveCommand === null &&
+    recentAgentActivity?.phase === "grace" &&
+    recentAgentActivity.source === input.agent &&
+    recentAgentActivity.clearedAt !== null &&
+    (recentAgentActivity.operationId === null
+      ? !operationGenerationTracked
+      : recentAgentActivity.operationId === input.operationId) &&
+    Date.now() - recentAgentActivity.clearedAt <=
       AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS;
   const currentTargetState =
     panel?.terminalState ??
     options.terminalStateService.getCurrent(session.id, session);
+  const canFallbackToCurrentStateAgent =
+    input.hookEvent !== "Stop" && currentTargetState.agent === effectiveAgent;
 
   if (
     input.hookEvent !== "SessionStart" &&
     !currentCommandMatches &&
     !graceCommandMatches &&
-    currentTargetState.agent !== effectiveAgent
+    !canFallbackToCurrentStateAgent
   ) {
     return {
       status: "ignored",
@@ -500,5 +507,13 @@ function resolveHookPanel(
   if (tmuxPaneId) {
     return byPane ? { ok: true, panel: byPane } : { ok: false };
   }
-  return { ok: true, panel: null };
+  const runningPanels = terminalSessionManager
+    .listPanels(terminalSessionId)
+    .filter((panel) => panel.status === "running");
+  if (runningPanels.length === 1) {
+    return { ok: true, panel: runningPanels[0]! };
+  }
+  return runningPanels.length === 0
+    ? { ok: true, panel: null }
+    : { ok: false };
 }

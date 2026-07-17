@@ -1,19 +1,18 @@
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
-import type { TerminalAgentKind, TerminalState } from "@runweave/shared/terminal/state";
+import type {
+  TerminalAgentKind,
+  TerminalState,
+} from "@runweave/shared/terminal/state";
 import type { TerminalRuntimeMetadata } from "./store";
 import type {
   RuntimeTerminalSessionRecord,
   TerminalSessionRecord,
 } from "./manager-records";
 import { isExistingDirectory } from "./manager-path";
-import {
-  getCompletionSourceForCommand,
-  type LastAiActiveCommandRecord,
-} from "./completion-source-gate";
 import { getAgentForCommand } from "./terminal-state-service";
-import { TerminalManagerBufferRuntime } from "./manager-buffer-runtime";
+import { TerminalManagerAgentActivityRuntime } from "./manager-agent-activity-runtime";
 
-export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime {
+export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityRuntime {
   markExited(terminalSessionId: string, exitCode?: number): void {
     const session = this.sessions.get(terminalSessionId);
     if (!session) {
@@ -82,7 +81,13 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
       activeCommand: session.activeCommand,
     };
 
-    this.observeActiveCommand(terminalSessionId, nextActiveCommand);
+    if (runningPanelCount === 0) {
+      await this.observeActiveCommand(
+        terminalSessionId,
+        session.activeCommand,
+        nextActiveCommand,
+      );
+    }
     session.cwd = metadata.cwd;
     session.activeCommand = nextActiveCommand;
     const storedThreadProvider =
@@ -126,12 +131,6 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
       },
     });
     return session;
-  }
-
-  getLastAiActiveCommand(
-    terminalSessionId: string,
-  ): LastAiActiveCommandRecord | null {
-    return this.lastAiActiveCommands.get(terminalSessionId) ?? null;
   }
 
   async updateSessionLaunch(
@@ -263,8 +262,9 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
 
     const nextThreadId = threadId?.trim() || undefined;
     const nextProvider = nextThreadId
-      ? provider ?? session.threadProvider ??
-        (session.threadId === nextThreadId ? "codex" : undefined)
+      ? (provider ??
+        session.threadProvider ??
+        (session.threadId === nextThreadId ? "codex" : undefined))
       : undefined;
     if (
       session.threadId === nextThreadId &&
@@ -332,7 +332,8 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
     }
 
     const nextProvider =
-      provider ?? session.threadProvider ??
+      provider ??
+      session.threadProvider ??
       (session.threadId === nextThreadId ? "codex" : undefined);
     if (!nextProvider) {
       return session;
@@ -423,8 +424,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
     await this.sessionStore.updateSessionCompletion({
       terminalSessionId,
       completionRevision,
-      acknowledgedCompletionRevision:
-        session.acknowledgedCompletionRevision,
+      acknowledgedCompletionRevision: session.acknowledgedCompletionRevision,
     });
     return completionRevision;
   }
@@ -443,8 +443,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
       session.completionRevision,
     );
     if (
-      acknowledgedCompletionRevision <=
-      session.acknowledgedCompletionRevision
+      acknowledgedCompletionRevision <= session.acknowledgedCompletionRevision
     ) {
       return session;
     }
@@ -468,7 +467,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
     this.pendingScrollbackChunks.delete(terminalSessionId);
     this.clearPendingActivityFlush(terminalSessionId);
     this.pendingActivityUpdates.delete(terminalSessionId);
-    this.lastAiActiveCommands.delete(terminalSessionId);
+    this.clearRecentAgentActivitiesForSession(terminalSessionId);
     this.clearPanelAgentOperationState(terminalSessionId);
     this.sessions.delete(terminalSessionId);
     for (const panel of this.panels.values()) {
@@ -480,36 +479,5 @@ export class TerminalManagerSessionRuntime extends TerminalManagerBufferRuntime 
     await this.sessionStore.deletePanelsForSession(terminalSessionId);
     await this.sessionStore.deleteSession(terminalSessionId);
     return true;
-  }
-
-  protected observeActiveCommand(
-    terminalSessionId: string,
-    activeCommand: string | null,
-  ): void {
-    const now = Date.now();
-    const source = getCompletionSourceForCommand(activeCommand);
-    if (source && activeCommand) {
-      this.lastAiActiveCommands.set(terminalSessionId, {
-        command: activeCommand,
-        source,
-        observedAt: now,
-        clearedAt: null,
-      });
-      return;
-    }
-
-    if (activeCommand !== null) {
-      this.lastAiActiveCommands.delete(terminalSessionId);
-      return;
-    }
-
-    const previous = this.lastAiActiveCommands.get(terminalSessionId);
-    if (!previous || previous.clearedAt !== null) {
-      return;
-    }
-    this.lastAiActiveCommands.set(terminalSessionId, {
-      ...previous,
-      clearedAt: now,
-    });
   }
 }

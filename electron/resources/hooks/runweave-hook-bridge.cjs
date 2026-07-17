@@ -20,9 +20,11 @@ const {
   normalizeEventName,
   normalizeReason,
   normalizeSource,
+  parseTmuxSocketPath,
   parseArgs,
   parsePayload,
   readHookEvent,
+  readTmuxPaneContext,
   readThreadId,
   toAgentHookStateEvent,
 } = require("./runweave-hook-payload.cjs");
@@ -63,14 +65,6 @@ function appendDebugLog(message, details) {
   } catch {
     // Ignore diagnostic logging failures.
   }
-}
-
-function parseTmuxSocketPath(value) {
-  if (!value) {
-    return null;
-  }
-  const socketPath = String(value).split(",")[0]?.trim();
-  return socketPath || null;
 }
 
 function readTmuxSessionEnv() {
@@ -123,75 +117,6 @@ function readTmuxSessionEnv() {
     sessionName,
     socketPath,
     keys: Object.keys(env).sort(),
-  };
-}
-
-function getCommandBasename(command) {
-  const normalized = String(command || "").trim().replace(/\\+/g, "/");
-  if (!normalized) {
-    return null;
-  }
-  const basename = normalized.split("/").filter(Boolean).at(-1) || normalized;
-  return basename || null;
-}
-
-function readTmuxPaneContext() {
-  const socketPath = parseTmuxSocketPath(process.env.TMUX);
-  const tmuxPaneId = process.env.TMUX_PANE;
-  if (!socketPath || !tmuxPaneId) {
-    return { commandName: null, panelId: null };
-  }
-  const separator = "__RUNWEAVE_METADATA_FIELD__";
-  const result = spawnSync(
-    process.env.TMUX_BINARY || "tmux",
-    [
-      "-S",
-      socketPath,
-      "display-message",
-      "-p",
-      "-t",
-      tmuxPaneId,
-      [
-        "#{@runweave_agent_prepare_command}",
-        "#{@runweave_agent_prepare_exit}",
-        "#{@runweave_command}",
-        "#{pane_current_command}",
-        "#{@runweave_panel_id}",
-      ].join(separator),
-    ],
-    {
-      encoding: "utf8",
-      timeout: 2000,
-      maxBuffer: 32 * 1024,
-    },
-  );
-  if (result.error || result.status !== 0) {
-    return { commandName: null, panelId: null };
-  }
-  const [
-    agentPrepareCommand = "",
-    agentPrepareExit = "",
-    runweaveCommand = "",
-    paneCommand = "",
-    panelId = "",
-  ] = String(result.stdout || "")
-    .replace(/\r?\n$/, "")
-    .split(separator);
-  const normalizedPaneCommand = getCommandBasename(paneCommand);
-  const paneAtInteractivePrompt = ["bash", "fish", "sh", "zsh"].includes(
-    normalizedPaneCommand,
-  );
-  const pendingAgentCommand =
-    agentPrepareExit.startsWith("pending:") &&
-    (Boolean(runweaveCommand.trim()) || !paneAtInteractivePrompt)
-      ? getCommandBasename(agentPrepareCommand)
-      : null;
-  return {
-    commandName:
-      pendingAgentCommand ||
-      getCommandBasename(runweaveCommand) ||
-      getCommandBasename(paneCommand),
-    panelId: panelId.trim() || null,
   };
 }
 
@@ -292,8 +217,12 @@ async function postAgentHook({
     ...(assistantResponse ? { response: assistantResponse } : {}),
     ...(toolHook?.toolUseId ? { toolUseId: toolHook.toolUseId } : {}),
     ...(toolHook?.toolName ? { toolName: toolHook.toolName } : {}),
-    ...(toolHook?.toolInput !== undefined ? { toolInput: toolHook.toolInput } : {}),
-    ...(toolHook?.toolResult !== undefined ? { toolResult: toolHook.toolResult } : {}),
+    ...(toolHook?.toolInput !== undefined
+      ? { toolInput: toolHook.toolInput }
+      : {}),
+    ...(toolHook?.toolResult !== undefined
+      ? { toolResult: toolHook.toolResult }
+      : {}),
     agent,
     hookEvent,
   });
@@ -366,9 +295,11 @@ async function main() {
   const payload = parsePayload(await readStdin());
   const rawEvent = readHookEvent(payload);
   const normalizedEvent = normalizeEventName(rawEvent);
-  const tmuxPaneContext = readTmuxPaneContext();
+  const tmuxPaneContext = readTmuxPaneContext(spawnSync);
   if (tmuxPaneContext.panelId) {
     process.env.RUNWEAVE_TERMINAL_PANEL_ID = tmuxPaneContext.panelId;
+  } else if (parseTmuxSocketPath(process.env.TMUX) && process.env.TMUX_PANE) {
+    delete process.env.RUNWEAVE_TERMINAL_PANEL_ID;
   }
   const commandName = args.commandName || tmuxPaneContext.commandName;
   const normalizedCommandName = String(commandName || "").toLowerCase();
@@ -376,9 +307,7 @@ async function main() {
   if (source === "unknown") {
     if (["codex", "claude"].includes(normalizedCommandName)) {
       source = normalizedCommandName;
-    } else if (
-      ["trae", "traecli", "traex"].includes(normalizedCommandName)
-    ) {
+    } else if (["trae", "traecli", "traex"].includes(normalizedCommandName)) {
       source = "trae";
     }
   }
@@ -408,6 +337,7 @@ async function main() {
     terminalSessionId: terminalSessionId || null,
     terminalPanelId,
     tmuxPaneId,
+    tmuxPaneContext,
     projectId: process.env.RUNWEAVE_PROJECT_ID || null,
     hasToken: Boolean(token),
     endpoint: redactEndpoint(endpoint),
@@ -498,8 +428,7 @@ async function main() {
           ? toolHook
           : undefined,
       activityEventId,
-      operationId:
-        process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
+      operationId: process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
     });
     appendDebugLog("hook bridge posted agent hook", {
       terminalSessionId,
@@ -527,12 +456,12 @@ async function main() {
         rawEvent,
         normalizedEvent,
         stateHookEvent,
-          source,
-          terminalSessionId,
-          threadId,
-          commandName,
-          dedupePrefix: "completion",
-        });
+        source,
+        terminalSessionId,
+        threadId,
+        commandName,
+        dedupePrefix: "completion",
+      });
       completionEvent.payload = {
         source: completionBody.source,
         completionReason: completionBody.completionReason,
@@ -541,6 +470,7 @@ async function main() {
         hookEvent: completionBody.hookEvent,
         cwd: completionBody.cwd,
         summary: completionBody.summary,
+        operationId: completionBody.operationId,
       };
       const result = await postAppServerEvent(appServerClient, completionEvent);
       appendDebugLog("hook bridge posted app-server completion event", {

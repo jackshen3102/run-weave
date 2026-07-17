@@ -1,6 +1,7 @@
 import type {
   PersistedTerminalPanelRecord,
   PersistedTerminalPanelWorkspaceRecord,
+  PersistedRecentAgentActivityRecord,
   UpdateTerminalPanelLastThreadParams,
   UpdateTerminalPanelPreviewParams,
   UpdateTerminalPanelStatusParams,
@@ -9,6 +10,7 @@ import type {
   UpdateTerminalPanelWorkspaceParams,
   UpsertTerminalPanelParams,
 } from "./store";
+import { buildRecentAgentActivityKey } from "./completion-source-gate";
 import { LowDbScrollbackStore } from "./lowdb-scrollback-store";
 
 export class LowDbPanelStore extends LowDbScrollbackStore {
@@ -20,6 +22,70 @@ export class LowDbPanelStore extends LowDbScrollbackStore {
     PersistedTerminalPanelWorkspaceRecord[]
   > {
     return this.getPanelWorkspaces();
+  }
+
+  async listRecentAgentActivities(): Promise<
+    PersistedRecentAgentActivityRecord[]
+  > {
+    return this.getRecentAgentActivities();
+  }
+
+  async upsertRecentAgentActivity(
+    activity: PersistedRecentAgentActivityRecord,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const key = buildRecentAgentActivityKey(
+        activity.terminalSessionId,
+        activity.panelId,
+      );
+      const index = database.data.recentAgentActivities.findIndex(
+        (candidate) =>
+          buildRecentAgentActivityKey(
+            candidate.terminalSessionId,
+            candidate.panelId,
+          ) === key,
+      );
+      const persisted = structuredClone(activity);
+      if (index >= 0) {
+        database.data.recentAgentActivities[index] = persisted;
+      } else {
+        database.data.recentAgentActivities.push(persisted);
+      }
+      await database.write();
+    });
+  }
+
+  async deleteRecentAgentActivity(
+    terminalSessionId: string,
+    panelId: string | null,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const key = buildRecentAgentActivityKey(terminalSessionId, panelId);
+      database.data.recentAgentActivities =
+        database.data.recentAgentActivities.filter(
+          (candidate) =>
+            buildRecentAgentActivityKey(
+              candidate.terminalSessionId,
+              candidate.panelId,
+            ) !== key,
+        );
+      await database.write();
+    });
+  }
+
+  async deleteRecentAgentActivitiesForSession(
+    terminalSessionId: string,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      database.data.recentAgentActivities =
+        database.data.recentAgentActivities.filter(
+          (activity) => activity.terminalSessionId !== terminalSessionId,
+        );
+      await database.write();
+    });
   }
 
   async upsertPanel(params: UpsertTerminalPanelParams): Promise<void> {
@@ -167,6 +233,10 @@ export class LowDbPanelStore extends LowDbScrollbackStore {
       database.data.panelWorkspaces = database.data.panelWorkspaces.filter(
         (workspace) => workspace.terminalSessionId !== terminalSessionId,
       );
+      database.data.recentAgentActivities =
+        database.data.recentAgentActivities.filter(
+          (activity) => activity.terminalSessionId !== terminalSessionId,
+        );
       await database.write();
     });
   }

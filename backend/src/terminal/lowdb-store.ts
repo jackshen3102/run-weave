@@ -121,6 +121,10 @@ export class LowDbTerminalSessionStore
       database.data.panelWorkspaces = database.data.panelWorkspaces.filter(
         (workspace) => !childSessionIds.includes(workspace.terminalSessionId),
       );
+      database.data.recentAgentActivities =
+        database.data.recentAgentActivities.filter(
+          (activity) => !childSessionIds.includes(activity.terminalSessionId),
+        );
       await Promise.all(
         childSessionIds.map((terminalSessionId) =>
           this.deleteScrollbackFile(terminalSessionId),
@@ -417,6 +421,10 @@ export class LowDbTerminalSessionStore
       database.data.panelWorkspaces = database.data.panelWorkspaces.filter(
         (workspace) => workspace.terminalSessionId !== terminalSessionId,
       );
+      database.data.recentAgentActivities =
+        database.data.recentAgentActivities.filter(
+          (activity) => activity.terminalSessionId !== terminalSessionId,
+        );
       await database.write();
     });
     await this.enqueueScrollbackWrite(async () => {

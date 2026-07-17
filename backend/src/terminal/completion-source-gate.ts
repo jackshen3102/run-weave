@@ -1,6 +1,7 @@
 import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
 
 export const AI_COMPLETION_ACTIVE_COMMAND_GRACE_MS = 30_000;
+export const AGENT_ACTIVITY_STARTING_MAX_AGE_MS = 5 * 60_000;
 
 const allowedActiveCommandsBySource: Partial<
   Record<TerminalCompletionEvent["source"], ReadonlySet<string>>
@@ -17,11 +18,24 @@ const legacyAllowedActiveCommandsBySource: Partial<
   trae: new Set(["traex", "traecli"]),
 };
 
-export interface LastAiActiveCommandRecord {
+export interface RecentAgentActivityRecord {
+  terminalSessionId: string;
+  panelId: string | null;
   command: string;
   source: TerminalCompletionEvent["source"];
+  operationId: string | null;
+  phase: "starting" | "active" | "grace";
   observedAt: number;
   clearedAt: number | null;
+}
+
+export function buildRecentAgentActivityKey(
+  terminalSessionId: string,
+  panelId: string | null,
+): string {
+  return panelId
+    ? `panel\0${terminalSessionId}\0${panelId}`
+    : `session\0${terminalSessionId}`;
 }
 
 function tokenizeShellCommand(command: string): string[] {

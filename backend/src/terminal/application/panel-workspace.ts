@@ -128,6 +128,7 @@ export async function ensureTmuxPanelWorkspace(
         pane,
         existingPanel.activeCommand,
       );
+      const previousActiveCommand = existingPanel.activeCommand;
       const nextTerminalState = resolveReconciledPanelTerminalState(
         pane,
         effectiveActiveCommand,
@@ -159,6 +160,33 @@ export async function ensureTmuxPanelWorkspace(
         shouldBackfillSessionAgentMetadata
       ) {
         const updatedAt = new Date();
+        if (previousActiveCommand !== effectiveActiveCommand) {
+          await terminalSessionManager.observePanelActiveCommand(
+            session.id,
+            existingPanel.id,
+            previousActiveCommand,
+            effectiveActiveCommand,
+          );
+        } else if (
+          nextTerminalState.agent === null &&
+          !terminalSessionManager.hasPanelAgentPreparation(
+            session.id,
+            existingPanel.id,
+          ) &&
+          terminalSessionManager.getRecentAgentActivity(
+            session.id,
+            existingPanel.id,
+          )?.phase === "starting"
+        ) {
+          await terminalSessionManager.clearRecentAgentActivity(
+            session.id,
+            existingPanel.id,
+          );
+          terminalSessionManager.clearPanelAgentOperationGeneration(
+            session.id,
+            existingPanel.id,
+          );
+        }
         existingPanel.cwd = pane.cwd || existingPanel.cwd;
         existingPanel.activeCommand = effectiveActiveCommand;
         existingPanel.terminalState = nextTerminalState;
@@ -213,6 +241,12 @@ export async function ensureTmuxPanelWorkspace(
             ),
           });
     await terminalSessionManager.upsertPanel(panel);
+    await terminalSessionManager.observePanelActiveCommand(
+      session.id,
+      panel.id,
+      null,
+      panel.activeCommand,
+    );
     await syncTmuxPanePanelId(tmuxService, target, pane, panel.id);
     livePanelIds.push(panel.id);
     changed = true;

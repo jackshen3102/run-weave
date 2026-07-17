@@ -1,6 +1,7 @@
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
+import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
 
 export interface PersistedTerminalProjectRecord {
   id: string;
@@ -73,6 +74,17 @@ export interface PersistedTerminalPanelWorkspaceRecord {
   activePanelId: string;
   panelIds: string[];
   renderMode: "tmux-native";
+}
+
+export interface PersistedRecentAgentActivityRecord {
+  terminalSessionId: string;
+  panelId: string | null;
+  command: string;
+  source: TerminalCompletionEvent["source"];
+  operationId: string | null;
+  phase: "starting" | "active" | "grace";
+  observedAt: number;
+  clearedAt: number | null;
 }
 
 export type PersistedTerminalSessionMetadataRecord = Omit<
@@ -237,6 +249,19 @@ export interface TerminalSessionStore {
   ): Promise<PersistedTerminalSessionRecord | null>;
   listPanels(): Promise<PersistedTerminalPanelRecord[]>;
   listPanelWorkspaces(): Promise<PersistedTerminalPanelWorkspaceRecord[]>;
+  listRecentAgentActivities(): Promise<
+    PersistedRecentAgentActivityRecord[]
+  >;
+  upsertRecentAgentActivity(
+    activity: PersistedRecentAgentActivityRecord,
+  ): Promise<void>;
+  deleteRecentAgentActivity(
+    terminalSessionId: string,
+    panelId: string | null,
+  ): Promise<void>;
+  deleteRecentAgentActivitiesForSession(
+    terminalSessionId: string,
+  ): Promise<void>;
   upsertPanel(params: UpsertTerminalPanelParams): Promise<void>;
   updatePanelThreadId(params: UpdateTerminalPanelThreadIdParams): Promise<void>;
   updatePanelPreview(params: UpdateTerminalPanelPreviewParams): Promise<void>;
