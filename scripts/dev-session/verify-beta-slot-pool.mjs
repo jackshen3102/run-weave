@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
+import { execFile, spawn } from "node:child_process";
+import { once } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import {
   BETA_SLOT_CAPACITY,
   BETA_SLOT_IDS,
   acquireBetaSlotLease,
   assertBetaSlotLease,
+  betaSlotProcessesAreAbsent,
   inspectBetaSlotCapacity,
   releaseBetaSlotLease,
   resetBetaSlotMutableState,
@@ -26,6 +30,9 @@ import {
 import { buildBetaStopArgs } from "./beta-service.mjs";
 import { verifyBetaSlotStorage } from "./verify-beta-slot-storage.mjs";
 import { validateManifest } from "./contracts.mjs";
+
+const execFileAsync = promisify(execFile);
+
 function leaseOptions(homeDir, index, requestedSlotId = null) {
   return {
     homeDir,
@@ -38,6 +45,37 @@ function leaseOptions(homeDir, index, requestedSlotId = null) {
 }
 
 export async function verifyBetaSlotPool(temporaryHome) {
+  const rejectedLegacyInstance = "dvs-new-legacy";
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [
+        "scripts/runweave-beta.mjs",
+        "update",
+        "--instance",
+        rejectedLegacyInstance,
+        "--dry-run",
+        "--json",
+      ],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, HOME: temporaryHome },
+      },
+    ),
+    (error) =>
+      error?.code === 1 &&
+      /Beta dev-session instance must be one of pool-01/.test(error.stderr),
+  );
+  assert.equal(
+    await fs
+      .lstat(
+        resolveBetaUpdateTargets(temporaryHome, rejectedLegacyInstance)
+          .instanceRoot,
+      )
+      .catch(() => null),
+    null,
+  );
+
   const sharedStopLockPath = path.join(
     temporaryHome,
     ".runweave",
@@ -192,6 +230,45 @@ export async function verifyBetaSlotPool(temporaryHome) {
   assert.equal(emptySnapshot.capacity, BETA_SLOT_CAPACITY);
   assert.equal(emptySnapshot.idle, BETA_SLOT_CAPACITY);
 
+  const absentProcessHome = path.join(temporaryHome, "absent-process-home");
+  assert.equal(
+    await betaSlotProcessesAreAbsent("pool-01", absentProcessHome),
+    true,
+  );
+  const liveProcessTargets = resolveBetaUpdateTargets(
+    absentProcessHome,
+    "pool-01",
+  );
+  await fs.mkdir(liveProcessTargets.userData, { recursive: true });
+  await fs.writeFile(
+    path.join(liveProcessTargets.userData, "beta-desktop-status.json"),
+    `${JSON.stringify({ app: { pid: process.pid } })}\n`,
+  );
+  assert.equal(
+    await betaSlotProcessesAreAbsent("pool-01", absentProcessHome),
+    true,
+  );
+  const liveSlotProcess = spawn(
+    process.execPath,
+    ["-e", "setInterval(() => {}, 1000)", liveProcessTargets.appPath],
+    { stdio: "ignore" },
+  );
+  try {
+    await fs.writeFile(
+      path.join(liveProcessTargets.userData, "beta-desktop-status.json"),
+      `${JSON.stringify({ app: { pid: liveSlotProcess.pid } })}\n`,
+    );
+    assert.equal(
+      await betaSlotProcessesAreAbsent("pool-01", absentProcessHome),
+      false,
+    );
+  } finally {
+    if (liveSlotProcess.exitCode === null) {
+      liveSlotProcess.kill("SIGTERM");
+      await once(liveSlotProcess, "exit");
+    }
+  }
+
   const attempts = await Promise.allSettled(
     Array.from({ length: BETA_SLOT_CAPACITY + 1 }, (_, index) =>
       acquireBetaSlotLease(leaseOptions(temporaryHome, index)),
@@ -298,46 +375,64 @@ export async function verifyBetaSlotPool(temporaryHome) {
   const safeTargets = resolveBetaUpdateTargets(janitorHome, "pool-04");
   await writeInactiveProcessEvidence(safeTargets);
   await fs.writeFile(
+    path.join(janitorPaths.leasesDir, "pool-02.lock"),
+    `${JSON.stringify(oldLease("pool-02", "dvs-orphan-no-state"))}\n`,
+    { mode: 0o600 },
+  );
+  await fs.writeFile(
     path.join(janitorPaths.leasesDir, "pool-04.lock"),
     `${JSON.stringify(oldLease("pool-04", "dvs-orphan-safe"))}\n`,
     { mode: 0o600 },
   );
   const unsafeTargets = resolveBetaUpdateTargets(janitorHome, "pool-05");
+  const unsafeSlotProcess = spawn(
+    process.execPath,
+    ["-e", "setInterval(() => {}, 1000)", unsafeTargets.appPath],
+    { stdio: "ignore" },
+  );
   await fs.mkdir(unsafeTargets.userData, { recursive: true });
   await fs.writeFile(
     path.join(unsafeTargets.userData, "beta-desktop-status.json"),
-    `${JSON.stringify({ app: { pid: process.pid } })}\n`,
+    `${JSON.stringify({ app: { pid: unsafeSlotProcess.pid } })}\n`,
   );
   await fs.writeFile(
     path.join(janitorPaths.leasesDir, "pool-05.lock"),
     `${JSON.stringify(oldLease("pool-05", "dvs-orphan-unsafe"))}\n`,
     { mode: 0o600 },
   );
-  const janitor = await runBetaPoolJanitor({
-    homeDir: janitorHome,
-    applicationsDir: janitorApplications,
-  });
-  assert.deepEqual(janitor.recovered, [
-    { slotId: "pool-04", ownerSessionId: "dvs-orphan-safe" },
-  ]);
-  assert(
-    janitor.broken.some(
-      (entry) =>
-        entry.slotId === "pool-05" &&
-        entry.reason.includes("orphan identity is not safe"),
-    ),
-  );
-  assert.equal(
-    await fs
-      .lstat(path.join(janitorPaths.leasesDir, "pool-04.lock"))
-      .catch(() => null),
-    null,
-  );
-  assert(
-    (
-      await fs.lstat(path.join(janitorPaths.leasesDir, "pool-05.lock"))
-    ).isFile(),
-  );
+  try {
+    const janitor = await runBetaPoolJanitor({
+      homeDir: janitorHome,
+      applicationsDir: janitorApplications,
+    });
+    assert.deepEqual(janitor.recovered, [
+      { slotId: "pool-02", ownerSessionId: "dvs-orphan-no-state" },
+      { slotId: "pool-04", ownerSessionId: "dvs-orphan-safe" },
+    ]);
+    assert(
+      janitor.broken.some(
+        (entry) =>
+          entry.slotId === "pool-05" &&
+          entry.reason.includes("orphan identity is not safe"),
+      ),
+    );
+    assert.equal(
+      await fs
+        .lstat(path.join(janitorPaths.leasesDir, "pool-04.lock"))
+        .catch(() => null),
+      null,
+    );
+    assert(
+      (
+        await fs.lstat(path.join(janitorPaths.leasesDir, "pool-05.lock"))
+      ).isFile(),
+    );
+  } finally {
+    if (unsafeSlotProcess.exitCode === null) {
+      unsafeSlotProcess.kill("SIGTERM");
+      await once(unsafeSlotProcess, "exit");
+    }
+  }
 
   const concurrentJanitorHome = path.join(
     temporaryHome,

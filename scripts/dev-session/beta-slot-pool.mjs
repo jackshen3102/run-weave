@@ -16,4 +16,7 @@ export {
   recordBetaSlotRelease,
   resetBetaSlotMutableState,
 } from "./beta-slot-pool-storage.mjs";
-export { runBetaPoolJanitor } from "./beta-slot-pool-janitor.mjs";
+export {
+  betaSlotProcessesAreAbsent,
+  runBetaPoolJanitor,
+} from "./beta-slot-pool-janitor.mjs";

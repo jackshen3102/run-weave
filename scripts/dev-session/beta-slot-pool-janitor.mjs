@@ -56,7 +56,10 @@ async function readLeaseManifest(lease) {
   }
 }
 
-async function recordedSlotProcessesAreAbsent(slotId, homeDir) {
+export async function betaSlotProcessesAreAbsent(
+  slotId,
+  homeDir = os.homedir(),
+) {
   const targets = resolveBetaUpdateTargets(homeDir, slotId);
   const [desktop, backend, appServer, references] = await Promise.all([
     inspectRecordedProcessState(
@@ -78,11 +81,19 @@ async function recordedSlotProcessesAreAbsent(slotId, homeDir) {
       targets.appServerHome,
     ]),
   ]);
-  const evidence = [desktop, backend, appServer, references];
-  return evidence.every((entry) => entry.trusted && !entry.active);
+  return (
+    [desktop, backend, appServer].every(
+      (entry) => entry.trusted || !entry.exists,
+    ) &&
+    references.trusted &&
+    !references.active
+  );
 }
 
-async function stopRecordedDedicatedServices(manifest, lease) {
+async function stopRecordedDedicatedServices(manifest, lease, homeDir) {
+  if (await betaSlotProcessesAreAbsent(lease.slotId, homeDir)) {
+    return;
+  }
   const dedicatedServices = [
     manifest.services?.electron,
     manifest.services?.backend,
@@ -180,7 +191,7 @@ export async function runBetaPoolJanitor({
         if (
           isPidLive(lease.allocatorPid) ||
           orphanAgeMs <= 10 * 60_000 ||
-          !(await recordedSlotProcessesAreAbsent(slotId, homeDir))
+          !(await betaSlotProcessesAreAbsent(slotId, homeDir))
         ) {
           summary.broken.push({
             slotId,
@@ -222,7 +233,7 @@ export async function runBetaPoolJanitor({
           continue;
         }
         try {
-          await stopRecordedDedicatedServices(manifest, lease);
+          await stopRecordedDedicatedServices(manifest, lease, homeDir);
         } catch (error) {
           summary.broken.push({
             slotId,

@@ -7,7 +7,10 @@ import {
   History,
   Home,
   MoreHorizontal,
+  RefreshCw,
 } from "lucide-react";
+import { useMemoizedFn } from "ahooks";
+import { useState } from "react";
 import type { ConnectionConfig } from "../../features/connection/types";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
@@ -18,6 +21,7 @@ import {
   useTerminalSessionsQuery,
 } from "../../features/terminal/queries/terminal-workspace-queries";
 import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
+import { recoverTerminalAgent } from "../../services/terminal";
 import { Button } from "../ui/button";
 import { ConnectionSwitcher } from "../connection-switcher";
 import {
@@ -101,6 +105,13 @@ export function TerminalWorkspaceHeader({
   const setStatusLookupOpen = useTerminalWorkspaceStore(
     (state) => state.setStatusLookupOpen,
   );
+  const setRequestError = useTerminalWorkspaceStore(
+    (state) => state.setRequestError,
+  );
+  const bumpAgentRecoveryRevision = useTerminalWorkspaceStore(
+    (state) => state.bumpAgentRecoveryRevision,
+  );
+  const [recoveringAgent, setRecoveringAgent] = useState(false);
   const activeProject =
     projects.find((project) => project.projectId === activeProjectId) ?? null;
   const activeSession =
@@ -116,6 +127,33 @@ export function TerminalWorkspaceHeader({
     );
     setHistoryDrawerOpen(true);
   };
+  const recoverActiveAgent = useMemoizedFn(async (): Promise<void> => {
+    if (!activeSession || recoveringAgent) {
+      return;
+    }
+    if (
+      !window.confirm(
+        "Restart the current Codex pane and resume its saved thread? Unsaved prompt text in this pane will be discarded.",
+      )
+    ) {
+      return;
+    }
+    setRecoveringAgent(true);
+    try {
+      await recoverTerminalAgent(
+        apiBase,
+        token,
+        activeSession.terminalSessionId,
+        { panelId: activeSession.activePanelId },
+      );
+      bumpAgentRecoveryRevision(activeSession.terminalSessionId);
+      setRequestError(null);
+    } catch (error) {
+      setRequestError(String(error));
+    } finally {
+      setRecoveringAgent(false);
+    }
+  });
   return (
     <div className="flex h-8 items-center gap-1.5 border-b border-slate-800 px-2">
       {onNavigateHome && (
@@ -224,6 +262,19 @@ export function TerminalWorkspaceHeader({
             >
               <History className="h-4 w-4" />
               Terminal History
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={
+                recoveringAgent ||
+                activeSession?.terminalState?.state !== "agent_idle" ||
+                activeSession.terminalState.agent !== "codex"
+              }
+              onSelect={() => {
+                void recoverActiveAgent();
+              }}
+            >
+              <RefreshCw className="h-4 w-4" />
+              {recoveringAgent ? "Recovering Codex…" : "Recover Codex"}
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => {

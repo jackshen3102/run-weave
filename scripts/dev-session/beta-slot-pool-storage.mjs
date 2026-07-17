@@ -5,7 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { resolveBetaUpdateTargets } from "../runweave-update-core.mjs";
+import {
+  resolveBetaAppBackupPrefix,
+  resolveBetaUpdateTargets,
+} from "../runweave-update-core.mjs";
 import { DevSessionError, assertPathInside } from "./contracts.mjs";
 import {
   DEFAULT_BETA_POOL_MIN_FREE_BYTES,
@@ -18,6 +21,20 @@ const execFileAsync = promisify(execFile);
 const MAX_UPDATE_LOGS = 5;
 const MAX_UPDATE_LOG_BYTES = 64 * 1024 * 1024;
 const MIN_PLANNED_WRITE_BYTES = 512 * 1024 * 1024;
+const LAUNCH_SERVICES_REGISTER =
+  "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
+
+async function unregisterApplicationPath(appPath, applicationsDir) {
+  if (
+    process.platform !== "darwin" ||
+    path.resolve(applicationsDir) !== "/Applications"
+  ) {
+    return false;
+  }
+  return await execFileAsync(LAUNCH_SERVICES_REGISTER, ["-u", appPath])
+    .then(() => true)
+    .catch(() => false);
+}
 
 async function calculatePathBytes(targetPath, rejectSymlink = true) {
   const stats = await fs.lstat(targetPath).catch((error) => {
@@ -310,21 +327,82 @@ export async function applyBetaSlotRetention({
       appServerPrevious,
     ),
   ]);
-  const referencedBackup = state?.previous?.app?.backupPath ?? null;
-  const backupPrefix = `.${targets.appName}.app.previous`;
-  const backupPaths = (await fs.readdir(applicationsDir).catch(() => []))
+  let referencedBackup = state?.previous?.app?.backupPath ?? null;
+  const backupPrefix = path.basename(
+    resolveBetaAppBackupPrefix(slotId, applicationsDir),
+  );
+  const legacyBackupPrefix = `.${targets.appName}.app.previous`;
+  const applicationEntries = await fs.readdir(applicationsDir).catch(() => []);
+  const backupPaths = applicationEntries
     .filter((entry) => entry.startsWith(backupPrefix))
     .map((entry) => path.join(applicationsDir, entry));
-  if (backupPaths.length > 0 && !referencedBackup) {
+  let legacyBackupPaths = applicationEntries
+    .filter((entry) => entry.startsWith(legacyBackupPrefix))
+    .map((entry) => path.join(applicationsDir, entry));
+  let appBackupMigrated = false;
+  let launchServicesUnregistered = 0;
+  if (
+    referencedBackup &&
+    state?.previous?.app?.exists === true &&
+    path.basename(referencedBackup).startsWith(legacyBackupPrefix)
+  ) {
+    const resolvedLegacyBackup = path.resolve(referencedBackup);
+    if (!legacyBackupPaths.includes(resolvedLegacyBackup)) {
+      throw new DevSessionError(
+        "Beta legacy app previous pointer is invalid",
+        5,
+        {
+          slotId,
+          referencedBackup,
+        },
+      );
+    }
+    const suffix = path
+      .basename(resolvedLegacyBackup)
+      .slice(legacyBackupPrefix.length);
+    const migratedBackup = path.join(
+      applicationsDir,
+      `${backupPrefix}${suffix}`,
+    );
+    if (await fs.lstat(migratedBackup).catch(() => null)) {
+      throw new DevSessionError("Beta app rollback target already exists", 5, {
+        slotId,
+        migratedBackup,
+      });
+    }
+    if (
+      await unregisterApplicationPath(resolvedLegacyBackup, applicationsDir)
+    ) {
+      launchServicesUnregistered += 1;
+    }
+    await fs.rename(resolvedLegacyBackup, migratedBackup);
+    try {
+      state.previous.app.backupPath = migratedBackup;
+      await atomicWriteJson(targets.statePath, state, targets.instanceRoot);
+    } catch (error) {
+      await fs
+        .rename(migratedBackup, resolvedLegacyBackup)
+        .catch(() => undefined);
+      throw error;
+    }
+    referencedBackup = migratedBackup;
+    backupPaths.push(migratedBackup);
+    legacyBackupPaths = legacyBackupPaths.filter(
+      (entry) => path.resolve(entry) !== resolvedLegacyBackup,
+    );
+    appBackupMigrated = true;
+  }
+  const allBackupPaths = [...backupPaths, ...legacyBackupPaths];
+  if (allBackupPaths.length > 0 && !referencedBackup) {
     throw new DevSessionError("Beta app previous pointer is missing", 5, {
       slotId,
-      backups: backupPaths,
+      backups: allBackupPaths,
     });
   }
   if (
     referencedBackup &&
     state?.previous?.app?.exists === true &&
-    (!backupPaths.includes(path.resolve(referencedBackup)) ||
+    (!allBackupPaths.includes(path.resolve(referencedBackup)) ||
       !path.basename(referencedBackup).startsWith(backupPrefix))
   ) {
     throw new DevSessionError("Beta app previous pointer is invalid", 5, {
@@ -342,12 +420,18 @@ export async function applyBetaSlotRetention({
     pruneLogs(path.join(targets.instanceRoot, "diagnostics", "logs")),
   ]);
   let appBackupCleanedBytes = 0;
-  for (const backupPath of backupPaths) {
+  for (const backupPath of allBackupPaths) {
     if (
       referencedBackup &&
       path.resolve(backupPath) === path.resolve(referencedBackup)
     ) {
       continue;
+    }
+    if (
+      path.basename(backupPath).startsWith(legacyBackupPrefix) &&
+      (await unregisterApplicationPath(backupPath, applicationsDir))
+    ) {
+      launchServicesUnregistered += 1;
     }
     appBackupCleanedBytes += await calculatePathBytes(backupPath);
     await fs.rm(backupPath, { recursive: true, force: true });
@@ -356,6 +440,8 @@ export async function applyBetaSlotRetention({
     desktopRuntime,
     appServerRuntime,
     logs,
+    appBackupMigrated,
+    launchServicesUnregistered,
     appBackupCleanedBytes,
     cleanedBytes:
       desktopRuntime.cleanedBytes +

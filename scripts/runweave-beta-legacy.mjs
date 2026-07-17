@@ -17,6 +17,8 @@ import {
 
 const POOL_SLOT_PATTERN = /^pool-0[1-5]$/;
 const OPERATION_ID_PATTERN = /^legacy-[0-9TZ-]+-[a-f0-9-]{36}$/;
+const LAUNCH_SERVICES_REGISTER =
+  "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
 
 function assertLegacyInstanceId(value) {
   const instanceId = assertBetaInstanceId(value);
@@ -83,6 +85,16 @@ async function readBundleId(appPath) {
   return result.ok ? result.stdout.trim() : null;
 }
 
+async function unregisterApplicationPath(appPath, applicationsDir) {
+  if (
+    process.platform !== "darwin" ||
+    path.resolve(applicationsDir) !== "/Applications"
+  ) {
+    return false;
+  }
+  return (await runCapture(LAUNCH_SERVICES_REGISTER, ["-u", appPath])).ok;
+}
+
 async function inspectResource(targetPath) {
   const stats = await fs.lstat(targetPath).catch((error) => {
     if (error?.code === "ENOENT") {
@@ -107,6 +119,15 @@ async function collectLegacyInstanceIds(homeDir, applicationsDir) {
   const roots = resolveLegacyRoots(homeDir);
   const ids = new Set();
   for (const entry of await fs.readdir(roots.instancesRoot).catch(() => [])) {
+    if (!POOL_SLOT_PATTERN.test(entry)) {
+      try {
+        ids.add(assertBetaInstanceId(entry));
+      } catch {
+        // Invalid directory names are reported separately by filesystem tooling.
+      }
+    }
+  }
+  for (const entry of await fs.readdir(roots.appServerRoot).catch(() => [])) {
     if (!POOL_SLOT_PATTERN.test(entry)) {
       try {
         ids.add(assertBetaInstanceId(entry));
@@ -151,31 +172,30 @@ export async function inventoryLegacyBeta({
       appServer,
       bundleId,
       processes,
-    ] =
-      await Promise.all([
-        inspectResource(targets.appPath),
-        inspectResource(targets.instanceRoot),
-        inspectResource(targets.appServerHome),
-        inspectRecordedProcessState(
-          path.join(targets.userData, "beta-desktop-status.json"),
-          ["app", "pid"],
-        ),
-        inspectRecordedProcessState(
-          path.join(targets.userData, "browser-profile", "backend.lock.json"),
-          ["pid"],
-        ),
-        inspectRecordedProcessState(
-          path.join(targets.appServerHome, "app-server.lock.json"),
-          ["pid"],
-        ),
-        readBundleId(targets.appPath),
-        inspectProcessReferences([
-          targets.appPath,
-          targets.instanceRoot,
-          targets.userData,
-          targets.appServerHome,
-        ]),
-      ]);
+    ] = await Promise.all([
+      inspectResource(targets.appPath),
+      inspectResource(targets.instanceRoot),
+      inspectResource(targets.appServerHome),
+      inspectRecordedProcessState(
+        path.join(targets.userData, "beta-desktop-status.json"),
+        ["app", "pid"],
+      ),
+      inspectRecordedProcessState(
+        path.join(targets.userData, "browser-profile", "backend.lock.json"),
+        ["pid"],
+      ),
+      inspectRecordedProcessState(
+        path.join(targets.appServerHome, "app-server.lock.json"),
+        ["pid"],
+      ),
+      readBundleId(targets.appPath),
+      inspectProcessReferences([
+        targets.appPath,
+        targets.instanceRoot,
+        targets.userData,
+        targets.appServerHome,
+      ]),
+    ]);
     const recordedProcesses = [desktop, backend, appServer];
     const active =
       recordedProcesses.some((processState) => processState.active) ||
@@ -183,16 +203,17 @@ export async function inventoryLegacyBeta({
     const processIdentityTrusted =
       recordedProcesses.every(
         (processState) => processState.trusted || !processState.exists,
-      ) &&
-      processes.trusted;
+      ) && processes.trusted;
+    const resources = [app, instanceRoot, appServerHome];
+    const existingResources = resources.filter((resource) => resource.exists);
     const trusted =
       !active &&
       processIdentityTrusted &&
-      app.exists &&
-      !app.symlink &&
-      !instanceRoot.symlink &&
-      !appServerHome.symlink &&
-      bundleId === targets.bundleId;
+      existingResources.length > 0 &&
+      existingResources.every(
+        (resource) => !resource.symlink && resource.kind === "directory",
+      ) &&
+      (!app.exists || bundleId === targets.bundleId);
     instances.push({
       instanceId,
       active,
@@ -203,8 +224,7 @@ export async function inventoryLegacyBeta({
       processIdentityFailures: [
         ...recordedProcesses
           .filter(
-            (processState) =>
-              processState.exists && !processState.trusted,
+            (processState) => processState.exists && !processState.trusted,
           )
           .map((processState) => ({
             path: processState.path,
@@ -217,7 +237,7 @@ export async function inventoryLegacyBeta({
       trusted,
       bundleId,
       expectedBundleId: targets.bundleId,
-      resources: [app, instanceRoot, appServerHome],
+      resources,
       suggestedCleanupCommand: trusted
         ? `node scripts/runweave-beta.mjs legacy-cleanup --instance ${instanceId} --json`
         : null,
@@ -263,6 +283,14 @@ export async function cleanupLegacyBeta({
     await assertNoSymlinkPath(resourceRoot, resource.path);
   }
   await fs.mkdir(operationRoot, { recursive: true, mode: 0o700 });
+  const appResource = candidate.resources.find(
+    (resource) =>
+      resource.exists &&
+      resource.path.startsWith(`${path.resolve(applicationsDir)}${path.sep}`),
+  );
+  const launchServicesUnregistered = appResource
+    ? await unregisterApplicationPath(appResource.path, applicationsDir)
+    : false;
   const entries = candidate.resources
     .filter((resource) => resource.exists)
     .map((resource, index) => ({
@@ -302,6 +330,7 @@ export async function cleanupLegacyBeta({
     applicationsDir: path.resolve(applicationsDir),
     state: "quarantined",
     completedAt: new Date().toISOString(),
+    launchServicesUnregistered,
     journalPath,
     entries,
     restoreCommand: `node scripts/runweave-beta.mjs legacy-restore --operation ${operationId} --json`,

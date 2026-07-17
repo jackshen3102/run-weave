@@ -28,6 +28,7 @@ import {
   BETA_SLOT_IDS,
   BETA_SLOT_POLICY,
   applyBetaSlotRetention,
+  assertBetaSlotId,
 } from "./dev-session/beta-slot-pool.mjs";
 import { assertLoopbackUrl } from "./dev-session/contracts.mjs";
 import {
@@ -180,10 +181,7 @@ async function update(
 
   const startedAt = Date.now();
   const baseline = await collectBaseline(paths);
-  baseline.app.backupPath = path.join(
-    "/Applications",
-    `.${paths.appName}.app.previous-${startedAt}`,
-  );
+  baseline.app.backupPath = `${paths.appBackupPath}-${startedAt}`;
   const logPath = path.join(
     paths.logDir,
     `update-${new Date().toISOString().replace(/[:.]/g, "-")}.log`,
@@ -411,6 +409,14 @@ async function verify(paths) {
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   const { forwarded, options } = parseControlArgs(args);
+  if (["update", "open", "rollback"].includes(command)) {
+    assertBetaSlotId(options.instanceId);
+  }
+  if (command === "migrate") {
+    throw new Error(
+      "legacy Beta migration is retired; use dev:session and legacy-cleanup",
+    );
+  }
   const paths = resolveBetaPaths(
     process.cwd(),
     os.homedir(),

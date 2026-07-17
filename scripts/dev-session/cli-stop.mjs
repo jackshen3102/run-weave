@@ -14,6 +14,7 @@ import { processIdentityMatches } from "./service-runtime.mjs";
 import {
   applyBetaSlotRetention,
   assertBetaSlotLease,
+  betaSlotProcessesAreAbsent,
   recordBetaSlotRelease,
   releaseBetaSlotLease,
   resetBetaSlotMutableState,
@@ -96,10 +97,35 @@ export async function runStop(options, sourceRoot, helpers) {
       manifest = updateManifest(manifest, { state: "stopping" });
       await writeManifest(manifest);
       try {
-        const cleanup = await cleanupStaleSessionServices(
+        let cleanup = await cleanupStaleSessionServices(
           manifest.services,
           retryingPartialCleanup ? { serviceNames: retryServiceNames } : {},
         );
+        if (
+          betaSlot &&
+          cleanup.summary.skippedStaleServices.length > 0 &&
+          (await betaSlotProcessesAreAbsent(betaSlot.assignedSlotId))
+        ) {
+          const alreadyStopped = cleanup.summary.skippedStaleServices.map(
+            (entry) => entry.service,
+          );
+          const services = structuredClone(cleanup.services);
+          for (const serviceName of alreadyStopped) {
+            services[serviceName].cleanupStatus =
+              "already-stopped-no-slot-processes";
+          }
+          cleanup = {
+            services,
+            summary: {
+              ...cleanup.summary,
+              stoppedServices: [
+                ...cleanup.summary.stoppedServices,
+                ...alreadyStopped,
+              ],
+              skippedStaleServices: [],
+            },
+          };
+        }
         if (cleanup.summary.skippedStaleServices.length > 0) {
           manifest = updateManifest(manifest, { services: cleanup.services });
           throw new DevSessionError(

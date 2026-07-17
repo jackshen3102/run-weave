@@ -36,6 +36,15 @@ export interface PrepareTerminalAgentResponse {
   commandSubmittedAt: string;
 }
 
+export interface RecoverTerminalAgentRequest {
+  panelId?: string;
+}
+
+export interface RecoverTerminalAgentResponse extends PrepareTerminalAgentResponse {
+  resumedThreadId: string;
+  recoveryMode: "pane_respawn";
+}
+
 export type TerminalAgentPreparationFailurePhase =
   | "panel_create"
   | "cli_launch"
