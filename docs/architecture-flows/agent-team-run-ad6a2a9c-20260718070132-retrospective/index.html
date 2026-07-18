@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Team Run ad6a2a9c 架构复盘</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07100e;
+        --panel: rgba(13, 29, 25, 0.88);
+        --panel-strong: #112720;
+        --line: rgba(174, 217, 195, 0.2);
+        --text: #eff8f3;
+        --muted: #9db5aa;
+        --green: #67e8a5;
+        --amber: #f6c96b;
+        --red: #ff8f87;
+        --blue: #79b8ff;
+        --violet: #c8a6ff;
+        --shadow: 0 28px 70px rgba(0, 0, 0, 0.28);
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        min-width: 320px;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 14% -5%, rgba(62, 207, 142, 0.18), transparent 31rem),
+          radial-gradient(circle at 94% 5%, rgba(98, 151, 255, 0.12), transparent 28rem),
+          var(--bg);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.55;
+      }
+
+      a { color: inherit; }
+      code {
+        color: #c7f8de;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.9em;
+        overflow-wrap: anywhere;
+      }
+
+      .shell {
+        width: min(1240px, calc(100% - 36px));
+        margin: 0 auto;
+        padding: 54px 0 84px;
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        padding: clamp(28px, 5vw, 62px);
+        border: 1px solid var(--line);
+        border-radius: 30px;
+        background: linear-gradient(145deg, rgba(18, 46, 37, 0.96), rgba(8, 21, 18, 0.94));
+        box-shadow: var(--shadow);
+      }
+
+      .hero::after {
+        content: "";
+        position: absolute;
+        right: -12%;
+        bottom: -55%;
+        width: 42rem;
+        height: 42rem;
+        border: 1px solid rgba(103, 232, 165, 0.15);
+        border-radius: 50%;
+      }
+
+      .eyebrow, .tag, .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        font-size: 12px;
+        font-weight: 750;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow { padding: 8px 12px; color: var(--green); }
+      .eyebrow::before, .status::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        box-shadow: 0 0 14px currentColor;
+      }
+
+      h1 {
+        position: relative;
+        z-index: 1;
+        max-width: 980px;
+        margin: 24px 0 17px;
+        font-size: clamp(36px, 6.3vw, 76px);
+        line-height: 1.02;
+        letter-spacing: -0.055em;
+      }
+
+      .hero-lead {
+        position: relative;
+        z-index: 1;
+        max-width: 910px;
+        margin: 0;
+        color: #c9ddd3;
+        font-size: clamp(17px, 2.1vw, 23px);
+      }
+
+      .hero-lead strong { color: var(--amber); }
+      .hero-meta {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 22px;
+        margin-top: 28px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .hero-meta b { color: var(--text); font-weight: 650; }
+      .hero-meta span { min-width: 0; overflow-wrap: anywhere; }
+      section { margin-top: 64px; }
+      .section-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(230px, 0.55fr);
+        gap: 28px;
+        align-items: end;
+        margin-bottom: 22px;
+      }
+
+      .section-kicker {
+        margin: 0 0 7px;
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: clamp(26px, 3.6vw, 43px);
+        line-height: 1.12;
+        letter-spacing: -0.035em;
+      }
+
+      .section-note { margin: 0; color: var(--muted); }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 13px;
+      }
+
+      .metric, .card, .flow-panel, .timeline, .evidence, .rec {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        box-shadow: 0 18px 46px rgba(0, 0, 0, 0.17);
+      }
+
+      .metric {
+        min-height: 134px;
+        padding: 22px;
+        border-radius: 19px;
+      }
+
+      .metric .value {
+        display: block;
+        color: var(--green);
+        font-size: clamp(27px, 4vw, 44px);
+        font-weight: 780;
+        line-height: 1;
+        letter-spacing: -0.045em;
+      }
+
+      .metric .label { display: block; margin-top: 12px; color: #d5e7dd; font-weight: 650; }
+      .metric .hint { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+      .flow-panel { overflow-x: auto; padding: 22px; border-radius: 24px; }
+      .flow-panel svg { display: block; min-width: 930px; width: 100%; height: auto; }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px 18px;
+        margin-top: 15px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .legend span::before {
+        content: "";
+        display: inline-block;
+        width: 18px;
+        height: 3px;
+        margin: 0 7px 3px 0;
+        border-radius: 99px;
+        background: currentColor;
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .card { padding: 24px; border-radius: 20px; }
+      .card h3, .rec h3 { margin: 15px 0 8px; font-size: 20px; letter-spacing: -0.02em; }
+      .card p, .rec p { margin: 0; color: var(--muted); }
+      .card ul, .rec ul { margin: 13px 0 0; padding-left: 19px; color: #d3e3db; }
+      .card li + li, .rec li + li { margin-top: 7px; }
+      .tag { padding: 5px 9px; }
+      .tag.product { color: var(--red); }
+      .tag.framework { color: var(--violet); }
+      .tag.contract { color: var(--amber); }
+      .tag.environment { color: var(--blue); }
+      .tag.observation { color: #a8b8b0; }
+
+      .timeline { padding: 10px 24px; border-radius: 22px; }
+      .timeline-row {
+        display: grid;
+        grid-template-columns: 118px 20px minmax(0, 1fr);
+        gap: 15px;
+        align-items: start;
+        padding: 19px 0;
+      }
+
+      .timeline-row + .timeline-row { border-top: 1px solid var(--line); }
+      .timeline-round { color: var(--green); font-size: 13px; font-weight: 760; }
+      .timeline-dot { width: 10px; height: 10px; margin-top: 5px; border: 2px solid var(--green); border-radius: 50%; }
+      .timeline-row h3 { margin: 0 0 5px; font-size: 16px; }
+      .timeline-row p { margin: 0; color: var(--muted); }
+
+      .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 21px; }
+      table { width: 100%; min-width: 780px; border-collapse: collapse; background: var(--panel); }
+      th, td { padding: 15px 17px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+      th { color: #c9ddd3; background: rgba(255, 255, 255, 0.025); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+      td { color: var(--muted); }
+      td:first-child { color: var(--text); font-weight: 650; }
+      tr:last-child td { border-bottom: 0; }
+
+      .recommendations { display: grid; gap: 12px; }
+      .rec {
+        display: grid;
+        grid-template-columns: 95px minmax(0, 1fr) 140px;
+        gap: 20px;
+        align-items: start;
+        padding: 22px;
+        border-radius: 19px;
+      }
+
+      .priority { color: var(--amber); font-size: 24px; font-weight: 800; }
+      .rec h3 { margin-top: 0; }
+      .status { justify-self: end; padding: 7px 10px; color: var(--blue); }
+      .status.done { color: var(--green); }
+      .status.partial { color: var(--amber); }
+
+      .evidence { padding: 22px 24px; border-radius: 20px; }
+      details + details { border-top: 1px solid var(--line); }
+      summary { padding: 15px 0; cursor: pointer; color: #d6e7de; font-weight: 650; }
+      details div { padding: 0 0 18px; color: var(--muted); }
+      .evidence details div { overflow-wrap: anywhere; }
+      footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        margin-top: 54px;
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      @media (max-width: 860px) {
+        .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .section-head { grid-template-columns: 1fr; }
+        .cards { grid-template-columns: 1fr; }
+        .rec { grid-template-columns: 70px minmax(0, 1fr); }
+        .status { grid-column: 2; justify-self: start; }
+      }
+
+      @media (max-width: 560px) {
+        .shell { width: min(100% - 22px, 1240px); padding-top: 18px; }
+        .hero { border-radius: 22px; }
+        .metrics { grid-template-columns: 1fr; }
+        .timeline-row { grid-template-columns: 76px 12px minmax(0, 1fr); gap: 10px; }
+        footer { flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <span class="eyebrow">Run done · resources clean</span>
+        <h1>不是一个“修不动”的 Bug。</h1>
+        <p class="hero-lead">
+          两个真实产品缺陷都已修复。这个 Run 被拖到 29 轮，主要原因是<strong>测试合同与既有架构不一致、恢复框架缺口和环境前置条件反复失效</strong>，而不是 displayScale 本身不可实现。
+        </p>
+        <div class="hero-meta">
+          <span>Run <b>atr_ad6a2a9c_20260718070132</b></span>
+          <span>时间 <b>2026-07-18 07:01 → 14:56</b></span>
+          <span>最终状态 <b>done</b></span>
+          <span>验收 <b>AGT-REVIEW-GATE + TBZ-001..009</b></span>
+        </div>
+      </header>
+
+      <section aria-labelledby="verdict-title">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Final verdict</p>
+            <h2 id="verdict-title">结果已经收口，过程暴露的是系统性放大器</h2>
+          </div>
+          <p class="section-note">墙钟时间不能直接当作“代码修复效率”：大量时间消耗在环境重建、测试合同改写与恢复门禁。</p>
+        </div>
+        <div class="metrics">
+          <article class="metric"><span class="value">10/10</span><span class="label">最终验收通过</span><span class="hint">含 review gate 与 9 个行为 Case</span></article>
+          <article class="metric"><span class="value">29</span><span class="label">最终轮次</span><span class="hint">包含修复、重派与环境恢复</span></article>
+          <article class="metric"><span class="value">39</span><span class="label">Worker dispatch</span><span class="hint">behavior 23 / code 9 / review 7</span></article>
+          <article class="metric"><span class="value">20</span><span class="label">Agent intervention</span><span class="hint">16 次 dispatch + 4 次合同刷新</span></article>
+          <article class="metric"><span class="value">22</span><span class="label">暂停事件</span><span class="hint">环境、依赖、合同与修复交接</span></article>
+          <article class="metric"><span class="value">7:54:50</span><span class="label">端到端耗时</span><span class="hint">07:01:32 至 14:56:22</span></article>
+          <article class="metric"><span class="value">2</span><span class="label">真实产品缺陷</span><span class="hint">竞态 + 截图恢复，均已修复</span></article>
+          <article class="metric"><span class="value">0</span><span class="label">残留 Fixture</span><span class="hint">blocked sessions 也已归零</span></article>
+        </div>
+      </section>
+
+      <section aria-labelledby="flow-title">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Architecture flow</p>
+            <h2 id="flow-title">理想闭环与本次真实闭环</h2>
+          </div>
+          <p class="section-note">问题不在“是否能实现”，而在每个门禁是否能区分产品失败、合同错误和环境缺失。</p>
+        </div>
+        <div class="flow-panel">
+          <svg viewBox="0 0 1130 500" role="img" aria-label="理想闭环与本次实际闭环对比图">
+            <defs>
+              <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#67e8a5" /></marker>
+              <marker id="arrow-amber" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#f6c96b" /></marker>
+              <marker id="arrow-violet" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#c8a6ff" /></marker>
+              <style>
+                .box{fill:#10261f;stroke:#345849;stroke-width:1.5}.label{fill:#eff8f3;font:700 15px Inter,system-ui}.sub{fill:#9db5aa;font:12px Inter,system-ui}.cap{fill:#67e8a5;font:800 12px Inter,system-ui;letter-spacing:1.6px}.edge{fill:none;stroke:#67e8a5;stroke-width:2.2;marker-end:url(#arrow-green)}.warn{fill:none;stroke:#f6c96b;stroke-width:2.2;stroke-dasharray:7 6;marker-end:url(#arrow-amber)}.framework{fill:none;stroke:#c8a6ff;stroke-width:2.2;stroke-dasharray:7 6;marker-end:url(#arrow-violet)}
+              </style>
+            </defs>
+            <text x="20" y="28" class="cap">IDEAL · 一次失败只进入一种恢复路径</text>
+            <g transform="translate(20 48)"><rect class="box" width="190" height="70" rx="14"/><text class="label" x="18" y="30">原子验收 Case</text><text class="sub" x="18" y="51">前置条件可自动建立</text></g>
+            <g transform="translate(286 48)"><rect class="box" width="190" height="70" rx="14"/><text class="label" x="18" y="30">Worker 执行</text><text class="sub" x="18" y="51">fresh fixture + fresh refs</text></g>
+            <g transform="translate(552 48)"><rect class="box" width="190" height="70" rx="14"/><text class="label" x="18" y="30">证据分类</text><text class="sub" x="18" y="51">产品 / 合同 / 环境</text></g>
+            <g transform="translate(818 48)"><rect class="box" width="190" height="70" rx="14"/><text class="label" x="18" y="30">选择性恢复</text><text class="sub" x="18" y="51">只重跑受影响 Case</text></g>
+            <path class="edge" d="M210 83H278"/><path class="edge" d="M476 83H544"/><path class="edge" d="M742 83H810"/>
+            <path class="edge" d="M1008 83H1080V143H647V126"/>
+            <text x="20" y="186" class="cap">ACTUAL · 三类问题叠加后反复进入同一个暂停门</text>
+            <g transform="translate(20 210)"><rect class="box" width="190" height="78" rx="14"/><text class="label" x="18" y="30">组合型 TBZ-006</text><text class="sub" x="18" y="52">导航 / preset / 新 Tab / 重启</text></g>
+            <g transform="translate(286 210)"><rect class="box" width="190" height="78" rx="14"/><text class="label" x="18" y="30">Behavior Verify</text><text class="sub" x="18" y="52">局部证据无法完成整 Case</text></g>
+            <g transform="translate(552 210)"><rect class="box" width="190" height="78" rx="14"/><text class="label" x="18" y="30">统一暂停 / Gate</text><text class="sub" x="18" y="52">need_human / recovery</text></g>
+            <g transform="translate(818 210)"><rect class="box" width="190" height="78" rx="14"/><text class="label" x="18" y="30">主 Agent 干预</text><text class="sub" x="18" y="52">20 次选择恢复动作</text></g>
+            <path class="edge" d="M210 249H278"/><path class="edge" d="M476 249H544"/><path class="edge" d="M742 249H810"/>
+            <g transform="translate(116 362)"><rect class="box" width="190" height="76" rx="14"/><text class="label" x="18" y="29">产品代码修复</text><text class="sub" x="18" y="51">2 个确认缺陷</text></g>
+            <g transform="translate(410 362)"><rect class="box" width="190" height="76" rx="14"/><text class="label" x="18" y="29">验收合同修订</text><text class="sub" x="18" y="51">CDP / Case 拆分 / 重启语义</text></g>
+            <g transform="translate(704 362)"><rect class="box" width="190" height="76" rx="14"/><text class="label" x="18" y="29">环境与框架恢复</text><text class="sub" x="18" y="51">slot / fixture / refs / receipts</text></g>
+            <path class="warn" d="M878 288V326H211V354"/><path class="warn" d="M878 288V326H505V354"/><path class="framework" d="M878 288V326H799V354"/>
+            <path class="warn" d="M211 362V315H647V296"/><path class="warn" d="M505 362V315H647V296"/><path class="framework" d="M799 362V315H647V296"/>
+            <text class="sub" x="932" y="402">最终：</text><text class="label" x="932" y="425">10/10 pass</text><text class="sub" x="932" y="446">fixtures = 0</text>
+          </svg>
+          <div class="legend"><span style="color:var(--green)">正常交付路径</span><span style="color:var(--amber)">合同或产品回路</span><span style="color:var(--violet)">环境与框架回路</span></div>
+        </div>
+      </section>
+
+      <section aria-labelledby="cause-title">
+        <div class="section-head">
+          <div><p class="section-kicker">Root cause taxonomy</p><h2 id="cause-title">五类问题必须分开判断</h2></div>
+          <p class="section-note">“blocked” 不是产品失败；“review pass” 也不是行为通过。分类错误会让主 Agent 反复修同一个不存在的产品 Bug。</p>
+        </div>
+        <div class="cards">
+          <article class="card"><span class="tag product">Real product defects · 2</span><h3>确实有 Bug，而且都能修</h3><ul><li>displayScale 串行队列的 no-op 判断曾在队列外，导致“后一次 reset 返回 1、早一次 set 最后提交 0.8”的 last-success-wins 竞态。</li><li>截图路径第一次等待 paint 曾位于 <code>try/finally</code> 外，异常时可能把 WebContents 留在临时 100% 状态。</li><li>两处均已修复，并分别通过后续 review 与行为链路。</li></ul></article>
+          <article class="card"><span class="tag framework">Framework defects</span><h3>恢复框架把可恢复状态升级成了人工门</h3><ul><li>20 次 Agent intervention 说明无人值守闭环没有在错误分类后自动选择最小动作。</li><li>已停止或启动前失败的 Dev Session 缺少可审计 cleanup receipt，出现 live=0 但 completion 被阻断。</li><li>本轮已补齐基于终态证据的 backfill，并让历史 r7/r23/r24/r28 全部形成 completed receipt。</li></ul></article>
+          <article class="card"><span class="tag contract">Acceptance contract</span><h3>测试一度要求架构并不承诺的行为</h3><ul><li>CDP 必须沿 scoped root connection + primary target session 操作；把 raw-created target 当真实 UI Tab 会得到 0×0 viewport。</li><li>原 TBZ-006 把四个生命周期不变量绑成一个 Case，任何一步环境缺失都会抹掉已完成证据，后拆为 TBZ-006..009。</li><li>原 TBZ-009 假设 Beta stop 后旧 Tab 恢复；官方清理语义实际会重建 user-data，因此改为“旧 A/B 不恢复，新 C 为 100%”。</li></ul></article>
+          <article class="card"><span class="tag environment">Environment capability</span><h3>前置能力不是稳定服务</h3><ul><li>出现过 5 个 Beta slot 全占用或 broken、service identity drift 与 stale session。</li><li>fixture server 未启动或在重启前退出，导航落到 <code>chrome-error://chromewebdata/</code>。</li><li>桌面重启后复用旧 UI ref、未通过 native 菜单建立 Device Mode，均无法产生可信产品结论。</li></ul></article>
+          <article class="card"><span class="tag observation">Observation risk</span><h3>不能用 7 小时 54 分证明“Bug 难修”</h3><p>墙钟时间包含测试合同修订、环境重建、清理框架修复、一次误取消后恢复，以及 23 个清理审计记录。它证明链路缺少隔离与自动恢复，不证明 displayScale 实现本身不可行。</p></article>
+          <article class="card"><span class="tag observation">Current truth</span><h3>最终行为与资源状态已经一致</h3><p>AGT-REVIEW-GATE 与 TBZ-001..009 全部 pass；Run 为 <code>done</code>；最新 fixture cleanup 为 <code>completed</code>；<code>ownedLiveFixtureRuns=0</code>，blocked Dev Sessions 归零。</p></article>
+        </div>
+      </section>
+
+      <section aria-labelledby="timeline-title">
+        <div class="section-head"><div><p class="section-kicker">Timeline</p><h2 id="timeline-title">29 轮里发生了什么</h2></div><p class="section-note">按决策变化聚合，而不是逐条复制日志。</p></div>
+        <div class="timeline">
+          <div class="timeline-row"><div class="timeline-round">Round 1–3</div><div class="timeline-dot"></div><div><h3>发现第一个真实竞态</h3><p>review 抓到 queue 外 no-op 判断造成的 last-success-wins 破坏；代码修复后进入行为验证。</p></div></div>
+          <div class="timeline-row"><div class="timeline-round">Round 4</div><div class="timeline-dot"></div><div><h3>CDP 操作边界重新对齐</h3><p>依据现有架构限制，把验收从嵌套 page session 修订为 scoped endpoint 的 primary target session。</p></div></div>
+          <div class="timeline-row"><div class="timeline-round">Round 5–14</div><div class="timeline-dot"></div><div><h3>真实 UI、截图与环境恢复交织</h3><p>TBZ-004/005 暴露 raw target 0 viewport、fixture 与 slot 问题；同时确认并修复截图异常恢复缺陷。</p></div></div>
+          <div class="timeline-row"><div class="timeline-round">Round 15–22</div><div class="timeline-dot"></div><div><h3>组合生命周期 Case 被拆开</h3><p>TBZ-006 多次只完成局部证据后，合同拆成导航重连、Device Mode、新 WebContents、Dev Session 重启四个原子 Case。</p></div></div>
+          <div class="timeline-row"><div class="timeline-round">Round 23–25</div><div class="timeline-dot"></div><div><h3>纠正 Beta stop 语义</h3><p>验收不再要求被清理的 user-data 恢复旧 Tab，改为验证旧 Tab 不恢复、新建 C 为 100%。期间出现全 slot 占用。</p></div></div>
+          <div class="timeline-row"><div class="timeline-round">Round 26–27</div><div class="timeline-dot"></div><div><h3>误取消后只恢复 pending Case</h3><p>保留 AGT gate 与 TBZ-001..008 证据，仅恢复 TBZ-009；先后遇到重启后旧 UI ref 和 fixture server 生命周期问题。</p></div></div>
+          <div class="timeline-row"><div class="timeline-round">Round 28</div><div class="timeline-dot"></div><div><h3>TBZ-009 获得完整真实证据</h3><p>同 ID stop/restart、旧 A/B 不恢复、新 C=100%、无持久化字段、最终清理均完成。</p></div></div>
+          <div class="timeline-row"><div class="timeline-round">Round 29</div><div class="timeline-dot"></div><div><h3>修复 cleanup receipt 并正式收口</h3><p>历史 stopped/pre-allocation failed Session 获得可审计 receipt，blocked sessions 与 live fixtures 全部归零，Run 标记 done。</p></div></div>
+        </div>
+      </section>
+
+      <section aria-labelledby="quant-title">
+        <div class="section-head"><div><p class="section-kicker">Quantitative audit</p><h2 id="quant-title">数字如何支持结论</h2></div><p class="section-note">只报告可从 Run、outbox 与 manifest 直接重算的数据。</p></div>
+        <div class="table-wrap"><table><thead><tr><th>指标</th><th>数值</th><th>解释</th></tr></thead><tbody>
+          <tr><td>最终验收</td><td>10 pass / 0 fail / 0 blocked</td><td>AGT-REVIEW-GATE 与 TBZ-001..009 全通过。</td></tr>
+          <tr><td>Worker dispatch</td><td>39</td><td>behavior_verify 23、code 9、code_review 7。</td></tr>
+          <tr><td>Agent intervention</td><td>20</td><td>16 次选择性 dispatch、4 次 refresh_acceptance。</td></tr>
+          <tr><td>暂停日志</td><td>22</td><td>反映环境、依赖、合同或修复交接，不等同于 22 个产品失败。</td></tr>
+          <tr><td>Fixture cleanup 审计</td><td>23</td><td>18 条 completed、5 条历史 blocked；最终 blocked=0。</td></tr>
+          <tr><td>证据文件</td><td>75</td><td><code>.runweave/evidence</code> 下与本 Run 关联的证据资产。</td></tr>
+          <tr><td>误取消</td><td>1</td><td>用户确认任务未结束后恢复，且保留已通过 Case 证据。</td></tr>
+          <tr><td>最终资源</td><td>0 live / 0 blocked</td><td>Run fixtures 查询为空，所有归属 Session 清理完成。</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section aria-labelledby="rec-title">
+        <div class="section-head"><div><p class="section-kicker">Recommendations</p><h2 id="rec-title">下一次应缩短到什么程度</h2></div><p class="section-note">目标不是“永不失败”，而是失败后一次分类、一次恢复、保留已完成证据。</p></div>
+        <div class="recommendations">
+          <article class="rec"><div class="priority">P0</div><div><h3>Dev Session cleanup 必须产出可审计终态 receipt</h3><p>只有 session_never_started、shared_backend、cleanup_endpoint 或 beta_slot_reset 等明确 completion basis 才能完成；live=0 本身不应靠推断伪造。</p></div><span class="status done">已完成</span></article>
+          <article class="rec"><div class="priority">P0</div><div><h3>Behavior worker 启动前做环境能力预检</h3><p>一次检查 slot、fixture lease、desktop/terminal-browser surface、native menu 能力和 session generation；缺失时停在环境层，不进入产品修复循环。</p></div><span class="status">待实现</span></article>
+          <article class="rec"><div class="priority">P1</div><div><h3>把验收 Case 原子性变成生成时约束</h3><p>跨导航、设备模式、WebContents 与进程重启不得默认塞进同一个 Case；每个 Case 必须能在一次 fixture 生命周期内完整取证。</p></div><span class="status partial">部分完成</span></article>
+          <article class="rec"><div class="priority">P1</div><div><h3>桌面重启后强制失效所有旧 UI 引用</h3><p>dev:open 返回新的 session generation；worker 工具拒绝使用旧 generation ref，并自动重新 snapshot，避免动作落到“Set project path”等错误控件。</p></div><span class="status">待实现</span></article>
+          <article class="rec"><div class="priority">P1</div><div><h3>Recovery Gate 按错误类别自动选最小动作</h3><p>环境恢复只重派 Case；合同变更才 refresh_acceptance；确认产品缺陷才交给 code。非拆分审批与 P0/P1 范围裁决不进入 Human Gate。</p></div><span class="status partial">规则已有</span></article>
+          <article class="rec"><div class="priority">P2</div><div><h3>指标拆分产品失败与非产品阻塞</h3><p>仪表盘分别展示 product fail、contract invalid、environment blocked、framework recovery 和 observation risk，避免用总轮次衡量代码质量。</p></div><span class="status">待实现</span></article>
+        </div>
+      </section>
+
+      <section aria-labelledby="evidence-title">
+        <div class="section-head"><div><p class="section-kicker">Evidence index</p><h2 id="evidence-title">可复核证据</h2></div><p class="section-note">本页是解释层，权威事实仍来自项目内原始文件。</p></div>
+        <div class="evidence">
+          <details open><summary>权威 Run 与 Case 合同</summary><div><code>.runweave/agent-team/atr_ad6a2a9c_20260718070132.json</code><br/><code>docs/testing/terminal/terminal-browser-display-scale.testplan.yaml</code>（SHA-256: 0f569da576f1265798e1757ec0e257513a71f0be96c9e507031dbbaec6d01cbb）</div></details>
+          <details><summary>最终 worker outbox</summary><div><code>.runweave/outbox/ad6a2a9c.panel-c527e022-621c-4b69-b56f-1b9f21333c1b.json</code><br/><code>.runweave/outbox/ad6a2a9c.panel-66fc76ab-82f4-4843-a857-e5ea69326fea.json</code><br/><code>.runweave/outbox/ad6a2a9c.panel-39d17d3e-1ffc-45ad-8f3c-c7bac2e4efdc.json</code></div></details>
+          <details><summary>产品缺陷 review 与当前实现</summary><div><code>docs/review/2026-07-18-terminal-browser-per-tab-display-scale-round-1.review.md</code><br/><code>docs/review/2026-07-18-terminal-browser-per-tab-display-scale-round-13.review.md</code><br/><code>electron/src/terminal-browser-display-scale.ts:205</code> 与 <code>:289</code></div></details>
+          <details><summary>清理框架修复</summary><div><code>scripts/dev-session/agent-team-fixture-cleanup.mjs</code><br/><code>scripts/dev-session/cli-stop.mjs</code><br/><code>scripts/dev-session/contracts.mjs</code></div></details>
+          <details><summary>未作出的推断</summary><div>没有把 environment skip 计为产品失败；没有把 review pass 提升为 behavior pass；没有把 live=0 单独当作 cleanup receipt；没有用旧 outbox 替代最新 dispatch 证据。</div></details>
+        </div>
+      </section>
+
+      <footer><span>Generated from the final auditable Run state · 2026-07-18</span><span>Runweave Agent Team retrospective</span></footer>
+    </main>
+  </body>
+</html>
