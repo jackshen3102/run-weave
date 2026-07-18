@@ -67,6 +67,7 @@ export class AgentTeamServiceContext {
       terminalSessionManager: this.terminalSessionManager,
       ptyService: this.ptyService,
       runtimeRegistry: this.runtimeRegistry,
+      terminalStateService: this.terminalStateService,
       tmuxService: this.tmuxService,
       tmuxOutputWatcher: this.tmuxOutputWatcher,
     });

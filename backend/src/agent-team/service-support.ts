@@ -17,6 +17,7 @@ import { isTerminalChildProjectIdLike } from "@runweave/shared/terminal/project-
 import { getAgentForCommand } from "../terminal/terminal-state-service";
 import { AgentTeamError } from "./errors";
 import {
+  isAgentTeamProjectFileMissingError,
   loadAcceptanceCasesFromTestPlan,
   resolveAgentTeamProjectFile,
 } from "./acceptance-case-loader";
@@ -26,6 +27,10 @@ import {
   formatVerificationSource,
 } from "./service-run-policy";
 import { buildHumanGateMainPrompt } from "./prompt-builders";
+import {
+  isReviewGateAcceptanceCase,
+  resetPersistedAcceptanceForRefresh,
+} from "./service-acceptance-policy";
 import { buildAgentTeamPanelRole } from "./service-workflow-policy";
 import { AgentTeamWorkerDispatchSupport } from "./service-worker-dispatch-support";
 
@@ -207,6 +212,42 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
     );
   }
 
+  protected async prepareAcceptanceRefresh(
+    run: AgentTeamRun,
+    generatedTestCaseFilePath: string,
+    allowPersistedAcceptanceFallback: boolean,
+  ): Promise<
+    PreparedAgentTeamAcceptance & { usedPersistedAcceptance: boolean }
+  > {
+    try {
+      return {
+        ...(await this.prepareSplitAcceptance(run, {
+          generatedTestCaseFilePath,
+        })),
+        usedPersistedAcceptance: false,
+      };
+    } catch (error) {
+      if (
+        !allowPersistedAcceptanceFallback ||
+        !isAgentTeamProjectFileMissingError(
+          error,
+          generatedTestCaseFilePath,
+        ) ||
+        run.verification?.generatedTestCaseFilePath !==
+          generatedTestCaseFilePath ||
+        !this.hasPersistedAcceptanceForSource(run, generatedTestCaseFilePath)
+      ) {
+        throw error;
+      }
+      return {
+        verification: run.verification,
+        acceptance: resetPersistedAcceptanceForRefresh(run.acceptance),
+        startLog: `验收来源文件 ${generatedTestCaseFilePath} 已不存在，使用 run 内持久化验收合同继续刷新`,
+        usedPersistedAcceptance: true,
+      };
+    }
+  }
+
   protected async resolveOptionalProjectFilePath(
     projectRoot: string,
     requestedPath: string | null | undefined,
@@ -234,10 +275,40 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
       run.projectId,
       session.cwd,
     );
-    const current = await this.withVerificationDigests(
-      projectRoot,
-      run.verification,
-    );
+    let generatedTestCaseSha256: string | null;
+    try {
+      generatedTestCaseSha256 = await this.hashProjectFile(
+        projectRoot,
+        run.verification.generatedTestCaseFilePath,
+      );
+    } catch (error) {
+      const generatedTestCaseFilePath =
+        run.verification.generatedTestCaseFilePath;
+      if (
+        !generatedTestCaseFilePath ||
+        !isAgentTeamProjectFileMissingError(
+          error,
+          generatedTestCaseFilePath,
+        ) ||
+        !this.hasPersistedAcceptanceForSource(run, generatedTestCaseFilePath)
+      ) {
+        throw error;
+      }
+      generatedTestCaseSha256 =
+        run.verification.generatedTestCaseSha256 ?? null;
+    }
+    const current: AgentTeamVerificationConfig = {
+      ...run.verification,
+      planSha256: await this.hashProjectFile(
+        projectRoot,
+        run.verification.planFilePath,
+      ),
+      testCaseSha256: await this.hashProjectFile(
+        projectRoot,
+        run.verification.testCaseFilePath,
+      ),
+      generatedTestCaseSha256,
+    };
     const fields = [
       ["计划文件", run.verification.planSha256, current.planSha256],
       ["测试案例文件", run.verification.testCaseSha256, current.testCaseSha256],
@@ -254,6 +325,22 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
         `${drift[0]}已变化，旧 review/acceptance 失效：expected ${drift[1] ?? "null"}，actual ${drift[2] ?? "null"}`,
       );
     }
+  }
+
+  private hasPersistedAcceptanceForSource(
+    run: AgentTeamRun,
+    sourceFilePath: string,
+  ): boolean {
+    const productCases = run.acceptance.filter(
+      (item) => !isReviewGateAcceptanceCase(item),
+    );
+    return (
+      productCases.length > 0 &&
+      productCases.every(
+        (item) =>
+          Boolean(item.sourceCaseId) && item.sourceFilePath === sourceFilePath,
+      )
+    );
   }
 
   protected effectiveTestCaseSha256(

@@ -39,6 +39,36 @@ export function assertAcceptanceRefreshPreservesTraceableCases(
   }
 }
 
+export function resetPersistedAcceptanceForRefresh(
+  acceptance: AgentTeamAcceptanceCase[],
+): AgentTeamAcceptanceCase[] {
+  return acceptance
+    .filter((item) => !isReviewGateAcceptanceCase(item))
+    .map((item) => ({
+      caseId: item.caseId,
+      text: item.text,
+      sourceCaseId: item.sourceCaseId ?? null,
+      sourceFilePath: item.sourceFilePath ?? null,
+      sourceHeading: item.sourceHeading ?? null,
+      tags: [...(item.tags ?? [])],
+      dependsOn: [...(item.dependsOn ?? [])],
+      status: "pending",
+      consecutiveFail: 0,
+      resultSummary: null,
+      reproduction: null,
+      evidence: [],
+      bouncedToPanelId: null,
+      recheckRequestedAt: null,
+      recheckDispatchId: null,
+      recheckWorkerPanelId: null,
+      recheckWorkerRole: null,
+      recheckOutboxMtimeMs: null,
+      recheckAttempt: 0,
+      lastRunStatus: "pending",
+      skipReason: null,
+    }));
+}
+
 export function mergeAcceptanceRefresh(
   existing: AgentTeamAcceptanceCase[],
   refreshed: AgentTeamAcceptanceCase[],

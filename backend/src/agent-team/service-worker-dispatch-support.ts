@@ -80,7 +80,8 @@ export class AgentTeamWorkerDispatchSupport extends AgentTeamServiceContext {
       expectedAgent &&
       readyPanel?.status === "running" &&
       readyPanelAgent === expectedAgent &&
-      readyPanel.terminalState?.state === "agent_idle";
+      (readyPanel.terminalState?.state === "agent_idle" ||
+        readyPanel.terminalState?.state === "agent_running");
     if (reusableActiveThread) {
       await this.promptSender.sendPromptToPane(session, prompt, {
         panelId: worker.panelId,
@@ -133,7 +134,8 @@ export class AgentTeamWorkerDispatchSupport extends AgentTeamServiceContext {
   ): Promise<TerminalPanelRecord | null> {
     const isReady = (candidate: TerminalPanelRecord | undefined) =>
       candidate?.status === "running" &&
-      candidate.terminalState?.state === "agent_idle" &&
+      (candidate.terminalState?.state === "agent_idle" ||
+        candidate.terminalState?.state === "agent_running") &&
       candidate.terminalState.agent === expectedAgent &&
       candidate.threadProvider === expectedAgent &&
       candidate.threadId?.trim() === expectedThreadId;
@@ -163,8 +165,7 @@ export class AgentTeamWorkerDispatchSupport extends AgentTeamServiceContext {
           candidate.status !== "running" ||
           (candidate.terminalState?.agent &&
             candidate.terminalState.agent !== expectedAgent) ||
-          candidate.terminalState?.state === "shell_idle" ||
-          candidate.terminalState?.state === "agent_running"
+          candidate.terminalState?.state === "shell_idle"
         ) {
           finish(null);
         }

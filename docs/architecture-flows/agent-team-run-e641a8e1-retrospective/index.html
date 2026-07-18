@@ -45,11 +45,11 @@
   <h2>根因分类</h2>
   <div class="grid">
     <article class="card"><span class="tag framework">已确认框架缺陷</span><h3>Prompt 传输没有容量协议</h3><p class="muted">只按换行切分，单个超长段落可直接进入 tmux 参数。失败发生在 worker 启动前，但 UI 已接近“投递中”语义。当前已增加 8 KiB UTF-8 分片，仍需端到端回归。</p></article>
-    <article class="card"><span class="tag framework">已确认框架缺陷</span><h3>Dispatch 持久化与 pane 启动非原子</h3><p class="muted">run 可显示 active dispatch，而 pane 仍停在旧 transcript。缺少 delivery ack 导致 UI 把“路由意图”显示成“已开始执行”。</p></article>
-    <article class="card"><span class="tag framework">已确认框架缺陷</span><h3>Thread 恢复策略只有拒绝，没有闭环</h3><p class="muted">为保护上下文而禁止新开 thread 是合理门禁；但没有 pane generation、context snapshot 或安全重建动作，因此每次都升级 Human Gate。</p></article>
+    <article class="card"><span class="tag fact">本轮已部分修复</span><h3>Dispatch 持久化与 pane 启动非原子</h3><p class="muted">缺失 activeWorkerDispatch 时现会忽略无法绑定身份的 completion，并基于未通过 case 自动建立一次 fresh dispatch；同一 round 再次缺失仍进入 Human Gate。pane delivery ack 仍是后续工作。</p></article>
+    <article class="card"><span class="tag fact">本轮已修复</span><h3>Active thread 消息投递曾被错误拒绝</h3><p class="muted">底层输入调度器原本就支持 agent_running 用 Tab 入队、agent_idle 用 C-m 提交；Agent Team 现已复用统一输入路径，两种状态均直接发消息。只有 shell_idle 才 resume，无历史上下文才 launch。</p></article>
     <article class="card"><span class="tag contract">合同设计问题</span><h3>一个 case 同时承担核心和边界行为</h3><p class="muted">严格顺序执行时，边界缺陷会阻塞大量独立 case。WTC-009 是典型：核心恢复与多 Session 边界应独立优先级和阻塞策略。</p></article>
     <article class="card"><span class="tag environment">环境能力问题</span><h3>验收合同未在 dispatch 前做 surface 预检</h3><p class="muted">直到 WTC-020 执行时才发现 app surface 不存在。该信息在 dev:open 能力表中可提前获知，应在 split/readiness 阶段发现。</p></article>
-    <article class="card"><span class="tag framework">已确认框架缺陷</span><h3>验收源文件生命周期不稳定</h3><p class="muted">run 内保留了解析结果和 SHA，但 refresh_acceptance 强依赖项目内原 Markdown；并发迁移删除文件后，用户已授权的合同调整仍无法落地。</p></article>
+    <article class="card"><span class="tag fact">本轮已修复</span><h3>验收源文件生命周期不稳定</h3><p class="muted">正式输入与解析链路仅接受 testplan.yaml。原 YAML 被迁移删除且未显式替换时，refresh_acceptance 现会复用 run 内持久化的结构化 acceptance 与 SHA；显式新路径仍严格执行 YAML 解析。</p></article>
   </div>
 
   <h2>量化结论</h2>
@@ -65,9 +65,9 @@
 
   <h2>后续优化建议</h2>
   <div class="recs">
-    <div class="rec"><div class="priority p0">P0</div><div><h3>建立 dispatch 两阶段提交：persist → deliver → ack</h3><p class="muted">新增 <code>deliveryState=requested|submitted|acknowledged|failed</code>、operationId 和 pane generation。只有收到目标 thread 的 ack 才在 UI 显示“执行中”；超时自动撤销 active dispatch 并安全重派。</p></div><div class="impact">目标：消除“已抛回但 pane 未启动”；预计减少 3–4 次人工介入。</div></div>
+    <div class="rec"><div class="priority p0">P0</div><div><h3>完成 dispatch 两阶段提交：persist → deliver → ack</h3><p class="muted">已落地缺失 dispatch 的一次性自动重建与防重复投递；下一步新增 <code>deliveryState=requested|submitted|acknowledged|failed</code>、operationId 和 pane generation。只有收到目标 thread 的 ack 才在 UI 显示“执行中”。</p></div><div class="impact">已解决 missing dispatch 的人工重派；仍需消除“已抛回但 pane 未启动”。</div></div>
     <div class="rec"><div class="priority p0">P0</div><div><h3>Prompt 使用有界传输协议</h3><p class="muted">保留 8 KiB UTF-8 分片，同时在发送前记录总字节数、chunk 数和最大 chunk；更长 prompt 改为临时文件/stdin，命令行只传引用与 SHA。加入 8 KiB、64 KiB、256 KiB 中文混合端到端用例。</p></div><div class="impact">目标：启动失败率归零；失败可在投递前诊断。</div></div>
-    <div class="rec"><div class="priority p0">P0</div><div><h3>把 thread 恢复从 Human Gate 变成显式状态机</h3><p class="muted">区分 resumable、stale-but-snapshotable、lost。为 stale thread 保存 dispatch prompt、outbox baseline、repair keys 和证据引用；允许在同 pane 新 generation 恢复，而不是笼统“禁止新开 thread”。</p></div><div class="impact">目标：减少反复 interrupt + dispatch；预计减少 5 次以上介入。</div></div>
+    <div class="rec"><div class="priority p1">P1</div><div><h3>继续补齐真正丢失 thread 的恢复状态机</h3><p class="muted">active running/idle 已直接走消息队列，不再误判为不可复用。剩余范围只针对 shell、进程或 pane 真正丢失的情况，区分 resumable、snapshotable、lost。</p></div><div class="impact">已消除日常 running/idle 的 Human Gate；后续只处理真实 thread 丢失。</div></div>
     <div class="rec"><div class="priority p1">P1</div><div><h3>验收前置 capability negotiation</h3><p class="muted">测试案例声明 <code>requiredSurfaces</code>；split/readiness 阶段与 Dev Session capabilities 求交集。缺失 app surface 时，在执行前就要求拆 case、skip 或选择支持该 surface 的 profile。</p></div><div class="impact">目标：WTC-020 类阻塞从 17 小时尾部前移到分钟级。</div></div>
     <div class="rec"><div class="priority p1">P1</div><div><h3>Case 调度从“全局首错即停”改为依赖图</h3><p class="muted">单 case 内仍严格遇错即停；case 之间只阻塞显式 <code>dependsOn</code> 后继。P1 边界失败不得饥饿无依赖 P0；自动拆分核心路径与 deferred 回归。</p></div><div class="impact">目标：避免 WTC-009 一次失败阻塞 11 条独立 case。</div></div>
     <div class="rec"><div class="priority p1">P1</div><div><h3>协议校验在 worker 提交时同步完成</h3><p class="muted">outbox 写入后先本地 schema/invariant 校验，失败时保持原 thread 可补交；不要消费 dispatch 后再发现 invariant 不一致。协议补交只更新 outbox，不重新触发产品验证。</p></div><div class="impact">目标：消除 Round 12–13 的补交循环。</div></div>

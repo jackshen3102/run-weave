@@ -113,7 +113,10 @@ export class TerminalManagerAgentActivityRuntime extends TerminalManagerBufferRu
 
     if (activeCommand !== null) {
       this.recentAgentActivities.delete(key);
-      if (panelId) {
+      if (
+        panelId &&
+        !this.hasPanelAgentPreparation(terminalSessionId, panelId)
+      ) {
         this.clearPanelAgentOperationGeneration(terminalSessionId, panelId);
       }
       await this.sessionStore.deleteRecentAgentActivity(

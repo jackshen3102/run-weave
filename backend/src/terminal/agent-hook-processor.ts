@@ -261,6 +261,7 @@ export async function processTerminalAgentHook(
 
   if (
     input.hookEvent !== "SessionStart" &&
+    !currentThreadIdentityMatched &&
     !currentCommandMatches &&
     !graceCommandMatches &&
     !canFallbackToCurrentStateAgent
