@@ -268,6 +268,11 @@ export function TerminalWorkspaceContent({
           (session) => session.terminalSessionId === initialTerminalSessionId,
         )?.projectId
       : null;
+    const activeSessionProjectId = activeSessionId
+      ? sessions.find(
+          (session) => session.terminalSessionId === activeSessionId,
+        )?.projectId
+      : null;
     const storedContextId =
       recentSelection?.contextProjectIdByParentProjectId[
         activeParentProjectId
@@ -281,8 +286,9 @@ export function TerminalWorkspaceContent({
             sessions.some((session) => session.projectId === projectId)),
       );
     const desiredContextId = [
-      activeProjectId,
+      activeSessionProjectId,
       initialSessionProjectId,
+      activeProjectId,
       storedContextId,
       activeParentProjectId,
     ].find(isKnownContext);
@@ -296,7 +302,7 @@ export function TerminalWorkspaceContent({
       scope,
       desiredContextId,
       projectSessions,
-      initialTerminalSessionId,
+      activeSessionId ?? initialTerminalSessionId,
     );
     if (
       activeProjectId === desiredContextId &&

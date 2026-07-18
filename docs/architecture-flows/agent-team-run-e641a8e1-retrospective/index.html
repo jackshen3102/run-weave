@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Team e641a8e1 深度复盘</title>
+  <style>
+    :root{color-scheme:dark;--bg:#07101f;--panel:#0d1930;--line:#243657;--text:#e8eefc;--muted:#9fb0ce;--cyan:#53d7ff;--green:#56e39f;--amber:#ffcc66;--red:#ff718a}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#142748 0,transparent 38%),var(--bg);color:var(--text);font:15px/1.62 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+    main{max-width:1180px;margin:auto;padding:56px 28px 96px}h1{font-size:42px;line-height:1.12;margin:10px 0 14px;letter-spacing:-.03em}h2{margin:54px 0 18px;font-size:25px}h3{font-size:17px;margin:0 0 8px}.eyebrow{color:var(--cyan);font-weight:700;letter-spacing:.12em;text-transform:uppercase}.lede{max-width:850px;color:var(--muted);font-size:18px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:30px 0}.metric,.card,.lane,.rec{border:1px solid var(--line);background:rgba(13,25,48,.9);border-radius:14px}.metric{padding:18px}.metric b{display:block;font-size:30px}.metric span,.muted{color:var(--muted)}.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}.lane{padding:17px;position:relative}.lane:not(:last-child):after{content:"→";position:absolute;right:-14px;top:42%;z-index:2;color:var(--cyan);font-size:22px}.lane small{color:var(--muted)}.ok{border-color:#236e57}.warn{border-color:#765f29}.bad{border-color:#713449}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.card{padding:20px}.tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700;margin-bottom:9px}.fact{background:#173f35;color:#8cf0c0}.framework{background:#4a2633;color:#ff9db0}.environment{background:#4b3d1c;color:#ffdc8a}.contract{background:#203e61;color:#90d5ff}.timeline{border-left:2px solid var(--line);margin-left:10px;padding-left:24px}.event{position:relative;margin:0 0 24px}.event:before{content:"";position:absolute;width:11px;height:11px;border-radius:50%;background:var(--cyan);left:-31px;top:7px}.event b{color:#fff}.event p{margin:3px 0;color:var(--muted)}table{width:100%;border-collapse:collapse;background:rgba(13,25,48,.9);border:1px solid var(--line)}th,td{text-align:left;padding:13px 14px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--cyan)}code{color:#b5e7ff}.recs{display:grid;gap:14px}.rec{padding:19px;display:grid;grid-template-columns:72px 1fr 170px;gap:16px;align-items:start}.priority{font-weight:800;font-size:18px}.p0{color:var(--red)}.p1{color:var(--amber)}.p2{color:var(--green)}.impact{color:var(--muted);font-size:13px}.conclusion{border:1px solid #316d85;background:#0c2637;padding:24px;border-radius:16px;margin-top:54px;font-size:18px}@media(max-width:850px){.metrics,.flow,.grid{grid-template-columns:1fr 1fr}.lane:after{display:none}.rec{grid-template-columns:56px 1fr}.impact{grid-column:2}}@media(max-width:560px){main{padding:35px 18px}.metrics,.flow,.grid{grid-template-columns:1fr}h1{font-size:34px}}
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">Run atr_e641a8e1_20260717180414</div>
+  <h1>Agent Team 深度复盘：小修复为何变成长流程</h1>
+  <p class="lede">核心判断：产品实现不是主要耗时项。真正的放大器是“控制面已登记”和“worker 已执行”之间缺少可证明的原子闭环，随后又被运行环境能力、协议补交和验收文件漂移反复放大。</p>
+
+  <section class="metrics" aria-label="run metrics">
+    <div class="metric"><b>22 / 23</b><span>当前通过 acceptance</span></div>
+    <div class="metric"><b>15</b><span>人工 intervention</span></div>
+    <div class="metric"><b>75</b><span>Loop 日志事件</span></div>
+    <div class="metric"><b>≈17h44m</b><span>创建至当前快照</span></div>
+  </section>
+
+  <h2>理想闭环与实际断点</h2>
+  <div class="flow" aria-label="agent team lifecycle">
+    <div class="lane ok"><h3>1. 可追溯验收</h3><small>先生成 case，再 split</small></div>
+    <div class="lane bad"><h3>2. Worker 投递</h3><small>超长 prompt、pane 状态漂移</small></div>
+    <div class="lane warn"><h3>3. Code 修复</h3><small>真实复现与 runtime 不一致</small></div>
+    <div class="lane bad"><h3>4. 协议交接</h3><small>outbox/invariant 补交卡 thread</small></div>
+    <div class="lane warn"><h3>5. 独立验收</h3><small>App surface 与合同不匹配</small></div>
+  </div>
+
+  <h2>时间线：哪里真正消耗了时间</h2>
+  <div class="timeline">
+    <div class="event"><b>起点：测试案例门禁正确生效</b><p>缺少可追溯案例时未 split；随后生成 WTC 前缀案例并进入 code / code_review / behavior_verify。</p></div>
+    <div class="event"><b>Round 3：首次框架级失败</b><p>behavior prompt 整段通过 tmux <code>send-keys -l</code> 投递，触发 <code>command too long</code>。控制面暂停，但没有自动降级为分片/文件输入。</p></div>
+    <div class="event"><b>Round 3–5：dispatch 状态漂移</b><p>多次出现 dispatch-id-v1 缺少 <code>activeWorkerDispatch</code>。安全门阻止 legacy fallback 是正确的，但没有自动重建 fresh dispatch。</p></div>
+    <div class="event"><b>Round 5–8：WTC-009 合同过宽</b><p>核心“父 Project 独立恢复”与边界“多 Session 非首 Terminal 异步回退”绑定，严格遇错即停导致后续 case 全部饥饿；拆为 WTC-009 核心与 deferred WTC-024 后才恢复。</p></div>
+    <div class="event"><b>Round 9–11：串行验收推进，但每轮需人工唤醒</b><p>WTC-010、WTC-011 通过；旧 behavior thread 的 Stop hook 状态反复不可复用，主 Agent逐 case interrupt + dispatch。</p></div>
+    <div class="event"><b>Round 11–14：WTC-012 产品缺陷与框架缺陷交织</b><p>missing child 打开 Agent Team 导致 backend code=1。修复本身很小，但先后经历 packaged backend 未加载源码、真实 source runtime 复验、fixVerifications invariant 不一致和协议补交 thread 不可复用。</p></div>
+    <div class="event"><b>Round 15：尾部环境阻塞</b><p>22/23 已通过；WTC-020 的 Desktop 部分通过，但 Dev Session 不提供 <code>app</code> surface，完整 App Home 合同无法执行。</p></div>
+  </div>
+
+  <h2>根因分类</h2>
+  <div class="grid">
+    <article class="card"><span class="tag framework">已确认框架缺陷</span><h3>Prompt 传输没有容量协议</h3><p class="muted">只按换行切分，单个超长段落可直接进入 tmux 参数。失败发生在 worker 启动前，但 UI 已接近“投递中”语义。当前已增加 8 KiB UTF-8 分片，仍需端到端回归。</p></article>
+    <article class="card"><span class="tag framework">已确认框架缺陷</span><h3>Dispatch 持久化与 pane 启动非原子</h3><p class="muted">run 可显示 active dispatch，而 pane 仍停在旧 transcript。缺少 delivery ack 导致 UI 把“路由意图”显示成“已开始执行”。</p></article>
+    <article class="card"><span class="tag framework">已确认框架缺陷</span><h3>Thread 恢复策略只有拒绝，没有闭环</h3><p class="muted">为保护上下文而禁止新开 thread 是合理门禁；但没有 pane generation、context snapshot 或安全重建动作，因此每次都升级 Human Gate。</p></article>
+    <article class="card"><span class="tag contract">合同设计问题</span><h3>一个 case 同时承担核心和边界行为</h3><p class="muted">严格顺序执行时，边界缺陷会阻塞大量独立 case。WTC-009 是典型：核心恢复与多 Session 边界应独立优先级和阻塞策略。</p></article>
+    <article class="card"><span class="tag environment">环境能力问题</span><h3>验收合同未在 dispatch 前做 surface 预检</h3><p class="muted">直到 WTC-020 执行时才发现 app surface 不存在。该信息在 dev:open 能力表中可提前获知，应在 split/readiness 阶段发现。</p></article>
+    <article class="card"><span class="tag framework">已确认框架缺陷</span><h3>验收源文件生命周期不稳定</h3><p class="muted">run 内保留了解析结果和 SHA，但 refresh_acceptance 强依赖项目内原 Markdown；并发迁移删除文件后，用户已授权的合同调整仍无法落地。</p></article>
+  </div>
+
+  <h2>量化结论</h2>
+  <table>
+    <thead><tr><th>观察</th><th>数字</th><th>含义</th></tr></thead>
+    <tbody>
+      <tr><td>验收完成度</td><td>95.7%（22/23）</td><td>实现总体已收敛，尾部不是大规模代码失败。</td></tr>
+      <tr><td>人工恢复密度</td><td>15 次 / 14 个完成 round ≈ 1.07</td><td>几乎每推进一轮就需要一次人工控制面动作，自动 loop 名义成立、恢复闭环不成立。</td></tr>
+      <tr><td>严格顺序的放大</td><td>WTC-009 后 11 条一度全部 blocked</td><td>首错即停适合单 case 内，不适合无依赖 case 的全局串行饥饿。</td></tr>
+      <tr><td>框架与产品故障混合</td><td>至少 5 类框架/环境阻塞，2 个主要产品缺陷</td><td>运行时间不能直接解释为 Code worker 效率。</td></tr>
+    </tbody>
+  </table>
+
+  <h2>后续优化建议</h2>
+  <div class="recs">
+    <div class="rec"><div class="priority p0">P0</div><div><h3>建立 dispatch 两阶段提交：persist → deliver → ack</h3><p class="muted">新增 <code>deliveryState=requested|submitted|acknowledged|failed</code>、operationId 和 pane generation。只有收到目标 thread 的 ack 才在 UI 显示“执行中”；超时自动撤销 active dispatch 并安全重派。</p></div><div class="impact">目标：消除“已抛回但 pane 未启动”；预计减少 3–4 次人工介入。</div></div>
+    <div class="rec"><div class="priority p0">P0</div><div><h3>Prompt 使用有界传输协议</h3><p class="muted">保留 8 KiB UTF-8 分片，同时在发送前记录总字节数、chunk 数和最大 chunk；更长 prompt 改为临时文件/stdin，命令行只传引用与 SHA。加入 8 KiB、64 KiB、256 KiB 中文混合端到端用例。</p></div><div class="impact">目标：启动失败率归零；失败可在投递前诊断。</div></div>
+    <div class="rec"><div class="priority p0">P0</div><div><h3>把 thread 恢复从 Human Gate 变成显式状态机</h3><p class="muted">区分 resumable、stale-but-snapshotable、lost。为 stale thread 保存 dispatch prompt、outbox baseline、repair keys 和证据引用；允许在同 pane 新 generation 恢复，而不是笼统“禁止新开 thread”。</p></div><div class="impact">目标：减少反复 interrupt + dispatch；预计减少 5 次以上介入。</div></div>
+    <div class="rec"><div class="priority p1">P1</div><div><h3>验收前置 capability negotiation</h3><p class="muted">测试案例声明 <code>requiredSurfaces</code>；split/readiness 阶段与 Dev Session capabilities 求交集。缺失 app surface 时，在执行前就要求拆 case、skip 或选择支持该 surface 的 profile。</p></div><div class="impact">目标：WTC-020 类阻塞从 17 小时尾部前移到分钟级。</div></div>
+    <div class="rec"><div class="priority p1">P1</div><div><h3>Case 调度从“全局首错即停”改为依赖图</h3><p class="muted">单 case 内仍严格遇错即停；case 之间只阻塞显式 <code>dependsOn</code> 后继。P1 边界失败不得饥饿无依赖 P0；自动拆分核心路径与 deferred 回归。</p></div><div class="impact">目标：避免 WTC-009 一次失败阻塞 11 条独立 case。</div></div>
+    <div class="rec"><div class="priority p1">P1</div><div><h3>协议校验在 worker 提交时同步完成</h3><p class="muted">outbox 写入后先本地 schema/invariant 校验，失败时保持原 thread 可补交；不要消费 dispatch 后再发现 invariant 不一致。协议补交只更新 outbox，不重新触发产品验证。</p></div><div class="impact">目标：消除 Round 12–13 的补交循环。</div></div>
+    <div class="rec"><div class="priority p1">P1</div><div><h3>将验收合同快照变成 run 的不可变附件</h3><p class="muted">split 时复制原文件到 run artifact，保存 path + SHA + parsed AST。refresh_acceptance 基于附件生成新版本；项目文档迁移不应删除运行中的事实源。</p></div><div class="impact">目标：用户授权后可直接调整 WTC-020，不受并发文件删除影响。</div></div>
+    <div class="rec"><div class="priority p2">P2</div><div><h3>UI 分开展示“已路由、已投递、已启动、已产出”</h3><p class="muted">当前“已抛回 Code pane”过度承诺。显示 dispatchId、requestedAt、ackAt、lastActivityAt、outbox mtime 和阻塞层级，并为框架故障提供明确的“恢复投递”入口。</p></div><div class="impact">目标：用户无需靠 tmux transcript 判断真状态。</div></div>
+  </div>
+
+  <div class="conclusion"><b>一句话结论：</b>这次 run 证明了“严格验收”本身有价值——它确实抓到了 WTC-009 和 WTC-012；但 Agent Team 目前的自动化只覆盖正常路径，恢复路径仍依赖主 Agent 手工编排。下一阶段不应继续增加更多 gate，而应优先让已有 gate 具备可观测、可恢复、可重放的闭环。</div>
+</main></body></html>
