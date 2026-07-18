@@ -80,40 +80,50 @@ interface TerminalWorkspaceActions {
 export type TerminalWorkspaceStore = TerminalWorkspaceState &
   TerminalWorkspaceActions;
 
-export const TERMINAL_PROJECT_HAS_BELL = 1 << 0;
-export const TERMINAL_PROJECT_HAS_COMPLETION = 1 << 1;
-export const TERMINAL_PROJECT_IS_WORKING = 1 << 2;
+export const TERMINAL_AGGREGATE_HAS_BELL = 1 << 0;
+export const TERMINAL_AGGREGATE_HAS_COMPLETION = 1 << 1;
+export const TERMINAL_AGGREGATE_IS_WORKING = 1 << 2;
 
-export function selectTerminalProjectStatusById(
+export interface TerminalAggregateStatusMaps {
+  byContextProjectId: Record<string, number>;
+  byParentProjectId: Record<string, number>;
+}
+
+export function selectTerminalAggregateStatusMaps(
   state: Pick<
     TerminalWorkspaceStore,
     "bellMarkers" | "completionMarkers" | "terminalStateBySessionId"
   >,
   sessions: TerminalSessionListItem[],
-): Record<string, number> {
-  const statusByProjectId: Record<string, number> = {};
+): TerminalAggregateStatusMaps {
+  const byContextProjectId: Record<string, number> = {};
+  const byParentProjectId: Record<string, number> = {};
 
   for (const session of sessions) {
-    const parentProjectId = resolveTerminalParentProjectId(session.projectId);
-    let status = statusByProjectId[parentProjectId] ?? 0;
+    let status = 0;
     if (state.bellMarkers[session.terminalSessionId]) {
-      status |= TERMINAL_PROJECT_HAS_BELL;
+      status |= TERMINAL_AGGREGATE_HAS_BELL;
     }
     if (state.completionMarkers[session.terminalSessionId]) {
-      status |= TERMINAL_PROJECT_HAS_COMPLETION;
+      status |= TERMINAL_AGGREGATE_HAS_COMPLETION;
     }
     if (
       state.terminalStateBySessionId[session.terminalSessionId]?.state ===
       "agent_running"
     ) {
-      status |= TERMINAL_PROJECT_IS_WORKING;
+      status |= TERMINAL_AGGREGATE_IS_WORKING;
     }
-    if (status !== 0) {
-      statusByProjectId[parentProjectId] = status;
+    if (status === 0) {
+      continue;
     }
+    byContextProjectId[session.projectId] =
+      (byContextProjectId[session.projectId] ?? 0) | status;
+    const parentProjectId = resolveTerminalParentProjectId(session.projectId);
+    byParentProjectId[parentProjectId] =
+      (byParentProjectId[parentProjectId] ?? 0) | status;
   }
 
-  return statusByProjectId;
+  return { byContextProjectId, byParentProjectId };
 }
 
 function resolveNext<T>(next: StateUpdater<T>, current: T): T {

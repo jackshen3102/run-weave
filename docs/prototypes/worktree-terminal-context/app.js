@@ -87,6 +87,35 @@ function statusDot(status) {
   return `<span class="status-dot ${escapeHtml(status)}" aria-hidden="true"></span>`;
 }
 
+function getAggregateTerminalStatus(sessions) {
+  let hasBell = false;
+  let hasCompletion = false;
+  let isWorking = false;
+  for (const session of sessions) {
+    hasBell ||= session.eventMarker === "bell";
+    hasCompletion ||= session.eventMarker === "completion";
+    isWorking ||= session.status === "running";
+  }
+  return {
+    eventStatus: hasBell ? "bell" : hasCompletion ? "completion" : "none",
+    isWorking,
+  };
+}
+
+function renderAggregateTerminalStatus(label, sessions) {
+  const status = getAggregateTerminalStatus(sessions);
+  return `
+    <span class="aggregate-terminal-status ${status.isWorking ? "working" : ""}">
+      <span class="aggregate-terminal-label">${escapeHtml(label)}</span>
+      <span
+        class="aggregate-terminal-dot ${status.eventStatus}"
+        data-event-status="${status.eventStatus}"
+        aria-hidden="true"
+      ></span>
+    </span>
+  `;
+}
+
 function renderBrand() {
   return `
     <div class="brand">
@@ -112,7 +141,10 @@ function renderProjectTabs() {
               aria-selected="${project.id === viewState.activeParentProjectId}"
               data-project-id="${escapeHtml(project.id)}"
             >
-              ${escapeHtml(project.name)}
+              ${renderAggregateTerminalStatus(
+                project.name,
+                project.worktrees.flatMap((worktree) => worktree.sessions),
+              )}
             </button>
           `,
         )
@@ -392,6 +424,9 @@ function renderPinIcon(pinned) {
 
 function renderRail() {
   const project = getActiveProject();
+  if (project.worktrees.length <= 1) {
+    return "";
+  }
   if (viewState.worktreeRailCollapsed) {
     return `
       <aside class="project-rail collapsed" aria-label="Collapsed worktrees">
@@ -430,9 +465,8 @@ function renderRail() {
                 type="button"
                 data-context-project-id="${escapeHtml(worktree.projectId)}"
               >
-                ${statusDot(worktree.status)}
                 <span class="rail-copy">
-                  <strong>${escapeHtml(worktree.name)}</strong>
+                  ${renderAggregateTerminalStatus(worktree.name, worktree.sessions)}
                   <small>${escapeHtml(worktree.branch)}</small>
                 </span>
               </button>
@@ -460,15 +494,16 @@ function renderRail() {
 }
 
 function renderRailLayout() {
+  const hasMultipleWorktrees = getActiveProject().worktrees.length > 1;
   return `
     ${renderTopbar()}
     <div
-      class="rail-layout ${viewState.worktreeRailCollapsed ? "rail-collapsed" : ""}"
+      class="rail-layout ${!hasMultipleWorktrees ? "rail-hidden" : viewState.worktreeRailCollapsed ? "rail-collapsed" : ""}"
       style="--worktree-rail-width: ${viewState.worktreeRailWidth}px"
     >
       ${renderRail()}
       ${
-        viewState.worktreeRailCollapsed
+        !hasMultipleWorktrees || viewState.worktreeRailCollapsed
           ? ""
           : `<div
               class="rail-resize-handle"

@@ -205,7 +205,8 @@
               "id": "terminal-fix-trae",
               "name": "Trae · preview sync",
               "agent": "trae",
-              "status": "attention",
+              "status": "idle",
+              "eventMarker": "bell",
               "cwd": "~/Code/browser-hub/feature/.worktree/preview-sync",
               "lines": [
                 "$ trae",
@@ -272,6 +273,7 @@
               "name": "shell",
               "agent": "bash",
               "status": "idle",
+              "eventMarker": "completion",
               "cwd": "~/Code/browser-hub/feature/.worktree/docs-index",
               "lines": [
                 "$ git status --short",
