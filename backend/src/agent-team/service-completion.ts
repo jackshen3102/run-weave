@@ -17,7 +17,7 @@ import {
   logReconciledCompletion,
   logStaleCompletion,
 } from "./service-completion-logging";
-import { AgentTeamCompletionSignalService } from "./service-completion-signal";
+import { AgentTeamCompletionRecoveryService } from "./service-completion-recovery";
 import type { AgentTeamCompletionSignalSource } from "./service-types";
 import {
   behaviorFailureContractErrors,
@@ -29,7 +29,6 @@ import {
 import { captureRepairSourceFingerprint } from "./repair-source-fingerprint";
 import {
   acceptanceCasesForRole,
-  behaviorVerificationCasesForDispatch,
   ensureWorkerGateAcceptance,
   expandRecheckCasesForFailures,
   isImplementationWorkerOutbox,
@@ -46,7 +45,7 @@ import {
   workerOutboxFreshnessMismatch,
 } from "./service-workflow-policy";
 
-export abstract class AgentTeamCompletionService extends AgentTeamCompletionSignalService {
+export abstract class AgentTeamCompletionService extends AgentTeamCompletionRecoveryService {
   protected abstract resolveOutboxRound(
     run: AgentTeamRun,
     outbox: AgentTeamWorkerOutbox,
@@ -113,38 +112,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionSign
         const { outbox, mtimeMs: outboxMtimeMs } = resolvedOutbox;
         const dispatch = resolveActiveWorkerDispatch(latest, activeWorker);
         if (!dispatch) {
-          const recoveryMarker = `dispatch-id-v1 activeWorkerDispatch 自动重建：${activeWorker.role} round ${latest.loop.round}`;
-          const recoveryCases =
-            activeWorker.role === "behavior_verify"
-              ? behaviorVerificationCasesForDispatch(latest)
-              : acceptanceCasesForRole(latest, activeWorker.role).filter(
-                  (item) => item.status !== "pass",
-                );
-          if (
-            recoveryCases.length > 0 &&
-            !latest.logs.includes(recoveryMarker)
-          ) {
-            await this.dispatchSerialWorker(
-              {
-                ...latest,
-                logs: [...latest.logs, recoveryMarker],
-              },
-              activeWorker.role,
-              {
-                cases: recoveryCases,
-                log: "dispatch-id-v1 缺少 activeWorkerDispatch，已自动建立 fresh dispatch",
-                triggerSummary:
-                  "控制面检测到 active worker 缺少 dispatch；忽略当前无法绑定身份的 completion，并使用新的 dispatchId 与 outbox baseline 重新投递。",
-              },
-            );
-            return true;
-          }
-          await this.pauseForRepairProtocolError(
-            latest,
-            recoveryCases.length === 0
-              ? "dispatch-id-v1 run 缺少 activeWorkerDispatch，且没有可安全重派的未通过 Case"
-              : "dispatch-id-v1 run 缺少 activeWorkerDispatch，自动重建已在当前 round 尝试过，禁止重复投递或回退 legacy dispatch",
-          );
+          await this.recoverMissingActiveWorkerDispatch(latest, activeWorker);
           return true;
         }
         const identityMismatch = completionOutboxIdentityMismatch(
