@@ -287,8 +287,8 @@ export function TerminalWorkspaceContent({
       );
     const desiredContextId = [
       activeSessionProjectId,
-      initialSessionProjectId,
       activeProjectId,
+      initialSessionProjectId,
       storedContextId,
       activeParentProjectId,
     ].find(isKnownContext);

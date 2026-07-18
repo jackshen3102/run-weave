@@ -859,12 +859,17 @@ input:focus-visible {
 }
 
 .rail-layout {
+  position: relative;
   display: grid;
   min-width: 0;
   min-height: 0;
   flex: 1;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: var(--worktree-rail-width, 236px) minmax(0, 1fr);
   transition: grid-template-columns 160ms ease;
+}
+
+.rail-layout.rail-resizing {
+  transition: none;
 }
 
 .rail-layout.rail-collapsed {
@@ -883,6 +888,36 @@ input:focus-visible {
 .project-rail.collapsed {
   overflow: hidden;
   padding: 0;
+}
+
+.rail-resize-handle {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  bottom: 0;
+  left: var(--worktree-rail-width, 236px);
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+  transform: translateX(-50%);
+}
+
+.rail-resize-handle::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: transparent;
+  content: "";
+  transform: translateX(-50%);
+  transition: background 120ms ease;
+}
+
+.rail-resize-handle:hover::after,
+.rail-resize-handle:focus-visible::after,
+.rail-layout.rail-resizing .rail-resize-handle::after {
+  background: var(--blue);
 }
 
 .rail-heading {
@@ -1188,7 +1223,9 @@ input:focus-visible {
   }
 
   .rail-layout {
-    grid-template-columns: 152px minmax(0, 1fr);
+    grid-template-columns:
+      min(var(--worktree-rail-width, 236px), 42vw)
+      minmax(0, 1fr);
   }
 
   .rail-layout.rail-collapsed {

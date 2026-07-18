@@ -1,6 +1,11 @@
-/* global document, fetch */
+/* global document, fetch, localStorage, window */
 
 const app = document.querySelector("#app");
+const DEFAULT_WORKTREE_RAIL_WIDTH = 236;
+const MIN_WORKTREE_RAIL_WIDTH = 180;
+const MAX_WORKTREE_RAIL_WIDTH = 420;
+const WORKTREE_RAIL_WIDTH_STORAGE_KEY =
+  "runweave.prototype.worktree-rail-width";
 
 const viewState = {
   data: null,
@@ -11,8 +16,26 @@ const viewState = {
   selectedPathByProject: {},
   pinnedProjectIds: new Set(),
   worktreeRailCollapsed: false,
+  worktreeRailWidth: DEFAULT_WORKTREE_RAIL_WIDTH,
   previewMode: "changes",
 };
+
+function clampWorktreeRailWidth(width) {
+  return Math.min(
+    MAX_WORKTREE_RAIL_WIDTH,
+    Math.max(MIN_WORKTREE_RAIL_WIDTH, width),
+  );
+}
+
+function readWorktreeRailWidth() {
+  const storedWidth = Number.parseInt(
+    localStorage.getItem(WORKTREE_RAIL_WIDTH_STORAGE_KEY) ?? "",
+    10,
+  );
+  return Number.isFinite(storedWidth)
+    ? clampWorktreeRailWidth(storedWidth)
+    : DEFAULT_WORKTREE_RAIL_WIDTH;
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -56,9 +79,7 @@ function getActiveSession() {
 }
 
 function getWorktreeProject(projectId) {
-  return allWorktrees().find(
-    ({ worktree }) => worktree.projectId === projectId,
-  )
+  return allWorktrees().find(({ worktree }) => worktree.projectId === projectId)
     ?.project;
 }
 
@@ -441,8 +462,26 @@ function renderRail() {
 function renderRailLayout() {
   return `
     ${renderTopbar()}
-    <div class="rail-layout ${viewState.worktreeRailCollapsed ? "rail-collapsed" : ""}">
+    <div
+      class="rail-layout ${viewState.worktreeRailCollapsed ? "rail-collapsed" : ""}"
+      style="--worktree-rail-width: ${viewState.worktreeRailWidth}px"
+    >
       ${renderRail()}
+      ${
+        viewState.worktreeRailCollapsed
+          ? ""
+          : `<div
+              class="rail-resize-handle"
+              data-resize-worktree-rail="true"
+              role="separator"
+              tabindex="0"
+              aria-label="Resize Worktrees panel"
+              aria-orientation="vertical"
+              aria-valuemin="${MIN_WORKTREE_RAIL_WIDTH}"
+              aria-valuemax="${MAX_WORKTREE_RAIL_WIDTH}"
+              aria-valuenow="${viewState.worktreeRailWidth}"
+            ></div>`
+      }
       <div class="rail-main">
         ${renderSessionBar()}
         ${renderWorkspaceBody({ showContextHeader: false })}
@@ -510,9 +549,8 @@ app.addEventListener("click", (event) => {
   if (target.dataset.togglePinnedProject) {
     const projectId = target.dataset.togglePinnedProject;
     if (
-      allWorktrees().find(
-        ({ worktree }) => worktree.projectId === projectId,
-      )?.worktree.isPrimary
+      allWorktrees().find(({ worktree }) => worktree.projectId === projectId)
+        ?.worktree.isPrimary
     ) {
       return;
     }
@@ -549,7 +587,47 @@ app.addEventListener("click", (event) => {
     render();
     return;
   }
+});
 
+app.addEventListener("pointerdown", (event) => {
+  const handle = event.target.closest("[data-resize-worktree-rail]");
+  if (!handle || viewState.worktreeRailCollapsed) return;
+
+  event.preventDefault();
+  const layout = handle.closest(".rail-layout");
+  const layoutLeft = layout.getBoundingClientRect().left;
+  const previousCursor = document.body.style.cursor;
+  const previousUserSelect = document.body.style.userSelect;
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  layout.classList.add("rail-resizing");
+
+  const resize = (moveEvent) => {
+    viewState.worktreeRailWidth = clampWorktreeRailWidth(
+      Math.round(moveEvent.clientX - layoutLeft),
+    );
+    layout.style.setProperty(
+      "--worktree-rail-width",
+      `${viewState.worktreeRailWidth}px`,
+    );
+    handle.setAttribute("aria-valuenow", String(viewState.worktreeRailWidth));
+  };
+  const stop = () => {
+    window.removeEventListener("pointermove", resize);
+    window.removeEventListener("pointerup", stop);
+    window.removeEventListener("pointercancel", stop);
+    document.body.style.cursor = previousCursor;
+    document.body.style.userSelect = previousUserSelect;
+    layout.classList.remove("rail-resizing");
+    localStorage.setItem(
+      WORKTREE_RAIL_WIDTH_STORAGE_KEY,
+      String(viewState.worktreeRailWidth),
+    );
+  };
+
+  window.addEventListener("pointermove", resize);
+  window.addEventListener("pointerup", stop);
+  window.addEventListener("pointercancel", stop);
 });
 
 function renderLoadError(error) {
@@ -576,6 +654,7 @@ fetch("./mock-state.json")
   })
   .then((data) => {
     viewState.data = data;
+    viewState.worktreeRailWidth = readWorktreeRailWidth();
     viewState.activeParentProjectId = data.activeParentProjectId;
     viewState.activeProjectId = data.activeProjectId;
     for (const { project, worktree } of allWorktrees()) {

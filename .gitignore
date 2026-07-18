@@ -25,3 +25,4 @@ deploy/nginx/openssl-san.local.cnf
 .runtime-artifacts/
 .runweave
 .trae
+.worktree
