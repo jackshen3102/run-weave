@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import {
   loadRecentTerminalSelection,
   saveRecentTerminalSelection,
@@ -48,11 +49,16 @@ export function resolvePreferredProjectId(
         (session) => session.terminalSessionId === preferredSessionId,
       )?.projectId
     : null;
+  const preferredSessionParentProjectId = preferredSessionProjectId
+    ? resolveTerminalParentProjectId(preferredSessionProjectId)
+    : null;
   if (
-    preferredSessionProjectId &&
-    projects.some((project) => project.projectId === preferredSessionProjectId)
+    preferredSessionParentProjectId &&
+    projects.some(
+      (project) => project.projectId === preferredSessionParentProjectId,
+    )
   ) {
-    return preferredSessionProjectId;
+    return preferredSessionParentProjectId;
   }
 
   if (
@@ -266,6 +272,7 @@ export function useSessionMarkerCleanup({
 
 interface PersistRecentSelectionOptions {
   apiBase: string;
+  activeParentProjectId: string | null;
   activeProjectId: string | null;
   activeSessionId: string | null;
   canPersist: boolean;
@@ -274,19 +281,33 @@ interface PersistRecentSelectionOptions {
 
 export function usePersistRecentSelection({
   apiBase,
+  activeParentProjectId,
   activeProjectId,
   activeSessionId,
   canPersist,
   requestError,
 }: PersistRecentSelectionOptions): void {
   useEffect(() => {
-    if (!canPersist || requestError || !activeProjectId) {
+    if (
+      !canPersist ||
+      requestError ||
+      !activeParentProjectId ||
+      !activeProjectId
+    ) {
       return;
     }
 
     saveRecentTerminalSelection(apiBase, {
+      parentProjectId: activeParentProjectId,
       projectId: activeProjectId,
       terminalSessionId: activeSessionId,
     });
-  }, [activeProjectId, activeSessionId, apiBase, canPersist, requestError]);
+  }, [
+    activeParentProjectId,
+    activeProjectId,
+    activeSessionId,
+    apiBase,
+    canPersist,
+    requestError,
+  ]);
 }

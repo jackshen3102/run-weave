@@ -1,0 +1,15 @@
+version: 1
+name: <测试计划名称>
+description: >
+  <测试范围与整体正确结果>
+
+cases:
+  - id: TOPIC-001
+    name: <一句话行为名称>
+    required: true
+    description: >
+      <验证目标以及什么结果算正确>
+    preconditions:
+      - <执行前必须成立的事实>
+    steps:
+      - <执行动作；确认可观察结果>

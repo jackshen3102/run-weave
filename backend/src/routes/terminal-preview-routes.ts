@@ -68,7 +68,13 @@ function resolveProjectPreviewContext(
 ) {
   const project = terminalSessionManager.getProject(projectId);
   if (!project) {
-    throw new TerminalPreviewError("Terminal project not found", 404);
+    const context = terminalSessionManager.getProjectContext(projectId);
+    throw new TerminalPreviewError(
+      context
+        ? "Terminal project context is unavailable"
+        : "Terminal project not found",
+      context ? 409 : 404,
+    );
   }
   return { project };
 }

@@ -1,5 +1,6 @@
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { AppHomeOverviewResponse, AppHomeOverviewSession } from "@runweave/shared/terminal/session";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 
 export interface TerminalHomeProjectGroup {
   project: TerminalProjectListItem;
@@ -41,9 +42,10 @@ export function buildTerminalHomeGroups(
   const sessionsByProject = new Map<string, AppHomeOverviewSession[]>();
 
   for (const session of overview.sessions) {
-    const current = sessionsByProject.get(session.projectId) ?? [];
+    const parentProjectId = resolveTerminalParentProjectId(session.projectId);
+    const current = sessionsByProject.get(parentProjectId) ?? [];
     current.push(session);
-    sessionsByProject.set(session.projectId, current);
+    sessionsByProject.set(parentProjectId, current);
   }
 
   return overview.projects

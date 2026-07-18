@@ -8,6 +8,7 @@ import type {
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { TerminalSessionRecord } from "../terminal/manager";
 import { AgentTeamError } from "./errors";
+import { assertAgentTeamTestPlanFilePath } from "./acceptance-case-loader";
 import type { AgentTeamCompletionSignal } from "./service-types";
 
 const DEFAULT_AGENT_TEAM_AGENT_COMMAND = "codex";
@@ -97,15 +98,7 @@ export function formatVerificationSource(
 }
 
 export function assertGeneratedTestCaseFilePath(relativePath: string): void {
-  if (
-    !relativePath.startsWith("docs/testing/") ||
-    !relativePath.endsWith("-test-cases.md")
-  ) {
-    throw new AgentTeamError(
-      400,
-      `生成的测试案例文件必须位于 docs/testing/ 且以 -test-cases.md 结尾：${relativePath}`,
-    );
-  }
+  assertAgentTeamTestPlanFilePath(relativePath);
 }
 
 export function createAgentTeamPanelError(

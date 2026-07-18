@@ -56,6 +56,10 @@ export const TMUX_SANITIZE_NPM_PREFIX_ENV_ARGS = [
   ";",
 ];
 export const TMUX_METADATA_FIELD_SEPARATOR = "__RUNWEAVE_METADATA_FIELD__";
+// Keep literal send-keys arguments below tmux's command parser limit. The
+// limit is byte-based, so this must be applied to UTF-8 bytes rather than JS
+// string length.
+export const TMUX_SEND_KEYS_MAX_CHUNK_BYTES = 8 * 1024;
 export const SHELL_INTEGRATION_ENV_KEYS = [
   "RUNWEAVE_LAST_COMMAND",
   "RUNWEAVE_ORIGINAL_ZDOTDIR",
@@ -171,7 +175,7 @@ export function splitInputForSendKeys(
       continue;
     }
     if (index > start) {
-      chunks.push({ type: "text", value: data.slice(start, index) });
+      appendTextChunks(chunks, data.slice(start, index));
     }
     chunks.push({ type: "enter" });
     if (char === "\r" && data[index + 1] === "\n") {
@@ -181,10 +185,33 @@ export function splitInputForSendKeys(
   }
 
   if (start < data.length) {
-    chunks.push({ type: "text", value: data.slice(start) });
+    appendTextChunks(chunks, data.slice(start));
   }
 
   return chunks;
+}
+
+function appendTextChunks(
+  chunks: Array<{ type: "text"; value: string } | { type: "enter" }>,
+  value: string,
+): void {
+  let start = 0;
+  let bytes = 0;
+  for (let index = 0; index < value.length; ) {
+    const codePoint = value.codePointAt(index)!;
+    const char = String.fromCodePoint(codePoint);
+    const charBytes = Buffer.byteLength(char, "utf8");
+    if (bytes > 0 && bytes + charBytes > TMUX_SEND_KEYS_MAX_CHUNK_BYTES) {
+      chunks.push({ type: "text", value: value.slice(start, index) });
+      start = index;
+      bytes = 0;
+    }
+    bytes += charBytes;
+    index += char.length;
+  }
+  if (start < value.length) {
+    chunks.push({ type: "text", value: value.slice(start) });
+  }
 }
 
 export async function delayAfterTmuxKey(

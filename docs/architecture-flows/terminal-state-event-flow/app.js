@@ -511,7 +511,7 @@ const issues = [
       "backend/src/terminal/manager-session-runtime.ts",
       "backend/src/terminal/application/panel-metadata.ts",
       "backend/src/routes/terminal-state.ts",
-      "docs/testing/terminal/terminal-state-test-cases.md",
+      "docs/testing/terminal/terminal-runtime-core.testplan.yaml",
     ],
   },
   {

@@ -67,7 +67,7 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
     let reviewCheckpoint: AgentTeamRun["reviewCheckpoint"] = null;
     if (reviewCheckpointMode === "local_commit") {
       const preflight = await this.reviewCheckpointGit.preflight(projectRoot);
-      for (const project of this.terminalSessionManager.listProjects()) {
+      for (const project of this.terminalSessionManager.listAllProjectContexts()) {
         const runs = await this.runStore.listRuns(project.id);
         const owner = runs.find(
           (candidate) =>

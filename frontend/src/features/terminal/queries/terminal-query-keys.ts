@@ -4,6 +4,12 @@ export const terminalQueryKeys = {
   all: (scope: string) => ["connection", scope, "terminal"] as const,
   projects: (scope: string) =>
     [...terminalQueryKeys.all(scope), "projects"] as const,
+  projectContexts: (scope: string, parentProjectId: string) =>
+    [
+      ...terminalQueryKeys.all(scope),
+      "project-contexts",
+      parentProjectId,
+    ] as const,
   sessions: (scope: string) =>
     [...terminalQueryKeys.all(scope), "sessions"] as const,
   preview: (scope: string, projectId: string) =>

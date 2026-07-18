@@ -159,7 +159,7 @@ http://127.0.0.1:6188/
 ## 边界
 
 - 原型不连接真实后端，不导入生产源码。
-- 关系与接口来自当前工作区代码追踪；P1—P5 结论同时引用 `docs/testing/terminal/terminal-event-recovery-test-cases.md` 的真实 WS / Playwright 执行结果。
+- 关系与接口来自当前工作区代码追踪；P1—P5 结论同时引用 `docs/testing/terminal/terminal-runtime-core.testplan.yaml` 的真实 WS / Playwright 执行结果。
 - App Server 在图中只展示与 Project / Terminal / Agent 状态相关的部分，不展开 Agent Team、Browser、Preview、Voice 等其它子系统。
-- 主图中的 P1—P5 已按 `docs/testing/terminal/terminal-event-recovery-test-cases.md` 执行；P3/P5 因未复现用户可见故障而保持现状。
+- 主图中的 P1—P5 已按 `docs/testing/terminal/terminal-runtime-core.testplan.yaml` 执行；P3/P5 因未复现用户可见故障而保持现状。
 - 原型只定位问题和失效条件，不给出修复优先级、目标架构或实施决策。

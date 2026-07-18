@@ -8,8 +8,10 @@ import {
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import {
   EMPTY_TERMINAL_PROJECTS,
+  EMPTY_TERMINAL_PROJECT_CONTEXTS,
   EMPTY_TERMINAL_SESSIONS,
   useTerminalProjectsQuery,
+  useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
 } from "../../features/terminal/queries/terminal-workspace-queries";
 import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
@@ -56,6 +58,12 @@ export function TerminalWorkspaceStage({
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeProjectId,
   );
+  const activeParentProjectId = useTerminalWorkspaceStore(
+    (state) => state.activeParentProjectId,
+  );
+  const contexts =
+    useTerminalProjectContextsQuery(activeParentProjectId).data ??
+    EMPTY_TERMINAL_PROJECT_CONTEXTS;
   const activeSessionId = useTerminalWorkspaceStore(
     (state) => state.activeSessionId,
   );
@@ -92,8 +100,23 @@ export function TerminalWorkspaceStage({
     if (activeSession) ids.add(activeSession.terminalSessionId);
     return sessions.filter((session) => ids.has(session.terminalSessionId));
   }, [activeSession, cachedSurfaceSessionIds, sessions]);
+  const activeParentProject =
+    projects.find(
+      (project) => project.projectId === activeParentProjectId,
+    ) ?? null;
+  const activeContext =
+    contexts.find((context) => context.projectId === activeProjectId) ?? null;
   const activeProject =
-    projects.find((project) => project.projectId === activeProjectId) ?? null;
+    activeParentProject && activeContext
+      ? {
+          ...activeParentProject,
+          projectId: activeContext.projectId,
+          name: activeContext.name,
+          path: activeContext.path,
+        }
+      : activeParentProject?.projectId === activeProjectId
+        ? activeParentProject
+        : null;
   const panelSplitEnabled = activeSession?.panelSplitEnabled ?? false;
   const activePanelWorkspace = activeSession
     ? (panelWorkspaceBySessionId[activeSession.terminalSessionId] ?? null)

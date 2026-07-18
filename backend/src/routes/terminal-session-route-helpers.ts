@@ -106,6 +106,15 @@ export function resolveTerminalCreateDefaults(
   const projectPath = projectId
     ? terminalSessionManager.getProject(projectId)?.path
     : undefined;
+  if (projectId && !terminalSessionManager.getProject(projectId)) {
+    const context = terminalSessionManager.getProjectContext(projectId);
+    throw new TerminalCreateDefaultsError(
+      context
+        ? "Terminal project context is unavailable"
+        : "Terminal project not found",
+      context ? 409 : 404,
+    );
+  }
   const cwd =
     payload.cwd?.trim() ||
     (isExistingDirectory(inheritedSession?.cwd)

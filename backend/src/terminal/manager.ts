@@ -6,6 +6,7 @@ import {
   toPersistedSession,
   type CreateTerminalSessionOptions,
   type TerminalProjectRecord,
+  type TerminalProjectContextRecord,
   type TerminalSessionRecord,
 } from "./manager-records";
 import { getInitialTerminalActiveCommand } from "./session-launch";
@@ -17,6 +18,7 @@ export type {
   TerminalPanelRecord,
   TerminalPanelWorkspaceRecord,
   TerminalProjectRecord,
+  TerminalProjectContextRecord,
   TerminalSessionRecord,
 } from "./manager-records";
 export type {
@@ -35,6 +37,7 @@ export class TerminalSessionManager extends TerminalManagerPanelOperations {
       path: projectPath?.trim() || null,
       createdAt: new Date(),
       isDefault: this.projects.size === 0,
+      pinnedChildProjectIds: [],
     };
 
     await this.sessionStore.insertProject(toPersistedProject(project));
@@ -42,6 +45,7 @@ export class TerminalSessionManager extends TerminalManagerPanelOperations {
     if (project.isDefault) {
       await this.sessionStore.setDefaultProject(project.id);
     }
+    await this.projectContexts.refresh(project, this.listSessions());
     return project;
   }
 
@@ -65,7 +69,41 @@ export class TerminalSessionManager extends TerminalManagerPanelOperations {
       name: project.name,
       path: project.path,
     });
+    this.projectContexts.clear(projectId);
+    await this.projectContexts.refresh(project, this.listSessions());
     return project;
+  }
+
+  async setProjectContextPinned(
+    parentProjectId: string,
+    childProjectId: string,
+    pinned: boolean,
+  ): Promise<TerminalProjectContextRecord | undefined> {
+    const parent = this.projects.get(parentProjectId);
+    if (!parent || childProjectId === parentProjectId) {
+      return undefined;
+    }
+    await this.projectContexts.refresh(parent, this.listSessions());
+    const context = this.projectContexts.get(childProjectId);
+    if (!context || context.parentProjectId !== parentProjectId) {
+      return undefined;
+    }
+    const nextPinnedIds = parent.pinnedChildProjectIds.filter(
+      (projectId) => projectId !== childProjectId,
+    );
+    if (pinned) {
+      nextPinnedIds.push(childProjectId);
+    }
+    parent.pinnedChildProjectIds = nextPinnedIds;
+    await this.sessionStore.updateProject({
+      projectId: parentProjectId,
+      pinnedChildProjectIds: nextPinnedIds,
+    });
+    const contexts = await this.projectContexts.refresh(
+      parent,
+      this.listSessions(),
+    );
+    return contexts.find((candidate) => candidate.projectId === childProjectId);
   }
 
   async deleteProject(projectId: string): Promise<boolean> {
@@ -75,13 +113,16 @@ export class TerminalSessionManager extends TerminalManagerPanelOperations {
     }
 
     const childSessionIds = this.listSessions()
-      .filter((session) => session.projectId === projectId)
+      .filter(
+        (session) => this.resolveParentProjectId(session.projectId) === projectId,
+      )
       .map((session) => session.id);
     for (const sessionId of childSessionIds) {
       await this.destroySession(sessionId);
     }
 
     this.projects.delete(projectId);
+    this.projectContexts.clear(projectId);
     await this.sessionStore.deleteProject(projectId);
 
     if (this.projects.size === 0) {

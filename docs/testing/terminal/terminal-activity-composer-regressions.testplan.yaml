@@ -1,0 +1,144 @@
+version: 1
+name: Terminal Activity 与 Floating Composer 最小回归
+description: >
+  验证 Terminal Activity 的用户入口、Thread 档案、Evidence、鉴权和异步恢复边界，
+  以及 Floating Composer 在支持 TUI 中的显示、同步、发送、搜索、scrollback 与 App 降级行为。
+
+cases:
+  - id: TAC-001
+    name: Activity 默认进入 Terminal History
+    required: true
+    description: >
+      验证已登录用户访问 `/activity` 时默认进入 Terminal History，并保留 Multi-Agent Runs、
+      Events、Timeline、Sources 与 Data Policy 等既有入口。
+    preconditions:
+      - 用户已登录 Runweave。
+      - 至少存在一个可展示的 Terminal Session。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 打开不带 query 参数的 `/activity`；确认 Terminal History 为默认选中项。
+      - 检查导航中的 Multi-Agent Runs、Events、Timeline、Sources、Data Policy，并刷新页面；确认入口、选中状态和页面壳层稳定，没有白屏、未捕获异常或无限加载。
+
+  - id: TAC-002
+    name: 同一 Terminal 按 Thread 分段归档
+    required: true
+    description: >
+      验证同一 `terminalSessionId` 的两个 Thread 只归属一条 Terminal 档案，退出并重新进入
+      Codex 后不会重建 Terminal 或覆盖旧 Thread。
+    preconditions:
+      - 存在真实 Terminal Session T1。
+      - App Server 中存在或可在 T1 内依次创建两个不同的 Thread。
+    steps:
+      - 在 T1 内完成一个 Codex Thread 后退出 TUI，再次进入 Codex 并完成第二个 Thread；打开 Terminal History。
+      - 确认仅存在一条 T1 档案、创建时间未变且最后活动时间更新，两个 Thread 以独立时间段显示；确认列表和详情不通过命令名、Thread ID 或时间接近度错误关联对象。
+
+  - id: TAC-003
+    name: Acceptance Evidence 只展示真实字段
+    required: true
+    description: >
+      验证有 Evidence 的 Acceptance 事件可下钻真实 type、label、summary、ref 与可选 detail，
+      无 Evidence 或缺失事实字段时不会伪造检查数量、测试路径或成功结论。
+    preconditions:
+      - 一个 Run 包含 `AgentTeamAcceptanceEvidence`，另一个 Run 没有 Evidence。
+      - 被测 Terminal 或 Run 的部分可选事实字段缺失。
+    steps:
+      - 在 Activity Inspector 中分别选择有 Evidence 的 Acceptance 事件和无 Evidence 的 Run。
+      - 确认 Inspector 只显示 DTO 中实际存在的字段，ref 按安全规则显示或跳转；无 Evidence 或缺失字段显示“未记录/不可用”或省略，不生成占位指标、mock 文本或推导结论。
+
+  - id: TAC-004
+    name: Activity 与 Thread detail 鉴权不泄露数据
+    required: true
+    description: >
+      验证 Work History 与 Backend Thread detail 在匿名状态返回 401 且不泄露 Terminal、消息或
+      Evidence，重新登录后才返回合约数据。
+    preconditions:
+      - 存在真实 Terminal、Thread 和 Run 数据。
+      - 可分别以无登录态和有效登录态请求 Activity 与 Thread detail。
+    steps:
+      - 在无登录态访问 Work History 与 Thread detail，再以有效登录态重复操作。
+      - 确认匿名请求返回 401 且响应和日志不包含消息正文、Terminal 或 Evidence；登录后页面和接口返回对应数据。
+
+  - id: TAC-005
+    name: Activity 分页与快速切换不会串数据
+    required: true
+    description: >
+      验证 Facts 快照分页在新增数据后无重复或跳项，且 T1 的迟到详情响应不会覆盖用户已切换到的 T2。
+    preconditions:
+      - Facts 数据可分页，且可在首屏读取后新增一条 Fact。
+      - T1 detail 可被受控延迟，T2 detail 可快速返回。
+    steps:
+      - 记录首屏 `asOfActivityOffset` 和 `nextCursor`，新增 Fact 后用同一快照读取下一页；确认无重复或跳项，刷新 archive 后可见新数据。
+      - 使用 `$toolkit:playwright-cli` 先选择 T1、在其响应返回前立即选择 T2；等待请求结束后确认 URL、选中项、Journal 与 Inspector 都属于 T2，没有混合内容或永久 loading。
+
+  - id: TAC-006
+    name: 删除或不存在对象后可恢复
+    required: true
+    description: >
+      验证当前选中的 Terminal 或 Run 在其他路径被删除或不存在时，页面清除失效选择并允许继续浏览，
+      不白屏、循环重试或错误选中同名对象。
+    preconditions:
+      - Activity 页面当前选中 Terminal T1 或 Run R1。
+      - 可通过另一入口删除 T1 或使 R1 不再存在。
+    steps:
+      - 删除对象后刷新详情，或直接打开带失效选中 ID 的 Activity URL。
+      - 确认后端明确返回对象不存在，UI 保留列表、清除失效选中并提示用户；选择其他对象后页面恢复，且不会删除 Activity Facts 或其他档案。
+
+  - id: TAC-007
+    name: 支持 TUI 离底显示并回底隐藏 Composer
+    required: true
+    description: >
+      验证 eligible 的 Codex、Trae-family 或已识别 TUI 离底后可展开 Floating Composer，回到底部后
+      Composer、打开入口和回底按钮同步隐藏；普通 shell 不会显示 Composer。
+    preconditions:
+      - 已使用 `$toolkit:playwright-cli` 打开 Web desktop Terminal。
+      - 存在普通 shell session，以及一个 `floatingComposerEligible=true` 的 supported TUI session。
+    steps:
+      - 在普通 shell 离底超过阈值；确认没有 floating composer textarea，原有 scroll-to-bottom 输入与按钮仍可用。
+      - 在 supported TUI 离底后点击 `Open floating composer`；确认出现 textarea、图标发送按钮和 Composer 上方的回底按钮。
+      - 分别点击回底按钮、使用滚轮或触控板回到底部；确认 terminal 到底，Composer、打开入口与回底按钮同步隐藏，TUI 原输入区重新成为主输入入口。
+
+  - id: TAC-008
+    name: Composer 与 Native TUI draft 双向同步
+    required: true
+    description: >
+      验证支持 draft mirror 的 TUI 输入在离底后带入 Composer，Composer 编辑在按钮或手势回底后回写
+      Native TUI，且整个过程不自动发送、截断、重复或拼接文本。
+    preconditions:
+      - supported TUI 位于底部，`floatingComposerEligible=true` 且 `draftMirrorSupported=true`。
+    steps:
+      - 在 Native TUI 输入未发送 draft，离底并打开 Composer；确认 textarea 显示完全相同的文本。
+      - 修改 Composer draft 后分别通过回底按钮和滚轮回底；确认 Native TUI 显示最新 draft、焦点回到 terminal，且没有自动发送、旧新文本拼接或 Composer 残留。
+
+  - id: TAC-009
+    name: Composer 一次发送与换行语义正确
+    required: true
+    description: >
+      验证发送只投递最新 draft 一次并清空 Composer；Shift+Enter 保留换行，Enter 发送完整多行内容。
+    preconditions:
+      - supported TUI 已离底并打开 Floating Composer。
+    steps:
+      - 输入唯一单行 draft 并点击发送图标；确认 terminal 回底、输出中仅出现一次该 draft，Composer draft 被清空并隐藏。
+      - 再次打开 Composer，输入两行文本并用 Shift+Enter 换行后按 Enter；确认换行前未发送，Enter 后完整两行 draft 被发送且 terminal 回底。
+
+  - id: TAC-010
+    name: 搜索与 Composer 互斥且 scrollback 可恢复
+    required: true
+    description: >
+      验证 terminal 搜索工具栏打开时不会显示 Floating Composer 或抢焦点；tmux scrollback/copy-mode
+      下的 supported TUI 仍可显示 Composer，并可通过回底退出 copy-mode。
+    preconditions:
+      - 存在支持 TUI 的 tmux runtime terminal。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 打开 terminal search 后向上滚动；确认搜索工具栏和输入焦点保持，Composer 不出现或覆盖工具栏。
+      - 关闭搜索后进入 tmux scrollback/copy-mode 并离底；确认 Composer 可显示，点击回底后通过现有退出 copy-mode 路径回到底部，Composer 同步隐藏。
+
+  - id: TAC-011
+    name: App 与 mobile 不出现 Web Composer 回归
+    required: true
+    description: >
+      验证 Floating Composer 仅作用于 Web desktop Terminal；mobile mode 与 Ionic App 的原有 composer、
+      Stop 和 keybar 行为不被覆盖。
+    preconditions:
+      - 可访问 mobile mode 或 Ionic App Terminal 页面。
+    steps:
+      - 打开 mobile 或 App Terminal 并滚动内容。
+      - 确认不出现 Web desktop Floating Composer，原有 App composer、Stop 和 keybar 仍可操作且布局未被覆盖。

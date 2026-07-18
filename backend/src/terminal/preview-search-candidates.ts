@@ -36,6 +36,7 @@ export const EXCLUDED_DIRECTORIES = new Set([
   ".next",
   ".svn",
   ".turbo",
+  ".worktree",
   "CVS",
   "bower_components",
   "build",

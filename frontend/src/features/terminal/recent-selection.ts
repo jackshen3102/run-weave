@@ -2,9 +2,11 @@ interface RecentTerminalSelection {
   projectId: string;
   terminalSessionId: string | null;
   projectSessionIds: Record<string, string>;
+  contextProjectIdByParentProjectId: Record<string, string>;
 }
 
 interface SaveRecentTerminalSelectionInput {
+  parentProjectId: string;
   projectId: string;
   terminalSessionId: string | null;
 }
@@ -38,6 +40,17 @@ export function loadRecentTerminalSelection(
             ),
           )
         : {};
+    const contextProjectIdByParentProjectId =
+      parsed.contextProjectIdByParentProjectId &&
+      typeof parsed.contextProjectIdByParentProjectId === "object" &&
+      !Array.isArray(parsed.contextProjectIdByParentProjectId)
+        ? Object.fromEntries(
+            Object.entries(parsed.contextProjectIdByParentProjectId).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[0] === "string" && typeof entry[1] === "string",
+            ),
+          )
+        : { [parsed.projectId]: parsed.projectId };
 
     if (typeof parsed.terminalSessionId === "string") {
       return {
@@ -47,6 +60,7 @@ export function loadRecentTerminalSelection(
           ...projectSessionIds,
           [parsed.projectId]: parsed.terminalSessionId,
         },
+        contextProjectIdByParentProjectId,
       };
     }
 
@@ -58,6 +72,7 @@ export function loadRecentTerminalSelection(
       projectId: parsed.projectId,
       terminalSessionId: null,
       projectSessionIds,
+      contextProjectIdByParentProjectId,
     };
   } catch {
     return null;
@@ -73,13 +88,18 @@ export function saveRecentTerminalSelection(
   if (selection.terminalSessionId) {
     nextProjectSessionIds[selection.projectId] = selection.terminalSessionId;
   }
+  const nextContextProjectIds = {
+    ...(currentSelection?.contextProjectIdByParentProjectId ?? {}),
+    [selection.parentProjectId]: selection.projectId,
+  };
 
   localStorage.setItem(
     buildStorageKey(apiBase),
     JSON.stringify({
-      projectId: selection.projectId,
+      projectId: selection.parentProjectId,
       terminalSessionId: selection.terminalSessionId,
       projectSessionIds: nextProjectSessionIds,
+      contextProjectIdByParentProjectId: nextContextProjectIds,
     } satisfies RecentTerminalSelection),
   );
 }

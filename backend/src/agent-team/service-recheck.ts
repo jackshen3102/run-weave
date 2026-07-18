@@ -63,7 +63,7 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
   protected async runRecheckWatchdog(
     source: "startup" | "watchdog",
   ): Promise<void> {
-    const projects = this.terminalSessionManager.listProjects();
+    const projects = this.terminalSessionManager.listAllProjectContexts();
     for (const project of projects) {
       const runs = await this.runStore.listRuns(project.id);
       for (const run of runs) {

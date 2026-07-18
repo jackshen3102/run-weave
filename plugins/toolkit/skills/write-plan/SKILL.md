@@ -48,7 +48,7 @@ description: 当识别到用户想把需求/目标写成可落地的实施计划
 
 业务逻辑、数据转换、权限、状态机优先给自动化验证；UI、配置、文档、一次性脚本可用手动验证清单。
 
-涉及需求实现的计划，验收章节必须配套测试用例：用 `write-test-cases` 产出 `docs/testing/<主题>-test-cases.md`，并在计划里引用其路径，做到「计划完成 = 用例齐备」。执行阶段用 `run-test-cases`。
+涉及需求实现的计划，验收章节必须配套测试用例：用 `write-test-cases` 产出 `docs/testing/<主题>.testplan.yaml`，并在计划里引用其路径，做到「计划完成 = 用例齐备」。不要生成 Markdown 测试案例；执行阶段用 `run-test-cases`。
 
 ## 可以留给执行者
 

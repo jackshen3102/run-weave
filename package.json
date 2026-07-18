@@ -41,6 +41,8 @@
     "app-server:verify-state-sync": "node ./scripts/verify-app-server-state-sync.mjs",
     "agent-team:verify-review-checkpoints": "pnpm --dir backend exec tsx ../scripts/verify-agent-team-review-checkpoints.mjs",
     "agent-team:verify-framework-recovery": "pnpm --dir backend exec tsx ../scripts/verify-agent-team-framework-recovery.mjs",
+    "testplan:validate": "pnpm --dir backend exec tsx ../scripts/validate-test-plan.ts",
+    "testplan:verify": "pnpm --dir backend exec tsx ../scripts/verify-test-plan-format.ts",
     "app-server:seed-threadref-fixture": "node ./scripts/seed-app-server-threadref-fixture.mjs",
     "app:ios:device": "pnpm --filter @runweave/app ios:open",
     "app:ios:local": "node ./scripts/app-ios-local.mjs",

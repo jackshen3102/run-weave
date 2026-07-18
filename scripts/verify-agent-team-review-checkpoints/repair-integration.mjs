@@ -29,7 +29,7 @@ function acceptanceCase(caseId) {
   return {
     caseId,
     sourceCaseId: caseId,
-    sourceFilePath: "docs/testing/full-test-cases.md",
+    sourceFilePath: "docs/testing/full.testplan.yaml",
     text: caseId,
     status: "pending",
     consecutiveFail: 0,
@@ -80,12 +80,12 @@ function verifyAcceptanceRefreshPreservesCases() {
   };
   const refreshedPassedCase = {
     ...acceptanceCase("BSP-001"),
-    sourceFilePath: "docs/testing/refreshed-test-cases.md",
+    sourceFilePath: "docs/testing/refreshed.testplan.yaml",
   };
   const refreshedAffectedCase = {
     ...acceptanceCase("BSP-002"),
     text: "BSP-002 refreshed contract",
-    sourceFilePath: "docs/testing/refreshed-test-cases.md",
+    sourceFilePath: "docs/testing/refreshed.testplan.yaml",
   };
   const merged = mergeAcceptanceRefresh(
     [passedCase, failedCase],
@@ -98,7 +98,7 @@ function verifyAcceptanceRefreshPreservesCases() {
       merged[0]?.status === "pass" &&
       merged[0]?.resultSummary === "existing pass" &&
       merged[0]?.evidence[0]?.ref === "fixture:existing-pass" &&
-      merged[0]?.sourceFilePath === "docs/testing/refreshed-test-cases.md" &&
+      merged[0]?.sourceFilePath === "docs/testing/refreshed.testplan.yaml" &&
       merged[1]?.caseId === "BSP-002" &&
       merged[1]?.status === "pending" &&
       merged[1]?.evidence.length === 0,
@@ -328,9 +328,9 @@ async function verifyAgentInterventionRoute() {
       note: "切换到可复现的 warm retry 验收合同",
       caseIds: ["BSP-017"],
       generatedTestCaseFilePath:
-        "docs/testing/beta-slot-pool-warm-retry-test-cases.md",
+        "docs/testing/beta-slot-pool-warm-retry.testplan.yaml",
       checkpointAllowedDirtyPaths: [
-        "docs/testing/beta-slot-pool-warm-retry-test-cases.md",
+        "docs/testing/beta-slot-pool-warm-retry.testplan.yaml",
       ],
       checkpointExpectedHeadCommit: "0123456789abcdef0123456789abcdef01234567",
       checkpointRebasedCommit: "fedcba9876543210fedcba9876543210fedcba98",
@@ -377,9 +377,9 @@ async function verifyAgentInterventionRoute() {
           "fedcba9876543210fedcba9876543210fedcba98" &&
         acceptedInterventions[1]?.input.action === "refresh_acceptance" &&
         acceptedInterventions[1]?.input.generatedTestCaseFilePath ===
-          "docs/testing/beta-slot-pool-warm-retry-test-cases.md" &&
+          "docs/testing/beta-slot-pool-warm-retry.testplan.yaml" &&
         acceptedInterventions[1]?.input.checkpointAllowedDirtyPaths?.[0] ===
-          "docs/testing/beta-slot-pool-warm-retry-test-cases.md" &&
+          "docs/testing/beta-slot-pool-warm-retry.testplan.yaml" &&
         acceptedInterventions[1]?.input.checkpointExpectedHeadCommit ===
           "0123456789abcdef0123456789abcdef01234567" &&
         acceptedInterventions[1]?.input.checkpointRebasedCommit ===

@@ -29,7 +29,7 @@ export function registerTerminalPrototypeGalleryRoutes(
     try {
       res.json(
         await listTerminalPrototypeGallery(
-          terminalSessionManager.listProjects(),
+          terminalSessionManager.listAllProjectContexts(),
         ),
       );
     } catch (error) {
@@ -42,7 +42,12 @@ export function registerTerminalPrototypeGalleryRoutes(
     async (req, res) => {
       const project = terminalSessionManager.getProject(req.params.id);
       if (!project) {
-        res.status(404).json({ message: "Terminal project not found" });
+        const context = terminalSessionManager.getProjectContext(req.params.id);
+        res.status(context ? 409 : 404).json({
+          message: context
+            ? "Terminal project context is unavailable"
+            : "Terminal project not found",
+        });
         return;
       }
       if (!authService) {

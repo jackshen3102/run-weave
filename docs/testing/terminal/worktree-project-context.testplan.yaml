@@ -1,0 +1,116 @@
+version: 1
+name: Worktree Project Context 核心验收
+description: >
+  验证父 Project 与 .worktree 直接子 Project 在发现、选择、Terminal、Preview、Agent Team、
+  Activity 与删除恢复中的唯一生效 projectId 语义。
+
+cases:
+  - id: WTC-001
+    name: Context 只发现合法直接子 Worktree 并生成稳定 ID
+    required: true
+    description: >
+      父 Project 是永久第一主节点；只有 Git 注册且位于 .worktree 直接子目录的真实路径可成为子 Project，ID 可 round-trip 且跨分支稳定。
+    preconditions:
+      - 父 Project 有两个直接子 Worktree、嵌套目录、symlink 逃逸目录和外部 Git worktree。
+    steps:
+      - 重复调用 contexts API，并切换一个子 Worktree 分支后读取 rail。
+      - 确认仅合法直接子节点出现，父节点 projectId 保持不变且永久置顶，子 ID 唯一稳定，不泄露或接受越界路径。
+
+  - id: WTC-002
+    name: 固定与排序只影响子 Context 不写 Git
+    required: true
+    description: >
+      固定顺序跨刷新和 backend 重启保留；未固定项按 Terminal 活跃度和名称稳定排序，主节点不可取消固定。
+    preconditions:
+      - 至少三个合法子 Project，具有不同 Terminal 最近活跃时间。
+    steps:
+      - 固定和取消固定一个子节点，刷新并重启 backend，再让另一子节点产生 Terminal 活动。
+      - 确认 pinnedChildProjectIds 持久化、主节点始终第一、排序稳定，过程中没有任何 Git 写操作。
+
+  - id: WTC-003
+    name: 选择 Context 原子切换 Terminal 与 Preview
+    required: true
+    description: >
+      切换子 Project 后，Session、cwd、Preview API、文件内容和迟到请求都必须使用同一个 effective projectId。
+    preconditions:
+      - 父根和子 Worktree 各有不同 Terminal 及同名不同内容的 Preview 文件。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 在两者之间快速切换并记录请求、DOM、cwd 和文件内容。
+      - 确认 active rail、Session、Preview 和 URL 同步指向当前子 ID，迟到父响应不会覆盖已选子 Context。
+
+  - id: WTC-004
+    name: Context、Terminal 与 Preview 恢复按正确作用域持久化
+    required: true
+    description: >
+      父 Project 恢复上次 Context，effective Project 恢复各自 Terminal 与 Preview 路径，不能在不同父或子节点间串状态。
+    preconditions:
+      - 两个父 Project 各有多个 Context、Terminal 和 Preview 文件。
+    steps:
+      - 分别选择非默认 Context、Terminal 和文件，刷新页面、重启 backend 后再来回切换父 Project。
+      - 确认恢复键分别以父与 effective Project 为作用域，UI 不显示其它项目的 Session 或路径。
+
+  - id: WTC-005
+    name: 新建和继承 Terminal 只保存一个生效 Project ID
+    required: true
+    description: >
+      在子 Context 创建或继承 Session 时，协议只能传 projectId=子 ID；不得引入 worktreeId/worktreePath 或回退到父路径。
+    preconditions:
+      - 当前选中合法子 Project，并记录其规范 projectId 与真实路径。
+    steps:
+      - 执行 New Terminal、inherit 与缺失子 ID 创建，读取请求、Session 存储和终端 pwd。
+      - 确认成功 Session 指向子 ID 和子 cwd；缺失 Context 返回 409 且不创建半状态。
+
+  - id: WTC-006
+    name: Project-scoped 能力全部沿用生效 Project ID
+    required: true
+    description: >
+      Preview 读写、Agent Team、Activity、Quick Input、Prototype Gallery 与 preview ticket 必须使用相同子根，不能按父项目或时间猜测。
+    preconditions:
+      - 父与子 Context 含可区分文件、活动、Agent Team run 和 prototype。
+    steps:
+      - 在子 Context 依次调用上述能力并检查 API、文件、run/outbox 与页面结果。
+      - 确认所有结果只属于当前子 ID，父与兄弟子 Context 均不显示或访问其数据。
+
+  - id: WTC-007
+    name: 外部新增移除和缺失 Context 安全收敛
+    required: true
+    description: >
+      外部新增/移除 Worktree 自动发现；仍有 Session 的移除项以 missing Context 保留安全入口，目录依赖操作一律拒绝。
+    preconditions:
+      - 页面停留在父 Project，目标子 Worktree 初始有或无存活 Terminal。
+    steps:
+      - 在页面外新增、移除子 Worktree，分别保留和删除其最后一个 Terminal 后刷新 contexts。
+      - 确认新增自动出现；有 Session 时保留 missing 节点且可打开原 Terminal，无 Session 时移除；新建、Preview、Agent Team 等目录操作返回 409。
+
+  - id: WTC-008
+    name: Context API 鉴权和路径边界 fail closed
+    required: true
+    description: >
+      伪造子 ID、路径逃逸、未认证固定操作和跨父 Project 请求不得读取或修改 Context 状态。
+    preconditions:
+      - 已准备未认证 token、其它父 Project ID、伪造的 wt ID 和 escape path。
+    steps:
+      - 分别调用 contexts、pin 和 project-scoped API，检查响应、文件系统与持久化状态。
+      - 确认所有非法请求被明确拒绝，不泄露路径、没有 pin/Session/Preview/Agent Team 副作用。
+
+  - id: WTC-009
+    name: 父 Project 删除级联停止全部子运行资源
+    required: true
+    description: >
+      删除父 Project 必须停止和清理其所有子 Context Session、Agent Team run 与选择状态，而不能遗留可访问资源。
+    preconditions:
+      - 父 Project 与两个子 Context 均有存活 Terminal，至少一个子 Context 有 Agent Team run。
+    steps:
+      - 删除父 Project，随后尝试读取、发送输入、恢复 run 和访问 Preview。
+      - 确认全部子资源被停止或不可访问，关联选择被清理，其他父 Project 与其资源保持不变。
+
+  - id: WTC-010
+    name: Worktree rail 只存在 Desktop Web 且不破坏布局
+    required: true
+    description: >
+      Desktop rail 的折叠、展开和移动宽度不能卸载 Terminal/Preview 或造成溢出；App 不渲染该桌面专属 rail。
+    preconditions:
+      - Desktop Web 有多个子 Context、多个 Terminal 与打开的 Preview，App 可访问相同父 Project。
+    steps:
+      - 用 `$toolkit:playwright-cli` 折叠展开 rail、刷新并检查布局，再打开 App 首页与详情页。
+      - 确认 Web 选择与布局完整且偏好恢复，App 不出现 rail 但仍通过父 Project 正确聚合信息。

@@ -2,17 +2,21 @@ import { useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef } from "react";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import type { ConnectionConfig } from "../../features/connection/types";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { useTerminalWorkspaceStore } from "../../features/terminal/workspace-store";
 import {
   EMPTY_TERMINAL_PROJECTS,
+  EMPTY_TERMINAL_PROJECT_CONTEXTS,
   EMPTY_TERMINAL_SESSIONS,
   updateTerminalSessions,
   useTerminalProjectsQuery,
+  useTerminalProjectContextsQuery,
   useTerminalSessionsQuery,
   useTerminalWorkspaceQueryClient,
 } from "../../features/terminal/queries/terminal-workspace-queries";
+import { loadRecentTerminalSelection } from "../../features/terminal/recent-selection";
 import { useTerminalRuntime } from "../../features/terminal/queries/terminal-runtime-provider";
 import { resolveCachedTerminalSurfaceIds } from "../../features/terminal/surface-cache";
 import type { ClientMode } from "../../features/client-mode";
@@ -34,15 +38,17 @@ const SESSION_RETRY_DELAY_MS = 2_000;
 function hasValidProjectSessionSelection(
   projects: Array<{ projectId: string }>,
   sessions: TerminalSessionListItem[],
+  parentProjectId: string | null,
   projectId: string | null,
   terminalSessionId: string | null,
 ): boolean {
-  if (!projectId || !terminalSessionId) {
+  if (!parentProjectId || !projectId || !terminalSessionId) {
     return false;
   }
 
   return (
-    projects.some((project) => project.projectId === projectId) &&
+    projects.some((project) => project.projectId === parentProjectId) &&
+    resolveTerminalParentProjectId(projectId) === parentProjectId &&
     sessions.some(
       (session) =>
         session.projectId === projectId &&
@@ -97,8 +103,18 @@ export function TerminalWorkspaceContent({
   const projects = projectsQuery.data ?? EMPTY_TERMINAL_PROJECTS;
   const sessions = sessionsQuery.data ?? EMPTY_TERMINAL_SESSIONS;
   const hasLoadedSessions = projectsQuery.isFetched && sessionsQuery.isFetched;
-  const loading = projectsQuery.isPending || sessionsQuery.isPending;
-  const queryError = projectsQuery.error ?? sessionsQuery.error;
+  const activeParentProjectId = useTerminalWorkspaceStore(
+    (state) => state.activeParentProjectId,
+  );
+  const contextsQuery = useTerminalProjectContextsQuery(activeParentProjectId);
+  const contexts =
+    contextsQuery.data ?? EMPTY_TERMINAL_PROJECT_CONTEXTS;
+  const loading =
+    projectsQuery.isPending ||
+    sessionsQuery.isPending ||
+    Boolean(activeParentProjectId && contextsQuery.isPending);
+  const queryError =
+    projectsQuery.error ?? sessionsQuery.error ?? contextsQuery.error;
   const requestError = queryError ? String(queryError) : null;
   const activeProjectId = useTerminalWorkspaceStore(
     (state) => state.activeProjectId,
@@ -115,8 +131,11 @@ export function TerminalWorkspaceContent({
   const historyTerminalSessionId = useTerminalWorkspaceStore(
     (state) => state.historyTerminalSessionId,
   );
-  const setActiveProjectId = useTerminalWorkspaceStore(
-    (state) => state.setActiveProjectId,
+  const setActiveParentProjectId = useTerminalWorkspaceStore(
+    (state) => state.setActiveParentProjectId,
+  );
+  const selectProjectContext = useTerminalWorkspaceStore(
+    (state) => state.selectProjectContext,
   );
   const setActiveSessionId = useTerminalWorkspaceStore(
     (state) => state.setActiveSessionId,
@@ -154,9 +173,16 @@ export function TerminalWorkspaceContent({
   );
 
   const selectActiveProject = useMemoizedFn((projectId: string) => {
-    setActiveProjectId(projectId);
+    const recentSelection = loadRecentTerminalSelection(scope);
+    const storedContextId =
+      recentSelection?.contextProjectIdByParentProjectId[projectId];
+    const effectiveProjectId =
+      storedContextId &&
+      resolveTerminalParentProjectId(storedContextId) === projectId
+        ? storedContextId
+        : projectId;
     const projectSessions = sessions.filter(
-      (session) => session.projectId === projectId,
+      (session) => session.projectId === effectiveProjectId,
     );
     const currentSessionId =
       useTerminalWorkspaceStore.getState().activeSessionId;
@@ -166,9 +192,25 @@ export function TerminalWorkspaceContent({
         (session) => session.terminalSessionId === currentSessionId,
       )
     ) {
+      selectProjectContext(projectId, effectiveProjectId, currentSessionId);
       return;
     }
-    selectActiveSession(
+    selectProjectContext(
+      projectId,
+      effectiveProjectId,
+      resolvePreferredSessionId(scope, effectiveProjectId, projectSessions),
+    );
+  });
+  const selectActiveContext = useMemoizedFn((projectId: string) => {
+    if (!activeParentProjectId) {
+      return;
+    }
+    const projectSessions = sessions.filter(
+      (session) => session.projectId === projectId,
+    );
+    selectProjectContext(
+      activeParentProjectId,
+      projectId,
       resolvePreferredSessionId(scope, projectId, projectSessions),
     );
   });
@@ -203,7 +245,6 @@ export function TerminalWorkspaceContent({
     token,
     onAuthExpired,
     loadSessions,
-    selectActiveSession,
   });
   useEffect(() => {
     initialTerminalSessionIdRef.current = initialTerminalSessionId;
@@ -234,6 +275,7 @@ export function TerminalWorkspaceContent({
     const activeSelectionIsValid = hasValidProjectSessionSelection(
       visibleProjects,
       sessions,
+      activeParentProjectId,
       activeProjectId,
       activeSessionId,
     );
@@ -241,22 +283,86 @@ export function TerminalWorkspaceContent({
       scope,
       visibleProjects,
       sessions,
-      activeProjectId,
+      activeParentProjectId,
       activeSelectionIsValid ? null : initialTerminalSessionId,
     );
     if (desiredProjectId) {
-      setActiveProjectId(desiredProjectId);
+      setActiveParentProjectId(desiredProjectId);
       return;
     }
-    setActiveProjectId(null);
+    selectProjectContext(null, null, null);
   }, [
+    activeParentProjectId,
     activeProjectId,
     activeSessionId,
     initialTerminalSessionId,
     scope,
     sessions,
-    setActiveProjectId,
+    setActiveParentProjectId,
+    selectProjectContext,
     visibleProjects,
+  ]);
+  useEffect(() => {
+    if (!activeParentProjectId || contextsQuery.isPending) {
+      return;
+    }
+    const recentSelection = loadRecentTerminalSelection(scope);
+    const initialSessionProjectId = initialTerminalSessionId
+      ? sessions.find(
+          (session) => session.terminalSessionId === initialTerminalSessionId,
+        )?.projectId
+      : null;
+    const storedContextId =
+      recentSelection?.contextProjectIdByParentProjectId[
+        activeParentProjectId
+      ];
+    const isKnownContext = (projectId: string | null | undefined): projectId is string =>
+      Boolean(
+        projectId &&
+          resolveTerminalParentProjectId(projectId) === activeParentProjectId &&
+          (projectId === activeParentProjectId ||
+            contexts.some((context) => context.projectId === projectId) ||
+            sessions.some((session) => session.projectId === projectId)),
+      );
+    const desiredContextId = [
+      activeProjectId,
+      initialSessionProjectId,
+      storedContextId,
+      activeParentProjectId,
+    ].find(isKnownContext);
+    if (!desiredContextId) {
+      return;
+    }
+    const projectSessions = sessions.filter(
+      (session) => session.projectId === desiredContextId,
+    );
+    const desiredSessionId = resolvePreferredSessionId(
+      scope,
+      desiredContextId,
+      projectSessions,
+      initialTerminalSessionId,
+    );
+    if (
+      activeProjectId === desiredContextId &&
+      activeSessionId === desiredSessionId
+    ) {
+      return;
+    }
+    selectProjectContext(
+      activeParentProjectId,
+      desiredContextId,
+      desiredSessionId,
+    );
+  }, [
+    activeParentProjectId,
+    activeProjectId,
+    activeSessionId,
+    contexts,
+    contextsQuery.isPending,
+    initialTerminalSessionId,
+    scope,
+    selectProjectContext,
+    sessions,
   ]);
   useEffect(() => {
     if (visibleSessions.length === 0) {
@@ -318,11 +424,17 @@ export function TerminalWorkspaceContent({
     setCachedSurfaceSessionIds,
   ]);
   const activeProjectLoaded = Boolean(
+    activeParentProjectId &&
     activeProjectId &&
-    projects.some((project) => project.projectId === activeProjectId),
+    projects.some(
+      (project) => project.projectId === activeParentProjectId,
+    ) &&
+    (activeProjectId === activeParentProjectId ||
+      contexts.some((context) => context.projectId === activeProjectId)),
   );
   const canPersistRecentSelection =
     hasLoadedSessions &&
+    contextsQuery.isFetched &&
     !requestError &&
     activeProjectLoaded &&
     (visibleSessions.length === 0 || activeSession !== null);
@@ -370,6 +482,7 @@ export function TerminalWorkspaceContent({
   });
   usePersistRecentSelection({
     apiBase: scope,
+    activeParentProjectId,
     activeProjectId,
     activeSessionId: activeSession?.terminalSessionId ?? null,
     canPersist: canPersistRecentSelection,
@@ -377,7 +490,7 @@ export function TerminalWorkspaceContent({
   });
   useSessionSelectionShortcuts({
     enabled: !projectDialogMode && !projectPendingDeletion,
-    activeProjectId,
+    activeProjectId: activeParentProjectId,
     activeSessionId: activeSession?.terminalSessionId ?? null,
     visibleProjects,
     visibleSessions,
@@ -479,7 +592,6 @@ export function TerminalWorkspaceContent({
     apiBase,
     token,
     clientMode,
-    selectActiveSession,
     removeProjectPreview,
     loadSessions,
     onAuthExpired,
@@ -501,6 +613,7 @@ export function TerminalWorkspaceContent({
         onConfirmDelete: () => void removeProject(),
         onReorder: handleProjectReorder,
         onSelect: selectActiveProject,
+        onSelectContext: selectActiveContext,
         onSubmitDialog: submitProjectDialog,
       }}
       sessions={{

@@ -10,6 +10,7 @@ export interface PersistedTerminalProjectRecord {
   createdAt: string;
   isDefault: boolean;
   order?: number;
+  pinnedChildProjectIds?: string[];
 }
 
 export interface PersistedTerminalSessionRecord {
@@ -231,6 +232,7 @@ export interface UpdateTerminalProjectParams {
   projectId: string;
   name?: string;
   path?: string | null;
+  pinnedChildProjectIds?: string[];
 }
 
 export interface TerminalSessionStore {

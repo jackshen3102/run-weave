@@ -1,0 +1,245 @@
+version: 1
+name: Worktree Terminal Context 验收
+description: >
+  验证父 Project 与 Worktree 子 Project 的唯一生效 projectId、选择恢复、Terminal 和 Preview
+  隔离、Agent Team 与活动数据归属、删除恢复及旧协议兼容；浏览器步骤必须使用
+  `$toolkit:playwright-cli` 在真实 Runweave 页面取证。
+
+cases:
+  - id: WTC-001
+    name: 主节点身份固定且 Worktree 显示名称与分支
+    required: true
+    description: >
+      覆盖原始用例：WTC-001、WTC-002。验证父 Project 主节点永久置顶、复用父 ID 且不可删除或取消固定，
+      子 Worktree 分别展示名称和分支，不泄漏任何变更摘要。
+    preconditions:
+      - 父 Project 指向含 `activity` 和 `preview-fix` 子 Worktree 的测试仓库。
+      - 已通过 contexts API 记录 parentProjectId 和两个 childProjectId。
+    steps:
+      - 请求 contexts API，并用 `$toolkit:playwright-cli` 读取 Worktree rail 的顺序、首行和操作区。
+      - 确认第一项 `isPrimary=true` 且 projectId 等于 parentProjectId，只显示永久固定标记；子项第一行显示名称、第二行显示实际分支，且没有 changes、dirty、文件名或增删行数摘要。
+      - 尝试对主节点调用固定接口；确认请求被拒绝，页面没有主节点删除、取消固定或更多操作入口。
+
+  - id: WTC-002
+    name: 只发现直接子 Worktree 并生成稳定子 ID
+    required: true
+    description: >
+      覆盖原始用例：WTC-003。验证自动发现只接受 `.worktree` 下已登记的直接子 Worktree，
+      子 Project ID 对父 ID 与名称稳定且唯一。
+    preconditions:
+      - 父根、`activity`、`preview-fix`、`.worktree/nested/deep` 和 `.worktree` 外的 outside 都已通过 Git 登记。
+    steps:
+      - 连续请求 contexts API 两次，切换 activity 分支后再请求一次，并保留 Git porcelain 输出。
+      - 确认只返回父根、activity 和 preview-fix；nested、outside 与普通目录均不出现，子 ID 能解析到正确父 ID 与名称，分支变化前后稳定且所有 ID 唯一。
+
+  - id: WTC-003
+    name: 外部 Worktree 新增和移除自动收敛
+    required: true
+    description: >
+      覆盖原始用例：WTC-004。验证产品只读取 Git Worktree 状态，外部新增和无 Terminal 的移除
+      会在刷新窗口内反映到 rail，不要求页面刷新或产品执行 Git 写操作。
+    preconditions:
+      - 页面停留在父 Project 主节点，测试仓库允许从页面外创建和移除 `.worktree/new-area`。
+    steps:
+      - 从页面外新增 new-area Worktree，等待最多 3 秒及一次请求延迟；使用 `$toolkit:playwright-cli` 确认节点出现。
+      - 从页面外移除无 Terminal 的节点；确认节点自动消失、未出现 Add/Delete/Refresh 入口、没有重复节点，并保存前后 DOM、请求时间戳与 Git 输出。
+
+  - id: WTC-004
+    name: 固定和最近活跃排序跨刷新稳定
+    required: true
+    description: >
+      覆盖原始用例：WTC-005、WTC-006。验证主节点始终第一，固定子 Project 优先于未固定项，
+      未固定项以 Terminal 最近活跃时间和名称稳定排序，且排序持久化不修改 Git。
+    preconditions:
+      - 至少有三个子 Project，其中两个未固定子 Project 各有 lastActivityAt 可区分的 Terminal。
+    steps:
+      - 固定最不活跃子项，刷新页面并重启 backend 后读取顺序；取消固定后向较旧子 Project Terminal 输入命令并等待 contexts 刷新。
+      - 确认主节点始终第一，固定状态跨重启保留；取消后最新活跃子项排在其他未固定项之前，同一时间按名称稳定排序且 rail 不抖动。
+      - 检查父 Project 持久化记录中的 pinnedChildProjectIds；确认只保存正确子 ID，固定操作未修改 Git。
+
+  - id: WTC-005
+    name: rail 折叠不破坏 Terminal 和 Preview 布局
+    required: true
+    description: >
+      覆盖原始用例：WTC-007。验证桌面端 Worktree rail 可折叠和恢复，且右侧 Terminal、
+      Session tabs 与 Preview 保持完整可用。
+    preconditions:
+      - 桌面模式下当前子 Project 有至少两个 Terminal，且 Preview 已打开。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 折叠并重新展开 rail，读取窄栏、展开按钮、关键 bounding box 和页面 scrollWidth/clientWidth。
+      - 确认展开约 236px、折叠约 36px，右侧始终含完整 Session tabs、Terminal 与 Preview；刷新后折叠偏好恢复且没有横向溢出或 Preview 卸载。
+
+  - id: WTC-006
+    name: 选择 Worktree 时 Terminal 与 Preview 原子切换
+    required: true
+    description: >
+      覆盖原始用例：WTC-008。验证选择子 Project 后所有右侧业务请求使用同一 effectiveProjectId，
+      迟到响应不能恢复父根内容。
+    preconditions:
+      - 父根和 activity 各有 Terminal 与内容不同的 `context.txt`，Preview 已打开 Files。
+    steps:
+      - 在主节点记录 active ID、cwd 和文件内容，再点击 activity 并立即读取父 tab、active 行、Terminal、请求 URL、cwd 和 Preview 内容。
+      - 确认父 tab 仍选中同一父 Project，active 行、Sessions、Terminal cwd 与 Preview 请求均只使用 activityChildProjectId，文件显示 `activity-context`。
+      - 等待全部请求完成；确认没有父、子双 ID 请求、两个 active 行或旧响应覆盖 activity 内容。
+
+  - id: WTC-007
+    name: 父 Project 独立恢复 context、Terminal 和 Preview
+    required: true
+    description: >
+      覆盖原始用例：WTC-009。验证每个父 Project 以自身 ID 隔离恢复最近 effective Project、
+      所属 Terminal 与 Preview 路径和内容。
+    preconditions:
+      - 两个父 Projects 各有至少两个 contexts、有效 Terminal 和内容不同的 Preview 文件。
+    steps:
+      - 在父 Project A 和 B 分别选择非首 context、Terminal 与 Preview 文件；在两者间来回切换并刷新页面。
+      - 使用 `$toolkit:playwright-cli` 读取 active context、Terminal projectId、Preview path/内容和 localStorage。
+      - 确认每个父 Project 恢复自己的 effective Project，Terminal 与 Preview 始终属于该 ID，contextProjectIdByParentProjectId 按父 ID 隔离。
+
+  - id: WTC-008
+    name: 非首 Terminal 在异步刷新中保持选择
+    required: false
+    description: >
+      覆盖原始用例：WTC-024。该非阻塞边界回归验证同一 effective 子 Project 的第二个 Terminal
+      在 contexts 或 session 异步刷新和页面重载后仍被选中。
+    preconditions:
+      - 某 effective 子 Project 有两个运行中的 Terminal，且已完成一次跨父 Project/context 恢复。
+    steps:
+      - 点击第二个 Terminal，分别在 300ms、至少一次 contexts/session 刷新后和页面重载后读取 active Session 与 localStorage。
+      - 确认第二个 Terminal 持续选中，projectSessionIds[effectiveProjectId] 保留该 Session，route、store 与 DOM 一致且页面无 React #185 或空白。
+
+  - id: WTC-009
+    name: 新建、继承和 Preview 读写只使用生效 Project ID
+    required: true
+    description: >
+      覆盖原始用例：WTC-010、WTC-011。验证创建或继承 Terminal 及 Preview 的搜索、读写、
+      目录、Changes 和 Diff 全部只通过 effectiveProjectId 隔离。
+    preconditions:
+      - 当前选中 activity，父根和 activity 有同名文件与不同 Git 变更，已记录 activityChildProjectId。
+    steps:
+      - 新建 Terminal 并基于它创建 inherit Session；读取 POST payload、Session 记录和两次 `pwd`，再以不存在子 ID 创建。
+      - 在父根和 activity 依次执行 Preview search、read、save、directory、changes、diff，并在 activity 保存 `context.txt` 后切回父根。
+      - 确认 Session 与请求仅使用 projectId=activityChildProjectId、无 worktreeId/worktreePath，cwd 位于 activity；Preview URL 使用子 ID 且无 worktreeId query，读写和缓存不跨根，missing 子 ID 返回 409。
+
+  - id: WTC-010
+    name: 移除含运行 Terminal 的 Worktree 保留安全入口
+    required: true
+    description: >
+      覆盖原始用例：WTC-012。验证外部移除子 Worktree 后，已有 Terminal 可访问但所有要求目录的
+      新操作 fail closed，最后一个 Terminal 关闭后节点被清理。
+    preconditions:
+      - preview-fix 有运行中 Terminal 且当前被选中。
+    steps:
+      - 从页面外强制移除 preview-fix Worktree，等待 contexts 刷新后访问已有 Terminal，并尝试新建 Terminal、Preview、Agent Team 与 Prototype。
+      - 确认节点变为 missing，已有 Terminal 可访问，所有目录操作返回 409 且不回退父 path/cwd。
+      - 关闭最后一个 Terminal；确认节点消失并回到主节点，保存 contexts JSON、DOM、错误响应和父根 hash。
+
+  - id: WTC-011
+    name: 旧存储与旧客户端继续使用父主节点
+    required: true
+    description: >
+      覆盖原始用例：WTC-013。验证缺少 pinnedChildProjectIds 的旧 LowDB 和只带父 projectId 的
+      旧 Session、Preview payload 可直接兼容运行。
+    preconditions:
+      - 已准备不含 pinnedChildProjectIds 的旧 LowDB fixture，所有旧 Session 仅使用父 projectId。
+    steps:
+      - 启动 backend，打开 Terminal 并读取 Projects、contexts、Sessions，再调用父 ID Preview API。
+      - 确认 backend 正常启动，旧 Project 只位于顶部父列表、旧 Session 位于主节点、父 ID Preview 正常，不要求离线迁移或新增字段。
+
+  - id: WTC-012
+    name: 未认证和伪造子 ID 均不能越权
+    required: true
+    description: >
+      覆盖原始用例：WTC-014、WTC-015。验证子 Project ID 与文件路径严格绑定父 Project，
+      并且未认证请求不能读取 contexts 或修改固定状态。
+    preconditions:
+      - 父 Project A/B 各有子 Project，普通用户已登录且可在独立请求中清除认证信息。
+    steps:
+      - 在 A 的 pin、Session 和 Preview 请求中传入 B 子 ID、非法编码、解码为 `..` 的 ID、`../` 文件路径和 symlink escape。
+      - 清除登录 cookie/token 后调用 contexts、pin、子 Project Preview 与 Session create。
+      - 确认跨父或非法 ID 返回 404、known missing 返回 409、路径逃逸返回现有 400/403、未认证请求均为 401；响应不泄漏路径或内容，A/B 文件与固定状态未改变。
+
+  - id: WTC-013
+    name: Agent Team 在子 Project 内解析并持久化
+    required: true
+    description: >
+      覆盖原始用例：WTC-016。验证子 Project Terminal 发起 Agent Team 后，计划、run、outbox 和
+      worker cwd 都留在同一 Worktree。
+    preconditions:
+      - activity Terminal 已选中，父根和 activity 都有内容不同的计划文件。
+    steps:
+      - 从 activity Terminal 发起 Agent Team，解析计划和用例并写入 run/outbox，读取 run 元数据与 worker cwd。
+      - 确认请求和 run 仅有 projectId=activityChildProjectId，计划、`.runweave/agent-team`、pane outbox 和 worker cwd 均位于 `.worktree/activity`，父根文件不变。
+
+  - id: WTC-014
+    name: 桌面和 App 按父 Project 聚合但保留子 ID
+    required: true
+    description: >
+      覆盖原始用例：WTC-017、WTC-020。验证桌面切换父 Project 时恢复各自 context，顶部状态与
+      App Home 可聚合子 Session，但打开时仍使用子 Project ID，且 App 不渲染 Worktree rail。
+    preconditions:
+      - 两个父 Projects 各选中过子 Project，activity 子 Session 处于 agent_running 或有 completion/bell。
+    steps:
+      - 在 desktop 来回切换父 Project 并刷新，再读取顶部父 tab 状态；打开 App Home，选择 activity 子 Session。
+      - 确认 desktop 恢复各自 context/Terminal，父 tab 聚合子状态，App 在父 Project 组内显示子 Session 且不显示 Worktree rail。
+      - 确认打开请求仍使用 activityChildProjectId，未改写成父 ID，也没有跨父 Session 或空白页。
+
+  - id: WTC-015
+    name: backend 重启后恢复子 Project Agent Team run
+    required: true
+    description: >
+      覆盖原始用例：WTC-018。验证 backend 重启后可按子 Project 找到 Agent Team run，
+      Work History 与 watchdog 不会因只遍历父 Projects 而遗漏它。
+    preconditions:
+      - activity 中存在 running 或 need_human Agent Team run 与对应 Session。
+    steps:
+      - 记录 run ID 后重启 backend，调用 Work History、Agent Team get/list，并等待 recheck watchdog。
+      - 确认 run 按原子子 Project ID 被找到、Work History 名称正确、watchdog 会处理该 run，父根未生成重复产物。
+
+  - id: WTC-016
+    name: 删除父 Project 级联清理所有子资源
+    required: true
+    description: >
+      覆盖原始用例：WTC-019。验证删除父 Project 会停止并删除父、子 Project 的 runtime、Session、
+      Panel、tmux 与 Preview cache，并完整记录删除事件。
+    preconditions:
+      - 临时父 Project 的主节点和两个子 Project 均有运行中 Terminal/Panel，且不使用用户真实 Project。
+    steps:
+      - 从顶部 Project 管理入口确认删除父 Project，读取 runtime、tmux、Sessions、Panels、Project 事件与 Preview cache。
+      - 确认父、子资源全部清理，`project_deleted.terminalSessionIds` 包含全部 ID，父 tab 与 contexts 消失，没有孤儿 tmux 或仍可访问的子 ID/Preview cache。
+
+  - id: WTC-017
+    name: Activity 与 Quick Input 按父子 Project 精确隔离
+    required: true
+    description: >
+      覆盖原始用例：WTC-021。验证父根和子 Project 的 Activity、导出范围及 Project-scoped
+      Quick Input 不互相汇总或删除扩散，global Quick Input 两侧可见。
+    preconditions:
+      - 父根与 activity 各有可区分 Activity fact、Project-scoped Quick Input，且存在一个 global Quick Input。
+    steps:
+      - 分别以父 ID 和子 ID 查询 Activity、导出范围和 Quick Input，并在测试 fixture 中删除子 scope Activity。
+      - 确认父、子查询只返回各自数据，global 项两侧可见，Project-scoped 项不串，删除子数据不影响父数据。
+
+  - id: WTC-018
+    name: Prototype Gallery 与 preview ticket 使用子根目录
+    required: true
+    description: >
+      覆盖原始用例：WTC-022。验证 activity context 打开 Prototype Gallery 和申请 preview ticket 时，
+      枚举、选择、票据与页面内容均属于 activity 子 Project。
+    preconditions:
+      - 父根与 activity 的 `docs/prototypes` 有同 slug、不同内容的原型。
+    steps:
+      - 从 activity 打开 Prototype Gallery，选择目标原型并申请 preview ticket。
+      - 确认 Gallery context、选择和 ticket 的 projectId 均为 activityChildProjectId，preview 内容来自 `.worktree/activity`，没有回退或替换为父根原型。
+
+  - id: WTC-019
+    name: P0 主链路在真实页面完整可验收
+    required: true
+    description: >
+      覆盖原始用例的验收出口。验证实现后的类型、lint 与 E2E 门禁通过，并以真实页面证据确认
+      主节点固定、父子 ID 隔离、Preview/Agent Team 不跨根以及父删除无子资源遗留。
+    preconditions:
+      - 已准备本计划的临时 Git Worktree 数据和可用 Runweave 测试环境。
+    steps:
+      - 依次运行 shared、backend、frontend、app 的 typecheck，运行 `pnpm lint`、worktree-terminal-context Playwright E2E 和 `git diff --check`；确认每项为 0 exit code。
+      - 使用 `$toolkit:playwright-cli` 执行本计划 required P0 场景并保存 DOM、网络或截图证据。
+      - 确认 console 无新增错误或警告、contexts 轮询无无限重试和重复节点；出现父子双业务 ID、跨根 Preview/Agent Team、主节点可取消固定、运行 Terminal 丢入口或父删除遗留子 runtime 时判定失败。

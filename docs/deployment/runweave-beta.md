@@ -64,7 +64,7 @@ pnpm dev:session --json
 - 每个槽位的 Desktop Runtime 与 App Server Runtime 最多保留 current + previous；App rollback 最多 1 个且不能以 `.app` 结尾。旧 `.app.previous-*` 会迁移并注销 LaunchServices 路径。磁盘不足时只能清理所有权可证明的 pool 垃圾，仍不足则 fail closed。
 - stale cleanup 只有在记录 PID 已退出或整个槽位不存在运行进程/路径所有者时才释放 lease；PID 复用且仍有槽位进程时继续 fail closed。
 
-验收合同见 [Runweave Beta 槽位池测试用例](../testing/beta-slot-pool-test-cases.md)。需要验证
+验收合同见 [Runweave Beta 槽位池测试计划](../testing/beta-slot-pool.testplan.yaml)。需要验证
 `dev-session --profile beta` 时，以该合同和 `dev:status` / `dev:open` 返回的 slot、lease、
 manifest、CDP 身份为准。
 
@@ -204,7 +204,7 @@ playwright-cli -s=runweave-beta-desktop detach
 
 Terminal Browser 验收先执行 `pnpm dev:open --session <devSessionId> --surface terminal-browser --json`，再附着其返回的 endpoint。Desktop CDP 和 Terminal Browser CDP 是不同 surface；不要用一个 endpoint 代替另一个，也不要使用全局 `PLAYWRIGHT_MCP_CDP_ENDPOINT` 或 Playwright 默认配置猜测目标。
 
-完整回归按 [Runweave Beta 自举开发通道测试用例](../testing/platform/runweave-beta-self-hosting-test-cases.md) 执行。静态命令、status 或代码阅读不能代替该文档要求的真实桌面与页面行为证据。
+完整回归按 [Runweave Beta 自举开发通道测试计划](../testing/platform/runweave-beta-self-hosting.testplan.yaml) 执行。静态命令、status 或代码阅读不能代替该文档要求的真实桌面与页面行为证据。
 
 ## 回滚
 

@@ -13,13 +13,13 @@
     {
       "caseId": "case_12",
       "sourceCaseId": "AGT-TERM-012",
-      "sourceFilePath": "docs/testing/terminal-state-test-cases.md",
+      "sourceFilePath": "docs/testing/terminal/terminal-state.testplan.yaml",
       "text": "正式 worker prompt 启动后的 lifecycle hook 只更新当前 generation"
     },
     {
       "caseId": "case_18",
       "sourceCaseId": "AGT-TERM-018",
-      "sourceFilePath": "docs/testing/terminal-state-test-cases.md",
+      "sourceFilePath": "docs/testing/terminal/terminal-state.testplan.yaml",
       "text": "worker outbox 完成后状态收口稳定"
     }
   ]

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { StateCreator } from "zustand";
+import { persist } from "zustand/middleware";
 import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
 import {
   createInitialTerminalBrowserState,
@@ -27,6 +28,8 @@ export type {
 
 export const DEFAULT_TERMINAL_SIDECAR_WIDTH = "clamp(320px, 60vw, 60vw)";
 const TERMINAL_SIDECAR_WIDTH_STORAGE_KEY = "runweave.terminal.sidecar.width.v1";
+const TERMINAL_PREVIEW_PROJECTS_STORAGE_KEY =
+  "runweave.terminal.preview.projects.v1";
 export const DEFAULT_MARKDOWN_VIEW_MODE: TerminalMarkdownViewMode = "preview";
 
 const DEFAULT_PROJECT_STATE: TerminalPreviewProjectState = {
@@ -289,5 +292,14 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
 });
 
 export const useTerminalPreviewStore = create<TerminalPreviewStore>()(
-  createTerminalPreviewStore,
+  persist(createTerminalPreviewStore, {
+    name: TERMINAL_PREVIEW_PROJECTS_STORAGE_KEY,
+    partialize: (state) => ({ projects: state.projects }),
+    merge: (persistedState, currentState) => ({
+      ...currentState,
+      projects:
+        (persistedState as Pick<TerminalPreviewStore, "projects">).projects ??
+        {},
+    }),
+  }),
 );

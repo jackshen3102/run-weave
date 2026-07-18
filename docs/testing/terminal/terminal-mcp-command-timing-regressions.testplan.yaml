@@ -1,0 +1,72 @@
+version: 1
+name: Terminal MCP 与命令时序回归
+description: >
+  验证 Terminal Browser 的 MCP 操作标志只反映真实目标操作，
+  并验证 activeCommand 和 Panel Agent grace 在跨端观察与 Backend 重启中的时序正确性。
+
+cases:
+  - id: TMCT-001
+    name: CDP 附着和读取不显示 MCP badge
+    required: true
+    description: >
+      验证 cdpProxyAttached 只表示 CDP debugger 已附着，不等于 MCP 正在操作页面；
+      auto-attach、初始化和读取命令不得使普通 Browser tab 显示 MCP badge。
+    preconditions:
+      - Electron Terminal Browser 面板中已打开一个普通 tab，并可取得该 Terminal Browser 的 CDP endpoint。
+      - 该 tab 在操作前未显示 MCP badge，且 Browser 面板保持可见。
+    steps:
+      - 使用 CDP 客户端附着该 endpoint，只执行 `Target.setAutoAttach`、`Page.enable`、`Runtime.enable`、`Target.getTargetInfo`、`Page.getFrameTree` 或读取当前 URL 等非操作命令。
+      - 使用真实 Terminal Browser UI 观察该 tab；确认 cdpProxyAttached 可为 true，但 tab 不显示 MCP badge 或 MCP 操作高亮。
+
+  - id: TMCT-002
+    name: MCP badge 精确关联操作 tab 并超时消失
+    required: true
+    description: >
+      验证真实 MCP 页面操作只短暂标记命中的 tab，不抢占用户当前选中 tab，
+      并在活动窗口过期后恢复普通样式。
+    preconditions:
+      - Terminal Browser 中存在 tab A 和 tab B，用户当前选中 tab A，两个 tab 都可被 CDP 附着。
+      - 两个 tab 在操作前均未显示 MCP badge。
+    steps:
+      - 仅对 tab B 执行 `page.goto`、点击或输入等真实页面操作；确认 tab B 短暂显示 MCP badge 和操作高亮，tab A 仍保持选中态且不显示 MCP badge。
+      - 等待 MCP 活动窗口过期；确认 tab B 的 MCP badge 自动消失并恢复普通样式，关闭按钮仍只关闭被点击的 tab。
+
+  - id: TMCT-003
+    name: activeCommand 在消费面最终一致且清除陈旧 Agent 状态
+    required: true
+    description: >
+      验证前台命令在 detail、list、history、App Home、当前 terminal WebSocket 和全局事件消费面最终一致；
+      命令结束或从 Codex 切换后不得残留陈旧 activeCommand 或 Codex Agent 状态。
+    preconditions:
+      - 已在真实 Runweave terminal 中创建可观察的交互 shell session，并能访问 detail、list、history、App Home 与 WebSocket 消费面。
+      - 浏览器页面通过 `$toolkit:playwright-cli` 打开该 terminal，并允许在最多 5 秒的一致性窗口内轮询状态。
+    steps:
+      - 执行 `sleep 5` 或 `node -e "setTimeout(()=>{}, 5000)"`；确认运行期间 detail、list、history、App Home、当前 terminal WebSocket 与 UI 标题在一致性窗口内收敛到相同 activeCommand，UI 标题使用其 basename。
+      - 等待命令结束并轮询全部消费面；确认 activeCommand 收敛为 null、标题移除命令括号，且全局 terminal events 不再使 Web 或 App Home 保留陈旧的 Codex Agent Idle/Running 状态。
+
+  - id: TMCT-004
+    name: 包装命令保持外层 activeCommand
+    required: true
+    description: >
+      验证 shell marker 存在时，npm 或 pnpm 等包装命令不会被 tmux pane_current_command
+      降级为内部 child process `node`。
+    preconditions:
+      - 已在含 package.json 的真实 terminal 项目中准备可持续运行的 npm 或 pnpm 脚本。
+      - 可读取目标 session 的 API、WebSocket、UI 标题和 tmux 诊断信息。
+    steps:
+      - 分别执行 `npm run <long-running-script>` 和 `pnpm exec node -e "setTimeout(()=>{}, 5000)"`，在命令运行期间读取 API、WebSocket 与真实 UI。
+      - 确认 npm 场景的 activeCommand 为 npm、pnpm 场景为 pnpm；即使 tmux pane_current_command 显示 node，也不会覆盖 API、WebSocket 或标题的外层包装命令。
+      - 等待每个命令结束；确认 activeCommand 在一致性窗口内恢复为 null，未残留 node、npm 或 pnpm。
+
+  - id: TMCT-005
+    name: Backend 重启后 grace 仅保留原剩余窗口
+    required: true
+    description: >
+      验证 Panel Agent 已清空 activeCommand 后的 Stop grace 在 Backend 重启后从原 clearedAt
+      继续倒计时，恢复原 Panel 和 operation 的未过期租约但不刷新 30 秒窗口。
+    preconditions:
+      - 多 Panel terminal 中的 Panel B 已进入 grace，已记录其 operation ID、clearedAt 与持久化活动记录。
+      - 同一 Backend/Profile 可在不重启 tmux 的情况下重启，并可使用真实 hook token 发送 Stop。
+    steps:
+      - 在 clearedAt 后 5 秒内重启 Backend；Backend ready 后立即向原 Panel B、原 Agent 与原 operation 发送 Stop，确认返回 `disposition=recorded`，并归属原 Panel 和 operation。
+      - 等待超过原始 clearedAt 起算的 grace 窗口后再发送同一 Stop；确认不再被接受，clearedAt 未被重启刷新，且不会归属其他 Panel 或 operation。

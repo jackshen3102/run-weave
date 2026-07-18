@@ -3,12 +3,14 @@ import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 
 export type TerminalWorkspaceProjectDialogMode = "create" | "edit" | null;
 
 type StateUpdater<T> = T | ((current: T) => T);
 
 interface TerminalWorkspaceState {
+  activeParentProjectId: string | null;
   activeProjectId: string | null;
   activeSessionId: string | null;
   hasLoadedSessions: boolean;
@@ -33,7 +35,13 @@ interface TerminalWorkspaceState {
 }
 
 interface TerminalWorkspaceActions {
+  setActiveParentProjectId: (next: StateUpdater<string | null>) => void;
   setActiveProjectId: (next: StateUpdater<string | null>) => void;
+  selectProjectContext: (
+    parentProjectId: string | null,
+    projectId: string | null,
+    terminalSessionId: string | null,
+  ) => void;
   setActiveSessionId: (next: StateUpdater<string | null>) => void;
   setHasLoadedSessions: (next: StateUpdater<boolean>) => void;
   setLoading: (next: StateUpdater<boolean>) => void;
@@ -86,7 +94,8 @@ export function selectTerminalProjectStatusById(
   const statusByProjectId: Record<string, number> = {};
 
   for (const session of sessions) {
-    let status = statusByProjectId[session.projectId] ?? 0;
+    const parentProjectId = resolveTerminalParentProjectId(session.projectId);
+    let status = statusByProjectId[parentProjectId] ?? 0;
     if (state.bellMarkers[session.terminalSessionId]) {
       status |= TERMINAL_PROJECT_HAS_BELL;
     }
@@ -100,7 +109,7 @@ export function selectTerminalProjectStatusById(
       status |= TERMINAL_PROJECT_IS_WORKING;
     }
     if (status !== 0) {
-      statusByProjectId[session.projectId] = status;
+      statusByProjectId[parentProjectId] = status;
     }
   }
 
@@ -114,6 +123,7 @@ function resolveNext<T>(next: StateUpdater<T>, current: T): T {
 }
 
 const initialState: TerminalWorkspaceState = {
+  activeParentProjectId: null,
   activeProjectId: null,
   activeSessionId: null,
   hasLoadedSessions: false,
@@ -140,10 +150,24 @@ const initialState: TerminalWorkspaceState = {
 export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
   (set) => ({
     ...initialState,
+    setActiveParentProjectId: (next) =>
+      set((state) => ({
+        activeParentProjectId: resolveNext(next, state.activeParentProjectId),
+      })),
     setActiveProjectId: (next) =>
       set((state) => ({
         activeProjectId: resolveNext(next, state.activeProjectId),
       })),
+    selectProjectContext: (
+      parentProjectId,
+      projectId,
+      terminalSessionId,
+    ) =>
+      set({
+        activeParentProjectId: parentProjectId,
+        activeProjectId: projectId,
+        activeSessionId: terminalSessionId,
+      }),
     setActiveSessionId: (next) =>
       set((state) => ({
         activeSessionId: resolveNext(next, state.activeSessionId),

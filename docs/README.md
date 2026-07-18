@@ -11,26 +11,27 @@
 
 ## 架构理解（活文档）
 
-| 需求                            | 阅读                                                            |
-| ------------------------------- | --------------------------------------------------------------- |
-| 架构 / 网络拓扑                 | architecture/network-topology.md                                |
-| app-server 架构概览             | architecture/app-server-architecture.md                         |
-| app-server Event Center 细节    | architecture/app-server-event-center.md                         |
-| Activity / Work History         | architecture/app-server-event-center.md#work-history-聚合边界   |
-| App 移动端边界                  | architecture/app-mobile.md                                      |
-| App 后端连接管理                | architecture/app-mobile.md#配置与安全                           |
-| App 终端语音输入                | architecture/app-mobile.md#app-终端语音输入                     |
-| App 终端输入与快捷键            | architecture/app-mobile.md#app-终端详情                         |
-| 终端状态模型                    | architecture/terminal-state.md                                  |
-| 终端代码预览 / Terminal Browser | architecture/terminal-code-preview.md                           |
-| 多项目原型轮巡库                | architecture/terminal-code-preview.md#多项目原型轮巡库          |
-| Web Terminal 快捷指令           | architecture/terminal-code-preview.md#快捷指令入口              |
-| Terminal Browser 注释模式       | architecture/terminal-code-preview.md#terminal-browser-注释模式 |
-| 终端 tmux 恢复                  | architecture/terminal-tmux-recovery.md                          |
-| 终端完成事件 Hook               | architecture/terminal-completion-hooks.md                       |
-| 终端任务完成通知（桌面/飞书）   | architecture/terminal-completion-notifications.md               |
-| Agent Team / Loop Engine        | architecture/multi-agent-orchestrator.md                        |
-| 本机系统资源监控                | architecture/system-monitor.md                                  |
+| 需求                             | 阅读                                                            |
+| -------------------------------- | --------------------------------------------------------------- |
+| 架构 / 网络拓扑                  | architecture/network-topology.md                                |
+| app-server 架构概览              | architecture/app-server-architecture.md                         |
+| app-server Event Center 细节     | architecture/app-server-event-center.md                         |
+| Activity / Work History          | architecture/app-server-event-center.md#work-history-聚合边界   |
+| App 移动端边界                   | architecture/app-mobile.md                                      |
+| App 后端连接管理                 | architecture/app-mobile.md#配置与安全                           |
+| App 终端语音输入                 | architecture/app-mobile.md#app-终端语音输入                     |
+| App 终端输入与快捷键             | architecture/app-mobile.md#app-终端详情                         |
+| 终端状态模型                     | architecture/terminal-state.md                                  |
+| Terminal Worktree Project 上下文 | architecture/terminal-worktree-context.md                       |
+| 终端代码预览 / Terminal Browser  | architecture/terminal-code-preview.md                           |
+| 多项目原型轮巡库                 | architecture/terminal-code-preview.md#多项目原型轮巡库          |
+| Web Terminal 快捷指令            | architecture/terminal-code-preview.md#快捷指令入口              |
+| Terminal Browser 注释模式        | architecture/terminal-code-preview.md#terminal-browser-注释模式 |
+| 终端 tmux 恢复                   | architecture/terminal-tmux-recovery.md                          |
+| 终端完成事件 Hook                | architecture/terminal-completion-hooks.md                       |
+| 终端任务完成通知（桌面/飞书）    | architecture/terminal-completion-notifications.md               |
+| Agent Team / Loop Engine         | architecture/multi-agent-orchestrator.md                        |
+| 本机系统资源监控                 | architecture/system-monitor.md                                  |
 
 ## 操作指南（活文档）
 
@@ -55,50 +56,22 @@
 
 ## 测试用例（活文档）
 
-供人或 agent 执行的测试用例与回归清单，非可执行测试代码。测试层级与命令选择见 `testing/layers.md` 和 `testing/command-matrix.md`。
+供人或 agent 执行的测试用例与回归清单，非可执行测试代码。新增或重写的测试计划统一使用
+`*.testplan.yaml`；Agent Team 只解析该格式，不兼容 Markdown 用例。格式规范见
+`testing/test-plan-format.md`，测试层级与命令选择见 `testing/layers.md` 和
+`testing/command-matrix.md`。
 
-| 需求                                     | 阅读                                                                                   |
-| ---------------------------------------- | -------------------------------------------------------------------------------------- |
-| 测试层级与命名                           | testing/layers.md                                                                      |
-| 测试命令选择                             | testing/command-matrix.md                                                              |
-| TerminalState 测试                       | testing/terminal/terminal-state-test-cases.md                                          |
-| Terminal 事件恢复与架构问题测试          | testing/terminal/terminal-event-recovery-test-cases.md                                 |
-| Terminal activeCommand 一致性测试        | testing/terminal/terminal-active-command-consistency-test-cases.md                     |
-| Terminal Agent Prepare 状态一致性测试    | testing/terminal/terminal-agent-prepare-state-consistency-test-cases.md                |
-| Terminal Panel Agent 活动租约测试        | testing/terminal/terminal-agent-run-grace-test-cases.md                                |
-| App 设备在线测试                         | testing/app/app-device-online-test-cases.md                                            |
-| app-server CLI 启动测试                  | testing/app/app-server-event-center-test-cases.md#as-ec-008-cli-owned-app-server-start |
-| app-server 状态同步测试                  | testing/app/app-server-state-sync-test-cases.md                                        |
-| Runweave Agent CLI 控制面测试            | testing/platform/runweave-cli-control-plane-test-cases.md                              |
-| Agent Team / Loop Engineer 测试          | testing/agent-team/agent-team-loop-engineer-test-cases.md                              |
-| Agent Team completion 恢复测试           | testing/agent-team/agent-team-completion-recovery-test-cases.md                        |
-| Agent Team 验收来源测试                  | testing/agent-team/agent-team-verification-case-source-test-cases.md                   |
-| Agent Team Review Checkpoint 测试        | testing/agent-team/agent-team-review-checkpoint-test-cases.md                          |
-| Agent Team 证据门禁修复闭环测试          | testing/agent-team/agent-team-evidence-gated-repair-loop-test-cases.md                 |
-| Codex 与 TraeX 能力对齐测试              | testing/agent-team/codex-traex-capability-parity-test-cases.md                         |
-| 飞书一次性终端投递测试                   | testing/app/feishu-one-shot-terminal-delivery-test-cases.md                            |
-| App Server ThreadRef fixture             | testing/app/app-server-threadref-fixture.md                                            |
-| Terminal Panel Split 测试                | testing/terminal/terminal-panel-split-test-cases.md                                    |
-| Terminal Worktree 上下文测试             | testing/terminal/worktree-terminal-context-test-cases.md                               |
-| 桌面端重启项目/终端恢复测试              | testing/platform/desktop-restart-terminal-selection-test-cases.md                      |
-| Terminal Floating Composer 测试          | testing/terminal/terminal-floating-composer-test-cases.md                              |
-| Terminal IME 输入测试                    | testing/terminal/terminal-ime-input-test-cases.md                                      |
-| 本地客户端更新测试                       | testing/platform/runweave-local-client-update-test-cases.md                            |
-| Runweave Beta 自举开发通道测试           | testing/platform/runweave-beta-self-hosting-test-cases.md                              |
-| Runweave Dev Session 分层开发环境测试    | testing/platform/runweave-dev-session-test-cases.md                                    |
-| Runweave Beta 多实例与 CDP 路由测试      | testing/platform/runweave-beta-instance-cdp-routing-test-cases.md                      |
-| Runweave Beta 五槽位池与回收测试         | testing/beta-slot-pool-test-cases.md                                                   |
-| Backend 内嵌行为数据底座测试             | testing/architecture/system-activity-data-foundation-test-cases.md                     |
-| Terminal Activity Work History 测试      | testing/terminal/terminal-activity-work-history-test-cases.md                          |
-| Terminal Browser CDP/MCP 测试            | testing/terminal/terminal-browser-cdp-mcp-test-cases.md                                |
-| Terminal Browser Playwright MCP 工具测试 | testing/terminal/terminal-browser-playwright-mcp-test-cases.md                         |
-| Terminal Browser 自适应多 Tab 测试       | testing/terminal/terminal-browser-adaptive-tabs-test-cases.md                          |
-| 多项目原型轮巡库测试                     | testing/browser/prototype-gallery-preview-test-cases.md                                |
-| 系统性架构重构验收                       | testing/architecture/runweave-systematic-architecture-refactor-test-cases.md           |
-| 独立行为数据底座目标架构验收             | testing/architecture/system-activity-data-foundation-test-cases.md                     |
-| 终端回归（Vim）                          | testing/runbooks/terminal-vim.md                                                       |
-| Explorer Quick Search 回归               | testing/runbooks/explorer-quick-search.md                                              |
-| Web Terminal 状态查询回归                | testing/runbooks/status-lookup-ui.md                                                   |
+| 核心系统能力                    | 测试计划                                                    |
+| ------------------------------- | ----------------------------------------------------------- |
+| YAML 格式、20 条上限与编写原则  | testing/test-plan-format.md                                 |
+| 测试层级与命令选择              | testing/layers.md、testing/command-matrix.md                |
+| Agent Team 端到端闭环           | testing/agent-team/agent-team-core.testplan.yaml            |
+| Terminal 运行时和多 Pane        | testing/terminal/terminal-runtime-core.testplan.yaml        |
+| Terminal Browser、CDP 与 MCP    | testing/terminal/terminal-browser-core.testplan.yaml        |
+| Worktree Project Context        | testing/terminal/worktree-project-context.testplan.yaml     |
+| Dev Session、Beta、更新与 CLI   | testing/platform/development-control-plane.testplan.yaml    |
+| Activity SQLite 行为数据底座    | testing/architecture/activity-data-foundation.testplan.yaml |
+| Ionic App 与本机 Backend 连通性 | testing/app/app-connectivity-core.testplan.yaml             |
 
 ## 历史归档（冻结，不代表当前事实）
 

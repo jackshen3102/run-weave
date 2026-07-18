@@ -1,0 +1,117 @@
+version: 1
+name: 跨运行时架构回归门禁
+description: >
+  验证架构重构后，代码规模、依赖方向、共享合约、质量门禁、更新回滚、
+  安全边界、资源释放与旧持久化数据在 Web、App、Backend、Electron、
+  App Server、CLI 和 Toolkit Hook 间保持正确。
+
+cases:
+  - id: CAR-001
+    name: 架构报告覆盖全部源码且行数债务不可回归
+    required: true
+    description: >
+      验证架构报告覆盖所有纳入的源码模块，600 行边界对支持的源码类型一致，
+      legacy baseline 只能递减并最终归零。
+    preconditions:
+      - 已记录当前 Git 基线和架构报告输出目录。
+      - 可在隔离 fixture 中创建不污染产品源码的行数与 baseline 变体。
+    steps:
+      - 执行 `pnpm architecture:report` 与 `pnpm architecture:check`，再以 Git 跟踪文件清单比对 frontend、backend、app、electron、scripts、shared、CLI、app-server 与 Toolkit Hook 的覆盖范围。
+      - 对 ts、tsx、css、mjs、cjs、sh 的 599、600、601 行 fixture 以及新增、增长、减少、删除和篡改 baseline 变体执行检查。
+      - 确认报告列出每个纳入文件与规则结果、最终 `over600=0`；599/600 通过而 601 失败；新增或放宽 baseline 被拒，最终无永久豁免或遗留 baseline。
+
+  - id: CAR-002
+    name: 依赖图拒绝 cycle 和逆向层级依赖
+    required: true
+    description: >
+      验证 runtime/type cycle、barrel 间接 cycle 和跨层逆向依赖均被架构门禁拒绝，
+      合法依赖方向仍可通过。
+    preconditions:
+      - 已准备 runtime import、type import、barrel re-export 和各层合法 adapter 到 port 依赖的隔离 fixture。
+    steps:
+      - 分别构造 runtime cycle、type cycle、App service 到 component、store 到 component、Backend domain/application 到 route 的违规依赖，再构造合法 type-only leaf import。
+      - 执行 `pnpm architecture:check` 并记录每个 fixture 的退出码和诊断链路。
+      - 确认所有 cycle 与禁向 import 失败且指出完整链路，合法依赖通过，产品图的 cycle 与 forbidden edge 均为零。
+
+  - id: CAR-003
+    name: shared 子路径合约在所有运行时兼容
+    required: true
+    description: >
+      验证 shared 子路径迁移不改变 Terminal、Agent Team 和 App Server 的既有 payload，
+      并且所有真实消费者都可解析该合约。
+    preconditions:
+      - 已保留重构前的 project、session、panel、input、state、event、WebSocket、Agent Team 与 App Server payload 样本。
+      - shared、frontend、app、backend、electron、app-server 和 CLI 均可执行构建或类型检查。
+    steps:
+      - 对各运行时执行现有 typecheck 或 build，并分别用重构前后入口序列化同一批协议样本。
+      - 搜索产品源码对 `@runweave/shared` 根导入的使用，并检查所有消费者使用明确子路径。
+      - 确认 JSON 字段、可选性与 discriminator 一致，所有消费者通过，产品源码新增根导入为零。
+
+  - id: CAR-004
+    name: 质量门禁与声明的执行范围一致
+    required: true
+    description: >
+      验证架构、类型、lint、构建和 E2E 命令真实执行，质量报告与文档不会把未执行的
+      静态或行为检查宣称为已通过。
+    preconditions:
+      - 仓库存在 `pnpm architecture:check`、`pnpm test:e2e` 与质量门禁命令。
+      - 可在隔离 fixture 中制造一个架构违规和一个 Playwright 失败。
+    steps:
+      - 依次执行 `pnpm architecture:check`、`pnpm typecheck`、`pnpm lint`、`pnpm build`、`pnpm test:e2e`、`pnpm quality:gate` 与 `git diff --check`。
+      - 分别引入隔离架构违规和 E2E 断言失败后重跑对应命令，并对照质量报告、`docs/testing/layers.md` 与 `docs/testing/command-matrix.md`。
+      - 确认真实失败均导致非零退出，质量报告列出实际执行的 architecture、static、E2E 步骤，文档不夸大执行范围。
+
+  - id: CAR-005
+    name: Stable 与 Beta 更新失败可回滚
+    required: true
+    description: >
+      验证 Stable、Beta、runtime、完整 App 与 App Server 更新保持目标隔离，
+      构建或健康检查失败时仍能回到原可用版本。
+    preconditions:
+      - 已记录 Stable 与 Beta 的版本、releaseId、安装路径、Backend/App Server 健康状态及干净和脏工作区基线。
+      - 当前本地 macOS 客户端与 Beta 更新入口均可执行 dry-run、update、status 与 rollback。
+    steps:
+      - 分别执行 dry-run、成功更新、runtime-only、App-only、App Server-only、构建失败、健康失败与 rollback 场景。
+      - 使用 `$computer-use` 打开被更新或回滚后的目标客户端并进入 Terminal 页面。
+      - 确认目标选择、snapshot、codesign、状态文件和 rollback 顺序正确；Stable 与 Beta 不串通，失败不覆盖原可用版本或丢失脏工作区内容。
+
+  - id: CAR-006
+    name: 跨运行时鉴权与路径边界不放宽
+    required: true
+    description: >
+      验证 Backend、App Server、Electron IPC/CDP、prototype preview、terminal ticket 与日志
+      在拆分后仍拒绝未授权、跨作用域和路径逃逸请求，并保持敏感字段脱敏。
+    preconditions:
+      - 可构造缺失或错误 token、错误 Origin、非法 query/payload、跨 project/session/panel/target、路径逃逸与敏感字段输入。
+    steps:
+      - 分别向 Backend、App Server、Electron IPC/CDP、prototype preview 文件路由和 terminal ticket 发起合法与非法请求，并检查错误响应和运行日志。
+      - 扫描本轮命令输出、manifest、报告和日志中的 Authorization、refresh token、webhook secret 等敏感字段。
+      - 确认所有非法访问被拒，connection、project、session、panel、window 与 target 相互隔离，且敏感值未写入日志、缓存或证据文件。
+
+  - id: CAR-007
+    name: 长周期操作释放跨运行时资源
+    required: true
+    description: >
+      验证 listener、timer、WebSocket、PTY、CDP、BrowserView 和相关进程在重复打开、
+      关闭、重连和重启后回到稳定基线。
+    preconditions:
+      - 可读取相关进程句柄、连接数、日志或资源诊断数据。
+      - 已准备 Web terminal、Preview、tmux panel、Electron Browser、DevTools 与 annotation 的重复操作环境。
+    steps:
+      - 循环 20 次执行 terminal 打开关闭、connection 切换、Preview mount/unmount、WebSocket 断连重连、panel 创建删除、Browser tab/DevTools/annotation 打开关闭以及 Backend/Electron 重启。
+      - 每轮记录 listener、timer、WS、CDP、PTY、BrowserView、子进程和端口占用情况。
+      - 确认第 20 轮资源回到稳定基线，无 MaxListeners、重复事件、僵尸进程、端口占用或依赖强杀掩盖 dispose 缺失的情况。
+
+  - id: CAR-008
+    name: 旧数据格式和独立 PR 回滚保持可读
+    required: true
+    description: >
+      验证新旧代码都能读取冻结的 LowDB、scrollback、Agent Team、App Server、App 认证
+      与 Browser tabs 数据格式，并支持按 PR 独立回滚。
+    preconditions:
+      - 已保存重构前 LowDB、scrollback、Agent Team run/outbox、App Server event/state/lock、App connection/auth index、Browser tabs 与 HTTP/WS/IPC/CLI 样本。
+      - 可切换到当前 workstream 各 PR 的前一版本。
+    steps:
+      - 使用新代码读取并操作旧 fixture，再按模块回滚一个 workstream PR 后用回滚代码读取未改变格式的数据。
+      - 比对回滚前后的 HTTP、WebSocket、IPC 与 CLI 样本，检查是否存在新旧 service、Query/Zustand 或 facade 双写残留。
+      - 确认无需手工迁移数据，新旧代码均可读取冻结格式，回滚只影响目标模块且公开合约保持兼容。

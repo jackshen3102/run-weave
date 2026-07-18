@@ -17,6 +17,7 @@ import { logger } from "../logging";
 import type { TerminalSessionManager } from "../terminal/manager";
 import { registerTerminalPreviewRoutes } from "./terminal-preview-routes";
 import { registerTerminalProjectRoutes } from "./terminal-project-routes";
+import { registerTerminalProjectContextRoutes } from "./terminal-project-context-routes";
 import { registerTerminalTmuxOrphanRoutes } from "./terminal-tmux-orphan-routes";
 import type { PtyService } from "../terminal/pty-service";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime-registry";
@@ -137,6 +138,7 @@ export function createTerminalRouter(
     tmuxOutputWatcher: options?.tmuxOutputWatcher,
     terminalEventService: options?.terminalEventService,
   });
+  registerTerminalProjectContextRoutes(router, terminalSessionManager);
 
   registerTerminalPreviewRoutes(router, terminalSessionManager);
 
@@ -249,7 +251,14 @@ export function createTerminalRouter(
         parsed.data.projectId &&
         !terminalSessionManager.getProject(parsed.data.projectId)
       ) {
-        res.status(404).json({ message: "Terminal project not found" });
+        const context = terminalSessionManager.getProjectContext(
+          parsed.data.projectId,
+        );
+        res.status(context ? 409 : 404).json({
+          message: context
+            ? "Terminal project context is unavailable"
+            : "Terminal project not found",
+        });
         return;
       }
       const session = await terminalSessionManager.createSession(

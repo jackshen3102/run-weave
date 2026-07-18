@@ -3,7 +3,7 @@
 > 状态：待实施
 > 粒度：L2（跨 shared、backend、frontend、App、Agent Team 与持久化）
 > 交互基准：`docs/prototypes/worktree-terminal-context/`
-> 配套用例：`docs/testing/terminal/worktree-terminal-context-test-cases.md`
+> 配套测试计划：`docs/testing/terminal/worktree-terminal-context.testplan.yaml`
 
 ## 决策摘要
 
@@ -339,7 +339,7 @@ activeSessionId: string | null;
 - `docs/architecture/terminal-worktree-context.md`（新增）
 - `docs/architecture/terminal-code-preview.md`
 - `docs/architecture/terminal-state.md`
-- `docs/testing/terminal/worktree-terminal-context-test-cases.md`
+- `docs/testing/terminal/worktree-terminal-context.testplan.yaml`
 - `docs/README.md`
 
 工作：
@@ -366,7 +366,7 @@ pnpm --dir frontend test:e2e -- worktree-terminal-context.spec.ts
 git diff --check
 ```
 
-上述静态门禁不能替代行为验收。真实 Runweave 页面必须按仓库 Dev Session 规则启动，并使用 `$toolkit:playwright-cli` 附着正确 surface，完成 `docs/testing/terminal/worktree-terminal-context-test-cases.md` 中的 P0 Web 用例。
+上述静态门禁不能替代行为验收。真实 Runweave 页面必须按仓库 Dev Session 规则启动，并使用 `$toolkit:playwright-cli` 附着正确 surface，完成 `docs/testing/terminal/worktree-terminal-context.testplan.yaml` 中的 P0 Web 用例。
 
 ## 兼容、迁移与回滚
 

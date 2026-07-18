@@ -13,10 +13,11 @@ import type {
   TerminalPanelRecord,
   TerminalSessionRecord,
 } from "../terminal/manager";
+import { isTerminalChildProjectIdLike } from "@runweave/shared/terminal/project-context";
 import { getAgentForCommand } from "../terminal/terminal-state-service";
 import { AgentTeamError } from "./errors";
 import {
-  loadAcceptanceCasesFromMarkdown,
+  loadAcceptanceCasesFromTestPlan,
   resolveAgentTeamProjectFile,
 } from "./acceptance-case-loader";
 import type { PreparedAgentTeamAcceptance } from "./service-types";
@@ -39,9 +40,14 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
   }
 
   protected resolveProjectRoot(projectId: string, cwd: string): string | null {
-    return (
-      this.terminalSessionManager.getProject(projectId)?.path ?? cwd ?? null
-    );
+    const projectPath = this.terminalSessionManager.getProject(projectId)?.path;
+    if (projectPath) {
+      return projectPath;
+    }
+    if (isTerminalChildProjectIdLike(projectId)) {
+      return null;
+    }
+    return cwd || null;
   }
 
   protected resolveRequiredProjectRoot(projectId: string, cwd: string): string {
@@ -62,7 +68,7 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
       "计划文件",
     );
     if (input.testCaseFilePath) {
-      const loaded = await loadAcceptanceCasesFromMarkdown({
+      const loaded = await loadAcceptanceCasesFromTestPlan({
         projectRoot,
         requestedPath: input.testCaseFilePath,
       });
@@ -82,7 +88,7 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
     let testCaseValidationError: string | null = null;
     if (input.options?.flow === "verify_first" && planFilePath) {
       try {
-        const loaded = await loadAcceptanceCasesFromMarkdown({
+        const loaded = await loadAcceptanceCasesFromTestPlan({
           projectRoot,
           requestedPath: planFilePath,
         });
@@ -151,7 +157,7 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
       null;
 
     if (input.testCaseFilePath) {
-      const loaded = await loadAcceptanceCasesFromMarkdown({
+      const loaded = await loadAcceptanceCasesFromTestPlan({
         projectRoot,
         requestedPath: input.testCaseFilePath,
       });
@@ -169,7 +175,7 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
     }
 
     if (input.generatedTestCaseFilePath) {
-      const loaded = await loadAcceptanceCasesFromMarkdown({
+      const loaded = await loadAcceptanceCasesFromTestPlan({
         projectRoot,
         requestedPath: input.generatedTestCaseFilePath,
       });

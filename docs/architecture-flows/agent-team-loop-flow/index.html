@@ -290,7 +290,7 @@
           <div class="pill"><span class="dot d-green"></span>done<span class="st">全部验收 pass</span></div>
         </div>
         <p class="sub" style="margin-top:14px;text-align:center;padding:0">
-          <b style="color:var(--amber)">验收来源前置门：startRun 先解析 verification（planFilePath / testCaseFilePath）。没有可追溯测试案例文件时，run 停在 <code>intake</code>，向主 Agent 注入生成指令，等它写 <code>docs/testing/*-test-cases.md</code> 后回调 propose-split，才继续。</b><br />
+          <b style="color:var(--amber)">验收来源前置门：startRun 先解析 verification（planFilePath / testCaseFilePath）。没有可追溯测试案例文件时，run 停在 <code>intake</code>，向主 Agent 注入生成指令，等它写 <code>docs/testing/**/*.testplan.yaml</code> 后回调 propose-split，才继续。</b><br />
           <b style="color:var(--green)">默认（前端）：autoApproveSplit=true。一旦有可追溯用例，intake 后跳过 proposal 直达 executing，无需人工确认。</b><br />
           proposal / need_human 这道拆分人工门只在 <code style="color:var(--amber)">autoApproveSplit=false</code>（API 直连 / CLI / 测试）时才出现。<br />
           旁路：<code style="color:var(--amber)">executing</code> 中 loop 熔断或复验超时 → <b style="color:var(--amber)">need_human</b>（冻结 worker，保留现场）→ <code style="color:var(--cyan)">resume(note)</code> 清零后继续；用例生成指令注入失败或复验彻底耗尽 → <b style="color:var(--red)">failed</b>。
@@ -302,7 +302,7 @@
         <h2>2 · 起手流程：提交任务 → 定验收来源 → split → 建 pane</h2>
         <p class="sub">
           <b>前端默认路径</b>：<code>startFlow</code> 提交 <code>task</code> + 可选 <code>planFilePath</code> / <code>testCaseFilePath</code>，硬编码 <code style="color:var(--green)">autoApproveSplit: true</code>（见 <code>terminal-agent-team-panel.tsx:192</code>）。
-          <b style="color:var(--amber)">startRun 先解析验收来源</b>：验收用例必须可追溯到 <code>docs/testing/*-test-cases.md</code>，不再用泛化默认用例。
+          <b style="color:var(--amber)">startRun 先解析验收来源</b>：验收用例必须可追溯到 <code>docs/testing/**/*.testplan.yaml</code>，不再用泛化默认用例，也不兼容 Markdown 测试案例。
           人工 split gate 只在 <code style="color:var(--amber)">autoApproveSplit=false</code>（API 直连 / CLI / 测试）时才走。
         </p>
         <div class="flow">
@@ -318,12 +318,12 @@
             <div class="node n-amber">
               <div class="kicker">分支 A · 无测试案例文件（前端默认）</div>
               <div class="title"><span class="dot d-amber"></span>停在 intake，让主 Agent 生成用例</div>
-              <div class="desc"><code>acceptance=[]</code> → 注入 <code>buildMainTestCaseGenerationPrompt</code>，要求跑 <code>$toolkit:write-test-cases</code> 写 <code>docs/testing/*-test-cases.md</code>，再回调 <code>propose-split</code>（带 <code>generatedTestCaseFilePath</code>）。注入失败 → <b style="color:var(--red)">failed</b>。</div>
+              <div class="desc"><code>acceptance=[]</code> → 注入 <code>buildMainTestCaseGenerationPrompt</code>，要求跑 <code>$toolkit:write-test-cases</code> 写 <code>docs/testing/**/*.testplan.yaml</code>，再回调 <code>propose-split</code>（带 <code>generatedTestCaseFilePath</code>）。Agent Team 不兼容 Markdown 测试案例。注入失败 → <b style="color:var(--red)">failed</b>。</div>
             </div>
             <div class="node n-cyan">
               <div class="kicker">分支 B · 已给 testCaseFilePath</div>
-              <div class="title"><span class="dot d-cyan"></span>解析 markdown 用例 → 直接拆分</div>
-              <div class="desc"><code>loadAcceptanceCasesFromMarkdown</code> 按 <code>### CASE-000</code> 三级标题解析步骤/期望/失败判定，生成带 <code>sourceCaseId</code>/<code>sourceFilePath</code> 的用例。</div>
+              <div class="title"><span class="dot d-cyan"></span>解析 YAML 用例 → 直接拆分</div>
+              <div class="desc"><code>loadAcceptanceCasesFromTestPlan</code> 按最小 YAML schema 解析 <code>required: true</code> 的 case，生成带 <code>sourceCaseId</code>/<code>sourceFilePath</code> 的验收用例。</div>
             </div>
           </div>
           <div class="arrow">↓<small style="color:var(--amber)">仅当 autoApproveSplit=false 才有下面这道人工门（可选旁路）</small></div>
@@ -496,7 +496,7 @@
           <div class="card">
             <h3>四个设计取舍（数字化）</h3>
             <ul class="clean">
-              <li><b>验收用例必须可追溯</b>：只认 <code class="inl">docs/testing/*-test-cases.md</code> 里 <code class="inl">### CASE-000</code> 解析出的用例（带 sourceCaseId/sourceFilePath），没有就停在 intake 让主 Agent 先写，杜绝“泛化默认用例假装验收”。</li>
+              <li><b>验收用例必须可追溯</b>：只认 <code class="inl">docs/testing/**/*.testplan.yaml</code> 中符合最小 schema 且 <code class="inl">required: true</code> 的 case（带 sourceCaseId/sourceFilePath），没有就停在 intake 让主 Agent 先写，杜绝“泛化默认用例假装验收”。</li>
               <li><b>debounce=2</b>：一次偶发 fail 不反弹 code，避免抖动打断改动。</li>
               <li><b>熔断=3 轮无进展</b>：只有 <i>pass 数上升</i> 或 <i>有 diff</i> 才算进展，防“改了但没效果”的死循环。</li>
               <li><b>串行 code→review→verify + 局部重跑</b>：保证每次验收针对最新代码；behavior_verify 默认只重跑失败/未执行/依赖 case，全量重跑要在 outbox 写明原因。</li>

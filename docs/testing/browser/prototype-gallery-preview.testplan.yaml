@@ -1,0 +1,123 @@
+version: 1
+name: 多项目原型轮巡库回归
+description: >
+  验证 Terminal Prototypes 工具能够按已登记项目发现原型、隔离同 slug 内容和票据，
+  正确提供资源 MIME 与 iframe sandbox，并在异常、竞态和鉴权场景保持可观察行为。
+
+cases:
+  - id: PGP-001
+    name: 已登记项目与 gallery 项目一一对应
+    required: true
+    description: >
+      验证 gallery 返回所有已登记 Terminal Project，并按每个项目真实路径状态独立报告
+      available、路径缺失、原型根目录缺失或不可用状态。
+    preconditions:
+      - Runweave 已登记至少三个不同状态的项目，且已取得有效 access token。
+    steps:
+      - 请求 Terminal Project 列表和 `GET /api/terminal/prototype-gallery`，记录项目 id、名称、path 和 projects。
+      - 按 project id 对照两份结果，并检查 path 为空、无 `docs/prototypes`、不可读或越界以及正常目录的状态。
+      - 确认 gallery 数量、id、名称、path 与顺序一致；单个项目异常不影响其他项目返回。
+
+  - id: PGP-002
+    name: 原型发现与入口元数据符合磁盘事实
+    required: true
+    description: >
+      验证原型仅来自 `docs/prototypes` 一级目录，标题、入口和根文件列表遵循真实磁盘内容，
+      且不会通过 symlink 或深层目录逃逸。
+    preconditions:
+      - 至少一个项目状态为 available，且其 `docs/prototypes` 可读。
+    steps:
+      - 读取 `docs/prototypes` 的一级目录并排序，再对照 gallery 返回的 prototype slug、title、entry 和 files。
+      - 分别检查含根部 `index.html`、仅 README、两者均无的目录，并加入 symlink 逃逸尝试。
+      - 确认一级目录、顺序和 slug 一致；entry 仅对普通根 `index.html` 有效；标题依次回退 HTML title、README H1、slug，逃逸或深层目录不被列入。
+
+  - id: PGP-003
+    name: Terminal 入口展示分组轮巡界面
+    required: true
+    description: >
+      验证真实 Terminal sidecar 中的 Prototypes 工具显示项目分组、原型空态和右侧预览，
+      且不会携带 Preview 专属源码编辑动作。
+    preconditions:
+      - frontend 与 backend 已启动，真实 Chromium 可登录并访问 Terminal。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 登录 Terminal，打开顶部 `...` 菜单并选择 Prototypes。
+      - 读取 sidecar 工具栏、项目分组和右侧内容区 DOM，并切换 Preview、Browser、Prototypes。
+      - 确认 Prototypes 被选中，所有已登记项目以分组或明确空态出现；右侧显示当前原型元信息与 iframe 或无入口空态，且无 Save、Refresh preview、Copy path 等 Preview 专属动作。
+
+  - id: PGP-004
+    name: 跨项目同 slug 内容和选择状态隔离
+    required: true
+    description: >
+      验证两个项目拥有相同 slug 时，点击项目切换会同时切换 iframe 内容、URL 与选中状态，
+      不会复用另一个项目的 HTML、脚本或 mock 数据。
+    preconditions:
+      - 两个项目包含可通过标题或 DOM 区分的同 slug 原型，另有一个不同 slug 原型。
+    steps:
+      - 在项目 A 点击共同 slug，记录选中项、右侧路径、iframe URL、标题和可区分 DOM 文本。
+      - 在项目 B 点击同一 slug，再点击第三个项目的另一个原型。
+      - 确认每次仅当前项有 `aria-current="page"`，iframe URL 同时含当前 project id 和 slug，项目 B 不复用 A 的内容或选中状态。
+
+  - id: PGP-005
+    name: 相对资源 MIME 和 iframe sandbox 正确
+    required: true
+    description: >
+      验证原型入口及本地相对 HTML、JS、JSON、图片资源可访问且使用正确 MIME、安全响应头，
+      iframe 不获得与父页面同源的权限。
+    preconditions:
+      - 已选择包含 HTML、JavaScript、JSON 和图片资源的原型，并取得有效预览票据。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 等待 iframe 主文档加载并读取 DOM，再请求入口、JS、JSON、图片和 HEAD 资源。
+      - 记录状态、Content-Type、Content-Length、安全响应头，以及 iframe 的 sandbox 和 referrerpolicy 属性。
+      - 确认资源返回正确 MIME、HEAD 无 body，响应包含 no-store、跨源资源与 nosniff 保护；iframe 仅允许 scripts、不含 allow-same-origin，且采用 no-referrer。
+
+  - id: PGP-006
+    name: 票据和文件路径不能跨项目或跨原型
+    required: true
+    description: >
+      验证原型预览票据绑定 project 和 slug，静态路由拒绝项目或原型替换、路径逃逸和写入方法。
+    preconditions:
+      - 项目 A、B 均含相同 slug 原型，且已为项目 A 签发预览票据。
+    steps:
+      - 使用 A 的票据访问 A 入口，再分别替换 URL 中的 project id 或 slug。
+      - 请求不存在文件、编码后的父目录路径，并向有效资源发送 POST。
+      - 确认原始资源成功；跨项目或跨原型为 401；不存在与逃逸路径为 4xx 且不返回根目录外内容；POST 为 405 且 Allow 为 `GET, HEAD`。
+
+  - id: PGP-007
+    name: 缺入口和异常项目呈现明确空态
+    required: true
+    description: >
+      验证路径缺失、原型目录缺失或不可用、无原型和无 index.html 均显示可区分空态，
+      不会阻断正常项目浏览。
+    preconditions:
+      - 至少存在一种项目异常状态；如可用，另准备一个没有 `index.html` 的原型。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 查看异常项目分组，并点击无入口原型。
+      - 再选择正常项目的可运行原型。
+      - 确认各异常显示对应的可理解状态；无入口项显示 `No index.html entry` 和一级文件、不创建 iframe 或申请可用票据；正常项目仍可预览。
+
+  - id: PGP-008
+    name: 选择持久化和请求竞态收敛
+    required: true
+    description: >
+      验证选择以 `{projectId, slug}` 持久化，刷新与重新加载保持来源一致，快速点击时较早票据
+      或请求不能覆盖最后一次选择。
+    preconditions:
+      - 至少两个项目各有一个可运行原型。
+    steps:
+      - 选择非默认项目原型，切换 Preview 后回到 Prototypes，关闭 sidecar 后重新打开。
+      - 刷新原型库、重新加载当前原型，并快速连续点击两个不同原型等待请求完成。
+      - 确认重开后恢复同一 `{projectId, slug}`；刷新保留有效选择；重新加载仅替换当前来源的新票据 URL；最终只展示最后一次点击。
+
+  - id: PGP-009
+    name: 鉴权和质量门禁保护原型轮巡
+    required: true
+    description: >
+      验证 gallery 与票据 API 拒绝无效身份，相关构建质量门禁通过，并以干净浏览器会话完成核心
+      轮巡路径而不产生本功能导致的 console error。
+    preconditions:
+      - 可分别构造无 access token、无效 token 和有效 token 请求。
+      - 相关 shared、backend、frontend 构建和 lint 命令可执行。
+    steps:
+      - 分别以无 token、无效 token、有效 token 调用 gallery 与 ticket API。
+      - 执行 shared、backend、frontend 的 typecheck、lint、`pnpm build` 与 `git diff --check`，再以新的 `$toolkit:playwright-cli` session 重跑项目分组、跨项目选择和资源核心路径。
+      - 确认无效身份不能枚举项目路径或签发票据，质量门禁成功，干净浏览器无本功能导致的 console error，iframe 内容与当前选择来源一致。
