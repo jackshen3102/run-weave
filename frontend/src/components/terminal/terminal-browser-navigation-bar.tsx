@@ -38,11 +38,11 @@ interface BrowserNavigationControls {
 }
 
 interface BrowserAnnotationControls {
-  active: boolean;
   count: number;
-  submitting: boolean;
+  panelOpen: boolean;
+  selecting: boolean;
+  onOpenPanel: () => void;
   onToggle: () => void;
-  onSubmit: () => void;
 }
 
 interface BrowserProxyControls {
@@ -93,10 +93,10 @@ export function TerminalBrowserNavigationBar({
     onSubmit: onSubmitAddress,
   } = address;
   const {
-    active: annotationActive,
     count: annotationCount,
-    submitting: annotationSubmitting,
-    onSubmit: onSubmitAnnotations,
+    panelOpen: annotationPanelOpen,
+    selecting: annotationSelecting,
+    onOpenPanel: onOpenAnnotationPanel,
     onToggle: onToggleAnnotation,
   } = annotation;
   const { onGo, onReload, onStop } = navigation;
@@ -139,9 +139,6 @@ export function TerminalBrowserNavigationBar({
       switch (action) {
         case "toggle-annotation":
           onToggleAnnotation();
-          break;
-        case "submit-annotations":
-          onSubmitAnnotations();
           break;
         case "open-headers":
           onHeaderRulesPanelOpenChange(true);
@@ -193,9 +190,7 @@ export function TerminalBrowserNavigationBar({
         x: rect.left,
         y: rect.bottom,
         showAnnotation: !hasAnnotations,
-        annotationActive,
-        annotationSubmitEnabled:
-          annotationActive && annotationCount > 0 && !annotationSubmitting,
+        annotationActive: annotationSelecting,
         showHeaders: !hasHeaderRules,
         deviceEnabled: !deviceSwitching,
         devtoolsEnabled:
@@ -215,17 +210,25 @@ export function TerminalBrowserNavigationBar({
       variant="ghost"
       className={[
         "relative h-7 w-7 rounded-md px-0",
-        annotationActive
+        annotationPanelOpen || annotationSelecting
           ? "bg-sky-500/15 text-sky-300 hover:bg-sky-500/20 hover:text-sky-200"
           : "",
       ].join(" ")}
       disabled={!isElectron}
-      onClick={onToggleAnnotation}
+      onClick={hasAnnotations ? onOpenAnnotationPanel : onToggleAnnotation}
       aria-label={
-        annotationActive ? "Stop browser comments" : "Add browser comments"
+        hasAnnotations
+          ? "Open browser comments"
+          : annotationSelecting
+            ? "Pause browser comments"
+            : "Add browser comments"
       }
       title={
-        annotationActive ? "Stop browser comments" : "Add browser comments"
+        hasAnnotations
+          ? "Open browser comments"
+          : annotationSelecting
+            ? "Pause browser comments"
+            : "Add browser comments"
       }
     >
       <MessageSquarePlus className="h-4 w-4" />

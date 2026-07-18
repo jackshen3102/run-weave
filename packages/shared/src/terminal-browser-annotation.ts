@@ -41,6 +41,7 @@ export interface TerminalBrowserAnnotationScreenshot {
 
 export interface TerminalBrowserAnnotationState {
   active: boolean;
+  selecting: boolean;
   annotations: TerminalBrowserAnnotationDraft[];
   pendingSubmitRequestId?: string | null;
 }

@@ -10,6 +10,7 @@ import { buildBrowserAnnotationPrompt } from "./terminal-browser-annotation-prom
 
 const EMPTY_ANNOTATION_STATE: TerminalBrowserAnnotationState = {
   active: false,
+  selecting: false,
   annotations: [],
 };
 
@@ -39,6 +40,7 @@ export function useTerminalBrowserAnnotations({
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const setAnnotationTabId = useMemoizedFn((tabId: string | null): void => {
     annotationTabIdRef.current = tabId;
@@ -46,6 +48,9 @@ export function useTerminalBrowserAnnotations({
   });
 
   const submitTab = useMemoizedFn(async (tabId: string): Promise<void> => {
+    if (submittingRef.current) {
+      return;
+    }
     setSubmitting(true);
     submittingRef.current = true;
     setError(null);
@@ -96,17 +101,33 @@ export function useTerminalBrowserAnnotations({
       const prompt = buildBrowserAnnotationPrompt(submission, {
         screenshotPath,
       });
-      setState(EMPTY_ANNOTATION_STATE);
-      setAnnotationTabId(null);
       await sendTerminalInput(apiBase, token, terminalSessionId, {
         data: prompt,
         mode: "prompt_paste",
         quickInputSource: "web_browser_annotation",
       });
+      const next =
+        await window.electronAPI?.terminalBrowserAnnotationStop?.(tabId);
+      setState(next ?? EMPTY_ANNOTATION_STATE);
+      setAnnotationTabId(null);
+      setPanelOpen(false);
       if (submitWarning) {
         setError(submitWarning);
       }
     } catch (caught) {
+      try {
+        const next =
+          await window.electronAPI?.terminalBrowserAnnotationSetSubmitting?.(
+            tabId,
+            false,
+          );
+        if (next) {
+          setState(next);
+        }
+      } catch {
+        // Preserve the original submission error.
+      }
+      setPanelOpen(true);
       setError(
         caught instanceof Error
           ? caught.message
@@ -130,6 +151,7 @@ export function useTerminalBrowserAnnotations({
         await window.electronAPI?.terminalBrowserAnnotationStop?.(tabId);
       setState(next ?? EMPTY_ANNOTATION_STATE);
       setAnnotationTabId(null);
+      setPanelOpen(false);
       handledSubmitRequestRef.current = null;
     } catch (caught) {
       setError(
@@ -144,8 +166,18 @@ export function useTerminalBrowserAnnotations({
     if (!isElectron || !activeTabId) {
       return;
     }
+    if (state.annotations.length > 0) {
+      setPanelOpen((current) => !current);
+      return;
+    }
     if (state.active) {
-      await stop();
+      const next =
+        await window.electronAPI?.terminalBrowserAnnotationSetSelecting?.(
+          activeTabId,
+          !state.selecting,
+        );
+      setState(next ?? { ...state, selecting: !state.selecting });
+      setPanelOpen(true);
       return;
     }
     setError(null);
@@ -154,7 +186,8 @@ export function useTerminalBrowserAnnotations({
       const next =
         await window.electronAPI?.terminalBrowserAnnotationStart?.(activeTabId);
       setAnnotationTabId(activeTabId);
-      setState(next ?? { active: true, annotations: [] });
+      setState(next ?? { active: true, selecting: true, annotations: [] });
+      setPanelOpen(true);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -171,12 +204,101 @@ export function useTerminalBrowserAnnotations({
     }
   });
 
+  const setSelecting = useMemoizedFn(
+    async (selecting: boolean): Promise<void> => {
+      const tabId = annotationTabId ?? activeTabId;
+      if (!isElectron || !tabId || !state.active || submittingRef.current) {
+        return;
+      }
+      setError(null);
+      try {
+        const next =
+          await window.electronAPI?.terminalBrowserAnnotationSetSelecting?.(
+            tabId,
+            selecting,
+          );
+        setState(next ?? { ...state, selecting });
+        setPanelOpen(true);
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Failed to update browser comment mode",
+        );
+      }
+    },
+  );
+
+  const closePanel = useMemoizedFn(async (): Promise<void> => {
+    if (state.annotations.length === 0) {
+      await stop();
+      return;
+    }
+    if (state.selecting) {
+      await setSelecting(false);
+    }
+    setPanelOpen(false);
+  });
+
+  const openPanel = useMemoizedFn((): void => {
+    setPanelOpen(true);
+  });
+
+  const deleteAnnotation = useMemoizedFn(
+    async (annotationId: string): Promise<void> => {
+      const tabId = annotationTabId ?? activeTabId;
+      if (!isElectron || !tabId || submittingRef.current) {
+        return;
+      }
+      setError(null);
+      try {
+        const next =
+          await window.electronAPI?.terminalBrowserAnnotationDelete?.(
+            tabId,
+            annotationId,
+          );
+        setState(next ?? state);
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Failed to delete browser comment",
+        );
+      }
+    },
+  );
+
+  const focusAnnotation = useMemoizedFn(
+    async (annotationId: string): Promise<void> => {
+      const tabId = annotationTabId ?? activeTabId;
+      if (!isElectron || !tabId || submittingRef.current) {
+        return;
+      }
+      setError(null);
+      try {
+        const next = await window.electronAPI?.terminalBrowserAnnotationFocus?.(
+          tabId,
+          annotationId,
+        );
+        setState(next ?? state);
+        setPanelOpen(true);
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Failed to focus browser comment",
+        );
+      }
+    },
+  );
+
   const handleTabClosed = useMemoizedFn((tabId: string): void => {
     if (annotationTabIdRef.current !== tabId) {
       return;
     }
     setAnnotationTabId(null);
     setState(EMPTY_ANNOTATION_STATE);
+    setPanelOpen(false);
   });
 
   useEffect(() => {
@@ -188,6 +310,9 @@ export function useTerminalBrowserAnnotations({
         if (annotationTabIdRef.current === tabId || next.active) {
           setAnnotationTabId(next.active ? tabId : null);
           setState(next);
+          if (!next.active) {
+            setPanelOpen(false);
+          }
         }
       },
     );
@@ -210,6 +335,7 @@ export function useTerminalBrowserAnnotations({
         if (!cancelled) {
           setState(next ?? EMPTY_ANNOTATION_STATE);
           setAnnotationTabId(null);
+          setPanelOpen(false);
           handledSubmitRequestRef.current = null;
         }
       })
@@ -246,6 +372,9 @@ export function useTerminalBrowserAnnotations({
             return;
           }
           setState(next);
+          if (next.annotations.length > 0) {
+            setPanelOpen(true);
+          }
           if (!next.active) {
             setAnnotationTabId(null);
             return;
@@ -283,9 +412,16 @@ export function useTerminalBrowserAnnotations({
   ]);
 
   return {
+    closePanel,
+    deleteAnnotation,
     error,
+    focusAnnotation,
     handleTabClosed,
+    openPanel,
+    panelOpen,
+    setSelecting,
     state,
+    stop,
     submit,
     submitting,
     toggle,

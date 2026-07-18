@@ -7,7 +7,7 @@ export function buildAnnotationRuntimeScript(): string {
   return `(() => {
     const globalName = ${JSON.stringify(TERMINAL_BROWSER_ANNOTATION_RUNTIME_GLOBAL)};
     if (window[globalName]?.active) {
-      return window[globalName].list();
+      return window[globalName].setSelecting(true);
     }
 
     const cssEscape = (value) => {
@@ -19,6 +19,10 @@ export function buildAnnotationRuntimeScript(): string {
     const trimText = (value, max = 120) => {
       const text = String(value ?? "").replace(/\\s+/g, " ").trim();
       return text.length > max ? text.slice(0, max - 1) + "..." : text;
+    };
+    const normalizeComment = (value, max = 4000) => {
+      const text = String(value ?? "").replace(/\\r\\n?/g, "\\n").trim();
+      return text.length > max ? text.slice(0, max) : text;
     };
     const elementLabel = (element) => {
       const aria = element.getAttribute("aria-label");
@@ -134,8 +138,8 @@ export function buildAnnotationRuntimeScript(): string {
     editor.style.display = "none";
     editor.innerHTML = \`
       <button type="button" class="rw-annotation-tools" aria-label="Comment options">⌘</button>
-      <input class="rw-annotation-input" aria-label="Browser annotation comment" placeholder="添加评论..." />
-      <button type="button" class="rw-annotation-send" aria-label="发送评论">↑</button>
+      <textarea class="rw-annotation-input" aria-label="Browser annotation comment" placeholder="描述你希望 Agent 修改什么..."></textarea>
+      <button type="button" class="rw-annotation-send" aria-label="添加评论">添加</button>
       <div class="rw-annotation-edit-actions">
         <button type="button" class="rw-annotation-edit-delete" aria-label="删除评论">⌫</button>
         <div class="rw-annotation-edit-buttons">
@@ -167,6 +171,8 @@ export function buildAnnotationRuntimeScript(): string {
     const menuAddButton = menu.querySelector(".rw-annotation-menu-add");
     const annotations = [];
     let pendingSubmitRequestId = null;
+    let selecting = true;
+    let submitting = false;
     let selectedElement = null;
     let selectedTarget = null;
     let editingAnnotationId = null;
@@ -257,7 +263,7 @@ export function buildAnnotationRuntimeScript(): string {
       const anchor = point ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
       const left = clampEditorLeft(anchor.x - 36, editorWidth);
       const below = anchor.y + 12;
-      const top = below + editorHeight < window.innerHeight
+      const top = below + editorHeight <= window.innerHeight - 12
         ? below
         : Math.max(12, anchor.y - editorHeight - 12);
       editor.style.left = Math.round(left) + "px";
@@ -272,10 +278,10 @@ export function buildAnnotationRuntimeScript(): string {
       const editorWidth = Math.min(420, Math.max(280, window.innerWidth - 24));
       editor.style.display = "flex";
       editor.style.width = Math.round(editorWidth) + "px";
-      placeEditorNearPoint(point, editorWidth, 56);
       input.value = "";
       sendButton.disabled = true;
       menu.hidden = true;
+      placeEditorNearPoint(point, editorWidth, editor.getBoundingClientRect().height);
       input.focus();
     };
     const showEditEditor = (annotation) => {
@@ -324,6 +330,9 @@ export function buildAnnotationRuntimeScript(): string {
         marker.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
+          if (submitting) {
+            return;
+          }
           showEditEditor(annotation);
         });
         lockLayer.appendChild(marker);
@@ -331,6 +340,7 @@ export function buildAnnotationRuntimeScript(): string {
     };
     const list = () => ({
       active: true,
+      selecting,
       annotations: annotations.map((annotation) => ({
         id: annotation.id,
         index: annotation.index,
@@ -341,6 +351,10 @@ export function buildAnnotationRuntimeScript(): string {
     });
 
     const onPointerMove = (event) => {
+      if (submitting || !selecting) {
+        hoverBox.style.display = "none";
+        return;
+      }
       if (isEditorEvent(event)) {
         return;
       }
@@ -352,6 +366,9 @@ export function buildAnnotationRuntimeScript(): string {
       placeBox(hoverBox, element.getBoundingClientRect());
     };
     const onClick = (event) => {
+      if (submitting || !selecting) {
+        return;
+      }
       if (isEditorEvent(event)) {
         return;
       }
@@ -371,7 +388,10 @@ export function buildAnnotationRuntimeScript(): string {
       }
     };
     const save = (submitNow = false) => {
-      const comment = trimText(input.value, 4000);
+      if (submitting) {
+        return list();
+      }
+      const comment = normalizeComment(input.value);
       if (!comment || !selectedElement || !selectedTarget) {
         if (editingAnnotationId) {
           const annotation = annotations.find((item) => item.id === editingAnnotationId);
@@ -399,6 +419,9 @@ export function buildAnnotationRuntimeScript(): string {
       return list();
     };
     const remove = (id) => {
+      if (submitting) {
+        return list();
+      }
       const index = annotations.findIndex((annotation) => annotation.id === id);
       if (index < 0) {
         return list();
@@ -411,7 +434,10 @@ export function buildAnnotationRuntimeScript(): string {
       return list();
     };
     const saveEdit = () => {
-      const comment = trimText(input.value, 4000);
+      if (submitting) {
+        return list();
+      }
+      const comment = normalizeComment(input.value);
       const annotation = annotations.find((item) => item.id === editingAnnotationId);
       if (!annotation || !comment) {
         return list();
@@ -422,15 +448,48 @@ export function buildAnnotationRuntimeScript(): string {
       return list();
     };
     const deleteEdit = () => {
-      if (!editingAnnotationId) {
+      if (submitting || !editingAnnotationId) {
         return list();
       }
       const state = remove(editingAnnotationId);
       hideEditor();
       return state;
     };
+    const focus = (id) => {
+      if (submitting) {
+        return list();
+      }
+      const annotation = annotations.find((item) => item.id === id);
+      if (!annotation) {
+        return list();
+      }
+      selecting = false;
+      hoverBox.style.display = "none";
+      showEditEditor(annotation);
+      return list();
+    };
     const consumeSubmitRequest = () => {
       pendingSubmitRequestId = null;
+      return list();
+    };
+    const setSelecting = (nextSelecting) => {
+      if (submitting) {
+        return list();
+      }
+      selecting = nextSelecting === true;
+      if (!selecting) {
+        hoverBox.style.display = "none";
+        hideEditor();
+      }
+      return list();
+    };
+    const setSubmitting = (nextSubmitting) => {
+      submitting = nextSubmitting === true;
+      if (submitting) {
+        selecting = false;
+        hoverBox.style.display = "none";
+        hideEditor();
+      }
       return list();
     };
     const stop = () => {
@@ -439,7 +498,7 @@ export function buildAnnotationRuntimeScript(): string {
       document.removeEventListener("keydown", onKeyDown, true);
       root.remove();
       delete window[globalName];
-      return { active: false, annotations: [] };
+      return { active: false, selecting: false, annotations: [] };
     };
 
     toolsButton.addEventListener("click", (event) => {
@@ -451,10 +510,10 @@ export function buildAnnotationRuntimeScript(): string {
       toggleMenu();
     });
     sendButton.addEventListener("click", () => {
-      save(true);
+      save(false);
     });
     menuSendButton.addEventListener("click", () => {
-      save(true);
+      save(false);
     });
     menuAddButton.addEventListener("click", () => {
       save(false);
@@ -463,7 +522,7 @@ export function buildAnnotationRuntimeScript(): string {
     editSaveButton.addEventListener("click", saveEdit);
     deleteButton.addEventListener("click", deleteEdit);
     input.addEventListener("input", () => {
-      sendButton.disabled = trimText(input.value, 4000).length === 0;
+      sendButton.disabled = normalizeComment(input.value).length === 0;
     });
     input.addEventListener("keydown", (event) => {
       event.stopPropagation();
@@ -481,14 +540,6 @@ export function buildAnnotationRuntimeScript(): string {
         }
         return;
       }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        if (editingAnnotationId) {
-          saveEdit();
-        } else {
-          save(true);
-        }
-      }
     });
     document.addEventListener("pointermove", onPointerMove, true);
     document.addEventListener("click", onClick, true);
@@ -498,9 +549,12 @@ export function buildAnnotationRuntimeScript(): string {
       active: true,
       list,
       remove,
+      focus,
       consumeSubmitRequest,
+      setSelecting,
+      setSubmitting,
       stop,
-      submit: list,
+      submit: () => setSubmitting(true),
     };
     return list();
   })()`;

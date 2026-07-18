@@ -1,10 +1,9 @@
 import { useMemoizedFn } from "ahooks";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { type TerminalBrowserDevicePresetId } from "@runweave/shared/terminal-browser-device";
-import { aiDiagnosticLog } from "../../features/diagnostic-logs/recorder";
 import { normalizeTerminalBrowserUrl } from "../../features/terminal/browser-url";
 import { useTerminalPreviewStore } from "../../features/terminal/preview-store";
 import { useTerminalBrowserBounds } from "./use-terminal-browser-bounds";
+import { useTerminalBrowserDeviceSelection } from "./use-terminal-browser-device-selection";
 import { useTerminalBrowserHeaderRules } from "./use-terminal-browser-header-rules";
 import { useTerminalBrowserAnnotations } from "./use-terminal-browser-annotations";
 import { useTerminalBrowserProxy } from "./use-terminal-browser-proxy";
@@ -67,7 +66,6 @@ export function useTerminalBrowserController({
     isElectron,
   );
   const [electronTabsSynced, setElectronTabsSynced] = useState(!isElectron);
-  const [deviceSwitching, setDeviceSwitching] = useState(false);
   const [headerRulesPanelOpen, setHeaderRulesPanelOpen] = useState(false);
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   const editingAddressTabIdRef = useRef<string | null>(null);
@@ -83,10 +81,23 @@ export function useTerminalBrowserController({
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
     [activeTabId, tabs],
   );
+  const { deviceSwitching, selectDevicePreset } =
+    useTerminalBrowserDeviceSelection({
+      activeTab,
+      isElectron,
+      updateBrowserTab,
+    });
   const {
+    closePanel: closeAnnotationPanel,
+    deleteAnnotation,
     error: annotationError,
+    focusAnnotation,
     handleTabClosed: handleAnnotationTabClosed,
+    openPanel: openAnnotationPanelState,
+    panelOpen: annotationPanelOpen,
+    setSelecting: setAnnotationSelecting,
     state: annotationState,
+    stop: discardAnnotations,
     submit: submitAnnotations,
     submitting: annotationSubmitting,
     toggle: toggleAnnotations,
@@ -109,6 +120,7 @@ export function useTerminalBrowserController({
   } = useTerminalBrowserBounds({
     active,
     activeTabId,
+    annotationPanelOpen,
     browserViewRef,
     devicePanelOpen,
     headerRulesPanelOpen,
@@ -250,7 +262,7 @@ export function useTerminalBrowserController({
 
   useEffect(() => {
     syncBounds(true);
-  }, [devicePanelOpen, headerRulesPanelOpen, syncBounds]);
+  }, [annotationPanelOpen, devicePanelOpen, headerRulesPanelOpen, syncBounds]);
 
   useEffect(() => {
     syncBounds(true);
@@ -418,11 +430,15 @@ export function useTerminalBrowserController({
   );
 
   const toggleAnnotation = useMemoizedFn(async (): Promise<void> => {
-    if (!annotationState.active) {
-      setHeaderRulesPanelOpen(false);
-      setDevicePanelOpen(false);
-    }
+    setHeaderRulesPanelOpen(false);
+    setDevicePanelOpen(false);
     await toggleAnnotations();
+  });
+
+  const openAnnotationPanel = useMemoizedFn((): void => {
+    setHeaderRulesPanelOpen(false);
+    setDevicePanelOpen(false);
+    openAnnotationPanelState();
   });
 
   if (!activeTab) {
@@ -490,6 +506,7 @@ export function useTerminalBrowserController({
     setHeaderRulesPanelOpen(open);
     if (open) {
       setDevicePanelOpen(false);
+      void closeAnnotationPanel();
     }
   };
 
@@ -497,49 +514,7 @@ export function useTerminalBrowserController({
     setDevicePanelOpen(open);
     if (open) {
       setHeaderRulesPanelOpen(false);
-    }
-  };
-
-  const selectDevicePreset = async (
-    presetId: TerminalBrowserDevicePresetId,
-  ): Promise<void> => {
-    if (!isElectron || deviceSwitching) {
-      return;
-    }
-    setDeviceSwitching(true);
-    updateBrowserTab(activeTab.id, { error: undefined });
-    aiDiagnosticLog("terminal browser device preset selected", {
-      tabId: activeTab.id,
-      previousPresetId: activeTab.deviceState.presetId,
-      nextPresetId: presetId,
-      previousLogicalWidth: activeTab.deviceState.viewport?.width ?? null,
-      previousLogicalHeight: activeTab.deviceState.viewport?.height ?? null,
-    });
-    try {
-      const deviceState =
-        await window.electronAPI?.terminalBrowserSetDeviceState?.(
-          activeTab.id,
-          presetId,
-        );
-      aiDiagnosticLog("terminal browser device preset applied", {
-        tabId: activeTab.id,
-        nextPresetId: presetId,
-        returnedPresetId: deviceState?.presetId ?? null,
-        returnedLogicalWidth: deviceState?.viewport?.width ?? null,
-        returnedLogicalHeight: deviceState?.viewport?.height ?? null,
-      });
-      if (deviceState) {
-        updateBrowserTab(activeTab.id, { deviceState, error: undefined });
-      }
-    } catch (error) {
-      updateBrowserTab(activeTab.id, {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to switch device mode",
-      });
-    } finally {
-      setDeviceSwitching(false);
+      void closeAnnotationPanel();
     }
   };
 
@@ -556,12 +531,15 @@ export function useTerminalBrowserController({
 
   return {
     activeTab,
+    annotationPanelOpen,
     annotationError,
     annotationState,
     annotationSubmitting,
     browserViewRef,
     closeTab,
+    closeAnnotationPanel,
     createBrowserTab,
+    deleteAnnotation,
     devicePanelOpen,
     deviceSwitching,
     go,
@@ -574,6 +552,7 @@ export function useTerminalBrowserController({
     isElectron,
     mobileDisabledReason,
     openUrlExternally,
+    openAnnotationPanel,
     proxyError,
     proxyState,
     proxySwitching,
@@ -583,15 +562,18 @@ export function useTerminalBrowserController({
     selectDevicePreset,
     setDisplayScale,
     setActiveBrowserTab,
+    setAnnotationSelecting,
     setDevicePanelOpenState,
     setHeaderPanelOpen,
     stop,
+    discardAnnotations,
     submitAddress,
     submitAnnotations,
     surfaceContainerRef,
     tabs,
     toggleProxy,
     toggleAnnotation,
+    focusAnnotation,
     updateBrowserTab,
   };
 }

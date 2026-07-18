@@ -44,16 +44,16 @@ export const TERMINAL_BROWSER_ANNOTATION_STYLE = `
 .rw-annotation-editor {
   position: fixed;
   width: min(420px, calc(100vw - 24px));
-  min-height: 52px;
+  min-height: 104px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
+  border-radius: 18px;
   background: #2d2d2d;
   color: #e2e8f0;
   padding: 8px 8px 8px 12px;
   pointer-events: auto;
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
 }
 .rw-annotation-tools {
@@ -63,7 +63,7 @@ export const TERMINAL_BROWSER_ANNOTATION_STYLE = `
   border-radius: 999px;
   background: transparent;
   color: #b8b8b8;
-  display: inline-flex;
+  display: none;
   align-items: center;
   justify-content: center;
   cursor: pointer;
@@ -73,17 +73,18 @@ export const TERMINAL_BROWSER_ANNOTATION_STYLE = `
 .rw-annotation-input {
   flex: 1;
   min-width: 0;
-  height: 32px;
+  min-height: 72px;
   border: 0;
   background: transparent;
   color: #f8fafc;
-  padding: 0;
-  font: 16px/1.3 ui-sans-serif, system-ui, sans-serif;
+  padding: 5px 0;
+  resize: vertical;
+  font: 15px/1.4 ui-sans-serif, system-ui, sans-serif;
   outline: none;
 }
 .rw-annotation-input::placeholder { color: rgba(248, 250, 252, 0.48); }
 .rw-annotation-send {
-  width: 36px;
+  width: 48px;
   height: 36px;
   border: 0;
   border-radius: 999px;
@@ -92,7 +93,8 @@ export const TERMINAL_BROWSER_ANNOTATION_STYLE = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font: 22px/1 ui-sans-serif, system-ui, sans-serif;
+  font: 12px/1 ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
   cursor: pointer;
 }
 .rw-annotation-send:disabled { opacity: 0.45; cursor: default; }
@@ -140,7 +142,7 @@ export const TERMINAL_BROWSER_ANNOTATION_STYLE = `
   align-items: flex-start;
   padding: 22px 22px 18px 22px;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(44px, 1fr) auto;
   gap: 12px 16px;
 }
@@ -152,12 +154,13 @@ export const TERMINAL_BROWSER_ANNOTATION_STYLE = `
   margin-top: 3px;
 }
 .rw-annotation-editor.rw-annotation-editor-editing .rw-annotation-input {
+  grid-column: 1;
   height: auto;
   min-height: 44px;
   align-self: start;
 }
 .rw-annotation-editor.rw-annotation-editor-editing .rw-annotation-edit-actions {
-  grid-column: 1 / 3;
+  grid-column: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;

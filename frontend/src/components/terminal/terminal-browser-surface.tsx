@@ -5,7 +5,9 @@ import {
   type TerminalBrowserDeviceState,
 } from "@runweave/shared/terminal-browser-device";
 import { type TerminalBrowserHeaderRule } from "@runweave/shared/terminal-browser-headers";
+import { type TerminalBrowserAnnotationState } from "@runweave/shared/terminal-browser-annotation";
 import { aiDiagnosticLog } from "../../features/diagnostic-logs/recorder";
+import { TerminalBrowserAnnotationsPanel } from "./terminal-browser-annotations-panel";
 import { TerminalBrowserDevicePanel } from "./terminal-browser-device-panel";
 import { TerminalBrowserHeadersPanel } from "./terminal-browser-headers-panel";
 import { Button } from "../ui/button";
@@ -34,6 +36,19 @@ interface BrowserHeaderPanel {
   onSave: (rules: TerminalBrowserHeaderRule[]) => Promise<boolean>;
 }
 
+interface BrowserAnnotationPanel {
+  error: string | null;
+  open: boolean;
+  state: TerminalBrowserAnnotationState;
+  submitting: boolean;
+  onClose: () => void;
+  onDelete: (annotationId: string) => void;
+  onDiscard: () => void;
+  onFocus: (annotationId: string) => void;
+  onSelectingChange: (selecting: boolean) => void;
+  onSubmit: () => void;
+}
+
 interface BrowserDevicePanel {
   open: boolean;
   state: TerminalBrowserDeviceState;
@@ -49,6 +64,7 @@ interface BrowserSurfaceEnvironment {
 }
 
 interface TerminalBrowserSurfaceProps {
+  annotations: BrowserAnnotationPanel;
   device: BrowserDevicePanel;
   environment: BrowserSurfaceEnvironment;
   headers: BrowserHeaderPanel;
@@ -56,6 +72,7 @@ interface TerminalBrowserSurfaceProps {
 }
 
 export function TerminalBrowserSurface({
+  annotations,
   device,
   environment,
   headers,
@@ -81,7 +98,8 @@ export function TerminalBrowserSurface({
   } = headers;
   const [mobileDisplaySize, setMobileDisplaySize] =
     useState<MobileDisplaySize | null>(null);
-  const sidePanelOpen = headerRulesPanelOpen || devicePanelOpen;
+  const sidePanelOpen =
+    annotations.open || headerRulesPanelOpen || devicePanelOpen;
   const lastMobileMeasureKeyRef = useRef<string | null>(null);
 
   useLayoutEffect(() => {
@@ -185,6 +203,7 @@ export function TerminalBrowserSurface({
           }}
         />
       )}
+      {isElectron ? <TerminalBrowserAnnotationsPanel {...annotations} /> : null}
       {isElectron ? (
         <TerminalBrowserHeadersPanel
           open={headerRulesPanelOpen}

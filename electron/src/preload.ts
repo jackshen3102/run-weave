@@ -175,9 +175,30 @@ contextBridge.exposeInMainWorld("electronAPI", {
       "terminal-browser:annotation-list",
       tabId,
     ) as Promise<TerminalBrowserAnnotationState>,
+  terminalBrowserAnnotationSetSelecting: (tabId: string, selecting: boolean) =>
+    ipcRenderer.invoke(
+      "terminal-browser:annotation-set-selecting",
+      tabId,
+      selecting,
+    ) as Promise<TerminalBrowserAnnotationState>,
+  terminalBrowserAnnotationSetSubmitting: (
+    tabId: string,
+    submitting: boolean,
+  ) =>
+    ipcRenderer.invoke(
+      "terminal-browser:annotation-set-submitting",
+      tabId,
+      submitting,
+    ) as Promise<TerminalBrowserAnnotationState>,
   terminalBrowserAnnotationDelete: (tabId: string, annotationId: string) =>
     ipcRenderer.invoke(
       "terminal-browser:annotation-delete",
+      tabId,
+      annotationId,
+    ) as Promise<TerminalBrowserAnnotationState>,
+  terminalBrowserAnnotationFocus: (tabId: string, annotationId: string) =>
+    ipcRenderer.invoke(
+      "terminal-browser:annotation-focus",
       tabId,
       annotationId,
     ) as Promise<TerminalBrowserAnnotationState>,
