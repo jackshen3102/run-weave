@@ -77,6 +77,30 @@ export class AgentTeamReviewCheckpointGit {
     await this.runGit(repoRoot, ["switch", "-c", branch]);
   }
 
+  async rollbackRunBranch(
+    state: Pick<
+      AgentTeamReviewCheckpointState,
+      "repoRoot" | "originalBranch" | "branch"
+    >,
+  ): Promise<void> {
+    const currentBranch = (
+      await this.runGit(state.repoRoot, [
+        "symbolic-ref",
+        "--quiet",
+        "--short",
+        "HEAD",
+      ])
+    ).stdout.trim();
+    if (currentBranch !== state.branch) {
+      throw new AgentTeamError(
+        409,
+        `无法回滚 successor 分支：当前分支为 ${currentBranch}`,
+      );
+    }
+    await this.runGit(state.repoRoot, ["switch", state.originalBranch]);
+    await this.runGit(state.repoRoot, ["branch", "-D", "--", state.branch]);
+  }
+
   async prepareReviewTarget(params: {
     state: AgentTeamReviewCheckpointState;
     scope: AgentTeamReviewScope;

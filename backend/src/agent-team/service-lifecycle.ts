@@ -303,6 +303,7 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
     input: ResumeAgentTeamRunRequest,
   ): Promise<AgentTeamRun> {
     const run = await this.requireRun(runId);
+    this.assertFrameworkRepairNotBlocked(run);
     if (run.pendingFindingDecision) {
       throw new AgentTeamError(
         409,
@@ -423,6 +424,7 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
     input: CompleteAgentTeamRunRequest,
   ): Promise<AgentTeamRun> {
     const run = await this.requireRun(runId);
+    this.assertFrameworkRepairNotBlocked(run);
     if (run.phase !== "executing") {
       throw new AgentTeamError(409, "Run is not executing");
     }

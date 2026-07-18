@@ -246,7 +246,11 @@ export async function createTerminalPanelSplit(
       throw new TerminalPanelError(
         500,
         "Failed to register terminal panel and fully restore its workspace",
-        { partialPanel: { panelId, tmuxPaneId: splitTarget.paneId } },
+        {
+          partialPanel: { panelId, tmuxPaneId: splitTarget.paneId },
+          paneRemoved,
+          cleanupFailed,
+        },
       );
     }
     throw error;

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import type { TerminalSessionManager } from "../../terminal/manager";
@@ -61,8 +61,13 @@ export class AgentTeamRunStore {
     terminalSessionId: string,
   ): Promise<AgentTeamRun | null> {
     const runs = await this.listRuns(projectId);
+    const terminalRuns = runs.filter(
+      (run) => run.terminalSessionId === terminalSessionId,
+    );
     return (
-      runs.find((run) => run.terminalSessionId === terminalSessionId) ?? null
+      terminalRuns.find(
+        (run) => run.status !== "done" && run.status !== "failed",
+      ) ?? terminalRuns[0] ?? null
     );
   }
 
@@ -74,5 +79,10 @@ export class AgentTeamRunStore {
       : null;
     await writeJsonFile(filePath, run);
     this.onWrite?.(previous, run);
+  }
+
+  async deleteRun(run: Pick<AgentTeamRun, "projectId" | "runId">): Promise<void> {
+    assertSafeAgentTeamRunId(run.runId);
+    await rm(this.paths.runFilePath(run.projectId, run.runId), { force: true });
   }
 }

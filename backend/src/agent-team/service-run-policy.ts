@@ -121,9 +121,18 @@ export function createAgentTeamPanelError(
     typeof error.statusCode === "number"
       ? error.statusCode
       : 409;
+  const sourceDetails =
+    typeof error === "object" &&
+    error !== null &&
+    "details" in error &&
+    typeof error.details === "object" &&
+    error.details !== null &&
+    !Array.isArray(error.details)
+      ? (error.details as Record<string, unknown>)
+      : {};
   return new AgentTeamError(
     statusCode,
     `Could not split worker pane for role "${role}": ${message}`,
-    { runId, role },
+    { ...sourceDetails, runId, role },
   );
 }

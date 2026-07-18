@@ -90,6 +90,10 @@ const splitGateSchema = z
   .strict();
 
 const resumeSchema = z.object({ note: z.string().trim().min(1) }).strict();
+const beginFrameworkRepairSchema = z
+  .object({ reason: z.string().trim().min(1) })
+  .strict();
+const emptyBodySchema = z.object({}).strict();
 const agentInterventionSchema = z
   .object({
     action: z.enum(["dispatch", "refresh_acceptance"]),
@@ -327,6 +331,74 @@ export function createAgentTeamRouter(
     }
     await handleServiceCall(res, () =>
       agentTeamService.resumeRun(params.data.runId, parsed.data),
+    );
+  });
+
+  router.get("/runs/:runId/framework-repair", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params" });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.getFrameworkRepairRecovery(params.data.runId),
+    );
+  });
+
+  router.post("/runs/:runId/framework-repair/begin", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params" });
+      return;
+    }
+    const parsed = beginFrameworkRepairSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.beginFrameworkRepair(params.data.runId, parsed.data),
+    );
+  });
+
+  router.post("/runs/:runId/framework-repair/continue", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params" });
+      return;
+    }
+    const parsed = emptyBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.continueFrameworkRepair(params.data.runId),
+    );
+  });
+
+  router.post("/runs/:runId/framework-repair/rerun", async (req, res) => {
+    const params = runParamsSchema.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ message: "Invalid request params" });
+      return;
+    }
+    const parsed = emptyBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid request body",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    await handleServiceCall(res, () =>
+      agentTeamService.rerunFrameworkRepair(params.data.runId),
     );
   });
 

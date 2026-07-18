@@ -29,6 +29,15 @@ import { buildAgentTeamPanelRole } from "./service-workflow-policy";
 import { AgentTeamWorkerDispatchSupport } from "./service-worker-dispatch-support";
 
 export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
+  protected assertFrameworkRepairNotBlocked(run: AgentTeamRun): void {
+    if (run.frameworkRepair?.result === "blocked") {
+      throw new AgentTeamError(
+        409,
+        "Run 正在等待框架修复恢复，只能选择继续原 Run 或重新运行",
+      );
+    }
+  }
+
   protected resolveProjectRoot(projectId: string, cwd: string): string | null {
     return (
       this.terminalSessionManager.getProject(projectId)?.path ?? cwd ?? null
@@ -365,6 +374,9 @@ export class AgentTeamServiceSupport extends AgentTeamWorkerDispatchSupport {
         | "activeWorkerDispatch"
         | "workerDispatchProtocolVersion"
         | "consumedWorkerDispatches"
+        | "frameworkRepair"
+        | "predecessorRunId"
+        | "successorRunId"
         | "clarify"
         | "proposal"
         | "workers"

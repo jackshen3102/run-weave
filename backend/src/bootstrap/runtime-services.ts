@@ -320,6 +320,7 @@ export async function createRuntimeServices(): Promise<RuntimeServices> {
     tmuxService,
     tmuxOutputWatcher,
     activity: terminalActivity,
+    backendInstanceId: crypto.randomUUID(),
   });
   agentTeamService.initialize();
   const appServerHistoryGateway = new AppServerHistoryGateway();

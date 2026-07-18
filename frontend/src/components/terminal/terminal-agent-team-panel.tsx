@@ -4,14 +4,19 @@ import { Loader2 } from "lucide-react";
 import type {
   AgentTeamFindingDisposition,
   AgentTeamFlow,
+  AgentTeamFrameworkRepairRecoveryStatus,
+  AgentTeamFrameworkRepairResponse,
   AgentTeamRun,
 } from "@runweave/shared/agent-team";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import {
+  continueAgentTeamFrameworkRepair,
   decideAgentTeamFinding,
   focusAgentTeamPane,
+  getAgentTeamFrameworkRepair,
   getAgentTeamRunForTerminal,
+  rerunAgentTeamFrameworkRepair,
   startAgentTeamRun,
   submitAgentTeamSplitGate,
 } from "../../services/terminal";
@@ -63,6 +68,8 @@ export function TerminalAgentTeamPanel({
   const [flow, setFlow] = useState<AgentTeamFlow>("code_first");
   const [workerDrafts, setWorkerDrafts] = useState<WorkerDraft[] | null>(null);
   const [retryingRunId, setRetryingRunId] = useState<string | null>(null);
+  const [frameworkRecovery, setFrameworkRecovery] =
+    useState<AgentTeamFrameworkRepairRecoveryStatus | null>(null);
 
   const projectId = activeProject?.projectId ?? null;
   const terminalSessionId = activeSession?.terminalSessionId ?? null;
@@ -128,7 +135,12 @@ export function TerminalAgentTeamPanel({
         projectId,
         terminalSessionId,
       );
+      const nextFrameworkRecovery =
+        next?.frameworkRepair?.result === "blocked"
+          ? await getAgentTeamFrameworkRepair(apiBase, token, next.runId)
+          : null;
       setRun(next);
+      setFrameworkRecovery(nextFrameworkRecovery);
       syncWorkerDraftsFromRun(next);
       syncActiveRunPresence(next);
     } catch (caught) {
@@ -140,6 +152,7 @@ export function TerminalAgentTeamPanel({
     setRun(null);
     setError(null);
     setRetryingRunId(null);
+    setFrameworkRecovery(null);
     syncWorkerDraftsFromRun(null);
     syncActiveRunPresence(null);
     if (!projectId || !terminalSessionId) {
@@ -172,6 +185,9 @@ export function TerminalAgentTeamPanel({
       try {
         const next = await action();
         setRun(next);
+        if (next.frameworkRepair?.result !== "blocked") {
+          setFrameworkRecovery(null);
+        }
         syncWorkerDraftsFromRun(next, { force: true });
         syncActiveRunPresence(next);
       } catch (caught) {
@@ -181,6 +197,47 @@ export function TerminalAgentTeamPanel({
       }
     },
   );
+
+  const runFrameworkRepairAction = useMemoizedFn(
+    async (
+      action: () => Promise<AgentTeamFrameworkRepairResponse>,
+    ): Promise<void> => {
+      setBusy(true);
+      setError(null);
+      try {
+        const response = await action();
+        const next = response.successorRun ?? response.run;
+        setRun(next);
+        setFrameworkRecovery(
+          next.frameworkRepair?.result === "blocked" ? response.recovery : null,
+        );
+        syncWorkerDraftsFromRun(next, { force: true });
+        syncActiveRunPresence(next);
+      } catch (caught) {
+        handleError(caught);
+      } finally {
+        setBusy(false);
+      }
+    },
+  );
+
+  const continueFrameworkRepair = useMemoizedFn((): void => {
+    if (!run || run.frameworkRepair?.result !== "blocked") {
+      return;
+    }
+    void runFrameworkRepairAction(() =>
+      continueAgentTeamFrameworkRepair(apiBase, token, run.runId),
+    );
+  });
+
+  const rerunFrameworkRepair = useMemoizedFn((): void => {
+    if (!run || run.frameworkRepair?.result !== "blocked") {
+      return;
+    }
+    void runFrameworkRepairAction(() =>
+      rerunAgentTeamFrameworkRepair(apiBase, token, run.runId),
+    );
+  });
 
   const startFlow = useMemoizedFn((): void => {
     if (!projectId || !terminalSessionId) {
@@ -358,7 +415,7 @@ export function TerminalAgentTeamPanel({
           busy={busy}
           onDecide={decideFinding}
         />
-      ) : run && attention ? (
+      ) : run && attention && run.frameworkRepair?.result !== "blocked" ? (
         <AgentTeamAttentionSummary
           attention={attention}
           onFocusPane={focusPane}
@@ -423,8 +480,11 @@ export function TerminalAgentTeamPanel({
             token={token}
             projectId={projectId}
             run={run}
+            frameworkRecovery={frameworkRecovery}
             busy={busy}
             onRetry={retryFailedRun}
+            onContinueFrameworkRepair={continueFrameworkRepair}
+            onRerunFrameworkRepair={rerunFrameworkRepair}
             onAuthExpired={onAuthExpired}
           />
         ) : null}

@@ -1,7 +1,16 @@
-import type { TerminalRuntimePreference } from "./terminal-protocol";
 import type { AgentTeamWorkerRole } from "./agent-team-worker";
 import type { AgentTeamAgentIntervention } from "./agent-team-intervention";
 import type { AgentTeamAcceptanceEvidence } from "./agent-team-evidence";
+import type {
+  AgentTeamAcceptanceStatus,
+  AgentTeamPhase,
+  AgentTeamReviewCheckpointState,
+  AgentTeamReviewTarget,
+  AgentTeamRunOptions,
+  AgentTeamStatus,
+  AgentTeamTerminal,
+  AgentTeamVerificationConfig,
+} from "./agent-team-run-contract";
 
 export type {
   AgentTeamAgentIntervention,
@@ -10,77 +19,27 @@ export type {
 } from "./agent-team-intervention";
 export type { AgentTeamWorkerRole } from "./agent-team-worker";
 export type { AgentTeamAcceptanceEvidence } from "./agent-team-evidence";
+export type {
+  AgentTeamAcceptanceSource,
+  AgentTeamAcceptanceStatus,
+  AgentTeamFlow,
+  AgentTeamPhase,
+  AgentTeamReviewCheckpoint,
+  AgentTeamReviewCheckpointMode,
+  AgentTeamReviewCheckpointState,
+  AgentTeamReviewScope,
+  AgentTeamReviewTarget,
+  AgentTeamRunOptions,
+  AgentTeamStatus,
+  AgentTeamTerminal,
+  AgentTeamVerificationConfig,
+} from "./agent-team-run-contract";
 
 /**
  * Agent-team / loop-engineer data model. This replaces the retired
  * orchestrator module. A terminal == one run; workers are tmux panes inside
  * that terminal's session.
  */
-
-export type AgentTeamPhase = "intake" | "proposal" | "executing";
-
-export type AgentTeamStatus =
-  | "clarifying"
-  | "running"
-  | "need_human"
-  | "done"
-  | "failed";
-
-export type AgentTeamAcceptanceStatus = "pass" | "fail" | "pending";
-export type AgentTeamAcceptanceSource =
-  | "test_case_file"
-  | "plan_file_generated"
-  | "task_generated";
-
-export interface AgentTeamVerificationConfig {
-  planFilePath?: string | null;
-  testCaseFilePath?: string | null;
-  generatedTestCaseFilePath?: string | null;
-  planSha256?: string | null;
-  testCaseSha256?: string | null;
-  generatedTestCaseSha256?: string | null;
-  acceptanceSource: AgentTeamAcceptanceSource;
-}
-
-export type AgentTeamReviewCheckpointMode = "disabled" | "local_commit";
-export type AgentTeamReviewScope = "full" | "incremental" | "final";
-
-/** Execution entry order: write-first or behavior-verification-first. */
-export type AgentTeamFlow = "code_first" | "verify_first";
-
-export interface AgentTeamReviewTarget {
-  scope: AgentTeamReviewScope;
-  baseCommit: string;
-  /** Exact committed HEAD covered by a final review target. */
-  targetCommit?: string | null;
-  targetTree: string;
-  changedPaths: string[];
-  planSha256: string | null;
-  testCaseSha256: string | null;
-  requestedAt: string;
-}
-
-export interface AgentTeamReviewCheckpoint {
-  sequence: number;
-  commit: string;
-  parentCommit: string;
-  tree: string;
-  reviewRound: number;
-  reviewerPanelId: string | null;
-  createdAt: string;
-}
-
-export interface AgentTeamReviewCheckpointState {
-  mode: "local_commit";
-  repoRoot: string;
-  originalBranch: string;
-  branch: string;
-  taskBaseCommit: string;
-  lastReviewedCommit: string;
-  pendingReview: AgentTeamReviewTarget | null;
-  checkpoints: AgentTeamReviewCheckpoint[];
-  finalReviewedCommit: string | null;
-}
 
 /** A single markdown acceptance case, drafted at proposal, tracked in loop. */
 export interface AgentTeamAcceptanceCase {
@@ -189,16 +148,6 @@ export interface HumanInterventionNote {
   clearedRepairCycles?: AgentTeamRepairCycle[];
 }
 
-export interface AgentTeamRunOptions {
-  autoApproveSplit: boolean;
-  /** Notify the main Agent once when the run enters a Human Gate. */
-  notifyMainOnHumanGate: boolean;
-  reviewCheckpointMode?: AgentTeamReviewCheckpointMode;
-  maxRepairAttempts?: number;
-  /** Execution entry order; defaults to code_first when absent. */
-  flow?: AgentTeamFlow;
-}
-
 /** Persisted freshness boundary for the worker currently allowed to complete. */
 export interface AgentTeamActiveWorkerDispatch {
   /** Unique identity for this backend-owned dispatch. */
@@ -241,6 +190,32 @@ export interface AgentTeamConsumedWorkerDispatchReceipt {
   consumedAt: string;
 }
 
+export type AgentTeamFrameworkRepairResult = "blocked" | "continued" | "rerun";
+
+export interface AgentTeamFrameworkRepairTarget {
+  role: AgentTeamWorkerRole;
+  caseIds: string[];
+  panelId: string | null;
+  tmuxPaneId: string | null;
+  invalidatedDispatch: AgentTeamActiveWorkerDispatch;
+}
+
+/** Persisted framework-repair boundary. A blocked record revokes old dispatches. */
+export interface AgentTeamFrameworkRepair {
+  repairId: string;
+  reason: string;
+  begunAt: string;
+  backendInstanceIdBefore: string;
+  target: AgentTeamFrameworkRepairTarget;
+  result: AgentTeamFrameworkRepairResult;
+  /** A durable dispatch reservation which may already have reached the Worker. */
+  pendingContinueDispatchId?: string | null;
+  continuedAt?: string | null;
+  continuedDispatchId?: string | null;
+  rerunAt?: string | null;
+  successorRunId?: string | null;
+}
+
 export interface AgentTeamRun {
   runId: string;
   projectId: string;
@@ -264,6 +239,12 @@ export interface AgentTeamRun {
   workerDispatchProtocolVersion?: 1;
   /** Durable receipts for dispatches whose state-machine effect has completed. */
   consumedWorkerDispatches?: AgentTeamConsumedWorkerDispatchReceipt[];
+  /** Framework repair gate and its final recovery decision, when present. */
+  frameworkRepair?: AgentTeamFrameworkRepair | null;
+  /** Links a clean rerun back to the framework-blocked run it replaced. */
+  predecessorRunId?: string | null;
+  /** Links a framework-blocked run to the clean rerun created from it. */
+  successorRunId?: string | null;
   clarify: AgentTeamClarifyMessage[];
   proposal: AgentTeamProposal | null;
   workers: AgentTeamWorker[];
@@ -280,13 +261,6 @@ export interface AgentTeamRun {
   logs: string[];
   createdAt: string;
   updatedAt: string;
-}
-
-export interface AgentTeamTerminal {
-  command?: string;
-  args?: string[];
-  cwd?: string | null;
-  runtimePreference?: TerminalRuntimePreference;
 }
 
 /** Worker outbox schema, extended with per-case acceptance results. */
@@ -491,6 +465,38 @@ export interface SubmitAgentTeamSplitGateRequest {
 
 export interface ResumeAgentTeamRunRequest {
   note: string;
+}
+
+export interface BeginAgentTeamFrameworkRepairRequest {
+  reason: string;
+}
+
+export type AgentTeamFrameworkRepairContinueBlockerCode =
+  | "backend_not_restarted"
+  | "recovery_target_missing"
+  | "worker_pane_unavailable"
+  | "continue_dispatch_pending"
+  | "repair_not_blocked";
+
+export interface AgentTeamFrameworkRepairRecoveryStatus {
+  runId: string;
+  repairId: string;
+  reason: string;
+  result: AgentTeamFrameworkRepairResult;
+  backendRestarted: boolean;
+  canContinue: boolean;
+  continueBlocker: {
+    code: AgentTeamFrameworkRepairContinueBlockerCode;
+    message: string;
+  } | null;
+  actions: Array<"continue" | "rerun">;
+  target: AgentTeamFrameworkRepairTarget;
+}
+
+export interface AgentTeamFrameworkRepairResponse {
+  run: AgentTeamRun;
+  recovery: AgentTeamFrameworkRepairRecoveryStatus;
+  successorRun: AgentTeamRun | null;
 }
 
 export interface CompleteAgentTeamRunRequest {

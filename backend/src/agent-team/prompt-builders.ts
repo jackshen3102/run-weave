@@ -16,48 +16,10 @@ const BEHAVIOR_FAILURE_REPRODUCTION_SCHEMA =
   'behavior_verify 的每个 fail 还必须包含 reproduction: { mode: "real_product", status: "reproduced", scenarioId, validationSessionId, steps: string[], expected, actual, evidence[] }；无法从真实产品入口完整复现时必须写 skipped + skipReason，不得把推断写成 fail。';
 const FINDING_SCHEMA =
   '审查类 outbox 如有发现，必须用 remainingFindings / resolvedFindings 表达：仍存在的问题写 remainingFindings，已修复的问题写 resolvedFindings。每个 open P0/P1 必须提供稳定的小写 invariantKey、verificationMode: "runtime"|"structural"，以及 reproduction: { mode: "real_product"|"review_harness"|"static_contract", status: "reproduced"|"confirmed", scenarioId?, validationSessionId?, steps: string[], expected, actual, evidence[] }。runtime finding 只能使用 real_product + reproduced + scenarioId，并写清实际可观察错误；只观察到内部中间状态、静态推断、未复现或环境阻塞时不得提交 open P0/P1。structural finding 必须由 review_harness/static_contract 确认。Final review 的 blocking finding 还必须提供 caseImpacts: [{ caseId, summary, evidence[] }]，caseId 使用 prompt 列出的 backend 产品 Case id，不能使用 generic Code Review gate；每条映射都要说明该复现场景如何违反产品 Case。若问题真实但不属于支持/需求范围，设置 disposition="out_of_scope" 申请人工裁决；reviewer 不得设置 waived。未设置 disposition 默认 blocking。同一 invariant 复用同一 key。acceptanceResults 为 pass 时，summary 不要留下未修复 P0/P1 的暗示。';
+const CODE_FIX_VERIFICATION_SCHEMA =
+  '- code outbox 必须逐项写 fixVerifications: [{ repairKey, invariant, reproduction: { mode: "real_product"|"review_harness"|"static_contract", status: "reproduced"|"confirmed"|"not_reproduced"|"boundary"|"blocked", scenarioId?, validationSessionId?, evidence[] }, skillInvocation: { name: "$toolkit:reproduce-before-fix", evidence[] }, verification: { status: "pass"|"fail"|"blocked", sameScenario, evidence[] }, impactedChecks: [{ label, dimension: "positive"|"negative"|"temporal"|"concurrent"|"regression", status: "pass"|"fail"|"skipped", summary, evidence[] }], strategyAssessment? }]。';
 
-export function buildMainTestCaseGenerationPrompt(params: {
-  run: AgentTeamRun;
-  planFilePath?: string | null;
-  testCaseValidationError?: string | null;
-}): string {
-  const { run, planFilePath, testCaseValidationError } = params;
-  const sourceText = planFilePath
-    ? testCaseValidationError
-      ? `输入文件（测试案例解析未通过）：${planFilePath}`
-      : `计划文件：${planFilePath}`
-    : `任务描述：${run.task}`;
-  const missingSourceInstructions = testCaseValidationError
-    ? [
-        `已尝试将输入文件作为测试案例解析，但未通过：${testCaseValidationError}`,
-        "如果该文件本来就是测试案例，优先修复原文件使其可解析，不要创建内容重复的新文档。",
-        "只有确认该文件确实只是计划时，才调用 $toolkit:write-test-cases 生成新的测试案例文档。",
-      ]
-    : [
-        "当前缺少可追溯测试案例文件。",
-        "请先调用 $toolkit:write-test-cases 生成测试案例文档。",
-      ];
-  return [
-    "你是本 Agent Team run 的主 Agent。",
-    "",
-    `Run: ${run.runId}`,
-    `Session: ${run.terminalSessionId}`,
-    `ProjectId: ${run.projectId}`,
-    "",
-    ...missingSourceInstructions,
-    "在测试案例文件可解析前，禁止进入 worker split，也禁止使用默认泛化 acceptance。",
-    "测试案例就绪后再提交 worker 拆分提案。",
-    "生成前先读取输入来源；若来源已出现可追溯 case ID 前缀，所有生成 case 必须继承该前缀，不得另造领域前缀；只有来源未给出 case ID 前缀时才按主题新建。",
-    "",
-    "输入来源：",
-    sourceText,
-    "",
-    "接续要求：",
-    "- 测试案例文档写完后，调用 POST /api/agent-team/runs/:runId/propose-split，payload 带 generatedTestCaseFilePath，并使用 code、code_review、behavior_verify 三类 worker。",
-    "- 如果无法生成可解析测试案例文件，停止并向用户说明“缺少可追溯测试案例文件”，不要提交 split。",
-  ].join("\n");
-}
+export { buildMainTestCaseGenerationPrompt } from "./prompt-builders-test-cases";
 
 export function buildWorkerStartupPrompt(params: {
   run: AgentTeamRun;
@@ -140,6 +102,68 @@ export function buildWorkerStartupPrompt(params: {
   return lines.join("\n");
 }
 
+/** A complete replacement task issued after a framework repair and restart. */
+export function buildFrameworkRepairContinuePrompt(params: {
+  run: AgentTeamRun;
+  worker: AgentTeamWorker;
+  cases: AgentTeamAcceptanceCase[];
+  outboxPath: string;
+}): string {
+  const { run, worker, cases, outboxPath } = params;
+  const repair = run.frameworkRepair;
+  const dispatchId = run.activeWorkerDispatch?.dispatchId;
+  if (!repair || repair.result !== "blocked" || !dispatchId) {
+    throw new Error(
+      "Framework repair continue prompt requires a fresh dispatch",
+    );
+  }
+  const codeRepairContract =
+    worker.role === "code"
+      ? formatCodeRepairContract(repairCyclesForActiveDispatch(run))
+      : [];
+  return [
+    "这是 Runweave 框架修复并完成 Backend 重启后的继续执行。",
+    "本消息是一条完整的新任务，不是旧 prompt 的剩余片段。",
+    "",
+    `Run: ${run.runId}`,
+    `Role: ${worker.role}`,
+    `Session: ${run.terminalSessionId}`,
+    `PanelId: ${worker.panelId ?? ""}`,
+    `TmuxPaneId: ${worker.tmuxPaneId ?? ""}`,
+    `DispatchId: ${dispatchId}`,
+    `- 旧 dispatch ${repair.target.invalidatedDispatch.dispatchId ?? "unknown"} 已失效，不得复用其结果。`,
+    `- outbox 顶层 dispatchId 必须等于 "${dispatchId}"。`,
+    "",
+    `原任务：${run.task}`,
+    `本次只处理这些 Case：${cases.map((item) => item.caseId).join(", ")}`,
+    ...cases.map(formatAcceptancePromptLine),
+    ...(worker.role === "code" && run.reviewCheckpoint
+      ? formatCodeWorkerCheckpointInstructions()
+      : []),
+    ...(worker.role === "code_review"
+      ? formatReviewTargetInstructions(run)
+      : []),
+    ...(worker.role === "behavior_verify" && behaviorCheckpointCommit(run)
+      ? [
+          `本轮被测 checkpoint：${behaviorCheckpointCommit(run)}`,
+          "开始验收前执行 git rev-parse HEAD 并确认等于该 commit。",
+          `outbox 顶层 verifiedCheckpointCommit 必须等于 "${behaviorCheckpointCommit(run)}"。`,
+        ]
+      : []),
+    ...(codeRepairContract.length > 0 ? ["", ...codeRepairContract] : []),
+    "",
+    `把结构化结果写入 ${outboxPath}。不要写 session 级 .runweave/outbox/${run.terminalSessionId}.json。`,
+    `outbox 顶层必须包含：sessionId="${run.terminalSessionId}"、panelId="${worker.panelId ?? ""}"、tmuxPaneId="${worker.tmuxPaneId ?? ""}"、runId="${run.runId}"、role="${worker.role}"、status="completed"|"failed"、summary、error、finishedAt。`,
+    EVIDENCE_SCHEMA,
+    ...(worker.role === "behavior_verify"
+      ? [BEHAVIOR_FAILURE_REPRODUCTION_SCHEMA]
+      : []),
+    ...(worker.role === "code_review" ? [FINDING_SCHEMA] : []),
+    "",
+    "只处理上述恢复目标，不接管主控调度。完成后以结构化 summary 收尾。",
+  ].join("\n");
+}
+
 /** Bounce a failed gate case back to a code pane. */
 export function buildBounceBackPrompt(params: {
   run: AgentTeamRun;
@@ -149,18 +173,6 @@ export function buildBounceBackPrompt(params: {
   const { run, failedCases, repairCycles } = params;
   const isReviewGateBounce =
     failedCases.length > 0 && failedCases.every(isReviewGateAcceptanceCase);
-  const runtimeRepairs = repairCycles.filter(
-    (cycle) => cycle.verificationMode === "runtime",
-  );
-  const structuralRepairs = repairCycles.filter(
-    (cycle) => cycle.verificationMode === "structural",
-  );
-  const requiresStrategyAssessment = repairCycles.some(
-    (cycle) => cycle.attempts >= 1,
-  );
-  const requiresExecutableReviewReproduction = structuralRepairs.some(
-    (cycle) => cycle.attempts >= 1,
-  );
   return [
     isReviewGateBounce
       ? `[loop round ${run.loop.round}] 串行门禁报以下用例失败，请修复：`
@@ -174,6 +186,35 @@ export function buildBounceBackPrompt(params: {
       return `- [${item.caseId}] ${item.text}${evidence ? `\n  证据：${evidence}` : ""}`;
     }),
     "",
+    ...formatCodeRepairContract(repairCycles),
+    "",
+    ...(run.reviewCheckpoint ? formatCodeWorkerCheckpointInstructions() : []),
+    ...(run.reviewCheckpoint ? [""] : []),
+    isReviewGateBounce
+      ? "完成上述自证后无需自行触发独立审查；backend 校验交接后会按 code_review → behavior_verify 顺序重新触发。"
+      : "完成上述自证后无需自行触发独立验收；backend 校验交接后会先重新触发 code_review。",
+  ].join("\n");
+}
+
+function formatCodeRepairContract(
+  repairCycles: AgentTeamRepairCycle[],
+): string[] {
+  if (repairCycles.length === 0) {
+    return [];
+  }
+  const runtimeRepairs = repairCycles.filter(
+    (cycle) => cycle.verificationMode === "runtime",
+  );
+  const structuralRepairs = repairCycles.filter(
+    (cycle) => cycle.verificationMode === "structural",
+  );
+  const requiresStrategyAssessment = repairCycles.some(
+    (cycle) => cycle.attempts >= 1,
+  );
+  const requiresExecutableReviewReproduction = structuralRepairs.some(
+    (cycle) => cycle.attempts >= 1,
+  );
+  return [
     "backend 固定的修复目标（repairKey 不可改名或覆盖）：",
     ...repairCycles.map(
       (cycle) =>
@@ -183,7 +224,7 @@ export function buildBounceBackPrompt(params: {
     "",
     "修复前强制门槛：",
     "- Codex worker 必须在修改源码前显式调用 $toolkit:reproduce-before-fix，并按 verifier 交接的同一场景完成 Before 复现。",
-    "- outbox 的 skillInvocation 必须写 name=\"$toolkit:reproduce-before-fix\" 并附调用证据；缺少证据属于不可事后补写的阻断错误。",
+    '- outbox 的 skillInvocation 必须写 name="$toolkit:reproduce-before-fix" 并附调用证据；缺少证据属于不可事后补写的阻断错误。',
     "",
     ...(runtimeRepairs.length > 0
       ? [
@@ -215,22 +256,22 @@ export function buildBounceBackPrompt(params: {
           "- 这是同一 repairKey 的第 2 次或以后修复：strategyAssessment 必填。先解释上一轮机制为何失败，再判断是否需要调整状态所有权、事件边界或数据模型；禁止无机制解释地继续叠加启发式。",
         ]
       : []),
-    '- code outbox 必须逐项写 fixVerifications: [{ repairKey, invariant, reproduction: { mode: "real_product"|"review_harness"|"static_contract", status: "reproduced"|"confirmed"|"not_reproduced"|"boundary"|"blocked", scenarioId?, validationSessionId?, evidence[] }, skillInvocation: { name: "$toolkit:reproduce-before-fix", evidence[] }, verification: { status: "pass"|"fail"|"blocked", sameScenario, evidence[] }, impactedChecks: [{ label, dimension: "positive"|"negative"|"temporal"|"concurrent"|"regression", status: "pass"|"fail"|"skipped", summary, evidence[] }], strategyAssessment? }]。',
+    CODE_FIX_VERIFICATION_SCHEMA,
     "- fixVerifications 只证明可以交给独立 gate 复验；不要用 acceptanceResults 给自己的修复判 pass。",
-    "",
-    ...(run.reviewCheckpoint ? formatCodeWorkerCheckpointInstructions() : []),
-    ...(run.reviewCheckpoint ? [""] : []),
-    isReviewGateBounce
-      ? "完成上述自证后无需自行触发独立审查；backend 校验交接后会按 code_review → behavior_verify 顺序重新触发。"
-      : "完成上述自证后无需自行触发独立验收；backend 校验交接后会先重新触发 code_review。",
-  ].join("\n");
+  ];
 }
 
-function formatRepairSourceReproduction(
-  cycle: AgentTeamRepairCycle,
-): string[] {
-  const reproduction =
-    cycle.sourceReproduction ?? cycle.finding?.reproduction;
+function repairCyclesForActiveDispatch(
+  run: AgentTeamRun,
+): AgentTeamRepairCycle[] {
+  const repairKeys = new Set(run.activeWorkerDispatch?.repairKeys ?? []);
+  return run.loop.repairCycles.filter((cycle) =>
+    repairKeys.has(cycle.repairKey),
+  );
+}
+
+function formatRepairSourceReproduction(cycle: AgentTeamRepairCycle): string[] {
+  const reproduction = cycle.sourceReproduction ?? cycle.finding?.reproduction;
   if (!reproduction) {
     return [
       `- ${cycle.repairKey} 缺少 verifier reproduction；禁止修改源码，先回派 verifier 补齐复现场景。`,
@@ -452,15 +493,7 @@ function formatReviewTargetInstructions(run: AgentTeamRun): string[] {
   ];
 }
 
-export function buildHumanNotePrompt(note: string): string {
-  return [
-    "[人工干预] 主 Agent 请注意，人已介入本 run 并给出以下指引：",
-    "",
-    note,
-    "",
-    "loop 已重置（错误指纹 + 无进展计数清零），请据此调整后继续推进。",
-  ].join("\n");
-}
+export { buildHumanNotePrompt } from "./prompt-builders-human-note";
 
 export function buildBlockedBehaviorMainPrompt(params: {
   run: AgentTeamRun;
@@ -491,6 +524,17 @@ export function buildBlockedBehaviorMainPrompt(params: {
 }
 
 export function buildHumanGateMainPrompt(run: AgentTeamRun): string {
+  if (run.frameworkRepair?.result === "blocked") {
+    return [
+      `[Agent Team ${run.runId}] Run 已进入框架修复阻塞。`,
+      `原因：${run.frameworkRepair.reason}`,
+      `旧 dispatch：${run.frameworkRepair.target.invalidatedDispatch.dispatchId ?? "unknown"}（已失效）`,
+      "完成框架修复并重启 Backend 后，只能选择继续原 Run 或重新运行。",
+      `先执行 rw agent-team framework-repair status ${run.runId} 检查恢复条件。`,
+      `现场可信时执行 rw agent-team framework-repair continue ${run.runId}；否则执行 rw agent-team framework-repair rerun ${run.runId}。`,
+      "不要使用通用 resume、agent intervention 或旧 outbox 绕过该门禁。",
+    ].join("\n");
+  }
   const blockedCases = run.loop.lastReason?.startsWith(
     "behavior_verify 环境阻塞",
   )
