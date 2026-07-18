@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { AgentTeamRun } from "@runweave/shared/agent-team";
 import type { TerminalSessionManager } from "../terminal/manager";
 import type { PtyService } from "../terminal/pty-service";
@@ -36,6 +37,7 @@ export class AgentTeamServiceContext {
   protected readonly outboxResolver: AgentTeamOutboxResolver;
   protected readonly outboxHistoryStore: AgentTeamOutboxHistoryStore;
   protected readonly reviewCheckpointGit: AgentTeamReviewCheckpointGit;
+  protected readonly backendInstanceId: string;
   protected readonly eventQueues = new Map<string, Promise<unknown>>();
   protected readonly pendingCompletionRounds = new Map<string, number>();
   protected recheckWatchdogTimer: ReturnType<typeof setInterval> | null = null;
@@ -48,6 +50,7 @@ export class AgentTeamServiceContext {
     this.terminalStateService = options.terminalStateService;
     this.tmuxService = options.tmuxService;
     this.tmuxOutputWatcher = options.tmuxOutputWatcher;
+    this.backendInstanceId = options.backendInstanceId ?? randomUUID();
     this.paths = new AgentTeamPaths(
       this.terminalSessionManager,
       options.cwd ?? process.cwd(),

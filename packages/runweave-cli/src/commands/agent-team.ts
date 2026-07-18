@@ -1,6 +1,8 @@
 import type {
   AgentTeamAgentInterventionAction,
   AgentTeamExportResponse,
+  AgentTeamFrameworkRepairRecoveryStatus,
+  AgentTeamFrameworkRepairResponse,
   AgentTeamWorkerRole,
 } from "@runweave/shared/agent-team";
 import {
@@ -24,7 +26,10 @@ export async function runAgentTeamCommand(
   },
 ): Promise<void> {
   if (!subcommand) {
-    throw new CliError("Usage: rw agent-team <export|intervene> [options]", 2);
+    throw new CliError(
+      "Usage: rw agent-team <export|intervene|framework-repair> [options]",
+      2,
+    );
   }
   const parsed = parseArgs(args, new Set(["json", "plain"]));
   const mode = resolveOutputMode(parsed.options);
@@ -103,7 +108,56 @@ export async function runAgentTeamCommand(
     return;
   }
 
+  if (subcommand === "framework-repair") {
+    const action = resolveFrameworkRepairAction(parsed.positionals[0]);
+    const runId = await resolveRunId(
+      client,
+      parsed.positionals[1],
+      parsed.options,
+    );
+    if (action === "status") {
+      const recovery = await client.getAgentTeamFrameworkRepair(runId);
+      writeOutput(
+        io.stdout,
+        mode,
+        mode === "json" ? recovery : formatPlainFrameworkRecovery(recovery),
+      );
+      return;
+    }
+    const response =
+      action === "begin"
+        ? await client.beginAgentTeamFrameworkRepair(runId, {
+            reason: requireStringOption(parsed.options, "reason"),
+          })
+        : action === "continue"
+          ? await client.continueAgentTeamFrameworkRepair(runId)
+          : await client.rerunAgentTeamFrameworkRepair(runId);
+    writeOutput(
+      io.stdout,
+      mode,
+      mode === "json" ? response : formatPlainFrameworkRepair(response),
+    );
+    return;
+  }
+
   throw new CliError(`Unknown agent-team command: ${subcommand}`, 2);
+}
+
+function resolveFrameworkRepairAction(
+  value: string | undefined,
+): "status" | "begin" | "continue" | "rerun" {
+  if (
+    value === "status" ||
+    value === "begin" ||
+    value === "continue" ||
+    value === "rerun"
+  ) {
+    return value;
+  }
+  throw new CliError(
+    "Usage: rw agent-team framework-repair <status|begin|continue|rerun> [runId]",
+    2,
+  );
 }
 
 async function resolveRunId(
@@ -118,7 +172,7 @@ async function resolveRunId(
   const terminalSessionId = getStringOption(options, "terminal-session-id");
   if (!projectId || !terminalSessionId) {
     throw new CliError(
-      "Missing runId. Pass rw agent-team export <runId> or --project-id plus --terminal-session-id.",
+      "Missing runId. Pass it positionally or use --project-id plus --terminal-session-id.",
       2,
     );
   }
@@ -273,4 +327,32 @@ function formatPlainExport(payload: AgentTeamExportResponse): string {
     lines.push("", "Warnings:", ...payload.warnings.map((item) => `- ${item}`));
   }
   return lines.join("\n");
+}
+
+function formatPlainFrameworkRecovery(
+  recovery: AgentTeamFrameworkRepairRecoveryStatus,
+): string {
+  return [
+    `Run: ${recovery.runId}`,
+    `Framework repair: ${recovery.repairId} (${recovery.result})`,
+    `Reason: ${recovery.reason}`,
+    `Backend restarted: ${recovery.backendRestarted ? "yes" : "no"}`,
+    `Can continue: ${recovery.canContinue ? "yes" : "no"}`,
+    ...(recovery.continueBlocker
+      ? [`Continue blocker: ${recovery.continueBlocker.message}`]
+      : []),
+    `Actions: ${recovery.actions.join(", ") || "none"}`,
+  ].join("\n");
+}
+
+function formatPlainFrameworkRepair(
+  response: AgentTeamFrameworkRepairResponse,
+): string {
+  return [
+    formatPlainFrameworkRecovery(response.recovery),
+    `Run status: ${response.run.status}`,
+    ...(response.successorRun
+      ? [`Successor run: ${response.successorRun.runId}`]
+      : []),
+  ].join("\n");
 }

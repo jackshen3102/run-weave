@@ -11,7 +11,7 @@ import type {
   TerminalSessionRecord,
 } from "../terminal/manager";
 import { normalizeAgentTeamWorkerOutbox } from "./outbox-resolver";
-import { AgentTeamLifecycleService } from "./service-lifecycle";
+import { AgentTeamFrameworkRepairService } from "./service-framework-repair";
 import type { ExportAgentTeamRunOptions } from "./service-types";
 import {
   clampExportTailLines,
@@ -22,7 +22,7 @@ import { formatErrorMessage } from "./service-run-policy";
 
 const MAX_EXPORT_TAIL_LINES = 5_000;
 
-export class AgentTeamExportService extends AgentTeamLifecycleService {
+export class AgentTeamExportService extends AgentTeamFrameworkRepairService {
   async exportRun(
     runId: string,
     options: ExportAgentTeamRunOptions = {},

@@ -22,6 +22,8 @@ export interface AgentTeamServiceOptions {
   tmuxOutputWatcher?: TmuxOutputWatcher;
   cwd?: string;
   activity?: TerminalActivityDependencies;
+  /** Unique to one Backend boot; used to prove a framework restart occurred. */
+  backendInstanceId?: string;
 }
 
 export type AgentTeamCompletionSignalSource =

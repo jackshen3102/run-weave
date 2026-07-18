@@ -1,5 +1,8 @@
 import { AlertTriangle, RotateCcw } from "lucide-react";
-import type { AgentTeamRun } from "@runweave/shared/agent-team";
+import type {
+  AgentTeamFrameworkRepairRecoveryStatus,
+  AgentTeamRun,
+} from "@runweave/shared/agent-team";
 import { Button } from "../ui/button";
 import {
   getAgentTeamCaseElementId,
@@ -14,16 +17,22 @@ export function ExecutingSection({
   token,
   projectId,
   run,
+  frameworkRecovery,
   busy,
   onRetry,
+  onContinueFrameworkRepair,
+  onRerunFrameworkRepair,
   onAuthExpired,
 }: {
   apiBase: string;
   token: string;
   projectId: string;
   run: AgentTeamRun;
+  frameworkRecovery: AgentTeamFrameworkRepairRecoveryStatus | null;
   busy: boolean;
   onRetry: () => void;
+  onContinueFrameworkRepair: () => void;
+  onRerunFrameworkRepair: () => void;
   onAuthExpired?: () => void;
 }) {
   const { loop, acceptance } = run;
@@ -34,6 +43,14 @@ export function ExecutingSection({
   return (
     <div className="space-y-3">
       <ExecutingHeader run={run} />
+      {run.frameworkRepair?.result === "blocked" ? (
+        <FrameworkRepairCard
+          recovery={frameworkRecovery}
+          busy={busy}
+          onContinue={onContinueFrameworkRepair}
+          onRerun={onRerunFrameworkRepair}
+        />
+      ) : null}
       {run.reviewCheckpoint ? <ReviewCheckpointStatus run={run} /> : null}
       <FindingDecisionsCard run={run} />
       <LoopProgressCard run={run} level={level} />
@@ -51,6 +68,59 @@ export function ExecutingSection({
   );
 }
 
+function FrameworkRepairCard({
+  recovery,
+  busy,
+  onContinue,
+  onRerun,
+}: {
+  recovery: AgentTeamFrameworkRepairRecoveryStatus | null;
+  busy: boolean;
+  onContinue: () => void;
+  onRerun: () => void;
+}) {
+  return (
+    <div className="space-y-2 rounded border border-amber-800 bg-amber-950/35 p-2">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-200">
+        <AlertTriangle className="h-4 w-4" /> 框架修复等待恢复
+      </div>
+      <p className="text-[11px] leading-relaxed text-amber-100">
+        {recovery?.reason ?? "正在读取框架修复现场…"}
+      </p>
+      <div className="space-y-0.5 text-[10px] text-amber-200/80">
+        <div>
+          Backend 重启：{recovery?.backendRestarted ? "已检测到" : "尚未检测到"}
+        </div>
+        <div>
+          继续条件：
+          {recovery?.canContinue
+            ? "原 Worker pane 可继续"
+            : (recovery?.continueBlocker?.message ?? "正在检查")}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={busy || !recovery?.canContinue}
+          onClick={onContinue}
+        >
+          继续原 Run
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={busy || !recovery}
+          onClick={onRerun}
+        >
+          <RotateCcw className="h-4 w-4" /> 重新运行
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ExecutingHeader({ run }: { run: AgentTeamRun }) {
   return (
     <div className="flex items-center justify-between">
@@ -58,7 +128,9 @@ function ExecutingHeader({ run }: { run: AgentTeamRun }) {
         Loop 状态
       </h3>
       <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">
-        {run.activeWorkerRole ? ROLE_LABEL[run.activeWorkerRole] : "Observe Only"}
+        {run.activeWorkerRole
+          ? ROLE_LABEL[run.activeWorkerRole]
+          : "Observe Only"}
       </span>
     </div>
   );
@@ -78,7 +150,9 @@ function FindingDecisionsCard({ run }: { run: AgentTeamRun }) {
         <div key={decision.id} className="mt-1 break-words">
           <span className="font-mono">{decision.invariantKey}</span> ·{" "}
           {formatFindingDisposition(decision.disposition)}
-          {decision.caseIds.length > 0 ? ` · ${decision.caseIds.join(", ")}` : ""}
+          {decision.caseIds.length > 0
+            ? ` · ${decision.caseIds.join(", ")}`
+            : ""}
           <span className="block text-sky-100/80">
             {decision.finding.severity} · {decision.finding.title}
           </span>

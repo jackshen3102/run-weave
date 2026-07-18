@@ -15,10 +15,13 @@ export {
 } from "./terminal-quick-inputs";
 export {
   completeAgentTeamRun,
+  continueAgentTeamFrameworkRepair,
   decideAgentTeamFinding,
   focusAgentTeamPane,
+  getAgentTeamFrameworkRepair,
   getAgentTeamRunForTerminal,
   proposeAgentTeamSplit,
+  rerunAgentTeamFrameworkRepair,
   resumeAgentTeamRun,
   startAgentTeamRun,
   submitAgentTeamSplitGate,

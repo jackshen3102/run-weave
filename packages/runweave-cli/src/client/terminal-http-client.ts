@@ -1,8 +1,11 @@
 import type {
   AgentTeamExportHistoryMode,
   AgentTeamExportResponse,
+  AgentTeamFrameworkRepairRecoveryStatus,
+  AgentTeamFrameworkRepairResponse,
   AgentTeamRun,
   AgentTeamRunsResponse,
+  BeginAgentTeamFrameworkRepairRequest,
   InterveneAgentTeamRunRequest,
 } from "@runweave/shared/agent-team";
 import type { TerminalStateResponse } from "@runweave/shared/terminal/events";
@@ -241,6 +244,48 @@ export class TerminalHttpClient {
   ): Promise<AgentTeamRun> {
     return this.auth.requestJson<AgentTeamRun>(
       `/api/agent-team/runs/${encodeURIComponent(runId)}/intervene`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  getAgentTeamFrameworkRepair(
+    runId: string,
+  ): Promise<AgentTeamFrameworkRepairRecoveryStatus> {
+    return this.auth.requestJson<AgentTeamFrameworkRepairRecoveryStatus>(
+      `/api/agent-team/runs/${encodeURIComponent(runId)}/framework-repair`,
+    );
+  }
+
+  beginAgentTeamFrameworkRepair(
+    runId: string,
+    payload: BeginAgentTeamFrameworkRepairRequest,
+  ): Promise<AgentTeamFrameworkRepairResponse> {
+    return this.requestAgentTeamFrameworkRepairAction(runId, "begin", payload);
+  }
+
+  continueAgentTeamFrameworkRepair(
+    runId: string,
+  ): Promise<AgentTeamFrameworkRepairResponse> {
+    return this.requestAgentTeamFrameworkRepairAction(runId, "continue", {});
+  }
+
+  rerunAgentTeamFrameworkRepair(
+    runId: string,
+  ): Promise<AgentTeamFrameworkRepairResponse> {
+    return this.requestAgentTeamFrameworkRepairAction(runId, "rerun", {});
+  }
+
+  private requestAgentTeamFrameworkRepairAction(
+    runId: string,
+    action: "begin" | "continue" | "rerun",
+    payload: BeginAgentTeamFrameworkRepairRequest | Record<string, never>,
+  ): Promise<AgentTeamFrameworkRepairResponse> {
+    return this.auth.requestJson<AgentTeamFrameworkRepairResponse>(
+      `/api/agent-team/runs/${encodeURIComponent(runId)}/framework-repair/${action}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

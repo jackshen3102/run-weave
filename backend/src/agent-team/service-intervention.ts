@@ -48,6 +48,7 @@ export class AgentTeamInterventionService extends AgentTeamRecheckService {
   ): Promise<AgentTeamRun> {
     return this.enqueue(runId, async () => {
       const run = await this.requireRun(runId);
+      this.assertFrameworkRepairNotBlocked(run);
       const supersedingActiveDispatch =
         input.action === "dispatch" &&
         run.status === "running" &&

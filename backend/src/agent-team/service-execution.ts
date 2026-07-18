@@ -11,6 +11,7 @@ import type {
 } from "@runweave/shared/agent-team";
 import type { TerminalSessionRecord } from "../terminal/manager";
 import { createTerminalPanelSplit } from "../terminal/application/panel-split";
+import { resolveTmuxTarget } from "../terminal/runtime-launcher";
 import { AgentTeamError } from "./errors";
 import {
   buildBounceBackPrompt,
@@ -86,98 +87,128 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     const executionAcceptance = ensureWorkerGateAcceptance(workers, acceptance);
     assertTraceableBehaviorAcceptance(workers, executionAcceptance);
     const boundWorkers: AgentTeamWorker[] = [];
-    for (const worker of workers) {
-      let panelId: string | null = null;
-      let tmuxPaneId: string | null = null;
-      const panelAlias = this.resolveWorkerPanelAlias(
-        session.id,
-        `${worker.role}-${boundWorkers.length + 1}`,
-        run.runId,
-        worker.role,
-      );
-      const panelRole = buildAgentTeamPanelRole(run.runId, worker.role);
-      if (this.tmuxService) {
-        const existingPanel = this.findReusableWorkerPanel(
+    const createdPanels: CreatedWorkerPanel[] = [];
+    let activeWorkers: AgentTeamWorker[] = [];
+    let activeWorker: AgentTeamWorker | null = null;
+    let activeWorkerDispatch: AgentTeamActiveWorkerDispatch | null = null;
+    let persistedRun: AgentTeamRun;
+    try {
+      for (const worker of workers) {
+        let panelId: string | null = null;
+        let tmuxPaneId: string | null = null;
+        const panelAlias = this.resolveWorkerPanelAlias(
           session.id,
+          `${worker.role}-${boundWorkers.length + 1}`,
           run.runId,
-          panelAlias,
-          panelRole,
+          worker.role,
         );
-        if (existingPanel) {
-          panelId = existingPanel.id;
-          tmuxPaneId = existingPanel.tmuxPaneId;
-        } else {
-          try {
-            const { panel } = await createTerminalPanelSplit(
-              this.terminalSessionManager,
-              session,
-              {
-                ptyService: this.ptyService,
-                runtimeRegistry: this.runtimeRegistry,
-                tmuxService: this.tmuxService,
-                tmuxOutputWatcher: this.tmuxOutputWatcher,
-                terminalEventService: this.terminalEventService,
-              },
-              {
-                direction: boundWorkers.length % 2 === 0 ? "right" : "down",
-                role: panelRole,
-                alias: panelAlias,
-                agentTeamRunId: run.runId,
-                agentTeamWorkerId: worker.id,
-                cwd: terminal.cwd ?? undefined,
-                focus: false,
-              },
-            );
-            panelId = panel.id;
-            tmuxPaneId = panel.tmuxPaneId;
-          } catch (error) {
-            throw createAgentTeamPanelError(run.runId, worker.role, error);
+        const panelRole = buildAgentTeamPanelRole(run.runId, worker.role);
+        if (this.tmuxService) {
+          const existingPanel = this.findReusableWorkerPanel(
+            session.id,
+            run.runId,
+            panelAlias,
+            panelRole,
+          );
+          if (existingPanel) {
+            panelId = existingPanel.id;
+            tmuxPaneId = existingPanel.tmuxPaneId;
+          } else {
+            try {
+              const { panel } = await createTerminalPanelSplit(
+                this.terminalSessionManager,
+                session,
+                {
+                  ptyService: this.ptyService,
+                  runtimeRegistry: this.runtimeRegistry,
+                  tmuxService: this.tmuxService,
+                  tmuxOutputWatcher: this.tmuxOutputWatcher,
+                  terminalEventService: this.terminalEventService,
+                },
+                {
+                  direction:
+                    boundWorkers.length % 2 === 0 ? "right" : "down",
+                  role: panelRole,
+                  alias: panelAlias,
+                  agentTeamRunId: run.runId,
+                  agentTeamWorkerId: worker.id,
+                  cwd: terminal.cwd ?? undefined,
+                  focus: false,
+                },
+              );
+              panelId = panel.id;
+              tmuxPaneId = panel.tmuxPaneId;
+              createdPanels.push({ panelId, tmuxPaneId });
+            } catch (error) {
+              const panelError = createAgentTeamPanelError(
+                run.runId,
+                worker.role,
+                error,
+              );
+              const partialPanel = partialPanelFromError(panelError);
+              if (partialPanel) {
+                createdPanels.push(partialPanel);
+              }
+              throw panelError;
+            }
           }
         }
+        const boundWorker: AgentTeamWorker = {
+          ...worker,
+          panelId,
+          tmuxPaneId,
+          frozen: true,
+        };
+        boundWorkers.push(boundWorker);
       }
-      const boundWorker: AgentTeamWorker = {
-        ...worker,
-        panelId,
-        tmuxPaneId,
-        frozen: true,
-      };
-      boundWorkers.push(boundWorker);
-    }
-    const activeWorkerRole = resolveInitialActiveWorkerRole(
-      boundWorkers,
-      run.options.flow ?? "code_first",
-    );
-    const activeWorkers = setActiveWorker(boundWorkers, activeWorkerRole);
-    const activeWorker = activeWorkerRole
-      ? findWorkerByRole(activeWorkers, activeWorkerRole)
-      : null;
-    let activeWorkerDispatch: AgentTeamActiveWorkerDispatch | null = null;
-    if (activeWorker?.panelId) {
-      const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(
+      const activeWorkerRole = resolveInitialActiveWorkerRole(
+        boundWorkers,
+        run.options.flow ?? "code_first",
+      );
+      activeWorkers = setActiveWorker(boundWorkers, activeWorkerRole);
+      activeWorker = activeWorkerRole
+        ? findWorkerByRole(activeWorkers, activeWorkerRole)
+        : null;
+      if (activeWorker?.panelId) {
+        const outboxMtimeMs = await this.readWorkerOutboxMtimeMs(
+          session,
+          activeWorker,
+        );
+        const requestedAt = new Date().toISOString();
+        activeWorkerDispatch = createActiveWorkerDispatch(
+          activeWorker,
+          requestedAt,
+          outboxMtimeMs,
+          run.loop.round,
+        );
+      }
+      persistedRun = await this.updateRun(run, {
+        phase: "executing",
+        status: "running",
+        terminal,
+        proposal: null,
+        activeWorkerRole,
+        activeWorkerDispatch,
+        workerDispatchProtocolVersion: 1,
+        consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
+        workers: activeWorkers,
+        acceptance: executionAcceptance,
+        logs: [...run.logs, context.log],
+      });
+    } catch (error) {
+      const rollbackErrors = await this.rollbackWorkerPanels(
         session,
-        activeWorker,
+        createdPanels,
       );
-      const requestedAt = new Date().toISOString();
-      activeWorkerDispatch = createActiveWorkerDispatch(
-        activeWorker,
-        requestedAt,
-        outboxMtimeMs,
-        run.loop.round,
-      );
+      await this.restoreMainPaneFocus(session, run.mainPanelId);
+      if (rollbackErrors.length > 0) {
+        throw new AgentTeamError(
+          409,
+          `Worker pane 创建或 Run 持久化失败，且新建 pane 回滚不完整：${rollbackErrors.join("; ")}`,
+        );
+      }
+      throw error;
     }
-    const persistedRun = await this.updateRun(run, {
-      phase: "executing",
-      status: "running",
-      terminal,
-      proposal: null,
-      activeWorkerRole,
-      activeWorkerDispatch,
-      workerDispatchProtocolVersion: 1,
-      consumedWorkerDispatches: run.consumedWorkerDispatches ?? [],
-      workers: activeWorkers,
-      acceptance: executionAcceptance,
-      logs: [...run.logs, context.log],
-    });
     if (activeWorker?.panelId && activeWorkerDispatch) {
       const startupPrompt = buildWorkerStartupPrompt({
         run: persistedRun,
@@ -217,6 +248,49 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
     }
     await this.restoreMainPaneFocus(session, run.mainPanelId);
     return persistedRun;
+  }
+
+  protected async rollbackWorkerPanels(
+    session: TerminalSessionRecord,
+    panels: CreatedWorkerPanel[],
+  ): Promise<string[]> {
+    const errors: string[] = [];
+    for (const panel of [...panels].reverse()) {
+      if (this.tmuxService && !panel.paneRemoved) {
+        await this.tmuxService
+          .killPane({
+            ...resolveTmuxTarget(session, this.tmuxService),
+            paneId: panel.tmuxPaneId,
+          })
+          .catch((error: unknown) => {
+            errors.push(
+              `kill ${panel.tmuxPaneId}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          });
+      }
+      await this.tmuxOutputWatcher
+        ?.unwatchPane(session.id, panel.tmuxPaneId)
+        .catch((error: unknown) => {
+          errors.push(
+            `unwatch ${panel.tmuxPaneId}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+      await this.terminalSessionManager
+        .markPanelExited(panel.panelId)
+        .catch((error: unknown) => {
+          errors.push(
+            `mark exited ${panel.panelId}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+      await this.terminalSessionManager
+        .removePanelFromWorkspace(session.id, panel.panelId)
+        .catch((error: unknown) => {
+          errors.push(
+            `remove ${panel.panelId}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+    }
+    return errors;
   }
 
   protected async applyRound(
@@ -515,6 +589,32 @@ export abstract class AgentTeamExecutionService extends AgentTeamServiceSupport 
       return run;
     }
   }
+}
+
+interface CreatedWorkerPanel {
+  panelId: string;
+  tmuxPaneId: string;
+  paneRemoved?: boolean;
+}
+
+function partialPanelFromError(error: AgentTeamError): CreatedWorkerPanel | null {
+  if (!error.details || typeof error.details !== "object") {
+    return null;
+  }
+  const details = error.details as Record<string, unknown>;
+  const partialPanel = details.partialPanel;
+  if (!partialPanel || typeof partialPanel !== "object") {
+    return null;
+  }
+  const panel = partialPanel as Record<string, unknown>;
+  if (typeof panel.panelId !== "string" || typeof panel.tmuxPaneId !== "string") {
+    return null;
+  }
+  return {
+    panelId: panel.panelId,
+    tmuxPaneId: panel.tmuxPaneId,
+    paneRemoved: details.paneRemoved === true,
+  };
 }
 
 function pendingDecisionFromReviewCycle(

@@ -1,4 +1,6 @@
 import type {
+  AgentTeamFrameworkRepairRecoveryStatus,
+  AgentTeamFrameworkRepairResponse,
   AgentTeamRun,
   AgentTeamRunsResponse,
   CompleteAgentTeamRunRequest,
@@ -88,6 +90,51 @@ export async function resumeAgentTeamRun(
       method: "POST",
       headers: AGENT_TEAM_JSON_HEADERS(token),
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function getAgentTeamFrameworkRepair(
+  apiBase: string,
+  token: string,
+  runId: string,
+): Promise<AgentTeamFrameworkRepairRecoveryStatus> {
+  return requestJson<AgentTeamFrameworkRepairRecoveryStatus>(
+    apiBase,
+    `/api/agent-team/runs/${encodeURIComponent(runId)}/framework-repair`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+}
+
+export async function continueAgentTeamFrameworkRepair(
+  apiBase: string,
+  token: string,
+  runId: string,
+): Promise<AgentTeamFrameworkRepairResponse> {
+  return requestFrameworkRepairAction(apiBase, token, runId, "continue");
+}
+
+export async function rerunAgentTeamFrameworkRepair(
+  apiBase: string,
+  token: string,
+  runId: string,
+): Promise<AgentTeamFrameworkRepairResponse> {
+  return requestFrameworkRepairAction(apiBase, token, runId, "rerun");
+}
+
+function requestFrameworkRepairAction(
+  apiBase: string,
+  token: string,
+  runId: string,
+  action: "continue" | "rerun",
+): Promise<AgentTeamFrameworkRepairResponse> {
+  return requestJson<AgentTeamFrameworkRepairResponse>(
+    apiBase,
+    `/api/agent-team/runs/${encodeURIComponent(runId)}/framework-repair/${action}`,
+    {
+      method: "POST",
+      headers: AGENT_TEAM_JSON_HEADERS(token),
+      body: "{}",
     },
   );
 }

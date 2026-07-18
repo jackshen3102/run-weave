@@ -241,6 +241,32 @@ export interface AgentTeamConsumedWorkerDispatchReceipt {
   consumedAt: string;
 }
 
+export type AgentTeamFrameworkRepairResult = "blocked" | "continued" | "rerun";
+
+export interface AgentTeamFrameworkRepairTarget {
+  role: AgentTeamWorkerRole;
+  caseIds: string[];
+  panelId: string | null;
+  tmuxPaneId: string | null;
+  invalidatedDispatch: AgentTeamActiveWorkerDispatch;
+}
+
+/** Persisted framework-repair boundary. A blocked record revokes old dispatches. */
+export interface AgentTeamFrameworkRepair {
+  repairId: string;
+  reason: string;
+  begunAt: string;
+  backendInstanceIdBefore: string;
+  target: AgentTeamFrameworkRepairTarget;
+  result: AgentTeamFrameworkRepairResult;
+  /** A durable dispatch reservation which may already have reached the Worker. */
+  pendingContinueDispatchId?: string | null;
+  continuedAt?: string | null;
+  continuedDispatchId?: string | null;
+  rerunAt?: string | null;
+  successorRunId?: string | null;
+}
+
 export interface AgentTeamRun {
   runId: string;
   projectId: string;
@@ -264,6 +290,12 @@ export interface AgentTeamRun {
   workerDispatchProtocolVersion?: 1;
   /** Durable receipts for dispatches whose state-machine effect has completed. */
   consumedWorkerDispatches?: AgentTeamConsumedWorkerDispatchReceipt[];
+  /** Framework repair gate and its final recovery decision, when present. */
+  frameworkRepair?: AgentTeamFrameworkRepair | null;
+  /** Links a clean rerun back to the framework-blocked run it replaced. */
+  predecessorRunId?: string | null;
+  /** Links a framework-blocked run to the clean rerun created from it. */
+  successorRunId?: string | null;
   clarify: AgentTeamClarifyMessage[];
   proposal: AgentTeamProposal | null;
   workers: AgentTeamWorker[];
@@ -491,6 +523,38 @@ export interface SubmitAgentTeamSplitGateRequest {
 
 export interface ResumeAgentTeamRunRequest {
   note: string;
+}
+
+export interface BeginAgentTeamFrameworkRepairRequest {
+  reason: string;
+}
+
+export type AgentTeamFrameworkRepairContinueBlockerCode =
+  | "backend_not_restarted"
+  | "recovery_target_missing"
+  | "worker_pane_unavailable"
+  | "continue_dispatch_pending"
+  | "repair_not_blocked";
+
+export interface AgentTeamFrameworkRepairRecoveryStatus {
+  runId: string;
+  repairId: string;
+  reason: string;
+  result: AgentTeamFrameworkRepairResult;
+  backendRestarted: boolean;
+  canContinue: boolean;
+  continueBlocker: {
+    code: AgentTeamFrameworkRepairContinueBlockerCode;
+    message: string;
+  } | null;
+  actions: Array<"continue" | "rerun">;
+  target: AgentTeamFrameworkRepairTarget;
+}
+
+export interface AgentTeamFrameworkRepairResponse {
+  run: AgentTeamRun;
+  recovery: AgentTeamFrameworkRepairRecoveryStatus;
+  successorRun: AgentTeamRun | null;
 }
 
 export interface CompleteAgentTeamRunRequest {
