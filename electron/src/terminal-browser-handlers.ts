@@ -55,10 +55,19 @@ import {
   sendTerminalBrowserTabUpdate,
 } from "./terminal-browser-view-updates.js";
 import { getTerminalBrowserTabsForWindow } from "./terminal-browser-proxy-api.js";
+import { popupTerminalBrowserToolMenu } from "./terminal-browser-tool-menu.js";
 
 export function registerTerminalBrowserHandlers(): void {
   ensureTerminalBrowserHeaderDispatcher();
   ensureTerminalBrowserCookiePersistence(getTerminalBrowserSession());
+
+  ipcMain.handle("terminal-browser:open-tool-menu", async (event, request) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) {
+      return null;
+    }
+    return await popupTerminalBrowserToolMenu(win, request);
+  });
 
   ipcMain.handle("terminal-browser:get-proxy-state", () => {
     return getTerminalBrowserProxyState();

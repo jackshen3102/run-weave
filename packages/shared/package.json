@@ -41,6 +41,7 @@
     "./terminal-browser-device": "./src/terminal-browser-device.ts",
     "./terminal-browser-headers": "./src/terminal-browser-headers.ts",
     "./terminal-browser-proxy": "./src/terminal-browser-proxy.ts",
+    "./terminal-browser-tool-menu": "./src/terminal-browser-tool-menu.ts",
     "./terminal-limits": "./src/terminal-limits.ts",
     "./terminal-preview-core": "./src/terminal-preview-core.ts",
     "./terminal-protocol": "./src/terminal-protocol.ts",

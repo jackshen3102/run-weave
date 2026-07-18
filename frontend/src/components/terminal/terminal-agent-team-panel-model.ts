@@ -47,7 +47,19 @@ export interface AgentTeamAttention {
 
 export interface AgentTeamStatusPresentation {
   label: string;
-  tone: "neutral" | "running" | AgentTeamAttentionTone;
+  tone: "neutral" | "running" | "recovering" | AgentTeamAttentionTone;
+}
+
+export type AgentTeamControlStateKind =
+  | "normal"
+  | "automatic_recovery"
+  | "recovery_required"
+  | "scope_decision";
+
+export interface AgentTeamControlState extends AgentTeamStatusPresentation {
+  kind: AgentTeamControlStateKind;
+  allowsFrameworkRecovery: boolean;
+  allowsFindingDecision: boolean;
 }
 
 export function getAgentTeamAttention(
@@ -72,12 +84,12 @@ export function getAgentTeamAttention(
     return {
       kind: "human",
       tone: "danger",
-      title: "需要人工介入",
+      title: "需要恢复现场",
       severity: "阻断",
       summary:
         run.loop.lastReason ??
         primaryIssue?.summary ??
-        "Agent Team 已暂停，等待人工处理。",
+        "Agent Team 已暂停，需要恢复运行现场。",
       meta: primaryIssue
         ? `阻断来源：${primaryIssue.title}${primaryIssue.caseId ? ` · ${primaryIssue.caseId}` : ""}`
         : "Loop 已暂停",
@@ -118,14 +130,15 @@ export function getAgentTeamStatusPresentation(
   run: AgentTeamRun,
   attention: AgentTeamAttention | null,
 ): AgentTeamStatusPresentation {
-  if (run.pendingFindingDecision) {
-    return { label: "需要范围裁决", tone: "danger" };
-  }
-  if (run.status === "need_human" || run.loop.escalated) {
-    return { label: "需要人工", tone: "danger" };
+  const controlState = getAgentTeamControlState(run);
+  if (controlState.kind !== "normal") {
+    return controlState;
   }
   if (run.status === "failed") {
     return { label: "失败", tone: "danger" };
+  }
+  if (run.status === "cancelled") {
+    return { label: "已取消 fixture", tone: "neutral" };
   }
   if (run.status === "done" && attention) {
     return { label: "人工结束 · 有遗留", tone: "warning" };
@@ -145,6 +158,52 @@ export function getAgentTeamStatusPresentation(
     return { label: PHASE_LABEL[run.phase], tone: "running" };
   }
   return { label: PHASE_LABEL[run.phase], tone: "neutral" };
+}
+
+export function getAgentTeamControlState(
+  run: AgentTeamRun,
+): AgentTeamControlState {
+  if (run.pendingFindingDecision) {
+    return {
+      kind: "scope_decision",
+      label: "需要范围裁决",
+      tone: "danger",
+      allowsFrameworkRecovery: false,
+      allowsFindingDecision: true,
+    };
+  }
+  if (run.status === "need_human" || run.loop.escalated) {
+    return {
+      kind: "recovery_required",
+      label: "需要恢复现场",
+      tone: "warning",
+      allowsFrameworkRecovery: run.frameworkRepair?.result === "blocked",
+      allowsFindingDecision: false,
+    };
+  }
+  if (
+    run.status === "running" &&
+    (run.activeWorkerDispatch?.protocolCorrectionAttempt ?? 0) > 0
+  ) {
+    return {
+      kind: "automatic_recovery",
+      label: "正在自动恢复",
+      tone: "recovering",
+      allowsFrameworkRecovery: false,
+      allowsFindingDecision: false,
+    };
+  }
+  return {
+    kind: "normal",
+    label: PHASE_LABEL[run.phase],
+    tone: run.status === "running" ? "running" : "neutral",
+    allowsFrameworkRecovery: false,
+    allowsFindingDecision: false,
+  };
+}
+
+export function isAgentTeamRunActive(run: AgentTeamRun): boolean {
+  return !["done", "failed", "cancelled"].includes(run.status);
 }
 
 export function getAgentTeamCaseElementId(

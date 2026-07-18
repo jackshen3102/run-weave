@@ -74,6 +74,13 @@ export function verifyEvidenceGatedRepairLoop(check) {
     new URL("../../backend/src/agent-team/service-support.ts", import.meta.url),
     "utf8",
   );
+  const workerDispatchSupportSource = readFileSync(
+    new URL(
+      "../../backend/src/agent-team/service-worker-dispatch-support.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   const pauseDispatchBody = supportSource.slice(
     supportSource.indexOf("protected async pauseForWorkerDispatchError"),
     supportSource.indexOf("private async withVerificationDigests"),
@@ -96,7 +103,7 @@ export function verifyEvidenceGatedRepairLoop(check) {
   );
   check(
     "repair-consumption-persists-receipt-and-advances-protocol",
-    completionSource.includes("recordConsumedWorkerDispatch") &&
+    completionSource.includes("withConsumedWorkerDispatch") &&
       completionSource.includes("workerDispatchProtocolVersion: 1") &&
       completionSource.includes("contentSha256: history.contentSha256"),
     completionSource.slice(0, 20_000),
@@ -132,7 +139,8 @@ export function verifyEvidenceGatedRepairLoop(check) {
       resumeBody.includes('lastRepairSourceRole === "behavior_verify"') &&
       resumeBody.includes("repairKey: `behavior_verify:${item.caseId}`") &&
       resumeBody.includes("repairCycles: resumedRepairCycles") &&
-      pauseDispatchBody.includes("activeWorkerRole: role") &&
+      pauseDispatchBody.includes("activeWorkerRole: null") &&
+      pauseDispatchBody.includes("activeWorkerDispatch: null") &&
       resumeBody.includes('activeWorkerRole === "code"') &&
       resumeBody.includes("return this.bounceFailuresToCode(") &&
       resumeBody.includes(
@@ -144,17 +152,19 @@ export function verifyEvidenceGatedRepairLoop(check) {
   );
   check(
     "human-gate-notification-is-centralized-configurable-and-default-on",
-    supportSource.includes('run.status !== "need_human"') &&
-      supportSource.includes('next.status === "need_human"') &&
-      supportSource.includes("next.options.notifyMainOnHumanGate !== false") &&
-      supportSource.includes(
+    workerDispatchSupportSource.includes('run.status !== "need_human"') &&
+      workerDispatchSupportSource.includes('next.status === "need_human"') &&
+      workerDispatchSupportSource.includes(
+        "next.options.notifyMainOnHumanGate !== false",
+      ) &&
+      workerDispatchSupportSource.includes(
         "await this.trySendToMain(next, buildHumanGateMainPrompt(next))",
       ) &&
       lifecycleSource.includes(
         "input.options?.notifyMainOnHumanGate ?? true",
       ) &&
       !executionSource.includes("buildBlockedBehaviorMainPrompt"),
-    { supportSource, lifecycleSource, executionSource },
+    { workerDispatchSupportSource, lifecycleSource, executionSource },
   );
   check(
     "main-agent-intervention-is-explicit-and-cannot-dispose-findings",

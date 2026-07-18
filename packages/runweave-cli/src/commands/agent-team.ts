@@ -3,6 +3,7 @@ import type {
   AgentTeamExportResponse,
   AgentTeamFrameworkRepairRecoveryStatus,
   AgentTeamFrameworkRepairResponse,
+  AgentTeamFixtureScopeResponse,
   AgentTeamWorkerRole,
 } from "@runweave/shared/agent-team";
 import {
@@ -27,11 +28,11 @@ export async function runAgentTeamCommand(
 ): Promise<void> {
   if (!subcommand) {
     throw new CliError(
-      "Usage: rw agent-team <export|intervene|framework-repair> [options]",
+      "Usage: rw agent-team <export|intervene|framework-repair|fixtures|cancel> [options]",
       2,
     );
   }
-  const parsed = parseArgs(args, new Set(["json", "plain"]));
+  const parsed = parseArgs(args, new Set(["json", "plain", "keep-resources"]));
   const mode = resolveOutputMode(parsed.options);
   const auth = await resolveAuthContext({
     profileName: getStringOption(parsed.options, "profile"),
@@ -136,6 +137,46 @@ export async function runAgentTeamCommand(
       io.stdout,
       mode,
       mode === "json" ? response : formatPlainFrameworkRepair(response),
+    );
+    return;
+  }
+
+  if (subcommand === "fixtures") {
+    const ownerRunId = parsed.positionals[0];
+    if (!ownerRunId) {
+      throw new CliError(
+        "Usage: rw agent-team fixtures <ownerRunId> [--dispatch-id <id>]",
+        2,
+      );
+    }
+    const payload = await client.listAgentTeamFixtureScope(
+      ownerRunId,
+      getStringOption(parsed.options, "dispatch-id"),
+    );
+    writeOutput(
+      io.stdout,
+      mode,
+      mode === "json" ? payload : formatPlainFixtureScope(payload),
+    );
+    return;
+  }
+
+  if (subcommand === "cancel") {
+    const runId = await resolveRunId(
+      client,
+      parsed.positionals[0],
+      parsed.options,
+    );
+    const run = await client.cancelAgentTeamRun(runId, {
+      reason: requireStringOption(parsed.options, "reason"),
+      cleanupResources: parsed.options["keep-resources"] !== true,
+    });
+    writeOutput(
+      io.stdout,
+      mode,
+      mode === "json"
+        ? run
+        : `Fixture ${run.runId}: ${run.status}, cleanup=${run.fixtureResourceCleanup?.status ?? "not-requested"}`,
     );
     return;
   }
@@ -354,5 +395,19 @@ function formatPlainFrameworkRepair(
     ...(response.successorRun
       ? [`Successor run: ${response.successorRun.runId}`]
       : []),
+  ].join("\n");
+}
+
+function formatPlainFixtureScope(
+  payload: AgentTeamFixtureScopeResponse,
+): string {
+  return [
+    `Owner Run: ${payload.ownerRunId}`,
+    `Owner Dispatch: ${payload.ownerDispatchId ?? "all"}`,
+    `Owned live fixtures: ${payload.ownedLiveFixtureRuns}`,
+    ...payload.runs.map(
+      (run) =>
+        `- ${run.runId}: ${run.status}, terminal=${run.terminalSessionId}, cleanup=${run.fixtureResourceCleanup?.status ?? "not-run"}`,
+    ),
   ].join("\n");
 }

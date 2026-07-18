@@ -9,11 +9,64 @@ import type {
 } from "../terminal/manager";
 import { getAgentForCommand } from "../terminal/terminal-state-service";
 import { AgentTeamError } from "./errors";
+import { buildHumanGateMainPrompt } from "./prompt-builders";
 import { AgentTeamServiceContext, agentTeamLogger } from "./service-context";
 
 const WORKER_THREAD_READINESS_TIMEOUT_MS = 10_000;
 
 export class AgentTeamWorkerDispatchSupport extends AgentTeamServiceContext {
+  protected async updateRun(
+    run: AgentTeamRun,
+    patch: Partial<
+      Pick<
+        AgentTeamRun,
+        | "phase"
+        | "status"
+        | "options"
+        | "terminal"
+        | "task"
+        | "verification"
+        | "reviewCheckpoint"
+        | "activeWorkerRole"
+        | "activeWorkerDispatch"
+        | "workerDispatchProtocolVersion"
+        | "consumedWorkerDispatches"
+        | "frameworkRepair"
+        | "predecessorRunId"
+        | "successorRunId"
+        | "clarify"
+        | "proposal"
+        | "workers"
+        | "acceptance"
+        | "loop"
+        | "humanNotes"
+        | "agentInterventions"
+        | "findingDecisions"
+        | "pendingFindingDecision"
+        | "cancellation"
+        | "fixtureResourceCleanup"
+        | "fixtureCleanupHistory"
+        | "logs"
+        | "mainPanelId"
+      >
+    >,
+  ): Promise<AgentTeamRun> {
+    const next: AgentTeamRun = {
+      ...run,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.runStore.writeRun(next);
+    if (
+      run.status !== "need_human" &&
+      next.status === "need_human" &&
+      next.options.notifyMainOnHumanGate !== false
+    ) {
+      await this.trySendToMain(next, buildHumanGateMainPrompt(next));
+    }
+    return next;
+  }
+
   protected async trySendToMain(
     run: AgentTeamRun,
     text: string,

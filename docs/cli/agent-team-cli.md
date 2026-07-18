@@ -26,3 +26,22 @@ rw agent-team export --project-id <projectId> --terminal-session-id <terminalSes
 - warnings
 
 `--history` 支持 `none`、`tail`、`full`。默认 `tail`，`--tail` 最大 5000 行。
+
+## Verification fixtures
+
+按父 Run 或精确 behavior dispatch 查看 owned fixture，不隐藏已取消的审计记录：
+
+```bash
+rw agent-team fixtures <ownerRunId> --json
+rw agent-team fixtures <ownerRunId> --dispatch-id <dispatchId> --plain
+```
+
+显式取消单个 fixture，并默认回收它声明拥有的 terminal/pane：
+
+```bash
+rw agent-team cancel <fixtureRunId> --reason "operator cleanup" --json
+```
+
+`cancel` 只接受 `verification_fixture`，写入可审计的 `cancelled` 终态，不删除 Run JSON 或 outbox history。诊断资源清理问题时可暂用 `--keep-resources`，之后用相同命令重试清理。
+
+命令只查询当前 CLI profile 对应的 Backend：父 Backend上的本地 fixture可直接查看；跨 Backend fixture应在owned Dev Session停止前查询candidate profile，停止后的Run/terminal/pane/outbox身份以Dev Session manifest的`fixtureCleanup.resourceLedger`和父Run的cleanup receipt为审计事实。

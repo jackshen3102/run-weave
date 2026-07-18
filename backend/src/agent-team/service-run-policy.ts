@@ -16,7 +16,7 @@ const DEFAULT_AGENT_TEAM_AGENT_COMMAND = "codex";
 export function createSyntheticCompletionEvent(
   run: AgentTeamRun,
   session: TerminalSessionRecord,
-  worker: Pick<AgentTeamWorker, "panelId" | "tmuxPaneId">,
+  worker: Pick<AgentTeamWorker, "panelId" | "tmuxPaneId"> | null,
   signal: AgentTeamCompletionSignal,
 ): Extract<TerminalEventEnvelope, { kind: "completion" }> {
   const now = new Date().toISOString();
@@ -36,8 +36,8 @@ export function createSyntheticCompletionEvent(
       cwd: signal.cwd ?? session.cwd,
       outboxPath: signal.outboxPath ?? null,
       summary: null,
-      panelId: signal.panelId ?? worker.panelId ?? null,
-      tmuxPaneId: signal.tmuxPaneId ?? worker.tmuxPaneId ?? null,
+      panelId: signal.panelId ?? worker?.panelId ?? null,
+      tmuxPaneId: signal.tmuxPaneId ?? worker?.tmuxPaneId ?? null,
     },
   };
 }

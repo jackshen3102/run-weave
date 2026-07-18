@@ -289,6 +289,9 @@ export class AgentTeamRecheckService extends AgentTeamCompletionService {
           ? {
               ...item,
               status: "pending" as const,
+              lastRunStatus: "pending" as const,
+              skip: null,
+              skipReason: null,
               resultSummary: null,
               reproduction: null,
               bouncedToPanelId: null,

@@ -152,8 +152,7 @@ function verifyWorkerPanesStayFixedAcrossRechecks(check) {
       ) &&
       preparationSource.indexOf(
         "reusingPanel && (!resumingThread || resetPanelBeforeResume)",
-      ) <
-        preparationSource.indexOf("respawnPane("),
+      ) < preparationSource.indexOf("respawnPane("),
     preparationSource.slice(0, 12_000),
   );
 }
@@ -582,7 +581,8 @@ async function verifyUnavailableExistingThreadFailsClosed(check, roots) {
     check(
       "agent-team-existing-thread-unavailable-fails-closed",
       result.status === "need_human" &&
-        result.activeWorkerRole === "code_review" &&
+        result.activeWorkerRole === null &&
+        result.activeWorkerDispatch === null &&
         result.logs.some((item) => item.includes("禁止新开 thread")) &&
         harness.respawnedPanes.length === 0 &&
         harness.paneOperations.every((item) => item.type !== "send") &&

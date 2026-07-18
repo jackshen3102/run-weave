@@ -16,7 +16,7 @@ import {
 import { createInitialLoop } from "./loop";
 import { resolveMaxRepairAttempts } from "./repair-loop";
 import { agentTeamLogger } from "./service-context";
-import { AgentTeamInterventionService } from "./service-intervention";
+import { AgentTeamFixtureLifecycleService } from "./service-fixture-lifecycle";
 import { acceptanceCasesForRole } from "./service-acceptance-policy";
 import {
   normalizeWorkers,
@@ -30,19 +30,17 @@ import {
   requireVerificationConfig,
   resolveAgentTeamTerminal,
 } from "./service-run-policy";
+import { isTerminalAgentTeamStatus } from "./service-fixture-support";
 
-export class AgentTeamLifecycleService extends AgentTeamInterventionService {
+export class AgentTeamLifecycleService extends AgentTeamFixtureLifecycleService {
   async startRun(input: CreateAgentTeamRunRequest): Promise<AgentTeamRun> {
     const session = this.requireSession(input.terminalSessionId);
+    const fixtureIdentity = await this.resolveRunFixtureIdentity(input);
     const existing = await this.runStore.getRunByTerminalSession(
       input.projectId,
       input.terminalSessionId,
     );
-    if (
-      existing &&
-      existing.status !== "done" &&
-      existing.status !== "failed"
-    ) {
+    if (existing && !isTerminalAgentTeamStatus(existing.status)) {
       throw new AgentTeamError(
         409,
         "This terminal already has an active agent-team run",
@@ -72,8 +70,7 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
         const owner = runs.find(
           (candidate) =>
             candidate.runId !== runId &&
-            candidate.status !== "done" &&
-            candidate.status !== "failed" &&
+            !isTerminalAgentTeamStatus(candidate.status) &&
             candidate.reviewCheckpoint?.repoRoot === preflight.repoRoot,
         );
         if (owner) {
@@ -128,6 +125,8 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
     const run: AgentTeamRun = {
       runId,
       projectId: input.projectId,
+      runKind: fixtureIdentity.runKind,
+      lineage: fixtureIdentity.lineage,
       terminalSessionId: input.terminalSessionId,
       mainPanelId,
       phase: "intake",
@@ -155,6 +154,9 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
       humanNotes: [],
       findingDecisions: [],
       pendingFindingDecision: null,
+      cancellation: null,
+      fixtureResourceCleanup: null,
+      fixtureCleanupHistory: [],
       logs: [prepared.startLog],
       createdAt: now,
       updatedAt: now,
@@ -304,6 +306,9 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
   ): Promise<AgentTeamRun> {
     const run = await this.requireRun(runId);
     this.assertFrameworkRepairNotBlocked(run);
+    if (run.status === "cancelled") {
+      throw new AgentTeamError(409, "Cancelled fixture Run cannot be resumed");
+    }
     if (run.pendingFindingDecision) {
       throw new AgentTeamError(
         409,
@@ -434,6 +439,12 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
     if (run.status === "failed") {
       throw new AgentTeamError(409, "Run has already failed");
     }
+    if (run.status === "cancelled") {
+      throw new AgentTeamError(
+        409,
+        "Cancelled fixture Run cannot be completed",
+      );
+    }
     if (run.pendingFindingDecision) {
       throw new AgentTeamError(
         409,
@@ -452,6 +463,31 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
     }
     const note = input.note?.trim();
     const now = new Date().toISOString();
+    let fixtureCleanupHistory = run.fixtureCleanupHistory ?? [];
+    if ((run.runKind ?? "primary") === "primary") {
+      const cleanup = await this.reconcileOwnedFixtureResources(
+        run,
+        null,
+        `owner Run ${run.runId} requested completion`,
+      );
+      fixtureCleanupHistory = [...fixtureCleanupHistory, cleanup];
+      if (cleanup.status !== "completed") {
+        const reason = formatFixtureCleanupBlocker(cleanup);
+        return this.updateRun(run, {
+          status: "need_human",
+          workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+          activeWorkerRole: null,
+          activeWorkerDispatch: null,
+          fixtureCleanupHistory,
+          loop: {
+            ...run.loop,
+            escalated: true,
+            lastReason: reason,
+          },
+          logs: [...run.logs, `⏸ ${reason}`],
+        });
+      }
+    }
     return this.updateRun(run, {
       status: "done",
       workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
@@ -473,6 +509,7 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
             },
           ]
         : run.humanNotes,
+      fixtureCleanupHistory,
       logs: [
         ...run.logs,
         note ? `✅ 人工确认完成：${note}` : "✅ 人工确认完成，loop 已结束",
@@ -524,6 +561,16 @@ export class AgentTeamLifecycleService extends AgentTeamInterventionService {
     }
     return run;
   }
+}
+
+function formatFixtureCleanupBlocker(
+  cleanup: NonNullable<AgentTeamRun["fixtureCleanupHistory"]>[number],
+): string {
+  const liveRuns = cleanup.ownedLiveFixtureRunIds.length;
+  const blockedSessions = cleanup.devSessions.filter(
+    (session) => session.error,
+  ).length;
+  return `fixture cleanup 未归零：ownedLiveFixtureRuns=${liveRuns}，blockedDevSessions=${blockedSessions}${cleanup.errors.length > 0 ? `；${cleanup.errors.join("; ")}` : ""}`;
 }
 
 function buildReviewCheckpointBranch(runId: string): string {

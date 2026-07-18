@@ -71,6 +71,28 @@ export class AgentTeamRunStore {
     );
   }
 
+  async listOwnedFixtureRuns(
+    ownerRunId: string,
+    ownerDispatchId?: string | null,
+  ): Promise<AgentTeamRun[]> {
+    const runs = (
+      await Promise.all(
+        this.terminalSessionManager
+          .listProjects()
+          .map((project) => this.listRuns(project.id)),
+      )
+    ).flat();
+    return runs
+      .filter(
+        (run) =>
+          run.runKind === "verification_fixture" &&
+          run.lineage?.ownerRunId === ownerRunId &&
+          (ownerDispatchId == null ||
+            run.lineage.ownerDispatchId === ownerDispatchId),
+      )
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }
+
   async writeRun(run: AgentTeamRun): Promise<void> {
     assertSafeAgentTeamRunId(run.runId);
     const filePath = this.paths.runFilePath(run.projectId, run.runId);

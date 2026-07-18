@@ -1,11 +1,21 @@
 import { contextBridge, ipcRenderer, shell } from "electron";
-import type { PackagedBackendConnectionState, RuntimeStatsSnapshot } from "@runweave/shared/runtime-monitor";
+import type {
+  PackagedBackendConnectionState,
+  RuntimeStatsSnapshot,
+} from "@runweave/shared/runtime-monitor";
 import type { SystemMonitorSnapshot } from "@runweave/shared/system-monitor";
-import type { TerminalBrowserAnnotationState, TerminalBrowserAnnotationSubmission } from "@runweave/shared/terminal-browser-annotation";
+import type {
+  TerminalBrowserAnnotationState,
+  TerminalBrowserAnnotationSubmission,
+} from "@runweave/shared/terminal-browser-annotation";
 import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared/terminal-browser-cdp-proxy";
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
 import type { TerminalBrowserHeaderState } from "@runweave/shared/terminal-browser-headers";
 import type { TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
+import type {
+  TerminalBrowserToolMenuAction,
+  TerminalBrowserToolMenuRequest,
+} from "@runweave/shared/terminal-browser-tool-menu";
 
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
@@ -73,7 +83,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
       }>
     >,
   terminalBrowserReorderTabs: (orderedTabIds: string[]) =>
-    ipcRenderer.invoke("terminal-browser:reorder-tabs", orderedTabIds) as Promise<void>,
+    ipcRenderer.invoke(
+      "terminal-browser:reorder-tabs",
+      orderedTabIds,
+    ) as Promise<void>,
   terminalBrowserReload: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:reload", tabId),
   terminalBrowserStop: (tabId: string) =>
@@ -109,6 +122,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   ) => ipcRenderer.invoke("terminal-browser:set-bounds", tabId, bounds),
   terminalBrowserOpenDevTools: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:open-devtools", tabId),
+  terminalBrowserOpenToolMenu: (request: TerminalBrowserToolMenuRequest) =>
+    ipcRenderer.invoke(
+      "terminal-browser:open-tool-menu",
+      request,
+    ) as Promise<TerminalBrowserToolMenuAction | null>,
   terminalBrowserGetCdpProxyInfo: (tabId: string) =>
     ipcRenderer.invoke(
       "terminal-browser:get-cdp-proxy-info",

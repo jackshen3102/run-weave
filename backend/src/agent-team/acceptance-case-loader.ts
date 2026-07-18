@@ -149,6 +149,7 @@ function buildAcceptanceCase(
     recheckOutboxMtimeMs: null,
     recheckAttempt: 0,
     lastRunStatus: "pending",
+    skip: null,
     skipReason: null,
   };
 }

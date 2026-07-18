@@ -562,6 +562,7 @@ function resetAcceptance(
     status: "pending",
     consecutiveFail: 0,
     lastRunStatus: "pending",
+    skip: null,
     skipReason: null,
     resultSummary: null,
     reproduction: null,

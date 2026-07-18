@@ -7,7 +7,8 @@ export type AgentTeamStatus =
   | "running"
   | "need_human"
   | "done"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export type AgentTeamAcceptanceStatus = "pass" | "fail" | "pending";
 export type AgentTeamAcceptanceSource =

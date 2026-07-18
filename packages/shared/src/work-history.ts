@@ -1,5 +1,9 @@
 import type { ActivityFactsPage } from "./activity/contracts";
-import type { AgentTeamRun, AgentTeamStatus } from "./agent-team";
+import type {
+  AgentTeamRun,
+  AgentTeamRunKind,
+  AgentTeamStatus,
+} from "./agent-team";
 import type {
   AppServerThreadDetailResponse,
   AppServerThreadRef,
@@ -61,6 +65,9 @@ export interface AgentTeamArchiveSummary {
   runId: string;
   projectId: string;
   terminalSessionId: string;
+  runKind: AgentTeamRunKind;
+  ownerRunId: string | null;
+  ownerDispatchId: string | null;
   status: AgentTeamStatus;
   mode: AgentTeamArchiveMode;
   createdAt: string;

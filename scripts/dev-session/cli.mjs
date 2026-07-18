@@ -18,6 +18,7 @@ import {
   writeManifest,
 } from "./registry.mjs";
 import {
+  applyAgentTeamFixtureBackendIsolation,
   inspectSessionServices,
   resolveOpenTarget,
   resolveSourceRevision,
@@ -36,6 +37,7 @@ import {
   runBetaPoolJanitor,
 } from "./beta-slot-pool.mjs";
 import { runStop } from "./cli-stop.mjs";
+import { resolveAgentTeamFixtureScope } from "./agent-team-fixture-scope.mjs";
 
 function parseArgs(argv) {
   const command = argv[0] ?? "start";
@@ -104,6 +106,7 @@ function createManifest({
   revision,
   state,
   services,
+  fixtureScope,
   failure = null,
 }) {
   const now = new Date().toISOString();
@@ -118,7 +121,10 @@ function createManifest({
       sourceRoot: plan.sourceRoot,
       originTerminalSessionId:
         process.env.RUNWEAVE_TERMINAL_SESSION_ID?.trim() || null,
-      agentTeamRunId: process.env.RUNWEAVE_AGENT_TEAM_RUN_ID?.trim() || null,
+      agentTeamRunId: fixtureScope?.ownerRunId ?? null,
+      agentTeamDispatchId: fixtureScope?.ownerDispatchId ?? null,
+      agentTeamCaseIds: fixtureScope?.ownerCaseIds ?? [],
+      fixtureNamespace: fixtureScope?.fixtureNamespace ?? null,
     },
     targetEnvironment: plan.targetEnvironment,
     source: {
@@ -221,7 +227,7 @@ async function runStart(options, sourceRoot) {
     sourceRoot,
     options.changedFiles,
   );
-  const plan = buildDevSessionPlan({
+  let plan = buildDevSessionPlan({
     sourceRoot,
     changedFiles,
     explicitProfile: options.profile,
@@ -230,6 +236,11 @@ async function runStart(options, sourceRoot) {
     serviceOverrides: options.serviceOverrides,
   });
   if (options.dryRun) {
+    const fixtureScope = await resolveAgentTeamFixtureScope({
+      sourceRoot: plan.sourceRoot,
+      sessionId: "dry-run",
+    });
+    plan = applyAgentTeamFixtureBackendIsolation(plan, fixtureScope);
     const dryRunPlan =
       plan.profile === "beta"
         ? {
@@ -260,6 +271,11 @@ async function runStart(options, sourceRoot) {
   const sessionId = assertDevSessionId(
     options.sessionId ?? createReadableSessionId(),
   );
+  const fixtureScope = await resolveAgentTeamFixtureScope({
+    sourceRoot: plan.sourceRoot,
+    sessionId,
+  });
+  plan = applyAgentTeamFixtureBackendIsolation(plan, fixtureScope);
   const revision = await resolveSourceRevision(sourceRoot);
   if (plan.profile === "beta") {
     await runBetaPoolJanitor();
@@ -286,6 +302,7 @@ async function runStart(options, sourceRoot) {
         revision,
         state: "planned",
         services: plan.services,
+        fixtureScope,
       });
       await writeManifest(manifest);
       manifestCreated = true;
@@ -334,6 +351,7 @@ async function runStart(options, sourceRoot) {
         sessionId,
         revision,
         paths,
+        fixtureScope,
       });
       manifest = updateManifest(manifest, {
         state: "ready",

@@ -137,6 +137,7 @@ export async function createTerminalPanelSplit(
         terminalSessionId: session.id,
         terminalPanelId: panelId,
         projectId: session.projectId,
+        agentTeamRunId,
         tmuxSessionName:
           session.tmuxSessionName ?? tmuxService.buildSessionName(session.id),
       }),

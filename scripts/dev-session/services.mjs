@@ -34,6 +34,7 @@ export async function startSessionServices({
   sessionId,
   revision,
   paths,
+  fixtureScope = null,
 }) {
   await mkdir(paths.logsDir, { recursive: true, mode: 0o700 });
   const reservedPorts = new Set();
@@ -75,8 +76,10 @@ export async function startSessionServices({
   };
   try {
     if (plan.profile === "beta") {
-      const requestedSharedBackend =
-        plan.services.backend.ownership === "shared-declared";
+      const requestedSharedBackend = resolveDevSessionBackendSharing(
+        plan,
+        fixtureScope,
+      );
       const requestedSharedAppServer =
         plan.services.appServer.ownership === "shared-declared";
       const requiredSharedBackend =
@@ -120,11 +123,16 @@ export async function startSessionServices({
         sharedAppServer,
         requestedSharedBackend,
         requestedSharedAppServer,
+        fixtureScope,
         onSpawn,
       });
     }
+    const requestedSharedBackend = resolveDevSessionBackendSharing(
+      plan,
+      fixtureScope,
+    );
     const requiredSharedBackend =
-      plan.services.backend.ownership === "shared-declared" &&
+      requestedSharedBackend &&
       plan.services.backend.selectedBy === "explicit-service";
     let backend = requiredSharedBackend
       ? await resolveSharedBackend(plan.sourceRoot, revision, {
@@ -158,7 +166,7 @@ export async function startSessionServices({
     appServer ??= { ownership: "disabled" };
 
     if (
-      plan.services.backend.ownership === "shared-declared" &&
+      requestedSharedBackend &&
       !backend
     ) {
       backend = await resolveSharedBackend(plan.sourceRoot, revision);
@@ -172,10 +180,13 @@ export async function startSessionServices({
         paths,
         port,
         appServer,
+        fixtureScope,
         onSpawn,
       });
       backend.ownershipUpgradeReason =
-        plan.services.backend.ownership === "shared-declared"
+        fixtureScope
+          ? "Agent Team fixture scope requires a dedicated Backend"
+          : plan.services.backend.ownership === "shared-declared"
           ? "Default Backend was unavailable; upgraded to dedicated"
           : undefined;
     }
@@ -255,6 +266,47 @@ export async function startSessionServices({
       await lease.release();
     }
   }
+}
+
+export function resolveDevSessionBackendSharing(plan, fixtureScope) {
+  const requestedSharedBackend =
+    plan.services.backend.ownership === "shared-declared";
+  if (!fixtureScope || !requestedSharedBackend) {
+    return requestedSharedBackend;
+  }
+  if (plan.services.backend.selectedBy === "explicit-service") {
+    throw new DevSessionError(
+      "Agent Team fixture Dev Session cannot use an explicitly shared Backend",
+      4,
+      {
+        ownerRunId: fixtureScope.ownerRunId,
+        ownerDispatchId: fixtureScope.ownerDispatchId,
+      },
+    );
+  }
+  return false;
+}
+
+export function applyAgentTeamFixtureBackendIsolation(plan, fixtureScope) {
+  const sharedBackend = resolveDevSessionBackendSharing(plan, fixtureScope);
+  if (
+    !fixtureScope ||
+    sharedBackend ||
+    plan.services.backend.ownership !== "shared-declared"
+  ) {
+    return plan;
+  }
+  return {
+    ...plan,
+    services: {
+      ...plan.services,
+      backend: {
+        ...plan.services.backend,
+        ownership: "dedicated",
+        selectedBy: "agent-team-fixture-scope",
+      },
+    },
+  };
 }
 
 export async function assertSessionServicesStoppable(services) {

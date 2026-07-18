@@ -1,4 +1,5 @@
 import type {
+  AgentTeamConsumedWorkerDispatchReceipt,
   AgentTeamRun,
   AgentTeamWorker,
 } from "@runweave/shared/agent-team";
@@ -18,6 +19,26 @@ export function logStaleCompletion(
     role: worker.role,
     panelId: worker.panelId ?? null,
     reason,
+  };
+  if (source === "watchdog") {
+    agentTeamLogger.debug("agent-team.completion.stale", fields);
+    return;
+  }
+  agentTeamLogger.info("agent-team.completion.stale", fields);
+}
+
+export function logConsumedCompletion(
+  source: AgentTeamCompletionSignalSource,
+  run: AgentTeamRun,
+  receipt: AgentTeamConsumedWorkerDispatchReceipt,
+): void {
+  const fields = {
+    message: "Agent-team completion matched an already consumed dispatch",
+    source,
+    runId: run.runId,
+    role: receipt.role,
+    dispatchId: receipt.dispatchId,
+    reason: "outbox_dispatch_already_consumed",
   };
   if (source === "watchdog") {
     agentTeamLogger.debug("agent-team.completion.stale", fields);

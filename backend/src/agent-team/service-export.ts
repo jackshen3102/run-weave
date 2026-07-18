@@ -28,11 +28,23 @@ export class AgentTeamExportService extends AgentTeamFrameworkRepairService {
     options: ExportAgentTeamRunOptions = {},
   ): Promise<AgentTeamExportResponse> {
     const run = await this.requireRun(runId);
-    const session = this.requireSession(run.terminalSessionId);
-    const panels = this.terminalSessionManager.listPanels(
+    const session = this.terminalSessionManager.getSession(
       run.terminalSessionId,
     );
+    const panels = session
+      ? this.terminalSessionManager.listPanels(run.terminalSessionId)
+      : [];
+    const cwd =
+      session?.cwd ??
+      run.terminal.cwd ??
+      this.resolveProjectRoot(run.projectId, "") ??
+      process.cwd();
     const warnings: string[] = [];
+    if (!session) {
+      warnings.push(
+        `Terminal session ${run.terminalSessionId} was cleaned up; persisted Run and outbox history remain available`,
+      );
+    }
     const historyMode = options.history ?? "tail";
     const tailLines = clampExportTailLines(options.tailLines);
     const includeSessionOther = options.includeSessionOther ?? true;
@@ -62,19 +74,23 @@ export class AgentTeamExportService extends AgentTeamFrameworkRepairService {
 
     const runBound: AgentTeamExportPanel[] = [];
     const sessionOther: AgentTeamExportPanel[] = [];
-    for (const panel of panels) {
-      const exportPanel = await this.buildExportPanel({
-        run,
-        session,
-        panel,
-        source: runBoundPanelIds.has(panel.id) ? "run-bound" : "session-other",
-        historyMode,
-        tailLines,
-      });
-      if (runBoundPanelIds.has(panel.id)) {
-        runBound.push(exportPanel);
-      } else if (includeSessionOther) {
-        sessionOther.push(exportPanel);
+    if (session) {
+      for (const panel of panels) {
+        const exportPanel = await this.buildExportPanel({
+          run,
+          session,
+          panel,
+          source: runBoundPanelIds.has(panel.id)
+            ? "run-bound"
+            : "session-other",
+          historyMode,
+          tailLines,
+        });
+        if (runBoundPanelIds.has(panel.id)) {
+          runBound.push(exportPanel);
+        } else if (includeSessionOther) {
+          sessionOther.push(exportPanel);
+        }
       }
     }
 
@@ -106,7 +122,7 @@ export class AgentTeamExportService extends AgentTeamFrameworkRepairService {
     }
 
     const outboxes = includeOutboxes
-      ? await this.collectExportOutboxes(run, session, runBound, warnings)
+      ? await this.collectExportOutboxes(run, cwd, runBound, warnings)
       : [];
     let outboxHistory: AgentTeamExportResponse["outboxHistory"] = [];
     if (includeOutboxes) {
@@ -114,7 +130,7 @@ export class AgentTeamExportService extends AgentTeamFrameworkRepairService {
         outboxHistory = await this.outboxHistoryStore.list(
           run.projectId,
           run.runId,
-          session.cwd,
+          cwd,
         );
         for (const item of outboxHistory) {
           if (item.error) {
@@ -133,7 +149,7 @@ export class AgentTeamExportService extends AgentTeamFrameworkRepairService {
     return {
       run,
       generatedAt: new Date().toISOString(),
-      projectRoot: this.resolveProjectRoot(run.projectId, session.cwd),
+      projectRoot: this.resolveProjectRoot(run.projectId, cwd),
       panels: { runBound, sessionOther },
       outboxes,
       outboxHistory,
@@ -218,7 +234,7 @@ export class AgentTeamExportService extends AgentTeamFrameworkRepairService {
 
   protected async collectExportOutboxes(
     run: AgentTeamRun,
-    session: TerminalSessionRecord,
+    cwd: string,
     panels: AgentTeamExportPanel[],
     warnings: string[],
   ): Promise<AgentTeamExportOutbox[]> {
@@ -238,7 +254,7 @@ export class AgentTeamExportService extends AgentTeamFrameworkRepairService {
             run.projectId,
             run.terminalSessionId,
             { panelId: panel.panelId },
-            session.cwd,
+            cwd,
           ),
           scope: "panel",
           panelId: panel.panelId,
@@ -251,7 +267,7 @@ export class AgentTeamExportService extends AgentTeamFrameworkRepairService {
             run.projectId,
             run.terminalSessionId,
             { tmuxPaneId: panel.tmuxPaneId },
-            session.cwd,
+            cwd,
           ),
           scope: "tmux-pane",
           panelId: panel.panelId,
@@ -263,7 +279,7 @@ export class AgentTeamExportService extends AgentTeamFrameworkRepairService {
       path: this.paths.defaultOutboxPath(
         run.projectId,
         run.terminalSessionId,
-        session.cwd,
+        cwd,
       ),
       scope: "legacy-session",
       panelId: null,

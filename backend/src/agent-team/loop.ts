@@ -1,4 +1,9 @@
-import type { AgentTeamAcceptanceCase, AgentTeamLoop, AgentTeamRun, AgentTeamWorkerOutbox } from "@runweave/shared/agent-team";
+import type {
+  AgentTeamAcceptanceCase,
+  AgentTeamLoop,
+  AgentTeamRun,
+  AgentTeamWorkerOutbox,
+} from "@runweave/shared/agent-team";
 import { isDeepStrictEqual } from "node:util";
 import {
   DEFAULT_MAX_REPAIR_ATTEMPTS,
@@ -83,8 +88,15 @@ export function foldRound(
       return {
         ...acceptanceCase,
         lastRunStatus: "skipped" as const,
-        skipReason: result.skipReason ?? "复验范围未命中，保持上一轮状态",
-        evidence: result.evidence.length > 0 ? result.evidence : acceptanceCase.evidence,
+        skip: result.skip ?? null,
+        skipReason:
+          result.skip?.detail ??
+          result.skipReason ??
+          "复验范围未命中，保持上一轮状态",
+        evidence:
+          result.evidence.length > 0
+            ? result.evidence
+            : acceptanceCase.evidence,
         recheckRequestedAt: null,
         recheckDispatchId: null,
         recheckWorkerPanelId: null,
@@ -98,6 +110,7 @@ export function foldRound(
         ...acceptanceCase,
         status: "pass" as const,
         lastRunStatus: "pass" as const,
+        skip: null,
         skipReason: null,
         resultSummary: result.summary ?? null,
         reproduction: null,
@@ -117,6 +130,7 @@ export function foldRound(
       ...acceptanceCase,
       status: "fail",
       lastRunStatus: "fail",
+      skip: null,
       skipReason: null,
       resultSummary: result.summary ?? null,
       reproduction: result.reproduction ?? null,

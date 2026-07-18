@@ -19,6 +19,10 @@ import { AgentTeamRunStore } from "./storage/run-store";
 import { AgentTeamAgentLaunchService } from "./agent-launch";
 import type { AgentTeamServiceOptions } from "./service-types";
 import { recordAgentTeamRunTransition } from "./activity-events";
+import {
+  resolveAgentTeamEnvironmentFixtureScope,
+  type AgentTeamEnvironmentFixtureScope,
+} from "./fixture-scope";
 
 export const agentTeamLogger = logger.child({
   component: "agent-team-service",
@@ -40,6 +44,8 @@ export class AgentTeamServiceContext {
   protected readonly outboxHistoryStore: AgentTeamOutboxHistoryStore;
   protected readonly reviewCheckpointGit: AgentTeamReviewCheckpointGit;
   protected readonly backendInstanceId: string;
+  protected readonly environmentFixtureScope: AgentTeamEnvironmentFixtureScope | null;
+  protected readonly runtimeEnv: NodeJS.ProcessEnv;
   protected readonly eventQueues = new Map<string, Promise<unknown>>();
   protected readonly pendingCompletionRounds = new Map<string, number>();
   protected recheckWatchdogTimer: ReturnType<typeof setInterval> | null = null;
@@ -53,6 +59,10 @@ export class AgentTeamServiceContext {
     this.tmuxService = options.tmuxService;
     this.tmuxOutputWatcher = options.tmuxOutputWatcher;
     this.backendInstanceId = options.backendInstanceId ?? randomUUID();
+    this.runtimeEnv = options.env ?? process.env;
+    this.environmentFixtureScope = resolveAgentTeamEnvironmentFixtureScope(
+      this.runtimeEnv,
+    );
     this.paths = new AgentTeamPaths(
       this.terminalSessionManager,
       options.cwd ?? process.cwd(),

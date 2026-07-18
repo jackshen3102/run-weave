@@ -18,6 +18,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
   protected async finalizeReviewCheckpoint(
     run: AgentTeamRun,
     outbox: AgentTeamWorkerOutbox,
+    options: { persist?: boolean } = {},
   ): Promise<AgentTeamRun> {
     const state = run.reviewCheckpoint;
     const target = state?.pendingReview;
@@ -36,7 +37,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
         );
         const finalReviewedCommit =
           target.targetCommit ?? state.lastReviewedCommit;
-        return this.updateRun(run, {
+        return this.applyReviewCheckpointPatch(run, options.persist, {
           reviewCheckpoint: {
             ...state,
             lastReviewedCommit: finalReviewedCommit,
@@ -73,7 +74,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
         run,
         "behavior_verify",
       ).every((item) => item.status === "pass");
-      return this.updateRun(run, {
+      return this.applyReviewCheckpointPatch(run, options.persist, {
         reviewCheckpoint: {
           ...state,
           lastReviewedCommit: checkpoint.commit,
@@ -90,6 +91,7 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
                     ...item,
                     status: "pending" as const,
                     resultSummary: null,
+                    skip: null,
                     skipReason: null,
                   }
                 : item,
@@ -106,6 +108,19 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
         error instanceof Error ? error.message : String(error),
       );
     }
+  }
+
+  private applyReviewCheckpointPatch(
+    run: AgentTeamRun,
+    persist: boolean | undefined,
+    patch: Partial<
+      Pick<AgentTeamRun, "reviewCheckpoint" | "acceptance" | "logs">
+    >,
+  ): Promise<AgentTeamRun> | AgentTeamRun {
+    if (persist !== false) {
+      return this.updateRun(run, patch);
+    }
+    return { ...run, ...patch };
   }
 
   protected async dispatchSerialWorker(
@@ -229,6 +244,9 @@ export abstract class AgentTeamSerialDispatchService extends AgentTeamExecutionS
           ? {
               ...item,
               status: "pending" as const,
+              lastRunStatus: "pending" as const,
+              skip: null,
+              skipReason: null,
               consecutiveFail: 0,
               resultSummary: null,
               reproduction: null,
