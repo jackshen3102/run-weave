@@ -18,6 +18,25 @@ export interface LoadedAgentTeamAcceptanceCases {
   cases: AgentTeamAcceptanceCase[];
 }
 
+const AGENT_TEAM_PROJECT_FILE_MISSING = "agent_team_project_file_missing";
+
+export function isAgentTeamProjectFileMissingError(
+  error: unknown,
+  requestedPath?: string,
+): error is AgentTeamError {
+  if (!(error instanceof AgentTeamError) || !error.details) {
+    return false;
+  }
+  const details = error.details as {
+    code?: unknown;
+    requestedPath?: unknown;
+  };
+  return (
+    details.code === AGENT_TEAM_PROJECT_FILE_MISSING &&
+    (requestedPath === undefined || details.requestedPath === requestedPath)
+  );
+}
+
 export async function resolveAgentTeamProjectFile(
   projectRoot: string,
   requestedPath: string,
@@ -41,9 +60,18 @@ export async function resolveAgentTeamProjectFile(
   if (!isInsidePath(rootPath, candidatePath)) {
     throw new AgentTeamError(403, `${label}必须位于当前项目目录内`);
   }
-  const resolvedPath = await realpath(candidatePath).catch(() => null);
+  const resolvedPath = await realpath(candidatePath).catch((error: unknown) => {
+    if (isMissingFileSystemEntry(error)) {
+      return null;
+    }
+    throw new AgentTeamError(400, `${label}无法访问：${trimmedPath}`);
+  });
   if (!resolvedPath) {
-    throw new AgentTeamError(400, `${label}不存在：${trimmedPath}`);
+    throw new AgentTeamError(400, `${label}不存在：${trimmedPath}`, {
+      code: AGENT_TEAM_PROJECT_FILE_MISSING,
+      requestedPath: trimmedPath,
+      label,
+    });
   }
   if (!isInsidePath(rootPath, resolvedPath)) {
     throw new AgentTeamError(403, `${label}必须位于当前项目目录内`);
@@ -131,6 +159,11 @@ function isInsidePath(rootPath: string, targetPath: string): boolean {
     relative === "" ||
     (!relative.startsWith("..") && !path.isAbsolute(relative))
   );
+}
+
+function isMissingFileSystemEntry(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
 }
 
 function toPosixRelativePath(rootPath: string, targetPath: string): string {

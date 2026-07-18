@@ -9,7 +9,7 @@
 - 人工 intervention：15 次
 - Loop 日志：75 条
 - 真实产品缺陷：WTC-009、WTC-012
-- 已确认框架缺陷：长 prompt 单参数投递、dispatch 与 pane 状态漂移、旧 thread 不可复用时缺少恢复闭环、协议补交与行为复验耦合、验收文件生命周期不稳定
+- 已确认框架缺陷：长 prompt 单参数投递、dispatch 与 pane 状态漂移、active thread 消息投递未复用统一队列、协议补交与行为复验耦合、验收文件生命周期不稳定。其中长 prompt、缺失 activeWorkerDispatch 的一次性自动重建，以及 running/idle agent 的直接消息投递已在本轮修复。
 
 ## 查看
 

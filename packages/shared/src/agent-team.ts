@@ -41,7 +41,7 @@ export type {
  * that terminal's session.
  */
 
-/** A single markdown acceptance case, drafted at proposal, tracked in loop. */
+/** A structured acceptance case loaded from a YAML test plan and tracked in loop. */
 export interface AgentTeamAcceptanceCase {
   caseId: string;
   text: string;
@@ -273,7 +273,7 @@ export type AgentTeamFindingDisposition =
   | "waived";
 
 export interface AgentTeamFindingCaseImpact {
-  /** Backend acceptance case id, not the source markdown heading id. */
+  /** Backend acceptance case id, not the source YAML case id. */
   caseId: string;
   /** Why this finding violates the selected product case. */
   summary: string;

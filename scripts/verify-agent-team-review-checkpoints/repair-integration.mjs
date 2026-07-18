@@ -6,7 +6,13 @@ import { buildHumanGateMainPrompt } from "../../backend/src/agent-team/prompt-bu
 import {
   assertAcceptanceRefreshPreservesTraceableCases,
   mergeAcceptanceRefresh,
+  resetPersistedAcceptanceForRefresh,
 } from "../../backend/src/agent-team/service-acceptance-policy.ts";
+import {
+  isAgentTeamProjectFileMissingError,
+  resolveAgentTeamProjectFile,
+} from "../../backend/src/agent-team/acceptance-case-loader.ts";
+import { AgentTeamServiceSupport } from "../../backend/src/agent-team/service-support.ts";
 import { createAgentTeamRouter } from "../../backend/src/routes/agent-team.ts";
 import { buildRepairRun } from "./repair-fixtures.mjs";
 
@@ -123,6 +129,147 @@ function verifyAcceptanceRefreshPreservesCases() {
     undeclaredChangeError?.statusCode === 409 &&
       undeclaredChangeError.message.includes("BSP-001"),
     { undeclaredChangeError: undeclaredChangeError?.message },
+  );
+
+  const reset = resetPersistedAcceptanceForRefresh([
+    {
+      ...failedCase,
+      sourceHeading: "BSP-002 persisted contract",
+      tags: ["required"],
+      dependsOn: ["BSP-001"],
+      consecutiveFail: 2,
+      evidence: [
+        {
+          type: "command",
+          label: "stale evidence",
+          summary: "must be cleared before rerun",
+          ref: "fixture:stale",
+        },
+      ],
+      recheckAttempt: 1,
+      lastRunStatus: "fail",
+      skipReason: "stale skip reason",
+    },
+  ]);
+  check(
+    "agent-intervention-persisted-contract-resets-execution-state",
+    reset[0]?.caseId === "BSP-002" &&
+      reset[0]?.sourceHeading === "BSP-002 persisted contract" &&
+      reset[0]?.dependsOn?.[0] === "BSP-001" &&
+      reset[0]?.status === "pending" &&
+      reset[0]?.consecutiveFail === 0 &&
+      reset[0]?.evidence.length === 0 &&
+      reset[0]?.recheckAttempt === 0 &&
+      reset[0]?.lastRunStatus === "pending" &&
+      reset[0]?.skipReason === null,
+    reset,
+  );
+}
+
+async function verifyMissingAcceptanceSourceClassification() {
+  const root = await createRepo();
+  const requestedPath = "docs/testing/removed.testplan.yaml";
+  let missingError = null;
+  try {
+    await resolveAgentTeamProjectFile(root, requestedPath, "测试案例文件");
+  } catch (error) {
+    missingError = error;
+  }
+  check(
+    "agent-intervention-classifies-removed-acceptance-source",
+    isAgentTeamProjectFileMissingError(missingError, requestedPath) &&
+      !isAgentTeamProjectFileMissingError(
+        missingError,
+        "docs/testing/another.testplan.yaml",
+      ),
+    { missingError: missingError?.message, details: missingError?.details },
+  );
+}
+
+async function verifyPersistedAcceptanceRefreshFallback() {
+  const root = await createRepo();
+  const sourceFilePath = "docs/testing/removed.testplan.yaml";
+  const service = Object.create(AgentTeamServiceSupport.prototype);
+  service.terminalSessionManager = {
+    getSession: (sessionId) =>
+      sessionId === "terminal" ? { id: sessionId, cwd: root } : null,
+    getProject: (projectId) =>
+      projectId === "project" ? { id: projectId, path: root } : null,
+  };
+  const run = {
+    terminalSessionId: "terminal",
+    projectId: "project",
+    verification: {
+      planFilePath: null,
+      planSha256: null,
+      testCaseFilePath: null,
+      testCaseSha256: null,
+      generatedTestCaseFilePath: sourceFilePath,
+      generatedTestCaseSha256: "persisted-source-sha",
+      acceptanceSource: "task_generated",
+    },
+    acceptance: [
+      {
+        ...acceptanceCase("BSP-002"),
+        sourceFilePath,
+        status: "fail",
+        consecutiveFail: 2,
+        resultSummary: "old failure",
+        evidence: [
+          {
+            type: "command",
+            label: "old evidence",
+            summary: "must be reset",
+            ref: "fixture:old-evidence",
+          },
+        ],
+      },
+    ],
+  };
+  const recovered = await service.prepareAcceptanceRefresh(
+    run,
+    sourceFilePath,
+    true,
+  );
+  await service.assertVerificationSourcesUnchanged(run);
+  let planDriftError = null;
+  try {
+    await service.assertVerificationSourcesUnchanged({
+      ...run,
+      verification: {
+        ...run.verification,
+        planFilePath: "app.txt",
+        planSha256: "stale-plan-sha",
+      },
+    });
+  } catch (error) {
+    planDriftError = error;
+  }
+  let explicitReplacementError = null;
+  try {
+    await service.prepareAcceptanceRefresh(run, sourceFilePath, false);
+  } catch (error) {
+    explicitReplacementError = error;
+  }
+  check(
+    "agent-intervention-recovers-deleted-yaml-from-persisted-contract",
+    recovered.usedPersistedAcceptance === true &&
+      recovered.verification === run.verification &&
+      recovered.acceptance[0]?.caseId === "BSP-002" &&
+      recovered.acceptance[0]?.status === "pending" &&
+      recovered.acceptance[0]?.evidence.length === 0 &&
+      recovered.startLog.includes("run 内持久化验收合同") &&
+      planDriftError?.statusCode === 409 &&
+      planDriftError.message.includes("计划文件已变化") &&
+      isAgentTeamProjectFileMissingError(
+        explicitReplacementError,
+        sourceFilePath,
+      ),
+    {
+      recovered,
+      planDriftError: planDriftError?.message,
+      explicitReplacementError: explicitReplacementError?.message,
+    },
   );
 }
 
@@ -413,6 +560,8 @@ export async function verifyRepairIntegration(checkResult, createRepoResult) {
   createRepoFixture = createRepoResult;
   try {
     verifyAcceptanceRefreshPreservesCases();
+    await verifyMissingAcceptanceSourceClassification();
+    await verifyPersistedAcceptanceRefreshFallback();
     verifyBlockedBehaviorMainPrompt();
     await verifyRepairSourceFingerprint();
     await verifyRepairBudgetRoute();

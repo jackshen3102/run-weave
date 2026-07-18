@@ -17,7 +17,7 @@ import {
   logReconciledCompletion,
   logStaleCompletion,
 } from "./service-completion-logging";
-import { AgentTeamCompletionSignalService } from "./service-completion-signal";
+import { AgentTeamCompletionRecoveryService } from "./service-completion-recovery";
 import type { AgentTeamCompletionSignalSource } from "./service-types";
 import {
   behaviorFailureContractErrors,
@@ -45,7 +45,7 @@ import {
   workerOutboxFreshnessMismatch,
 } from "./service-workflow-policy";
 
-export abstract class AgentTeamCompletionService extends AgentTeamCompletionSignalService {
+export abstract class AgentTeamCompletionService extends AgentTeamCompletionRecoveryService {
   protected abstract resolveOutboxRound(
     run: AgentTeamRun,
     outbox: AgentTeamWorkerOutbox,
@@ -112,10 +112,7 @@ export abstract class AgentTeamCompletionService extends AgentTeamCompletionSign
         const { outbox, mtimeMs: outboxMtimeMs } = resolvedOutbox;
         const dispatch = resolveActiveWorkerDispatch(latest, activeWorker);
         if (!dispatch) {
-          await this.pauseForRepairProtocolError(
-            latest,
-            "dispatch-id-v1 run 缺少 activeWorkerDispatch，禁止回退 legacy dispatch",
-          );
+          await this.recoverMissingActiveWorkerDispatch(latest, activeWorker);
           return true;
         }
         const identityMismatch = completionOutboxIdentityMismatch(

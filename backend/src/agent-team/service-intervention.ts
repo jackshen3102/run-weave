@@ -83,8 +83,10 @@ export class AgentTeamInterventionService extends AgentTeamRecheckService {
             "刷新验收合同后只能派发 code_review 或 behavior_verify",
           );
         }
+        const explicitGeneratedTestCaseFilePath =
+          input.generatedTestCaseFilePath;
         const generatedTestCaseFilePath =
-          input.generatedTestCaseFilePath ??
+          explicitGeneratedTestCaseFilePath ??
           run.verification?.generatedTestCaseFilePath;
         if (!generatedTestCaseFilePath) {
           throw new AgentTeamError(
@@ -92,9 +94,11 @@ export class AgentTeamInterventionService extends AgentTeamRecheckService {
             "refresh_acceptance 需要 generatedTestCaseFilePath",
           );
         }
-        const prepared = await this.prepareSplitAcceptance(run, {
+        const prepared = await this.prepareAcceptanceRefresh(
+          run,
           generatedTestCaseFilePath,
-        });
+          !explicitGeneratedTestCaseFilePath,
+        );
         const affectedCaseIds = input.caseIds ?? [];
         const acceptance = ensureWorkerGateAcceptance(
           run.workers,
@@ -161,6 +165,7 @@ export class AgentTeamInterventionService extends AgentTeamRecheckService {
           ],
           logs: [
             ...run.logs,
+            ...(prepared.usedPersistedAcceptance ? [prepared.startLog] : []),
             `Agent 刷新验收合同：${prepared.verification.generatedTestCaseFilePath ?? generatedTestCaseFilePath}；影响 Case：${affectedCaseIds.join(", ")}`,
           ],
         });

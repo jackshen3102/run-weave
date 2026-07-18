@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createInitialLoop } from "../../backend/src/agent-team/loop.ts";
 import { buildMainTestCaseGenerationPrompt } from "../../backend/src/agent-team/prompt-builders.ts";
@@ -95,33 +95,26 @@ function buildExecutingVerifyFirstRun(harness, overrides = {}) {
 async function verifyPlanInputRecognition(check, roots) {
   await withHarness(roots, async (harness) => {
     const service = buildService(harness);
-    const sourceFilePath = "verify-first-source.md";
+    const sourceFilePath =
+      "docs/testing/verify-first-source.testplan.yaml";
+    await mkdir(path.join(harness.session.cwd, "docs/testing"), {
+      recursive: true,
+    });
     await writeFile(
       path.join(harness.session.cwd, sourceFilePath),
       [
-        "# Verify First cases",
-        "",
-        "### VF-PARSE-001 existing test case",
-        "",
-        "**前置条件（Given）**",
-        "",
-        "- fixture ready",
-        "",
-        "**操作（When）**",
-        "",
-        "1. run verification",
-        "",
-        "**预期结果（Then）**",
-        "",
-        "- verification passes",
-        "",
-        "**失败判断**",
-        "",
-        "- verification fails",
-        "",
-        "**验证方式**",
-        "",
-        "- command evidence",
+        "version: 1",
+        "name: Verify First 现有测试计划识别",
+        "description: 验证 Verify First 能直接识别符合最小规范的 YAML 测试计划。",
+        "cases:",
+        "  - id: VF-PARSE-001",
+        "    name: 现有测试计划进入行为验证",
+        "    required: true",
+        "    description: 验证已有 YAML 测试计划被解析为可追溯验收 Case。",
+        "    preconditions:",
+        "      - 测试夹具目录中存在符合最小规范的 YAML 测试计划。",
+        "    steps:",
+        "      - 提交该测试计划启动 Verify First；确认验收来源为 test_case_file，且生成 VF-PARSE-001。",
       ].join("\n"),
     );
     const input = {
@@ -142,17 +135,18 @@ async function verifyPlanInputRecognition(check, roots) {
       prepared,
     );
 
-    const invalidSourceFilePath = "verify-first-invalid-source.md";
+    const invalidSourceFilePath =
+      "docs/testing/verify-first-invalid-source.testplan.yaml";
     await writeFile(
       path.join(harness.session.cwd, invalidSourceFilePath),
       [
-        "# Invalid cases",
-        "",
-        "### VF-PARSE-002 incomplete test case",
-        "",
-        "**操作（When）**",
-        "",
-        "1. run verification",
+        "version: 1",
+        "name: Verify First 非法测试计划",
+        "description: 验证缺少必填字段的 YAML 测试计划会被拒绝。",
+        "cases:",
+        "  - id: VF-PARSE-001",
+        "    name: 缺少必填字段",
+        "    required: true",
       ].join("\n"),
     );
     const invalidPrepared = await service.prepareInitial(
@@ -170,9 +164,12 @@ async function verifyPlanInputRecognition(check, roots) {
       "verify-first-reports-parse-error-and-repairs-source-first",
       invalidPrepared.acceptance.length === 0 &&
         invalidPrepared.testCaseValidationError?.includes(
-          "VF-PARSE-002 缺少期望、失败判定",
+          "cases.0.description",
         ) &&
-        prompt.includes("VF-PARSE-002 缺少期望、失败判定") &&
+        invalidPrepared.testCaseValidationError.includes(
+          "cases.0.preconditions",
+        ) &&
+        prompt.includes("cases.0.description") &&
         prompt.includes("输入文件（测试案例解析未通过）") &&
         prompt.includes("优先修复原文件") &&
         prompt.includes("不要创建内容重复的新文档"),

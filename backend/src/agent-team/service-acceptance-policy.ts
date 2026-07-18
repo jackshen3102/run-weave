@@ -19,6 +19,7 @@ export {
   assertAcceptanceRefreshPreservesTraceableCases,
   isReviewGateAcceptanceCase,
   mergeAcceptanceRefresh,
+  resetPersistedAcceptanceForRefresh,
 } from "./service-acceptance-refresh-policy";
 
 const RECHECK_TIMEOUT_MS = 60 * 60 * 1000;

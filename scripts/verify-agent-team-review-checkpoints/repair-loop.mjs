@@ -163,7 +163,7 @@ export function verifyEvidenceGatedRepairLoop(check) {
       resumeBody.includes('run.status === "done"') &&
       resumeBody.includes("if (run.pendingFindingDecision)") &&
       resumeBody.includes("Agent 不得代替人工 disposition") &&
-      resumeBody.includes("this.prepareSplitAcceptance(run") &&
+      resumeBody.includes("this.prepareAcceptanceRefresh(") &&
       resumeBody.includes("ensureWorkerGateAcceptance(") &&
       resumeBody.includes("mergeAcceptanceRefresh(") &&
       resumeBody.includes("const affectedCaseIds = input.caseIds ?? []") &&
