@@ -75,26 +75,44 @@ export class AgentTeamFixtureSupport extends AgentTeamWorkerDispatchSupport {
       throw new AgentTeamError(409, "Fixture owner Run does not exist");
     }
     const dispatch = owner.activeWorkerDispatch;
-    if (
-      owner.phase !== "executing" ||
-      owner.status !== "running" ||
-      owner.activeWorkerRole !== "behavior_verify" ||
-      dispatch?.role !== "behavior_verify" ||
-      dispatch.dispatchId !== lineage.ownerDispatchId
-    ) {
+    const isBehaviorOwner =
+      owner.phase === "executing" &&
+      owner.status === "running" &&
+      owner.activeWorkerRole === "behavior_verify" &&
+      dispatch?.role === "behavior_verify" &&
+      dispatch.dispatchId === lineage.ownerDispatchId;
+    const runtimeRepairCaseIds = activeRuntimeRepairCaseIds(
+      owner,
+      lineage.ownerDispatchId,
+      lineage.ownerDevSessionId ?? null,
+    );
+    const isRuntimeRepairOwner =
+      owner.phase === "executing" &&
+      owner.status === "running" &&
+      owner.activeWorkerRole === "code" &&
+      dispatch?.role === "code" &&
+      dispatch.dispatchId === lineage.ownerDispatchId &&
+      runtimeRepairCaseIds.length > 0;
+    if (!isBehaviorOwner && !isRuntimeRepairOwner) {
       throw new AgentTeamError(
         409,
-        "Fixture owner dispatch is not the active behavior_verify dispatch",
+        "Fixture owner dispatch is not the active behavior_verify or runtime code repair dispatch",
       );
     }
-    const dispatchCases = owner.acceptance.filter(
-      (item) => item.recheckDispatchId === lineage.ownerDispatchId,
-    );
     const allowedCases = new Set(
-      (dispatchCases.length > 0
-        ? dispatchCases
-        : owner.acceptance.filter((item) => !isReviewGateAcceptanceCase(item))
-      ).map((item) => item.caseId),
+      isRuntimeRepairOwner
+        ? runtimeRepairCaseIds
+        : (() => {
+            const dispatchCases = owner.acceptance.filter(
+              (item) => item.recheckDispatchId === lineage.ownerDispatchId,
+            );
+            return (dispatchCases.length > 0
+              ? dispatchCases
+              : owner.acceptance.filter(
+                  (item) => !isReviewGateAcceptanceCase(item),
+                )
+            ).map((item) => item.caseId);
+          })(),
     );
     if (
       lineage.ownerCaseIds.length === 0 ||
@@ -102,7 +120,7 @@ export class AgentTeamFixtureSupport extends AgentTeamWorkerDispatchSupport {
     ) {
       throw new AgentTeamError(
         409,
-        "Fixture ownerCaseIds are outside the active behavior dispatch",
+        "Fixture ownerCaseIds are outside the active fixture dispatch",
       );
     }
     if (
@@ -274,6 +292,45 @@ export class AgentTeamFixtureSupport extends AgentTeamWorkerDispatchSupport {
       errors,
     };
   }
+}
+
+function activeRuntimeRepairCaseIds(
+  owner: AgentTeamRun,
+  dispatchId: string,
+  devSessionId: string | null,
+): string[] {
+  const dispatch = owner.activeWorkerDispatch;
+  if (
+    !devSessionId ||
+    dispatch?.dispatchId !== dispatchId ||
+    dispatch.role !== "code"
+  ) {
+    return [];
+  }
+  const repairKeys = new Set(dispatch.repairKeys ?? []);
+  const productCaseIds = new Set(
+    owner.acceptance
+      .filter((item) => !isReviewGateAcceptanceCase(item))
+      .map((item) => item.caseId),
+  );
+  return Array.from(
+    new Set(
+      owner.loop.repairCycles
+        .filter((cycle) => {
+          const reproduction =
+            cycle.sourceReproduction ?? cycle.finding?.reproduction;
+          return (
+            cycle.verificationMode === "runtime" &&
+            repairKeys.has(cycle.repairKey) &&
+            reproduction?.mode === "real_product" &&
+            reproduction.status === "reproduced" &&
+            reproduction.validationSessionId === devSessionId
+          );
+        })
+        .flatMap((cycle) => cycle.caseIds)
+        .filter((caseId) => productCaseIds.has(caseId)),
+    ),
+  );
 }
 
 export function isTerminalAgentTeamStatus(

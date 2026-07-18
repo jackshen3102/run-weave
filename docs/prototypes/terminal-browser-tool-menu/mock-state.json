@@ -1,13 +1,35 @@
 {
   "annotationCount": 0,
+  "activeTabId": "tab-a",
   "headerRuleCount": 0,
   "moreOpen": false,
+  "zoomMenuOpen": false,
+  "zoomLevels": [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2],
+  "tabs": [
+    {
+      "id": "tab-a",
+      "title": "Runweave Browser",
+      "url": "https://runweave.local/dashboard",
+      "heading": "Workspace dashboard",
+      "description": "Monitor the active workspace and browser automation.",
+      "displayScale": 1
+    },
+    {
+      "id": "tab-b",
+      "title": "Runweave Docs",
+      "url": "https://runweave.local/docs",
+      "heading": "Runweave documentation",
+      "description": "Browse product concepts and integration references.",
+      "displayScale": 1
+    }
+  ],
   "tools": [
     { "id": "copy", "label": "Copy address", "icon": "▣", "fixed": true },
     { "id": "proxy", "label": "Browser proxy", "icon": "⌁", "fixed": true },
     { "id": "annotate", "label": "Add browser comments", "icon": "▢+" },
     { "id": "submit", "label": "Submit browser comments", "icon": "➤" },
     { "id": "headers", "label": "Request headers", "icon": "{}" },
+    { "id": "zoom", "label": "Zoom", "icon": "⌕" },
     { "id": "device", "label": "Device mode", "icon": "▭" },
     { "id": "devtools", "label": "Open browser DevTools", "icon": "</>" },
     { "id": "external", "label": "Open in system browser", "icon": "↗" }

@@ -62,6 +62,7 @@ export function getTerminalBrowserUpdateKey(
     update.mcpActivityUntil ?? "",
     update.devtoolsOpen ? "1" : "0",
     getTerminalBrowserDeviceStateUpdateKey(update.deviceState),
+    update.displayScale,
   ].join("\u001f");
 }
 
@@ -166,6 +167,7 @@ export function sendTerminalBrowserTabUpdate(
     mcpActivityUntil: entry.mcpActivityUntil,
     devtoolsOpen: entry.devtoolsOpen,
     deviceState: getTerminalBrowserDeviceState(entry),
+    displayScale: entry.displayScale,
   };
   queueTerminalBrowserTabUpdate(
     win,
@@ -199,6 +201,7 @@ export function sendTerminalBrowserTabActivatedFromProxy(
     mcpActivityUntil: entry.mcpActivityUntil,
     devtoolsOpen: entry.devtoolsOpen,
     deviceState: getTerminalBrowserDeviceState(entry),
+    displayScale: entry.displayScale,
   };
   win.webContents.send("terminal-browser:tab-activated-from-proxy", update);
 }

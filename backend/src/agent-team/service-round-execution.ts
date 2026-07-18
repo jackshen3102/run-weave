@@ -18,12 +18,11 @@ import {
   acceptanceCasesForRole,
   behaviorVerificationCasesForDispatch,
   ensureWorkerGateAcceptance,
-  findStableFailCaseIdsNeedingBounce,
   hasRolePassed,
   isReviewGateAcceptanceCase,
-  isUnbouncedFailCase,
-  mergeCaseIds,
 } from "./service-acceptance-policy";
+import { resolveBounceSelection } from "./service-bounce-policy";
+import { shouldContinueBeforeNoProgressEscalation } from "./service-round-continuation-policy";
 import { pendingDecisionFromReviewCycle } from "./service-execution-support";
 import { AgentTeamServiceSupport } from "./service-support";
 
@@ -44,6 +43,7 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
   protected abstract bounceFailuresToCode(
     run: AgentTeamRun,
     caseIds: string[],
+    repairKeys?: string[],
   ): Promise<AgentTeamRun>;
 
   protected async applyRound(
@@ -130,6 +130,11 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
       ...run,
       acceptance: foldedAcceptance,
     });
+    const shouldContinueSerially = shouldContinueBeforeNoProgressEscalation(
+      { ...run, loop, acceptance: foldedAcceptance },
+      params.completedWorkerRole,
+      automaticBehaviorCases,
+    );
     const blockedBehaviorCases =
       params.completedWorkerRole === "behavior_verify" &&
       automaticBehaviorCases.length === 0 &&
@@ -213,7 +218,10 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
         reason,
       );
       logs.push(`⏸ ${reason}`);
-    } else if (shouldEscalate(repairFolded.loop)) {
+    } else if (
+      shouldEscalate(repairFolded.loop) &&
+      !shouldContinueSerially
+    ) {
       const reason = buildEscalationReason(repairFolded.loop, foldedAcceptance);
       loop = { ...repairFolded.loop, escalated: true, lastReason: reason };
       status = "need_human";
@@ -252,18 +260,23 @@ export abstract class AgentTeamRoundExecutionService extends AgentTeamServiceSup
       });
     }
 
-    // Bounce stable failing cases back to a code pane. Retry any stable fail
-    // that has not been marked as bounced yet, so a transient prompt-send miss
-    // does not leave later rounds stuck above the threshold forever.
-    const caseIdsNeedingBounce =
+    // Stable failures use the case marker as a debounce. A newly consumed gate
+    // result is already idempotent at the dispatch receipt boundary, so it may
+    // force the same case through a new repair cycle after an earlier bounce.
+    const bounceSelection =
       status === "running"
-        ? mergeCaseIds(
-            findStableFailCaseIdsNeedingBounce(nextRun),
+        ? resolveBounceSelection(
+            nextRun,
             params.forceBounceCaseIds ?? [],
-          ).filter((caseId) => isUnbouncedFailCase(nextRun, caseId))
-        : [];
-    if (caseIdsNeedingBounce.length > 0) {
-      return this.bounceFailuresToCode(nextRun, caseIdsNeedingBounce);
+            params.repairTargets ?? [],
+          )
+        : { caseIds: [], repairKeys: [] };
+    if (bounceSelection.caseIds.length > 0) {
+      return this.bounceFailuresToCode(
+        nextRun,
+        bounceSelection.caseIds,
+        bounceSelection.repairKeys,
+      );
     }
     if (
       status === "running" &&

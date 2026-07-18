@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Terminal Browser scoped CDP primary target session 与 Playwright 分工架构" />
+    <title>Terminal Browser Scoped CDP Boundary</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #071019;
+        --surface: #0d1723;
+        --surface-2: #122032;
+        --surface-3: #172a3e;
+        --line: #2a425b;
+        --line-soft: rgba(159, 184, 210, 0.16);
+        --text: #edf5fc;
+        --muted: #9cafc2;
+        --faint: #6f8398;
+        --blue: #6bb6ff;
+        --cyan: #55d4cf;
+        --green: #70dc9d;
+        --amber: #f5c568;
+        --red: #ff7c89;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        min-width: 1080px;
+        min-height: 100vh;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 10% -10%, rgba(107, 182, 255, 0.16), transparent 34%),
+          radial-gradient(circle at 92% 4%, rgba(85, 212, 207, 0.09), transparent 30%),
+          var(--bg);
+      }
+      button { font: inherit; }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        min-height: 58px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 30px;
+        border-bottom: 1px solid var(--line-soft);
+        background: rgba(7, 16, 25, 0.9);
+        backdrop-filter: blur(16px);
+      }
+      .brand { display: flex; align-items: center; gap: 12px; }
+      .mark {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        border: 1px solid rgba(107, 182, 255, 0.5);
+        border-radius: 9px;
+        color: var(--blue);
+        background: rgba(107, 182, 255, 0.1);
+        font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .brand strong, .brand span { display: block; }
+      .brand strong { font-size: 13px; }
+      .brand span { margin-top: 2px; color: var(--faint); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+      .boundary-state { display: flex; align-items: center; gap: 8px; color: var(--green); font-size: 12px; }
+      .boundary-state::before { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(112, 220, 157, .1); content: ""; }
+
+      main { width: min(1540px, calc(100% - 52px)); margin: 0 auto; padding: 38px 0 72px; }
+      .hero { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 42px; align-items: end; }
+      .eyebrow { margin: 0 0 12px; color: var(--blue); font: 700 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .14em; text-transform: uppercase; }
+      h1 { max-width: 1000px; margin: 0; font-size: clamp(34px, 4vw, 54px); line-height: 1.08; letter-spacing: -.04em; }
+      .lead { max-width: 920px; margin: 18px 0 0; color: var(--muted); font-size: 15px; line-height: 1.8; }
+      .decision {
+        padding: 20px;
+        border: 1px solid rgba(112, 220, 157, .26);
+        border-radius: 16px;
+        background: linear-gradient(135deg, rgba(112, 220, 157, .09), rgba(13, 23, 35, .8));
+      }
+      .decision span { color: var(--green); font: 700 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; }
+      .decision strong { display: block; margin-top: 10px; font-size: 18px; line-height: 1.45; }
+      .decision p { margin: 10px 0 0; color: #b9c8d7; font-size: 12px; line-height: 1.65; }
+
+      .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 26px 0 22px; }
+      .metric { min-height: 88px; padding: 15px 17px; border: 1px solid var(--line-soft); border-radius: 14px; background: rgba(13, 23, 35, .76); }
+      .metric strong { display: block; font: 700 24px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .metric span { display: block; margin-top: 9px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+      .tabs { display: flex; width: fit-content; gap: 6px; margin: 24px 0 16px; padding: 5px; border: 1px solid var(--line-soft); border-radius: 12px; background: rgba(13, 23, 35, .76); }
+      .tab { padding: 9px 15px; border: 0; border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer; }
+      .tab:hover, .tab[aria-selected="true"] { color: var(--text); background: var(--surface-3); }
+      .tab[aria-selected="true"] { box-shadow: inset 0 0 0 1px rgba(107, 182, 255, .22); }
+
+      .panel { display: none; padding: 24px; border: 1px solid var(--line-soft); border-radius: 18px; background: rgba(13, 23, 35, .78); box-shadow: 0 24px 70px rgba(0,0,0,.24); }
+      .panel.active { display: block; }
+      .panel-head { display: flex; align-items: start; justify-content: space-between; gap: 28px; margin-bottom: 20px; }
+      h2 { margin: 0 0 8px; font-size: 22px; }
+      .panel-head p { max-width: 850px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+      .badge { flex: none; padding: 7px 10px; border: 1px solid currentColor; border-radius: 999px; color: var(--green); background: rgba(112, 220, 157, .08); font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; }
+
+      .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; }
+      .node { position: relative; min-height: 220px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); }
+      .node:not(:last-child)::after { position: absolute; top: 50%; right: -24px; width: 18px; height: 1px; background: var(--line); content: ""; }
+      .node:not(:last-child)::before { position: absolute; top: calc(50% - 3px); right: -25px; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid var(--line); content: ""; }
+      .node-kicker { color: var(--cyan); font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; }
+      .node h3 { margin: 11px 0 9px; font-size: 16px; }
+      .node p, .node li { color: var(--muted); font-size: 12px; line-height: 1.62; }
+      .node ul { margin: 0; padding-left: 18px; }
+      .code { display: block; margin-top: 12px; padding: 9px 10px; border: 1px solid rgba(107, 182, 255, .16); border-radius: 8px; color: #bddcff; background: rgba(7,16,25,.72); font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+      .supported { border-color: rgba(112, 220, 157, .36); background: linear-gradient(160deg, rgba(112, 220, 157, .08), var(--surface-2) 60%); }
+      .blocked { border-color: rgba(255, 124, 137, .34); background: linear-gradient(160deg, rgba(255, 124, 137, .08), var(--surface-2) 60%); }
+
+      .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+      .card { padding: 16px; border: 1px solid var(--line-soft); border-radius: 12px; background: rgba(7,16,25,.56); }
+      .card h3 { margin: 0 0 8px; font-size: 13px; }
+      .card p, .card li { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.62; }
+      .card ul { margin: 0; padding-left: 18px; }
+
+      .matrix { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 12px; }
+      .matrix th, .matrix td { padding: 13px 14px; border-bottom: 1px solid var(--line-soft); text-align: left; font-size: 12px; line-height: 1.55; }
+      .matrix th { color: var(--faint); background: rgba(7,16,25,.66); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+      .matrix td { color: var(--muted); }
+      .matrix td:first-child { color: var(--text); font-weight: 650; }
+      .yes { color: var(--green); }
+      .no { color: var(--red); }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark">CDP</div>
+        <div><strong>Terminal Browser Scoped CDP Boundary</strong><span>Primary target session · 2026-07-18</span></div>
+      </div>
+      <div class="boundary-state">Intentional capability boundary</div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">DisplayScale · supported architecture</p>
+          <h1>保留单 target primary session，不扩成通用 CDP</h1>
+          <p class="lead">Playwright 负责页面行为，独立 raw CDP connection 负责 Runweave custom domain。两条通道共享 scoped Browser group 和物理 debugger，但不要求同一 connection 为同 target 创建第二个逻辑 session。</p>
+        </div>
+        <aside class="decision"><span>冻结决策</span><strong>限制是设计，不是缺陷。</strong><p>Agent 通过 root Target.attachToTarget 取得 primary session；不使用 browserContext.newCDPSession(page)。</p></aside>
+      </section>
+
+      <section class="metrics" aria-label="边界摘要">
+        <div class="metric"><strong>1</strong><span>同 connection、同 target 的 primary proxy session</span></div>
+        <div class="metric"><strong>2</strong><span>页面行为与 custom control 两条明确通道</span></div>
+        <div class="metric"><strong>0</strong><span>新增 nested CDPSession 或 event fan-out</span></div>
+        <div class="metric"><strong>6</strong><span>重新整理后的 required 行为 Case</span></div>
+      </section>
+
+      <nav class="tabs" aria-label="架构视图">
+        <button class="tab" type="button" aria-selected="true" data-panel="flow">支持链路</button>
+        <button class="tab" type="button" aria-selected="false" data-panel="permissions">能力边界</button>
+        <button class="tab" type="button" aria-selected="false" data-panel="testing">测试映射</button>
+      </nav>
+
+      <section class="panel active" id="flow" aria-labelledby="flow-title">
+        <div class="panel-head"><div><h2 id="flow-title">支持链路：scoped root attach → primary target session</h2><p>target 的可见性先由 groupId 收窄，target ownership 再由 sessionId 固化；displayScale command 本身不重新接收 targetId。</p></div><span class="badge">supported</span></div>
+        <div class="flow">
+          <article class="node supported"><span class="node-kicker">Dev Session</span><h3>Scoped endpoint</h3><p>surface 提供带 groupId 的 terminal-browser WebSocket；/json/list 与 Target.getTargets 只暴露当前 group。</p><code class="code">ws://…/runweave-terminal-browser?groupId=…</code></article>
+          <article class="node supported"><span class="node-kicker">Raw root connection</span><h3>选择并附着 target</h3><ul><li>Target.getTargets</li><li>Target.attachToTarget</li><li>重复 attach 返回同一 id</li></ul></article>
+          <article class="node supported"><span class="node-kicker">Primary session</span><h3>Runweave custom domain</h3><ul><li>getDisplayScale</li><li>setDisplayScale</li><li>resetDisplayScale</li></ul><code class="code">sessionId → targetId → TerminalBrowserEntry</code></article>
+          <article class="node supported"><span class="node-kicker">Product observation</span><h3>Playwright + desktop</h3><p>Playwright 检查 DOM、viewport、坐标和截图；desktop 原生菜单检查当前 Tab 百分比和可见呈现。</p></article>
+        </div>
+        <div class="cards">
+          <article class="card"><h3>同 connection</h3><p>一个 target 只有一个 primary proxy session；A、B 两个 target 各自有 session。</p></article>
+          <article class="card"><h3>跨 connection</h3><p>Playwright 与 raw control connection 可各自附着；物理 debugger 由 shared ref-count 复用。</p></article>
+          <article class="card"><h3>完成清理</h3><p>显式 detach、connection close、target close 都回收对应 ownership，不留下 fixture。</p></article>
+        </div>
+      </section>
+
+      <section class="panel" id="permissions" aria-labelledby="permissions-title">
+        <div class="panel-head"><div><h2 id="permissions-title">能力边界：支持什么，不支持什么</h2><p>displayScale 复用现有受限 proxy，不以单个功能为由扩大 browser-session 或跨 group 能力。</p></div><span class="badge">fail closed</span></div>
+        <div class="flow">
+          <article class="node supported"><span class="node-kicker">Allowed</span><h3>Root Target.getTargets</h3><p>只返回 scoped Browser group 的 target；这是 targetId 的来源。</p></article>
+          <article class="node supported"><span class="node-kicker">Allowed</span><h3>Root attach primary</h3><p>root attach 当前 group target，返回 connection-local primary sessionId。</p></article>
+          <article class="node blocked"><span class="node-kicker">Not supported</span><h3>Nested CDPSession</h3><p>不承诺 browser session 内再次 attach；不使用 Playwright newCDPSession(page)。</p></article>
+          <article class="node blocked"><span class="node-kicker">Rejected</span><h3>跨边界调用</h3><p>root/browser custom command、跨 group target、未知 session、85% 与额外 targetId 都不得修改状态。</p></article>
+        </div>
+        <div class="cards">
+          <article class="card"><h3>为什么 command 不带 targetId</h3><p>target 在 attach 时已由 scoped connection 校验；后续 command 只相信 session ownership。</p></article>
+          <article class="card"><h3>为什么不用 newCDPSession</h3><p>它要求同 target 的第二个 logical session，超出当前 proxy 的身份与事件模型。</p></article>
+          <article class="card"><h3>为什么 raw connection 合理</h3><p>它走现有 root attach 合约，不修改 proxy cardinality；Playwright 仍独立负责页面语义。</p></article>
+        </div>
+      </section>
+
+      <section class="panel" id="testing" aria-labelledby="testing-title">
+        <div class="panel-head"><div><h2 id="testing-title">测试映射：每条 Case 都走受支持入口</h2><p>所有 displayScale mutation 通过 raw primary session 发起；所有页面结果通过 Playwright 或 desktop UI 观察。</p></div><span class="badge">6 required</span></div>
+        <table class="matrix">
+          <thead><tr><th>Case</th><th>Control 入口</th><th>Observation</th><th>禁止路径</th></tr></thead>
+          <tbody>
+            <tr><td>TBZ-001</td><td>Desktop Zoom menu</td><td>A/B 菜单与可见页面</td><td class="no">无 CDP 代替人工行为</td></tr>
+            <tr><td>TBZ-002</td><td>Raw root attach + primary session</td><td>Playwright pages + native menu</td><td class="no">无 newCDPSession(page)</td></tr>
+            <tr><td>TBZ-003</td><td>Raw displayScale</td><td>Playwright viewport / CSS geometry</td><td class="no">无 nested session</td></tr>
+            <tr><td>TBZ-004</td><td>Raw displayScale</td><td>Playwright locator / mouse / scroll</td><td class="no">无坐标补偿</td></tr>
+            <tr><td>TBZ-005</td><td>Raw displayScale</td><td>Playwright viewport/full-page screenshot</td><td class="no">无 PNG 后处理</td></tr>
+            <tr><td>TBZ-006</td><td>Raw connection rebuild</td><td>Playwright navigation/device + desktop restart</td><td class="no">无 sessionId 持久化假设</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <script>
+      const tabs = [...document.querySelectorAll(".tab")];
+      const panels = [...document.querySelectorAll(".panel")];
+      for (const tab of tabs) {
+        tab.addEventListener("click", () => {
+          const targetId = tab.dataset.panel;
+          for (const item of tabs) item.setAttribute("aria-selected", String(item === tab));
+          for (const panel of panels) panel.classList.toggle("active", panel.id === targetId);
+        });
+      }
+    </script>
+  </body>
+</html>

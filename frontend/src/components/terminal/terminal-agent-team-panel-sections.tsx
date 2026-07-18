@@ -167,11 +167,11 @@ export function StartFlowSection({
         />
         <span>
           <span className="block font-medium text-slate-200">
-            Human Gate 时通知主 Agent
+            恢复门禁时通知主 Agent
           </span>
           <span className="mt-0.5 block text-slate-500">
-            默认开启。主 Agent
-            可分析并执行允许的恢复动作，但不能代替人工审批或裁决。
+            默认开启。机械、环境和验收合同阻塞由主 Agent
+            分析并执行显式恢复；拆分审批和 P0/P1 范围裁决仍由人工决定。
           </span>
         </span>
       </label>

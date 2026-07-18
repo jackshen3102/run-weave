@@ -7,6 +7,11 @@ import {
 } from "./terminal-browser-view.js";
 import { shouldMarkTerminalBrowserMcpActivity } from "./terminal-browser-cdp-activity.js";
 import { CDP_PROXY_TRACE_ENABLED } from "./terminal-browser-cdp-proxy-logging.js";
+import {
+  captureTerminalBrowserScreenshot,
+  getTerminalBrowserAutomationLayoutMetrics,
+  sendTerminalBrowserAutomationMetricsCommand,
+} from "./terminal-browser-display-scale.js";
 
 export interface CdpProxySession {
   proxySessionId: string;
@@ -42,6 +47,24 @@ interface SharedDebuggerAttachment {
 }
 
 const sharedDebuggerAttachments = new Map<string, SharedDebuggerAttachment>();
+
+function rewriteMouseCoordinatesForDisplayScale(
+  method: string,
+  params: Record<string, unknown>,
+  displayScale: number,
+): Record<string, unknown> {
+  if (method !== "Input.dispatchMouseEvent" || displayScale === 1) {
+    return params;
+  }
+  const next = { ...params };
+  if (typeof params.x === "number" && Number.isFinite(params.x)) {
+    next.x = params.x * displayScale;
+  }
+  if (typeof params.y === "number" && Number.isFinite(params.y)) {
+    next.y = params.y * displayScale;
+  }
+  return next;
+}
 
 function attachSharedDebugger(
   targetId: string,
@@ -226,13 +249,59 @@ export class CdpSessionManager {
       markTerminalBrowserMcpActivity(targetId);
     }
 
-    const commandParams = this.rewriteCommandParamsForElectron(target, params);
-    const result = await target.webContents.debugger.sendCommand(
-      method,
-      commandParams,
-      target.electronSessionId ?? undefined,
-    );
-    const safeResult = (result as object) ?? {};
+    const entry = getTerminalBrowserEntryByTargetId(targetId)?.entry;
+    const sendToElectron = async (
+      forwardedMethod: string,
+      forwardedParams: Record<string, unknown>,
+    ): Promise<object> => {
+      const rewrittenParams = this.rewriteCommandParamsForElectron(
+        target,
+        forwardedParams,
+      ) as Record<string, unknown>;
+      const commandParams = entry
+        ? rewriteMouseCoordinatesForDisplayScale(
+            forwardedMethod,
+            rewrittenParams,
+            entry.displayScale,
+          )
+        : rewrittenParams;
+      const result = await target.webContents.debugger.sendCommand(
+        forwardedMethod,
+        commandParams,
+        target.electronSessionId ?? undefined,
+      );
+      return (result as object | undefined) ?? {};
+    };
+    let safeResult: object;
+    if (
+      entry &&
+      (method === "Emulation.setDeviceMetricsOverride" ||
+        method === "Emulation.clearDeviceMetricsOverride")
+    ) {
+      safeResult = await sendTerminalBrowserAutomationMetricsCommand(
+        entry,
+        method,
+        params as Record<string, unknown>,
+        sendToElectron,
+      );
+    } else if (entry && method === "Page.captureScreenshot") {
+      safeResult = await captureTerminalBrowserScreenshot(
+        entry,
+        params as Record<string, unknown>,
+        sendToElectron,
+      );
+    } else if (entry && method === "Page.getLayoutMetrics") {
+      safeResult = await getTerminalBrowserAutomationLayoutMetrics(
+        entry,
+        params as Record<string, unknown>,
+        sendToElectron,
+      );
+    } else {
+      safeResult = await sendToElectron(
+        method,
+        params as Record<string, unknown>,
+      );
+    }
     if (method === "Page.getFrameTree") {
       target.rootFrameId = this.getRootFrameId(safeResult);
     }

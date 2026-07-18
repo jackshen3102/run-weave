@@ -10,7 +10,7 @@ export async function resolveAgentTeamFixtureScope({
   sessionId,
   env = process.env,
 }) {
-  const resolvedOwner = await resolveOwnerRun(sourceRoot, env);
+  const resolvedOwner = await resolveOwnerRun(sourceRoot, sessionId, env);
   if (!resolvedOwner) {
     return null;
   }
@@ -28,42 +28,21 @@ export async function resolveAgentTeamFixtureScope({
     run?.runId !== ownerRunId ||
     run?.phase !== "executing" ||
     run?.status !== "running" ||
-    run?.activeWorkerRole !== "behavior_verify" ||
-    dispatch?.role !== "behavior_verify" ||
+    run?.activeWorkerRole !== dispatch?.role ||
     typeof dispatch.dispatchId !== "string" ||
     !dispatch.dispatchId.trim() ||
     (panelIdentityPresent && !dispatchMatchesPane(dispatch, env))
   ) {
     throw new DevSessionError(
-      "Dev Session fixture owner must be the active behavior_verify dispatch",
+      "Dev Session fixture owner must be the active behavior_verify or runtime code repair dispatch",
       5,
       { ownerRunId, runPath },
     );
   }
-  const dispatchCases = Array.isArray(run.acceptance)
-    ? run.acceptance.filter(
-        (item) => item?.recheckDispatchId === dispatch.dispatchId,
-      )
-    : [];
-  const fallbackCases = Array.isArray(run.acceptance)
-    ? run.acceptance.filter(
-        (item) =>
-          typeof item?.caseId === "string" &&
-          !/code review|代码审查|code_review/i.test(String(item?.text ?? "")),
-      )
-    : [];
-  const ownerCaseIds = Array.from(
-    new Set(
-      (dispatchCases.length > 0 ? dispatchCases : fallbackCases)
-        .map((item) =>
-          typeof item?.caseId === "string" ? item.caseId.trim() : "",
-        )
-        .filter(Boolean),
-    ),
-  );
+  const ownerCaseIds = resolveDispatchOwnerCaseIds(run, sessionId);
   if (ownerCaseIds.length === 0) {
     throw new DevSessionError(
-      "Active behavior_verify dispatch has no traceable product cases",
+      "Active fixture dispatch has no traceable product cases for this Dev Session",
       5,
       { ownerRunId, ownerDispatchId: dispatch.dispatchId },
     );
@@ -77,7 +56,7 @@ export async function resolveAgentTeamFixtureScope({
   };
 }
 
-async function resolveOwnerRun(sourceRoot, env) {
+async function resolveOwnerRun(sourceRoot, sessionId, env) {
   const explicitOwnerRunId =
     env.RUNWEAVE_AGENT_TEAM_RUN_ID?.trim() || null;
   if (explicitOwnerRunId) {
@@ -135,8 +114,8 @@ async function resolveOwnerRun(sourceRoot, env) {
         run?.runId === candidateRunId &&
         run?.phase === "executing" &&
         run?.status === "running" &&
-        run?.activeWorkerRole === "behavior_verify" &&
-        run?.activeWorkerDispatch?.role === "behavior_verify" &&
+        run?.activeWorkerRole === run?.activeWorkerDispatch?.role &&
+        resolveDispatchOwnerCaseIds(run, sessionId).length > 0 &&
         dispatchMatchesPane(run.activeWorkerDispatch, env)
       ) {
         matches.push({ ownerRunId: candidateRunId, runPath, run });
@@ -147,12 +126,80 @@ async function resolveOwnerRun(sourceRoot, env) {
   }
   if (matches.length > 1) {
     throw new DevSessionError(
-      "Multiple active behavior_verify Runs claim the current pane",
+      "Multiple active fixture Runs claim the current pane",
       5,
       { ownerRunIds: matches.map((item) => item.ownerRunId) },
     );
   }
   return matches[0] ?? null;
+}
+
+function resolveDispatchOwnerCaseIds(run, sessionId) {
+  const dispatch = run?.activeWorkerDispatch;
+  const acceptance = Array.isArray(run?.acceptance) ? run.acceptance : [];
+  if (dispatch?.role === "behavior_verify") {
+    const dispatchCases = acceptance.filter(
+      (item) => item?.recheckDispatchId === dispatch.dispatchId,
+    );
+    const fallbackCases = acceptance.filter(isProductAcceptanceCase);
+    return uniqueCaseIds(
+      dispatchCases.length > 0 ? dispatchCases : fallbackCases,
+    );
+  }
+  if (dispatch?.role !== "code") {
+    return [];
+  }
+  const repairKeys = new Set(
+    Array.isArray(dispatch.repairKeys) ? dispatch.repairKeys : [],
+  );
+  const acceptedCaseIds = new Set(
+    acceptance
+      .filter(isProductAcceptanceCase)
+      .map((item) => item.caseId.trim()),
+  );
+  const repairCycles = Array.isArray(run?.loop?.repairCycles)
+    ? run.loop.repairCycles
+    : [];
+  return Array.from(
+    new Set(
+      repairCycles
+        .filter((cycle) => {
+          const reproduction =
+            cycle?.sourceReproduction ?? cycle?.finding?.reproduction;
+          return (
+            cycle?.verificationMode === "runtime" &&
+            repairKeys.has(cycle.repairKey) &&
+            reproduction?.mode === "real_product" &&
+            reproduction?.status === "reproduced" &&
+            reproduction?.validationSessionId === sessionId
+          );
+        })
+        .flatMap((cycle) =>
+          Array.isArray(cycle.caseIds) ? cycle.caseIds : [],
+        )
+        .map((caseId) => (typeof caseId === "string" ? caseId.trim() : ""))
+        .filter((caseId) => caseId && acceptedCaseIds.has(caseId)),
+    ),
+  );
+}
+
+function uniqueCaseIds(cases) {
+  return Array.from(
+    new Set(
+      cases
+        .map((item) =>
+          typeof item?.caseId === "string" ? item.caseId.trim() : "",
+        )
+        .filter(Boolean),
+    ),
+  );
+}
+
+function isProductAcceptanceCase(item) {
+  return (
+    typeof item?.caseId === "string" &&
+    !/code review|代码审查|code_review/i.test(String(item?.text ?? ""))
+  );
 }
 
 function ownerRunPath(sourceRoot, ownerRunId) {

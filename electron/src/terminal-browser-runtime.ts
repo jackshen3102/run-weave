@@ -30,6 +30,7 @@ export interface TerminalBrowserUpdate extends TerminalBrowserSnapshot {
   mcpActivityUntil: number | null;
   devtoolsOpen: boolean;
   deviceState: TerminalBrowserDeviceState;
+  displayScale: number;
 }
 
 export interface TerminalBrowserTabSnapshot extends TerminalBrowserUpdate {
@@ -51,7 +52,11 @@ export interface TerminalBrowserEntry {
   mcpActivityUntil: number | null;
   devtoolsOpen: boolean;
   deviceState: TerminalBrowserDeviceState;
+  displayScale: number;
   emulationScale: number;
+  automationDeviceMetrics: Record<string, unknown> | null;
+  metricsMutationQueue: Promise<void>;
+  metricsMutationClosed: boolean;
   defaultUserAgent: string;
   deviceDebuggerAttached: boolean;
   onDeviceDebuggerDetach:

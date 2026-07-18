@@ -1,16 +1,15 @@
-import type { WebContentsView } from "electron";
 import { createTerminalBrowserDeviceState, getTerminalBrowserDevicePreset, type TerminalBrowserDevicePresetId, type TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import {
+  ensureTerminalBrowserMetricsDebugger,
+  reapplyTerminalBrowserDisplayMetrics,
+  releaseTerminalBrowserMetricsDebugger,
+  type TerminalBrowserDisplayScaleEntry,
+} from "./terminal-browser-display-scale.js";
 
-export interface TerminalBrowserDeviceEmulationEntry {
-  view: WebContentsView;
-  targetId: string;
-  cdpProxyAttached: boolean;
+export interface TerminalBrowserDeviceEmulationEntry
+  extends TerminalBrowserDisplayScaleEntry {
   devtoolsOpen: boolean;
-  deviceState: TerminalBrowserDeviceState;
-  emulationScale: number;
   defaultUserAgent: string;
-  deviceDebuggerAttached: boolean;
-  onDeviceDebuggerDetach: ((event: Electron.Event, reason: string) => void) | null;
 }
 
 export function getTerminalBrowserDeviceState(
@@ -35,59 +34,16 @@ export function clampTerminalBrowserEmulationScale(value: unknown): number {
 export function attachTerminalBrowserDeviceDebugger(
   entry: TerminalBrowserDeviceEmulationEntry,
 ): void {
-  if (entry.deviceDebuggerAttached) {
-    return;
-  }
-  const webContents = entry.view.webContents;
-  if (webContents.isDestroyed()) {
-    throw new Error("Cannot emulate a closed browser tab");
-  }
-  if (entry.devtoolsOpen || webContents.isDevToolsOpened()) {
+  if (entry.devtoolsOpen || entry.view.webContents.isDevToolsOpened()) {
     throw new Error("Cannot enable mobile mode while DevTools is open");
   }
-  if (!entry.cdpProxyAttached) {
-    try {
-      webContents.debugger.attach("1.3");
-    } catch (error) {
-      throw new Error(
-        `Cannot enable mobile mode because the debugger is unavailable: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  entry.deviceDebuggerAttached = true;
-  entry.onDeviceDebuggerDetach = (_event, reason) => {
-    entry.deviceDebuggerAttached = false;
-    entry.onDeviceDebuggerDetach = null;
-    console.info("[electron] terminal browser device debugger detached", {
-      targetId: entry.targetId,
-      reason,
-    });
-  };
-  webContents.debugger.on("detach", entry.onDeviceDebuggerDetach);
+  ensureTerminalBrowserMetricsDebugger(entry);
 }
 
 export function detachTerminalBrowserDeviceDebugger(
   entry: TerminalBrowserDeviceEmulationEntry,
 ): void {
-  if (!entry.deviceDebuggerAttached) {
-    return;
-  }
-  const webContents = entry.view.webContents;
-  if (entry.onDeviceDebuggerDetach) {
-    webContents.debugger.off("detach", entry.onDeviceDebuggerDetach);
-    entry.onDeviceDebuggerDetach = null;
-  }
-  if (!entry.cdpProxyAttached) {
-    try {
-      webContents.debugger.detach();
-    } catch {
-      // Already detached.
-    }
-  }
-  entry.deviceDebuggerAttached = false;
+  releaseTerminalBrowserMetricsDebugger(entry);
 }
 
 export async function applyTerminalBrowserDeviceEmulation(
@@ -102,7 +58,7 @@ export async function applyTerminalBrowserDeviceEmulation(
 
   if (!preset.mobile) {
     if (entry.deviceState.mobile) {
-      await webContents.debugger.sendCommand("Emulation.clearDeviceMetricsOverride");
+      attachTerminalBrowserDeviceDebugger(entry);
       await webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
         enabled: false,
       });
@@ -110,13 +66,19 @@ export async function applyTerminalBrowserDeviceEmulation(
         userAgent: entry.defaultUserAgent,
       });
     }
-    if (entry.deviceDebuggerAttached) {
-      detachTerminalBrowserDeviceDebugger(entry);
-    }
     webContents.setUserAgent(entry.defaultUserAgent);
+    const previousState = entry.deviceState;
+    const previousEmulationScale = entry.emulationScale;
     entry.emulationScale = 1;
     const state = createTerminalBrowserDeviceState("desktop");
     entry.deviceState = state;
+    try {
+      await reapplyTerminalBrowserDisplayMetrics(entry);
+    } catch (error) {
+      entry.deviceState = previousState;
+      entry.emulationScale = previousEmulationScale;
+      throw error;
+    }
     return state;
   }
 
@@ -135,20 +97,20 @@ export async function applyTerminalBrowserDeviceEmulation(
     userAgent: preset.userAgent,
     platform: preset.id === "pixel-7" ? "Android" : "iPhone",
   });
-  await webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
-    width: viewport.width,
-    height: viewport.height,
-    deviceScaleFactor: viewport.deviceScaleFactor,
-    mobile: true,
-    scale: entry.emulationScale,
-  });
   await webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
     enabled: true,
     configuration: "mobile",
   });
 
+  const previousState = entry.deviceState;
   const state = createTerminalBrowserDeviceState(preset.id);
   entry.deviceState = state;
+  try {
+    await reapplyTerminalBrowserDisplayMetrics(entry);
+  } catch (error) {
+    entry.deviceState = previousState;
+    throw error;
+  }
   return state;
 }
 
@@ -156,9 +118,12 @@ export async function updateTerminalBrowserEmulationScale(
   entry: TerminalBrowserDeviceEmulationEntry,
   emulationScale: number,
 ): Promise<void> {
+  const previousEmulationScale = entry.emulationScale;
   entry.emulationScale = clampTerminalBrowserEmulationScale(emulationScale);
-  if (!entry.deviceState.mobile) {
-    return;
+  try {
+    await reapplyTerminalBrowserDisplayMetrics(entry);
+  } catch (error) {
+    entry.emulationScale = previousEmulationScale;
+    throw error;
   }
-  await applyTerminalBrowserDeviceEmulation(entry, entry.deviceState.presetId);
 }

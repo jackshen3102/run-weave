@@ -1,0 +1,153 @@
+version: 1
+name: Terminal Browser per-tab 显示缩放验收
+description: >
+  验证右侧 Terminal Browser 的显示缩放只作用于目标 Tab；人工菜单与 Agent 使用同一份
+  per-tab 状态。Agent 只通过 scoped root connection 返回的 primary target session 调用
+  Runweave custom domain，不要求或验证 Playwright nested CDPSession 能力。Playwright 页面
+  viewport、坐标与截图语义不受显示缩放影响。
+
+cases:
+  - id: TBZ-001
+    name: 人工缩放只修改当前 Browser Tab
+    required: true
+    description: >
+      验证原生 Zoom 子菜单按固定档位调整当前 Tab，切换 Tab 不串值，重置只恢复目标 Tab，
+      新 Tab 默认显示为 100%。
+    preconditions:
+      - 已通过 Dev Session 启动真实 Electron Terminal Browser，并打开两个内容可区分的 Browser Tab A、B。
+      - A、B 两个 Tab 的初始 Zoom 菜单均显示 100%。
+    steps:
+      - 使用 $computer-use 在 A Tab 的更多菜单中打开 Zoom 子菜单；确认父菜单显示 100%，Reset zoom 不可用。
+      - 连续执行 Zoom out 将 A 调整到 80%；确认每次选择后菜单关闭，重新打开后依次显示 90% 与 80%，页面可见内容随档位缩小。
+      - 切换到 B；确认 Zoom 仍为 100%，页面没有继承 A 的 80%。
+      - 切回 A；确认 Zoom 仍为 80%；执行 Reset zoom 后确认 A 恢复 100%，B 仍为 100%。
+      - 新建一个 Browser Tab；确认其 Zoom 默认为 100%；关闭新 Tab 后确认 A、B 的状态没有变化。
+
+  - id: TBZ-002
+    name: Agent 通过 scoped primary target session 控制目标 Tab
+    required: true
+    description: >
+      验证 Agent 在 scoped root connection 上取得当前 Browser group 的 target，并通过每个 target
+      唯一的 primary session 读取、设置和重置 displayScale；重复 attach 保持幂等，root、browser
+      session、跨 group target 和非法参数均不能修改页面。
+    preconditions:
+      - 已从当前 Dev Session 的 terminal-browser surface 取得 scoped WebSocket endpoint。
+      - 已使用 $toolkit:playwright-cli 显式附着同一 scoped endpoint，并在当前 group 准备 A、B 两个静态 page。
+      - 已在另一个 Browser group 准备隔离对照 page，且记录 A、B 与隔离 page 的 targetId 和 groupId。
+    steps:
+      - 新建独立 raw CDP root connection 调用 Target.getTargets；确认只返回 A、B，不返回隔离 group 的 page。
+      - 在 root connection 调用 Target.attachToTarget 附着 A；确认返回非空 primary sessionId；再次附着 A，确认返回同一个 sessionId，没有创建第二个 target session。
+      - 使用 A 的 primary session 调用 Runweave.getDisplayScale；确认返回 100%；调用 Runweave.setDisplayScale 设置 80%，确认返回 80%，A 原生菜单与可见页面同步为 80%，B 仍为 100%。
+      - 在同一 root connection 附着 B；确认 B 获得不同于 A 的 primary sessionId；读取 B 为 100%，再读取 A 仍为 80%。
+      - 使用 A 的 primary session 调用 Runweave.resetDisplayScale；确认返回 100%，A 菜单恢复 100%，B 保持 100%。
+      - 分别从缺少 target session 的 root 调用、browser session 调用、带额外 targetId 的请求、85% 非法档位和当前 scoped connection 对隔离 target 的 attach 发起操作；确认全部明确失败，A、B 最终仍为 100%。
+      - detach A、B primary session 并关闭 raw connection；确认 Playwright 对 A、B 的受支持页面操作仍可继续，CDP attachment 状态最终清理。
+
+  - id: TBZ-003
+    name: 显示缩放不改变 Playwright 逻辑 viewport
+    required: true
+    description: >
+      验证 Playwright page API 设置的逻辑 viewport 是自动化语义；Agent 通过独立 scoped primary
+      target session 修改 displayScale 时，只改变 Electron 右侧可见呈现，不改变页面报告的尺寸、
+      媒体查询或 CSS 几何。
+    preconditions:
+      - 目标 Tab 加载无动画的静态验收页面，页面可报告 viewport、媒体查询结果和固定元素矩形。
+      - $toolkit:playwright-cli 已附着目标 scoped endpoint，独立 raw CDP connection 已取得该 Tab 的 primary target session。
+    steps:
+      - 使用 Playwright 将目标 page 的 viewport 设置为 1920×1080；记录 window.innerWidth、window.innerHeight、关键媒体查询和固定元素 getBoundingClientRect()；确认都对应 1920×1080。
+      - 通过 raw primary target session 将 displayScale 依次设为 80% 和 50%；每次都确认右侧面板看到更多页面内容，同时 Playwright 读取的 viewport、媒体查询和元素 CSS 几何与 100% 基准一致。
+      - 在 displayScale 为 50% 时使用 Playwright 将 viewport 改为 1440×900；确认页面只切换到 1440×900 逻辑尺寸，原生 Zoom 菜单仍显示 50%。
+      - 通过同一 primary target session reset displayScale；确认菜单恢复 100%，Playwright 逻辑 viewport 仍为 1440×900。
+
+  - id: TBZ-004
+    name: Playwright 点击与滚动保持 CSS 坐标语义
+    required: true
+    description: >
+      验证 Agent 通过 primary target session 改变显示比例后，Playwright locator 与 page.mouse
+      仍使用未缩放的 CSS 坐标命中同一元素，输入和滚动不需要乘除 displayScale。
+    preconditions:
+      - 目标页面包含可唯一识别的按钮、输入框、滚动区域和位于 viewport 边缘的交互元素。
+      - 页面会在 DOM 中记录最后一次 pointer、click、input 和 scroll 事件的目标与 CSS 坐标。
+      - Playwright 与独立 raw primary target session 均已连接到目标 Tab 所在 scoped endpoint。
+    steps:
+      - 在 100% 下使用 Playwright locator 和 page.mouse 点击指定元素、输入文本并滚动；确认 DOM 记录的目标、文本、滚动位置和 CSS 坐标正确。
+      - 通过 raw primary target session 将 displayScale 设为 80%；重复完全相同的 Playwright 操作；确认命中目标、文本、滚动位置和 CSS 坐标与 100% 一致。
+      - 将 displayScale 设为 50% 后再次重复；确认没有偏移到相邻元素或可见画面之外，也没有手工坐标补偿。
+      - 切换到保持 100% 的 B Tab 执行相同 Playwright 操作；确认 B 不继承 A 的显示比例或坐标状态。
+
+  - id: TBZ-005
+    name: Playwright 截图不包含显示缩放
+    required: true
+    description: >
+      验证 displayScale 只服务 Electron 右侧可见呈现；Agent 通过 primary target session 改变
+      比例时，Playwright viewport screenshot 与 full-page screenshot 的逻辑尺寸、裁剪范围和
+      静态页面内容保持不变。
+    preconditions:
+      - 目标页面为无动画、无时间和随机内容的静态截图基准页，并具有超过一屏的固定长内容。
+      - Playwright viewport 固定为 1920×1080，字体和资源已加载完成，raw primary target session 已附着目标 Tab。
+    steps:
+      - 在 100% 下使用 Playwright 保存 viewport screenshot 与 full-page screenshot；记录两张图片的尺寸、裁剪范围、关键区域和完整页面高度。
+      - 通过 raw primary target session 将 displayScale 设为 80%，重新保存两类截图；确认图片尺寸、裁剪范围、关键区域和完整页面高度与 100% 基准一致，同时桌面面板可见页面缩小。
+      - 将 displayScale 设为 50% 后再次保存两类截图；确认自动化截图仍与 100% 基准一致，而桌面面板能看到更多页面内容。
+      - reset displayScale 后确认菜单和桌面呈现回到 100%，Playwright 截图链路仍可继续使用。
+
+  - id: TBZ-006
+    name: 导航与 raw CDP 重连保留当前 Tab 缩放
+    required: true
+    description: >
+      验证 displayScale 属于当前 Tab 的 WebContents 生命周期；页面导航和 Agent 的 raw CDP
+      connection 重建都不会创建新的 WebContents，因此 A 的缩放保持，B 不受影响。
+    preconditions:
+      - 真实 UI 已创建 A、B 两个 Browser Tab，A 已通过 primary target session 设为 80%，B 保持 100%。
+      - Playwright 与独立 raw CDP connection 均已附着 A 所在 scoped endpoint。
+    steps:
+      - 使用 Playwright 让 A 完成同源导航；通过原生菜单与 primary target session 确认 A 仍为 80%，B 仍为 100%。
+      - 使用 Playwright 让 A 完成跨源导航；再次确认 A 仍为 80%，B 仍为 100%。
+      - 关闭 raw CDP connection，重新连接同一 scoped endpoint 并重新 attach A；确认获得可用 primary session，Runweave.getDisplayScale 返回 80%。
+      - detach primary session 并关闭 raw connection；确认 Playwright 对 A 的页面操作仍可继续，并清理本轮 Tab 与连接。
+
+  - id: TBZ-007
+    name: 显示缩放与设备模式组合时不改变逻辑 viewport
+    required: true
+    description: >
+      验证现有 device preset 继续定义自动化逻辑 viewport，displayScale 只改变 Electron 可见呈现；
+      两种状态由统一 metrics 组合链路应用，但彼此不篡改。
+    preconditions:
+      - 真实 UI 已创建 A、B 两个 Browser Tab，两者初始 displayScale 均为 100%。
+      - Playwright 与独立 raw CDP connection 均已附着 A 所在 scoped endpoint，且环境支持至少一个现有移动设备 preset。
+    steps:
+      - 使用 $computer-use 在 A 的 More browser tools 原生菜单选择 Device Mode；菜单关闭后使用 desktop Playwright 在可见的 Device side panel 选择一个现有移动设备 preset，并记录逻辑 viewport、媒体查询结果和固定元素 CSS 几何。
+      - 通过 A 的 primary target session 将 displayScale 依次设为 80% 和 50%；每次确认桌面可见内容按比例变化，但 Playwright 读取的 preset viewport、媒体查询和 CSS 几何保持不变。
+      - 对 A 执行 Zoom in 与 Reset zoom；确认逻辑 viewport 始终保持 preset 值，最终 displayScale 回到 100%，B 的设备状态和显示比例均未变化。
+      - 关闭设备模式并清理本轮 Tab 与连接。
+
+  - id: TBZ-008
+    name: 新 WebContents 回到 100% 且不持久化缩放
+    required: true
+    description: >
+      验证 displayScale 不写入持久化状态；关闭 Tab 会结束其 WebContents 生命周期，新建 Tab
+      使用 100% 默认值，其他既有 Tab 不受影响。
+    preconditions:
+      - 真实 UI 已创建 A、B 两个 Browser Tab，A 已设为 80%，B 保持 100%。
+      - 已记录本次 Dev Session 的用户数据与 Terminal Browser 持久化文件位置。
+    steps:
+      - 检查持久化文件；确认 Browser Tab 数据中不存在 displayScale 字段。
+      - 关闭 A Tab 后通过真实 UI 新建 Browser Tab C；确认 C 获得新的 WebContents，原生 Zoom 菜单与 primary target session 均报告 100%。
+      - 切换到 B；确认 B 仍为 100%，且没有继承已关闭 A 的状态。
+      - 再次检查持久化文件仍不存在 displayScale 字段，并清理本轮 Tab 与连接。
+
+  - id: TBZ-009
+    name: Dev Session 清理重启后旧 Tab 不恢复且新 Tab 回到 100%
+    required: true
+    description: >
+      验证 Beta Dev Session 的官方 dev:stop 会清理并重建隔离 slot 的 user-data，旧 Browser Tab
+      不跨 Session 清理恢复；使用同一 Session ID 重新启动后，新建 Terminal Browser WebContents
+      使用 100% 默认 displayScale，且持久化状态中不包含 displayScale。
+    preconditions:
+      - 真实 UI 中至少有两个 Browser Tab，A 已设为 80%，B 保持 100%。
+      - 本轮 Dev Session 支持按官方 dev:stop 与 dev:session 流程停止并以同一 Session ID 重新启动。
+    steps:
+      - 记录 A、B 的页面身份与 A=80%、B=100% 的运行时状态；确认当前持久化文件不包含 displayScale；停止本次 Dev Session，并确认 fixtureCleanup.status=completed、ownedLiveFixtureRuns=0 且 Beta slot cleanup 报告 userDataRecreated=true。
+      - 使用同一 Session ID 重新启动 Dev Session；从 dev:open 重新取得 desktop 与 terminal-browser surface，只附着新实例。
+      - 在真实桌面 UI 中确认旧 A、B 不再恢复；通过真实 UI 新建 Browser Tab C，并通过原生 Zoom 菜单与 C 的 primary target session 确认 displayScale 为 100%。
+      - 确认新的持久化文件仍不包含 displayScale；关闭 C、detach Playwright 与 raw CDP 连接，再次停止 Dev Session，并确认 fixture、连接和 dedicated 资源全部清理。

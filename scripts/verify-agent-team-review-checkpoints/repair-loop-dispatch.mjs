@@ -1,5 +1,7 @@
 import { normalizeAgentTeamWorkerOutbox } from "../../backend/src/agent-team/outbox-resolver.ts";
 import { incrementRepairAttempts } from "../../backend/src/agent-team/repair-loop.ts";
+import { resolveBounceSelection } from "../../backend/src/agent-team/service-bounce-policy.ts";
+import { shouldContinueBeforeNoProgressEscalation } from "../../backend/src/agent-team/service-round-continuation-policy.ts";
 import {
   completionOutboxIdentityMismatch,
   completionSignalWorkerMismatch,
@@ -12,6 +14,66 @@ export function verifyDispatchProtocolChecks(
   check,
   { run, runtimeRun, runtimeCycle, behaviorDispatchRun },
 ) {
+  const previouslyBouncedRun = {
+    ...run,
+    loop: {
+      ...run.loop,
+      repairCycles: [
+        {
+          repairKey: "behavior_verify:BSP-017",
+          caseIds: [run.acceptance[0].caseId],
+        },
+        {
+          repairKey: "code_review:new-structural-finding",
+          caseIds: [run.acceptance[0].caseId],
+        },
+      ],
+    },
+    acceptance: [
+      { ...run.acceptance[0], status: "fail", consecutiveFail: 2 },
+      { ...run.acceptance[1], status: "pass", consecutiveFail: 0 },
+    ],
+  };
+  const forcedSelection = resolveBounceSelection(
+    previouslyBouncedRun,
+    [run.acceptance[0].caseId, run.acceptance[1].caseId],
+    [
+      {
+        repairKey: "code_review:new-structural-finding",
+        caseIds: [run.acceptance[0].caseId],
+      },
+    ],
+  );
+  check(
+    "new-review-finding-rebounces-only-current-repair-target",
+    forcedSelection.caseIds.join(",") === run.acceptance[0].caseId &&
+      forcedSelection.repairKeys.join(",") ===
+        "code_review:new-structural-finding" &&
+      resolveBounceSelection(previouslyBouncedRun, [], []).caseIds.length === 0,
+    forcedSelection,
+  );
+  const reviewPassedRun = {
+    ...run,
+    loop: { ...run.loop, noProgressCount: run.loop.maxNoProgress },
+    acceptance: run.acceptance.map((item) =>
+      item.caseId === "case_2" ? { ...item, status: "pass" } : item,
+    ),
+  };
+  check(
+    "review-pass-continues-to-behavior-before-no-progress-escalation",
+    shouldContinueBeforeNoProgressEscalation(
+      reviewPassedRun,
+      "code_review",
+      [],
+    ) &&
+      shouldContinueBeforeNoProgressEscalation(
+        reviewPassedRun,
+        "behavior_verify",
+        [run.acceptance[0]],
+      ) &&
+      !shouldContinueBeforeNoProgressEscalation(reviewPassedRun, "code", []),
+    reviewPassedRun.acceptance,
+  );
   const currentBehaviorOutbox = normalizeAgentTeamWorkerOutbox({
     sessionId: behaviorDispatchRun.terminalSessionId,
     panelId: run.workers[2].panelId,

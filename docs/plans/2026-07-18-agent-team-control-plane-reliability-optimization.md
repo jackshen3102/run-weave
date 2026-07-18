@@ -53,7 +53,7 @@
 - 不回退 dispatch-id-v1，不接受 session-level outbox，不复用旧 dispatch冒充新任务。
 - 不允许因为原 thread暂时不可用而新开 thread；上下文安全优先于自动完成。
 - 不降低 P0/P1 reproduction、caseImpacts、review checkpoint、真实浏览器证据或测试案例可追溯性。
-- 不自动做 out_of_scope/waived/acceptance refresh；系统只负责在正确时间请求人做决定。
+- 不自动做 out_of_scope/waived；acceptance refresh 由主 Agent 基于代码与验收证据显式执行并留下 intervention 记录，不因 `need_human` 状态再次请求用户确认。
 - 不删除现有 `.runweave/agent-team/*.json` 或 outbox history。历史脏现场先保留证据，待新 cleanup能力完成后用可审计 cancelled迁移处理。
 - 不在本仓库新增单元测试/TDD文件；验证使用独立脚本、隔离临时项目、真实API和Playwright。
 - 不把所有改动塞进一个PR。下面四个PR必须按顺序、逐个通过各自Case后合入。

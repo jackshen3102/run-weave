@@ -4,7 +4,10 @@ export type TerminalBrowserToolMenuAction =
   | "open-headers"
   | "open-device"
   | "open-devtools"
-  | "open-external";
+  | "open-external"
+  | "zoom-out"
+  | "zoom-in"
+  | "reset-zoom";
 
 export interface TerminalBrowserToolMenuRequest {
   x: number;
@@ -15,4 +18,5 @@ export interface TerminalBrowserToolMenuRequest {
   showHeaders: boolean;
   deviceEnabled: boolean;
   devtoolsEnabled: boolean;
+  displayScale: number;
 }

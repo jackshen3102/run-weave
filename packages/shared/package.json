@@ -39,6 +39,7 @@
     "./terminal-browser-annotation": "./src/terminal-browser-annotation.ts",
     "./terminal-browser-cdp-proxy": "./src/terminal-browser-cdp-proxy.ts",
     "./terminal-browser-device": "./src/terminal-browser-device.ts",
+    "./terminal-browser-display-scale": "./src/terminal-browser-display-scale.ts",
     "./terminal-browser-headers": "./src/terminal-browser-headers.ts",
     "./terminal-browser-proxy": "./src/terminal-browser-proxy.ts",
     "./terminal-browser-tool-menu": "./src/terminal-browser-tool-menu.ts",

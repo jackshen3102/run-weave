@@ -14,12 +14,50 @@ export class AgentTeamFixtureLifecycleService extends AgentTeamInterventionServi
     input: CancelAgentTeamRunRequest,
   ): Promise<AgentTeamRun> {
     const run = await this.requireRun(runId);
-    return this.cancelOwnedFixtureRun(
-      run,
-      input.reason.trim(),
-      "api",
-      input.cleanupResources !== false,
-    );
+    const reason = input.reason.trim();
+    const cleanupResources = input.cleanupResources !== false;
+    if (run.runKind === "verification_fixture") {
+      return this.cancelOwnedFixtureRun(
+        run,
+        reason,
+        "api",
+        cleanupResources,
+      );
+    }
+    if (isTerminalAgentTeamStatus(run.status)) {
+      return run;
+    }
+
+    const cleanup = cleanupResources
+      ? await this.reconcileOwnedFixtureResources(
+          run,
+          null,
+          `owner Run ${run.runId} was cancelled`,
+        )
+      : null;
+    return this.updateRun(run, {
+      status: "cancelled",
+      workers: run.workers.map((worker) => ({ ...worker, frozen: true })),
+      activeWorkerRole: null,
+      activeWorkerDispatch: null,
+      cancellation: {
+        reason,
+        requestedAt: new Date().toISOString(),
+        source: "api",
+      },
+      fixtureCleanupHistory: cleanup
+        ? [...(run.fixtureCleanupHistory ?? []), cleanup]
+        : run.fixtureCleanupHistory,
+      logs: [
+        ...run.logs,
+        `⏹ Run 已取消：${reason}`,
+        ...(cleanup && cleanup.status !== "completed"
+          ? [
+              `⚠ 取消后的 fixture cleanup 仍需审计：${cleanup.errors.join("; ") || cleanup.status}`,
+            ]
+          : []),
+      ],
+    });
   }
 
   async listFixtureScope(

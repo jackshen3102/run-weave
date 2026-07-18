@@ -55,6 +55,7 @@ export function TerminalBrowserTool({
     reorderTabs,
     saveHeaderRules,
     selectDevicePreset,
+    setDisplayScale,
     setActiveBrowserTab,
     setDevicePanelOpenState,
     setHeaderPanelOpen,
@@ -120,6 +121,7 @@ export function TerminalBrowserTool({
             );
           },
           onOpenExternal: () => openUrlExternally(activeTab.url),
+          onSetDisplayScale: (factor) => void setDisplayScale(factor),
         }}
       />
       <TerminalBrowserErrorBanners
