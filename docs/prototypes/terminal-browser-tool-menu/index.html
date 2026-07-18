@@ -62,6 +62,10 @@
         font-size: 12px;
         text-align: left;
       }
+      .tab[aria-selected="true"] {
+        background: #1e293b;
+        color: #f8fafc;
+      }
       .navigation {
         min-height: 40px;
         display: flex;
@@ -126,28 +130,93 @@
         font-size: 12px;
         text-align: left;
       }
+      .tool-item:disabled {
+        cursor: default;
+        color: #64748b;
+      }
       .tool-item:hover {
         background: #172033;
         color: #f8fafc;
+      }
+      .tool-item:disabled:hover {
+        background: transparent;
+        color: #64748b;
       }
       .tool-icon {
         width: 20px;
         color: #94a3b8;
         text-align: center;
       }
-      .browser-content {
+      .tool-value {
+        margin-left: auto;
+        color: #94a3b8;
+        font-variant-numeric: tabular-nums;
+      }
+      .menu-chevron {
+        width: 10px;
+        color: #64748b;
+        text-align: right;
+      }
+      .menu-item-with-submenu {
+        position: relative;
+      }
+      .zoom-submenu {
+        position: absolute;
+        top: 0;
+        right: calc(100% + 6px);
+        width: 180px;
+        padding: 5px;
+        border: 1px solid #334155;
+        border-radius: 7px;
+        background: #111827;
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+      }
+      .zoom-submenu[hidden] {
+        display: none;
+      }
+      .menu-separator {
+        height: 1px;
+        margin: 4px 6px;
+        background: #334155;
+      }
+      .browser-viewport {
         min-height: 340px;
+        height: 340px;
+        overflow: hidden;
+        background: #e2e8f0;
+      }
+      .browser-page {
+        min-height: 340px;
+        transform-origin: top left;
         padding: 42px;
         background: #fff;
         color: #334155;
       }
-      .browser-content h1 {
+      .browser-page h1 {
         margin: 0 0 8px;
         font-size: 22px;
       }
-      .browser-content p {
+      .browser-page p {
         margin: 0;
         color: #64748b;
+        font-size: 14px;
+      }
+      .content-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(180px, 1fr));
+        gap: 16px;
+        margin-top: 28px;
+      }
+      .content-card {
+        min-height: 120px;
+        padding: 18px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #f8fafc;
+      }
+      .content-card strong {
+        display: block;
+        margin-bottom: 8px;
         font-size: 14px;
       }
     </style>

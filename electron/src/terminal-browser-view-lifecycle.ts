@@ -1,6 +1,7 @@
 import { BrowserWindow, shell, WebContentsView } from "electron";
 import { randomUUID } from "node:crypto";
 import { createTerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import { DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE } from "@runweave/shared/terminal-browser-display-scale";
 import {
   normalizeTerminalBrowserUrlForStorage,
   selectTerminalBrowserTabsForRestore,
@@ -11,9 +12,7 @@ import {
   clearTerminalBrowserAnnotationsForWindow,
 } from "./terminal-browser-annotation.js";
 import { getIsQuitting } from "./app-state.js";
-import {
-  detachTerminalBrowserDeviceDebugger,
-} from "./terminal-browser-device-emulation.js";
+import { closeTerminalBrowserDisplayScale } from "./terminal-browser-display-scale.js";
 import {
   TERMINAL_BROWSER_SESSION_PARTITION,
   createTerminalBrowserGroupId,
@@ -233,7 +232,11 @@ export function getOrCreateTerminalBrowserView(
     mcpActivityUntil: null,
     devtoolsOpen: false,
     deviceState: createTerminalBrowserDeviceState("desktop"),
+    displayScale: DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
     emulationScale: 1,
+    automationDeviceMetrics: null,
+    metricsMutationQueue: Promise.resolve(),
+    metricsMutationClosed: false,
     defaultUserAgent: view.webContents.getUserAgent(),
     deviceDebuggerAttached: false,
     onDeviceDebuggerDetach: null,
@@ -322,8 +325,7 @@ export function getOrCreateTerminalBrowserView(
     }
     removeTerminalBrowserTabOrder(win.id, tabId);
     clearPendingTerminalBrowserTabUpdate(entry);
-    entry.deviceDebuggerAttached = false;
-    entry.onDeviceDebuggerDetach = null;
+    closeTerminalBrowserDisplayScale(entry);
     clearTerminalBrowserAnnotation(key);
     terminalBrowserEvents.emit("tab-closed", {
       targetId: entry.targetId,
@@ -368,6 +370,7 @@ export function createTerminalBrowserTabFromPageOpen(
     url,
     title: "",
     openerTabId,
+    displayScale: entry.displayScale,
   });
   void view.webContents.loadURL(url).catch(() => {
     sendTerminalBrowserTabUpdate(win, tabId, entry, false);
@@ -479,7 +482,7 @@ export function closeTerminalBrowserEntry(
     win.contentView.removeChildView(entry.view);
   }
   clearPendingTerminalBrowserTabUpdate(entry);
-  detachTerminalBrowserDeviceDebugger(entry);
+  closeTerminalBrowserDisplayScale(entry);
   terminalBrowserRuntime.entries.delete(key);
   removeTerminalBrowserTabOrder(win.id, tabId);
   clearTerminalBrowserAnnotation(key);
@@ -511,7 +514,7 @@ export function closeTerminalBrowsersForWindow(windowId: number): void {
       browserGroupId: entry.browserGroupId,
     });
     clearPendingTerminalBrowserTabUpdate(entry);
-    detachTerminalBrowserDeviceDebugger(entry);
+    closeTerminalBrowserDisplayScale(entry);
     entry.view.webContents.close();
   }
   terminalBrowserEvents.emit("window-closed", { windowId });

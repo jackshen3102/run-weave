@@ -1,6 +1,7 @@
 import { BrowserWindow, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { getTerminalBrowserDeviceState } from "./terminal-browser-device-emulation.js";
+import { setTerminalBrowserDisplayScale } from "./terminal-browser-display-scale.js";
 import {
   getTerminalBrowserKey,
   terminalBrowserRuntime,
@@ -90,6 +91,7 @@ export function getTerminalBrowserTabsForWindow(
       mcpActivityUntil: entry.mcpActivityUntil,
       devtoolsOpen: entry.devtoolsOpen,
       deviceState: getTerminalBrowserDeviceState(entry),
+      displayScale: entry.displayScale,
     });
   }
   return tabs;
@@ -138,6 +140,7 @@ export async function createTerminalBrowserTabFromProxy(
     browserGroupId: entry.browserGroupId,
     url: safeUrl ?? url,
     title: "",
+    displayScale: entry.displayScale,
   });
 
   return {
@@ -196,6 +199,31 @@ export function setTerminalBrowserCdpProxyAttached(
       sendTerminalBrowserTabUpdate(win, tabId, found.entry);
     }
   }
+}
+
+export function getTerminalBrowserDisplayScaleForTarget(
+  targetId: string,
+): number | null {
+  return getTerminalBrowserEntryByTargetId(targetId)?.entry.displayScale ?? null;
+}
+
+export async function setTerminalBrowserDisplayScaleForTarget(
+  targetId: string,
+  factor: unknown,
+): Promise<{ factor: number } | null> {
+  const found = getTerminalBrowserEntryByTargetId(targetId);
+  if (!found) {
+    return null;
+  }
+  const result = await setTerminalBrowserDisplayScale(found.entry, factor);
+  const parts = found.key.split(":");
+  const windowId = Number(parts[0]);
+  const tabId = parts.slice(1).join(":");
+  const win = BrowserWindow.fromId(windowId);
+  if (win) {
+    sendTerminalBrowserTabUpdate(win, tabId, found.entry);
+  }
+  return result;
 }
 
 export function markTerminalBrowserMcpActivity(targetId: string): void {

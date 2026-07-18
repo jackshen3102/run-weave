@@ -10,6 +10,7 @@ import type {
 } from "@runweave/shared/terminal-browser-annotation";
 import type { TerminalBrowserCdpProxyInfo } from "@runweave/shared/terminal-browser-cdp-proxy";
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import type { TerminalBrowserDisplayScaleState } from "@runweave/shared/terminal-browser-display-scale";
 import type { TerminalBrowserHeaderState } from "@runweave/shared/terminal-browser-headers";
 import type { TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
 import type {
@@ -80,6 +81,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
         mcpActivityUntil: number | null;
         devtoolsOpen: boolean;
         deviceState: TerminalBrowserDeviceState;
+        displayScale: number;
       }>
     >,
   terminalBrowserReorderTabs: (orderedTabIds: string[]) =>
@@ -110,6 +112,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
       tabId,
       presetId,
     ) as Promise<TerminalBrowserDeviceState>,
+  terminalBrowserSetDisplayScale: (tabId: string, factor: number) =>
+    ipcRenderer.invoke(
+      "terminal-browser:set-display-scale",
+      tabId,
+      factor,
+    ) as Promise<TerminalBrowserDisplayScaleState>,
   terminalBrowserSetBounds: (
     tabId: string,
     bounds: {
@@ -185,6 +193,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       url: string;
       title: string;
       openerTabId?: string;
+      displayScale: number;
     }) => void,
   ) => {
     const wrapped = (
@@ -195,6 +204,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
         url: string;
         title: string;
         openerTabId?: string;
+        displayScale: number;
       },
     ) => {
       listener(data);
@@ -217,6 +227,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       mcpActivityUntil: number | null;
       devtoolsOpen: boolean;
       deviceState: TerminalBrowserDeviceState;
+      displayScale: number;
     }) => void,
   ) => {
     const wrapped = (
@@ -233,6 +244,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
         mcpActivityUntil: number | null;
         devtoolsOpen: boolean;
         deviceState: TerminalBrowserDeviceState;
+        displayScale: number;
       },
     ) => {
       listener(data);
@@ -255,6 +267,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
       mcpActivityUntil: number | null;
       devtoolsOpen: boolean;
       deviceState: TerminalBrowserDeviceState;
+      displayScale: number;
     }) => void,
   ) => {
     const wrapped = (
@@ -271,6 +284,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
         mcpActivityUntil: number | null;
         devtoolsOpen: boolean;
         deviceState: TerminalBrowserDeviceState;
+        displayScale: number;
       },
     ) => {
       listener(data);

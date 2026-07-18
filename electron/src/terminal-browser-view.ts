@@ -12,8 +12,10 @@ export {
   getTerminalBrowserCdpTargets,
   getTerminalBrowserEntryByKey,
   getTerminalBrowserEntryByTargetId,
+  getTerminalBrowserDisplayScaleForTarget,
   getTerminalBrowserTabsForWindow,
   markTerminalBrowserMcpActivity,
   setTerminalBrowserCdpProxyAttached,
+  setTerminalBrowserDisplayScaleForTarget,
 } from "./terminal-browser-proxy-api.js";
 export { registerTerminalBrowserHandlers } from "./terminal-browser-handlers.js";

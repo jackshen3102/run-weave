@@ -8,6 +8,7 @@ import { useTerminalBrowserBounds } from "./use-terminal-browser-bounds";
 import { useTerminalBrowserHeaderRules } from "./use-terminal-browser-header-rules";
 import { useTerminalBrowserAnnotations } from "./use-terminal-browser-annotations";
 import { useTerminalBrowserProxy } from "./use-terminal-browser-proxy";
+import { useTerminalBrowserDisplayScale } from "./use-terminal-browser-display-scale";
 import {
   buildTabStateFromElectronSnapshot,
   buildTabUpdateFromElectronSnapshot,
@@ -61,6 +62,10 @@ export function useTerminalBrowserController({
   const loadedUrlByTabRef = useRef<Record<string, string>>({});
   const navigationSequenceByTabRef = useRef<Record<string, number>>({});
   const isElectron = window.electronAPI?.isElectron === true;
+  const setDisplayScale = useTerminalBrowserDisplayScale(
+    activeTabId,
+    isElectron,
+  );
   const [electronTabsSynced, setElectronTabsSynced] = useState(!isElectron);
   const [deviceSwitching, setDeviceSwitching] = useState(false);
   const [headerRulesPanelOpen, setHeaderRulesPanelOpen] = useState(false);
@@ -576,6 +581,7 @@ export function useTerminalBrowserController({
     reorderTabs,
     saveHeaderRules,
     selectDevicePreset,
+    setDisplayScale,
     setActiveBrowserTab,
     setDevicePanelOpenState,
     setHeaderPanelOpen,

@@ -7,6 +7,11 @@ import type {
   TerminalBrowserToolMenuAction,
   TerminalBrowserToolMenuRequest,
 } from "@runweave/shared/terminal-browser-tool-menu";
+import {
+  getNextTerminalBrowserDisplayScale,
+  getPreviousTerminalBrowserDisplayScale,
+  isTerminalBrowserDisplayScale,
+} from "@runweave/shared/terminal-browser-display-scale";
 
 function isTerminalBrowserToolMenuRequest(
   value: unknown,
@@ -25,7 +30,8 @@ function isTerminalBrowserToolMenuRequest(
     typeof request.annotationSubmitEnabled === "boolean" &&
     typeof request.showHeaders === "boolean" &&
     typeof request.deviceEnabled === "boolean" &&
-    typeof request.devtoolsEnabled === "boolean"
+    typeof request.devtoolsEnabled === "boolean" &&
+    isTerminalBrowserDisplayScale(request.displayScale)
   );
 }
 
@@ -64,6 +70,33 @@ export async function popupTerminalBrowserToolMenu(
         click: () => select("open-headers"),
       });
     }
+    const previousDisplayScale = getPreviousTerminalBrowserDisplayScale(
+      value.displayScale,
+    );
+    const nextDisplayScale = getNextTerminalBrowserDisplayScale(
+      value.displayScale,
+    );
+    template.push({
+      label: `Zoom · ${Math.round(value.displayScale * 100)}%`,
+      submenu: [
+        {
+          label: "Zoom out",
+          enabled: previousDisplayScale !== null,
+          click: () => select("zoom-out"),
+        },
+        {
+          label: "Zoom in",
+          enabled: nextDisplayScale !== null,
+          click: () => select("zoom-in"),
+        },
+        { type: "separator" },
+        {
+          label: "Reset zoom",
+          enabled: value.displayScale !== 1,
+          click: () => select("reset-zoom"),
+        },
+      ],
+    });
     template.push(
       {
         label: "Device Mode",

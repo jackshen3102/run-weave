@@ -2,6 +2,7 @@ import {
   createTerminalBrowserDeviceState,
   type TerminalBrowserDeviceState,
 } from "@runweave/shared/terminal-browser-device";
+import { DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE } from "@runweave/shared/terminal-browser-display-scale";
 import type { StoreApi } from "zustand";
 import type {
   TerminalBrowserTabState,
@@ -39,6 +40,7 @@ function createBrowserTabState(
     canGoBack: false,
     canGoForward: false,
     deviceState: createTerminalBrowserDeviceState("desktop"),
+    displayScale: DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
   };
 }
 
@@ -198,6 +200,7 @@ export function createTerminalPreviewBrowserActions(
           canGoBack: false,
           canGoForward: false,
           deviceState: createTerminalBrowserDeviceState("desktop"),
+          displayScale: DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
         };
         return {
           browser: {

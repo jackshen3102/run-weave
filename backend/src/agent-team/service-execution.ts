@@ -269,6 +269,7 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
   protected async bounceFailuresToCode(
     run: AgentTeamRun,
     caseIds: string[],
+    repairKeys?: string[],
   ): Promise<AgentTeamRun> {
     const codeWorker =
       run.workers.find((worker) => worker.role === "code" && worker.panelId) ??
@@ -279,7 +280,17 @@ export abstract class AgentTeamExecutionService extends AgentTeamRoundExecutionS
     const failedCases = run.acceptance.filter((item) =>
       caseIds.includes(item.caseId),
     );
-    const repairCycles = repairCyclesForCases(run.loop, caseIds);
+    const repairKeySet = repairKeys ? new Set(repairKeys) : null;
+    const repairCycles = repairCyclesForCases(run.loop, caseIds).filter(
+      (cycle) => !repairKeySet || repairKeySet.has(cycle.repairKey),
+    );
+    if (repairKeySet && repairCycles.length !== repairKeySet.size) {
+      return this.pauseForWorkerDispatchError(
+        run,
+        "code",
+        `本轮失败缺少可识别 repair target：${Array.from(repairKeySet).join(", ") || "none"}`,
+      );
+    }
     const missingReproductionCaseIds = new Set(
       repairCycles
         .filter(

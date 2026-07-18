@@ -50,6 +50,55 @@ export function buildRun({
   };
 }
 
+export function buildRuntimeRepairRun(owner) {
+  const repairOwner = structuredClone(owner);
+  repairOwner.runId = "atr_fixture_scope_repair_owner";
+  repairOwner.activeWorkerRole = "code";
+  repairOwner.activeWorkerDispatch = {
+    dispatchId: "dispatch-runtime-repair",
+    role: "code",
+    panelId: "code-panel",
+    tmuxPaneId: "%1",
+    round: 2,
+    requestedAt: new Date().toISOString(),
+    outboxMtimeMs: null,
+    repairKeys: ["behavior_verify:ATFR-020"],
+  };
+  repairOwner.loop.repairCycles = [
+    {
+      repairKey: "behavior_verify:ATFR-020",
+      sourceRole: "behavior_verify",
+      caseIds: ["ATFR-020"],
+      invariant: "runtime fixture handoff",
+      verificationMode: "runtime",
+      sourceEvidenceRefs: ["fixture:before"],
+      sourceReproduction: {
+        mode: "real_product",
+        status: "reproduced",
+        scenarioId: "ATFR-020-runtime-repair",
+        validationSessionId: "dvs-runtime-repair",
+        steps: ["reproduce"],
+        expected: "pass",
+        actual: "fail",
+        evidence: [
+          {
+            type: "log",
+            label: "before",
+            summary: "fail",
+            ref: "fixture:before",
+          },
+        ],
+      },
+      attempts: 0,
+      maxAttempts: 3,
+      firstFailedRound: 1,
+      lastFailedRound: 1,
+      lastFailureSummary: "runtime failure",
+    },
+  ];
+  return repairOwner;
+}
+
 export function lineage(owner, dispatchId, sessionId, ownsTerminalSession) {
   return {
     ownerRunId: owner.runId,

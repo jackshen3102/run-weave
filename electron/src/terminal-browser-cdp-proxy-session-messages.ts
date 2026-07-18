@@ -7,12 +7,21 @@ import {
   validateNavigateParams,
   validateSetContentParams,
 } from "./terminal-browser-cdp-proxy-handler.js";
-import { closeTerminalBrowserTabFromProxy } from "./terminal-browser-view.js";
+import {
+  DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
+  isTerminalBrowserDisplayScale,
+} from "@runweave/shared/terminal-browser-display-scale";
+import {
+  closeTerminalBrowserTabFromProxy,
+  getTerminalBrowserDisplayScaleForTarget,
+  setTerminalBrowserDisplayScaleForTarget,
+} from "./terminal-browser-view.js";
 import type { CdpProxyConnectionState } from "./terminal-browser-cdp-proxy-types.js";
 import { CDP_PROXY_TRACE_ENABLED } from "./terminal-browser-cdp-proxy-logging.js";
 import {
   getCurrentTargetInfos,
   getTargetInfoForRequest,
+  canUseTarget,
   isSafeNoopCommand,
   sendJson,
 } from "./terminal-browser-cdp-proxy-utils.js";
@@ -169,6 +178,85 @@ export async function handleSessionMessage(
 
   if (isSafeNoopCommand(method)) {
     sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    return;
+  }
+
+  if (
+    method === "Runweave.getDisplayScale" ||
+    method === "Runweave.setDisplayScale" ||
+    method === "Runweave.resetDisplayScale"
+  ) {
+    const targetId = sessionManager.getTargetIdForSession(sessionId);
+    if (!targetId || !canUseTarget(conn, targetId)) {
+      sendJson(
+        ws,
+        buildCdpSessionError(
+          id,
+          sessionId,
+          -32000,
+          "No terminal browser target available for session",
+        ),
+      );
+      return;
+    }
+
+    const paramKeys = Object.keys(params);
+    const validParams =
+      method === "Runweave.setDisplayScale"
+        ? paramKeys.length === 1 &&
+          paramKeys[0] === "factor" &&
+          isTerminalBrowserDisplayScale(params.factor)
+        : paramKeys.length === 0;
+    if (!validParams) {
+      sendJson(
+        ws,
+        buildCdpSessionError(
+          id,
+          sessionId,
+          -32602,
+          method === "Runweave.setDisplayScale"
+            ? "factor must be a supported terminal browser display scale"
+            : `${method} does not accept parameters`,
+        ),
+      );
+      return;
+    }
+
+    if (method === "Runweave.getDisplayScale") {
+      const factor = getTerminalBrowserDisplayScaleForTarget(targetId);
+      if (factor === null) {
+        sendJson(
+          ws,
+          buildCdpSessionError(id, sessionId, -32000, "Browser tab is closed"),
+        );
+        return;
+      }
+      sendJson(ws, buildCdpSessionResult(id, sessionId, { factor }));
+      return;
+    }
+
+    try {
+      const state = await setTerminalBrowserDisplayScaleForTarget(
+        targetId,
+        method === "Runweave.resetDisplayScale"
+          ? DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE
+          : params.factor,
+      );
+      if (!state) {
+        throw new Error("Browser tab is closed");
+      }
+      sendJson(ws, buildCdpSessionResult(id, sessionId, state));
+    } catch (error) {
+      sendJson(
+        ws,
+        buildCdpSessionError(
+          id,
+          sessionId,
+          -32000,
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+    }
     return;
   }
 

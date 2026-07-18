@@ -3,9 +3,9 @@ export type AgentTeamRunKind = "primary" | "verification_fixture";
 export interface AgentTeamRunLineage {
   /** Stable owner on the parent control plane. */
   ownerRunId: string;
-  /** Exact behavior_verify dispatch that created this fixture. */
+  /** Exact behavior_verify or runtime code repair dispatch that created this fixture. */
   ownerDispatchId: string;
-  /** Product cases covered by the owning behavior dispatch. */
+  /** Product cases covered by the owning behavior or runtime repair dispatch. */
   ownerCaseIds: string[];
   /** Dev Session that bridges the parent and fixture control planes. */
   ownerDevSessionId?: string | null;

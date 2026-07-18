@@ -176,7 +176,7 @@ export async function runAgentTeamCommand(
       mode,
       mode === "json"
         ? run
-        : `Fixture ${run.runId}: ${run.status}, cleanup=${run.fixtureResourceCleanup?.status ?? "not-requested"}`,
+        : `Run ${run.runId}: ${run.status}, cleanup=${run.fixtureResourceCleanup?.status ?? run.fixtureCleanupHistory?.at(-1)?.status ?? "not-requested"}`,
     );
     return;
   }

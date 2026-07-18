@@ -6,6 +6,7 @@ import {
 } from "@runweave/shared/terminal-browser-device";
 import type { TerminalBrowserHeaderState } from "@runweave/shared/terminal-browser-headers";
 import type { TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
+import type { TerminalBrowserDisplayScaleState } from "@runweave/shared/terminal-browser-display-scale";
 import {
   deleteTerminalBrowserAnnotation,
   listTerminalBrowserAnnotations,
@@ -21,6 +22,7 @@ import {
   updateTerminalBrowserEmulationScale,
 } from "./terminal-browser-device-emulation.js";
 import { ensureTerminalBrowserCookiePersistence } from "./terminal-browser-cookie-persistence.js";
+import { setTerminalBrowserDisplayScale } from "./terminal-browser-display-scale.js";
 import {
   getTerminalBrowserKey,
   getTerminalBrowserSession,
@@ -195,6 +197,28 @@ export function registerTerminalBrowserHandlers(): void {
       );
       sendTerminalBrowserTabUpdate(win, tabId, entry);
       return nextState;
+    },
+  );
+
+  ipcMain.handle(
+    "terminal-browser:set-display-scale",
+    async (
+      event,
+      tabId: string,
+      factor: unknown,
+    ): Promise<TerminalBrowserDisplayScaleState> => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || typeof tabId !== "string") {
+        throw new Error("Invalid browser display scale request");
+      }
+      const entry = getExistingTerminalBrowserEntry(
+        win,
+        tabId,
+        "update display scale for",
+      );
+      const state = await setTerminalBrowserDisplayScale(entry, factor);
+      sendTerminalBrowserTabUpdate(win, tabId, entry);
+      return state;
     },
   );
 

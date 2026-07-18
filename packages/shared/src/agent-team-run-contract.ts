@@ -68,7 +68,7 @@ export interface AgentTeamReviewCheckpointState {
 
 export interface AgentTeamRunOptions {
   autoApproveSplit: boolean;
-  /** Notify the main Agent once when the run enters a Human Gate. */
+  /** Notify the main Agent once when the run enters a recovery or human-decision gate. */
   notifyMainOnHumanGate: boolean;
   reviewCheckpointMode?: AgentTeamReviewCheckpointMode;
   maxRepairAttempts?: number;

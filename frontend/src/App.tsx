@@ -15,6 +15,7 @@ import type {
   TerminalBrowserDevicePresetId,
   TerminalBrowserDeviceState,
 } from "@runweave/shared/terminal-browser-device";
+import type { TerminalBrowserDisplayScaleState } from "@runweave/shared/terminal-browser-display-scale";
 import type { TerminalBrowserHeaderState } from "@runweave/shared/terminal-browser-headers";
 import type { TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
 import type {
@@ -73,6 +74,7 @@ interface TerminalBrowserTabSnapshot extends TerminalBrowserSnapshot {
   mcpActivityUntil: number | null;
   devtoolsOpen: boolean;
   deviceState: TerminalBrowserDeviceState;
+  displayScale?: number;
 }
 
 declare global {
@@ -118,6 +120,10 @@ declare global {
         tabId: string,
         presetId: TerminalBrowserDevicePresetId,
       ) => Promise<TerminalBrowserDeviceState>;
+      terminalBrowserSetDisplayScale?: (
+        tabId: string,
+        factor: number,
+      ) => Promise<TerminalBrowserDisplayScaleState>;
       terminalBrowserSetBounds?: (
         tabId: string,
         bounds: TerminalBrowserBounds | null,
@@ -161,6 +167,7 @@ declare global {
           url: string;
           title: string;
           openerTabId?: string;
+          displayScale?: number;
         }) => void,
       ) => () => void;
       onTerminalBrowserTabUpdated?: (
@@ -173,6 +180,7 @@ declare global {
             mcpActivityUntil: number | null;
             devtoolsOpen: boolean;
             deviceState: TerminalBrowserDeviceState;
+            displayScale?: number;
           },
         ) => void,
       ) => () => void;
@@ -186,6 +194,7 @@ declare global {
             mcpActivityUntil: number | null;
             devtoolsOpen: boolean;
             deviceState: TerminalBrowserDeviceState;
+            displayScale?: number;
           },
         ) => void,
       ) => () => void;

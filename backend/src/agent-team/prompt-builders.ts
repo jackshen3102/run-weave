@@ -237,6 +237,7 @@ function formatCodeRepairContract(
           "Runtime/behavior 复现门槛：",
           "- 必须从真实产品入口稳定复现，记录 scenarioId、validationSessionId 和 Before evidence；mock、fixture、私有函数或静态阅读不能单独算复现。",
           "- 修复后使用同一 scenarioId 和 validationSessionId 原样重跑，记录 After pass evidence。未复现、边界或环境阻塞时停止修改并如实交接。",
+          "- verifier 已按资源账本清理旧 Session 时，当前 runtime code repair dispatch 可通过 pnpm dev:session 受控重建同一 validationSessionId；owner scope 必须绑定当前 repair dispatch、repairKey 和 Case，禁止复用旧 endpoint 或更换 Session ID。",
           "",
         ]
       : []),

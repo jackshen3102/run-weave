@@ -23,6 +23,7 @@ export interface TerminalBrowserTabState {
   mcpActivityUntil?: number | null;
   devtoolsOpen?: boolean;
   deviceState: TerminalBrowserDeviceState;
+  displayScale: number;
 }
 
 export const DEFAULT_MARKDOWN_VIEW_MODE: TerminalMarkdownViewMode = "preview";

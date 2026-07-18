@@ -15,6 +15,11 @@ import { useRef, useState, type FormEvent } from "react";
 import { type TerminalBrowserHeaderRule } from "@runweave/shared/terminal-browser-headers";
 import { type TerminalBrowserProxyState } from "@runweave/shared/terminal-browser-proxy";
 import type { TerminalBrowserToolMenuAction } from "@runweave/shared/terminal-browser-tool-menu";
+import {
+  DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
+  getNextTerminalBrowserDisplayScale,
+  getPreviousTerminalBrowserDisplayScale,
+} from "@runweave/shared/terminal-browser-display-scale";
 import type { TerminalBrowserTabState } from "../../features/terminal/preview-store";
 import { TerminalBrowserHeadersButton } from "./terminal-browser-headers-panel";
 import { Button } from "../ui/button";
@@ -59,6 +64,7 @@ interface BrowserUtilityControls {
   isElectron: boolean;
   onOpenDevTools: () => void;
   onOpenExternal: () => void;
+  onSetDisplayScale: (factor: number) => void;
 }
 
 interface TerminalBrowserNavigationBarProps {
@@ -107,7 +113,12 @@ export function TerminalBrowserNavigationBar({
     switching: proxySwitching,
     onToggle: onToggleProxy,
   } = proxy;
-  const { isElectron, onOpenDevTools, onOpenExternal } = utilities;
+  const {
+    isElectron,
+    onOpenDevTools,
+    onOpenExternal,
+    onSetDisplayScale,
+  } = utilities;
   const moreToolsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [addressCopied, setAddressCopied] = useState(false);
   const [moreToolsOpen, setMoreToolsOpen] = useState(false);
@@ -144,6 +155,27 @@ export function TerminalBrowserNavigationBar({
         case "open-external":
           onOpenExternal();
           break;
+        case "zoom-out": {
+          const factor = getPreviousTerminalBrowserDisplayScale(
+            activeTab.displayScale,
+          );
+          if (factor !== null) {
+            onSetDisplayScale(factor);
+          }
+          break;
+        }
+        case "zoom-in": {
+          const factor = getNextTerminalBrowserDisplayScale(
+            activeTab.displayScale,
+          );
+          if (factor !== null) {
+            onSetDisplayScale(factor);
+          }
+          break;
+        }
+        case "reset-zoom":
+          onSetDisplayScale(DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE);
+          break;
       }
     },
   );
@@ -168,6 +200,7 @@ export function TerminalBrowserNavigationBar({
         deviceEnabled: !deviceSwitching,
         devtoolsEnabled:
           activeTab.cdpProxyAttached !== true && !activeTab.deviceState.mobile,
+        displayScale: activeTab.displayScale,
       });
       handleMoreTool(action);
     } finally {

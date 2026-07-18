@@ -1,0 +1,543 @@
+{
+  "stats": [
+    {
+      "value": "≈77k",
+      "label": "Activity facts",
+      "note": "当前本地样本 · 6 天"
+    },
+    {
+      "value": "490",
+      "label": "Terminal sessions",
+      "note": "个人终端行为"
+    },
+    {
+      "value": "69",
+      "label": "Agent Team runs",
+      "note": "团队协作行为"
+    },
+    {
+      "value": "≈84k",
+      "label": "App Server events",
+      "note": "完整线程事件"
+    },
+    {
+      "value": "7d",
+      "label": "Raw content window",
+      "note": "决定每日抽取"
+    }
+  ],
+  "flowColumns": [
+    {
+      "id": "source",
+      "nodes": [
+        {
+          "id": "terminal-source",
+          "kind": "current",
+          "kicker": "CURRENT · INDIVIDUAL",
+          "title": "Terminal / Thread",
+          "body": "输入、工具调用、内容、状态、结果与 Session ID。",
+          "tags": ["Prompt", "Tool", "Outcome"]
+        },
+        {
+          "id": "team-source",
+          "kind": "current",
+          "kicker": "CURRENT · TEAM",
+          "title": "Agent Team Run",
+          "body": "Worker、Round、Review、Verify、失败与恢复轨迹。",
+          "tags": ["Run", "Round", "Evidence"]
+        }
+      ]
+    },
+    {
+      "id": "episode",
+      "nodes": [
+        {
+          "id": "episode-builder",
+          "kind": "target",
+          "kicker": "TARGET · NORMALIZE",
+          "title": "Episode Builder",
+          "body": "将事实拼成有目标、上下文、轨迹、结果的可学习单元。",
+          "tags": ["Goal", "Trajectory", "Prompt chain"]
+        }
+      ]
+    },
+    {
+      "id": "reflect",
+      "nodes": [
+        {
+          "id": "reflector",
+          "kind": "target",
+          "kicker": "TARGET · CAUSAL",
+          "title": "Reflector + Clusterer",
+          "body": "归因、找反例、聚类重复模式，区分 Prompt、产品与运行时问题。",
+          "tags": ["Cause", "Counterexample", "Scope"]
+        }
+      ]
+    },
+    {
+      "id": "candidate",
+      "nodes": [
+        {
+          "id": "candidate-factory",
+          "kind": "target",
+          "kicker": "TARGET · SYNTHESIZE",
+          "title": "Candidate Factory",
+          "body": "产生记忆、Prompt、Skill、路由、产品或代码候选资产。",
+          "tags": ["Memory", "Prompt", "Skill", "Product"]
+        }
+      ]
+    },
+    {
+      "id": "evaluate",
+      "nodes": [
+        {
+          "id": "evaluation-gate",
+          "kind": "target",
+          "kicker": "TARGET · EVALUATE",
+          "title": "Shadow Replay Gate",
+          "body": "Champion / Challenger 对照，检查目标收益、回归与样本有效性。",
+          "tags": ["Replay", "Regression", "Decision"]
+        }
+      ]
+    },
+    {
+      "id": "registry",
+      "nodes": [
+        {
+          "id": "asset-registry",
+          "kind": "target",
+          "kicker": "TARGET · GOVERN",
+          "title": "Evolution Registry",
+          "body": "版本化管理 draft、shadow、promoted、retired、rejected。",
+          "tags": ["Version", "Evidence", "Rollback"]
+        }
+      ]
+    },
+    {
+      "id": "inject",
+      "nodes": [
+        {
+          "id": "runtime-injection",
+          "kind": "target",
+          "kicker": "TARGET · REUSE",
+          "title": "Runtime Injection",
+          "body": "按任务和上下文选择已晋级资产，注入下一次 Agent 执行。",
+          "tags": ["Retrieve", "Route", "Observe"]
+        }
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "prompt-defect",
+      "label": "Prompt 表达缺陷",
+      "subtitle": "学习如何更清楚地表达",
+      "badge": "PROMPT INTELLIGENCE",
+      "title": "从纠偏对话提炼 Prompt 经验",
+      "summary": "多次任务都因缺少边界、验收条件或优先级而返工，且换成语义完整的表达后稳定改善。",
+      "path": [
+        "terminal-source",
+        "episode-builder",
+        "reflector",
+        "candidate-factory",
+        "evaluation-gate",
+        "asset-registry",
+        "runtime-injection"
+      ],
+      "steps": [
+        "对齐原始 Prompt、Agent 理解、首次行为、纠偏 Prompt 与最终结果。",
+        "在独立任务中寻找同类反例，确认不是单次模型随机性。",
+        "生成 Prompt lint 规则或可选模板，而不是偷偷改写用户原意。",
+        "用简短、自然、专业、含噪表达做鲁棒性 Replay。"
+      ],
+      "decision": "验证通过后晋级为 Prompt lint / template；不进入产品修复队列。"
+    },
+    {
+      "id": "product-defect",
+      "label": "产品 / 合约缺陷",
+      "subtitle": "Prompt 纠偏不应掩盖 Bug",
+      "badge": "PRODUCT RADAR",
+      "title": "把“靠提示语绕过”识别为产品问题",
+      "summary": "用户必须反复写特殊短语才能得到本应默认正确的行为，说明责任可能在产品、协议、工具反馈或系统 Prompt。",
+      "path": [
+        "terminal-source",
+        "team-source",
+        "episode-builder",
+        "reflector",
+        "candidate-factory",
+        "evaluation-gate",
+        "asset-registry"
+      ],
+      "steps": [
+        "比较自然表达与特殊纠偏表达的行为差异，定位责任层。",
+        "关联多个终端、项目或 Agent Team Run，排除单任务偶然性。",
+        "形成带证据链、影响面和复现条件的 Product Insight。",
+        "代码候选只作为草案进入隔离验证，绝不因 Prompt 成功而关闭问题。"
+      ],
+      "decision": "进入 Product Radar；Prompt 经验仅记录症状，不作为正确性修复。"
+    },
+    {
+      "id": "skill-crystal",
+      "label": "Skill 能力沉淀",
+      "subtitle": "把重复成功压缩成工具",
+      "badge": "SKILL CRYSTALLIZATION",
+      "title": "从跨任务成功轨迹沉淀 Skill",
+      "summary": "同一类多步任务在不同项目里反复成功，步骤、工具组合、验收合同和失败恢复方式具有稳定结构。",
+      "path": [
+        "terminal-source",
+        "team-source",
+        "episode-builder",
+        "reflector",
+        "candidate-factory",
+        "evaluation-gate",
+        "asset-registry",
+        "runtime-injection"
+      ],
+      "steps": [
+        "至少聚合 5 个成功 Episode，并覆盖 3 类任务上下文。",
+        "抽取稳定步骤、适用边界、反例和验收方式。",
+        "生成 Skill 候选，在未见过的历史任务上做 Shadow Replay。",
+        "确认效率提升且不损伤正确性后晋级，本地按需检索。"
+      ],
+      "decision": "晋级为版本化 Skill；保留来源 Episode 与一键回滚。"
+    },
+    {
+      "id": "memory-reuse",
+      "label": "经验记忆复用",
+      "subtitle": "避免重复踩坑与重复探索",
+      "badge": "LOCAL MEMORY",
+      "title": "让下一次执行主动使用已验证经验",
+      "summary": "历史任务中已形成稳定的边界、反模式或决策依据，新任务出现相似上下文时，系统只检索最相关的少量经验。",
+      "path": [
+        "terminal-source",
+        "episode-builder",
+        "reflector",
+        "candidate-factory",
+        "evaluation-gate",
+        "asset-registry",
+        "runtime-injection"
+      ],
+      "steps": [
+        "以任务、项目、工具、模型版本和失败模式定义适用范围。",
+        "合并重复洞察，保留冲突观点和反例，不无限堆叠上下文。",
+        "Replay 验证经验是否提升一次成功率或减少无效动作。",
+        "运行时选择性注入，并继续记录使用后结果。"
+      ],
+      "decision": "晋级为局部经验，不升级成无条件的全局规则。"
+    }
+  ],
+  "options": [
+    {
+      "id": "A",
+      "name": "Local Memory OS",
+      "description": "先把历史事实变成 Episode、洞察、Prompt 经验和可检索记忆，重点解决“看得见但用不起来”。",
+      "estimate": "4–6 周",
+      "complexity": "中",
+      "level": "L0–L3",
+      "recommended": false,
+      "items": [
+        "每日 Episode 抽取",
+        "多维复盘与 Prompt 分析",
+        "洞察合并、冲突和过期",
+        "手动确认后注入"
+      ]
+    },
+    {
+      "id": "B",
+      "name": "Evolution Foundry",
+      "description": "在记忆之上增加候选资产、Shadow Replay、Champion / Challenger、晋级和回滚，形成真正闭环。",
+      "estimate": "8–12 周",
+      "complexity": "高",
+      "level": "L0–L4",
+      "recommended": true,
+      "items": [
+        "覆盖方案 A 全部能力",
+        "Prompt / Skill / Routing 候选",
+        "证据门禁与自动淘汰",
+        "L4 本地受控复用"
+      ]
+    },
+    {
+      "id": "C",
+      "name": "Open Evolution Lab",
+      "description": "允许 Agent 生成新工具、代码改动和更开放的策略变体，通过沙盒实验探索超出预设资产类型的进化。",
+      "estimate": "12–20+ 周",
+      "complexity": "很高",
+      "level": "L0–L4+",
+      "recommended": false,
+      "items": [
+        "开放式候选生成",
+        "代码 / 工具双重记忆",
+        "隔离基准与预算控制",
+        "人工批准后才能离开实验室"
+      ]
+    }
+  ],
+  "promptChain": [
+    {
+      "index": "01",
+      "title": "Original Prompt",
+      "detail": "用户原始表达、上下文与附件"
+    },
+    {
+      "index": "02",
+      "title": "Inferred Intent",
+      "detail": "Agent 理解的目标、约束与验收"
+    },
+    {
+      "index": "03",
+      "title": "Initial Behavior",
+      "detail": "计划、工具、动作与首次结果"
+    },
+    {
+      "index": "04",
+      "title": "Correction Prompt",
+      "detail": "用户纠偏点与责任层线索"
+    },
+    { "index": "05", "title": "Behavior Diff", "detail": "纠偏前后行为变化" },
+    {
+      "index": "06",
+      "title": "Final Outcome",
+      "detail": "成功、返工、阻塞与证据"
+    }
+  ],
+  "causes": [
+    {
+      "id": "prompt",
+      "title": "Prompt 缺陷",
+      "subtitle": "歧义、冲突、缺约束",
+      "badge": "CAUSE 01",
+      "headline": "输入信息结构不足",
+      "description": "自然语言中缺少关键边界、成功标准或优先级，并且补足这些信息后能跨任务稳定改善。",
+      "actionTitle": "正确产物",
+      "action": "Prompt lint、写法建议、任务模板、可选澄清问题。",
+      "antiRule": "不把某次成功的长 Prompt 直接复制为全局模板；先做语义等价表达测试。"
+    },
+    {
+      "id": "product",
+      "title": "产品 / 合约缺陷",
+      "subtitle": "默认行为不正确",
+      "badge": "CAUSE 02",
+      "headline": "产品要求用户说“魔法短语”",
+      "description": "工具、协议、系统 Prompt 或 UI 没有提供正确默认行为，用户不得不通过提示语规避。",
+      "actionTitle": "正确产物",
+      "action": "Product Insight、复现证据、影响面与代码 / 协议候选。",
+      "antiRule": "Prompt 能绕过问题，只能证明存在规避路径，不能证明产品没有 Bug。"
+    },
+    {
+      "id": "runtime",
+      "title": "模型 / 运行时波动",
+      "subtitle": "相同输入结果不稳定",
+      "badge": "CAUSE 03",
+      "headline": "问题来自不确定性与能力边界",
+      "description": "相同条件下成功与失败交替，且与模型、上下文长度、工具错误或超时显著相关。",
+      "actionTitle": "正确产物",
+      "action": "模型路由、重试策略、上下文压缩或 evaluator 调整。",
+      "antiRule": "不把随机成功样本写成 Prompt 经验，也不靠重复追加指令制造虚假稳定。"
+    },
+    {
+      "id": "incomplete",
+      "title": "自然表达不完整",
+      "subtitle": "用户不知道系统需要什么",
+      "badge": "CAUSE 04",
+      "headline": "交互应主动补齐必要信息",
+      "description": "用户表达合理，但系统掌握的隐藏约束、能力边界或必要参数没有被暴露。",
+      "actionTitle": "正确产物",
+      "action": "最少澄清、智能默认值、输入辅助与能力边界提示。",
+      "antiRule": "不把产品信息架构的缺失归咎于用户“不会写 Prompt”。"
+    }
+  ],
+  "lintDimensions": [
+    {
+      "title": "目标与产物",
+      "detail": "要解决什么，最终要交付什么；避免只描述过程。"
+    },
+    {
+      "title": "范围与边界",
+      "detail": "明确对象、禁止项、可修改范围和不能隐含扩大的权限。"
+    },
+    {
+      "title": "证据与验收",
+      "detail": "什么结果算完成，哪些真实行为或证据必须出现。"
+    },
+    {
+      "title": "上下文与依赖",
+      "detail": "提供必要文件、环境、Session 或前置决策，不堆无关背景。"
+    },
+    {
+      "title": "优先级与取舍",
+      "detail": "冲突时谁优先；速度、质量、风险、成本如何排序。"
+    },
+    {
+      "title": "表达鲁棒性",
+      "detail": "简短、自然、专业、含噪表达都应得到等价的正确理解。"
+    },
+    {
+      "title": "最少澄清",
+      "detail": "只在答案会实质改变方案时提问，其余采用显式合理假设。"
+    },
+    {
+      "title": "责任层识别",
+      "detail": "区分用户输入、产品合约、模型能力和运行环境，避免错修。"
+    }
+  ],
+  "levels": [
+    {
+      "id": "L0",
+      "name": "Observe",
+      "subtitle": "只读观察",
+      "description": "统一查看终端、线程、Agent Team 与 App Server 历史，建立事实和数据质量基线。",
+      "can": "查询、聚合、回放事实",
+      "cannot": "生成或注入任何资产",
+      "output": "Activity / Work History 视图",
+      "boundary": "完全只读；任何结论都必须能回到原始 Session / Run / Event。"
+    },
+    {
+      "id": "L1",
+      "name": "Understand",
+      "subtitle": "形成 Episode",
+      "description": "识别目标、轨迹、Prompt 因果链、结果、异常与上下文，生成带证据的复盘。",
+      "can": "归因、聚类、寻找反例",
+      "cannot": "改变未来 Agent 行为",
+      "output": "Episode + Insight",
+      "boundary": "推断与事实分开存储；数据缺口必须降低置信度。"
+    },
+    {
+      "id": "L2",
+      "name": "Propose",
+      "subtitle": "生成候选",
+      "description": "把反复出现的经验转为 Memory、Prompt、Skill、Routing、Product 或 Code 候选。",
+      "can": "创建草案、合并和冲突检测",
+      "cannot": "未经评估直接进入运行时",
+      "output": "CandidateAsset",
+      "boundary": "每个候选必须声明适用范围、反例、来源与预期收益。"
+    },
+    {
+      "id": "L3",
+      "name": "Experiment",
+      "subtitle": "影子实验",
+      "description": "在历史或隔离任务上运行 Champion / Challenger，自动拒绝无效或引发回归的候选。",
+      "can": "Replay、Canary、自动淘汰",
+      "cannot": "直接修改用户默认配置",
+      "output": "Evaluation + Decision",
+      "boundary": "小样本不自动晋级；关键正确性维度出现回归即失败。"
+    },
+    {
+      "id": "L4",
+      "name": "Local Autonomy",
+      "subtitle": "本地受控自治",
+      "description": "自动检索、注入、观察和维护已经通过门禁的本地资产，并根据新证据降级或退休。",
+      "can": "本地注入、更新、回滚、退休",
+      "cannot": "外发、自动合并、提权、破坏性操作",
+      "output": "Promoted Asset + Runtime Trace",
+      "boundary": "代码和产品改动仍只是候选；任何离开本地与不可逆动作都需要人工授权。"
+    }
+  ],
+  "cadence": [
+    {
+      "when": "Daily",
+      "title": "增量构建 Episode",
+      "detail": "按 watermarks 读取新增事实与内容，在 7 天原始内容到期前形成稳定学习单元。"
+    },
+    {
+      "when": "Every 2–3 days",
+      "title": "聚类与归因",
+      "detail": "合并相似经验，比较 Prompt 纠偏链，区分产品、输入和运行时原因。"
+    },
+    {
+      "when": "Weekly",
+      "title": "Replay 与晋级",
+      "detail": "对候选运行对照评估，晋级、拒绝或继续收集证据，并输出周度总结。"
+    },
+    {
+      "when": "Monthly",
+      "title": "退休与跨版本检查",
+      "detail": "检测模型、产品与代码版本漂移，删除过期规则或重新评估其有效性。"
+    },
+    {
+      "when": "Event trigger",
+      "title": "严重失败即时复盘",
+      "detail": "同类高成本失败连续出现 3 次时提前触发，不等待固定周期。"
+    }
+  ],
+  "thresholds": [
+    {
+      "name": "经验候选",
+      "condition": "跨 ≥2 个任务出现同一模式",
+      "value": "≥3 Episodes"
+    },
+    {
+      "name": "Skill 候选",
+      "condition": "覆盖 ≥3 类任务且步骤稳定",
+      "value": "≥5 Successes"
+    },
+    {
+      "name": "产品洞察",
+      "condition": "跨 ≥3 个项目 / 上下文，或单次高严重度",
+      "value": "Evidence gate"
+    },
+    {
+      "name": "自动晋级",
+      "condition": "目标改善、关键维度无回归",
+      "value": "N ≥30"
+    },
+    {
+      "name": "事件触发",
+      "condition": "同类高成本失败连续出现",
+      "value": "3 failures"
+    }
+  ],
+  "contracts": [
+    {
+      "name": "EvolutionRun",
+      "detail": "分析窗口、watermark、版本、数据完整度与本轮决策摘要。"
+    },
+    {
+      "name": "Episode",
+      "detail": "目标、环境、Prompt 链、轨迹、结果、证据与终端 / Run 关联。"
+    },
+    {
+      "name": "Insight",
+      "detail": "观察、归因、建议、反例、范围、置信度、有效期与状态。"
+    },
+    {
+      "name": "CandidateAsset",
+      "detail": "Memory / Prompt / Skill / Routing / Product / Code 的版本与生命周期。"
+    },
+    {
+      "name": "Evaluation",
+      "detail": "Champion / Challenger、指标向量、回归项、样本与决策。"
+    },
+    {
+      "name": "ContributionEdge",
+      "detail": "派生资产到来源 Episode 的图关系，支持删除与置信度重算。"
+    },
+    {
+      "name": "RuntimeTrace",
+      "detail": "下一次执行实际检索了什么、为什么注入、使用后发生了什么。"
+    },
+    {
+      "name": "DataQuality",
+      "detail": "保留期截断、序列缺口、拒绝记录与样本偏差，进入置信度计算。"
+    }
+  ],
+  "metrics": [
+    { "name": "任务结果", "detail": "正确性、完成度、一次成功与真实验收。" },
+    { "name": "意图理解", "detail": "约束识别、少返工、澄清是否必要。" },
+    { "name": "行动质量", "detail": "无效工具调用、路径长度、证据充分度。" },
+    { "name": "自我纠错", "detail": "错误发现、恢复成本、相同错误复发。" },
+    {
+      "name": "协作质量",
+      "detail": "Agent Team 分工、交接、Review 与 Verify 闭环。"
+    },
+    {
+      "name": "泛化能力",
+      "detail": "跨项目、任务与语义等价 Prompt 的稳定性。"
+    },
+    {
+      "name": "Prompt Intelligence",
+      "detail": "表达鲁棒性、纠偏次数与责任层识别。"
+    },
+    { "name": "安全可靠", "detail": "权限越界、回归、不可逆风险与可回滚性。" }
+  ]
+}

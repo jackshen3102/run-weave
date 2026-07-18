@@ -12,6 +12,7 @@ import { withHarness } from "./verify-agent-team-review-checkpoints/bootstrap-li
 import { verifyDevSessionBackendIsolation } from "./verify-agent-team-fixture-lifecycle/dev-session-isolation.mjs";
 import {
   buildRun,
+  buildRuntimeRepairRun,
   lineage,
 } from "./verify-agent-team-fixture-lifecycle/fixtures.mjs";
 
@@ -312,6 +313,11 @@ async function verifyDevSessionScopeResolution() {
     path.join(runDir, `${owner.runId}.json`),
     `${JSON.stringify(owner, null, 2)}\n`,
   );
+  const repairOwner = buildRuntimeRepairRun(owner);
+  await writeFile(
+    path.join(runDir, `${repairOwner.runId}.json`),
+    `${JSON.stringify(repairOwner, null, 2)}\n`,
+  );
   const scope = await resolveAgentTeamFixtureScope({
     sourceRoot: root,
     sessionId: "dvs-scope-resolution",
@@ -335,6 +341,26 @@ async function verifyDevSessionScopeResolution() {
   } catch (error) {
     mismatchedPaneError = error;
   }
+  const repairScope = await resolveAgentTeamFixtureScope({
+    sourceRoot: root,
+    sessionId: "dvs-runtime-repair",
+    env: { RUNWEAVE_AGENT_TEAM_RUN_ID: repairOwner.runId },
+  });
+  const inferredRepairScope = await resolveAgentTeamFixtureScope({
+    sourceRoot: root,
+    sessionId: "dvs-runtime-repair",
+    env: { RUNWEAVE_TERMINAL_PANEL_ID: "code-panel" },
+  });
+  let wrongRepairSessionError = null;
+  try {
+    await resolveAgentTeamFixtureScope({
+      sourceRoot: root,
+      sessionId: "dvs-another-session",
+      env: { RUNWEAVE_AGENT_TEAM_RUN_ID: repairOwner.runId },
+    });
+  } catch (error) {
+    wrongRepairSessionError = error;
+  }
   check(
     "ATFR-020-dev-session-inherits-active-behavior-owner",
     scope?.ownerRunId === owner.runId &&
@@ -345,6 +371,18 @@ async function verifyDevSessionScopeResolution() {
       inferredScope.ownerDevSessionId === "dvs-scope-inferred" &&
       mismatchedPaneError?.exitCode === 5,
     { scope, inferredScope, mismatchedPaneError },
+  );
+  check(
+    "ATFR-023-runtime-code-repair-recreates-verifier-session-under-new-owner",
+    repairScope?.ownerRunId === repairOwner.runId &&
+      repairScope.ownerDispatchId ===
+        repairOwner.activeWorkerDispatch.dispatchId &&
+      repairScope.ownerCaseIds.join(",") === "ATFR-020" &&
+      repairScope.ownerDevSessionId === "dvs-runtime-repair" &&
+      inferredRepairScope?.ownerDispatchId ===
+        repairOwner.activeWorkerDispatch.dispatchId &&
+      wrongRepairSessionError?.exitCode === 5,
+    { repairScope, inferredRepairScope, wrongRepairSessionError },
   );
 }
 

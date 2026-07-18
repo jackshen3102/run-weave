@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createTerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import { DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE } from "@runweave/shared/terminal-browser-display-scale";
 import { TerminalBrowserTabs } from "../components/terminal/terminal-browser-tabs";
 import type { TerminalBrowserTabState } from "../features/terminal/preview-store";
 
@@ -45,6 +46,7 @@ function normalizeHarnessTab(tab: HarnessTab): TerminalBrowserTabState {
     canGoBack: false,
     canGoForward: false,
     deviceState: createTerminalBrowserDeviceState("desktop"),
+    displayScale: DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
   };
 }
 

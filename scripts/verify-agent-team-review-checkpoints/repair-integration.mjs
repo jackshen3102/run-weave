@@ -327,6 +327,27 @@ function verifyBlockedBehaviorMainPrompt() {
       proposalPrompt.includes("不授权绕过 Human Gate"),
     proposalPrompt,
   );
+  const recoveryPrompt = buildHumanGateMainPrompt({
+    ...buildRepairRun(),
+    runId: "atr_recovery_fixture",
+    phase: "executing",
+    status: "need_human",
+    loop: {
+      ...buildRepairRun().loop,
+      lastReason: "协议补交期间源码、Git HEAD 或 index 已变化",
+    },
+  });
+  check(
+    "execution-recovery-gate-delegates-safe-recovery-to-main-agent",
+    recoveryPrompt.includes("Agent Recovery Gate") &&
+      recoveryPrompt.includes("自动推进允许的下一步") &&
+      recoveryPrompt.includes("--action dispatch") &&
+      recoveryPrompt.includes("<code|code_review|behavior_verify>") &&
+      recoveryPrompt.includes("--action refresh_acceptance") &&
+      recoveryPrompt.includes("framework-repair status") &&
+      recoveryPrompt.includes("不得仅因状态名为 need_human 就向用户请求确认"),
+    recoveryPrompt,
+  );
 }
 
 async function verifyRepairSourceFingerprint() {

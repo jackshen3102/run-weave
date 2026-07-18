@@ -31,7 +31,8 @@ export function buildBlockedBehaviorMainPrompt(params: {
     `- 环境或依赖修复后，执行 rw agent-team intervene ${run.runId} --action dispatch --role behavior_verify --cases <受影响 Case> --note <原因>。`,
     `- 确需修改验收合同时，编辑项目内完整测试案例文件，再执行 rw agent-team intervene ${run.runId} --action refresh_acceptance --role <code_review|behavior_verify> --cases <受影响 Case> --generated-test-case-file <文件> --note <原因>。`,
     "- 未声明的 Case 必须保持既有状态和证据，禁止全量重跑。",
-    "- 无法安全判断时保持 need_human，并向用户说明需要的决策。",
+    "- 这是主 Agent 恢复任务，不是人工审批；除非出现拆分审批或 P0/P1 finding 范围裁决，不得仅因 need_human 状态向用户请求确认。",
+    "- 证据不足时保持现场不变并继续只读诊断，直到能选择合法恢复动作。",
   ].join("\n");
 }
 
@@ -41,9 +42,9 @@ export function buildHumanGateMainPrompt(run: AgentTeamRun): string {
       `[Agent Team ${run.runId}] Run 已进入框架修复阻塞。`,
       `原因：${run.frameworkRepair.reason}`,
       `旧 dispatch：${run.frameworkRepair.target.invalidatedDispatch.dispatchId ?? "unknown"}（已失效）`,
-      "完成框架修复并重启 Backend 后，只能选择继续原 Run 或重新运行。",
+      "这是主 Agent 自动恢复流程，不请求用户选择。完成框架修复、更新应用并重启 Backend 后，只能选择继续原 Run 或重新运行。",
       `先执行 rw agent-team framework-repair status ${run.runId} 检查恢复条件。`,
-      `现场可信时执行 rw agent-team framework-repair continue ${run.runId}；否则执行 rw agent-team framework-repair rerun ${run.runId}。`,
+      `canContinue=true 时执行 rw agent-team framework-repair continue ${run.runId}；否则在 recovery actions 允许时执行 rw agent-team framework-repair rerun ${run.runId}。`,
       "不要使用通用 resume、agent intervention 或旧 outbox 绕过该门禁。",
     ].join("\n");
   }
@@ -58,23 +59,33 @@ export function buildHumanGateMainPrompt(run: AgentTeamRun): string {
   if (blockedCases.length > 0) {
     return buildBlockedBehaviorMainPrompt({ run, blockedCases });
   }
+  if (run.phase === "proposal") {
+    return [
+      `[Agent Team ${run.runId}] run 已进入 Human Gate。`,
+      `阶段：${run.phase}`,
+      `原因：${run.loop.lastReason ?? run.logs.at(-1) ?? "未记录"}`,
+      "当前是拆分提案门禁：请向用户说明提案并等待确认或拒绝，不得代替用户审批。",
+      "本通知不授权绕过 Human Gate。",
+    ].join("\n");
+  }
+  if (run.pendingFindingDecision) {
+    return [
+      `[Agent Team ${run.runId}] run 已进入 Human Gate。`,
+      `阶段：${run.phase}`,
+      `当前是 P0/P1 finding 范围裁决：${run.pendingFindingDecision.reason}`,
+      "必须请求用户 disposition，不得由 Agent 代替人工裁决。",
+      "本通知不授权绕过 Human Gate。",
+    ].join("\n");
+  }
 
   return [
-    `[Agent Team ${run.runId}] run 已进入 Human Gate，请检查当前状态并推进允许的下一步。`,
+    `[Agent Team ${run.runId}] run 已进入 Agent Recovery Gate，请检查当前状态并自动推进允许的下一步。`,
     `阶段：${run.phase}`,
     `原因：${run.loop.lastReason ?? run.logs.at(-1) ?? "未记录"}`,
-    ...(run.phase === "proposal"
-      ? [
-          "当前是拆分提案门禁：请向用户说明提案并等待确认或拒绝，不得代替用户审批。",
-        ]
-      : []),
-    ...(run.pendingFindingDecision
-      ? [
-          `当前是 P0/P1 finding 范围裁决：${run.pendingFindingDecision.reason}`,
-          "必须请求用户 disposition，不得由 Agent 代替人工裁决。",
-        ]
-      : []),
-    "先分析门禁原因；仅在现有权限允许且能安全恢复时执行修复或 Agent intervention。",
-    "本通知不授权绕过 Human Gate。无法安全判断时，向用户说明所需决策。",
+    "当前不是拆分审批或 finding 范围裁决；先只读检查 Run、源码边界和验收合同，再由主 Agent 选择最小合法恢复动作。",
+    `仅环境或依赖已恢复时，执行 rw agent-team intervene ${run.runId} --action dispatch --role <code|code_review|behavior_verify> --cases <受影响 Case> --note <原因>。`,
+    `验收合同已经修订时，执行 rw agent-team intervene ${run.runId} --action refresh_acceptance --role <code_review|behavior_verify> --cases <受影响 Case> --generated-test-case-file <文件> --note <原因>。`,
+    "框架修复现场存在时，按 framework-repair status 的 canContinue/actions 自动选择 continue 或 rerun。",
+    "不得修改 Run JSON、伪造旧 outbox 或绕过安全校验；也不得仅因状态名为 need_human 就向用户请求确认。",
   ].join("\n");
 }

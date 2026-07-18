@@ -1,4 +1,8 @@
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
+import {
+  DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE,
+  isTerminalBrowserDisplayScale,
+} from "@runweave/shared/terminal-browser-display-scale";
 import { browserTabLabel } from "./terminal-browser-tab-utils";
 
 export interface ElectronBrowserSnapshot {
@@ -15,6 +19,7 @@ export interface ElectronBrowserUpdate extends ElectronBrowserSnapshot {
   mcpActivityUntil?: number | null;
   devtoolsOpen?: boolean;
   deviceState?: TerminalBrowserDeviceState;
+  displayScale?: number;
 }
 
 export interface ElectronBrowserTabSnapshot extends ElectronBrowserUpdate {
@@ -25,6 +30,7 @@ export interface ElectronBrowserTabSnapshot extends ElectronBrowserUpdate {
   mcpActivityUntil: number | null;
   devtoolsOpen: boolean;
   deviceState: TerminalBrowserDeviceState;
+  displayScale?: number;
 }
 
 export function openUrlExternally(url: string): void {
@@ -75,6 +81,7 @@ export function buildTabUpdateFromElectronUpdate(
     mcpActivityUntil: update.mcpActivityUntil,
     devtoolsOpen: update.devtoolsOpen,
     deviceState: update.deviceState,
+    displayScale: normalizeDisplayScale(update.displayScale),
     error: undefined,
   };
 }
@@ -96,7 +103,14 @@ export function buildTabStateFromElectronSnapshot(
     mcpActivityUntil: snapshot.mcpActivityUntil,
     devtoolsOpen: snapshot.devtoolsOpen,
     deviceState: snapshot.deviceState,
+    displayScale: normalizeDisplayScale(snapshot.displayScale),
   };
+}
+
+function normalizeDisplayScale(value: unknown): number {
+  return isTerminalBrowserDisplayScale(value)
+    ? value
+    : DEFAULT_TERMINAL_BROWSER_DISPLAY_SCALE;
 }
 
 function normalizeElectronBrowserUrl(url: string): string {
